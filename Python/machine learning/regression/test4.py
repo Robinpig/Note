@@ -1,6 +1,5 @@
 from sklearn import datasets
 from sklearn.linear_model import LinearRegression
-import matplotlib.pyplot as plt
 
 # 使用以后的数据集进行线性回归
 loaded_data = datasets.load_boston()
