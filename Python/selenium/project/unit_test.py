@@ -1,8 +1,8 @@
-import unittest
+import unit_test
 from calculator import Calculator
 
 
-class TestCalculator(unittest.TestCalculator):
+class TestCalculator(unit_test.TestCalculator):
     def test_add(self):
         c = Calculator(4, 6)
         result = c.__add__()
@@ -10,4 +10,4 @@ class TestCalculator(unittest.TestCalculator):
 
 
 if __name__ == '__main__':
-    unittest.main()
+    unit_test.main()
