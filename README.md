@@ -1,6 +1,3 @@
 # Note
-日常随笔
+Daily Note
 
-主要以计算机为主
-
-使用xmind
