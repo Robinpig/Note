@@ -1,8 +1,8 @@
 # SpringBoot
 
-## Annotation
+## Annotations
 
-### SpringBootApplication
+### @SpringBootApplication
 
 ```java
 @Target(ElementType.TYPE)
@@ -16,7 +16,7 @@
 public @interface SpringBootApplication {
 ```
 
-#### SpringBootConfiguration
+#### @SpringBootConfiguration
 
 ```java
 @Target(ElementType.TYPE)
@@ -26,9 +26,9 @@ public @interface SpringBootApplication {
 public @interface SpringBootConfiguration {
 ```
 
-##### Configuration
+##### @Configuration
 
-#### EnableAutoConfiguration
+#### @EnableAutoConfiguration
 
 ```
 @Target(ElementType.TYPE)
@@ -65,7 +65,7 @@ protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata an
 }
 ```
 
-##### AutoConfigurationPackage
+##### @AutoConfigurationPackage
 
 ```
 @Target(ElementType.TYPE)
@@ -76,7 +76,9 @@ protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata an
 public @interface AutoConfigurationPackage {
 ```
 
-###### Import
+###### @Import
+
+
 
 ## Web
 
@@ -110,6 +112,78 @@ resolve request order:
 
 -  dynamic controller
 - static resources
+
+## Test
+
+### Junit5
+
+It's need JDK15 to build Junit5,.
+
+#### Condition
+
+#### Extension
+
+#### Annotations
+
+@DisplayName
+
+
+
+##### @Timeout
+
+##### @Isolated
+
+##### @SpringBootTest
+
+
+
+| Junit5                                      | Junit4                                  |
+| ------------------------------------------- | --------------------------------------- |
+| @Disabled                                   | @Ignore                                 |
+| @ExtendWith                                 | @RunWith                                |
+| @Tag                                        | @Category                               |
+| @BeforeEach @AfterEach @BeforeAll @AfterAll | @Before @After @BeforeClass @AfterClass |
+
+
+
+#### Assertions
+
+static methods
+
+Nest Test 
+
+Inner test invoke Outer test.
+
+##### Paramterized Test
+
+Use different parameters to run test.
+
+- @ParamterizedTest
+- @ValueSource
+- @CsvValueSource
+- @MethodSource
+- @EnumSource
+- @NullSource
+
+
+
+
+
+#### Actuator
+
+Admin
+
+
+
+Starter
+
+
+
+
+
+
+
+
 
 
 
