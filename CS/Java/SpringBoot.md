@@ -82,7 +82,7 @@ public @interface AutoConfigurationPackage {
 
 ## Web
 
-![springboot-web-annotation.png](https://github.com/Robinpig/Note/raw/master/images/Spring/springboot-web-annotation.png)
+![SpringBoot Web Annotation](https://github.com/Robinpig/Note/raw/master/images/Spring/springboot-web-annotation.png)
 
 ## YAML
 

@@ -4,7 +4,9 @@
 
 ## Design
 
-![dubbo_framework_design](https://github.com/Robinpig/Note/raw/master/images/Dubbo/Dubbo-framework.png)
+![Dubbo Framework](https://github.com/Robinpig/Note/raw/master/images/Dubbo/Dubbo-framework.png)
+
+
 
 ## SPI
 
