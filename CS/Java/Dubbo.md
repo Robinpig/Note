@@ -12,4 +12,30 @@
 
 use Adapter
 
+Wrapper class
+
 JavaAssist
+
+## Transport
+AbstractServer.doOpen()->create a Netty or Mina Server.
+
+Request Event connected by NettyServer -> AllChannelHandler -> Executor Service 
+-> Dubbo Protocol invoke() -> received
+
+- received
+- handleRequest
+
+-> reply()
+
+RegistryProtocol
+
+- create Registry
+- do Register
+
+Dispatcher
+AllDispstcher
+
+ThreadPool Model
+
+GenericFilter
+
