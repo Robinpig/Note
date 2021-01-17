@@ -2,7 +2,7 @@
 
 ![Bootstrap](https://github.com/Robinpig/Note/raw/master/images/Netty/Bootstrap.png)
 
-group
+### group( )
 
 ```java
 /**
@@ -33,53 +33,183 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
     return this;
 }
 ```
-channel
+
+
+
+### init( ) 
+
+in ServerBootstrap
 
 ```java
-/**
- * The {@link Class} which is used to create {@link Channel} instances from.
- * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
- * {@link Channel} implementation has no no-args constructor.
- */
-public B channel(Class<? extends C> channelClass) {
-    return channelFactory(new ReflectiveChannelFactory<C>(
-            ObjectUtil.checkNotNull(channelClass, "channelClass")
-    ));
-}
-
-/**
- * Creates a new channel.
-*/
 @Override
-public T newChannel() {
-    try {
-        return constructor.newInstance();
-    } catch (Throwable t) {
-        throw new ChannelException("Unable to create Channel from class " + constructor.getDeclaringClass(), t);
+void init(Channel channel) throws Exception {
+    final Map<ChannelOption<?>, Object> options = options0();
+    synchronized (options) {
+        setChannelOptions(channel, options, logger);
     }
-}
 
-/**
- * Creates a new instance.In AbstractChannel Constructor
- *
- * @param parent
- *        the parent of this channel. {@code null} if there's no parent.
- */
-protected AbstractChannel(Channel parent) {
-    this.parent = parent;
-    id = newId();
-    unsafe = newUnsafe();
-    pipeline = newChannelPipeline();
+    final Map<AttributeKey<?>, Object> attrs = attrs0();
+    synchronized (attrs) {
+        for (Entry<AttributeKey<?>, Object> e: attrs.entrySet()) {
+            @SuppressWarnings("unchecked")
+            AttributeKey<Object> key = (AttributeKey<Object>) e.getKey();
+            channel.attr(key).set(e.getValue());
+        }
+    }
+
+    ChannelPipeline p = channel.pipeline();
+
+    final EventLoopGroup currentChildGroup = childGroup;
+    final ChannelHandler currentChildHandler = childHandler;
+    final Entry<ChannelOption<?>, Object>[] currentChildOptions;
+    final Entry<AttributeKey<?>, Object>[] currentChildAttrs;
+    synchronized (childOptions) {
+        currentChildOptions = childOptions.entrySet().toArray(newOptionArray(0));
+    }
+    synchronized (childAttrs) {
+        currentChildAttrs = childAttrs.entrySet().toArray(newAttrArray(0));
+    }
+
+    p.addLast(new ChannelInitializer<Channel>() {
+        @Override
+        public void initChannel(final Channel ch) throws Exception {
+            final ChannelPipeline pipeline = ch.pipeline();
+            ChannelHandler handler = config.handler();
+            if (handler != null) {
+                pipeline.addLast(handler);
+            }
+
+            ch.eventLoop().execute(new Runnable() {
+                @Override
+                public void run() {
+                    pipeline.addLast(new ServerBootstrapAcceptor(
+                            ch, currentChildGroup, currentChildHandler, currentChildOptions, currentChildAttrs));
+                }
+            });
+        }
+    });
 }
 ```
 
-[Channel](https://github.com/Robinpig/Note/blob/master/CS/Java/Netty/Channel.md)
+
 
 Where  to new channel? 
 
+bind( ) ->doBind( )->initAndRegister( )
+
 connect( )->doResolveAndConnect( )->initAndRegister( )
 
+### bind( ) 
+
 ```java
+/**
+ * Create a new {@link Channel} and bind it.
+ */
+public ChannelFuture bind() {
+    validate();
+    SocketAddress localAddress = this.localAddress;
+    if (localAddress == null) {
+        throw new IllegalStateException("localAddress not set");
+    }
+    return doBind(localAddress);
+}
+
+private ChannelFuture doBind(final SocketAddress localAddress) {
+    final ChannelFuture regFuture = initAndRegister();
+    final Channel channel = regFuture.channel();
+    if (regFuture.cause() != null) {
+        return regFuture;
+    }
+
+    if (regFuture.isDone()) {
+        // At this point we know that the registration was complete and successful.
+        ChannelPromise promise = channel.newPromise();
+        doBind0(regFuture, channel, localAddress, promise);
+        return promise;
+    } else {
+        // Registration future is almost always fulfilled already, but just in case it's not.
+        final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
+        regFuture.addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) throws Exception {
+                Throwable cause = future.cause();
+                if (cause != null) {
+                    // Registration on the EventLoop failed so fail the ChannelPromise directly to not cause an
+                    // IllegalStateException once we try to access the EventLoop of the Channel.
+                    promise.setFailure(cause);
+                } else {
+                    // Registration was successful, so set the correct executor to use.
+                    // See https://github.com/netty/netty/issues/2586
+                    promise.registered();
+
+                    doBind0(regFuture, channel, localAddress, promise);
+                }
+            }
+        });
+        return promise;
+    }
+}
+```
+
+
+
+### connect( )
+
+```java
+/**
+ * Connect a {@link Channel} to the remote peer.
+ */
+public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress) {
+    ObjectUtil.checkNotNull(remoteAddress, "remoteAddress");
+    validate();
+    return doResolveAndConnect(remoteAddress, localAddress);
+}
+
+/**
+ * @see #connect()
+ */
+private ChannelFuture doResolveAndConnect(final SocketAddress remoteAddress, final SocketAddress localAddress) {
+    final ChannelFuture regFuture = initAndRegister();
+    final Channel channel = regFuture.channel();
+
+    if (regFuture.isDone()) {
+        if (!regFuture.isSuccess()) {
+            return regFuture;
+        }
+        return doResolveAndConnect0(channel, remoteAddress, localAddress, channel.newPromise());
+    } else {
+        // Registration future is almost always fulfilled already, but just in case it's not.
+        final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
+        regFuture.addListener(new ChannelFutureListener() {
+            @Override
+            public void operationComplete(ChannelFuture future) throws Exception {
+                // Directly obtain the cause and do a null check so we only need one volatile read in case of a
+                // failure.
+                Throwable cause = future.cause();
+                if (cause != null) {
+                    // Registration on the EventLoop failed so fail the ChannelPromise directly to not cause an
+                    // IllegalStateException once we try to access the EventLoop of the Channel.
+                    promise.setFailure(cause);
+                } else {
+                    // Registration was successful, so set the correct executor to use.
+                    // See https://github.com/netty/netty/issues/2586
+                    promise.registered();
+                    doResolveAndConnect0(channel, remoteAddress, localAddress, promise);
+                }
+            }
+        });
+        return promise;
+    }
+}
+
+```
+
+
+
+### initAndRegister( ) 
+
+```java
+
 final ChannelFuture initAndRegister() {
     Channel channel = null;
     try {
@@ -117,3 +247,37 @@ final ChannelFuture initAndRegister() {
     return regFuture;
 }
 ```
+
+
+
+### channel( ) 
+new [Channel](https://github.com/Robinpig/Note/blob/master/CS/Java/Netty/Channel.md)
+
+```java
+/**
+ * The {@link Class} which is used to create {@link Channel} instances from.
+ * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
+ * {@link Channel} implementation has no no-args constructor.
+ */
+public B channel(Class<? extends C> channelClass) {
+    return channelFactory(new ReflectiveChannelFactory<C>(
+            ObjectUtil.checkNotNull(channelClass, "channelClass")
+    ));
+}
+
+/**
+ * Creates a new channel.
+*/
+@Override
+public T newChannel() {
+    try {
+        return constructor.newInstance();
+    } catch (Throwable t) {
+        throw new ChannelException("Unable to create Channel from class " + constructor.getDeclaringClass(), t);
+    }
+}
+```
+
+
+
+
