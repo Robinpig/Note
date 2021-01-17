@@ -73,7 +73,7 @@ protected AbstractChannel(Channel parent) {
 }
 ```
 
-[Channel](https://github.com/Robinpig/Note/CS/Java/Netty/Channel.md)
+[Channel](https://github.com/Robinpig/Note/blob/master/CS/Java/Netty/Channel.md)
 
 Where  to new channel? 
 
