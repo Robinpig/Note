@@ -269,6 +269,193 @@ protected void run() {
 
 
 
+### select( )
+
+```java
+private void select(boolean oldWakenUp) throws IOException {
+    Selector selector = this.selector;
+    try {
+        int selectCnt = 0;
+        long currentTimeNanos = System.nanoTime();
+        long selectDeadLineNanos = currentTimeNanos + delayNanos(currentTimeNanos);
+
+        for (;;) {
+            long timeoutMillis = (selectDeadLineNanos - currentTimeNanos + 500000L) / 1000000L;
+            if (timeoutMillis <= 0) {
+                if (selectCnt == 0) {
+                    selector.selectNow();
+                    selectCnt = 1;
+                }
+                break;
+            }
+
+            // If a task was submitted when wakenUp value was true, the task didn't get a chance to call
+            // Selector#wakeup. So we need to check task queue again before executing select operation.
+            // If we don't, the task might be pended until select operation was timed out.
+            // It might be pended until idle timeout if IdleStateHandler existed in pipeline.
+            if (hasTasks() && wakenUp.compareAndSet(false, true)) {
+                selector.selectNow();
+                selectCnt = 1;
+                break;
+            }
+
+            int selectedKeys = selector.select(timeoutMillis);
+            selectCnt ++;
+
+            if (selectedKeys != 0 || oldWakenUp || wakenUp.get() || hasTasks() || hasScheduledTasks()) {
+                // - Selected something,
+                // - waken up by user, or
+                // - the task queue has a pending task.
+                // - a scheduled task is ready for processing
+                break;
+            }
+            if (Thread.interrupted()) {
+                // Thread was interrupted so reset selected keys and break so we not run into a busy loop.
+                // As this is most likely a bug in the handler of the user or it's client library we will
+                // also log it.
+                //
+                // See https://github.com/netty/netty/issues/2426
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Selector.select() returned prematurely because " +
+                            "Thread.currentThread().interrupt() was called. Use " +
+                            "NioEventLoop.shutdownGracefully() to shutdown the NioEventLoop.");
+                }
+                selectCnt = 1;
+                break;
+            }
+
+            long time = System.nanoTime();
+            if (time - TimeUnit.MILLISECONDS.toNanos(timeoutMillis) >= currentTimeNanos) {
+                // timeoutMillis elapsed without anything selected.
+                selectCnt = 1;
+            } else if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
+                    selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
+                // The code exists in an extra method to ensure the method is not too big to inline as this
+                // branch is not very likely to get hit very frequently.
+                selector = selectRebuildSelector(selectCnt);
+                selectCnt = 1;
+                break;
+            }
+
+            currentTimeNanos = time;
+        }
+
+        if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS) {
+            if (logger.isDebugEnabled()) {
+                logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
+                        selectCnt - 1, selector);
+            }
+        }
+    } catch (CancelledKeyException e) {
+        if (logger.isDebugEnabled()) {
+            logger.debug(CancelledKeyException.class.getSimpleName() + " raised by a Selector {} - JDK bug?",
+                    selector, e);
+        }
+        // Harmless exception - log anyway
+    }
+}
+```
+
+
+
+### selectRebuildSelector( )
+
+```java
+private Selector selectRebuildSelector(int selectCnt) throws IOException {
+    // The selector returned prematurely many times in a row.
+    // Rebuild the selector to work around the problem.
+    logger.warn(
+            "Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
+            selectCnt, selector);
+
+    rebuildSelector();
+    Selector selector = this.selector;
+
+    // Select again to populate selectedKeys.
+    selector.selectNow();
+    return selector;
+}
+
+/**
+ * Replaces the current {@link Selector} of this event loop with newly created {@link Selector}s to work
+ * around the infamous epoll 100% CPU bug.
+ */
+public void rebuildSelector() {
+    if (!inEventLoop()) {
+        execute(new Runnable() {
+            @Override
+            public void run() {
+                rebuildSelector0();
+            }
+        });
+        return;
+    }
+    rebuildSelector0();
+}
+
+private void rebuildSelector0() {
+    final Selector oldSelector = selector;
+    final SelectorTuple newSelectorTuple;
+
+    if (oldSelector == null) {
+        return;
+    }
+
+    try {
+        newSelectorTuple = openSelector();
+    } catch (Exception e) {
+        logger.warn("Failed to create a new Selector.", e);
+        return;
+    }
+
+    // Register all channels to the new Selector.
+    int nChannels = 0;
+    for (SelectionKey key: oldSelector.keys()) {
+        Object a = key.attachment();
+        try {
+            if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null) {
+                continue;
+            }
+
+            int interestOps = key.interestOps();
+            key.cancel();
+            SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
+            if (a instanceof AbstractNioChannel) {
+                // Update SelectionKey
+                ((AbstractNioChannel) a).selectionKey = newKey;
+            }
+            nChannels ++;
+        } catch (Exception e) {
+            logger.warn("Failed to re-register a Channel to the new Selector.", e);
+            if (a instanceof AbstractNioChannel) {
+                AbstractNioChannel ch = (AbstractNioChannel) a;
+                ch.unsafe().close(ch.unsafe().voidPromise());
+            } else {
+                @SuppressWarnings("unchecked")
+                NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
+                invokeChannelUnregistered(task, key, e);
+            }
+        }
+    }
+
+    selector = newSelectorTuple.selector;
+    unwrappedSelector = newSelectorTuple.unwrappedSelector;
+
+    try {
+        // time to close the old selector as everything else is registered to the new one
+        oldSelector.close();
+    } catch (Throwable t) {
+        if (logger.isWarnEnabled()) {
+            logger.warn("Failed to close the old Selector.", t);
+        }
+    }
+
+    if (logger.isInfoEnabled()) {
+        logger.info("Migrated " + nChannels + " channel(s) to the new Selector.");
+    }
+}
+```
+
 ### processSelectedKeys( )
 
 ```java
@@ -397,3 +584,31 @@ protected boolean runAllTasks() {
 }
 ```
 
+
+
+### closeAll( )
+
+```java
+private void closeAll() {
+    selectAgain();
+    Set<SelectionKey> keys = selector.keys();
+    Collection<AbstractNioChannel> channels = new ArrayList<AbstractNioChannel>(keys.size());
+    for (SelectionKey k: keys) {
+        Object a = k.attachment();
+        if (a instanceof AbstractNioChannel) {
+            channels.add((AbstractNioChannel) a);
+        } else {
+            k.cancel();
+            @SuppressWarnings("unchecked")
+            NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
+            invokeChannelUnregistered(task, k, null);
+        }
+    }
+
+    for (AbstractNioChannel ch: channels) {
+        ch.unsafe().close(ch.unsafe().voidPromise());
+    }
+}
+```
+
+unsafe.close( ) in [Channel](https://github.com/Robinpig/Note/blob/master/CS/Java/Netty/Channel.md )  

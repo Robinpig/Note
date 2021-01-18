@@ -25,90 +25,7 @@ protected AbstractChannel(Channel parent) {
 
 
 
-### register( )
-
-```java
-@Override
-public final void register(EventLoop eventLoop, final ChannelPromise promise) {
-    if (eventLoop == null) {
-        throw new NullPointerException("eventLoop");
-    }
-    if (isRegistered()) {
-        promise.setFailure(new IllegalStateException("registered to an event loop already"));
-        return;
-    }
-    if (!isCompatible(eventLoop)) {
-        promise.setFailure(
-                new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
-        return;
-    }
-
-    AbstractChannel.this.eventLoop = eventLoop;
-
-    if (eventLoop.inEventLoop()) {
-        register0(promise);
-    } else {
-        try {
-            eventLoop.execute(new Runnable() {
-                @Override
-                public void run() {
-                    register0(promise);
-                }
-            });
-        } catch (Throwable t) {
-            logger.warn(
-                    "Force-closing a channel whose registration task was not accepted by an event loop: {}",
-                    AbstractChannel.this, t);
-            closeForcibly();
-            closeFuture.setClosed();
-            safeSetFailure(promise, t);
-        }
-    }
-}
-
-private void register0(ChannelPromise promise) {
-    try {
-        // check if the channel is still open as it could be closed in the mean time when the register
-        // call was outside of the eventLoop
-        if (!promise.setUncancellable() || !ensureOpen(promise)) {
-            return;
-        }
-        boolean firstRegistration = neverRegistered;
-        doRegister();
-        neverRegistered = false;
-        registered = true;
-
-        // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
-        // user may already fire events through the pipeline in the ChannelFutureListener.
-        pipeline.invokeHandlerAddedIfNeeded();
-
-        safeSetSuccess(promise);
-        pipeline.fireChannelRegistered();
-        // Only fire a channelActive if the channel has never been registered. This prevents firing
-        // multiple channel actives if the channel is deregistered and re-registered.
-        if (isActive()) {
-            if (firstRegistration) {
-                pipeline.fireChannelActive();
-            } else if (config().isAutoRead()) {
-                // This channel was registered before and autoRead() is set. This means we need to begin read
-                // again so that we process inbound data.
-                //
-                // See https://github.com/netty/netty/issues/4805
-                beginRead();
-            }
-        }
-    } catch (Throwable t) {
-        // Close the channel directly to avoid FD leak.
-        closeForcibly();
-        closeFuture.setClosed();
-        safeSetFailure(promise, t);
-    }
-}
-```
-
-
-
-beginRead( )
+### beginRead( )
 
 ```java
 @Override
@@ -151,7 +68,7 @@ protected void doBeginRead() throws Exception {
 
 
 
-doRegister( )
+### doRegister( )
 
 ```java
 @Override
@@ -223,6 +140,8 @@ static void invokeChannelActive(final AbstractChannelHandlerContext next) {
 
 
 
+### channelActive( )
+
 ```java
 @Override
 public void channelActive(ChannelHandlerContext ctx) {
@@ -230,9 +149,10 @@ public void channelActive(ChannelHandlerContext ctx) {
 
     readIfIsAutoRead();
 }
-```
 
-```
+/**
+ * In HeadContext
+ */
 private void readIfIsAutoRead() {
     if (channel.config().isAutoRead()) {
         channel.read();
@@ -408,6 +328,9 @@ protected abstract class AbstractUnsafe implements Unsafe {
     }
 }
 
+/**
+ * Read messages into the given array and return the amount which was read.
+ */
 @Override
 protected int doReadMessages(List<Object> buf) throws Exception {
     SocketChannel ch = SocketUtils.accept(javaChannel());
@@ -433,3 +356,191 @@ protected int doReadMessages(List<Object> buf) throws Exception {
 
 
 
+### register( )
+
+```java
+@Override
+public final void register(EventLoop eventLoop, final ChannelPromise promise) {
+    if (eventLoop == null) {
+        throw new NullPointerException("eventLoop");
+    }
+    if (isRegistered()) {
+        promise.setFailure(new IllegalStateException("registered to an event loop already"));
+        return;
+    }
+    if (!isCompatible(eventLoop)) {
+        promise.setFailure(
+                new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
+        return;
+    }
+
+    AbstractChannel.this.eventLoop = eventLoop;
+
+    if (eventLoop.inEventLoop()) {
+        register0(promise);
+    } else {
+        try {
+            eventLoop.execute(new Runnable() {
+                @Override
+                public void run() {
+                    register0(promise);
+                }
+            });
+        } catch (Throwable t) {
+            logger.warn(
+                    "Force-closing a channel whose registration task was not accepted by an event loop: {}",
+                    AbstractChannel.this, t);
+            closeForcibly();
+            closeFuture.setClosed();
+            safeSetFailure(promise, t);
+        }
+    }
+}
+
+private void register0(ChannelPromise promise) {
+    try {
+        // check if the channel is still open as it could be closed in the mean time when the register
+        // call was outside of the eventLoop
+        if (!promise.setUncancellable() || !ensureOpen(promise)) {
+            return;
+        }
+        boolean firstRegistration = neverRegistered;
+        doRegister();
+        neverRegistered = false;
+        registered = true;
+
+        // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
+        // user may already fire events through the pipeline in the ChannelFutureListener.
+        pipeline.invokeHandlerAddedIfNeeded();
+
+        safeSetSuccess(promise);
+        pipeline.fireChannelRegistered();
+        // Only fire a channelActive if the channel has never been registered. This prevents firing
+        // multiple channel actives if the channel is deregistered and re-registered.
+        if (isActive()) {
+            if (firstRegistration) {
+                pipeline.fireChannelActive();
+            } else if (config().isAutoRead()) {
+                // This channel was registered before and autoRead() is set. This means we need to begin read
+                // again so that we process inbound data.
+                //
+                // See https://github.com/netty/netty/issues/4805
+                beginRead();
+            }
+        }
+    } catch (Throwable t) {
+        // Close the channel directly to avoid FD leak.
+        closeForcibly();
+        closeFuture.setClosed();
+        safeSetFailure(promise, t);
+    }
+}
+```
+
+
+
+### close( )
+
+```java
+@Override
+public final void close(final ChannelPromise promise) {
+    assertEventLoop();
+
+    ClosedChannelException closedChannelException = new ClosedChannelException();
+    close(promise, closedChannelException, closedChannelException, false);
+}
+
+private void close(final ChannelPromise promise, final Throwable cause,
+                   final ClosedChannelException closeCause, final boolean notify) {
+    if (!promise.setUncancellable()) {
+        return;
+    }
+
+    if (closeInitiated) {
+        if (closeFuture.isDone()) {
+            // Closed already.
+            safeSetSuccess(promise);
+        } else if (!(promise instanceof VoidChannelPromise)) { // Only needed if no VoidChannelPromise.
+            // This means close() was called before so we just register a listener and return
+            closeFuture.addListener(new ChannelFutureListener() {
+                @Override
+                public void operationComplete(ChannelFuture future) throws Exception {
+                    promise.setSuccess();
+                }
+            });
+        }
+        return;
+    }
+
+    closeInitiated = true;
+
+    final boolean wasActive = isActive();
+    final ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+    this.outboundBuffer = null; // Disallow adding any messages and flushes to outboundBuffer.
+    Executor closeExecutor = prepareToClose();
+    if (closeExecutor != null) {
+        closeExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // Execute the close.
+                    doClose0(promise);
+                } finally {
+                    // Call invokeLater so closeAndDeregister is executed in the EventLoop again!
+                    invokeLater(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (outboundBuffer != null) {
+                                // Fail all the queued messages
+                                outboundBuffer.failFlushed(cause, notify);
+                                outboundBuffer.close(closeCause);
+                            }
+                            fireChannelInactiveAndDeregister(wasActive);
+                        }
+                    });
+                }
+            }
+        });
+    } else {
+        try {
+            // Close the channel and fail the queued messages in all cases.
+            doClose0(promise);
+        } finally {
+            if (outboundBuffer != null) {
+                // Fail all the queued messages.
+                outboundBuffer.failFlushed(cause, notify);
+                outboundBuffer.close(closeCause);
+            }
+        }
+        if (inFlush0) {
+            invokeLater(new Runnable() {
+                @Override
+                public void run() {
+                    fireChannelInactiveAndDeregister(wasActive);
+                }
+            });
+        } else {
+            fireChannelInactiveAndDeregister(wasActive);
+        }
+    }
+}
+
+private void doClose0(ChannelPromise promise) {
+    try {
+        doClose();
+        closeFuture.setClosed();
+        safeSetSuccess(promise);
+    } catch (Throwable t) {
+        closeFuture.setClosed();
+        safeSetFailure(promise, t);
+    }
+}
+
+/**
+ * Close the {@link Channel}
+ */
+@Override
+protected void doClose() throws Exception {
+    javaChannel().close();
+}
+```
