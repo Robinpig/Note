@@ -6,10 +6,13 @@
 
 
 
-based on Erang, and it's hard to deploy the env. 
-
+based on Erang, and it's hard to deploy the environment. 
 
 ## Active MQ
+
+
+
+
 
 
 ## Kafka

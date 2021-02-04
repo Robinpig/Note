@@ -22,7 +22,7 @@
 
 [Rust](https://github.com/Robinpig/Note/blob/master/CS/Rust/Rust.md)
 
-[Python](https://github.com/Robinpig/Note/blob/master/CS/Python/Python.md)
+[Scala](https://github.com/Robinpig/Note/blob/master/CS/Scala/Scala.md)
 
 
 
