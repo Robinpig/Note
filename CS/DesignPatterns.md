@@ -27,7 +27,7 @@ Software entities like classes, modules and functions should be **open for exten
 - High-level modules should not depend on low-level modules. Both should depend on abstractions.
 - Abstractions should not depend on details. Details should depend on abstractions.
 
-using interface as a abstract layer, and Factory Method, Abstract Factory, Prototype
+using interface as a abstract layer, and Factory Method, Abstract Factory, Prototype.
 
 
 
