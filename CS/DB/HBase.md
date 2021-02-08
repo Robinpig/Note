@@ -1,8 +1,8 @@
 # HBase
 
-## 简述
+## Summary
 
-### 比较
+### Compare
 
 #### Hive - Mysql
 
