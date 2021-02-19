@@ -1,6 +1,15 @@
 # Machine Learning
 
-## 1.KNN
+## Classification
+
+## Clustering
+
+## Regression
+
+## Dimensionality reduction
+
+
+## KNN
 
 K-Nearest Neighbor 懒惰学习
 
@@ -18,9 +27,11 @@ $$
 d(p,q)=\sqrt{\sum_{i=1}^n\left(q_i-p_i\right)^2}
 $$ {Euclidean Distance}
 
-​																	*1.1 Euclidean Distance*
+​																	
 
-#### 2.Chebyshev Distance
+*1.1 Euclidean Distance*
+
+#### Chebyshev Distance
 
 二维平面
 $$
@@ -83,7 +94,7 @@ $$
 - 一般数值很大的时候不用这个，计算量太大。但是单个样本又不能太少，否则容易发生误分。
 - 最大的缺点是无法给出数据的内在含义。
 
-## 2.决策树
+## Decision Trees
 
 
 
