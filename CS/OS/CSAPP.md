@@ -4,7 +4,7 @@
 
 ### 信息是位+上下文
 
-只由ASCII字符构成的文件为文本文件，其它文件为二进制文件
+Text File < Binary File
 
 
 
