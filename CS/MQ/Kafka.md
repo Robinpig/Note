@@ -89,3 +89,25 @@
 #### TopicConfigManager
 
 #### KafkaController
+
+
+
+Topic 无序
+
+paritition内部有序
+
+消息重试:消息存储 异步重试
+
+消息积压: 减小传输数据大小 IO压力 路由分配规则
+
+
+
+高并发下重复主键是否需加锁
+
+消息重复:幂等性
+
+
+
+环境隔离
+
+消息恢复
