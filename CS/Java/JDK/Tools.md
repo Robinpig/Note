@@ -11,6 +11,14 @@
 -  jstat提供GC和类装载活动的信息。可适用于脚本
 -  jvisualvm监视JVM的GUI工具，可用来剖析运行的应用，分析JVM堆转储（事后活动，虽然jvisualvm也可以实时抓取程序的堆转储
 
+
+
+## jps
+
+jps -l	显示Java进程
+
+
+
 ## jcmd
 
 jcmd process_id command optional_arguments
