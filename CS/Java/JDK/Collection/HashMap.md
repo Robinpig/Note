@@ -142,7 +142,7 @@ static final int hash(Object key) {
 
 ### 放置算法
 
-​
+
 
 ```java
  if ((p = tab[i = (n - 1) & hash]) == null)
@@ -301,11 +301,13 @@ final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
     }
 }
 ```
-### put方法:
+### put方法
 
 HashMap只提供了put用于添加元素，putVal方法只是给put方法调用的一个方法，并没有提供给用户使用。
 
 对putVal方法添加元素的分析如下：
+
+![put](https://github.com/Robinpig/Note/raw/master/images/JDK/HashMap-put.png)
 
 ①如果定位到的数组位置没有元素 就直接插入。
 ②如果定位到的数组位置有元素就和要插入的key比较，如果key相同就直接覆盖，如果key不相同，就判断p是否是一个树节点，如果是就调用e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value)将元素添加进入。如果不是就遍历链表插入(插入的是链表尾部)。
@@ -442,3 +444,19 @@ final Node<K,V> getNode(int hash, Object key) {
 8. 当同一个索引位置的节点在移除后达到 6 个时，并且该索引位置的节点为红黑树节点，会触发红黑树节点转链表节点。红黑树节点转链表节点的具体方法为源码中的 untreeify 方法。
 9. HashMap 在 JDK 1.8 之后不再有死循环的问题，JDK 1.8 之前存在死循环的根本原因是在扩容后同一索引位置的节点顺序会反掉。
 10. HashMap 是非线程安全的，在并发场景下使用 ConcurrentHashMap 来代替。
+
+
+
+
+
+1. HashMap 的存取是没有顺序的。
+2. KV 均允许为 NULL。
+3. 多线程情况下该类不安全，可以考虑用 HashTable。
+4. JDk8底层是数组 + 链表 + 红黑树，JDK7底层是数组 + 链表。
+5. 初始容量和装载因子是决定整个类性能的关键点，轻易不要动。
+6. HashMap是**懒汉式**创建的，只有在你put数据时候才会 build。
+7. 单向链表转换为红黑树的时候会先变化为**双向链表**最终转换为**红黑树**，切记双向链表跟红黑树是`共存`的。
+8. 对于传入的两个`key`，会强制性的判别出个高低，目的是为了决定向左还是向右放置数据。
+9. 链表转红黑树后会努力将红黑树的`root`节点和链表的头节点 跟`table[i]`节点融合成一个。
+10. 在删除的时候是先判断删除节点红黑树个数是否需要转链表，不转链表就跟`RBT`类似，找个合适的节点来填充已删除的节点。
+11. 红黑树的`root`节点`不一定`跟`table[i]`也就是链表的头节点是同一个，三者同步是靠`MoveRootToFront`实现的。而`HashIterator.remove()`会在调用`removeNode`的时候`movable=false`。
