@@ -1,14 +1,17 @@
 # Redis
 
-## 安装
+[Redis](https://redis.io)
 
-官网下载
+> Redis is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker. Redis provides data structures such as strings, hashes, lists, sets, sorted sets with range queries, bitmaps, hyperloglogs, geospatial indexes, and streams. Redis has built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence, and provides high availability via Redis Sentinel and automatic partitioning with Redis Cluster.
 
-需要gcc环境 make编译
+## Install
 
-修改配置文件 端口绑定 保护模式修改 IP修改   密码修改
+- Docker
 
-**单线程、非阻塞、多路复用**的I/O模型的TCP服务器。
+- make source
+- apt-get(Ubuntu) yum(RedHat) brew(Mac)
+
+
 
 ## 数据类型
 
