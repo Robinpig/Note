@@ -107,7 +107,7 @@ public class AtomicReference < V > implements java.io.Serializable {
 
 **基于最开始演示的这段代码作为入口**
 
-```
+```java
 public class VolatileDemo {
     public volatile static boolean stop=false;
     public static void main(String[] args) throws InterruptedException {
@@ -127,7 +127,7 @@ public class VolatileDemo {
 
 通过 `javap-vVolatileDemo.class`查看字节码指令
 
-```
+```java
 public static volatile boolean stop;
     descriptor: Z
     flags: ACC_PUBLIC, ACC_STATIC, ACC_VOLATILE
@@ -156,7 +156,7 @@ public static volatile boolean stop;
 
 注意被修饰了volatile关键字的 stop字段，会多一个 ACC_VOLATILE的flag，在给 stop复制的时候，调用的字节码是 putstatic,这个字节码会通过`BytecodeInterpreter`解释器来执行，找到Hotspot的源码 `bytecodeInterpreter.cpp`文件，搜索 putstatic指令定位到代码
 
-```
+```c++
 CASE(_putstatic):
         {
           u2 index = Bytes::get_native_u2(pc+1);
@@ -267,7 +267,7 @@ CASE(_putstatic):
 
 其他代码不用管，直接看 cache->is_volatile()这段代码，cache是 stop在常量池缓存中的一个实例，这段代码是判断这个cache是否是被 volatile修饰， is_volatile()方法的定义在 accessFlags.hpp文件中，代码如下
 
-```
+```c++
 public:
   // Java access flags
   ...//
