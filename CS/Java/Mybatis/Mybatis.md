@@ -1,6 +1,8 @@
 # Mybatis
 
+## Introduction
 
+[MyBatis](https://mybatis.org/mybatis-3/) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
 
 ### SqlSession
 
@@ -12,11 +14,70 @@
 
 ### SqlSessionFactoryBuilder
 
-主要是负责创建 **SqlSessionFactory** 的构造器类, 其中使用到了构建者设计模式; 仅负责创建 **SqlSessionFactory**
+build SqlSessionFactory
+
+```java
+public SqlSessionFactory build(InputStream inputStream, String environment, Properties properties) {
+  try {
+    XMLConfigBuilder parser = new XMLConfigBuilder(inputStream, environment, properties);
+    return build(parser.parse());
+  } catch (Exception e) {
+    throw ExceptionFactory.wrapException("Error building SqlSession.", e);
+  } finally {
+    ErrorContext.instance().reset();
+    try {
+      inputStream.close();
+    } catch (IOException e) {
+      // Intentionally ignore. Prefer previous error.
+    }
+  }
+}
+```
+
+
+
+### XMLConfigBuilder
+
+build configuration
+
+```java
+public Configuration parse() {
+  if (parsed) {
+    throw new BuilderException("Each XMLConfigBuilder can only be used once.");
+  }
+  parsed = true;
+  parseConfiguration(parser.evalNode("/configuration"));
+  return configuration;
+}
+
+private void parseConfiguration(XNode root) {
+  try {
+    //issue #117 read properties first
+    propertiesElement(root.evalNode("properties"));
+    Properties settings = settingsAsProperties(root.evalNode("settings"));
+    loadCustomVfs(settings);
+    typeAliasesElement(root.evalNode("typeAliases"));
+    pluginElement(root.evalNode("plugins"));
+    objectFactoryElement(root.evalNode("objectFactory"));
+    objectWrapperFactoryElement(root.evalNode("objectWrapperFactory"));
+    reflectorFactoryElement(root.evalNode("reflectorFactory"));
+    settingsElement(settings);
+    // read it after objectFactory and objectWrapperFactory issue #631
+    environmentsElement(root.evalNode("environments"));
+    databaseIdProviderElement(root.evalNode("databaseIdProvider"));
+    typeHandlerElement(root.evalNode("typeHandlers"));
+    mapperElement(root.evalNode("mappers"));
+  } catch (Exception e) {
+    throw new BuilderException("Error parsing SQL Mapper Configuration. Cause: " + e, e);
+  }
+}
+```
+
+
 
 ### Configuration
 
-Mybatis 最重要的配置类, 没有之一, 存储了大量的对象配置, 可以看源码感受一下
+Mybatis 最重要的配置类, 没有之一, 存储了大量的对象配置
 
 ### MappedStatement
 
