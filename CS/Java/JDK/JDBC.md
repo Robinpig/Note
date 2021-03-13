@@ -1,4 +1,4 @@
 # JDBC
 
-compare \$ {} and #{}
-is safety to use #{} replace \${}
+## compare \${} and #{}
+It's safety to use #{} replace \${}
