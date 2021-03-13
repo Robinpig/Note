@@ -6,6 +6,16 @@
 - MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. 
 - MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
 
+
+Compare with Hibernate
+
+- Mybatis
+    - programmers need to write SQL 
+    - SQL may not work if DataBase changed
+- Hibernate
+    - programmers not need to write SQL
+    - absolutely a ORM framework
+
 ### SqlSession
 
 负责执行 **select、insert、update、delete** 等命令, 同时负责获取映射器和管理事务; 其底层封装了与 JDBC 的交互, 可以说是 mybatis 最核心的接口之一
