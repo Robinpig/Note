@@ -2,7 +2,19 @@
 
 ## Introduction
 
-[MyBatis](https://mybatis.org/mybatis-3/) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
+- [MyBatis](https://mybatis.org/mybatis-3/) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. 
+- MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. 
+- MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
+
+
+Compare with Hibernate
+
+- Mybatis
+    - programmers need to write SQL 
+    - SQL may not work if DataBase changed
+- Hibernate
+    - programmers not need to write SQL
+    - absolutely a ORM framework
 
 ### SqlSession
 
