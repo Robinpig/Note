@@ -1,6 +1,16 @@
 # Kafka
 
-高吞吐量与可水平扩展的消息系统，
+[Apache Kafka](https://kafka.apache.org/) is an open-source distributed **event streaming** platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
+
+
+
+## event streaming
+
+> Event streaming is the digital equivalent of the human body's central nervous system. It is the technological foundation for the 'always-on' world where businesses are increasingly software-defined and automated, and where the user of software is more software.
+>
+> Technically speaking, event streaming is the practice of capturing data in real-time from event sources like databases, sensors, mobile devices, cloud services, and software applications in the form of streams of events; storing these event streams durably for later retrieval; manipulating, processing, and reacting to the event streams in real-time as well as retrospectively; and routing the event streams to different destination technologies as needed. Event streaming thus ensures a continuous flow and interpretation of data so that the right information is at the right place, at the right time.
+
+
 
 ## 基本组成
 
@@ -10,7 +20,7 @@
 
 - **Topic**
 
-  ​				Topic可逻辑上分布在多个Broker中，但不需关心数据实际存放位置。
+  ​				Topic 队列实现 可逻辑上分布在多个Broker中，但不需关心数据实际存放位置 但只能保证在一个Broker上topic顺序
 
 - **Partition**
 
