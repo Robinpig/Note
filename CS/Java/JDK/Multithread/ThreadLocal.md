@@ -1,164 +1,42 @@
 # ThreadLocal
 
-ThreadLocal，简单翻译过来就是本地线程，但是直接这么翻译很难理解ThreadLocal的作用，如果换一种说法，可以称为线程本地存储。简单来说，就是ThreadLocal为共享变量在每个线程中都创建一个副本，每个线程可以访问自己内部的副本变量。这样做的好处是可以保证共享变量在多线程环境下访问的线程安全性
+> `This class provides thread-local variables. These variables differ from their normal counterparts in that each thread that accesses one (via its get or set method) has its own, independently initialized copy of the variable. ThreadLocal instances are typically private static fields in classes that wish to associate state with a thread (e.g., a user ID or Transaction ID).`
 
-## ThreadLocal的使用
+> `Each thread holds an implicit reference to its copy of a thread-local variable as long as the thread is alive and the ThreadLocal instance is accessible; after a thread goes away, all of its copies of thread-local instances are subject to garbage collection (unless other references to these copies exist).`
 
-### 没有使用ThreadLocal时
 
-通过一个简单的例子来演示一下ThreadLocal的作用，这段代码是定义了一个静态的成员变量`num`，然后通过构造5个线程对这个`num`做递增
 
-```
-public class ThreadLocalDemo {
+## ThreadLocalMap
 
-    private static Integer num=0;
+The set() of ThreadLocal
 
-    public static void main(String[] args) {
-        Thread[] threads=new Thread[5];
-        for(int i=0;i<5;i++){
-            threads[i]=new Thread(()->{
-               num+=5;
-               System.out.println(Thread.currentThread().getName()+" : "+num);
-            },"Thread-"+i);
-        }
-
-        for(Thread thread:threads){
-            thread.start();
-        }
-    }
+```java
+/**
+ * Sets the current thread's copy of this thread-local variable
+ * to the specified value.  Most subclasses will have no need to
+ * override this method, relying solely on the {@link #initialValue}
+ * method to set the values of thread-locals.
+ *
+ * @param value the value to be stored in the current thread's copy of
+ *        this thread-local.
+ */
+public void set(T value) {
+    Thread t = Thread.currentThread();
+    ThreadLocalMap map = getMap(t);
+    if (map != null)
+        map.set(this, value);
+    else
+        createMap(t, value);
 }
 ```
 
-运行结果
+`ThreadLocalMap map=getMap(t)`实际上就是访问`Thread`类中的`ThreadLocalMap`这个成员变量
 
-```
-Thread-0 : 5
-Thread-1 : 10
-Thread-2 : 15
-Thread-3 : 20
-Thread-4 : 25
-```
+`ThreadLocalMap create when set the first value`
 
-每个线程都会对这个成员变量做递增，如果线程的执行顺序不确定，那么意味着每个线程获得的结果也是不一样的。
+> `ThreadLocalMap is a customized hash map suitable only for maintaining thread local values. No operations are exported outside of the ThreadLocal class. The class is package private to allow declaration of fields in class Thread. To help deal with very large and long-lived usages, the hash table entries use WeakReferences for keys. However, since reference queues are not used, stale entries are guaranteed to be removed only when the table starts running out of space.`
 
-### 使用了ThreadLocal以后
-
-通过ThreadLocal对上面的代码做一个改动
-
-```
-public class ThreadLocalDemo {
-
-    private static final ThreadLocal<Integer> local=new ThreadLocal<Integer>(){
-        protected Integer initialValue(){
-            return 0; //通过initialValue方法设置默认值
-        }
-    };
-
-    public static void main(String[] args) {
-        Thread[] threads=new Thread[5];
-        for(int i=0;i<5;i++){
-            threads[i]=new Thread(()->{
-                int num=local.get().intValue();
-                num+=5;
-               System.out.println(Thread.currentThread().getName()+" : "+num);
-            },"Thread-"+i);
-        }
-
-        for(Thread thread:threads){
-            thread.start();
-        }
-    }
-}
-```
-
-运行结果
-
-```
-Thread-0 : 5
-Thread-4 : 5
-Thread-2 : 5
-Thread-1 : 5
-Thread-3 : 5
-```
-
-从结果可以看到，每个线程的值都是5，意味着各个线程之间都是独立的变量副本，彼此不相互影响.
-
-> ThreadLocal会给定一个初始值，也就是`initialValue()`方法，而每个线程都会从ThreadLocal中获得这个初始化的值的副本，这样可以使得每个线程都拥有一个副本拷贝
-
-看到这里，估计有很多人都会和我一样有一些疑问
-
-1. 每个线程的变量副本是怎么存储的?
-2. ThreadLocal是如何实现多线程场景下的共享变量副本隔离?
-
-带着疑问，来看一下ThreadLocal这个类的定义(默认情况下,JDK的源码都是基于1.8版本)
-
-![ThreadLocal的全局图](https://segmentfault.com/img/bVbkDx0?w=505&h=215)
-
-从ThreadLocal的方法定义来看,还是挺简单的。就几个方法
-
-- get: 获取ThreadLocal中当前线程对应的线程局部变量
-- set：设置当前线程的线程局部变量的值
-- remove：将当前线程局部变量的值删除
-
-另外，还有一个initialValue()方法，在前面的代码中有演示，作用是返回当前线程局部变量的初始值，这个方法是一个`protected`方法，主要是在构造ThreadLocal时用于设置默认的初始值
-
-## set方法的实现
-
-set方法是设置一个线程的局部变量的值，相当于当前线程通过set设置的局部变量的值，只对当前线程可见。
-
-```
-    public void set(T value) {
-        Thread t = Thread.currentThread();//获取当前执行的线程
-        ThreadLocalMap map = getMap(t); //获得当前线程的ThreadLocalMap实例
-        if (map != null)//如果map不为空，说明当前线程已经有了一个ThreadLocalMap实例
-            map.set(this, value);//直接将当前value设置到ThreadLocalMap中
-        else
-            createMap(t, value); //说明当前线程是第一次使用线程本地变量，构造map
-    }
-```
-
-- `Thread.currentThread` 获取当前执行的线程
-- `getMap(t)` ,根据当前线程得到当前线程的ThreadLocalMap对象，这个对象具体是做什么的?稍后分析
-- 如果map不为空，说明当前线程已经构造过ThreadLocalMap，直接将值存储到map中
-- 如果map为空，说明是第一次使用，调用`createMap`构造
-
-### ThreadLocalMap是什么?
-
-我们来分析一下这句话，`ThreadLocalMap map=getMap(t)`获得一个ThreadLocalMap对象，那这个对象是干嘛的呢?
-其实不用分析，基本上也能猜测出来，Map是一个集合，集合用来存储数据，那么在ThreadLocal中，应该就是用来存储线程的局部变量的。`ThreadLocalMap`这个类很关键。
-
-```
-    ThreadLocalMap getMap(Thread t) {
-        return t.threadLocals;
-    }
-```
-
-t.threadLocals实际上就是访问Thread类中的ThreadLocalMap这个成员变量
-
-```
-public
-class Thread implements Runnable {
- /* ThreadLocal values pertaining to this thread. This map is maintained
-     * by the ThreadLocal class. */
-    ThreadLocal.ThreadLocalMap threadLocals = null;
-...
-}
-```
-
-从上面的代码发现每一个线程都有自己单独的ThreadLocalMap实例，而对应这个线程的所有本地变量都会保存到这个map内
-
-### ThreadLocalMap是在哪里构造?
-
-在`set`方法中，有一行代码`createmap(t,value);`，这个方法就是用来构造ThreadLocalMap，从传入的参数来看，它的实现逻辑基本也能猜出出几分吧
-
-```
-    void createMap(Thread t, T firstValue) {
-        t.threadLocals = new ThreadLocalMap(this, firstValue);
-    }
-```
-
-`Thread t` 是通过`Thread.currentThread()`来获取的表示当前线程，然后直接通过`new ThreadLocalMap`将当前线程中的`threadLocals`做了初始化
-ThreadLocalMap是一个静态内部类，内部定义了一个Entry对象用来真正存储数据
+### create ThreadLocalMap
 
 ```Java
 static class ThreadLocalMap {
@@ -171,17 +49,18 @@ static class ThreadLocalMap {
                 value = v;
             }
         }
+   			/**
+         * Construct a new map initially containing (firstKey, firstValue).
+         * ThreadLocalMaps are constructed lazily, so we only create
+         * one when we have at least one entry to put in it.
+         */
         ThreadLocalMap(ThreadLocal<?> firstKey, Object firstValue) {
-            //构造一个Entry数组，并设置初始大小
             table = new Entry[INITIAL_CAPACITY];
-            //计算Entry数据下标
             int i = firstKey.threadLocalHashCode & (INITIAL_CAPACITY - 1);
-            //将`firstValue`存入到指定的table下标中
             table[i] = new Entry(firstKey, firstValue);
-            size = 1;//设置节点长度为1
-            setThreshold(INITIAL_CAPACITY); //设置扩容的阈值
+            size = 1;
+            setThreshold(INITIAL_CAPACITY);
         }
-    //...省略部分代码
 }
 ```
 
@@ -273,35 +152,9 @@ private static int nextHashCode() {
 
 - Entry[i]= hashCode & (length-1)
 
-### 魔数0x61c88647
+### HASH_INCREMENT
 
-从上面的分析可以看出，它是在上一个被构造出的ThreadLocal的threadLocalHashCode的基础上加上一个魔数0x61c88647。我们来做一个实验，看看这个散列算法的运算结果
-
-```
-    private static final int HASH_INCREMENT = 0x61c88647;
-    public static void main(String[] args) {
-        magicHash(16); //初始大小16
-        magicHash(32); //扩容一倍
-    }
-
-    private static void magicHash(int size){
-        int hashCode = 0;
-        for(int i=0;i<size;i++){
-            hashCode = i*HASH_INCREMENT+HASH_INCREMENT;
-            System.out.print((hashCode & (size-1))+" ");
-        }
-        System.out.println();
-    }
-```
-
-输出结果
-
-```
-7 14 5 12 3 10 1 8 15 6 13 4 11 2 9 0 
-7 14 21 28 3 10 17 24 31 6 13 20 27 2 9 16 23 30 5 12 19 26 1 8 15 22 29 4 11 18 25 0 
-```
-
-根据运行结果，这个算法在长度为2的N次方的数组上，确实可以完美散列，没有任何冲突, 是不是很神奇。
+The difference between successively generated hash codes - turns implicit sequential thread-local IDs into near-optimally spread multiplicative hash values for power-of-two-sized tables.
 
 > 魔数0x61c88647的选取和斐波那契散列有关，**0x61c88647**对应的十进制为1640531527。而斐波那契散列的乘数可以用`(long) ((1L << 31) * (Math.sqrt(5) - 1));` 如果把这个值给转为带符号的int，则会得到-1640531527。也就是说
 > `(long) ((1L << 31) * (Math.sqrt(5) - 1));`得到的结果就是1640531527，也就是魔数**0x61c88647**
@@ -496,7 +349,7 @@ private int expungeStaleEntry(int staleSlot) {
 
 set的逻辑分析完成以后，get的源码分析就很简单了
 
-```
+```java
 public T get() {
         Thread t = Thread.currentThread();
         //从当前线程中获取ThreadLocalMap
