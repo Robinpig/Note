@@ -35,6 +35,32 @@
 
 
 
+
+
+## Method
+
+### Sleep
+
+#### yield 跟 sleep 
+
+1. yield 跟 sleep 都能暂停当前线程，都不会释放锁资源，sleep 可以指定具体休眠的时间，而 yield 则依赖 CPU 的时间片划分。
+2. sleep方法给其他线程运行机会时不考虑线程的优先级，因此会给低优先级的线程以运行的机会。yield方法只会给相同优先级或更高优先级的线程以运行的机会。
+3. 调用 sleep 方法使线程进入等待状态，等待休眠时间达到，而调用我们的 yield方法，线程会进入就绪状态，也就是sleep需要等待设置的时间后才会进行就绪状态，而yield会立即进入就绪状态。
+4. sleep方法声明会抛出 InterruptedException，而 yield 方法没有声明任何异常
+5. yield 不能被中断，而 sleep 则可以接受中断。
+6. sleep方法比yield方法具有更好的移植性(跟操作系统CPU调度相关)
+
+#### wait 跟 sleep 
+
+1. wait来自Object，sleep 来自 Thread
+2. wait 释放锁，sleep 不释放
+3. wait 必须在同步代码块中，sleep 可以任意使用
+4. wait 不需要捕获异常，sleep 需捕获异常
+
+
+
+
+
 ## Lock
 
 ### Dead Lock
@@ -56,4 +82,6 @@
 ### Live Lock
 
 
+
+## JMM
 
