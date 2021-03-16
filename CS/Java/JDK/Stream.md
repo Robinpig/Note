@@ -10,3 +10,20 @@ Lazy Traversal
 
 3．多个过滤器有些开销，所以要确保编写好用的过滤器。
 
+
+
+### 结构
+
+- 流获取
+- 转换操作 : 可以有多个
+- 终止操作 : 只能有一个
+
+###  类型
+
+- stream() : 单管道
+- parallelStream()
+  - 多管道，并行流式处理，底层使用 ForkJoinPool 实现
+  - 强制要求有序 : forEachOrdered()
+
+
+
