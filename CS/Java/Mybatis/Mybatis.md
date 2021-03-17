@@ -24,72 +24,7 @@ Compare with Hibernate
 
 负责创建 **SqlSession** 的工厂, 一旦被创建就应该在应用运行期间一直存在, **不需要额外再进行创建**
 
-### SqlSessionFactoryBuilder
 
-build SqlSessionFactory
-
-```java
-public SqlSessionFactory build(InputStream inputStream, String environment, Properties properties) {
-  try {
-    XMLConfigBuilder parser = new XMLConfigBuilder(inputStream, environment, properties);
-    return build(parser.parse());
-  } catch (Exception e) {
-    throw ExceptionFactory.wrapException("Error building SqlSession.", e);
-  } finally {
-    ErrorContext.instance().reset();
-    try {
-      inputStream.close();
-    } catch (IOException e) {
-      // Intentionally ignore. Prefer previous error.
-    }
-  }
-}
-```
-
-
-
-### XMLConfigBuilder
-
-build configuration
-
-```java
-public Configuration parse() {
-  if (parsed) {
-    throw new BuilderException("Each XMLConfigBuilder can only be used once.");
-  }
-  parsed = true;
-  parseConfiguration(parser.evalNode("/configuration"));
-  return configuration;
-}
-
-private void parseConfiguration(XNode root) {
-  try {
-    //issue #117 read properties first
-    propertiesElement(root.evalNode("properties"));
-    Properties settings = settingsAsProperties(root.evalNode("settings"));
-    loadCustomVfs(settings);
-    typeAliasesElement(root.evalNode("typeAliases"));
-    pluginElement(root.evalNode("plugins"));
-    objectFactoryElement(root.evalNode("objectFactory"));
-    objectWrapperFactoryElement(root.evalNode("objectWrapperFactory"));
-    reflectorFactoryElement(root.evalNode("reflectorFactory"));
-    settingsElement(settings);
-    // read it after objectFactory and objectWrapperFactory issue #631
-    environmentsElement(root.evalNode("environments"));
-    databaseIdProviderElement(root.evalNode("databaseIdProvider"));
-    typeHandlerElement(root.evalNode("typeHandlers"));
-    mapperElement(root.evalNode("mappers"));
-  } catch (Exception e) {
-    throw new BuilderException("Error parsing SQL Mapper Configuration. Cause: " + e, e);
-  }
-}
-```
-
-
-
-### Configuration
-
-Mybatis 最重要的配置类, 没有之一, 存储了大量的对象配置
 
 ### MappedStatement
 
