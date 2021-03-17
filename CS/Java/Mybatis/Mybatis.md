@@ -16,14 +16,6 @@ Compare with Hibernate
     - programmers not need to write SQL
     - absolutely a ORM framework
 
-### SqlSession
-
-负责执行 **select、insert、update、delete** 等命令, 同时负责获取映射器和管理事务; 其底层封装了与 JDBC 的交互, 可以说是 mybatis 最核心的接口之一
-
-### SqlSessionFactory
-
-负责创建 **SqlSession** 的工厂, 一旦被创建就应该在应用运行期间一直存在, **不需要额外再进行创建**
-
 
 
 ### MappedStatement
