@@ -4,6 +4,8 @@
 
 ## Introduction
 
+
+
 - [MyBatis](https://mybatis.org/mybatis-3/) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. 
 - MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. 
 - MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
@@ -52,7 +54,7 @@ Interceptor 为 Mybatis 中定义公共拦截器的接口, 其中定义了相关
 
 #### 反射模块
 
-反射在 Java 中的应用可以说是相当广泛了, 同时也是一把双刃剑。 Mybatis 框架本身 **封装出了反射模块**, 提供了比原生反射更 **简洁易用的 API 接口**, 以及对 **类的元数据增加缓存, 提高反射的性能**
+`Reflector class represents a cached set of class definition information that allows for easy mapping between property names and getter/setter methods.`
 
 #### 类型转换
 
