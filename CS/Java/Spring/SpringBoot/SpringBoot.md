@@ -1,5 +1,9 @@
 # SpringBoot
 
+
+
+## [How to start Spring Boot Application?](https://github.com/Robinpig/Note/blob/master/CS/Java/Spring/SpringBoot/Start.md)
+
 ## Annotations
 
 ### @SpringBootApplication
@@ -93,6 +97,8 @@ How to bind the properties
 ```groovy
 annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
 ```
+
+
 
 ## Tools
 
