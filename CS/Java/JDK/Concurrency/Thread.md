@@ -16,18 +16,7 @@
 
 ## Status
 
-在Java中，线程共有六种状态：
-
-| 状态         | 说明                                                         |
-| ------------ | ------------------------------------------------------------ |
-| NEW          | 初始状态：线程被创建，但还没有调用start()方法                |
-| RUNNABLE     | 运行状态：Java线程将操作系统中的就绪和运行两种状态笼统的称作“运行” |
-| BLOCKED      | 阻塞状态：表示线程阻塞于锁                                   |
-| WAITING      | 等待状态：表示线程进入等待状态，进入该状态表示当前线程需要等待其他线程做出一些特定动作（通知或中断） |
-| TIME_WAITING | 超时等待状态：该状态不同于 WAITIND，它是可以在指定的时间自行返回的 |
-| TERMINATED   | 终止状态：表示当前线程已经执行完毕                           |
-
-
+A thread can be in one of the following states:
 
 ```java
 /**
@@ -133,9 +122,6 @@ public enum State {
  * Returns the state of this thread.
  * This method is designed for use in monitoring of the system state,
  * not for synchronization control.
- *
- * @return this thread's state.
- * @since 1.5
  */
 public State getState() {
     // get current thread state
@@ -149,9 +135,108 @@ public State getState() {
 
 
 
+```java
+/**
+ * Interrupts this thread.
+ *
+ * <p> Unless the current thread is interrupting itself, which is
+ * always permitted, the {@link #checkAccess() checkAccess} method
+ * of this thread is invoked, which may cause a {@link
+ * SecurityException} to be thrown.
+ *
+ * <p> If this thread is blocked in an invocation of the {@link
+ * Object#wait() wait()}, {@link Object#wait(long) wait(long)}, or {@link
+ * Object#wait(long, int) wait(long, int)} methods of the {@link Object}
+ * class, or of the {@link #join()}, {@link #join(long)}, {@link
+ * #join(long, int)}, {@link #sleep(long)}, or {@link #sleep(long, int)},
+ * methods of this class, then its interrupt status will be cleared and it
+ * will receive an {@link InterruptedException}.
+ *
+ * <p> If this thread is blocked in an I/O operation upon an {@link
+ * java.nio.channels.InterruptibleChannel InterruptibleChannel}
+ * then the channel will be closed, the thread's interrupt
+ * status will be set, and the thread will receive a {@link
+ * java.nio.channels.ClosedByInterruptException}.
+ *
+ * <p> If this thread is blocked in a {@link java.nio.channels.Selector}
+ * then the thread's interrupt status will be set and it will return
+ * immediately from the selection operation, possibly with a non-zero
+ * value, just as if the selector's {@link
+ * java.nio.channels.Selector#wakeup wakeup} method were invoked.
+ *
+ * <p> If none of the previous conditions hold then this thread's interrupt
+ * status will be set. </p>
+ *
+ * <p> Interrupting a thread that is not alive need not have any effect.
+ *
+ * @throws  SecurityException
+ *          if the current thread cannot modify this thread
+ *
+ * @revised 6.0
+ * @spec JSR-51
+ */
+public void interrupt() {
+    if (this != Thread.currentThread())
+        checkAccess();
+
+    synchronized (blockerLock) {
+        Interruptible b = blocker;
+        if (b != null) {
+            interrupt0();           // Just to set the interrupt flag
+            b.interrupt(this);
+            return;
+        }
+    }
+    interrupt0();
+}
+
+/**
+ * Tests whether the current thread has been interrupted.  The
+ * <i>interrupted status</i> of the thread is cleared by this method.  In
+ * other words, if this method were to be called twice in succession, the
+ * second call would return false (unless the current thread were
+ * interrupted again, after the first call had cleared its interrupted
+ * status and before the second call had examined it).
+ *
+ * <p>A thread interruption ignored because a thread was not alive
+ * at the time of the interrupt will be reflected by this method
+ * returning false.
+ *
+ * @return  <code>true</code> if the current thread has been interrupted;
+ *          <code>false</code> otherwise.
+ * @see #isInterrupted()
+ * @revised 6.0
+ */
+public static boolean interrupted() {
+    return currentThread().isInterrupted(true);
+}
+
+/**
+ * Tests whether this thread has been interrupted.  The <i>interrupted
+ * status</i> of the thread is unaffected by this method.
+ *
+ * <p>A thread interruption ignored because a thread was not alive
+ * at the time of the interrupt will be reflected by this method
+ * returning false.
+ *
+ * @return  <code>true</code> if this thread has been interrupted;
+ *          <code>false</code> otherwise.
+ * @see     #interrupted()
+ * @revised 6.0
+ */
+public boolean isInterrupted() {
+    return isInterrupted(false);
+}
+
+/**
+ * Tests if some Thread has been interrupted.  The interrupted state
+ * is reset or not based on the value of ClearInterrupted that is
+ * passed.
+ */
+private native boolean isInterrupted(boolean ClearInterrupted);
+```
 
 
-## 
 
 ### Sleep
 
