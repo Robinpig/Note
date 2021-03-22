@@ -1,5 +1,15 @@
 # Generics
 
+How to implement generics?
+- Code specialization
+- Code sharing
+
+`C++ and C# use Code specialization while Java use Code sharing`
+
+type erase
+
+generics not exist in JVM,only have List.class not List<Integer>.class
+
 ## Type Expression
 
 Usually Parameters : 
@@ -14,5 +24,5 @@ Usually Parameters :
 
 - ? - Type not sure
 
-All of then are extends Object
+
 
