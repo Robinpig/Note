@@ -1,14 +1,26 @@
-# Log
+# Logging
+
+`MyBatis provides logging information through the use of an internal log factory. The internal log factory will delegate logging information to one of the following log implementations:`
+
+- SLF4J
+- Apache Commons Logging
+- Log4j 2
+- Log4j
+- JDK logging
+
+`The logging solution chosen is based on runtime introspection by the internal MyBatis log factory. The MyBatis log factory will use the first logging implementation it finds (implementations are searched in the above order). If MyBatis finds none of the above implementations, then logging will be disabled.`
+
+### [How to select a different logging implementation ](https://mybatis.org/mybatis-3/logging.html)
 
 
 
-Logging Package
+## Package
 
 ![Logging](https://github.com/Robinpig/Note/raw/master/images/Mybatis/Mybatis-logging.png)
 
 
 
-Log
+### Log
 
 ```java
 public interface Log {
@@ -30,13 +42,9 @@ public interface Log {
 
 
 
-LogFactory
+### LogFactory
 
 ```java
-/**
- * @author Clinton Begin
- * @author Eduardo Macarron
- */
 public final class LogFactory {
 
   /**
@@ -90,11 +98,13 @@ private static void setImplementation(Class<? extends Log> implClass) {
 
 
 
-Logger
+### Logger
 
 ![Logger](https://github.com/Robinpig/Note/raw/master/images/Mybatis/Mybatis-JdbcLogger.png)
 
-ConnectionLogger
+
+
+### ConnectionLogger
 
 ```java
 @Override

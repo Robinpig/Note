@@ -1,5 +1,13 @@
 # Cache
 
+Cache
+
+
+
+Enable cache
+
+
+
 `package org.apache.ibatis.cache`
 
 ![Cache](https://github.com/Robinpig/Note/raw/master/images/Mybatis/Cache.png)
