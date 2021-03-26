@@ -6,7 +6,7 @@ How to implement generics?
 
 `C++ and C# use Code specialization while Java use Code sharing`
 
-type erase
+Type Erasure
 
 generics not exist in JVM,only have List.class not List<Integer>.class
 
