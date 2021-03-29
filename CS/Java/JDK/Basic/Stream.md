@@ -16,6 +16,27 @@ Lazy Traversal
 
 
 
+How to create Stream?
+
+Collection
+
+Arrays
+
+Stream of()
+
+Stream empty()
+
+Stream iterate() generate()
+
+
+
+- distinct
+- skip
+- limit
+- filter
+
+
+
 ### 结构
 
 - 流获取
@@ -37,6 +58,20 @@ Lazy Traversal
 - flatMap
 - max/min
 - reduce
+- sort
+
+End operation
+
+- allMatch
+- anyMatch
+- noneMatch
+- findFirst
+- findAny
+- count
+- max/min
+- forEach
+
+
 
 
 

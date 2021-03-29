@@ -417,6 +417,7 @@ public class BatchExecutor extends BaseExecutor {
     }
     handler.parameterize(stmt);
     handler.batch(stmt);
+    // Integer.MIN_VALUE + 1002
     return BATCH_UPDATE_RETURN_VALUE;
   }
 }
