@@ -1,5 +1,15 @@
 # Throwable
 
+![Throwable](https://github.com/Robinpig/Note/raw/master/images/JDK/Throwable.png)
+
+
+
+**NullPointerException**
+
+A null object invoke non-static method will throw NPE.
+
+can use == or != compare null value or use **Optional** to avoid comparison.
+
 
 
 - 处理异常的代价未必会很高，不过还是应该在适合的时候才用。
