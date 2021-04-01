@@ -55,10 +55,18 @@ When a primitive data type is a member of a class, it is guaranteed to get a def
 
 
 
-####Boolean
+## Wrapper Class
+
+All Integer wrapper class must use equals to compare values.
+
+
+
+### Boolean
 私有属性
 
-    private final boolean value;
+```java
+private final boolean value;
+```
 
 实现Cpmpare接口，重写compare方法
 
@@ -84,34 +92,55 @@ When a primitive data type is a member of a class, it is guaranteed to get a def
         }
 
 1.8版本增加logicAnd\logicOr\logicXor方法
-####Integer
+
+### Integer
 属性值：
 
-    @Native public static final int   MIN_VALUE = 0x80000000;
-    @Native public static final int   MAX_VALUE = 0x7fffffff;
-    //hashCode返回value
-    private final int value;
-    @Native public static final int SIZE = 32;
-    //4bytes
-    public static final int BYTES = SIZE / Byte.SIZE;
-    final static char[] digits = {
-            '0' , '1' , '2' , '3' , '4' , '5' ,
-            '6' , '7' , '8' , '9' , 'a' , 'b' ,
-            'c' , 'd' , 'e' , 'f' , 'g' , 'h' ,
-            'i' , 'j' , 'k' , 'l' , 'm' , 'n' ,
-            'o' , 'p' , 'q' , 'r' , 's' , 't' ,
-            'u' , 'v' , 'w' , 'x' , 'y' , 'z'
-        };
+```java
+@Native public static final int   MIN_VALUE = 0x80000000;
+@Native public static final int   MAX_VALUE = 0x7fffffff;
+//hashCode返回value
+private final int value;
+@Native public static final int SIZE = 32;
+//4bytes
+public static final int BYTES = SIZE / Byte.SIZE;
+final static char[] digits = {
+        '0' , '1' , '2' , '3' , '4' , '5' ,
+        '6' , '7' , '8' , '9' , 'a' , 'b' ,
+        'c' , 'd' , 'e' , 'f' , 'g' , 'h' ,
+        'i' , 'j' , 'k' , 'l' , 'm' , 'n' ,
+        'o' , 'p' , 'q' , 'r' , 's' , 't' ,
+        'u' , 'v' , 'w' , 'x' , 'y' , 'z'
+    };
+```
 
 
 
 
-    public static int highestOneBit(int i) {
-        // HD, Figure 3-1
-        i |= (i >>  1);
-        i |= (i >>  2);
-        i |= (i >>  4);
-        i |= (i >>  8);
-        i |= (i >> 16);
-        return i - (i >>> 1);
-    }
+```java
+public static int highestOneBit(int i) {
+    // HD, Figure 3-1
+    i |= (i >>  1);
+    i |= (i >>  2);
+    i |= (i >>  4);
+    i |= (i >>  8);
+    i |= (i >> 16);
+    return i - (i >>> 1);
+}
+```
+
+
+### BigDecimal
+
+use compareTo
+
+use **BigDecimal(String)**  create object
+
+
+
+### BigInteger
+
+
+
+
+
