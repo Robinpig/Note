@@ -8,7 +8,11 @@
 
 ## Collection
 
+Allocate  memory when first element added.
 
+
+
+Map
 
 
 
