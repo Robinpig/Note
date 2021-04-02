@@ -18,7 +18,7 @@
 
 This means that an object can have internal data (which gives it state), methods (to produce behavior), and each object can be uniquely distinguished from every other object—to put this in a concrete sense, each object has a unique address in memory.
 
-# Access Control 
+## Access Control 
 
 ### Reason
 
@@ -66,7 +66,11 @@ Class override method in superclass with same method name and argument list.
 
  
 
+## Polymorphism
 
+Type
+- compile type 
+- runtime type
 
 
 
@@ -153,6 +157,12 @@ public String toString() {
 protected void finalize() throws Throwable { }
 ```
 
+
+create a object
+
+- static first, then dynamic
+- superclass first, then class
+- fields first, then block and constructor
 
 
 
