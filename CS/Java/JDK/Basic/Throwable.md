@@ -6,9 +6,9 @@
 
 **NullPointerException**
 
-A null object invoke non-static method will throw NPE.
+A null object invoke **non-static** method will throw NPE.
 
-can use == or != compare null value or use **Optional** to avoid comparison.
+Use == or != compare null value or use **Optional** to avoid comparison.
 
 
 
