@@ -80,6 +80,8 @@ Type
 
 
 
+
+
 ```java
 private static native void registerNatives();
 static {
