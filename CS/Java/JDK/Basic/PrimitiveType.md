@@ -70,20 +70,26 @@ private final boolean value;
 
 实现Cpmpare接口，重写compare方法
 
-    public static int compare(boolean x, boolean y) {
-        return (x == y) ? 0 : (x ? 1 : -1);
-    }
+```java
+public static int compare(boolean x, boolean y) {
+    return (x == y) ? 0 : (x ? 1 : -1);
+}
+```
 构造器:可传入原始类型或String忽略大小写判断是否为true
 
-     public static boolean parseBoolean(String s) {
-            return ((s != null) && s.equalsIgnoreCase("true"));
-        }
+```java
+ public static boolean parseBoolean(String s) {
+        return ((s != null) && s.equalsIgnoreCase("true"));
+    }
+```
 
 通过valueOf方法始终返回的是静态常量，即同一对象，减少开销
 
-    public static Boolean valueOf(boolean b) {
-        return (b ? TRUE : FALSE);
-    }
+```java
+public static Boolean valueOf(boolean b) {
+    return (b ? TRUE : FALSE);
+}
+```
 
 重写了hashCode方法，实质调用静态方法返回1231或1237
 
@@ -94,6 +100,13 @@ private final boolean value;
 1.8版本增加logicAnd\logicOr\logicXor方法
 
 ### Integer
+
+Cache
+
+
+
+
+
 属性值：
 
 ```java
