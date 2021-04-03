@@ -2,7 +2,7 @@
 
 [Redis](https://redis.io)
 
-`Redis is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker. Redis provides data structures such as strings, hashes, lists, sets, sorted sets with range queries, bitmaps, hyperloglogs, geospatial indexes, and streams. Redis has built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence, and provides high availability via Redis Sentinel and automatic partitioning with Redis Cluster.`
+Redis is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker. Redis provides data structures such as **strings, hashes, lists, sets, sorted sets** with **range queries, bitmaps, hyperloglogs, geospatial indexes, and streams**. Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
 ## Install
 
@@ -19,11 +19,11 @@
 
 - 获取所有的键应采用SCAN而非KEYS（易阻塞）
 - 删除键（较大）时使用UNLINK较DEL性能更好
-- RENAME时可先EXISTS判断存在时先使用UNLINK
+- RENAME时可先EXISTS判断存在
 
 
 
-### 字符串
+### string
 
 Redis里所有键都为字符串
 
@@ -69,13 +69,53 @@ char buf[];
 
   **字节数组**，不同于C语言的字符数组。
 
+when create string, len=capacity, usually we don't append string.
+
+len>44 raw, else embstr.
+
+debug object key
+
+RedisObject is 16byte
+
+capacity +len +flags =3byte
+
+NULL = 1byte
+
+jemalloc apply 64byte
+
+so a SDS max string len is 64-16-3-1=44byte
+
+redisObject is close value in embstr
+
+
+
+
+
 ### 列表
 
 双向链表
 
-### 哈希
+### hash
+
+siphash
+
+not expand size when bgsave except out  of dict_force_resize_ratio 
+
+and elements less than 10% of array'length will reduce capacity
 
 ### 集合
+
+listpack
+
+ziplist 级联更新 
+
+
+
+rax sort by key 
+
+zset sort by score
+
+
 
 ### 有序集合
 
@@ -89,7 +129,17 @@ HyperLogLog 实质是当作字符串存储
 
 ## 数据特性
 
-### 位图
+### bitmap
+
+bitcount
+
+bitpos
+
+bitfield KEY [GET type offset] [SET type offset value] [INCRBY type offset increment] [OVERFLOW WRAP|SAT|FAIL]
+
+- wrap cycle value 
+- sat keep the max/min value
+- fail return fail and do nothing
 
 底层数据类型为字符串，
 
@@ -386,3 +436,73 @@ public boolean unlock() {
     }
 }
 ```
+
+
+
+## command
+
+
+
+### info
+
+- Server
+- Clients
+  - rejected_connections
+- Memory
+  - human  memory jemalloc apply
+  - rss_human  memory in top command
+  - peak_human 
+  - lua_human
+- Persistence
+- Stats
+  - ops_per_sec 
+  - sync_partial_err
+- Replication
+  - backlog
+- CPU
+- Modules
+- Errorstats
+- Cluster
+- Keyspace
+
+
+
+monitor get request cmds of current time
+
+
+
+maxmemory-policy
+
+- noeviction default refuse write(exclude del) request
+- volatile-lru
+- volatile-ttl
+- volatile-random
+- alleys-lru
+- alleys-random
+- volatile-lfu
+- allkeys-lfu
+
+
+
+
+
+LRU
+
+keys contain a 24bits of timestamp 
+
+random get keys and del the oldest one util the memory is enough
+
+
+
+unlink use a async thread to del big value
+
+flushdb and flushall can add params to be async 
+
+
+
+LFU
+
+24bits
+
+- 8bits logistic counter log
+- 16bits last decrement time minutes
