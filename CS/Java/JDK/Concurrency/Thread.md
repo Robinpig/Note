@@ -4,11 +4,68 @@
 
 ## Create
 
-| Method             |                               |
-| ------------------ | ----------------------------- |
-| extends Thread     |                               |
-| implement Runnable | could extends another Class   |
-| implement Callable | override call() return Future |
+*How to create a Thread instance?*
+
+
+
+### Thread
+
+```JAVA
+/**
+ * Allocates a new Thread object.
+ */
+public Thread() {
+    init(null, null, "Thread-" + nextThreadNum(), 0);
+}
+
+/**
+ * Allocates a new Thread object with Runnable taarget.
+ */
+public Thread(Runnable target) {
+    init(null, target, "Thread-" + nextThreadNum(), 0);
+}
+```
+
+
+
+### Runnable
+
+*The Runnable interface should be implemented by any class whose instances are intended to be **executed by a thread**. The class must define a method of no arguments **called run**.*
+*This interface is designed to provide a common protocol for objects that wish to execute code while they are active. **Runnable is implemented by class Thread.***
+
+*A class that implements Runnable can run without subclassing Thread by instantiating a Thread instance and passing itself in as the target.his is important because classes should not be subclassed unless the programmer intends on modifying or enhancing the fundamental behavior of the class.*
+
+```java
+@FunctionalInterface
+public interface Runnable {
+
+    public abstract void run();
+}
+```
+
+
+
+### Callable
+
+*A task that **returns a result and may throw an exception**. Implementors define a single method with no arguments **called call**.*
+
+**Runnable does not return a result and cannot throw a checked exception.**
+
+**The Callable interface is similar to Runnable**, in that both are designed for classes whose instances are potentially executed by another thread. 
+
+
+
+The **Executors** class contains utility methods to convert from other common forms to Callable classes.
+
+```java
+@FunctionalInterface
+public interface Callable<V> {
+    /**
+     * Computes a result, or throws an exception if unable to do so.
+     */
+    V call() throws Exception;
+}
+```
 
 
 
@@ -68,8 +125,6 @@ throws InterruptedException {
 
 
 ## Interrupt
-
-
 
 ```java
 /**
@@ -398,13 +453,15 @@ public final void wait() throws InterruptedException {
 }
 ```
 
+
+
 ### Sleep
 
 #### yield 跟 sleep 
 
-1. yield 跟 sleep 都能暂停当前线程，都不会释放锁资源，sleep 可以指定具体休眠的时间，而 yield 则依赖 CPU 的时间片划分。
-2. sleep方法给其他线程运行机会时不考虑线程的优先级，因此会给低优先级的线程以运行的机会。yield方法只会给相同优先级或更高优先级的线程以运行的机会。
-3. 调用 sleep 方法使线程进入等待状态，等待休眠时间达到，而调用我们的 yield方法，线程会进入就绪状态，也就是sleep需要等待设置的时间后才会进行就绪状态，而yield会立即进入就绪状态。
+1. yield 跟 sleep 都能暂停当前线程，都不会释放锁资源，sleep 可以指定具体休眠的时间，而 yield 则依赖 CPU 的时间片划分
+2. sleep方法给其他线程运行机会时不考虑线程的优先级，因此会给低优先级的线程以运行的机会。yield方法只会给相同优先级或更高优先级的线程以运行的机会
+3. 调用 sleep 方法使线程进入等待状态，等待休眠时间达到，而调用我们的 yield方法，线程会进入就绪状态，也就是sleep需要等待设置的时间后才会进行就绪状态，而yield会立即进入就绪状态
 4. sleep方法声明会抛出 InterruptedException，而 yield 方法没有声明任何异常
 5. yield 不能被中断，而 sleep 则可以接受中断。
 6. sleep方法比yield方法具有更好的移植性(跟操作系统CPU调度相关)
