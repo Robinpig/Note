@@ -21,11 +21,27 @@ Redis is an open source (BSD licensed), in-memory data structure store, used as 
 - 删除键（较大）时使用UNLINK较DEL性能更好
 - RENAME时可先EXISTS判断存在
 
+value过大，会导致慢查询，内存增长过快等等。
+
+> - 如果是String类型，单个value大小控制10k以内。
+> - 如果是hash、list、set、zset类型，元素个数一般不超过5000。
+
 
 
 ### string
 
-Redis里所有键都为字符串
+Redis里所有键都为字符串 
+
+以业务名为key前缀，用冒号隔开，以防止key冲突覆盖。确保key的语义清晰
+
+key禁止包含特殊字符，如空格、换行、单双引号以及其他转义字符。
+
+Redis的key尽量设置ttl，以保证不使用的Key能被及时清理或淘汰。
+
+
+
+
+**长度限制? 使用hash存储,占用空间**
 
 expire will be delete after reset value
 
