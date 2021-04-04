@@ -6,7 +6,7 @@
 
 *How to create a Thread instance?*
 
-
+***Just new a Thread instance.***
 
 ### Thread
 

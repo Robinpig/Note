@@ -698,7 +698,7 @@ private void processWorkerExit(Worker w, boolean completedAbruptly) {
 }
 ```
 
-#### 
+
 
 #### shutdown
 
@@ -735,7 +735,7 @@ public void shutdown() {
 }
 ```
 
-#### 
+#### tryTerminate
 
 ```java
 /**
@@ -798,3 +798,10 @@ final void tryTerminate() {
 
 实时设置与监控
 
+
+
+## 参考资料
+
+- [1] JDK 1.8源码
+- [2] [深入理解Java线程池：ThreadPoolExecutor](http://www.ideabuffer.cn/2017/04/04/深入理解Java线程池：ThreadPoolExecutor/)
+- [3] [Java线程池实现原理及其在美团业务中的实践](https://tech.meituan.com/2020/04/02/java-pooling-pratice-in-meituan.html)
