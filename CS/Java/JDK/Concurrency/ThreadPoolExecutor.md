@@ -19,24 +19,18 @@ benefits：
 
 ### Executor
 
-> An object that executes submitted **Runnable** tasks. This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.
+*An object that executes submitted **Runnable** tasks. This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.*
 
 ```java
 public interface Executor {
-
-    /**
-     * Executes the given command at some time in the future.  The command
-     * may execute in a new thread, in a pooled thread, or in the calling
-     * thread, at the discretion of the {@code Executor} implementation.
-     *
-     * @param command the runnable task
-     * @throws RejectedExecutionException if this task cannot be
-     * accepted for execution
-     * @throws NullPointerException if command is null
-     */
+   /**
+    * The command may execute in a new thread, in a pooled thread, or in the calling thread
+    */
     void execute(Runnable command);
 }
 ```
+
+
 
 ### ExecutorService
 
@@ -78,6 +72,110 @@ public interface ExecutorService extends Executor {
 }
 ```
 
+
+
+### AbstractExecutorService
+
+
+
+Returns a RunnableFuture.
+
+```java
+protected <T> RunnableFuture<T> newTaskFor(Runnable runnable, T value) {
+    return new FutureTask<T>(runnable, value);
+}
+
+protected <T> RunnableFuture<T> newTaskFor(Callable<T> callable) {
+  	return new FutureTask<T>(callable);
+}
+```
+
+
+
+#### doInvokeAny
+
+```java
+/**
+ * the main mechanics of invokeAny.
+ */
+private <T> T doInvokeAny(Collection<? extends Callable<T>> tasks,
+                          boolean timed, long nanos)
+    throws InterruptedException, ExecutionException, TimeoutException {
+    if (tasks == null)
+        throw new NullPointerException();
+    int ntasks = tasks.size();
+    if (ntasks == 0)
+        throw new IllegalArgumentException();
+    ArrayList<Future<T>> futures = new ArrayList<Future<T>>(ntasks);
+    /**
+     *Creates an ExecutorCompletionService using the supplied executor for base task 
+     *execution and a LinkedBlockingQueue as a completion queue.
+     */
+    ExecutorCompletionService<T> ecs =
+        new ExecutorCompletionService<T>(this);
+
+    // For efficiency, especially in executors with limited
+    // parallelism, check to see if previously submitted tasks are
+    // done before submitting more of them. This interleaving
+    // plus the exception mechanics account for messiness of main
+    // loop.
+
+    try {
+        // Record exceptions so that if we fail to obtain any
+        // result, we can throw the last exception we got.
+        ExecutionException ee = null;
+        final long deadline = timed ? System.nanoTime() + nanos : 0L;
+        Iterator<? extends Callable<T>> it = tasks.iterator();
+
+        // Start one task for sure; the rest incrementally
+        futures.add(ecs.submit(it.next()));
+        --ntasks;
+        int active = 1;
+
+        for (;;) {
+            Future<T> f = ecs.poll();
+            if (f == null) {
+                if (ntasks > 0) {
+                    --ntasks;
+                    futures.add(ecs.submit(it.next()));
+                    ++active;
+                }
+                else if (active == 0)
+                    break;
+                else if (timed) {
+                    f = ecs.poll(nanos, TimeUnit.NANOSECONDS);
+                    if (f == null)
+                        throw new TimeoutException();
+                    nanos = deadline - System.nanoTime();
+                }
+                else
+                    f = ecs.take();
+            }
+            if (f != null) {
+                --active;
+                try {
+                    return f.get();
+                } catch (ExecutionException eex) {
+                    ee = eex;
+                } catch (RuntimeException rex) {
+                    ee = new ExecutionException(rex);
+                }
+            }
+        }
+
+        if (ee == null)
+            ee = new ExecutionException();
+        throw ee;
+
+    } finally {
+        for (int i = 0, size = futures.size(); i < size; i++)
+            futures.get(i).cancel(true);
+    }
+}
+```
+
+
+
 ### ScheduledExecutorService
 
 > An ExecutorService that can **schedule** commands to run after a given delay, or to execute periodically.
@@ -101,7 +199,6 @@ public interface ScheduledExecutorService extends ExecutorService {
                                                      long initialDelay,
                                                      long delay,
                                                      TimeUnit unit);
-
 }
 ```
 
@@ -150,8 +247,7 @@ private static boolean isRunning(int c) {
 
 
 
-
-state
+### runState
 
 
 >The runState provides the main lifecycle control, taking on values: 
@@ -187,15 +283,23 @@ Transfer of state:
 
 #### create
 
-> Creates a new ThreadPoolExecutor with the given initial parameters.
-> Params:
-> corePoolSize – the number of threads to keep in the pool, even if they are idle, unless allowCoreThreadTimeOut is set
-> maximumPoolSize – the maximum number of threads to allow in the pool
-> keepAliveTime – when the number of threads is greater than the core, this is the maximum time that excess idle threads will wait for new tasks before terminating.
-> unit – the time unit for the keepAliveTime argument
-> workQueue – the queue to use for holding tasks before they are executed. This queue will hold only the Runnable tasks submitted by the execute method.
-> threadFactory – the factory to use when the executor creates a new thread
-> handler – the handler to use when execution is blocked because the thread bounds and queue capacities are reached
+Creates a new ThreadPoolExecutor with the given initial parameters:
+
+1. corePoolSize – the number of threads to keep in the pool, even if they are idle, unless allowCoreThreadTimeOut is set
+
+2. maximumPoolSize – the maximum number of threads to allow in the pool
+
+3. keepAliveTime – when the number of threads is greater than the core, this is the maximum time that excess idle 
+
+   threads will wait for new tasks before terminating.
+
+4. unit – the time unit for the keepAliveTime argument
+
+5. workQueue – the queue to use for holding tasks before they are executed. This queue will hold only the Runnable tasks submitted by the execute method.
+
+6. threadFactory – the factory to use when the executor creates a new thread
+
+7. handler – the handler to use when execution is blocked because the thread bounds and queue capacities are reached
 
 ```java
 public ThreadPoolExecutor(int corePoolSize,
@@ -205,16 +309,12 @@ public ThreadPoolExecutor(int corePoolSize,
                           BlockingQueue<Runnable> workQueue,
                           ThreadFactory threadFactory,
                           RejectedExecutionHandler handler) {
-    if (corePoolSize < 0 ||
-        maximumPoolSize <= 0 ||
-        maximumPoolSize < corePoolSize ||
+    if (corePoolSize < 0 || maximumPoolSize <= 0 || maximumPoolSize < corePoolSize ||
         keepAliveTime < 0)
         throw new IllegalArgumentException();
     if (workQueue == null || threadFactory == null || handler == null)
         throw new NullPointerException();
-    this.acc = System.getSecurityManager() == null ?
-            null :
-            AccessController.getContext();
+    this.acc = System.getSecurityManager() == null ? null : AccessController.getContext();
     this.corePoolSize = corePoolSize;
     this.maximumPoolSize = maximumPoolSize;
     this.workQueue = workQueue;
@@ -248,7 +348,14 @@ public ThreadPoolExecutor(int corePoolSize,
 
 #### RejectedExecutionHandler
 
-rejectedExecution method that may be invoked by a ThreadPoolExecutor when execute cannot accept a task. This may occur when no more threads or queue slots are available because their bounds would be exceeded, or upon shutdown of the Executor.
+*RejectedExecution method that may be invoked by a ThreadPoolExecutor when execute cannot accept a task.*
+
+*This may occur when **no more threads or queue slots are available** because :*
+
+- **their bounds would be exceeded**
+- **upon shutdown of the Executor**
+
+
 
 | RejectedExecutionHandler | Behavior                                                     |
 | ------------------------ | ------------------------------------------------------------ |
@@ -797,6 +904,140 @@ final void tryTerminate() {
 线程池的配置没有标准公式化的答案
 
 实时设置与监控
+
+
+
+Submit  task
+
+- execute
+- submit
+
+shutdown
+
+- shutdown
+- shutdownNow
+
+
+
+getState
+
+- getTaskCount
+- getCompletedTaskCount
+- getCorePoolSize
+- getPoolSize
+- getActiveCount
+
+
+
+
+## Executors
+
+
+
+```java
+/**
+ * Creates a thread pool that maintains enough threads to support
+ * the given parallelism level, and may use multiple queues to
+ * reduce contention. The parallelism level corresponds to the
+ * maximum number of threads actively engaged in, or available to
+ * engage in, task processing. The actual number of threads may
+ * grow and shrink dynamically. A work-stealing pool makes no
+ * guarantees about the order in which submitted tasks are
+ * executed.
+ */
+public static ExecutorService newWorkStealingPool(int parallelism) {
+    return new ForkJoinPool
+        (parallelism,
+         ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+         null, true);
+}
+
+/**
+ * Creates a work-stealing thread pool using all
+ * {@link Runtime#availableProcessors available processors}
+ * as its target parallelism level.
+ */
+public static ExecutorService newWorkStealingPool() {
+    return new ForkJoinPool
+        (Runtime.getRuntime().availableProcessors(),
+         ForkJoinPool.defaultForkJoinWorkerThreadFactory,
+         null, true);
+}
+
+/**
+ * Creates a thread pool that reuses a fixed number of threads
+ * operating off a shared unbounded queue, using the provided
+ * ThreadFactory to create new threads when needed.  At any point,
+ * at most {@code nThreads} threads will be active processing
+ * tasks.  If additional tasks are submitted when all threads are
+ * active, they will wait in the queue until a thread is
+ * available.  If any thread terminates due to a failure during
+ * execution prior to shutdown, a new one will take its place if
+ * needed to execute subsequent tasks.  The threads in the pool will
+ * exist until it is explicitly {@link ExecutorService#shutdown
+ * shutdown}.
+ */
+public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory threadFactory) {
+    return new ThreadPoolExecutor(nThreads, nThreads,
+                                  0L, TimeUnit.MILLISECONDS,
+                                  new LinkedBlockingQueue<Runnable>(),
+                                  threadFactory);
+}
+```
+
+
+
+```java
+/**
+ * Creates a thread pool that creates new threads as needed, but
+ * will reuse previously constructed threads when they are
+ * available, and uses the provided
+ * ThreadFactory to create new threads when needed.
+ */
+public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
+    return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
+                                  60L, TimeUnit.SECONDS,
+                                  new SynchronousQueue<Runnable>(),
+                                  threadFactory);
+}
+```
+
+
+
+```java
+/**
+ * Creates an Executor that uses a single worker thread operating
+ * off an unbounded queue, and uses the provided ThreadFactory to
+ * create a new thread when needed. Unlike the otherwise
+ * equivalent {@code newFixedThreadPool(1, threadFactory)} the
+ * returned executor is guaranteed not to be reconfigurable to use
+ * additional threads.
+ */
+public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactory) {
+    return new FinalizableDelegatedExecutorService
+        (new ThreadPoolExecutor(1, 1,
+                                0L, TimeUnit.MILLISECONDS,
+                                new LinkedBlockingQueue<Runnable>(),
+                                threadFactory));
+}
+
+
+```
+
+
+
+```java
+/**
+ * Creates a thread pool that can schedule commands to run after a
+ * given delay, or to execute periodically.
+ * @param corePoolSize the number of threads to keep in the pool,
+ * even if they are idle
+ */
+public static ScheduledExecutorService newScheduledThreadPool(
+        int corePoolSize, ThreadFactory threadFactory) {
+    return new ScheduledThreadPoolExecutor(corePoolSize, threadFactory);
+}
+```
 
 
 

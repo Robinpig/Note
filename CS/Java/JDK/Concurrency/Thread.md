@@ -28,45 +28,6 @@ public Thread(Runnable target) {
 
 
 
-### Runnable
-
-*The Runnable interface should be implemented by any class whose instances are intended to be **executed by a thread**. The class must define a method of no arguments **called run**.*
-*This interface is designed to provide a common protocol for objects that wish to execute code while they are active. **Runnable is implemented by class Thread.***
-
-*A class that implements Runnable can run without subclassing Thread by instantiating a Thread instance and passing itself in as the target.his is important because classes should not be subclassed unless the programmer intends on modifying or enhancing the fundamental behavior of the class.*
-
-```java
-@FunctionalInterface
-public interface Runnable {
-
-    public abstract void run();
-}
-```
-
-
-
-### Callable
-
-*A task that **returns a result and may throw an exception**. Implementors define a single method with no arguments **called call**.*
-
-**Runnable does not return a result and cannot throw a checked exception.**
-
-**The Callable interface is similar to Runnable**, in that both are designed for classes whose instances are potentially executed by another thread. 
-
-
-
-The **Executors** class contains utility methods to convert from other common forms to Callable classes.
-
-```java
-@FunctionalInterface
-public interface Callable<V> {
-    /**
-     * Computes a result, or throws an exception if unable to do so.
-     */
-    V call() throws Exception;
-}
-```
-
 
 
 ## Lifetime
@@ -85,6 +46,57 @@ A thread can be in one of the following states:
 | WATING       | A thread that is waiting indefinitely for another thread to perform a particular action is in this state. |
 | TIME_WAITING | A thread that is waiting for another thread to perform an action for up to a specified waiting time is in this state. |
 | TERMINATED   | A thread that has exited is in this state.                   |
+
+
+
+```java
+/**
+ * Causes this thread to begin execution; the Java Virtual Machine
+ * calls the <code>run</code> method of this thread.
+ * <p>
+ * The result is that two threads are running concurrently: the
+ * current thread (which returns from the call to the
+ * <code>start</code> method) and the other thread (which executes its
+ * <code>run</code> method).
+ * <p>
+ * It is never legal to start a thread more than once.
+ * In particular, a thread may not be restarted once it has completed
+ * execution.
+ */
+public synchronized void start() {
+    /**
+     * This method is not invoked for the main method thread or "system"
+     * group threads created/set up by the VM. Any new functionality added
+     * to this method in the future may have to also be added to the VM.
+     *
+     * A zero status value corresponds to state "NEW".
+     */
+    if (threadStatus != 0)
+        throw new IllegalThreadStateException();
+
+    /* Notify the group that this thread is about to be started
+     * so that it can be added to the group's list of threads
+     * and the group's unstarted count can be decremented. */
+    group.add(this);
+
+    boolean started = false;
+    try {
+        start0();
+        started = true;
+    } finally {
+        try {
+            if (!started) {
+                group.threadStartFailed(this);
+            }
+        } catch (Throwable ignore) {
+            /* do nothing. If start0 threw a Throwable then
+              it will be passed up the call stack */
+        }
+    }
+}
+
+private native void start0();
+```
 
 
 
@@ -124,46 +136,46 @@ throws InterruptedException {
 
 
 
+```c++
+//一个c++函数：
+void JavaThread::exit(bool destroy_vm, ExitType exit_type) ；
+//里面有一个贼不起眼的一行代码
+ensure_join(this);
+
+static void ensure_join(JavaThread* thread) {
+  Handle threadObj(thread, thread->threadObj());
+
+  ObjectLocker lock(threadObj, thread);
+
+  thread->clear_pending_exception();
+
+  java_lang_Thread::set_thread_status(threadObj(),        java_lang_Thread::TERMINATED);
+  java_lang_Thread::set_thread(threadObj(), NULL);
+  //同志们看到了没，别的不用看，就看这一句
+  //thread就是当前线程，是啥？就是刚才例子中说的threadA线程
+  lock.notify_all(thread);
+  thread->clear_pending_exception();
+}
+```
+
 ## Interrupt
+
+*Interrupts this thread.*
+Unless the current thread is interrupting itself, which is always permitted, the checkAccess method of this thread is invoked, which may cause a SecurityException to be thrown.
+
+1. If this thread is blocked in an invocation of the wait(), wait(long), or wait(long, int) methods of the Object class, or of the join(), join(long), join(long, int), sleep(long), or sleep(long, int), methods of this class, then its interrupt status will be cleared and it will receive an InterruptedException.
+
+2. If this thread is blocked in an I/O operation upon an InterruptibleChannel then the channel will be closed, the thread's interrupt status will be set, and the thread will receive a java.nio.channels.ClosedByInterruptException.
+   If this thread is blocked in a java.nio.channels.Selector then the thread's interrupt status will be set and it will return immediately from the selection operation, possibly with a non-zero value, just as if the selector's wakeup method were invoked.
+
+3. If none of the previous conditions hold then this thread's interrupt status will be set.
+
+4. Interrupting a thread that is not alive need not have any effect.
+
+   
 
 ```java
 /**
- * Interrupts this thread.
- *
- * <p> Unless the current thread is interrupting itself, which is
- * always permitted, the {@link #checkAccess() checkAccess} method
- * of this thread is invoked, which may cause a {@link
- * SecurityException} to be thrown.
- *
- * <p> If this thread is blocked in an invocation of the {@link
- * Object#wait() wait()}, {@link Object#wait(long) wait(long)}, or {@link
- * Object#wait(long, int) wait(long, int)} methods of the {@link Object}
- * class, or of the {@link #join()}, {@link #join(long)}, {@link
- * #join(long, int)}, {@link #sleep(long)}, or {@link #sleep(long, int)},
- * methods of this class, then its interrupt status will be cleared and it
- * will receive an {@link InterruptedException}.
- *
- * <p> If this thread is blocked in an I/O operation upon an {@link
- * java.nio.channels.InterruptibleChannel InterruptibleChannel}
- * then the channel will be closed, the thread's interrupt
- * status will be set, and the thread will receive a {@link
- * java.nio.channels.ClosedByInterruptException}.
- *
- * <p> If this thread is blocked in a {@link java.nio.channels.Selector}
- * then the thread's interrupt status will be set and it will return
- * immediately from the selection operation, possibly with a non-zero
- * value, just as if the selector's {@link
- * java.nio.channels.Selector#wakeup wakeup} method were invoked.
- *
- * <p> If none of the previous conditions hold then this thread's interrupt
- * status will be set. </p>
- *
- * <p> Interrupting a thread that is not alive need not have any effect.
- *
- * @throws  SecurityException
- *          if the current thread cannot modify this thread
- *
- * @revised 6.0
  * @spec JSR-51
  */
 public void interrupt() {
@@ -192,11 +204,6 @@ public void interrupt() {
  * <p>A thread interruption ignored because a thread was not alive
  * at the time of the interrupt will be reflected by this method
  * returning false.
- *
- * @return  <code>true</code> if the current thread has been interrupted;
- *          <code>false</code> otherwise.
- * @see #isInterrupted()
- * @revised 6.0
  */
 public static boolean interrupted() {
     return currentThread().isInterrupted(true);
@@ -209,11 +216,6 @@ public static boolean interrupted() {
  * <p>A thread interruption ignored because a thread was not alive
  * at the time of the interrupt will be reflected by this method
  * returning false.
- *
- * @return  <code>true</code> if this thread has been interrupted;
- *          <code>false</code> otherwise.
- * @see     #interrupted()
- * @revised 6.0
  */
 public boolean isInterrupted() {
     return isInterrupted(false);
