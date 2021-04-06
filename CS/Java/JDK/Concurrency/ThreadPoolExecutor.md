@@ -249,22 +249,21 @@ private static boolean isRunning(int c) {
 
 ### runState
 
+The runState provides the main lifecycle control, taking on values: 
 
->The runState provides the main lifecycle control, taking on values: 
->
->RUNNING: Accept new tasks and process queued tasks 
->
->SHUTDOWN: Don't accept new tasks, but process queued tasks 
->
->STOP: Don't accept new tasks, don't process queued tasks, and interrupt in-progress tasks TIDYING: All tasks have terminated, workerCount is zero, 
->
->the thread transitioning to state TIDYING will run the terminated() hook method TERMINATED: terminated() has completed The numerical order among these values matters, to allow ordered comparisons. The runState monotonically increases over time, but need not hit each state. 
->
->The transitions are: RUNNING -> SHUTDOWN On invocation of shutdown(), perhaps implicitly in finalize() (RUNNING or SHUTDOWN) -> STOP On invocation of shutdownNow() SHUTDOWN -> TIDYING When both queue and pool are empty STOP -> TIDYING When pool is empty TIDYING -> TERMINATED 
->
->When the terminated() hook method has completed Threads waiting in awaitTermination() will return when the state reaches TERMINATED. 
->
->Detecting the transition from SHUTDOWN to TIDYING is less straightforward than you'd like because the queue may become empty after non-empty and vice versa during SHUTDOWN state, but we can only terminate if, after seeing that it is empty, we see that workerCount is 0 (which sometimes entails a recheck -- see below).
+- RUNNING: Accept new tasks and process queued tasks 
+- SHUTDOWN: Don't accept new tasks, but process queued tasks 
+- STOP: Don't accept new tasks, don't process queued tasks, and interrupt in-progress tasks 
+- TIDYING: All tasks have terminated, workerCount is zero, the thread transitioning to state TIDYING will run the terminated() hook method 
+- TERMINATED: terminated() has completed The numerical order among these values matters, to allow ordered comparisons. The runState monotonically increases over time, but need not hit each state. 
+
+The transitions are: RUNNING -> SHUTDOWN On invocation of shutdown(), perhaps implicitly in finalize() 
+
+(RUNNING or SHUTDOWN) -> STOP On invocation of shutdownNow() SHUTDOWN -> TIDYING When both queue and pool are empty STOP -> TIDYING When pool is empty TIDYING -> TERMINATED 
+
+When the terminated() hook method has completed Threads waiting in awaitTermination() will return when the state reaches TERMINATED. 
+
+Detecting the transition from SHUTDOWN to TIDYING is less straightforward than you'd like because the queue may become empty after non-empty and vice versa during SHUTDOWN state, but we can only terminate if, after seeing that it is empty, we see that workerCount is 0 (which sometimes entails a recheck -- see below).
 
 ```java
 // runState is stored in the high-order bits
@@ -377,42 +376,18 @@ public ThreadPoolExecutor(int corePoolSize,
  * If the task cannot be submitted for execution, either because this
  * executor has been shutdown or because its capacity has been reached,
  * the task is handled by the current {@code RejectedExecutionHandler}.
- *
- * @param command the task to execute
- * @throws RejectedExecutionException at discretion of
- *         {@code RejectedExecutionHandler}, if the task
- *         cannot be accepted for execution
- * @throws NullPointerException if {@code command} is null
  */
 public void execute(Runnable command) {
     if (command == null)
         throw new NullPointerException();
-    /*
-     * Proceed in 3 steps:
-     *
-     * 1. If fewer than corePoolSize threads are running, try to
-     * start a new thread with the given command as its first
-     * task.  The call to addWorker atomically checks runState and
-     * workerCount, and so prevents false alarms that would add
-     * threads when it shouldn't, by returning false.
-     *
-     * 2. If a task can be successfully queued, then we still need
-     * to double-check whether we should have added a thread
-     * (because existing ones died since last checking) or that
-     * the pool shut down since entry into this method. So we
-     * recheck state and if necessary roll back the enqueuing if
-     * stopped, or start a new thread if there are none.
-     *
-     * 3. If we cannot queue task, then we try to add a new
-     * thread.  If it fails, we know we are shut down or saturated
-     * and so reject the task.
-     */
+    
     int c = ctl.get();
     if (workerCountOf(c) < corePoolSize) {
         if (addWorker(command, true))
             return;
         c = ctl.get();
     }
+   
     if (isRunning(c) && workQueue.offer(command)) {
         int recheck = ctl.get();
         if (! isRunning(recheck) && remove(command))
@@ -420,16 +395,21 @@ public void execute(Runnable command) {
         else if (workerCountOf(recheck) == 0)
             addWorker(null, false);
     }
+   
     else if (!addWorker(command, false))
         reject(command);
 }
 ```
 
-1. 首先检测线程池运行状态，如果不是RUNNING，则直接拒绝，线程池要保证在RUNNING的状态下执行任务。
-2. 如果workerCount < corePoolSize，则创建并启动一个线程来执行新提交的任务。
-3. 如果workerCount >= corePoolSize，且线程池内的阻塞队列未满，则将任务添加到该阻塞队列中。
-4. 如果workerCount >= corePoolSize && workerCount < maximumPoolSize，且线程池内的阻塞队列已满，则创建并启动一个线程来执行新提交的任务。
-5. 如果workerCount >= maximumPoolSize，并且线程池内的阻塞队列已满, 则根据拒绝策略来处理该任务, 默认的处理方式是直接抛异常。
+
+
+ *Proceed in 3 steps:*
+
+1. *If fewer than corePoolSize threads are running, try to start a new thread with the given command as its first task.  The call to **addWorker atomically checks runState and workerCount**, and so prevents false alarms that would add threads when it shouldn't, by returning false.*
+2. *If a task can be successfully queued, then we still **need to double-check whether we should have added a thread (because existing ones died since last checking) or that the pool shut down** since entry into this method. So we recheck state and if necessary roll back the enqueuing if stopped, or start a new thread if there are none.*
+3. *If we cannot queue task, then we try to add a new thread.  If it fails, we know we are shut down or saturated and so reject the task.*
+
+
 
 ![ThreadPoolExecutor](https://github.com/Robinpig/Note/raw/master/images/JDK/ThreadPoolExecutor-execute.png)
 
@@ -457,12 +437,6 @@ public void execute(Runnable command) {
  * or when the queue is full (in which case we must bypass queue).
  * Initially idle threads are usually created via
  * prestartCoreThread or to replace other dying workers.
- *
- * @param core if true use corePoolSize as bound, else
- * maximumPoolSize. (A boolean indicator is used here rather than a
- * value to ensure reads of fresh values after checking other pool
- * state).
- * @return true if successful
  */
 private boolean addWorker(Runnable firstTask, boolean core) {
     retry:
@@ -530,7 +504,29 @@ private boolean addWorker(Runnable firstTask, boolean core) {
     }
     return workerStarted;
 }
+
+/**
+ * Rolls back the worker thread creation.
+ * - removes worker from workers, if present
+ * - decrements worker count
+ * - rechecks for termination, in case the existence of this
+ *   worker was holding up termination
+ */
+private void addWorkerFailed(Worker w) {
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        if (w != null)
+            workers.remove(w);
+        decrementWorkerCount();
+        tryTerminate();
+    } finally {
+        mainLock.unlock();
+    }
+}
 ```
+
+
 
 ![ThreadPoolExecutor](https://github.com/Robinpig/Note/raw/master/images/JDK/ThreadPoolExecutor-addWorker.png)
 
@@ -540,9 +536,23 @@ private boolean addWorker(Runnable firstTask, boolean core) {
 
 #### Worker 
 
-> Class Worker mainly maintains interrupt control state for threads running tasks, along with other minor bookkeeping. This class opportunistically extends **AbstractQueuedSynchronizer** to simplify acquiring and releasing a lock surrounding each task execution. This protects against interrupts that are intended to wake up a worker thread waiting for a task from instead interrupting a task being run. We implement a simple non-reentrant mutual exclusion lock rather than use ReentrantLock because we do not want worker tasks to be able to reacquire the lock when they invoke pool control methods like setCorePoolSize. Additionally, to suppress interrupts until the thread actually starts running tasks, we initialize lock state to a negative value, and clear it upon start (in runWorker).
+Class Worker mainly maintains interrupt control state for threads running tasks, along with other minor bookkeeping. This class opportunistically extends **AbstractQueuedSynchronizer** to simplify acquiring and releasing a lock surrounding each task execution. This protects against interrupts that are intended to wake up a worker thread waiting for a task from instead interrupting a task being run. We implement a simple non-reentrant mutual exclusion lock rather than use ReentrantLock because we do not want worker tasks to be able to reacquire the lock when they invoke pool control methods like setCorePoolSize. Additionally, to suppress interrupts until the thread actually starts running tasks, we initialize lock state to a negative value, and clear it upon start (in runWorker).
 
 
+
+constructor
+
+```java
+/**
+ * Creates with given first task and thread from ThreadFactory.
+ * @param firstTask the first task (null if none)
+ */
+Worker(Runnable firstTask) {
+    setState(-1); // inhibit interrupts until runWorker
+    this.firstTask = firstTask;
+    this.thread = getThreadFactory().newThread(this);
+}
+```
 
 fields in Worker
 
@@ -602,56 +612,32 @@ Worker是通过继承AQS，使用AQS来实现独占锁这个功能。没有使�
 
 
 
-tryAcquire方法是根据state是否是0来判断的，所以构造函数里`setState(-1);`将state设置为-1是为了禁止在执行任务前对线程进行中断。
+
+
+Override run
+
+```java
+/** Delegates main run loop to outer runWorker  */
+public void run() {
+    runWorker(this);
+}
+```
 
 
 
 #### runWorker
 
+
+
+*Main worker run loop. **Repeatedly gets tasks from queue and executes them, while coping with a number of issues**:* 
+
+1. *We may start out with an initial task, in which case we don't need to get the first one. Otherwise, as long as pool is running, we get tasks from getTask. If it returns null then the worker exits due to changed pool state or configuration parameters. Other exits result from exception throws in external code, in which case completedAbruptly holds, which usually leads processWorkerExit to replace this thread.* 
+2. *Before running any task, the lock is acquired to prevent other pool interrupts while the task is executing, and then we ensure that unless pool is stopping, this thread does not have its interrupt set.* 
+3. *Each task run is preceded by a call to beforeExecute, which might throw an exception, in which case we cause thread to die (breaking loop with completedAbruptly true) without processing the task.* 
+4. *Assuming beforeExecute completes normally, we run the task, gathering any of its thrown exceptions to send to afterExecute. We separately handle RuntimeException, Error (both of which the specs guarantee that we trap) and arbitrary Throwables. Because we cannot rethrow Throwables within Runnable.run, we wrap them within Errors on the way out (to the thread's UncaughtExceptionHandler). Any thrown exception also conservatively causes thread to die.* 
+5. *After task.run completes, we call afterExecute, which may also throw an exception, which will also cause thread to die. According to JLS Sec 14.20, this exception is the one that will be in effect even if task.run throws. The net effect of the exception mechanics is that afterExecute and the thread's UncaughtExceptionHandler have as accurate information as we can provide about any problems encountered by user code.*
+
 ```java
-/**
- * Main worker run loop.  Repeatedly gets tasks from queue and
- * executes them, while coping with a number of issues:
- *
- * 1. We may start out with an initial task, in which case we
- * don't need to get the first one. Otherwise, as long as pool is
- * running, we get tasks from getTask. If it returns null then the
- * worker exits due to changed pool state or configuration
- * parameters.  Other exits result from exception throws in
- * external code, in which case completedAbruptly holds, which
- * usually leads processWorkerExit to replace this thread.
- *
- * 2. Before running any task, the lock is acquired to prevent
- * other pool interrupts while the task is executing, and then we
- * ensure that unless pool is stopping, this thread does not have
- * its interrupt set.
- *
- * 3. Each task run is preceded by a call to beforeExecute, which
- * might throw an exception, in which case we cause thread to die
- * (breaking loop with completedAbruptly true) without processing
- * the task.
- *
- * 4. Assuming beforeExecute completes normally, we run the task,
- * gathering any of its thrown exceptions to send to afterExecute.
- * We separately handle RuntimeException, Error (both of which the
- * specs guarantee that we trap) and arbitrary Throwables.
- * Because we cannot rethrow Throwables within Runnable.run, we
- * wrap them within Errors on the way out (to the thread's
- * UncaughtExceptionHandler).  Any thrown exception also
- * conservatively causes thread to die.
- *
- * 5. After task.run completes, we call afterExecute, which may
- * also throw an exception, which will also cause thread to
- * die. According to JLS Sec 14.20, this exception is the one that
- * will be in effect even if task.run throws.
- *
- * The net effect of the exception mechanics is that afterExecute
- * and the thread's UncaughtExceptionHandler have as accurate
- * information as we can provide about any problems encountered by
- * user code.
- *
- * @param w the worker
- */
 final void runWorker(Worker w) {
     Thread wt = Thread.currentThread();
     Runnable task = w.firstTask;
@@ -699,24 +685,16 @@ final void runWorker(Worker w) {
 
 #### getTask
 
+
+
+Performs blocking or timed wait for a task, depending on current configuration settings, or returns null if this worker must exit because of any of: 
+
+1. There are more than maximumPoolSize workers (due to a call to setMaximumPoolSize). 
+2. The pool is stopped. 
+3. The pool is shutdown and the queue is empty. 
+4. This worker timed out waiting for a task, and timed-out workers are subject to termination (that is, allowCoreThreadTimeOut || workerCount > corePoolSize) both before and after the timed wait, and if the queue is non-empty, this worker is not the last thread in the pool.
+
 ```java
-/**
- * Performs blocking or timed wait for a task, depending on
- * current configuration settings, or returns null if this worker
- * must exit because of any of:
- * 1. There are more than maximumPoolSize workers (due to
- *    a call to setMaximumPoolSize).
- * 2. The pool is stopped.
- * 3. The pool is shutdown and the queue is empty.
- * 4. This worker timed out waiting for a task, and timed-out
- *    workers are subject to termination (that is,
- *    {@code allowCoreThreadTimeOut || workerCount > corePoolSize})
- *    both before and after the timed wait, and if the queue is
- *    non-empty, this worker is not the last thread in the pool.
- *
- * @return task, or null if the worker must exit, in which case
- *         workerCount is decremented
- */
 private Runnable getTask() {
     boolean timedOut = false; // Did the last poll() time out?
 
@@ -762,20 +740,9 @@ private Runnable getTask() {
 
 #### processWorkerExit
 
+*Performs cleanup and bookkeeping for a dying worker. Called only from worker threads. Unless completedAbruptly is set, assumes that workerCount has already been adjusted to account for exit. This method removes thread from worker set, and possibly terminates the pool or replaces the worker if either it exited due to user task exception or if fewer than corePoolSize workers are running or queue is non-empty but there are no workers.*
+
 ```java
-/**
- * Performs cleanup and bookkeeping for a dying worker. Called
- * only from worker threads. Unless completedAbruptly is set,
- * assumes that workerCount has already been adjusted to account
- * for exit.  This method removes thread from worker set, and
- * possibly terminates the pool or replaces the worker if either
- * it exited due to user task exception or if fewer than
- * corePoolSize workers are running or queue is non-empty but
- * there are no workers.
- *
- * @param w the worker
- * @param completedAbruptly if the worker died due to user exception
- */
 private void processWorkerExit(Worker w, boolean completedAbruptly) {
     if (completedAbruptly) // If abrupt, then workerCount wasn't adjusted
         decrementWorkerCount();
@@ -806,41 +773,6 @@ private void processWorkerExit(Worker w, boolean completedAbruptly) {
 ```
 
 
-
-#### shutdown
-
-- 在getTask方法中，如果这时线程池的状态是SHUTDOWN并且workQueue为空，那么就应该返回null来结束这个工作线程，而使线程池进入SHUTDOWN状态需要调用shutdown方法；
-- shutdown方法会调用interruptIdleWorkers来中断空闲的线程，interruptIdleWorkers持有mainLock，会遍历workers来逐个判断工作线程是否空闲。但getTask方法中没有mainLock；
-- 在getTask中，如果判断当前线程池状态是RUNNING，并且阻塞队列为空，那么会调用`workQueue.take()`进行阻塞；
-- 如果在判断当前线程池状态是RUNNING后，这时调用了shutdown方法把状态改为了SHUTDOWN，这时如果不进行中断，那么当前的工作线程在调用了`workQueue.take()`后会一直阻塞而不会被销毁，因为在SHUTDOWN状态下不允许再有新的任务添加到workQueue中，这样一来线程池永远都关闭不了了；
-- 由上可知，shutdown方法与getTask方法（从队列中获取任务时）存在竞态条件；
-
-```java
-/**
- * Initiates an orderly shutdown in which previously submitted
- * tasks are executed, but no new tasks will be accepted.
- * Invocation has no additional effect if already shut down.
- *
- * <p>This method does not wait for previously submitted tasks to
- * complete execution.  Use {@link #awaitTermination awaitTermination}
- * to do that.
- *
- * @throws SecurityException {@inheritDoc}
- */
-public void shutdown() {
-    final ReentrantLock mainLock = this.mainLock;
-    mainLock.lock();
-    try {
-        checkShutdownAccess();
-        advanceRunState(SHUTDOWN);
-        interruptIdleWorkers();
-        onShutdown(); // hook for ScheduledThreadPoolExecutor
-    } finally {
-        mainLock.unlock();
-    }
-    tryTerminate();
-}
-```
 
 #### tryTerminate
 
@@ -890,6 +822,105 @@ final void tryTerminate() {
 
 
 
+
+#### shutdown
+
+- 在getTask方法中，如果这时线程池的状态是SHUTDOWN并且workQueue为空，那么就应该返回null来结束这个工作线程，而使线程池进入SHUTDOWN状态需要调用shutdown方法；
+- shutdown方法会调用interruptIdleWorkers来中断空闲的线程，interruptIdleWorkers持有mainLock，会遍历workers来逐个判断工作线程是否空闲。但getTask方法中没有mainLock；
+- 在getTask中，如果判断当前线程池状态是RUNNING，并且阻塞队列为空，那么会调用`workQueue.take()`进行阻塞；
+- 如果在判断当前线程池状态是RUNNING后，这时调用了shutdown方法把状态改为了SHUTDOWN，这时如果不进行中断，那么当前的工作线程在调用了`workQueue.take()`后会一直阻塞而不会被销毁，因为在SHUTDOWN状态下不允许再有新的任务添加到workQueue中，这样一来线程池永远都关闭不了了；
+- 由上可知，shutdown方法与getTask方法（从队列中获取任务时）存在竞态条件；
+
+```java
+/**
+ * Initiates an orderly shutdown in which previously submitted
+ * tasks are executed, but no new tasks will be accepted.
+ * Invocation has no additional effect if already shut down.
+ *
+ * <p>This method does not wait for previously submitted tasks to
+ * complete execution.  Use {@link #awaitTermination awaitTermination}
+ * to do that.
+ *
+ * @throws SecurityException {@inheritDoc}
+ */
+public void shutdown() {
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        checkShutdownAccess();
+        advanceRunState(SHUTDOWN);
+        interruptIdleWorkers();
+        onShutdown(); // hook for ScheduledThreadPoolExecutor
+    } finally {
+        mainLock.unlock();
+    }
+    tryTerminate();
+}
+```
+
+
+
+#### shutdownNow
+
+```java
+/**
+ * Attempts to stop all actively executing tasks, halts the
+ * processing of waiting tasks, and returns a list of the tasks
+ * that were awaiting execution. These tasks are drained (removed)
+ * from the task queue upon return from this method.
+ *
+ * <p>This method does not wait for actively executing tasks to
+ * terminate.  Use {@link #awaitTermination awaitTermination} to
+ * do that.
+ *
+ * <p>There are no guarantees beyond best-effort attempts to stop
+ * processing actively executing tasks.  This implementation
+ * cancels tasks via {@link Thread#interrupt}, so any task that
+ * fails to respond to interrupts may never terminate.
+ *
+ * @throws SecurityException {@inheritDoc}
+ */
+public List<Runnable> shutdownNow() {
+    List<Runnable> tasks;
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        checkShutdownAccess();
+        advanceRunState(STOP);
+        interruptWorkers();
+        tasks = drainQueue();
+    } finally {
+        mainLock.unlock();
+    }
+    tryTerminate();
+    return tasks;
+}
+
+/**
+ * Interrupts all threads, even if active. Ignores SecurityExceptions
+ * (in which case some threads may remain uninterrupted).
+ */
+private void interruptWorkers() {
+    final ReentrantLock mainLock = this.mainLock;
+    mainLock.lock();
+    try {
+        for (Worker w : workers)
+            w.interruptIfStarted();
+    } finally {
+        mainLock.unlock();
+    }
+}
+
+void interruptIfStarted() {
+    Thread t;
+    if (getState() >= 0 && (t = thread) != null && !t.isInterrupted()) {
+        try {
+            t.interrupt();
+        } catch (SecurityException ignore) {
+        }
+    }
+}
+```
 
 场景分析
 
