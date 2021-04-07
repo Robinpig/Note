@@ -80,7 +80,7 @@ Type
 
 
 
-
+### registerNatives
 
 ```java
 private static native void registerNatives();
@@ -168,4 +168,6 @@ create a object
 
 
 
+### wait & notify
 
+See [Thread](https://github.com/Robinpig/Note/raw/master/CS/Java/JDK/Concurrency/Thread.md)

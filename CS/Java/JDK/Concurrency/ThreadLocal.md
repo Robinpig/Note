@@ -8,7 +8,7 @@
 
 ## ThreadLocalMap
 
-The set() of ThreadLocal
+### set
 
 ```java
 /**
@@ -28,6 +28,22 @@ public void set(T value) {
     else
         createMap(t, value);
 }
+```
+
+`ThreadLocalMap in Thread`
+
+```java
+/** ThreadLocal values pertaining to this thread. This map is maintained
+ * by the ThreadLocal class. 
+ */
+ThreadLocal.ThreadLocalMap threadLocals = null;
+
+/**
+ * InheritableThreadLocal values pertaining to this thread. This map is
+ * maintained by the InheritableThreadLocal class.
+ */
+ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
+
 ```
 
 `ThreadLocalMap map=getMap(t)`实际上就是访问`Thread`类中的`ThreadLocalMap`这个成员变量
@@ -64,7 +80,7 @@ static class ThreadLocalMap {
 }
 ```
 
-> 分析到这里，基本知道了ThreadLocalMap长啥样了，也知道它是如何构造的?那么我看到这里的时候仍然有疑问
+
 
 - Entry继承了`WeakReference`,这个表示什么意思?
 - 在构造ThreadLocalMap的时候`new ThreadLocalMap(this, firstValue);`,key其实是this，this表示当前对象的引用，在当前的案例中，this指的是`ThreadLocal local`。那么多个线程对应同一个ThreadLocal实例，怎么对每一个ThreadLocal对象做区分呢？
