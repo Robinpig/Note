@@ -8,6 +8,14 @@ Executors are the JDK name for the concept of thread pools. The “executor” n
 
 Spring’s `TaskExecutor` interface is identical to the `java.util.concurrent.Executor` interface. In fact, originally, its primary reason for existence was to abstract away the need for Java 5 when using thread pools. The interface has a single method (`execute(Runnable task)`) that accepts a task for execution based on the semantics and configuration of the thread pool.
 
+```java
+@FunctionalInterface
+public interface TaskExecutor extends Executor {
+   @Override
+   void execute(Runnable task);
+}
+```
+
 The `TaskExecutor` was originally created to give other Spring components an abstraction for thread pooling where needed. Components such as the `ApplicationEventMulticaster`, JMS’s `AbstractMessageListenerContainer`, and Quartz integration all use the `TaskExecutor` abstraction to pool threads. However, if your beans need thread pooling behavior, you can also use this abstraction for your own needs.
 
 
@@ -22,7 +30,8 @@ Spring includes a number of pre-built implementations of `TaskExecutor`. In all 
 - `ThreadPoolTaskExecutor`: This implementation is most commonly used. It exposes bean properties for configuring a `java.util.concurrent.ThreadPoolExecutor` and wraps it in a `TaskExecutor`. If you need to adapt to a different kind of `java.util.concurrent.Executor`, we recommend that you use a `ConcurrentTaskExecutor` instead.
 - `WorkManagerTaskExecutor`: This implementation uses a CommonJ `WorkManager` as its backing service provider and is the central convenience class for setting up CommonJ-based thread pool integration on WebLogic or WebSphere within a Spring application context.
 - `DefaultManagedTaskExecutor`: This implementation uses a JNDI-obtained `ManagedExecutorService` in a JSR-236 compatible runtime environment (such as a Java EE 7+ application server), replacing a CommonJ WorkManager for that purpose.
-- 
+
+  
 
 ## TaskScheduler
 
@@ -103,17 +112,42 @@ The other implementation is a `PeriodicTrigger` that accepts a fixed period, an 
 
 
 
-
-
 ## Async
 
 
 
-The default advice mode for processing `@Async` annotations is `proxy` which allows for interception of calls through the proxy only. Local calls within the **same class cannot get intercepted** that way. For a more advanced mode of interception, consider switching to `aspectj` mode in combination with compile-time or load-time weaving.
+**The default advice mode for processing `@Async` annotations is `proxy`** which allows for interception of calls through the proxy only. Local calls within the **same class cannot get intercepted** that way. For a more advanced mode of interception, consider switching to `aspectj` mode in combination with compile-time or load-time weaving.
+
+### Example
+
+```java
+@Configuration
+@EnableAsync
+public class AppConfig {
+}
+```
 
 
 
-### @EnableAsync
+Even methods that return a value can be invoked asynchronously. However, such methods are required to have a `Future`-typed return value. This still provides the benefit of asynchronous execution so that the caller can perform other tasks prior to calling `get()` on that `Future`. The following example shows how to use `@Async` on a method that returns a value:
+
+```java
+@Async
+Future<String> returnSomething(int i) {
+    // this will be run asynchronously
+}
+```
+
+
+
+### Implementations
+
+#### EnableAsync
+
+The mode attribute controls how advice is applied: 
+
+- If the mode is AdviceMode.PROXY (the default), then the other attributes control the behavior of the proxying. Please note that proxy mode allows for interception of calls through the proxy only; local calls within the same class cannot get intercepted that way.
+- Note that if the mode is set to AdviceMode.ASPECTJ, then the value of the proxyTargetClass attribute will be ignored. Note also that in this case the spring-aspects module JAR must be present on the classpath, with compile-time weaving or load-time weaving applying the aspect to the affected classes. There is no proxy involved in such a scenario; local calls will be intercepted as well.
 
 ```java
 @Target({ElementType.TYPE})
@@ -131,23 +165,13 @@ public @interface EnableAsync {
 }
 ```
 
+#### AsyncConfigurationSelector
+
 ```java
-/**
- * Selects which implementation of {@link AbstractAsyncConfiguration} should
- * be used based on the value of {@link EnableAsync#mode} on the importing
- * {@code @Configuration} class.
- *
- * @author Chris Beams
- * @author Juergen Hoeller
- * @since 3.1
- * @see EnableAsync
- * @see ProxyAsyncConfiguration
- */
 public class AsyncConfigurationSelector extends AdviceModeImportSelector<EnableAsync> {
 
    private static final String ASYNC_EXECUTION_ASPECT_CONFIGURATION_CLASS_NAME =
          "org.springframework.scheduling.aspectj.AspectJAsyncConfiguration";
-
 
    /**
     * Returns {@link ProxyAsyncConfiguration} or {@code AspectJAsyncConfiguration}
@@ -170,18 +194,11 @@ public class AsyncConfigurationSelector extends AdviceModeImportSelector<EnableA
 }
 ```
 
+
+
+*@Configuration class that registers the Spring infrastructure beans necessary to enable proxy-based asynchronous method execution.*
+
 ```java
-/**
- * {@code @Configuration} class that registers the Spring infrastructure beans necessary
- * to enable proxy-based asynchronous method execution.
- *
- * @author Chris Beams
- * @author Stephane Nicoll
- * @author Juergen Hoeller
- * @since 3.1
- * @see EnableAsync
- * @see AsyncConfigurationSelector
- */
 @Configuration
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 public class ProxyAsyncConfiguration extends AbstractAsyncConfiguration {
@@ -204,7 +221,11 @@ public class ProxyAsyncConfiguration extends AbstractAsyncConfiguration {
 }
 ```
 
+#### AsyncAnnotationBeanPostProcessor
 
+*Bean post-processor that automatically applies asynchronous invocation behavior to any bean that carries the Async annotation at class or method-level by adding a corresponding AsyncAnnotationAdvisor to the exposed proxy (either an existing AOP proxy or a newly generated proxy that implements all of the target's interfaces).*
+
+*override setBeanFactory method from **BeanFactoryAware***
 
 ```java
 @Override
@@ -220,16 +241,14 @@ public void setBeanFactory(BeanFactory beanFactory) {
 }
 ```
 
+
+
+#### AsyncAnnotationAdvisor
+
+***Advisor that activates asynchronous method execution through the Async annotation.** This annotation can be used at the method and type level in implementation classes as well as in service interfaces.*
+*This advisor detects the EJB 3.1 javax.ejb.Asynchronous annotation as well, treating it exactly like Spring's own Async. Furthermore, a custom async annotation type may get **specified through the "asyncAnnotationType" property**.*
+
 ```java
-/**
- * Create a new {@code AsyncAnnotationAdvisor} for the given task executor.
- * @param executor the task executor to use for asynchronous methods
- * (can be {@code null} to trigger default executor resolution)
- * @param exceptionHandler the {@link AsyncUncaughtExceptionHandler} to use to
- * handle unexpected exception thrown by asynchronous method executions
- * @since 5.1
- * @see AnnotationAsyncExecutionInterceptor#getDefaultExecutor(BeanFactory)
- */
 @SuppressWarnings("unchecked")
 public AsyncAnnotationAdvisor(
       @Nullable Supplier<Executor> executor, @Nullable Supplier<AsyncUncaughtExceptionHandler> exceptionHandler) {
@@ -246,11 +265,7 @@ public AsyncAnnotationAdvisor(
    this.advice = buildAdvice(executor, exceptionHandler);
    this.pointcut = buildPointcut(asyncAnnotationTypes);
 }
-```
 
-
-
-```java
 protected Advice buildAdvice(
       @Nullable Supplier<Executor> executor, @Nullable Supplier<AsyncUncaughtExceptionHandler> exceptionHandler) {
 
@@ -260,7 +275,97 @@ protected Advice buildAdvice(
 }
 ```
 
+##### setAsyncAnnotationType
 
+*Set the 'async' annotation type.*
+*The default async annotation type is the Async annotation, as well as the EJB 3.1 javax.ejb.Asynchronous annotation (if present).*
+*This setter property exists so that developers can provide their own (non-Spring-specific) annotation type to indicate that a method is to be executed asynchronously.*
+
+```java
+public void setAsyncAnnotationType(Class<? extends Annotation> asyncAnnotationType) {
+   Assert.notNull(asyncAnnotationType, "'asyncAnnotationType' must not be null");
+   Set<Class<? extends Annotation>> asyncAnnotationTypes = new HashSet<>();
+   asyncAnnotationTypes.add(asyncAnnotationType);
+   this.pointcut = buildPointcut(asyncAnnotationTypes);
+}
+```
+
+
+
+#### AnnotationAsyncExecutionInterceptor
+
+*getDefaultExecutor searches for a unique TaskExecutor bean in the context, or for an Executor bean named "taskExecutor" otherwise.If neither of the two is resolvable, this implementation will return null.*
+
+```java
+/**
+ * Configure this aspect with the given executor and exception handler suppliers,
+ * applying the corresponding default if a supplier is not resolvable.
+ */
+public void configure(@Nullable Supplier<Executor> defaultExecutor,
+      @Nullable Supplier<AsyncUncaughtExceptionHandler> exceptionHandler) {
+ 
+   this.defaultExecutor = new SingletonSupplier<>(defaultExecutor, () -> getDefaultExecutor(this.beanFactory));
+   this.exceptionHandler = new SingletonSupplier<>(exceptionHandler, SimpleAsyncUncaughtExceptionHandler::new);
+}
+```
+
+
+
+#### AsyncExecutionInterceptor
+
+*AOP Alliance MethodInterceptor that processes method invocations asynchronously, using a given **AsyncTaskExecutor**. Typically used with the **org.springframework.scheduling.annotation.Async** annotation.*
+*In terms of target method signatures, any parameter types are supported. However, the return type is constrained to either void or java.util.concurrent.Future. In the latter case, the Future handle returned from the proxy will be an actual asynchronous Future that can be used to track the result of the asynchronous method execution. However, since the target method needs to implement the same signature, it will have to return a temporary Future handle that just passes the return value through (like Spring's **org.springframework.scheduling.annotation.AsyncResult** or EJB 3.1's javax.ejb.AsyncResult).*
+*When the return type is **java.util.concurrent.Future**, any exception thrown during the execution can be accessed and managed by the caller. With void return type however, such exceptions cannot be transmitted back. In that case an **AsyncUncaughtExceptionHandler** can be registered to process such exceptions.*
+
+```java
+public class AsyncExecutionInterceptor extends AsyncExecutionAspectSupport implements MethodInterceptor, Ordered {}
+```
+
+
+
+##### invoke
+
+*This implementation is a no-op for compatibility in Spring 3.1.2. Subclasses may override to provide support for extracting qualifier information, e.g. via an annotation on the given method.*
+
+```java
+@Override
+@Nullable
+public Object invoke(final MethodInvocation invocation) throws Throwable {
+   Class<?> targetClass = (invocation.getThis() != null ? AopUtils.getTargetClass(invocation.getThis()) : null);
+   Method specificMethod = ClassUtils.getMostSpecificMethod(invocation.getMethod(), targetClass);
+   final Method userDeclaredMethod = BridgeMethodResolver.findBridgedMethod(specificMethod);
+
+   AsyncTaskExecutor executor = determineAsyncExecutor(userDeclaredMethod);
+   if (executor == null) {
+      throw new IllegalStateException(
+            "No executor specified and no default executor set on AsyncExecutionInterceptor either");
+   }
+
+   Callable<Object> task = () -> {
+      try {
+         Object result = invocation.proceed();
+         if (result instanceof Future) {
+            return ((Future<?>) result).get();
+         }
+      }
+      catch (ExecutionException ex) {
+         handleError(ex.getCause(), userDeclaredMethod, invocation.getArguments());
+      }
+      catch (Throwable ex) {
+         handleError(ex, userDeclaredMethod, invocation.getArguments());
+      }
+      return null;
+   };
+
+   return doSubmit(task, executor, invocation.getMethod().getReturnType());
+}
+```
+
+
+
+##### determineAsyncExecutor
+
+*Determine the specific executor to use when executing the given method. Should preferably return an AsyncListenableTaskExecutor implementation.*
 
 ```java
 @Nullable
@@ -286,15 +391,11 @@ protected AsyncTaskExecutor determineAsyncExecutor(Method method) {
     return (AsyncTaskExecutor)executor;
 }
 ```
+##### doSubmit
+
+*Delegate for actually executing the given task with the chosen executor.*
 
 ```java
-/**
- * Delegate for actually executing the given task with the chosen executor.
- * @param task the task to execute
- * @param executor the chosen executor
- * @param returnType the declared return type (potentially a {@link Future} variant)
- * @return the execution result (potentially a corresponding {@link Future} handle)
- */
 @Nullable
 protected Object doSubmit(Callable<Object> task, AsyncTaskExecutor executor, Class<?> returnType) {
    if (CompletableFuture.class.isAssignableFrom(returnType)) {
@@ -317,28 +418,6 @@ protected Object doSubmit(Callable<Object> task, AsyncTaskExecutor executor, Cla
       executor.submit(task);
       return null;
    }
-}
-```
-
-@Async
-
-```java
-@Target({ElementType.TYPE, ElementType.METHOD})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-public @interface Async {
-    String value() default "";
-}
-```
-
-
-
-Even methods that return a value can be invoked asynchronously. However, such methods are required to have a `Future`-typed return value. This still provides the benefit of asynchronous execution so that the caller can perform other tasks prior to calling `get()` on that `Future`. The following example shows how to use `@Async` on a method that returns a value:
-
-```java
-@Async
-Future<String> returnSomething(int i) {
-    // this will be run asynchronously
 }
 ```
 
@@ -381,19 +460,6 @@ EnableScheduling import SchedulingConfiguration
 #### SchedulingConfiguration
 
 ```java
-/**
- * {@code @Configuration} class that registers a {@link ScheduledAnnotationBeanPostProcessor}
- * bean capable of processing Spring's @{@link Scheduled} annotation.
- *
- * <p>This configuration class is automatically imported when using the
- * {@link EnableScheduling @EnableScheduling} annotation. See
- * {@code @EnableScheduling}'s javadoc for complete usage details.
- *
- * @author Chris Beams
- * @since 3.1
- * @see EnableScheduling
- * @see ScheduledAnnotationBeanPostProcessor
- */
 @Configuration
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 public class SchedulingConfiguration {
