@@ -73,6 +73,10 @@ Compare
 
 ## Functional Interface
 
+*There are some interfaces in Java that have only a single method but aren’t normally meant to be implemented by lambda expressions. For example, they might assume that the object has internal state and be interfaces with a single method only coincidentally. A couple of good examples are **java.lang.Comparable** and **java.io.Closeable**.*
+
+*In contrast to Closeable and Comparable, all the new interfaces introduced in order to provide Stream interoperability are expected to be implemented by lambda expressions. They are really there to **bundle up blocks of code as data**. Consequently, they have the @FunctionalInterface annotation applied.*
+
 
 
 | Functional Interface | Parameter Type | Return Type | Scence |
@@ -166,22 +170,21 @@ It’s very easy to figure out whether an operation is eager or lazy: **look at 
 
 ### Generate Stream
 
-Collection
+#### Collection
 
-Arrays
+*Collection provide a **default method** to avert all third-party collections libraries being broken.*
 
-Stream of()
+*default methods are designed primarily to allow binary compatible API evolution. Allowing classes to win over any default methods simplifies a lot of inheritance scenarios.*
 
-Stream empty()
+#### Arrays
 
-Stream iterate() generate()
+#### Stream 
 
+of()
 
+empty()
 
-- distinct
-- skip
-- limit
-- filter
+iterate() generate()
 
 
 
@@ -195,6 +198,10 @@ Stream iterate() generate()
   - 强制要求有序 : forEachOrdered()
 
 
+
+
+
+### Method
 
 **collect(toList)**
 
@@ -218,29 +225,13 @@ use Predicate interface
 
 
 
+### Key Points
+
+*Whenever you pass lambda expressions into the higher-order functions on the Stream interface, you should seek to **avoid side effects**. The only exception to this is the **forEach** method, which is a terminal operation.*
 
 
-*Whenever you pass lambda expressions into the higher-order functions on the Stream interface, you should seek to avoid side effects. The only exception to this is the forEach method, which is a terminal operation.*
 
-
-
-- map
-- filter
-- flatMap
-- max/min
-- reduce
-- sort
-
-End operation
-
-- allMatch
-- anyMatch
-- noneMatch
-- findFirst
-- findAny
-- count
-- max/min
-- forEach
+*A significant performance advantage can be had by **using primitive specialized lambda expressions and streams** such as IntStream.*
 
 
 
