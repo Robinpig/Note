@@ -99,23 +99,72 @@ Compare
 
 ## Stream
 
+*A Stream is a tool for building up complex operations on collections using a functional approach.*
+
+### Iterator & Stream
+
+*Counting London-based artists using a for loop*
+
+```java
+int count = 0;
+for (Artist artist : allArtists) {
+    if (artist.isFrom("London")) {
+        count++;
+    }
+}
+```
+
+*Looking under the covers a little bit, the for loop is actually syntactic sugar that wraps up the iteration and hides it. It’s worth taking a moment to look at what’s going on under the hood here. The first step in this process is a call to the iterator method, which creates a new **Iterator** object in order to control the iteration process. We call this **external iteration**. The iteration then proceeds by explicitly calling the hasNext and next methods on this Iterator.*
+
+*Counting London-based artists using an iterator*
+
+```java
+int count = 0;
+Iterator<Artist> iterator = allArtists.iterator();
+while(iterator.hasNext()) {
+    Artist artist = iterator.next();
+    if (artist.isFrom("London")) {
+        count++;
+    }
+}
+```
 
 
-Lazy Traversal
+
+![External Iteration](https://github.com/Robinpig/Note/raw/master/images/JDK/Stream-External-Iteration.png)
+
+
+
+*Counting London-based artists using internal iteration*
+
+```java
+long count = allArtists.stream()
+                       .filter(artist -> artist.isFrom("London"))
+                       .count();
+```
+
+
+
+![Internal Iteration](https://github.com/Robinpig/Note/raw/master/images/JDK/Stream-Internal-Iteration.png)
+
+It’s very easy to figure out whether an operation is eager or lazy: **look at what it returns.**
+
+- If it gives you back a Stream, it’s lazy
+- if it gives you back another value or void, then it’s eager
+
+*This makes sense because the preferred way of using these methods is to form a sequence of lazy operations chained together and then to have a single eager operation at the end that generates your result.*
+
+
 
 1. 过滤器因为支持在迭代过程中结束处理，所以有很大的性能优势
 2. 即使都要处理整个数据集，一个过滤器还是要比一个迭代器稍微快些
 3. 多个过滤器有些开销，所以要确保编写好用的过滤器
 
-返回值是否为stream
-
-- 及早求值
-
-- 惰性求值
+- 
 
 
 
-How to create Stream?
+### Generate Stream
 
 Collection
 
@@ -136,13 +185,9 @@ Stream iterate() generate()
 
 
 
-### 结构
 
-- 流获取
-- 转换操作 : 可以有多个
-- 终止操作 : 只能有一个
 
-###  类型
+###  Type
 
 - stream() : 单管道
 - parallelStream()
@@ -151,7 +196,34 @@ Stream iterate() generate()
 
 
 
-- collect(toList)
+**collect(toList)**
+
+*collect(toList()) is an eager operation that generates a list from the values in a Stream.*
+
+**map**
+
+*If you’ve got a function that converts a value of one type into another, map lets you apply this function to a stream of values, producing another stream of the new values.*
+
+
+
+**filter**
+
+*Any time you’re looping over some data and checking each element, you might want to think about using the new filter method on Stream.*
+
+use Predicate interface
+
+**flatMap**
+
+*flatMap lets you replace a value with a Stream and concatenates all the streams together.*
+
+
+
+
+
+*Whenever you pass lambda expressions into the higher-order functions on the Stream interface, you should seek to avoid side effects. The only exception to this is the forEach method, which is a terminal operation.*
+
+
+
 - map
 - filter
 - flatMap
