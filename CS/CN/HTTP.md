@@ -1,9 +1,16 @@
 # HTTP
 
+*HyperText Transfer Protocol*
+
+
+
 ## Cookie？Session？Token？
-###为什么需要？
+
+### 为什么需要？
 HTTP协议的无状态性无法认证请求来源
-###区别
+
+### 区别
+
 - Cookie存储在客户端
     - 不安全
     - 数量限制
@@ -14,23 +21,25 @@ HTTP协议的无状态性无法认证请求来源
     - 支持移动设备
     - 跨程序调用
     - 安全
-###基于Token的验证原理
+### 基于Token的验证原理
     
+
 基于Token的身份验证是无状态的，我们不将用户信息存在服务器或Session中。
-    
+
 这种概念解决了在服务端存储信息时的许多问题。NoSession意味着你的程序可以根据需要去增减机器，而不用去担心用户是否登录。
-    
+
 基于Token的身份验证的过程如下:
     
+
    - 用户通过用户名和密码发送请求。
    - 程序验证。
    - 程序返回一个签名的token 给客户端。
    - 客户端储存token,并且每次用于每次发送请求。
    - 服务端验证token并返回数据。
-    
+
    每一次请求都需要 token。token 应该在HTTP的头部发送从而保证了Http请求无状态。我们同样通过设置服务器属性Access-Control-Allow-Origin:* ，让服务器能接受到来自所有域的请求。需要主要的是，在ACAO头部标明(designating)*时，不得带有像HTTP认证，客户端SSL证书和cookies的证书。
-   
-###基于Token验证的优势
+
+### 基于Token验证的优势
 
 - 无状态、可扩展
 
@@ -67,7 +76,7 @@ Having our API just serve data, we can also make the design choice to serve asse
 创建Token的时候，你可以设定一些选项。我们在后续的文章中会进行更加详尽的描述，但是标准的用法会在JSON Web Token体现。
 
 最近的程序和文档是供给JSON Web Token的。它支持众多的语言。这意味在未来的使用中你可以真正的转换你的认证机制。   
-###JWT
+### JWT
 JSON Web Token 是一个开放标准
 
 用途：
@@ -81,3 +90,89 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 - Payload 有效载荷
 - Signature 签名
     - 通过payload和secret使用Header指定算法生成
+
+
+
+
+
+在HTTP/1.1规范中幂等性的定义是：
+
+> Methods can also have the property of "idempotence" in that (aside from error or expiration issues) the side-effects of N > 0 identical requests is the same as for a single request.
+
+从定义上看，HTTP 方法的幂等性是指一次和多次请求某一个资源应该具有同样的副作用。幂等性属于语义范畴，正如编译器只能帮助检查语法错误一样，HTTP 规范也没有办法通过消息格式等语法手段来定义它，这可能是它不太受到重视的原因之一。但实际上，幂等性是分布式系统设计中十分重要的概念，而 HTTP 的分布式本质也决定了它在 HTTP 中具有重要地位。
+
+HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只是可读的。所以只有 OPTIONS、GET、HEAD 是安全的，其他都是不安全的。
+
+| HTTP 方法 | 幂等性 | 安全性 |
+| --------- | ------ | ------ |
+| OPTIONS   | yes    | yes    |
+| GET       | yes    | yes    |
+| HEAD      | yes    | yes    |
+| PUT       | yes    | no     |
+| DELETE    | yes    | no     |
+| POST      | no     | no     |
+| PATCH     | no     | no     |
+
+**POST 和 PATCH 这两个不是幂等性的**。
+两次相同的POST请求会在服务器端创建两份资源，它们具有不同的URI。
+对同一URI进行多次PUT的副作用和一次PUT是相同的。
+
+## HTTP 状态码
+
+服务器返回的 **响应报文** 中第一行为状态行，包含了状态码以及原因短语，用来告知客户端请求的结果。
+
+| 状态码 | 类别                             | 原因短语                   |
+| ------ | -------------------------------- | -------------------------- |
+| 1XX    | Informational（信息性状态码）    | 接收的请求正在处理         |
+| 2XX    | Success（成功状态码）            | 请求正常处理完毕           |
+| 3XX    | Redirection（重定向状态码）      | 需要进行附加操作以完成请求 |
+| 4XX    | Client Error（客户端错误状态码） | 服务器无法处理请求         |
+| 5XX    | Server Error（服务器错误状态码） | 服务器处理请求出错         |
+
+### 1XX 信息
+
+- **100 Continue** ：表明到目前为止都很正常，客户端可以继续发送请求或者忽略这个响应。
+
+### 2XX 成功
+
+- **200 OK**
+- **204 No Content** ：请求已经成功处理，但是返回的响应报文不包含实体的主体部分。一般在只需要从客户端往服务器发送信息，而不需要返回数据时使用。
+- **206 Partial Content** ：表示客户端进行了范围请求。响应报文包含由 Content-Range 指定范围的实体内容。
+
+### 3XX 重定向
+
+- **301 Moved Permanently** ：永久性重定向
+- **302 Found** ：临时性重定向
+- **303 See Other** ：和 302 有着相同的功能，但是 303 明确要求客户端应该采用 GET 方法获取资源。
+- 注：虽然 HTTP 协议规定 301、302 状态下重定向时不允许把 POST 方法改成 GET 方法，但是大多数浏览器都会在 301、302 和 303 状态下的重定向把 POST 方法改成 GET 方法。
+- **304 Not Modified** ：如果请求报文首部包含一些条件，例如：If-Match，If-ModifiedSince，If-None-Match，If-Range，If-Unmodified-Since，如果不满足条件，则服务器会返回 304 状态码。
+- **307 Temporary Redirect** ：临时重定向，与 302 的含义类似，但是 307 要求浏览器不会把重定向请求的 POST 方法改成 GET 方法。
+
+### 4XX 客户端错误
+
+- **400 Bad Request** ：请求报文中存在语法错误。
+- **401 Unauthorized** ：该状态码表示发送的请求需要有认证信息（BASIC 认证、DIGEST 认证）。如果之前已进行过一次请求，则表示用户认证失败。
+- **403 Forbidden** ：请求被拒绝，服务器端没有必要给出拒绝的详细理由。
+- **404 Not Found**
+
+### 5XX 服务器错误
+
+- **500 Internal Server Error** ：服务器正在执行请求时发生错误。
+- **503 Service Unavilable** ：服务器暂时处于超负载或正在进行停机维护，现在无法处理请求。
+
+
+
+[HTTP Code](https://zh.wikipedia.org/wiki/HTTP%E7%8A%B6%E6%80%81%E7%A0%81)
+
+
+
+并行连接
+
+持久连接
+
+pipeline
+
+
+
+(Cross-Origin Resource Sharing)CORS跨域
+
