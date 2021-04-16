@@ -32,6 +32,12 @@ public @interface SpringBootConfiguration {
 
 ##### @Configuration
 
+```java
+
+```
+
+
+
 #### @EnableAutoConfiguration
 
 ```
@@ -44,7 +50,7 @@ public @interface SpringBootConfiguration {
 public @interface EnableAutoConfiguration {
 ```
 
-In class AutoConfigurationImportSelector, getAutoConfigurationEntry load configurations.
+In class AutoConfigurationImportSelector, **getAutoConfigurationEntry** load configurations.
 
 ```java
 /**
@@ -71,7 +77,13 @@ protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata an
 
 ##### @AutoConfigurationPackage
 
-```
+
+
+```java
+/**
+ * Indicates that the package containing the annotated class should be registered with
+ * {@link AutoConfigurationPackages}.
+ */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
@@ -79,6 +91,68 @@ protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata an
 @Import(AutoConfigurationPackages.Registrar.class)
 public @interface AutoConfigurationPackage {
 ```
+
+```java
+/**
+ * {@link ImportBeanDefinitionRegistrar} to store the base package from the importing
+ * configuration.
+ */
+static class Registrar implements ImportBeanDefinitionRegistrar, DeterminableImports {
+
+   @Override
+   public void registerBeanDefinitions(AnnotationMetadata metadata, BeanDefinitionRegistry registry) {
+      register(registry, new PackageImport(metadata).getPackageName());
+   }
+
+   @Override
+   public Set<Object> determineImports(AnnotationMetadata metadata) {
+      return Collections.singleton(new PackageImport(metadata));
+   }
+
+}
+```
+
+
+
+~~~java
+/**
+ * Interface that can be implemented by {@link ImportSelector} and
+ * {@link ImportBeanDefinitionRegistrar} implementations when they can determine imports
+ * early. The {@link ImportSelector} and {@link ImportBeanDefinitionRegistrar} interfaces
+ * are quite flexible which can make it hard to tell exactly what bean definitions they
+ * will add. This interface should be used when an implementation consistently results in
+ * the same imports, given the same source.
+ * <p>
+ * Using {@link DeterminableImports} is particularly useful when working with Spring's
+ * testing support. It allows for better generation of {@link ApplicationContext} cache
+ * keys.
+ *
+ * @author Phillip Webb
+ * @author Andy Wilkinson
+ * @since 1.5.0
+ */
+@FunctionalInterface
+public interface DeterminableImports {
+
+   /**
+    * Return a set of objects that represent the imports. Objects within the returned
+    * {@code Set} must implement a valid {@link Object#hashCode() hashCode} and
+    * {@link Object#equals(Object) equals}.
+    * <p>
+    * Imports from multiple {@link DeterminableImports} instances may be combined by the
+    * caller to create a complete set.
+    * <p>
+    * Unlike {@link ImportSelector} and {@link ImportBeanDefinitionRegistrar} any
+    * {@link Aware} callbacks will not be invoked before this method is called.
+    * @param metadata the source meta-data
+    * @return a key representing the annotations that actually drive the import
+    */
+   Set<Object> determineImports(AnnotationMetadata metadata);
+
+}
+~~~
+
+
 
 ###### @Import
 
