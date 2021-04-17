@@ -32,10 +32,6 @@ public @interface SpringBootConfiguration {
 
 ##### @Configuration
 
-```java
-
-```
-
 
 
 #### @EnableAutoConfiguration
@@ -76,8 +72,6 @@ protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata an
 ```
 
 ##### @AutoConfigurationPackage
-
-
 
 ```java
 /**
@@ -126,10 +120,6 @@ static class Registrar implements ImportBeanDefinitionRegistrar, DeterminableImp
  * Using {@link DeterminableImports} is particularly useful when working with Spring's
  * testing support. It allows for better generation of {@link ApplicationContext} cache
  * keys.
- *
- * @author Phillip Webb
- * @author Andy Wilkinson
- * @since 1.5.0
  */
 @FunctionalInterface
 public interface DeterminableImports {
@@ -151,6 +141,36 @@ public interface DeterminableImports {
 
 }
 ~~~
+
+##### register
+
+```java
+/**
+ * Programmatically registers the auto-configuration package names. Subsequent
+ * invocations will add the given package names to those that have already been
+ * registered. You can use this method to manually define the base packages that will
+ * be used for a given {@link BeanDefinitionRegistry}. Generally it's recommended that
+ * you don't call this method directly, but instead rely on the default convention
+ * where the package name is set from your {@code @EnableAutoConfiguration}
+ * configuration class or classes.
+ * @param registry the bean definition registry
+ * @param packageNames the package names to set
+ */
+public static void register(BeanDefinitionRegistry registry, String... packageNames) {
+   if (registry.containsBeanDefinition(BEAN)) {
+      BeanDefinition beanDefinition = registry.getBeanDefinition(BEAN);
+      ConstructorArgumentValues constructorArguments = beanDefinition.getConstructorArgumentValues();
+      constructorArguments.addIndexedArgumentValue(0, addBasePackages(constructorArguments, packageNames));
+   }
+   else {
+      GenericBeanDefinition beanDefinition = new GenericBeanDefinition();
+      beanDefinition.setBeanClass(BasePackages.class);
+      beanDefinition.getConstructorArgumentValues().addIndexedArgumentValue(0, packageNames);
+      beanDefinition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+      registry.registerBeanDefinition(BEAN, beanDefinition);
+   }
+}
+```
 
 
 
