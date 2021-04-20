@@ -48,6 +48,7 @@ public static void main(String[] args) throws Throwable {
 > Maximum vm operation time (except for Exit VM operation)      0 ms
 
 
+-XX:+SafePointTimeout -XX:SafepointTimeoutDelay=2000
 
 
 
