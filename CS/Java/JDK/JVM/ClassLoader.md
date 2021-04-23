@@ -42,11 +42,16 @@
 
 ## 加载流程 
 
-load->   Link->验证->准备->解析->初始化
+1. Loading
+2. Linking
+   1. Verification
+   2. Preparation
+   3. Resolution
+3. Initializtion
+4. Using
+5. Unloading
 
-
-
-### Load
+### Loading
 
 负责从文件系统或者网络中加载Class文件，Class文件开头有特定Magic Number ， 4Byte
 
@@ -68,9 +73,11 @@ Classloader只负责class文件的加载，至于是否可运行，则由执行�
 
 
 
-### Link
+### Linking
 
-#### 验证
+
+
+### Verification
 
 目的
 
@@ -87,3 +94,26 @@ CA FE BA BE(魔数，Java虚拟机识别)
 常量池的常量中是否有不被支持的常量类型
 
 指向常量的各种索引值中是否有指向不存在的常量或不符合类型的常量
+
+
+
+### Preparation
+
+
+
+### Resolution
+
+
+
+### Initialization
+
+
+
+
+
+### Using
+
+
+
+### Unloading
+
