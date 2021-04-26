@@ -1,13 +1,141 @@
 # HTTP
 
-*HyperText Transfer Protocol*
+`HyperText Transfer Protocol`
+
+简单 灵活 易扩展
+
+Stateless
+
+明文 不安全
+
+HTTPS
+
+TLS
 
 
 
-## Cookie？Session？Token？
+性能不算高
 
-### 为什么需要？
-HTTP协议的无状态性无法认证请求来源
+
+
+
+
+报文
+
+- Header
+  - start line
+  - header
+- entity
+
+ 
+
+Method
+
+- GET
+- POST
+- PUT
+- DELETE
+- HEAD
+- OPTIONS
+- TRACE
+- CONNECT
+
+
+
+## HTTP 2.0
+
+
+
+头部压缩
+
+二进制格式
+
+强化安全
+
+多路复用
+
+标头
+
+- Cache-Control
+- Connection
+- Pragma
+- Trailer
+- Transfer-Encoding
+- Upgrade
+- Via
+- Warning
+
+
+
+Cache
+
+no-cache
+
+public
+
+
+
+Connection
+
+```http
+Connection: keep-Alive
+```
+
+
+
+```http
+Connection: close
+```
+
+
+
+Accept-Charset
+
+
+
+## Authority
+
+HTTP协议的无状态性 无法认证请求来源 需要使用机制来记录用户信息与状态
+
+
+
+### Cookie
+
+优点
+
+会话管理
+
+行为追踪 个性定制
+
+cookie类型
+
+会话 - 客户端可选择 是否删除 删除后无法识别
+
+永久 - 设置了过期条件 客户端进行持久化
+
+
+
+```http
+Set-Cookie: xxx
+```
+
+Cookie跨域
+
+不同域名未使用相同Cookie
+
+
+
+Session
+
+session依赖于容器 
+
+解决方案
+
+1. 集群复制 影响性能
+2. 路由 固定用户固定容器 容错性不高
+3. 使用中间件统一存储
+
+多系统时可以考虑独立于其它业务系统
 
 ### 区别
 
@@ -22,7 +150,7 @@ HTTP协议的无状态性无法认证请求来源
     - 跨程序调用
     - 安全
 ### 基于Token的验证原理
-    
+
 
 基于Token的身份验证是无状态的，我们不将用户信息存在服务器或Session中。
 
@@ -77,7 +205,17 @@ Having our API just serve data, we can also make the design choice to serve asse
 
 最近的程序和文档是供给JSON Web Token的。它支持众多的语言。这意味在未来的使用中你可以真正的转换你的认证机制。   
 ### JWT
-JSON Web Token 是一个开放标准
+
+*[`JSON Web Token(JWT)`](https://datatracker.ietf.org/doc/rfc7519/)  is a compact, URL-safe means of representing claims to be transferred between two parties.  The claims in a JWT are encoded as a JSON object that is used as the payload of a JSON Web Signature (JWS) structure or as the plaintext of a JSON Web Encryption (JWE) structure, enabling the claims to be digitally signed or integrity protected with a Message Authentication Code (MAC) and/or encrypted.*
+
+
+
+可以在服务端验证
+
+可以跨域认证
+
+
+
 
 用途：
 - 授权：这是使用JWT的最常见方案。一旦用户登录，每个后续请求将包括JWT，从而允许用户访问该令牌允许的路由，服务和资源。单一登录是当今广泛使用JWT的一项功能，因为它的开销很小并且可以在不同的域中轻松使用。
@@ -85,10 +223,11 @@ JSON Web Token 是一个开放标准
 
 结构：
 JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）分隔，分别是：
+
 - Header 标头
     - 通常由两部分组成：令牌的类型（即JWT）和所使用的签名算法
-- Payload 有效载荷
-- Signature 签名
+- Payload 
+- Signature 
     - 通过payload和secret使用Header指定算法生成
 
 
