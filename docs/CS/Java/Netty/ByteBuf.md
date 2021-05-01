@@ -2,12 +2,11 @@
 
 
 
-![ByteBuf](https://github.com/Robinpig/Note/raw/master/images/Netty/ByteBuf.png)
+![ByteBuf](./images/Netty/ByteBuf.png)
 
 
 
 ByteBuf
-
 1. readIndex and  writeIndex
 2. auto expand
 3. reference count

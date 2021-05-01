@@ -456,6 +456,12 @@ final Node<K,V> getNode(int hash, Object key) {
     return null;
 }
 ```
+使用红黑树而不是AVL树或者B+树
+
+因为AVL树比红黑树保持更加严格的平衡，是以更多旋转操作导致更慢的插入和删除为代价的树，B+树所有的节点挤在一起，当数据量不多的时候会退化成链表
+
+
+
 ### HashMap 和 Hashtable 的区别
 
 - HashMap 允许 key 和 value 为 null，Hashtable 不允许。

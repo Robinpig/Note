@@ -41,3 +41,11 @@ private TransactionAttribute computeTransactionAttribute(Method method, Class<?>
 - 事务中避免一次性处理太多数据
 - 非事务执行
 - 异步处理
+
+
+
+Propagation
+
+TransactionDefinition
+
+TransactionSynchronizationManager

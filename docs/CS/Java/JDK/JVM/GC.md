@@ -37,3 +37,9 @@ GC Roots
 
 - 弱引用:
 - 虚引用:
+
+
+
+
+
+![image-20210425062416346](/Users/robin/Library/Application Support/typora-user-images/image-20210425062416346.png)
