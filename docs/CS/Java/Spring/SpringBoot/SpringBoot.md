@@ -180,7 +180,7 @@ public static void register(BeanDefinitionRegistry registry, String... packageNa
 
 ## Web
 
-![SpringBoot Web Annotation](https://github.com/Robinpig/Note/raw/master/images/Spring/springboot-web-annotation.png)
+![SpringBoot Web Annotation](/images/Spring/springboot-web-annotation.png)
 
 ## YAML
 

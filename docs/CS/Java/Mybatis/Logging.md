@@ -16,7 +16,7 @@
 
 ## Package
 
-![Logging](https://github.com/Robinpig/Note/raw/master/images/Mybatis/Mybatis-logging.png)
+![Logging](/images/Mybatis/Mybatis-logging.png)
 
 
 
@@ -100,7 +100,7 @@ private static void setImplementation(Class<? extends Log> implClass) {
 
 ### Logger
 
-![Logger](https://github.com/Robinpig/Note/raw/master/images/Mybatis/Mybatis-JdbcLogger.png)
+![Logger](/images/Mybatis/Mybatis-JdbcLogger.png)
 
 
 

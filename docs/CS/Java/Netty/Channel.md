@@ -1,6 +1,6 @@
 # Channel
 
-![Channel](https://github.com/Robinpig/Note/raw/master/images/Netty/Channel.png)
+![Channel](/images/Netty/Channel.png)
 
 
 

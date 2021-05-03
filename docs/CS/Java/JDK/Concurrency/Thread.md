@@ -32,7 +32,7 @@ public Thread(Runnable target) {
 
 ## Lifetime
 
-![Thread-Lifetime](https://github.com/Robinpig/Note/raw/master/images/JDK/Thread-Lifetime.png)
+![Thread-Lifetime](/images/JDK/Thread-Lifetime.png)
 
 ### Status
 

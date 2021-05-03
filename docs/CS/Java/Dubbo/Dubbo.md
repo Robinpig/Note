@@ -4,7 +4,7 @@
 
 ## Design
 
-![Dubbo Framework](https://github.com/Robinpig/Note/raw/master/images/Dubbo/Dubbo-framework.png)
+![Dubbo Framework](/images/Dubbo/Dubbo-framework.png)
 
 
 | 节点 |	角色说明 |

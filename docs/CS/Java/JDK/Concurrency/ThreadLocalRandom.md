@@ -1,7 +1,7 @@
 # ThreadLocalRandom
 
 
-![Random](https://github.com/Robinpig/Note/raw/master/images/JDK/Random.png)
+![Random](/images/JDK/Random.png)
 
 
 ## Random

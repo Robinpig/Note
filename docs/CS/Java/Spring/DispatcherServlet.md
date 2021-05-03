@@ -2,7 +2,7 @@
 
 
 
-![DispatcherServlet](https://github.com/Robinpig/Note/raw/master/images/Spring/DispatcherServlet.png)
+![DispatcherServlet](/images/Spring/DispatcherServlet.png)
 
 
 

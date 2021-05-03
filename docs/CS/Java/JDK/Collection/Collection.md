@@ -2,7 +2,7 @@
 
 
 
-![Collection](https://github.com/Robinpig/Note/raw/master/images/JDK/Collection.png)
+![Collection](/images/JDK/Collection.png)
 
 
 

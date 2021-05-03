@@ -1,6 +1,6 @@
 # Throwable
 
-![Throwable](https://github.com/Robinpig/Note/raw/master/images/JDK/Throwable.png)
+![Throwable](/images/JDK/Throwable.png)
 
 
 

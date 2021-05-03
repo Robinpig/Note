@@ -1,6 +1,6 @@
 # Bootstrap
 
-![Bootstrap](https://github.com/Robinpig/Note/raw/master/images/Netty/Bootstrap.png)
+![Bootstrap](/images/Netty/Bootstrap.png)
 
 ### group( )
 
@@ -251,7 +251,7 @@ final ChannelFuture initAndRegister() {
 
 
 ### channel( ) 
-new [Channel](CS/Java/Netty/Channel.md)
+new [Channel](/docs/CS/Java/Netty/Channel.md)
 
 ```java
 /**

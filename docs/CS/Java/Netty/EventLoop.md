@@ -8,7 +8,7 @@ a array of EventLoop
 
 ServerBootstrap Builder design pattern
 
-![EventLoopGroup](https://github.com/Robinpig/Note/raw/master/images/Netty/EventLoopGroup.png)
+![EventLoopGroup](/images/Netty/EventLoopGroup.png)
 
 ### Constructor
 
@@ -133,13 +133,13 @@ public EventExecutorChooser newChooser(EventExecutor[] executors) {
 
 ## EventLoop
 
-![EventLoop](https://github.com/Robinpig/Note/raw/master/images/Netty/EventLoop.png)
+![EventLoop](/images/Netty/EventLoop.png)
 
 
 
 EventLoop start( )
 
-![NioEventLoop_Start](https://github.com/Robinpig/Note/raw/master/images/Netty/NioEventLoop_Start.png)
+![NioEventLoop_Start](/images/Netty/NioEventLoop_Start.png)
 
 - openSelector
   - SelectedSelectionKeySet

@@ -10,7 +10,7 @@
 
 ## Future
 
-![Future](https://github.com/Robinpig/Note/raw/master/images/Netty/Future.png)
+![Future](/images/Netty/Future.png)
 
 ### Future
 

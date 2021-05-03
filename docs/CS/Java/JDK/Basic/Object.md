@@ -187,4 +187,4 @@ create a object
 
 ### wait & notify
 
-See [Thread](https://github.com/Robinpig/Note/raw/master/CS/Java/JDK/Concurrency/Thread.md)
+See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
