@@ -8,7 +8,7 @@
 
 ```java
 /**
- * Creates an {@link SqlSession} out of a connection or a DataSource
+ * Creates an SqlSession out of a connection or a DataSource
  */
 public interface SqlSessionFactory {
 

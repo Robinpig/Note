@@ -16,7 +16,7 @@
 
 ## Package
 
-![Logging](/images/Mybatis/Mybatis-logging.png)
+![Logging](./images/logging.png)
 
 
 

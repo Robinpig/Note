@@ -8,7 +8,7 @@ a array of EventLoop
 
 ServerBootstrap Builder design pattern
 
-![EventLoopGroup](/images/Netty/EventLoopGroup.png)
+![EventLoopGroup](./images/EventLoopGroup.png)
 
 ### Constructor
 

@@ -1,6 +1,6 @@
 # Bootstrap
 
-![Bootstrap](/images/Netty/Bootstrap.png)
+![Bootstrap](./images/Bootstrap.png)
 
 ### group( )
 

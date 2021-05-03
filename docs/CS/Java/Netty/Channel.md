@@ -1,6 +1,6 @@
 # Channel
 
-![Channel](/images/Netty/Channel.png)
+![Channel](./images/Channel.png)
 
 
 

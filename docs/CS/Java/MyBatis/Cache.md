@@ -10,7 +10,7 @@ Enable cache
 
 `package org.apache.ibatis.cache`
 
-![Cache](/images/Mybatis/Cache.png)
+![Cache](./images/Cache.png)
 
 
 

@@ -10,7 +10,7 @@
 
 ## Future
 
-![Future](/images/Netty/Future.png)
+![Future](./images/Future.png)
 
 ### Future
 

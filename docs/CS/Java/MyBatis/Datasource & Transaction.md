@@ -6,7 +6,7 @@
 
 ### DataSourceFactory
 
-![DataSourceFactory](/images/Mybatis/DataSourceFactory.png)
+![DataSourceFactory](./images/DataSourceFactory.png)
 
 `DataSourceFactory provide methods to setProperties and get javax.sql.DataSource`
 

@@ -2,7 +2,7 @@
 
 
 
-![ByteBuf](./images/Netty/ByteBuf.png)
+![ByteBuf](./images/ByteBuf.png)
 
 
 
