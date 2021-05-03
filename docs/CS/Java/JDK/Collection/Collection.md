@@ -2,7 +2,7 @@
 
 
 
-![Collection](/images/JDK/Collection.png)
+![Collection](../images/Collection.png)
 
 
 

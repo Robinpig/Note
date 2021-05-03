@@ -1,6 +1,6 @@
 # Throwable
 
-![Throwable](/images/JDK/Throwable.png)
+![Throwable](../images/Throwable.png)
 
 
 

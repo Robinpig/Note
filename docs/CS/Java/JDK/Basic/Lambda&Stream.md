@@ -135,7 +135,7 @@ while(iterator.hasNext()) {
 
 
 
-![External Iteration](/images/JDK/Stream-External-Iteration.png)
+![External Iteration](../images/Stream-External-Iteration.png)
 
 
 
@@ -149,7 +149,7 @@ long count = allArtists.stream()
 
 
 
-![Internal Iteration](/images/JDK/Stream-Internal-Iteration.png)
+![Internal Iteration](../images/Stream-Internal-Iteration.png)
 
 It’s very easy to figure out whether an operation is eager or lazy: **look at what it returns.**
 

@@ -34,6 +34,6 @@ $$
 
 空间定向改变时，行列式为负数
 
-![image-20200302130934963](/images/Mathematics/determinant.png)
+![image-20200302130934963](./images/determinant.png)
 
 ad-bc

@@ -15,7 +15,7 @@ benefits：
 
 
 
-![ThreadPoolExecutor](/images/JDK/ThreadPoolExecutor.png)
+![ThreadPoolExecutor](../images/ThreadPoolExecutor.png)
 
 ### Executor
 
@@ -276,7 +276,7 @@ private static final int TERMINATED =  3 << COUNT_BITS;
 
 Transfer of state:
 
-![ThreadPoolExecutor](/images/JDK/ThreadPoolExecutor-state.png)
+![ThreadPoolExecutor](../images/ThreadPoolExecutor-state.png)
 
 
 
@@ -411,7 +411,7 @@ public void execute(Runnable command) {
 
 
 
-![ThreadPoolExecutor](/images/JDK/ThreadPoolExecutor-execute.png)
+![ThreadPoolExecutor](../images/ThreadPoolExecutor-execute.png)
 
 
 
@@ -528,7 +528,7 @@ private void addWorkerFailed(Worker w) {
 
 
 
-![ThreadPoolExecutor](/images/JDK/ThreadPoolExecutor-addWorker.png)
+![ThreadPoolExecutor](../images/ThreadPoolExecutor-addWorker.png)
 
 
 
@@ -734,7 +734,7 @@ private Runnable getTask() {
 }
 ```
 
-![ThreadPoolExecutor](/images/JDK/ThreadPoolExecutor-getTask.png)
+![ThreadPoolExecutor](../images/ThreadPoolExecutor-getTask.png)
 
 
 

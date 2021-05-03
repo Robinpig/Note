@@ -1,7 +1,7 @@
 # ThreadLocalRandom
 
 
-![Random](/images/JDK/Random.png)
+![Random](../images/Random.png)
 
 
 ## Random

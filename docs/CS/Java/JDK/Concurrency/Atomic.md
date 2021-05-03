@@ -23,7 +23,7 @@ Since:1.5
 5. *compareAndSet and all other read-and-update operations such as getAndIncrement **have the memory effects of both reading and writing volatile variables**.*
 
 
-![Atomic](/images/JDK/Atomic.png)
+![Atomic](../images/Atomic.png)
 
 
 
