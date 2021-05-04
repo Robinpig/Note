@@ -133,13 +133,13 @@ public EventExecutorChooser newChooser(EventExecutor[] executors) {
 
 ## EventLoop
 
-![EventLoop](/images/Netty/EventLoop.png)
+![EventLoop](./images/EventLoop.png)
 
 
 
 EventLoop start( )
 
-![NioEventLoop_Start](/images/Netty/NioEventLoop_Start.png)
+![NioEventLoop_Start](./images/NioEventLoop_Start.png)
 
 - openSelector
   - SelectedSelectionKeySet
@@ -550,7 +550,7 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 }
 ```
 
-Unsafe.read( ) in [Channel](https://github.com/Robinpig/Note/blob/master/CS/Java/Netty/Channel.md )  
+Unsafe.read( ) in [Channel](./Channel.md )  
 
 
 
@@ -611,4 +611,4 @@ private void closeAll() {
 }
 ```
 
-unsafe.close( ) in [Channel](https://github.com/Robinpig/Note/blob/master/CS/Java/Netty/Channel.md )  
+unsafe.close( ) in [Channel](./Channel.md )  

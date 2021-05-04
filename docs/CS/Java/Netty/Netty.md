@@ -4,29 +4,28 @@
 
 ## Bootstrap
 
- [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md )  
-
+ [Bootstrap](./Bootstrap.md )  
 
 
 
 ## EventLoop
 
- [EventLoop](/docs/CS/Java/Netty/EventLoop.md )  
+ [EventLoop](./EventLoop.md )  
 
 
 
 ## Chnanel
 
- [Channel](/docs/CS/Java/Netty/Channel.md )  
+ [Channel](./Channel.md )  
 
 
 
 ## ByteBuf
 
- [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md )  
+ [ByteBuf](./ByteBuf.md )  
 
 
 
 ## Others
 
- [Others](/docs/CS/Java/Netty/Others.md )  
+ [Others](./Others.md )  

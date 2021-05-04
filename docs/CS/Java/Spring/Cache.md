@@ -28,3 +28,24 @@ To enable caching annotations add the annotation `@EnableCaching` to one of your
 public class AppConfig {
 }
 ```
+
+
+
+
+
+```xml
+<dependency>    
+	<groupId>org.springframework.boot</groupId>    
+  <artifactId>spring-boot-starter-cache</artifactId>  
+</dependency>
+
+
+```
+
+
+
+1. `@Cacheable` 表示如果缓存系统里没有这个数值，就将方法的返回值缓存起来；
+2. `@CachePut` 表示每次执行该方法，都把返回值缓存起来；
+3. `@CacheEvict` 表示执行方法的时候，清除某些缓存值
+
+**CacheAspectSupport**

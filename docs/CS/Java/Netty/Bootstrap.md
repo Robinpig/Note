@@ -251,7 +251,7 @@ final ChannelFuture initAndRegister() {
 
 
 ### channel( ) 
-new [Channel](/docs/CS/Java/Netty/Channel.md)
+new [Channel](./Channel.md)
 
 ```java
 /**
