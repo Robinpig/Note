@@ -550,7 +550,7 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 }
 ```
 
-Unsafe.read( ) in [Channel](./Channel.md )  
+Unsafe.read( ) in [Channel](/docs/CS/Java/Netty/Channel.md )  
 
 
 
@@ -611,4 +611,4 @@ private void closeAll() {
 }
 ```
 
-unsafe.close( ) in [Channel](./Channel.md )  
+unsafe.close( ) in [Channel](/docs/CS/Java/Netty/Channel.md )  
