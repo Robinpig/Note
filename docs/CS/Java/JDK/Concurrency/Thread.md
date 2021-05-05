@@ -32,7 +32,7 @@ public Thread(Runnable target) {
 
 ## Lifetime
 
-![Thread-Lifetime](/images/JDK/Thread-Lifetime.png)
+![Thread-Lifetime](../images/Thread-Lifetime.png)
 
 ### Status
 
@@ -136,25 +136,26 @@ throws InterruptedException {
 
 
 
-```c++
-//一个c++函数：
-void JavaThread::exit(bool destroy_vm, ExitType exit_type) ；
-//里面有一个贼不起眼的一行代码
-ensure_join(this);
+notifyAll when JavaThread exit
 
+```cpp
+void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
+	//...
+  ensure_join(this);
+  //...
+}
 static void ensure_join(JavaThread* thread) {
-  Handle threadObj(thread, thread->threadObj());
+    Handle threadObj(thread, thread->threadObj());
 
-  ObjectLocker lock(threadObj, thread);
+    ObjectLocker lock(threadObj, thread);
 
-  thread->clear_pending_exception();
+    thread->clear_pending_exception();
 
-  java_lang_Thread::set_thread_status(threadObj(),        java_lang_Thread::TERMINATED);
-  java_lang_Thread::set_thread(threadObj(), NULL);
-  //同志们看到了没，别的不用看，就看这一句
-  //thread就是当前线程，是啥？就是刚才例子中说的threadA线程
-  lock.notify_all(thread);
-  thread->clear_pending_exception();
+    java_lang_Thread::set_thread_status(threadObj(),        java_lang_Thread::TERMINATED);
+    java_lang_Thread::set_thread(threadObj(), NULL);
+    //notify_all
+    lock.notify_all(thread);
+    thread->clear_pending_exception();
 }
 ```
 
@@ -503,3 +504,49 @@ public final void wait() throws InterruptedException {
 
 ## JMM
 
+
+
+## Start
+
+
+
+```c++
+void Thread::start(Thread* thread) {
+  // Start is different from resume in that its safety is guaranteed by context or
+  // being called from a Java method synchronized on the Thread object.
+  if (!DisableStartThread) {
+    if (thread->is_Java_thread()) {
+      // Initialize the thread state to RUNNABLE before starting this thread.
+      // Can not set it after the thread started because we do not know the
+      // exact thread state at that time. It could be in MONITOR_WAIT or
+      // in SLEEPING or some other state.
+      java_lang_Thread::set_thread_status(((JavaThread*)thread)->threadObj(),
+                                          java_lang_Thread::RUNNABLE);
+    }
+    os::start_thread(thread);
+  }
+}
+```
+
+
+
+```c++
+// The INITIALIZED state is distinguished from the SUSPENDED state because the
+// conditions in which a thread is first started are different from those in which
+// a suspension is resumed.  These differences make it hard for us to apply the
+// tougher checks when starting threads that we want to do when resuming them.
+// However, when start_thread is called as a result of Thread.start, on a Java
+// thread, the operation is synchronized on the Java Thread object.  So there
+// cannot be a race to start the thread and hence for the thread to exit while
+// we are working on it.  Non-Java threads that start Java threads either have
+// to do so in a context in which races are impossible, or should do appropriate
+// locking.
+
+void os::start_thread(Thread* thread) {
+  // guard suspend/resume
+  MutexLockerEx ml(thread->SR_lock(), Mutex::_no_safepoint_check_flag);
+  OSThread* osthread = thread->osthread();
+  osthread->set_state(RUNNABLE);
+  pd_start_thread(thread);
+}
+```

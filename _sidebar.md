@@ -1,6 +1,3 @@
-* [Home](/README.md)
-
-[comment]: <> (* [CS]&#40;/CS/Basic.md&#41;)
 
 - CS
     - [CS](/docs/CS/CS.md)
@@ -14,6 +11,10 @@
         - JDK
           - Basic
             - [Object](/docs/CS/Java/JDK/Basic/Object.md)
+          - Collection
+            - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
+          - Concurrency
+            - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
           - JVM
             - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
             - [GC](/docs/CS/Java/JDK/JVM/GC.md)
