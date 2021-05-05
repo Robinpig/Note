@@ -236,7 +236,7 @@ private native boolean isInterrupted(boolean ClearInterrupted);
 
 ## wait and notify
 
-Provider-consumer 
+Provider-Consumer 
 
 Wait-notify只是一个condition queue 仅使用于单生产/消费模型
 
@@ -510,7 +510,7 @@ public final void wait() throws InterruptedException {
 
 
 
-```c++
+```cpp
 void Thread::start(Thread* thread) {
   // Start is different from resume in that its safety is guaranteed by context or
   // being called from a Java method synchronized on the Thread object.
@@ -530,7 +530,7 @@ void Thread::start(Thread* thread) {
 
 
 
-```c++
+```cpp
 // The INITIALIZED state is distinguished from the SUSPENDED state because the
 // conditions in which a thread is first started are different from those in which
 // a suspension is resumed.  These differences make it hard for us to apply the
