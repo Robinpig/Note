@@ -14,7 +14,7 @@
 
 
 
-## Chnanel
+## Channel
 
  [Channel](/docs/CS/Java/Netty/Channel.md )  
 
