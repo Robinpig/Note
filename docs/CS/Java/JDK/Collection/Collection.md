@@ -564,22 +564,6 @@ public interface Collection<E> extends Iterable<E> {
      * specified collection (optional operation).  In other words, removes from
      * this collection all of its elements that are not contained in the
      * specified collection.
-     *
-     * @param c collection containing elements to be retained in this collection
-     * @return {@code true} if this collection changed as a result of the call
-     * @throws UnsupportedOperationException if the {@code retainAll} operation
-     *         is not supported by this collection
-     * @throws ClassCastException if the types of one or more elements
-     *         in this collection are incompatible with the specified
-     *         collection
-     *         (<a href="{@docRoot}/java.base/java/util/Collection.html#optional-restrictions">optional</a>)
-     * @throws NullPointerException if this collection contains one or more
-     *         null elements and the specified collection does not permit null
-     *         elements
-     *         (<a href="{@docRoot}/java.base/java/util/Collection.html#optional-restrictions">optional</a>),
-     *         or if the specified collection is null
-     * @see #remove(Object)
-     * @see #contains(Object)
      */
     boolean retainAll(Collection<?> c);
 
@@ -619,14 +603,6 @@ public interface Collection<E> extends Iterable<E> {
      * is compared to any list or set.  (By the same logic, it is not possible
      * to write a class that correctly implements both the {@code Set} and
      * {@code List} interfaces.)
-     *
-     * @param o object to be compared for equality with this collection
-     * @return {@code true} if the specified object is equal to this
-     * collection
-     *
-     * @see Object#equals(Object)
-     * @see Set#equals(Object)
-     * @see List#equals(Object)
      */
     boolean equals(Object o);
 
@@ -639,14 +615,16 @@ public interface Collection<E> extends Iterable<E> {
      * to satisfy the general contract for the {@code Object.hashCode} method.
      * In particular, {@code c1.equals(c2)} implies that
      * {@code c1.hashCode()==c2.hashCode()}.
-     *
-     * @return the hash code value for this collection
-     *
-     * @see Object#hashCode()
-     * @see Object#equals(Object)
      */
     int hashCode();
 
+```
+
+
+
+Since 1.8 add Stream API
+
+```java
     /**
      * Creates a {@link Spliterator} over the elements in this collection.
      *
@@ -748,14 +726,27 @@ Allocate  memory when first element added.
 
 
 
-Map
+
+
+## Concurrent Modify
+
+### Fail-Fast
+
+#### ConcurrentModificationException
+
+*This exception may be thrown by methods that have detected concurrent modification of an object when such modification is not permissible.*
+
+1. *For example, **it is not generally permissible for one thread to modify a Collection while another thread is iterating over it**. In general, the results of the iteration are undefined under these circumstances. Some Iterator implementations (including those of all the general purpose collection implementations provided by the JRE) may choose to throw this exception if this behavior is detected. Iterators that do this are known as fail-fast iterators, as they fail quickly and cleanly, rather that risking arbitrary, non-deterministic behavior at an undetermined time in the future.*
+2.  If **a single thread issues a sequence of method invocations that violates the contract of an object, the object may throw this exception**. For example, if a thread modifies a collection directly while it is iterating over the collection with a fail-fast iterator, the iterator will throw this exception.*
+
+*Note that fail-fast behavior cannot be guaranteed as it is, generally speaking, impossible to make any hard guarantees in the presence of unsynchronized concurrent modification. Fail-fast operations throw ConcurrentModificationException on a best-effort basis. Therefore, it would be wrong to write a program that depended on this exception for its correctness: **ConcurrentModificationException should be used only to detect bugs**.*
 
 
 
-fail-fast
+### Fail-Safe
 
-- Remove/add element in foreach will throw ConcurrentModificationException.
-- Multiple threads remove/add element in Collection also throw ConcurrentModificationException.
+For example CopyOnWriteArrayList.
+
 
 ## Arrays
 

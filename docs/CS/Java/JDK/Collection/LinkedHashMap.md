@@ -14,7 +14,7 @@ LinkedHashMap是HashMap的子类，内部使用双链表进行顺序的维护，
 
 三参数构造器:
 
-```
+```java
 public LinkedHashMap(int initialCapacity, float loadFactor, boolean accessOrder) {
     super(initialCapacity, loadFactor);
     this.accessOrder = accessOrder;
@@ -23,7 +23,7 @@ public LinkedHashMap(int initialCapacity, float loadFactor, boolean accessOrder)
 
 如果accessOrder为true，那么表示将顺序记录为访问顺序，否则为插入顺序，默认为false。而正是这一参数并对removeEldestEntry方法进行覆盖便可以快速实现一个简单的LRU缓存。
 
-# 
+
 
 # put
 
