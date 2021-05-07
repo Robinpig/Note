@@ -11,8 +11,10 @@
         - JDK
           - Basic
             - [Object](/docs/CS/Java/JDK/Basic/Object.md)
+            - [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
           - Collection
             - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
+            - [List](/docs/CS/Java/JDK/Collection/List.md)
           - Concurrency
             - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
           - JVM
