@@ -4,7 +4,7 @@
 
 ![](../images/List.png)
 
-#### [继承树](http://notfound9.github.io/interviewGuide/#/docs/ArrayList?id=_4继承树)
+
 
 - ArrayList继承于AbstractList抽象类，实现了**List, RandomAccess, Cloneable, java.io.Serializable**接口 。
 - LinkedList继承自AbstractSequentialList 实现**List, Deque, Cloneable, java.io.Serializable**接口。
