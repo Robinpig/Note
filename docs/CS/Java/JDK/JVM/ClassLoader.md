@@ -10,13 +10,14 @@
 
 - ExtensionClassLoader(扩展类加载器) 
 
-- AppClassLoader(应用程序类加载器)
+- AppClassLoader(应用程序类加载器) 继承于Ext类加载器
 
-  继承于Ext类加载器
-
+- User ClassLoader
+  
+  
   
 
-## 双亲委派模型 
+### 双亲委派
 
 防止重复加载 Java核心API不被篡改 
 重写loadClass方法绕过双亲委托
@@ -40,7 +41,7 @@
 
 
 
-## 加载流程 
+## Load Class
 
 1. Loading
 2. Linking
