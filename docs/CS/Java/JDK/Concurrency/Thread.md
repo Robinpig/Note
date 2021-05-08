@@ -159,82 +159,9 @@ static void ensure_join(JavaThread* thread) {
 }
 ```
 
-## Interrupt
-
-*Interrupts this thread.*
-Unless the current thread is interrupting itself, which is always permitted, the checkAccess method of this thread is invoked, which may cause a SecurityException to be thrown.
-
-1. If this thread is blocked in an invocation of the wait(), wait(long), or wait(long, int) methods of the Object class, or of the join(), join(long), join(long, int), sleep(long), or sleep(long, int), methods of this class, then its interrupt status will be cleared and it will receive an InterruptedException.
-
-2. If this thread is blocked in an I/O operation upon an InterruptibleChannel then the channel will be closed, the thread's interrupt status will be set, and the thread will receive a java.nio.channels.ClosedByInterruptException.
-   If this thread is blocked in a java.nio.channels.Selector then the thread's interrupt status will be set and it will return immediately from the selection operation, possibly with a non-zero value, just as if the selector's wakeup method were invoked.
-
-3. If none of the previous conditions hold then this thread's interrupt status will be set.
-
-4. Interrupting a thread that is not alive need not have any effect.
-
-   
-
-```java
-/**
- * @spec JSR-51
- */
-public void interrupt() {
-    if (this != Thread.currentThread())
-        checkAccess();
-
-    synchronized (blockerLock) {
-        Interruptible b = blocker;
-        if (b != null) {
-            interrupt0();           // Just to set the interrupt flag
-            b.interrupt(this);
-            return;
-        }
-    }
-    interrupt0();
-}
-
-/**
- * Tests whether the current thread has been interrupted.  The
- * <i>interrupted status</i> of the thread is cleared by this method.  In
- * other words, if this method were to be called twice in succession, the
- * second call would return false (unless the current thread were
- * interrupted again, after the first call had cleared its interrupted
- * status and before the second call had examined it).
- *
- * <p>A thread interruption ignored because a thread was not alive
- * at the time of the interrupt will be reflected by this method
- * returning false.
- */
-public static boolean interrupted() {
-    return currentThread().isInterrupted(true);
-}
-
-/**
- * Tests whether this thread has been interrupted.  The <i>interrupted
- * status</i> of the thread is unaffected by this method.
- *
- * <p>A thread interruption ignored because a thread was not alive
- * at the time of the interrupt will be reflected by this method
- * returning false.
- */
-public boolean isInterrupted() {
-    return isInterrupted(false);
-}
-
-/**
- * Tests if some Thread has been interrupted.  The interrupted state
- * is reset or not based on the value of ClearInterrupted that is
- * passed.
- */
-private native boolean isInterrupted(boolean ClearInterrupted);
-```
 
 
-
-
-
-## wait and notify
+### wait & notify
 
 Provider-Consumer 
 
@@ -475,6 +402,140 @@ public final void wait() throws InterruptedException {
 2. wait 释放锁，sleep 不释放
 3. wait 必须在同步代码块中，sleep 可以任意使用
 4. wait 不需要捕获异常，sleep 需捕获异常
+
+
+
+
+
+### TimeUnit
+
+*A TimeUnit represents time durations at a given unit of granularity and provides utility methods to convert across units, and to perform timing and delay operations in these units. A TimeUnit does not maintain time information, but only helps organize and use time representations that may be maintained separately across various contexts.*
+*A TimeUnit is mainly used to inform time-based methods how a given timing parameter should be interpreted.*
+*Note however, that there is no guarantee that a particular timeout implementation will be able to notice the passage of time at the same granularity as the given TimeUnit.*
+
+
+
+**Convenience Methods:**
+
+| Method         | Convenience Method in TimeUnit |
+| -------------- | ------------------------------ |
+| *Object.wait*  | *timedWait*                    |
+| *Thread.join*  | *timedJoin*                    |
+| *Thread.sleep* | *sleep*                        |
+
+```java
+/**
+ * Performs a timed {@link Object#wait(long, int) Object.wait}
+ * using this time unit.
+ */
+public void timedWait(Object obj, long timeout)
+        throws InterruptedException {
+    if (timeout > 0) {
+        long ms = toMillis(timeout);
+        int ns = excessNanos(timeout, ms);
+        obj.wait(ms, ns);
+    }
+}
+
+/**
+ * Performs a timed {@link Thread#join(long, int) Thread.join}
+ * using this time unit.
+ */
+public void timedJoin(Thread thread, long timeout)
+        throws InterruptedException {
+    if (timeout > 0) {
+        long ms = toMillis(timeout);
+        int ns = excessNanos(timeout, ms);
+        thread.join(ms, ns);
+    }
+}
+
+/**
+ * Performs a {@link Thread#sleep(long, int) Thread.sleep} using
+ * this time unit.
+ */
+public void sleep(long timeout) throws InterruptedException {
+    if (timeout > 0) {
+        long ms = toMillis(timeout);
+        int ns = excessNanos(timeout, ms);
+        Thread.sleep(ms, ns);
+    }
+}
+```
+
+
+
+
+## Interrupt
+
+*Interrupts this thread.*
+Unless the current thread is interrupting itself, which is always permitted, the checkAccess method of this thread is invoked, which may cause a SecurityException to be thrown.
+
+1. If this thread is blocked in an invocation of the wait(), wait(long), or wait(long, int) methods of the Object class, or of the join(), join(long), join(long, int), sleep(long), or sleep(long, int), methods of this class, then its interrupt status will be cleared and it will receive an InterruptedException.
+
+2. If this thread is blocked in an I/O operation upon an InterruptibleChannel then the channel will be closed, the thread's interrupt status will be set, and the thread will receive a java.nio.channels.ClosedByInterruptException.
+   If this thread is blocked in a java.nio.channels.Selector then the thread's interrupt status will be set and it will return immediately from the selection operation, possibly with a non-zero value, just as if the selector's wakeup method were invoked.
+
+3. If none of the previous conditions hold then this thread's interrupt status will be set.
+
+4. Interrupting a thread that is not alive need not have any effect.
+
+   
+
+```java
+/**
+ * @spec JSR-51
+ */
+public void interrupt() {
+    if (this != Thread.currentThread())
+        checkAccess();
+
+    synchronized (blockerLock) {
+        Interruptible b = blocker;
+        if (b != null) {
+            interrupt0();           // Just to set the interrupt flag
+            b.interrupt(this);
+            return;
+        }
+    }
+    interrupt0();
+}
+
+/**
+ * Tests whether the current thread has been interrupted.  The
+ * <i>interrupted status</i> of the thread is cleared by this method.  In
+ * other words, if this method were to be called twice in succession, the
+ * second call would return false (unless the current thread were
+ * interrupted again, after the first call had cleared its interrupted
+ * status and before the second call had examined it).
+ *
+ * <p>A thread interruption ignored because a thread was not alive
+ * at the time of the interrupt will be reflected by this method
+ * returning false.
+ */
+public static boolean interrupted() {
+    return currentThread().isInterrupted(true);
+}
+
+/**
+ * Tests whether this thread has been interrupted.  The <i>interrupted
+ * status</i> of the thread is unaffected by this method.
+ *
+ * <p>A thread interruption ignored because a thread was not alive
+ * at the time of the interrupt will be reflected by this method
+ * returning false.
+ */
+public boolean isInterrupted() {
+    return isInterrupted(false);
+}
+
+/**
+ * Tests if some Thread has been interrupted.  The interrupted state
+ * is reset or not based on the value of ClearInterrupted that is
+ * passed.
+ */
+private native boolean isInterrupted(boolean ClearInterrupted);
+```
 
 
 
