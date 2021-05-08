@@ -6,6 +6,26 @@
 
 
 
+## ThreadLocal
+
+### Create ThreadLocal withInitial
+
+```java
+/**
+ * Creates a thread local variable. The initial value of the variable is
+ * determined by invoking the {@code get} method on the {@code Supplier}.
+ */
+public static <S> ThreadLocal<S> withInitial(Supplier<? extends S> supplier) {
+    return new SuppliedThreadLocal<>(supplier);
+}
+
+/**
+ * Creates a thread local variable.
+ */
+public ThreadLocal() {
+}
+```
+
 ### Set value in ThreadLocal
 
 `ThreadLocalMap map=getMap(t)` actually get **ThreadLocal.ThreadLocalMap** of currentThread
@@ -489,7 +509,7 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
 
 **TransmittableThreadLocal**
 
-## 
+
 
 
 
