@@ -86,7 +86,7 @@ Three rules:
 
 
 
-## Object
+## Object Class
 
 `Class Object is the root of the class hierarchy. Every class has Object as a superclass. All objects, including arrays, implement the methods of this class.`
 
@@ -102,6 +102,7 @@ static {
 ```
 
 
+### getClass
 
 > Returns the runtime class of this Object. The returned Class object is the object that is locked by **static synchronized methods** of the represented class.
 >
@@ -114,7 +115,7 @@ static {
 public final native Class<?> getClass();
 ```
 
-
+### equals
 
 Indicates whether some other object is "equal to" this one.
 The equals method implements an equivalence relation on non-null object references:
@@ -164,13 +165,15 @@ public native int hashCode();
 protected native Object clone() throws CloneNotSupportedException;
 ```
 
-
+### toString
 
 ```java
 public String toString() {
     return getClass().getName() + "@" + Integer.toHexString(hashCode());
 }
 ```
+
+### finalize
 
 ```java
 protected void finalize() throws Throwable { }
@@ -187,4 +190,4 @@ create a object
 
 ### wait & notify
 
-See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Order)
