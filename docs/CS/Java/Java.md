@@ -1,30 +1,30 @@
 # Java
 
-## Java Development Kit
+## [Java Development Kit]()
 
-[JVM](CS/Java/JDK/JVM/JVM.md)
+[JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 
-[Collection](CS/Java/JDK/Collection/Collection.md)
+[Collection](/docs/CS/Java/JDK/Collection/Collection.md)
 
 
 ## Framework
 
-### [Mybatis](CS/Java/Mybatis/Mybatis.md)
+### [Mybatis](/docs/CS/Java/Mybatis/Mybatis.md)
 
-### [Tomcat](CS/Java/Tomcat/Tomcat.md)
+### [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
 
-### [Netty](CS/Java/Netty/Netty.md)
+### [Netty](/docs/CS/Java/Netty/Netty.md)
 
-### [Dubbo](CS/Java/Dubbo/Dubbo.md)
+### [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
 
-### [Spring](CS/Java/Spring/Spring.md)
+### [Spring](/docs/CS/Java/Spring/Spring.md)
 
-### [SpringBoot](CS/Java/Spring/SpringBoot/SpringBoot.md)
+### [Spring Boot](/docs/CS/Java/Spring/SpringBoot/SpringBoot.md)
 
-### [SpringCloud](CS/Java/Spring/SpringCloud/SpringCloud.md)
+### [Spring Cloud](/docs/CS/Java/Spring/SpringCloud/SpringCloud.md)
 
 
 
 ## Improving Code
 
-[EffectiveJava](CS/Java/EffectiveJava.md)
+[Effective Java](/docs/CS/Java/EffectiveJava.md)
