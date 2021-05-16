@@ -19,6 +19,7 @@
             - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
             - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
             - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
+            - [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
           - JVM
             - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
             - [GC](/docs/CS/Java/JDK/JVM/GC.md)

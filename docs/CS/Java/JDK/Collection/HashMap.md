@@ -1,6 +1,6 @@
 # HashMap
 
-## HashMAp
+## HashMap
 
 
 
@@ -1240,3 +1240,7 @@ void afterNodeAccess(Node<K,V> e) { // move node to last
     }
 }
 ```
+
+
+
+## TreeMap
