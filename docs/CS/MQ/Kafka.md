@@ -121,3 +121,9 @@ paritition内部有序
 环境隔离
 
 消息恢复
+
+## quorum replace zookeeper
+
+why
+1. 强依赖 维护困难
+2. Zookeeper CP 影响性能
