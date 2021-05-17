@@ -1,4 +1,4 @@
-#  SafePoint
+#  Safepoint
 
 Main thread will print the num util sub thread ends, not after 1000ms we expected.
 
@@ -71,6 +71,16 @@ Other methods
 
 - Use JDK10 and later
 - Use long to limit a countedLoop
+
+
+
+`SafepointMechanism::default_initialize`
+
+*Safepoint actually a page of memory*
+
+
+
+`SafepointSynchronize::begin`
 
 
 
