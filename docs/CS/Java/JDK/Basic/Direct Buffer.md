@@ -4,8 +4,30 @@
 
 How to allocate direct memory?
 
-1. `ByteBuffer.allocateDirect` invoke `Unsafe.allocateMemory`
+1. `ByteBuffer.allocteDirect` invoke `Unsafe.allocateMemory`
 2. `Unsafe.allocateMemory`
+
+
+
+```cpp
+//unsafe.cpp
+UNSAFE_ENTRY(jlong, Unsafe_AllocateMemory0(JNIEnv *env, jobject unsafe, jlong size)) {
+  size_t sz = (size_t)size;
+
+  sz = align_up(sz, HeapWordSize);
+  void* x = os::malloc(sz, mtOther);
+
+  return addr_to_java(x);
+} UNSAFE_END
+
+UNSAFE_ENTRY(void, Unsafe_FreeMemory0(JNIEnv *env, jobject unsafe, jlong addr)) {
+  void* p = addr_from_java(addr);
+
+  os::free(p);
+} UNSAFE_END
+```
+
+`Unsafe.allocateMemory/freeMemory` invoke `os::malloc/free ` finally use `glib::malloc/free`.
 
 
 
