@@ -1,19 +1,127 @@
-# Synchronized
+# synchronized
 
 ## 字节码分析
 
-  通过字节码我们可以发现 ，修饰在方法层面的同步关键字，会多一个 ACC_SYNCHRONIZED的flag；修饰在代码块层面的同步块会多一个 monitorenter和 monitorexit关键字。无论采用哪一种方式，本质上都是对一个对象的监视器(monitor)进行获取，而这个获取的过程是排他的，也就是同一个时刻只能有一个线程获得同步块对象的监视器。
+ 通过字节码我们可以发现 ，修饰在方法层面的同步关键字，会多一个 ACC_SYNCHRONIZED的flag；修饰在代码块层面的同步块会多一个 monitorenter和 monitorexit关键字。无论采用哪一种方式，本质上都是对一个对象的监视器(monitor)进行获取，而这个获取的过程是排他的，也就是同一个时刻只能有一个线程获得同步块对象的监视器。
 
-  synchronizer.cpp文件 
+
+
+![sychronized](https://notfound9.github.io/interviewGuide/static/sychronize.png)
+
+
+
+```
+//synchronized with block
+monitorenter monitorexit
+
+//synchronized with method
+ACC_SYNCHRONIZED
+```
+
+
+
+interpreterRuntime.cpp
+
+```cpp
+// Synchronization
+//
+// The interpreter's synchronization code is factored out so that it can
+// be shared by method invocation and synchronized blocks.
+//%note synchronization_3
+
+//%note monitor_1
+IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, BasicObjectLock* elem))
+#ifdef ASSERT
+  thread->last_frame().interpreter_frame_verify_monitor(elem);
+#endif
+  if (PrintBiasedLockingStatistics) {
+    Atomic::inc(BiasedLocking::slow_path_entry_count_addr());
+  }
+  Handle h_obj(thread, elem->obj());
+  assert(Universe::heap()->is_in_reserved_or_null(h_obj()),
+         "must be NULL or an object");
+  if (UseBiasedLocking) {
+    // Retry fast entry if bias is revoked to avoid unnecessary inflation
+    ObjectSynchronizer::fast_enter(h_obj, elem->lock(), true, CHECK);
+  } else {
+    ObjectSynchronizer::slow_enter(h_obj, elem->lock(), CHECK);
+  }
+  assert(Universe::heap()->is_in_reserved_or_null(elem->obj()),
+         "must be NULL or an object");
+#ifdef ASSERT
+  thread->last_frame().interpreter_frame_verify_monitor(elem);
+#endif
+IRT_END
+```
+
+偏向锁可以通过 -XX:+UseBiasedLocking开启或者关闭
+
+如果支持偏向锁,则执行 ObjectSynchronizer::fast_enter的逻辑
+如果不支持偏向锁,则执行 ObjectSynchronizer::slow_enter逻辑，绕过偏向锁，直接进入轻量级锁
+
+basicLock.hpp
+
+```cpp
+class BasicLock {
+  friend class VMStructs;
+  friend class JVMCIVMStructs;
+ private:
+  volatile markOop _displaced_header;
+ public:
+  markOop      displaced_header() const               { return _displaced_header; }
+  void         set_displaced_header(markOop header)   { _displaced_header = header; }
+
+  void print_on(outputStream* st) const;
+
+  // move a basic lock (used during deoptimization
+  void move_to(oop obj, BasicLock* dest);
+
+  static int displaced_header_offset_in_bytes()       { return offset_of(BasicLock, _displaced_header); }
+};
+
+// A BasicObjectLock associates a specific Java object with a BasicLock.
+// It is currently embedded in an interpreter frame.
+
+// Because some machines have alignment restrictions on the control stack,
+// the actual space allocated by the interpreter may include padding words
+// after the end of the BasicObjectLock.  Also, in order to guarantee
+// alignment of the embedded BasicLock objects on such machines, we
+// put the embedded BasicLock at the beginning of the struct.
+
+class BasicObjectLock {
+  friend class VMStructs;
+ private:
+  BasicLock _lock;                                    // the lock, must be double word aligned
+  oop       _obj;                                     // object holds the lock;
+
+ public:
+  // Manipulation
+  oop      obj() const                                { return _obj;  }
+  void set_obj(oop obj)                               { _obj = obj; }
+  BasicLock* lock()                                   { return &_lock; }
+
+  // Note: Use frame::interpreter_frame_monitor_size() for the size of BasicObjectLocks
+  //       in interpreter activation frames since it includes machine-specific padding.
+  static int size()                                   { return sizeof(BasicObjectLock)/wordSize; }
+
+  // GC support
+  void oops_do(OopClosure* f) { f->do_oop(&_obj); }
+
+  static int obj_offset_in_bytes()                    { return offset_of(BasicObjectLock, _obj);  }
+  static int lock_offset_in_bytes()                   { return offset_of(BasicObjectLock, _lock); }
+};
+```
+
+
+
+ synchronizer.cpp文件 
 
 ### objectMonitor
  在hotspot虚拟机中，采用ObjectMonitor类来实现monitor ， 每个对象中都会内置一个ObjectMonitor对象 
 
 在 ObjectMonitor.hpp中，可以看到ObjectMonitor的定义
-```
- class ObjectMonitor {
-...
-  ObjectMonitor() {
+```cpp
+ObjectMonitor() {
     _header       = NULL; //markOop对象头
     _count        = 0;    
     _waiters      = 0,   //等待线程数
@@ -31,72 +139,46 @@
     _SpinClock    = 0 ;
     OwnerIsThread = 0 ; 
     _previous_owner_tid = 0; //监视器前一个拥有线程的ID
-  }
-...
-```
-
-
-
-## 锁升级 
-
-### 偏向锁
-
-在大多数的情况下，锁不仅不存在多线程的竞争，而且总是由同一个线程获得。因此为了让线程获得锁的代价更低引入了偏向锁的概念。偏向锁的意思是如果一个线程获得了一个偏向锁，如果在接下来的一段时间中没有其他线程来竞争锁，那么持有偏向锁的线程再次进入或者退出同一个同步代码块，不需要再次进行抢占锁和释放锁的操作。偏向锁可以通过 -XX:+UseBiasedLocking开启或者关闭
-
-
-
-
-我们基于monitorenter为入口，沿着偏向锁->轻量级锁->重量级锁的路径来分析synchronized的实现过程
-```
-IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, BasicObjectLock* elem))
-#ifdef ASSERT
-  thread->last_frame().interpreter_frame_verify_monitor(elem);
-#endif
-  ...
-  if (UseBiasedLocking) {
-    // Retry fast entry if bias is revoked to avoid unnecessary inflation
-    ObjectSynchronizer::fast_enter(h_obj, elem->lock(), true, CHECK);
-  } else {
-    ObjectSynchronizer::slow_enter(h_obj, elem->lock(), CHECK);
-  }
-  ...
-#ifdef ASSERT
-  thread->last_frame().interpreter_frame_verify_monitor(elem);
-#endif
-IRT_END
-UseBiasedLocking是在JVM启动的时候，是否启动偏向锁的标识
-```
-如果支持偏向锁,则执行 ObjectSynchronizer::fast_enter的逻辑
-如果不支持偏向锁,则执行 ObjectSynchronizer::slow_enter逻辑，绕过偏向锁，直接进入轻量级锁
-ObjectSynchronizer::fast_enter的实现在 synchronizer.cpp文件中，代码如下
-```
-void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_rebias, TRAPS) {
- if (UseBiasedLocking) { //判断是否开启了偏向锁
-    if (!SafepointSynchronize::is_at_safepoint()) { //如果不处于全局安全点
-      //通过`revoke_and_rebias`这个函数尝试获取偏向锁
-      BiasedLocking::Condition cond = BiasedLocking::revoke_and_rebias(obj, attempt_rebias, THREAD);
-      if (cond == BiasedLocking::BIAS_REVOKED_AND_REBIASED) {//如果是撤销与重偏向直接返回
-        return;
-      }
-    } else {//如果在安全点，撤销偏向锁
-      assert(!attempt_rebias, "can not rebias toward VM thread");
-      BiasedLocking::revoke_at_safepoint(obj);
-    }
-    assert(!obj->mark()->has_bias_pattern(), "biases should be revoked by now");
- }
-
- slow_enter (obj, lock, THREAD) ;
 }
 ```
-fast_enter方法的主要流程做一个简单的解释
-
-再次检查偏向锁是否开启
-当处于不安全点时，通过 revoke_and_rebias尝试获取偏向锁，如果成功则直接返回，如果失败则进入轻量级锁获取过程
-revoke_and_rebias这个偏向锁的获取逻辑在 biasedLocking.cpp中
-如果偏向锁未开启，则进入 slow_enter获取轻量级锁的流程
 
 
-#### 偏向锁的获取
+
+### Biased Lock
+
+在大多数的情况下，锁不仅不存在多线程的竞争，而且总是由同一个线程获得。因此为了让线程获得锁的代价更低引入了偏向锁的概念。偏向锁的意思是如果一个线程获得了一个偏向锁，如果在接下来的一段时间中没有其他线程来竞争锁，那么持有偏向锁的线程再次进入或者退出同一个同步代码块，不需要再次进行抢占锁和释放锁的操作。
+
+
+ObjectSynchronizer::fast_enter的实现在 synchronizer.cpp文件中，代码如下
+
+```cpp
+void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_rebias, TRAPS) {
+  if (UseBiasedLocking) { 
+    if (!SafepointSynchronize::is_at_safepoint()) {
+      BiasedLocking::Condition cond = BiasedLocking::revoke_and_rebias(obj, attempt_rebias, THREAD);
+      if (cond == BiasedLocking::BIAS_REVOKED_AND_REBIASED) {
+        return;
+      }
+    } else {
+      assert(!attempt_rebias, "can not rebias toward VM thread");
+      BiasedLocking::revoke_at_safepoint(obj);	//is_at_safepoint
+    }
+    assert(!obj->mark()->has_bias_pattern(), "biases should be revoked by now");
+  }
+  
+  slow_enter(obj, lock, THREAD);
+}
+```
+
+**ObjectSynchronizer::fast_enter():** 
+
+1. *check `if(UseBiasedLocking) `*
+   1. *`if(!SafepointSynchronize::is_at_safepoint())`, invoke `BiasedLocking::revoke_and_rebias()` success, return*
+2. *Others, `ObjectSynchronizer::slow_enter()`*
+
+
+
+#### revoke and rebias
 
 偏向锁的获取过程非常简单，当一个线程访问同步块获取锁时，会在对象头和栈帧中的锁记录里存储偏向锁的线程ID，表示哪个线程获得了偏向锁，结合前面分析的Mark Word来分析一下偏向锁的获取逻辑
 
@@ -106,9 +188,131 @@ revoke_and_rebias这个偏向锁的获取逻辑在 biasedLocking.cpp中
 
 > CAS:表示自旋锁，由于线程的阻塞和唤醒需要CPU从用户态转为核心态，频繁的阻塞和唤醒对CPU来说性能开销很大。同时，很多对象锁的锁定状态指会持续很短的时间，因此引入了自旋锁，所谓自旋就是一个无意义的死循环，在循环体内不断的重行竞争锁。当然，自旋的次数会有限制，超出指定的限制会升级到阻塞锁。
 
-BiasedLocking::revoke_and_rebias 是用来获取当前偏向锁的状态(可能是偏向锁撤销后重新偏向)。这个方法的逻辑在 biasedLocking.cpp中
+BiasedLocking::revoke_and_rebias 是用来获取当前偏向锁的状态(可能是偏向锁撤销后重新偏向)。
 
+in biasedLocking.cpp
+
+1. Get markOop
+2.  if (mark->is_biased_anonymously() && !attempt_rebias) 
+
+```cpp
+BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attempt_rebias, TRAPS) {
+  assert(!SafepointSynchronize::is_at_safepoint(), "must not be called while at safepoint");
+
+  // We can revoke the biases of anonymously-biased objects
+  // efficiently enough that we should not cause these revocations to
+  // update the heuristics because doing so may cause unwanted bulk
+  // revocations (which are expensive) to occur.
+  markOop mark = obj->mark();
+  if (mark->is_biased_anonymously() && !attempt_rebias) {
+    // We are probably trying to revoke the bias of this object due to
+    // an identity hash code computation. Try to revoke the bias
+    // without a safepoint. This is possible if we can successfully
+    // compare-and-exchange an unbiased header into the mark word of
+    // the object, meaning that no other thread has raced to acquire
+    // the bias of the object.
+    markOop biased_value       = mark;
+    markOop unbiased_prototype = markOopDesc::prototype()->set_age(mark->age());
+    markOop res_mark = obj->cas_set_mark(unbiased_prototype, mark);
+    if (res_mark == biased_value) {
+      return BIAS_REVOKED;
+    }
+  } else if (mark->has_bias_pattern()) {
+    Klass* k = obj->klass();
+    markOop prototype_header = k->prototype_header();
+    if (!prototype_header->has_bias_pattern()) {
+      // This object has a stale bias from before the bulk revocation
+      // for this data type occurred. It's pointless to update the
+      // heuristics at this point so simply update the header with a
+      // CAS. If we fail this race, the object's bias has been revoked
+      // by another thread so we simply return and let the caller deal
+      // with it.
+      markOop biased_value       = mark;
+      markOop res_mark = obj->cas_set_mark(prototype_header, mark);
+      assert(!obj->mark()->has_bias_pattern(), "even if we raced, should still be revoked");
+      return BIAS_REVOKED;
+    } else if (prototype_header->bias_epoch() != mark->bias_epoch()) {
+      // The epoch of this biasing has expired indicating that the
+      // object is effectively unbiased. Depending on whether we need
+      // to rebias or revoke the bias of this object we can do it
+      // efficiently enough with a CAS that we shouldn't update the
+      // heuristics. This is normally done in the assembly code but we
+      // can reach this point due to various points in the runtime
+      // needing to revoke biases.
+      if (attempt_rebias) {
+        assert(THREAD->is_Java_thread(), "");
+        markOop biased_value       = mark;
+        markOop rebiased_prototype = markOopDesc::encode((JavaThread*) THREAD, mark->age(), prototype_header->bias_epoch());
+        markOop res_mark = obj->cas_set_mark(rebiased_prototype, mark);
+        if (res_mark == biased_value) {
+          return BIAS_REVOKED_AND_REBIASED;
+        }
+      } else {
+        markOop biased_value       = mark;
+        markOop unbiased_prototype = markOopDesc::prototype()->set_age(mark->age());
+        markOop res_mark = obj->cas_set_mark(unbiased_prototype, mark);
+        if (res_mark == biased_value) {
+          return BIAS_REVOKED;
+        }
+      }
+    }
+  }
+
+  HeuristicsResult heuristics = update_heuristics(obj(), attempt_rebias);
+  if (heuristics == HR_NOT_BIASED) {
+    return NOT_BIASED;
+  } else if (heuristics == HR_SINGLE_REVOKE) {
+    Klass *k = obj->klass();
+    markOop prototype_header = k->prototype_header();
+    if (mark->biased_locker() == THREAD &&
+        prototype_header->bias_epoch() == mark->bias_epoch()) {
+      // A thread is trying to revoke the bias of an object biased
+      // toward it, again likely due to an identity hash code
+      // computation. We can again avoid a safepoint in this case
+      // since we are only going to walk our own stack. There are no
+      // races with revocations occurring in other threads because we
+      // reach no safepoints in the revocation path.
+      // Also check the epoch because even if threads match, another thread
+      // can come in with a CAS to steal the bias of an object that has a
+      // stale epoch.
+      ResourceMark rm;
+      log_info(biasedlocking)("Revoking bias by walking my own stack:");
+      EventBiasedLockSelfRevocation event;
+      BiasedLocking::Condition cond = revoke_bias(obj(), false, false, (JavaThread*) THREAD, NULL);
+      ((JavaThread*) THREAD)->set_cached_monitor_info(NULL);
+      assert(cond == BIAS_REVOKED, "why not?");
+      if (event.should_commit()) {
+        post_self_revocation_event(&event, k);
+      }
+      return cond;
+    } else {
+      EventBiasedLockRevocation event;
+      VM_RevokeBias revoke(&obj, (JavaThread*) THREAD);
+      VMThread::execute(&revoke);
+      if (event.should_commit() && revoke.status_code() != NOT_BIASED) {
+        post_revocation_event(&event, k, &revoke);
+      }
+      return revoke.status_code();
+    }
+  }
+
+  assert((heuristics == HR_BULK_REVOKE) ||
+         (heuristics == HR_BULK_REBIAS), "?");
+  EventBiasedLockClassRevocation event;
+  VM_BulkRevokeBias bulk_revoke(&obj, (JavaThread*) THREAD,
+                                (heuristics == HR_BULK_REBIAS),
+                                attempt_rebias);
+  VMThread::execute(&bulk_revoke);
+  if (event.should_commit()) {
+    post_class_revocation_event(&event, obj->klass(), heuristics != HR_BULK_REBIAS);
+  }
+  return bulk_revoke.status_code();
+}
 ```
+
+
+
+```cpp
 BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attempt_rebias, TRAPS) {
   assert(!SafepointSynchronize::is_at_safepoint(), "must not be called while at safepoint");
   markOop mark = obj->mark(); //获取锁对象的对象头
@@ -159,25 +363,40 @@ BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attem
 }
 ```
 
-#### 偏向锁的撤销
+#### revoke bias
 
-当其他线程尝试竞争偏向锁时，持有偏向锁的线程才会释放偏向锁，撤销偏向锁的过程需要等待一个全局安全点(所有工作线程都停止字节码的执行)。当到达一个全局安全点时，这时会根据偏向锁的状态来判断是否需要撤销偏向锁，调用 revoke_at_safepoint方法，这个方法也是在 biasedLocking.cpp中定义的
+In  biasedLocking.cpp
 
-```
+***BiasedLocking::revoke_at_safepoint must only be called while at safepoint.***
+
+update_heuristics:
+
+ Heuristics to attempt to throttle the number of revocations.
+ Stages:
+
+ 1. Revoke the biases of all objects in the heap of this type,    but allow rebiasing of those objects if unlocked.
+  2. Revoke the biases of all objects in the heap of this type   and don't allow rebiasing of these objects. Disable  allocation of objects of that type with the bias bit set.
+
+```cpp
 void BiasedLocking::revoke_at_safepoint(Handle h_obj) {
   assert(SafepointSynchronize::is_at_safepoint(), "must only be called while at safepoint");
   oop obj = h_obj();
-  //更新撤销偏向锁计数，并返回偏向锁撤销次数和偏向次数
-  HeuristicsResult heuristics = update_heuristics(obj, false);
-  if (heuristics == HR_SINGLE_REVOKE) {//可偏向且未达到批量处理的阈值(下面会单独解释)
-    revoke_bias(obj, false, false, NULL); //撤销偏向锁
-  } else if ((heuristics == HR_BULK_REBIAS) || 
-             (heuristics == HR_BULK_REVOKE)) {//如果是多次撤销或者多次偏向
-    //批量撤销
+  HeuristicsResult heuristics = update_heuristics(obj, false);//
+  if (heuristics == HR_SINGLE_REVOKE) {
+    revoke_bias(obj, false, false, NULL, NULL);
+  } else if ((heuristics == HR_BULK_REBIAS) ||
+             (heuristics == HR_BULK_REVOKE)) {
     bulk_revoke_or_rebias_at_safepoint(obj, (heuristics == HR_BULK_REBIAS), false, NULL);
   }
   clean_up_cached_monitor_info();
 }
+
+enum HeuristicsResult {
+  HR_NOT_BIASED    = 1,
+  HR_SINGLE_REVOKE = 2,
+  HR_BULK_REBIAS   = 3,
+  HR_BULK_REVOKE   = 4
+};
 ```
 
 1. 首先，暂停拥有偏向锁的线程，然后检查偏向锁的线程是否为存活状态
@@ -198,7 +417,7 @@ void BiasedLocking::revoke_at_safepoint(Handle h_obj) {
 
 轻量级锁的获取，是调用 ::slow_enter方法，该方法同样位于 synchronizer.cpp文件中
 
-```
+```cpp
 void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
   markOop mark = obj->mark();
   assert(!mark->has_bias_pattern(), "should not see bias pattern here");
@@ -484,9 +703,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
 
 重量级锁的竞争，在 ObjectMonitor::enter方法中，代码文件在 objectMonitor.cpp重量级锁的代码就不一一分析了，简单说一下下面这段代码主要做的几件事
 
-1. 通过CAS重量级锁的竞争逻辑
-
-   重量级锁的竞争，在 ObjectMonitor::enter方法中，代码文件在 objectMonitor.cpp重量级锁的代码就不一一分析了，简单说一下下面这段代码主要做的几件事将monitor的 _owner字段设置为当前线程，如果设置成功，则直接返回
+1. 通过CAS将monitor的 _owner字段设置为当前线程，如果设置成功，则直接返回
 
 2. 如果之前的 _owner指向的是当前的线程，说明是重入，执行 _recursions++增加重入次数
 
@@ -494,7 +711,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
 
 4. 如果获取锁失败，则等待锁释放
 
-   ```
+   ```cpp
    void ATTR ObjectMonitor::enter(TRAPS) {
      // The following code is ordered to check the most common cases first
      // and to reduce RTS->RTO cache line upgrades on SPARC and IA32 processors.
@@ -604,7 +821,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
 2. 通过自旋操作将node节点push到_cxq队列
 3. node节点添加到_cxq队列之后，继续通过自旋尝试获取锁，如果在指定的阈值范围内没有获得锁，则通过park将当前线程挂起，等待被唤醒
 
-```
+```cpp
 void ATTR ObjectMonitor::EnterI (TRAPS) {
     Thread * Self = THREAD ;
     ...//省略很多代码
@@ -681,7 +898,7 @@ TryLock(self)的代码是在 ObjectMonitor::TryLock定义的，代码的实现�
 
 > 代码的实现原理很简单，通过自旋，CAS设置monitor的_owner字段为当前线程，如果成功，表示获取到了锁，如果失败，则继续被挂起
 
-```
+```cpp
 int ObjectMonitor::TryLock (Thread * Self) {
    for (;;) {
       void * own = _owner ;
