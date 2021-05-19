@@ -2,15 +2,7 @@
 
 ## HashMap
 
-
-
-| 版本变更 | 1.7 | 1.8 |
-| :---: | :---: | :---: |
-| hash算法 | 扰动4次 | 更简化 |
-| 存储变化 | 无 | 转变红黑树 |
-| 插入链表位置 | 头部 | 尾部 |
-| resize | 存在死锁 | 无死锁 |
-### 简述
+### Introduction
 
 继承AbstractMap，实现Map接口
 
@@ -18,57 +10,12 @@
 
 如果当前数组的长度小于 64，那么会选择先进行数组扩容，而不是转换为红黑树），以减少搜索时间
 
-### Fields
-
-```java
-//The default initial capacity - MUST be a power of two.
-static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16
-
-//The maximum capacity
-static final int MAXIMUM_CAPACITY = 1 << 30;
-
-// The load factor used when none specified in constructor.
-static final float DEFAULT_LOAD_FACTOR = 0.75f;
-
-// treeify when already has Nodes >= TREEIFY_THRESHOLD
-static final int TREEIFY_THRESHOLD = 8;
-
-//untreeify when already has Nodes =< UNTREEIFY_THRESHOLD
-static final int UNTREEIFY_THRESHOLD = 6;
-
-//The smallest table capacity for which bins may be treeified.
-static final int MIN_TREEIFY_CAPACITY = 64;
-
-//initialized on first use, and resized as necessary. length always a power of two
-//also tolerate length zero in some operations
-transient Node<K,V>[] table;
-
-//Holds cached entrySet(). Note that AbstractMap fields are used for keySet() and values().
-transient Set<Map.Entry<K,V>> entrySet;
-
-//The number of key-value mappings contained in this map.
-transient int size;
-
-/**
- * The number of times this HashMap has been structurally modified
- * Structural modifications are those that change the number of mappings in
- * the HashMap or otherwise modify its internal structure (e.g.,
- * rehash).  This field is used to make iterators on Collection-views of
- * the HashMap fail-fast.  (See ConcurrentModificationException).
- */
-transient int modCount;
-
-//The next size value at which to resize (capacity * load factor).
-int threshold;
-
-final float loadFactor;
-```
-
-**loadFactor**
-
-控制数组存放数据的疏密程度，loadFactor越趋近于1，那么 数组中存放的数据(entry)也就越多，也就越密，也就是会让链表的长度增加
-loadFactor太大导致查找元素效率低，太小导致数组的利用率低，存放的数据会很分散。loadFactor的默认值为0.75f是官方给出的一个比较好的临界值
-
+| 版本变更 | 1.7 | 1.8 |
+| :---: | :---: | :---: |
+| hash算法 | 扰动4次 | 更简化 |
+| 存储变化 | 无 | 转变红黑树 |
+| 插入链表位置 | 头部 | 尾部 |
+| resize | 存在死锁 | 无死锁 |
 
 
 ### Inner Class
@@ -138,11 +85,67 @@ static class Entry<K,V> extends HashMap.Node<K,V> {
 
 
 
-### Method
+### Fields
+
+```java
+//The default initial capacity - MUST be a power of two.
+static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16
+
+//The maximum capacity
+static final int MAXIMUM_CAPACITY = 1 << 30;
+
+// The load factor used when none specified in constructor.
+static final float DEFAULT_LOAD_FACTOR = 0.75f;
+
+// treeify when already has Nodes >= TREEIFY_THRESHOLD
+static final int TREEIFY_THRESHOLD = 8;
+
+//untreeify when already has Nodes =< UNTREEIFY_THRESHOLD
+static final int UNTREEIFY_THRESHOLD = 6;
+
+//The smallest table capacity for which bins may be treeified.
+static final int MIN_TREEIFY_CAPACITY = 64;
+
+//initialized on first use, and resized as necessary. length always a power of two
+//also tolerate length zero in some operations
+transient Node<K,V>[] table;
+
+//Holds cached entrySet(). Note that AbstractMap fields are used for keySet() and values().
+transient Set<Map.Entry<K,V>> entrySet;
+
+//The number of key-value mappings contained in this map.
+transient int size;
+
+/**
+ * The number of times this HashMap has been structurally modified
+ * Structural modifications are those that change the number of mappings in
+ * the HashMap or otherwise modify its internal structure (e.g.,
+ * rehash).  This field is used to make iterators on Collection-views of
+ * the HashMap fail-fast.  (See ConcurrentModificationException).
+ */
+transient int modCount;
+
+//The next size value at which to resize (capacity * load factor).
+int threshold;
+
+final float loadFactor;
+
+/** The next size value at which to resize (capacity * load factor). */
+int threshold;
+```
 
 
 
-#### 构造方法
+
+
+**loadFactor**
+
+控制数组存放数据的疏密程度，loadFactor越趋近于1，那么 数组中存放的数据(entry)也就越多，也就越密，也就是会让链表的长度增加
+loadFactor太大导致查找元素效率低，太小导致数组的利用率低，存放的数据会很分散。loadFactor的默认值为0.75f是官方给出的一个比较好的临界值
+
+
+
+### constructor
 
 HashMap 中有四个构造方法，它们分别如下：
 
@@ -199,9 +202,9 @@ final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
     }
 }
 ```
-#### put方法
 
 
+### put
 
 
 ```java
@@ -270,7 +273,7 @@ final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
 
 ![put](../images/HashMap-put.png)
 
-#### hash()
+#### hash
 
 HashMap 通过 key 的 hashCode 经过扰动函数处理过后得到 hash 值，然后通过 (n - 1) & hash 判断当前元素存放的位置（这里的 n 指的是数组的长度），
 
@@ -280,20 +283,19 @@ JDK 1.7 的 hash 方法的性能会稍差一点点，因为毕竟扰动了 4 次
 ```java
 static final int hash(Object key) {
   int h;
-  // key.hashCode()：返回散列值也就是hashcode
-  // ^ ：按位异或
-  // >>>:无符号右移，忽略符号位，空位都以0补齐
   return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
 }
 ```
+
+
+
+### resize
 
 扩容:
 
 扩容这个过程涉及到 rehash、复制数据等操作，所以非常消耗性能。
 
 threshold = capacity * loadFactor，当Size>=threshold的时候，考虑对数组扩增了
-
-#### resize方法
 
 进行扩容，会伴随着一次重新hash分配，并且会遍历hash表中所有的元素，是非常耗时的。在编写程序中，要尽量避免resize。
 
@@ -304,12 +306,11 @@ final Node<K,V>[] resize() {
     int oldThr = threshold;
     int newCap, newThr = 0;
     if (oldCap > 0) {
-        // 超过最大值就不再扩充了，就只好随你碰撞去吧
+        //1. oldCap >= MAXIMUM_CAPACITY, return
         if (oldCap >= MAXIMUM_CAPACITY) {
             threshold = Integer.MAX_VALUE;
             return oldTab;
         }
-        // 没超过最大值，就扩充为原来的2倍
         else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY && oldCap >= DEFAULT_INITIAL_CAPACITY)
             newThr = oldThr << 1; // double threshold
     }
@@ -320,7 +321,7 @@ final Node<K,V>[] resize() {
         newCap = DEFAULT_INITIAL_CAPACITY;
         newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
     }
-    // 计算新的resize上限
+    // check threshold
     if (newThr == 0) {
         float ft = (float)newCap * loadFactor;
         newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ? (int)ft : Integer.MAX_VALUE);
@@ -330,7 +331,6 @@ final Node<K,V>[] resize() {
         Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];
     table = newTab;
     if (oldTab != null) {
-        // 把每个bucket都移动到新的buckets中
         for (int j = 0; j < oldCap; ++j) {
             Node<K,V> e;
             if ((e = oldTab[j]) != null) {
@@ -345,7 +345,7 @@ final Node<K,V>[] resize() {
                     Node<K,V> next;
                     do {
                         next = e.next;
-                        // 原索引
+                        // check (e.hash & oldCap) == 0
                         if ((e.hash & oldCap) == 0) {
                             if (loTail == null)
                                 loHead = e;
@@ -353,7 +353,6 @@ final Node<K,V>[] resize() {
                                 loTail.next = e;
                             loTail = e;
                         }
-                        // 原索引+oldCap
                         else {
                             if (hiTail == null)
                                 hiHead = e;
@@ -362,12 +361,12 @@ final Node<K,V>[] resize() {
                             hiTail = e;
                         }
                     } while ((e = next) != null);
-                    // 原索引放到bucket里
+                    // old bucket
                     if (loTail != null) {
                         loTail.next = null;
                         newTab[j] = loHead;
                     }
-                    // 原索引+oldCap放到bucket里
+                    // new bucket
                     if (hiTail != null) {
                         hiTail.next = null;
                         newTab[j + oldCap] = hiHead;
@@ -416,28 +415,27 @@ final void treeifyBin(Node<K,V>[] tab, int hash) {
 
 
 
-#### get方法
+### get
 
 ```java
 public V get(Object key) {
     Node<K,V> e;
+  //1. hash(key)
     return (e = getNode(hash(key), key)) == null ? null : e.value;
 }
 
 final Node<K,V> getNode(int hash, Object key) {
     Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
+  	//2. get index of tab
     if ((tab = table) != null && (n = tab.length) > 0 &&
         (first = tab[(n - 1) & hash]) != null) {
-        // 数组元素相等
-        if (first.hash == hash && // always check first node
+        if (first.hash == hash && // 3. always check first node
             ((k = first.key) == key || (key != null && key.equals(k))))
             return first;
-        // 桶中不止一个节点
+        // 4. iterate
         if ((e = first.next) != null) {
-            // 在树中get
             if (first instanceof TreeNode)
                 return ((TreeNode<K,V>)first).getTreeNode(hash, key);
-            // 在链表中get
             do {
                 if (e.hash == hash &&
                     ((k = e.key) == key || (key != null && key.equals(k))))
@@ -454,7 +452,7 @@ final Node<K,V> getNode(int hash, Object key) {
 
 
 
-### HashMap 和 Hashtable 的区别
+### HashMap vs Hashtable
 
 - HashMap 允许 key 和 value 为 null，Hashtable 不允许。
 - HashMap 的默认初始容量为 16，Hashtable 为 11。
