@@ -33,20 +33,106 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 ## Load Balance
 
+```nginx
+# default
+upstream real_serer{
+	server 192.168.1.100:8000;
+  server 192.168.1.100:8001;
+}
+```
+
+```nginx
+# weight
+upstream real_serer{
+	server 192.168.1.100:8000 weight=1;
+  server 192.168.1.100:8001 weight=2;
+}
+```
+
+```nginx
+# ip_hash
+upstream bakend {  
+    ip_hash;  
+    server 192.168.0.1:8000;  
+    server 192.168.0.1:8001;  
+} 
+```
+
+```nginx
+# fair
+upstream bakend {  
+    server 192.168.0.1:8000;  
+    server 192.168.0.1:8001; 
+    fair;
+} 
+```
+
+```nginx
+# url hash
+upstream bakend {  
+    server 192.168.0.1:8000;  
+    server 192.168.0.1:8001; 
+    hash $request_uri;  
+    hash_method crc32; 
+} 
+```
+
+consistent hash
+
+一致性hash就是创建出n个虚拟节点，n个虚拟节点构成一个环，从n个虚拟节点中，挑选出一些节点当成真实的upstream server节点。构成一个每次将计算得到的hash%n，得到请求分配的虚拟节点的位置c，从位置c顺时针移动，获得离c最近的真实upstream server节点
+
+```nginx
+# url hash
+upstream bakend {  
+  	consistent_hash $request_uri;
+    server 192.168.0.1:8000;  
+    server 192.168.0.1:8001; 
+} 
+```
+
 fail retry
 
 ```nginx
+# weight
 upstream real_serer{
 	server 192.168.1.100:8000 weight=1 max_fails=2 fail_timeout=60s;
   server 192.168.1.100:8001 weight=2 max_fails=2 fail_timeout=60s;
 }
+
 ```
 
 
 
 limit
 
-limit_req_zone
+limit_req_zone 
+
+```nginx
+
+http {
+  	# leaky bucket not set burst 
+    limit_req_zone $binary_remote_addr zone=one:10m rate=1r/s; 
+    server {
+        location /search/ {
+      			# token bucket set burst
+            limit_req zone=one burst=5 nodelay;
+        }
+}  
+```
+
+
+
+limit_conn_zone, need **ngx_http_limit_conn_module**
+
+```nginx
+  limit_conn_zone $binary_remote_addr zone=addr:10m;
+
+  server {
+      location /download/ {
+              limit_conn addr 1;
+      }
+  }
+```
 
 白名单 黑名单
 
