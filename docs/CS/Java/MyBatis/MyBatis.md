@@ -2,7 +2,7 @@
 
 
 
-## Introduction
+### Introduction
 
 
 
@@ -22,7 +22,7 @@ Compare with Hibernate
 
 
 
-## Architecture
+### Architecture
 
 
 
