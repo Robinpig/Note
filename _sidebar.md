@@ -7,7 +7,7 @@
     - DataStructure & Algorithm
     - C
     - C++
-    - Java
+    - [Java](/docs/CS/Java/Java.md)
         - JDK
           - Basic
             - [Object](/docs/CS/Java/JDK/Basic/Object.md)

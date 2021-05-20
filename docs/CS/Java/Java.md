@@ -1,10 +1,7 @@
 # Java
 
-## [Java Development Kit]()
-
-[JVM](/docs/CS/Java/JDK/JVM/JVM.md)
-
-[Collection](/docs/CS/Java/JDK/Collection/Collection.md)
+## JDK
+## [Java Development Kit](/docs/CS/Java/JDK/JDK.md)
 
 
 ## Framework
@@ -29,4 +26,4 @@
 
 ## Improving Code
 
-[Effective Java](/docs/CS/Java/EffectiveJava.md)
+## [Effective Java](/docs/CS/Java/EffectiveJava.md)
