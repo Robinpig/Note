@@ -1,6 +1,7 @@
 # Java
 
 ## JDK
+
 ## [Java Development Kit](/docs/CS/Java/JDK/JDK.md)
 
 
@@ -16,11 +17,11 @@
 
 ### [Spring](/docs/CS/Java/Spring/Spring.md)
 
-### [Spring Boot](/docs/CS/Java/Spring/SpringBoot/SpringBoot.md)
+### [Spring Boot](/docs/CS/Java/Spring%20Boot/Spring%20Boot.md)
 
-### [Spring Cloud](/docs/CS/Java/Spring/SpringCloud/SpringCloud.md)
+### [Spring Cloud](/docs/CS/Java/Spring%20Cloud/SpringCloud.md)
 
-### [Spring Cloud Alibaba](/docs/CS/Java/Spring/SpringCloudAlibaba/SpringCloudAlibaba.md)
+### [Spring Cloud Alibaba](/docs/CS/Java/SpringCloudAlibaba/SpringCloudAlibaba.md)
 
 
 
