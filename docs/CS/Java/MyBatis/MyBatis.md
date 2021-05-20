@@ -28,7 +28,7 @@ Compare with Hibernate
 
 ### Infrastructure
 
-#### [Reflector](https://github.com/Robinpig/Note/blob/master/CS/Java/Mybatis/Reflector.md)
+#### [Reflector](/docs/CS/Java/MyBatis/Reflector.md)
 
 `Reflector class represents a cached set of class definition information that allows for easy mapping between property names and getter/setter methods.`
 
@@ -36,7 +36,7 @@ Compare with Hibernate
 
 
 
-#### [Log](https://github.com/Robinpig/Note/blob/master/CS/Java/Mybatis/Log.md) 
+#### [Log](/docs/CS/Java/MyBatis/Log.md) 
 
 `Log provide log4j log4j2 slf4j jdklog and so on`
 
@@ -51,7 +51,7 @@ Compare with Hibernate
 
 
 
-#### [Init](https://github.com/Robinpig/Note/blob/master/CS/Java/Mybatis/Init.md) 
+#### [Init](/docs/CS/Java/MyBatis/Init.md) 
 
 `Load Mybatis-config.xml, create Configuration and SqlsessionFactory`
 
@@ -63,13 +63,13 @@ Compare with Hibernate
 
 #### Execute
 
-##### [Executor](https://github.com/Robinpig/Note/blob/master/CS/Java/Mybatis/Executor.md) 
+##### [Executor](/docs/CS/Java/MyBatis/Executor.md) 
 
-##### [StatementHandler](https://github.com/Robinpig/Note/blob/master/CS/Java/Mybatis/StatementHandler.md)
+##### [StatementHandler](/docs/CS/Java/MyBatis/StatementHandler.md)
 
 ##### ParameterHandler
 
-##### [ResultSetHandler](https://github.com/Robinpig/Note/blob/master/CS/Java/Mybatis/ResultSetHandler.md) 
+##### [ResultSetHandler](/docs/CS/Java/MyBatis/ResultSetHandler.md) 
 
 
 #### Plugins
@@ -79,6 +79,6 @@ Compare with Hibernate
 ### 接口层
 
 
-##### [Logging](https://github.com/Robinpig/Note/blob/master/CS/Java/Mybatis/Logging.md) 
+##### [Logging](/docs/CS/Java/MyBatis/Logging.md) 
 
 

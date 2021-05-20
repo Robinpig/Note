@@ -8,41 +8,38 @@
     - C
     - C++
     - [Java](/docs/CS/Java/Java.md)
-        - JDK
-          - Basic
+        - [JDK](/docs/CS/Java/JDK/JDK.md)
+          - [Basic](/docs/CS/Java/JDK/Basic/Basic.md)
             - [Object](/docs/CS/Java/JDK/Basic/Object.md)
             - [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
-          - Collection
-            - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
+          - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
             - [List](/docs/CS/Java/JDK/Collection/List.md)
             - [HashMap](/docs/CS/Java/JDK/Collection/HashMap.md)
-          - Concurrency
+          - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
             - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
             - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
             - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
             - [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
-          - JVM
-            - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+          - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
             - [GC](/docs/CS/Java/JDK/JVM/GC.md)
             - [G1](/docs/CS/Java/JDK/JVM/G1.md)
             - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
         - Quartz
           
-        - Spring
-          - [Spring](/docs/CS/Java/Spring/Spring.md)
+        - [Spring](/docs/CS/Java/Spring/Spring.md)
+          
         - Spring Boot
           
         - Spring Cloud
           - [Eureka](/docs/CS/Java/Spring/SpringCloud/Eureka.md)
-        - Netty
-            - [Netty](/docs/CS/Java/Netty/Netty.md)
+        - [Netty](/docs/CS/Java/Netty/Netty.md)
             - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
             - [Chanel](/docs/CS/Java/Netty/Channel.md)
             - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
             - [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
             - [Others](/docs/CS/Java/Netty/Others.md)
           
-        - MyBatis
+        - [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
     - Go
     - Rust
     - Scala
