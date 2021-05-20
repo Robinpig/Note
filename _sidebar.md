@@ -15,6 +15,7 @@
           - Collection
             - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
             - [List](/docs/CS/Java/JDK/Collection/List.md)
+            - [HashMap](/docs/CS/Java/JDK/Collection/HashMap.md)
           - Concurrency
             - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
             - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
