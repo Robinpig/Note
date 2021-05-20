@@ -6,7 +6,7 @@
 
 
 
-## Collection
+### Collection
 
 
 
@@ -426,7 +426,7 @@ Allocate  memory when first element added.
 
 
 
-## Concurrent Modify
+### Concurrent Modify
 
 ### Fail-Fast
 
@@ -453,7 +453,7 @@ For example CopyOnWriteArrayList.
 ConcurrentHashMap UNSAFE.getObjectVolatile
 
 
-## Arrays
+### Arrays
 
 
 
@@ -474,7 +474,7 @@ public static <T> List<T> asList(T... a) {
 
 
 
-## Iterable
+### Iterable
 
 
 
