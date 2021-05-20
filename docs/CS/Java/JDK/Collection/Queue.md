@@ -1,6 +1,30 @@
-# BlockingQueue
+# Queue
 
 
+
+## Queue
+
+
+
+### AbstractQueue
+
+
+
+## Deque
+
+
+
+### ArrayDeque
+
+
+
+## PriorityQueue
+
+
+
+
+
+## BlockingQueue
 
 阻塞队列(BlockingQueue)是一个支持两个附加操作的队列。这两个附加的操作是：在队列为空时，获取元素的线程会等待队列变为非空。当队列满时，存储元素的线程会等待队列可用。阻塞队列常用于生产者和消费者的场景，生产者是往队列里添加元素的线程，消费者是从队列里拿元素的线程。阻塞队列就是生产者存放元素的容器，而消费者也只从容器里拿元素。
 
@@ -15,18 +39,16 @@
 | LinkedBlockingDeque   | Deque            |
 
 
-
-## BlockingQueue
-
+### ArrayBlockingQueue
 
 
 ### SynchronousQueue
 
-*A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**. A synchronous queue **does not have any internal capacity, not even a capacity of one**. 
+*A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**. A synchronous queue **does not have any internal capacity, not even a capacity of one**.*
 
-you cannot insert an element (using any method) unless another thread is trying to remove it; 
+*you cannot insert an element (using any method) unless another thread is trying to remove it;*
 
-The head of the queue is the element that the first queued inserting thread is trying to add to the queue; if there is no such queued thread then no element is available for removal and poll() will return null. *
+*The head of the queue is the element that the first queued inserting thread is trying to add to the queue; if there is no such queued thread then no element is available for removal and poll() will return null.*
 
 *For purposes of other Collection methods (for example contains), a SynchronousQueue acts as an empty collection. This queue does not permit null elements.*
 
@@ -71,3 +93,4 @@ public int remainingCapacity() {
 
 
 #### TransferQueue
+

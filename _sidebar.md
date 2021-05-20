@@ -14,7 +14,7 @@
             - [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
           - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
             - [List](/docs/CS/Java/JDK/Collection/List.md)
-            - [HashMap](/docs/CS/Java/JDK/Collection/HashMap.md)
+            - [HashMap](/docs/CS/Java/JDK/Collection/Map.md)
           - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
             - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
             - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
@@ -28,10 +28,10 @@
           
         - [Spring](/docs/CS/Java/Spring/Spring.md)
           
-        - Spring Boot
+        - [Spring Boot](/docs/CS/Java/Spring%20Boot/Spring%20Boot.md)
           
         - Spring Cloud
-          - [Eureka](/docs/CS/Java/Spring/SpringCloud/Eureka.md)
+          - [Eureka](/docs/CS/Java/Spring%20Cloud/Eureka.md)
         - [Netty](/docs/CS/Java/Netty/Netty.md)
             - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
             - [Chanel](/docs/CS/Java/Netty/Channel.md)

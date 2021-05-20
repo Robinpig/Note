@@ -199,7 +199,7 @@ protected AbstractInstanceRegistry(EurekaServerConfig serverConfig, EurekaClient
 
 ###  CircularQueue
 
-Delegate a **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/BlockingQueue.md)** and override offer method.
+Delegate a **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ArrayBlockingQueue)** and override offer method.
 
 ```java
 static class CircularQueue<E> extends AbstractQueue<E> {
