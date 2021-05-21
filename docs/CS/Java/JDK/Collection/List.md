@@ -4,20 +4,19 @@
 
 ![](../images/List.png)
 
+## Summary
 
-
-- ArrayList继承于AbstractList抽象类，实现了**List, RandomAccess, Cloneable, java.io.Serializable**接口 。
-- LinkedList继承自AbstractSequentialList 实现**List, Deque, Cloneable, java.io.Serializable**接口。
-
-**AbstractSequentialList**是AbstractList类的子类，实现了根据下标来访问元素的一些方法，主要是通过listIterator遍历获取特定元素。
-
-**List接口**代表的是有序集合，与Set相反，List的元素是按照move operations的顺序进行排列。
+| Type        | ArrayList         | LinkedList             |
+| ----------- | ----------------- | ---------------------- |
+| Super Class | AbstractList      | AbstractSequentialList |
+| Interface   | List&RandomAccess | List&Deque             |
+|             |                   |                        |
 
 
 
 ## LinkedList
 
-
+**Deque**接口是双端队列的意思，代表LinkedList支持两端元素插入和移除。
 
 ```java
 public class LinkedList<E>
@@ -26,18 +25,10 @@ public class LinkedList<E>
 {
     transient int size = 0;
 
-    /**
-     * Pointer to first node.
-     * Invariant: (first == null && last == null) ||
-     *            (first.prev == null && first.item != null)
-     */
+    // Pointer to first node.
     transient Node<E> first;
 
-    /**
-     * Pointer to last node.
-     * Invariant: (first == null && last == null) ||
-     *            (last.next == null && last.item != null)
-     */
+    //Pointer to last node.
     transient Node<E> last;
 
     /** Constructs an empty list. */
@@ -49,8 +40,6 @@ public class LinkedList<E>
 
 
 ### Node
-
-
 
 ```java
 private static class Node<E> {
@@ -73,11 +62,6 @@ private static class Node<E> {
 ```java
 /**
  * Appends the specified element to the end of this list.
- *
- * <p>This method is equivalent to {@link #addLast}.
- *
- * @param e element to be appended to this list
- * @return {@code true} (as specified by {@link Collection#add})
  */
 public boolean add(E e) {
     linkLast(e);
@@ -88,10 +72,6 @@ public boolean add(E e) {
  * Inserts the specified element at the specified position in this list.
  * Shifts the element currently at that position (if any) and any
  * subsequent elements to the right (adds one to their indices).
- *
- * @param index index at which the specified element is to be inserted
- * @param element element to be inserted
- * @throws IndexOutOfBoundsException {@inheritDoc}
  */
 public void add(int index, E element) {
     checkPositionIndex(index);
@@ -109,20 +89,18 @@ public void add(int index, E element) {
 
 ## ArrayList
 
+**RandomAccess**是一个标示性接口，代表ArrayList支持快速访问，而LinkedList不支持。
+
 ```java
 public class ArrayList<E> extends AbstractList<E>
         implements List<E>, RandomAccess, Cloneable, java.io.Serializable {...}
 ```
 
-**Cloneable接口**代表类会重新父类Object的clone()方法，支持对实例对象的clone操作。
-
-**java.io.Serializable**接口代表类支持序列化。
-
-**RandomAccess**是一个标示性接口，代表ArrayList支持快速访问，而LinkedList不支持。
-
-**Deque**接口是双端队列的意思，代表LinkedList支持两端元素插入和移除。
 
 
+
+
+### Fields
 
 ```java
 /**
@@ -150,9 +128,6 @@ private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
  */
 transient Object[] elementData; // non-private to simplify nested class access
 
-/**
- * The size of the ArrayList (the number of elements it contains).
- */
 private int size;
 
 /**
