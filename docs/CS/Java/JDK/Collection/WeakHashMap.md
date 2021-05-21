@@ -1,10 +1,8 @@
 # WeakHashMap
 
-## 简述
+## Introduction
 
 WeakHashMap的行为一定程度上基于垃圾收集器的行为，因此一些Map数据结构对应的常识在WeakHashMap上会失效——size()方法的返回值会随着程序的运行变小，isEmpty()方法的返回值会从false变成true等等。
-
-## 继承结构
 
 ```java
  public class WeakHashMap<K,V>
@@ -12,7 +10,7 @@ WeakHashMap的行为一定程度上基于垃圾收集器的行为，因此一些
      implements Map<K,V> {
 ```
 
-## 成员变量
+## Fields
 
 ```java
  Entry<K,V>[] table;  //底层采用数组+单向链表
@@ -459,7 +457,6 @@ expungeStaleEntries方法代码如下。
 ```
 
 
-​      
 
 
 

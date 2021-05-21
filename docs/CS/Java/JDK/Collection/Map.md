@@ -1109,3 +1109,7 @@ public class TreeMap<K,V>
     extends AbstractMap<K,V>
     implements NavigableMap<K,V>, Cloneable, java.io.Serializable{}
 ```
+
+
+
+## [WeakHashMap](/docs/CS/Java/JDK/Collection/WeakHashMap.md)
