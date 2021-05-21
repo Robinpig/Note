@@ -893,6 +893,19 @@ static final class CounterCell {
 
 ## LinkedHashMap
 
+*Hash table and linked list implementation of the Map interface, with **predictable iteration order**. This implementation differs from `HashMap` in that it **maintains a doubly-linked list running through all of its entries**. 
+
+*This **linked list defines the iteration ordering**:*
+
+1. *normally the order in which keys were inserted into the map (insertion-order).*
+2. *Note that insertion order is not affected if a key is re-inserted into the map. (A key k is reinserted into a map m if m.put(k, v) is invoked when m.containsKey(k) would return true immediately prior to the invocation.)*
+
+*This implementation spares its clients from the unspecified, generally chaotic ordering provided by HashMap (and Hashtable), without incurring the increased cost associated with TreeMap.* 
+
+
+
+### Entry
+
 
 
 ```java
@@ -958,51 +971,70 @@ private void linkNodeLast(LinkedHashMap.Entry<K,V> p) {
 
 如果accessOrder为true，会保存访问顺序，在访问节点时，会调用afterNodeAccess()方法将节点先从双向链表移除，然后添加到链表尾部。
 
+### LRU
+
+*This kind of map is well-suited to building LRU caches. Invoking the `put, putIfAbsent, get, getOrDefault, compute, computeIfAbsent, computeIfPresent, or merge` methods results in an access to the corresponding entry (assuming it exists after the invocation completes).* 
+
+### afterNodeAccess
+
 ```java
-public class LinkedHashMap<K,V>
-    extends HashMap<K,V>
-    implements Map<K,V>
-{
-//头结点，指向最老的元素
-    transient LinkedHashMap.Entry<K,V> head;
-//尾节点，指向最新的元素
-    transient LinkedHashMap.Entry<K,V> tail;
-//如果accssOrder为true，代表节点需要按照访问顺序排列，每次访问了元素，会将元素移动到尾部（代表最新的节点）。
-public V get(Object key) {
-        Node<K,V> e;
-        if ((e = getNode(hash(key), key)) == null)
-            return null;
-        if (accessOrder)
-            afterNodeAccess(e);
-        return e.value;
-}
-//将节点从双向链表中删除，移动到尾部。
 void afterNodeAccess(Node<K,V> e) { // move node to last
-        LinkedHashMap.Entry<K,V> last;
-        if (accessOrder && (last = tail) != e) {
-            LinkedHashMap.Entry<K,V> p =
-                (LinkedHashMap.Entry<K,V>)e, 
-            b = p.before, a = p.after;
-            p.after = null;
-            if (b == null) head = a;
-            else b.after = a;
-            if (a != null) a.before = b;
-            else last = b;
-            if (last == null) head = p;
-            else {
-                p.before = last;
-                last.after = p;
-            }
-            tail = p;
-            ++modCount;
+    LinkedHashMap.Entry<K,V> last;
+    if (accessOrder && (last = tail) != e) {
+        LinkedHashMap.Entry<K,V> p =
+            (LinkedHashMap.Entry<K,V>)e, b = p.before, a = p.after;
+        p.after = null;
+        if (b == null)
+            head = a;
+        else
+            b.after = a;
+        if (a != null)
+            a.before = b;
+        else
+            last = b;
+        if (last == null)
+            head = p;
+        else {
+            p.before = last;
+            last.after = p;
         }
+        tail = p;
+        ++modCount;
     }
 }
 ```
 
 
 
-### LRU
+
+
+```java
+void afterNodeRemoval(Node<K,V> e) { // unlink
+    LinkedHashMap.Entry<K,V> p =
+        (LinkedHashMap.Entry<K,V>)e, b = p.before, a = p.after;
+    p.before = p.after = null;
+    if (b == null)
+        head = a;
+    else
+        b.after = a;
+    if (a == null)
+        tail = b;
+    else
+        a.before = b;
+}
+
+void afterNodeInsertion(boolean evict) { // possibly remove eldest
+    LinkedHashMap.Entry<K,V> first;
+    if (evict && (first = head) != null && removeEldestEntry(first)) {
+        K key = first.key;
+        removeNode(hash(key), key, null, false, true);
+    }
+}
+```
+
+
+
+#### Example
 
 ```java
 //使用LinkedHashMap实现LRU算法(accessOrder为false的实现方式)
