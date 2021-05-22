@@ -6,6 +6,8 @@
 
 ## Summary
 
+`RBT` = `Red-Black Tree`
+
 | Type            | HashTable          | HashMap                   | ConcurrentHashMap     | TreeMap            | LinkedHashMap             |
 | --------------- | ------------------ | ------------------------- | --------------------- | ------------------ | ------------------------- |
 | Structure       | array+linked list  | array+linked list+RBT     | array+linked list+RBT | array+RBT          | array+linked list+RBT     |

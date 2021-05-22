@@ -440,7 +440,7 @@ Allocate  memory when first element added.
 *Note that fail-fast behavior cannot be guaranteed as it is, generally speaking, impossible to make any hard guarantees in the presence of unsynchronized concurrent modification. Fail-fast operations throw ConcurrentModificationException on a best-effort basis. Therefore, it would be wrong to write a program that depended on this exception for its correctness: **ConcurrentModificationException should be used only to detect bugs**.*
 
 ```java
-//for example in removeIf of ArrayList
+//for example in removeIf of ArrayList, check if the modCount == expectedModCount 
 if (modCount != expectedModCount) {
     throw new ConcurrentModificationException();
 }

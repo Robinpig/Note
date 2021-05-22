@@ -6,11 +6,16 @@
 
 ## Summary
 
-| Type        | ArrayList         | LinkedList             |
-| ----------- | ----------------- | ---------------------- |
-| Super Class | AbstractList      | AbstractSequentialList |
-| Interface   | List&RandomAccess | List&Deque             |
-|             |                   |                        |
+`RA` = `RandomAccess`
+
+| Type        | ArrayList    | LinkedList             | CopyOnWriteArrayList | Vector       | Stack  |
+| ----------- | ------------ | ---------------------- | -------------------- | ------------ | ------ |
+| Super Class | AbstractList | AbstractSequentialList |                      | AbstractList | Vector |
+| Interface   | List&RA      | List&Deque             | List&RA              | List&RA      |        |
+| Satety      | unsafe       | unsafe                 | safe                 | safe         | safe   |
+|             |              |                        |                      |              |        |
+|             |              |                        |                      |              |        |
+|             |              |                        |                      |              |        |
 
 
 
@@ -336,7 +341,7 @@ final transient ReentrantLock lock = new ReentrantLock();
 
 
 
- 
+
 
 ```java
 /** The array, accessed only via getArray/setArray. */
@@ -344,6 +349,8 @@ private transient volatile Object[] array;
 ```
 
 
+
+### add
 
 ```java
 public boolean add(E e) {
@@ -361,3 +368,7 @@ public boolean add(E e) {
         }
     }
 ```
+
+
+
+## Vector & Stack
