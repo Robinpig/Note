@@ -98,6 +98,51 @@ network transmission consumption.
 
 
 
+### hashCode
+
+
+
+*Returns a hash code for this string. The hash code for a String object is computed as*
+
+​      *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
+​      
+
+*using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)*
+
+Why use 31?
+
+1. 碰撞概率小
+2. 计算方便
+3. 散列均匀,不会有199这样会溢出的风险
+
+```java
+public int hashCode() {
+    // The hash or hashIsZero fields are subject to a benign data race,
+    // making it crucial to ensure that any observable result of the
+    // calculation in this method stays correct under any possible read of
+    // these fields. Necessary restrictions to allow this to be correct
+    // without explicit memory fences or similar concurrency primitives is
+    // that we can ever only write to one of these two fields for a given
+    // String instance, and that the computation is idempotent and derived
+    // from immutable state
+    int h = hash;
+    if (h == 0 && !hashIsZero) {
+        h = isLatin1() ? StringLatin1.hashCode(value)
+                       : StringUTF16.hashCode(value);
+        if (h == 0) {
+            hashIsZero = true;
+        } else {
+            hash = h;
+        }
+    }
+    return h;
+}
+```
+
+ 
+
+
+
 ## StringBuilder
 
 
