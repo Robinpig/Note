@@ -455,9 +455,7 @@ ConcurrentHashMap UNSAFE.getObjectVolatile
 
 ### Arrays
 
-
-
-### asList
+#### asList
 
 Returns a **fixed-size** list( **java.util.Arrays$ArrayList** ) backed by the specified array. (Changes to the returned list "write through" to the array.) This method acts as bridge between array-based and collection-based APIs, in combination with Collection.toArray. The returned list is serializable and implements RandomAccess.
 This method also provides a convenient way to create a fixed-size list initialized to contain several elements:
@@ -474,7 +472,178 @@ public static <T> List<T> asList(T... a) {
 
 
 
-### Iterable
+## Collections
+
+
+
+### sort
+
+```java
+//Collections.java
+public static <T> void sort(List<T> list, Comparator<? super T> c) {
+    list.sort(c);
+}
+
+//List.java
+default void sort(Comparator<? super E> c) {
+    Object[] a = this.toArray();
+    Arrays.sort(a, (Comparator) c);
+    ListIterator<E> i = this.listIterator();
+    for (Object e : a) {
+        i.next();
+        i.set((E) e);
+    }
+}
+
+//Arrays.java
+public static <T> void sort(T[] a, Comparator<? super T> c) {
+    if (c == null) {
+        sort(a);
+    } else {
+        if (LegacyMergeSort.userRequested)
+            legacyMergeSort(a, c);
+        else
+            TimSort.sort(a, 0, a.length, c, null, 0, 0);
+    }
+}
+```
+
+
+
+### binarySearch
+
+```java
+public static <T>
+int binarySearch(List<? extends Comparable<? super T>> list, T key) {
+    if (list instanceof RandomAccess || list.size()<BINARYSEARCH_THRESHOLD)
+        return Collections.indexedBinarySearch(list, key);
+    else
+        return Collections.iteratorBinarySearch(list, key);
+}
+
+private static <T>
+int indexedBinarySearch(List<? extends Comparable<? super T>> list, T key) {
+    int low = 0;
+    int high = list.size()-1;
+
+    while (low <= high) {
+        int mid = (low + high) >>> 1;
+        Comparable<? super T> midVal = list.get(mid);
+        int cmp = midVal.compareTo(key);
+
+        if (cmp < 0)
+            low = mid + 1;
+        else if (cmp > 0)
+            high = mid - 1;
+        else
+            return mid; // key found
+    }
+    return -(low + 1);  // key not found
+}
+
+private static <T>
+int iteratorBinarySearch(List<? extends Comparable<? super T>> list, T key)
+{
+    int low = 0;
+    int high = list.size()-1;
+    ListIterator<? extends Comparable<? super T>> i = list.listIterator();
+
+    while (low <= high) {
+        int mid = (low + high) >>> 1;
+        Comparable<? super T> midVal = get(i, mid);
+        int cmp = midVal.compareTo(key);
+
+        if (cmp < 0)
+            low = mid + 1;
+        else if (cmp > 0)
+            high = mid - 1;
+        else
+            return mid; // key found
+    }
+    return -(low + 1);  // key not found
+}
+```
+
+### shuffle
+
+```java
+public static void shuffle(List<?> list, Random rnd) {
+    int size = list.size();
+    if (size < SHUFFLE_THRESHOLD || list instanceof RandomAccess) {
+        for (int i=size; i>1; i--)
+            swap(list, i-1, rnd.nextInt(i));
+    } else {
+        Object[] arr = list.toArray();
+
+        // Shuffle array
+        for (int i=size; i>1; i--)
+            swap(arr, i-1, rnd.nextInt(i));
+
+        // Dump array back into list
+        // instead of using a raw type here, it's possible to capture
+        // the wildcard but it will require a call to a supplementary
+        // private method
+        ListIterator it = list.listIterator();
+        for (Object e : arr) {
+            it.next();
+            it.set(e);
+        }
+    }
+}
+```
+
+### rarate
+
+```java
+public static void rotate(List<?> list, int distance) {
+    if (list instanceof RandomAccess || list.size() < ROTATE_THRESHOLD)
+        rotate1(list, distance);
+    else
+        rotate2(list, distance);
+}
+
+private static <T> void rotate1(List<T> list, int distance) {
+    int size = list.size();
+    if (size == 0)
+        return;
+    distance = distance % size;
+    if (distance < 0)
+        distance += size;
+    if (distance == 0)
+        return;
+
+    for (int cycleStart = 0, nMoved = 0; nMoved != size; cycleStart++) {
+        T displaced = list.get(cycleStart);
+        int i = cycleStart;
+        do {
+            i += distance;
+            if (i >= size)
+                i -= size;
+            displaced = list.set(i, displaced);
+            nMoved ++;
+        } while (i != cycleStart);
+    }
+}
+
+private static void rotate2(List<?> list, int distance) {
+    int size = list.size();
+    if (size == 0)
+        return;
+    int mid =  -distance % size;
+    if (mid < 0)
+        mid += size;
+    if (mid == 0)
+        return;
+
+    reverse(list.subList(0, mid));
+    reverse(list.subList(mid, size));
+    reverse(list);
+}
+```
+
+
+
+## Iterable
 
 
 

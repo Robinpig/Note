@@ -289,20 +289,6 @@ private void grow(int minCapacity) {
 ***(Because of the restrictions already itemized, this paragraph effectively applies only to the situation where both arrays have component types that are reference types.)***
 
 ```java
-/**
- * @param      src      the source array.
- * @param      srcPos   starting position in the source array.
- * @param      dest     the destination array.
- * @param      destPos  starting position in the destination data.
- * @param      length   the number of array elements to be copied.
- * @exception  IndexOutOfBoundsException  if copying would cause
- *               access of data outside array bounds.
- * @exception  ArrayStoreException  if an element in the <code>src</code>
- *               array could not be stored into the <code>dest</code> array
- *               because of a type mismatch.
- * @exception  NullPointerException if either <code>src</code> or
- *               <code>dest</code> is <code>null</code>.
- */
 public static native void arraycopy(Object src,  int  srcPos,
                                     Object dest, int destPos,
                                     int length);
@@ -310,11 +296,10 @@ public static native void arraycopy(Object src,  int  srcPos,
 
 
 
-ArayList use Object[], LinkedList use linked-table
+ArayList use Object[], LinkedList use linked-list
 
-Arraylist 从头部添加删除元素消耗比linkedlist大
-
-中间和末尾都较优于linkedlist 因为linkedlist去中间需要遍历N,创建元素消耗比array大,对象多
+1. Arraylist 从头部添加删除元素消耗比linkedlist大
+2. 中间和末尾都较优于linkedlist 因为linkedlist去中间需要遍历N,创建元素消耗比array大,对象多
 
 遍历时linkedlist使用迭代器能获得接近array的性能
 
@@ -372,3 +357,7 @@ public boolean add(E e) {
 
 
 ## Vector & Stack
+
+
+
+Stack vs ArrayDeque
