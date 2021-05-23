@@ -4,11 +4,11 @@
 
 ![Thread-Lifetime](../images/Thread-Lifetime.png)
 
-#### Status
+#### State
 
 A thread can be in one of the following states:
 
-| Status       | Description                                                  |
+| State        | Description                                                  |
 | ------------ | ------------------------------------------------------------ |
 | NEW          | A thread that has not yet started is in this state.          |
 | RUNNABLE     | A thread executing in the Java virtual machine is in this state. |
@@ -98,12 +98,13 @@ private native void start0();
 
 JVM_StartThread:
 
-1. `native_thread = new JavaThread(&thread_entry, sz)`
-   1. `os::create_thread(this, thr_type, stack_sz)`
+1. `native_thread = new JavaThread`
+   1. `os::create_thread invoke pthread_create()`
    2. ` while (state  == ALLOCATED), Monitor::wait(Mutex::_no_safepoint_check_flag)`
+   3. `after Monitor::notify, thread->call_run()`
 2. `Thread::start(native_thread)`
-   1. `os::start_thread(thread)`
-   2. `Monitor::notify`
+   1. `os::start_thread(thread), set_state(RUNNABLE)`
+   2. `pd_start_thread invoke Monitor::notify`
 
 ```c
 //Thread.c
@@ -232,73 +233,6 @@ static void thread_entry(JavaThread* thread, TRAPS) {
 
 
 
-**JavaThread::run()**
-
-```cpp
-// thread.cpp
-// The first routine called by a new Java thread
-void JavaThread::run() {
-  // initialize thread-local alloc buffer related fields
-  this->initialize_tlab();
-
-  // used to test validity of stack trace backs
-  this->record_base_of_stack_pointer();
-
-  this->create_stack_guard_pages();
-
-  this->cache_global_variables();
-
-  // Thread is now sufficient initialized to be handled by the safepoint code as being
-  // in the VM. Change thread state from _thread_new to _thread_in_vm
-  ThreadStateTransition::transition_and_fence(this, _thread_new, _thread_in_vm);
-
-  assert(JavaThread::current() == this, "sanity check");
-  assert(!Thread::current()->owns_locks(), "sanity check");
-
-  DTRACE_THREAD_PROBE(start, this);
-
-  // This operation might block. We call that after all safepoint checks for a new thread has
-  // been completed.
-  this->set_active_handles(JNIHandleBlock::allocate_block());
-
-  if (JvmtiExport::should_post_thread_life()) {
-    JvmtiExport::post_thread_start(this);
-
-  }
-
-  // We call another function to do the rest so we are sure that the stack addresses used
-  // from there will be lower than the stack base just computed
-  thread_main_inner();
-
-  // Note, thread is no longer valid at this point!
-}
-
-void JavaThread::thread_main_inner() {
-  assert(JavaThread::current() == this, "sanity check");
-  assert(this->threadObj() != NULL, "just checking");
-
-  // Execute thread entry point unless this thread has a pending exception
-  // or has been stopped before starting.
-  // Note: Due to JVM_StopThread we can have pending exceptions already!
-  if (!this->has_pending_exception() &&
-      !java_lang_Thread::is_stillborn(this->threadObj())) {
-    {
-      ResourceMark rm(this);
-      this->set_native_thread_name(this->get_thread_name());
-    }
-    HandleMark hm(this);
-    this->entry_point()(this, this);//return _entry_point
-  }
-
-  DTRACE_THREAD_PROBE(stop, this);
-
-  this->exit(false);
-  this->smr_delete();
-}
-```
-
-
-
 ### JavaThread::JavaThread
 
 
@@ -333,9 +267,10 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
 
 ### os::create_thread
 
-pthread_create in os_linux.cpp
+
 
 ```cpp
+//os_linux.cpp
 bool os::create_thread(Thread* thread, ThreadType thr_type,
                        size_t req_stack_size) {
   assert(thread->osthread() == NULL, "caller responsible");
@@ -384,6 +319,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
 
   {
     pthread_t tid;
+    //
     int ret = pthread_create(&tid, &attr, (void* (*)(void*)) thread_native_entry, thread);
 
     char buf[64];
@@ -429,9 +365,70 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
   assert(state == INITIALIZED, "race condition");
   return true;
 }
+
+// Thread start routine for all newly created threads
+static void *thread_native_entry(Thread *thread) {
+
+  thread->record_stack_base_and_size();
+
+  // Try to randomize the cache line index of hot stack frames.
+  // This helps when threads of the same stack traces evict each other's
+  // cache lines. The threads can be either from the same JVM instance, or
+  // from different JVM instances. The benefit is especially true for
+  // processors with hyperthreading technology.
+  static int counter = 0;
+  int pid = os::current_process_id();
+  alloca(((pid ^ counter++) & 7) * 128);
+
+  thread->initialize_thread_current();
+
+  OSThread* osthread = thread->osthread();
+  Monitor* sync = osthread->startThread_lock();
+
+  osthread->set_thread_id(os::current_thread_id());
+
+  log_info(os, thread)("Thread is alive (tid: " UINTX_FORMAT ", pthread id: " UINTX_FORMAT ").",
+    os::current_thread_id(), (uintx) pthread_self());
+
+  if (UseNUMA) {
+    int lgrp_id = os::numa_get_group_id();
+    if (lgrp_id != -1) {
+      thread->set_lgrp_id(lgrp_id);
+    }
+  }
+  // initialize signal mask for this thread
+  os::Linux::hotspot_sigmask(thread);
+
+  // initialize floating point control register
+  os::Linux::init_thread_fpu_state();
+
+  // handshaking with parent thread
+  {
+    MutexLockerEx ml(sync, Mutex::_no_safepoint_check_flag);
+
+    // notify parent thread
+    osthread->set_state(INITIALIZED);
+    sync->notify_all();
+
+    // wait until os::start_thread()
+    while (osthread->get_state() == INITIALIZED) {
+      sync->wait(Mutex::_no_safepoint_check_flag);
+    }
+  }
+
+  // call one more level start routine
+  thread->call_run();
+
+  // Note: at this point the thread object may already have deleted itself.
+  // Prevent dereferencing it from here on out.
+  thread = NULL;
+
+  log_info(os, thread)("Thread finished (tid: " UINTX_FORMAT ", pthread id: " UINTX_FORMAT ").",
+    os::current_thread_id(), (uintx) pthread_self());
+
+  return 0;
+}
 ```
-
-
 
 ### Thread::start
 
@@ -528,6 +525,69 @@ bool Monitor::notify() {
 }
 ```
 
+
+
+### JavaThread::run
+
+```cpp
+// thread.cpp
+// The first routine called by a new Java thread
+void JavaThread::run() {
+  // initialize thread-local alloc buffer related fields
+  this->initialize_tlab();
+
+  // used to test validity of stack trace backs
+  this->record_base_of_stack_pointer();
+
+  this->create_stack_guard_pages();
+
+  this->cache_global_variables();
+
+  // Thread is now sufficient initialized to be handled by the safepoint code as being
+  // in the VM. Change thread state from _thread_new to _thread_in_vm
+  ThreadStateTransition::transition_and_fence(this, _thread_new, _thread_in_vm);
+
+  DTRACE_THREAD_PROBE(start, this);
+
+  // This operation might block. We call that after all safepoint checks for a new thread has
+  // been completed.
+  this->set_active_handles(JNIHandleBlock::allocate_block());
+
+  if (JvmtiExport::should_post_thread_life()) {
+    JvmtiExport::post_thread_start(this);
+
+  }
+
+  // We call another function to do the rest so we are sure that the stack addresses used
+  // from there will be lower than the stack base just computed
+  thread_main_inner();
+
+  // Note, thread is no longer valid at this point!
+}
+
+void JavaThread::thread_main_inner() {
+  // Execute thread entry point unless this thread has a pending exception
+  // or has been stopped before starting.
+  // Note: Due to JVM_StopThread we can have pending exceptions already!
+  if (!this->has_pending_exception() &&
+      !java_lang_Thread::is_stillborn(this->threadObj())) {
+    {
+      ResourceMark rm(this);
+      //set native thread name
+      this->set_native_thread_name(this->get_thread_name());
+    }
+    HandleMark hm(this);
+    //execute entry_point -> run_method_name
+    this->entry_point()(this, this);
+  }
+
+  DTRACE_THREAD_PROBE(stop, this);
+
+  this->exit(false);
+  this->smr_delete();
+}
+```
+
 ## Order
 
 ### join
@@ -572,15 +632,15 @@ Provider-Consumer
 
 Wait-notify只是一个condition queue 仅使用于单生产/消费模型
 
+Causes the current thread to wait until either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object, or a specified amount of time has elapsed.
+
+**The current thread must own this object's monitor.**
+
+
+
+InterruptedException if any thread interrupted the current thread before or while the current thread was waiting for a notification.  **The <i>interrupted status</i> of the current thread is cleared when this exception is thrown.**
 ```java
 /**
- * Causes the current thread to wait until either another thread invokes the
- * {@link java.lang.Object#notify()} method or the
- * {@link java.lang.Object#notifyAll()} method for this object, or a
- * specified amount of time has elapsed.
- * <p>
- * The current thread must own this object's monitor.
- * <p>
  * This method causes the current thread (call it <var>T</var>) to
  * place itself in the wait set for this object and then to relinquish
  * any and all synchronization claims on this object. Thread <var>T</var>
@@ -728,13 +788,7 @@ public final void wait(long timeout, int nanos) throws InterruptedException {
  * This method should only be called by a thread that is the owner
  * of this object's monitor. See the {@code notify} method for a
  * description of the ways in which a thread can become the owner of
- * a monitor.
- *
- * @throws  InterruptedException if any thread interrupted the
- *             current thread before or while the current thread
- *             was waiting for a notification.  The <i>interrupted
- *             status</i> of the current thread is cleared when
- *             this exception is thrown.
+ * a monitor. 
  */
 public final void wait() throws InterruptedException {
     wait(0);
@@ -1296,4 +1350,45 @@ private native boolean isInterrupted(boolean ClearInterrupted);
 ### Live Lock
 
 ## JMM
+
+*Utility classes commonly useful in concurrent programming. This package includes a few small standardized extensible frameworks, as well as some classes that provide useful functionality and are otherwise tedious or difficult to implement. Here are brief descriptions of the main components. See also the java.util.concurrent.locks and java.util.concurrent.atomic packages.*
+*Executors*
+*Interfaces. Executor is a simple standardized interface for defining custom thread-like subsystems, including thread pools, asynchronous I/O, and lightweight task frameworks. Depending on which concrete Executor class is being used, tasks may execute in a newly created thread, an existing task-execution thread, or the thread calling execute, and may execute sequentially or concurrently. ExecutorService provides a more complete asynchronous task execution framework. An ExecutorService manages queuing and scheduling of tasks, and allows controlled shutdown. The ScheduledExecutorService subinterface and associated interfaces add support for delayed and periodic task execution. ExecutorServices provide methods arranging asynchronous execution of any function expressed as Callable, the result-bearing analog of Runnable. A Future returns the results of a function, allows determination of whether execution has completed, and provides a means to cancel execution. A RunnableFuture is a Future that possesses a run method that upon execution, sets its results.*
+*Implementations. Classes ThreadPoolExecutor and ScheduledThreadPoolExecutor provide tunable, flexible thread pools. The Executors class provides factory methods for the most common kinds and configurations of Executors, as well as a few utility methods for using them. Other utilities based on Executors include the concrete class FutureTask providing a common extensible implementation of Futures, and ExecutorCompletionService, that assists in coordinating the processing of groups of asynchronous tasks.*
+*Class ForkJoinPool provides an Executor primarily designed for processing instances of ForkJoinTask and its subclasses. These classes employ a work-stealing scheduler that attains high throughput for tasks conforming to restrictions that often hold in computation-intensive parallel processing.*
+*Queues*
+*The ConcurrentLinkedQueue class supplies an efficient scalable thread-safe non-blocking FIFO queue. The ConcurrentLinkedDeque class is similar, but additionally supports the java.util.Deque interface.*
+*Five implementations in java.util.concurrent support the extended BlockingQueue interface, that defines blocking versions of put and take: LinkedBlockingQueue, ArrayBlockingQueue, SynchronousQueue, PriorityBlockingQueue, and DelayQueue. The different classes cover the most common usage contexts for producer-consumer, messaging, parallel tasking, and related concurrent designs.*
+*Extended interface TransferQueue, and implementation LinkedTransferQueue introduce a synchronous transfer method (along with related features) in which a producer may optionally block awaiting its consumer.*
+*The BlockingDeque interface extends BlockingQueue to support both FIFO and LIFO (stack-based) operations. Class LinkedBlockingDeque provides an implementation.*
+*Timing*
+*The TimeUnit class provides multiple granularities (including nanoseconds) for specifying and controlling time-out based operations. Most classes in the package contain operations based on time-outs in addition to indefinite waits. In all cases that time-outs are used, the time-out specifies the minimum time that the method should wait before indicating that it timed-out. Implementations make a "best effort" to detect time-outs as soon as possible after they occur. However, an indefinite amount of time may elapse between a time-out being detected and a thread actually executing again after that time-out. All methods that accept timeout parameters treat values less than or equal to zero to mean not to wait at all. To wait "forever", you can use a value of Long.MAX_VALUE.*
+*Synchronizers*
+*Five classes aid common special-purpose synchronization idioms.*
+*Semaphore is a classic concurrency tool.*
+*CountDownLatch is a very simple yet very common utility for blocking until a given number of signals, events, or conditions hold.*
+*A CyclicBarrier is a resettable multiway synchronization point useful in some styles of parallel programming.*
+*A Phaser provides a more flexible form of barrier that may be used to control phased computation among multiple threads.*
+*An Exchanger allows two threads to exchange objects at a rendezvous point, and is useful in several pipeline designs.*
+*Concurrent Collections*
+*Besides Queues, this package supplies Collection implementations designed for use in multithreaded contexts: ConcurrentHashMap, ConcurrentSkipListMap, ConcurrentSkipListSet, CopyOnWriteArrayList, and CopyOnWriteArraySet. When many threads are expected to access a given collection, a ConcurrentHashMap is normally preferable to a synchronized HashMap, and a ConcurrentSkipListMap is normally preferable to a synchronized TreeMap. A CopyOnWriteArrayList is preferable to a synchronized ArrayList when the expected number of reads and traversals greatly outnumber the number of updates to a list.*
+*The "Concurrent" prefix used with some classes in this package is a shorthand indicating several differences from similar "synchronized" classes. For example java.util.Hashtable and Collections.synchronizedMap(new HashMap()) are synchronized. But ConcurrentHashMap is "concurrent". A concurrent collection is thread-safe, but not governed by a single exclusion lock. In the particular case of ConcurrentHashMap, it safely permits any number of concurrent reads as well as a tunable number of concurrent writes. "Synchronized" classes can be useful when you need to prevent all access to a collection via a single lock, at the expense of poorer scalability. In other cases in which multiple threads are expected to access a common collection, "concurrent" versions are normally preferable. And unsynchronized collections are preferable when either collections are unshared, or are accessible only when holding other locks.*
+*Most concurrent Collection implementations (including most Queues) also differ from the usual java.util conventions in that their Iterators and Spliterators provide weakly consistent rather than fast-fail traversal:*
+*they may proceed concurrently with other operations*
+*they will never throw ConcurrentModificationException*
+*they are guaranteed to traverse elements as they existed upon construction exactly once, and may (but are not guaranteed to) reflect any modifications subsequent to construction.*
+*Memory Consistency Properties*
+*Chapter 17 of the Java Language Specification  defines the happens-before relation on memory operations such as reads and writes of shared variables. The results of a write by one thread are guaranteed to be visible to a read by another thread only if the write operation happens-before the read operation. The synchronized and volatile constructs, as well as the Thread.start() and Thread.join() methods, can form happens-before relationships. In particular:*
+*Each action in a thread happens-before every action in that thread that comes later in the program's order.*
+*An unlock (synchronized block or method exit) of a monitor happens-before every subsequent lock (synchronized block or method entry) of that same monitor. And because the happens-before relation is transitive, all actions of a thread prior to unlocking happen-before all actions subsequent to any thread locking that monitor.*
+*A write to a volatile field happens-before every subsequent read of that same field. Writes and reads of volatile fields have similar memory consistency effects as entering and exiting monitors, but do not entail mutual exclusion locking.*
+*A call to start on a thread happens-before any action in the started thread.*
+*All actions in a thread happen-before any other thread successfully returns from a join on that thread.*
+*The methods of all classes in java.util.concurrent and its subpackages extend these guarantees to higher-level synchronization. In particular:*
+*Actions in a thread prior to placing an object into any concurrent collection happen-before actions subsequent to the access or removal of that element from the collection in another thread.*
+*Actions in a thread prior to the submission of a Runnable to an Executor happen-before its execution begins. Similarly for Callables submitted to an ExecutorService.*
+*Actions taken by the asynchronous computation represented by a Future happen-before actions subsequent to the retrieval of the result via Future.get() in another thread.*
+*Actions prior to "releasing" synchronizer methods such as Lock.unlock, Semaphore.release, and CountDownLatch.countDown happen-before actions subsequent to a successful "acquiring" method such as Lock.lock, Semaphore.acquire, Condition.await, and CountDownLatch.await on the same synchronizer object in another thread.*
+*For each pair of threads that successfully exchange objects via an Exchanger, actions prior to the exchange() in each thread happen-before those subsequent to the corresponding exchange() in another thread.*
+*Actions prior to calling CyclicBarrier.await and Phaser.awaitAdvance (as well as its variants) happen-before actions performed by the barrier action, and actions performed by the barrier action happen-before actions subsequent to a successful return from the corresponding await in other threads.*
 
