@@ -4,13 +4,15 @@
 
 ## ClassLoader Type
 
-- BootstrapClassLoader(启动类加载器)
+- `BootstrapClassLoader`
 
   C++实现,
 
-- ExtensionClassLoader(扩展类加载器) 
+- `ExtensionClassLoader`
 
-- AppClassLoader(应用程序类加载器) 继承于Ext类加载器
+- `AppClassLoader`
+
+  继承于Ext类加载器
 
 - User ClassLoader
   
@@ -27,7 +29,7 @@
 
 1. override loadClass(), not findClass()
 2. SPI机制, JDBC JNDI,use contextClassLoader(most be ApplicationClassLoader)
-3. hotswap, OSGI or Spring devtools RestartClassLoader
+3. hotswap, `OSGI`(`Open Service Gateway Initiative`) or Spring devtools RestartClassLoader
 4. since JDK9, module 
 
 
@@ -561,7 +563,9 @@ classfile/verifier.cpp
 
 ### Preparation
 
+prepare the memory in method area
 
+`ConstantValue` will set the final value
 
 ### Resolution
 
@@ -571,7 +575,7 @@ classfile/verifier.cpp
 
 InstanceKlass::Initialize_impl()
 
-
+<clinit>
 
 ### Using
 

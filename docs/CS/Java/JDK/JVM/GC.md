@@ -32,7 +32,7 @@ Garbage Collection
 
 ### Recycle
 
-Copy
+Copying
 
 Mark-Sweep
 
