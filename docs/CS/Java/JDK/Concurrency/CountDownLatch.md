@@ -98,3 +98,85 @@ public boolean await(long timeout, TimeUnit unit)
     return sync.tryAcquireSharedNanos(1, unit.toNanos(timeout));
 }
 ```
+
+
+
+## Example
+
+
+A useful property of a CountDownLatch is that it doesn't require that threads calling countDown wait for the count to reach zero before proceeding, it simply prevents any thread from proceeding past an await until all threads could pass.
+
+ Here is a pair of classes in which a group of worker threads use two countdown latches:
+The first is a start signal that prevents any worker from proceeding until the driver is ready for them to proceed;
+The second is a completion signal that allows the driver to wait until all workers have completed.
+
+```java
+class Driver { // ...
+   void main() throws InterruptedException {
+     CountDownLatch startSignal = new CountDownLatch(1);
+     CountDownLatch doneSignal = new CountDownLatch(N);
+
+     for (int i = 0; i < N; ++i) // create and start threads
+       new Thread(new Worker(startSignal, doneSignal)).start();
+
+     doSomethingElse();            // don't let run yet
+     startSignal.countDown();      // let all threads proceed
+     doSomethingElse();
+     doneSignal.await();           // wait for all to finish
+   }
+ }
+
+ class Worker implements Runnable {
+   private final CountDownLatch startSignal;
+   private final CountDownLatch doneSignal;
+   Worker(CountDownLatch startSignal, CountDownLatch doneSignal) {
+     this.startSignal = startSignal;
+     this.doneSignal = doneSignal;
+   }
+   public void run() {
+     try {
+       startSignal.await();
+       doWork();
+       doneSignal.countDown();
+     } catch (InterruptedException ex) {} // return;
+   }
+
+   void doWork() { ... }
+ }
+```
+
+
+
+Another typical usage would be to divide a problem into N parts, describe each part with a Runnable that executes that portion and counts down on the latch, and queue all the Runnables to an Executor. When all sub-parts are complete, the coordinating thread will be able to pass through await. (When threads must repeatedly count down in this way, instead use a CyclicBarrier.)
+
+```java
+class Driver2 { // ...
+   void main() throws InterruptedException {
+     CountDownLatch doneSignal = new CountDownLatch(N);
+     Executor e = ...
+
+     for (int i = 0; i < N; ++i) // create and start threads
+       e.execute(new WorkerRunnable(doneSignal, i));
+
+     doneSignal.await();           // wait for all to finish
+   }
+ }
+
+ class WorkerRunnable implements Runnable {
+   private final CountDownLatch doneSignal;
+   private final int i;
+   WorkerRunnable(CountDownLatch doneSignal, int i) {
+     this.doneSignal = doneSignal;
+     this.i = i;
+   }
+   public void run() {
+     try {
+       doWork(i);
+       doneSignal.countDown();
+     } catch (InterruptedException ex) {} // return;
+   }
+
+   void doWork() { ... }
+ }
+```
+
