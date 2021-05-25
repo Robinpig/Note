@@ -1,4 +1,4 @@
-# Data Structures And Algorithms
+# Algorithms
 
 
 
@@ -9,6 +9,3 @@
 Binary Search Tree
 
 AVL Tree
-
-
-

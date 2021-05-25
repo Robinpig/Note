@@ -4,7 +4,7 @@
     - OS
     - Network
         - [WebSocket](/docs/CS/CN/WebSocket.md)
-    - DataStructure & Algorithm
+    - Algorithms
     - C
     - C++
     - [Java](/docs/CS/Java/Java.md)
