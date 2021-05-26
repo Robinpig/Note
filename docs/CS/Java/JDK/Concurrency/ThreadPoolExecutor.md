@@ -204,11 +204,13 @@ public interface ScheduledExecutorService extends ExecutorService {
 
 
 
-### ThreadPoolExecutor
 
-2. 线程池如何维护自身状态。
-3. 线程池如何管理任务。
-4. 线程池如何管理线程。
+
+## ThreadPoolExecutor
+
+1. 线程池如何维护自身状态。
+4. 线程池如何管理任务。
+5. 线程池如何管理线程。
 
 
 
@@ -347,9 +349,7 @@ public ThreadPoolExecutor(int corePoolSize,
 
 #### RejectedExecutionHandler
 
-*RejectedExecution method that may be invoked by a ThreadPoolExecutor when execute cannot accept a task.*
-
-*This may occur when **no more threads or queue slots are available** because :*
+*RejectedExecution method that may be invoked by a ThreadPoolExecutor when execute cannot accept a task.This may occur when **no more threads or queue slots are available** because :*
 
 - **their bounds would be exceeded**
 - **upon shutdown of the Executor**
