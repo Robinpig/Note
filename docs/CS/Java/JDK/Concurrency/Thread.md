@@ -2,6 +2,8 @@
 
 ## Lifetime
 
+图源《Java并发编程的艺术》4.1.4节:
+
 ![Thread-Lifetime](../images/Thread-Lifetime.png)
 
 #### State
@@ -1346,8 +1348,11 @@ private native boolean isInterrupted(boolean ClearInterrupted);
 
 
 
-
 ### Live Lock
+
+
+
+
 
 ## JMM
 
