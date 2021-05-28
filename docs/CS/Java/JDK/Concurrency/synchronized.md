@@ -10,7 +10,7 @@
 
 
 
-```
+```java
 //synchronized with block
 monitorenter monitorexit
 
@@ -20,11 +20,108 @@ ACC_SYNCHRONIZED
 
 
 
-interpreterRuntime.cpp
+
+
+
+
+
+
+### Oop
 
 ```cpp
-// Synchronization
+//oop.hpp
+class oopDesc {
+  friend class VMStructs;
+  friend class JVMCIVMStructs;
+ private:
+  volatile markOop _mark;
+  union _metadata {
+    Klass*      _klass;
+    narrowKlass _compressed_klass;
+  } _metadata;
+
+ public:
+  inline markOop  mark()          const;
+  inline markOop  mark_raw()      const;
+  inline markOop* mark_addr_raw() const;
+
+  inline void set_mark(volatile markOop m);
+  inline void set_mark_raw(volatile markOop m);
+  static inline void set_mark_raw(HeapWord* mem, markOop m);
+
+  inline void release_set_mark(markOop m);
+  inline markOop cas_set_mark(markOop new_mark, markOop old_mark);
+  inline markOop cas_set_mark_raw(markOop new_mark, markOop old_mark, atomic_memory_order order = memory_order_conservative);
+
+  // Used only to re-initialize the mark word (e.g., of promoted
+  // objects during a GC) -- requires a valid klass pointer
+  inline void init_mark();
+  inline void init_mark_raw();
+
+  inline Klass* klass() const;
+  inline Klass* klass_or_null() const volatile;
+  inline Klass* klass_or_null_acquire() const volatile;
+  static inline Klass** klass_addr(HeapWord* mem);
+  static inline narrowKlass* compressed_klass_addr(HeapWord* mem);
+  inline Klass** klass_addr();
+  inline narrowKlass* compressed_klass_addr();
+...
+}
+```
+
+
+
+```cpp
+//markOop.hpp
+class markOopDesc: public oopDesc
+  ObjectMonitor* monitor() const {
+    assert(has_monitor(), "check");
+    // Use xor instead of &~ to provide one extra tag-bit check.
+    return (ObjectMonitor*) (value() ^ monitor_value);//monitor_value = 2
+  }
+...
+}
+```
+
+
+
+### objectMonitor
+
+ 在hotspot虚拟机中，采用ObjectMonitor类来实现monitor ， 每个对象中都会内置一个ObjectMonitor对象 
+
+在 ObjectMonitor.hpp中，可以看到ObjectMonitor的定义
+
+```cpp
+// synchronizer.cpp
+ObjectMonitor() {
+    _header       = NULL; //markOop对象头
+    _count        = 0;    
+    _waiters      = 0,   //等待线程数
+    _recursions   = 0;   //重入次数
+    _object       = NULL;  
+    _owner        = NULL;  //获得ObjectMonitor对象的线程
+    _WaitSet      = NULL;  //处于wait状态的线程，会被加入到waitSet
+    _WaitSetLock  = 0 ; 
+    _Responsible  = NULL ;
+    _succ         = NULL ;
+    _cxq          = NULL ;
+    FreeNext      = NULL ;
+    _EntryList    = NULL ; //处于等待锁BLOCKED状态的线程
+    _SpinFreq     = 0 ;   
+    _SpinClock    = 0 ;
+    OwnerIsThread = 0 ; 
+    _previous_owner_tid = 0; //监视器前一个拥有线程的ID
+}
+```
+
+
+
+### InterpreterRuntime::monitorenter
+
+```cpp
+//interpreterRuntime.cpp
 //
+// Synchronization
 // The interpreter's synchronization code is factored out so that it can
 // be shared by method invocation and synchronized blocks.
 //%note synchronization_3
@@ -54,14 +151,21 @@ IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, Ba
 IRT_END
 ```
 
+
+
+
+
+### Biased Lock
+
 偏向锁可以通过 -XX:+UseBiasedLocking开启或者关闭
 
 如果支持偏向锁,则执行 ObjectSynchronizer::fast_enter的逻辑
 如果不支持偏向锁,则执行 ObjectSynchronizer::slow_enter逻辑，绕过偏向锁，直接进入轻量级锁
 
-basicLock.hpp
+
 
 ```cpp
+//basicLock.hpp
 class BasicLock {
   friend class VMStructs;
   friend class JVMCIVMStructs;
@@ -114,44 +218,12 @@ class BasicObjectLock {
 
 
 
- synchronizer.cpp文件 
-
-### objectMonitor
- 在hotspot虚拟机中，采用ObjectMonitor类来实现monitor ， 每个对象中都会内置一个ObjectMonitor对象 
-
-在 ObjectMonitor.hpp中，可以看到ObjectMonitor的定义
-```cpp
-ObjectMonitor() {
-    _header       = NULL; //markOop对象头
-    _count        = 0;    
-    _waiters      = 0,   //等待线程数
-    _recursions   = 0;   //重入次数
-    _object       = NULL;  
-    _owner        = NULL;  //获得ObjectMonitor对象的线程
-    _WaitSet      = NULL;  //处于wait状态的线程，会被加入到waitSet
-    _WaitSetLock  = 0 ; 
-    _Responsible  = NULL ;
-    _succ         = NULL ;
-    _cxq          = NULL ;
-    FreeNext      = NULL ;
-    _EntryList    = NULL ; //处于等待锁BLOCKED状态的线程
-    _SpinFreq     = 0 ;   
-    _SpinClock    = 0 ;
-    OwnerIsThread = 0 ; 
-    _previous_owner_tid = 0; //监视器前一个拥有线程的ID
-}
-```
-
-
-
-### Biased Lock
-
 在大多数的情况下，锁不仅不存在多线程的竞争，而且总是由同一个线程获得。因此为了让线程获得锁的代价更低引入了偏向锁的概念。偏向锁的意思是如果一个线程获得了一个偏向锁，如果在接下来的一段时间中没有其他线程来竞争锁，那么持有偏向锁的线程再次进入或者退出同一个同步代码块，不需要再次进行抢占锁和释放锁的操作。
 
-
-ObjectSynchronizer::fast_enter的实现在 synchronizer.cpp文件中，代码如下
+#### ObjectSynchronizer::fast_enter
 
 ```cpp
+//synchronizer.cpp
 void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_rebias, TRAPS) {
   if (UseBiasedLocking) { 
     if (!SafepointSynchronize::is_at_safepoint()) {
@@ -188,14 +260,13 @@ void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_re
 
 > CAS:表示自旋锁，由于线程的阻塞和唤醒需要CPU从用户态转为核心态，频繁的阻塞和唤醒对CPU来说性能开销很大。同时，很多对象锁的锁定状态指会持续很短的时间，因此引入了自旋锁，所谓自旋就是一个无意义的死循环，在循环体内不断的重行竞争锁。当然，自旋的次数会有限制，超出指定的限制会升级到阻塞锁。
 
-BiasedLocking::revoke_and_rebias 是用来获取当前偏向锁的状态(可能是偏向锁撤销后重新偏向)。
+BiasedLocking::revoke_and_rebias 是用来获取当前偏向锁的状态(可能是偏向锁撤销后重新偏向):
 
-in biasedLocking.cpp
-
-1. Get markOop
-2.  if (mark->is_biased_anonymously() && !attempt_rebias) 
+1. `Get markOop`
+2.  `if (mark->is_biased_anonymously() && !attempt_rebias) `
 
 ```cpp
+//biasedLocking.cpp
 BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attempt_rebias, TRAPS) {
   assert(!SafepointSynchronize::is_at_safepoint(), "must not be called while at safepoint");
 
@@ -312,60 +383,7 @@ BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attem
 
 
 
-```cpp
-BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attempt_rebias, TRAPS) {
-  assert(!SafepointSynchronize::is_at_safepoint(), "must not be called while at safepoint");
-  markOop mark = obj->mark(); //获取锁对象的对象头
-  //判断mark是否为可偏向状态，即mark的偏向锁标志位为1，锁标志位为 01，线程id为null
-  if (mark->is_biased_anonymously() && !attempt_rebias) {
-    //这个分支是进行对象的hashCode计算时会进入，在一个非全局安全点进行偏向锁撤销
-    markOop biased_value       = mark;
-    //创建一个非偏向的markword
-    markOop unbiased_prototype = markOopDesc::prototype()->set_age(mark->age());
-    //Atomic:cmpxchg_ptr是CAS操作，通过cas重新设置偏向锁状态
-    markOop res_mark = (markOop) Atomic::cmpxchg_ptr(unbiased_prototype, obj->mark_addr(), mark);
-    if (res_mark == biased_value) {//如果CAS成功，返回偏向锁撤销状态
-      return BIAS_REVOKED;
-    }
-  } else if (mark->has_bias_pattern()) {//如果锁对象为可偏向状态（biased_lock:1, lock:01，不管线程id是否为空）,尝试重新偏向
-    Klass* k = obj->klass(); 
-    markOop prototype_header = k->prototype_header();
-    //如果已经有线程对锁对象进行了全局锁定，则取消偏向锁操作
-    if (!prototype_header->has_bias_pattern()) {
-      markOop biased_value       = mark;
-      //CAS 更新对象头markword为非偏向锁
-      markOop res_mark = (markOop) Atomic::cmpxchg_ptr(prototype_header, obj->mark_addr(), mark);
-      assert(!(*(obj->mark_addr()))->has_bias_pattern(), "even if we raced, should still be revoked");
-      return BIAS_REVOKED; //返回偏向锁撤销状态
-    } else if (prototype_header->bias_epoch() != mark->bias_epoch()) {
-      //如果偏向锁过期，则进入当前分支
-      if (attempt_rebias) {//如果允许尝试获取偏向锁
-        assert(THREAD->is_Java_thread(), "");
-        markOop biased_value       = mark;
-        markOop rebiased_prototype = markOopDesc::encode((JavaThread*) THREAD, mark->age(), prototype_header->bias_epoch());
-        //通过CAS 操作， 将本线程的 ThreadID 、时间错、分代年龄尝试写入对象头中
-        markOop res_mark = (markOop) Atomic::cmpxchg_ptr(rebiased_prototype, obj->mark_addr(), mark);
-        if (res_mark == biased_value) { //CAS成功，则返回撤销和重新偏向状态
-          return BIAS_REVOKED_AND_REBIASED;
-        }
-      } else {//不尝试获取偏向锁，则取消偏向锁
-        //通过CAS操作更新分代年龄
-        markOop biased_value       = mark;
-        markOop unbiased_prototype = markOopDesc::prototype()->set_age(mark->age());
-        markOop res_mark = (markOop) Atomic::cmpxchg_ptr(unbiased_prototype, obj->mark_addr(), mark);
-        if (res_mark == biased_value) { //如果CAS操作成功，返回偏向锁撤销状态
-          return BIAS_REVOKED;
-        }
-      }
-    }
-  }
-  ...//省略
-}
-```
-
 #### revoke bias
-
-In  biasedLocking.cpp
 
 ***BiasedLocking::revoke_at_safepoint must only be called while at safepoint.***
 
@@ -378,6 +396,7 @@ update_heuristics:
   2. Revoke the biases of all objects in the heap of this type   and don't allow rebiasing of these objects. Disable  allocation of objects of that type with the bias bit set.
 
 ```cpp
+//biasedLocking.cpp
 void BiasedLocking::revoke_at_safepoint(Handle h_obj) {
   assert(SafepointSynchronize::is_at_safepoint(), "must only be called while at safepoint");
   oop obj = h_obj();
@@ -413,7 +432,7 @@ enum HeuristicsResult {
 1. 一种是不可偏向的无锁状态，简单来说就是已经获得偏向锁的线程已经退出了同步代码块，那么这个时候会撤销偏向锁，并升级为轻量级锁
 2. 一种是不可偏向的已锁状态，简单来说就是已经获得偏向锁的线程正在执行同步代码块，那么这个时候会升级到轻量级锁并且被原持有锁的线程获得锁
 
-#### 轻量级锁加锁
+#### ObjectSynchronizer::slow_enter
 
 轻量级锁的获取，是调用 ::slow_enter方法，该方法同样位于 synchronizer.cpp文件中
 
@@ -489,7 +508,7 @@ void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
 
 轻量级锁的释放是通过 monitorexit调用
 
-```
+```cpp
 IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, BasicObjectLock* elem))
 #ifdef ASSERT
   thread->last_frame().interpreter_frame_verify_monitor(elem);
@@ -510,17 +529,15 @@ IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, Bas
 IRT_END
 ```
 
-这段代码中主要是通过 ObjectSynchronizer::slow_exit来执行
 
-```
+
+#### ObjectSynchronizer::slow_exit
+
+```cpp
 void ObjectSynchronizer::slow_exit(oop object, BasicLock* lock, TRAPS) {
   fast_exit (object, lock, THREAD) ;
 }
-```
 
-ObjectSynchronizer::fast_exit的代码如下
-
-```
 void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
   assert(!object->mark()->has_bias_pattern(), "should not see bias pattern here");
   // if displaced header is null, the previous enter is recursive enter, no-op
@@ -561,11 +578,11 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 
 轻量级锁的释放也比较简单，就是将当前线程栈帧中锁记录空间中的Mark Word替换到锁对象的对象头中，如果成功表示锁释放成功。否则，锁膨胀成重量级锁，实现重量级锁的释放锁逻辑
 
-### 锁膨胀的过程分析
+### ObjectSynchronizer::inflate
 
 重量级锁是通过对象内部的监视器(monitor)来实现，而monitor的本质是依赖操作系统底层的MutexLock实现的。我们先来看锁的膨胀过程，从前面的分析中已经知道了所膨胀的过程是通过 ObjectSynchronizer::inflate方法实现的，代码如下
 
-```
+```cpp
 ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
   // Inflate mutates the heap ...
   // Relaxing assertion for bug 6320749.
