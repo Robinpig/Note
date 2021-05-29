@@ -16,6 +16,10 @@ TLS
 
 性能不算高
 
+1. 明文传输，不检查内容是否被窃听
+2. 不校验通信方是否是伪装
+3. 不确定报文是否正常，未被篡改
+
 
 
 
@@ -41,8 +45,17 @@ Method
 - CONNECT
 
 
+## Version
 
-## HTTP 2.0
+### HTTP 1.1
+
+connection keep-alive
+
+pipeline
+
+队头阻塞 串行化顺序等待
+
+### HTTP 2.0
 
 
 
@@ -86,10 +99,6 @@ Connection: keep-Alive
 ```http
 Connection: close
 ```
-
-
-
-Accept-Charset
 
 
 
