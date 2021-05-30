@@ -26,9 +26,36 @@ The following are terms and definitions important to understand extensible appli
 
 ## ServiceLoader
 
-The `java.util.ServiceLoader` class helps you find, load, and use service providers. It searches for service providers on your application's class path or in your runtime environment's extensions directory. It loads them and enables your application to use the provider's APIs. If you add new providers to the class path or runtime extension directory, the `ServiceLoader` class finds them. If your application knows the provider interface, it can find and use different implementations of that interface. You can use the first loadable instance of the interface or iterate through all the available interfaces.
+The `java.util.ServiceLoader` class helps you find, load, and use service providers. It searches for service providers on your application's class path or in your runtime environment's extensions directory. **It loads them and enables your application to use the provider's APIs.** If you add new providers to the class path or runtime extension directory, the `ServiceLoader` class finds them. If your application knows the provider interface, it can find and use different implementations of that interface. **You can use the first loadable instance of the interface or iterate through all the available interfaces**.
 
-The `ServiceLoader` class is final, which means that you cannot make it a subclass or override its loading algorithms. You cannot, for example, change its algorithm to search for services from a different location.
+The `ServiceLoader` class is final, which means that you cannot make it a subclass or override its loading algorithms. **You cannot, for example, change its algorithm to search for services from a different location**.
+
+```java
+public final class ServiceLoader<S>
+    implements Iterable<S>
+{
+
+    private static final String PREFIX = "META-INF/services/";
+
+    // The class or interface representing the service being loaded
+    private final Class<S> service;
+
+    // The class loader used to locate, load, and instantiate providers
+    private final ClassLoader loader;
+
+    // The access control context taken when the ServiceLoader is created
+    private final AccessControlContext acc;
+
+    // Cached providers, in instantiation order
+    private LinkedHashMap<String,S> providers = new LinkedHashMap<>();
+
+    // The current lazy-lookup iterator
+    private LazyIterator lookupIterator;
+...
+}
+```
+
+
 
 From the perspective of the `ServiceLoader` class, all services have a single type, which is usually a single interface or abstract class. The provider itself contains one or more concrete classes that extend the service type with an implementation specific to its purpose. The `ServiceLoader` class requires that the single exposed provider type has a default constructor, which requires no arguments. This enables the `ServiceLoader` class to easily instantiate the service providers that it finds.
 
