@@ -51,7 +51,7 @@ Method
 
 connection keep-alive
 
-pipeline
+pipeline, 不必等上一个请求返回可发送第二个请求
 
 队头阻塞 串行化顺序等待
 
@@ -59,13 +59,15 @@ pipeline
 
 
 
-头部压缩
+头部压缩 HPACK algorithm
 
 二进制格式
 
 强化安全
 
-多路复用
+服务器推送
+
+多路复用 并发请求 无队头阻塞问题
 
 标头
 
@@ -99,6 +101,14 @@ Connection: keep-Alive
 ```http
 Connection: close
 ```
+
+issues:
+
+多路复用同一个TCP连接，一旦对奥
+
+### HTTP 3.0
+
+服务器推送
 
 
 

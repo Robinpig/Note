@@ -76,3 +76,25 @@ CA
 1. DV
 2. OV
 3. EV
+
+
+
+SSL/TLS 协议建立流程:
+
+1. ClientHello
+
+   client->server, send Client Random, support protocol version, algorithm list
+
+2. ServerHello
+
+   check protocol version and algorithm list, return with Server Random CA
+
+3. client response
+
+   check CA, get public key from CA ,
+
+   create pre-master key and send
+
+4. server response
+
+   get pre-master key, calc private key
