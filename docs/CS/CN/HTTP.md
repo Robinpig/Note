@@ -16,6 +16,10 @@ TLS
 
 性能不算高
 
+1. 明文传输，不检查内容是否被窃听
+2. 不校验通信方是否是伪装
+3. 不确定报文是否正常，未被篡改
+
 
 
 
@@ -41,18 +45,29 @@ Method
 - CONNECT
 
 
+## Version
 
-## HTTP 2.0
+### HTTP 1.1
+
+connection keep-alive
+
+pipeline, 不必等上一个请求返回可发送第二个请求
+
+队头阻塞 串行化顺序等待
+
+### HTTP 2.0
 
 
 
-头部压缩
+头部压缩 HPACK algorithm
 
 二进制格式
 
 强化安全
 
-多路复用
+服务器推送
+
+多路复用 并发请求 无队头阻塞问题
 
 标头
 
@@ -87,9 +102,13 @@ Connection: keep-Alive
 Connection: close
 ```
 
+issues:
 
+多路复用同一个TCP连接，一旦对奥
 
-Accept-Charset
+### HTTP 3.0
+
+服务器推送
 
 
 
