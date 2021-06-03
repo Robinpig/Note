@@ -4,6 +4,13 @@
 
 
 
+DNS解析流程
+
+1. 询问local DNS server，有缓存IP即自动返回
+2. local DNS server询问root DNS server，逐步遍历出子DNS server 获取IP，缓存到本地后返回
+
+
+
 建立在UDP之上
 
 
