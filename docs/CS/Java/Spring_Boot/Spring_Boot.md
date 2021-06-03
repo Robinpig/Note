@@ -1,7 +1,7 @@
 # Spring Boot
 
 
-### [How to start Spring Boot Application?](https://github.com/Robinpig/Note/blob/master/CS/Java/Spring/SpringBoot/Start.md)
+### [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
 
 ## Annotations
 

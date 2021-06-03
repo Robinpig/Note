@@ -30,7 +30,7 @@
           
         - [Spring](/docs/CS/Java/Spring/Spring.md)
           
-        - [Spring Boot](/docs/CS/Java/Spring%20Boot/Spring%20Boot.md)
+        - [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
           
         - Spring Cloud
           - [Eureka](/docs/CS/Java/Spring%20Cloud/Eureka.md)
