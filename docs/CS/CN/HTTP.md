@@ -104,11 +104,15 @@ Connection: close
 
 issues:
 
-多路复用同一个TCP连接，一旦对奥
+多路复用同一个TCP连接，TCP连接不了解上层多少HTTP请求， 当存在丢包时， 其他HTTP请求必须阻塞等待
 
 ### HTTP 3.0
 
-服务器推送
+使用UDP代替TCP ，防止出现队头阻塞或者重传阻塞
+
+升级到TLS1.3 头部压缩算法QPack
+
+基于TCP+TLS1.2需要6次握手，QUIC压缩到3次
 
 
 

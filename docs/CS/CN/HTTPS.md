@@ -2,7 +2,11 @@
 
 `HyperText Transfer Protocol Secure`
 
-HTTPS = HTTP + TLS(SSL)
+HTTPS = HTTP + TLS/SSL
+
+在建立连接时，增加了TLS握手
+
+传输过程使用对称加密算法
 
 传输安全 防止传输被监听 数据被窃取 确认网站真实性
 
@@ -98,3 +102,12 @@ SSL/TLS 协议建立流程:
 4. server response
 
    get pre-master key, calc private key
+
+## TLS/SSL
+
+TLS握手演变
+
+TLS1.2 4次 两次RTT RFC5246
+
+TLS1.3 3次 一次RTT
+
