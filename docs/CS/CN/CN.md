@@ -2,11 +2,13 @@
 
 
 
+[科来-网络通信协议图-2020](http://www.colasoft.com.cn/download/network-protocol-map-2020.pdf)
+
 ## Layer
 
 Application Layer
 
-
+HTTP、FTP、SMTP、DNS
 
 
 
@@ -28,13 +30,13 @@ Application Layer
 
 ### Transmission Control Protocol
 
-
+encapsulate
 
 
 
 ### User Datagram Protocol
 
-s
+
 
 
 
