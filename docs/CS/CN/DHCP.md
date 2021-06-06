@@ -1,6 +1,28 @@
 # DHCP
 
 
+DHCP
+Dynamic Host Configuration Protocol
+
+Subnet
+
+Lease
+
+DHCP DISCOVER
+
+DHCP OFFER
+
+DHCP REQUEST
+
+DHCP ACK
+
+DHCP NAK
+
+DHCP RELEASE
+
+DHCP INFORM
+
+DHCP DECLINE
 
 客户端监听68端口 服务端监听67端口
 
