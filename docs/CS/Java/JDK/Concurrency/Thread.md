@@ -821,13 +821,12 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 
 ##### ObjectMonitor::wait
 
-in objectMonitor.cpp
-
-enter the wait queue
-
-exit the monitor
+1. check for a pending interrupt, THROW(vmSymbols::java_lang_InterruptedException());
+2. AddWaiter, enter the wait queue
+3. exit the monitor
 
 ```cpp
+//objectMonitor.cpp
 // Note: a subset of changes to ObjectMonitor::wait()
 // will need to be replicated in complete_exit
 void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
@@ -1053,7 +1052,18 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
 
 ### notify
 
-*如果是通过notify来唤起的线程，那先进入wait的线程会先被唤起来 * 如果是通过nootifyAll唤起的线程，默认情况是最后进入的会先被唤起来，即LIFO的策略*
+notify, notifyAll : wake up thread when exit the sync block
+
+|            | notify | notifyAll |
+| ---------- | ------ | --------- |
+| wake order | FIFO   | LIFO      |
+|            |        |           |
+|            |        |           |
+
+notifyAll 在退出同步块时唤醒其倒数第二个进入wait状态的线程，依次类推
+
+
+
 ```java
 /**
  * Wakes up a single thread that is waiting on this object's
@@ -1179,7 +1189,6 @@ void ObjectMonitor::INotify(Thread * Self) {
 
 *_WaitSetLock protects the wait queue, not the EntryList.  We could move the add-to-EntryList operation, above, outside the critical section protected by _WaitSetLock.  In practice that's not useful.  With the exception of  wait() timeouts and interrupts the monitor owner is the only thread that grabs _WaitSetLock.  **There's almost no contention on _WaitSetLock** so it's not profitable to reduce the length of the critical section.*
 
-
 **notifyAll** when JavaThread exit
 
 ```cpp
@@ -1203,6 +1212,217 @@ static void ensure_join(JavaThread* thread) {
 }
 ```
 
+
+
+#### ObjectMonitor::exit
+
+```cpp
+void ObjectMonitor::exit(bool not_suspended, TRAPS) {
+  Thread * const Self = THREAD;
+  if (THREAD != _owner) {
+    if (THREAD->is_lock_owned((address) _owner)) {
+      // Transmute _owner from a BasicLock pointer to a Thread address.
+      // We don't need to hold _mutex for this transition.
+      // Non-null to Non-null is safe as long as all readers can
+      // tolerate either flavor.
+      assert(_recursions == 0, "invariant");
+      _owner = THREAD;
+      _recursions = 0;
+    } else {
+      // Apparent unbalanced locking ...
+      // Naively we'd like to throw IllegalMonitorStateException.
+      // As a practical matter we can neither allocate nor throw an
+      // exception as ::exit() can be called from leaf routines.
+      // see x86_32.ad Fast_Unlock() and the I1 and I2 properties.
+      // Upon deeper reflection, however, in a properly run JVM the only
+      // way we should encounter this situation is in the presence of
+      // unbalanced JNI locking. TODO: CheckJNICalls.
+      // See also: CR4414101
+      assert(false, "Non-balanced monitor enter/exit! Likely JNI locking");
+      return;
+    }
+  }
+
+  if (_recursions != 0) {
+    _recursions--;        // this is simple recursive enter
+    return;
+  }
+
+  // Invariant: after setting Responsible=null an thread must execute
+  // a MEMBAR or other serializing instruction before fetching EntryList|cxq.
+  _Responsible = NULL;
+
+#if INCLUDE_JFR
+  // get the owner's thread id for the MonitorEnter event
+  // if it is enabled and the thread isn't suspended
+  if (not_suspended && EventJavaMonitorEnter::is_enabled()) {
+    _previous_owner_tid = JFR_THREAD_ID(Self);
+  }
+#endif
+
+  for (;;) {
+    assert(THREAD == _owner, "invariant");
+
+    // release semantics: prior loads and stores from within the critical section
+    // must not float (reorder) past the following store that drops the lock.
+    // On SPARC that requires MEMBAR #loadstore|#storestore.
+    // But of course in TSO #loadstore|#storestore is not required.
+    OrderAccess::release_store(&_owner, (void*)NULL);   // drop the lock
+    OrderAccess::storeload();                        // See if we need to wake a successor
+    if ((intptr_t(_EntryList)|intptr_t(_cxq)) == 0 || _succ != NULL) {
+      return;
+    }
+    // Other threads are blocked trying to acquire the lock.
+
+    // Normally the exiting thread is responsible for ensuring succession,
+    // but if other successors are ready or other entering threads are spinning
+    // then this thread can simply store NULL into _owner and exit without
+    // waking a successor.  The existence of spinners or ready successors
+    // guarantees proper succession (liveness).  Responsibility passes to the
+    // ready or running successors.  The exiting thread delegates the duty.
+    // More precisely, if a successor already exists this thread is absolved
+    // of the responsibility of waking (unparking) one.
+    //
+    // The _succ variable is critical to reducing futile wakeup frequency.
+    // _succ identifies the "heir presumptive" thread that has been made
+    // ready (unparked) but that has not yet run.  We need only one such
+    // successor thread to guarantee progress.
+    // See http://www.usenix.org/events/jvm01/full_papers/dice/dice.pdf
+    // section 3.3 "Futile Wakeup Throttling" for details.
+    //
+    // Note that spinners in Enter() also set _succ non-null.
+    // In the current implementation spinners opportunistically set
+    // _succ so that exiting threads might avoid waking a successor.
+    // Another less appealing alternative would be for the exiting thread
+    // to drop the lock and then spin briefly to see if a spinner managed
+    // to acquire the lock.  If so, the exiting thread could exit
+    // immediately without waking a successor, otherwise the exiting
+    // thread would need to dequeue and wake a successor.
+    // (Note that we'd need to make the post-drop spin short, but no
+    // shorter than the worst-case round-trip cache-line migration time.
+    // The dropped lock needs to become visible to the spinner, and then
+    // the acquisition of the lock by the spinner must become visible to
+    // the exiting thread).
+
+    // It appears that an heir-presumptive (successor) must be made ready.
+    // Only the current lock owner can manipulate the EntryList or
+    // drain _cxq, so we need to reacquire the lock.  If we fail
+    // to reacquire the lock the responsibility for ensuring succession
+    // falls to the new owner.
+    //
+    if (!Atomic::replace_if_null(THREAD, &_owner)) {
+      return;
+    }
+
+    guarantee(_owner == THREAD, "invariant");
+
+    ObjectWaiter * w = NULL;
+
+    w = _EntryList;
+    if (w != NULL) {
+      // I'd like to write: guarantee (w->_thread != Self).
+      // But in practice an exiting thread may find itself on the EntryList.
+      // Let's say thread T1 calls O.wait().  Wait() enqueues T1 on O's waitset and
+      // then calls exit().  Exit release the lock by setting O._owner to NULL.
+      // Let's say T1 then stalls.  T2 acquires O and calls O.notify().  The
+      // notify() operation moves T1 from O's waitset to O's EntryList. T2 then
+      // release the lock "O".  T2 resumes immediately after the ST of null into
+      // _owner, above.  T2 notices that the EntryList is populated, so it
+      // reacquires the lock and then finds itself on the EntryList.
+      // Given all that, we have to tolerate the circumstance where "w" is
+      // associated with Self.
+      assert(w->TState == ObjectWaiter::TS_ENTER, "invariant");
+      ExitEpilog(Self, w);
+      return;
+    }
+
+    // If we find that both _cxq and EntryList are null then just
+    // re-run the exit protocol from the top.
+    w = _cxq;
+    if (w == NULL) continue;
+
+    // Drain _cxq into EntryList - bulk transfer.
+    // First, detach _cxq.
+    // The following loop is tantamount to: w = swap(&cxq, NULL)
+    for (;;) {
+      assert(w != NULL, "Invariant");
+      ObjectWaiter * u = Atomic::cmpxchg((ObjectWaiter*)NULL, &_cxq, w);
+      if (u == w) break;
+      w = u;
+    }
+
+    assert(w != NULL, "invariant");
+    assert(_EntryList == NULL, "invariant");
+
+    // Convert the LIFO SLL anchored by _cxq into a DLL.
+    // The list reorganization step operates in O(LENGTH(w)) time.
+    // It's critical that this step operate quickly as
+    // "Self" still holds the outer-lock, restricting parallelism
+    // and effectively lengthening the critical section.
+    // Invariant: s chases t chases u.
+    // TODO-FIXME: consider changing EntryList from a DLL to a CDLL so
+    // we have faster access to the tail.
+
+    _EntryList = w;
+    ObjectWaiter * q = NULL;
+    ObjectWaiter * p;
+    for (p = w; p != NULL; p = p->_next) {
+      guarantee(p->TState == ObjectWaiter::TS_CXQ, "Invariant");
+      p->TState = ObjectWaiter::TS_ENTER;
+      p->_prev = q;
+      q = p;
+    }
+
+    // In 1-0 mode we need: ST EntryList; MEMBAR #storestore; ST _owner = NULL
+    // The MEMBAR is satisfied by the release_store() operation in ExitEpilog().
+
+    // See if we can abdicate to a spinner instead of waking a thread.
+    // A primary goal of the implementation is to reduce the
+    // context-switch rate.
+    if (_succ != NULL) continue;
+
+    w = _EntryList;
+    if (w != NULL) {
+      guarantee(w->TState == ObjectWaiter::TS_ENTER, "invariant");
+      ExitEpilog(Self, w);
+      return;
+    }
+  }
+}
+```
+
+#### ObjectMonitor::ExitEpilog
+
+Exit protocol:
+
+1. ST _succ = wakee
+2. membar #loadstore|#storestore;
+3. ST _owner = NULL
+4. unpark(wakee)
+
+```cpp
+void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
+  assert(_owner == Self, "invariant");
+
+  _succ = Wakee->_thread;
+  ParkEvent * Trigger = Wakee->_event;
+
+  // Hygiene -- once we've set _owner = NULL we can't safely dereference Wakee again.
+  // The thread associated with Wakee may have grabbed the lock and "Wakee" may be
+  // out-of-scope (non-extant).
+  Wakee  = NULL;
+
+  // Drop the lock
+  OrderAccess::release_store(&_owner, (void*)NULL);
+  OrderAccess::fence();                               // ST _owner vs LD in unpark()
+
+  DTRACE_MONITOR_PROBE(contended__exit, this, object(), Self);
+  Trigger->unpark();
+
+  // Maintain stats and report events to JVMTI
+  OM_PERFDATA_OP(Parks, inc());
+}
+```
 
 ### Sleep
 
