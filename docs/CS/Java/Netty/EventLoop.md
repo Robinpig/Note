@@ -2,35 +2,346 @@
 
 
 
-## EventLoopGroup
-
-a array of EventLoop 
-
-ServerBootstrap Builder design pattern
+### EventLoopGroup Inheritance
 
 ![EventLoopGroup](./images/EventLoopGroup.png)
 
-### Constructor
+
+
+### EventExecutorGroup
+
+The EventExecutorGroup is responsible for **providing the EventExecutor's to use via its `next()` method**. Besides this, it is also responsible for **handling their life-cycle** and **allows shutting them down in a global fashion**.
 
 ```java
+public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<EventExecutor> {
+    
+    //Returns one of the EventExecutors managed by this EventExecutorGroup.
+    EventExecutor next();
+
+    @Override
+    Iterator<EventExecutor> iterator();
+  ...
+}
+```
+
+
+
+Signals this executor that the caller wants the executor to be shut down. Once this method is called, isShuttingDown() starts to return true, and the executor prepares to shut itself down. Unlike shutdown(), graceful shutdown ensures that no tasks are submitted for 'the quiet period' (usually a couple seconds) before it shuts itself down. If a task is submitted during the quiet period, it is guaranteed to be accepted and the quiet period will start over.
+
+```java
+ 		Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit);
+
+		//Returns true if and only if all EventExecutors managed by this EventExecutorGroup 
+  	//are being shut down gracefully or was shut down.
+    boolean isShuttingDown();
+
+    //Shortcut method for shutdownGracefully(long, long, TimeUnit) with 
+		//sensible default values.
+    Future<?> shutdownGracefully();
+
+    //Returns the Future which is notified when all EventExecutors managed 
+		//by this EventExecutorGroup have been terminated.
+    Future<?> terminationFuture();
+
+    @Override
+    @Deprecated
+    void shutdown();
+
+    @Override
+    @Deprecated
+    List<Runnable> shutdownNow();
+```
+
+
+
+### EventExecutor
+
+```java
+
 /**
- * Create a new instance.
+ * The {@link EventExecutor} is a special {@link EventExecutorGroup} which comes
+ * with some handy methods to see if a {@link Thread} is executed in a event loop.
+ * Besides this, it also extends the {@link EventExecutorGroup} to allow for a generic
+ * way to access methods.
  *
- * @param nThreads          the number of threads that will be used by this instance.
- * @param executor          the Executor to use, or {@code null} if the default should be used.
- * @param chooserFactory    the {@link EventExecutorChooserFactory} to use.
- * @param args              arguments which will passed to each {@link #newChild(Executor, Object...)} call
  */
+public interface EventExecutor extends EventExecutorGroup {
+
+    /**
+     * Returns a reference to itself.
+     */
+    @Override
+    EventExecutor next();
+
+    /**
+     * Return the {@link EventExecutorGroup} which is the parent of this {@link EventExecutor},
+     */
+    EventExecutorGroup parent();
+
+    /**
+     * Calls {@link #inEventLoop(Thread)} with {@link Thread#currentThread()} as argument
+     */
+    boolean inEventLoop();
+
+    /**
+     * Return {@code true} if the given {@link Thread} is executed in the event loop,
+     * {@code false} otherwise.
+     */
+    boolean inEventLoop(Thread thread);
+
+    /**
+     * Return a new {@link Promise}.
+     */
+    <V> Promise<V> newPromise();
+
+    /**
+     * Create a new {@link ProgressivePromise}.
+     */
+    <V> ProgressivePromise<V> newProgressivePromise();
+
+    /**
+     * Create a new {@link Future} which is marked as succeeded already. So {@link Future#isSuccess()}
+     * will return {@code true}. All {@link FutureListener} added to it will be notified directly. Also
+     * every call of blocking methods will just return without blocking.
+     */
+    <V> Future<V> newSucceededFuture(V result);
+
+    /**
+     * Create a new {@link Future} which is marked as failed already. So {@link Future#isSuccess()}
+     * will return {@code false}. All {@link FutureListener} added to it will be notified directly. Also
+     * every call of blocking methods will just return without blocking.
+     */
+    <V> Future<V> newFailedFuture(Throwable cause);
+}
+```
+
+
+
+### EventLoopGroup
+
+Special EventExecutorGroup which allows registering Channels that get processed for later selection during the event loop.
+
+```java
+public interface EventLoopGroup extends EventExecutorGroup {
+  
+    @Override
+    EventLoop next();
+
+    //Register a Channel with this EventLoop. 
+  	//The returned ChannelFuture will get notified once the registration was complete.
+    ChannelFuture register(Channel channel);
+
+    //Register a Channel with this EventLoop using a ChannelFuture. 
+  	//The passed ChannelFuture will get notified once the registration was complete and also will get returned.
+    ChannelFuture register(ChannelPromise promise);
+
+    //@deprecated Use #register(ChannelPromise) instead.
+    @Deprecated
+    ChannelFuture register(Channel channel, ChannelPromise promise);
+}
+```
+
+
+
+### register
+
+```java
+//MultithreadEventLoopGroup#register()
+@Override
+public ChannelFuture register(Channel channel) {
+    return next().register(channel);
+}
+
+//SingleThreadEventLoop#register()
+@Override
+public ChannelFuture register(Channel channel) {
+    return register(new DefaultChannelPromise(channel, this));
+}
+
+//SingleThreadEventLoop#register()
+@Override
+public ChannelFuture register(final ChannelPromise promise) {
+    promise.channel().unsafe().register(this, promise);
+    return promise;
+}
+```
+
+finally invoke` Channel#register()`
+
+### AbstractNioChannel#doRegister( )
+
+```java
+//AbstractNioChannel#doRegister()
+@Override
+protected void doRegister() throws Exception {
+    boolean selected = false;
+    for (;;) {
+        try {
+            selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
+            return;
+        } catch (CancelledKeyException e) {
+            if (!selected) {
+                // Force the Selector to select now as the "canceled" SelectionKey may still be
+                // cached and not removed because no Select.select(..) operation was called yet.
+                eventLoop().selectNow();
+                selected = true;
+            } else {
+                // We forced a select operation on the selector before but the SelectionKey is still cached
+                // for whatever reason. JDK bug ?
+                throw e;
+            }
+        }
+    }
+}
+```
+
+
+
+
+
+## Create NioEventLoopGroup
+
+
+
+```java
+public NioEventLoopGroup(int nThreads) {
+    this(nThreads, (Executor) null);
+}
+
+//Create a new instance using the specified number of threads, 
+//the given ThreadFactory and the SelectorProvider which is returned by SelectorProvider#provider().
+public NioEventLoopGroup(int nThreads, ThreadFactory threadFactory) {
+    this(nThreads, threadFactory, SelectorProvider.provider());
+}
+
+public NioEventLoopGroup(
+        int nThreads, ThreadFactory threadFactory, final SelectorProvider selectorProvider) {
+    this(nThreads, threadFactory, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
+}
+
+public NioEventLoopGroup(int nThreads, ThreadFactory threadFactory,
+    final SelectorProvider selectorProvider, final SelectStrategyFactory selectStrategyFactory) {
+    super(nThreads, threadFactory, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
+}
+
+public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
+                         final SelectorProvider selectorProvider,
+                         final SelectStrategyFactory selectStrategyFactory,
+                         final RejectedExecutionHandler rejectedExecutionHandler,
+                         final EventLoopTaskQueueFactory taskQueueFactory) {
+    super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory,
+            rejectedExecutionHandler, taskQueueFactory);
+}
+```
+
+
+
+#### SelectorProvider#provider()
+
+```java
+//java.nio.channels.spi.SelectorProvider#provider()
+public static SelectorProvider provider() {
+        synchronized (lock) {
+            if (provider != null)
+                return provider;
+            return AccessController.doPrivileged(
+                new PrivilegedAction<SelectorProvider>() {
+                    public SelectorProvider run() {
+                            if (loadProviderFromProperty())
+                                return provider;
+                            if (loadProviderAsService())
+                                return provider;
+                            provider = sun.nio.ch.DefaultSelectorProvider.create();
+                            return provider;
+                        }
+                    });
+        }
+    }
+
+//sun.nio.ch.DefaultSelectorProvider.create()
+public static SelectorProvider create() {
+        String osname = AccessController
+            .doPrivileged(new GetPropertyAction("os.name"));
+        if (osname.equals("SunOS"))
+            return createProvider("sun.nio.ch.DevPollSelectorProvider");
+        if (osname.equals("Linux"))
+            return createProvider("sun.nio.ch.EPollSelectorProvider");
+        return new sun.nio.ch.PollSelectorProvider();
+    }
+```
+
+
+
+#### DefaultSelectStrategyFactory
+
+```java
+public final class DefaultSelectStrategyFactory implements SelectStrategyFactory {
+    public static final SelectStrategyFactory INSTANCE = new DefaultSelectStrategyFactory();
+
+    private DefaultSelectStrategyFactory() { }
+
+    @Override
+    public SelectStrategy newSelectStrategy() {
+        return DefaultSelectStrategy.INSTANCE;
+    }
+}
+```
+
+
+
+#### RejectedExecutionHandlers#reject()
+
+```java
+public final class RejectedExecutionHandlers {
+    private static final RejectedExecutionHandler REJECT = new RejectedExecutionHandler() {
+        @Override
+        public void rejected(Runnable task, SingleThreadEventExecutor executor) {
+            throw new RejectedExecutionException();
+        }
+    };
+
+    private RejectedExecutionHandlers() { }
+
+    /**
+     * Returns a {@link RejectedExecutionHandler} that will always just throw a {@link RejectedExecutionException}.
+     */
+    public static RejectedExecutionHandler reject() {
+        return REJECT;
+    }
+}
+```
+
+
+
+#### MultithreadEventExecutorGroup
+
+
+```java
+private final EventExecutor[] children;
+private final Set<EventExecutor> readonlyChildren;
+private final AtomicInteger terminatedChildren = new AtomicInteger();
+private final Promise<?> terminationFuture = new DefaultPromise(GlobalEventExecutor.INSTANCE);
+private final EventExecutorChooserFactory.EventExecutorChooser chooser;
+
+private static final int DEFAULT_EVENT_LOOP_THREADS;
+
+    static {
+        DEFAULT_EVENT_LOOP_THREADS = Math.max(1, SystemPropertyUtil.getInt(
+                "io.netty.eventLoopThreads", NettyRuntime.availableProcessors() * 2));
+    }
+
+protected MultithreadEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory, Object... args) {
+        super(nThreads == 0 ? DEFAULT_EVENT_LOOP_THREADS : nThreads, executor, chooserFactory, args);
+    }
+
 protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
                                         EventExecutorChooserFactory chooserFactory, Object... args) {
-    if (nThreads <= 0) {
-        throw new IllegalArgumentException(String.format("nThreads: %d (expected: > 0)", nThreads));
-    }
-
-    if (executor == null) {
-        executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
-    }
-
+  	// ... ignore assert method
+  
+  	if (executor == null) {
+            executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
+        }
+  
     children = new EventExecutor[nThreads];
 
     for (int i = 0; i < nThreads; i ++) {
@@ -77,7 +388,7 @@ protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
     for (EventExecutor e: children) {
         e.terminationFuture().addListener(terminationListener);
     }
-
+		//finally get readonlyChildrenSet
     Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
     Collections.addAll(childrenSet, children);
     readonlyChildren = Collections.unmodifiableSet(childrenSet);
@@ -86,68 +397,425 @@ protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
 
 
 
-DefaultThreadFactory.newThread( ) wrap Thread to FastThreadLocalThread
-
-### newThread
-
-```java
-@Override
-public Thread newThread(Runnable r) {
-    Thread t = newThread(FastThreadLocalRunnable.wrap(r), prefix + nextId.incrementAndGet());
-    try {
-        if (t.isDaemon() != daemon) {
-            t.setDaemon(daemon);
-        }
-
-        if (t.getPriority() != priority) {
-            t.setPriority(priority);
-        }
-    } catch (Exception ignored) {
-        // Doesn't matter even if failed to set.
-    }
-    return t;
-}
-
-protected Thread newThread(Runnable r, String name) {
-    return new FastThreadLocalThread(threadGroup, r, name);
-}
-```
 
 
-
-Choose next
+#### ThreadPerTaskExecutor
 
 ```java
-@SuppressWarnings("unchecked")
-@Override
-public EventExecutorChooser newChooser(EventExecutor[] executors) {
-    if (isPowerOfTwo(executors.length)) {
-        return new PowerOfTwoEventExecutorChooser(executors);
-    } else {
-        return new GenericEventExecutorChooser(executors);
+public final class ThreadPerTaskExecutor implements Executor {
+    private final ThreadFactory threadFactory;
+		//ignore constructor
+
+    @Override
+    public void execute(Runnable command) {
+        threadFactory.newThread(command).start();
     }
 }
 ```
 
 
 
-## EventLoop
+#### DefaultThreadFactory
+
+```java
+public class DefaultThreadFactory implements ThreadFactory {
+
+    private static final AtomicInteger poolId = new AtomicInteger();
+
+    private final AtomicInteger nextId = new AtomicInteger();
+    private final String prefix;
+    private final boolean daemon;
+    private final int priority;
+    protected final ThreadGroup threadGroup;
+
+    public DefaultThreadFactory(Class<?> poolType) {
+        this(poolType, false, Thread.NORM_PRIORITY);
+    }
+
+    public DefaultThreadFactory(Class<?> poolType, boolean daemon, int priority) {
+        this(toPoolName(poolType), daemon, priority);
+    }
+
+    public static String toPoolName(Class<?> poolType) {
+       //ignore checking parameters
+      
+        String poolName = StringUtil.simpleClassName(poolType);
+        switch (poolName.length()) {
+            case 0:
+                return "unknown";
+            case 1:
+                return poolName.toLowerCase(Locale.US);
+            default:
+                if (Character.isUpperCase(poolName.charAt(0)) && Character.isLowerCase(poolName.charAt(1))) {
+                    return Character.toLowerCase(poolName.charAt(0)) + poolName.substring(1);
+                } else {
+                    return poolName;
+                }
+        }
+    }
+
+    public DefaultThreadFactory(String poolName, boolean daemon, int priority, ThreadGroup threadGroup) {
+       //ignore checking parameters
+
+        prefix = poolName + '-' + poolId.incrementAndGet() + '-';
+        this.daemon = daemon;
+        this.priority = priority;
+        this.threadGroup = threadGroup;
+    }
+
+    public DefaultThreadFactory(String poolName, boolean daemon, int priority) {
+        this(poolName, daemon, priority, System.getSecurityManager() == null ?
+                Thread.currentThread().getThreadGroup() : System.getSecurityManager().getThreadGroup());
+    }
+
+  ...
+}
+```
+
+##### DefaultThreadFactory#newThread()
+
+create **FastThreadLocalThread**
+
+```java
+		//DefaultThreadFactory#newThread()
+		@Override
+    public Thread newThread(Runnable r) {
+        Thread t = newThread(FastThreadLocalRunnable.wrap(r), prefix + nextId.incrementAndGet());
+        try {
+            if (t.isDaemon() != daemon) {
+                t.setDaemon(daemon);
+            }
+
+            if (t.getPriority() != priority) {
+                t.setPriority(priority);
+            }
+        } catch (Exception ignored) {
+            // Doesn't matter even if failed to set.
+        }
+        return t;
+    }
+
+		protected Thread newThread(Runnable r, String name) {
+        return new FastThreadLocalThread(threadGroup, r, name);
+    }
+```
+
+
+
+#### NioEventLoopGroup#newChild()
+
+create NioEventLoop
+
+```java
+//NioEventLoopGroup#newChild()
+@Override
+protected EventLoop newChild(Executor executor, Object... args) throws Exception {
+    EventLoopTaskQueueFactory queueFactory = args.length == 4 ? (EventLoopTaskQueueFactory) args[3] : null;
+    return new NioEventLoop(this, executor, (SelectorProvider) args[0],
+        ((SelectStrategyFactory) args[1]).newSelectStrategy(), (RejectedExecutionHandler) args[2], queueFactory);
+}
+```
+
+
+
+#### EventExecutorChooserFactory#newChooser()
+
+```java
+//Default implementation which uses simple round-robin to choose next EventExecutor.
+@UnstableApi
+public final class DefaultEventExecutorChooserFactory implements EventExecutorChooserFactory {
+
+    public static final DefaultEventExecutorChooserFactory INSTANCE = new DefaultEventExecutorChooserFactory();
+
+    private DefaultEventExecutorChooserFactory() { }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public EventExecutorChooser newChooser(EventExecutor[] executors) {
+        if (isPowerOfTwo(executors.length)) {
+            return new PowerOfTwoEventExecutorChooser(executors);
+        } else {
+            return new GenericEventExecutorChooser(executors);
+        }
+    }
+
+    private static boolean isPowerOfTwo(int val) {
+        return (val & -val) == val;
+    }
+
+    private static final class PowerOfTwoEventExecutorChooser implements EventExecutorChooser {
+        private final AtomicInteger idx = new AtomicInteger();
+        private final EventExecutor[] executors;
+
+        PowerOfTwoEventExecutorChooser(EventExecutor[] executors) {
+            this.executors = executors;
+        }
+
+        @Override
+        public EventExecutor next() {
+            return executors[idx.getAndIncrement() & executors.length - 1];
+        }
+    }
+
+    private static final class GenericEventExecutorChooser implements EventExecutorChooser {
+        private final AtomicInteger idx = new AtomicInteger();
+        private final EventExecutor[] executors;
+
+        GenericEventExecutorChooser(EventExecutor[] executors) {
+            this.executors = executors;
+        }
+
+        @Override
+        public EventExecutor next() {
+            return executors[Math.abs(idx.getAndIncrement() % executors.length)];
+        }
+    }
+}
+```
+
+
+
+#### NioEventLoopGroup#setIoRatio
+
+Sets the percentage of the desired amount of time spent for I/O in the child event loops. The default value is 50, which means the event loop will try to **spend the same amount of time for I/O as for non-I/O tasks**.
+
+```java
+/**
+ * Sets the percentage of the desired amount of time spent for I/O in the child event loops.  The default value is 50, which means the event loop will try to spend the same amount of time for I/O as for non-I/O tasks.
+ */
+public void setIoRatio(int ioRatio) {
+    for (EventExecutor e: this) {
+        ((NioEventLoop) e).setIoRatio(ioRatio);
+    }
+}
+```
+
+
+
+## Fix epoll 100% CPU bug
+
+Replaces the current Selectors of the child event loops with newly created Selectors to work around the infamous epoll 100% CPU bug.
+
+```java
+public void rebuildSelectors() {
+    for (EventExecutor e: this) {
+        ((NioEventLoop) e).rebuildSelector();
+    }
+}
+```
+
+
+
+### EventLoop Inheritance
 
 ![EventLoop](./images/EventLoop.png)
 
 
 
-EventLoop start( )
+## Create NioEventLoop
 
-![NioEventLoop_Start](./images/NioEventLoop_Start.png)
+```java
+NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
+             SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
+             EventLoopTaskQueueFactory queueFactory) {
+    super(parent, executor, false, newTaskQueue(queueFactory), newTaskQueue(queueFactory),
+            rejectedExecutionHandler);
+    //check selectorProvider & strategy non-null
+    provider = selectorProvider;
+    final SelectorTuple selectorTuple = openSelector();
+    selector = selectorTuple.selector;
+    unwrappedSelector = selectorTuple.unwrappedSelector;
+    selectStrategy = strategy;
+}
+```
 
-- openSelector
-  - SelectedSelectionKeySet
-- register ServerSocketChannel
-- deal IO event
-- deal schedule task
 
-SelectedSelectionKeySet
+
+#### NioEventLoop#newTaskQueue()
+
+`PlatformDependent#<Runnable>newMpscQueue()`
+
+```java
+private static Queue<Runnable> newTaskQueue(
+        EventLoopTaskQueueFactory queueFactory) {
+    if (queueFactory == null) {
+        return newTaskQueue0(DEFAULT_MAX_PENDING_TASKS);
+    }
+    return queueFactory.newTaskQueue(DEFAULT_MAX_PENDING_TASKS);
+}
+
+private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
+    // This event loop never calls takeTask()
+    return maxPendingTasks == Integer.MAX_VALUE ? PlatformDependent.<Runnable>newMpscQueue()
+            : PlatformDependent.<Runnable>newMpscQueue(maxPendingTasks);
+}
+```
+
+
+
+Fields
+
+```java
+private static final int CLEANUP_INTERVAL = 256; // XXX Hard-coded value, but won't need customization.
+
+private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
+        SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);//default false
+
+private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
+
+// if SystemPropertyUtil.getInt("io.netty.selectorAutoRebuildThreshold") < 3, default 512
+private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
+
+private final IntSupplier selectNowSupplier = new IntSupplier() {
+    @Override
+    public int get() throws Exception {
+        return selectNow();
+    }
+};
+
+// Workaround for JDK NIO bug.
+//
+// See:
+// - http://bugs.sun.com/view_bug.do?bug_id=6427854
+// - https://github.com/netty/netty/issues/203
+static {
+    final String key = "sun.nio.ch.bugLevel";
+    final String bugLevel = SystemPropertyUtil.get(key);
+    // if (bugLevel == null), AccessController.doPrivileged(new PrivilegedAction<Void>()) to run System.setProperty(key, "");
+
+   //init SELECTOR_AUTO_REBUILD_THRESHOLD
+}
+
+/**
+ * The NIO Selector.
+ */
+private Selector selector;
+private Selector unwrappedSelector;
+private SelectedSelectionKeySet selectedKeys;
+
+private final SelectorProvider provider;
+
+/**
+ * Boolean that controls determines if a blocked Selector.select should
+ * break out of its selection process. In our case we use a timeout for
+ * the select method and the select method will block for that time unless
+ * waken up.
+ */
+private final AtomicBoolean wakenUp = new AtomicBoolean();
+private volatile long nextWakeupTime = Long.MAX_VALUE;
+
+private final SelectStrategy selectStrategy;
+
+private volatile int ioRatio = 50;
+private int cancelledKeys;
+private boolean needsToSelectAgain;
+```
+
+
+
+#### NioEventLoop#openSelector()
+
+```java
+private SelectorTuple openSelector() {
+    final Selector unwrappedSelector;
+    try {
+      	//implement by different os, epoll/kqueue
+        unwrappedSelector = provider.openSelector();
+    } catch (IOException e) {
+        throw new ChannelException("failed to open a new selector", e);
+    }
+
+    if (DISABLE_KEY_SET_OPTIMIZATION) {
+        return new SelectorTuple(unwrappedSelector);
+    }
+
+    Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
+        @Override
+        public Object run() {
+            try {
+                return Class.forName(
+                        "sun.nio.ch.SelectorImpl",
+                        false,
+                        PlatformDependent.getSystemClassLoader());
+            } catch (Throwable cause) {
+                return cause;
+            }
+        }
+    });
+
+    if (!(maybeSelectorImplClass instanceof Class) ||
+        // ensure the current selector implementation is what we can instrument.
+        !((Class<?>) maybeSelectorImplClass).isAssignableFrom(unwrappedSelector.getClass())) {
+        if (maybeSelectorImplClass instanceof Throwable) {
+            Throwable t = (Throwable) maybeSelectorImplClass;
+            logger.trace("failed to instrument a special java.util.Set into: {}", unwrappedSelector, t);
+        }
+        return new SelectorTuple(unwrappedSelector);
+    }
+
+    final Class<?> selectorImplClass = (Class<?>) maybeSelectorImplClass;
+    final SelectedSelectionKeySet selectedKeySet = new SelectedSelectionKeySet();
+
+    Object maybeException = AccessController.doPrivileged(new PrivilegedAction<Object>() {
+        @Override
+        public Object run() {
+            try {
+                Field selectedKeysField = selectorImplClass.getDeclaredField("selectedKeys");
+                Field publicSelectedKeysField = selectorImplClass.getDeclaredField("publicSelectedKeys");
+
+                if (PlatformDependent.javaVersion() >= 9 && PlatformDependent.hasUnsafe()) {
+                    // Let us try to use sun.misc.Unsafe to replace the SelectionKeySet.
+                    // This allows us to also do this in Java9+ without any extra flags.
+                    long selectedKeysFieldOffset = PlatformDependent.objectFieldOffset(selectedKeysField);
+                    long publicSelectedKeysFieldOffset =
+                            PlatformDependent.objectFieldOffset(publicSelectedKeysField);
+
+                    if (selectedKeysFieldOffset != -1 && publicSelectedKeysFieldOffset != -1) {
+                        PlatformDependent.putObject(
+                                unwrappedSelector, selectedKeysFieldOffset, selectedKeySet);
+                        PlatformDependent.putObject(
+                                unwrappedSelector, publicSelectedKeysFieldOffset, selectedKeySet);
+                        return null;
+                    }
+                    // We could not retrieve the offset, lets try reflection as last-resort.
+                }
+
+                Throwable cause = ReflectionUtil.trySetAccessible(selectedKeysField, true);
+                if (cause != null) {
+                    return cause;
+                }
+                cause = ReflectionUtil.trySetAccessible(publicSelectedKeysField, true);
+                if (cause != null) {
+                    return cause;
+                }
+
+                selectedKeysField.set(unwrappedSelector, selectedKeySet);
+                publicSelectedKeysField.set(unwrappedSelector, selectedKeySet);
+                return null;
+            } catch (NoSuchFieldException e) {
+                return e;
+            } catch (IllegalAccessException e) {
+                return e;
+            }
+        }
+    });
+
+    if (maybeException instanceof Exception) {
+        selectedKeys = null;
+        Exception e = (Exception) maybeException;
+        logger.trace("failed to instrument a special java.util.Set into: {}", unwrappedSelector, e);
+        return new SelectorTuple(unwrappedSelector);
+    }
+    selectedKeys = selectedKeySet;
+    logger.trace("instrumented a special java.util.Set into: {}", unwrappedSelector);
+    return new SelectorTuple(unwrappedSelector,
+                             new SelectedSelectionKeySetSelector(unwrappedSelector, selectedKeySet));
+}
+```
+
+
+
+SelectedSelectionKeySet actually use SelectionKey[] keys
 
 ```java
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
@@ -158,18 +826,146 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
     SelectedSelectionKeySet() {
         keys = new SelectionKey[1024];
     }
-/**
- * override add() iterator()
- */
+  ...
+}
 ```
 
 
 
-start( )
+## NioEventLoop#execute()
 
-### run( ) 
 
-in NioEventLoop
+
+### SingleThreadEventExecutor#execute()
+
+```java
+@Override
+public void execute(Runnable task) {
+    ObjectUtil.checkNotNull(task, "task");
+    execute(task, !(task instanceof LazyRunnable) && wakesUpForTask(task));
+}
+
+private void execute(Runnable task, boolean immediate) {
+    boolean inEventLoop = inEventLoop();
+    addTask(task);
+    if (!inEventLoop) {
+        startThread();
+        if (isShutdown()) {
+            boolean reject = false;
+            try {
+                if (removeTask(task)) {
+                    reject = true;
+                }
+            } catch (UnsupportedOperationException e) {
+                // The task queue does not support removal so the best thing we can do is to just move on and
+                // hope we will be able to pick-up the task before its completely terminated.
+                // In worst case we will log on termination.
+            }
+            if (reject) {
+                reject();
+            }
+        }
+    }
+
+    if (!addTaskWakesUp && immediate) {
+        wakeup(inEventLoop);
+    }
+}
+```
+
+
+
+### SingleThreadEventExecutor#startThread()
+
+`EventLoop.run() in for(;;) `
+
+```java
+private void startThread() {
+    if (state == ST_NOT_STARTED) {
+        if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
+            boolean success = false;
+            try {
+                doStartThread();
+                success = true;
+            } finally {
+                if (!success) {
+                    STATE_UPDATER.compareAndSet(this, ST_STARTED, ST_NOT_STARTED);
+                }
+            }
+        }
+    }
+}
+
+private void doStartThread() {
+    assert thread == null;
+    executor.execute(new Runnable() {
+        @Override
+        public void run() {
+            thread = Thread.currentThread();
+            if (interrupted) {
+                thread.interrupt();
+            }
+
+            boolean success = false;
+            updateLastExecutionTime();
+            try {
+                SingleThreadEventExecutor.this.run();//invoke EventLoop.run()
+                success = true;
+            } catch (Throwable t) {
+                logger.warn("Unexpected exception from an event executor: ", t);
+            } finally {
+                for (;;) {
+                    int oldState = state;
+                    if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
+                            SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
+                        break;
+                    }
+                }
+
+                // Check if confirmShutdown() was called at the end of the loop.
+                if (success && gracefulShutdownStartTime == 0) {
+                    if (logger.isErrorEnabled()) {
+                        logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " +
+                                SingleThreadEventExecutor.class.getSimpleName() + ".confirmShutdown() must " +
+                                "be called before run() implementation terminates.");
+                    }
+                }
+
+                try {
+                    // Run all remaining tasks and shutdown hooks.
+                    for (;;) {
+                        if (confirmShutdown()) {
+                            break;
+                        }
+                    }
+                } finally {
+                    try {
+                        cleanup();
+                    } finally {
+                        // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify
+                        // the future. The user may block on the future and once it unblocks the JVM may terminate
+                        // and start unloading classes.
+                        // See https://github.com/netty/netty/issues/6596.
+                        FastThreadLocal.removeAll();
+
+                        STATE_UPDATER.set(SingleThreadEventExecutor.this, ST_TERMINATED);
+                        threadLock.countDown();
+                        if (logger.isWarnEnabled() && !taskQueue.isEmpty()) {
+                            logger.warn("An event executor terminated with " +
+                                    "non-empty task queue (" + taskQueue.size() + ')');
+                        }
+                        terminationFuture.setSuccess(null);
+                    }
+                }
+            }
+        }
+    });
+}
+```
+
+
+
+### NioEventLoop#run( ) 
 
 ```java
 @Override
@@ -266,6 +1062,73 @@ protected void run() {
     }
 }
 ```
+
+
+
+
+
+### NioEventLoop#register()
+
+```java
+/**
+ * Registers an arbitrary {@link SelectableChannel}, not necessarily created by Netty, to the {@link Selector}
+ * of this event loop.  Once the specified {@link SelectableChannel} is registered, the specified {@code task} will
+ * be executed by this event loop when the {@link SelectableChannel} is ready.
+ */
+public void register(final SelectableChannel ch, final int interestOps, final NioTask<?> task) {
+    //ignore assertion
+
+    if (isShutdown()) {
+        throw new IllegalStateException("event loop shut down");
+    }
+
+    if (inEventLoop()) {
+        register0(ch, interestOps, task);
+    } else {
+        try {
+            // Offload to the EventLoop as otherwise java.nio.channels.spi.AbstractSelectableChannel.register
+            // may block for a long time while trying to obtain an internal lock that may be hold while selecting.
+            submit(new Runnable() {
+                @Override
+                public void run() {
+                    register0(ch, interestOps, task);
+                }
+            }).sync();
+        } catch (InterruptedException ignore) {
+            // Even if interrupted we did schedule it so just mark the Thread as interrupted.
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+
+private void register0(SelectableChannel ch, int interestOps, NioTask<?> task) {
+    try {
+        ch.register(unwrappedSelector, interestOps, task);
+    } catch (Exception e) {
+        throw new EventLoopException("failed to register a channel", e);
+    }
+}
+```
+
+
+
+SelectedSelectionKeySet
+
+```java
+final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
+
+    SelectionKey[] keys;
+    int size;
+
+    SelectedSelectionKeySet() {
+        keys = new SelectionKey[1024];
+    }
+/**
+ * override add() iterator()
+ */
+```
+
+
 
 
 
@@ -456,7 +1319,7 @@ private void rebuildSelector0() {
 }
 ```
 
-### processSelectedKeys( )
+#### NioEventLoop#processSelectedKeys( )
 
 ```java
 private void processSelectedKeys() {
@@ -550,7 +1413,95 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 }
 ```
 
-Unsafe.read( ) in [Channel](/docs/CS/Java/Netty/Channel.md )  
+#### Unsafe#read( )
+
+```java
+  @Override
+    public void read() {
+        assert eventLoop().inEventLoop();
+        final ChannelConfig config = config();
+        final ChannelPipeline pipeline = pipeline();
+        final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+        allocHandle.reset(config);
+
+        boolean closed = false;
+        Throwable exception = null;
+        try {
+            try {
+                do {
+                    int localRead = doReadMessages(readBuf);
+                    if (localRead == 0) {
+                        break;
+                    }
+                    if (localRead < 0) {
+                        closed = true;
+                        break;
+                    }
+
+                    allocHandle.incMessagesRead(localRead);
+                } while (allocHandle.continueReading());
+            } catch (Throwable t) {
+                exception = t;
+            }
+
+            int size = readBuf.size();
+            for (int i = 0; i < size; i ++) {
+                readPending = false;
+                pipeline.fireChannelRead(readBuf.get(i));
+            }
+            readBuf.clear();
+            allocHandle.readComplete();
+            pipeline.fireChannelReadComplete();
+
+            if (exception != null) {
+                closed = closeOnReadError(exception);
+
+                pipeline.fireExceptionCaught(exception);
+            }
+
+            if (closed) {
+                inputShutdown = true;
+                if (isOpen()) {
+                    close(voidPromise());
+                }
+            }
+        } finally {
+            // Check if there is a readPending which was not processed yet.
+            // This could be for two reasons:
+            // * The user called Channel.read() or ChannelHandlerContext.read() in channelRead(...) method
+            // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
+            //
+            // See https://github.com/netty/netty/issues/2254
+            if (!readPending && !config.isAutoRead()) {
+                removeReadOp();
+            }
+        }
+    }
+}
+
+//Read messages into the given array and return the amount which was read.
+@Override
+protected int doReadMessages(List<Object> buf) throws Exception {
+    SocketChannel ch = SocketUtils.accept(javaChannel());
+
+    try {
+        if (ch != null) {
+            buf.add(new NioSocketChannel(this, ch));
+            return 1;
+        }
+    } catch (Throwable t) {
+        logger.warn("Failed to create a new channel from an accepted socket.", t);
+
+        try {
+            ch.close();
+        } catch (Throwable t2) {
+            logger.warn("Failed to close a socket.", t2);
+        }
+    }
+
+    return 0;
+}
+```
 
 
 
