@@ -323,6 +323,17 @@ public class AsyncExecutionInterceptor extends AsyncExecutionAspectSupport imple
 
 
 
+*This implementation searches for a unique org.springframework.core.task.TaskExecutor bean in the context, or for an Executor bean named "taskExecutor" otherwise. If neither of the two is resolvable (e.g. if no BeanFactory was configured at all), this implementation falls back to a newly created **SimpleAsyncTaskExecutor** instance for local use if no default could be found.*
+
+```java
+@Override
+@Nullable
+protected Executor getDefaultExecutor(@Nullable BeanFactory beanFactory) {
+   Executor defaultExecutor = super.getDefaultExecutor(beanFactory);
+   return (defaultExecutor != null ? defaultExecutor : new SimpleAsyncTaskExecutor());
+}
+```
+
 ##### invoke
 
 *This implementation is a no-op for compatibility in Spring 3.1.2. Subclasses may override to provide support for extracting qualifier information, e.g. via an annotation on the given method.*
@@ -422,6 +433,12 @@ protected Object doSubmit(Callable<Object> task, AsyncTaskExecutor executor, Cla
 ```
 
 
+
+Implement **AsyncConfigurer**
+
+extends **AsyncConfigurerSupport**
+
+Configure **TaskExecutor**
 
 ## Schedule
 
