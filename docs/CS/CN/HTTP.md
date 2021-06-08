@@ -2,6 +2,8 @@
 
 `HyperText Transfer Protocol`
 
+https://www.w3.org/Protocols/
+
 简单 灵活 易扩展
 
 Stateless
@@ -32,6 +34,28 @@ TLS
 - CR+LF
 
 - Content
+
+内容编码
+
+大容量数据使用 Chunked Transfer Coding
+
+多种数据多部分对象集合
+
+**MIME(Multipurpose Internet Mail Extensions)**
+
+
+
+multipart/form-data
+
+
+
+传输恢复 Range Request
+
+
+
+内容协商机制
+
+Content Negotiation
 
  request
 
@@ -157,7 +181,7 @@ todo PUT DELETE not security
 
 ### connection keepalive
 
-Connection
+复用TCP连接,持久使用
 
 ```http
 Connection: keep-Alive
@@ -218,7 +242,15 @@ issues:
 
 基于TCP+TLS1.2需要6次握手，QUIC压缩到3次
 
+## URI
 
+URI(Uniform Resource Identifier)
+
+URL(Uniform Resource Locator)
+
+[RFC 2396 - ]
+
+[RFC 3986 - ]
 
 ## Authority
 
@@ -284,7 +316,9 @@ session依赖于容器
     - 支持移动设备
     - 跨程序调用
     - 安全
-### 基于Token的验证原理
+### Token
+
+验证原理
 
 
 基于Token的身份验证是无状态的，我们不将用户信息存在服务器或Session中。
