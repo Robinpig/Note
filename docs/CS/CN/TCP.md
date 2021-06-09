@@ -26,7 +26,7 @@
 
 ![tcp_shakehand](./images/tcp_shake.png)
 
-three-way handshaking
+### three-way handshaking
 
 | 类型    | Name            | 描述         |
 | :------ | --------------- | ------------ |
@@ -41,11 +41,54 @@ three-way handshaking
 
 SYN -> SYN + ACK ->ACK
 
- 
+ 第三次握手方可携带数据
 
-syn fail
 
-retry 
+
+初始序列号ISN生成基于时钟 RFC1948
+
+客户端和服务端ISN不相同：
+
+1. 安全性 防止接受伪造报文
+2. 辨别历史报文以丢弃
+
+
+
+MTU 和MSS
+
+MTU 网络包最大长度 以太网为1500Byte
+
+MSS 去除IP和TCP头部后 网络包容纳TCP内容最大长度
+
+
+
+阻止重复历史连接端初始化
+
+第三次连接可以通过seq num判断是否是历史连接， 是则返回RST终止
+
+
+
+同步双方初始序列号
+
+对双方对请求序列号都需要确认，四次握手可简化成三次，但两次握手不能确保初始序列号能被成功接受
+
+
+
+减少资源消耗
+
+两次握手时，服务端将在发送完ack+syn后直接进入establish
+
+存在网络阻塞时，客户端未接受到服务端的响应，会试图多次重新建立连接，造成服务端建立连接过多，浪费资源
+
+
+
+#### retry
+
+##### syn fail
+
+**scenario**: client send syn fail, server can not receive package
+
+client retry send syn 
 
 RTO 1 + 2 <<< (n-1)
 
@@ -56,11 +99,12 @@ n = tcp_syn_retries
 cat /proc/sys/net/ipv4/tcp_syn_retries #5
 ```
 
-syn+ack fail
+##### syn+ack fail
 
-client retry syn, and server return syn+ack until tcp_syn_retries
+**scenario**: client can not receive syn+ack from server
 
-server also will retry, return syn+ack until tcp_synack_retries
+1. client retry syn until `tcp_syn_retries`, every trying will reset count of server syn+ack
+2. server also will retry send syn+ack until `tcp_synack_retries`
 
 syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主动关闭了连接
 
@@ -69,22 +113,15 @@ syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主�
 cat /proc/sys/net/ipv4/tcp_synack_retries #2
 ```
 
+##### ack fail
 
+**scenario**: client into ESTABLISH after send ack, server can not receive ack
 
-连接未使用时，会等待tcp的keepalive机制触发才能发现一个已被关闭的连接 7875 sec
+server continue send syn+ack, syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主动关闭了连接
 
-或者在试图发送数据包时失败，重传`tcp_retries2`次失败后关闭连接
+客户端：
 
-default send  retries
-
-```shell
-# linux
-cat /proc/sys/net/ipv4/tcp_retries2	#15
-```
-
-
-
-
+1. 连接未使用时，会等待tcp的keepalive机制触发才能发现一个已被关闭的连接 7875 sec
 
 ```shell
 cat /proc/sys/net/ipv4/tcp_keepalive_time	#7200
@@ -94,9 +131,26 @@ cat /proc/sys/net/ipv4/tcp_keepalive_probes	#9
 
 keepalive_time + ( keepalive_intvl * keepalive_probes ) = 7200 + ( 75 * 9 ) = 7875 seconds
 
+2. 在试图发送数据包时失败，重传`tcp_retries2`次失败后关闭连接
+
+```shell
+# linux
+cat /proc/sys/net/ipv4/tcp_retries2	#15
+```
+
+default send  retries
+
+`tcp_retries1` 失败后通知IP层进行MTU探测、刷新路由等流程而不是关闭连接
+
+同样受timeout限制
 
 
-#### `sack(Selective Acknowledgment)`
+
+
+
+#### `sack`
+
+`sack (Selective Acknowledgment)`
 
 当发送方收到三个重复ack，立刻触发快速重传，立即重传丢失数据包
 
@@ -141,7 +195,9 @@ window
 
 在socket里使用TCP_NODELAY关闭Nagle
 
-#### 延迟确认
+
+
+#### ack delay
 
 1. 有响应数据发送时，ack被携带
 2. 无响应数据发送时，等待固定时间发送ack
@@ -162,33 +218,117 @@ CONFIG_HZ=1000
 
 Nagle和延迟确认都开启会互相等待到最大值，增加时延
 
+
+
+#### connection queue
+
+1. syn queue/半连接队列
+2. accpet queue/全连接队列
+
+
+
+##### syn queue
+
+```shell
+cat /proc/sys/net/ipv4/tcp_max_syn_backlog	#1024
+```
+
+
+
+```shell
+ # get current syn queue size
+ netstat -natp | grep SYN_RECV | wc -l
+```
+
+
+
+use [`hping3`] mock syn attack
+
+
+
+**tcp_syncookies when syn queue is overflow**
+
+```shell
+cat /proc/sys/net/ipv4/tcp_syncookies	#1
+```
+
+
+
+check the syn sockets dropped
+
+```shell
+netstat -s|grep "SYNs to LISTEN"
+```
+
+
+
+**prevent syn attack**
+
+1. expand syn queue and accept queue size
+2. enable tcp_syncookies
+3. reduce `tcp_synack_retries`to fast quit connection from SYN_RECV
+
+##### accept queue
+
+```shell
+# -l show the listening socket
+# -n no expain server name
+# -t only tcp
+ss -lnt
+```
+
+in listening
+
+Recv-Q/Send-Q
+
+|        | in Listening              | non-listening             |
+| ------ | ------------------------- | ------------------------- |
+| Recv-Q | current accept queue size | recv & not read byte size |
+| Send-Q | max accept queue size     | send & not ack byte size  |
+
+
+
+max accept queue size = `min(backlog,somaxconn)`
+
+backlog are set in `listen(int socked,int backlog)`
+
+```shell
+cat /proc/sys/net/core/somaxconn #128
+```
+
+
+
+
+
+use[`wrk`](https://github.com/wg/wrk) to test accept queue overflow
+
+```shell
+# -t thread number
+# -c connection count
+# -d continue time
+wrk -t 6 -c 30000 -d 60s http://xxx.xxx.xxx.xxx 
+```
+
+
+
+建议使用0以防止应用只是短暂的连接过多，利用客户端重试机制尽量可以得到响应而不是直接重置连接
+
+```shell
+# 0 dicard, 1 dicard and return RST
+cat /proc/sys/net/ipv4/tcp_abort_on_overflow
+```
+
+
+
+```shell
+netstat -s|grep overflowed
+```
+
+
+
+if see `connection reset by peer`, might be accept queue overflow
+
 ### 四次挥手
-
-FIN -> ACK   FIN -> ACK
-
-第三次握手方可携带数据
-
-
-
-阻止重复历史连接端初始化
-
-第三次连接可以通过seq num判断是否是历史连接， 是则返回RST终止
-
-
-
-同步双方初始序列号
-
-对双方对请求序列号都需要确认，四次握手可简化成三次，但两次握手不能确保初始序列号能被成功接受
-
-
-
-减少资源消耗
-
-两次握手时，服务端将在发送完ack+syn后直接进入establish
-
-存在网络阻塞时，客户端未接受到服务端的响应，会试图多次重新建立连接，造成服务端建立连接过多，浪费资源
-
-四次挥手
 
 FIN -> ACK   FIN -> ACK
 
@@ -198,22 +338,66 @@ netstat -napt
 
 
 
-初始序列号ISN生成基于时钟 RFC1948
+任意一方都有一个FIN 和一个ACK
 
-客户端和服务端ISN不相同：
-
-1. 安全性 防止接受伪造报文
-2. 辨别历史报文以丢弃
+主动发起的有TIME_WAIT状态 Linux里固定为60s = 2MSL
 
 
 
-MTU 和MSS
-
-MTU 网络包最大长度 以太网为1500Byte
-
-MSS 去除IP和TCP头部后 网络包容纳TCP内容最大长度
+关闭连接函数`close` |  `shutdown` , close关闭会使连接成为orphan 连接 无进程号
 
 
+
+
+
+主动方/被动方发送FIN收不到ACK时会重发，重发次数受`tcp_orphan_retries`限制, 降低tcp_orphan_retries能快速关闭连接
+
+```shell
+cat /proc/sys/net/ipv4/tcp_orphan_retries	#0 in linux when set tcp_orphan_retries == 0, real 8
+```
+
+当恶意请求使得FIN无法发送时，orphan连接会在超过tcp_max_orphans后使用RST重置关闭连接：
+
+1. 缓冲区还有数据未读取时，FIN不发送
+2. 窗口大小为0时，只能发送保活探测报文
+
+```shell
+cat /proc/sys/net/ipv4/tcp_max_orphans	#8192
+```
+
+
+
+orphan connection(use close) FIN_WAIT2 timeout tcp_fin_timeout s
+
+```shell
+cat /proc/sys/net/ipv4/tcp_fin_timeout	#60
+```
+
+
+
+TIME_WAIT
+
+1. 防止接收到旧连接的数据
+2. 保证连接尽量正常关闭
+
+TIME_WAIT数量超过`tcp_max_tw_buckets`后连接就不经过此状态而直接关闭
+
+```shell
+cat /proc/sys/net/ipv4/tcp_max_tw_buckets #5000
+```
+
+
+
+`tcp_tw_reuse`适用于发起连接的一方，需结合`tcp_timestamps`使用
+
+```shell
+cat /proc/sys/net/ipv4/tcp_tw_reuse #3
+cat /proc/sys/net/ipv4/tcp_timestamps #1 enable
+```
+
+
+
+当双方都主动发FIN后接受到对方的FIN进入CLOSEING状态之后返回发送ack都进入TIME_WAIT后等待2MSL关闭
 
 ### TCP报文交由IP层分片
 
@@ -234,11 +418,7 @@ SYN攻击：
 
 
 
-四次挥手
 
-任意一方都有一个FIN 和一个ACK
-
-主动发起的有TIME_WAIT状态 Linux里固定为60s = 2MSL
 
 use tcpdump capture a tcp request and response
 
@@ -248,7 +428,21 @@ tcpdump -i any tcp and host xxx.xxx.xxx.xxx and port 80  -w http.pcap
 
 
 
-use WireShark 
+use WireShark f
 
 Statistics -> Flow Graph -> TCP Flows
 
+
+
+### How to optimize TCP
+
+1. for client set syn_retries
+2. for server
+   1. prevent syn attacks
+   2. improve accept queue
+3. transport optimizing
+   1. expand tcp_window_scaling
+
+
+
+socket的SO_SNDBUF/SO_RCVBUF会关闭缓存区动态调整功能
