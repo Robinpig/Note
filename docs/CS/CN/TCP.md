@@ -131,12 +131,24 @@ cat /proc/sys/net/ipv4/tcp_keepalive_probes	#9
 
 keepalive_time + ( keepalive_intvl * keepalive_probes ) = 7200 + ( 75 * 9 ) = 7875 seconds
 
+keepalive 不足
+   1. TCP Keepalive是扩展选项，不一定所有的设备都支持；
+   2. TCP Keepalive报文可能被设备特意过滤或屏蔽，如运营商设备；
+   3. TCP Keepalive无法检测应用层状态，如进程阻塞、死锁、TCP缓冲区满等情况；
+   4. TCP Keepalive容易与TCP重传控制冲突，从而导致失效。
+      
+对于TCP状态无法反应应用层状态问题，这里稍微介绍几个场景。第一个是TCP连接成功建立，不代表对端应用感知到了该连接，因为TCP三次握手是内核中完成的，虽然连接已建立完成，但对端可能根本没有Accept；
+因此，一些场景仅通过TCP连接能否建立成功来判断对端应用的健康状况是不准确的，这种方案仅能探测进程是否存活。另一个是，本地TCP写操作成功，但数据可能还在本地写缓冲区中、网络链路设备中、对端读缓冲区中，并不代表对端应用读取到了数据。
+
+
+
 2. 在试图发送数据包时失败，重传`tcp_retries2`次失败后关闭连接
 
 ```shell
 # linux
 cat /proc/sys/net/ipv4/tcp_retries2	#15
 ```
+RFC 1122建议对应的超时时间不低于100s 
 
 default send  retries
 
@@ -388,12 +400,13 @@ cat /proc/sys/net/ipv4/tcp_max_tw_buckets #5000
 
 
 
-`tcp_tw_reuse`适用于发起连接的一方，需结合`tcp_timestamps`使用
-
+`tcp_tw_reuse`适用于发起连接的一方(Client use connect())，需结合`tcp_timestamps`使用, 1s后可复用（防止最后的ack丢失）
+服务端若要复用，用于连接的socket(not listening socket)配置`SO_REUSEADDR`和`tcp_timestamps`使用，参考netty start
 ```shell
 cat /proc/sys/net/ipv4/tcp_tw_reuse #3
 cat /proc/sys/net/ipv4/tcp_timestamps #1 enable
 ```
+[RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
 
 
 
