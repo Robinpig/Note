@@ -160,6 +160,193 @@ public native int hashCode();
 
 
 
+**return 0 if object is NULL**
+
+```cpp
+//jvm.cpp
+JVM_ENTRY(jint, JVM_IHashCode(JNIEnv* env, jobject handle))
+  JVMWrapper("JVM_IHashCode");
+  // as implemented in the classic virtual machine; return 0 if object is NULL
+  return handle == NULL ? 0 : ObjectSynchronizer::FastHashCode (THREAD, JNIHandles::resolve_non_null(handle)) ;
+JVM_END
+```
+
+
+
+```cpp
+//synchronizer.cpp
+// hashCode() generation :
+//
+// Possibilities:
+// * MD5Digest of {obj,stwRandom}
+// * CRC32 of {obj,stwRandom} or any linear-feedback shift register function.
+// * A DES- or AES-style SBox[] mechanism
+// * One of the Phi-based schemes, such as:
+//   2654435761 = 2^32 * Phi (golden ratio)
+//   HashCodeValue = ((uintptr_t(obj) >> 3) * 2654435761) ^ GVars.stwRandom ;
+// * A variation of Marsaglia's shift-xor RNG scheme.
+// * (obj ^ stwRandom) is appealing, but can result
+//   in undesirable regularity in the hashCode values of adjacent objects
+//   (objects allocated back-to-back, in particular).  This could potentially
+//   result in hashtable collisions and reduced hashtable efficiency.
+//   There are simple ways to "diffuse" the middle address bits over the
+//   generated hashCode values:
+
+intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
+  if (UseBiasedLocking) {
+    // NOTE: many places throughout the JVM do not expect a safepoint
+    // to be taken here, in particular most operations on perm gen
+    // objects. However, we only ever bias Java instances and all of
+    // the call sites of identity_hash that might revoke biases have
+    // been checked to make sure they can handle a safepoint. The
+    // added check of the bias pattern is to avoid useless calls to
+    // thread-local storage.
+    if (obj->mark()->has_bias_pattern()) {
+      // Handle for oop obj in case of STW safepoint
+      Handle hobj(Self, obj);
+      // Relaxing assertion for bug 6320749.
+      assert(Universe::verify_in_progress() ||
+             !SafepointSynchronize::is_at_safepoint(),
+             "biases should not be seen by VM thread here");
+      BiasedLocking::revoke_and_rebias(hobj, false, JavaThread::current());
+      obj = hobj();
+      assert(!obj->mark()->has_bias_pattern(), "biases should be revoked by now");
+    }
+  }
+
+  // hashCode() is a heap mutator ...
+  // Relaxing assertion for bug 6320749.
+  assert(Universe::verify_in_progress() || DumpSharedSpaces ||
+         !SafepointSynchronize::is_at_safepoint(), "invariant");
+  assert(Universe::verify_in_progress() || DumpSharedSpaces ||
+         Self->is_Java_thread() , "invariant");
+  assert(Universe::verify_in_progress() || DumpSharedSpaces ||
+         ((JavaThread *)Self)->thread_state() != _thread_blocked, "invariant");
+
+  ObjectMonitor* monitor = NULL;
+  markOop temp, test;
+  intptr_t hash;
+  markOop mark = ReadStableMark(obj);
+
+  // object should remain ineligible for biased locking
+  assert(!mark->has_bias_pattern(), "invariant");
+
+  if (mark->is_neutral()) {
+    hash = mark->hash();              // this is a normal header
+    if (hash) {                       // if it has hash, just return it
+      return hash;
+    }
+    hash = get_next_hash(Self, obj);  // allocate a new hash code
+    temp = mark->copy_set_hash(hash); // merge the hash code into header
+    // use (machine word version) atomic operation to install the hash
+    test = obj->cas_set_mark(temp, mark);
+    if (test == mark) {
+      return hash;
+    }
+    // If atomic operation failed, we must inflate the header
+    // into heavy weight monitor. We could add more code here
+    // for fast path, but it does not worth the complexity.
+  } else if (mark->has_monitor()) {
+    monitor = mark->monitor();
+    temp = monitor->header();
+    assert(temp->is_neutral(), "invariant");
+    hash = temp->hash();
+    if (hash) {
+      return hash;
+    }
+    // Skip to the following code to reduce code size
+  } else if (Self->is_lock_owned((address)mark->locker())) {
+    temp = mark->displaced_mark_helper(); // this is a lightweight monitor owned
+    assert(temp->is_neutral(), "invariant");
+    hash = temp->hash();              // by current thread, check if the displaced
+    if (hash) {                       // header contains hash code
+      return hash;
+    }
+    // WARNING:
+    //   The displaced header is strictly immutable.
+    // It can NOT be changed in ANY cases. So we have
+    // to inflate the header into heavyweight monitor
+    // even the current thread owns the lock. The reason
+    // is the BasicLock (stack slot) will be asynchronously
+    // read by other threads during the inflate() function.
+    // Any change to stack may not propagate to other threads
+    // correctly.
+  }
+
+  // Inflate the monitor to set hash code
+  monitor = ObjectSynchronizer::inflate(Self, obj, inflate_cause_hash_code);
+  // Load displaced header and check it has hash code
+  mark = monitor->header();
+  assert(mark->is_neutral(), "invariant");
+  hash = mark->hash();
+  if (hash == 0) {
+    hash = get_next_hash(Self, obj);// get hash
+    temp = mark->copy_set_hash(hash); // merge hash code into header
+    assert(temp->is_neutral(), "invariant");
+    test = Atomic::cmpxchg(temp, monitor->header_addr(), mark);
+    if (test != mark) {
+      // The only update to the header in the monitor (outside GC)
+      // is install the hash code. If someone add new usage of
+      // displaced header, please update this code
+      hash = test->hash();
+      assert(test->is_neutral(), "invariant");
+      assert(hash != 0, "Trivial unexpected object/monitor header usage.");
+    }
+  }
+  // We finally get the hash
+  return hash;
+}
+
+static inline intptr_t get_next_hash(Thread * Self, oop obj) {
+  intptr_t value = 0;
+  if (hashCode == 0) {
+    // This form uses global Park-Miller RNG.
+    // On MP system we'll have lots of RW access to a global, so the
+    // mechanism induces lots of coherency traffic.
+    value = os::random();
+  } else if (hashCode == 1) {
+    // This variation has the property of being stable (idempotent)
+    // between STW operations.  This can be useful in some of the 1-0
+    // synchronization schemes.
+    intptr_t addrBits = cast_from_oop<intptr_t>(obj) >> 3;
+    value = addrBits ^ (addrBits >> 5) ^ GVars.stwRandom;
+  } else if (hashCode == 2) {
+    value = 1;            // for sensitivity testing
+  } else if (hashCode == 3) {
+    value = ++GVars.hcSequence;
+  } else if (hashCode == 4) {
+    value = cast_from_oop<intptr_t>(obj);
+  } else {
+    // Marsaglia's xor-shift scheme with thread-specific state
+    // This is probably the best overall implementation -- we'll
+    // likely make this the default in future releases.
+    unsigned t = Self->_hashStateX;
+    t ^= (t << 11);
+    Self->_hashStateX = Self->_hashStateY;
+    Self->_hashStateY = Self->_hashStateZ;
+    Self->_hashStateZ = Self->_hashStateW;
+    unsigned v = Self->_hashStateW;
+    v = (v ^ (v >> 19)) ^ (t ^ (t >> 8));
+    Self->_hashStateW = v;
+    value = v;
+  }
+
+  value &= markOopDesc::hash_mask;
+  if (value == 0) value = 0xBAD;
+  assert(value != markOopDesc::no_hash, "invariant");
+  return value;
+}
+```
+
+Use `-XX:hashCode=N` choose algorithm of generate hashCode, default 5
+
+```shell
+java -XX:+PrintFlagsFinal -version | grep hashCode
+intx hashCode                                  = 5                                   {product}
+```
+
+
+
 ### clone
 
 ```java
