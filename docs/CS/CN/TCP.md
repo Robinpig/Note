@@ -179,7 +179,7 @@ cat /proc/sys/net/ipv4/tcp_sack	#1
 
 RFC2883
 
-#### fastopen
+#### TPO
 
 和HTTP的keepalive不相同，是为了尽可能热连接，减少RTT
 
