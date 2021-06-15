@@ -27,7 +27,7 @@ $$
 d(p,q)=\sqrt{\sum_{i=1}^n\left(q_i-p_i\right)^2}
 $$ {Euclidean Distance}
 
-​																	
+ 																	
 
 *1.1 Euclidean Distance*
 
