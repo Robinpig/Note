@@ -7,7 +7,7 @@
 mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 ```
 
-​	
+ 	
 
 | Variable_name            | Value                        |
 | ------------------------ | ---------------------------- |
