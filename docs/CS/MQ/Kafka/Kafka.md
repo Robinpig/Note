@@ -25,15 +25,15 @@ Notes:
 
 - **Broker**
 
-  ​				一台服务器即为一个Broker，Broker集群中没有主从区别，一个Broker有多个Topic。
+   				一台服务器即为一个Broker，Broker集群中没有主从区别，一个Broker有多个Topic。
 
 - **Topic**
 
-  ​				Topic 队列实现 可逻辑上分布在多个Broker中，但不需关心数据实际存放位置 但只能保证在一个Broker上topic顺序
+   				Topic 队列实现 可逻辑上分布在多个Broker中，但不需关心数据实际存放位置 但只能保证在一个Broker上topic顺序
 
 - **Partition**
 
-  ​				Topic可被分布成多个Partition到多台Broker中，每条消息分配一个自增Id（Offset），保证一个Partition中顺序，但不保证单个Topic中多个Partition之间顺序。Partition 可提高吞吐量
+   				Topic可被分布成多个Partition到多台Broker中，每条消息分配一个自增Id（Offset），保证一个Partition中顺序，但不保证单个Topic中多个Partition之间顺序。Partition 可提高吞吐量
 
 - **Offset**
 
@@ -139,6 +139,8 @@ paritition内部有序, 同一个key只会散列到同一个parition, 可以设�
 
 ## Zookeeper
 
+
+controller
 
 
 1. Register Brokers
