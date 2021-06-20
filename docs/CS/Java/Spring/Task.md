@@ -1,12 +1,16 @@
 # Task
 
-## TaskExecutor
 
-### Abstraction
+
+## Async
+
+### TaskExecutor
+
+#### Abstraction
 
 Executors are the JDK name for the concept of thread pools. The “executor” naming is due to the fact that there is no guarantee that the underlying implementation is actually a pool. An executor may be single-threaded or even synchronous. Spring’s abstraction hides implementation details between the Java SE and Java EE environments.
 
-Spring’s `TaskExecutor` interface is identical to the `java.util.concurrent.Executor` interface. In fact, originally, its primary reason for existence was to abstract away the need for Java 5 when using thread pools. The interface has a single method (`execute(Runnable task)`) that accepts a task for execution based on the semantics and configuration of the thread pool.
+Spring’s `TaskExecutor` interface is identical to the `java.util.concurrent.Executor` interface. In fact, originally, **its primary reason for existence was to abstract away the need for Java 5 when using thread pools**. The interface has a single method (`execute(Runnable task)`) that accepts a task for execution based on the semantics and configuration of the thread pool.
 
 ```java
 @FunctionalInterface
@@ -20,7 +24,7 @@ The `TaskExecutor` was originally created to give other Spring components an abs
 
 
 
-### Types
+#### Types
 
 Spring includes a number of pre-built implementations of `TaskExecutor`. In all likelihood, you should never need to implement your own. The variants that Spring provides are as follows:
 
@@ -31,88 +35,12 @@ Spring includes a number of pre-built implementations of `TaskExecutor`. In all 
 - `WorkManagerTaskExecutor`: This implementation uses a CommonJ `WorkManager` as its backing service provider and is the central convenience class for setting up CommonJ-based thread pool integration on WebLogic or WebSphere within a Spring application context.
 - `DefaultManagedTaskExecutor`: This implementation uses a JNDI-obtained `ManagedExecutorService` in a JSR-236 compatible runtime environment (such as a Java EE 7+ application server), replacing a CommonJ WorkManager for that purpose.
 
-  
-
-## TaskScheduler
-
-### Abstraction
-
-In addition to the `TaskExecutor` abstraction, Spring 3.0 introduced a `TaskScheduler` with a variety of methods for scheduling tasks to run at some point in the future. The following listing shows the `TaskScheduler` interface definition:
-
-```java
-public interface TaskScheduler {
-
-    ScheduledFuture schedule(Runnable task, Trigger trigger);
-
-    ScheduledFuture schedule(Runnable task, Instant startTime);
-
-    ScheduledFuture schedule(Runnable task, Date startTime);
-
-    ScheduledFuture scheduleAtFixedRate(Runnable task, Instant startTime, Duration period);
-
-    ScheduledFuture scheduleAtFixedRate(Runnable task, Date startTime, long period);
-
-    ScheduledFuture scheduleAtFixedRate(Runnable task, Duration period);
-
-    ScheduledFuture scheduleAtFixedRate(Runnable task, long period);
-
-    ScheduledFuture scheduleWithFixedDelay(Runnable task, Instant startTime, Duration delay);
-
-    ScheduledFuture scheduleWithFixedDelay(Runnable task, Date startTime, long delay);
-
-    ScheduledFuture scheduleWithFixedDelay(Runnable task, Duration delay);
-
-    ScheduledFuture scheduleWithFixedDelay(Runnable task, long delay);
-}
-```
-
-The simplest method is the one named `schedule` that takes only a `Runnable` and a `Date`. That causes the task to run once after the specified time. All of the other methods are capable of scheduling tasks to run repeatedly. The fixed-rate and fixed-delay methods are for simple, periodic execution, but the method that accepts a `Trigger` is much more flexible.
-
-### implementations
-
-As with Spring’s `TaskExecutor` abstraction, the primary benefit of the `TaskScheduler` arrangement is that an application’s scheduling needs are decoupled from the deployment environment. This abstraction level is particularly relevant when deploying to an application server environment where threads should not be created directly by the application itself. For such scenarios, Spring provides a `TimerManagerTaskScheduler` that delegates to a CommonJ `TimerManager` on WebLogic or WebSphere as well as a more recent `DefaultManagedTaskScheduler` that delegates to a JSR-236 `ManagedScheduledExecutorService` in a Java EE 7+ environment. Both are typically configured with a JNDI lookup.
-
-Whenever external thread management is not a requirement, a simpler alternative is a local `ScheduledExecutorService` setup within the application, which can be adapted through Spring’s `ConcurrentTaskScheduler`. As a convenience, Spring also provides a `ThreadPoolTaskScheduler`, which internally delegates to a `ScheduledExecutorService` to provide common bean-style configuration along the lines of `ThreadPoolTaskExecutor`. These variants work perfectly fine for locally embedded thread pool setups in lenient application server environments, as well — in particular on Tomcat and Jetty.
 
 
 
-## Trigger
-
-The `Trigger` interface is essentially inspired by JSR-236 which, as of Spring 3.0, was not yet officially implemented. The basic idea of the `Trigger` is that execution times may be determined based on past execution outcomes or even arbitrary conditions. If these determinations do take into account the outcome of the preceding execution, that information is available within a `TriggerContext`. The `Trigger` interface itself is quite simple, as the following listing shows:
-
-```java
-public interface Trigger {
-
-    Date nextExecutionTime(TriggerContext triggerContext);
-}
-```
-
-The `TriggerContext` is the most important part. It encapsulates all of the relevant data and is open for extension in the future, if necessary. The `TriggerContext` is an interface (a `SimpleTriggerContext` implementation is used by default). The following listing shows the available methods for `Trigger` implementations.
-
-```java
-public interface TriggerContext {
-
-    Date lastScheduledExecutionTime();
-
-    Date lastActualExecutionTime();
-
-    Date lastCompletionTime();
-}
-```
-
-### Implementations
-
-Spring provides two implementations of the `Trigger` interface. The most interesting one is the `CronTrigger`. It enables the scheduling of tasks based on cron expressions. For example, the following task is scheduled to run 15 minutes past each hour but only during the 9-to-5 “business hours” on weekdays:
-
-```java
-scheduler.schedule(task, new CronTrigger("0 15 9-17 * * MON-FRI"));
-```
-
-The other implementation is a `PeriodicTrigger` that accepts a fixed period, an optional initial delay value, and a boolean to indicate whether the period should be interpreted as a fixed-rate or a fixed-delay. Since the `TaskScheduler` interface already defines methods for scheduling tasks at a fixed rate or with a fixed delay, those methods should be used directly whenever possible. The value of the `PeriodicTrigger` implementation is that you can use it within components that rely on the `Trigger` abstraction. For example, it may be convenient to allow periodic triggers, cron-based triggers, and even custom trigger implementations to be used interchangeably. Such a component could take advantage of dependency injection so that you can configure such `Triggers` externally and, therefore, easily modify or extend them.
 
 
-
-## Async
+### Async
 
 
 
@@ -165,7 +93,9 @@ public @interface EnableAsync {
 }
 ```
 
-#### AsyncConfigurationSelector
+
+
+#### Inject TaskExecutors from AsyncConfigurer
 
 ```java
 public class AsyncConfigurationSelector extends AdviceModeImportSelector<EnableAsync> {
@@ -182,7 +112,7 @@ public class AsyncConfigurationSelector extends AdviceModeImportSelector<EnableA
    @Nullable
    public String[] selectImports(AdviceMode adviceMode) {
       switch (adviceMode) {
-         case PROXY:
+         case PROXY://actually use CglibAopProxy
             return new String[] {ProxyAsyncConfiguration.class.getName()};
          case ASPECTJ:
             return new String[] {ASYNC_EXECUTION_ASPECT_CONFIGURATION_CLASS_NAME};
@@ -192,13 +122,8 @@ public class AsyncConfigurationSelector extends AdviceModeImportSelector<EnableA
    }
 
 }
-```
 
-
-
-*@Configuration class that registers the Spring infrastructure beans necessary to enable proxy-based asynchronous method execution.*
-
-```java
+//ProxyAsyncConfiguration
 @Configuration
 @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
 public class ProxyAsyncConfiguration extends AbstractAsyncConfiguration {
@@ -219,7 +144,23 @@ public class ProxyAsyncConfiguration extends AbstractAsyncConfiguration {
    }
 
 }
+
+//AbstractAsyncConfiguration.java Collect any {@link AsyncConfigurer} beans through autowiring.
+@Autowired(required = false)
+void setConfigurers(Collection<AsyncConfigurer> configurers) {
+   if (CollectionUtils.isEmpty(configurers)) {
+      return;
+   }
+   if (configurers.size() > 1) {
+      throw new IllegalStateException("Only one AsyncConfigurer may exist");
+   }
+   AsyncConfigurer configurer = configurers.iterator().next();
+   this.executor = configurer::getAsyncExecutor;
+   this.exceptionHandler = configurer::getAsyncUncaughtExceptionHandler;
+}
 ```
+
+
 
 #### AsyncAnnotationBeanPostProcessor
 
@@ -323,22 +264,12 @@ public class AsyncExecutionInterceptor extends AsyncExecutionAspectSupport imple
 
 
 
-*This implementation searches for a unique org.springframework.core.task.TaskExecutor bean in the context, or for an Executor bean named "taskExecutor" otherwise. If neither of the two is resolvable (e.g. if no BeanFactory was configured at all), this implementation falls back to a newly created **SimpleAsyncTaskExecutor** instance for local use if no default could be found.*
+#### invoke
+
+`CglibMethodInvocation extends ReflectiveMethodInvocation`, `CglibMethodInvocation#invokeJoinpoint()` gives a marginal performance improvement versus using reflection to invoke the target when invoking public methods.
 
 ```java
-@Override
-@Nullable
-protected Executor getDefaultExecutor(@Nullable BeanFactory beanFactory) {
-   Executor defaultExecutor = super.getDefaultExecutor(beanFactory);
-   return (defaultExecutor != null ? defaultExecutor : new SimpleAsyncTaskExecutor());
-}
-```
-
-##### invoke
-
-*This implementation is a no-op for compatibility in Spring 3.1.2. Subclasses may override to provide support for extracting qualifier information, e.g. via an annotation on the given method.*
-
-```java
+//AsyncExecutionInterceptor#invoke()
 @Override
 @Nullable
 public Object invoke(final MethodInvocation invocation) throws Throwable {
@@ -346,14 +277,13 @@ public Object invoke(final MethodInvocation invocation) throws Throwable {
    Method specificMethod = ClassUtils.getMostSpecificMethod(invocation.getMethod(), targetClass);
    final Method userDeclaredMethod = BridgeMethodResolver.findBridgedMethod(specificMethod);
 
+  //determineAsyncExecutor, assertNotNull omission
    AsyncTaskExecutor executor = determineAsyncExecutor(userDeclaredMethod);
-   if (executor == null) {
-      throw new IllegalStateException(
-            "No executor specified and no default executor set on AsyncExecutionInterceptor either");
-   }
 
+  //wrap Callable
    Callable<Object> task = () -> {
       try {
+        // use CglibMethodInvocation#invokeJoinpoint() to improve performance
          Object result = invocation.proceed();
          if (result instanceof Future) {
             return ((Future<?>) result).get();
@@ -367,28 +297,32 @@ public Object invoke(final MethodInvocation invocation) throws Throwable {
       }
       return null;
    };
-
+	
+  //submit Callable
    return doSubmit(task, executor, invocation.getMethod().getReturnType());
 }
 ```
 
 
 
-##### determineAsyncExecutor
+#### determineAsyncExecutor
 
 *Determine the specific executor to use when executing the given method. Should preferably return an AsyncListenableTaskExecutor implementation.*
 
 ```java
+//AsyncExecutionAspectSupport#determineAsyncExecutor()
+private final Map<Method, AsyncTaskExecutor> executors = new ConcurrentHashMap(16);
 @Nullable
 protected AsyncTaskExecutor determineAsyncExecutor(Method method) {
-    AsyncTaskExecutor executor = (AsyncTaskExecutor)this.executors.get(method);
+    AsyncTaskExecutor executor = (AsyncTaskExecutor)this.executors.get(method);//1. from cache
     if (executor == null) {
         String qualifier = this.getExecutorQualifier(method);
         Executor targetExecutor;
         if (StringUtils.hasLength(qualifier)) {
+          	//2. use qualifier from beanFactory
             targetExecutor = this.findQualifiedExecutor(this.beanFactory, qualifier);
         } else {
-            targetExecutor = (Executor)this.defaultExecutor.get();
+            targetExecutor = (Executor)this.defaultExecutor.get();//3. use defaultExecutor
         }
 
         if (targetExecutor == null) {
@@ -402,11 +336,29 @@ protected AsyncTaskExecutor determineAsyncExecutor(Method method) {
     return (AsyncTaskExecutor)executor;
 }
 ```
-##### doSubmit
+
+##### getDefaultExecutor
+
+*This implementation searches for a unique org.springframework.core.task.TaskExecutor bean in the context, or for an Executor bean named "`taskExecutor`" otherwise. If neither of the two is resolvable (e.g. if no BeanFactory was configured at all), this implementation falls back to a newly created **SimpleAsyncTaskExecutor** instance for local use if no default could be found.*
+
+```java
+//AsyncExecutionInterceptor#getDefaultExecutor()
+@Override
+@Nullable
+protected Executor getDefaultExecutor(@Nullable BeanFactory beanFactory) {
+   Executor defaultExecutor = super.getDefaultExecutor(beanFactory);
+   return (defaultExecutor != null ? defaultExecutor : new SimpleAsyncTaskExecutor());
+}
+```
+
+
+
+#### doSubmit
 
 *Delegate for actually executing the given task with the chosen executor.*
 
 ```java
+//AsyncExecutionAspectSupport#doSubmit()
 @Nullable
 protected Object doSubmit(Callable<Object> task, AsyncTaskExecutor executor, Class<?> returnType) {
    if (CompletableFuture.class.isAssignableFrom(returnType)) {
@@ -434,17 +386,105 @@ protected Object doSubmit(Callable<Object> task, AsyncTaskExecutor executor, Cla
 
 
 
-Implement **AsyncConfigurer**
 
-extends **AsyncConfigurerSupport**
 
-Configure **TaskExecutor**
+
+### How to use owner TaskExecutor?
+
+1. Implement **AsyncConfigurer**
+2. **extends **AsyncConfigurerSupport
+3. **Configure **TaskExecutor**
+
+
+
+
+
+
 
 ## Schedule
 
+### TaskScheduler
+
+#### Abstraction
+
+In addition to the `TaskExecutor` abstraction, Spring 3.0 introduced a `TaskScheduler` with a variety of methods for scheduling tasks to run at some point in the future. The following listing shows the `TaskScheduler` interface definition:
+
+```java
+public interface TaskScheduler {
+
+    ScheduledFuture schedule(Runnable task, Trigger trigger);
+
+    ScheduledFuture schedule(Runnable task, Instant startTime);
+
+    ScheduledFuture schedule(Runnable task, Date startTime);
+
+    ScheduledFuture scheduleAtFixedRate(Runnable task, Instant startTime, Duration period);
+
+    ScheduledFuture scheduleAtFixedRate(Runnable task, Date startTime, long period);
+
+    ScheduledFuture scheduleAtFixedRate(Runnable task, Duration period);
+
+    ScheduledFuture scheduleAtFixedRate(Runnable task, long period);
+
+    ScheduledFuture scheduleWithFixedDelay(Runnable task, Instant startTime, Duration delay);
+
+    ScheduledFuture scheduleWithFixedDelay(Runnable task, Date startTime, long delay);
+
+    ScheduledFuture scheduleWithFixedDelay(Runnable task, Duration delay);
+
+    ScheduledFuture scheduleWithFixedDelay(Runnable task, long delay);
+}
+```
+
+The simplest method is the one named `schedule` that takes only a `Runnable` and a `Date`. That causes the task to run once after the specified time. All of the other methods are capable of scheduling tasks to run repeatedly. The fixed-rate and fixed-delay methods are for simple, periodic execution, but the method that accepts a `Trigger` is much more flexible.
+
+#### implementations
+
+As with Spring’s `TaskExecutor` abstraction, the primary benefit of the `TaskScheduler` arrangement is that an application’s scheduling needs are decoupled from the deployment environment. This abstraction level is particularly relevant when deploying to an application server environment where threads should not be created directly by the application itself. For such scenarios, Spring provides a `TimerManagerTaskScheduler` that delegates to a CommonJ `TimerManager` on WebLogic or WebSphere as well as a more recent `DefaultManagedTaskScheduler` that delegates to a JSR-236 `ManagedScheduledExecutorService` in a Java EE 7+ environment. Both are typically configured with a JNDI lookup.
+
+Whenever external thread management is not a requirement, a simpler alternative is a local `ScheduledExecutorService` setup within the application, which can be adapted through Spring’s `ConcurrentTaskScheduler`. As a convenience, Spring also provides a `ThreadPoolTaskScheduler`, which internally delegates to a `ScheduledExecutorService` to provide common bean-style configuration along the lines of `ThreadPoolTaskExecutor`. These variants work perfectly fine for locally embedded thread pool setups in lenient application server environments, as well — in particular on Tomcat and Jetty.
 
 
-### Example
+
+### Trigger
+
+The `Trigger` interface is essentially inspired by JSR-236 which, as of Spring 3.0, was not yet officially implemented. The basic idea of the `Trigger` is that execution times may be determined based on past execution outcomes or even arbitrary conditions. If these determinations do take into account the outcome of the preceding execution, that information is available within a `TriggerContext`. The `Trigger` interface itself is quite simple, as the following listing shows:
+
+```java
+public interface Trigger {
+
+    Date nextExecutionTime(TriggerContext triggerContext);
+}
+```
+
+The `TriggerContext` is the most important part. It encapsulates all of the relevant data and is open for extension in the future, if necessary. The `TriggerContext` is an interface (a `SimpleTriggerContext` implementation is used by default). The following listing shows the available methods for `Trigger` implementations.
+
+```java
+public interface TriggerContext {
+
+    Date lastScheduledExecutionTime();
+
+    Date lastActualExecutionTime();
+
+    Date lastCompletionTime();
+}
+```
+
+#### Implementations
+
+Spring provides two implementations of the `Trigger` interface. The most interesting one is the `CronTrigger`. It enables the scheduling of tasks based on cron expressions. For example, the following task is scheduled to run 15 minutes past each hour but only during the 9-to-5 “business hours” on weekdays:
+
+```java
+scheduler.schedule(task, new CronTrigger("0 15 9-17 * * MON-FRI"));
+```
+
+The other implementation is a `PeriodicTrigger` that accepts a fixed period, an optional initial delay value, and a boolean to indicate whether the period should be interpreted as a fixed-rate or a fixed-delay. Since the `TaskScheduler` interface already defines methods for scheduling tasks at a fixed rate or with a fixed delay, those methods should be used directly whenever possible. The value of the `PeriodicTrigger` implementation is that you can use it within components that rely on the `Trigger` abstraction. For example, it may be convenient to allow periodic triggers, cron-based triggers, and even custom trigger implementations to be used interchangeably. Such a component could take advantage of dependency injection so that you can configure such `Triggers` externally and, therefore, easily modify or extend them.
+
+
+
+### Schedule
+
+#### Example
 
 Enables Spring's scheduled task execution capability. To be used on @Configuration classes as follows:
 
@@ -470,7 +510,7 @@ public class MyTask {
 
 
 
-### Implementations
+#### Implementations
 
 EnableScheduling import SchedulingConfiguration
 
