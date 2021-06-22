@@ -15,7 +15,118 @@ public class Application {
 }
 ```
 
-## run 
+### Load Resources 
+@SpringBootApplication
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@SpringBootConfiguration
+@EnableAutoConfiguration
+@ComponentScan(excludeFilters = { @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+      @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
+public @interface SpringBootApplication {}
+```
+
+@SpringBootConfiguration
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Configuration
+public @interface SpringBootConfiguration {}
+```
+
+@EnableAutoConfiguration
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@AutoConfigurationPackage//Indicates that the package containing the annotated class should be registered with AutoConfigurationPackages
+@Import(AutoConfigurationImportSelector.class)
+public @interface EnableAutoConfiguration {}
+```
+
+In class AutoConfigurationImportSelector, **getAutoConfigurationEntry** load configurations.
+
+```java
+//Return the AutoConfigurationEntry based on the AnnotationMetadata of the importing @Configuration class.
+protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata annotationMetadata) {
+   if (!isEnabled(annotationMetadata)) {
+      return EMPTY_ENTRY;
+   }
+   AnnotationAttributes attributes = getAttributes(annotationMetadata);
+   List<String> configurations = getCandidateConfigurations(annotationMetadata, attributes);
+   configurations = removeDuplicates(configurations);
+   Set<String> exclusions = getExclusions(annotationMetadata, attributes);
+   checkExcludedClasses(configurations, exclusions);
+   configurations.removeAll(exclusions);
+   configurations = getConfigurationClassFilter().filter(configurations);
+   fireAutoConfigurationImportEvents(configurations, exclusions);
+   return new AutoConfigurationEntry(configurations, exclusions);
+}
+
+protected List<String> getCandidateConfigurations(AnnotationMetadata metadata, AnnotationAttributes attributes) {
+        List<String> configurations = SpringFactoriesLoader.loadFactoryNames(getSpringFactoriesLoaderFactoryClass(),
+        getBeanClassLoader());
+        Assert.notEmpty(configurations, "No auto configuration classes found in META-INF/spring.factories. If you "
+        + "are using a custom packaging, make sure that file is correct.");
+        return configurations;
+        }
+
+
+```
+
+getResources from `META-INF/spring.factories`
+```java
+//SpringFactoriesLoader.java
+public static List<String> loadFactoryNames(Class<?> factoryType, @Nullable ClassLoader classLoader) {
+        String factoryTypeName = factoryType.getName();
+        return (List)loadSpringFactories(classLoader).getOrDefault(factoryTypeName, Collections.emptyList());
+    }
+
+private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoader classLoader) {
+        MultiValueMap<String, String> result = (MultiValueMap)cache.get(classLoader);
+        if (result != null) {
+        return result;
+        } else {
+        try {
+        Enumeration<URL> urls = classLoader != null ? classLoader.getResources("META-INF/spring.factories") : ClassLoader.getSystemResources("META-INF/spring.factories");
+        LinkedMultiValueMap result = new LinkedMultiValueMap();
+
+        while(urls.hasMoreElements()) {
+        URL url = (URL)urls.nextElement();
+        UrlResource resource = new UrlResource(url);
+        Properties properties = PropertiesLoaderUtils.loadProperties(resource);
+        Iterator var6 = properties.entrySet().iterator();
+
+        while(var6.hasNext()) {
+        Entry<?, ?> entry = (Entry)var6.next();
+        String factoryTypeName = ((String)entry.getKey()).trim();
+        String[] var9 = StringUtils.commaDelimitedListToStringArray((String)entry.getValue());
+        int var10 = var9.length;
+
+        for(int var11 = 0; var11 < var10; ++var11) {
+        String factoryImplementationName = var9[var11];
+        result.add(factoryTypeName, factoryImplementationName.trim());
+        }
+        }
+        }
+
+        cache.put(classLoader, result);
+        return result;
+        } catch (IOException var13) {
+        throw new IllegalArgumentException("Unable to load factories from location [META-INF/spring.factories]", var13);
+        }
+        }
+}
+```
+### run 
 
 ```java
 /**
@@ -68,7 +179,7 @@ public ConfigurableApplicationContext run(String... args) {
 
 
 
-### getRunListeners
+#### getRunListeners
 
 createSpringFactoriesInstances
 
@@ -119,13 +230,13 @@ private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] 
 
 
 
-### listeners.starting
+#### listeners.starting
 
 `new ApplicationStartingEvent() and invoke the given listener with the given event.`
 
 
 
-### prepareEnvironment
+#### prepareEnvironment
 
 ```java
 private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
@@ -145,15 +256,14 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
 	}
 ```
 
-### configureIgnoreBeanInfo
+#### configureIgnoreBeanInfo
 
 
 
-### printBanner
 
 
 
-### createApplicationContext
+#### createApplicationContext
 
 `Strategy method used to create the ApplicationContext. By default this method will respect any explicitly set application context or application context class before falling back to a suitable default.`
 
@@ -210,7 +320,7 @@ static WebApplicationType deduceFromApplicationContext(Class<?> applicationConte
 
 
 
-### prepareContext
+#### prepareContext
 
 ```java
 private void prepareContext(ConfigurableApplicationContext context, ConfigurableEnvironment environment,
@@ -316,20 +426,22 @@ Note that any ApplicationListener registered here will be applied on refresh if 
 
 
 
-### refreshContext
+#### refreshContext
 
-see Spring refreshContext
+see `AbstractApplicationContext#refresh()`, start webServer for ServletWebServerApplicationContext
 
 
-### afterRefresh
+
+
+#### afterRefresh
 
 `do nothing`
 
-### listeners.started
+#### listeners.started
 
 `The context has been refreshed and the application has started but CommandLineRunners and ApplicationRunners have not been called.`
 
-### callRunners
+#### callRunners
 
 `run ApplicationRunner and CommandLineRunner`
 
