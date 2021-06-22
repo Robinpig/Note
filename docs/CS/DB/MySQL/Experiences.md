@@ -33,4 +33,9 @@ MariaDB [mysql]> exit;
 3. Restart db as normal
 
 
+### Search Limit
+
+1. use cover index + child serach primary key
+2. remember last index (for a continuous query)
+3. lower rank for a overflow limit offset value(fail-fast return 4XX)
 
