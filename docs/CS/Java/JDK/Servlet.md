@@ -4194,3 +4194,46 @@ public interface HttpServletResponse extends ServletResponse {
     public static final int SC_HTTP_VERSION_NOT_SUPPORTED = 505;
 }
 ```
+
+
+
+
+
+Servlet3.0之前1请求1线程
+
+3.0
+
+1. 请求被Servlet容器接受,分配线程流转Filter链
+2. Servlet使用req.startAsync返回异步上下文
+3. 异步线程处理完请求后拿AsyncContext写回请求方
+
+
+
+`@WebServlet(asyncSupport = true)` 开启异步支持, `AsyncContext` start task
+
+`AsyncListener` 设置监听响应
+
+
+
+Servlet3.1非阻塞IO
+
+在Servlet处理请求时，从ServletInputStream中读取请求体时是阻塞的。而我们想要的是，当数据就绪时通知我们去读取就可以了，因为这可以避免占用Servlet容器线程或者业务线程来进行阻塞读取
+
+IO数据需要等待内核接收就绪方可,期间会阻塞容器线程
+
+
+
+ReadListener到ServletInputStream 数据准备好后回调onDataAvailable方法
+
+响应不同的异步
+
+1. DeferredResult封装 代理了AsyncContext的流程
+2. Callable封装 使用TaskExecutor执行
+
+
+
+
+
+webflux
+
+HttpHandler Adapter
