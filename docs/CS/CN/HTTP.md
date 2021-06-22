@@ -69,7 +69,7 @@ GET / HTTP/1.1
 
 
 
-reponse
+response
 
 status row
 
@@ -123,6 +123,9 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 ### HTTP 状态码
 
 服务器返回的 **响应报文** 中第一行为状态行，包含了状态码以及原因短语，用来告知客户端请求的结果。
+
+[HTTP Code](https://zh.wikipedia.org/wiki/HTTP%E7%8A%B6%E6%80%81%E7%A0%81)
+
 
 | 状态码 | 类别                             | 原因短语                   |
 | ------ | -------------------------------- | -------------------------- |
@@ -254,13 +257,26 @@ URL(Uniform Resource Locator)
 
 ## Authority
 
-HTTP协议的无状态性 无法认证请求来源 需要使用机制来记录用户信息与状态
+HTTP is stateless.
 
 
+To overcome the stateless nature of HTTP requests, we could use either a session or a token.
 
-### Cookie
+### Session
 
-优点
+In the session based authentication, the server will create a session for the user after the user logs in. The session id is then stored on a cookie on the user’s browser. While the user stays logged in, the cookie would be sent along with every subsequent request. The server can then compare the session id stored on the cookie against the session information stored in the memory to verify user’s identity and sends response with the corresponding state!
+session依赖于容器 
+
+解决方案
+
+1. 集群复制 影响性能
+2. 路由 固定用户固定容器 容错性不高
+3. 使用中间件统一存储
+
+多系统时可以考虑独立于其它业务系统
+
+
+Cookie 优点
 
 会话管理
 
@@ -291,34 +307,9 @@ Cookie跨域
 不同域名未使用相同Cookie
 
 
-
-Session
-
-session依赖于容器 
-
-解决方案
-
-1. 集群复制 影响性能
-2. 路由 固定用户固定容器 容错性不高
-3. 使用中间件统一存储
-
-多系统时可以考虑独立于其它业务系统
-
-### 区别
-
-- Cookie存储在客户端
-    - 不安全
-    - 数量限制
-- Session存储在服务端
-    - 不能跨域
-- Token
-    - 无状态、可扩展
-    - 支持移动设备
-    - 跨程序调用
-    - 安全
 ### Token
 
-验证原理
+Many web applications use JSON Web Token (JWT) instead of sessions for authentication. In the token based application, the server creates JWT with a secret and sends the JWT to the client. **The client stores the JWT (usually in local storage) and includes JWT in the header with every request.** The server would then validate the JWT with every request from the client and sends response.
 
 
 基于Token的身份验证是无状态的，我们不将用户信息存在服务器或Session中。
@@ -336,44 +327,16 @@ session依赖于容器
 
    每一次请求都需要 token。token 应该在HTTP的头部发送从而保证了Http请求无状态。我们同样通过设置服务器属性Access-Control-Allow-Origin:* ，让服务器能接受到来自所有域的请求。需要主要的是，在ACAO头部标明(designating)*时，不得带有像HTTP认证，客户端SSL证书和cookies的证书。
 
-### 基于Token验证的优势
+#### Token验证的优势
 
-- 无状态、可扩展
-
-在客户端存储的 Token 是无状态的，并且能够被扩展。基于这种无状态和不存储Session信息，负载负载均衡器能够将用户信息从一个服务传到其他服务器上。
-
-如果我们将已验证的用户的信息保存在Session中，则每次请求都需要用户向已验证的服务器发送验证信息(称为Session亲和性)。用户量大时，可能会造成 一些拥堵。
-
-但是不要着急。使用Token之后这些问题都迎刃而解，因为Token自己hold住了用户的验证信息。
-
-- 安全性
-
-请求中发送token而不再是发送cookie能够防止CSRF(跨站请求伪造)。即使在客户端使用cookie存储token，cookie也仅仅是一个存储机制而不是用于认证。不将信息存储在Session中，让我们少了对session操作。
-
-Token是有时效的，一段时间之后用户需要重新验证。我们也不一定需要等到Token自动失效，Token有撤回的操作，通过token revocataion可以使一个特定的Token或是一组有相同认证的token无效。
-
-- 可扩展性
-
-Token能够创建与其它程序共享权限的程序。例如，能将一个随便的社交帐号和自己的大号(Fackbook或是Twitter)联系起来。当通过服务登录Twitter(我们将这个过程Buffer)时，我们可以将这些Buffer附到Twitter的数据流上(we are allowing Buffer to post to our Twitter stream)。
-
-使用Token时，可以提供可选的权限给第三方应用程序。当用户想让另一个应用程序访问它们的数据，我们可以通过建立自己的API，得出特殊权限的tokens。
-
-- 多平台跨域
-
-我们提前先来谈论一下CORS(跨域资源共享)，对应用程序和服务进行扩展的时候，需要介入各种各种的设备和应用程序。
-
-Having our API just serve data, we can also make the design choice to serve assets from a CDN. This eliminates the issues that CORS brings up after we set a quick header configuration for our application.
-
-只要用户有一个通过了验证的token，数据和资源就能够在任何域上被请求到。
-
-    Access-Control-Allow-Origin: *
-
+- Scalability
+- Multiple Device
 - 基于标准
 
 创建Token的时候，你可以设定一些选项。我们在后续的文章中会进行更加详尽的描述，但是标准的用法会在JSON Web Token体现。
 
 最近的程序和文档是供给JSON Web Token的。它支持众多的语言。这意味在未来的使用中你可以真正的转换你的认证机制。   
-### JWT
+#### JWT
 
 *[`JSON Web Token(JWT)`](https://datatracker.ietf.org/doc/rfc7519/)  is a compact, URL-safe means of representing claims to be transferred between two parties.  The claims in a JWT are encoded as a JSON object that is used as the payload of a JSON Web Signature (JWS) structure or as the plaintext of a JSON Web Encryption (JWE) structure, enabling the claims to be digitally signed or integrity protected with a Message Authentication Code (MAC) and/or encrypted.*
 
@@ -383,7 +346,7 @@ Having our API just serve data, we can also make the design choice to serve asse
 
 可以跨域认证
 
-
+ensure only the necessary information is included in JWT and sensitive information should be omitted to prevent XSS security attacks.
 
 
 用途：
@@ -401,18 +364,20 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 
 
 
+### Session vs Token
+
+- Session存储在服务端
+  - 不能跨域
+- Token
+  - 无状态、可扩展
+  - 支持移动设备
+  - 跨程序调用
+  - 安全
+  - much bigger comparing with the session id stored in cookie
+  
 
 
-[HTTP Code](https://zh.wikipedia.org/wiki/HTTP%E7%8A%B6%E6%80%81%E7%A0%81)
-
-
-
-并行连接
-
-持久连接
-
-pipeline
-
+## Security
 
 
 (Cross-Origin Resource Sharing)CORS跨域
