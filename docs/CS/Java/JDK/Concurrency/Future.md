@@ -2,8 +2,6 @@
 
 *We could create a **Thread** object with a **Runnable** target, also use **FutureTask** to get **Future**.*
 
-
-
 ### Runnable
 
 *The Runnable interface should be implemented by any class whose instances are intended to be **executed by a thread**. The class must define a method of no arguments **called run**.*
@@ -149,10 +147,6 @@ static final class PrivilegedCallableUsingCurrentClassLoader<T> implements Calla
  * includes the current Thread's inherited AccessControlContext and any
  * limited privilege scope, and places it in an AccessControlContext object.
  * This context may then be checked at a later point, possibly in another thread.
- *
- * @see AccessControlContext
- *
- * @return the AccessControlContext based on the current context.
  */
 public static AccessControlContext getContext()
 {
@@ -227,11 +221,33 @@ static final class RunnableAdapter<T> implements Callable<T> {
 
 
 
-## Executors
+
 
 
 
 ### Future 
+
+Example:
+
+```java
+interface ArchiveSearcher { String search(String target); }
+ class App {
+   ExecutorService executor = ...
+   ArchiveSearcher searcher = ...
+   void showSearch(String target) throws InterruptedException {
+     Callable<String> task = () -> searcher.search(target);
+     Future<String> future = executor.submit(task);
+     displayOtherThings(); // do other things while searching
+     try {
+       displayText(future.get()); // use future
+     } catch (ExecutionException ex) { cleanup(); return; }
+   }
+ }
+```
+
+
+
+**Memory consistency effects**: Actions taken by the asynchronous computation happen-before actions following the corresponding Future.get() in another thread.
 
 ```java
 /**
@@ -248,49 +264,6 @@ static final class RunnableAdapter<T> implements Callable<T> {
  * of cancellability but not provide a usable result, you can
  * declare types of the form {@code Future<?>} and
  * return {@code null} as a result of the underlying task.
- *
- * <p>
- * <b>Sample Usage</b> (Note that the following classes are all
- * made-up.)
- * <pre> {@code
- * interface ArchiveSearcher { String search(String target); }
- * class App {
- *   ExecutorService executor = ...
- *   ArchiveSearcher searcher = ...
- *   void showSearch(final String target)
- *       throws InterruptedException {
- *     Future<String> future
- *       = executor.submit(new Callable<String>() {
- *         public String call() {
- *             return searcher.search(target);
- *         }});
- *     displayOtherThings(); // do other things while searching
- *     try {
- *       displayText(future.get()); // use future
- *     } catch (ExecutionException ex) { cleanup(); return; }
- *   }
- * }}</pre>
- *
- * The {@link FutureTask} class is an implementation of {@code Future} that
- * implements {@code Runnable}, and so may be executed by an {@code Executor}.
- * For example, the above construction with {@code submit} could be replaced by:
- *  <pre> {@code
- * FutureTask<String> future =
- *   new FutureTask<String>(new Callable<String>() {
- *     public String call() {
- *       return searcher.search(target);
- *   }});
- * executor.execute(future);}</pre>
- *
- * <p>Memory consistency effects: Actions taken by the asynchronous computation
- * <a href="package-summary.html#MemoryVisibility"> <i>happen-before</i></a>
- * actions following the corresponding {@code Future.get()} in another thread.
- *
- * @see FutureTask
- * @see Executor
- * @since 1.5
- * @author Doug Lea
- * @param <V> The result type returned by this Future's {@code get} method
  */
 public interface Future<V> {
 
@@ -310,12 +283,7 @@ public interface Future<V> {
      */
     boolean cancel(boolean mayInterruptIfRunning);
 
-    /**
-     * Returns {@code true} if this task was cancelled before it completed
-     * normally.
-     *
-     * @return {@code true} if this task was cancelled before it completed
-     */
+    // Returns {@code true} if this task was cancelled before it completed normally.
     boolean isCancelled();
 
     /**
@@ -329,33 +297,10 @@ public interface Future<V> {
      */
     boolean isDone();
 
-    /**
-     * Waits if necessary for the computation to complete, and then
-     * retrieves its result.
-     *
-     * @return the computed result
-     * @throws CancellationException if the computation was cancelled
-     * @throws ExecutionException if the computation threw an
-     * exception
-     * @throws InterruptedException if the current thread was interrupted
-     * while waiting
-     */
+    // Waits if necessary for the computation to complete, and then retrieves its result.
     V get() throws InterruptedException, ExecutionException;
 
-    /**
-     * Waits if necessary for at most the given time for the computation
-     * to complete, and then retrieves its result, if available.
-     *
-     * @param timeout the maximum time to wait
-     * @param unit the time unit of the timeout argument
-     * @return the computed result
-     * @throws CancellationException if the computation was cancelled
-     * @throws ExecutionException if the computation threw an
-     * exception
-     * @throws InterruptedException if the current thread was interrupted
-     * while waiting
-     * @throws TimeoutException if the wait timed out
-     */
+    // Waits if necessary for at most the given time for the computation to complete, and then retrieves its result, if available
     V get(long timeout, TimeUnit unit)
         throws InterruptedException, ExecutionException, TimeoutException;
 }
@@ -387,7 +332,15 @@ public interface RunnableFuture<V> extends Runnable, Future<V> {
 
 
 
-### FutureTask
+## FutureTask
+
+The FutureTask class is an implementation of Future that implements Runnable, and so may be executed by an Executor. For example, the above construction with submit could be replaced by:
+```java
+ FutureTask future = new FutureTask<>(task);
+ executor.execute(future);
+```
+
+
 
 ```java
 /**
