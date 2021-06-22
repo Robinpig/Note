@@ -4,7 +4,8 @@
 
 ## Introduction
 
-
+Instances of the class Class represent classes and interfaces in a running Java application. An enum is a kind of class and an annotation is a kind of interface. Every array also belongs to a class that is reflected as a Class object that is shared by all arrays with the same element type and number of dimensions. The primitive Java types (boolean, byte, char, short, int, long, float, and double), and the keyword void are also represented as Class objects.
+Class has no public constructor. Instead Class objects are constructed automatically by the Java Virtual Machine as classes are loaded and by calls to the defineClass method in the class loader.
 
 - Class
 - Constructor
@@ -21,6 +22,20 @@ Get Class Object
 4. ClassLoader.loadClass()
 
 
+
+1. `getName()` Returns the name of the entity (class, interface, array class, primitive type, or void) represented by this Class object, as a String.
+2. `getSimpleName()` Returns the simple name of the underlying class as given in the source code. Returns an empty string if the underlying class is anonymous.
+3. `getCanonicalName()` Returns the canonical name of the underlying class as defined by the Java Language Specification. Returns null if the underlying class does not have a canonical name (i.e., if it is a local or anonymous class or an array whose component type does not have a canonical name).
+
+
+| Class           | getName             | getSimpleName | getCanonicalName    |
+| --------------- | ------------------- | ------------- | ------------------- |
+| int.class       | int                 | int           | int                 |
+| int[].class     | [I                  | int[]         | int[]               |
+| int[][].class   | [[I                 | int[][]       | int[][]             |
+| String.class    | java.lang.String    | String        | java.lang.String    |
+| String[].class  | [Ljava.lang.String; | String[]      | java.lang.String[]  |
+| ArrayList.class | java.util.ArrayList | ArrayList     | java.util.ArrayList |
 
 
 
