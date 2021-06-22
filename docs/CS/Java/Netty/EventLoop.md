@@ -519,6 +519,7 @@ protected EventLoop newChild(Executor executor, Object... args) throws Exception
 
 
 #### EventExecutorChooserFactory#newChooser()
+default use **PowerOfTwoEventExecutorChooser**
 
 ```java
 //Default implementation which uses simple round-robin to choose next EventExecutor.
@@ -1413,69 +1414,56 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 }
 ```
 
-#### Unsafe#read( )
+#### NioByteUnsafe#read( )
 
 ```java
-  @Override
-    public void read() {
-        assert eventLoop().inEventLoop();
-        final ChannelConfig config = config();
-        final ChannelPipeline pipeline = pipeline();
-        final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+
+public final void read() {
+    ChannelConfig config = AbstractNioByteChannel.this.config();
+    if (AbstractNioByteChannel.this.shouldBreakReadReady(config)) {
+        AbstractNioByteChannel.this.clearReadPending();
+    } else {
+        ChannelPipeline pipeline = AbstractNioByteChannel.this.pipeline();
+        ByteBufAllocator allocator = config.getAllocator();
+        Handle allocHandle = this.recvBufAllocHandle();
         allocHandle.reset(config);
+        ByteBuf byteBuf = null;
+        boolean close = false;
 
-        boolean closed = false;
-        Throwable exception = null;
         try {
-            try {
-                do {
-                    int localRead = doReadMessages(readBuf);
-                    if (localRead == 0) {
-                        break;
+            do {
+                byteBuf = allocHandle.allocate(allocator);
+                allocHandle.lastBytesRead(AbstractNioByteChannel.this.doReadBytes(byteBuf));
+                if (allocHandle.lastBytesRead() <= 0) {
+                    byteBuf.release();
+                    byteBuf = null;
+                    close = allocHandle.lastBytesRead() < 0;
+                    if (close) {
+                        AbstractNioByteChannel.this.readPending = false;
                     }
-                    if (localRead < 0) {
-                        closed = true;
-                        break;
-                    }
+                    break;
+                }
 
-                    allocHandle.incMessagesRead(localRead);
-                } while (allocHandle.continueReading());
-            } catch (Throwable t) {
-                exception = t;
-            }
+                allocHandle.incMessagesRead(1);
+                AbstractNioByteChannel.this.readPending = false;
+                pipeline.fireChannelRead(byteBuf);
+                byteBuf = null;
+            } while(allocHandle.continueReading()); // default read once
 
-            int size = readBuf.size();
-            for (int i = 0; i < size; i ++) {
-                readPending = false;
-                pipeline.fireChannelRead(readBuf.get(i));
-            }
-            readBuf.clear();
             allocHandle.readComplete();
             pipeline.fireChannelReadComplete();
-
-            if (exception != null) {
-                closed = closeOnReadError(exception);
-
-                pipeline.fireExceptionCaught(exception);
+            if (close) {
+                this.closeOnRead(pipeline);
             }
-
-            if (closed) {
-                inputShutdown = true;
-                if (isOpen()) {
-                    close(voidPromise());
-                }
-            }
+        } catch (Throwable var11) {
+            this.handleReadException(pipeline, byteBuf, var11, close, allocHandle);
         } finally {
-            // Check if there is a readPending which was not processed yet.
-            // This could be for two reasons:
-            // * The user called Channel.read() or ChannelHandlerContext.read() in channelRead(...) method
-            // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
-            //
-            // See https://github.com/netty/netty/issues/2254
-            if (!readPending && !config.isAutoRead()) {
-                removeReadOp();
+            if (!AbstractNioByteChannel.this.readPending && !config.isAutoRead()) {
+                this.removeReadOp();
             }
+
         }
+
     }
 }
 
