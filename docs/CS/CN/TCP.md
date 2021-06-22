@@ -24,9 +24,12 @@
 
 可靠传输
 
+## Connection
+
 ![tcp_shakehand](./images/tcp_shake.png)
 
 ### three-way handshaking
+check network and ack initial sequence number
 
 | 类型    | Name            | 描述         |
 | :------ | --------------- | ------------ |
@@ -46,6 +49,7 @@ SYN -> SYN + ACK ->ACK
 
 
 初始序列号ISN生成基于时钟 RFC1948
+RFC793
 
 客户端和服务端ISN不相同：
 
@@ -90,7 +94,7 @@ MSS 去除IP和TCP头部后 网络包容纳TCP内容最大长度
 
 client retry send syn 
 
-RTO 1 + 2 <<< (n-1)
+RTO(Retransmission Timeout) 1 + 2 <<< (n-1)
 
 n = tcp_syn_retries
 
@@ -143,9 +147,10 @@ keepalive 不足
 
 
 2. 在试图发送数据包时失败，重传`tcp_retries2`次失败后关闭连接
-
+   RCF1122
 ```shell
 # linux
+cat /proc/sys/net/ipv4/tcp_retries2	#3
 cat /proc/sys/net/ipv4/tcp_retries2	#15
 ```
 RFC 1122建议对应的超时时间不低于100s 
@@ -181,7 +186,7 @@ RFC2883
 
 #### TPO
 
-和HTTP的keepalive不相同，是为了尽可能热连接，减少RTT
+和HTTP的keepalive不相同，是为了尽可能热连接，减少RTT(Round Trip Time)
 
 首次HTTP请求最快2RTT(第三次握手携带HTTP请求)，若fastopen开启，则生成cookie在下次请求时携带 无需三次握手，只需一次RTT就可以完成HTTP	-- [TCP Fast Open](http://conferences.sigcomm.org/co-next/2011/papers/1569470463.pdf)
 
@@ -325,6 +330,8 @@ wrk -t 6 -c 30000 -d 60s http://xxx.xxx.xxx.xxx
 
 建议使用0以防止应用只是短暂的连接过多，利用客户端重试机制尽量可以得到响应而不是直接重置连接
 
+if see `connection reset by peer`, might be accept queue overflow, default will be connection timeout
+
 ```shell
 # 0 dicard, 1 dicard and return RST
 cat /proc/sys/net/ipv4/tcp_abort_on_overflow
@@ -336,9 +343,6 @@ cat /proc/sys/net/ipv4/tcp_abort_on_overflow
 netstat -s|grep overflowed
 ```
 
-
-
-if see `connection reset by peer`, might be accept queue overflow
 
 ### 四次挥手
 
@@ -406,9 +410,13 @@ cat /proc/sys/net/ipv4/tcp_max_tw_buckets #5000
 cat /proc/sys/net/ipv4/tcp_tw_reuse #3
 cat /proc/sys/net/ipv4/tcp_timestamps #1 enable
 ```
+
 [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
 
+```shell
+net.ipv4.tcp_tw_recycle # 1 enable quick recycle TIME_WAIT sockets
 
+```
 
 当双方都主动发FIN后接受到对方的FIN进入CLOSEING状态之后返回发送ack都进入TIME_WAIT后等待2MSL关闭
 
@@ -446,6 +454,7 @@ use WireShark f
 Statistics -> Flow Graph -> TCP Flows
 
 
+## Examples
 
 ### How to optimize TCP
 
@@ -459,3 +468,28 @@ Statistics -> Flow Graph -> TCP Flows
 
 
 socket的SO_SNDBUF/SO_RCVBUF会关闭缓存区动态调整功能
+
+### max connections
+
+1. 文件描述符限制
+   系统级：当前系统可打开的最大数量，通过fs.file-max参数可修改
+   用户级：指定用户可打开的最大数量，修改/etc/security/limits.conf
+   进程级：单个进程可打开的最大数量，通过fs.nr_open参数可修改
+   
+
+2 占用资源限制
+```shell
+sysctl -a | grep rmem
+net.ipv4.tcp_rmem = 4096 87380 8388608
+net.core.rmem_default = 212992
+net.core.rmem_max = 8388608
+```
+
+ss
+
+slabtop
+
+### too many CLOSE_WAIT
+cause:
+1. forget invoke close/shutdown to send FIN
+2. backlog too large
