@@ -302,9 +302,6 @@ public final class RejectedExecutionHandlers {
 
     private RejectedExecutionHandlers() { }
 
-    /**
-     * Returns a {@link RejectedExecutionHandler} that will always just throw a {@link RejectedExecutionException}.
-     */
     public static RejectedExecutionHandler reject() {
         return REJECT;
     }
@@ -474,7 +471,7 @@ public class DefaultThreadFactory implements ThreadFactory {
 
 ##### DefaultThreadFactory#newThread()
 
-create **FastThreadLocalThread**
+create [FastThreadLocalThread](/docs/CS/Java/Netty/FastThreadLocal.md)
 
 ```java
 		//DefaultThreadFactory#newThread()

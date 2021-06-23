@@ -511,6 +511,12 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
 
 
 
+## Optimize ThreadLocal
+
+
+
+1. [FastThreadLocal in Netty](/docs/CS/Java/Netty/FastThreadLocal.md)
+
 
 
 ## Practice
