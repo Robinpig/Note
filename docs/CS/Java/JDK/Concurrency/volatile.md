@@ -1,8 +1,14 @@
 # volatile
 
-## **引言**
+## Introduction
 
 
+
+注意：当且仅当满足以下所有条件时，才应该用volatile变量
+
+- 对变量的写入操作不依赖变量的当前值，或者你能确保只有单个线程更新变量的值。
+- 该变量不会与其他的状态一起纳入不变性条件中。
+- 在访问变量时不需要加锁。
 
 ## 术语定义
 
@@ -27,8 +33,9 @@ Java 语言规范第三版中对 volatile 的定义如下： java 编程语言�
 2. 禁止指令重排序优化。
 
 
+volatile 禁用的是编译器重排序和处理器重排序
 
-## volatile 的实现原理
+## volatile 可见性实现原理
 
 那么 volatile 是如何来保证可见性的呢？在 x86 处理器下通过工具获取 JIT 编译器生成的汇编指令来看看对 Volatile 进行写操作 CPU 会做什么事情。
 
@@ -53,25 +60,13 @@ Java 语言规范第三版中对 volatile 的定义如下： java 编程语言�
 
 
 
-### 缓存一致性
-
-MESI
-
-Modified（已修改）, Exclusive（独占的）,Shared（共享的），Invalid（无效的）
-
-总线风暴
-
-总线嗅探技术有哪些缺点？
-
-由于MESI缓存一致性协议，需要不断对主线进行内存嗅探，大量的交互会导致总线带宽达到峰值。
-
 ## volatile 的使用优化
 
 著名的 Java 并发编程大师 Doug lea 在 JDK7 的并发包里新增一个队列集合类 LinkedTransferQueue，他在使用 Volatile 变量时，用一种追加字节的方式来优化队列出队和入队的性能。
 
 追加字节能优化性能？这种方式看起来很神奇，但如果深入理解处理器架构就能理解其中的奥秘。让我们先来看看 LinkedTransferQueue 这个类，它使用一个内部类类型来定义队列的头队列（Head）和尾节点（tail），而这个内部类 PaddedAtomicReference 相对于父类 AtomicReference 只做了一件事情，就将共享变量追加到 64 字节。我们可以来计算下，一个对象的引用占 4 个字节，它追加了 15 个变量共占 60 个字节，再加上父类的 Value 变量，一共 64 个字节。
 
-```
+```java
 /** head of the queue */
 private transient final PaddedAtomicReference < QNode > head;
 
@@ -114,6 +109,54 @@ public class AtomicReference < V > implements java.io.Serializable {
 2. 变量不需要与其他的状态变量共同参与不变约束。
 
 在某些情况下，volatile的同步机制性要优于锁。并且，volatile变量读操作的性能消耗与普通变量几乎没有什么差别，但是写操作则可能会慢一些，因为它需要在本地代码中插入许多内存屏障指令来保证处理器不发生乱序执行。
+
+
+
+JIT
+
+```java
+    private static int sharedVariable = 0;
+    private static final int MAX = 10;
+
+    public static void main(String[] args) {
+
+        new Thread(() -> {
+            int oldValue = sharedVariable;
+            while (sharedVariable < MAX) {
+                if (sharedVariable != oldValue) {
+                    System.out.println(Thread.currentThread().getName() + " watched the change : " + oldValue + "->" + sharedVariable);
+                    oldValue = sharedVariable;
+                }
+            }
+            System.out.println(Thread.currentThread().getName() + " stop run");
+        }, "t1").start();
+
+        new Thread(() -> {
+            int oldValue = sharedVariable;
+            while (sharedVariable < MAX) {
+                System.out.println(Thread.currentThread().getName() + " do the change : " + sharedVariable + "->" + (++oldValue));
+                sharedVariable = oldValue;
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            System.out.println(Thread.currentThread().getName() + " stop run");
+        }, "t2").start();
+
+    }
+```
+
+-XX:-UseCompiler
+
+
+
+Store Buffer
+
+Invalidate Queue
+
+
 
 ## volatile源码分析
 
@@ -170,7 +213,7 @@ public static volatile boolean stop;
 
 注意被修饰了volatile关键字的 stop字段，会多一个 ACC_VOLATILE的flag，在给 stop复制的时候，调用的字节码是 putstatic,这个字节码会通过`BytecodeInterpreter`解释器来执行，找到Hotspot的源码 `bytecodeInterpreter.cpp`文件，搜索 putstatic指令定位到代码
 
-```c++
+```cpp
 CASE(_putstatic):
         {
           u2 index = Bytes::get_native_u2(pc+1);
@@ -276,12 +319,12 @@ CASE(_putstatic):
               obj->double_field_put(field_offset, STACK_DOUBLE(-1));
             }
           }
-...//省略很多代码
+...
 ```
 
 其他代码不用管，直接看 cache->is_volatile()这段代码，cache是 stop在常量池缓存中的一个实例，这段代码是判断这个cache是否是被 volatile修饰， is_volatile()方法的定义在 accessFlags.hpp文件中，代码如下
 
-```c++
+```cpp
 public:
   // Java access flags
   ...//
@@ -293,17 +336,15 @@ public:
 is_volatile是判断是否有 ACC_VOLATILE这个flag，很显然，通过 volatile修饰的stop的字节码中是存在这个flag的，所以 is_volatile()返回true
 接着，根据当前字段的类型来给 stop赋值，执行 release_byte_field_put方法赋值,这个方法的实现在 oop.inline.hpp中
 
-```
+```cpp
 inline void oopDesc::release_byte_field_put(int offset, jbyte contents)     
 { OrderAccess::release_store(byte_field_addr(offset), contents); }
 ```
 
-赋值的动作被包装了一层，看看 OrderAccess::release_store做了什么事情呢？这个方法的定义在 orderAccess.hpp中，具体的实现，根据不同的操作系统和CPU架构，调用不同的实现
-![图片描述](https://segmentfault.com/img/bVbky4D?w=246&h=170)
+赋值的动作被包装了一层，看看 OrderAccess::release_store做了什么事情呢？这个方法的定义在 orderAccess.hpp中，
 
-以 orderAccess_linux_x86.inline.hpp为例，找到 OrderAccess::release_store的实现，代码如下
-
-```
+```cpp
+// orderAccess_linux_x86.inline.hpp
 inline void OrderAccess::release_store(volatile jbyte* p, jbyte v) { *p = v; }
 ```
 
@@ -311,7 +352,7 @@ inline void OrderAccess::release_store(volatile jbyte* p, jbyte v) { *p = v; }
 
 > 赋值操作完成以后，如果大家仔细看了前面putstatic的代码，就会发现还会执行一个 OrderAccess::storeload();的代码，这个代码的实现是在 orderAccess_linux_x86.inline.hpp,它其实就是一个storeload内存屏障，JVM层面的四种内存屏障的定义以及实现
 
-```
+```cpp
 inline void OrderAccess::loadload()   { acquire(); }
 inline void OrderAccess::storestore() { release(); }
 inline void OrderAccess::loadstore()  { acquire(); }
@@ -320,7 +361,7 @@ inline void OrderAccess::storeload()  { fence(); }
 
 当调用 storeload屏障时，它会调用fence()方法
 
-```
+```cpp
 inline void OrderAccess::fence() {
   if (os::is_MP()) { //返回是否多处理器,如果是多处理器才有必要增加内存屏障
     // always use locked addl since mfence is sometimes expensive
@@ -335,7 +376,9 @@ inline void OrderAccess::fence() {
 }
 ```
 
-os::is_MP()判断是否是多核,如果是单核,那么就不存在内存不可见或者乱序的问题 __volatile__:禁止编译器对代码进行某些优化.
+os::is_MP()判断是否是多核,如果是单核,那么就不存在内存不可见或者乱序的问题 
+
+__volatile__:禁止编译器对代码进行某些优化.
 Lock :汇编指令，lock指令会锁住操作的缓存行(cacheline), 一般用于read-Modify-write的操作;用来保证后续的操作是原子的
 cc代表的是寄存器,memory代表是内存;这边同时用了”cc”和”memory”,来通知编译器内存或者寄存器内的内容已经发生了修改,要重新生成加载指令(不可以从缓存寄存器中取)
 这边的read/write请求不能越过lock指令进行重排,那么所有带有lock prefix指令(lock ,xchgl等)都会构成一个天然的x86 Mfence(读写屏障),这里用lock指令作为内存屏障,然后利用asm volatile("" ::: "cc,memory")作为编译器屏障. 这里并没有使用x86的内存屏障指令(mfence,lfence,sfence)，应该是跟x86的架构有关系，x86处理器是强一致内存模型
@@ -343,3 +386,12 @@ cc代表的是寄存器,memory代表是内存;这边同时用了”cc”和”me
 > storeload屏障是固定调用的方法?为什么要固定调用呢？
 
 原因是：避免volatile写与后面可能有的volatile读/写操作重排序。因为编译器常常无法准确判断在一个volatile写的后面是否需要插入一个StoreLoad屏障。为了保证能正确实现volatile的内存语义，JMM在采取了保守策略：在每个volatile写的后面，或者在每个volatile读的前面插入一个StoreLoad屏障。因为volatile写-读内存语义的常见使用模式是：一个写线程写volatile变量，多个读线程读同一个volatile变量。当读线程的数量大大超过写线程时，选择在volatile写之后插入StoreLoad屏障将带来可观的执行效率的提升。从这里可以看到JMM在实现上的一个特点：首先确保正确性，然后再去追求执行效率
+
+
+
+
+
+
+
+
+

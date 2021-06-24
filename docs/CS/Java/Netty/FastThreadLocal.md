@@ -105,5 +105,5 @@ private static InternalThreadLocalMap slowGet() {
 | --- | --- | --- |
 | Location | array index | hash & liner |
 | resize | just copy | copy & rehash |
-| iterate | get head collection | iterate all array |
-| gc | only need to remove after task done | exist memory leaky & expunge stale value when set/get |
+| Iteration | get head collection | iterate all array |
+| remove | only need to remove after task done | exist memory leaky & expunge stale value when set/get |
