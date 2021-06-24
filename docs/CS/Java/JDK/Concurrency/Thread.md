@@ -269,7 +269,7 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
 
 ### os::create_thread
 
-
+todo PTHREAD_CREATE_DETACHED
 
 ```cpp
 //os_linux.cpp
@@ -821,7 +821,7 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 
 ##### ObjectMonitor::wait
 
-1. check for a pending interrupt, THROW(vmSymbols::java_lang_InterruptedException());
+1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException());
 2. AddWaiter, enter the wait queue
 3. exit the monitor
 
@@ -841,7 +841,7 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
 
   EventJavaMonitorWait event;
 
-  // check for a pending interrupt
+  // check for a pending interrupt and ClearInterrupted
   if (interruptible && Thread::is_interrupted(Self, true) && !HAS_PENDING_EXCEPTION) {
     // post monitor waited event.  Note that this is past-tense, we are done waiting.
     if (JvmtiExport::should_post_monitor_waited()) {
@@ -1444,7 +1444,88 @@ void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
 
 
 
+#### See
 
+1. `OSThread::set_interrupted(true)`
+2. `ParkEvent::park`
+
+When `ParkEvent::unpark` by `interrupt()`, use `OSThread::set_interrupted(true)` at next iteration.
+
+```cpp
+// os_posix.cpp
+int os::sleep(Thread* thread, jlong millis, bool interruptible) {
+
+  ParkEvent * const slp = thread->_SleepEvent ;
+  slp->reset() ;
+  OrderAccess::fence() ;
+
+  if (interruptible) {
+    jlong prevtime = javaTimeNanos();
+
+    for (;;) {
+      // check for a pending interrupt and ClearInterrupted
+      if (os::is_interrupted(thread, true)) { 
+        return OS_INTRPT;
+      }
+
+      jlong newtime = javaTimeNanos();
+
+      if (newtime - prevtime < 0) {
+        // time moving backwards, should only happen if no monotonic clock
+        // not a guarantee() because JVM should not abort on kernel/glibc bugs
+        assert(!os::supports_monotonic_clock(), "unexpected time moving backwards detected in os::sleep(interruptible)");
+      } else {
+        millis -= (newtime - prevtime) / NANOSECS_PER_MILLISEC;
+      }
+
+      if (millis <= 0) {
+        return OS_OK;
+      }
+
+      prevtime = newtime;
+
+      {
+        assert(thread->is_Java_thread(), "sanity check");
+        JavaThread *jt = (JavaThread *) thread;
+        ThreadBlockInVM tbivm(jt);
+        OSThreadWaitState osts(jt->osthread(), false /* not Object.wait() */);
+
+        jt->set_suspend_equivalent();
+        // cleared by handle_special_suspend_equivalent_condition() or
+        // java_suspend_self() via check_and_wait_while_suspended()
+
+        slp->park(millis);
+
+        // were we externally suspended while we were waiting?
+        jt->check_and_wait_while_suspended();
+      }
+    }
+  } else {
+    OSThreadWaitState osts(thread->osthread(), false /* not Object.wait() */);
+    jlong prevtime = javaTimeNanos();
+
+    for (;;) {
+      // It'd be nice to avoid the back-to-back javaTimeNanos() calls on
+      // the 1st iteration ...
+      jlong newtime = javaTimeNanos();
+
+      if (newtime - prevtime < 0) {
+        // time moving backwards, should only happen if no monotonic clock
+        // not a guarantee() because JVM should not abort on kernel/glibc bugs
+        assert(!os::supports_monotonic_clock(), "unexpected time moving backwards detected on os::sleep(!interruptible)");
+      } else {
+        millis -= (newtime - prevtime) / NANOSECS_PER_MILLISEC;
+      }
+
+      if (millis <= 0) break ;
+
+      prevtime = newtime;
+      slp->park(millis);
+    }
+    return OS_OK ;
+  }
+}
+```
 
 
 
@@ -1550,6 +1631,64 @@ public boolean isInterrupted() {
 
 private native boolean isInterrupted(boolean ClearInterrupted);
 ```
+
+
+
+
+
+#### See
+
+1. `OSThread::set_interrupted(true)`
+2. `ParkEvent::unpark`
+
+```c
+//Thread.c
+{"interrupt0",       "()V",        (void *)&JVM_Interrupt},
+```
+
+```cpp
+//jvm.cpp
+JVM_ENTRY(void, JVM_Interrupt(JNIEnv* env, jobject jthread))
+  JVMWrapper("JVM_Interrupt");
+
+  ThreadsListHandle tlh(thread);
+  JavaThread* receiver = NULL;
+  bool is_alive = tlh.cv_internal_thread_to_JavaThread(jthread, &receiver, NULL);
+  if (is_alive) {
+    // jthread refers to a live JavaThread.
+    Thread::interrupt(receiver);
+  }
+JVM_END
+
+//thread.cpp
+void Thread::interrupt(Thread* thread) {
+  os::interrupt(thread);
+}
+
+// os.posix.cpp
+void os::interrupt(Thread* thread) {
+  OSThread* osthread = thread->osthread();
+
+  if (!osthread->interrupted()) {
+    osthread->set_interrupted(true);
+    // More than one thread can get here with the same value of osthread,
+    // resulting in multiple notifications.  We do, however, want the store
+    // to interrupted() to be visible to other threads before we execute unpark().
+    OrderAccess::fence();
+    ParkEvent * const slp = thread->_SleepEvent ;
+    if (slp != NULL) slp->unpark() ;
+  }
+
+  // For JSR166. Unpark even if interrupt status already was set
+  if (thread->is_Java_thread())
+    ((JavaThread*)thread)->parker()->unpark();
+
+  ParkEvent * ev = thread->_ParkEvent ;
+  if (ev != NULL) ev->unpark() ;
+}
+```
+
+
 
 ## Lock
 
