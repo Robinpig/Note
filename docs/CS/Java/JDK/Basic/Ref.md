@@ -48,6 +48,13 @@ public abstract class Reference<T> {
 
 
 
+## ReferenceHandler
+
+1. from PendingList to ReferenceQueue in a loop.
+2. if instanceof Cleaner , `invoke Cleaner.clean()` like DirectByteBuffer is free by [Cleaner](/docs/CS/Java/JDK/Basic/Direct_Buffer.md?id=cleaner).
+
+
+
 Create Reference Object
 
 find ref object when GC
@@ -59,8 +66,6 @@ move elements in DiscoveredList to PendingList `referenceProcessor.cpp`中`enque
 add pending to ReferenceQueue by ReferenceHandler
 
 remove from referenceQueue
-
-
 
 ```java
 /* High-priority thread to enqueue pending References
@@ -93,26 +98,13 @@ private static class ReferenceHandler extends Thread {
         }
     }
 }
-```
 
-
-
-```java
 /**
  * Try handle pending {@link Reference} if there is one.<p>
  * Return {@code true} as a hint that there might be another
  * {@link Reference} pending or {@code false} when there are no more pending
  * {@link Reference}s at the moment and the program can do some other
  * useful work instead of looping.
- *
- * @param waitForNotify if {@code true} and there was no pending
- *                      {@link Reference}, wait until notified from VM
- *                      or interrupted; if {@code false}, return immediately
- *                      when there is no pending {@link Reference}.
- * @return {@code true} if there was a {@link Reference} pending and it
- *         was processed, or we waited for notification and either got it
- *         or thread was interrupted before being notified;
- *         {@code false} otherwise.
  */
 static boolean tryHandlePending(boolean waitForNotify) {
     Reference<Object> r;
@@ -163,10 +155,6 @@ static boolean tryHandlePending(boolean waitForNotify) {
 ```
 
 
-
-流程比较简单：就是源源不断的从PendingList中提取出元素，然后将其加入到ReferenceQueue中去，开发者可以通过从ReferenceQueue中poll元素感知到对象被回收的事件。
-
-另外需要注意的是，对于Cleaner类型（继承自虚引用）的对象会有额外的处理：在其指向的对象被回收时，会调用clean方法，该方法主要是用来做对应的资源回收，**在堆外内存DirectByteBuffer中就是用Cleaner进行堆外内存的回收，这也是虚引用在java中的典型应用。**
 
 
 
@@ -280,6 +268,8 @@ public class WeakReference<T> extends Reference<T> {
 
 
 ## Cleaner
+
+Since 1.9
 
 *Cleaner manages a set of object references and corresponding cleaning actions.*
 *Cleaning actions are registered to run after the cleaner is notified that the object has become phantom reachable. The cleaner uses PhantomReference and ReferenceQueue to be notified when the reachability changes.*
