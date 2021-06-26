@@ -4,13 +4,7 @@
 
  通过字节码我们可以发现 ，修饰在方法层面的同步关键字，会多一个 ACC_SYNCHRONIZED的flag；修饰在代码块层面的同步块会多一个 monitorenter和 monitorexit关键字。无论采用哪一种方式，本质上都是对一个对象的监视器(monitor)进行获取，而这个获取的过程是排他的，也就是同一个时刻只能有一个线程获得同步块对象的监视器。
 
-
-
-![sychronized](https://notfound9.github.io/interviewGuide/static/sychronize.png)
-
-
-
-```java
+```
 //synchronized with block
 monitorenter monitorexit
 
@@ -23,6 +17,10 @@ ACC_SYNCHRONIZED
 
 
 
+
+## Process
+
+![sychronized](https://notfound9.github.io/interviewGuide/static/sychronize.png)
 
 
 
@@ -151,22 +149,39 @@ IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, Ba
 IRT_END
 ```
 
+biasLock unlock 后其它线程都升级为轻量级锁，解锁后为不可偏向无锁状态
+
+如果支持偏向锁,则执行 `ObjectSynchronizer::fast_enter`
+如果不支持偏向锁,则执行 `ObjectSynchronizer::slow_enter`，直接进入轻量级锁
 
 
 
+```shell
+-XX:+UseBiasedLocking # in JDK15 default close
+-XX:BiasedLockingStartupDelay=0 #default 5
+```
+
+
+
+存在矛盾
+匿名偏向状态下，如果调用系统的hashCode()方法，会使对象回到无锁态，并在markword中写入hashCode。并且在这个状态下，如果有线程尝试获取锁，会直接从无锁升级到轻量级锁，不会再升级为偏向锁
+wait()方法调用过程中依赖于重量级锁中与对象关联的monitor，在调用wait()方法后monitor会把线程变为WAITING状态，所以才会强制升级为重量级锁。除此之外，调用hashCode方法时也会使偏向锁直接升级为重量级锁
+
+BiasedLockingBulkRebiasThreshold：偏向锁批量重偏向阈值，默认为20次
+BiasedLockingBulkRevokeThreshold：偏向锁批量撤销阈值，默认为40次
+BiasedLockingDecayTime：重置计数的延迟时间，默认值为25000毫秒（即25秒）
+批量重偏向是以class而不是对象为单位的，每个class会维护一个偏向锁的撤销计数器，每当该class的对象发生偏向锁的撤销时，该计数器会加一，当这个值达到默认阈值20时，jvm就会认为这个锁对象不再适合原线程，因此进行批量重偏向。而距离上次批量重偏向的25秒内，如果撤销计数达到40，就会发生批量撤销，如果超过25秒，那么就会重置在[20, 40)内的计数。
 
 ### Biased Lock
 
-偏向锁可以通过 -XX:+UseBiasedLocking开启或者关闭
+[JEP 374: Disable and Deprecate Biased Locking](https://openjdk.java.net/jeps/374)
 
-如果支持偏向锁,则执行 ObjectSynchronizer::fast_enter的逻辑
-如果不支持偏向锁,则执行 ObjectSynchronizer::slow_enter逻辑，绕过偏向锁，直接进入轻量级锁
-
-
+1. 偏向锁和重量级锁只用到了_obj字段，而轻量级锁用到了_displaced_header
+2. 释放锁时都需要修改Lock Record 里的_obj字段。
 
 ```cpp
 //basicLock.hpp
-class BasicLock {
+class BasicLock {  
   friend class VMStructs;
   friend class JVMCIVMStructs;
  private:
@@ -192,7 +207,7 @@ class BasicLock {
 // alignment of the embedded BasicLock objects on such machines, we
 // put the embedded BasicLock at the beginning of the struct.
 
-class BasicObjectLock {
+class BasicObjectLock { // Lock Record
   friend class VMStructs;
  private:
   BasicLock _lock;                                    // the lock, must be double word aligned
@@ -216,8 +231,33 @@ class BasicObjectLock {
 };
 ```
 
+默认开启
+```shell
+-XX:+UseCompressedOops
+```
+由于使用了8字节对齐后每个对象的地址偏移量后3位必定为0，所以在存储的时候可以将后3位0抹除（转化为bit是抹除了最后24位）
+在此基础上再去掉最高位，就完成了指针从8字节到4字节的压缩。而在实际使用时，在压缩后的指针后加3位0，就能够实现向真实地址的映射。
+指针的32位中的每一个bit，都可以代表8个字节，这样就相当于使原有的内存地址得到了8倍的扩容。所以在8字节对齐的情况下，32位最大能表示2^32*8=32GB内存
+由于能够表示的最大内存是32GB，所以如果配置的最大的堆内存超过这个数值时，那么指针压缩将会失效。
+-XX:ObjectAlignmentInBytes=16 对应64g
+
+实例数据排序规则
+根据对齐规则会压缩调整
+```shell
+-XX:+CompactFields
+```
+父类先
+大字段先
+基本类型先，可调整
+```shell
+-XX:FieldsAllocationStyle=0 # POJO first, primitive second, default =1
+```
 
 
+超过15 报错
+```
+-XX:MaxTenuringThreshold=15
+```
 在大多数的情况下，锁不仅不存在多线程的竞争，而且总是由同一个线程获得。因此为了让线程获得锁的代价更低引入了偏向锁的概念。偏向锁的意思是如果一个线程获得了一个偏向锁，如果在接下来的一段时间中没有其他线程来竞争锁，那么持有偏向锁的线程再次进入或者退出同一个同步代码块，不需要再次进行抢占锁和释放锁的操作。
 
 #### ObjectSynchronizer::fast_enter
@@ -245,22 +285,17 @@ void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_re
 **ObjectSynchronizer::fast_enter():** 
 
 1. *check `if(UseBiasedLocking) `*
-   1. *`if(!SafepointSynchronize::is_at_safepoint())`, invoke `BiasedLocking::revoke_and_rebias()` success, return*
+   1. *`if is_at_safepoint())`, invoke `BiasedLocking::revoke_at_safepoint()`*
+   2. *Else invoke `BiasedLocking::revoke_and_rebias()` success, return*
 2. *Others, `ObjectSynchronizer::slow_enter()`*
 
 
 
 #### revoke and rebias
 
-偏向锁的获取过程非常简单，当一个线程访问同步块获取锁时，会在对象头和栈帧中的锁记录里存储偏向锁的线程ID，表示哪个线程获得了偏向锁，结合前面分析的Mark Word来分析一下偏向锁的获取逻辑
+**must not be called while at safepoint**
 
-1. 首先获取目标对象的Mark Word，根据锁的标识为和epoch去判断当前是否处于可偏向的状态
-2. 如果为可偏向状态，则通过CAS操作将自己的线程ID写入到MarkWord，如果CAS操作成功，则表示当前线程成功获取到偏向锁，继续执行同步代码块
-3. 如果是已偏向状态，先检测MarkWord中存储的threadID和当前访问的线程的threadID是否相等，如果相等，表示当前线程已经获得了偏向锁，则不需要再获得锁直接执行同步代码；如果不相等，则证明当前锁偏向于其他线程，需要撤销偏向锁。
-
-> CAS:表示自旋锁，由于线程的阻塞和唤醒需要CPU从用户态转为核心态，频繁的阻塞和唤醒对CPU来说性能开销很大。同时，很多对象锁的锁定状态指会持续很短的时间，因此引入了自旋锁，所谓自旋就是一个无意义的死循环，在循环体内不断的重行竞争锁。当然，自旋的次数会有限制，超出指定的限制会升级到阻塞锁。
-
-BiasedLocking::revoke_and_rebias 是用来获取当前偏向锁的状态(可能是偏向锁撤销后重新偏向):
+use CAS
 
 1. `Get markOop`
 2.  `if (mark->is_biased_anonymously() && !attempt_rebias) `
@@ -268,8 +303,6 @@ BiasedLocking::revoke_and_rebias 是用来获取当前偏向锁的状态(可能�
 ```cpp
 //biasedLocking.cpp
 BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attempt_rebias, TRAPS) {
-  assert(!SafepointSynchronize::is_at_safepoint(), "must not be called while at safepoint");
-
   // We can revoke the biases of anonymously-biased objects
   // efficiently enough that we should not cause these revocations to
   // update the heuristics because doing so may cause unwanted bulk
@@ -385,7 +418,7 @@ BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attem
 
 #### revoke bias
 
-***BiasedLocking::revoke_at_safepoint must only be called while at safepoint.***
+***BiasedLocking::revoke_at_safepoint must only be called while at safepoint.***, so don't need CAS
 
 update_heuristics:
 
@@ -425,7 +458,7 @@ enum HeuristicsResult {
     JVM内部为每个类维护了一个偏向锁revoke计数器，对偏向锁撤销进行计数，当这个值达到指定阈值时，JVM会认为这个类的偏向锁有问题，需要重新偏向(rebias),对所有属于这个类的对象进行重偏向的操作成为 批量重偏向(bulk rebias)。
     在做bulk rebias时，会对这个类的epoch的值做递增，这个epoch会存储在对象头中的epoch字段。在判断这个对象是否获得偏向锁的条件是:markword的 biased_lock:1、lock:01、threadid和当前线程id相等、epoch字段和所属类的epoch值相同，如果epoch的值不一样，要么就是撤销偏向锁、要么就是rebias； 如果这个类的revoke计数器的值继续增加到一个阈值，那么jvm会认为这个类不适合偏向锁，就需要进行bulk revoke操作 
 
-### 轻量级锁
+### Light Lock
 
 前面我们知道，当存在超过一个线程在竞争同一个同步代码块时，会发生偏向锁的撤销。偏向锁撤销以后对象会可能会处于两种状态
 
@@ -489,7 +522,6 @@ void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
 > 3. 线程尝试使用CAS将对象头中的Mark Word替换为指向锁记录的指针 ——stack pointer 
 >
 > 4. 如果替换成功，表示当前线程获得轻量级锁，如果失败，表示存在其他线程竞争锁，那么当前线程会尝试使用CAS来获取锁，当自旋超过指定次数(可以自定义)时仍然无法获得锁，此时锁会膨胀升级为重量级锁
->
 
 轻量级锁加锁前：
     ![Light-weight Locking ： Before](https://segmentfault.com/img/remote/1460000007006604?w=839&h=499)
@@ -497,16 +529,15 @@ void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
 轻量级锁加锁后：
     ![Ligth-weight Locking ： After](https://segmentfault.com/img/remote/1460000007006605?w=839&h=499)
 
+#### Unlock
 
-#### 轻量锁解锁
+轻量级锁的释放是通过 monitorexit调用
 
 1. 尝试CAS操作将锁记录中的Displaced Mark Word替换回到对象头中
 2. 如果成功，表示没有竞争发生
 3. 如果失败，表示当前锁存在竞争，锁会膨胀成重量级锁
 
 > 一旦锁升级成重量级锁，就不会再恢复到轻量级锁状态。当锁处于重量级锁状态，其他线程尝试获取锁时，都会被阻塞，也就是 BLOCKED状态。当持有锁的线程释放锁之后会唤醒这些现场，被唤醒之后的线程会进行新一轮的竞争
-
-轻量级锁的释放是通过 monitorexit调用
 
 ```cpp
 IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, BasicObjectLock* elem))
@@ -578,9 +609,10 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 
 轻量级锁的释放也比较简单，就是将当前线程栈帧中锁记录空间中的Mark Word替换到锁对象的对象头中，如果成功表示锁释放成功。否则，锁膨胀成重量级锁，实现重量级锁的释放锁逻辑
 
-### ObjectSynchronizer::inflate
 
-重量级锁是通过对象内部的监视器(monitor)来实现，而monitor的本质是依赖操作系统底层的MutexLock实现的。我们先来看锁的膨胀过程，从前面的分析中已经知道了所膨胀的过程是通过 ObjectSynchronizer::inflate方法实现的，代码如下
+同时竞争重量锁释放后为无锁不可偏向
+
+### ObjectSynchronizer::inflate
 
 ```cpp
 ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
@@ -708,6 +740,8 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
 
 ### 重量级锁
 
+重量级锁是通过对象内部的监视器(monitor)来实现，而monitor的本质是依赖操作系统底层的MutexLock实现的。我们先来看锁的膨胀过程，从前面的分析中已经知道了所膨胀的过程是通过 ObjectSynchronizer::inflate方法实现的，代码如下
+
 重量级锁依赖对象内部的monitor锁来实现，而monitor又依赖操作系统的MutexLock（互斥锁）
 
 大家如果对MutexLock有兴趣，可以抽时间去了解，假设Mutex变量的值为1，表示互斥锁空闲，这个时候某个线程调用lock可以获得锁，而Mutex的值为0表示互斥锁已经被其他线程获得，其他线程调用lock只能挂起等待
@@ -718,7 +752,167 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
 
 #### 重量级锁的竞争逻辑
 
-重量级锁的竞争，在 ObjectMonitor::enter方法中，代码文件在 objectMonitor.cpp重量级锁的代码就不一一分析了，简单说一下下面这段代码主要做的几件事
+重量级锁的竞争，在 ObjectMonitor::enter方法中，代码文件在 objectMonitor.cpp
+
+```cpp
+
+void ObjectMonitor::enter(TRAPS) {
+  // The following code is ordered to check the most common cases first
+  // and to reduce RTS->RTO cache line upgrades on SPARC and IA32 processors.
+  Thread * const Self = THREAD;
+
+  void * cur = Atomic::cmpxchg(Self, &_owner, (void*)NULL);//cas
+  if (cur == NULL) {
+    // Either ASSERT _recursions == 0 or explicitly set _recursions = 0.
+    assert(_recursions == 0, "invariant");
+    assert(_owner == Self, "invariant");
+    return;
+  }
+
+  if (cur == Self) {//if recursion
+    // TODO-FIXME: check for integer overflow!  BUGID 6557169.
+    _recursions++;
+    return;
+  }
+
+  if (Self->is_lock_owned ((address)cur)) {
+    assert(_recursions == 0, "internal state error");
+    _recursions = 1;
+    // Commute owner from a thread-specific on-stack BasicLockObject address to
+    // a full-fledged "Thread *".
+    _owner = Self;
+    return;
+  }
+
+  // We've encountered genuine contention.
+  assert(Self->_Stalled == 0, "invariant");
+  Self->_Stalled = intptr_t(this);
+
+  // Try one round of spinning *before* enqueueing Self
+  // and before going through the awkward and expensive state
+  // transitions.  The following spin is strictly optional ...
+  // Note that if we acquire the monitor from an initial spin
+  // we forgo posting JVMTI events and firing DTRACE probes.
+  if (TrySpin(Self) > 0) {
+    assert(_owner == Self, "invariant");
+    assert(_recursions == 0, "invariant");
+    assert(((oop)(object()))->mark() == markOopDesc::encode(this), "invariant");
+    Self->_Stalled = 0;
+    return;
+  }
+
+  assert(_owner != Self, "invariant");
+  assert(_succ != Self, "invariant");
+  assert(Self->is_Java_thread(), "invariant");
+  JavaThread * jt = (JavaThread *) Self;
+  assert(!SafepointSynchronize::is_at_safepoint(), "invariant");
+  assert(jt->thread_state() != _thread_blocked, "invariant");
+  assert(this->object() != NULL, "invariant");
+  assert(_count >= 0, "invariant");
+
+  // Prevent deflation at STW-time.  See deflate_idle_monitors() and is_busy().
+  // Ensure the object-monitor relationship remains stable while there's contention.
+  Atomic::inc(&_count);
+
+  JFR_ONLY(JfrConditionalFlushWithStacktrace<EventJavaMonitorEnter> flush(jt);)
+  EventJavaMonitorEnter event;
+  if (event.should_commit()) {
+    event.set_monitorClass(((oop)this->object())->klass());
+    event.set_address((uintptr_t)(this->object_addr()));
+  }
+
+  { // Change java thread status to indicate blocked on monitor enter.
+    JavaThreadBlockedOnMonitorEnterState jtbmes(jt, this);
+
+    Self->set_current_pending_monitor(this);
+
+    DTRACE_MONITOR_PROBE(contended__enter, this, object(), jt);
+    if (JvmtiExport::should_post_monitor_contended_enter()) {
+      JvmtiExport::post_monitor_contended_enter(jt, this);
+
+      // The current thread does not yet own the monitor and does not
+      // yet appear on any queues that would get it made the successor.
+      // This means that the JVMTI_EVENT_MONITOR_CONTENDED_ENTER event
+      // handler cannot accidentally consume an unpark() meant for the
+      // ParkEvent associated with this ObjectMonitor.
+    }
+
+    OSThreadContendState osts(Self->osthread());
+    ThreadBlockInVM tbivm(jt);
+
+    // TODO-FIXME: change the following for(;;) loop to straight-line code.
+    for (;;) {
+      jt->set_suspend_equivalent();
+      // cleared by handle_special_suspend_equivalent_condition()
+      // or java_suspend_self()
+
+      EnterI(THREAD);
+
+      if (!ExitSuspendEquivalent(jt)) break;
+
+      // We have acquired the contended monitor, but while we were
+      // waiting another thread suspended us. We don't want to enter
+      // the monitor while suspended because that would surprise the
+      // thread that suspended us.
+      //
+      _recursions = 0;
+      _succ = NULL;
+      exit(false, Self);
+
+      jt->java_suspend_self();
+    }
+    Self->set_current_pending_monitor(NULL);
+
+    // We cleared the pending monitor info since we've just gotten past
+    // the enter-check-for-suspend dance and we now own the monitor free
+    // and clear, i.e., it is no longer pending. The ThreadBlockInVM
+    // destructor can go to a safepoint at the end of this block. If we
+    // do a thread dump during that safepoint, then this thread will show
+    // as having "-locked" the monitor, but the OS and java.lang.Thread
+    // states will still report that the thread is blocked trying to
+    // acquire it.
+  }
+
+  Atomic::dec(&_count);
+  assert(_count >= 0, "invariant");
+  Self->_Stalled = 0;
+
+  // Must either set _recursions = 0 or ASSERT _recursions == 0.
+  assert(_recursions == 0, "invariant");
+  assert(_owner == Self, "invariant");
+  assert(_succ != Self, "invariant");
+  assert(((oop)(object()))->mark() == markOopDesc::encode(this), "invariant");
+
+  // The thread -- now the owner -- is back in vm mode.
+  // Report the glorious news via TI,DTrace and jvmstat.
+  // The probe effect is non-trivial.  All the reportage occurs
+  // while we hold the monitor, increasing the length of the critical
+  // section.  Amdahl's parallel speedup law comes vividly into play.
+  //
+  // Another option might be to aggregate the events (thread local or
+  // per-monitor aggregation) and defer reporting until a more opportune
+  // time -- such as next time some thread encounters contention but has
+  // yet to acquire the lock.  While spinning that thread could
+  // spinning we could increment JVMStat counters, etc.
+
+  DTRACE_MONITOR_PROBE(contended__entered, this, object(), jt);
+  if (JvmtiExport::should_post_monitor_contended_entered()) {
+    JvmtiExport::post_monitor_contended_entered(jt, this);
+
+    // The current thread already owns the monitor and is not going to
+    // call park() for the remainder of the monitor enter protocol. So
+    // it doesn't matter if the JVMTI_EVENT_MONITOR_CONTENDED_ENTERED
+    // event handler consumed an unpark() issued by the thread that
+    // just exited the monitor.
+  }
+  if (event.should_commit()) {
+    event.set_previousOwner((uintptr_t)_previous_owner_tid);
+    event.commit();
+  }
+  OM_PERFDATA_OP(ContendedLockAttempts, inc());
+}
+```
+简单说一下下面这段代码主要做的几件事
 
 1. 通过CAS将monitor的 _owner字段设置为当前线程，如果设置成功，则直接返回
 
@@ -832,7 +1026,7 @@ ObjectMonitor * ATTR ObjectSynchronizer::inflate (Thread * Self, oop object) {
    ...//此处省略无数行代码
    ```
 
-如果获取锁失败，则需要通过自旋的方式等待锁释放，自旋执行的方法是 ObjectMonitor::EnterI，主要做的几件事如下
+如果获取重量锁失败，则需要通过自旋的方式等待锁释放，自旋执行的方法是 ObjectMonitor::EnterI，主要做的几件事如下
 
 1. 将当前线程封装成ObjectWaiter对象node，状态设置成TS_CXQ
 2. 通过自旋操作将node节点push到_cxq队列
@@ -912,6 +1106,7 @@ void ATTR ObjectMonitor::EnterI (TRAPS) {
 ```
 
 TryLock(self)的代码是在 ObjectMonitor::TryLock定义的，代码的实现如下
+`Adaptive spin-then-block - rational spinning`
 
 > 代码的实现原理很简单，通过自旋，CAS设置monitor的_owner字段为当前线程，如果成功，表示获取到了锁，如果失败，则继续被挂起
 
@@ -1005,7 +1200,7 @@ void ATTR ObjectMonitor::exit(bool not_suspended, TRAPS) {
 
 根据不同的策略(由QMode指定)，从cxq或EntryList中获取头节点，通过ObjectMonitor::ExitEpilog方法唤醒该节点封装的线程，唤醒操作最终由unpark完成
 
-```
+```cpp
 void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
 {
    assert (_owner == Self, "invariant") ;
@@ -1041,3 +1236,22 @@ void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
    }
 }
 ```
+
+
+
+
+
+## Summary
+
+1、偏向锁和轻量级锁的"锁"即是Mark Word，而重量级锁的"锁"是ObjectMonitor，此时Mark Word保留了指针指向ObjectMonitor。
+2、偏向锁和轻量级锁依靠Lock Record个数来记录重入的次数，而重量级锁通过
+ObjectMonitor里的_recursions 整形变量记录。
+3、偏向锁和轻量级锁的重入只需要做简单的判断即可，而重量级锁需要通过CAS判断是否是重入
+
+
+
+## Reference
+
+
+
+1. [](https://www.jianshu.com/p/22b5a0a78a9b)
