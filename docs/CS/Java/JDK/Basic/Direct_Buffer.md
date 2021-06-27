@@ -125,7 +125,7 @@ private static class Deallocator
 
 
 
-[Cleaner extends PhantomReference](/docs/CS/Java/JDK/Basic/Ref.md)
+[Cleaner extends PhantomReference](/docs/CS/Java/JDK/Basic/Ref.md?id=phantom-reference)
 
 
 

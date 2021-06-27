@@ -234,4 +234,6 @@ use Predicate interface
 *A significant performance advantage can be had by **using primitive specialized lambda expressions and streams** such as IntStream.*
 
 
+### Parallel Stream
 
+based on `ForkJoinPool.commonPool()`
