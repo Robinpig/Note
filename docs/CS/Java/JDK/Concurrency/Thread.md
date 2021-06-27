@@ -623,7 +623,7 @@ throws InterruptedException {
     }
 }
 ```
-
+`ObjectSynchronizer::notifyall` in `JavaThread::exit()`
 
 
 
@@ -636,117 +636,12 @@ Wait-notify只是一个condition queue 仅使用于单生产/消费模型
 
 Causes the current thread to wait until either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object, or a specified amount of time has elapsed.
 
-**The current thread must own this object's monitor.**
-
-
+**The current thread must own this object's monitor.** use `CHECK_OWNER`.
 
 InterruptedException if any thread interrupted the current thread before or while the current thread was waiting for a notification.  **The <i>interrupted status</i> of the current thread is cleared when this exception is thrown.**
 ```java
-/**
- * This method causes the current thread (call it <var>T</var>) to
- * place itself in the wait set for this object and then to relinquish
- * any and all synchronization claims on this object. Thread <var>T</var>
- * becomes disabled for thread scheduling purposes and lies dormant
- * until one of four things happens:
- * <ul>
- * <li>Some other thread invokes the {@code notify} method for this
- * object and thread <var>T</var> happens to be arbitrarily chosen as
- * the thread to be awakened.
- * <li>Some other thread invokes the {@code notifyAll} method for this
- * object.
- * <li>Some other thread {@linkplain Thread#interrupt() interrupts}
- * thread <var>T</var>.
- * <li>The specified amount of real time has elapsed, more or less.  If
- * {@code timeout} is zero, however, then real time is not taken into
- * consideration and the thread simply waits until notified.
- * </ul>
- * The thread <var>T</var> is then removed from the wait set for this
- * object and re-enabled for thread scheduling. It then competes in the
- * usual manner with other threads for the right to synchronize on the
- * object; once it has gained control of the object, all its
- * synchronization claims on the object are restored to the status quo
- * ante - that is, to the situation as of the time that the {@code wait}
- * method was invoked. Thread <var>T</var> then returns from the
- * invocation of the {@code wait} method. Thus, on return from the
- * {@code wait} method, the synchronization state of the object and of
- * thread {@code T} is exactly as it was when the {@code wait} method
- * was invoked.
- * <p>
- * A thread can also wake up without being notified, interrupted, or
- * timing out, a so-called <i>spurious wakeup</i>.  While this will rarely
- * occur in practice, applications must guard against it by testing for
- * the condition that should have caused the thread to be awakened, and
- * continuing to wait if the condition is not satisfied.  In other words,
- * waits should always occur in loops, like this one:
- * <pre>
- *     synchronized (obj) {
- *         while (&lt;condition does not hold&gt;)
- *             obj.wait(timeout);
- *         ... // Perform action appropriate to condition
- *     }
- * </pre>
- * (For more information on this topic, see Section 3.2.3 in Doug Lea's
- * "Concurrent Programming in Java (Second Edition)" (Addison-Wesley,
- * 2000), or Item 50 in Joshua Bloch's "Effective Java Programming
- * Language Guide" (Addison-Wesley, 2001).
- *
- * <p>If the current thread is {@linkplain java.lang.Thread#interrupt()
- * interrupted} by any thread before or while it is waiting, then an
- * {@code InterruptedException} is thrown.  This exception is not
- * thrown until the lock status of this object has been restored as
- * described above.
- *
- * <p>
- * Note that the {@code wait} method, as it places the current thread
- * into the wait set for this object, unlocks only this object; any
- * other objects on which the current thread may be synchronized remain
- * locked while the thread waits.
- */
 public final native void wait(long timeout) throws InterruptedException;
 
-/**
- * Causes the current thread to wait until another thread invokes the
- * {@link java.lang.Object#notify()} method or the
- * {@link java.lang.Object#notifyAll()} method for this object, or
- * some other thread interrupts the current thread, or a certain
- * amount of real time has elapsed.
- * <p>
- * This method is similar to the {@code wait} method of one
- * argument, but it allows finer control over the amount of time to
- * wait for a notification before giving up. The amount of real time,
- * measured in nanoseconds, is given by:
- * <blockquote>
- * <pre>
- * 1000000*timeout+nanos</pre></blockquote>
- * <p>
- * In all other respects, this method does the same thing as the
- * method {@link #wait(long)} of one argument. In particular,
- * {@code wait(0, 0)} means the same thing as {@code wait(0)}.
- * <p>
- * The current thread must own this object's monitor. The thread
- * releases ownership of this monitor and waits until either of the
- * following two conditions has occurred:
- * <ul>
- * <li>Another thread notifies threads waiting on this object's monitor
- *     to wake up either through a call to the {@code notify} method
- *     or the {@code notifyAll} method.
- * <li>The timeout period, specified by {@code timeout}
- *     milliseconds plus {@code nanos} nanoseconds arguments, has
- *     elapsed.
- * </ul>
- * <p>
- * The thread then waits until it can re-obtain ownership of the
- * monitor and resumes execution.
- * <p>
- * As in the one argument version, interrupts and spurious wakeups are
- * possible, and this method should always be used in a loop:
- * <pre>
- *     synchronized (obj) {
- *         while (&lt;condition does not hold&gt;)
- *             obj.wait(timeout, nanos);
- *         ... // Perform action appropriate to condition
- *     }
- */
 public final void wait(long timeout, int nanos) throws InterruptedException {
     if (timeout < 0) {
         throw new IllegalArgumentException("timeout value is negative");
@@ -764,41 +659,16 @@ public final void wait(long timeout, int nanos) throws InterruptedException {
     wait(timeout);
 }
 
-/**
- * Causes the current thread to wait until another thread invokes the
- * {@link java.lang.Object#notify()} method or the
- * {@link java.lang.Object#notifyAll()} method for this object.
- * In other words, this method behaves exactly as if it simply
- * performs the call {@code wait(0)}.
- * <p>
- * The current thread must own this object's monitor. The thread
- * releases ownership of this monitor and waits until another thread
- * notifies threads waiting on this object's monitor to wake up
- * either through a call to the {@code notify} method or the
- * {@code notifyAll} method. The thread then waits until it can
- * re-obtain ownership of the monitor and resumes execution.
- * <p>
- * As in the one argument version, interrupts and spurious wakeups are
- * possible, and this method should always be used in a loop:
- * <pre>
- *     synchronized (obj) {
- *         while (&lt;condition does not hold&gt;)
- *             obj.wait();
- *         ... // Perform action appropriate to condition
- *     }
- * </pre>
- * This method should only be called by a thread that is the owner
- * of this object's monitor. See the {@code notify} method for a
- * description of the ways in which a thread can become the owner of
- * a monitor. 
- */
 public final void wait() throws InterruptedException {
     wait(0);
 }
 ```
 
 
+
 ##### ObjectSynchronizer::wait
+
+[ObjectSynchronizer::inflate]()
 
 ```cpp
 // NOTE: must use heavy weight monitor to handle wait()
@@ -817,13 +687,14 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 }
 ```
 
-
-
 ##### ObjectMonitor::wait
 
-1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException());
-2. AddWaiter, enter the wait queue
-3. exit the monitor
+1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException())
+2. CHECK_OWNER
+3. AddWaiter, enter the wait queue
+4. Thread::SpinRelease, exit monitor
+5. Park Self
+6. ReenterI when unPark by other Thread
 
 ```cpp
 //objectMonitor.cpp
@@ -1052,12 +923,11 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
 
 ### notify
 
-notify, notifyAll : wake up thread when exit the sync block
+wake up thread when exit the sync block
 
 |            | notify | notifyAll |
 | ---------- | ------ | --------- |
 | wake order | FIFO   | LIFO      |
-|            |        |           |
 |            |        |           |
 
 notifyAll 在退出同步块时唤醒其倒数第二个进入wait状态的线程，依次类推
@@ -1065,47 +935,8 @@ notifyAll 在退出同步块时唤醒其倒数第二个进入wait状态的线程
 
 
 ```java
-/**
- * Wakes up a single thread that is waiting on this object's
- * monitor. If any threads are waiting on this object, one of them
- * is chosen to be awakened. The choice is arbitrary and occurs at
- * the discretion of the implementation. A thread waits on an object's
- * monitor by calling one of the {@code wait} methods.
- * <p>
- * The awakened thread will not be able to proceed until the current
- * thread relinquishes the lock on this object. The awakened thread will
- * compete in the usual manner with any other threads that might be
- * actively competing to synchronize on this object; for example, the
- * awakened thread enjoys no reliable privilege or disadvantage in being
- * the next thread to lock this object.
- * <p>
- * This method should only be called by a thread that is the owner
- * of this object's monitor. A thread becomes the owner of the
- * object's monitor in one of three ways:
- * <ul>
- * <li>By executing a synchronized instance method of that object.
- * <li>By executing the body of a {@code synchronized} statement
- *     that synchronizes on the object.
- * <li>For objects of type {@code Class,} by executing a
- *     synchronized static method of that class.
- * </ul>
- * <p>
- * Only one thread at a time can own an object's monitor.
- */
 public final native void notify();
 
-/**
- * Wakes up all threads that are waiting on this object's monitor. A
- * thread waits on an object's monitor by calling one of the
- * {@code wait} methods.
- * <p>
- * The awakened threads will not be able to proceed until the current
- * thread relinquishes the lock on this object. The awakened threads
- * will compete in the usual manner with any other threads that might
- * be actively competing to synchronize on this object; for example,
- * the awakened threads enjoy no reliable privilege or disadvantage in
- * being the next thread to lock this object.
- */
 public final native void notifyAll();
 
 ```
@@ -1118,7 +949,7 @@ public final native void notifyAll();
 
 
 
-dequeue from the WaitSet to the EntryList
+dequeue from the WaitSet to the EntryList or _cxq
 
 
 ```cpp
@@ -1426,7 +1257,9 @@ void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
 
 ### Sleep
 
-#### yield 跟 sleep 
+
+
+#### yield
 
 1. yield 跟 sleep 都能暂停当前线程，都不会释放锁资源，sleep 可以指定具体休眠的时间，而 yield 则依赖 CPU 的时间片划分
 2. sleep方法给其他线程运行机会时不考虑线程的优先级，因此会给低优先级的线程以运行的机会。yield方法只会给相同优先级或更高优先级的线程以运行的机会
@@ -1445,6 +1278,54 @@ void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
 
 
 #### See
+if millis = 0, `os::naked_yield()` like `Thread#yield()`
+```cpp
+// jvm.cpp
+JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
+  JVMWrapper("JVM_Sleep");
+
+  if (millis < 0) {
+    THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(), "timeout value is negative");
+  }
+
+  if (Thread::is_interrupted (THREAD, true) && !HAS_PENDING_EXCEPTION) {
+    THROW_MSG(vmSymbols::java_lang_InterruptedException(), "sleep interrupted");
+  }
+
+  // Save current thread state and restore it at the end of this block.
+  // And set new thread state to SLEEPING.
+  JavaThreadSleepState jtss(thread);
+
+  HOTSPOT_THREAD_SLEEP_BEGIN(millis);
+  EventThreadSleep event;
+
+  if (millis == 0) {
+    os::naked_yield();
+  } else {
+    ThreadState old_state = thread->osthread()->get_state();
+    thread->osthread()->set_state(SLEEPING);
+    if (os::sleep(thread, millis, true) == OS_INTRPT) {
+      // An asynchronous exception (e.g., ThreadDeathException) could have been thrown on
+      // us while we were sleeping. We do not overwrite those.
+      if (!HAS_PENDING_EXCEPTION) {
+        if (event.should_commit()) {
+          post_thread_sleep_event(&event, millis);
+        }
+        HOTSPOT_THREAD_SLEEP_END(1);
+
+        // TODO-FIXME: THROW_MSG returns which means we will not call set_state()
+        // to properly restore the thread state.  That's likely wrong.
+        THROW_MSG(vmSymbols::java_lang_InterruptedException(), "sleep interrupted");
+      }
+    }
+    thread->osthread()->set_state(old_state);
+  }
+  if (event.should_commit()) {
+    post_thread_sleep_event(&event, millis);
+  }
+  HOTSPOT_THREAD_SLEEP_END(0);
+JVM_END
+```
 
 1. `OSThread::set_interrupted(true)`
 2. `ParkEvent::park`
