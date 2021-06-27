@@ -1,6 +1,6 @@
 # Map
 
-
+### Map Inheritance
 
 ![Map](../images/Map.png)
 
@@ -404,7 +404,7 @@ JDK1.8 vs JDK1.7 at resize
 1. don't need calc hash again
 2. add at tail vs add at head
 
-
+todo JDK1.7 resize 
 
 ### treeifyBin
 

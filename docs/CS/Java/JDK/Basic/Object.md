@@ -158,7 +158,7 @@ As much as is reasonably practical, the hashCode method defined by class Object 
 public native int hashCode();
 ```
 
-
+will use [**ObjectSynchronizer::inflate**]()
 
 **return 0 if object is NULL**
 
