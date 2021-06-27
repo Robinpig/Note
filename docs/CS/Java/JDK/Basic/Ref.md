@@ -4,7 +4,7 @@
 
 ![java.lang.ref](../images/Ref.png)
 
-## Ref
+### Reference
 
 ```java
 public abstract class Reference<T> {
@@ -156,9 +156,9 @@ static boolean tryHandlePending(boolean waitForNotify) {
 
 
 
+## Type
 
-
-## SoftReference
+### SoftReference
 
 ```java
 public class SoftReference<T> extends Reference<T> {
@@ -220,7 +220,7 @@ public class SoftReference<T> extends Reference<T> {
 
 
 
-## WeakReference
+### WeakReference
 
 ```java
 /**
@@ -267,7 +267,11 @@ public class WeakReference<T> extends Reference<T> {
 
 
 
-## Cleaner
+### Phantom Reference
+
+
+
+### Cleaner
 
 Since 1.9
 
