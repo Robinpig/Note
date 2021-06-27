@@ -1,17 +1,9 @@
-# Spring IoC简单说明
+# IoC
 
-## IoC简述
+## Introduction
 
-##### IoC概念
+IoC(`Inversion of Control`) depends on DI(`Dependency Injection`) in Spring
 
-IoC（Inversion of Control）***控制反转*** 又名 DI（Dependency Injection ）***依赖注入***
-
-```
-	控制反转 指将对象的管理责任交给Spring容器
-	依赖注入 被依赖对象注入到依赖对象中 
-```
-
-依赖注入是控制反转的实现手段 控制反转是 DIP（Dependency Inversion Principle）**依赖倒置原则**体现
 
 ##### 对象类型的管理
 
@@ -40,6 +32,46 @@ BeanFactory接口定义了IoC容器最基本的形式 并且提供了IoC容器�
 > - **FactoryBean** 是一个Bean 能产生或者修饰对象生成的工厂Bean 实现与设计模式中的工厂模式和修饰器模式类似 注意和作为
 > - **BeanFactory** 是Factory 也就是IoC容器或对象工厂  所有的Bean都是由BeanFactory（也就是IoC容器）来进行管理的
 
+```java
+public interface BeanFactory {
+
+	String FACTORY_BEAN_PREFIX = "&";
+
+	Object getBean(String name) throws BeansException;
+
+	<T> T getBean(String name, Class<T> requiredType) throws BeansException;
+
+	Object getBean(String name, Object... args) throws BeansException;
+
+	<T> T getBean(Class<T> requiredType) throws BeansException;
+
+	<T> T getBean(Class<T> requiredType, Object... args) throws BeansException;
+
+	<T> ObjectProvider<T> getBeanProvider(Class<T> requiredType);
+
+	<T> ObjectProvider<T> getBeanProvider(ResolvableType requiredType);
+
+	boolean containsBean(String name);
+
+	boolean isSingleton(String name) throws NoSuchBeanDefinitionException;
+
+	boolean isPrototype(String name) throws NoSuchBeanDefinitionException;
+
+	boolean isTypeMatch(String name, ResolvableType typeToMatch) throws NoSuchBeanDefinitionException;
+
+	boolean isTypeMatch(String name, Class<?> typeToMatch) throws NoSuchBeanDefinitionException;
+
+	@Nullable
+	Class<?> getType(String name) throws NoSuchBeanDefinitionException;
+
+	@Nullable
+	Class<?> getType(String name, boolean allowFactoryBeanInit) throws NoSuchBeanDefinitionException;
+
+	String[] getAliases(String name);
+
+}
+```
+
 ###### 接口方法
 
 getBean()
@@ -63,7 +95,7 @@ etAliases()
 #### ApplicationContext
 
 应用上下文
- ![在这里插入图片描述 ](https://img-blog.csdnimg.cn/20191019084010711.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
+ ![Beanfactory ](./images/BeanFactory.png)
  ApplicationContext继承接口图
  由上图可知ApplicationContext在BeanFactory 简单IoC容器的基础上 增加了许多面向框架的特性 同时对应用环境作了许多适配
 
@@ -74,7 +106,7 @@ etAliases()
 
 ## IoC容器的初始化过程
 
-### refresh()方法启动
+### AbstractApplicationContext#refresh()
 
 refresh()在ConfigurableApplicationContext接口声明
  启动包括**BeanDefinition的Resouce定位 载入和注册**
@@ -82,6 +114,7 @@ refresh()在ConfigurableApplicationContext接口声明
  以下是AbstractApplicationContext重写的refresh()
 
 ```java
+// AbstractApplicationContext#refresh()
 @Override
 	public void refresh() throws BeansException, IllegalStateException {
 		synchronized (this.startupShutdownMonitor) {
@@ -327,3 +360,11 @@ DLBF的基类AbstractBeanFactory的getBean()中调用doGetBean() 之后会调用
  Bean的销毁过程 首先对postProcessBeforeDestruction进行调用 然后调用Bean的destroy方法 最后是对Bean的自定义销毁方法的调用
  ![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019114800284.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
  Bean生命周期图
+
+
+
+## EventListener
+
+EventPublisher
+
+ApplicationListener
