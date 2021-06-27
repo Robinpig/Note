@@ -30,7 +30,7 @@ Isolation level
 
 
 
-![image-20210430214713744](/Users/robin/Library/Application Support/typora-user-images/image-20210430214713744.png)
+![image-20210430214713744](./images/SQL.png)
 
 Table
 
