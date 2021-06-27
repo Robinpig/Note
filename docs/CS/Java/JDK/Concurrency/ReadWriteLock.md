@@ -1,8 +1,4 @@
-# 类图
-
-## 
-
-## ReadWriteLock
+# ReadWriteLock
 
 [![ReadWriteLock类图](https://github.com/seaswalker/JDK/raw/master/note/ReadWriteLock/images/ReadWriteLock.jpg)](https://github.com/seaswalker/JDK/blob/master/note/ReadWriteLock/images/ReadWriteLock.jpg)
 
@@ -14,7 +10,7 @@ ReentrantReadWriteLock内部的Sync的类图如下:
 
 [![Sync类图](https://github.com/seaswalker/JDK/raw/master/note/ReadWriteLock/images/Sync.jpg)](https://github.com/seaswalker/JDK/blob/master/note/ReadWriteLock/images/Sync.jpg)
 
-# 
+
 
 # 构造
 
@@ -120,11 +116,11 @@ if (exclusiveCount(c) != 0 && getExclusiveOwnerThread() != current)
 
 getState值在此处被当做两个short来使用，高16位值代表读锁的持有次数，低16位代表写锁的的持有次数。
 
-```
+```java
 static final int SHARED_SHIFT   = 16;
 static final int SHARED_UNIT    = (1 << SHARED_SHIFT);
 static final int MAX_COUNT      = (1 << SHARED_SHIFT) - 1;
-static final int EXCLUSIVE_MASK = (1 << SHARED_SHIFT) - 1;
+static final int EXCLUSIVE_MASK = (1 << SHARED_SHIFT) - 1;// Oxffff
 
 static int sharedCount(int c)    { return c >>> SHARED_SHIFT; }
 
