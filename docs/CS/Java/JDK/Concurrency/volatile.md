@@ -10,7 +10,7 @@
 - 该变量不会与其他的状态一起纳入不变性条件中。
 - 在访问变量时不需要加锁。
 
-## 术语定义
+### 术语定义
 
 | 术语       | 英文单词               | 描述                                                         |
 | ---------- | ---------------------- | ------------------------------------------------------------ |
@@ -23,9 +23,7 @@
 | 写命中     | write hit              | 当处理器将操作数写回到一个内存缓存的区域时，它首先会检查这个缓存的内存地址是否在缓存行中，如果存在一个有效的缓存行，则处理器将这个操作数写回到缓存，而不是写回到内存，这个操作被称为写命中。 |
 | 写缺失     | write misses the cache | 一个有效的缓存行被写入到不存在的内存区域。                   |
 
-## volatile 的官方定义
-
-Java 语言规范第三版中对 volatile 的定义如下： java 编程语言允许线程访问共享变量，为了确保共享变量能被准确和一致的更新，线程应该确保通过排他锁单独获得这个变量。Java 语言提供了 volatile，在某些情况下比锁更加方便。如果一个字段被声明成 volatile，java 线程内存模型确保所有线程看到这个变量的值是一致的。
+### 官方定义
 
 当一个变量定义为volatile之后，它具备两种特性：
 
@@ -33,9 +31,9 @@ Java 语言规范第三版中对 volatile 的定义如下： java 编程语言�
 2. 禁止指令重排序优化。
 
 
-volatile 禁用的是编译器重排序和处理器重排序
 
-## volatile 可见性实现原理
+
+## volatile 可见性
 
 那么 volatile 是如何来保证可见性的呢？在 x86 处理器下通过工具获取 JIT 编译器生成的汇编指令来看看对 Volatile 进行写操作 CPU 会做什么事情。
 
@@ -182,7 +180,7 @@ public class VolatileDemo {
 }
 ```
 
-通过 `javap-vVolatileDemo.class`查看字节码指令
+`javap-v VolatileDemo.class`
 
 ```java
 public static volatile boolean stop;
@@ -322,9 +320,12 @@ CASE(_putstatic):
 ...
 ```
 
-其他代码不用管，直接看 cache->is_volatile()这段代码，cache是 stop在常量池缓存中的一个实例，这段代码是判断这个cache是否是被 volatile修饰， is_volatile()方法的定义在 accessFlags.hpp文件中，代码如下
+
+
+cache->is_volatile() ，cache是 stop在常量池缓存中的一个实例，这段代码是判断这个cache是否是被 volatile修饰， is_volatile()方法的定义在 accessFlags.hpp文件中，代码如下
 
 ```cpp
+// accessFlags.hpp
 public:
   // Java access flags
   ...//
