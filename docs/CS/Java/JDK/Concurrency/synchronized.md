@@ -1586,12 +1586,12 @@ void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
 
 ## Summary
 
-| Lock           | Bias Lock   | Light lock  | Heavy Lock                            |
-| -------------- | ----------- | ----------- | ------------------------------------- |
-| Race condition | Mark Word   | Mark Word   | ObjectMonitor                         |
-| Recursion      | Lock Record | Lock Record | _recursions in ObjectMonitor(use CAS) |
-|                |             |             |                                       |
-|                |             |             |                                       |
+| Lock           | Bias Lock    | Light lock   | Heavy Lock                            |
+| -------------- | ------------ | ------------ | ------------------------------------- |
+| Race condition | Mark Word    | Mark Word    | ObjectMonitor                         |
+| Recursion      | Lock Records | Lock Records | _recursions in ObjectMonitor(use CAS) |
+|                |              |              |                                       |
+|                |              |              |                                       |
 
 
 
