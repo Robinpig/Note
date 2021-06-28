@@ -721,6 +721,7 @@ private Runnable getTask() {
         }
 
         try {
+          // if > corePoolSize, use poll will out of loop and terminate 
             Runnable r = timed ?
                 workQueue.poll(keepAliveTime, TimeUnit.NANOSECONDS) :
                 workQueue.take();
