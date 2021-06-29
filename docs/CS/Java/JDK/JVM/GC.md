@@ -1,8 +1,7 @@
 # GC
 Garbage Collection 
-## GC Algorithms
 
-### Collect 
+## When an instance is dead？ 
 #### 引用计数算法：
 
    为对象添加一个引用计数器，当对象增加一个引用时计数器加 1，
