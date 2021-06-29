@@ -61,6 +61,15 @@ All Integer wrapper class must use equals to compare values.
 
 
 
+## FlyWeight
+
+
+
+IntegerCache
+```
+-XX:AutoBoxCacheMax = 
+```
+
 ### Boolean
 私有属性
 
