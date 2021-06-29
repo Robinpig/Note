@@ -6,8 +6,7 @@
 
 ### Direct Memory
 
-[Direct Memory Management](/docs/CS/Java/JDK/Basic/Direct Memory.md)
-
+[Direct Memory Management](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
 
 
 ### Memory Barrier

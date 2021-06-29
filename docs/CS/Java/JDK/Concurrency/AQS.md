@@ -1,10 +1,10 @@
 # AQS
 
+## Introduction
 
 
-![image-20210617104422023](/Users/robin/Library/Application Support/typora-user-images/image-20210617104422023.png)
 
-简单解释一下J.U.C，是JDK中提供的并发工具包,`java.util.concurrent`。里面提供了很多并发编程中很常用的实用工具类，比如atomic原子操作、比如lock同步锁、fork/join等。
+![AQS](../images/AQS.png)
 
 
 
