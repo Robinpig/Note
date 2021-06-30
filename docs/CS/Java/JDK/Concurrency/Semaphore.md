@@ -2,6 +2,10 @@
 
 
 
+## Introduction
+
+
+
 _A counting semaphore. Conceptually, a semaphore maintains a set of permits. Each acquire blocks if necessary until a permit is available, and then takes it. Each release adds a permit, potentially releasing a blocking acquirer. However, no actual permit objects are used; the Semaphore just keeps a count of the number available and acts accordingly._
 **Semaphores are often used to restrict the number of threads than can access some (physical or logical) resource.** 
 
@@ -19,6 +23,14 @@ This class also provides convenience methods to acquire and release multiple per
 public class Semaphore implements java.io.Serializable {
     /** All mechanics via AbstractQueuedSynchronizer subclass */
     private final Sync sync;
+  
+   public Semaphore(int permits) {
+        sync = new NonfairSync(permits);
+    }
+  
+   public Semaphore(int permits, boolean fair) {
+        sync = fair ? new FairSync(permits) : new NonfairSync(permits);
+    }
 }
 ```
 
@@ -87,109 +99,84 @@ abstract static class Sync extends AbstractQueuedSynchronizer {
 
 
 
+## acquire
 
+
+
+Repeatedly:
+
+1. Check if node now first
+2. if so, ensure head stable, else ensure valid predecessor
+3. if node is first or not yet enqueued, try acquiring
+4. else if node not yet created, create it
+5. else if not yet enqueued, try once to enqueue
+6. else if woken from park, retry (up to postSpins times)
+7. else if WAITING status not set, set and retry
+8. else park and clear WAITING status, and check cancellation
 
 ```java
 public void acquire() throws InterruptedException {
     sync.acquireSharedInterruptibly(1);
 }
-```
 
+// in AQS
+public final void acquireSharedInterruptibly(int arg)
+        throws InterruptedException {
+    if (Thread.interrupted())
+        throw new InterruptedException();
+    if (tryAcquireShared(arg) < 0)
+        doAcquireSharedInterruptibly(arg);
+}
 
-
-```java
-final int acquire(Node node, int arg, boolean shared,
-                  boolean interruptible, boolean timed, long time) {
-    Thread current = Thread.currentThread();
-    byte spins = 0, postSpins = 0;   // retries upon unpark of first thread
-    boolean interrupted = false, first = false;
-    Node pred = null;                // predecessor of node when enqueued
-
-    /*
-     * Repeatedly:
-     *  Check if node now first
-     *    if so, ensure head stable, else ensure valid predecessor
-     *  if node is first or not yet enqueued, try acquiring
-     *  else if node not yet created, create it
-     *  else if not yet enqueued, try once to enqueue
-     *  else if woken from park, retry (up to postSpins times)
-     *  else if WAITING status not set, set and retry
-     *  else park and clear WAITING status, and check cancellation
-     */
-
+// FairLock
+protected int tryAcquireShared(int acquires) {
     for (;;) {
-        if (!first && (pred = (node == null) ? null : node.prev) != null &&
-            !(first = (head == pred))) {
-            if (pred.status < 0) {
-                cleanQueue();           // predecessor cancelled
-                continue;
-            } else if (pred.prev == null) {
-                Thread.onSpinWait();    // ensure serialization
-                continue;
-            }
-        }
-        if (first || pred == null) {
-            boolean acquired;
-            try {
-                if (shared)
-                    acquired = (tryAcquireShared(arg) >= 0);
-                else
-                    acquired = tryAcquire(arg);
-            } catch (Throwable ex) {
-                cancelAcquire(node, interrupted, false);
-                throw ex;
-            }
-            if (acquired) {
-                if (first) {
-                    node.prev = null;
-                    head = node;
-                    pred.next = null;
-                    node.waiter = null;
-                    if (shared)
-                        signalNextIfShared(node);
-                    if (interrupted)
-                        current.interrupt();
-                }
-                return 1;
-            }
-        }
-        if (node == null) {                 // allocate; retry before enqueue
-            if (shared)
-                node = new SharedNode();
-            else
-                node = new ExclusiveNode();
-        } else if (pred == null) {          // try to enqueue
-            node.waiter = current;
-            Node t = tail;
-            node.setPrevRelaxed(t);         // avoid unnecessary fence
-            if (t == null)
-                tryInitializeHead();
-            else if (!casTail(t, node))
-                node.setPrevRelaxed(null);  // back out
-            else
-                t.next = node;
-        } else if (first && spins != 0) {
-            --spins;                        // reduce unfairness on rewaits
-            Thread.onSpinWait();
-        } else if (node.status == 0) {
-            node.status = WAITING;          // enable signal and recheck
-        } else {
-            long nanos;
-            spins = postSpins = (byte)((postSpins << 1) | 1);
-            if (!timed)
-                LockSupport.park(this);
-            else if ((nanos = time - System.nanoTime()) > 0L)
-                LockSupport.parkNanos(this, nanos);
-            else
-                break;
-            node.clearStatus();
-            if ((interrupted |= Thread.interrupted()) && interruptible)
-                break;
-        }
+        if (hasQueuedPredecessors())
+            return -1;
+        int available = getState();
+        int remaining = available - acquires;
+        if (remaining < 0 ||
+            compareAndSetState(available, remaining))
+            return remaining;
     }
-    return cancelAcquire(node, interrupted, interruptible);
+}
+
+// NonFairLock
+final int nonfairTryAcquireShared(int acquires) {
+    for (;;) {
+        int available = getState();
+        int remaining = available - acquires;
+        if (remaining < 0 ||
+            compareAndSetState(available, remaining))
+            return remaining;
+    }
 }
 ```
+
+
+
+
+
+## release
+
+```java
+public void release() {
+    sync.releaseShared(1);
+}
+
+protected final boolean tryReleaseShared(int releases) {
+    for (;;) {
+        int current = getState();
+        int next = current + releases;
+        if (next < current) // overflow
+            throw new Error("Maximum permit count exceeded");
+        if (compareAndSetState(current, next))
+            return true;
+    }
+}
+```
+
+
 
 ## Example
 
@@ -241,3 +228,6 @@ _For example, here is a class that uses a semaphore to control access to a pool 
  }
 ```
 
+
+
+Semaphore 许可的数量和线程数不存在必然的联系

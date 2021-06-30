@@ -409,6 +409,21 @@ protected final boolean tryReleaseShared(int unused) {
 
 #### tryRelease
 
+Note that tryRelease and tryAcquire can be called by Conditions. So it is possible that their arguments contain both read and write holds that are all released during a condition wait and re-established in tryAcquire.
+
+```java
+protected final boolean tryRelease(int releases) {
+    if (!isHeldExclusively())
+        throw new IllegalMonitorStateException();
+    int nextc = getState() - releases;
+    boolean free = exclusiveCount(nextc) == 0;
+    if (free)
+        setExclusiveOwnerThread(null);
+    setState(nextc);
+    return free;
+}
+```
+
 
 
 ## tryLock
@@ -419,11 +434,11 @@ protected final boolean tryReleaseShared(int unused) {
 
 ## Summary
 
-|      | ReadLock                                                | WriteLock                             |
-| ---- | ------------------------------------------------------- | ------------------------------------- |
-|      | ReadLock will block WriteLock(unless writeLock is next) | WriteLock block readLock(unless self) |
-|      |                                                         |                                       |
-|      |                                                         |                                       |
+|      | ReadLock                | WriteLock                                                    |
+| ---- | ----------------------- | ------------------------------------------------------------ |
+| lock | ReadLock allow ReadLock | WriteLock block both ReadLock/WriteLock(unless W -> R of self) |
+|      |                         |                                                              |
+|      |                         |                                                              |
 
 
 
