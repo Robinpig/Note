@@ -1,4 +1,4 @@
-# MpscLinkedQueue
+## Introduction
 
 The code was inspired by the similarly named JCTools class:
 https://github.com/JCTools/JCTools/blob/master/jctools-core/src/main/java/org/jctools/queues/atomic

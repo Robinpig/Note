@@ -1,5 +1,3 @@
-# SPI
-
 
 
 ## Introduction

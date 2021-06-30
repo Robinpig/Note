@@ -172,13 +172,13 @@ toString方法需要提供类里面所有有用的东西
 
 
 
-### Item 18: Favor composition over inheritance  
+### Item 18: Favor composition over Hierarchy  
 
-Unlike method invocation, inheritance violates encapsulation  
+Unlike method invocation, Hierarchy violates encapsulation  
 
 
 
-### Item 19: Design and document for inheritance or else prohibit it  
+### Item 19: Design and document for Hierarchy or else prohibit it  
 
 
 

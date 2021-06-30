@@ -1,14 +1,10 @@
-# Channel
 
-
-
-
-### Channel Inheritance
+### Channel Hierarchy
 ![Channel](./images/Channel.png)
 
 
 
-### Channel
+## Channel
 
 ```java
 public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparable<Channel> {
@@ -619,6 +615,9 @@ HeadContext(DefaultChannelPipeline pipeline) {
 }
 ```
 
+
+
+## Channelhandler
 
 
 

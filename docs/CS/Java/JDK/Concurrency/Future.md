@@ -1,4 +1,4 @@
-# Future
+## Introduction
 
 *We could create a **Thread** object with a **Runnable** target, also use **FutureTask** to get **Future**.*
 

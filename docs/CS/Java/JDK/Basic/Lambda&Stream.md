@@ -1,7 +1,3 @@
-# Lambda & Stream
-
-
-
 ## Lambda
 
 
@@ -174,7 +170,7 @@ It’s very easy to figure out whether an operation is eager or lazy: **look at 
 
 *Collection provide a **default method** to avert all third-party collections libraries being broken.*
 
-*default methods are designed primarily to allow binary compatible API evolution. Allowing classes to win over any default methods simplifies a lot of inheritance scenarios.*
+*default methods are designed primarily to allow binary compatible API evolution. Allowing classes to win over any default methods simplifies a lot of Hierarchy scenarios.*
 
 #### Arrays
 

@@ -1,7 +1,3 @@
-# Semaphore
-
-
-
 ## Introduction
 
 

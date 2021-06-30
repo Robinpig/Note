@@ -1,6 +1,4 @@
-# Annotation
-
-
+### Annotation Hierarchy
 
 ![Annotation](../images/Annotation.png)
 

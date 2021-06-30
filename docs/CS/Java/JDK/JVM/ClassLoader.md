@@ -2,28 +2,27 @@
 
 
 
-## ClassLoader Type
+## ClassLoader
 
-- `BootstrapClassLoader`
 
-  C++实现,
 
-- `ExtensionClassLoader`
+| ClassLoader            | Lang | Load path           | Ext                            |      |
+| ---------------------- | ---- | ------------------- | ------------------------------ | ---- |
+| `BootstrapClassLoader` | C++  | <JAVA_HOME>/lib     |                                |      |
+| `ExtensionClassLoader` | Java | <JAVA_HOME>/lib/ext |                                |      |
+| `AppClassLoader`       | Java | classpath/          | extends `ExtensionClassLoader` |      |
+| `User ClassLoader`     | Java | all                 | extends `AppClassLoader`       |      |
 
-- `AppClassLoader`
 
-  继承于Ext类加载器
 
-- User ClassLoader
-  
-  
-  
+
 
 ### 双亲委派
 
 1. 防止重复加载 
 2. Java核心API不被篡改 
 重写loadClass方法绕过双亲委托
+3. 使用组合方式进行加载而非继承
 
 破坏双亲委托
 
@@ -151,8 +150,8 @@ protected Object getClassLoadingLock(String className) {
 protected final void resolveClass(Class<?> c) {
         resolveClass0(c);
     }
-
-    private native void resolveClass0(Class<?> c);
+    
+private native void resolveClass0(Class<?> c);
 ```
 
 
@@ -540,7 +539,7 @@ InstanceKlass::link_class_impl()
 classfile/rewriter.cpp
 
 
-### Verification
+#### Verification
 
 目的
 
@@ -561,15 +560,15 @@ CA FE BA BE(魔数，Java虚拟机识别)
 
 classfile/verifier.cpp
 
-### Preparation
+#### Preparation
 
 prepare the memory in method area
 
 `ConstantValue` will set the final value
 
-### Resolution
+#### Resolution
 
-
+可以在Initiailzation之后进行
 
 ### Initialization
 

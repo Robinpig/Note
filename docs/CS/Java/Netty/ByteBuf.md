@@ -1,6 +1,4 @@
-# ByteBuf
-
-
+###  ByteBuf Hierarchy
 
 ![ByteBuf](./images/ByteBuf.png)
 

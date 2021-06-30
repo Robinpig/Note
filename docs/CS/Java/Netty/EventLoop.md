@@ -1,8 +1,4 @@
-# EventLoop
-
-
-
-### EventLoopGroup Inheritance
+### EventLoopGroup Hierarchy
 
 ![EventLoopGroup](./images/EventLoopGroup.png)
 
@@ -604,7 +600,7 @@ public void rebuildSelectors() {
 
 
 
-### EventLoop Inheritance
+### EventLoop Hierarchy
 
 ![EventLoop](./images/EventLoop.png)
 

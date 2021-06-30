@@ -1,6 +1,4 @@
-# Object
-
-
+## OOP
 
 > “We cut nature up, organize it into concepts, and ascribe significances as we do, largely because we are parties to an agreement that holds throughout our speech community and is codified in the patterns of our language ... we cannot talk at all except by subscribing to the organization and classification of data which the agreement decrees.” Benjamin Lee Whorf (1897-1941)
 
@@ -33,7 +31,7 @@ Java uses three explicit keywords to set the boundaries in a class: **public**, 
 
 -  **public** means the following element is available to everyone. 
 - The **private** keyword, on the other hand, means that no one can access that element except you, the creator of the type, inside methods of that type. **private** is a brick wall between you and the client programmer. Someone who tries to access a **private** member will get a compile-time error. 
-- The **protected** keyword acts like **private**, with the exception that an inheriting class has access to **protected** members, but not **private** members. Inheritance will be introduced shortly. 
+- The **protected** keyword acts like **private**, with the exception that an inheriting class has access to **protected** members, but not **private** members. Hierarchy will be introduced shortly. 
 - Java also has a “**default**” access, which comes into play if you don’t use one of the aforementioned specifiers. This is usually called ***package* *access*** because classes can access the members of other classes in the same package, but outside of the package those same members appear to be **private**. 
 
 
@@ -74,7 +72,7 @@ Type
 
 
 
-## Multiple Inheritance
+## Multiple Hierarchy
 
 Three rules:
 

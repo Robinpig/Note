@@ -1,5 +1,3 @@
-# ResultSetHandler
-
 
 
 ```java

@@ -1,5 +1,3 @@
-# Reflection
-
 
 
 ## Introduction

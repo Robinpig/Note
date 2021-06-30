@@ -1,7 +1,3 @@
-# CountDownLatch
-
-
-
 ## Introduction
 
 
@@ -87,7 +83,7 @@ Causes the current thread to wait until the latch has counted down to zero, unle
    3. The specified waiting time elapses.
 
 3.  If the count reaches zero then the method returns with the value true.
-      
+    
 4. If the current thread:
 
       1. has its interrupted status set on entry to this method; 

@@ -1,8 +1,4 @@
-# Bootstrap
-
-
-
-### Bootstrap Inheritance
+### Bootstrap Hierarchy
 
 ![Bootstrap](./images/Bootstrap.png)
 

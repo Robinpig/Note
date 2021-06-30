@@ -1,6 +1,4 @@
-# List
-
-
+### List Hierarchy
 
 ![](../images/List.png)
 

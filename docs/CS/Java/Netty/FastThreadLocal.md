@@ -1,6 +1,6 @@
-# FastThreadLocal
 
 
+## Introduction
 
 *A special variant of [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md) that yields higher access performance when accessed from a FastThreadLocalThread.*
 *Internally, a **FastThreadLocal uses a constant index in an array**, instead of using hash code and hash table, to look for a variable. Although seemingly very subtle, it yields slight performance advantage over using a hash table, and it is useful when accessed frequently.*

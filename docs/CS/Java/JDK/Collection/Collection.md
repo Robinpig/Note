@@ -1,6 +1,4 @@
-# Collection
-
-*Here are the collection hierarchy.*
+### Collection Hierarchy
 
 ![Collection](../images/Collection.png)
 

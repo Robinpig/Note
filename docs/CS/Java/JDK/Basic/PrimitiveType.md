@@ -1,8 +1,6 @@
-# Primitive Type
 
 
-
-## Primitive Type
+## Introduction
 
 That is, instead of creating the variable by using **new**, an “automatic” variable is created that is *not a reference*. The variable holds the value, and it’s **placed on the stack**, so it’s much more efficient. 
 
@@ -156,7 +154,7 @@ public static int highestOneBit(int i) {
 
 use compareTo
 
-use **BigDecimal(String)**  create object
+use **BigDecimal(String)**  create object param must be notBlank
 
 
 

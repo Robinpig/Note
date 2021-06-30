@@ -1,6 +1,4 @@
-# enum
-
-
+## Introduction
 
 **The \*enum\* keyword was introduced in Java 5.** It denotes a special type of class that **always extends the *java.lang.Enum* class.** 
 

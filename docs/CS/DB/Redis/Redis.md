@@ -15,6 +15,108 @@ Redis is an open source (BSD licensed), in-memory data structure store, used as 
 
 ## 数据类型
 
+
+
+As you can see in the client structure above, arguments in a command
+are described as `robj` structures. The following is the full `robj`
+structure, which defines a *Redis object*:
+
+```c
+typedef struct redisObject {
+    unsigned type:4;
+    unsigned encoding:4;
+    unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
+                            * LFU data (least significant 8 bits frequency
+                            * and most significant 16 bits access time). */
+    int refcount;
+    void *ptr;
+} robj;
+```
+
+Basically this structure can represent all the basic Redis data types like
+strings, lists, sets, sorted sets and so forth. The interesting thing is that
+it has a `type` field, so that it is possible to know what type a given
+object has, and a `refcount`, so that the same object can be referenced
+in multiple places without allocating it multiple times. Finally the `ptr`
+field points to the actual representation of the object, which might vary
+even for the same type, depending on the `encoding` used.
+
+Redis objects are used extensively in the Redis internals, however in order
+to avoid the overhead of indirect accesses, recently in many places
+we just use plain dynamic strings not wrapped inside a Redis object.
+
+
+
+```c
+// server.h
+/* A redis object, that is a type able to hold a string / list / set */
+
+/* The actual Redis Object */
+#define OBJ_STRING 0    /* String object. */
+#define OBJ_LIST 1      /* List object. */
+#define OBJ_SET 2       /* Set object. */
+#define OBJ_ZSET 3      /* Sorted set object. */
+#define OBJ_HASH 4      /* Hash object. */
+
+/* The "module" object type is a special one that signals that the object
+ * is one directly managed by a Redis module. In this case the value points
+ * to a moduleValue struct, which contains the object value (which is only
+ * handled by the module itself) and the RedisModuleType struct which lists
+ * function pointers in order to serialize, deserialize, AOF-rewrite and
+ * free the object.
+ *
+ * Inside the RDB file, module types are encoded as OBJ_MODULE followed
+ * by a 64 bit module type ID, which has a 54 bits module-specific signature
+ * in order to dispatch the loading to the right module, plus a 10 bits
+ * encoding version. */
+#define OBJ_MODULE 5    /* Module object. */
+#define OBJ_STREAM 6    /* Stream object. */
+```
+
+
+
+```c
+/* Objects encoding. Some kind of objects like Strings and Hashes can be
+ * internally represented in multiple ways. The 'encoding' field of the object
+ * is set to one of this fields for this object. */
+#define OBJ_ENCODING_RAW 0     /* Raw representation */
+#define OBJ_ENCODING_INT 1     /* Encoded as integer */
+#define OBJ_ENCODING_HT 2      /* Encoded as hash table */
+#define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
+#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
+#define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
+#define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
+#define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+#define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
+#define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
+```
+
+
+
+### createObject
+
+```c
+/* ===================== Creation and parsing of objects ==================== */
+// object.c
+robj *createObject(int type, void *ptr) {
+    robj *o = zmalloc(sizeof(*o));
+    o->type = type;
+    o->encoding = OBJ_ENCODING_RAW;
+    o->ptr = ptr;
+    o->refcount = 1;
+
+    /* Set the LRU to the current lruclock (minutes resolution), or
+     * alternatively the LFU counter. */
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+        o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
+    } else {
+        o->lru = LRU_CLOCK();
+    }
+    return o;
+}
+```
+
 ### 键管理
 
 - 获取所有的键应采用SCAN而非KEYS（易阻塞）
@@ -26,7 +128,7 @@ value过大，会导致慢查询，内存增长过快等等。
 > - 如果是String类型，单个value大小控制10k以内。
 > - 如果是hash、list、set、zset类型，元素个数一般不超过5000。
 
-
+Redis支持的常用5种数据类型指的是value类型，分别为：字符串String、列表List、哈希Hash、集合Set、有序集合Zset，但是Redis后续又丰富了几种数据类型分别是Bitmaps、HyperLogLogs、GEO
 
 ### string
 
@@ -39,69 +141,6 @@ key禁止包含特殊字符，如空格、换行、单双引号以及其他转�
 Redis的key尽量设置ttl，以保证不使用的Key能被及时清理或淘汰。
 
 
-
-
-**长度限制? 使用hash存储,占用空间**
-
-expire will be delete after reset value
-
-Redis**不直接使用**C中的字符串类型，而是作为字面量。
-
-字符串主要使用SDS （**Simple Dynamic String** ）：
-
-```c
-struct  sdshdr{
-//记录buf中已保存字符的长度
-//等于SDS所保存的字符串的长度
-int  len;
-//记录buf数组中未使用字节的数量
-int free;
-//字节数组，用于保存字符串
-char buf[];
-};
-```
-
- SDS为了能够**使用部分C字符串函数**，遵循了C字符串以空字符结尾的惯例，保存空字符的1字节不计算在SDSlen属性中，并且为空字符分配额外的1字节空间，以及添加空字符到字符串末尾等操作，都是由SDS函数自动完成的，可以说**空字符对使用者是透明的** 。
-
-- 常数复杂度获取字符串长度
-
-  len属性获取长度
-
-- 杜绝缓冲区溢出
-
-  可以在超过free空间时自动动态扩展内存
-
-- 减少修改字符串时带来的内存重分配次数
-
-  -  空间预分配
-
-     当字符串长度小于 **1M** 时，扩容都是加倍现有的空间，如果超过 1M，扩容时一次只会多扩 1M 的空间。(字符串最大长度为 **512M**) 
-
-  -  惰性空间释放 
-
-    free可以用以记录未被使用的空间，不需重新构建新的字符串对象。
-
-- 二进制安全
-
-  **字节数组**，不同于C语言的字符数组。
-
-when create string, len=capacity, usually we don't append string.
-
-len>44 raw, else embstr.
-
-debug object key
-
-RedisObject is 16byte
-
-capacity +len +flags =3byte
-
-NULL = 1byte
-
-jemalloc apply 64byte
-
-so a SDS max string len is 64-16-3-1=44byte
-
-redisObject is close value in embstr
 
 
 
@@ -135,6 +174,10 @@ zset sort by score
 
 ### 有序集合
 
+在score相同的情况下，使用`字典排序`
+
+排行榜 score使用类snowflake算法 value+时间戳 等等
+
 ### HLL
 
 HyperLogLog 实质是当作字符串存储
@@ -167,14 +210,52 @@ bitfield KEY [GET type offset] [SET type offset value] [INCRBY type offset incre
 
 使用管道将多个命令放入同一个执行队列中，减少往返时延消耗。
 
+Event
+Redis的文件事件和时间事件
+
+Redis作为单线程服务要处理的工作一点也不少，Redis是事件驱动的服务器，主要的事件类型就是：文件事件类型和时间事件类型，其中时间事件是理解单线程逻辑模型的关键。
+
+时间事件
+Redis的时间事件分为两类：
+定时事件：任务在等待指定大小的等待时间之后就执行，执行完成就不再执行，只触发一次；
+周期事件：任务每隔一定时间就执行，执行完成之后等待下一次执行，会周期性的触发；
+
+周期性时间事件
+Redis中大部分是周期事件，周期事件主要是服务器定期对自身运行情况进行检测和调整，从而保证稳定性，这项工作主要是ServerCron函数来完成的，周期事件的内容主要包括：
+删除数据库的key
+触发RDB和AOF持久化
+主从同步
+集群化保活
+关闭清理死客户端链接
+统计更新服务器的内存、key数量等信息
+可见 Redis的周期性事件虽然主要处理辅助任务，但是对整个服务的稳定运行，起到至关重要的作用。
+
+时间事件的无序链表
+Redis的每个时间事件分为三个部分：
+事件ID 全局唯一 依次递增
+触发时间戳 ms级精度
+事件处理函数 事件回调函数
+时间事件Time_Event结构：
+
 ### 事务
 
 使用WATCH对键设置标志，使用MULTI启动事务，若发生非期待状态，放弃该事务。Redis事务无回滚功能
 
+
+
+## Lua
+
+EVAL
+
+
+
+
+
 ## 持久化机制
 
 ### RDB
-
+save
+bgsave
 快照snapshot，SAVE使用主线程同步转储，BGSAVEfork()出子进程转储。文件名默认为dump.rdb。但数据一致性不高，但转储恢复速度更快，占用存储空间更少。
 
 ### AOF
@@ -522,3 +603,7 @@ LFU
 
 - 8bits logistic counter log
 - 16bits last decrement time minutes
+
+
+## Reference
+1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)

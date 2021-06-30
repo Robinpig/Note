@@ -1,8 +1,6 @@
-# Servlet
 
 
-
-What is Servlet?
+## What is Servlet?
 
 ### Servlet
 

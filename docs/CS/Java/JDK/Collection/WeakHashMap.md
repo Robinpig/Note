@@ -1,5 +1,3 @@
-# WeakHashMap
-
 ## Introduction
 
 WeakHashMap的行为一定程度上基于垃圾收集器的行为，因此一些Map数据结构对应的常识在WeakHashMap上会失效——size()方法的返回值会随着程序的运行变小，isEmpty()方法的返回值会从false变成true等等。

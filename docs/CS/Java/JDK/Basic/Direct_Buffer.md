@@ -1,6 +1,4 @@
-# Direct Buffer
-
-
+## Introduction
 
 How to allocate direct memory?
 

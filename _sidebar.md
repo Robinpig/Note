@@ -46,7 +46,7 @@
             - [Chanel](/docs/CS/Java/Netty/Channel.md)
             - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
             - [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
-            - [Others](/docs/CS/Java/Netty/Future.md)
+            - [Future](/docs/CS/Java/Netty/Future.md)
           
         - [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
     - Go

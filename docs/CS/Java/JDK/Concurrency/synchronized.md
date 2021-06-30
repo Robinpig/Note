@@ -1,6 +1,6 @@
-# synchronized
 
-## 字节码分析
+
+## Introduction
 
  通过字节码我们可以发现 ，修饰在方法层面的同步关键字，会多一个 ACC_SYNCHRONIZED的flag；修饰在代码块层面的同步块会多一个 monitorenter和 monitorexit关键字。无论采用哪一种方式，本质上都是对一个对象的监视器(monitor)进行获取，而这个获取的过程是排他的，也就是同一个时刻只能有一个线程获得同步块对象的监视器。
 

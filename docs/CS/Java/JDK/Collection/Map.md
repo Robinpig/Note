@@ -1,6 +1,4 @@
-# Map
-
-### Map Inheritance
+### Map Hierarchy
 
 ![Map](../images/Map.png)
 

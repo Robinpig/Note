@@ -1,4 +1,4 @@
-# Throwable
+### Throwable Hierarchy
 
 ![Throwable](../images/Throwable.png)
 

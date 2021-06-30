@@ -1,8 +1,4 @@
-# MyBatis
-
-
-
-### Introduction
+## Introduction
 
 
 
@@ -80,5 +76,4 @@ Compare with Hibernate
 
 
 ##### [Logging](/docs/CS/Java/MyBatis/Logging.md) 
-
 

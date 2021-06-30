@@ -1,7 +1,3 @@
-# ReentrantLock
-
-
-
 ## lock
 
 ```java

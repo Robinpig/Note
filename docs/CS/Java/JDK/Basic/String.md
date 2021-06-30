@@ -1,6 +1,4 @@
-# String
-
-
+## Introduction
 
 *The **String class represents character strings. All string literals in Java programs are implemented as instances of this class**.*
   `Strings are constant; their values cannot be changed after they are created. `
@@ -105,7 +103,7 @@ network transmission consumption.
 *Returns a hash code for this string. The hash code for a String object is computed as*
 
        *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
-       
+
 
 *using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)*
 
