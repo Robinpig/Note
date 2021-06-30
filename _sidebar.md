@@ -26,6 +26,8 @@
             - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
             - [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
             - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+            - [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
+            - [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
           - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
             - [GC](/docs/CS/Java/JDK/JVM/GC.md)
             - [G1](/docs/CS/Java/JDK/JVM/G1.md)
