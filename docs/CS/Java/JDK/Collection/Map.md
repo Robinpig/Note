@@ -67,7 +67,7 @@ static class Node<K,V> implements Map.Entry<K,V> {
 
 #### TreeNode
 
-
+JEP-180
 
 ```java
 /**
@@ -317,7 +317,7 @@ static final int hash(Object key) {
 
 ### resize
 
-
+check (e.hash & oldCap) == 0
 
 ```java
 final Node<K,V>[] resize() {
