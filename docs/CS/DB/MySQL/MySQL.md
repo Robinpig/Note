@@ -24,8 +24,8 @@ Isolation Problem
 Isolation level
 
 - Read uncommitted
-- Read committed default in Oracle SQL server
-- Repetable read **default level in MySQL**
+- Read committed default in Oracle SQL server, only see committed data from other transactions
+- Repetable read **default level in MySQL**, and use MVCC avoid Phantom read
 - Serializable
 
 
@@ -142,6 +142,14 @@ storage file
 
 支持事务 外键 行级锁 MVCC 支持真正的在线热备份
 
+
+
+### Memory
+
+表描述文件frm在磁盘 表数据全在内存 使用Hash Index
+
+
+
 ### Index  
 
     Hash索引：
@@ -179,7 +187,6 @@ storage file
  - 写与写互斥 防止数据覆盖
  - 读不允许写 防止脏读
  - 读不允许写 防止不可重复读
-   
 
   两段锁协议
 
