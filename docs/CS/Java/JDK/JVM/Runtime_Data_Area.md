@@ -1,5 +1,3 @@
-# Runtime  Data Area
-
 
 
 ## Introduction
@@ -92,7 +90,7 @@ Method 元信息
 Class 元信息
 
 
-
+[JEP 122: Remove the Permanent Generation](https://openjdk.java.net/jeps/122)
 
 
 ## 程序计数器
