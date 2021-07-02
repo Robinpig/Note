@@ -5,7 +5,8 @@
 
 #### Memory Model
 
-monitor
+[JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
+
 
 线程各自的本地内存对其它线程是不可见的；多个线程写入主存时可能会存在脏数据；指令重排导致结果不可控。
 多线程交互需要解决上述三个问题，这三个问题也是线程并发的核心：
@@ -21,21 +22,23 @@ monitor
 
 
 
-#### CAS
+#### [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=CAS)
 
-#### valatile
+#### [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
 
-#### synchronized
-
+#### [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 
 
 #### Thread
 
-Thread
+[Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 
-ThreadLocal
+[ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 
-### atomic
+[ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
+
+
+### [atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md)
 
 
 
@@ -44,9 +47,13 @@ ThreadLocal
 1. fail-fast for Collections in `java.util`, such as `HashMap`, `ArrayList`
 2. fail-safe for Collections in `java.util.concurrent`, such as `ConcurrentHashMap`, `CopyOnWriteArrayList`
 
-#### Blocking Queue
+[CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList)
 
+[ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap)
 
+[ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap)
+
+#### [Blocking Queue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
 
 
 
@@ -54,17 +61,34 @@ ThreadLocal
 
 ![locks](../images/juc-locks.png)
 
+[Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
+
+[AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+
+[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
+
+[ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
+
+[StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 
 
 ### synchronizer
 
 ![img](https://upload-images.jianshu.io/upload_images/19073098-ad30778587f3b754.png?imageMogr2/auto-orient/strip|imageView2/2/w/1200)
 
+[Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
 
+[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
+
+[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
 
 ### Executor
 
-#### Future
+[ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
 
-#### ThreadPoolExecutor
+[ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)
+
+
+#### [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
+
 
