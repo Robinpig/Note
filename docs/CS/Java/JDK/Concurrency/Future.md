@@ -1,5 +1,9 @@
 ## Introduction
 
+### Future Hierarchy
+
+![Future](../images/Future.png)
+
 *We could create a **Thread** object with a **Runnable** target, also use **FutureTask** to get **Future**.*
 
 ### Runnable
