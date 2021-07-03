@@ -4,7 +4,7 @@
 
 ![java.lang.ref](../images/Ref.png)
 
-### Reference
+### Reference<T>
 
 ```java
 public abstract class Reference<T> {
@@ -97,13 +97,14 @@ private static class ReferenceHandler extends Thread {
             tryHandlePending(true);
         }
     }
-}
 
+}
+```
+
+```java
 /**
- * Try handle pending {@link Reference} if there is one.<p>
- * Return {@code true} as a hint that there might be another
- * {@link Reference} pending or {@code false} when there are no more pending
- * {@link Reference}s at the moment and the program can do some other
+ * Try handle pending Reference if there is one.<p>
+ * Return true} as a hint that there might be another Reference pending or false} when there are no more pending References at the moment and the program can do some other
  * useful work instead of looping.
  */
 static boolean tryHandlePending(boolean waitForNotify) {
@@ -269,7 +270,271 @@ public class WeakReference<T> extends Reference<T> {
 
 ### Phantom Reference
 
+### FinalReference
+Final references, used to implement finalization
 
+```java
+class FinalReference<T> extends Reference<T> {
+
+    public FinalReference(T referent, ReferenceQueue<? super T> q) {
+        super(referent, q);
+    }
+
+    @Override
+    public boolean enqueue() {
+        throw new InternalError("should never reach here");
+    }
+}
+```
+
+#### Finalizer
+
+Package-private; must be in same package as the Reference class
+
+register invoked by VM
+```java
+final class Finalizer extends FinalReference<Object> {
+
+    private static ReferenceQueue<Object> queue = new ReferenceQueue<>();
+
+    /** Head of doubly linked list of Finalizers awaiting finalization. */
+    private static Finalizer unfinalized = null;
+
+    /** Lock guarding access to unfinalized list. */
+    private static final Object lock = new Object();
+
+    private Finalizer next, prev;
+
+
+    static {
+        ThreadGroup tg = Thread.currentThread().getThreadGroup();
+        for (ThreadGroup tgn = tg;
+             tgn != null;
+             tg = tgn, tgn = tg.getParent())
+            ;
+        Thread finalizer = new FinalizerThread(tg);
+        finalizer.setPriority(Thread.MAX_PRIORITY - 2);
+        finalizer.setDaemon(true);
+        finalizer.start();
+    }
+
+    /* Invoked by VM */
+    static void register(Object finalizee) {
+        new Finalizer(finalizee);
+    }
+
+    private Finalizer(Object finalizee) {
+        super(finalizee, queue);
+        // push onto unfinalized
+        synchronized (lock) {
+            if (unfinalized != null) {
+                this.next = unfinalized;
+                unfinalized.prev = this;
+            }
+            unfinalized = this;
+        }
+    }
+
+    static ReferenceQueue<Object> getQueue() {
+        return queue;
+    }
+    ...
+}
+```
+
+```java
+    //Called by Runtime.runFinalization()
+    static void runFinalization() {
+        if (VM.initLevel() == 0) {
+            return;
+        }
+
+        forkSecondaryFinalizer(new Runnable() {
+            private volatile boolean running;
+            public void run() {
+                // in case of recursive call to run()
+                if (running)
+                    return;
+                final JavaLangAccess jla = SharedSecrets.getJavaLangAccess();
+                running = true;
+                for (Finalizer f; (f = (Finalizer)queue.poll()) != null; )
+                    f.runFinalizer(jla);
+            }
+        });
+    }
+
+    /* Create a privileged secondary finalizer thread in the system thread
+     * group for the given Runnable, and wait for it to complete.
+     *
+     * This method is used by runFinalization.
+     *
+     * It could have been implemented by offloading the work to the
+     * regular finalizer thread and waiting for that thread to finish.
+     * The advantage of creating a fresh thread, however, is that it insulates
+     * invokers of that method from a stalled or deadlocked finalizer thread.
+     */
+    private static void forkSecondaryFinalizer(final Runnable proc) {
+        AccessController.doPrivileged(
+            new PrivilegedAction<>() {
+                public Void run() {
+                    ThreadGroup tg = Thread.currentThread().getThreadGroup();
+                    for (ThreadGroup tgn = tg;
+                         tgn != null;
+                         tg = tgn, tgn = tg.getParent());
+                    Thread sft = new Thread(tg, proc, "Secondary finalizer", 0, false);
+                    sft.start();
+                    try {
+                        sft.join();
+                    } catch (InterruptedException x) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return null;
+                }});
+    }
+```
+
+#### runFinalizer
+
+use JavaLangAccess.invokeFinalize
+**after invoke finalize method, the reference set null so can't run finalize method twice**
+```java
+ private void runFinalizer(JavaLangAccess jla) {
+        synchronized (lock) {
+            if (this.next == this)      // already finalized
+                return;
+            // unlink from unfinalized
+            if (unfinalized == this)
+                unfinalized = this.next;
+            else
+                this.prev.next = this.next;
+            if (this.next != null)
+                this.next.prev = this.prev;
+            this.prev = null;
+            this.next = this;           // mark as finalized
+        }
+
+        try {
+            Object finalizee = this.get();
+            if (finalizee != null && !(finalizee instanceof java.lang.Enum)) {
+                jla.invokeFinalize(finalizee); // Invokes the finalize method of the given object.
+
+                // Clear stack slot containing this variable, to decrease the chances of false retention with a conservative GC
+                finalizee = null;
+            }
+        } catch (Throwable x) { }
+        super.clear();
+    }
+```
+
+#### FinalizerThread
+
+```java
+private static class FinalizerThread extends Thread {
+        private volatile boolean running;
+        FinalizerThread(ThreadGroup g) {
+            super(g, null, "Finalizer", 0, false);
+        }
+        public void run() {
+            // in case of recursive call to run()
+            if (running)
+                return;
+
+            // Finalizer thread starts before System.initializeSystemClass
+            // is called.  Wait until JavaLangAccess is available
+            while (VM.initLevel() == 0) {
+                // delay until VM completes initialization
+                try {
+                    VM.awaitInitLevel(1);
+                } catch (InterruptedException x) {
+                    // ignore and continue
+                }
+            }
+            final JavaLangAccess jla = SharedSecrets.getJavaLangAccess();
+            running = true;
+            for (;;) {
+                try {
+                    Finalizer f = (Finalizer)queue.remove();
+                    f.runFinalizer(jla);
+                } catch (InterruptedException x) {
+                    // ignore and continue
+                }
+            }
+        }
+    }
+```
+
+### When VM invoke register?
+
+```cpp
+
+IRT_ENTRY(void, InterpreterRuntime::register_finalizer(JavaThread* thread, oopDesc* obj))
+  assert(oopDesc::is_oop(obj), "must be a valid oop");
+  assert(obj->klass()->has_finalizer(), "shouldn't be here otherwise");
+  InstanceKlass::register_finalizer(instanceOop(obj), CHECK);
+IRT_END
+```
+
+```cpp
+// globals.hpp
+product(bool, RegisterFinalizersAtInit, true,                             \
+"Register finalizable objects at end of Object.<init> or "        \
+"after allocation")
+```
+
+also clone will invoke Finalizer.register()
+```cpp
+// instanceKlass.cpp
+instanceOop InstanceKlass::allocate_instance(TRAPS) {
+  bool has_finalizer_flag = has_finalizer(); // Query before possible GC
+  int size = size_helper();  // Query before forming handle.
+
+  instanceOop i;
+
+  i = (instanceOop)Universe::heap()->obj_allocate(this, size, CHECK_NULL);
+  if (has_finalizer_flag && !RegisterFinalizersAtInit) {
+    i = register_finalizer(i, CHECK_NULL);
+  }
+  return i;
+}
+```
+
+#### Rewriter::rewrite_Object_init
+The new finalization semantics says that registration of finalizable objects must be performed on successful return from the Object.<init> constructor.  We could implement this trivially if <init> were never rewritten but since JVMTI allows this to occur, a more complicated solution is required.  A special return bytecode is used only by Object.<init> to signal the finalization registration point.  Additionally local 0 must be preserved so it's available to pass to the registration function.  For simplicity we require that local 0 is never overwritten so it's available as an argument for registration.
+
+
+rewrite _return to _return_register_finalizer
+```cpp
+// rewriter.cpp
+void Rewriter::rewrite_Object_init(const methodHandle& method, TRAPS) {
+  RawBytecodeStream bcs(method);
+  while (!bcs.is_last_bytecode()) {
+    Bytecodes::Code opcode = bcs.raw_next();
+    switch (opcode) {
+      case Bytecodes::_return: *bcs.bcp() = Bytecodes::_return_register_finalizer; break;
+
+      case Bytecodes::_istore:
+      case Bytecodes::_lstore:
+      case Bytecodes::_fstore:
+      case Bytecodes::_dstore:
+      case Bytecodes::_astore:
+        if (bcs.get_index() != 0) continue;
+
+        // fall through
+      case Bytecodes::_istore_0:
+      case Bytecodes::_lstore_0:
+      case Bytecodes::_fstore_0:
+      case Bytecodes::_dstore_0:
+      case Bytecodes::_astore_0:
+        THROW_MSG(vmSymbols::java_lang_IncompatibleClassChangeError(),
+                  "can't overwrite local 0 in Object.<init>");
+        break;
+
+      default:
+        break;
+    }
+  }
+}
+```
 
 ### Cleaner
 
@@ -307,23 +572,11 @@ public final class Cleaner {
     }
 
     /**
-     * Returns a new {@code Cleaner}.
-     * <p>
-     * The cleaner creates a {@link Thread#setDaemon(boolean) daemon thread}
-     * to process the phantom reachable objects and to invoke cleaning actions.
-     * The {@linkplain java.lang.Thread#getContextClassLoader context class loader}
-     * of the thread is set to the
-     * {@link ClassLoader#getSystemClassLoader() system class loader}.
-     * The thread has no permissions, enforced only if a
-     * {@link java.lang.System#setSecurityManager(SecurityManager) SecurityManager is set}.
-     * <p>
-     * The cleaner terminates when it is phantom reachable and all of the
-     * registered cleaning actions are complete.
-     *
-     * @return a new {@code Cleaner}
-     *
-     * @throws  SecurityException  if the current thread is not allowed to
-     *               create or start the thread.
+     * Returns a new Cleaner.
+     * The cleaner creates a  daemon thread to process the phantom reachable objects and to invoke cleaning actions.
+     * The context class loader of the thread is set to the system class loader.
+     * The thread has no permissions, enforced only if a SecurityManager is set.
+     * The cleaner terminates when it is phantom reachable and all of the registered cleaning actions are complete.
      */
     public static Cleaner create() {
         Cleaner cleaner = new Cleaner();
@@ -332,25 +585,10 @@ public final class Cleaner {
     }
 
     /**
-     * Returns a new {@code Cleaner} using a {@code Thread} from the {@code ThreadFactory}.
-     * <p>
-     * A thread from the thread factory's {@link ThreadFactory#newThread(Runnable) newThread}
-     * method is set to be a {@link Thread#setDaemon(boolean) daemon thread}
-     * and started to process phantom reachable objects and invoke cleaning actions.
-     * On each call the {@link ThreadFactory#newThread(Runnable) thread factory}
-     * must provide a Thread that is suitable for performing the cleaning actions.
-     * <p>
-     * The cleaner terminates when it is phantom reachable and all of the
-     * registered cleaning actions are complete.
-     *
-     * @param threadFactory a {@code ThreadFactory} to return a new {@code Thread}
-     *                      to process cleaning actions
-     * @return a new {@code Cleaner}
-     *
-     * @throws  IllegalThreadStateException  if the thread from the thread
-     *               factory was {@link Thread.State#NEW not a new thread}.
-     * @throws  SecurityException  if the current thread is not allowed to
-     *               create or start the thread.
+     * Returns a new Cleaner using a Thread from the ThreadFactory.
+     * A thread from the thread factory's  newThread method is set to be a daemon thread and started to process phantom reachable objects and invoke cleaning actions.
+     * On each call the thread factory must provide a Thread that is suitable for performing the cleaning actions.
+     * The cleaner terminates when it is phantom reachable and all of the registered cleaning actions are complete.
      */
     public static Cleaner create(ThreadFactory threadFactory) {
         Objects.requireNonNull(threadFactory, "threadFactory");
@@ -364,10 +602,6 @@ public final class Cleaner {
      * becomes phantom reachable.
      * Refer to the <a href="#compatible-cleaners">API Note</a> above for
      * cautions about the behavior of cleaning actions.
-     *
-     * @param obj   the object to monitor
-     * @param action a {@code Runnable} to invoke when the object becomes phantom reachable
-     * @return a {@code Cleanable} instance
      */
     public Cleanable register(Object obj, Runnable action) {
         Objects.requireNonNull(obj, "obj");
@@ -376,15 +610,14 @@ public final class Cleaner {
     }
 
     /**
-     * {@code Cleanable} represents an object and a
-     * cleaning action registered in a {@code Cleaner}.
-     * @since 9
+     * Cleanable represents an object and a
+     * cleaning action registered in a Cleaner.
      */
     public interface Cleanable {
         /**
          * Unregisters the cleanable and invokes the cleaning action.
          * The cleanable's cleaning action is invoked at most once
-         * regardless of the number of calls to {@code clean}.
+         * regardless of the number of calls to clean}.
          */
         void clean();
     }
