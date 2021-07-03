@@ -315,6 +315,38 @@ static int ep_insert(struct eventpoll *ep, const struct epoll_event *event,
 ### epoll_wait
 
 
+// in fs/eventpoll.c
+
+invoke ep_poll
+
+
+ep_poll_callback
+
+tcp 内存使用slab分配
+
+dmidecode 查看CPU 内存信息
+每个CPU和它直接相连的内存条组成Node
+
+numactl --hardware
+查看Node情况
+Node划分为Zone
+
+```shell
+cat /proc/zoneinfo #查看zone信息
+```
+
+Zone包含Page 一般为4KB
+
+
+```shell
+cat /proc/slabinfo
+slabtop
+```
+slab_def.h
+
+mm/slab.h
+
+空establish 连接占用3.3KB左右
 
 Level-triggered and edge-triggered
 The epoll event distribution interface is able to behave both as edge-triggered (ET) and as level-triggered (LT).  The differ‐
@@ -699,6 +731,9 @@ fd_install to fdlist of process
 
 127.0.0.1 本机网络IO不需要经过网卡， 不经过Ring Buffer 直接把skb传送给协议接收栈， 可以通过BPF绕过内核协议栈，减少开销（Istio的sidecar代理与本地进程通信）
 
+## mmap
+
+## sendfile
 
 ## Reference
 

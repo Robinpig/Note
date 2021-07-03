@@ -572,6 +572,8 @@ prepare the memory in method area
 
 ### Initialization
 
+init when use `putstatic`,`getstatic`,`new`,`invokestatic`
+
 InstanceKlass::Initialize_impl()
 
 <clinit>
