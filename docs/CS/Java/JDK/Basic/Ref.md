@@ -395,7 +395,7 @@ final class Finalizer extends FinalReference<Object> {
 
 #### runFinalizer
 
-use JavaLangAccess.invokeFinalize
+use `JavaLangAccess#invokeFinalize()` run `finalize` method
 **after invoke finalize method, the reference set null so can't run finalize method twice**
 ```java
  private void runFinalizer(JavaLangAccess jla) {

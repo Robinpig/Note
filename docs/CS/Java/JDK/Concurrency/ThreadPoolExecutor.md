@@ -15,7 +15,7 @@ benefits：
 
 ![ThreadPoolExecutor](../images/ThreadPoolExecutor.png)
 
-### Executor
+## Executor
 
 *An object that executes submitted **Runnable** tasks. This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.*
 
@@ -203,7 +203,6 @@ public interface ScheduledExecutorService extends ExecutorService {
 
 
 
-
 ## ThreadPoolExecutor
 
 1. 线程池如何维护自身状态。
@@ -280,7 +279,7 @@ Transfer of state:
 
 
 
-#### create
+### create ThreadPoolExecutor
 
 Creates a new ThreadPoolExecutor with the given initial parameters:
 
@@ -329,7 +328,7 @@ public ThreadPoolExecutor(int corePoolSize,
 
 
 
-#### [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
+### [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
 
 阻塞队列(BlockingQueue)是一个支持两个附加操作的队列。这两个附加的操作是：在队列为空时，获取元素的线程会等待队列变为非空。当队列满时，存储元素的线程会等待队列可用。阻塞队列常用于生产者和消费者的场景，生产者是往队列里添加元素的线程，消费者是从队列里拿元素的线程。阻塞队列就是生产者存放元素的容器，而消费者也只从容器里拿元素。
 
@@ -345,7 +344,7 @@ public ThreadPoolExecutor(int corePoolSize,
 
 
 
-#### RejectedExecutionHandler
+### RejectedExecutionHandler
 
 *RejectedExecution method that may be invoked by a ThreadPoolExecutor when execute cannot accept a task.This may occur when **no more threads or queue slots are available** because :*
 
@@ -364,7 +363,7 @@ public ThreadPoolExecutor(int corePoolSize,
 
 
 
-#### execute
+### execute
 
 ```java
 /**
@@ -413,7 +412,7 @@ public void execute(Runnable command) {
 
 
 
-#### addWorker
+### addWorker
 
 ```java
 /**
@@ -822,7 +821,7 @@ final void tryTerminate() {
 
 
 
-#### shutdown
+### shutdown
 
 - 在getTask方法中，如果这时线程池的状态是SHUTDOWN并且workQueue为空，那么就应该返回null来结束这个工作线程，而使线程池进入SHUTDOWN状态需要调用shutdown方法；
 - shutdown方法会调用interruptIdleWorkers来中断空闲的线程，interruptIdleWorkers持有mainLock，会遍历workers来逐个判断工作线程是否空闲。但getTask方法中没有mainLock；
@@ -964,49 +963,21 @@ getState
 
 
 
+Creates a thread pool that maintains enough threads to support the given parallelism level, and may use multiple queues to reduce contention. The parallelism level corresponds to the maximum number of threads actively engaged in, or available to engage in, task processing. The actual number of threads may grow and shrink dynamically. A work-stealing pool makes no guarantees about the order in which submitted tasks are executed.
+
 ```java
-/**
- * Creates a thread pool that maintains enough threads to support
- * the given parallelism level, and may use multiple queues to
- * reduce contention. The parallelism level corresponds to the
- * maximum number of threads actively engaged in, or available to
- * engage in, task processing. The actual number of threads may
- * grow and shrink dynamically. A work-stealing pool makes no
- * guarantees about the order in which submitted tasks are
- * executed.
- */
 public static ExecutorService newWorkStealingPool(int parallelism) {
     return new ForkJoinPool
         (parallelism,
          ForkJoinPool.defaultForkJoinWorkerThreadFactory,
          null, true);
 }
+```
 
-/**
- * Creates a work-stealing thread pool using all
- * {@link Runtime#availableProcessors available processors}
- * as its target parallelism level.
- */
-public static ExecutorService newWorkStealingPool() {
-    return new ForkJoinPool
-        (Runtime.getRuntime().availableProcessors(),
-         ForkJoinPool.defaultForkJoinWorkerThreadFactory,
-         null, true);
-}
 
-/**
- * Creates a thread pool that reuses a fixed number of threads
- * operating off a shared unbounded queue, using the provided
- * ThreadFactory to create new threads when needed.  At any point,
- * at most {@code nThreads} threads will be active processing
- * tasks.  If additional tasks are submitted when all threads are
- * active, they will wait in the queue until a thread is
- * available.  If any thread terminates due to a failure during
- * execution prior to shutdown, a new one will take its place if
- * needed to execute subsequent tasks.  The threads in the pool will
- * exist until it is explicitly {@link ExecutorService#shutdown
- * shutdown}.
- */
+Creates a thread pool that reuses a fixed number of threads operating off a shared unbounded queue, using the provided ThreadFactory to create new threads when needed. At any point, at most nThreads threads will be active processing tasks. If additional tasks are submitted when all threads are active, they will wait in the queue until a thread is available. If any thread terminates due to a failure during execution prior to shutdown, a new one will take its place if needed to execute subsequent tasks. The threads in the pool will exist until it is explicitly shutdown.
+
+```java
 public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory threadFactory) {
     return new ThreadPoolExecutor(nThreads, nThreads,
                                   0L, TimeUnit.MILLISECONDS,
@@ -1016,14 +987,9 @@ public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory thr
 ```
 
 
+Creates a thread pool that creates new threads as needed, but will reuse previously constructed threads when they are available, and uses the provided ThreadFactory to create new threads when needed.
 
 ```java
-/**
- * Creates a thread pool that creates new threads as needed, but
- * will reuse previously constructed threads when they are
- * available, and uses the provided
- * ThreadFactory to create new threads when needed.
- */
 public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
     return new ThreadPoolExecutor(0, Integer.MAX_VALUE,
                                   60L, TimeUnit.SECONDS,
@@ -1033,16 +999,9 @@ public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
 ```
 
 
+Creates an Executor that uses a single worker thread operating off an unbounded queue, and uses the provided ThreadFactory to create a new thread when needed. Unlike the otherwise equivalent newFixedThreadPool(1, threadFactory) the returned executor is guaranteed not to be reconfigurable to use additional threads.
 
 ```java
-/**
- * Creates an Executor that uses a single worker thread operating
- * off an unbounded queue, and uses the provided ThreadFactory to
- * create a new thread when needed. Unlike the otherwise
- * equivalent {@code newFixedThreadPool(1, threadFactory)} the
- * returned executor is guaranteed not to be reconfigurable to use
- * additional threads.
- */
 public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactory) {
     return new FinalizableDelegatedExecutorService
         (new ThreadPoolExecutor(1, 1,
@@ -1055,14 +1014,9 @@ public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactor
 ```
 
 
+Creates a thread pool that can schedule commands to run after a given delay, or to execute periodically.
 
 ```java
-/**
- * Creates a thread pool that can schedule commands to run after a
- * given delay, or to execute periodically.
- * @param corePoolSize the number of threads to keep in the pool,
- * even if they are idle
- */
 public static ScheduledExecutorService newScheduledThreadPool(
         int corePoolSize, ThreadFactory threadFactory) {
     return new ScheduledThreadPoolExecutor(corePoolSize, threadFactory);
@@ -1071,8 +1025,7 @@ public static ScheduledExecutorService newScheduledThreadPool(
 
 
 
-## 参考资料
+## Reference
 
-- [1] JDK 1.8源码
-- [2] [深入理解Java线程池：ThreadPoolExecutor](http://www.ideabuffer.cn/2017/04/04/深入理解Java线程池：ThreadPoolExecutor/)
-- [3] [Java线程池实现原理及其在美团业务中的实践](https://tech.meituan.com/2020/04/02/java-pooling-pratice-in-meituan.html)
+1. [深入理解Java线程池：ThreadPoolExecutor](http://www.ideabuffer.cn/2017/04/04/深入理解Java线程池：ThreadPoolExecutor/)
+2. [Java线程池实现原理及其在美团业务中的实践](https://tech.meituan.com/2020/04/02/java-pooling-pratice-in-meituan.html)

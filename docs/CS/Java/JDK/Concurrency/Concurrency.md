@@ -53,7 +53,8 @@
 
 [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap)
 
-#### [Blocking Queue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
+
+#### [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
 
 
 
