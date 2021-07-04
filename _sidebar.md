@@ -11,6 +11,7 @@
         - [JDK](/docs/CS/Java/JDK/JDK.md)
           - [Basic](/docs/CS/Java/JDK/Basic/Basic.md)
             - [Object](/docs/CS/Java/JDK/Basic/Object.md)
+            - [SPI](/docs/CS/Java/JDK/Basic/SPI.md)
             - [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
             - [Ref](/docs/CS/Java/JDK/Basic/Ref.md)
             - [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
@@ -49,6 +50,8 @@
             - [Future](/docs/CS/Java/Netty/Future.md)
           
         - [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+        - [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+            - [SPI](/docs/CS/Java/Dubbo/SPI.md)
     - Go
     - Rust
     - Scala

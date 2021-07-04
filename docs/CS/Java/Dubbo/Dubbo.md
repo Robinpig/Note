@@ -1,11 +1,17 @@
-# Dubbo
+
+## Introduction
 
 [Apache Dubbo](http://dubbo.apache.org/) is a high-performance, java based open source RPC framework.
 
 ## Design
 
-![Dubbo Framework](/images/Dubbo/Dubbo-framework.png)
+### layers
+![Dubbo Framework](./images/Dubbo-framework.png)
 
+### packages
+![Dubbo-Packages](./images/Dubbo-Package.png)
+
+### cluster
 
 | 节点 |	角色说明 |
 | :---: | :---: |
@@ -24,7 +30,19 @@
 - 服务消费者，从提供者地址列表中，基于软负载均衡算法，选一台提供者进行调用，如果调用失败，再选另一台调用。
 - 服务消费者和提供者，在内存中累计调用次数和调用时间，定时每分钟发送一次统计数据到监控中心。
 
-## 协议
+## Package
+
+### SPI
+
+[SPI](/docs/CS/Java/Dubbo/SPI.md)
+
+use Adapter
+
+Wrapper class
+
+JavaAssist
+
+### Protocol
 
 | 协议名称   | 实现描述                                                     | 连接                                                         | 使用场景                                                     |
 | :--------- | :----------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
@@ -35,13 +53,6 @@
 | webservice | 传输：HTTP  序列化：SOAP文件序列化                           | 连接个数：多连接   连接方式：短连接   传输协议：HTTP   传输方式：同步传输 | 1.系统集成  2.跨语言调用                                     |
 | t
 
-## SPI
-
-use Adapter
-
-Wrapper class
-
-JavaAssist
 
 ## Transport
 AbstractServer.doOpen()->create a Netty or Mina Server.

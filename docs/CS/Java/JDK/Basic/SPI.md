@@ -231,3 +231,12 @@ public class DictionaryDemo {
 }
 ```
 
+
+
+## Summary
+
+
+
+1. Load all implemetions
+2. Less extensions
+3. exception not quite evidently
