@@ -113,7 +113,18 @@ Why use 31?
 2. 计算方便
 3. 散列均匀,不会有199这样会溢出的风险
 
+
+
 ```java
+/** Cache the hash code for the string */
+private int hash; // Default to 0
+
+/**
+ * Cache if the hash has been calculated as actually being zero, enabling
+ * us to avoid recalculating this.
+ */
+private boolean hashIsZero; // Default to false;
+
 public int hashCode() {
     // The hash or hashIsZero fields are subject to a benign data race,
     // making it crucial to ensure that any observable result of the
@@ -137,7 +148,39 @@ public int hashCode() {
 }
 ```
 
- 
+### equals
+```java
+    /**
+     * Compares this string to the specified object.  The result is {@code
+     * true} if and only if the argument is not {@code null} and is a {@code
+     * String} object that represents the same sequence of characters as this
+     * object.
+     *
+     * <p>For finer-grained String comparison, refer to
+     * {@link java.text.Collator}.
+     *
+     * @param  anObject
+     *         The object to compare this {@code String} against
+     *
+     * @return  {@code true} if the given object represents a {@code String}
+     *          equivalent to this string, {@code false} otherwise
+     *
+     * @see  #compareTo(String)
+     * @see  #equalsIgnoreCase(String)
+     */
+    public boolean equals(Object anObject) {
+        if (this == anObject) {
+            return true;
+        }
+        if (anObject instanceof String) {
+            String aString = (String)anObject;
+            if (!COMPACT_STRINGS || this.coder == aString.coder) {
+                return StringLatin1.equals(value, aString.value);
+            }
+        }
+        return false;
+    }
+```
 
 
 
