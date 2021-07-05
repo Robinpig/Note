@@ -77,3 +77,6 @@ ThreadPool Model
 
 GenericFilter
 
+### registry
+
+[registry](/docs/CS/Java/Dubbo/registry.md)
