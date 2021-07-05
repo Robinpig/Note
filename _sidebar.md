@@ -5,6 +5,9 @@
     - Network
         - [WebSocket](/docs/CS/CN/WebSocket.md)
     - Algorithms
+    - DataBase
+      - Redis
+        - [SDS](/docs/CS/DB/Redis/SDS.md)
     - C
     - C++
     - [Java](/docs/CS/Java/Java.md)

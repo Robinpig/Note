@@ -13,9 +13,7 @@ Redis is an open source (BSD licensed), in-memory data structure store, used as 
 
 
 
-## 数据类型
-
-
+## Data Type
 
 As you can see in the client structure above, arguments in a command
 are described as `robj` structures. The following is the full `robj`
@@ -33,17 +31,9 @@ typedef struct redisObject {
 } robj;
 ```
 
-Basically this structure can represent all the basic Redis data types like
-strings, lists, sets, sorted sets and so forth. The interesting thing is that
-it has a `type` field, so that it is possible to know what type a given
-object has, and a `refcount`, so that the same object can be referenced
-in multiple places without allocating it multiple times. Finally the `ptr`
-field points to the actual representation of the object, which might vary
-even for the same type, depending on the `encoding` used.
+Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth. The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times. Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
 
-Redis objects are used extensively in the Redis internals, however in order
-to avoid the overhead of indirect accesses, recently in many places
-we just use plain dynamic strings not wrapped inside a Redis object.
+Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
 
 
@@ -598,6 +588,12 @@ flushdb and flushall can add params to be async
 
 
 LFU
+
+
+
+### How fast is Redis?
+
+
 
 24bits
 
