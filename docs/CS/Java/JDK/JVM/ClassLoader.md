@@ -531,6 +531,403 @@ InstanceKlass* ClassFileParser::create_instance_klass(bool changed_by_loadhook,
 }
 ```
 
+
+
+#### InstanceKlass::allocate_instance_klass
+
+```cpp
+// instanceKlass.cpp
+InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& parser, TRAPS) {
+  const int size = InstanceKlass::size(parser.vtable_size(),
+                                       parser.itable_size(),
+                                       nonstatic_oop_map_size(parser.total_oop_map_count()),
+                                       parser.is_interface(),
+                                       parser.is_unsafe_anonymous(),
+                                       should_store_fingerprint(parser.is_unsafe_anonymous()));
+
+  const Symbol* const class_name = parser.class_name();
+  assert(class_name != NULL, "invariant");
+  ClassLoaderData* loader_data = parser.loader_data();
+  assert(loader_data != NULL, "invariant");
+
+  InstanceKlass* ik;
+
+  // Allocation
+  if (REF_NONE == parser.reference_type()) {
+    if (class_name == vmSymbols::java_lang_Class()) {
+      // mirror
+      ik = new (loader_data, size, THREAD) InstanceMirrorKlass(parser);
+    }
+    else if (is_class_loader(class_name, parser)) {
+      // class loader
+      ik = new (loader_data, size, THREAD) InstanceClassLoaderKlass(parser);
+    } else {
+      // normal
+      ik = new (loader_data, size, THREAD) InstanceKlass(parser, InstanceKlass::_misc_kind_other);
+    }
+  } else {
+    // reference
+    ik = new (loader_data, size, THREAD) InstanceRefKlass(parser);
+  }
+
+  // Check for pending exception before adding to the loader data and incrementing
+  // class count.  Can get OOM here.
+  if (HAS_PENDING_EXCEPTION) {
+    return NULL;
+  }
+
+  return ik;
+}
+```
+
+
+
+#### ClassFileParser::fill_instance_klass
+
+
+
+java_lang_Class::create_mirror
+
+```cpp
+void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loadhook, TRAPS) {
+  assert(ik != NULL, "invariant");
+
+  // Set name and CLD before adding to CLD
+  ik->set_class_loader_data(_loader_data);
+  ik->set_name(_class_name);
+
+  // Add all classes to our internal class loader list here,
+  // including classes in the bootstrap (NULL) class loader.
+  const bool publicize = !is_internal();
+
+  _loader_data->add_class(ik, publicize);
+
+  set_klass_to_deallocate(ik);
+
+  assert(_field_info != NULL, "invariant");
+  assert(ik->static_field_size() == _field_info->static_field_size, "sanity");
+  assert(ik->nonstatic_oop_map_count() == _field_info->total_oop_map_count,
+    "sanity");
+
+  assert(ik->is_instance_klass(), "sanity");
+  assert(ik->size_helper() == _field_info->instance_size, "sanity");
+
+  // Fill in information already parsed
+  ik->set_should_verify_class(_need_verify);
+
+  // Not yet: supers are done below to support the new subtype-checking fields
+  ik->set_nonstatic_field_size(_field_info->nonstatic_field_size);
+  ik->set_has_nonstatic_fields(_field_info->has_nonstatic_fields);
+  assert(_fac != NULL, "invariant");
+  ik->set_static_oop_field_count(_fac->count[STATIC_OOP]);
+
+  // this transfers ownership of a lot of arrays from
+  // the parser onto the InstanceKlass*
+  apply_parsed_class_metadata(ik, _java_fields_count, CHECK);
+
+  // note that is not safe to use the fields in the parser from this point on
+  assert(NULL == _cp, "invariant");
+  assert(NULL == _fields, "invariant");
+  assert(NULL == _methods, "invariant");
+  assert(NULL == _inner_classes, "invariant");
+  assert(NULL == _nest_members, "invariant");
+  assert(NULL == _local_interfaces, "invariant");
+  assert(NULL == _combined_annotations, "invariant");
+
+  if (_has_final_method) {
+    ik->set_has_final_method();
+  }
+
+  ik->copy_method_ordering(_method_ordering, CHECK);
+  // The InstanceKlass::_methods_jmethod_ids cache
+  // is managed on the assumption that the initial cache
+  // size is equal to the number of methods in the class. If
+  // that changes, then InstanceKlass::idnum_can_increment()
+  // has to be changed accordingly.
+  ik->set_initial_method_idnum(ik->methods()->length());
+
+  ik->set_this_class_index(_this_class_index);
+
+  if (is_unsafe_anonymous()) {
+    // _this_class_index is a CONSTANT_Class entry that refers to this
+    // anonymous class itself. If this class needs to refer to its own methods or
+    // fields, it would use a CONSTANT_MethodRef, etc, which would reference
+    // _this_class_index. However, because this class is anonymous (it's
+    // not stored in SystemDictionary), _this_class_index cannot be resolved
+    // with ConstantPool::klass_at_impl, which does a SystemDictionary lookup.
+    // Therefore, we must eagerly resolve _this_class_index now.
+    ik->constants()->klass_at_put(_this_class_index, ik);
+  }
+
+  ik->set_minor_version(_minor_version);
+  ik->set_major_version(_major_version);
+  ik->set_has_nonstatic_concrete_methods(_has_nonstatic_concrete_methods);
+  ik->set_declares_nonstatic_concrete_methods(_declares_nonstatic_concrete_methods);
+
+  if (_unsafe_anonymous_host != NULL) {
+    assert (ik->is_unsafe_anonymous(), "should be the same");
+    ik->set_unsafe_anonymous_host(_unsafe_anonymous_host);
+  }
+
+  // Set PackageEntry for this_klass
+  oop cl = ik->class_loader();
+  Handle clh = Handle(THREAD, java_lang_ClassLoader::non_reflection_class_loader(cl));
+  ClassLoaderData* cld = ClassLoaderData::class_loader_data_or_null(clh());
+  ik->set_package(cld, CHECK);
+
+  const Array<Method*>* const methods = ik->methods();
+  assert(methods != NULL, "invariant");
+  const int methods_len = methods->length();
+
+  check_methods_for_intrinsics(ik, methods);
+
+  // Fill in field values obtained by parse_classfile_attributes
+  if (_parsed_annotations->has_any_annotations()) {
+    _parsed_annotations->apply_to(ik);
+  }
+
+  apply_parsed_class_attributes(ik);
+
+  // Miranda methods
+  if ((_num_miranda_methods > 0) ||
+      // if this class introduced new miranda methods or
+      (_super_klass != NULL && _super_klass->has_miranda_methods())
+        // super class exists and this class inherited miranda methods
+     ) {
+       ik->set_has_miranda_methods(); // then set a flag
+  }
+
+  // Fill in information needed to compute superclasses.
+  ik->initialize_supers(const_cast<InstanceKlass*>(_super_klass), _transitive_interfaces, CHECK);
+  ik->set_transitive_interfaces(_transitive_interfaces);
+  _transitive_interfaces = NULL;
+
+  // Initialize itable offset tables
+  klassItable::setup_itable_offset_table(ik);
+
+  // Compute transitive closure of interfaces this class implements
+  // Do final class setup
+  fill_oop_maps(ik,
+                _field_info->nonstatic_oop_map_count,
+                _field_info->nonstatic_oop_offsets,
+                _field_info->nonstatic_oop_counts);
+
+  // Fill in has_finalizer, has_vanilla_constructor, and layout_helper
+  set_precomputed_flags(ik);
+
+  // check if this class can access its super class
+  check_super_class_access(ik, CHECK);
+
+  // check if this class can access its superinterfaces
+  check_super_interface_access(ik, CHECK);
+
+  // check if this class overrides any final method
+  check_final_method_override(ik, CHECK);
+
+  // reject static interface methods prior to Java 8
+  if (ik->is_interface() && _major_version < JAVA_8_VERSION) {
+    check_illegal_static_method(ik, CHECK);
+  }
+
+  // Obtain this_klass' module entry
+  ModuleEntry* module_entry = ik->module();
+  assert(module_entry != NULL, "module_entry should always be set");
+
+  // Obtain java.lang.Module
+  Handle module_handle(THREAD, module_entry->module());
+
+  // Allocate mirror and initialize static fields
+  // The create_mirror() call will also call compute_modifiers()
+  java_lang_Class::create_mirror(ik,
+                                 Handle(THREAD, _loader_data->class_loader()),
+                                 module_handle,
+                                 _protection_domain,
+                                 CHECK);
+
+  assert(_all_mirandas != NULL, "invariant");
+
+  // Generate any default methods - default methods are public interface methods
+  // that have a default implementation.  This is new with Java 8.
+  if (_has_nonstatic_concrete_methods) {
+    DefaultMethods::generate_default_methods(ik,
+                                             _all_mirandas,
+                                             CHECK);
+  }
+
+  // Add read edges to the unnamed modules of the bootstrap and app class loaders.
+  if (changed_by_loadhook && !module_handle.is_null() && module_entry->is_named() &&
+      !module_entry->has_default_read_edges()) {
+    if (!module_entry->set_has_default_read_edges()) {
+      // We won a potential race
+      JvmtiExport::add_default_read_edges(module_handle, THREAD);
+    }
+  }
+
+  ClassLoadingService::notify_class_loaded(ik, false /* not shared class */);
+
+  if (!is_internal()) {
+    if (log_is_enabled(Info, class, load)) {
+      ResourceMark rm;
+      const char* module_name = (module_entry->name() == NULL) ? UNNAMED_MODULE : module_entry->name()->as_C_string();
+      ik->print_class_load_logging(_loader_data, module_name, _stream);
+    }
+
+    if (ik->minor_version() == JAVA_PREVIEW_MINOR_VERSION &&
+        ik->major_version() != JAVA_MIN_SUPPORTED_VERSION &&
+        log_is_enabled(Info, class, preview)) {
+      ResourceMark rm;
+      log_info(class, preview)("Loading class %s that depends on preview features (class file version %d.65535)",
+                               ik->external_name(), ik->major_version());
+    }
+
+    if (log_is_enabled(Debug, class, resolve))  {
+      ResourceMark rm;
+      // print out the superclass.
+      const char * from = ik->external_name();
+      if (ik->java_super() != NULL) {
+        log_debug(class, resolve)("%s %s (super)",
+                   from,
+                   ik->java_super()->external_name());
+      }
+      // print out each of the interface classes referred to by this class.
+      const Array<InstanceKlass*>* const local_interfaces = ik->local_interfaces();
+      if (local_interfaces != NULL) {
+        const int length = local_interfaces->length();
+        for (int i = 0; i < length; i++) {
+          const InstanceKlass* const k = local_interfaces->at(i);
+          const char * to = k->external_name();
+          log_debug(class, resolve)("%s %s (interface)", from, to);
+        }
+      }
+    }
+  }
+
+  JFR_ONLY(INIT_ID(ik);)
+
+  // If we reach here, all is well.
+  // Now remove the InstanceKlass* from the _klass_to_deallocate field
+  // in order for it to not be destroyed in the ClassFileParser destructor.
+  set_klass_to_deallocate(NULL);
+
+  // it's official
+  set_klass(ik);
+
+  debug_only(ik->verify();)
+}
+```
+
+
+
+#### java_lang_Class::create_mirror
+
+```cpp
+// javaClasses.cpp
+void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
+                                    Handle module, Handle protection_domain, TRAPS) {
+  assert(k != NULL, "Use create_basic_type_mirror for primitive types");
+  assert(k->java_mirror() == NULL, "should only assign mirror once");
+
+  // Use this moment of initialization to cache modifier_flags also,
+  // to support Class.getModifiers().  Instance classes recalculate
+  // the cached flags after the class file is parsed, but before the
+  // class is put into the system dictionary.
+  int computed_modifiers = k->compute_modifier_flags(CHECK);
+  k->set_modifier_flags(computed_modifiers);
+  // Class_klass has to be loaded because it is used to allocate
+  // the mirror.
+  if (SystemDictionary::Class_klass_loaded()) {
+    // Allocate mirror (java.lang.Class instance)
+    oop mirror_oop = InstanceMirrorKlass::cast(SystemDictionary::Class_klass())->allocate_instance(k, CHECK);
+    Handle mirror(THREAD, mirror_oop);
+    Handle comp_mirror;
+
+    // Setup indirection from mirror->klass
+    java_lang_Class::set_klass(mirror(), k);
+
+    InstanceMirrorKlass* mk = InstanceMirrorKlass::cast(mirror->klass());
+    assert(oop_size(mirror()) == mk->instance_size(k), "should have been set");
+
+    java_lang_Class::set_static_oop_field_count(mirror(), mk->compute_static_oop_field_count(mirror()));
+
+    // It might also have a component mirror.  This mirror must already exist.
+    if (k->is_array_klass()) {
+      if (k->is_typeArray_klass()) {
+        BasicType type = TypeArrayKlass::cast(k)->element_type();
+        comp_mirror = Handle(THREAD, Universe::java_mirror(type));
+      } else {
+        assert(k->is_objArray_klass(), "Must be");
+        Klass* element_klass = ObjArrayKlass::cast(k)->element_klass();
+        assert(element_klass != NULL, "Must have an element klass");
+        comp_mirror = Handle(THREAD, element_klass->java_mirror());
+      }
+      assert(comp_mirror() != NULL, "must have a mirror");
+
+      // Two-way link between the array klass and its component mirror:
+      // (array_klass) k -> mirror -> component_mirror -> array_klass -> k
+      set_component_mirror(mirror(), comp_mirror());
+      // See below for ordering dependencies between field array_klass in component mirror
+      // and java_mirror in this klass.
+    } else {
+      assert(k->is_instance_klass(), "Must be");
+
+      initialize_mirror_fields(k, mirror, protection_domain, THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        // If any of the fields throws an exception like OOM remove the klass field
+        // from the mirror so GC doesn't follow it after the klass has been deallocated.
+        // This mirror looks like a primitive type, which logically it is because it
+        // it represents no class.
+        java_lang_Class::set_klass(mirror(), NULL);
+        return;
+      }
+    }
+
+    // set the classLoader field in the java_lang_Class instance
+    assert(oopDesc::equals(class_loader(), k->class_loader()), "should be same");
+    set_class_loader(mirror(), class_loader());
+
+    // Setup indirection from klass->mirror
+    // after any exceptions can happen during allocations.
+    k->set_java_mirror(mirror);
+
+    // Set the module field in the java_lang_Class instance.  This must be done
+    // after the mirror is set.
+    set_mirror_module_field(k, mirror, module, THREAD);
+
+    if (comp_mirror() != NULL) {
+      // Set after k->java_mirror() is published, because compiled code running
+      // concurrently doesn't expect a k to have a null java_mirror.
+      release_set_array_klass(comp_mirror(), k);
+    }
+  } else {
+    assert(fixup_mirror_list() != NULL, "fixup_mirror_list not initialized");
+    fixup_mirror_list()->push(k);
+  }
+}
+```
+
+
+
+#### InstanceKlass::allocate_instance
+
+todo **Universe::heap()->obj_allocate**
+
+```cpp
+instanceOop InstanceKlass::allocate_instance(TRAPS) {
+  bool has_finalizer_flag = has_finalizer(); // Query before possible GC
+  int size = size_helper();  // Query before forming handle.
+
+  instanceOop i;
+
+  i = (instanceOop)Universe::heap()->obj_allocate(this, size, CHECK_NULL);
+  if (has_finalizer_flag && !RegisterFinalizersAtInit) {
+    i = register_finalizer(i, CHECK_NULL);
+  }
+  return i;
+}
+```
+
+
+
 ### Linking
 
 InstanceKlass::link_class_impl()
