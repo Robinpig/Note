@@ -64,6 +64,7 @@
 - [webflux](/docs/CS/Java/Spring/webflux.md)
 
 ### [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+- [actuator](/docs/CS/Java/Spring_Boot/actuator.md)
 
 ### Spring Cloud
 - [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
