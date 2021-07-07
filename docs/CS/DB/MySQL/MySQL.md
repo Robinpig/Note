@@ -103,7 +103,7 @@ mysql> select version();
 
 
 
-#### MyISAM和InnoDB区别 
+#### MyISAM vs InnoDB 
 
   MyISAM:
 
@@ -143,7 +143,25 @@ storage file
 支持事务 外键 行级锁 MVCC 支持真正的在线热备份
 
 
+#### Q1
+一张表，里面有 ID 自增主键，当 insert 了 17 条记录之后，删除了第 15,16,17 条记录，
+再把 Mysql 重启，再 insert 一条记录，这条记录的 ID 是 18 还是 15 ？
+(1)如果表的类型是 MyISAM，那么是 18
+因为 MyISAM 表会把自增主键的最大 ID 记录到数据文件里，重启 MySQL 自增主键的最大
+ID 也不会丢失
+（ 2）如果表的类型是 InnoDB，那么是 15
+InnoDB 表只是把自增主键的最大 ID 记录到内存中，所以重启数据库或者是对表进行
+OPTIMIZE 操作，都会导致最大 ID 丢失
 
+#### What HEAP table is?
+HEAP 表存在于内存中，用于临时高速存储。
+BLOB 或 TEXT 字段是不允许的
+只能使用比较运算符=， <， >， =>， = <
+HEAP 表不支持 AUTO_INCREMENT
+索引不可为 NULL
+
+#### Auto Increment overflow
+duplicate key error
 ### Memory
 
 表描述文件frm在磁盘 表数据全在内存 使用Hash Index

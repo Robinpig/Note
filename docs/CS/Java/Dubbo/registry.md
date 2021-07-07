@@ -572,6 +572,9 @@ final Instance instance = createInstance(url);
 invoke [com.alibaba.nacos.client.naming.net.NamingProxy::registerService()](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/registry.md?id=registerService)
 ```java
 // org.apache.dubbo.registry.nacos.NacosNamingServiceWrapper
+
+private NamingService namingService;
+
 public void registerInstance(String serviceName, String group, Instance instance) throws NacosException {
         namingService.registerInstance(handleInnerSymbol(serviceName), group, instance);
     }
