@@ -135,6 +135,7 @@ public interface Registry extends Node, RegistryService {
     }
 }
 ```
+### FailbackRegistry
 
 ```java
 // FailbackRegistry. (SPI, Prototype, ThreadSafe)
@@ -545,3 +546,47 @@ public abstract class FailbackRegistry extends AbstractRegistry {
     }
 }
 ```
+
+
+### NacosRegistry
+
+```java
+// nacosRegistry
+
+@Override
+public void doRegister(URL url) {
+final String serviceName = getServiceName(url);
+
+final Instance instance = createInstance(url);
+        /**
+         *  namingService.registerInstance with {@link org.apache.dubbo.registry.support.AbstractRegistry#registryUrl}
+         *  default {@link DEFAULT_GROUP}
+         *
+         * in https://github.com/apache/dubbo/issues/5978
+         */
+        execute(namingService -> namingService.registerInstance(serviceName,
+        getUrl().getParameter(GROUP_KEY, Constants.DEFAULT_GROUP), instance));
+        }
+```
+
+invoke [com.alibaba.nacos.client.naming.net.NamingProxy::registerService()](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/registry.md?id=registerService)
+```java
+// org.apache.dubbo.registry.nacos.NacosNamingServiceWrapper
+public void registerInstance(String serviceName, String group, Instance instance) throws NacosException {
+        namingService.registerInstance(handleInnerSymbol(serviceName), group, instance);
+    }
+    
+// com.alibaba.nacos.client.naming.NacosNamingService
+@Override
+public void registerInstance(String serviceName, String groupName, Instance instance) throws NacosException {
+        NamingUtils.checkInstanceIsLegal(instance);
+        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+        if (instance.isEphemeral()) {
+        BeatInfo beatInfo = beatReactor.buildBeatInfo(groupedServiceName, instance);
+        beatReactor.addBeatInfo(groupedServiceName, beatInfo);
+        }
+        serverProxy.registerService(groupedServiceName, groupName, instance);
+}
+```
+
+
