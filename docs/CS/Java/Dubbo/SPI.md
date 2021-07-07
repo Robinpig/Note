@@ -226,7 +226,7 @@ private Class<?> getAdaptiveExtensionClass() {
 
 #### createAdaptiveExtensionClass
 
-**create Dynamic Class**
+**create Dynamic Class** by [AdaptiveClassCodeGenerator](/docs/CS/Java/Dubbo/SPi.md?id=AdaptiveClassCodeGenerator)
 
 ```java
 private Class<?> createAdaptiveExtensionClass() {
@@ -753,7 +753,7 @@ public String getExtensionName(Class<?> extensionClass) {
 
 
 
-### AdaptiveClassCodeGenerator#generate()
+### AdaptiveClassCodeGenerator
 
 ```java
 /**
@@ -787,6 +787,13 @@ public String generate() {
 
 ## Summary
 
-Dubbo SPI vs JDK SPI
+
+
+|        | JDK SPI         | Dubbo SPI |
+| ------ | --------------- | --------- |
+| load   | must load all   |           |
+| Source | only one source |           |
+|        |                 |           |
 
  
+

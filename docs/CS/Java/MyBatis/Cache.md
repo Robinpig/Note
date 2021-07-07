@@ -137,7 +137,7 @@ public class BlockingCache implements Cache {
 
 
 
-`new ReentrantLock when first get Cache`
+new [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) when first get Cache
 
 ```java
 private ReentrantLock getLockForKey(Object key) {

@@ -65,7 +65,7 @@ The `loadInstalled` method searches the runtime environment's extension director
 
 
 
-## Code
+## Sample
 
 
 
