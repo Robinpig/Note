@@ -107,7 +107,7 @@ robj *createObject(int type, void *ptr) {
 }
 ```
 
-### 键管理
+### Key
 
 - 获取所有的键应采用SCAN而非KEYS（易阻塞）
 - 删除键（较大）时使用UNLINK较DEL性能更好

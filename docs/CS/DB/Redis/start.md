@@ -1,5 +1,3 @@
-
-
 ## main
 
 
@@ -1620,6 +1618,116 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
 
 
 
+### InitServerLast
+
+```c
+/* Some steps in server initialization need to be done last (after modules
+ * are loaded).
+ * Specifically, creation of threads due to a race bug in ld.so, in which
+ * Thread Local Storage initialization collides with dlopen call.
+ * see: https://sourceware.org/bugzilla/show_bug.cgi?id=19329 */
+void InitServerLast() {
+    bioInit();
+    initThreadedIO();
+    set_jemalloc_bg_thread(server.jemalloc_bg_thread);
+    server.initial_memory_usage = zmalloc_used_memory();
+}
+```
+
+
+
+```c
+/* Initialize the data structures needed for threaded I/O. */
+void initThreadedIO(void) {
+    server.io_threads_active = 0; /* We start with threads not active. */
+
+    /* Don't spawn any thread if the user selected a single thread:
+     * we'll handle I/O directly from the main thread. */
+    if (server.io_threads_num == 1) return;
+
+    if (server.io_threads_num > IO_THREADS_MAX_NUM) {
+        serverLog(LL_WARNING,"Fatal: too many I/O threads configured. "
+                             "The maximum number is %d.", IO_THREADS_MAX_NUM);
+        exit(1);
+    }
+
+    /* Spawn and initialize the I/O threads. */
+    for (int i = 0; i < server.io_threads_num; i++) {
+        /* Things we do for all the threads including the main thread. */
+        io_threads_list[i] = listCreate();
+        if (i == 0) continue; /* Thread 0 is the main thread. */
+
+        /* Things we do only for the additional threads. */
+        pthread_t tid;
+        pthread_mutex_init(&io_threads_mutex[i],NULL);
+        io_threads_pending[i] = 0;
+        pthread_mutex_lock(&io_threads_mutex[i]); /* Thread will be stopped. */
+        if (pthread_create(&tid,NULL,IOThreadMain,(void*)(long)i) != 0) {
+            serverLog(LL_WARNING,"Fatal: Can't initialize IO thread.");
+            exit(1);
+        }
+        io_threads[i] = tid;
+    }
+}
+```
+
+
+
+#### IOThreadMain
+
+call `readQueryFromClient` when `IO_THREADS_OP_READ` in loop
+
+```c
+void *IOThreadMain(void *myid) {
+    /* The ID is the thread number (from 0 to server.iothreads_num-1), and is
+     * used by the thread to just manipulate a single sub-array of clients. */
+    long id = (unsigned long)myid;
+    char thdname[16];
+
+    snprintf(thdname, sizeof(thdname), "io_thd_%ld", id);
+    redis_set_thread_title(thdname);
+    redisSetCpuAffinity(server.server_cpulist);
+
+    while(1) {
+        /* Wait for start */
+        for (int j = 0; j < 1000000; j++) {
+            if (io_threads_pending[id] != 0) break;
+        }
+
+        /* Give the main thread a chance to stop this thread. */
+        if (io_threads_pending[id] == 0) {
+            pthread_mutex_lock(&io_threads_mutex[id]);
+            pthread_mutex_unlock(&io_threads_mutex[id]);
+            continue;
+        }
+
+        serverAssert(io_threads_pending[id] != 0);
+
+        if (tio_debug) printf("[%ld] %d to handle\n", id, (int)listLength(io_threads_list[id]));
+
+        /* Process: note that the main thread will never touch our list
+         * before we drop the pending count to 0. */
+        listIter li;
+        listNode *ln;
+        listRewind(io_threads_list[id],&li);
+        while((ln = listNext(&li))) {
+            client *c = listNodeValue(ln);
+            if (io_threads_op == IO_THREADS_OP_WRITE) {
+                writeToClient(c,0);
+            } else if (io_threads_op == IO_THREADS_OP_READ) {
+                readQueryFromClient(c->conn);
+            } else {
+                serverPanic("io_threads_op value is unknown");
+            }
+        }
+        listEmpty(io_threads_list[id]);
+        io_threads_pending[id] = 0;
+
+        if (tio_debug) printf("[%ld] Done\n", id);
+    }
+}
+```
+
 
 
 ### aeMain
@@ -1656,6 +1764,7 @@ Process every pending time event, then every pending file event (that may be reg
 The function returns the number of events processed. 
 
 ```c
+// ae.c
 int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 {
     int processed = 0, numevents;
@@ -1785,9 +1894,35 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 }
 ```
 
+#### aeSearchNearestTimer
 
+```c
+/* Search the first timer to fire.
+ * This operation is useful to know how many time the select can be
+ * put in sleep without to delay any event.
+ * If there are no timers NULL is returned.
+ *
+ * Note that's O(N) since time events are unsorted.
+ * Possible optimizations (not needed by Redis so far, but...):
+ * 1) Insert the event in order, so that the nearest is just the head.
+ *    Much better but still insertion or deletion of timers is O(N).
+ * 2) Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
+ */
+static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
+{
+    aeTimeEvent *te = eventLoop->timeEventHead;
+    aeTimeEvent *nearest = NULL;
 
-
+    while(te) {
+        if (!nearest || te->when_sec < nearest->when_sec ||
+                (te->when_sec == nearest->when_sec &&
+                 te->when_ms < nearest->when_ms))
+            nearest = te;
+        te = te->next;
+    }
+    return nearest;
+}
+```
 
 #### beforeSleep
 
@@ -1897,7 +2032,42 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
 }
 ```
 
+#### aeApiPoll
 
+```c
+// ae_kqueue.c
+static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
+    aeApiState *state = eventLoop->apidata;
+    int retval, numevents = 0;
+
+    if (tvp != NULL) {
+        struct timespec timeout;
+        timeout.tv_sec = tvp->tv_sec;
+        timeout.tv_nsec = tvp->tv_usec * 1000;
+        retval = kevent(state->kqfd, NULL, 0, state->events, eventLoop->setsize,
+                        &timeout);
+    } else {
+        retval = kevent(state->kqfd, NULL, 0, state->events, eventLoop->setsize,
+                        NULL);
+    }
+
+    if (retval > 0) {
+        int j;
+
+        numevents = retval;
+        for(j = 0; j < numevents; j++) {
+            int mask = 0;
+            struct kevent *e = state->events+j;
+
+            if (e->filter == EVFILT_READ) mask |= AE_READABLE;
+            if (e->filter == EVFILT_WRITE) mask |= AE_WRITABLE;
+            eventLoop->fired[j].fd = e->ident;
+            eventLoop->fired[j].mask = mask;
+        }
+    }
+    return numevents;
+}
+```
 
 #### afterSleep
 
@@ -1916,7 +2086,103 @@ void afterSleep(struct aeEventLoop *eventLoop) {
 
 
 
+#### processTimeEvents
+
+```c
+/* Process time events */
+static int processTimeEvents(aeEventLoop *eventLoop) {
+    int processed = 0;
+    aeTimeEvent *te;
+    long long maxId;
+    time_t now = time(NULL);
+
+    /* If the system clock is moved to the future, and then set back to the
+     * right value, time events may be delayed in a random way. Often this
+     * means that scheduled operations will not be performed soon enough.
+     *
+     * Here we try to detect system clock skews, and force all the time
+     * events to be processed ASAP when this happens: the idea is that
+     * processing events earlier is less dangerous than delaying them
+     * indefinitely, and practice suggests it is. */
+    if (now < eventLoop->lastTime) {
+        te = eventLoop->timeEventHead;
+        while(te) {
+            te->when_sec = 0;
+            te = te->next;
+        }
+    }
+    eventLoop->lastTime = now;
+
+    te = eventLoop->timeEventHead;
+    maxId = eventLoop->timeEventNextId-1;
+    while(te) {
+        long now_sec, now_ms;
+        long long id;
+
+        /* Remove events scheduled for deletion. */
+        if (te->id == AE_DELETED_EVENT_ID) {
+            aeTimeEvent *next = te->next;
+            /* If a reference exists for this timer event,
+             * don't free it. This is currently incremented
+             * for recursive timerProc calls */
+            if (te->refcount) {
+                te = next;
+                continue;
+            }
+            if (te->prev)
+                te->prev->next = te->next;
+            else
+                eventLoop->timeEventHead = te->next;
+            if (te->next)
+                te->next->prev = te->prev;
+            if (te->finalizerProc)
+                te->finalizerProc(eventLoop, te->clientData);
+            zfree(te);
+            te = next;
+            continue;
+        }
+
+        /* Make sure we don't process time events created by time events in
+         * this iteration. Note that this check is currently useless: we always
+         * add new timers on the head, however if we change the implementation
+         * detail, this check may be useful again: we keep it here for future
+         * defense. */
+        if (te->id > maxId) {
+            te = te->next;
+            continue;
+        }
+        aeGetTime(&now_sec, &now_ms);
+        if (now_sec > te->when_sec ||
+            (now_sec == te->when_sec && now_ms >= te->when_ms))
+        {
+            int retval;
+
+            id = te->id;
+            te->refcount++;
+            retval = te->timeProc(eventLoop, id, te->clientData);
+            te->refcount--;
+            processed++;
+            if (retval != AE_NOMORE) {
+                aeAddMillisecondsToNow(retval,&te->when_sec,&te->when_ms);
+            } else {
+                te->id = AE_DELETED_EVENT_ID;
+            }
+        }
+        te = te->next;
+    }
+    return processed;
+}
+```
+
+
+
+## Do
+
+
+
 #### readQueryFromClient
+
+`readQueryFromClient()` is the ***readable event handler*** and accumulates data from read from the client into the query buffer.
 
 ```c
 void readQueryFromClient(connection *conn) {
