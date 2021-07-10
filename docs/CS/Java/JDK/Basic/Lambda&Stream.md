@@ -36,9 +36,8 @@ public static void main(java.lang.String[]);
 
 
 
-### Lambda
+### invokedynamic
 
-- invokedynamic
 
 ```java
  public static void main(String[] args) {
@@ -47,7 +46,7 @@ public static void main(java.lang.String[]);
     }
 ```
 
-```java
+```
  public static void main(java.lang.String[]);
     Code:
        0: new           #2                  // class java/lang/Thread
@@ -58,7 +57,24 @@ public static void main(java.lang.String[]);
       13: return
 ```
 
+javap
+```
+InnerClasses:
+  public static final #58= #57 of #61;    // Lookup=class java/lang/invoke/MethodHandles$Lookup of class java/lang/invoke/MethodHandles
+BootstrapMethods:
+  0: #29 REF_invokeStatic java/lang/invoke/LambdaMetafactory.metafactory:(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)Ljava/lang/invoke/CallSite;
+    Method arguments:
+      #30 ()V
+      #31 REF_invokeStatic com/yh/framework/netty/thread/FastThreadLocalTest.lambda$main$0:()V
+      #30 ()V
+```
 
+CallSite
+
+java.lang.invoke.CallSite
+
+1. 使用invokedynamic指令，运行时调用LambdaMetafactory.metafactory动态的生成内部类，实现了接口，
+2. 内部类里的调用方法块并不是动态生成的，只是在原class里已经编译生成了一个静态的方法，内部类只需要调用该静态方法
 
 Compare
 
@@ -233,3 +249,8 @@ use Predicate interface
 ### Parallel Stream
 
 based on `ForkJoinPool.commonPool()`
+
+
+## Reference
+
+1. [底层原理之旅—带你看透Lambda表达式的本质](https://juejin.cn/post/6966839856421044237)

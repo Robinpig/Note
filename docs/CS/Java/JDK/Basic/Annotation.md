@@ -1,10 +1,18 @@
+## Introduction
+
+
+
 ### Annotation Hierarchy
 
 ![Annotation](../images/Annotation.png)
 
 *The common interface extended by all annotation types. Note that an interface that manually extends this one does not define an annotation type. Also note that this interface does not itself define an annotation type. More information about annotation types can be found in section 9.6 of The Java Language Specification. The reflect.AnnotatedElement interface discusses compatibility concerns when evolving an annotation type from being non-repeatable to being repeatable.*
 
-## Introduction
+## 
+
+
+
+## See
 
 For example, see `@ResponseBody`:
 
@@ -119,18 +127,10 @@ public enum ElementType {
     /** Package declaration */
     PACKAGE,
 
-    /**
-     * Type parameter declaration
-     *
-     * @since 1.8
-     */
+    // Type parameter declaration
     TYPE_PARAMETER,
 
-    /**
-     * Use of a type
-     *
-     * @since 1.8
-     */
+    // Use of a type
     TYPE_USE
 }
 
@@ -150,10 +150,6 @@ public enum ElementType {
  * meta-annotated type is used directly for annotation.  It has no
  * effect if the meta-annotated type is used as a member type in
  * another annotation type.
- *
- * @author  Joshua Bloch
- * @since 1.5
- * @jls 9.6.3.2 @Retention
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
@@ -262,10 +258,6 @@ public @interface Documented {
  * that this meta-annotation only causes annotations to be inherited
  * from superclasses; annotations on implemented interfaces have no
  * effect.
- *
- * @author  Joshua Bloch
- * @since 1.5
- * @jls 9.6.3.3 @Inherited
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
@@ -274,41 +266,14 @@ public @interface Inherited {
 }
 ```
 
-### Example
 
-see dubbo `@SPI` getExtension
+
+## Implemention
+
+see [Dubbo SPI](/docs/CS/Java/Dubbo/SPI.md)
 
 
 ```java
-
-/**
- * Marker for extension interface
- * <p/>
- * Changes on extension configuration file <br/>
- * Use <code>Protocol</code> as an example, its configuration file 'META-INF/dubbo/com.xxx.Protocol' is changed from: <br/>
- * <pre>
- *     com.foo.XxxProtocol
- *     com.foo.YyyProtocol
- * </pre>
- * <p>
- * to key-value pair <br/>
- * <pre>
- *     xxx=com.foo.XxxProtocol
- *     yyy=com.foo.YyyProtocol
- * </pre>
- * <br/>
- * The reason for this change is:
- * <p>
- * If there's third party library referenced by static field or by method in extension implementation, its class will
- * fail to initialize if the third party library doesn't exist. In this case, dubbo cannot figure out extension's id
- * therefore cannot be able to map the exception information with the extension, if the previous format is used.
- * <p/>
- * For example:
- * <p>
- * Fails to load Extension("mina"). When user configure to use mina, dubbo will complain the extension cannot be loaded,
- * instead of reporting which extract extension implementation fails and the extract reason.
- * </p>
- */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
@@ -322,28 +287,3 @@ public @interface SPI {
 }
 ```
 
-```java
-package org.apache.dubbo.common.extension.factory;
-
-import org.apache.dubbo.common.extension.ExtensionFactory;
-import org.apache.dubbo.common.extension.ExtensionLoader;
-import org.apache.dubbo.common.extension.SPI;
-
-/**
- * SpiExtensionFactory
- */
-public class SpiExtensionFactory implements ExtensionFactory {
-
-    @Override
-    public <T> T getExtension(Class<T> type, String name) {
-        if (type.isInterface() && type.isAnnotationPresent(SPI.class)) {
-            ExtensionLoader<T> loader = ExtensionLoader.getExtensionLoader(type);
-            if (!loader.getSupportedExtensions().isEmpty()) {
-                return loader.getAdaptiveExtension();
-            }
-        }
-        return null;
-    }
-
-}
-```

@@ -150,7 +150,70 @@ Deques can also be used as LIFO (Last-In-First-Out) stacks. This interface shoul
 
 ### ArrayDeque
 
+
+
+Resizable-array implementation of the Deque interface. Array deques have no capacity restrictions; they grow as necessary to support usage. They are not thread-safe; in the absence of external synchronization, they do not support concurrent access by multiple threads. Null elements are prohibited. This class is likely to be faster than Stack when used as a stack, and faster than LinkedList when used as a queue.
+
+Most ArrayDeque operations run in amortized constant time. Exceptions include remove, removeFirstOccurrence, removeLastOccurrence, contains, iterator.remove(), and the bulk operations, all of which run in linear time.
+
+The iterators returned by this class's iterator method are fail-fast: If the deque is modified at any time after the iterator is created, in any way except through the iterator's own remove method, the iterator will generally throw a **ConcurrentModificationException**. Thus, in the face of concurrent modification, the iterator fails quickly and cleanly, rather than risking arbitrary, non-deterministic behavior at an undetermined time in the future.
+
+Note that the fail-fast behavior of an iterator cannot be guaranteed as it is, generally speaking, impossible to make any hard guarantees in the presence of unsynchronized concurrent modification. Fail-fast iterators throw ConcurrentModificationException on a best-effort basis. Therefore, it would be wrong to write a program that depended on this exception for its correctness: the fail-fast behavior of iterators should be used only to detect bugs.
+
+This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces.
+
+
+
+```java
+    /*
+     * VMs excel at optimizing simple array loops where indices are
+     * incrementing or decrementing over a valid slice, e.g.
+     *
+     * for (int i = start; i < end; i++) ... elements[i]
+     *
+     * Because in a circular array, elements are in general stored in
+     * two disjoint such slices, we help the VM by writing unusual
+     * nested loops for all traversals over the elements.  Having only
+     * one hot inner loop body instead of two or three eases human
+     * maintenance and encourages VM loop inlining into the caller.
+     */
+
+    /**
+     * The array in which the elements of the deque are stored.
+     * All array cells not holding deque elements are always null.
+     * The array always has at least one null slot (at tail).
+     */
+    transient Object[] elements;
+
+    /**
+     * The index of the element at the head of the deque (which is the
+     * element that would be removed by remove() or pop()); or an
+     * arbitrary number 0 <= head < elements.length equal to tail if
+     * the deque is empty.
+     */
+    transient int head;
+
+    /**
+     * The index at which the next element would be added to the tail
+     * of the deque (via addLast(E), add(E), or push(E));
+     * elements[tail] is always null.
+     */
+    transient int tail;
+
+    /**
+     * The maximum size of array to allocate.
+     * Some VMs reserve some header words in an array.
+     * Attempts to allocate larger arrays may result in
+     * OutOfMemoryError: Requested array size exceeds VM limit
+     */
+    private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+```
+
+
+
 ## PriorityQueue
+
+
 
 ## BlockingQueue
 
@@ -226,4 +289,10 @@ public int remainingCapacity(){
 ```
 
 #### TransferQueue
+
+
+
+## Summary
+
+
 
