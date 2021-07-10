@@ -4,7 +4,10 @@
 
  [CS](/docs/CS/CS.md)
 
+## Operating System
 
+### Linux
+- [thundering herd](/docs/CS/OS/Linux/thundering_herd.md)
 
 ## Network
     
