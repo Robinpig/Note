@@ -607,88 +607,96 @@ private Class<?> createEnhancedSubclass(RootBeanDefinition beanDefinition) {
 }
 ```
 
+
+
 #### populateBean
 
+
+
 ```java
+/**
+ * Populate the bean instance in the given BeanWrapper with the property values
+ * from the bean definition.
+ * @param beanName the name of the bean
+ * @param mbd the bean definition for the bean
+ * @param bw the BeanWrapper with bean instance
+ */
+@SuppressWarnings("deprecation")  // for postProcessPropertyValues
 protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable BeanWrapper bw) {
-		if (bw == null) {
-			if (mbd.hasPropertyValues()) {
-				throw new BeanCreationException(
-						mbd.getResourceDescription(), beanName, "Cannot apply property values to null instance");
-			}
-			else {
-				// Skip property population phase for null instance.
-				return;
-			}
-		}
+   if (bw == null) {
+      if (mbd.hasPropertyValues()) {
+         throw new BeanCreationException(
+               mbd.getResourceDescription(), beanName, "Cannot apply property values to null instance");
+      }
+      else {
+         // Skip property population phase for null instance.
+         return;
+      }
+   }
 
-		// Give any InstantiationAwareBeanPostProcessors the opportunity to modify the
-		// state of the bean before properties are set. This can be used, for example,
-		// to support styles of field injection.
-		if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
-			for (BeanPostProcessor bp : getBeanPostProcessors()) {
-				if (bp instanceof InstantiationAwareBeanPostProcessor) {
-					InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
-					if (!ibp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
-						return;
-					}
-				}
-			}
-		}
+   // Give any InstantiationAwareBeanPostProcessors the opportunity to modify the
+   // state of the bean before properties are set. This can be used, for example,
+   // to support styles of field injection.
+   if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+      for (InstantiationAwareBeanPostProcessor bp : getBeanPostProcessorCache().instantiationAware) {
+         if (!bp.postProcessAfterInstantiation(bw.getWrappedInstance(), beanName)) {
+            return;
+         }
+      }
+   }
 
-		PropertyValues pvs = (mbd.hasPropertyValues() ? mbd.getPropertyValues() : null);
+   PropertyValues pvs = (mbd.hasPropertyValues() ? mbd.getPropertyValues() : null);
 
-		int resolvedAutowireMode = mbd.getResolvedAutowireMode();
-		if (resolvedAutowireMode == AUTOWIRE_BY_NAME || resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
-			MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
-			// Add property values based on autowire by name if applicable.
-			if (resolvedAutowireMode == AUTOWIRE_BY_NAME) {
-				autowireByName(beanName, mbd, bw, newPvs);
-			}
-			// Add property values based on autowire by type if applicable.
-			if (resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
-				autowireByType(beanName, mbd, bw, newPvs);
-			}
-			pvs = newPvs;
-		}
+   int resolvedAutowireMode = mbd.getResolvedAutowireMode();
+   if (resolvedAutowireMode == AUTOWIRE_BY_NAME || resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
+      MutablePropertyValues newPvs = new MutablePropertyValues(pvs);
+      // Add property values based on autowire by name if applicable.
+      if (resolvedAutowireMode == AUTOWIRE_BY_NAME) {
+         autowireByName(beanName, mbd, bw, newPvs);
+      }
+      // Add property values based on autowire by type if applicable.
+      if (resolvedAutowireMode == AUTOWIRE_BY_TYPE) {
+         autowireByType(beanName, mbd, bw, newPvs);
+      }
+      pvs = newPvs;
+   }
 
-		boolean hasInstAwareBpps = hasInstantiationAwareBeanPostProcessors();
-		boolean needsDepCheck = (mbd.getDependencyCheck() != AbstractBeanDefinition.DEPENDENCY_CHECK_NONE);
+   boolean hasInstAwareBpps = hasInstantiationAwareBeanPostProcessors();
+   boolean needsDepCheck = (mbd.getDependencyCheck() != AbstractBeanDefinition.DEPENDENCY_CHECK_NONE);
 
-		PropertyDescriptor[] filteredPds = null;
-		if (hasInstAwareBpps) {
-			if (pvs == null) {
-				pvs = mbd.getPropertyValues();
-			}
-			for (BeanPostProcessor bp : getBeanPostProcessors()) {
-				if (bp instanceof InstantiationAwareBeanPostProcessor) {
-					InstantiationAwareBeanPostProcessor ibp = (InstantiationAwareBeanPostProcessor) bp;
-					PropertyValues pvsToUse = ibp.postProcessProperties(pvs, bw.getWrappedInstance(), beanName);
-					if (pvsToUse == null) {
-						if (filteredPds == null) {
-							filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
-						}
-						pvsToUse = ibp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
-						if (pvsToUse == null) {
-							return;
-						}
-					}
-					pvs = pvsToUse;
-				}
-			}
-		}
-		if (needsDepCheck) {
-			if (filteredPds == null) {
-				filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
-			}
-			checkDependencies(beanName, mbd, filteredPds, pvs);
-		}
+   PropertyDescriptor[] filteredPds = null;
+   if (hasInstAwareBpps) {
+      if (pvs == null) {
+         pvs = mbd.getPropertyValues();
+      }
+      for (InstantiationAwareBeanPostProcessor bp : getBeanPostProcessorCache().instantiationAware) {
+         PropertyValues pvsToUse = bp.postProcessProperties(pvs, bw.getWrappedInstance(), beanName);
+         if (pvsToUse == null) {
+            if (filteredPds == null) {
+               filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
+            }
+            pvsToUse = bp.postProcessPropertyValues(pvs, filteredPds, bw.getWrappedInstance(), beanName);
+            if (pvsToUse == null) {
+               return;
+            }
+         }
+         pvs = pvsToUse;
+      }
+   }
+   if (needsDepCheck) {
+      if (filteredPds == null) {
+         filteredPds = filterPropertyDescriptorsForDependencyCheck(bw, mbd.allowCaching);
+      }
+      checkDependencies(beanName, mbd, filteredPds, pvs);
+   }
 
-		if (pvs != null) {
-			applyPropertyValues(beanName, mbd, bw, pvs);
-		}
-	}
+   if (pvs != null) {
+      applyPropertyValues(beanName, mbd, bw, pvs);
+   }
+}
 ```
+
+
 
 BeanDefinitionValueResolver
 
