@@ -40,7 +40,7 @@ public class DiscardServer {
             // Wait until the server socket is closed.
             // In this example, this does not happen, but you can do that to gracefully
             // shut down your server.
-            f.channel().closeFuture().sync();
+            f.channel().closeFuture().sync(); // (8)
         } finally {
             workerGroup.shutdownGracefully();
             bossGroup.shutdownGracefully();
@@ -62,12 +62,16 @@ public class DiscardServer {
 
 1. [Create EventLoopGroup](/docs/CS/Java/Netty/EventLoop.md?id=create-nioeventloopgroup)
 2. [Create ServerBootstrap](/docs/CS/Java/Netty/Bootstrap.md?id=create-serverbootstrap)
-
-
-
+3. Set [Channel](/docs/CS/Java/Netty/Channel.md)
+4. Set [ChannelHandler](/docs/CS/Java/Netty/ChannelHandler.md)
+5. Option
+6. ChildOption
 7. [ServerBootstrap#bind()](/docs/CS/Java/Netty/Bootstrap.md?id=serverbootstrapbind-)
+8. [ChannelFuture](/docs/CS/Java/Netty/Future.md)
 
 
+
+## Under Hood
 
 AllocateByteBuf
 
