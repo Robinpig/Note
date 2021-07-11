@@ -9,7 +9,6 @@ IoC(`Inversion of Control`) depends on DI(`Dependency Injection`) in Spring
 
 ![Beanfactory ](./images/BeanFactory.png)
 
-
 ***第一条接口设计主线*** 从接口**BeanFactory**到**HierarchicalBeanFactory** 再到**ConfigurableBeanFactory** 是一条主要的BeanFactory设计路径
 
 ***第二条接口设计主线*** 以**ApplicationContext**应用上下文接口为核心的接口设计 这里涉及的主要接口设计有 从BeanFactory到**ListableBeanFactory** 再到ApplicationContext 再到常用的WebApplicationContext或者ConfigurableApplicationContext
@@ -88,6 +87,10 @@ etAliases()
 - **BeanFactory** 是Factory 也就是IoC容器或对象工厂  所有的Bean都是由BeanFactory（也就是IoC容器）来进行管理的
 
 #### AbstractBeanFactory
+
+
+
+#### doGetBean
 
 ```java
 
@@ -255,15 +258,12 @@ protected <T> T doGetBean(
 	}
 ```
 
+#### createBean
 
-createBean
 ```java
+// AbstractAutowireCapableBeanFactory
 protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
 			throws BeanCreationException {
-
-		if (logger.isTraceEnabled()) {
-			logger.trace("Creating instance of bean '" + beanName + "'");
-		}
 		RootBeanDefinition mbdToUse = mbd;
 
 		// Make sure bean class is actually resolved at this point, and
@@ -298,9 +298,6 @@ protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable O
 
 		try {
 			Object beanInstance = doCreateBean(beanName, mbdToUse, args);
-			if (logger.isTraceEnabled()) {
-				logger.trace("Finished creating instance of bean '" + beanName + "'");
-			}
 			return beanInstance;
 		}
 		catch (BeanCreationException | ImplicitlyAppearedSingletonException ex) {
@@ -506,7 +503,7 @@ protected BeanWrapper instantiateBean(String beanName, RootBeanDefinition mbd) {
 
 
 ```java
-
+// SimpleInstantiationStrategy
 	@Override
 	public Object instantiate(RootBeanDefinition bd, @Nullable String beanName, BeanFactory owner) {
 		// Don't override the class with CGLIB if no overrides.
@@ -553,6 +550,61 @@ protected BeanWrapper instantiateBean(String beanName, RootBeanDefinition mbd) {
 		// Must generate CGLIB subclass...
 		return new CglibSubclassCreator(bd, owner).instantiate(ctor, args);
 	}
+```
+
+
+
+```java
+/** CglibSubclassingInstantiationStrategy.CglibSubclassCreator
+ * Create a new instance of a dynamically generated subclass implementing the
+ * required lookups.
+ * @param ctor constructor to use. If this is {@code null}, use the
+ * no-arg constructor (no parameterization, or Setter Injection)
+ * @param args arguments to use for the constructor.
+ * Ignored if the {@code ctor} parameter is {@code null}.
+ * @return new instance of the dynamically generated subclass
+ */
+public Object instantiate(@Nullable Constructor<?> ctor, Object... args) {
+   Class<?> subclass = createEnhancedSubclass(this.beanDefinition);
+   Object instance;
+   if (ctor == null) {
+      instance = BeanUtils.instantiateClass(subclass);
+   }
+   else {
+      try {
+         Constructor<?> enhancedSubclassConstructor = subclass.getConstructor(ctor.getParameterTypes());
+         instance = enhancedSubclassConstructor.newInstance(args);
+      }
+      catch (Exception ex) {
+         throw new BeanInstantiationException(this.beanDefinition.getBeanClass(),
+               "Failed to invoke constructor for CGLIB enhanced subclass [" + subclass.getName() + "]", ex);
+      }
+   }
+   // SPR-10785: set callbacks directly on the instance instead of in the
+   // enhanced class (via the Enhancer) in order to avoid memory leaks.
+   Factory factory = (Factory) instance;
+   factory.setCallbacks(new Callback[] {NoOp.INSTANCE,
+         new LookupOverrideMethodInterceptor(this.beanDefinition, this.owner),
+         new ReplaceOverrideMethodInterceptor(this.beanDefinition, this.owner)});
+   return instance;
+}
+
+/**
+ * Create an enhanced subclass of the bean class for the provided bean
+ * definition, using CGLIB.
+ */
+private Class<?> createEnhancedSubclass(RootBeanDefinition beanDefinition) {
+   Enhancer enhancer = new Enhancer();
+   enhancer.setSuperclass(beanDefinition.getBeanClass());
+   enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
+   if (this.owner instanceof ConfigurableBeanFactory) {
+      ClassLoader cl = ((ConfigurableBeanFactory) this.owner).getBeanClassLoader();
+      enhancer.setStrategy(new ClassLoaderAwareGeneratorStrategy(cl));
+   }
+   enhancer.setCallbackFilter(new MethodOverrideCallbackFilter(beanDefinition));
+   enhancer.setCallbackTypes(CALLBACK_TYPES);
+   return enhancer.createClass();
+}
 ```
 
 #### populateBean
@@ -659,9 +711,9 @@ IoC 的功能在低级容器⾥就可以实现
 > - **支持应用事件** 继承了接口ApplicationEventPublisher 从而在上下文中引入了事件机制 这些事件和Bean的生命周期的结合为Bean的管理提供了便利
 > - **其它附加服务** 这些服务使得基本IoC容器的功能更丰富
 
-#### AbstractApplicationContext#refresh()
+### refresh
 
-refresh()在ConfigurableApplicationContext接口声明
+declared in `ConfigurableApplicationContext`
  启动包括**BeanDefinition的Resouce定位 载入和注册**
  BeanDefinition 是依赖反转模式中管理的对象依赖关系的数据抽象 也是容器实现依赖反转功能的核心数据结构
  以下是AbstractApplicationContext重写的refresh()
@@ -732,6 +784,171 @@ refresh()在ConfigurableApplicationContext接口声明
 			}
 		}
 	}
+```
+
+
+
+
+
+```java
+/**
+ * Tell the subclass to refresh the internal bean factory.
+ * @return the fresh BeanFactory instance
+ * @see #refreshBeanFactory()
+ * @see #getBeanFactory()
+ */
+protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
+   refreshBeanFactory();
+   ConfigurableListableBeanFactory beanFactory = getBeanFactory();
+   if (logger.isDebugEnabled()) {
+      logger.debug("Bean factory for " + getDisplayName() + ": " + beanFactory);
+   }
+   return beanFactory;
+}
+```
+
+```java
+/**
+ * This implementation performs an actual refresh of this context's underlying
+ * bean factory, shutting down the previous bean factory (if any) and
+ * initializing a fresh bean factory for the next phase of the context's lifecycle.
+ */
+// AbstractRefreshableApplicationContext::refreshBeanFactory()
+@Override
+protected final void refreshBeanFactory() throws BeansException {
+   if (hasBeanFactory()) {
+      destroyBeans();
+      closeBeanFactory();
+   }
+   try {
+      DefaultListableBeanFactory beanFactory = createBeanFactory();
+      beanFactory.setSerializationId(getId());
+      customizeBeanFactory(beanFactory);
+      loadBeanDefinitions(beanFactory);
+      this.beanFactory = beanFactory;
+   }
+   catch (IOException ex) {
+      throw new ApplicationContextException("I/O error parsing bean definition source for " + getDisplayName(), ex);
+   }
+}
+```
+
+
+
+
+
+```java
+/** AbstractXmlApplicationContext
+ * Loads the bean definitions via an XmlBeanDefinitionReader.
+ * @see org.springframework.beans.factory.xml.XmlBeanDefinitionReader
+ * @see #initBeanDefinitionReader
+ * @see #loadBeanDefinitions
+ */
+@Override
+protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throws BeansException, IOException {
+   // Create a new XmlBeanDefinitionReader for the given BeanFactory.
+   XmlBeanDefinitionReader beanDefinitionReader = new XmlBeanDefinitionReader(beanFactory);
+
+   // Configure the bean definition reader with this context's
+   // resource loading environment.
+   beanDefinitionReader.setEnvironment(this.getEnvironment());
+   beanDefinitionReader.setResourceLoader(this);
+   beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
+
+   // Allow a subclass to provide custom initialization of the reader,
+   // then proceed with actually loading the bean definitions.
+   initBeanDefinitionReader(beanDefinitionReader);
+   loadBeanDefinitions(beanDefinitionReader);
+}
+
+
+	/**
+	 * Load the bean definitions with the given XmlBeanDefinitionReader.
+	 * <p>The lifecycle of the bean factory is handled by the {@link #refreshBeanFactory}
+	 * method; hence this method is just supposed to load and/or register bean definitions.
+	 * @param reader the XmlBeanDefinitionReader to use
+	 * @throws BeansException in case of bean registration errors
+	 * @throws IOException if the required XML document isn't found
+	 * @see #refreshBeanFactory
+	 * @see #getConfigLocations
+	 * @see #getResources
+	 * @see #getResourcePatternResolver
+	 */
+	protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws BeansException, IOException {
+		Resource[] configResources = getConfigResources();
+		if (configResources != null) {
+			reader.loadBeanDefinitions(configResources);
+		}
+		String[] configLocations = getConfigLocations();
+		if (configLocations != null) {
+			reader.loadBeanDefinitions(configLocations);
+		}
+	}
+```
+
+```java
+// AbstractRefreshableApplicationContext
+protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) {
+    AnnotatedBeanDefinitionReader reader = this.getAnnotatedBeanDefinitionReader(beanFactory);
+    ClassPathBeanDefinitionScanner scanner = this.getClassPathBeanDefinitionScanner(beanFactory);
+    BeanNameGenerator beanNameGenerator = this.getBeanNameGenerator();
+    if (beanNameGenerator != null) {
+        reader.setBeanNameGenerator(beanNameGenerator);
+        scanner.setBeanNameGenerator(beanNameGenerator);
+        beanFactory.registerSingleton("org.springframework.context.annotation.internalConfigurationBeanNameGenerator", beanNameGenerator);
+    }
+
+    ScopeMetadataResolver scopeMetadataResolver = this.getScopeMetadataResolver();
+    if (scopeMetadataResolver != null) {
+        reader.setScopeMetadataResolver(scopeMetadataResolver);
+        scanner.setScopeMetadataResolver(scopeMetadataResolver);
+    }
+
+    if (!this.componentClasses.isEmpty()) {
+        if (this.logger.isDebugEnabled()) {
+            this.logger.debug("Registering component classes: [" + StringUtils.collectionToCommaDelimitedString(this.componentClasses) + "]");
+        }
+
+        reader.register(ClassUtils.toClassArray(this.componentClasses));
+    }
+
+    if (!this.basePackages.isEmpty()) {
+        if (this.logger.isDebugEnabled()) {
+            this.logger.debug("Scanning base packages: [" + StringUtils.collectionToCommaDelimitedString(this.basePackages) + "]");
+        }
+
+        scanner.scan(StringUtils.toStringArray(this.basePackages));
+    }
+
+    String[] configLocations = this.getConfigLocations();
+    if (configLocations != null) {
+        String[] var7 = configLocations;
+        int var8 = configLocations.length;
+
+        for(int var9 = 0; var9 < var8; ++var9) {
+            String configLocation = var7[var9];
+
+            try {
+                Class<?> clazz = ClassUtils.forName(configLocation, this.getClassLoader());
+                if (this.logger.isTraceEnabled()) {
+                    this.logger.trace("Registering [" + configLocation + "]");
+                }
+
+                reader.register(new Class[]{clazz});
+            } catch (ClassNotFoundException var13) {
+                if (this.logger.isTraceEnabled()) {
+                    this.logger.trace("Could not load class for config location [" + configLocation + "] - trying package scan. " + var13);
+                }
+
+                int count = scanner.scan(new String[]{configLocation});
+                if (count == 0 && this.logger.isDebugEnabled()) {
+                    this.logger.debug("No component classes found for specified class/package [" + configLocation + "]");
+                }
+            }
+        }
+    }
+
+}
 ```
 
 ##### Resouce定位
@@ -833,6 +1050,582 @@ loadBeanDefinitions()在AbstractRefreshableApplicationContext中声明 需要Bea
 		}
 	}
 ```
+
+
+
+
+
+```java
+// AbstractBeanDefinitionReader
+@Override
+public int loadBeanDefinitions(Resource... resources) throws BeanDefinitionStoreException {
+   Assert.notNull(resources, "Resource array must not be null");
+   int count = 0;
+   for (Resource resource : resources) {
+      count += loadBeanDefinitions(resource);
+   }
+   return count;
+}
+
+@Override
+public int loadBeanDefinitions(String... locations) throws BeanDefinitionStoreException {
+  Assert.notNull(locations, "Location array must not be null");
+  int count = 0;
+  for (String location : locations) {
+    count += loadBeanDefinitions(location);
+  }
+  return count;
+}
+
+@Override
+public int loadBeanDefinitions(String location) throws BeanDefinitionStoreException {
+   return loadBeanDefinitions(location, null);
+}
+
+
+/**
+	* Load bean definitions from the specified resource location.
+	* <p>The location can also be a location pattern, provided that the
+	* ResourceLoader of this bean definition reader is a ResourcePatternResolver.
+	* @param location the resource location, to be loaded with the ResourceLoader
+	* (or ResourcePatternResolver) of this bean definition reader
+	* @param actualResources a Set to be filled with the actual Resource objects
+	* that have been resolved during the loading process. May be {@code null}
+	* to indicate that the caller is not interested in those Resource objects.
+	* @return the number of bean definitions found
+	* @throws BeanDefinitionStoreException in case of loading or parsing errors
+	* @see #getResourceLoader()
+	* @see #loadBeanDefinitions(org.springframework.core.io.Resource)
+	* @see #loadBeanDefinitions(org.springframework.core.io.Resource[])
+	*/
+public int loadBeanDefinitions(String location, @Nullable Set<Resource> actualResources) throws BeanDefinitionStoreException {
+  ResourceLoader resourceLoader = getResourceLoader();
+  if (resourceLoader == null) {
+    throw new BeanDefinitionStoreException(
+      "Cannot load bean definitions from location [" + location + "]: no ResourceLoader available");
+  }
+
+  if (resourceLoader instanceof ResourcePatternResolver) {
+    // Resource pattern matching available.
+    try {
+      Resource[] resources = ((ResourcePatternResolver) resourceLoader).getResources(location);
+      int count = loadBeanDefinitions(resources);
+      if (actualResources != null) {
+        Collections.addAll(actualResources, resources);
+      }
+      if (logger.isTraceEnabled()) {
+        logger.trace("Loaded " + count + " bean definitions from location pattern [" + location + "]");
+      }
+      return count;
+    }
+    catch (IOException ex) {
+      throw new BeanDefinitionStoreException(
+        "Could not resolve bean definition resource pattern [" + location + "]", ex);
+    }
+  }
+  else {
+    // Can only load single resources by absolute URL.
+    Resource resource = resourceLoader.getResource(location); // use DefaultResourceLoader
+    int count = loadBeanDefinitions(resource);
+    if (actualResources != null) {
+      actualResources.add(resource);
+    }
+    if (logger.isTraceEnabled()) {
+      logger.trace("Loaded " + count + " bean definitions from location [" + location + "]");
+    }
+    return count;
+  }
+}
+```
+
+
+
+```java
+// DefaultResourceLoader#getResource
+public Resource getResource(String location) {
+    Assert.notNull(location, "Location must not be null");
+    Iterator var2 = this.getProtocolResolvers().iterator();
+
+    Resource resource;
+    do {
+        if (!var2.hasNext()) {
+            if (location.startsWith("/")) {
+                return this.getResourceByPath(location);
+            }
+
+            if (location.startsWith("classpath:")) {
+                return new ClassPathResource(location.substring("classpath:".length()), this.getClassLoader());
+            }
+
+            try {
+                URL url = new URL(location);
+                return (Resource)(ResourceUtils.isFileURL(url) ? new FileUrlResource(url) : new UrlResource(url));
+            } catch (MalformedURLException var5) {
+                return this.getResourceByPath(location);
+            }
+        }
+
+        ProtocolResolver protocolResolver = (ProtocolResolver)var2.next();
+        resource = protocolResolver.resolve(location, this);
+    } while(resource == null);
+
+    return resource;
+}
+```
+
+
+
+```java
+/**
+ * Return a Resource handle for the resource at the given path.
+ * <p>The default implementation supports class path locations. This should
+ * be appropriate for standalone implementations but can be overridden,
+ * e.g. for implementations targeted at a Servlet container.
+ * @param path the path to the resource
+ * @return the corresponding Resource handle
+ * @see ClassPathResource
+ * @see org.springframework.context.support.FileSystemXmlApplicationContext#getResourceByPath
+ * @see org.springframework.web.context.support.XmlWebApplicationContext#getResourceByPath
+ */
+protected Resource getResourceByPath(String path) {
+   return new ClassPathContextResource(path, getClassLoader());
+}
+
+
+	/** org.springframework.context.support.FileSystemXmlApplicationContext#getResourceByPath
+	 * Resolve resource paths as file system paths.
+	 * <p>Note: Even if a given path starts with a slash, it will get
+	 * interpreted as relative to the current VM working directory.
+	 * This is consistent with the semantics in a Servlet container.
+	 * @param path the path to the resource
+	 * @return the Resource handle
+	 * @see org.springframework.web.context.support.XmlWebApplicationContext#getResourceByPath
+	 */
+	@Override
+	protected Resource getResourceByPath(String path) {
+		if (path.startsWith("/")) {
+			path = path.substring(1);
+		}
+		return new FileSystemResource(path);
+	}
+
+
+	/**
+	 * Create a new {@code FileSystemResource} from a file path.
+	 * <p>Note: When building relative resources via {@link #createRelative},
+	 * it makes a difference whether the specified resource base path here
+	 * ends with a slash or not. In the case of "C:/dir1/", relative paths
+	 * will be built underneath that root: e.g. relative path "dir2" ->
+	 * "C:/dir1/dir2". In the case of "C:/dir1", relative paths will apply
+	 * at the same directory level: relative path "dir2" -> "C:/dir2".
+	 * @param path a file path
+	 * @see #FileSystemResource(Path)
+	 */
+	// FileSystemResource extends AbstractResource implements WritableResource 
+	public FileSystemResource(String path) {
+		Assert.notNull(path, "Path must not be null");
+		this.path = StringUtils.cleanPath(path);
+		this.file = new File(path);
+		this.filePath = this.file.toPath();
+	}
+
+
+	/**
+	 * This implementation supports file paths beneath the root of the ServletContext.
+	 * @see ServletContextResource
+	 */
+	@Override
+	protected Resource getResourceByPath(String path) {
+		Assert.state(this.servletContext != null, "No ServletContext available");
+		return new ServletContextResource(this.servletContext, path);
+	}
+
+	
+	/**
+	 * Create a new ServletContextResource.
+	 * <p>The Servlet spec requires that resource paths start with a slash,
+	 * even if many containers accept paths without leading slash too.
+	 * Consequently, the given path will be prepended with a slash if it
+	 * doesn't already start with one.
+	 * @param servletContext the ServletContext to load from
+	 * @param path the path of the resource
+	 */
+	// ServletContextResource extends AbstractFileResolvingResource implements ContextResource 
+	public ServletContextResource(ServletContext servletContext, String path) {
+		// check ServletContext and set to property
+		// check path
+		String pathToUse = StringUtils.cleanPath(path);
+		if (!pathToUse.startsWith("/")) {
+			pathToUse = "/" + pathToUse;
+		}
+		this.path = pathToUse;
+	}
+```
+
+
+
+doLoadDocument & registerBeanDefinitions
+
+```java
+/** XmlBeanDefinitionReader#loadBeanDefinitions
+ * Load bean definitions from the specified XML file.
+ * @param encodedResource the resource descriptor for the XML file,
+ * allowing to specify an encoding to use for parsing the file
+ * @return the number of bean definitions found
+ * @throws BeanDefinitionStoreException in case of loading or parsing errors
+ */
+public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
+   Set<EncodedResource> currentResources = this.resourcesCurrentlyBeingLoaded.get();
+
+   if (!currentResources.add(encodedResource)) {
+      throw new BeanDefinitionStoreException(
+            "Detected cyclic loading of " + encodedResource + " - check your import definitions!");
+   }
+
+   try (InputStream inputStream = encodedResource.getResource().getInputStream()) {
+      InputSource inputSource = new InputSource(inputStream);
+      if (encodedResource.getEncoding() != null) {
+         inputSource.setEncoding(encodedResource.getEncoding());
+      }
+     	// doLoadDocument & registerBeanDefinitions
+      return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
+   }
+   catch (IOException ex) {
+      throw new BeanDefinitionStoreException(
+            "IOException parsing XML document from " + encodedResource.getResource(), ex);
+   }
+   finally {
+      currentResources.remove(encodedResource);
+      if (currentResources.isEmpty()) {
+         this.resourcesCurrentlyBeingLoaded.remove();
+      }
+   }
+}
+```
+
+
+
+```java
+/**
+ * Register the bean definitions contained in the given DOM document.
+ * Called by {@code loadBeanDefinitions}.
+ * <p>Creates a new instance of the parser class and invokes
+ * {@code registerBeanDefinitions} on it.
+ * @param doc the DOM document
+ * @param resource the resource descriptor (for context information)
+ * @return the number of bean definitions found
+ * @throws BeanDefinitionStoreException in case of parsing errors
+ * @see #loadBeanDefinitions
+ * @see #setDocumentReaderClass
+ * @see BeanDefinitionDocumentReader#registerBeanDefinitions
+ */
+public int registerBeanDefinitions(Document doc, Resource resource) throws BeanDefinitionStoreException {
+   BeanDefinitionDocumentReader documentReader = createBeanDefinitionDocumentReader();
+   int countBefore = getRegistry().getBeanDefinitionCount();
+   documentReader.registerBeanDefinitions(doc, createReaderContext(resource));
+   return getRegistry().getBeanDefinitionCount() - countBefore;
+}
+```
+
+
+
+DefaultBeanDefinitionDocumentReader
+
+```java
+/**
+ * Register each bean definition within the given root {@code <beans/>} element.
+ */
+@SuppressWarnings("deprecation")  // for Environment.acceptsProfiles(String...)
+protected void doRegisterBeanDefinitions(Element root) {
+   // Any nested <beans> elements will cause recursion in this method. In
+   // order to propagate and preserve <beans> default-* attributes correctly,
+   // keep track of the current (parent) delegate, which may be null. Create
+   // the new (child) delegate with a reference to the parent for fallback purposes,
+   // then ultimately reset this.delegate back to its original (parent) reference.
+   // this behavior emulates a stack of delegates without actually necessitating one.
+   BeanDefinitionParserDelegate parent = this.delegate;
+   this.delegate = createDelegate(getReaderContext(), root, parent);
+
+   if (this.delegate.isDefaultNamespace(root)) {
+      String profileSpec = root.getAttribute(PROFILE_ATTRIBUTE);
+      if (StringUtils.hasText(profileSpec)) {
+         String[] specifiedProfiles = StringUtils.tokenizeToStringArray(
+               profileSpec, BeanDefinitionParserDelegate.MULTI_VALUE_ATTRIBUTE_DELIMITERS);
+         // We cannot use Profiles.of(...) since profile expressions are not supported
+         // in XML config. See SPR-12458 for details.
+         if (!getReaderContext().getEnvironment().acceptsProfiles(specifiedProfiles)) {
+            return;
+         }
+      }
+   }
+
+   preProcessXml(root);
+   parseBeanDefinitions(root, this.delegate);
+   postProcessXml(root);
+
+   this.delegate = parent;
+}
+```
+
+
+
+```java
+/**
+ * Parse the elements at the root level in the document:
+ * "import", "alias", "bean".
+ * @param root the DOM root element of the document
+ */
+protected void parseBeanDefinitions(Element root, BeanDefinitionParserDelegate delegate) {
+   if (delegate.isDefaultNamespace(root)) {
+      NodeList nl = root.getChildNodes();
+      for (int i = 0; i < nl.getLength(); i++) {
+         Node node = nl.item(i);
+         if (node instanceof Element) {
+            Element ele = (Element) node;
+            if (delegate.isDefaultNamespace(ele)) {
+               parseDefaultElement(ele, delegate);
+            }
+            else {
+               delegate.parseCustomElement(ele);
+            }
+         }
+      }
+   }
+   else {
+      delegate.parseCustomElement(root);
+   }
+}
+
+
+private void parseDefaultElement(Element ele, BeanDefinitionParserDelegate delegate) {
+  if (delegate.nodeNameEquals(ele, IMPORT_ELEMENT)) {
+    importBeanDefinitionResource(ele);
+  }
+  else if (delegate.nodeNameEquals(ele, ALIAS_ELEMENT)) {
+    processAliasRegistration(ele);
+  }
+  else if (delegate.nodeNameEquals(ele, BEAN_ELEMENT)) {
+    processBeanDefinition(ele, delegate);
+  }
+  else if (delegate.nodeNameEquals(ele, NESTED_BEANS_ELEMENT)) {
+    // recurse
+    doRegisterBeanDefinitions(ele);
+  }
+}
+```
+
+```java
+/**
+ * Parse an "import" element and load the bean definitions
+ * from the given resource into the bean factory.
+ */
+protected void importBeanDefinitionResource(Element ele) {
+   String location = ele.getAttribute(RESOURCE_ATTRIBUTE);
+   if (!StringUtils.hasText(location)) {
+      getReaderContext().error("Resource location must not be empty", ele);
+      return;
+   }
+
+   // Resolve system properties: e.g. "${user.dir}"
+   location = getReaderContext().getEnvironment().resolveRequiredPlaceholders(location);
+
+   Set<Resource> actualResources = new LinkedHashSet<>(4);
+
+   // Discover whether the location is an absolute or relative URI
+   boolean absoluteLocation = false;
+   try {
+      absoluteLocation = ResourcePatternUtils.isUrl(location) || ResourceUtils.toURI(location).isAbsolute();
+   }
+   catch (URISyntaxException ex) {
+      // cannot convert to an URI, considering the location relative
+      // unless it is the well-known Spring prefix "classpath*:"
+   }
+
+   // Absolute or relative?
+   if (absoluteLocation) {
+      try {
+         int importCount = getReaderContext().getReader().loadBeanDefinitions(location, actualResources);
+         if (logger.isTraceEnabled()) {
+            logger.trace("Imported " + importCount + " bean definitions from URL location [" + location + "]");
+         }
+      }
+      catch (BeanDefinitionStoreException ex) {
+         getReaderContext().error(
+               "Failed to import bean definitions from URL location [" + location + "]", ele, ex);
+      }
+   }
+   else {
+      // No URL -> considering resource location as relative to the current file.
+      try {
+         int importCount;
+         Resource relativeResource = getReaderContext().getResource().createRelative(location);
+         if (relativeResource.exists()) {
+            importCount = getReaderContext().getReader().loadBeanDefinitions(relativeResource);
+            actualResources.add(relativeResource);
+         }
+         else {
+            String baseLocation = getReaderContext().getResource().getURL().toString();
+            importCount = getReaderContext().getReader().loadBeanDefinitions(
+                  StringUtils.applyRelativePath(baseLocation, location), actualResources);
+         }
+         if (logger.isTraceEnabled()) {
+            logger.trace("Imported " + importCount + " bean definitions from relative location [" + location + "]");
+         }
+      }
+      catch (IOException ex) {
+         getReaderContext().error("Failed to resolve current resource location", ele, ex);
+      }
+      catch (BeanDefinitionStoreException ex) {
+         getReaderContext().error(
+               "Failed to import bean definitions from relative location [" + location + "]", ele, ex);
+      }
+   }
+   Resource[] actResArray = actualResources.toArray(new Resource[0]);
+   getReaderContext().fireImportProcessed(location, actResArray, extractSource(ele));
+}
+```
+
+```java
+/**
+ * Process the given alias element, registering the alias with the registry.
+ */
+protected void processAliasRegistration(Element ele) {
+   String name = ele.getAttribute(NAME_ATTRIBUTE);
+   String alias = ele.getAttribute(ALIAS_ATTRIBUTE);
+   boolean valid = true;
+   if (!StringUtils.hasText(name)) {
+      getReaderContext().error("Name must not be empty", ele);
+      valid = false;
+   }
+   if (!StringUtils.hasText(alias)) {
+      getReaderContext().error("Alias must not be empty", ele);
+      valid = false;
+   }
+   if (valid) {
+      try {
+         getReaderContext().getRegistry().registerAlias(name, alias);
+      }
+      catch (Exception ex) {
+         getReaderContext().error("Failed to register alias '" + alias +
+               "' for bean with name '" + name + "'", ele, ex);
+      }
+      getReaderContext().fireAliasRegistered(name, alias, extractSource(ele));
+   }
+}
+
+/**
+ * Process the given bean element, parsing the bean definition
+ * and registering it with the registry.
+ */
+protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
+   BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);
+   if (bdHolder != null) {
+      bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);
+      try {
+         // Register the final decorated instance.
+         BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());
+      }
+      catch (BeanDefinitionStoreException ex) {
+         getReaderContext().error("Failed to register bean definition with name '" +
+               bdHolder.getBeanName() + "'", ele, ex);
+      }
+      // Send registration event.
+      getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
+   }
+}
+```
+
+
+
+
+
+```java
+/** BeanDefinitionReaderUtils#registerBeanDefinition
+ * Register the given bean definition with the given bean factory.
+ * @param definitionHolder the bean definition including name and aliases
+ * @param registry the bean factory to register with
+ * @throws BeanDefinitionStoreException if registration failed
+ */
+public static void registerBeanDefinition(
+      BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
+      throws BeanDefinitionStoreException {
+
+   // Register bean definition under primary name.
+   String beanName = definitionHolder.getBeanName();
+   registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
+
+   // Register aliases for bean name, if any.
+   String[] aliases = definitionHolder.getAliases();
+   if (aliases != null) {
+      for (String alias : aliases) {
+         registry.registerAlias(beanName, alias);
+      }
+   }
+}
+```
+
+
+
+```java
+// DefaultListableBeanFactory
+@Override
+public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
+      throws BeanDefinitionStoreException {
+   if (beanDefinition instanceof AbstractBeanDefinition) {
+      try {
+         ((AbstractBeanDefinition) beanDefinition).validate();
+      }
+      catch (BeanDefinitionValidationException ex) {
+         throw new BeanDefinitionStoreException(beanDefinition.getResourceDescription(), beanName,
+               "Validation of bean definition failed", ex);
+      }
+   }
+
+   BeanDefinition existingDefinition = this.beanDefinitionMap.get(beanName);
+   if (existingDefinition != null) {
+      if (!isAllowBeanDefinitionOverriding()) {
+         throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
+      }
+      else if (existingDefinition.getRole() < beanDefinition.getRole()) {
+         // e.g. was ROLE_APPLICATION, now overriding with ROLE_SUPPORT or ROLE_INFRASTRUCTURE
+      }
+      else if (!beanDefinition.equals(existingDefinition)) {
+      }
+      else {
+      }
+      this.beanDefinitionMap.put(beanName, beanDefinition);
+   }
+   else {
+      if (hasBeanCreationStarted()) {
+         // Cannot modify startup-time collection elements anymore (for stable iteration)
+         synchronized (this.beanDefinitionMap) {
+            this.beanDefinitionMap.put(beanName, beanDefinition);
+            List<String> updatedDefinitions = new ArrayList<>(this.beanDefinitionNames.size() + 1);
+            updatedDefinitions.addAll(this.beanDefinitionNames);
+            updatedDefinitions.add(beanName);
+            this.beanDefinitionNames = updatedDefinitions;
+            removeManualSingletonName(beanName);
+         }
+      }
+      else {
+         // Still in startup registration phase
+         this.beanDefinitionMap.put(beanName, beanDefinition);
+         this.beanDefinitionNames.add(beanName);
+         removeManualSingletonName(beanName);
+      }
+      this.frozenBeanDefinitionNames = null;
+   }
+
+   if (existingDefinition != null || containsSingleton(beanName)) {
+      resetBeanDefinition(beanName);
+   }
+   else if (isConfigurationFrozen()) {
+      clearByTypeCache();
+   }
+}
+```
+
+
 
 完成了BeanDefinition的注册 就完成了IoC容器的初始化过程建立了整个Bean的配置信息都在beanDefinitionMap里被检索和使用 容器的作用就是对这些信息进行处理和维护 这些信息是容器建立依赖反转的基础
 

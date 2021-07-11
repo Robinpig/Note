@@ -1,6 +1,3 @@
-# Start
-
-
 
 ## Entrance
 
@@ -14,6 +11,8 @@ public class Application {
 
 }
 ```
+
+## Prepare
 
 ### Load Resources 
 @SpringBootApplication
@@ -126,7 +125,7 @@ private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoad
         }
 }
 ```
-### run 
+## run 
 
 ```java
 /**
@@ -179,7 +178,7 @@ public ConfigurableApplicationContext run(String... args) {
 
 
 
-#### getRunListeners
+### getRunListeners
 
 createSpringFactoriesInstances
 
@@ -230,13 +229,13 @@ private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] 
 
 
 
-#### listeners.starting
+### listeners.starting
 
 `new ApplicationStartingEvent() and invoke the given listener with the given event.`
 
 
 
-#### prepareEnvironment
+### prepareEnvironment
 
 ```java
 private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
@@ -256,14 +255,14 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
 	}
 ```
 
-#### configureIgnoreBeanInfo
+### configureIgnoreBeanInfo
 
 
 
 
 
 
-#### createApplicationContext
+### createApplicationContext
 
 `Strategy method used to create the ApplicationContext. By default this method will respect any explicitly set application context or application context class before falling back to a suitable default.`
 
@@ -320,7 +319,7 @@ static WebApplicationType deduceFromApplicationContext(Class<?> applicationConte
 
 
 
-#### prepareContext
+### prepareContext
 
 ```java
 private void prepareContext(ConfigurableApplicationContext context, ConfigurableEnvironment environment,
@@ -354,7 +353,7 @@ private void prepareContext(ConfigurableApplicationContext context, Configurable
 }
 ```
 
-#### postProcessApplicationContext
+### postProcessApplicationContext
 
 `Apply any relevant post processing the ApplicationContext. Subclasses can apply additional processing as required.`
 
@@ -378,7 +377,7 @@ protected void postProcessApplicationContext(ConfigurableApplicationContext cont
 }
 ```
 
-#### applyInitializers
+### applyInitializers
 
 `Apply any ApplicationContextInitializers to the context before it is refreshed.`
 
@@ -394,7 +393,7 @@ protected void applyInitializers(ConfigurableApplicationContext context) {
 }
 ```
 
-#### load
+### load
 
 `Load beans into the application context.`
 
@@ -419,29 +418,29 @@ protected void load(ApplicationContext context, Object[] sources) {
 
 
 
-#### listeners.contextLoaded
+### listeners.contextLoaded
 
 `Add ApplicationListeners that will be notified on context events such as context refresh and context shutdown.
 Note that any ApplicationListener registered here will be applied on refresh if the context is not active yet, or on the fly with the current event multicaster in case of a context that is already active.`
 
 
 
-#### refreshContext
+### refreshContext
 
-see `AbstractApplicationContext#refresh()`, start webServer for ServletWebServerApplicationContext
-
-
+see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md?id=refresh), start webServer for ServletWebServerApplicationContext
 
 
-#### afterRefresh
+
+
+### afterRefresh
 
 `do nothing`
 
-#### listeners.started
+### listeners.started
 
 `The context has been refreshed and the application has started but CommandLineRunners and ApplicationRunners have not been called.`
 
-#### callRunners
+### callRunners
 
 `run ApplicationRunner and CommandLineRunner`
 
