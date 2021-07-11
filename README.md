@@ -30,7 +30,7 @@
   
 
 #### IO
-- [epoll](/docs/CS/DB/Redis/epoll.md)
+- [ae](/docs/CS/DB/Redis/ae.md)
 
 
 ## C
@@ -74,7 +74,7 @@
 ### Quartz
 
 ### [Spring](/docs/CS/Java/Spring/Spring.md)
-- [ioc](/docs/CS/Java/Spring/IoC.md)
+- [IoC](/docs/CS/Java/Spring/IoC.md)
 - [webflux](/docs/CS/Java/Spring/webflux.md)
 
 ### [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)

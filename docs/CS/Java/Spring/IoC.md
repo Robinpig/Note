@@ -698,13 +698,512 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
 
 
 
+#### InstantiationAwareBeanPostProcessor
+
+Subinterface of BeanPostProcessor that adds a before-instantiation callback, and a callback after instantiation but before explicit properties are set or autowiring occurs.
+Typically used to suppress default instantiation for specific target beans, for example to create proxies with special TargetSources (pooling targets, lazily initializing targets, etc), or to implement additional injection strategies such as field injection.
+NOTE: This interface is a special purpose interface, mainly for internal use within the framework. It is recommended to implement the plain BeanPostProcessor interface as far as possible, or to derive from InstantiationAwareBeanPostProcessorAdapter in order to be shielded from extensions to this interface.
+
+```java
+
+@Nullable
+default PropertyValues postProcessProperties(PropertyValues pvs, Object bean, String beanName)
+      throws BeansException {
+
+   return null;
+}
+
+@Deprecated
+@Nullable
+default PropertyValues postProcessPropertyValues(
+  PropertyValues pvs, PropertyDescriptor[] pds, Object bean, String beanName) throws BeansException {
+
+  return pvs;
+}
+```
+
+
+
+```java
+/**
+ * Apply the given property values, resolving any runtime references
+ * to other beans in this bean factory. Must use deep copy, so we
+ * don't permanently modify this property.
+ * @param beanName the bean name passed for better exception information
+ * @param mbd the merged bean definition
+ * @param bw the BeanWrapper wrapping the target object
+ * @param pvs the new property values
+ */
+protected void applyPropertyValues(String beanName, BeanDefinition mbd, BeanWrapper bw, PropertyValues pvs) {
+   if (pvs.isEmpty()) {
+      return;
+   }
+
+   if (System.getSecurityManager() != null && bw instanceof BeanWrapperImpl) {
+      ((BeanWrapperImpl) bw).setSecurityContext(getAccessControlContext());
+   }
+
+   MutablePropertyValues mpvs = null;
+   List<PropertyValue> original;
+
+   if (pvs instanceof MutablePropertyValues) {
+      mpvs = (MutablePropertyValues) pvs;
+      if (mpvs.isConverted()) {
+         // Shortcut: use the pre-converted values as-is.
+         try {
+            bw.setPropertyValues(mpvs);
+            return;
+         }
+         catch (BeansException ex) {
+            throw new BeanCreationException(
+                  mbd.getResourceDescription(), beanName, "Error setting property values", ex);
+         }
+      }
+      original = mpvs.getPropertyValueList();
+   }
+   else {
+      original = Arrays.asList(pvs.getPropertyValues());
+   }
+
+   TypeConverter converter = getCustomTypeConverter();
+   if (converter == null) {
+      converter = bw;
+   }
+   BeanDefinitionValueResolver valueResolver = new BeanDefinitionValueResolver(this, beanName, mbd, converter);
+
+   // Create a deep copy, resolving any references for values.
+   List<PropertyValue> deepCopy = new ArrayList<>(original.size());
+   boolean resolveNecessary = false;
+   for (PropertyValue pv : original) {
+      if (pv.isConverted()) {
+         deepCopy.add(pv);
+      }
+      else {
+         String propertyName = pv.getName();
+         Object originalValue = pv.getValue();
+         if (originalValue == AutowiredPropertyMarker.INSTANCE) {
+            Method writeMethod = bw.getPropertyDescriptor(propertyName).getWriteMethod();
+            if (writeMethod == null) {
+               throw new IllegalArgumentException("Autowire marker for property without write method: " + pv);
+            }
+            originalValue = new DependencyDescriptor(new MethodParameter(writeMethod, 0), true);
+         }
+         Object resolvedValue = valueResolver.resolveValueIfNecessary(pv, originalValue);
+         Object convertedValue = resolvedValue;
+         boolean convertible = bw.isWritableProperty(propertyName) &&
+               !PropertyAccessorUtils.isNestedOrIndexedProperty(propertyName);
+         if (convertible) {
+            convertedValue = convertForProperty(resolvedValue, propertyName, bw, converter);
+         }
+         // Possibly store converted value in merged bean definition,
+         // in order to avoid re-conversion for every created bean instance.
+         if (resolvedValue == originalValue) {
+            if (convertible) {
+               pv.setConvertedValue(convertedValue);
+            }
+            deepCopy.add(pv);
+         }
+         else if (convertible && originalValue instanceof TypedStringValue &&
+               !((TypedStringValue) originalValue).isDynamic() &&
+               !(convertedValue instanceof Collection || ObjectUtils.isArray(convertedValue))) {
+            pv.setConvertedValue(convertedValue);
+            deepCopy.add(pv);
+         }
+         else {
+            resolveNecessary = true;
+            deepCopy.add(new PropertyValue(pv, convertedValue));
+         }
+      }
+   }
+   if (mpvs != null && !resolveNecessary) {
+      mpvs.setConverted();
+   }
+
+   // Set our (possibly massaged) deep copy.
+   try {
+      bw.setPropertyValues(new MutablePropertyValues(deepCopy));
+   }
+   catch (BeansException ex) {
+      throw new BeanCreationException(
+            mbd.getResourceDescription(), beanName, "Error setting property values", ex);
+   }
+}
+```
+
+
+
+#### resolveValueIfNecessary
+
+```java
+/** BeanDefinitionValueResolver
+ * Given a PropertyValue, return a value, resolving any references to other
+ * beans in the factory if necessary. The value could be:
+ * <li>A BeanDefinition, which leads to the creation of a corresponding
+ * new bean instance. Singleton flags and names of such "inner beans"
+ * are always ignored: Inner beans are anonymous prototypes.
+ * <li>A RuntimeBeanReference, which must be resolved.
+ * <li>A ManagedList. This is a special collection that may contain
+ * RuntimeBeanReferences or Collections that will need to be resolved.
+ * <li>A ManagedSet. May also contain RuntimeBeanReferences or
+ * Collections that will need to be resolved.
+ * <li>A ManagedMap. In this case the value may be a RuntimeBeanReference
+ * or Collection that will need to be resolved.
+ * <li>An ordinary object or {@code null}, in which case it's left alone.
+ * @param argName the name of the argument that the value is defined for
+ * @param value the value object to resolve
+ * @return the resolved object
+ */
+@Nullable
+public Object resolveValueIfNecessary(Object argName, @Nullable Object value) {
+   // We must check each value to see whether it requires a runtime reference
+   // to another bean to be resolved.
+   if (value instanceof RuntimeBeanReference) {
+      RuntimeBeanReference ref = (RuntimeBeanReference) value;
+      return resolveReference(argName, ref);
+   }
+   else if (value instanceof RuntimeBeanNameReference) {
+      String refName = ((RuntimeBeanNameReference) value).getBeanName();
+      refName = String.valueOf(doEvaluate(refName));
+      if (!this.beanFactory.containsBean(refName)) {
+         throw new BeanDefinitionStoreException(
+               "Invalid bean name '" + refName + "' in bean reference for " + argName);
+      }
+      return refName;
+   }
+   else if (value instanceof BeanDefinitionHolder) {
+      // Resolve BeanDefinitionHolder: contains BeanDefinition with name and aliases.
+      BeanDefinitionHolder bdHolder = (BeanDefinitionHolder) value;
+      return resolveInnerBean(argName, bdHolder.getBeanName(), bdHolder.getBeanDefinition());
+   }
+   else if (value instanceof BeanDefinition) {
+      // Resolve plain BeanDefinition, without contained name: use dummy name.
+      BeanDefinition bd = (BeanDefinition) value;
+      String innerBeanName = "(inner bean)" + BeanFactoryUtils.GENERATED_BEAN_NAME_SEPARATOR +
+            ObjectUtils.getIdentityHexString(bd);
+      return resolveInnerBean(argName, innerBeanName, bd);
+   }
+   else if (value instanceof DependencyDescriptor) {
+      Set<String> autowiredBeanNames = new LinkedHashSet<>(4);
+      Object result = this.beanFactory.resolveDependency(
+            (DependencyDescriptor) value, this.beanName, autowiredBeanNames, this.typeConverter);
+      for (String autowiredBeanName : autowiredBeanNames) {
+         if (this.beanFactory.containsBean(autowiredBeanName)) {
+            this.beanFactory.registerDependentBean(autowiredBeanName, this.beanName);
+         }
+      }
+      return result;
+   }
+   else if (value instanceof ManagedArray) {
+      // May need to resolve contained runtime references.
+      ManagedArray array = (ManagedArray) value;
+      Class<?> elementType = array.resolvedElementType;
+      if (elementType == null) {
+         String elementTypeName = array.getElementTypeName();
+         if (StringUtils.hasText(elementTypeName)) {
+            try {
+               elementType = ClassUtils.forName(elementTypeName, this.beanFactory.getBeanClassLoader());
+               array.resolvedElementType = elementType;
+            }
+            catch (Throwable ex) {
+               // Improve the message by showing the context.
+               throw new BeanCreationException(
+                     this.beanDefinition.getResourceDescription(), this.beanName,
+                     "Error resolving array type for " + argName, ex);
+            }
+         }
+         else {
+            elementType = Object.class;
+         }
+      }
+      return resolveManagedArray(argName, (List<?>) value, elementType);
+   }
+   else if (value instanceof ManagedList) {
+      // May need to resolve contained runtime references.
+      return resolveManagedList(argName, (List<?>) value);
+   }
+   else if (value instanceof ManagedSet) {
+      // May need to resolve contained runtime references.
+      return resolveManagedSet(argName, (Set<?>) value);
+   }
+   else if (value instanceof ManagedMap) {
+      // May need to resolve contained runtime references.
+      return resolveManagedMap(argName, (Map<?, ?>) value);
+   }
+   else if (value instanceof ManagedProperties) {
+      Properties original = (Properties) value;
+      Properties copy = new Properties();
+      original.forEach((propKey, propValue) -> {
+         if (propKey instanceof TypedStringValue) {
+            propKey = evaluate((TypedStringValue) propKey);
+         }
+         if (propValue instanceof TypedStringValue) {
+            propValue = evaluate((TypedStringValue) propValue);
+         }
+         if (propKey == null || propValue == null) {
+            throw new BeanCreationException(
+                  this.beanDefinition.getResourceDescription(), this.beanName,
+                  "Error converting Properties key/value pair for " + argName + ": resolved to null");
+         }
+         copy.put(propKey, propValue);
+      });
+      return copy;
+   }
+   else if (value instanceof TypedStringValue) {
+      // Convert value to target type here.
+      TypedStringValue typedStringValue = (TypedStringValue) value;
+      Object valueObject = evaluate(typedStringValue);
+      try {
+         Class<?> resolvedTargetType = resolveTargetType(typedStringValue);
+         if (resolvedTargetType != null) {
+            return this.typeConverter.convertIfNecessary(valueObject, resolvedTargetType);
+         }
+         else {
+            return valueObject;
+         }
+      }
+      catch (Throwable ex) {
+         // Improve the message by showing the context.
+         throw new BeanCreationException(
+               this.beanDefinition.getResourceDescription(), this.beanName,
+               "Error converting typed String value for " + argName, ex);
+      }
+   }
+   else if (value instanceof NullBean) {
+      return null;
+   }
+   else {
+      return evaluate(value);
+   }
+}
+```
+
+
+
+#### setPropertyValues
+
+```java
+// AbstractPropertyAccessor
+@Override
+public void setPropertyValues(PropertyValues pvs, boolean ignoreUnknown, boolean ignoreInvalid)
+      throws BeansException {
+
+   List<PropertyAccessException> propertyAccessExceptions = null;
+   List<PropertyValue> propertyValues = (pvs instanceof MutablePropertyValues ?
+         ((MutablePropertyValues) pvs).getPropertyValueList() : Arrays.asList(pvs.getPropertyValues()));
+
+   if (ignoreUnknown) {
+      this.suppressNotWritablePropertyException = true;
+   }
+   try {
+      for (PropertyValue pv : propertyValues) {
+         // setPropertyValue may throw any BeansException, which won't be caught
+         // here, if there is a critical failure such as no matching field.
+         // We can attempt to deal only with less serious exceptions.
+         try {
+            setPropertyValue(pv);
+         }
+         catch (NotWritablePropertyException ex) {
+            if (!ignoreUnknown) {
+               throw ex;
+            }
+            // Otherwise, just ignore it and continue...
+         }
+         catch (NullValueInNestedPathException ex) {
+            if (!ignoreInvalid) {
+               throw ex;
+            }
+            // Otherwise, just ignore it and continue...
+         }
+         catch (PropertyAccessException ex) {
+            if (propertyAccessExceptions == null) {
+               propertyAccessExceptions = new ArrayList<>();
+            }
+            propertyAccessExceptions.add(ex);
+         }
+      }
+   }
+   finally {
+      if (ignoreUnknown) {
+         this.suppressNotWritablePropertyException = false;
+      }
+   }
+
+   // If we encountered individual exceptions, throw the composite exception.
+   if (propertyAccessExceptions != null) {
+      PropertyAccessException[] paeArray = propertyAccessExceptions.toArray(new PropertyAccessException[0]);
+      throw new PropertyBatchUpdateException(paeArray);
+   }
+}
+```
+
+
+
+```java
+// AbstractNestablePropertyAccessor
+@Override
+public void setPropertyValue(String propertyName, @Nullable Object value) throws BeansException {
+   AbstractNestablePropertyAccessor nestedPa;
+   try {
+      nestedPa = getPropertyAccessorForPropertyPath(propertyName);
+   }
+   catch (NotReadablePropertyException ex) {
+      throw new NotWritablePropertyException(getRootClass(), this.nestedPath + propertyName,
+            "Nested property in path '" + propertyName + "' does not exist", ex);
+   }
+   PropertyTokenHolder tokens = getPropertyNameTokens(getFinalPath(nestedPa, propertyName));
+   nestedPa.setPropertyValue(tokens, new PropertyValue(propertyName, value));
+}
+
+@SuppressWarnings("unchecked")
+private void processKeyedProperty(PropertyTokenHolder tokens, PropertyValue pv) {
+  Object propValue = getPropertyHoldingValue(tokens);
+  PropertyHandler ph = getLocalPropertyHandler(tokens.actualName);
+  if (ph == null) {
+    throw new InvalidPropertyException(
+      getRootClass(), this.nestedPath + tokens.actualName, "No property handler found");
+  }
+  Assert.state(tokens.keys != null, "No token keys");
+  String lastKey = tokens.keys[tokens.keys.length - 1];
+
+  if (propValue.getClass().isArray()) {
+    Class<?> requiredType = propValue.getClass().getComponentType();
+    int arrayIndex = Integer.parseInt(lastKey);
+    Object oldValue = null;
+    try {
+      if (isExtractOldValueForEditor() && arrayIndex < Array.getLength(propValue)) {
+        oldValue = Array.get(propValue, arrayIndex);
+      }
+      Object convertedValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
+                                                 requiredType, ph.nested(tokens.keys.length));
+      int length = Array.getLength(propValue);
+      if (arrayIndex >= length && arrayIndex < this.autoGrowCollectionLimit) {
+        Class<?> componentType = propValue.getClass().getComponentType();
+        Object newArray = Array.newInstance(componentType, arrayIndex + 1);
+        System.arraycopy(propValue, 0, newArray, 0, length);
+        int lastKeyIndex = tokens.canonicalName.lastIndexOf('[');
+        String propName = tokens.canonicalName.substring(0, lastKeyIndex);
+        setPropertyValue(propName, newArray);
+        propValue = getPropertyValue(propName);
+      }
+      Array.set(propValue, arrayIndex, convertedValue);
+    }
+    catch (IndexOutOfBoundsException ex) {
+      throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+                                         "Invalid array index in property path '" + tokens.canonicalName + "'", ex);
+    }
+  }
+
+  else if (propValue instanceof List) {
+    Class<?> requiredType = ph.getCollectionType(tokens.keys.length);
+    List<Object> list = (List<Object>) propValue;
+    int index = Integer.parseInt(lastKey);
+    Object oldValue = null;
+    if (isExtractOldValueForEditor() && index < list.size()) {
+      oldValue = list.get(index);
+    }
+    Object convertedValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
+                                               requiredType, ph.nested(tokens.keys.length));
+    int size = list.size();
+    if (index >= size && index < this.autoGrowCollectionLimit) {
+      for (int i = size; i < index; i++) {
+        try {
+          list.add(null);
+        }
+        catch (NullPointerException ex) {
+          throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+                                             "Cannot set element with index " + index + " in List of size " +
+                                             size + ", accessed using property path '" + tokens.canonicalName +
+                                             "': List does not support filling up gaps with null elements");
+        }
+      }
+      list.add(convertedValue);
+    }
+    else {
+      try {
+        list.set(index, convertedValue);
+      }
+      catch (IndexOutOfBoundsException ex) {
+        throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+                                           "Invalid list index in property path '" + tokens.canonicalName + "'", ex);
+      }
+    }
+  }
+
+  else if (propValue instanceof Map) {
+    Class<?> mapKeyType = ph.getMapKeyType(tokens.keys.length);
+    Class<?> mapValueType = ph.getMapValueType(tokens.keys.length);
+    Map<Object, Object> map = (Map<Object, Object>) propValue;
+    // IMPORTANT: Do not pass full property name in here - property editors
+    // must not kick in for map keys but rather only for map values.
+    TypeDescriptor typeDescriptor = TypeDescriptor.valueOf(mapKeyType);
+    Object convertedMapKey = convertIfNecessary(null, null, lastKey, mapKeyType, typeDescriptor);
+    Object oldValue = null;
+    if (isExtractOldValueForEditor()) {
+      oldValue = map.get(convertedMapKey);
+    }
+    // Pass full property name and old value in here, since we want full
+    // conversion ability for map values.
+    Object convertedMapValue = convertIfNecessary(tokens.canonicalName, oldValue, pv.getValue(),
+                                                  mapValueType, ph.nested(tokens.keys.length));
+    map.put(convertedMapKey, convertedMapValue);
+  }
+
+  else {
+    throw new InvalidPropertyException(getRootClass(), this.nestedPath + tokens.canonicalName,
+                                       "Property referenced in indexed property path '" + tokens.canonicalName +
+                                       "' is neither an array nor a List nor a Map; returned value was [" + propValue + "]");
+  }
+}
+```
+
+
+
+在 bean 的实例化和依赖注入的过程中，需要依据 BeanDefinition 中的信息来递归地完成依赖注入。另外，在此过程中存在许多递归调用，一个递归是在上下文体系中查找 当前 bean 依赖的 bean 和创建 当前 bean 依赖的 bean 的递归调用；另一个是在依赖注入时，通过递归调用容器的 getBean() 方法，得到当前 bean 的依赖 bean，同时也触发对依赖 bean 的创建和注入；在对 bean 的属性进行依赖注入时，解析的过程也是递归的。这样，根据依赖关系，从最末层的依赖 bean 开始，一层一层地完成 bean 的创建和注入，直到最后完成当前 bean 的创建
+
 BeanDefinitionValueResolver
 
 AbstractPropertyAccessor
 
-BeanWrapperImpl
+### finishBeanFactoryInitialization
 
 lazy-init false in refresh()->finishBeanFactoryInitialization
+
+```java
+/**
+ * Finish the initialization of this context's bean factory,
+ * initializing all remaining singleton beans.
+ */
+protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
+   // Initialize conversion service for this context.
+   if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
+         beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
+      beanFactory.setConversionService(
+            beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
+   }
+
+   // Register a default embedded value resolver if no BeanFactoryPostProcessor
+   // (such as a PropertySourcesPlaceholderConfigurer bean) registered any before:
+   // at this point, primarily for resolution in annotation attribute values.
+   if (!beanFactory.hasEmbeddedValueResolver()) {
+      beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
+   }
+
+   // Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
+   String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
+   for (String weaverAwareName : weaverAwareNames) {
+      getBean(weaverAwareName);
+   }
+
+   // Stop using the temporary ClassLoader for type matching.
+   beanFactory.setTempClassLoader(null);
+
+   // Allow for caching all bean definition metadata, not expecting further changes.
+   beanFactory.freezeConfiguration();
+
+   // Instantiate all remaining (non-lazy-init) singletons.
+   beanFactory.preInstantiateSingletons();
+}
+```
 
 ### ApplicationContext
 
@@ -1637,6 +2136,13 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 
 完成了BeanDefinition的注册 就完成了IoC容器的初始化过程建立了整个Bean的配置信息都在beanDefinitionMap里被检索和使用 容器的作用就是对这些信息进行处理和维护 这些信息是容器建立依赖反转的基础
 
+
+
+### BeanDefinition
+
+A BeanDefinition describes a bean instance, which has property values, constructor argument values, and further information supplied by concrete implementations.
+This is just a minimal interface: The main intention is to allow a BeanFactoryPostProcessor to introspect and modify property values and other bean metadata.
+
 # 依赖注入
 
 依赖注入的过程触发事件
@@ -1647,6 +2153,104 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 DLBF的基类AbstractBeanFactory的getBean()中调用doGetBean() 之后会调用createBean 在这个过程中 Bean对象会依据BeanDefinition定义的要求生成  在AbstractAutowireCapableBeanFactory中实现了这个createBean,  createBean不但生成了需要的Bean 还对Bean初始化进行了处理  比如实现了在BeanDefinition中的init-method属性定义 Bean后置处理器等 下图就是依赖注入过程
  ![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019112746693.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
  依赖注入过程[1]
+
+
+
+
+
+#### BeanPostProcessor
+
+Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or wrapping beans with proxies.
+
+Typically, post-processors that populate beans via marker interfaces or the like will implement postProcessBeforeInitialization, while post-processors that wrap beans with proxies will normally implement postProcessAfterInitialization.
+
+Registration
+An ApplicationContext can autodetect BeanPostProcessor beans in its bean definitions and apply those post-processors to any beans subsequently created. A plain BeanFactory allows for programmatic registration of post-processors, applying them to all beans created through the bean factory.
+
+Ordering
+BeanPostProcessor beans that are autodetected in an ApplicationContext will be ordered according to `org.springframework.core.PriorityOrdered` and `org.springframework.core.Ordered` semantics. In contrast, BeanPostProcessor beans that are registered programmatically with a BeanFactory will be applied in the order of registration; any ordering semantics expressed through implementing the PriorityOrdered or Ordered interface will be ignored for programmatically registered post-processors. Furthermore, the @Order annotation is not taken into account for BeanPostProcessor beans.
+
+```java
+public interface BeanPostProcessor {
+
+   /**
+    * Apply this {@code BeanPostProcessor} to the given new bean instance <i>before</i> any bean
+    * initialization callbacks (like InitializingBean's {@code afterPropertiesSet}
+    * or a custom init-method). The bean will already be populated with property values.
+    * The returned bean instance may be a wrapper around the original.
+    * <p>The default implementation returns the given {@code bean} as-is.
+    * @param bean the new bean instance
+    * @param beanName the name of the bean
+    * @return the bean instance to use, either the original or a wrapped one;
+    * if {@code null}, no subsequent BeanPostProcessors will be invoked
+    * @throws org.springframework.beans.BeansException in case of errors
+    * @see org.springframework.beans.factory.InitializingBean#afterPropertiesSet
+    */
+   @Nullable
+   default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+      return bean;
+   }
+
+   /**
+    * Apply this {@code BeanPostProcessor} to the given new bean instance <i>after</i> any bean
+    * initialization callbacks (like InitializingBean's {@code afterPropertiesSet}
+    * or a custom init-method). The bean will already be populated with property values.
+    * The returned bean instance may be a wrapper around the original.
+    * <p>In case of a FactoryBean, this callback will be invoked for both the FactoryBean
+    * instance and the objects created by the FactoryBean (as of Spring 2.0). The
+    * post-processor can decide whether to apply to either the FactoryBean or created
+    * objects or both through corresponding {@code bean instanceof FactoryBean} checks.
+    * <p>This callback will also be invoked after a short-circuiting triggered by a
+    * {@link InstantiationAwareBeanPostProcessor#postProcessBeforeInstantiation} method,
+    * in contrast to all other {@code BeanPostProcessor} callbacks.
+    * <p>The default implementation returns the given {@code bean} as-is.
+    * @param bean the new bean instance
+    * @param beanName the name of the bean
+    * @return the bean instance to use, either the original or a wrapped one;
+    * if {@code null}, no subsequent BeanPostProcessors will be invoked
+    * @throws org.springframework.beans.BeansException in case of errors
+    * @see org.springframework.beans.factory.InitializingBean#afterPropertiesSet
+    * @see org.springframework.beans.factory.FactoryBean
+    */
+   @Nullable
+   default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+      return bean;
+   }
+
+}
+```
+
+
+
+```java
+// ServletContextAwareProcessor
+@Override
+public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+   if (getServletContext() != null && bean instanceof ServletContextAware) {
+      ((ServletContextAware) bean).setServletContext(getServletContext());
+   }
+   if (getServletConfig() != null && bean instanceof ServletConfigAware) {
+      ((ServletConfigAware) bean).setServletConfig(getServletConfig());
+   }
+   return bean;
+}
+```
+
+
+
+```java
+// AbstractRefreshableWebApplicationContext
+// Register request/session scopes, a {@link ServletContextAwareProcessor}, etc.
+@Override
+protected void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) {
+  beanFactory.addBeanPostProcessor(new ServletContextAwareProcessor(this.servletContext, this.servletConfig));
+  beanFactory.ignoreDependencyInterface(ServletContextAware.class);
+  beanFactory.ignoreDependencyInterface(ServletConfigAware.class);
+
+  WebApplicationContextUtils.registerWebApplicationScopes(beanFactory, this.servletContext);
+  WebApplicationContextUtils.registerEnvironmentBeans(beanFactory, this.servletContext, this.servletConfig);
+}
+```
 
 ## 容器关闭
 
