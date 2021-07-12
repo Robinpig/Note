@@ -1,14 +1,10 @@
-# ZooKeeper
-
-
-
-## ZooKeeper是什么？
+## Introduction
 
 ZooKeeper是一个分布式的，开放源码的分布式应用程序协调服务，是Google的Chubby一个开源的实现，它是集群的管理者，监视着集群中各个节点的状态根据节点提交的反馈进行下一步合理操作。最终，将简单易用的接口和性能高效、功能稳定的系统提供给用户
 
 
 
-## 
+
 
 ### 文件系统
 
@@ -129,3 +125,13 @@ Follower的消息循环处理如下几种来自Leader的消息：
 5. REVALIDATE消息：根据Leader的REVALIDATE结果，关闭待revalidate的session还是允许其接受消息
 6. SYNC消息：返回SYNC结果到客户端，这个消息最初由客户端发起，用来强制得到最新的更新。
 
+
+## Distributed Lock
+
+### exclusive lock
+
+use watcher notify when node delete
+
+### Read-Write Lock
+
+service watch own node, notify by watcher
