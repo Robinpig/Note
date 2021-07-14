@@ -243,6 +243,8 @@ public interface Registry extends Node, RegistryService {
 
  when register/unregister, add/remove url from `Set<URL> registered`
 
+
+
 ```java
 /**
  * AbstractRegistry. (SPI, Prototype, ThreadSafe)
@@ -332,7 +334,7 @@ protected void notify(List<URL> urls) {
 
 
 
-
+#### Cache
 
 ```java
 private void saveProperties(URL url) {
@@ -358,7 +360,7 @@ private void saveProperties(URL url) {
         if (syncSaveFile) {
             doSaveProperties(version);
         } else {
-            registryCacheExecutor.execute(new SaveProperties(version));
+            registryCacheExecutor.execute(new SaveProperties(version));// async
         }
     } catch (Throwable t) {
         logger.warn(t.getMessage(), t);
@@ -405,7 +407,6 @@ public void doSaveProperties(long version) {
     } catch (Throwable e) {
         savePropertiesRetryTimes.incrementAndGet();
         if (savePropertiesRetryTimes.get() >= MAX_RETRY_TIMES_SAVE_PROPERTIES) {
-            logger.warn("Failed to save registry cache file after retrying " + MAX_RETRY_TIMES_SAVE_PROPERTIES + " times, cause: " + e.getMessage(), e);
             savePropertiesRetryTimes.set(0);
             return;
         }
@@ -415,8 +416,6 @@ public void doSaveProperties(long version) {
         } else {
             registryCacheExecutor.execute(new SaveProperties(lastCacheChanged.incrementAndGet()));
         }
-        logger.warn("Failed to save registry cache file, will retry, cause: " + e.getMessage(), e);
-    }
 }
 ```
 
@@ -826,19 +825,12 @@ public abstract class FailbackRegistry extends AbstractRegistry {
 ```java
 @Override
 public void register(URL url) {
-    if (url == null) {
-        throw new IllegalArgumentException("register url == null");
-    }
-    if (logger.isInfoEnabled()) {
-        logger.info("Register: " + url);
-    }
     registered.add(url);
 }
 
 @Override
 public void register(URL url) {
     if (!acceptable(url)) {
-        logger.info("URL " + url + " will not be registered to Registry. Registry " + url + " does not accept service of this protocol type.");
         return;
     }
     super.register(url);
@@ -860,9 +852,7 @@ public void register(URL url) {
                 t = t.getCause();
             }
             throw new IllegalStateException("Failed to register " + url + " to registry " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
-        } else {
-            logger.error("Failed to register " + url + ", waiting for retry, cause: " + t.getMessage(), t);
-        }
+        } else {}
 
         // Record a failed registration request to a failed list, retry regularly
         addFailedRegistered(url);
@@ -898,12 +888,6 @@ private void addFailedRegistered(URL url) {
 ```java
 @Override
 public void unregister(URL url) {
-    if (url == null) {
-        throw new IllegalArgumentException("unregister url == null");
-    }
-    if (logger.isInfoEnabled()) {
-        logger.info("Unregister: " + url);
-    }
     registered.remove(url);
 }
 
@@ -928,9 +912,7 @@ public void unregister(URL url) {
                 t = t.getCause();
             }
             throw new IllegalStateException("Failed to unregister " + url + " to registry " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
-        } else {
-            logger.error("Failed to unregister " + url + ", waiting for retry, cause: " + t.getMessage(), t);
-        }
+        } else {}
 
         // Record a failed registration request to a failed list, retry regularly
         addFailedUnregistered(url);
@@ -947,6 +929,102 @@ private void addFailedUnregistered(URL url) {
     if (oldOne == null) {
         // never has a retry task. then start a new task for retry.
         retryTimer.newTimeout(newTask, retryPeriod, TimeUnit.MILLISECONDS);
+    }
+}
+```
+
+
+
+
+
+#### subscribe
+
+1. add Set<NotifyListener>
+2. removeFailedSubscribed
+3. doSubscribe
+4. if step3 fail, notify when url exists in Cache
+5. addFailedSubscribed
+
+```java
+@Override
+public void subscribe(URL url, NotifyListener listener) {
+  Set<NotifyListener> listeners = subscribed.computeIfAbsent(url, n -> new ConcurrentHashSet<>());
+  listeners.add(listener);
+}
+
+@Override
+public void subscribe(URL url, NotifyListener listener) {
+    super.subscribe(url, listener);
+    removeFailedSubscribed(url, listener);
+    try {
+        // Sending a subscription request to the server side
+        doSubscribe(url, listener);
+    } catch (Exception e) {
+        Throwable t = e;
+
+        List<URL> urls = getCacheUrls(url);
+        if (CollectionUtils.isNotEmpty(urls)) {
+            notify(url, listener, urls);
+        } else {
+            // If the startup detection is opened, the Exception is thrown directly.
+            boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
+                    && url.getParameter(Constants.CHECK_KEY, true);
+            boolean skipFailback = t instanceof SkipFailbackWrapperException;
+            if (check || skipFailback) {
+                if (skipFailback) {
+                    t = t.getCause();
+                }
+                throw new IllegalStateException("Failed to subscribe " + url + ", cause: " + t.getMessage(), t);
+            } else {}
+        }
+
+        // Record a failed registration request to a failed list, retry regularly
+        addFailedSubscribed(url, listener);
+    }
+}
+```
+
+
+
+#### unsubscribe
+
+1. remove listener from Set<NotifyListener>  and remove url from notified
+
+```java
+@Override
+public void unsubscribe(URL url, NotifyListener listener) {
+  Set<NotifyListener> listeners = subscribed.get(url);
+  if (listeners != null) {
+    listeners.remove(listener);
+  }
+
+  // do not forget remove notified
+  notified.remove(url);
+}
+
+@Override
+public void unsubscribe(URL url, NotifyListener listener) {
+    super.unsubscribe(url, listener);
+    removeFailedSubscribed(url, listener);
+    try {
+        // Sending a canceling subscription request to the server side
+        doUnsubscribe(url, listener);
+    } catch (Exception e) {
+        Throwable t = e;
+
+        // If the startup detection is opened, the Exception is thrown directly.
+        boolean check = getUrl().getParameter(Constants.CHECK_KEY, true)
+                && url.getParameter(Constants.CHECK_KEY, true);
+        boolean skipFailback = t instanceof SkipFailbackWrapperException;
+        if (check || skipFailback) {
+            if (skipFailback) {
+                t = t.getCause();
+            }
+            throw new IllegalStateException("Failed to unsubscribe " + url + " to registry " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
+        } else {}
+
+        // Record a failed registration request to a failed list, retry regularly
+        addFailedUnsubscribed(url, listener);
     }
 }
 ```
@@ -1054,8 +1132,6 @@ public class ZookeeperRegistryFactory extends AbstractRegistryFactory {
 ```
 
 
-
-1. 
 
 
 
@@ -1352,6 +1428,214 @@ private class RegistryChildListenerImpl implements ChildListener {
             logger.warn("Zookeeper children listener thread was interrupted unexpectedly, may cause race condition with the main thread.");
         }
         ZookeeperRegistry.this.notify(url, listener, toUrlsWithEmpty(url, path, children));
+    }
+}
+```
+
+
+
+### RedisRegsitry
+
+use Jedis Pub/Sub
+
+```java
+public class RedisRegistryFactory extends AbstractRegistryFactory {
+    @Override
+    protected Registry createRegistry(URL url) {
+        return new RedisRegistry(url);
+    }
+}
+```
+
+
+
+```java
+@Override
+public void doRegister(URL url) {
+    String key = toCategoryPath(url);
+    String value = url.toFullString();
+    String expire = String.valueOf(System.currentTimeMillis() + expirePeriod);
+    try {
+        redisClient.hset(key, value, expire);
+        redisClient.publish(key, REGISTER);
+    } catch (Throwable t) {
+        throw new RpcException("Failed to register service to redis registry. registry: " + url.getAddress() + ", service: " + url + ", cause: " + t.getMessage(), t);
+    }
+}
+```
+
+#### Notifier
+
+```java
+private class Notifier extends Thread {
+
+    private final String service;
+    private final AtomicInteger connectSkip = new AtomicInteger();
+    private final AtomicInteger connectSkipped = new AtomicInteger();
+
+    private volatile boolean first = true;
+    private volatile boolean running = true;
+    private volatile int connectRandom;
+
+    public Notifier(String service) {
+        super.setDaemon(true);
+        super.setName("DubboRedisSubscribe");
+        this.service = service;
+    }
+
+    private void resetSkip() {
+        connectSkip.set(0);
+        connectSkipped.set(0);
+        connectRandom = 0;
+    }
+
+    private boolean isSkip() {
+        int skip = connectSkip.get(); // Growth of skipping times
+        if (skip >= 10) { // If the number of skipping times increases by more than 10, take the random number
+            if (connectRandom == 0) {
+                connectRandom = ThreadLocalRandom.current().nextInt(10);
+            }
+            skip = 10 + connectRandom;
+        }
+        if (connectSkipped.getAndIncrement() < skip) { // Check the number of skipping times
+            return true;
+        }
+        connectSkip.incrementAndGet();
+        connectSkipped.set(0);
+        connectRandom = 0;
+        return false;
+    }
+
+    @Override
+    public void run() {
+        while (running) {
+            try {
+                if (!isSkip()) {
+                    try {
+                        if (!redisClient.isConnected()) {
+                            continue;
+                        }
+                        try {
+                            if (service.endsWith(ANY_VALUE)) {
+                                if (first) {
+                                    first = false;
+                                    Set<String> keys = redisClient.scan(service);
+                                    if (CollectionUtils.isNotEmpty(keys)) {
+                                        for (String s : keys) {
+                                            doNotify(s);
+                                        }
+                                    }
+                                    resetSkip();
+                                }
+                                redisClient.psubscribe(new NotifySub(), service);
+                            } else {
+                                if (first) {
+                                    first = false;
+                                    doNotify(service);
+                                    resetSkip();
+                                }
+                                redisClient.psubscribe(new NotifySub(), service + PATH_SEPARATOR + ANY_VALUE); // blocking
+                            }
+                        } catch (Throwable t) { // Retry another server
+                            logger.warn("Failed to subscribe service from redis registry. registry: " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
+                            // If you only have a single redis, you need to take a rest to avoid overtaking a lot of CPU resources
+                            sleep(reconnectPeriod);
+                        }
+                    } catch (Throwable t) {
+                        sleep(reconnectPeriod);
+                    }
+                }
+            } catch (Throwable t) {
+                logger.error(t.getMessage(), t);
+            }
+        }
+    }
+
+  	// running = false && redisClient.disconnect();
+    public void shutdown() {...}
+
+}
+```
+
+```java
+private class NotifySub extends JedisPubSub {
+    public NotifySub() {}
+
+    @Override
+    public void onMessage(String key, String msg) {
+        if (msg.equals(REGISTER)
+                || msg.equals(UNREGISTER)) {
+            try {
+                doNotify(key);
+            } catch (Throwable t) { // TODO Notification failure does not restore mechanism guarantee
+            }
+        }
+    }
+...
+}
+```
+
+#### doNotify
+
+```java
+private void doNotify(Collection<String> keys, URL url, Collection<NotifyListener> listeners) {
+    if (keys == null || keys.isEmpty()
+            || listeners == null || listeners.isEmpty()) {
+        return;
+    }
+    long now = System.currentTimeMillis();
+    List<URL> result = new ArrayList<>();
+    List<String> categories = Arrays.asList(url.getParameter(CATEGORY_KEY, new String[0]));
+    String consumerService = url.getServiceInterface();
+    for (String key : keys) {
+        if (!ANY_VALUE.equals(consumerService)) {
+            String providerService = toServiceName(key);
+            if (!providerService.equals(consumerService)) {
+                continue;
+            }
+        }
+        String category = toCategoryName(key);
+        if (!categories.contains(ANY_VALUE) && !categories.contains(category)) {
+            continue;
+        }
+        List<URL> urls = new ArrayList<>();
+        Set<URL> toDeleteExpireKeys = new HashSet<>(expireCache.keySet());
+        Map<String, String> values = redisClient.hgetAll(key);
+        if (CollectionUtils.isNotEmptyMap(values)) {
+            for (Map.Entry<String, String> entry : values.entrySet()) {
+                URL u = URL.valueOf(entry.getKey());
+                long expire = Long.parseLong(entry.getValue());
+                if (!u.getParameter(DYNAMIC_KEY, true)
+                        || expire >= now) {
+                    if (UrlUtils.isMatch(url, u)) {
+                        urls.add(u);
+                        expireCache.put(u, expire);
+                        toDeleteExpireKeys.remove(u);
+                    }
+                }
+            }
+        }
+
+        if (!toDeleteExpireKeys.isEmpty()) {
+            for (URL u : toDeleteExpireKeys) {
+                expireCache.remove(u);
+            }
+        }
+        if (urls.isEmpty()) {
+            urls.add(URLBuilder.from(url)
+                    .setProtocol(EMPTY_PROTOCOL)
+                    .setAddress(ANYHOST_VALUE)
+                    .setPath(toServiceName(key))
+                    .addParameter(CATEGORY_KEY, category)
+                    .build());
+        }
+        result.addAll(urls);
+    }
+    if (CollectionUtils.isEmpty(result)) {
+        return;
+    }
+    for (NotifyListener listener : listeners) {
+        notify(url, listener, result);
     }
 }
 ```
