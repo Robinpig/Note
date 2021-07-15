@@ -77,5 +77,5 @@ AllocateByteBuf
 
 
 
-Future and Promise
+[Future and Promise](/docs/CS/Java/Netty/Future.md)
 

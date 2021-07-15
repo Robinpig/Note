@@ -89,6 +89,7 @@
 - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
 - [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
 - [Future](/docs/CS/Java/Netty/Future.md)
+- [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
   
 ### [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
 
