@@ -72,6 +72,20 @@ Type
 
 
 
+### Abstract Class vs Interface
+
+|                 | Abstract Class     | Interface                                          |
+| --------------- | ------------------ | -------------------------------------------------- |
+| Abstract Method | public/protected   | public                                             |
+| Fields          | all                | public static final                                |
+| Constructor     | Has                | no constructor                                     |
+| Hierarchy       | only one           | multiple implement                                 |
+| Method & Block  | all                | only default/static/public static method, no block |
+| For             | template by extend | add function                                       |
+|                 | is a               | like a                                             |
+
+
+
 ## Multiple Hierarchy
 
 Three rules:

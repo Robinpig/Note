@@ -2,13 +2,64 @@
 
 **The \*enum\* keyword was introduced in Java 5.** It denotes a special type of class that **always extends the *java.lang.Enum* class.** 
 
-
-
 **Comparing Enum Types Using “==”  rather than equals.**
 
 
 
+`finalize` is final
 
+
+
+
+
+### Serialize
+
+```java
+/**
+ * prevent default deserialization
+ */
+private void readObject(ObjectInputStream in) throws IOException,
+    ClassNotFoundException {
+    throw new InvalidObjectException("can't deserialize enum");
+}
+
+private void readObjectNoData() throws ObjectStreamException {
+    throw new InvalidObjectException("can't deserialize enum");
+}
+```
+
+
+
+```java
+// Writes given enum constant to stream. only write Enum.name
+private void writeEnum(Enum<?> en,
+                       ObjectStreamClass desc,
+                       boolean unshared)
+    throws IOException
+{
+    bout.writeByte(TC_ENUM);
+    ObjectStreamClass sdesc = desc.getSuperDesc();
+    writeClassDesc((sdesc.forClass() == Enum.class) ? desc : sdesc, false);
+    handles.assign(unshared ? null : en);
+    writeString(en.name(), false);
+}
+```
+
+
+
+~~~java
+/** ObjectInputStream
+ * Reads in and returns enum constant, or null if enum type is
+ * unresolvable.  Sets passHandle to enum constant's assigned handle.
+ */
+private Enum<?> readEnum(boolean unshared) throws IOException {
+  ...
+    Enum<?> en = Enum.valueOf((Class)cl, name); // use name Enum.valueOf()
+ 		result = en;
+  ```
+    return result;
+}
+~~~
 
 
 
