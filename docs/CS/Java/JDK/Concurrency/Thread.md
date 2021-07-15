@@ -630,10 +630,6 @@ throws InterruptedException {
 
 ### wait
 
-Provider-Consumer
-
-Wait-notify只是一个condition queue 仅使用于单生产/消费模型
-
 Causes the current thread to wait until either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object, or a specified amount of time has elapsed.
 
 **The current thread must own this object's monitor.** use `CHECK_OWNER`.
@@ -643,19 +639,6 @@ InterruptedException if any thread interrupted the current thread before or whil
 public final native void wait(long timeout) throws InterruptedException;
 
 public final void wait(long timeout, int nanos) throws InterruptedException {
-    if (timeout < 0) {
-        throw new IllegalArgumentException("timeout value is negative");
-    }
-
-    if (nanos < 0 || nanos > 999999) {
-        throw new IllegalArgumentException(
-                            "nanosecond timeout value out of range");
-    }
-
-    if (nanos > 0) {
-        timeout++;
-    }
-
     wait(timeout);
 }
 
@@ -668,14 +651,13 @@ public final void wait() throws InterruptedException {
 
 ##### ObjectSynchronizer::wait
 
-[ObjectSynchronizer::inflate]()
+must get monitor by [ObjectSynchronizer::inflate]()
 
 ```cpp
 // NOTE: must use heavy weight monitor to handle wait()
 int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
   if (UseBiasedLocking) {
     BiasedLocking::revoke_and_rebias(obj, false, THREAD);
-    assert(!obj->mark()->has_bias_pattern(), "biases should be revoked by now");
   }
   ObjectMonitor* monitor = ObjectSynchronizer::inflate(THREAD,
                                                        obj(),
@@ -692,9 +674,9 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException())
 2. CHECK_OWNER
 3. AddWaiter, enter the wait queue
-4. Thread::SpinRelease, exit monitor
+4. exit monitor
 5. Park Self
-6. ReenterI when unPark by other Thread
+6. ReenterI  or enter when unPark by other Thread
 
 ```cpp
 //objectMonitor.cpp
@@ -702,10 +684,7 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 // will need to be replicated in complete_exit
 void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
   Thread * const Self = THREAD;
-  assert(Self->is_Java_thread(), "Must be Java thread!");
   JavaThread *jt = (JavaThread *)THREAD;
-
-  assert(InitDone, "Unexpectedly not initialized");
 
   // Throw IMSX or IEX.
   CHECK_OWNER();
@@ -714,46 +693,11 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
 
   // check for a pending interrupt and ClearInterrupted
   if (interruptible && Thread::is_interrupted(Self, true) && !HAS_PENDING_EXCEPTION) {
-    // post monitor waited event.  Note that this is past-tense, we are done waiting.
-    if (JvmtiExport::should_post_monitor_waited()) {
-      // Note: 'false' parameter is passed here because the
-      // wait was not timed out due to thread interrupt.
-      JvmtiExport::post_monitor_waited(jt, this, false);
-
-      // In this short circuit of the monitor wait protocol, the
-      // current thread never drops ownership of the monitor and
-      // never gets added to the wait queue so the current thread
-      // cannot be made the successor. This means that the
-      // JVMTI_EVENT_MONITOR_WAITED event handler cannot accidentally
-      // consume an unpark() meant for the ParkEvent associated with
-      // this ObjectMonitor.
-    }
-    if (event.should_commit()) {
-      post_monitor_wait_event(&event, this, 0, millis, false);
-    }
     THROW(vmSymbols::java_lang_InterruptedException());
     return;
   }
 
-  assert(Self->_Stalled == 0, "invariant");
-  Self->_Stalled = intptr_t(this);
-  jt->set_current_waiting_monitor(this);
-
-  // create a node to be put into the queue
-  // Critically, after we reset() the event but prior to park(), we must check
-  // for a pending interrupt.
-  ObjectWaiter node(Self);
-  node.TState = ObjectWaiter::TS_WAIT;
-  Self->_ParkEvent->reset();
-  OrderAccess::fence();          // ST into Event; membar ; LD interrupted-flag
-
-  // Enter the waiting queue, which is a circular doubly linked list in this case
-  // but it could be a priority queue or any data structure.
-  // _WaitSetLock protects the wait queue.  Normally the wait queue is accessed only
-  // by the the owner of the monitor *except* in the case where park()
-  // returns because of a timeout of interrupt.  Contention is exceptionally rare
-  // so we use a simple spin-lock instead of a heavier-weight blocking lock.
-
+	// AddWaiter
   Thread::SpinAcquire(&_WaitSetLock, "WaitSet - add");
   AddWaiter(&node);
   Thread::SpinRelease(&_WaitSetLock);
@@ -766,116 +710,36 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
   exit(true, Self);                    // exit the monitor
   guarantee(_owner != Self, "invariant");
 
-  // The thread is on the WaitSet list - now park() it.
-  // On MP systems it's conceivable that a brief spin before we park
-  // could be profitable.
-  //
   // TODO-FIXME: change the following logic to a loop of the form
   //   while (!timeout && !interrupted && _notified == 0) park()
-
-  int ret = OS_OK;
-  int WasNotified = 0;
-  { // State transition wrappers
-    OSThread* osthread = Self->osthread();
-    OSThreadWaitState osts(osthread, true);
-    {
-      ThreadBlockInVM tbivm(jt);
-      // Thread is in thread_blocked state and oop access is unsafe.
-      jt->set_suspend_equivalent();
-
-      if (interruptible && (Thread::is_interrupted(THREAD, false) || HAS_PENDING_EXCEPTION)) {
-        // Intentionally empty
-      } else if (node._notified == 0) {
         if (millis <= 0) {
           Self->_ParkEvent->park();
         } else {
           ret = Self->_ParkEvent->park(millis);
         }
-      }
+	// Exit thread safepoint: transition _thread_blocked -> _thread_in_vm
 
-      // were we externally suspended while we were waiting?
-      if (ExitSuspendEquivalent (jt)) {
-        // TODO-FIXME: add -- if succ == Self then succ = null.
-        jt->java_suspend_self();
-      }
-
-    } // Exit thread safepoint: transition _thread_blocked -> _thread_in_vm
-
-    // Node may be on the WaitSet, the EntryList (or cxq), or in transition
-    // from the WaitSet to the EntryList.
-    // See if we need to remove Node from the WaitSet.
-    // We use double-checked locking to avoid grabbing _WaitSetLock
-    // if the thread is not on the wait queue.
-    //
-    // Note that we don't need a fence before the fetch of TState.
-    // In the worst case we'll fetch a old-stale value of TS_WAIT previously
-    // written by the is thread. (perhaps the fetch might even be satisfied
-    // by a look-aside into the processor's own store buffer, although given
-    // the length of the code path between the prior ST and this load that's
-    // highly unlikely).  If the following LD fetches a stale TS_WAIT value
-    // then we'll acquire the lock and then re-fetch a fresh TState value.
-    // That is, we fail toward safety.
+    
 
     if (node.TState == ObjectWaiter::TS_WAIT) {
       Thread::SpinAcquire(&_WaitSetLock, "WaitSet - unlink");
       if (node.TState == ObjectWaiter::TS_WAIT) {
         DequeueSpecificWaiter(&node);       // unlink from WaitSet
-        assert(node._notified == 0, "invariant");
         node.TState = ObjectWaiter::TS_RUN;
       }
       Thread::SpinRelease(&_WaitSetLock);
     }
-
-    // The thread is now either on off-list (TS_RUN),
-    // on the EntryList (TS_ENTER), or on the cxq (TS_CXQ).
-    // The Node's TState variable is stable from the perspective of this thread.
-    // No other threads will asynchronously modify TState.
-    guarantee(node.TState != ObjectWaiter::TS_WAIT, "invariant");
-    OrderAccess::loadload();
-    if (_succ == Self) _succ = NULL;
-    WasNotified = node._notified;
-
-    // Reentry phase -- reacquire the monitor.
-    // re-enter contended monitor after object.wait().
-    // retain OBJECT_WAIT state until re-enter successfully completes
-    // Thread state is thread_in_vm and oop access is again safe,
-    // although the raw address of the object may have changed.
-    // (Don't cache naked oops over safepoints, of course).
 
     // post monitor waited event. Note that this is past-tense, we are done waiting.
     if (JvmtiExport::should_post_monitor_waited()) {
       JvmtiExport::post_monitor_waited(jt, this, ret == OS_TIMEOUT);
 
       if (node._notified != 0 && _succ == Self) {
-        // In this part of the monitor wait-notify-reenter protocol it
-        // is possible (and normal) for another thread to do a fastpath
-        // monitor enter-exit while this thread is still trying to get
-        // to the reenter portion of the protocol.
-        //
-        // The ObjectMonitor was notified and the current thread is
-        // the successor which also means that an unpark() has already
-        // been done. The JVMTI_EVENT_MONITOR_WAITED event handler can
-        // consume the unpark() that was done when the successor was
-        // set because the same ParkEvent is shared between Java
-        // monitors and JVM/TI RawMonitors (for now).
-        //
-        // We redo the unpark() to ensure forward progress, i.e., we
-        // don't want all pending threads hanging (parked) with none
-        // entering the unlocked monitor.
         node._event->unpark();
       }
     }
-
-    if (event.should_commit()) {
-      post_monitor_wait_event(&event, this, node._notifier_tid, millis, ret == OS_TIMEOUT);
-    }
-
-    OrderAccess::fence();
-
-    assert(Self->_Stalled != 0, "invariant");
-    Self->_Stalled = 0;
-
-    assert(_owner != Self, "invariant");
+		
+  	// enter or reenter 
     ObjectWaiter::TStates v = node.TState;
     if (v == ObjectWaiter::TS_RUN) {
       enter(Self);
@@ -884,26 +748,13 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
       ReenterI(Self, &node);
       node.wait_reenter_end(this);
     }
-
-    // Self has reacquired the lock.
-    // Lifecycle - the node representing Self must not appear on any queues.
-    // Node is about to go out-of-scope, but even if it were immortal we wouldn't
-    // want residual elements associated with this thread left on any lists.
-    guarantee(node.TState == ObjectWaiter::TS_RUN, "invariant");
-    assert(_owner == Self, "invariant");
-    assert(_succ != Self, "invariant");
-  } // OSThreadWaitState()
+  	// OSThreadWaitState()
 
   jt->set_current_waiting_monitor(NULL);
 
   guarantee(_recursions == 0, "invariant");
   _recursions = save;     // restore the old recursion count
   _waiters--;             // decrement the number of waiters
-
-  // Verify a few postconditions
-  assert(_owner == Self, "invariant");
-  assert(_succ != Self, "invariant");
-  assert(((oop)(object()))->mark() == markOopDesc::encode(this), "invariant");
 
   // check if the notification happened
   if (!WasNotified) {
@@ -913,9 +764,6 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
       THROW(vmSymbols::java_lang_InterruptedException());
     }
   }
-
-  // NOTE: Spurious wake up will be consider as timeout.
-  // Monitor notify has precedence over thread interrupt.
 }
 ```
 
@@ -930,7 +778,7 @@ wake up thread when exit the sync block
 | wake order | FIFO   | LIFO      |
 |            |        |           |
 
-notifyAll 在退出同步块时唤醒其倒数第二个进入wait状态的线程，依次类推
+notifyAll foreach from tail -> head
 
 
 

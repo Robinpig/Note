@@ -1,10 +1,14 @@
+## Introduction
+
+
+
 ### Ref Hierarchy
 
 
 
 ![java.lang.ref](../images/Ref.png)
 
-### Reference<T>
+### Reference
 
 ```java
 public abstract class Reference<T> {
@@ -59,9 +63,9 @@ Create Reference Object
 
 find ref object when GC
 
-if need to collect, add to DiscoveredList `referenceProcessor.cpp`中`process_discovered_references`方法
+if need to collect, add to DiscoveredList `referenceProcessor.cpp`中`process_discovered_references`
 
-move elements in DiscoveredList to PendingList `referenceProcessor.cpp`中`enqueue_discovered_ref_helper`方法
+move elements in DiscoveredList to PendingList when  `enqueue_discovered_ref_helper`  in `referenceProcessor.cpp`
 
 add pending to ReferenceQueue by ReferenceHandler
 
@@ -103,7 +107,7 @@ private static class ReferenceHandler extends Thread {
 
 ```java
 /**
- * Try handle pending Reference if there is one.<p>
+ * Try handle pending Reference if there is one.
  * Return true} as a hint that there might be another Reference pending or false} when there are no more pending References at the moment and the program can do some other
  * useful work instead of looping.
  */
@@ -150,7 +154,7 @@ static boolean tryHandlePending(boolean waitForNotify) {
     }
 
     ReferenceQueue<? super Object> q = r.queue;
-    if (q != ReferenceQueue.NULL) q.enqueue(r);
+    if (q != ReferenceQueue.NULL) q.enqueue(r); // enq ReferenceQueue
     return true;
 }
 ```
@@ -164,9 +168,7 @@ static boolean tryHandlePending(boolean waitForNotify) {
 ```java
 public class SoftReference<T> extends Reference<T> {
 
-    /**
-     * Timestamp clock, updated by the garbage collector
-     */
+    // Timestamp clock, updated by the garbage collector
     static private long clock;
 
     /**
@@ -176,26 +178,8 @@ public class SoftReference<T> extends Reference<T> {
      */
     private long timestamp;
 
-    /**
-     * Creates a new soft reference that refers to the given object.  The new
-     * reference is not registered with any queue.
-     *
-     * @param referent object the new soft reference will refer to
-     */
-    public SoftReference(T referent) {
-        super(referent);
-        this.timestamp = clock;
-    }
-
-    /**
-     * Creates a new soft reference that refers to the given object and is
-     * registered with the given queue.
-     *
-     * @param referent object the new soft reference will refer to
-     * @param q the queue with which the reference is to be registered,
-     *          or <tt>null</tt> if registration is not required
-     *
-     */
+    // Creates a new soft reference that refers to the given object and is
+    // registered with the given queue.
     public SoftReference(T referent, ReferenceQueue<? super T> q) {
         super(referent, q);
         this.timestamp = clock;
@@ -205,9 +189,6 @@ public class SoftReference<T> extends Reference<T> {
      * Returns this reference object's referent.  If this reference object has
      * been cleared, either by the program or by the garbage collector, then
      * this method returns <code>null</code>.
-     *
-     * @return   The object to which this reference refers, or
-     *           <code>null</code> if this reference object has been cleared
      */
     public T get() {
         T o = super.get();
@@ -216,6 +197,126 @@ public class SoftReference<T> extends Reference<T> {
         return o;
     }
 
+}
+```
+
+
+
+`ReferenceProcessor::process_discovered_references`
+
+ -> `process_soft_ref_reconsider `
+
+ -> `process_soft_ref_reconsider_work`
+
+(SoftReferences only) **Traverse the list and remove any SoftReferences whose referents are not alive**, but that should be kept alive for policy reasons. Keep alive the transitive closure of all such referents.
+
+```java
+// referenceProcessor.cpp
+size_t ReferenceProcessor::process_soft_ref_reconsider_work(DiscoveredList&    refs_list,
+                                                            ReferencePolicy*   policy,
+                                                            BoolObjectClosure* is_alive,
+                                                            OopClosure*        keep_alive,
+                                                            VoidClosure*       complete_gc) {
+  DiscoveredListIterator iter(refs_list, keep_alive, is_alive);
+  // Decide which softly reachable refs should be kept alive.
+  while (iter.has_next()) {
+    iter.load_ptrs(DEBUG_ONLY(!discovery_is_atomic() /* allow_null_referent */));
+    bool referent_is_dead = (iter.referent() != NULL) && !iter.is_referent_alive();
+    if (referent_is_dead &&
+        !policy->should_clear_reference(iter.obj(), _soft_ref_timestamp_clock)) {
+      log_dropped_ref(iter, "by policy");
+      // Remove Reference object from list
+      iter.remove();
+      // keep the referent around
+      iter.make_referent_alive();
+      iter.move_to_next();
+    } else {
+      iter.next();
+    }
+  }
+  // Close the reachable set
+  complete_gc->do_void();
+  return iter.removed();
+}
+```
+
+
+
+#### referencePolicy
+
+referencePolicy is used to determine when soft reference objects should be cleared.
+
+1. Server compiler mode **LRUMaxHeapPolicy** 
+2. Else **LRUCurrentHeapPolicy**
+
+
+```java
+// referencePolicy.hpp
+class NeverClearPolicy : public ReferencePolicy {
+ public:
+  virtual bool should_clear_reference(oop p, jlong timestamp_clock) {
+    return false;
+  }
+};
+
+class AlwaysClearPolicy : public ReferencePolicy {
+ public:
+  virtual bool should_clear_reference(oop p, jlong timestamp_clock) {
+    return true;
+  }
+};
+
+class LRUCurrentHeapPolicy : public ReferencePolicy {
+ private:
+  jlong _max_interval;
+
+ public:
+  LRUCurrentHeapPolicy();
+
+  // Capture state (of-the-VM) information needed to evaluate the policy
+  void setup();
+  virtual bool should_clear_reference(oop p, jlong timestamp_clock);
+};
+
+class LRUMaxHeapPolicy : public ReferencePolicy {
+ private:
+  jlong _max_interval;
+
+ public:
+  LRUMaxHeapPolicy();
+
+  // Capture state (of-the-VM) information needed to evaluate the policy
+  void setup();
+  virtual bool should_clear_reference(oop p, jlong timestamp_clock);
+};
+```
+
+
+
+```java
+// referenceProcessor.cpp
+void ReferenceProcessor::init_statics() {
+  // We need a monotonically non-decreasing time in ms but
+  // os::javaTimeMillis() does not guarantee monotonicity.
+  jlong now = os::javaTimeNanos() / NANOSECS_PER_MILLISEC;
+
+  // Initialize the soft ref timestamp clock.
+  _soft_ref_timestamp_clock = now;
+  // Also update the soft ref clock in j.l.r.SoftReference
+  java_lang_ref_SoftReference::set_clock(_soft_ref_timestamp_clock);
+
+  _always_clear_soft_ref_policy = new AlwaysClearPolicy();
+  if (is_server_compilation_mode_vm()) {
+    _default_soft_ref_policy = new LRUMaxHeapPolicy();
+  } else {
+    _default_soft_ref_policy = new LRUCurrentHeapPolicy();
+  }
+  if (_always_clear_soft_ref_policy == NULL || _default_soft_ref_policy == NULL) {
+    vm_exit_during_initialization("Could not allocate reference policy object");
+  }
+  guarantee(RefDiscoveryPolicy == ReferenceBasedDiscovery ||
+            RefDiscoveryPolicy == ReferentBasedDiscovery,
+            "Unrecognized RefDiscoveryPolicy");
 }
 ```
 
@@ -268,9 +369,122 @@ public class WeakReference<T> extends Reference<T> {
 
 
 
+Traverse the list and remove any Refs whose referents are alive, or NULL if discovery is not atomic. Enqueue and clear the reference for others if do_enqueue_and_clear is set.
+
+```cpp
+size_t ReferenceProcessor::process_soft_weak_final_refs_work(DiscoveredList&    refs_list,
+                                                             BoolObjectClosure* is_alive,
+                                                             OopClosure*        keep_alive,
+                                                             bool               do_enqueue_and_clear) {
+  DiscoveredListIterator iter(refs_list, keep_alive, is_alive);
+  while (iter.has_next()) {
+    iter.load_ptrs(DEBUG_ONLY(!discovery_is_atomic() /* allow_null_referent */));
+    if (iter.referent() == NULL) {
+      // Reference has been cleared since discovery; only possible if
+      // discovery is not atomic (checked by load_ptrs).  Remove
+      // reference from list.
+      log_dropped_ref(iter, "cleared");
+      iter.remove();
+      iter.move_to_next();
+    } else if (iter.is_referent_alive()) {
+      // The referent is reachable after all.
+      // Remove reference from list.
+      log_dropped_ref(iter, "reachable");
+      iter.remove();
+      // Update the referent pointer as necessary.  Note that this
+      // should not entail any recursive marking because the
+      // referent must already have been traversed.
+      iter.make_referent_alive();
+      iter.move_to_next();
+    } else {
+      if (do_enqueue_and_clear) {
+        iter.clear_referent();
+        iter.enqueue();
+        log_enqueued_ref(iter, "cleared");
+      }
+      // Keep in discovered list
+      iter.next();
+    }
+  }
+  if (do_enqueue_and_clear) {
+    iter.complete_enqueue();
+    refs_list.clear();
+  }
+  return iter.removed();
+}
+```
+
 ### Phantom Reference
 
+
+
+```java
+public class PhantomReference<T> extends Reference<T> {
+    public T get() {
+        return null;
+    }
+  
+    public PhantomReference(T referent, ReferenceQueue<? super T> q) {
+        super(referent, q);
+    }
+
+}
+```
+
+
+
+**TODO in JDK12 will clear referent while JDk1.8 not**
+
+```cpp
+size_t ReferenceProcessor::process_phantom_refs_work(DiscoveredList&    refs_list,
+                                          BoolObjectClosure* is_alive,
+                                          OopClosure*        keep_alive,
+                                          VoidClosure*       complete_gc) {
+  DiscoveredListIterator iter(refs_list, keep_alive, is_alive);
+  while (iter.has_next()) {
+    iter.load_ptrs(DEBUG_ONLY(!discovery_is_atomic() /* allow_null_referent */));
+
+    oop const referent = iter.referent();
+
+    if (referent == NULL || iter.is_referent_alive()) {
+      iter.make_referent_alive();
+      iter.remove();
+      iter.move_to_next();
+    } else {
+      iter.clear_referent();
+      iter.enqueue();
+      log_enqueued_ref(iter, "cleared Phantom");
+      iter.next();
+    }
+  }
+  iter.complete_enqueue();
+  // Close the reachable set; needed for collectors which keep_alive_closure do
+  // not immediately complete their work.
+  complete_gc->do_void();
+  refs_list.clear();
+
+  return iter.removed();
+}
+```
+
+
+
+```cpp
+void DiscoveredListIterator::complete_enqueue() {
+  if (_prev_discovered != NULL) {
+    // This is the last object.
+    // Swap refs_list into pending list and set obj's
+    // discovered to what we read from the pending list.
+    oop old = Universe::swap_reference_pending_list(_refs_list.head());
+    HeapAccess<AS_NO_KEEPALIVE>::oop_store_at(_prev_discovered, java_lang_ref_Reference::discovered_offset, old);
+  }
+}
+```
+
+
+
 ### FinalReference
+
 Final references, used to implement finalization
 
 ```java
@@ -284,6 +498,36 @@ class FinalReference<T> extends Reference<T> {
     public boolean enqueue() {
         throw new InternalError("should never reach here");
     }
+}
+```
+
+
+
+**Keep alive followers of referents for FinalReferences.** Must only be called for those.
+
+```cpp
+size_t ReferenceProcessor::process_final_keep_alive_work(DiscoveredList& refs_list,
+                                                         OopClosure*     keep_alive,
+                                                         VoidClosure*    complete_gc) {
+  DiscoveredListIterator iter(refs_list, keep_alive, NULL);
+  while (iter.has_next()) {
+    iter.load_ptrs(DEBUG_ONLY(false /* allow_null_referent */));
+    // keep the referent and followers around
+    iter.make_referent_alive();
+
+    // Self-loop next, to mark the FinalReference not active.
+    java_lang_ref_Reference::set_next_raw(iter.obj(), iter.obj());
+
+    iter.enqueue();
+    log_enqueued_ref(iter, "Final");
+    iter.next();
+  }
+  iter.complete_enqueue();
+  // Close the reachable set
+  complete_gc->do_void();
+  refs_list.clear();
+
+  return iter.removed();
 }
 ```
 
@@ -463,7 +707,9 @@ private static class FinalizerThread extends Thread {
     }
 ```
 
-### When VM invoke register?
+
+
+#### When VM invoke register?
 
 ```cpp
 
@@ -481,7 +727,7 @@ product(bool, RegisterFinalizersAtInit, true,                             \
 "after allocation")
 ```
 
-also clone will invoke Finalizer.register()
+also clone will call `Finalizer#register()`
 ```cpp
 // instanceKlass.cpp
 instanceOop InstanceKlass::allocate_instance(TRAPS) {
@@ -538,88 +784,94 @@ void Rewriter::rewrite_Object_init(const methodHandle& method, TRAPS) {
 
 ### Cleaner
 
-Since 1.9
-
-*Cleaner manages a set of object references and corresponding cleaning actions.*
-*Cleaning actions are registered to run after the cleaner is notified that the object has become phantom reachable. The cleaner uses PhantomReference and ReferenceQueue to be notified when the reachability changes.*
-*Each cleaner operates independently, managing the pending cleaning actions and handling threading and termination when the cleaner is no longer in use. Registering an object reference and corresponding cleaning action returns a Cleanable. The most efficient use is to explicitly invoke the clean method when the object is closed or no longer needed. The cleaning action is a Runnable to be invoked at most once when the object has become phantom reachable unless it has already been explicitly cleaned. Note that the cleaning action must not refer to the object being registered. If so, the object will not become phantom reachable and the cleaning action will not be invoked automatically.*
-*The execution of the cleaning action is performed by a thread associated with the cleaner. All exceptions thrown by the cleaning action are ignored. The cleaner and other cleaning actions are not affected by exceptions in a cleaning action. The thread runs until all registered cleaning actions have completed and the cleaner itself is reclaimed by the garbage collector.*
-*The behavior of cleaners during System.exit is implementation specific. No guarantees are made relating to whether cleaning actions are invoked or not.*
-*Unless otherwise noted, passing a null argument to a constructor or method in this class will cause a NullPointerException to be thrown.*
-
 ```java
-public final class Cleaner {
+public class Cleaner
+    extends PhantomReference<Object>
+{
 
-    /**
-     * The Cleaner implementation.
-     */
-    final CleanerImpl impl;
+    // Dummy reference queue, needed because the PhantomReference constructor
+    // insists that we pass a queue.  Nothing will ever be placed on this queue
+    // since the reference handler invokes cleaners explicitly.
+    //
+    private static final ReferenceQueue<Object> dummyQueue = new ReferenceQueue<>();
 
-    static {
-        CleanerImpl.setCleanerImplAccess(new Function<Cleaner, CleanerImpl>() {
-            @Override
-            public CleanerImpl apply(Cleaner cleaner) {
-                return cleaner.impl;
-            }
-        });
+    // Doubly-linked list of live cleaners, which prevents the cleaners
+    // themselves from being GC'd before their referents
+    //
+    static private Cleaner first = null;
+
+    private Cleaner
+        next = null,
+        prev = null;
+
+    private static synchronized Cleaner add(Cleaner cl) {
+        if (first != null) {
+            cl.next = first;
+            first.prev = cl;
+        }
+        first = cl;
+        return cl;
+    }
+
+    private static synchronized boolean remove(Cleaner cl) {
+
+        // If already removed, do nothing
+        if (cl.next == cl)
+            return false;
+
+        // Update list
+        if (first == cl) {
+            if (cl.next != null)
+                first = cl.next;
+            else
+                first = cl.prev;
+        }
+        if (cl.next != null)
+            cl.next.prev = cl.prev;
+        if (cl.prev != null)
+            cl.prev.next = cl.next;
+
+        // Indicate removal by pointing the cleaner to itself
+        cl.next = cl;
+        cl.prev = cl;
+        return true;
+
+    }
+
+    private final Runnable thunk;
+
+    private Cleaner(Object referent, Runnable thunk) {
+        super(referent, dummyQueue);
+        this.thunk = thunk;
     }
 
     /**
-     * Construct a Cleaner implementation and start it.
+     * Creates a new cleaner.
      */
-    private Cleaner() {
-        impl = new CleanerImpl();
+    public static Cleaner create(Object ob, Runnable thunk) {
+        if (thunk == null)
+            return null;
+        return add(new Cleaner(ob, thunk));
     }
 
     /**
-     * Returns a new Cleaner.
-     * The cleaner creates a  daemon thread to process the phantom reachable objects and to invoke cleaning actions.
-     * The context class loader of the thread is set to the system class loader.
-     * The thread has no permissions, enforced only if a SecurityManager is set.
-     * The cleaner terminates when it is phantom reachable and all of the registered cleaning actions are complete.
+     * Runs this cleaner, if it has not been run before.
      */
-    public static Cleaner create() {
-        Cleaner cleaner = new Cleaner();
-        cleaner.impl.start(cleaner, null);
-        return cleaner;
-    }
-
-    /**
-     * Returns a new Cleaner using a Thread from the ThreadFactory.
-     * A thread from the thread factory's  newThread method is set to be a daemon thread and started to process phantom reachable objects and invoke cleaning actions.
-     * On each call the thread factory must provide a Thread that is suitable for performing the cleaning actions.
-     * The cleaner terminates when it is phantom reachable and all of the registered cleaning actions are complete.
-     */
-    public static Cleaner create(ThreadFactory threadFactory) {
-        Objects.requireNonNull(threadFactory, "threadFactory");
-        Cleaner cleaner = new Cleaner();
-        cleaner.impl.start(cleaner, threadFactory);
-        return cleaner;
-    }
-
-    /**
-     * Registers an object and a cleaning action to run when the object
-     * becomes phantom reachable.
-     * Refer to the <a href="#compatible-cleaners">API Note</a> above for
-     * cautions about the behavior of cleaning actions.
-     */
-    public Cleanable register(Object obj, Runnable action) {
-        Objects.requireNonNull(obj, "obj");
-        Objects.requireNonNull(action, "action");
-        return new CleanerImpl.PhantomCleanableRef(obj, this, action);
-    }
-
-    /**
-     * Cleanable represents an object and a
-     * cleaning action registered in a Cleaner.
-     */
-    public interface Cleanable {
-        /**
-         * Unregisters the cleanable and invokes the cleaning action.
-         * The cleanable's cleaning action is invoked at most once
-         * regardless of the number of calls to clean}.
-         */
-        void clean();
+    public void clean() {
+        if (!remove(this))
+            return;
+        try {
+            thunk.run();
+        } catch (final Throwable x) {
+            AccessController.doPrivileged(new PrivilegedAction<Void>() {
+                    public Void run() {
+                        if (System.err != null)
+                            new Error("Cleaner terminated abnormally", x)
+                                .printStackTrace();
+                        System.exit(1);
+                        return null;
+                    }});
+        }
     }
 
 }
@@ -627,86 +879,15 @@ public final class Cleaner {
 
 
 
-referenceProcessor.cpp
+## Summary
 
-```cpp
-ReferenceProcessorStats ReferenceProcessor::process_discovered_references(
-  BoolObjectClosure*            is_alive,
-  OopClosure*                   keep_alive,
-  VoidClosure*                  complete_gc,
-  AbstractRefProcTaskExecutor*  task_executor,
-  ReferenceProcessorPhaseTimes* phase_times) {
-
-  double start_time = os::elapsedTime();
-
-  assert(!enqueuing_is_done(), "If here enqueuing should not be complete");
-  // Stop treating discovered references specially.
-  disable_discovery();
-
-  // If discovery was concurrent, someone could have modified
-  // the value of the static field in the j.l.r.SoftReference
-  // class that holds the soft reference timestamp clock using
-  // reflection or Unsafe between when discovery was enabled and
-  // now. Unconditionally update the static field in ReferenceProcessor
-  // here so that we use the new value during processing of the
-  // discovered soft refs.
-
-  _soft_ref_timestamp_clock = java_lang_ref_SoftReference::clock();
-
-  ReferenceProcessorStats stats(total_count(_discoveredSoftRefs),
-                                total_count(_discoveredWeakRefs),
-                                total_count(_discoveredFinalRefs),
-                                total_count(_discoveredPhantomRefs));
-
-  {
-    RefProcTotalPhaseTimesTracker tt(RefPhase1, phase_times, this);
-    process_soft_ref_reconsider(is_alive, keep_alive, complete_gc,
-                                task_executor, phase_times);
-  }
-
-  update_soft_ref_master_clock();
-
-  {
-    RefProcTotalPhaseTimesTracker tt(RefPhase2, phase_times, this);
-    process_soft_weak_final_refs(is_alive, keep_alive, complete_gc, task_executor, phase_times);
-  }
-
-  {
-    RefProcTotalPhaseTimesTracker tt(RefPhase3, phase_times, this);
-    process_final_keep_alive(keep_alive, complete_gc, task_executor, phase_times);
-  }
-
-  {
-    RefProcTotalPhaseTimesTracker tt(RefPhase4, phase_times, this);
-    process_phantom_refs(is_alive, keep_alive, complete_gc, task_executor, phase_times);
-  }
-
-  if (task_executor != NULL) {
-    // Record the work done by the parallel workers.
-    task_executor->set_single_threaded_mode();
-  }
-
-  phase_times->set_total_time_ms((os::elapsedTime() - start_time) * 1000);
-
-  return stats;
-}
-```
+|      | Soft            | Weak               | Phantom                | Final |
+| ---- | --------------- | ------------------ | ---------------------- | ----- |
+|      | clean by Policy | clean all the time | use to trace collector |       |
+|      |                 |                    |                        |       |
+|      |                 |                    |                        |       |
 
 
-
-
-
-```cpp
-void DiscoveredListIterator::complete_enqueue() {
-  if (_prev_discovered != NULL) {
-    // This is the last object.
-    // Swap refs_list into pending list and set obj's
-    // discovered to what we read from the pending list.
-    oop old = Universe::swap_reference_pending_list(_refs_list.head());
-    HeapAccess<AS_NO_KEEPALIVE>::oop_store_at(_prev_discovered, java_lang_ref_Reference::discovered_offset, old);
-  }
-}
-```
 
 ## Reference
 

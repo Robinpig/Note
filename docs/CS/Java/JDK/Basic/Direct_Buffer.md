@@ -2,10 +2,8 @@
 
 How to allocate direct memory?
 
-1. `ByteBuffer.allocteDirect` invoke `Unsafe.allocateMemory`
+1. `ByteBuffer.allocteDirect` call `Unsafe.allocateMemory`
 2. `Unsafe.allocateMemory`
-
-
 
 ```cpp
 //unsafe.cpp
@@ -31,9 +29,18 @@ UNSAFE_ENTRY(void, Unsafe_FreeMemory0(JNIEnv *env, jobject unsafe, jlong addr)) 
 
 ## create DirectByteBuffer
 
-1. `unsafe.allocateMemory()`
-2. `unsafe.setMemory()`
-3. create a `Cleaner` to recycle direct memory when directByteBuffer instance unused
+
+1. `reserveMemory`
+2. if has enough memory, return
+   2. Else `tryHandlePendingReference` free memory util enough memory
+   3. `System.gc()`
+   4. Continue step 1, 2 util enough memory or MAX_SLEEPS
+   5. if still no enough memory, OOM
+3. `unsafe.allocateMemory`
+4. init memory with `(byte) 0`
+5. create a `Cleaner` with `Deallocator` to free direct memory when directByteBuffer instance unused
+
+
 
 ```java
 //ByteBuffer.java 
@@ -260,18 +267,4 @@ static boolean tryHandlePending(boolean waitForNotify) {
     return true;
 }
 ```
-cerate DirecByteBuffer
-
-
-1. `reserveMemory`
-1. if has enough memory, return
-   2. Else `tryHandlePendingReference` free memory util enough memory
-   3. `System.gc()`
-   4. Continue step 1, 2 util enough memory or MAX_SLEEPS
-   5. if still no enough memory, OOM
-3. `unsafe.allocateMemory`
-3. init memory with `(byte) 0`
-4. create a `Cleaner` with `Deallocator` to free direct memory when directByteBuffer instance unused
-
-
 
