@@ -522,6 +522,5 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
 ## Practice
 
 1. session/token for use
-2. DB connection
 3. TraceId for trace request
 

@@ -103,9 +103,7 @@ static final long spinForTimeoutThreshold = 1000L;
 | Queue  | Sync list               | Condition           |
 | ------ | ----------------------- | ------------------- |
 | Struct | use Node.prev/Node.next | use Node.nextWaiter |
-|        | FIFO                    | FIFO                |
-| enq    |                         |                     |
-| deq    |                         | add to              |
+| Order  | FIFO                    | FIFO                |
 
 
 
@@ -857,7 +855,7 @@ public final void await() throws InterruptedException {
 
 
 #### addConditionWaiter
-
+If lastWaiter is cancelled, clean out, add nextWaiter
 ```java
 private Node addConditionWaiter() {
     Node t = lastWaiter;
@@ -878,7 +876,33 @@ private Node addConditionWaiter() {
 
 
 
+Unlinks cancelled waiter nodes from condition queue. Called only while holding lock. This is called when cancellation occurred during condition wait, and upon insertion of a new waiter when lastWaiter is seen to have been cancelled. This method is needed to avoid garbage retention in the absence of signals. So even though it may require a full traversal, it comes into play only when timeouts or cancellations occur in the absence of signals. It traverses all nodes rather than stopping at a particular target to unlink all pointers to garbage nodes without requiring many re-traversals during cancellation storms.
 
+```java
+private void unlinkCancelledWaiters() {
+    Node t = firstWaiter;
+    Node trail = null;
+    while (t != null) {
+        Node next = t.nextWaiter;
+        if (t.waitStatus != Node.CONDITION) {
+            t.nextWaiter = null;
+            if (trail == null)
+                firstWaiter = next;
+            else
+                trail.nextWaiter = next;
+            if (next == null)
+                lastWaiter = trail;
+        }
+        else
+            trail = t;
+        t = next;
+    }
+}
+```
+
+
+
+#### fullyRelease
 
 ```java
 /**
@@ -954,7 +978,7 @@ final boolean isOnSyncQueue(Node node) {
 
 
 
-
+#### reportInterruptAfterWait
 
 ```java
 private void reportInterruptAfterWait(int interruptMode)
@@ -992,6 +1016,8 @@ public final void signalAll() {
 
 #### doSignal
 
+Removes and transfers nodes until hit non-cancelled one or null. Split out from signal in part to encourage compilers to inline the case of no waiters.
+
 ```java
 private void doSignal(Node first) {
     do {
@@ -1021,9 +1047,7 @@ enq
 
 ```java
 final boolean transferForSignal(Node node) {
-    /*
-     * If cannot change waitStatus, the node has been cancelled.
-     */
+    // If cannot change waitStatus, the node has been cancelled.
     if (!compareAndSetWaitStatus(node, Node.CONDITION, 0))
         return false;
 
