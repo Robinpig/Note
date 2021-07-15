@@ -306,29 +306,35 @@ public abstract class AbstractRegistry implements Registry {
 #### notify
 
 ```java
-protected void notify(List<URL> urls) {
-    if (CollectionUtils.isEmpty(urls)) {
-        return;
+ /** AbstractRegistry
+   * Notify changes from the Provider side.
+   * @param url      consumer side url
+   * @param listener listener
+   * @param urls     provider latest urls
+   */
+protected void notify(URL url, NotifyListener listener, List<URL> urls) {
+  // keep every provider's category.
+  Map<String, List<URL>> result = new HashMap<>();
+  for (URL u : urls) {
+    if (UrlUtils.isMatch(url, u)) {
+      String category = u.getParameter(CATEGORY_KEY, DEFAULT_CATEGORY);
+      List<URL> categoryList = result.computeIfAbsent(category, k -> new ArrayList<>());
+      categoryList.add(u);
     }
-
-    for (Map.Entry<URL, Set<NotifyListener>> entry : getSubscribed().entrySet()) {
-        URL url = entry.getKey();
-
-        if (!UrlUtils.isMatch(url, urls.get(0))) {
-            continue;
-        }
-
-        Set<NotifyListener> listeners = entry.getValue();
-        if (listeners != null) {
-            for (NotifyListener listener : listeners) {
-                try {
-                    notify(url, listener, filterEmpty(url, urls));
-                } catch (Throwable t) {
-                    logger.error("Failed to notify registry event, urls: " + urls + ", cause: " + t.getMessage(), t);
-                }
-            }
-        }
-    }
+  }
+  if (result.size() == 0) {
+    return;
+  }
+  Map<String, List<URL>> categoryNotified = notified.computeIfAbsent(url, u -> new ConcurrentHashMap<>());
+  for (Map.Entry<String, List<URL>> entry : result.entrySet()) {
+    String category = entry.getKey();
+    List<URL> categoryList = entry.getValue();
+    categoryNotified.put(category, categoryList);
+    listener.notify(categoryList);
+    // We will update our cache file after each notification.
+    // When our Registry has a subscribe failure due to network jitter, we can return at least the existing cache URL.
+    saveProperties(url);
+  }
 }
 ```
 
@@ -1195,7 +1201,7 @@ public class ZookeeperRegistry extends FailbackRegistry {
         try {
             zkClient.close();
         } catch (Exception e) {
-            logger.warn("Failed to close zookeeper client " + getUrl() + ", cause: " + e.getMessage(), e);
+            logger.warn("");
         }
     }
   ...
@@ -1204,29 +1210,23 @@ public class ZookeeperRegistry extends FailbackRegistry {
 
 
 
+
+
 ```java
 @Override
 public void doRegister(URL url) {
-    try {
-        zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true));
-    } catch (Throwable e) {
-        throw new RpcException("Failed to register " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);
-    }
+  	zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true));
 }
 
 @Override
 public void doUnregister(URL url) {
-    try {
-        zkClient.delete(toUrlPath(url));
-    } catch (Throwable e) {
-        throw new RpcException("Failed to unregister " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);
-    }
+  	zkClient.delete(toUrlPath(url));
 }
 
 @Override
 public void doSubscribe(final URL url, final NotifyListener listener) {
     try {
-        if (ANY_VALUE.equals(url.getServiceInterface())) {
+        if (ANY_VALUE.equals(url.getServiceInterface())) { // doSubscribe all service for admin
             String root = toRootPath();
             ConcurrentMap<NotifyListener, ChildListener> listeners = zkListeners.computeIfAbsent(url, k -> new ConcurrentHashMap<>());
             ChildListener zkListener = listeners.computeIfAbsent(listener, k -> (parentPath, currentChilds) -> {
@@ -1269,7 +1269,7 @@ public void doSubscribe(final URL url, final NotifyListener listener) {
             latch.countDown();
         }
     } catch (Throwable e) {
-        throw new RpcException("Failed to subscribe " + url + " to zookeeper " + getUrl() + ", cause: " + e.getMessage(), e);
+        throw new RpcException("");
     }
 }
 
@@ -1436,8 +1436,6 @@ private class RegistryChildListenerImpl implements ChildListener {
 
 ### RedisRegsitry
 
-use Jedis Pub/Sub
-
 ```java
 public class RedisRegistryFactory extends AbstractRegistryFactory {
     @Override
@@ -1449,6 +1447,10 @@ public class RedisRegistryFactory extends AbstractRegistryFactory {
 
 
 
+#### doRegister
+
+use Jedis Pub/Sub
+
 ```java
 @Override
 public void doRegister(URL url) {
@@ -1457,12 +1459,96 @@ public void doRegister(URL url) {
     String expire = String.valueOf(System.currentTimeMillis() + expirePeriod);
     try {
         redisClient.hset(key, value, expire);
-        redisClient.publish(key, REGISTER);
+        redisClient.publish(key, REGISTER); // publish
     } catch (Throwable t) {
-        throw new RpcException("Failed to register service to redis registry. registry: " + url.getAddress() + ", service: " + url + ", cause: " + t.getMessage(), t);
+        throw new RpcException("");
     }
 }
 ```
+
+
+
+a SingleScheduledThreadPool `expireExecutor` scheduleWithFixedDelay `deferExpired` and call `doNotify`
+
+```java
+private final ScheduledExecutorService expireExecutor = Executors.newScheduledThreadPool(1, new NamedThreadFactory("DubboRegistryExpireTimer", true));
+
+// SESSION_TIMEOUT_KEY: session DEFAULT_SESSION_TIMEOUT: 60s
+this.expirePeriod = url.getParameter(SESSION_TIMEOUT_KEY, DEFAULT_SESSION_TIMEOUT);
+this.expireFuture = expireExecutor.scheduleWithFixedDelay(() -> {
+    try {
+        deferExpired(); // Extend the expiration time
+    } catch (Throwable t) { // Defensive fault tolerance
+        logger.error("");
+    }
+}, expirePeriod / 2, expirePeriod / 2, TimeUnit.MILLISECONDS);
+
+private void deferExpired() {
+    for (URL url : new HashSet<>(getRegistered())) {
+        if (url.getParameter(DYNAMIC_KEY, true)) {
+            String key = toCategoryPath(url);
+            if (redisClient.hset(key, url.toFullString(), String.valueOf(System.currentTimeMillis() + expirePeriod)) == 1) {
+                redisClient.publish(key, REGISTER);
+            }
+        }
+    }
+
+    if (doExpire) {
+        for (Map.Entry<URL, Long> expireEntry : expireCache.entrySet()) {
+            if (expireEntry.getValue() < System.currentTimeMillis()) {
+                doNotify(toCategoryPath(expireEntry.getKey()));
+            }
+        }
+    }
+
+    if (admin) { // if admin
+        clean(); // hgetAll root* del & publish UnRegister for expire key
+    }
+}
+```
+
+
+
+#### doSubscribe 
+
+```java
+@Override
+public void doSubscribe(final URL url, final NotifyListener listener) {
+    String service = toServicePath(url);
+    Notifier notifier = notifiers.get(service);
+    if (notifier == null) {
+        Notifier newNotifier = new Notifier(service);
+        notifiers.putIfAbsent(service, newNotifier); // set cache
+        notifier = notifiers.get(service);
+        if (notifier == newNotifier) {
+            notifier.start();
+        }
+    }
+    try {
+        if (service.endsWith(ANY_VALUE)) {
+            admin = true;
+            Set<String> keys = redisClient.scan(service);
+            if (CollectionUtils.isNotEmpty(keys)) {
+                Map<String, Set<String>> serviceKeys = new HashMap<>();
+                for (String key : keys) {
+                    String serviceKey = toServicePath(key);
+                    Set<String> sk = serviceKeys.computeIfAbsent(serviceKey, k -> new HashSet<>());
+                    sk.add(key);
+                }
+                for (Set<String> sk : serviceKeys.values()) {
+                    doNotify(sk, url, Collections.singletonList(listener));
+                }
+            }
+        } else {
+            doNotify(redisClient.scan(service + PATH_SEPARATOR + ANY_VALUE), url, Collections.singletonList(listener));
+        }
+    } catch (Throwable t) {
+        throw new RpcException("");
+    }
+}
+```
+
+
 
 #### Notifier
 
@@ -1537,7 +1623,7 @@ private class Notifier extends Thread {
                                 redisClient.psubscribe(new NotifySub(), service + PATH_SEPARATOR + ANY_VALUE); // blocking
                             }
                         } catch (Throwable t) { // Retry another server
-                            logger.warn("Failed to subscribe service from redis registry. registry: " + getUrl().getAddress() + ", cause: " + t.getMessage(), t);
+                            logger.warn("");
                             // If you only have a single redis, you need to take a rest to avoid overtaking a lot of CPU resources
                             sleep(reconnectPeriod);
                         }
@@ -1635,7 +1721,7 @@ private void doNotify(Collection<String> keys, URL url, Collection<NotifyListene
         return;
     }
     for (NotifyListener listener : listeners) {
-        notify(url, listener, result);
+        notify(url, listener, result); // call AbstractRegistry#notify()
     }
 }
 ```

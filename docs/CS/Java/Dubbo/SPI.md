@@ -269,11 +269,6 @@ use `setter` to inject
 
 ```java
 private T injectExtension(T instance) {
-
-    if (objectFactory == null) {
-        return instance;
-    }
-
     try {
         for (Method method : instance.getClass().getMethods()) {
             if (!isSetter(method)) {
@@ -295,10 +290,8 @@ private T injectExtension(T instance) {
                     method.invoke(instance, object);
                 }
             } catch (Exception e) {
-                logger.error("Failed to inject via method " + method.getName()
-                        + " of interface " + type.getName() + ": " + e.getMessage(), e);
+                logger.error("");
             }
-
         }
     } catch (Exception e) {
         logger.error(e.getMessage(), e);
@@ -423,7 +416,7 @@ private void loadDirectory(Map<String, Class<?>> extensionClasses, String dir, S
 
 ##### loadResource
 
-invoke `loadClass`
+invoke `loadClass` in BufferedReader
 
 ```java
 private void loadResource(Map<String, Class<?>> extensionClasses, ClassLoader classLoader,
@@ -452,17 +445,11 @@ private void loadResource(Map<String, Class<?>> extensionClasses, ClassLoader cl
                             loadClass(extensionClasses, resourceURL, Class.forName(clazz, true, classLoader), name, overridden);
                         }
                     } catch (Throwable t) {
-                        IllegalStateException e = new IllegalStateException(
-                                "Failed to load extension class (interface: " + type + ", class line: " + line + ") in " + resourceURL +
-                                        ", cause: " + t.getMessage(), t);
+                        IllegalStateException e = new IllegalStateException("");
                         exceptions.put(line, e);
-                    }
-                }
-            }
-        }
+        }    }	}		}
     } catch (Throwable t) {
-        logger.error("Exception occurred when loading extension class (interface: " +
-                type + ", class file: " + resourceURL + ") in " + resourceURL, t);
+        logger.error("");
     }
 }
 
@@ -480,11 +467,9 @@ private boolean isExcluded(String className, String... excludedPackages) {
 
 
 
-
-
 ### loadClass
 
-if Adaptive.class, 
+cache Class 
 
 ```java
 private void loadClass(Map<String, Class<?>> extensionClasses, java.net.URL resourceURL, Class<?> clazz, String name,
@@ -687,13 +672,12 @@ public T getDefaultExtension() {
 
 #### createExtension
 
+call injectExension
+
 ```java
 @SuppressWarnings("unchecked")
 private T createExtension(String name, boolean wrap) {
     Class<?> clazz = getExtensionClasses().get(name);
-    if (clazz == null || unacceptableExceptions.contains(name)) {
-        throw findException(name);
-    }
     try {
         T instance = (T) EXTENSION_INSTANCES.get(clazz);
         if (instance == null) {
@@ -751,6 +735,85 @@ public String getExtensionName(Class<?> extensionClass) {
 
 
 
+### getActivateExtension
+
+```java
+/**
+ * Get activate extensions.
+ *
+ * @param url    url
+ * @param values extension point names
+ * @param group  group
+ * @return extension list which are activated
+ * @see org.apache.dubbo.common.extension.Activate
+ */
+public List<T> getActivateExtension(URL url, String[] values, String group) {
+    List<T> activateExtensions = new ArrayList<>();
+    // solve the bug of using @SPI's wrapper method to report a null pointer exception.
+    TreeMap<Class, T> activateExtensionsMap = new TreeMap<>(ActivateComparator.COMPARATOR);
+    Set<String> loadedNames = new HashSet<>();
+    Set<String> names = CollectionUtils.ofSet(values);
+    if (!names.contains(REMOVE_VALUE_PREFIX + DEFAULT_KEY)) {
+        getExtensionClasses();
+        for (Map.Entry<String, Object> entry : cachedActivates.entrySet()) {
+            String name = entry.getKey();
+            Object activate = entry.getValue();
+
+            String[] activateGroup, activateValue;
+
+            if (activate instanceof Activate) {
+                activateGroup = ((Activate) activate).group();
+                activateValue = ((Activate) activate).value();
+            } else if (activate instanceof com.alibaba.dubbo.common.extension.Activate) {
+                activateGroup = ((com.alibaba.dubbo.common.extension.Activate) activate).group();
+                activateValue = ((com.alibaba.dubbo.common.extension.Activate) activate).value();
+            } else {
+                continue;
+            }
+            if (isMatchGroup(group, activateGroup)
+                    && !names.contains(name)
+                    && !names.contains(REMOVE_VALUE_PREFIX + name)
+                    && isActive(activateValue, url)
+                    && !loadedNames.contains(name)) {
+                activateExtensionsMap.put(getExtensionClass(name), getExtension(name));
+                loadedNames.add(name);
+            }
+        }
+        if (!activateExtensionsMap.isEmpty()) {
+            activateExtensions.addAll(activateExtensionsMap.values());
+        }
+    }
+    List<T> loadedExtensions = new ArrayList<>();
+    for (String name : names) {
+        if (!name.startsWith(REMOVE_VALUE_PREFIX)
+                && !names.contains(REMOVE_VALUE_PREFIX + name)) {
+            if (!loadedNames.contains(name)) {
+                if (DEFAULT_KEY.equals(name)) {
+                    if (!loadedExtensions.isEmpty()) {
+                        activateExtensions.addAll(0, loadedExtensions);
+                        loadedExtensions.clear();
+                    }
+                } else {
+                    loadedExtensions.add(getExtension(name));
+                }
+                loadedNames.add(name);
+            } else {
+                // If getExtension(name) exists, getExtensionClass(name) must exist, so there is no null pointer processing here.
+                String simpleName = getExtensionClass(name).getSimpleName();
+                logger.warn("Catch duplicated filter, ExtensionLoader will ignore one of them. Please check. Filter Name: " + name +
+                        ". Ignored Class Name: " + simpleName);
+            }
+        }
+    }
+    if (!loadedExtensions.isEmpty()) {
+        activateExtensions.addAll(loadedExtensions);
+    }
+    return activateExtensions;
+}
+```
+
+
+
 
 
 ### AdaptiveClassCodeGenerator
@@ -785,15 +848,169 @@ public String generate() {
 
 
 
+## Compiler
+
+![Compiler](./images/Compiler.png)
+
+```java
+/**
+ * Compiler. (SPI, Singleton, ThreadSafe)
+ */
+@SPI(JavassistCompiler.NAME)
+public interface Compiler {
+
+    /**
+     * Compile java source code.
+     *
+     * @param code        Java source code
+     * @param classLoader classloader
+     * @return Compiled class
+     */
+    Class<?> compile(String code, ClassLoader classLoader);
+
+}
+```
+
+
+
+
+
+```java
+/**
+ * AdaptiveCompiler. (SPI, Singleton, ThreadSafe)
+ */
+@Adaptive
+public class AdaptiveCompiler implements Compiler {
+
+    private static volatile String DEFAULT_COMPILER;
+
+  	// call by ApplicationConfig#setCompiler()
+    public static void setDefaultCompiler(String compiler) {
+        DEFAULT_COMPILER = compiler;
+    }
+
+    @Override
+    public Class<?> compile(String code, ClassLoader classLoader) {
+        Compiler compiler;
+        ExtensionLoader<Compiler> loader = ExtensionLoader.getExtensionLoader(Compiler.class);
+        String name = DEFAULT_COMPILER; // copy reference
+        if (name != null && name.length() > 0) {
+            compiler = loader.getExtension(name);
+        } else {
+            compiler = loader.getDefaultExtension();
+        }
+        return compiler.compile(code, classLoader);
+    }
+
+}
+```
+
+
+
+### JavassistCompiler
+
+```java
+/**
+ * JavassistCompiler. (SPI, Singleton, ThreadSafe)
+ */
+public class JavassistCompiler extends AbstractCompiler {
+
+    public static final String NAME = "javassist";
+
+    private static final Pattern IMPORT_PATTERN = Pattern.compile("import\\s+([\\w\\.\\*]+);\n");
+
+    private static final Pattern EXTENDS_PATTERN = Pattern.compile("\\s+extends\\s+([\\w\\.]+)[^\\{]*\\{\n");
+
+    private static final Pattern IMPLEMENTS_PATTERN = Pattern.compile("\\s+implements\\s+([\\w\\.]+)\\s*\\{\n");
+
+    private static final Pattern METHODS_PATTERN = Pattern.compile("\n(private|public|protected)\\s+");
+
+    private static final Pattern FIELD_PATTERN = Pattern.compile("[^\n]+=[^\n]+;");
+
+    @Override
+    public Class<?> doCompile(String name, String source) throws Throwable {
+        CtClassBuilder builder = new CtClassBuilder();
+        builder.setClassName(name);
+
+        // process imported classes
+        Matcher matcher = IMPORT_PATTERN.matcher(source);
+        while (matcher.find()) {
+            builder.addImports(matcher.group(1).trim());
+        }
+
+        // process extended super class
+        matcher = EXTENDS_PATTERN.matcher(source);
+        if (matcher.find()) {
+            builder.setSuperClassName(matcher.group(1).trim());
+        }
+
+        // process implemented interfaces
+        matcher = IMPLEMENTS_PATTERN.matcher(source);
+        if (matcher.find()) {
+            String[] ifaces = matcher.group(1).trim().split("\\,");
+            Arrays.stream(ifaces).forEach(i -> builder.addInterface(i.trim()));
+        }
+
+        // process constructors, fields, methods
+        String body = source.substring(source.indexOf('{') + 1, source.length() - 1);
+        String[] methods = METHODS_PATTERN.split(body);
+        String className = ClassUtils.getSimpleClassName(name);
+        Arrays.stream(methods).map(String::trim).filter(m -> !m.isEmpty()).forEach(method -> {
+            if (method.startsWith(className)) {
+                builder.addConstructor("public " + method);
+            } else if (FIELD_PATTERN.matcher(method).matches()) {
+                builder.addField("private " + method);
+            } else {
+                builder.addMethod("public " + method);
+            }
+        });
+
+        // compile
+        ClassLoader classLoader = org.apache.dubbo.common.utils.ClassUtils.getCallerClassLoader(getClass());
+        CtClass cls = builder.build(classLoader);
+        return cls.toClass(classLoader, JavassistCompiler.class.getProtectionDomain());
+    }
+
+}
+```
+
+
+
+### JDKCompiler
+
+```java
+/**
+ * JdkCompiler. (SPI, Singleton, ThreadSafe)
+ */
+public class JdkCompiler extends AbstractCompiler {
+
+    public static final String NAME = "jdk";
+
+    private final JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+
+    private final DiagnosticCollector<JavaFileObject> diagnosticCollector = new DiagnosticCollector<JavaFileObject>();
+
+    private final ClassLoaderImpl classLoader;
+
+    private final JavaFileManagerImpl javaFileManager;
+
+    private final List<String> options;
+
+    private static final String DEFAULT_JAVA_VERSION = "1.8";
+...
+}
+```
+
 ## Summary
 
 
 
-|        | JDK SPI         | Dubbo SPI |
-| ------ | --------------- | --------- |
-| load   | must load all   |           |
-| Source | only one source |           |
-|        |                 |           |
+|              | JDK SPI                   | Dubbo SPI       |
+| ------------ | ------------------------- | --------------- |
+| load         | must load all SubClasses  | -               |
+| Source       | only one source           | -               |
+| Fail Message | fail message may override | -               |
+| Extension    | -                         | support IoC AOP |
 
  
 
