@@ -3,9 +3,16 @@
 
 
 
-ziplist / hashtable
 
-渐进式rehash
+```c
+typedef struct dict {
+    dictType *type;
+    void *privdata;
+    dictht ht[2];
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    unsigned long iterators; /* number of iterators currently running */
+} dict;
+```
 
 
 
@@ -33,18 +40,6 @@ typedef struct dictEntry {
     } v;
     struct dictEntry *next;
 } dictEntry;
-```
-
-
-
-```c
-typedef struct dict {
-    dictType *type;
-    void *privdata;
-    dictht ht[2];
-    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    unsigned long iterators; /* number of iterators currently running */
-} dict;
 ```
 
 

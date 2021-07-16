@@ -30,3 +30,53 @@ typedef struct zlentry {
                                     is, this points to prev-entry-len field. */
 } zlentry;
 ```
+
+
+
+
+
+```c
+/* Create a new empty ziplist. */
+unsigned char *ziplistNew(void) {
+    unsigned int bytes = ZIPLIST_HEADER_SIZE+ZIPLIST_END_SIZE;
+    unsigned char *zl = zmalloc(bytes);
+    ZIPLIST_BYTES(zl) = intrev32ifbe(bytes);
+    ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(ZIPLIST_HEADER_SIZE);
+    ZIPLIST_LENGTH(zl) = 0;
+    zl[bytes-1] = ZIP_END;
+    return zl;
+}
+```
+
+
+
+
+
+```c
+/* Resize the ziplist. */
+unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
+    zl = zrealloc(zl,len);
+    ZIPLIST_BYTES(zl) = intrev32ifbe(len);
+    zl[len-1] = ZIP_END;
+    return zl;
+}
+
+// endianconv.c
+uint32_t intrev32(uint32_t v) {
+    memrev32(&v);
+    return v;
+}
+
+/* Toggle the 32 bit unsigned integer pointed by *p from little endian to
+ * big endian */
+void memrev32(void *p) {
+    unsigned char *x = p, t;
+
+    t = x[0];
+    x[0] = x[3];
+    x[3] = t;
+    t = x[1];
+    x[1] = x[2];
+    x[2] = t;
+}
+```
