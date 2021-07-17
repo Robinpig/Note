@@ -1,5 +1,7 @@
 ## Introduction
 
+
+
 ### Future Hierarchy
 
 ![Future](../images/Future.png)
@@ -175,63 +177,15 @@ private static native AccessControlContext getStackAccessControlContext();
 
 
 
-```java
-/**
- * Performs the specified {@code PrivilegedExceptionAction} with
- * privileges enabled and restricted by the specified
- * {@code AccessControlContext}.  The action is performed with the
- * intersection of the permissions possessed by the caller's
- * protection domain, and those possessed by the domains represented by the
- * specified {@code AccessControlContext}.
- * <p>
- * If the action's {@code run} method throws an <i>unchecked</i>
- * exception, it will propagate through this method.
- * <p>
- * If a security manager is installed and the specified
- * {@code AccessControlContext} was not created by system code and the
- * caller's {@code ProtectionDomain} has not been granted the
- * {@literal "createAccessControlContext"}
- * {@link java.security.SecurityPermission}, then the action is performed
- * with no permissions.
- */
-@CallerSensitive
-public static native <T> T
-    doPrivileged(PrivilegedExceptionAction<T> action,
-                 AccessControlContext context)
-    throws PrivilegedActionException;
-```
-
-
-
-### RunnableAdapter
-
-```java
-/**
- * A callable that runs given task and returns given result
- */
-static final class RunnableAdapter<T> implements Callable<T> {
-    final Runnable task;
-    final T result;
-    RunnableAdapter(Runnable task, T result) {
-        this.task = task;
-        this.result = result;
-    }
-    public T call() {
-        task.run();
-        return result;
-    }
-}
-```
-
-
-
 
 
 
 
 ### Future 
 
-Example:
+
+
+#### Example:
 
 ```java
 interface ArchiveSearcher { String search(String target); }
@@ -290,15 +244,7 @@ public interface Future<V> {
     // Returns {@code true} if this task was cancelled before it completed normally.
     boolean isCancelled();
 
-    /**
-     * Returns {@code true} if this task completed.
-     *
-     * Completion may be due to normal termination, an exception, or
-     * cancellation -- in all of these cases, this method will return
-     * {@code true}.
-     *
-     * @return {@code true} if this task completed
-     */
+    // Returns {@code true} if this task completed.
     boolean isDone();
 
     // Waits if necessary for the computation to complete, and then retrieves its result.
@@ -314,22 +260,11 @@ public interface Future<V> {
 
 ### RunnableFuture
 
+A Future that is Runnable. Successful execution of the run method causes completion of the Future and **allows access to its results**.
+
 ```java
-/**
- * A {@link Future} that is {@link Runnable}. Successful execution of
- * the {@code run} method causes completion of the {@code Future}
- * and allows access to its results.
- * @see FutureTask
- * @see Executor
- * @since 1.6
- * @author Doug Lea
- * @param <V> The result type returned by this Future's {@code get} method
- */
 public interface RunnableFuture<V> extends Runnable, Future<V> {
-    /**
-     * Sets this Future to the result of its computation
-     * unless it has been cancelled.
-     */
+    // Sets this Future to the result of its computation unless it has been cancelled.
     void run();
 }
 ```
@@ -338,72 +273,23 @@ public interface RunnableFuture<V> extends Runnable, Future<V> {
 
 ## FutureTask
 
-The FutureTask class is an implementation of Future that implements Runnable, and so may be executed by an Executor. For example, the above construction with submit could be replaced by:
+**A cancellable asynchronous computation**. This class provides a base implementation of *Future*, with methods to start and cancel a computation, query to see if the computation is complete, and retrieve the result of the computation. 
+
+The result can only be retrieved when the computation has completed; the **get methods will block if the computation has not yet completed**. Once the computation has completed, the computation **cannot be restarted or cancelled (unless the computation is invoked using runAndReset)**.
+
+A FutureTask can be used to wrap a *Callable* or *Runnable* object. Because FutureTask implements Runnable, a FutureTask can be submitted to an **Executor** for execution. For example, the above construction with submit could be replaced by:
+
 ```java
  FutureTask future = new FutureTask<>(task);
  executor.execute(future);
 ```
 
+In addition to serving as a standalone class, this class provides protected functionality that may be useful when creating customized task classes.
+
 
 
 ```java
-/**
- * A cancellable asynchronous computation.  This class provides a base
- * implementation of {@link Future}, with methods to start and cancel
- * a computation, query to see if the computation is complete, and
- * retrieve the result of the computation.  The result can only be
- * retrieved when the computation has completed; the {@code get}
- * methods will block if the computation has not yet completed.  Once
- * the computation has completed, the computation cannot be restarted
- * or cancelled (unless the computation is invoked using
- * {@link #runAndReset}).
- *
- * <p>A {@code FutureTask} can be used to wrap a {@link Callable} or
- * {@link Runnable} object.  Because {@code FutureTask} implements
- * {@code Runnable}, a {@code FutureTask} can be submitted to an
- * {@link Executor} for execution.
- *
- * <p>In addition to serving as a standalone class, this class provides
- * {@code protected} functionality that may be useful when creating
- * customized task classes.
- */
 public class FutureTask<V> implements RunnableFuture<V> {
-    /*
-     * Revision notes: This differs from previous versions of this
-     * class that relied on AbstractQueuedSynchronizer, mainly to
-     * avoid surprising users about retaining interrupt status during
-     * cancellation races. Sync control in the current design relies
-     * on a "state" field updated via CAS to track completion, along
-     * with a simple Treiber stack to hold waiting threads.
-     *
-     * Style note: As usual, we bypass overhead of using
-     * AtomicXFieldUpdaters and instead directly use Unsafe intrinsics.
-     */
-
-    /**
-     * The run state of this task, initially NEW.  The run state
-     * transitions to a terminal state only in methods set,
-     * setException, and cancel.  During completion, state may take on
-     * transient values of COMPLETING (while outcome is being set) or
-     * INTERRUPTING (only while interrupting the runner to satisfy a
-     * cancel(true)). Transitions from these intermediate to final
-     * states use cheaper ordered/lazy writes because values are unique
-     * and cannot be further modified.
-     *
-     * Possible state transitions:
-     * NEW -> COMPLETING -> NORMAL
-     * NEW -> COMPLETING -> EXCEPTIONAL
-     * NEW -> CANCELLED
-     * NEW -> INTERRUPTING -> INTERRUPTED
-     */
-    private volatile int state;
-    private static final int NEW          = 0;
-    private static final int COMPLETING   = 1;
-    private static final int NORMAL       = 2;
-    private static final int EXCEPTIONAL  = 3;
-    private static final int CANCELLED    = 4;
-    private static final int INTERRUPTING = 5;
-    private static final int INTERRUPTED  = 6;
 
     /** The underlying callable; nulled out after running */
     private Callable<V> callable;
@@ -413,6 +299,223 @@ public class FutureTask<V> implements RunnableFuture<V> {
     private volatile Thread runner;
     /** Treiber stack of waiting threads */
     private volatile WaitNode waiters;
+
+...
+}
+```
+
+
+
+### state
+
+**Revision notes**: This differs from previous versions of this class that relied on AbstractQueuedSynchronizer, mainly to avoid surprising users about retaining interrupt status during cancellation races. Sync control in the current design relies on a "state" field updated via CAS to track completion, along with a simple Treiber stack to hold waiting threads.
+
+The run state of this task, initially NEW. 
+
+The run state transitions to a terminal state only in methods set, setException, and cancel. 
+
+During completion, state may take on transient values of COMPLETING (while outcome is being set)  or INTERRUPTING (only while interrupting the runner to satisfy a cancel(true)). Transitions from these intermediate to final states use cheaper ordered/lazy writes because values are unique and cannot be further modified. 
+
+Possible state transitions: NEW -> COMPLETING -> NORMAL NEW -> COMPLETING -> EXCEPTIONAL NEW -> CANCELLED NEW -> INTERRUPTING -> INTERRUPTED
+
+```java
+private volatile int state;
+private static final int NEW          = 0;
+private static final int COMPLETING   = 1;
+private static final int NORMAL       = 2;
+private static final int EXCEPTIONAL  = 3;
+private static final int CANCELLED    = 4;
+private static final int INTERRUPTING = 5;
+private static final int INTERRUPTED  = 6;
+```
+
+
+
+
+
+### Constructor
+
+```java
+public FutureTask(Callable<V> callable) {
+  if (callable == null)
+    throw new NullPointerException();
+  this.callable = callable;
+  this.state = NEW;       // ensure visibility of callable
+}
+
+public FutureTask(Runnable runnable, V result) {
+  this.callable = Executors.callable(runnable, result); // Adapater pattern
+  this.state = NEW;       // ensure visibility of callable
+}
+
+// Executors#callable()
+public static <T> Callable<T> callable(Runnable task, T result) {
+  if (task == null)
+    throw new NullPointerException();
+  return new RunnableAdapter<T>(task, result);
+}
+```
+
+### RunnableAdapter
+
+```java
+/**
+ * A callable that runs given task and returns given result
+ */
+static final class RunnableAdapter<T> implements Callable<T> {
+    final Runnable task;
+    final T result;
+    RunnableAdapter(Runnable task, T result) {
+        this.task = task;
+        this.result = result;
+    }
+    public T call() {
+        task.run();
+        return result;
+    }
+}
+```
+
+
+
+
+
+### run
+
+ 
+
+```java
+public void run() {
+    if (state != NEW ||
+        !RUNNER.compareAndSet(this, null, Thread.currentThread())) // CAS set runner
+        return;
+    try {
+        Callable<V> c = callable;
+        if (c != null && state == NEW) {
+            V result;
+            boolean ran;
+            try {
+                result = c.call();
+                ran = true;
+            } catch (Throwable ex) {
+                result = null;
+                ran = false;
+                setException(ex);
+            }
+            if (ran)
+                set(result);
+        }
+    } finally {
+        // runner must be non-null until state is settled to
+        // prevent concurrent calls to run()
+        runner = null;
+        // state must be re-read after nulling runner to prevent leaked interrupts
+        int s = state;
+        if (s >= INTERRUPTING)
+            handlePossibleCancellationInterrupt(s);
+    }
+}
+
+
+/**
+  * Sets the result of this future to the given value unless
+  * this future has already been set or has been cancelled.
+  *
+  * <p>This method is invoked internally by the {@link #run} method
+  * upon successful completion of the computation.
+  */
+protected void set(V v) {
+  if (STATE.compareAndSet(this, NEW, COMPLETING)) {
+    outcome = v;
+    STATE.setRelease(this, NORMAL); // final state
+    finishCompletion();
+  }
+}
+
+
+/**
+  * Causes this future to report an {@link ExecutionException}
+  * with the given throwable as its cause, unless this future has
+  * already been set or has been cancelled.
+  *
+  * <p>This method is invoked internally by the {@link #run} method
+  * upon failure of the computation.
+  */
+protected void setException(Throwable t) {
+  if (STATE.compareAndSet(this, NEW, COMPLETING)) {
+    outcome = t;
+    STATE.setRelease(this, EXCEPTIONAL); // final state
+    finishCompletion();
+  }
+}
+```
+
+
+
+### handlePossibleCancellationInterrupt
+
+Ensures that any interrupt from a possible cancel(true) is only delivered to a task while in run or runAndReset.
+
+**TODO**: why delete `Thread.interrupted();` ?
+
+```java
+private void handlePossibleCancellationInterrupt(int s) {
+    // It is possible for our interrupter to stall before getting a
+    // chance to interrupt us.  Let's spin-wait patiently.
+    if (s == INTERRUPTING)
+        while (state == INTERRUPTING)
+            Thread.yield(); // wait out pending interrupt
+
+    // assert state == INTERRUPTED;
+
+    // We want to clear any interrupt we may have received from
+    // cancel(true).  However, it is permissible to use interrupts
+    // as an independent mechanism for a task to communicate with
+    // its caller, and there is no way to clear only the
+    // cancellation interrupt.
+    //
+    // Thread.interrupted();
+}
+```
+
+
+
+### finishCompletion
+
+```java
+/**
+ * Removes and signals all waiting threads, invokes done(), and
+ * nulls out callable.
+ */
+private void finishCompletion() {
+    // assert state > COMPLETING;
+    for (WaitNode q; (q = waiters) != null;) {
+        if (WAITERS.weakCompareAndSet(this, q, null)) {
+            for (;;) {
+                Thread t = q.thread;
+                if (t != null) {
+                    q.thread = null;
+                    LockSupport.unpark(t);
+                }
+                WaitNode next = q.next;
+                if (next == null)
+                    break;
+                q.next = null; // unlink to help gc
+                q = next;
+            }
+            break;
+        }
+    }
+
+    done();
+
+    callable = null;        // to reduce footprint
+}
+```
+
+```java
+public class FutureTask<V> implements RunnableFuture<V> {
+    
 
     /**
      * Returns result or throws exception for completed task.
@@ -429,36 +532,7 @@ public class FutureTask<V> implements RunnableFuture<V> {
         throw new ExecutionException((Throwable)x);
     }
 
-    /**
-     * Creates a {@code FutureTask} that will, upon running, execute the
-     * given {@code Callable}.
-     *
-     * @param  callable the callable task
-     * @throws NullPointerException if the callable is null
-     */
-    public FutureTask(Callable<V> callable) {
-        if (callable == null)
-            throw new NullPointerException();
-        this.callable = callable;
-        this.state = NEW;       // ensure visibility of callable
-    }
-
-    /**
-     * Creates a {@code FutureTask} that will, upon running, execute the
-     * given {@code Runnable}, and arrange that {@code get} will return the
-     * given result on successful completion.
-     *
-     * @param runnable the runnable task
-     * @param result the result to return on successful completion. If
-     * you don't need a particular result, consider using
-     * constructions of the form:
-     * {@code Future<?> f = new FutureTask<Void>(runnable, null)}
-     * @throws NullPointerException if the runnable is null
-     */
-    public FutureTask(Runnable runnable, V result) {
-        this.callable = Executors.callable(runnable, result);
-        this.state = NEW;       // ensure visibility of callable
-    }
+    
 
     public boolean isCancelled() {
         return state >= CANCELLED;
@@ -654,17 +728,6 @@ public class FutureTask<V> implements RunnableFuture<V> {
     }
 
     /**
-     * Simple linked list nodes to record waiting threads in a Treiber
-     * stack.  See other classes such as Phaser and SynchronousQueue
-     * for more detailed explanation.
-     */
-    static final class WaitNode {
-        volatile Thread thread;
-        volatile WaitNode next;
-        WaitNode() { thread = Thread.currentThread(); }
-    }
-
-    /**
      * Removes and signals all waiting threads, invokes done(), and
      * nulls out callable.
      */
@@ -737,17 +800,140 @@ public class FutureTask<V> implements RunnableFuture<V> {
         }
     }
 
-    /**
-     * Tries to unlink a timed-out or interrupted wait node to avoid
-     * accumulating garbage.  Internal nodes are simply unspliced
-     * without CAS since it is harmless if they are traversed anyway
-     * by releasers.  To avoid effects of unsplicing from already
-     * removed nodes, the list is retraversed in case of an apparent
-     * race.  This is slow when there are a lot of nodes, but we don't
-     * expect lists to be long enough to outweigh higher-overhead
-     * schemes.
+   
+}
+```
+
+
+
+### WaitNode
+
+
+
+```java
+ /**
+     * Simple linked list nodes to record waiting threads in a Treiber
+     * stack.  See other classes such as Phaser and SynchronousQueue
+     * for more detailed explanation.
      */
-    private void removeWaiter(WaitNode node) {
+    static final class WaitNode {
+        volatile Thread thread;
+        volatile WaitNode next;
+        WaitNode() { thread = Thread.currentThread(); }
+    }
+```
+
+
+
+
+
+### get
+
+```java
+public V get() throws InterruptedException, ExecutionException {
+    int s = state;
+    if (s <= COMPLETING)
+        s = awaitDone(false, 0L);
+    return report(s);
+}
+
+public V get(long timeout, TimeUnit unit)
+    throws InterruptedException, ExecutionException, TimeoutException {
+    if (unit == null)
+        throw new NullPointerException();
+    int s = state;
+    if (s <= COMPLETING &&
+        (s = awaitDone(true, unit.toNanos(timeout))) <= COMPLETING)
+        throw new TimeoutException();
+    return report(s);
+}
+
+
+// Returns result or throws exception for completed task.
+@SuppressWarnings("unchecked")
+private V report(int s) throws ExecutionException {
+  Object x = outcome;
+  if (s == NORMAL)
+    return (V)x;
+  if (s >= CANCELLED)
+    throw new CancellationException();
+  throw new ExecutionException((Throwable)x);
+}
+```
+
+
+
+#### awaitDone
+
+Awaits completion or aborts on interrupt or timeout.
+
+The code below is very delicate, to achieve these goals:
+- call nanoTime exactly once for each call to park
+- if nanos <= 0L, return promptly without allocation or nanoTime
+- if nanos == Long.MIN_VALUE, don't underflow
+- if nanos == Long.MAX_VALUE, and nanoTime is non-monotonic and we suffer a spurious wakeup, we will do no worse than to park-spin for a while
+
+```java
+private int awaitDone(boolean timed, long nanos)
+    throws InterruptedException {
+    long startTime = 0L;    // Special value 0L means not yet parked
+    WaitNode q = null;
+    boolean queued = false;
+    for (;;) {
+        int s = state;
+        if (s > COMPLETING) {
+            if (q != null)
+                q.thread = null;
+            return s;
+        }
+        else if (s == COMPLETING)
+            // We may have already promised (via isDone) that we are done
+            // so never return empty-handed or throw InterruptedException
+            Thread.yield();
+        else if (Thread.interrupted()) {
+            removeWaiter(q);
+            throw new InterruptedException();
+        }
+        else if (q == null) {
+            if (timed && nanos <= 0L)
+                return s;
+            q = new WaitNode();
+        }
+        else if (!queued)
+            queued = WAITERS.weakCompareAndSet(this, q.next = waiters, q);
+        else if (timed) {
+            final long parkNanos;
+            if (startTime == 0L) { // first time
+                startTime = System.nanoTime();
+                if (startTime == 0L)
+                    startTime = 1L;
+                parkNanos = nanos;
+            } else {
+                long elapsed = System.nanoTime() - startTime;
+                if (elapsed >= nanos) {
+                    removeWaiter(q);
+                    return state;
+                }
+                parkNanos = nanos - elapsed;
+            }
+            // nanoTime may be slow; recheck before parking
+            if (state < COMPLETING)
+                LockSupport.parkNanos(this, parkNanos);
+        }
+        else
+            LockSupport.park(this);
+    }
+}
+```
+
+
+
+#### removeWaiter
+
+Tries to unlink a timed-out or interrupted wait node to avoid accumulating garbage. Internal nodes are simply unspliced without *CAS* since it is harmless if they are traversed anyway by releasers. To avoid effects of unsplicing from already removed nodes, the list is retraversed in case of an apparent race. This is slow when there are a lot of nodes, but we don't expect lists to be long enough to outweigh higher-overhead schemes.
+
+```java
+ private void removeWaiter(WaitNode node) {
         if (node != null) {
             node.thread = null;
             retry:
@@ -769,26 +955,30 @@ public class FutureTask<V> implements RunnableFuture<V> {
             }
         }
     }
+```
 
-    // Unsafe mechanics
-    private static final sun.misc.Unsafe UNSAFE;
-    private static final long stateOffset;
-    private static final long runnerOffset;
-    private static final long waitersOffset;
-    static {
-        try {
-            UNSAFE = sun.misc.Unsafe.getUnsafe();
-            Class<?> k = FutureTask.class;
-            stateOffset = UNSAFE.objectFieldOffset
-                (k.getDeclaredField("state"));
-            runnerOffset = UNSAFE.objectFieldOffset
-                (k.getDeclaredField("runner"));
-            waitersOffset = UNSAFE.objectFieldOffset
-                (k.getDeclaredField("waiters"));
-        } catch (Exception e) {
-            throw new Error(e);
+
+
+### cancel
+
+```java
+public boolean cancel(boolean mayInterruptIfRunning) {
+    if (!(state == NEW && STATE.compareAndSet
+          (this, NEW, mayInterruptIfRunning ? INTERRUPTING : CANCELLED)))
+        return false;
+    try {    // in case call to interrupt throws exception
+        if (mayInterruptIfRunning) {
+            try {
+                Thread t = runner;
+                if (t != null)
+                    t.interrupt();
+            } finally { // final state
+                STATE.setRelease(this, INTERRUPTED);
+            }
         }
+    } finally {
+        finishCompletion();
     }
-
+    return true;
 }
 ```
