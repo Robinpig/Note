@@ -79,16 +79,43 @@ Java虚拟机栈管理Java方法的调用，而本地方法栈用于管理本地
 
 Eden:from:to=8:1:1
 
+### allocate memory for instance
+
+If TLAB
+
+eden cas
+
+Minior GC to Old 
+
+Full GC
+
+
+
+
+
 
 
 ### Method Area
 
-Constant Pool
+
+
+```java
+// -XX:MaxMetaspaceSize=10M
+public static void main(String[] args) {
+    while (true) {
+        Enhancer enhancer = new Enhancer();
+        enhancer.setSuperclass(HeapOOM.class);
+        enhancer.setUseCache(false); // use cache if true to avoid OOM
+        enhancer.setCallback((MethodInterceptor) (o, method, objects, methodProxy) -> methodProxy.invoke(o, objects));
+        enhancer.create();
+
+    }
+}
+```
 
 Method 元信息
 
 Class 元信息
-
 
 [JEP 122: Remove the Permanent Generation](https://openjdk.java.net/jeps/122)
 
