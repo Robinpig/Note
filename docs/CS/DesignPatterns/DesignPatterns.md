@@ -8,28 +8,7 @@ https://www.oodesign.com
 
 ## Design Principles
 
-
-
-### Open Close Principle
-
-#### Intent
-
-Software entities like classes, modules and functions should be **open for extension** but **closed for modifications**.
-
-
-
-
-
-### Dependency Inversion Principle
-
-#### Intent
-
-- High-level modules should not depend on low-level modules. Both should depend on abstractions.
-- Abstractions should not depend on details. Details should depend on abstractions.
-
-using interface as a abstract layer, and Factory Method, Abstract Factory, Prototype.
-
-
+### SOLID
 
 
 
@@ -40,6 +19,16 @@ using interface as a abstract layer, and Factory Method, Abstract Factory, Proto
 A class should have only one reason to change.
 
 
+
+**Isolation**
+
+
+
+### Open-Close Principle
+
+#### Intent
+
+Software entities like classes, modules and functions should be **open for extension** but **closed for modifications**.
 
 
 
@@ -57,6 +46,12 @@ This principle is just an extension of the Open Close Principle and it means tha
 
 
 
+Law of Demeter
+
+
+
+
+
 ### Interface Segregation Principle
 
 #### Intent
@@ -66,6 +61,17 @@ Clients should not be forced to depend upon interfaces that they don't use.
 
 
 If the design is already done fat interfaces can be segregated using the Adapter pattern.
+
+
+
+### Dependency Inversion Principle
+
+#### Intent
+
+- High-level modules should not depend on low-level modules. Both should depend on abstractions.
+- Abstractions should not depend on details. Details should depend on abstractions.
+
+using interface as a abstract layer, and Factory Method, Abstract Factory, Prototype.
 
 
 
