@@ -1,18 +1,4 @@
-# Spring MVC
-
-
-
-DispatcherServlet
-
-ContextLoaderListener
-
-HandlerMapper
-
-HandlerAdapter
-
-
-
-ModelAndView
+## Init
 
 ### ContextLoaderListener
 
@@ -21,78 +7,15 @@ As of Spring 3.1, ContextLoaderListener supports injecting the root web applicat
 
 ```java
 public class ContextLoaderListener extends ContextLoader implements ServletContextListener {
-
-   /**
-    * Create a new {@code ContextLoaderListener} that will create a web application
-    * context based on the "contextClass" and "contextConfigLocation" servlet
-    * context-params. See {@link ContextLoader} superclass documentation for details on
-    * default values for each.
-    * <p>This constructor is typically used when declaring {@code ContextLoaderListener}
-    * as a {@code <listener>} within {@code web.xml}, where a no-arg constructor is
-    * required.
-    * <p>The created application context will be registered into the ServletContext under
-    * the attribute name {@link WebApplicationContext#ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE}
-    * and the Spring application context will be closed when the {@link #contextDestroyed}
-    * lifecycle method is invoked on this listener.
-    * @see ContextLoader
-    * @see #ContextLoaderListener(WebApplicationContext)
-    * @see #contextInitialized(ServletContextEvent)
-    * @see #contextDestroyed(ServletContextEvent)
-    */
-   public ContextLoaderListener() {
-   }
-
-   /**
-    * Create a new {@code ContextLoaderListener} with the given application context. This
-    * constructor is useful in Servlet 3.0+ environments where instance-based
-    * registration of listeners is possible through the {@link javax.servlet.ServletContext#addListener}
-    * API.
-    * <p>The context may or may not yet be {@linkplain
-    * org.springframework.context.ConfigurableApplicationContext#refresh() refreshed}. If it
-    * (a) is an implementation of {@link ConfigurableWebApplicationContext} and
-    * (b) has <strong>not</strong> already been refreshed (the recommended approach),
-    * then the following will occur:
-    * <ul>
-    * <li>If the given context has not already been assigned an {@linkplain
-    * org.springframework.context.ConfigurableApplicationContext#setId id}, one will be assigned to it</li>
-    * <li>{@code ServletContext} and {@code ServletConfig} objects will be delegated to
-    * the application context</li>
-    * <li>{@link #customizeContext} will be called</li>
-    * <li>Any {@link org.springframework.context.ApplicationContextInitializer ApplicationContextInitializer org.springframework.context.ApplicationContextInitializer ApplicationContextInitializers}
-    * specified through the "contextInitializerClasses" init-param will be applied.</li>
-    * <li>{@link org.springframework.context.ConfigurableApplicationContext#refresh refresh()} will be called</li>
-    * </ul>
-    * If the context has already been refreshed or does not implement
-    * {@code ConfigurableWebApplicationContext}, none of the above will occur under the
-    * assumption that the user has performed these actions (or not) per his or her
-    * specific needs.
-    * <p>See {@link org.springframework.web.WebApplicationInitializer} for usage examples.
-    * <p>In any case, the given application context will be registered into the
-    * ServletContext under the attribute name {@link
-    * WebApplicationContext#ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE} and the Spring
-    * application context will be closed when the {@link #contextDestroyed} lifecycle
-    * method is invoked on this listener.
-    * @param context the application context to manage
-    * @see #contextInitialized(ServletContextEvent)
-    * @see #contextDestroyed(ServletContextEvent)
-    */
-   public ContextLoaderListener(WebApplicationContext context) {
-      super(context);
-   }
-
-
-   /**
-    * Initialize the root web application context.
-    */
+...
+   // Initialize the root web application context.
    @Override
    public void contextInitialized(ServletContextEvent event) {
       initWebApplicationContext(event.getServletContext());
    }
 
 
-   /**
-    * Close the root web application context.
-    */
+   // Close the root web application context.
    @Override
    public void contextDestroyed(ServletContextEvent event) {
       closeWebApplicationContext(event.getServletContext());
@@ -103,6 +26,8 @@ public class ContextLoaderListener extends ContextLoader implements ServletConte
 ```
 
 
+
+### initWebApplicationContext
 
 ```java
 /**
@@ -160,15 +85,6 @@ public WebApplicationContext initWebApplicationContext(ServletContext servletCon
 #### createWebApplicationContext
 
 ```java
-/**
- * Instantiate the root WebApplicationContext for this loader, either the
- * default context class or a custom context class if specified.
- * <p>This implementation expects custom contexts to implement the
- * {@link ConfigurableWebApplicationContext} interface.
- * Can be overridden in subclasses.
- * <p>In addition, {@link #customizeContext} gets called prior to refreshing the
- * context, allowing subclasses to perform custom modifications to the context.
- */
 protected WebApplicationContext createWebApplicationContext(ServletContext sc) {
    Class<?> contextClass = determineContextClass(sc);
    if (!ConfigurableWebApplicationContext.class.isAssignableFrom(contextClass)) {
@@ -182,10 +98,6 @@ protected WebApplicationContext createWebApplicationContext(ServletContext sc) {
 /**
  * Return the WebApplicationContext implementation class to use, either the
  * default XmlWebApplicationContext or a custom context class if specified.
- * @param servletContext current servlet context
- * @return the WebApplicationContext implementation class to use
- * @see #CONTEXT_CLASS_PARAM
- * @see org.springframework.web.context.support.XmlWebApplicationContext
  */
 protected Class<?> determineContextClass(ServletContext servletContext) {
    String contextClassName = servletContext.getInitParameter(CONTEXT_CLASS_PARAM);
@@ -246,6 +158,10 @@ protected void configureAndRefreshWebApplicationContext(ConfigurableWebApplicati
    wac.refresh();
 }
 ```
+
+
+
+
 
 ### XmlWebApplicationContext
 
@@ -330,6 +246,95 @@ public class XmlWebApplicationContext extends AbstractRefreshableWebApplicationC
 
 
 
+
+
+
+
+org.springframework.web.servlet
+
+```java
+// FrameworkServlet
+/**
+ * Overridden method of {@link HttpServletBean}, invoked after any bean properties
+ * have been set. Creates this servlet's WebApplicationContext.
+ */
+@Override
+protected final void initServletBean() throws ServletException {
+   try {
+      this.webApplicationContext = initWebApplicationContext();
+      initFrameworkServlet();
+   }
+   catch (ServletException | RuntimeException ex) {
+      throw ex;
+   }
+}
+```
+
+```java
+/**
+ * Initialize and publish the WebApplicationContext for this servlet.
+ * <p>Delegates to {@link #createWebApplicationContext} for actual creation
+ * of the context. Can be overridden in subclasses.
+ * @return the WebApplicationContext instance
+ * @see #FrameworkServlet(WebApplicationContext)
+ * @see #setContextClass
+ * @see #setContextConfigLocation
+ */
+protected WebApplicationContext initWebApplicationContext() {
+   WebApplicationContext rootContext =
+         WebApplicationContextUtils.getWebApplicationContext(getServletContext());
+   WebApplicationContext wac = null;
+
+   if (this.webApplicationContext != null) {
+      // A context instance was injected at construction time -> use it
+      wac = this.webApplicationContext;
+      if (wac instanceof ConfigurableWebApplicationContext) {
+         ConfigurableWebApplicationContext cwac = (ConfigurableWebApplicationContext) wac;
+         if (!cwac.isActive()) {
+            // The context has not yet been refreshed -> provide services such as
+            // setting the parent context, setting the application context id, etc
+            if (cwac.getParent() == null) {
+               // The context instance was injected without an explicit parent -> set
+               // the root application context (if any; may be null) as the parent
+               cwac.setParent(rootContext);
+            }
+            configureAndRefreshWebApplicationContext(cwac);
+         }
+      }
+   }
+   if (wac == null) {
+      // No context instance was injected at construction time -> see if one
+      // has been registered in the servlet context. If one exists, it is assumed
+      // that the parent context (if any) has already been set and that the
+      // user has performed any initialization such as setting the context id
+      wac = findWebApplicationContext();
+   }
+   if (wac == null) {
+      // No context instance is defined for this servlet -> create a local one
+      wac = createWebApplicationContext(rootContext);
+   }
+
+   if (!this.refreshEventReceived) {
+      // Either the context is not a ConfigurableApplicationContext with refresh
+      // support or the context injected at construction time had already been
+      // refreshed -> trigger initial onRefresh manually here.
+      synchronized (this.onRefreshMonitor) {
+         onRefresh(wac);
+      }
+   }
+
+   if (this.publishContext) {
+      // Publish the context as a servlet context attribute.
+      String attrName = getServletContextAttributeName();
+      getServletContext().setAttribute(attrName, wac);
+   }
+
+   return wac;
+}
+```
+
+
+
 ### DispatcherServlet
 
 ```java
@@ -338,26 +343,13 @@ public class XmlWebApplicationContext extends AbstractRefreshableWebApplicationC
  */
 public class DispatcherServlet extends HttpServlet {
 
-    private static final long serialVersionUID = 5766349180380479888L;
     private static final Map<Integer, HttpHandler> HANDLERS = new ConcurrentHashMap<Integer, HttpHandler>();
     private static DispatcherServlet INSTANCE;
 
     public DispatcherServlet() {
         DispatcherServlet.INSTANCE = this;
     }
-
-    public static void addHttpHandler(int port, HttpHandler processor) {
-        HANDLERS.put(port, processor);
-    }
-
-    public static void removeHttpHandler(int port) {
-        HANDLERS.remove(port);
-    }
-
-    public static DispatcherServlet getInstance() {
-        return INSTANCE;
-    }
-
+		...
     @Override
     protected void service(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
@@ -368,119 +360,31 @@ public class DispatcherServlet extends HttpServlet {
             handler.handle(request, response);
         }
     }
-
-}
-```
-
-WebServiceProtocol  set DispatchServlet to `org.apache.cxf.transport.servlet.SerlvetController`
-
-SerlvetController invoke DispatchServlet#service()
-
-
-
-```java
-public boolean invoke(HttpServletRequest request, HttpServletResponse res, boolean returnErrors)
-    throws ServletException {
-    try {
-        String pathInfo = request.getPathInfo() == null ? "" : request.getPathInfo();
-        AbstractHTTPDestination d = destinationRegistry.getDestinationForPath(pathInfo, true);
-
-        if (d == null) {
-            if (!isHideServiceList && (request.getRequestURI().endsWith(serviceListRelativePath)
-                || request.getRequestURI().endsWith(serviceListRelativePath + "/")
-                || StringUtils.isEmpty(pathInfo)
-                || "/".equals(pathInfo))) {
-                if (isAuthServiceListPage) {
-                    setAuthServiceListPageAttribute(request);
-                }
-                setBaseURLAttribute(request);
-                serviceListGenerator.service(request, res);
-            } else {
-                d = destinationRegistry.checkRestfulRequest(pathInfo);
-                if (d == null || d.getMessageObserver() == null) {
-                    if (returnErrors) {
-                        LOG.warning("Can't find the request for "
-                            + request.getRequestURL() + "'s Observer ");
-                        generateNotFound(request, res);
-                    }
-                    return false;
-                }
-            }
-        }
-        if (d != null && d.getMessageObserver() != null) {
-            Bus bus = d.getBus();
-            ClassLoaderHolder orig = null;
-            try {
-                if (bus != null) {
-                    ClassLoader loader = bus.getExtension(ClassLoader.class);
-                    if (loader == null) {
-                        ResourceManager manager = bus.getExtension(ResourceManager.class);
-                        if (manager != null) {
-                            loader = manager.resolveResource("", ClassLoader.class);
-                        }
-                    }
-                    if (loader != null) {
-                        //need to set the context classloader to the loader of the bundle
-                        orig = ClassLoaderUtils.setThreadContextClassloader(loader);
-                    }
-                }
-                updateDestination(request, d);
-                invokeDestination(request, res, d);
-            } finally {
-                if (orig != null) { 
-                    orig.reset();
-                }
-            }
-        }
-    } catch (IOException e) {
-        throw new ServletException(e);
-    }
-    return true;
 }
 ```
 
 
 
+## dipatch
 
 
-### Dubbo TomcatHttpServer
 
-```java
-// org.apache.dubbo.remoting.http.tomcat.TomcatHttpServer
-public TomcatHttpServer(URL url, final HttpHandler handler) {
-    super(url, handler);
+HandlerMapping路径匹配
 
-    this.url = url;
-    DispatcherServlet.addHttpHandler(url.getPort(), handler);
-    String baseDir = new File(System.getProperty("java.io.tmpdir")).getAbsolutePath();
-    tomcat = new Tomcat();
+->interceptor执行拦截器preHandler
 
-    Connector connector = tomcat.getConnector();
-    connector.setPort(url.getPort());
-    connector.setProperty("maxThreads", String.valueOf(url.getParameter(THREADS_KEY, DEFAULT_THREADS)));
-    connector.setProperty("maxConnections", String.valueOf(url.getParameter(ACCEPTS_KEY, -1)));
-    connector.setProperty("URIEncoding", "UTF-8");
-    connector.setProperty("connectionTimeout", "60000");
-    connector.setProperty("maxKeepAliveRequests", "-1");
+->HandlerMethodArgumentResolver参数解析
 
-    tomcat.setBaseDir(baseDir);
-    tomcat.setPort(url.getPort());
+->invoke执行匹配的方法
 
-    Context context = tomcat.addContext("/", baseDir);
-    Tomcat.addServlet(context, "dispatcher", new DispatcherServlet());
-    // Issue : https://github.com/apache/dubbo/issues/6418
-    // addServletMapping method will be removed since Tomcat 9
-    // context.addServletMapping("/*", "dispatcher");
-    context.addServletMappingDecoded("/*", "dispatcher");
-    ServletManager.getInstance().addServletContext(url.getPort(), context.getServletContext());
+->HandlerMethodReturnValueHandler返回值解析
 
-    // tell tomcat to fail on startup failures.
-    System.setProperty("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE", "true");
+->封装modelAndView
 
-    try {
-        tomcat.start();
-    } catch (LifecycleException e) {
-        throw new IllegalStateException("Failed to start tomcat server at " + url.getAddress(), e);
-    }
-}
-```
+->interceptor执行拦截器postHandler
+
+->HandlerExceptionResolver异常处理
+
+->渲染视图
+
+->interceptor执行拦截器afterCompletion.
