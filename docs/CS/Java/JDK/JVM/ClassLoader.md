@@ -144,6 +144,8 @@ protected Object getClassLoadingLock(String className) {
         }
 ```
 
+
+
 *Links the specified class. This (misleadingly named) method may be used by a class loader to link a class. If the class c has already been linked, then this method simply returns. Otherwise, the class is linked as described in the "Execution" chapter of The Java™ Language Specification.*
 
 ```java
@@ -155,105 +157,131 @@ private native void resolveClass0(Class<?> c);
 ```
 
 
+
+
+
+
 ```cpp
 //classLoader.cpp
 // Called by the boot classloader to load classes
 InstanceKlass* ClassLoader::load_class(Symbol* name, bool search_append_only, TRAPS) {
+	...
 
-  ResourceMark rm(THREAD);
-  HandleMark hm(THREAD);
-
-  const char* const class_name = name->as_C_string();
-
-  EventMark m("loading class %s", class_name);
-
-  const char* const file_name = file_name_for_class_name(class_name,
-                                                         name->utf8_length());
-
-  // Lookup stream for parsing .class file
-  ClassFileStream* stream = NULL;
-  s2 classpath_index = 0;
-  ClassPathEntry* e = NULL;
-
-  // If search_append_only is true, boot loader visibility boundaries are
-  // set to be _first_append_entry to the end. This includes:
-  //   [-Xbootclasspath/a]; [jvmti appended entries]
-  //
-  // If search_append_only is false, boot loader visibility boundaries are
-  // set to be the --patch-module entries plus the base piece. This includes:
-  //   [--patch-module=<module>=<file>(<pathsep><file>)*]; [jimage | exploded module build]
-  //
-
-  // Load Attempt #1: --patch-module
-  // Determine the class' defining module.  If it appears in the _patch_mod_entries,
-  // attempt to load the class from those locations specific to the module.
-  // Specifications to --patch-module can contain a partial number of classes
-  // that are part of the overall module definition.  So if a particular class is not
-  // found within its module specification, the search should continue to Load Attempt #2.
-  // Note: The --patch-module entries are never searched if the boot loader's
-  //       visibility boundary is limited to only searching the append entries.
-  if (_patch_mod_entries != NULL && !search_append_only) {
-    // At CDS dump time, the --patch-module entries are ignored. That means a
-    // class is still loaded from the runtime image even if it might
-    // appear in the _patch_mod_entries. The runtime shared class visibility
-    // check will determine if a shared class is visible based on the runtime
-    // environemnt, including the runtime --patch-module setting.
-    //
-    // DynamicDumpSharedSpaces requires UseSharedSpaces to be enabled. Since --patch-module
-    // is not supported with UseSharedSpaces, it is not supported with DynamicDumpSharedSpaces.
-    if (!DumpSharedSpaces) {
-      stream = search_module_entries(THREAD, _patch_mod_entries, class_name, file_name);
-    }
-  }
-
-  // Load Attempt #2: [jimage | exploded build]
-  if (!search_append_only && (NULL == stream)) {
-    if (has_jrt_entry()) {
-      e = _jrt_entry;
-      stream = _jrt_entry->open_stream(THREAD, file_name);
-    } else {
-      // Exploded build - attempt to locate class in its defining module's location.
-      stream = search_module_entries(THREAD, _exploded_entries, class_name, file_name);
-    }
-  }
-
-  // Load Attempt #3: [-Xbootclasspath/a]; [jvmti appended entries]
-  if (search_append_only && (NULL == stream)) {
-    // For the boot loader append path search, the starting classpath_index
-    // for the appended piece is always 1 to account for either the
-    // _jrt_entry or the _exploded_entries.
-    classpath_index = 1;
-
-    e = first_append_entry();
-    while (e != NULL) {
-      stream = e->open_stream(THREAD, file_name);
-      if (NULL != stream) {
-        break;
-      }
-      e = e->next();
-      ++classpath_index;
-    }
-  }
-
-  if (NULL == stream) {
-    return NULL;
-  }
-
-  stream->set_verify(ClassLoaderExt::should_verify(classpath_index));
-
-  ClassLoaderData* loader_data = ClassLoaderData::the_null_class_loader_data();
-  Handle protection_domain;
-  ClassLoadInfo cl_info(protection_domain);
-
-  InstanceKlass* result = KlassFactory::create_from_stream(stream,
-                                                           name,
-                                                           loader_data,
-                                                           cl_info,
-                                                           CHECK_NULL);
+  InstanceKlass* result = KlassFactory::create_from_stream(stream, name,
+                                                           loader_data, cl_info, CHECK_NULL);
   result->set_classpath_index(classpath_index);
   return result;
 }
 ```
+
+
+
+or
+
+#### Java_java_lang_ClassLoader_defineClass1
+
+defineClass2 also call  `JVM_DefineClassWithSource`
+
+```c
+// ClassLoader.c
+JNIEXPORT jclass JNICALL
+Java_java_lang_ClassLoader_defineClass1(JNIEnv *env, jclass cls, jobject loader,
+                                        jstring name, jbyteArray data, jint offset,
+                                        jint length, jobject pd, jstring source)
+{
+
+    jclass result = 0;
+    ...
+    result = JVM_DefineClassWithSource(env, utfName, loader, body, length, pd, utfSource);
+		...
+    return result;
+}
+```
+
+
+
+call `SystemDictionary::resolve_from_stream`
+
+```cpp
+// jvm.cpp
+JVM_ENTRY(jclass, JVM_DefineClassWithSource(JNIEnv *env, const char *name, jobject loader, const jbyte *buf, jsize len, jobject pd, const char *source))
+  JVMWrapper("JVM_DefineClassWithSource");
+
+  return jvm_define_class_common(env, name, loader, buf, len, pd, source, THREAD);
+JVM_END
+```
+
+
+
+
+
+```cpp
+// common code for JVM_DefineClass() and JVM_DefineClassWithSource()
+static jclass jvm_define_class_common(JNIEnv *env, const char *name,
+                                      jobject loader, const jbyte *buf,
+                                      jsize len, jobject pd, const char *source,
+                                      TRAPS) {
+
+
+
+  Handle class_loader (THREAD, JNIHandles::resolve(loader));
+  
+  Handle protection_domain (THREAD, JNIHandles::resolve(pd));
+  
+  Klass* k = SystemDictionary::resolve_from_stream(class_name,
+                                                   class_loader,
+                                                   protection_domain,
+                                                   &st,
+                                                   CHECK_NULL);
+
+  return (jclass) JNIHandles::make_local(env, k->java_mirror());
+}
+```
+
+
+
+
+
+```cpp
+// systemDictionary.cpp
+// Add a klass to the system from a stream (called by jni_DefineClass and
+// JVM_DefineClass).
+// Note: class_name can be NULL. In that case we do not know the name of
+// the class until we have parsed the stream.
+
+InstanceKlass* SystemDictionary::resolve_from_stream(Symbol* class_name,
+                                                     Handle class_loader,
+                                                     Handle protection_domain,
+                                                     ClassFileStream* st,
+                                                     TRAPS) {
+
+  
+  ClassLoaderData* loader_data = register_loader(class_loader);
+
+  
+  // Parse the stream and create a klass.
+  // Note that we do this even though this klass might
+  // already be present in the SystemDictionary, otherwise we would not
+  // throw potential ClassFormatErrors.
+ InstanceKlass* k = NULL;
+
+#if INCLUDE_CDS
+  if (!DumpSharedSpaces) {
+    k = SystemDictionaryShared::lookup_from_stream(class_name, class_loader,
+                                                   protection_domain, st, CHECK_NULL);
+  }
+#endif
+
+    k = KlassFactory::create_from_stream(st, class_name, loader_data, protection_domain,
+                                         NULL, // unsafe_anonymous_host
+                                         NULL, // cp_patches
+                                         CHECK_NULL);
+  ...
+  return k;
+}
+```
+
+
 
 
 ```cpp
@@ -263,48 +291,21 @@ InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
                                                 ClassLoaderData* loader_data,
                                                 const ClassLoadInfo& cl_info,
                                                 TRAPS) {
-  ResourceMark rm(THREAD);
-  HandleMark hm(THREAD);
-
-  JvmtiCachedClassFileData* cached_class_file = NULL;
-
-  ClassFileStream* old_stream = stream;
-
-  // increment counter
-  THREAD->statistical_info().incr_define_class_count();
+	...
 
   // Skip this processing for VM hidden classes
   if (!cl_info.is_hidden()) {
-    stream = check_class_file_load_hook(stream,
-                                        name,
-                                        loader_data,
-                                        cl_info.protection_domain(),
-                                        &cached_class_file,
-                                        CHECK_NULL);
+    stream = check_class_file_load_hook(stream, name, loader_data, cl_info.protection_domain(),
+                                        &cached_class_file, CHECK_NULL);
   }
+  
   // parse stream
-  ClassFileParser parser(stream,
-                         name,
-                         loader_data,
-                         &cl_info,
+  ClassFileParser parser(stream, name, loader_data, &cl_info,
                          ClassFileParser::BROADCAST, // publicity level
                          CHECK_NULL);
-
-  const ClassInstanceInfo* cl_inst_info = cl_info.class_hidden_info_ptr();
+	
+  // create_instance_klass
   InstanceKlass* result = parser.create_instance_klass(old_stream != stream, *cl_inst_info, CHECK_NULL);
-
-  if (cached_class_file != NULL) {
-    // JVMTI: we have an InstanceKlass now, tell it about the cached bytes
-    result->set_cached_class_file(cached_class_file);
-  }
-
-  JFR_ONLY(ON_KLASS_CREATION(result, parser, THREAD);)
-
-#if INCLUDE_CDS
-  if (Arguments::is_dumping_archive()) {
-    ClassLoader::record_result(THREAD, result, stream);
-  }
-#endif // INCLUDE_CDS
 
   return result;
 }
@@ -313,148 +314,32 @@ InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
 
 
 ```cpp
+ClassFileParser::ClassFileParser(...) {
+	...
+
+  parse_stream(stream, CHECK);
+
+  post_process_parsed_stream(stream, _cp, CHECK);
+}
+```
+
+#### ClassFileParser::parse_stream 
+
+```cpp
 //classFileParser.cpp
 void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                                    TRAPS) {
-  // BEGIN STREAM PARSING
-  stream->guarantee_more(8, CHECK);  // magic, major, minor
-  // Magic value
-  const u4 magic = stream->get_u4_fast();
-  guarantee_property(magic == JAVA_CLASSFILE_MAGIC,
-                     "Incompatible magic value %u in class file %s",
-                     magic, CHECK);
+  // verify
 
-  // Version numbers
-  _minor_version = stream->get_u2_fast();
-  _major_version = stream->get_u2_fast();
-
-  // Check version numbers - we check this even with verifier off
-  verify_class_version(_major_version, _minor_version, _class_name, CHECK);
-
-  stream->guarantee_more(3, CHECK); // length, first cp tag
-  u2 cp_size = stream->get_u2_fast();
-
-  guarantee_property(
-    cp_size >= 1, "Illegal constant pool size %u in class file %s",
-    cp_size, CHECK);
-
-  _orig_cp_size = cp_size;
-  if (is_hidden()) { // Add a slot for hidden class name.
-    cp_size++;
-  }
-
-  _cp = ConstantPool::allocate(_loader_data,
-                               cp_size,
-                               CHECK);
-
+  _cp = ConstantPool::allocate(_loader_data, cp_size, CHECK);
   ConstantPool* const cp = _cp;
-
   parse_constant_pool(stream, cp, _orig_cp_size, CHECK);
-
-  // ACCESS FLAGS
-  stream->guarantee_more(8, CHECK);  // flags, this_class, super_class, infs_len
-
-  // Access flags
-  jint flags;
-  // JVM_ACC_MODULE is defined in JDK-9 and later.
-  if (_major_version >= JAVA_9_VERSION) {
-    flags = stream->get_u2_fast() & (JVM_RECOGNIZED_CLASS_MODIFIERS | JVM_ACC_MODULE);
-  } else {
-    flags = stream->get_u2_fast() & JVM_RECOGNIZED_CLASS_MODIFIERS;
-  }
-
-  if ((flags & JVM_ACC_INTERFACE) && _major_version < JAVA_6_VERSION) {
-    // Set abstract bit for old class files for backward compatibility
-    flags |= JVM_ACC_ABSTRACT;
-  }
-
-  verify_legal_class_modifiers(flags, CHECK);
-
-  short bad_constant = class_bad_constant_seen();
-  if (bad_constant != 0) {
-    // Do not throw CFE until after the access_flags are checked because if
-    // ACC_MODULE is set in the access flags, then NCDFE must be thrown, not CFE.
-    classfile_parse_error("Unknown constant tag %u in class file %s", bad_constant, THREAD);
-    return;
-  }
-
-  _access_flags.set_flags(flags);
-
-  // This class and superclass
-  _this_class_index = stream->get_u2_fast();
-  check_property(
-    valid_cp_range(_this_class_index, cp_size) &&
-      cp->tag_at(_this_class_index).is_unresolved_klass(),
-    "Invalid this class index %u in constant pool in class file %s",
-    _this_class_index, CHECK);
-
-  Symbol* const class_name_in_cp = cp->klass_name_at(_this_class_index);
-
-  // Don't need to check whether this class name is legal or not.
-  // It has been checked when constant pool is parsed.
-  // However, make sure it is not an array type.
-  if (_need_verify) {
-    guarantee_property(class_name_in_cp->char_at(0) != JVM_SIGNATURE_ARRAY,
-                       "Bad class name in class file %s",
-                       CHECK);
-  }
-
-#ifdef ASSERT
-  // Basic sanity checks
-  if (_is_hidden) {
-    assert(_class_name != vmSymbols::unknown_class_name(), "hidden classes should have a special name");
-  }
-#endif
-
-  // Update the _class_name as needed depending on whether this is a named, un-named, or hidden class.
-
-  if (_is_hidden) {
-    assert(_class_name != NULL, "Unexpected null _class_name");
-#ifdef ASSERT
-    if (_need_verify) {
-      verify_legal_class_name(_class_name, CHECK);
-    }
-#endif
-
-  } else {
-    // Check if name in class file matches given name
-    if (_class_name != class_name_in_cp) {
-      if (_class_name != vmSymbols::unknown_class_name()) {
-        ResourceMark rm(THREAD);
-        Exceptions::fthrow(THREAD_AND_LOCATION,
-                           vmSymbols::java_lang_NoClassDefFoundError(),
-                           "%s (wrong name: %s)",
-                           class_name_in_cp->as_C_string(),
-                           _class_name->as_C_string()
-                           );
-        return;
-      } else {
-        // The class name was not known by the caller so we set it from
-        // the value in the CP.
-        update_class_name(class_name_in_cp);
-      }
-      // else nothing to do: the expected class name matches what is in the CP
-    }
-  }
-  if (!is_internal()) {
-    LogTarget(Debug, class, preorder) lt;
-    if (lt.is_enabled()){
-      ResourceMark rm(THREAD);
-      LogStream ls(lt);
-      ls.print("%s", _class_name->as_klass_external_name());
-      if (stream->source() != NULL) {
-        ls.print(" source: %s", stream->source());
-      }
-      ls.cr();
-    }
-  }
+  
+  ...
 
   // SUPERKLASS
   _super_class_index = stream->get_u2_fast();
-  _super_klass = parse_super_class(cp,
-                                   _super_class_index,
-                                   _need_verify,
-                                   CHECK);
+  _super_klass = parse_super_class(cp, _super_class_index, _need_verify, CHECK);
 
   // Interfaces
   _itfs_len = stream->get_u2_fast();
@@ -483,12 +368,7 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                 &_declares_nonstatic_concrete_methods,
                 CHECK);
 
-  // promote flags from parse_methods() to the klass' flags
-  _access_flags.add_promoted_flags(promoted_flags.as_int());
-
-  if (_declares_nonstatic_concrete_methods) {
-    _has_nonstatic_concrete_methods = true;
-  }
+ ...
 
   // Additional attributes/annotations
   _parsed_annotations = new ClassAnnotationCollector();
@@ -497,17 +377,13 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
   // Finalize the Annotations metadata object,
   // now that all annotation arrays have been created.
   create_combined_annotations(CHECK);
-
-  // Make sure this is the end of class file stream
-  guarantee_property(stream->at_eos(),
-                     "Extra bytes at the end of class file %s",
-                     CHECK);
-
-  // all bytes in stream read and parsed
 }
 ```
 
-ClassFileParser::create_instance_klass():
+
+
+#### ClassFileParser::create_instance_klass
+
 1. InstanceKlass::allocate_instance_klass()
 2. fill_instance_klass()
 
@@ -533,23 +409,11 @@ InstanceKlass* ClassFileParser::create_instance_klass(bool changed_by_loadhook,
 
 
 
-#### InstanceKlass::allocate_instance_klass
+##### InstanceKlass::allocate_instance_klass
 
 ```cpp
 // instanceKlass.cpp
 InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& parser, TRAPS) {
-  const int size = InstanceKlass::size(parser.vtable_size(),
-                                       parser.itable_size(),
-                                       nonstatic_oop_map_size(parser.total_oop_map_count()),
-                                       parser.is_interface(),
-                                       parser.is_unsafe_anonymous(),
-                                       should_store_fingerprint(parser.is_unsafe_anonymous()));
-
-  const Symbol* const class_name = parser.class_name();
-  assert(class_name != NULL, "invariant");
-  ClassLoaderData* loader_data = parser.loader_data();
-  assert(loader_data != NULL, "invariant");
-
   InstanceKlass* ik;
 
   // Allocation
@@ -569,172 +433,27 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
     // reference
     ik = new (loader_data, size, THREAD) InstanceRefKlass(parser);
   }
-
-  // Check for pending exception before adding to the loader data and incrementing
-  // class count.  Can get OOM here.
-  if (HAS_PENDING_EXCEPTION) {
-    return NULL;
-  }
-
+  
   return ik;
 }
 ```
 
 
 
-#### ClassFileParser::fill_instance_klass
+##### ClassFileParser::fill_instance_klass
 
-
-
-java_lang_Class::create_mirror
+`java_lang_Class::create_mirror`
 
 ```cpp
 void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loadhook, TRAPS) {
-  assert(ik != NULL, "invariant");
-
-  // Set name and CLD before adding to CLD
-  ik->set_class_loader_data(_loader_data);
-  ik->set_name(_class_name);
-
-  // Add all classes to our internal class loader list here,
-  // including classes in the bootstrap (NULL) class loader.
-  const bool publicize = !is_internal();
-
-  _loader_data->add_class(ik, publicize);
 
   set_klass_to_deallocate(ik);
-
-  assert(_field_info != NULL, "invariant");
-  assert(ik->static_field_size() == _field_info->static_field_size, "sanity");
-  assert(ik->nonstatic_oop_map_count() == _field_info->total_oop_map_count,
-    "sanity");
-
-  assert(ik->is_instance_klass(), "sanity");
-  assert(ik->size_helper() == _field_info->instance_size, "sanity");
-
-  // Fill in information already parsed
-  ik->set_should_verify_class(_need_verify);
-
-  // Not yet: supers are done below to support the new subtype-checking fields
-  ik->set_nonstatic_field_size(_field_info->nonstatic_field_size);
-  ik->set_has_nonstatic_fields(_field_info->has_nonstatic_fields);
-  assert(_fac != NULL, "invariant");
-  ik->set_static_oop_field_count(_fac->count[STATIC_OOP]);
-
-  // this transfers ownership of a lot of arrays from
-  // the parser onto the InstanceKlass*
-  apply_parsed_class_metadata(ik, _java_fields_count, CHECK);
-
-  // note that is not safe to use the fields in the parser from this point on
-  assert(NULL == _cp, "invariant");
-  assert(NULL == _fields, "invariant");
-  assert(NULL == _methods, "invariant");
-  assert(NULL == _inner_classes, "invariant");
-  assert(NULL == _nest_members, "invariant");
-  assert(NULL == _local_interfaces, "invariant");
-  assert(NULL == _combined_annotations, "invariant");
-
-  if (_has_final_method) {
-    ik->set_has_final_method();
-  }
-
-  ik->copy_method_ordering(_method_ordering, CHECK);
-  // The InstanceKlass::_methods_jmethod_ids cache
-  // is managed on the assumption that the initial cache
-  // size is equal to the number of methods in the class. If
-  // that changes, then InstanceKlass::idnum_can_increment()
-  // has to be changed accordingly.
-  ik->set_initial_method_idnum(ik->methods()->length());
-
-  ik->set_this_class_index(_this_class_index);
-
-  if (is_unsafe_anonymous()) {
-    // _this_class_index is a CONSTANT_Class entry that refers to this
-    // anonymous class itself. If this class needs to refer to its own methods or
-    // fields, it would use a CONSTANT_MethodRef, etc, which would reference
-    // _this_class_index. However, because this class is anonymous (it's
-    // not stored in SystemDictionary), _this_class_index cannot be resolved
-    // with ConstantPool::klass_at_impl, which does a SystemDictionary lookup.
-    // Therefore, we must eagerly resolve _this_class_index now.
-    ik->constants()->klass_at_put(_this_class_index, ik);
-  }
-
-  ik->set_minor_version(_minor_version);
-  ik->set_major_version(_major_version);
-  ik->set_has_nonstatic_concrete_methods(_has_nonstatic_concrete_methods);
-  ik->set_declares_nonstatic_concrete_methods(_declares_nonstatic_concrete_methods);
-
-  if (_unsafe_anonymous_host != NULL) {
-    assert (ik->is_unsafe_anonymous(), "should be the same");
-    ik->set_unsafe_anonymous_host(_unsafe_anonymous_host);
-  }
-
+ 
   // Set PackageEntry for this_klass
   oop cl = ik->class_loader();
   Handle clh = Handle(THREAD, java_lang_ClassLoader::non_reflection_class_loader(cl));
   ClassLoaderData* cld = ClassLoaderData::class_loader_data_or_null(clh());
   ik->set_package(cld, CHECK);
-
-  const Array<Method*>* const methods = ik->methods();
-  assert(methods != NULL, "invariant");
-  const int methods_len = methods->length();
-
-  check_methods_for_intrinsics(ik, methods);
-
-  // Fill in field values obtained by parse_classfile_attributes
-  if (_parsed_annotations->has_any_annotations()) {
-    _parsed_annotations->apply_to(ik);
-  }
-
-  apply_parsed_class_attributes(ik);
-
-  // Miranda methods
-  if ((_num_miranda_methods > 0) ||
-      // if this class introduced new miranda methods or
-      (_super_klass != NULL && _super_klass->has_miranda_methods())
-        // super class exists and this class inherited miranda methods
-     ) {
-       ik->set_has_miranda_methods(); // then set a flag
-  }
-
-  // Fill in information needed to compute superclasses.
-  ik->initialize_supers(const_cast<InstanceKlass*>(_super_klass), _transitive_interfaces, CHECK);
-  ik->set_transitive_interfaces(_transitive_interfaces);
-  _transitive_interfaces = NULL;
-
-  // Initialize itable offset tables
-  klassItable::setup_itable_offset_table(ik);
-
-  // Compute transitive closure of interfaces this class implements
-  // Do final class setup
-  fill_oop_maps(ik,
-                _field_info->nonstatic_oop_map_count,
-                _field_info->nonstatic_oop_offsets,
-                _field_info->nonstatic_oop_counts);
-
-  // Fill in has_finalizer, has_vanilla_constructor, and layout_helper
-  set_precomputed_flags(ik);
-
-  // check if this class can access its super class
-  check_super_class_access(ik, CHECK);
-
-  // check if this class can access its superinterfaces
-  check_super_interface_access(ik, CHECK);
-
-  // check if this class overrides any final method
-  check_final_method_override(ik, CHECK);
-
-  // reject static interface methods prior to Java 8
-  if (ik->is_interface() && _major_version < JAVA_8_VERSION) {
-    check_illegal_static_method(ik, CHECK);
-  }
-
-  // Obtain this_klass' module entry
-  ModuleEntry* module_entry = ik->module();
-  assert(module_entry != NULL, "module_entry should always be set");
-
-  // Obtain java.lang.Module
-  Handle module_handle(THREAD, module_entry->module());
 
   // Allocate mirror and initialize static fields
   // The create_mirror() call will also call compute_modifiers()
@@ -744,65 +463,14 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
                                  _protection_domain,
                                  CHECK);
 
-  assert(_all_mirandas != NULL, "invariant");
 
   // Generate any default methods - default methods are public interface methods
   // that have a default implementation.  This is new with Java 8.
   if (_has_nonstatic_concrete_methods) {
-    DefaultMethods::generate_default_methods(ik,
-                                             _all_mirandas,
-                                             CHECK);
-  }
-
-  // Add read edges to the unnamed modules of the bootstrap and app class loaders.
-  if (changed_by_loadhook && !module_handle.is_null() && module_entry->is_named() &&
-      !module_entry->has_default_read_edges()) {
-    if (!module_entry->set_has_default_read_edges()) {
-      // We won a potential race
-      JvmtiExport::add_default_read_edges(module_handle, THREAD);
-    }
+    DefaultMethods::generate_default_methods(ik, _all_mirandas, CHECK);
   }
 
   ClassLoadingService::notify_class_loaded(ik, false /* not shared class */);
-
-  if (!is_internal()) {
-    if (log_is_enabled(Info, class, load)) {
-      ResourceMark rm;
-      const char* module_name = (module_entry->name() == NULL) ? UNNAMED_MODULE : module_entry->name()->as_C_string();
-      ik->print_class_load_logging(_loader_data, module_name, _stream);
-    }
-
-    if (ik->minor_version() == JAVA_PREVIEW_MINOR_VERSION &&
-        ik->major_version() != JAVA_MIN_SUPPORTED_VERSION &&
-        log_is_enabled(Info, class, preview)) {
-      ResourceMark rm;
-      log_info(class, preview)("Loading class %s that depends on preview features (class file version %d.65535)",
-                               ik->external_name(), ik->major_version());
-    }
-
-    if (log_is_enabled(Debug, class, resolve))  {
-      ResourceMark rm;
-      // print out the superclass.
-      const char * from = ik->external_name();
-      if (ik->java_super() != NULL) {
-        log_debug(class, resolve)("%s %s (super)",
-                   from,
-                   ik->java_super()->external_name());
-      }
-      // print out each of the interface classes referred to by this class.
-      const Array<InstanceKlass*>* const local_interfaces = ik->local_interfaces();
-      if (local_interfaces != NULL) {
-        const int length = local_interfaces->length();
-        for (int i = 0; i < length; i++) {
-          const InstanceKlass* const k = local_interfaces->at(i);
-          const char * to = k->external_name();
-          log_debug(class, resolve)("%s %s (interface)", from, to);
-        }
-      }
-    }
-  }
-
-  JFR_ONLY(INIT_ID(ik);)
 
   // If we reach here, all is well.
   // Now remove the InstanceKlass* from the _klass_to_deallocate field
@@ -811,8 +479,6 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
 
   // it's official
   set_klass(ik);
-
-  debug_only(ik->verify();)
 }
 ```
 
@@ -824,65 +490,10 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
 // javaClasses.cpp
 void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
                                     Handle module, Handle protection_domain, TRAPS) {
-  assert(k != NULL, "Use create_basic_type_mirror for primitive types");
-  assert(k->java_mirror() == NULL, "should only assign mirror once");
-
-  // Use this moment of initialization to cache modifier_flags also,
-  // to support Class.getModifiers().  Instance classes recalculate
-  // the cached flags after the class file is parsed, but before the
-  // class is put into the system dictionary.
-  int computed_modifiers = k->compute_modifier_flags(CHECK);
-  k->set_modifier_flags(computed_modifiers);
-  // Class_klass has to be loaded because it is used to allocate
-  // the mirror.
-  if (SystemDictionary::Class_klass_loaded()) {
-    // Allocate mirror (java.lang.Class instance)
-    oop mirror_oop = InstanceMirrorKlass::cast(SystemDictionary::Class_klass())->allocate_instance(k, CHECK);
-    Handle mirror(THREAD, mirror_oop);
-    Handle comp_mirror;
-
-    // Setup indirection from mirror->klass
-    java_lang_Class::set_klass(mirror(), k);
-
-    InstanceMirrorKlass* mk = InstanceMirrorKlass::cast(mirror->klass());
-    assert(oop_size(mirror()) == mk->instance_size(k), "should have been set");
-
-    java_lang_Class::set_static_oop_field_count(mirror(), mk->compute_static_oop_field_count(mirror()));
-
-    // It might also have a component mirror.  This mirror must already exist.
-    if (k->is_array_klass()) {
-      if (k->is_typeArray_klass()) {
-        BasicType type = TypeArrayKlass::cast(k)->element_type();
-        comp_mirror = Handle(THREAD, Universe::java_mirror(type));
-      } else {
-        assert(k->is_objArray_klass(), "Must be");
-        Klass* element_klass = ObjArrayKlass::cast(k)->element_klass();
-        assert(element_klass != NULL, "Must have an element klass");
-        comp_mirror = Handle(THREAD, element_klass->java_mirror());
-      }
-      assert(comp_mirror() != NULL, "must have a mirror");
-
-      // Two-way link between the array klass and its component mirror:
-      // (array_klass) k -> mirror -> component_mirror -> array_klass -> k
-      set_component_mirror(mirror(), comp_mirror());
-      // See below for ordering dependencies between field array_klass in component mirror
-      // and java_mirror in this klass.
-    } else {
-      assert(k->is_instance_klass(), "Must be");
-
-      initialize_mirror_fields(k, mirror, protection_domain, THREAD);
-      if (HAS_PENDING_EXCEPTION) {
-        // If any of the fields throws an exception like OOM remove the klass field
-        // from the mirror so GC doesn't follow it after the klass has been deallocated.
-        // This mirror looks like a primitive type, which logically it is because it
-        // it represents no class.
-        java_lang_Class::set_klass(mirror(), NULL);
-        return;
-      }
-    }
+     
+  	initialize_mirror_fields(k, mirror, protection_domain, THREAD);
 
     // set the classLoader field in the java_lang_Class instance
-    assert(oopDesc::equals(class_loader(), k->class_loader()), "should be same");
     set_class_loader(mirror(), class_loader());
 
     // Setup indirection from klass->mirror
@@ -898,10 +509,6 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
       // concurrently doesn't expect a k to have a null java_mirror.
       release_set_array_klass(comp_mirror(), k);
     }
-  } else {
-    assert(fixup_mirror_list() != NULL, "fixup_mirror_list not initialized");
-    fixup_mirror_list()->push(k);
-  }
 }
 ```
 
