@@ -2,13 +2,13 @@
 
 **The \*enum\* keyword was introduced in Java 5.** It denotes a special type of class that **always extends the *java.lang.Enum* class.** 
 
+**Java enum**, also called Java **enumeration type**, is a type whose **fields consist of a fixed set of constants**. The very purpose of enum is to **enforce compile time type safety**. 
+
 **Comparing Enum Types Using “==”  rather than equals.**
 
 
 
 `finalize` is final
-
-
 
 
 

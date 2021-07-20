@@ -80,6 +80,7 @@
 - [webflux](/docs/CS/Java/Spring/webflux.md)
 
 ### [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+- [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
 - [actuator](/docs/CS/Java/Spring_Boot/actuator.md)
 
 ### Spring Cloud
