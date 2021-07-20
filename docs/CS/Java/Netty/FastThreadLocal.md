@@ -11,6 +11,8 @@
 
 ## Use FastThreadLocal
 
+**FastThreadLocal don not extens ThreadLocal.**
+
 ```java
 public class FastThreadLocal<V> {
 
@@ -246,6 +248,7 @@ public long rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8, rp9;
 | --- | --- | --- |
 | Location | array index | hash & liner |
 | resize | just copy | copy & rehash |
-| Iteration | get head Set and get all FastThreadLocal | iterate all array |
-| Storage | weakReference key in ThreadLocalMap | StrongReference Set in  indexedVariables[0] of InternalThreadLocalMap(may value in ThreadLocalMap) |
+| Iteration | iterate all elements | get head Set and get all FastThreadLocal |
+| Storage | weakReference key in ThreadLocalMap | InternalThreadLocalMap may value in ThreadLocalMap or  field in FastThreadLocal, storage value in InternalThreadLocalMap |
 | remove | only need to remove after task done | exist memory leaky & expunge stale value when set/get |
+| Special value | - | a strong reference set of all fastThreadLocals in InternalThreadLocalMap |

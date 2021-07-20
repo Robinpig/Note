@@ -1,6 +1,10 @@
-### EventLoopGroup Hierarchy
+## Introduction
 
-![EventLoopGroup](./images/EventLoopGroup.png)
+
+
+### EventLoop Hierarchy
+
+![EventLoopGroup](./images/EventLoop.png)
 
 
 
@@ -21,6 +25,8 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
 ```
 
 
+
+#### shutdownGracefully
 
 Signals this executor that the caller wants the executor to be shut down. Once this method is called, isShuttingDown() starts to return true, and the executor prepares to shut itself down. Unlike shutdown(), graceful shutdown ensures that no tasks are submitted for 'the quiet period' (usually a couple seconds) before it shuts itself down. If a task is submitted during the quiet period, it is guaranteed to be accepted and the quiet period will start over.
 
@@ -46,6 +52,68 @@ Signals this executor that the caller wants the executor to be shut down. Once t
     @Override
     @Deprecated
     List<Runnable> shutdownNow();
+```
+
+
+
+```java
+// SingleThreadEventExecutor
+@Override
+public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit) {
+    ObjectUtil.checkPositiveOrZero(quietPeriod, "quietPeriod");
+    if (timeout < quietPeriod) {
+        throw new IllegalArgumentException(
+                "timeout: " + timeout + " (expected >= quietPeriod (" + quietPeriod + "))");
+    }
+    ObjectUtil.checkNotNull(unit, "unit");
+
+    if (isShuttingDown()) {
+        return terminationFuture();
+    }
+
+    boolean inEventLoop = inEventLoop();
+    boolean wakeup;
+    int oldState;
+    for (;;) {
+        if (isShuttingDown()) {
+            return terminationFuture();
+        }
+        int newState;
+        wakeup = true;
+        oldState = state;
+        if (inEventLoop) {
+            newState = ST_SHUTTING_DOWN;
+        } else {
+            switch (oldState) {
+                case ST_NOT_STARTED:
+                case ST_STARTED:
+                    newState = ST_SHUTTING_DOWN;
+                    break;
+                default:
+                    newState = oldState;
+                    wakeup = false;
+            }
+        }
+        if (STATE_UPDATER.compareAndSet(this, oldState, newState)) {
+            break;
+        }
+    }
+    gracefulShutdownQuietPeriod = unit.toNanos(quietPeriod);
+    gracefulShutdownTimeout = unit.toNanos(timeout);
+
+    if (ensureThreadStarted(oldState)) {
+        return terminationFuture;
+    }
+
+    if (wakeup) {
+        taskQueue.offer(WAKEUP_TASK);
+        if (!addTaskWakesUp) {
+            wakeup(inEventLoop);
+        }
+    }
+
+    return terminationFuture();
+}
 ```
 
 
@@ -162,9 +230,9 @@ public ChannelFuture register(final ChannelPromise promise) {
 }
 ```
 
-finally invoke` Channel#register()`
 
-### AbstractNioChannel#doRegister( )
+
+#### doRegister( )
 
 ```java
 //AbstractNioChannel#doRegister()
@@ -586,24 +654,6 @@ public void setIoRatio(int ioRatio) {
 
 
 
-## Fix epoll 100% CPU bug
-
-Replaces the current Selectors of the child event loops with newly created Selectors to work around the infamous epoll 100% CPU bug.
-
-```java
-public void rebuildSelectors() {
-    for (EventExecutor e: this) {
-        ((NioEventLoop) e).rebuildSelector();
-    }
-}
-```
-
-
-
-### EventLoop Hierarchy
-
-![EventLoop](./images/EventLoop.png)
-
 
 
 ## Create NioEventLoop
@@ -826,13 +876,10 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
 
 
-## NioEventLoop#execute()
-
-
-
-### SingleThreadEventExecutor#execute()
+## execute()
 
 ```java
+// SingleThreadEventExecutor#execute()
 @Override
 public void execute(Runnable task) {
     ObjectUtil.checkNotNull(task, "task");
@@ -869,11 +916,12 @@ private void execute(Runnable task, boolean immediate) {
 
 
 
-### SingleThreadEventExecutor#startThread()
+### startThread()
 
 `EventLoop.run() in for(;;) `
 
 ```java
+// SingleThreadEventExecutor#startThread()
 private void startThread() {
     if (state == ST_NOT_STARTED) {
         if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
@@ -906,7 +954,6 @@ private void doStartThread() {
                 SingleThreadEventExecutor.this.run();//invoke EventLoop.run()
                 success = true;
             } catch (Throwable t) {
-                logger.warn("Unexpected exception from an event executor: ", t);
             } finally {
                 for (;;) {
                     int oldState = state;
@@ -918,11 +965,6 @@ private void doStartThread() {
 
                 // Check if confirmShutdown() was called at the end of the loop.
                 if (success && gracefulShutdownStartTime == 0) {
-                    if (logger.isErrorEnabled()) {
-                        logger.error("Buggy " + EventExecutor.class.getSimpleName() + " implementation; " +
-                                SingleThreadEventExecutor.class.getSimpleName() + ".confirmShutdown() must " +
-                                "be called before run() implementation terminates.");
-                    }
                 }
 
                 try {
@@ -934,20 +976,16 @@ private void doStartThread() {
                     }
                 } finally {
                     try {
-                        cleanup();
+                        cleanup(); // implement by different EventLoop
                     } finally {
-                        // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify
-                        // the future. The user may block on the future and once it unblocks the JVM may terminate
+                        // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify the future.
+                        // The user may block on the future and once it unblocks the JVM may terminate
                         // and start unloading classes.
                         // See https://github.com/netty/netty/issues/6596.
                         FastThreadLocal.removeAll();
 
                         STATE_UPDATER.set(SingleThreadEventExecutor.this, ST_TERMINATED);
                         threadLock.countDown();
-                        if (logger.isWarnEnabled() && !taskQueue.isEmpty()) {
-                            logger.warn("An event executor terminated with " +
-                                    "non-empty task queue (" + taskQueue.size() + ')');
-                        }
                         terminationFuture.setSuccess(null);
                     }
                 }
@@ -959,9 +997,10 @@ private void doStartThread() {
 
 
 
-### NioEventLoop#run( ) 
+### run( ) 
 
 ```java
+// NioEventLoop
 @Override
 protected void run() {
     for (;;) {
@@ -1059,53 +1098,6 @@ protected void run() {
 
 
 
-
-
-### NioEventLoop#register()
-
-```java
-/**
- * Registers an arbitrary {@link SelectableChannel}, not necessarily created by Netty, to the {@link Selector}
- * of this event loop.  Once the specified {@link SelectableChannel} is registered, the specified {@code task} will
- * be executed by this event loop when the {@link SelectableChannel} is ready.
- */
-public void register(final SelectableChannel ch, final int interestOps, final NioTask<?> task) {
-    //ignore assertion
-
-    if (isShutdown()) {
-        throw new IllegalStateException("event loop shut down");
-    }
-
-    if (inEventLoop()) {
-        register0(ch, interestOps, task);
-    } else {
-        try {
-            // Offload to the EventLoop as otherwise java.nio.channels.spi.AbstractSelectableChannel.register
-            // may block for a long time while trying to obtain an internal lock that may be hold while selecting.
-            submit(new Runnable() {
-                @Override
-                public void run() {
-                    register0(ch, interestOps, task);
-                }
-            }).sync();
-        } catch (InterruptedException ignore) {
-            // Even if interrupted we did schedule it so just mark the Thread as interrupted.
-            Thread.currentThread().interrupt();
-        }
-    }
-}
-
-private void register0(SelectableChannel ch, int interestOps, NioTask<?> task) {
-    try {
-        ch.register(unwrappedSelector, interestOps, task);
-    } catch (Exception e) {
-        throw new EventLoopException("failed to register a channel", e);
-    }
-}
-```
-
-
-
 SelectedSelectionKeySet
 
 ```java
@@ -1121,8 +1113,6 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
  * override add() iterator()
  */
 ```
-
-
 
 
 
@@ -1172,11 +1162,6 @@ private void select(boolean oldWakenUp) throws IOException {
                 // also log it.
                 //
                 // See https://github.com/netty/netty/issues/2426
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Selector.select() returned prematurely because " +
-                            "Thread.currentThread().interrupt() was called. Use " +
-                            "NioEventLoop.shutdownGracefully() to shutdown the NioEventLoop.");
-                }
                 selectCnt = 1;
                 break;
             }
@@ -1196,18 +1181,7 @@ private void select(boolean oldWakenUp) throws IOException {
 
             currentTimeNanos = time;
         }
-
-        if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
-                        selectCnt - 1, selector);
-            }
-        }
     } catch (CancelledKeyException e) {
-        if (logger.isDebugEnabled()) {
-            logger.debug(CancelledKeyException.class.getSimpleName() + " raised by a Selector {} - JDK bug?",
-                    selector, e);
-        }
         // Harmless exception - log anyway
     }
 }
@@ -1215,105 +1189,7 @@ private void select(boolean oldWakenUp) throws IOException {
 
 
 
-### selectRebuildSelector( )
-
-```java
-private Selector selectRebuildSelector(int selectCnt) throws IOException {
-    // The selector returned prematurely many times in a row.
-    // Rebuild the selector to work around the problem.
-    logger.warn(
-            "Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
-            selectCnt, selector);
-
-    rebuildSelector();
-    Selector selector = this.selector;
-
-    // Select again to populate selectedKeys.
-    selector.selectNow();
-    return selector;
-}
-
-/**
- * Replaces the current {@link Selector} of this event loop with newly created {@link Selector}s to work
- * around the infamous epoll 100% CPU bug.
- */
-public void rebuildSelector() {
-    if (!inEventLoop()) {
-        execute(new Runnable() {
-            @Override
-            public void run() {
-                rebuildSelector0();
-            }
-        });
-        return;
-    }
-    rebuildSelector0();
-}
-
-private void rebuildSelector0() {
-    final Selector oldSelector = selector;
-    final SelectorTuple newSelectorTuple;
-
-    if (oldSelector == null) {
-        return;
-    }
-
-    try {
-        newSelectorTuple = openSelector();
-    } catch (Exception e) {
-        logger.warn("Failed to create a new Selector.", e);
-        return;
-    }
-
-    // Register all channels to the new Selector.
-    int nChannels = 0;
-    for (SelectionKey key: oldSelector.keys()) {
-        Object a = key.attachment();
-        try {
-            if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null) {
-                continue;
-            }
-
-            int interestOps = key.interestOps();
-            key.cancel();
-            SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
-            if (a instanceof AbstractNioChannel) {
-                // Update SelectionKey
-                ((AbstractNioChannel) a).selectionKey = newKey;
-            }
-            nChannels ++;
-        } catch (Exception e) {
-            logger.warn("Failed to re-register a Channel to the new Selector.", e);
-            if (a instanceof AbstractNioChannel) {
-                AbstractNioChannel ch = (AbstractNioChannel) a;
-                ch.unsafe().close(ch.unsafe().voidPromise());
-            } else {
-                @SuppressWarnings("unchecked")
-                NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
-                invokeChannelUnregistered(task, key, e);
-            }
-        }
-    }
-
-    selector = newSelectorTuple.selector;
-    unwrappedSelector = newSelectorTuple.unwrappedSelector;
-
-    try {
-        // time to close the old selector as everything else is registered to the new one
-        oldSelector.close();
-    } catch (Throwable t) {
-        if (logger.isWarnEnabled()) {
-            logger.warn("Failed to close the old Selector.", t);
-        }
-    }
-
-    if (logger.isInfoEnabled()) {
-        logger.info("Migrated " + nChannels + " channel(s) to the new Selector.");
-    }
-}
-```
-
-#### NioEventLoop#processSelectedKeys( )
+#### processSelectedKeys( )
 
 ```java
 private void processSelectedKeys() {
@@ -1471,12 +1347,9 @@ protected int doReadMessages(List<Object> buf) throws Exception {
             return 1;
         }
     } catch (Throwable t) {
-        logger.warn("Failed to create a new channel from an accepted socket.", t);
-
         try {
             ch.close();
         } catch (Throwable t2) {
-            logger.warn("Failed to close a socket.", t2);
         }
     }
 
@@ -1488,14 +1361,8 @@ protected int doReadMessages(List<Object> buf) throws Exception {
 
 ### runAllTasks( ) 
 
-in NioEventLoop
-
 ```java
-/**
- * Poll all tasks from the task queue and run them via {@link Runnable#run()} method.
- *
- * @return {@code true} if and only if at least one task was run
- */
+// Poll all tasks from the task queue and run them via {@link Runnable#run()} method.
 protected boolean runAllTasks() {
     assert inEventLoop();
     boolean fetchedAll;
@@ -1544,3 +1411,106 @@ private void closeAll() {
 ```
 
 unsafe.close( ) in [Channel](/docs/CS/Java/Netty/Channel.md )  
+
+
+
+
+
+## Fix epoll 100% CPU bug
+
+Replaces the current Selectors of the child event loops with newly created Selectors to work around the infamous epoll 100% CPU bug.
+
+```java
+public void rebuildSelectors() {
+    for (EventExecutor e: this) {
+        ((NioEventLoop) e).rebuildSelector();
+    }
+}
+```
+
+
+
+### selectRebuildSelector( )
+
+```java
+private Selector selectRebuildSelector(int selectCnt) throws IOException {
+    // The selector returned prematurely many times in a row.
+    // Rebuild the selector to work around the problem.
+    logger.warn(
+            "Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
+            selectCnt, selector);
+
+    rebuildSelector();
+    Selector selector = this.selector;
+
+    // Select again to populate selectedKeys.
+    selector.selectNow();
+    return selector;
+}
+```
+
+
+
+
+
+### rebuildSelector0
+
+```java
+private void rebuildSelector0() {
+    final Selector oldSelector = selector;
+    final SelectorTuple newSelectorTuple;
+
+    if (oldSelector == null) {
+        return;
+    }
+
+    try {
+        newSelectorTuple = openSelector();
+    } catch (Exception e) {
+        logger.warn("Failed to create a new Selector.", e);
+        return;
+    }
+
+    // Register all channels to the new Selector.
+    int nChannels = 0;
+    for (SelectionKey key: oldSelector.keys()) {
+        Object a = key.attachment();
+        try {
+            if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null) {
+                continue;
+            }
+
+            int interestOps = key.interestOps();
+            key.cancel();
+            SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
+            if (a instanceof AbstractNioChannel) {
+                // Update SelectionKey
+                ((AbstractNioChannel) a).selectionKey = newKey;
+            }
+            nChannels ++;
+        } catch (Exception e) {
+            logger.warn("Failed to re-register a Channel to the new Selector.", e);
+            if (a instanceof AbstractNioChannel) {
+                AbstractNioChannel ch = (AbstractNioChannel) a;
+                ch.unsafe().close(ch.unsafe().voidPromise());
+            } else {
+                @SuppressWarnings("unchecked")
+                NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
+                invokeChannelUnregistered(task, key, e);
+            }
+        }
+    }
+
+    selector = newSelectorTuple.selector;
+    unwrappedSelector = newSelectorTuple.unwrappedSelector;
+
+    try {
+        // time to close the old selector as everything else is registered to the new one
+        oldSelector.close();
+    } catch (Throwable t) {
+    }
+}
+```
+
+
+
