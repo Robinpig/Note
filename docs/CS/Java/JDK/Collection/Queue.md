@@ -1,10 +1,14 @@
 
 
+## Introduction
+
+
+
 ### Queue Hierarchy
 
-![queue](../images/Queue.png)
+![queue](file:///Users/robin/Note/docs/CS/Java/JDK/images/Queue.png?lastModify=1626593689)
 
-## Introduction
+
 
 A collection designed for holding elements prior to processing. Besides basic Collection operations, queues provide
 additional insertion, extraction, and inspection operations.
@@ -211,14 +215,84 @@ This class and its iterator implement all of the optional methods of the Collect
 
 
 
-## PriorityQueue
-
 
 
 ## BlockingQueue
 
-阻塞队列(BlockingQueue)
-是一个支持两个附加操作的队列。这两个附加的操作是：在队列为空时，获取元素的线程会等待队列变为非空。当队列满时，存储元素的线程会等待队列可用。阻塞队列常用于生产者和消费者的场景，生产者是往队列里添加元素的线程，消费者是从队列里拿元素的线程。阻塞队列就是生产者存放元素的容器，而消费者也只从容器里拿元素。
+A Queue that additionally supports operations that wait for the queue to become non-empty when retrieving an element, and wait for space to become available in the queue when storing an element.
+
+BlockingQueue methods come in four forms, with different ways of handling operations that cannot be satisfied immediately, but may be satisfied at some point in the future: one throws an exception, the second returns a special value (either null or false, depending on the operation), the third blocks the current thread indefinitely until the operation can succeed, and the fourth blocks for only a given maximum time limit before giving up. 
+
+These methods are summarized in the following table:
+
+|         | Throws exception | Special value | Blocks | Times out            |
+| ------- | ---------------- | ------------- | ------ | -------------------- |
+| **Insert** | add(e)           | offer(e)      | put(e) | offer(e, time, unit) |
+| **Remove** |      remove()            |     poll()          |    take()    |           poll(time, unit)           |
+| **Examine** |        element()          |   peek()            |     not applicable   |             not applicable         |
+
+
+
+A BlockingQueue **does not accept null elements**. Implementations throw *NullPointerException* on attempts to add, put or offer a null. A null is used as a sentinel value to indicate failure of poll operations.
+
+A BlockingQueue may be capacity bounded. At any given time it may have a remainingCapacity beyond which no additional elements can be put without blocking. A BlockingQueue without any intrinsic capacity constraints always reports a remaining capacity of Integer.MAX_VALUE.
+
+BlockingQueue implementations are designed to be used primarily for producer-consumer queues, but additionally support the Collection interface. So, for example, it is possible to remove an arbitrary element from a queue using remove(x). However, such operations are in general not performed very efficiently, and are intended for only occasional use, such as when a queued message is cancelled.
+
+BlockingQueue implementations are thread-safe. All queuing methods achieve their effects atomically using internal locks or other forms of concurrency control. However, the bulk Collection operations addAll, containsAll, retainAll and removeAll are not necessarily performed atomically unless specified otherwise in an implementation. So it is possible, for example, for addAll(c) to fail (throwing an exception) after adding only some of the elements in c.
+
+A BlockingQueue does not intrinsically support any kind of "close" or "shutdown" operation to indicate that no more items will be added. The needs and usage of such features tend to be implementation-dependent. For example, a common tactic is for producers to insert special end-of-stream or poison objects, that are interpreted accordingly when taken by consumers.
+
+Usage example, based on a typical producer-consumer scenario. Note that a BlockingQueue can safely be used with multiple producers and multiple consumers.
+
+
+
+
+
+### Example
+
+```java
+class Producer implements Runnable {
+   private final BlockingQueue queue;
+   Producer(BlockingQueue q) { queue = q; }
+   public void run() {
+     try {
+       while (true) { queue.put(produce()); }
+     } catch (InterruptedException ex) { ... handle ...}
+   }
+   Object produce() { ... }
+ }
+
+ class Consumer implements Runnable {
+   private final BlockingQueue queue;
+   Consumer(BlockingQueue q) { queue = q; }
+   public void run() {
+     try {
+       while (true) { consume(queue.take()); }
+     } catch (InterruptedException ex) { ... handle ...}
+   }
+   void consume(Object x) { ... }
+ }
+
+ class Setup {
+   void main() {
+     BlockingQueue q = new SomeQueueImplementation();
+     Producer p = new Producer(q);
+     Consumer c1 = new Consumer(q);
+     Consumer c2 = new Consumer(q);
+     new Thread(p).start();
+     new Thread(c1).start();
+     new Thread(c2).start();
+   }
+ }
+```
+
+
+
+**Memory consistency effects**: As with other concurrent collections, actions in a thread prior to placing an object into a BlockingQueue happen-before actions subsequent to the access or removal of that element from the BlockingQueue in another thread.
+This interface is a member of the Java Collections Framework.
+
+
 
 | Blocking Queue Name   | Description      |
 | --------------------- | ---------------- |
@@ -231,6 +305,71 @@ This class and its iterator implement all of the optional methods of the Collect
 | LinkedBlockingDeque   | Deque            |
 
 ### ArrayBlockingQueue
+
+only one lock
+
+```java
+/** Main lock guarding all access */
+final ReentrantLock lock;
+
+/** Condition for waiting takes */
+@SuppressWarnings("serial")  // Classes implementing Condition may be serializable.
+private final Condition notEmpty;
+
+/** Condition for waiting puts */
+@SuppressWarnings("serial")  // Classes implementing Condition may be serializable.
+private final Condition notFull;
+```
+
+
+
+```java
+public ArrayBlockingQueue(int capacity, boolean fair,
+                          Collection<? extends E> c) {
+    this(capacity, fair);
+
+    final ReentrantLock lock = this.lock;
+    lock.lock(); // Lock only for visibility, not mutual exclusion
+    try {
+        final Object[] items = this.items;
+        int i = 0;
+        try {
+            for (E e : c)
+                items[i++] = Objects.requireNonNull(e);
+        } catch (ArrayIndexOutOfBoundsException ex) {
+            throw new IllegalArgumentException();
+        }
+        count = i;
+        putIndex = (i == capacity) ? 0 : i;
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+
+
+### LinkedBlockingQueue
+
+takeLock and putLock
+
+```java
+/** Lock held by take, poll, etc */
+private final ReentrantLock takeLock = new ReentrantLock();
+
+/** Wait queue for waiting takes */
+@SuppressWarnings("serial") // Classes implementing Condition may be serializable.
+private final Condition notEmpty = takeLock.newCondition();
+
+/** Lock held by put, offer, etc */
+private final ReentrantLock putLock = new ReentrantLock();
+
+/** Wait queue for waiting puts */
+@SuppressWarnings("serial") // Classes implementing Condition may be serializable.
+private final Condition notFull = putLock.newCondition();
+```
+
+
 
 ### DelayQueue
 
@@ -259,6 +398,26 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
         implements BlockingQueue<E>, java.io.Serializable {
 }
 ```
+
+
+
+```java
+private ReentrantLock qlock;
+private WaitQueue waitingProducers;
+private WaitQueue waitingConsumers;
+
+
+/**
+  * The transferer. Set only in constructor, but cannot be declared
+  * as final without further complicating serialization.  Since
+  * this is accessed only at most once per public method, there
+  * isn't a noticeable performance penalty for using volatile
+  * instead of final here.
+  */
+private transient volatile Transferer<E> transferer;
+```
+
+
 
 `You cannot peek at a synchronous queue because an element is only present when you try to remove it.`
 
@@ -289,6 +448,131 @@ public int remainingCapacity(){
 ```
 
 #### TransferQueue
+
+Basic algorithm is to loop trying to take either of
+two actions:
+1. If queue apparently empty or holding same-mode nodes, try to add node to queue of waiters, wait to be fulfilled (or cancelled) and return matching item.
+2. If queue apparently contains waiting items, and this call is of complementary mode, try to fulfill by CAS'ing item field of waiting node and dequeuing it, and then returning matching item.
+
+In each case, along the way, check for and try to help advance head and tail on behalf of other stalled/slow threads.
+
+The loop starts off with a null check guarding against seeing uninitialized head or tail values. This never happens in current SynchronousQueue, but could if callers held non-volatile/final ref to the transferer. The check is here anyway because it places null checks at top of loop, which is usually faster than having them implicitly interspersed.
+
+```java
+/**
+ * Puts or takes an item.
+ */
+@SuppressWarnings("unchecked")
+E transfer(E e, boolean timed, long nanos) {
+    QNode s = null; // constructed/reused as needed
+    boolean isData = (e != null);
+
+    for (;;) {
+        QNode t = tail;
+        QNode h = head;
+        if (t == null || h == null)         // saw uninitialized value
+            continue;                       // spin
+
+        if (h == t || t.isData == isData) { // empty or same-mode
+            QNode tn = t.next;
+            if (t != tail)                  // inconsistent read
+                continue;
+            if (tn != null) {               // lagging tail
+                advanceTail(t, tn);
+                continue;
+            }
+            if (timed && nanos <= 0L)       // can't wait
+                return null;
+            if (s == null)
+                s = new QNode(e, isData);
+            if (!t.casNext(null, s))        // failed to link in
+                continue;
+
+            advanceTail(t, s);              // swing tail and wait
+            Object x = awaitFulfill(s, e, timed, nanos);
+            if (x == s) {                   // wait was cancelled
+                clean(t, s);
+                return null;
+            }
+
+            if (!s.isOffList()) {           // not already unlinked
+                advanceHead(t, s);          // unlink if head
+                if (x != null)              // and forget fields
+                    s.item = s;
+                s.waiter = null;
+            }
+            return (x != null) ? (E)x : e;
+
+        } else {                            // complementary-mode
+            QNode m = h.next;               // node to fulfill
+            if (t != tail || m == null || h != head)
+                continue;                   // inconsistent read
+
+            Object x = m.item;
+            if (isData == (x != null) ||    // m already fulfilled
+                x == m ||                   // m cancelled
+                !m.casItem(x, e)) {         // lost CAS
+                advanceHead(h, m);          // dequeue and retry
+                continue;
+            }
+
+            advanceHead(h, m);              // successfully fulfilled
+            LockSupport.unpark(m.waiter);
+            return (x != null) ? (E)x : e;
+        }
+    }
+}
+```
+
+
+
+### PriorityBlockingQueue
+
+
+
+```java
+/**
+ * Default array capacity.
+ */
+private static final int DEFAULT_INITIAL_CAPACITY = 11;
+
+/**
+ * Priority queue represented as a balanced binary heap: the two
+ * children of queue[n] are queue[2*n+1] and queue[2*(n+1)].  The
+ * priority queue is ordered by comparator, or by the elements'
+ * natural ordering, if comparator is null: For each node n in the
+ * heap and each descendant d of n, n <= d.  The element with the
+ * lowest value is in queue[0], assuming the queue is nonempty.
+ */
+private transient Object[] queue;
+
+/**
+ * The number of elements in the priority queue.
+ */
+private transient int size;
+
+/**
+ * The comparator, or null if priority queue uses elements'
+ * natural ordering.
+ */
+private transient Comparator<? super E> comparator;
+
+/**
+ * Lock used for all public operations.
+ */
+private final ReentrantLock lock = new ReentrantLock();
+
+/**
+ * Condition for blocking when empty.
+ */
+@SuppressWarnings("serial") // Classes implementing Condition may be serializable.
+private final Condition notEmpty = lock.newCondition();
+
+/**
+ * Spinlock for allocation, acquired via CAS.
+ */
+private transient volatile int allocationSpinLock;
+```
 
 
 

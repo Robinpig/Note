@@ -5,7 +5,7 @@
 use javap -c
 
 ```
-//synchronized with block
+//synchronized with block finally add monitorexit
 monitorenter monitorexit
 
 //synchronized with method

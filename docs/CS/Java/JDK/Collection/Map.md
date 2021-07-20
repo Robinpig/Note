@@ -1112,6 +1112,257 @@ public class TreeMap<K,V>
 
 
 
+### put
+
+Associates the specified value with the specified key in this map. If the map previously contained a mapping for the key, the old value is replaced.
+
+```java
+public V put(K key, V value) {
+    Entry<K,V> t = root;
+    if (t == null) {
+        compare(key, key); // type (and possibly null) check
+
+        root = new Entry<>(key, value, null);
+        size = 1;
+        modCount++;
+        return null;
+    }
+    int cmp;
+    Entry<K,V> parent;
+    // split comparator and comparable paths
+    Comparator<? super K> cpr = comparator;
+    if (cpr != null) {
+        do {
+            parent = t;
+            cmp = cpr.compare(key, t.key);
+            if (cmp < 0)
+                t = t.left;
+            else if (cmp > 0)
+                t = t.right;
+            else
+                return t.setValue(value);
+        } while (t != null);
+    }
+    else {
+        if (key == null)
+            throw new NullPointerException();
+        @SuppressWarnings("unchecked")
+            Comparable<? super K> k = (Comparable<? super K>) key;
+        do {
+            parent = t;
+            cmp = k.compareTo(t.key);
+            if (cmp < 0)
+                t = t.left;
+            else if (cmp > 0)
+                t = t.right;
+            else
+                return t.setValue(value);
+        } while (t != null);
+    }
+    Entry<K,V> e = new Entry<>(key, value, parent);
+    if (cmp < 0)
+        parent.left = e;
+    else
+        parent.right = e;
+    fixAfterInsertion(e);
+    size++;
+    modCount++;
+    return null;
+}
+```
+
+
+
+
+
+### fixAfterInsertion
+
+From CLR
+
+```java
+private void fixAfterInsertion(Entry<K,V> x) {
+    x.color = RED;
+
+    while (x != null && x != root && x.parent.color == RED) {
+        if (parentOf(x) == leftOf(parentOf(parentOf(x)))) {
+            Entry<K,V> y = rightOf(parentOf(parentOf(x)));
+            if (colorOf(y) == RED) {
+                setColor(parentOf(x), BLACK);
+                setColor(y, BLACK);
+                setColor(parentOf(parentOf(x)), RED);
+                x = parentOf(parentOf(x));
+            } else {
+                if (x == rightOf(parentOf(x))) {
+                    x = parentOf(x);
+                    rotateLeft(x);
+                }
+                setColor(parentOf(x), BLACK);
+                setColor(parentOf(parentOf(x)), RED);
+                rotateRight(parentOf(parentOf(x)));
+            }
+        } else {
+            Entry<K,V> y = leftOf(parentOf(parentOf(x)));
+            if (colorOf(y) == RED) {
+                setColor(parentOf(x), BLACK);
+                setColor(y, BLACK);
+                setColor(parentOf(parentOf(x)), RED);
+                x = parentOf(parentOf(x));
+            } else {
+                if (x == leftOf(parentOf(x))) {
+                    x = parentOf(x);
+                    rotateRight(x);
+                }
+                setColor(parentOf(x), BLACK);
+                setColor(parentOf(parentOf(x)), RED);
+                rotateLeft(parentOf(parentOf(x)));
+            }
+        }
+    }
+    root.color = BLACK;
+}
+```
+
+
+
+rotate
+
+
+
+```java
+/** From CLR */
+private void rotateLeft(Entry<K,V> p) {
+    if (p != null) {
+        Entry<K,V> r = p.right;
+        p.right = r.left;
+        if (r.left != null)
+            r.left.parent = p;
+        r.parent = p.parent;
+        if (p.parent == null)
+            root = r;
+        else if (p.parent.left == p)
+            p.parent.left = r;
+        else
+            p.parent.right = r;
+        r.left = p;
+        p.parent = r;
+    }
+}
+
+/** From CLR */
+private void rotateRight(Entry<K,V> p) {
+    if (p != null) {
+        Entry<K,V> l = p.left;
+        p.left = l.right;
+        if (l.right != null) l.right.parent = p;
+        l.parent = p.parent;
+        if (p.parent == null)
+            root = l;
+        else if (p.parent.right == p)
+            p.parent.right = l;
+        else p.parent.left = l;
+        l.right = p;
+        p.parent = l;
+    }
+}
+```
+
+
+
+### remove
+
+```java
+public V remove(Object key) {
+    Entry<K,V> p = getEntry(key);
+    if (p == null)
+        return null;
+
+    V oldValue = p.value;
+    deleteEntry(p);
+    return oldValue;
+}
+
+private void deleteEntry(Entry<K,V> p) {
+  modCount++;
+  size--;
+
+  // If strictly internal, copy successor's element to p and then make p
+  // point to successor.
+  if (p.left != null && p.right != null) {
+    Entry<K,V> s = successor(p);
+    p.key = s.key;
+    p.value = s.value;
+    p = s;
+  } // p has 2 children
+
+  // Start fixup at replacement node, if it exists.
+  Entry<K,V> replacement = (p.left != null ? p.left : p.right);
+
+  if (replacement != null) {
+    // Link replacement to parent
+    replacement.parent = p.parent;
+    if (p.parent == null)
+      root = replacement;
+    else if (p == p.parent.left)
+      p.parent.left  = replacement;
+    else
+      p.parent.right = replacement;
+
+    // Null out links so they are OK to use by fixAfterDeletion.
+    p.left = p.right = p.parent = null;
+
+    // Fix replacement
+    if (p.color == BLACK)
+      fixAfterDeletion(replacement);
+  } else if (p.parent == null) { // return if we are the only node.
+    root = null;
+  } else { //  No children. Use self as phantom replacement and unlink.
+    if (p.color == BLACK)
+      fixAfterDeletion(p);
+
+    if (p.parent != null) {
+      if (p == p.parent.left)
+        p.parent.left = null;
+      else if (p == p.parent.right)
+        p.parent.right = null;
+      p.parent = null;
+    }
+  }
+}
+
+```
+
+
+
+### get
+
+```java
+public V get(Object key) {
+    Entry<K,V> p = getEntry(key);
+    return (p==null ? null : p.value);
+}
+
+final Entry<K,V> getEntry(Object key) {
+  // Offload comparator-based version for sake of performance
+  if (comparator != null)
+    return getEntryUsingComparator(key);
+  if (key == null)
+    throw new NullPointerException();
+  @SuppressWarnings("unchecked")
+  Comparable<? super K> k = (Comparable<? super K>) key;
+  Entry<K,V> p = root;
+  while (p != null) {
+    int cmp = k.compareTo(p.key);
+    if (cmp < 0)
+      p = p.left;
+    else if (cmp > 0)
+      p = p.right;
+    else
+      return p;
+  }
+  return null;
+}
+```
+
 ## [WeakHashMap](/docs/CS/Java/JDK/Collection/WeakHashMap.md)
 
 
