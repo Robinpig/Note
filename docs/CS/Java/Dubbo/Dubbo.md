@@ -44,15 +44,20 @@ JavaAssist
 
 ### Protocol
 
-| 协议名称   | 实现描述                                                     | 连接                                                         | 使用场景                                                     |
-| :--------- | :----------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| dubbo      | 传输：mina、netty、grizzy  序列化：dubbo、hessian2、java、json | dubbo缺省采用单一长连接和NIO异步通讯                         | 1.传入传出参数数据包较小  2.消费者 比提供者多  3.常规远程服务方法调用  4.不适合传送大数据量的服务，比如文件、传视频 |
-| rmi        | 传输：java rmi  序列化：java 标准序列化                      | 连接个数：多连接  连接方式：短连接  传输协议：TCP/IP  传输方式：BIO | 1.常规RPC调用  2.与原RMI客户端互操作  3.可传文件  4.不支持防火墙穿透 |
-| hessian    | 传输：Serverlet容器  序列化：hessian二进制序列化             | 连接个数：多连接   连接方式：短连接   传输协议：HTTP   传输方式：同步传输 | 1.提供者比消费者多  2.可传文件  3.跨语言传输                 |
-| http       | 传输：servlet容器  序列化：表单序列化                        | 连接个数：多连接   连接方式：短连接   传输协议：HTTP   传输方式：同步传输 | 1.提供者多余消费者  2.数据包混合                             |
-| webservice | 传输：HTTP  序列化：SOAP文件序列化                           | 连接个数：多连接   连接方式：短连接   传输协议：HTTP   传输方式：同步传输 | 1.系统集成  2.跨语言调用                                     |
-| t
+| Protocol   | Transporter                        | Serialization               | Features                               | Applicable Scene                                             |
+| :--------- | :--------------------------------- | --------------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| dubbo      | Mina, Netty, grizzy                | dubbo, hessian2, java, json | Single Long connection Async NIO TCP   | Multiple rquests with few contents or consumers much larger than providers |
+| rmi        | Java rmi                           | Serializable                | Multiple short connections, Sync, TCP  |                                                              |
+| hessian    | Servlet, default Jetty             | Hessian                     | Multiple short connections, Sync, HTTP |                                                              |
+| http       | Spring HttpInvoker                 | form                        | Multiple short connections, Sync, HTTP | Unsupport upload files                                       |
+| webservice | 传输：HTTP  序列化：SOAP文件序列化 |                             | Multiple short connections, Sync, HTTP |                                                              |
+| Triple     |                                    | default ProtoBuf            | Single Long connection Async NIO TCP   |                                                              |
 
+
+
+
+
+Protocol Invoker Exporter(wrapper Invoker)
 
 ## Transport
 AbstractServer.doOpen()->create a Netty or Mina Server.
