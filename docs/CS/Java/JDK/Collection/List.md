@@ -382,7 +382,7 @@ Stack vs ArrayDeque
 | Super Class | AbstractList | AbstractSequentialList |                      | AbstractList | Vector |
 | Interface   | List&RA      | List&Deque             | List&RA              | List&RA      |        |
 | Satety      | unsafe       | unsafe                 | safe                 | safe         | safe   |
-|             |              |                        |                      |              |        |
+| Resize      | 1.5          |                        |                      | 2            | 2      |
 |             |              |                        |                      |              |        |
 |             |              |                        |                      |              |        |
 
