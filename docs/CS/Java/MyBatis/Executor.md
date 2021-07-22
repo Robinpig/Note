@@ -1,4 +1,8 @@
-# Executor
+## Introduction
+
+### Executor Hierarchy
+
+<img src="./images/Executor.png" alt="z" style="zoom:150%;" />
 
 `All SQLs are executed by Executor`
 
@@ -89,16 +93,16 @@ public void clearLocalCache() {
 }
 ```
 
-`localCache and  localOutputParameterCache will clear when `
+localCache and  localOutputParameterCache will clear when 
 
-- `update or close`
-- `query`
-  - `queryStack == 0 && ms.isFlushCacheRequired()`
-  - `configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT `
+- update or close
+- query
+  - queryStack == 0 && ms.isFlushCacheRequired()
+  - configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT 
 
 
 
-update
+#### update
 
 ```java
 @Override
@@ -114,7 +118,7 @@ public int update(MappedStatement ms, Object parameter) throws SQLException {
 
 
 
-query
+#### query
 
 ```java
 @SuppressWarnings("unchecked")
@@ -156,7 +160,7 @@ query
 
 
 
-createCacheKey
+#### createCacheKey
 
 ```java
 @Override
@@ -227,11 +231,14 @@ public void rollback(boolean required) throws SQLException {
 }
 ```
 
+### doFlushStatements
 
+Call by SqlSession
 
-flushStatement in **BatchExecutor**
+flushStatement call doFlushStatements
 
 ```java
+// BatchExecutor
 public List<BatchResult> doFlushStatements(boolean isRollback) throws SQLException {
   try {
     List<BatchResult> results = new ArrayList<BatchResult>();
@@ -255,18 +262,7 @@ public List<BatchResult> doFlushStatements(boolean isRollback) throws SQLExcepti
             }
           }
         } catch (BatchUpdateException e) {
-          StringBuffer message = new StringBuffer();
-          message.append(batchResult.getMappedStatement().getId())
-              .append(" (batch index #")
-              .append(i + 1)
-              .append(")")
-              .append(" failed.");
-          if (i > 0) {
-            message.append(" ")
-                .append(i)
-                .append(" prior sub executor(s) completed successfully, but will be rolled back.");
-          }
-          throw new BatchExecutorException(message.toString(), e, results, batchResult);
+          throw new BatchExecutorException("");
         }
         results.add(batchResult);
       }
@@ -286,6 +282,13 @@ public List<BatchResult> doFlushStatements(boolean isRollback) throws SQLExcepti
 
 
 ## SimpleExecutor
+
+1. newStatementHandler
+2. get Connection from transaction
+3. get Statement
+4. [StatementHandler update](/docs/CS/Java/MyBatis/StatementHandler.md?id=update)
+   1. execute
+   2. resultSetHandler.handleResultSets(Query) or [keyGenerator::processAfter()](/docs/CS/Java/MyBatis/KeyGenerator.md?id=processAfter)
 
 ```java
 public class SimpleExecutor extends BaseExecutor {
@@ -320,6 +323,16 @@ public class SimpleExecutor extends BaseExecutor {
     }
   }
   
+  // getConnection from transaction
+  protected Connection getConnection(Log statementLog) throws SQLException {
+    Connection connection = transaction.getConnection();
+    if (statementLog.isDebugEnabled()) { // create JDK Proxy instance
+      return ConnectionLogger.newInstance(connection, statementLog, queryStack);
+    } else {
+      return connection;
+    }
+  }
+  
    private Statement prepareStatement(StatementHandler handler, Log statementLog) throws SQLException {
     Statement stmt;
     Connection connection = getConnection(statementLog);
@@ -330,13 +343,15 @@ public class SimpleExecutor extends BaseExecutor {
 }
 ```
 
-`finally invoke methods of` **StatementHandler**
+
 
 
 
 ## ReuseExecutor
 
-`use HashMap to reuse Statement, also close Statement and clear map in doFlushStatements`
+use HashMap to reuse Statements.
+
+close Statements and clear map in *doFlushStatements*.
 
 ```java
 public class ReuseExecutor extends BaseExecutor {
@@ -420,5 +435,20 @@ public class BatchExecutor extends BaseExecutor {
     // Integer.MIN_VALUE + 1002
     return BATCH_UPDATE_RETURN_VALUE;
   }
+}
+```
+
+
+
+## CachingExecxutor
+
+[Cache](/docs/CS/Java/MyBatis/Cache.md)
+
+```java
+public class CachingExecutor implements Executor {
+
+  private final Executor delegate;
+  private final TransactionalCacheManager tcm = new TransactionalCacheManager();
+...
 }
 ```
