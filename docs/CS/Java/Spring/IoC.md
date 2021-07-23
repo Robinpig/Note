@@ -2437,7 +2437,7 @@ protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 
 #### BeanPostProcessor
 
-Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or wrapping beans with proxies.
+Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies](/docs/CS/Java/Spring/AOP.md?id=createProxy).
 
 Typically, post-processors that populate beans via marker interfaces or the like will implement postProcessBeforeInitialization, while post-processors that wrap beans with proxies will normally implement postProcessAfterInitialization.
 
@@ -2456,12 +2456,6 @@ public interface BeanPostProcessor {
     * or a custom init-method). The bean will already be populated with property values.
     * The returned bean instance may be a wrapper around the original.
     * <p>The default implementation returns the given {@code bean} as-is.
-    * @param bean the new bean instance
-    * @param beanName the name of the bean
-    * @return the bean instance to use, either the original or a wrapped one;
-    * if {@code null}, no subsequent BeanPostProcessors will be invoked
-    * @throws org.springframework.beans.BeansException in case of errors
-    * @see org.springframework.beans.factory.InitializingBean#afterPropertiesSet
     */
    @Nullable
    default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
@@ -2481,13 +2475,6 @@ public interface BeanPostProcessor {
     * {@link InstantiationAwareBeanPostProcessor#postProcessBeforeInstantiation} method,
     * in contrast to all other {@code BeanPostProcessor} callbacks.
     * <p>The default implementation returns the given {@code bean} as-is.
-    * @param bean the new bean instance
-    * @param beanName the name of the bean
-    * @return the bean instance to use, either the original or a wrapped one;
-    * if {@code null}, no subsequent BeanPostProcessors will be invoked
-    * @throws org.springframework.beans.BeansException in case of errors
-    * @see org.springframework.beans.factory.InitializingBean#afterPropertiesSet
-    * @see org.springframework.beans.factory.FactoryBean
     */
    @Nullable
    default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {

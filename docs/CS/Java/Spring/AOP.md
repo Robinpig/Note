@@ -62,10 +62,9 @@ public @interface EnableAspectJAutoProxy {
    boolean proxyTargetClass() default false;
 
    /**
-    * Indicate that the proxy should be exposed by the AOP framework as a {@code ThreadLocal}
-    * for retrieval via the {@link org.springframework.aop.framework.AopContext} class.
+    * Indicate that the proxy should be exposed by the AOP framework as a ThreadLocal
+    * for retrieval via the AopContext class.
     * Off by default, i.e. no guarantees that {@code AopContext} access will work.
-    * @since 4.3.1
     */
    boolean exposeProxy() default false;
 
@@ -74,14 +73,14 @@ public @interface EnableAspectJAutoProxy {
 
 ### registerBeanDefinitions
 
-Registers an **AnnotationAwareAspectJAutoProxyCreator** against the current BeanDefinitionRegistry as appropriate based on a given @EnableAspectJAutoProxy annotation.
+Registers an **AnnotationAwareAspectJAutoProxyCreator** against the current `BeanDefinitionRegistry` as appropriate based on a given `@EnableAspectJAutoProxy` annotation.
 
 ```java
 class AspectJAutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 
    /**
     * Register, escalate, and configure the AspectJ auto proxy creator based on the value
-    * of the @{@link EnableAspectJAutoProxy#proxyTargetClass()} attribute on the importing
+    * of the EnableAspectJAutoProxy#proxyTargetClass() attribute on the importing
     * {@code @Configuration} class.
     */
    @Override
@@ -107,7 +106,7 @@ class AspectJAutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 
 
 
-
+#### AnnotationAwareAspectJAutoProxyCreator
 
 ```java
 // AnnotationAwareAspectJAutoProxyCreator
@@ -133,11 +132,11 @@ protected void initBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 
 
 
-AspectJAwareAdvisorAutoProxyCreator subclass that processes all AspectJ annotation aspects in the current application context, as well as Spring Advisors.
+*AspectJAwareAdvisorAutoProxyCreator subclass that processes all **AspectJ annotation aspects** in the current application context, as well as Spring Advisors.*
 Any AspectJ annotated classes will automatically be recognized, and their advice applied if Spring AOP's proxy-based model is capable of applying it. This covers method execution joinpoints.
 If the <aop:include> element is used, only @AspectJ beans with names matched by an include pattern will be considered as defining aspects to use for Spring auto-proxying.
 
-Processing of Spring Advisors follows the rules established in org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator.
+Processing of Spring Advisors follows the rules established in `org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator`.
 
 
 
@@ -184,7 +183,9 @@ protected List<Advisor> findCandidateAdvisors() {
 }
 
 
-
+// BeanFactoryAdvisorRetrievalHelper
+// Helper for retrieving standard Spring Advisors from a BeanFactory, 
+// for use with auto-proxying.
 public List<Advisor> findAdvisorBeans() {
 		// Determine list of advisor bean names, if not cached already.
 		String[] advisorNames = this.cachedAdvisorBeanNames;
@@ -232,6 +233,10 @@ public List<Advisor> findAdvisorBeans() {
 ## createProxy
 
 ![](./images/AnnotationAwareAspectJAutoProxyCreator.png)
+
+
+
+`AbstractAutoProxyCreator` implements [*BeanPostProcessor*](/docs/CS/Java/Spring/IoC.md?id=BeanPostProcesor)
 
 ### postProcessBeforeInstantiation
 
@@ -644,6 +649,125 @@ public List<Object> getInterceptorsAndDynamicInterceptionAdvice(
    }
 
    return interceptorList;
+}
+```
+
+## ProxyFactoryBean
+
+Return a proxy. Invoked when clients obtain beans from this factory bean. Create an instance of the AOP proxy to be returned by this factory. The instance will be cached for a singleton, and create on each call to getObject() for a proxy.
+
+```java
+@Override
+@Nullable
+public Object getObject() throws BeansException {
+   initializeAdvisorChain();
+   if (isSingleton()) {
+      return getSingletonInstance();
+   }
+   else {
+      return newPrototypeInstance();
+   }
+}
+```
+
+Create the advisor (interceptor) chain. Advisors that are sourced from a BeanFactory will be refreshed each time a new prototype instance is added. Interceptors added programmatically through the factory API are unaffected by such changes.
+
+```java
+private synchronized void initializeAdvisorChain() throws AopConfigException, BeansException {
+   if (this.advisorChainInitialized) {
+      return;
+   }
+
+   if (!ObjectUtils.isEmpty(this.interceptorNames)) {
+      if (this.beanFactory == null) {
+         throw new IllegalStateException("");
+      }
+
+      // Globals can't be last unless we specified a targetSource using the property...
+      if (this.interceptorNames[this.interceptorNames.length - 1].endsWith(GLOBAL_SUFFIX) &&
+            this.targetName == null && this.targetSource == EMPTY_TARGET_SOURCE) {
+         throw new AopConfigException("Target required after globals");
+      }
+
+      // Materialize interceptor chain from bean names.
+      for (String name : this.interceptorNames) {
+         if (name.endsWith(GLOBAL_SUFFIX)) {
+            if (!(this.beanFactory instanceof ListableBeanFactory)) {
+               throw new AopConfigException("");
+            }
+            addGlobalAdvisors((ListableBeanFactory) this.beanFactory,
+                  name.substring(0, name.length() - GLOBAL_SUFFIX.length()));
+         }
+
+         else {
+            // If we get here, we need to add a named interceptor.
+            // We must check if it's a singleton or prototype.
+            Object advice;
+            if (this.singleton || this.beanFactory.isSingleton(name)) {
+               // Add the real Advisor/Advice to the chain.
+               advice = this.beanFactory.getBean(name);
+            }
+            else {
+               // It's a prototype Advice or Advisor: replace with a prototype.
+               // Avoid unnecessary creation of prototype bean just for advisor chain initialization.
+               advice = new PrototypePlaceholderAdvisor(name);
+            }
+            addAdvisorOnChainCreation(advice);
+         }
+      }
+   }
+
+   this.advisorChainInitialized = true;
+}
+```
+
+
+
+
+
+```java
+private synchronized Object getSingletonInstance() {
+   if (this.singletonInstance == null) {
+      this.targetSource = freshTargetSource();
+      if (this.autodetectInterfaces && getProxiedInterfaces().length == 0 && !isProxyTargetClass()) {
+         // Rely on AOP infrastructure to tell us what interfaces to proxy.
+         Class<?> targetClass = getTargetClass();
+         if (targetClass == null) {
+            throw new FactoryBeanNotInitializedException("Cannot determine target class for proxy");
+         }
+         setInterfaces(ClassUtils.getAllInterfacesForClass(targetClass, this.proxyClassLoader));
+      }
+      // Initialize the shared singleton instance.
+      super.setFrozen(this.freezeProxy);
+      this.singletonInstance = getProxy(createAopProxy());
+   }
+   return this.singletonInstance;
+}
+```
+
+
+
+```java
+private synchronized Object newPrototypeInstance() {
+   // In the case of a prototype, we need to give the proxy
+   // an independent instance of the configuration.
+   // In this case, no proxy will have an instance of this object's configuration,
+   // but will have an independent copy.
+   ProxyCreatorSupport copy = new ProxyCreatorSupport(getAopProxyFactory());
+
+   // The copy needs a fresh advisor chain, and a fresh TargetSource.
+   TargetSource targetSource = freshTargetSource();
+   copy.copyConfigurationFrom(this, targetSource, freshAdvisorChain());
+   if (this.autodetectInterfaces && getProxiedInterfaces().length == 0 && !isProxyTargetClass()) {
+      // Rely on AOP infrastructure to tell us what interfaces to proxy.
+      Class<?> targetClass = targetSource.getTargetClass();
+      if (targetClass != null) {
+         copy.setInterfaces(ClassUtils.getAllInterfacesForClass(targetClass, this.proxyClassLoader));
+      }
+   }
+   copy.setFrozen(this.freezeProxy);
+
+   return getProxy(copy.createAopProxy());
 }
 ```
 
