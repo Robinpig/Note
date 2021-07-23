@@ -81,7 +81,7 @@ public Executor newExecutor(Transaction transaction, ExecutorType executorType) 
   } else {
     executor = new SimpleExecutor(this, transaction);
   }
-  if (cacheEnabled) {
+  if (cacheEnabled) { // 2nd Cache
     executor = new CachingExecutor(executor);
   }
   executor = (Executor) interceptorChain.pluginAll(executor);
@@ -356,3 +356,12 @@ public class PageInterceptor implements Interceptor {
 }
 ```
 
+
+
+## Applicable Scene
+
+1. Check if the SQL is allowed to execute
+2. Enhance
+   1. Pagehelper
+   2. Shard
+   3. Generate distributed unique key
