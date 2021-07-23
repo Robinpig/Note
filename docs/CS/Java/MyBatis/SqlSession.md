@@ -353,4 +353,4 @@ public class DefaultSqlSession implements SqlSession {
 
 `all of select method invoke Executor.query()`
 
-![DefaultSqlSession](/images/Mybatis/DefaultSqlSession-query.png)
+![DefaultSqlSession](./images/DefaultSqlSession-query.png)
