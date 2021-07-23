@@ -1,3 +1,7 @@
+## Introduction
+
+
+
 ###  ByteBuf Hierarchy
 
 ![ByteBuf](./images/ByteBuf.png)
@@ -652,6 +656,507 @@ private void record0(Object hint) {
     }
 }
 ```
+
+
+
+## Allocator
+
+Implementations are responsible to allocate buffers. Implementations of this interface are expected to be thread-safe.
+
+```java
+public interface ByteBufAllocator {
+
+    ByteBufAllocator DEFAULT = ByteBufUtil.DEFAULT_ALLOCATOR;
+  ...
+}   
+```
+
+
+
+```java
+// ByteBufUtil
+static final ByteBufAllocator DEFAULT_ALLOCATOR;
+
+static {
+    String allocType = SystemPropertyUtil.get(
+            "io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "pooled");
+    allocType = allocType.toLowerCase(Locale.US).trim();
+
+    ByteBufAllocator alloc;
+    if ("unpooled".equals(allocType)) {
+        alloc = UnpooledByteBufAllocator.DEFAULT;
+    } else if ("pooled".equals(allocType)) {
+        alloc = PooledByteBufAllocator.DEFAULT; // default
+    } else {
+        alloc = PooledByteBufAllocator.DEFAULT;
+    }
+
+    DEFAULT_ALLOCATOR = alloc;
+
+    THREAD_LOCAL_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.threadLocalDirectBufferSize", 0);
+
+    MAX_CHAR_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.maxThreadLocalCharBufferSize", 16 * 1024);
+}
+```
+
+
+
+```java
+public static final PooledByteBufAllocator DEFAULT =
+        new PooledByteBufAllocator(PlatformDependent.directBufferPreferred());
+```
+
+
+
+```java
+/**
+ * Returns {@code true} if the platform has reliable low-level direct buffer access API and a user has not specified
+ * {@code -Dio.netty.noPreferDirect} option.
+ */
+public static boolean directBufferPreferred() {
+    return DIRECT_BUFFER_PREFERRED;
+}
+```
+
+
+
+pageSize 8192
+
+```java
+public PooledByteBufAllocator(boolean preferDirect, int nHeapArena, int nDirectArena, int pageSize, int maxOrder,
+                              int smallCacheSize, int normalCacheSize,
+                              boolean useCacheForAllThreads, int directMemoryCacheAlignment) {
+    super(preferDirect);
+    threadCache = new PoolThreadLocalCache(useCacheForAllThreads);
+    this.smallCacheSize = smallCacheSize;
+    this.normalCacheSize = normalCacheSize;
+    chunkSize = validateAndCalculateChunkSize(pageSize, maxOrder);
+
+    checkPositiveOrZero(nHeapArena, "nHeapArena");
+    checkPositiveOrZero(nDirectArena, "nDirectArena");
+
+    checkPositiveOrZero(directMemoryCacheAlignment, "directMemoryCacheAlignment");
+    if (directMemoryCacheAlignment > 0 && !isDirectMemoryCacheAlignmentSupported()) {
+        throw new IllegalArgumentException("directMemoryCacheAlignment is not supported");
+    }
+
+    if ((directMemoryCacheAlignment & -directMemoryCacheAlignment) != directMemoryCacheAlignment) {
+        throw new IllegalArgumentException("directMemoryCacheAlignment: "
+                + directMemoryCacheAlignment + " (expected: power of two)");
+    }
+
+    int pageShifts = validateAndCalculatePageShifts(pageSize);
+
+    if (nHeapArena > 0) {
+        heapArenas = newArenaArray(nHeapArena);
+        List<PoolArenaMetric> metrics = new ArrayList<PoolArenaMetric>(heapArenas.length);
+        for (int i = 0; i < heapArenas.length; i ++) {
+            PoolArena.HeapArena arena = new PoolArena.HeapArena(this,
+                    pageSize, pageShifts, chunkSize,
+                    directMemoryCacheAlignment);
+            heapArenas[i] = arena;
+            metrics.add(arena);
+        }
+        heapArenaMetrics = Collections.unmodifiableList(metrics);
+    } else {
+        heapArenas = null;
+        heapArenaMetrics = Collections.emptyList();
+    }
+
+    if (nDirectArena > 0) {
+        directArenas = newArenaArray(nDirectArena);
+        List<PoolArenaMetric> metrics = new ArrayList<PoolArenaMetric>(directArenas.length);
+        for (int i = 0; i < directArenas.length; i ++) {
+            PoolArena.DirectArena arena = new PoolArena.DirectArena(
+                    this, pageSize, pageShifts, chunkSize, directMemoryCacheAlignment);
+            directArenas[i] = arena;
+            metrics.add(arena);
+        }
+        directArenaMetrics = Collections.unmodifiableList(metrics);
+    } else {
+        directArenas = null;
+        directArenaMetrics = Collections.emptyList();
+    }
+    metric = new PooledByteBufAllocatorMetric(this);
+}
+```
+
+
+
+
+
+```java
+/**
+ * Metrics for a chunk.
+ */
+public interface PoolChunkMetric {
+
+    /**
+     * Return the percentage of the current usage of the chunk.
+     */
+    int usage();
+
+    /**
+     * Return the size of the chunk in bytes, this is the maximum of bytes that can be served out of the chunk.
+     */
+    int chunkSize();
+
+    /**
+     * Return the number of free bytes in the chunk.
+     */
+    int freeBytes();
+}
+```
+
+
+
+
+
+```java
+abstract class PoolArena<T> extends SizeClasses implements PoolArenaMetric {
+```
+
+
+
+### allocate
+
+
+
+```java
+// PoolArena
+PooledByteBuf<T> allocate(PoolThreadCache cache, int reqCapacity, int maxCapacity) {
+    PooledByteBuf<T> buf = newByteBuf(maxCapacity);
+    allocate(cache, buf, reqCapacity);
+    return buf;
+}
+
+private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
+    final int sizeIdx = size2SizeIdx(reqCapacity);
+
+    if (sizeIdx <= smallMaxSizeIdx) {
+        tcacheAllocateSmall(cache, buf, reqCapacity, sizeIdx);
+    } else if (sizeIdx < nSizes) {
+        tcacheAllocateNormal(cache, buf, reqCapacity, sizeIdx);
+    } else {
+        int normCapacity = directMemoryCacheAlignment > 0
+                ? normalizeSize(reqCapacity) : reqCapacity;
+        // Huge allocations are never served via the cache so just call allocateHuge
+        allocateHuge(buf, normCapacity);
+    }
+}
+```
+
+#### tcacheAllocateSmall
+
+1. cahe allocateSmall
+2. synchronized head 
+3. synchronized PoolArena, allocateNormal
+
+```java
+// PoolArena
+private void tcacheAllocateSmall(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity,
+                                 final int sizeIdx) {
+
+    if (cache.allocateSmall(this, buf, reqCapacity, sizeIdx)) {
+        // was able to allocate out of the cache so move on
+        return;
+    }
+
+    /**
+     * Synchronize on the head. This is needed as {@link PoolChunk#allocateSubpage(int)} and
+     * {@link PoolChunk#free(long)} may modify the doubly linked list as well.
+     */
+    final PoolSubpage<T> head = smallSubpagePools[sizeIdx];
+    final boolean needsNormalAllocation;
+    synchronized (head) {
+        final PoolSubpage<T> s = head.next;
+        needsNormalAllocation = s == head;
+        if (!needsNormalAllocation) {
+            assert s.doNotDestroy && s.elemSize == sizeIdx2size(sizeIdx);
+            long handle = s.allocate();
+            assert handle >= 0;
+            s.chunk.initBufWithSubpage(buf, null, handle, reqCapacity, cache);
+        }
+    }
+
+    if (needsNormalAllocation) {
+        synchronized (this) {
+            allocateNormal(buf, reqCapacity, sizeIdx, cache);
+        }
+    }
+
+    incSmallAllocation();
+}
+```
+
+
+
+
+
+```java
+// PoolThreadcache
+private boolean allocate(MemoryRegionCache<?> cache, PooledByteBuf buf, int reqCapacity) {
+    if (cache == null) {
+        // no cache found so just return false here
+        return false;
+    }
+    boolean allocated = cache.allocate(buf, reqCapacity, this);
+  	//  freeSweepAllocationThreshold default 8192
+    if (++ allocations >= freeSweepAllocationThreshold) {
+        allocations = 0;
+        trim();
+    }
+    return allocated;
+}
+
+
+// Allocate something out of the cache if possible and remove the entry from the cache.
+public final boolean allocate(PooledByteBuf<T> buf, int reqCapacity, PoolThreadCache threadCache) {
+  Entry<T> entry = queue.poll();
+  if (entry == null) {
+    return false;
+  }
+  initBuf(entry.chunk, entry.nioBuffer, entry.handle, buf, reqCapacity, threadCache);
+  entry.recycle();
+
+  // allocations is not thread-safe which is fine as this is only called from the same thread all time.
+  ++ allocations;
+  return true;
+}
+```
+
+
+
+
+
+```java
+
+// Free up cached {@link PoolChunk}s if not allocated frequently enough.
+public final void trim() {
+  int free = size - allocations;
+  allocations = 0;
+
+  // We not even allocated all the number that are
+  if (free > 0) {
+    free(free, false);
+  }
+}
+
+private int free(int max, boolean finalizer) {
+    int numFreed = 0;
+    for (; numFreed < max; numFreed++) {
+        Entry<T> entry = queue.poll();
+        if (entry != null) {
+            freeEntry(entry, finalizer);
+        } else {
+            // all cleared
+            return numFreed;
+        }
+    }
+    return numFreed;
+}
+
+private  void freeEntry(Entry entry, boolean finalizer) {
+  PoolChunk chunk = entry.chunk;
+  long handle = entry.handle;
+  ByteBuffer nioBuffer = entry.nioBuffer;
+
+  if (!finalizer) {
+    // recycle now so PoolChunk can be GC'ed. This will only be done if this is not freed because of
+    // a finalizer.
+    entry.recycle();
+  }
+
+  chunk.arena.freeChunk(chunk, handle, entry.normCapacity, sizeClass, nioBuffer, finalizer);
+}
+```
+
+
+
+##### PoolSubpage::allocate
+
+```java
+/** PoolSubpage
+ * Returns the bitmap index of the subpage allocation.
+ */
+long allocate() {
+    if (numAvail == 0 || !doNotDestroy) {
+        return -1;
+    }
+
+    final int bitmapIdx = getNextAvail();
+    int q = bitmapIdx >>> 6;
+    int r = bitmapIdx & 63;
+    assert (bitmap[q] >>> r & 1) == 0;
+    bitmap[q] |= 1L << r;
+
+    if (-- numAvail == 0) {
+        removeFromPool();
+    }
+
+    return toHandle(bitmapIdx);
+}
+```
+
+
+
+
+
+```java
+// PoolArena
+void freeChunk(PoolChunk<T> chunk, long handle, int normCapacity, SizeClass sizeClass, ByteBuffer nioBuffer,
+               boolean finalizer) {
+    final boolean destroyChunk;
+    synchronized (this) {
+        // We only call this if freeChunk is not called because of the PoolThreadCache finalizer as otherwise this
+        // may fail due lazy class-loading in for example tomcat.
+        if (!finalizer) {
+            switch (sizeClass) {
+                case Normal:
+                    ++deallocationsNormal;
+                    break;
+                case Small:
+                    ++deallocationsSmall;
+                    break;
+                default:
+                    throw new Error();
+            }
+        }
+        destroyChunk = !chunk.parent.free(chunk, handle, normCapacity, nioBuffer);
+    }
+    if (destroyChunk) {
+        // destroyChunk not need to be called while holding the synchronized lock.
+        destroyChunk(chunk);
+    }
+}
+```
+
+
+
+#### allocateNormal
+
+```java
+// PoolArena
+// Method must be called inside synchronized(this) { ... } block
+private void allocateNormal(PooledByteBuf<T> buf, int reqCapacity, int sizeIdx, PoolThreadCache threadCache) {
+    if (q050.allocate(buf, reqCapacity, sizeIdx, threadCache) ||
+        q025.allocate(buf, reqCapacity, sizeIdx, threadCache) ||
+        q000.allocate(buf, reqCapacity, sizeIdx, threadCache) ||
+        qInit.allocate(buf, reqCapacity, sizeIdx, threadCache) ||
+        q075.allocate(buf, reqCapacity, sizeIdx, threadCache)) {
+        return;
+    }
+
+    // Add a new chunk.
+    PoolChunk<T> c = newChunk(pageSize, nPSizes, pageShifts, chunkSize);
+    boolean success = c.allocate(buf, reqCapacity, sizeIdx, threadCache);
+    assert success;
+    qInit.add(c);
+}
+```
+
+
+
+
+
+```java
+// PoolChunk
+boolean allocate(PooledByteBuf<T> buf, int reqCapacity, int sizeIdx, PoolThreadCache cache) {
+    final long handle;
+    if (sizeIdx <= arena.smallMaxSizeIdx) {
+        // small
+        handle = allocateSubpage(sizeIdx);
+        if (handle < 0) {
+            return false;
+        }
+        assert isSubpage(handle);
+    } else {
+        // normal
+        // runSize must be multiple of pageSize
+        int runSize = arena.sizeIdx2size(sizeIdx);
+        handle = allocateRun(runSize);
+        if (handle < 0) {
+            return false;
+        }
+    }
+
+    ByteBuffer nioBuffer = cachedNioBuffers != null? cachedNioBuffers.pollLast() : null;
+    initBuf(buf, nioBuffer, handle, reqCapacity, cache);
+    return true;
+}
+```
+
+##### allocateSubpage
+
+```java
+/**
+ * Create / initialize a new PoolSubpage of normCapacity. Any PoolSubpage created / initialized here is added to
+ * subpage pool in the PoolArena that owns this PoolChunk
+ *
+ * @param sizeIdx sizeIdx of normalized size
+ *
+ * @return index in memoryMap
+ */
+private long allocateSubpage(int sizeIdx) {
+    // Obtain the head of the PoolSubPage pool that is owned by the PoolArena and synchronize on it.
+    // This is need as we may add it back and so alter the linked-list structure.
+    PoolSubpage<T> head = arena.findSubpagePoolHead(sizeIdx);
+    synchronized (head) {
+        //allocate a new run
+        int runSize = calculateRunSize(sizeIdx);
+        //runSize must be multiples of pageSize
+        long runHandle = allocateRun(runSize);
+        if (runHandle < 0) {
+            return -1;
+        }
+
+        int runOffset = runOffset(runHandle);
+        int elemSize = arena.sizeIdx2size(sizeIdx);
+
+        PoolSubpage<T> subpage = new PoolSubpage<T>(head, this, pageShifts, runOffset,
+                           runSize(pageShifts, runHandle), elemSize);
+
+        subpages[runOffset] = subpage;
+        return subpage.allocate();
+    }
+}
+```
+
+
+
+##### allocateRun
+
+```java
+private long allocateRun(int runSize) {
+    int pages = runSize >> pageShifts;
+    int pageIdx = arena.pages2pageIdx(pages);
+
+    synchronized (runsAvail) {
+        //find first queue which has at least one big enough run
+        int queueIdx = runFirstBestFit(pageIdx);
+        if (queueIdx == -1) {
+            return -1;
+        }
+
+        //get run with min offset in this queue
+        PriorityQueue<Long> queue = runsAvail[queueIdx];
+        long handle = queue.poll();
+
+        assert !isUsed(handle);
+
+        removeAvailRun(queue, handle);
+
+        if (handle != -1) {
+            handle = splitLargeRun(handle, pages);
+        }
+
+        freeBytes -= runSize(pageShifts, handle);
+        return handle;
+    }
+}
+```
+
+
 
 
 

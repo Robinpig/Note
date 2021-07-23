@@ -2,7 +2,7 @@
 
 ### Executor Hierarchy
 
-<img src="./images/Executor.png" alt="z" style="zoom:150%;" />
+![](./images/Executor.png)
 
 `All SQLs are executed by Executor`
 
@@ -459,11 +459,10 @@ public class BatchExecutor extends BaseExecutor {
 }
 ```
 
+## CachingExecutor
 
+[2nd Level Cache](/docs/CS/Java/MyBatis/Cache.md)
 
-## CachingExecxutor
-
-[Cache](/docs/CS/Java/MyBatis/Cache.md)
 
 ```java
 public class CachingExecutor implements Executor {

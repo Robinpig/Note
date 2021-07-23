@@ -86,7 +86,9 @@
 ### Spring Cloud
 - [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
 
-### [Netty](/docs/CS/Java/Netty/Netty.md)
+### Netty
+[Netty](/docs/CS/Java/Netty/Netty.md) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
+
 - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
 - [Chanel](/docs/CS/Java/Netty/Channel.md)
 - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
@@ -94,7 +96,33 @@
 - [Future](/docs/CS/Java/Netty/Future.md)
 - [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
   
-### [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+### MyBatis
+
+[MyBatis](/docs/CS/Java/MyBatis/MyBatis.md) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Ordinary Java Objects) to database records.
+
+#### Infrastructure
+- [Binding](/docs/CS/Java/MyBatis/binding.md)
+- [Log](/docs/CS/Java/MyBatis/Logging.md)
+- [Cache](/docs/CS/Java/MyBatis/Cache.md)
+- [DataSource](/docs/CS/Java/MyBatis/DataSource.md)
+- [Reflector](/docs/CS/Java/MyBatis/Reflector.md)
+
+
+#### Execute
+
+- [Executor](/docs/CS/Java/MyBatis/Executor.md)
+- [StatementHandler](/docs/CS/Java/MyBatis/StatementHandler.md)
+- [ResultSetHandler](/docs/CS/Java/MyBatis/ResultSetHandler.md)
+- [Interceptor](/docs/CS/Java/MyBatis/Interceptor.md)
+- [KeyGenerator](/docs/CS/Java/MyBatis/KeyGenerator.md)
+- [SqlSession](/docs/CS/Java/MyBatis/SqlSession.md)
+
+
+#### Extension
+- [MyBatis-Spring](/docs/CS/Java/MyBatis/MyBatis-Spring.md)
+- [Init](/docs/CS/Java/MyBatis/Init.md)
+- [Extension](/docs/CS/Java/MyBatis/Extension.md)
+
 
 ### [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
 - [SPI](/docs/CS/Java/Dubbo/SPI.md)

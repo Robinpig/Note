@@ -1,6 +1,20 @@
+## Introduction
 
 
-## Reflector
+
+### Reflector Hierarchy
+
+
+
+<img src="./images/Reflector.png" style="zoom:150%;" />
+
+
+
+## Factory
+
+
+
+
 
 ```java
 /**
@@ -411,9 +425,22 @@ public class Reflector {
 
 
 
-## ReflectorFactory
+### ReflectorFactory
+
+use ConcurrentMap cache all Reflectors
 
 ```java
+public interface ReflectorFactory {
+
+  boolean isClassCacheEnabled();
+
+  void setClassCacheEnabled(boolean classCacheEnabled);
+
+  Reflector findForClass(Class<?> type);
+}
+
+
+
 public class DefaultReflectorFactory implements ReflectorFactory {
   private boolean classCacheEnabled = true;
   private final ConcurrentMap<Class<?>, Reflector> reflectorMap = new ConcurrentHashMap<>();
@@ -446,7 +473,7 @@ public class DefaultReflectorFactory implements ReflectorFactory {
 
 
 
-ObjectFactory
+### ObjectFactory
 
 ```java
 
@@ -559,80 +586,6 @@ public class DefaultObjectFactory implements ObjectFactory, Serializable {
 ```
 
 
-
-Type Transform
-
-
-
-## JdbcType
-
-```java
-public enum JdbcType {
-  /*
-   * This is added to enable basic support for the
-   * ARRAY data type - but a custom type handler is still required
-   */
-  ARRAY(Types.ARRAY),
-  BIT(Types.BIT),
-  TINYINT(Types.TINYINT),
-  SMALLINT(Types.SMALLINT),
-  INTEGER(Types.INTEGER),
-  BIGINT(Types.BIGINT),
-  FLOAT(Types.FLOAT),
-  REAL(Types.REAL),
-  DOUBLE(Types.DOUBLE),
-  NUMERIC(Types.NUMERIC),
-  DECIMAL(Types.DECIMAL),
-  CHAR(Types.CHAR),
-  VARCHAR(Types.VARCHAR),
-  LONGVARCHAR(Types.LONGVARCHAR),
-  DATE(Types.DATE),
-  TIME(Types.TIME),
-  TIMESTAMP(Types.TIMESTAMP),
-  BINARY(Types.BINARY),
-  VARBINARY(Types.VARBINARY),
-  LONGVARBINARY(Types.LONGVARBINARY),
-  NULL(Types.NULL),
-  OTHER(Types.OTHER),
-  BLOB(Types.BLOB),
-  CLOB(Types.CLOB),
-  BOOLEAN(Types.BOOLEAN),
-  CURSOR(-10), // Oracle
-  UNDEFINED(Integer.MIN_VALUE + 1000),
-  NVARCHAR(Types.NVARCHAR), // JDK6
-  NCHAR(Types.NCHAR), // JDK6
-  NCLOB(Types.NCLOB), // JDK6
-  STRUCT(Types.STRUCT),
-  JAVA_OBJECT(Types.JAVA_OBJECT),
-  DISTINCT(Types.DISTINCT),
-  REF(Types.REF),
-  DATALINK(Types.DATALINK),
-  ROWID(Types.ROWID), // JDK6
-  LONGNVARCHAR(Types.LONGNVARCHAR), // JDK6
-  SQLXML(Types.SQLXML), // JDK6
-  DATETIMEOFFSET(-155), // SQL Server 2008
-  TIME_WITH_TIMEZONE(Types.TIME_WITH_TIMEZONE), // JDBC 4.2 JDK8
-  TIMESTAMP_WITH_TIMEZONE(Types.TIMESTAMP_WITH_TIMEZONE); // JDBC 4.2 JDK8
-
-  public final int TYPE_CODE;
-  private static Map<Integer,JdbcType> codeLookup = new HashMap<>();
-
-  static {
-    for (JdbcType type : JdbcType.values()) {
-      codeLookup.put(type.TYPE_CODE, type);
-    }
-  }
-
-  JdbcType(int code) {
-    this.TYPE_CODE = code;
-  }
-
-  public static JdbcType forCode(int code)  {
-    return codeLookup.get(code);
-  }
-
-}
-```
 
 
 
@@ -1216,3 +1169,31 @@ public final class TypeHandlerRegistry {
 
   }
 ```
+
+
+
+### TypeParameterResolver
+
+
+
+```java
+// TypeParameterResolver
+private static Type resolveType(Type type, Type srcType, Class<?> declaringClass) {
+  if (type instanceof TypeVariable) {
+    return resolveTypeVar((TypeVariable<?>) type, srcType, declaringClass);
+  } else if (type instanceof ParameterizedType) {
+    return resolveParameterizedType((ParameterizedType) type, srcType, declaringClass);
+  } else if (type instanceof GenericArrayType) {
+    return resolveGenericArrayType((GenericArrayType) type, srcType, declaringClass);
+  } else {
+    return type;
+  }
+}
+```
+
+
+
+
+
+## ObjectWrapper
+

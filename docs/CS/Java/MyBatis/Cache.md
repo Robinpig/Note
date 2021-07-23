@@ -20,21 +20,11 @@ MyBatis will pass the namespace as id to the constructor.
 // SPI for cache providers.
 public interface Cache {
 
-  /**
-   * @return The identifier of this cache
-   */
+  //The identifier of this cache
   String getId();
 
-  /**
-   * @param key Can be any object but usually it is a {@link CacheKey}
-   * @param value The result of a select.
-   */
   void putObject(Object key, Object value);
 
-  /**
-   * @param key The key
-   * @return The object stored in the cache.
-   */
   Object getObject(Object key);
 
   /**
@@ -46,10 +36,6 @@ public interface Cache {
    * and releases it when the value is back again.
    * This way other threads will wait for the value to be 
    * available instead of hitting the database.
-   *
-   * 
-   * @param key The key
-   * @return Not used
    */
   Object removeObject(Object key);
 
@@ -58,19 +44,12 @@ public interface Cache {
    */  
   void clear();
 
-  /**
-   * Optional. This method is not called by the core.
-   * 
-   * @return The number of elements stored in the cache (not its capacity).
-   */
+  // Optional. This method is not called by the core.
   int getSize();
   
   /** 
    * Optional. As of 3.2.6 this method is no longer called by the core.
-   *  
    * Any locking needed by the cache must be provided internally by the cache provider.
-   * 
-   * @return A ReadWriteLock 
    */
   ReadWriteLock getReadWriteLock();
 
@@ -79,7 +58,7 @@ public interface Cache {
 
 
 
-
+Example:
 
 ```java
 public MyCache(final String id) {
@@ -250,10 +229,11 @@ public class LruCache implements Cache {
 
 
 
-## 2nd level cache
+## 2ndCache
 
 @CacheNamespace 
 
+enable 2nd level cache in [CachingExecutor](/docs/CS/Java/MyBatis/Executor.md)
 
 ```java
 public class TransactionalCacheManager {

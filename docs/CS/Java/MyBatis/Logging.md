@@ -44,6 +44,8 @@ public interface Log {
 
 ### LogFactory
 
+getLog by using `Constructor::newInstance()`
+
 ```java
 public final class LogFactory {
 
@@ -67,21 +69,38 @@ public final class LogFactory {
     tryImplementation(() -> { useJdkLogging(); });
     tryImplementation(() -> { useNoLogging(); });
   }
+  
+  
+  public static Log getLog(String logger) {
+    try {
+      return logConstructor.newInstance(logger);
+    } catch (Throwable t) {
+      throw new LogException("Error creating logger for logger " + logger + ".  Cause: " + t, t);
+    }
+  }
 ```
 
 
 
-Implement define logging
+So the order of log is in static block:
+
+**useSlf4jLogging** 1st
 
 ```java
+private static void tryImplementation(Runnable runnable) {
+    if (logConstructor == null) {
+      try {
+        runnable.run();
+      } catch (Throwable t) {
+        // ignore
+      }
+    }
+  }
+
 public static synchronized void useCustomLogging(Class<? extends Log> clazz) {
   setImplementation(clazz);
 }
-```
 
-
-
-```java
 private static void setImplementation(Class<? extends Log> implClass) {
   try {
     Constructor<? extends Log> candidate = implClass.getConstructor(String.class);
@@ -100,7 +119,7 @@ private static void setImplementation(Class<? extends Log> implClass) {
 
 ### Logger
 
-![Logger](/images/Mybatis/Mybatis-JdbcLogger.png)
+![Logger](./images/JdbcLogger.png)
 
 
 
