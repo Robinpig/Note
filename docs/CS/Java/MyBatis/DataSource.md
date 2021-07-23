@@ -644,7 +644,6 @@ protected boolean pingConnection(PooledConnection conn) {
 
 ## Transaction
 
-### Transaction
 
 ```java
 /**
