@@ -1,4 +1,14 @@
-# gateway
+## gateway vs Zuul
+
+
+
+|       | Zuul | Gateway                            |
+| ----- | ---- | ---------------------------------- |
+| basic |      | webflux, only support spring cloud |
+|       |      |                                    |
+|       |      |                                    |
+
+
 
 
 GatewayAutoConfiguration
@@ -49,5 +59,13 @@ LoadBalancerClientFilter
 
 DispatcherHandler
 
+
+
+### RoutePredicate
+
+
+
 RoutePredicateHandlerMapping#lookupRoute()
+
+
 

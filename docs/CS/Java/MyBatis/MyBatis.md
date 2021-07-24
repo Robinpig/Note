@@ -26,7 +26,7 @@ Compare with Hibernate
 
 #### [Cache](/docs/CS/Java/MyBatis/Cache.md)
 #### [DataSource](/docs/CS/Java/MyBatis/DataSource.md)
-#### 
+
 #### [Reflector](/docs/CS/Java/MyBatis/Reflector.md)
 
 `Reflector class represents a cached set of class definition information that allows for easy mapping between property names and getter/setter methods.`
@@ -49,7 +49,6 @@ Compare with Hibernate
 `Load Mybatis-config.xml, create Configuration and SqlsessionFactory`
 
 #### [Extension](/docs/CS/Java/MyBatis/Extension.md)
-
 
 
 

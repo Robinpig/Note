@@ -127,12 +127,20 @@ private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoad
 ```
 ## run 
 
+1. getRunListeners and starting
+2. prepareEnvironment
+3. configureIgnoreBeanInfo
+4. createApplicationContext
+5. prepareContext
+6. refreshContext
+7. afterRefresh
+8. listeners started
+9. callRunners
+10. listeners running
+
 ```java
 /**
  * Run the Spring application, creating and refreshing a new
- * {@link ApplicationContext}.
- * @param args the application arguments (usually passed from a Java main method)
- * @return a running {@link ApplicationContext}
  */
 public ConfigurableApplicationContext run(String... args) {
    StopWatch stopWatch = new StopWatch();
@@ -140,7 +148,8 @@ public ConfigurableApplicationContext run(String... args) {
    ConfigurableApplicationContext context = null;
    Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
    configureHeadlessProperty();
-   SpringApplicationRunListeners listeners = getRunListeners(args);
+   
+  SpringApplicationRunListeners listeners = getRunListeners(args);
    listeners.starting();
    try {
       ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
@@ -153,10 +162,12 @@ public ConfigurableApplicationContext run(String... args) {
       prepareContext(context, environment, listeners, applicationArguments, printedBanner);
       refreshContext(context);
       afterRefresh(context, applicationArguments);
+     
       stopWatch.stop();
       if (this.logStartupInfo) {
          new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), stopWatch);
       }
+     
       listeners.started(context);
       callRunners(context, applicationArguments);
    }
@@ -180,7 +191,7 @@ public ConfigurableApplicationContext run(String... args) {
 
 ### getRunListeners
 
-createSpringFactoriesInstances
+**createSpringFactoriesInstances**
 
 - `SpringFactoriesLoader.loadFactoryNames(type, classLoader)`
   -  `Load the fully qualified class names of factory implementations of the given type from {@value #FACTORIES_RESOURCE_LOCATION}, using the given class loader.`
@@ -188,7 +199,7 @@ createSpringFactoriesInstances
   - `Sort the given list with a default AnnotationAwareOrderComparator. Optimized to skip sorting for lists with size 0 or 1, in order to avoid unnecessary array extraction.`
 
 **AnnotationAwareOrderComparator**
-`AnnotationAwareOrderComparator is an extension of OrderComparator that supports Spring's org.springframework.core.Ordered interface as well as the @Order and @Priority annotations, with an order value provided by an Ordered instance overriding a statically defined annotation value (if any).`
+*AnnotationAwareOrderComparator* is an extension of *OrderComparator* that supports Spring's org.springframework.core.Ordered interface as well as the @Order and @Priority annotations, with an order value provided by an Ordered instance overriding a statically defined annotation value (if any).
 
 
 ```java
@@ -203,7 +214,7 @@ private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] 
 		// Use names and ensure unique to protect against duplicates
 		Set<String> names = new LinkedHashSet<>(SpringFactoriesLoader.loadFactoryNames(type, classLoader));
 		List<T> instances = createSpringFactoriesInstances(type, parameterTypes, classLoader, args, names);
-		AnnotationAwareOrderComparator.sort(instances);
+		AnnotationAwareOrderComparator.sort(instances); // sort
 		return instances;
 	}
 
@@ -257,14 +268,21 @@ private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners
 
 ### configureIgnoreBeanInfo
 
-
+```java
+private void configureIgnoreBeanInfo(ConfigurableEnvironment environment) {
+   if (System.getProperty(CachedIntrospectionResults.IGNORE_BEANINFO_PROPERTY_NAME) == null) {
+      Boolean ignore = environment.getProperty("spring.beaninfo.ignore", Boolean.class, Boolean.TRUE);
+      System.setProperty(CachedIntrospectionResults.IGNORE_BEANINFO_PROPERTY_NAME, ignore.toString());
+   }
+}
+```
 
 
 
 
 ### createApplicationContext
 
-`Strategy method used to create the ApplicationContext. By default this method will respect any explicitly set application context or application context class before falling back to a suitable default.`
+Strategy method used to create the *ApplicationContext*. By default this method will respect any explicitly set application context or application context class before falling back to a suitable default.
 
 
 ```java
@@ -291,7 +309,7 @@ protected ConfigurableApplicationContext createApplicationContext() {
 	return (ConfigurableApplicationContext) BeanUtils.instantiateClass(contextClass);
 }
 ```
-setApplicationContextClass
+
 
 ```java
 /**
@@ -427,7 +445,7 @@ Note that any ApplicationListener registered here will be applied on refresh if 
 
 ### refreshContext
 
-see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md?id=refresh), start webServer for ServletWebServerApplicationContext
+see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md), start webServer for ServletWebServerApplicationContext
 
 
 
@@ -457,6 +475,16 @@ private void callRunners(ApplicationContext context, ApplicationArguments args) 
       if (runner instanceof CommandLineRunner) {
          callRunner((CommandLineRunner) runner, args);
       }
+   }
+}
+```
+
+### listeners.running
+
+```java
+void running(ConfigurableApplicationContext context) {
+   for (SpringApplicationRunListener listener : this.listeners) {
+      listener.running(context);
    }
 }
 ```

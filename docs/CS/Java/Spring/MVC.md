@@ -1,5 +1,7 @@
 ## Init
 
+
+
 ### ContextLoaderListener
 
 Bootstrap listener to start up and shut down Spring's **root WebApplicationContext**. Simply delegates to ContextLoader as well as to ContextCleanupListener.
@@ -29,13 +31,10 @@ public class ContextLoaderListener extends ContextLoader implements ServletConte
 
 ### initWebApplicationContext
 
+Initialize Spring's web application context for the given servlet context, using the application context provided at construction time, or creating a new one according to the "*contextClass*" and "*contextConfigLocation*" context-params.
+
 ```java
-/**
- * Initialize Spring's web application context for the given servlet context,
- * using the application context provided at construction time, or creating a new one
- * according to the "{@link #CONTEXT_CLASS_PARAM contextClass}" and
- * "{@link #CONFIG_LOCATION_PARAM contextConfigLocation}" context-params.
- */
+// ContextLoader
 public WebApplicationContext initWebApplicationContext(ServletContext servletContext) {
    if (servletContext.getAttribute(WebApplicationContext.ROOT_WEB_APPLICATION_CONTEXT_ATTRIBUTE) != null) {
       throw new IllegalStateException("");
@@ -122,9 +121,10 @@ protected Class<?> determineContextClass(ServletContext servletContext) {
 }
 ```
 
-
+#### configureAndRefreshWebApplicationContext
 
 ```java
+// ContextLoader
 protected void configureAndRefreshWebApplicationContext(ConfigurableWebApplicationContext wac, ServletContext sc) {
    if (ObjectUtils.identityToString(wac).equals(wac.getId())) {
       // The application context id is still set to its original default value
@@ -163,112 +163,13 @@ protected void configureAndRefreshWebApplicationContext(ConfigurableWebApplicati
 
 
 
-### XmlWebApplicationContext
-
-```java
-public class XmlWebApplicationContext extends AbstractRefreshableWebApplicationContext {
-
-   /** Default config location for the root context. */
-   public static final String DEFAULT_CONFIG_LOCATION = "/WEB-INF/applicationContext.xml";
-
-   /** Default prefix for building a config location for a namespace. */
-   public static final String DEFAULT_CONFIG_LOCATION_PREFIX = "/WEB-INF/";
-
-   /** Default suffix for building a config location for a namespace. */
-   public static final String DEFAULT_CONFIG_LOCATION_SUFFIX = ".xml";
 
 
-   /**
-    * Loads the bean definitions via an XmlBeanDefinitionReader.
-    * @see org.springframework.beans.factory.xml.XmlBeanDefinitionReader
-    * @see #initBeanDefinitionReader
-    * @see #loadBeanDefinitions
-    */
-   @Override
-   protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throws BeansException, IOException {
-      // Create a new XmlBeanDefinitionReader for the given BeanFactory.
-      XmlBeanDefinitionReader beanDefinitionReader = new XmlBeanDefinitionReader(beanFactory);
-
-      // Configure the bean definition reader with this context's
-      // resource loading environment.
-      beanDefinitionReader.setEnvironment(getEnvironment());
-      beanDefinitionReader.setResourceLoader(this);
-      beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
-
-      // Allow a subclass to provide custom initialization of the reader,
-      // then proceed with actually loading the bean definitions.
-      initBeanDefinitionReader(beanDefinitionReader); // do nothing
-      loadBeanDefinitions(beanDefinitionReader);
-   }
- 
-  
-	/**
-	 * Initialize the bean definition reader used for loading the bean
-	 * definitions of this context. Default implementation is empty.
-	 * Can be overridden in subclasses, e.g. for turning off XML validation
-	 * or using a different XmlBeanDefinitionParser implementation.
-	 */
-	protected void initBeanDefinitionReader(XmlBeanDefinitionReader beanDefinitionReader) {
-	}
-
-	/**
-	 * Load the bean definitions with the given XmlBeanDefinitionReader.
-	 * <p>The lifecycle of the bean factory is handled by the refreshBeanFactory method;
-	 * therefore this method is just supposed to load and/or register bean definitions.
-	 * <p>Delegates to a ResourcePatternResolver for resolving location patterns
-	 * into Resource instances.
-	 */
-	protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws IOException {
-		String[] configLocations = getConfigLocations();
-		if (configLocations != null) {
-			for (String configLocation : configLocations) {
-				reader.loadBeanDefinitions(configLocation);
-			}
-		}
-	}
-
-	/**
-	 * The default location for the root context is "/WEB-INF/applicationContext.xml",
-	 * and "/WEB-INF/test-servlet.xml" for a context with the namespace "test-servlet"
-	 * (like for a DispatcherServlet instance with the servlet-name "test").
-	 */
-	@Override
-	protected String[] getDefaultConfigLocations() {
-		if (getNamespace() != null) {
-			return new String[] {DEFAULT_CONFIG_LOCATION_PREFIX + getNamespace() + DEFAULT_CONFIG_LOCATION_SUFFIX};
-		}
-		else {
-			return new String[] {DEFAULT_CONFIG_LOCATION};
-		}
-	}
-}
-```
-
-
-
-
-
-
+![](./images/DispatcherServlet.png)
 
 org.springframework.web.servlet
 
-```java
-// FrameworkServlet
-/**
- * Overridden method of {@link HttpServletBean}, invoked after any bean properties
- * have been set. Creates this servlet's WebApplicationContext.
- */
-@Override
-protected final void initServletBean() throws ServletException {
-   try {
-      this.webApplicationContext = initWebApplicationContext();
-      initFrameworkServlet();
-   }
-   catch (ServletException | RuntimeException ex) {
-      throw ex;
-   }
-}
-```
+
 
 ```java
 /**
@@ -337,6 +238,14 @@ protected WebApplicationContext initWebApplicationContext() {
 
 ### HttpServletBean
 
+Simple extension of HttpServlet which treats its config parameters (init-param entries within the servlet tag in web.xml) as bean properties.
+A handy superclass for any type of servlet. Type conversion of config parameters is automatic, with the corresponding setter method getting invoked with the converted value. It is also possible for subclasses to specify required properties. Parameters without matching bean property setter will simply be ignored.
+This servlet leaves request handling to subclasses, inheriting the default behavior of HttpServlet (doGet, doPost, etc).
+This generic servlet base class has no dependency on the Spring org.springframework.context.ApplicationContext concept. Simple servlets usually don't load their own context but rather access service beans from the Spring root application context, accessible via the filter's ServletContext (see org.springframework.web.context.support.WebApplicationContextUtils).
+The FrameworkServlet class is a more specific servlet base class which loads its own application context. FrameworkServlet serves as direct base class of Spring's full-fledged DispatcherServlet.
+
+
+
 Map config parameters onto bean properties of this servlet, and invoke subclass initialization.
 
 ```java
@@ -383,6 +292,96 @@ protected final void initServletBean() throws ServletException {
 
 
 
+Initialize and publish the WebApplicationContext for this servlet.
+Delegates to createWebApplicationContext for actual creation of the context. Can be overridden in subclasses.
+
+```java
+// FrameworkServlet
+protected WebApplicationContext initWebApplicationContext() {
+   WebApplicationContext rootContext =
+         WebApplicationContextUtils.getWebApplicationContext(getServletContext());
+   WebApplicationContext wac = null;
+
+   if (this.webApplicationContext != null) {
+      // A context instance was injected at construction time -> use it
+      wac = this.webApplicationContext;
+      if (wac instanceof ConfigurableWebApplicationContext) {
+         ConfigurableWebApplicationContext cwac = (ConfigurableWebApplicationContext) wac;
+         if (!cwac.isActive()) {
+            // The context has not yet been refreshed -> provide services such as
+            // setting the parent context, setting the application context id, etc
+            if (cwac.getParent() == null) {
+               // The context instance was injected without an explicit parent -> set
+               // the root application context (if any; may be null) as the parent
+               cwac.setParent(rootContext);
+            }
+            configureAndRefreshWebApplicationContext(cwac);
+         }
+      }
+   }
+   if (wac == null) {
+      // No context instance was injected at construction time -> see if one
+      // has been registered in the servlet context. If one exists, it is assumed
+      // that the parent context (if any) has already been set and that the
+      // user has performed any initialization such as setting the context id
+      wac = findWebApplicationContext();
+   }
+   if (wac == null) {
+      // No context instance is defined for this servlet -> create a local one
+      wac = createWebApplicationContext(rootContext);
+   }
+
+   if (!this.refreshEventReceived) {
+      // Either the context is not a ConfigurableApplicationContext with refresh
+      // support or the context injected at construction time had already been
+      // refreshed -> trigger initial onRefresh manually here.
+      synchronized (this.onRefreshMonitor) {
+         onRefresh(wac);
+      }
+   }
+
+   if (this.publishContext) {
+      // Publish the context as a servlet context attribute.
+      String attrName = getServletContextAttributeName();
+      getServletContext().setAttribute(attrName, wac);
+   }
+
+   return wac;
+}
+```
+
+
+
+Instantiate the WebApplicationContext for this servlet, either a default XmlWebApplicationContext or a custom context class, if set.
+This implementation expects custom contexts to implement the ConfigurableWebApplicationContext interface. Can be overridden in subclasses.
+Do not forget to register this servlet instance as application listener on the created context (for triggering its callback, and to call ConfigurableApplicationContext.refresh() before returning the context instance.
+
+```java
+// FrameworkServlet
+protected WebApplicationContext createWebApplicationContext(@Nullable ApplicationContext parent) {
+   Class<?> contextClass = getContextClass();
+   if (!ConfigurableWebApplicationContext.class.isAssignableFrom(contextClass)) {
+      throw new ApplicationContextException("");
+   }
+   ConfigurableWebApplicationContext wac =
+         (ConfigurableWebApplicationContext) BeanUtils.instantiateClass(contextClass);
+
+   wac.setEnvironment(getEnvironment());
+   wac.setParent(parent);
+   String configLocation = getContextConfigLocation();
+   if (configLocation != null) {
+      wac.setConfigLocation(configLocation);
+   }
+   configureAndRefreshWebApplicationContext(wac);
+
+   return wac;
+}
+```
+
+
+
+
+
 ### onRefresh
 
 ```java
@@ -416,7 +415,7 @@ protected void initStrategies(ApplicationContext context) {
 
 ### DispatcherServlet
 
-![](./images/DispatcherServlet.png)
+
 
 ```java
 /**
@@ -485,7 +484,7 @@ protected final void processRequest(HttpServletRequest request, HttpServletRespo
 }
 ```
 
-
+### doService
 
 Exposes the DispatcherServlet-specific request attributes and delegates to doDispatch for the actual dispatching.
 
@@ -542,7 +541,7 @@ protected void doService(HttpServletRequest request, HttpServletResponse respons
 }
 ```
 
-
+### doDispatch
 
 Process the actual dispatching to the handler.
 The handler will be obtained by applying the servlet's HandlerMappings in order. The HandlerAdapter will be obtained by querying the servlet's installed HandlerAdapters to find the first that supports the handler class.
@@ -634,22 +633,13 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 
 
 
-HandlerMapping路径匹配
-
-->interceptor执行拦截器preHandler
-
-->HandlerMethodArgumentResolver参数解析
-
-->invoke执行匹配的方法
-
-->HandlerMethodReturnValueHandler返回值解析
-
-->封装modelAndView
-
-->interceptor执行拦截器postHandler
-
-->HandlerExceptionResolver异常处理
-
-->渲染视图
-
-->interceptor执行拦截器afterCompletion.
+1. match HandlerMapping
+2. interceptor preHandler
+3. HandlerMethodArgumentResolver resolve params
+4. call method in *Controller
+5. HandlerMethodReturnValueHandler resolve returnValue
+6. modelAndView wrap returnValue
+7. interceptor postHandler
+8. HandlerExceptionResolver hande Exception
+9. View
+10. interceptor afterCompletion
