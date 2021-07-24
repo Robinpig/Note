@@ -363,6 +363,28 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 
 ##### circular references
 
+
+```java
+// DefaultSingletonBeanRegistry is superClass of AbstractBeanFactory
+/**
+ * Add the given singleton factory for building the specified singleton
+ * if necessary.
+ * <p>To be called for eager registration of singletons, e.g. to be able to
+ * resolve circular references.
+ */
+ protected void addSingletonFactory(String beanName, ObjectFactory<?> singletonFactory) {
+     Assert.notNull(singletonFactory, "Singleton factory must not be null");
+     synchronized (this.singletonObjects) {
+         if (!this.singletonObjects.containsKey(beanName)) {
+             this.singletonFactories.put(beanName, singletonFactory);
+             this.earlySingletonObjects.remove(beanName);
+             this.registeredSingletons.add(beanName);
+         }
+     }
+ }
+```
+
+
 1. isSingleton
 2. allowCircularReferences
 3. isSingletonCurrentlyInCreation

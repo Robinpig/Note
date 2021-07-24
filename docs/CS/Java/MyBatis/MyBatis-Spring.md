@@ -321,6 +321,8 @@ protected void checkDaoConfig() {
 }
 ```
 
+### 1st cache invalid
+Because every call will new SqlSession, please use transaction.
 
 
 ## start

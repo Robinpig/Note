@@ -2,7 +2,6 @@
 
 ## JDK
 
-## [Java Development Kit](/docs/CS/Java/JDK/JDK.md)
 
 
 ## Framework
