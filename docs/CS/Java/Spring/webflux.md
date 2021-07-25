@@ -73,7 +73,99 @@ public Mono<? extends DisposableServer> bind(ServerBootstrap b) {
 
 
 
+## handle
+
+Contract to handle a web request.
+Use *HttpWebHandlerAdapter* to adapt a *WebHandler* to an *HttpHandler*. The *WebHttpHandlerBuilder* provides a convenient way to do that while also optionally configuring one or more filters and/or exception handlers.
+
+```java
+public interface WebHandler {
+
+   //Handle the web server exchange.
+   Mono<Void> handle(ServerWebExchange exchange);
+
+}
+```
 
 
 
+### DispatcherHandler
 
+Central dispatcher for HTTP request handlers/controllers. Dispatches to registered handlers for processing a request, providing convenient mapping facilities.
+DispatcherHandler discovers the delegate components it needs from Spring configuration. It detects the following in the application context:
+HandlerMapping -- map requests to handler objects
+HandlerAdapter -- for using any handler interface
+HandlerResultHandler -- process handler return values
+DispatcherHandler is also designed to be a Spring bean itself and implements ApplicationContextAware for access to the context it runs in. If DispatcherHandler is declared as a bean with the name "webHandler", it is discovered by WebHttpHandlerBuilder.applicationContext(ApplicationContext) which puts together a processing chain together with WebFilter, WebExceptionHandler and others.
+A DispatcherHandler bean declaration is included in @EnableWebFlux configuration.
+
+
+
+```java
+public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, ApplicationContextAware {
+
+   @Nullable
+   private List<HandlerMapping> handlerMappings;
+
+   @Nullable
+   private List<HandlerAdapter> handlerAdapters;
+
+   @Nullable
+   private List<HandlerResultHandler> resultHandlers;
+  
+  ...
+}
+```
+
+
+
+```java
+// DispatcherHandler
+@Override
+public Mono<Void> handle(ServerWebExchange exchange) {
+   if (this.handlerMappings == null) {
+      return createNotFoundError();
+   }
+   if (CorsUtils.isPreFlightRequest(exchange.getRequest())) {
+      return handlePreFlight(exchange);
+   }
+   return Flux.fromIterable(this.handlerMappings)
+         .concatMap(mapping -> mapping.getHandler(exchange))
+         .next()
+         .switchIfEmpty(createNotFoundError())
+         .flatMap(handler -> invokeHandler(exchange, handler))
+         .flatMap(result -> handleResult(exchange, result));
+}
+```
+
+
+
+```java
+// DispatcherHandler
+@Override
+public void setApplicationContext(ApplicationContext applicationContext) {
+   initStrategies(applicationContext);
+}
+
+
+protected void initStrategies(ApplicationContext context) {
+   Map<String, HandlerMapping> mappingBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+         context, HandlerMapping.class, true, false);
+
+   ArrayList<HandlerMapping> mappings = new ArrayList<>(mappingBeans.values());
+   AnnotationAwareOrderComparator.sort(mappings);
+   this.handlerMappings = Collections.unmodifiableList(mappings);
+
+   Map<String, HandlerAdapter> adapterBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+         context, HandlerAdapter.class, true, false);
+
+   this.handlerAdapters = new ArrayList<>(adapterBeans.values());
+   AnnotationAwareOrderComparator.sort(this.handlerAdapters);
+
+   Map<String, HandlerResultHandler> beans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+         context, HandlerResultHandler.class, true, false);
+
+   this.resultHandlers = new ArrayList<>(beans.values());
+   AnnotationAwareOrderComparator.sort(this.resultHandlers);
+}
+```

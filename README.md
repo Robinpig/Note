@@ -1,8 +1,8 @@
 
 
-## Introduction
+ [Computer Science](/docs/CS/CS.md) is the study of algorithmic processes, computational machines and computation itself.
 
- [CS](/docs/CS/CS.md)
+## Algorithms
 
 ## Operating System
 
@@ -12,8 +12,6 @@
 ## Network
     
 - [WebSocket](/docs/CS/CN/WebSocket.md)
-
-## Algorithms
 
 ## DataBase
     
@@ -42,7 +40,8 @@
         
 ### JDK
             
-#### [Basic](/docs/CS/Java/JDK/Basic/Basic.md)
+#### Basics
+[Basics of Java](/docs/CS/Java/JDK/Basic/Basic.md)
                 
 - [Object](/docs/CS/Java/JDK/Basic/Object.md)
 - [SPI](/docs/CS/Java/JDK/Basic/SPI.md)
@@ -51,13 +50,17 @@
 - [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
 - [Direct Buffer](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
 
-#### [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
+#### Collection
+The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framework that provides an architecture to store and manipulate the group of objects.
+
 - [List](/docs/CS/Java/JDK/Collection/List.md)
 - [Map](/docs/CS/Java/JDK/Collection/Map.md)
 - [Set](/docs/CS/Java/JDK/Collection/Set.md)
 - [Queue](/docs/CS/Java/JDK/Collection/Queue.md)
 
-#### [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+#### Concurrency
+[Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)  is a process of executing multiple threads simultaneously.
+
 - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
@@ -66,7 +69,8 @@
 - [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
 - [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
 
-#### [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+#### JVM
+[JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
 - [GC](/docs/CS/Java/JDK/JVM/GC.md)
 - [G1](/docs/CS/Java/JDK/JVM/G1.md)
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
@@ -104,7 +108,8 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 - [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
 - [Future](/docs/CS/Java/Netty/Future.md)
 - [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
-  
+
+
 ### MyBatis
 
 [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Ordinary Java Objects) to database records.
@@ -144,6 +149,7 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 
 ### Tomcat
 
+- [start](/docs/CS/Java/Tomcat/Start.md)
 
 ## Go
 
