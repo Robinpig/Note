@@ -44,6 +44,7 @@
 [Basics of Java](/docs/CS/Java/JDK/Basic/Basic.md)
                 
 - [Object](/docs/CS/Java/JDK/Basic/Object.md)
+- [String](/docs/CS/Java/JDK/Basic/String.md)
 - [SPI](/docs/CS/Java/JDK/Basic/SPI.md)
 - [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
 - [Ref](/docs/CS/Java/JDK/Basic/Ref.md)
@@ -64,6 +65,10 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
+- [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
+
+
+##### Lock
 - [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
 - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 - [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)

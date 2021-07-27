@@ -982,3 +982,237 @@ public boolean cancel(boolean mayInterruptIfRunning) {
     return true;
 }
 ```
+
+
+
+
+
+## CompletableFuture
+
+A Future that may be explicitly completed (setting its value and status), and may be used as a CompletionStage, supporting dependent functions and actions that trigger upon its completion.
+When two or more threads attempt to complete, completeExceptionally, or cancel a CompletableFuture, only one of them succeeds.
+In addition to these and related methods for directly manipulating status and results, CompletableFuture implements interface CompletionStage with the following policies:
+
+- Actions supplied for dependent completions of non-async methods may be performed by the thread that completes the current CompletableFuture, or by any other caller of a completion method.
+- All async methods without an explicit Executor argument are performed using the **ForkJoinPool.commonPool()** (unless it does not support a parallelism level of at least two, in which case, a new Thread is created to run each task). This may be overridden for non-static methods in subclasses by defining method defaultExecutor(). To simplify monitoring, debugging, and tracking, all generated asynchronous tasks are instances of the marker interface CompletableFuture.AsynchronousCompletionTask. Operations with time-delays can use adapter methods defined in this class, for example: supplyAsync(supplier, delayedExecutor(timeout, timeUnit)). To support methods with delays and timeouts, this class maintains at most one daemon thread for triggering and cancelling actions, not for running them.
+- All CompletionStage methods are implemented independently of other public methods, so the behavior of one method is not impacted by overrides of others in subclasses.
+- All CompletionStage methods return CompletableFutures. To restrict usages to only those methods defined in interface CompletionStage, use method minimalCompletionStage. Or to ensure only that clients do not themselves modify a future, use method copy.
+
+
+
+
+
+CompletableFuture also implements Future with the following policies:
+
+- Since (unlike FutureTask) this class has no direct control over the computation that causes it to be completed, cancellation is treated as just another form of exceptional completion. Method cancel has the same effect as completeExceptionally(new CancellationException()). Method isCompletedExceptionally can be used to determine if a CompletableFuture completed in any exceptional fashion.
+- In case of exceptional completion with a CompletionException, methods get() and get(long, TimeUnit) throw an ExecutionException with the same cause as held in the corresponding CompletionException. To simplify usage in most contexts, this class also defines methods join() and getNow that instead throw the CompletionException directly in these cases.
+
+
+
+Arguments used to pass a completion result (that is, for parameters of type T) for methods accepting them may be null, but passing a null value for any other parameter will result in a NullPointerException being thrown.
+Subclasses of this class should normally override the "virtual constructor" method newIncompleteFuture, which establishes the concrete type returned by CompletionStage methods. For example, here is a class that substitutes a different default Executor and disables the obtrude methods:
+
+```java
+
+ class MyCompletableFuture<T> extends CompletableFuture<T> {
+   static final Executor myExecutor = ...;
+   public MyCompletableFuture() { }
+   public <U> CompletableFuture<U> newIncompleteFuture() {
+     return new MyCompletableFuture<U>(); }
+   public Executor defaultExecutor() {
+     return myExecutor; }
+   public void obtrudeValue(T value) {
+     throw new UnsupportedOperationException(); }
+   public void obtrudeException(Throwable ex) {
+     throw new UnsupportedOperationException(); }
+ }
+```
+
+
+
+Default executor -- ForkJoinPool.commonPool()
+
+```java
+private static final boolean USE_COMMON_POOL =
+    (ForkJoinPool.getCommonPoolParallelism() > 1);
+
+// Default executor -- ForkJoinPool.commonPool() unless it cannot support parallelism.
+private static final Executor ASYNC_POOL = USE_COMMON_POOL ?
+    ForkJoinPool.commonPool() : new ThreadPerTaskExecutor();
+```
+
+
+
+### task chain
+
+```java
+public static <U> CompletableFuture<U> supplyAsync(Supplier<U> supplier) {
+  return asyncSupplyStage(ASYNC_POOL, supplier);
+}
+
+public static <U> CompletableFuture<U> supplyAsync(Supplier<U> supplier,
+                                                   Executor executor) {
+  return asyncSupplyStage(screenExecutor(executor), supplier);
+}
+
+public static CompletableFuture<Void> runAsync(Runnable runnable) {
+  return asyncRunStage(ASYNC_POOL, runnable);
+}
+
+public static CompletableFuture<Void> runAsync(Runnable runnable,
+                                               Executor executor) {
+  return asyncRunStage(screenExecutor(executor), runnable);
+}
+```
+
+
+
+then execute another task
+
+```java
+public <U> CompletableFuture<U> thenApplyAsync(
+    Function<? super T,? extends U> fn, Executor executor) {
+    return uniApplyStage(screenExecutor(executor), fn);
+}
+
+public CompletableFuture<Void> thenAcceptAsync(Consumer<? super T> action) {
+  return uniAcceptStage(defaultExecutor(), action);
+}
+
+public CompletableFuture<Void> thenRunAsync(Runnable action,
+                                            Executor executor) {
+  return uniRunStage(screenExecutor(executor), action);
+}
+```
+
+
+
+### handle Exception
+
+```java
+public CompletableFuture<T> exceptionallyAsync(
+    Function<Throwable, ? extends T> fn, Executor executor) {
+    return uniExceptionallyStage(screenExecutor(executor), fn);
+}
+
+public <U> CompletableFuture<U> handleAsync(
+  BiFunction<? super T, Throwable, ? extends U> fn, Executor executor) {
+  return uniHandleStage(screenExecutor(executor), fn);
+}
+```
+
+
+
+### collect Results
+
+```java
+public <U,V> CompletableFuture<V> thenCombineAsync(
+        CompletionStage<? extends U> other,
+        BiFunction<? super T,? super U,? extends V> fn, Executor executor) {
+        return biApplyStage(screenExecutor(executor), other, fn);
+    }
+```
+
+
+
+```java
+public <U> CompletableFuture<U> thenComposeAsync(
+    Function<? super T, ? extends CompletionStage<U>> fn,
+    Executor executor) {
+    return uniComposeStage(screenExecutor(executor), fn);
+}
+```
+
+
+
+allOf
+
+```java
+public static CompletableFuture<Void> allOf(CompletableFuture<?>... cfs) {
+  return andTree(cfs, 0, cfs.length - 1);
+}
+
+static CompletableFuture<Void> andTree(CompletableFuture<?>[] cfs,
+                                       int lo, int hi) {
+    CompletableFuture<Void> d = new CompletableFuture<Void>();
+    if (lo > hi) // empty
+        d.result = NIL;
+    else {
+        CompletableFuture<?> a, b; Object r, s, z; Throwable x;
+        int mid = (lo + hi) >>> 1;
+        if ((a = (lo == mid ? cfs[lo] :
+                  andTree(cfs, lo, mid))) == null ||
+            (b = (lo == hi ? a : (hi == mid+1) ? cfs[hi] :
+                  andTree(cfs, mid+1, hi))) == null)
+            throw new NullPointerException();
+        if ((r = a.result) == null || (s = b.result) == null)
+            a.bipush(b, new BiRelay<>(d, a, b));
+        else if ((r instanceof AltResult
+                  && (x = ((AltResult)(z = r)).ex) != null) ||
+                 (s instanceof AltResult
+                  && (x = ((AltResult)(z = s)).ex) != null))
+            d.result = encodeThrowable(x, z);
+        else
+            d.result = NIL;
+    }
+    return d;
+}
+```
+
+anyOf
+
+```java
+public static CompletableFuture<Object> anyOf(CompletableFuture<?>... cfs) {
+    int n; Object r;
+    if ((n = cfs.length) <= 1)
+        return (n == 0)
+            ? new CompletableFuture<Object>()
+            : uniCopyStage(cfs[0]);
+    for (CompletableFuture<?> cf : cfs)
+        if ((r = cf.result) != null)
+            return new CompletableFuture<Object>(encodeRelay(r));
+    cfs = cfs.clone();
+    CompletableFuture<Object> d = new CompletableFuture<>();
+    for (CompletableFuture<?> cf : cfs)
+        cf.unipush(new AnyOf(d, cf, cfs));
+    // If d was completed while we were adding completions, we should
+    // clean the stack of any sources that may have had completions
+    // pushed on their stack after d was completed.
+    if (d.result != null)
+        for (int i = 0, len = cfs.length; i < len; i++)
+            if (cfs[i].result != null)
+                for (i++; i < len; i++)
+                    if (cfs[i].result == null)
+                        cfs[i].cleanStack();
+    return d;
+}
+```
+
+
+
+The result type returned by this future's join and get methods
+
+```java
+public T join() {
+    Object r;
+    if ((r = result) == null)
+        r = waitingGet(false);
+    return (T) reportJoin(r);
+}
+
+
+// Decodes outcome to return result or throw unchecked exception.
+private static Object reportJoin(Object r) {
+  if (r instanceof AltResult) {
+    Throwable x;
+    if ((x = ((AltResult)r).ex) == null)
+      return null;
+    if (x instanceof CancellationException)
+      throw (CancellationException)x;
+    if (x instanceof CompletionException)
+      throw (CompletionException)x;
+    throw new CompletionException(x);
+  }
+  return r;
+}
+```
