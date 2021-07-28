@@ -565,7 +565,7 @@ create [FastThreadLocalThread](/docs/CS/Java/Netty/FastThreadLocal.md)
 
 #### NioEventLoopGroup#newChild()
 
-create NioEventLoop
+just create NioEventLoop, not start Thread
 
 ```java
 //NioEventLoopGroup#newChild()
@@ -877,6 +877,7 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
 
 ## execute()
+startThread when execute first task
 
 ```java
 // SingleThreadEventExecutor#execute()

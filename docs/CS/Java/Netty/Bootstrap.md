@@ -339,7 +339,7 @@ private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapte
 
 **AbstractChannel$AbstracrUnsafe#register0** execute follow methods:
 
-1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/Channel.md?id=channelpipelinefirechannelactive-)
+1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/ChannelHandler.md?id=channelpipelinefirechannelactive-)
 2. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/Channel.md?id=abstractchannelbeginread-)
 
 

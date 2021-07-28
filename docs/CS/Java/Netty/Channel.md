@@ -267,8 +267,9 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 
 **AbstractChannel$AbstracrUnsafe#register0** execute follow methods:
 
-1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/Channel.md?id=channelpipelinefirechannelactive-)
-2. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/Channel.md?id=abstractchannelbeginread-)
+1. ChannelPipeline#invokeHandlerAddedIfNeeded()
+2. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/Channel.md?id=channelpipelinefirechannelactive-)
+3. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/Channel.md?id=abstractchannelbeginread-)
 
 ```java
 private void register0(ChannelPromise promise) {
