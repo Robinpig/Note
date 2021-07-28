@@ -445,7 +445,41 @@ Note that any ApplicationListener registered here will be applied on refresh if 
 
 ### refreshContext
 
-see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md), start webServer for ServletWebServerApplicationContext
+see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md?id=refresh), 
+
+create webServer in `onRefresh`
+
+```java
+// ServletWebServerApplicationContext
+@Override
+protected void onRefresh() {
+   super.onRefresh();
+   try {
+      createWebServer();
+   }
+   catch (Throwable ex) {
+      throw new ApplicationContextException("Unable to start web server", ex);
+   }
+}
+```
+
+
+
+Start webServer in `finishRefresh`
+
+```java
+// org.springframework.boot.web.servlet.context.WebServerStartStopLifecycle
+class WebServerStartStopLifecycle implements SmartLifecycle {
+  @Override
+	public void start() {
+		this.webServer.start();
+		this.running = true;
+		this.applicationContext
+				.publishEvent(new ServletWebServerInitializedEvent(this.webServer, this.applicationContext));
+	}
+}
+```
+
 
 
 

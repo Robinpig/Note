@@ -49,7 +49,7 @@ Spring doesn't support constructor injection in an abstract class.
 
 
 
-### Introduction to the Spring IoC Container and Beans 
+### Spring IoC Container and Beans 
 
 The `org.springframework.beans` and `org.springframework.context` packages are the basis for Spring Framework’s IoC container. The [`BeanFactory`](https://docs.spring.io/spring-framework/docs/5.3.9/javadoc-api/org/springframework/beans/factory/BeanFactory.html) interface provides an advanced configuration mechanism capable of managing any type of object. [`ApplicationContext`](https://docs.spring.io/spring-framework/docs/5.3.9/javadoc-api/org/springframework/context/ApplicationContext.html) is a sub-interface of `BeanFactory`. It adds:
 
@@ -841,7 +841,71 @@ public void preInstantiateSingletons() throws BeansException {
 
 
 
+### finishRefresh
 
+Finish the refresh of this context, invoking the **LifecycleProcessor's onRefresh()** method and publishing the **ContextRefreshedEvent**.
+
+```java
+protected void finishRefresh() {
+   // Clear context-level resource caches (such as ASM metadata from scanning).
+   clearResourceCaches();
+
+   // Initialize lifecycle processor for this context.
+   initLifecycleProcessor();
+
+   // Propagate refresh to lifecycle processor first.
+   getLifecycleProcessor().onRefresh();
+
+   // Publish the final event.
+   publishEvent(new ContextRefreshedEvent(this));
+
+   // Participate in LiveBeansView MBean, if active.
+   LiveBeansView.registerApplicationContext(this);
+}
+```
+
+
+
+```java
+// DefaultLifecycleProcessor
+@Override
+public void onRefresh() {
+   startBeans(true);
+   this.running = true;
+}
+
+private void startBeans(boolean autoStartupOnly) {
+  Map<String, Lifecycle> lifecycleBeans = getLifecycleBeans();
+  Map<Integer, LifecycleGroup> phases = new HashMap<>();
+  lifecycleBeans.forEach((beanName, bean) -> {
+    if (!autoStartupOnly || (bean instanceof SmartLifecycle && ((SmartLifecycle) bean).isAutoStartup())) {
+      int phase = getPhase(bean);
+      LifecycleGroup group = phases.get(phase);
+      if (group == null) {
+        group = new LifecycleGroup(phase, this.timeoutPerShutdownPhase, lifecycleBeans, autoStartupOnly);
+        phases.put(phase, group);
+      }
+      group.add(beanName, bean);
+    }
+  });
+  if (!phases.isEmpty()) {
+    List<Integer> keys = new ArrayList<>(phases.keySet());
+    Collections.sort(keys);
+    for (Integer key : keys) {
+      phases.get(key).start();
+    }
+  }
+}
+```
+
+Start the specified bean as part of the given set of Lifecycle beans, making sure that any beans that it depends on are started first.
+
+
+
+```java
+// org.springframework.context
+public interface SmartLifecycle extends Lifecycle, Phased {}
+```
 
 
 
