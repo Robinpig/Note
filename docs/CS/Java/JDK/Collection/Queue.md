@@ -6,7 +6,7 @@
 
 ### Queue Hierarchy
 
-![queue](file:///Users/robin/Note/docs/CS/Java/JDK/images/Queue.png?lastModify=1626593689)
+![queue](../images/Queue.png)
 
 
 
@@ -219,7 +219,10 @@ This class and its iterator implement all of the optional methods of the Collect
 
 ## BlockingQueue
 
-A Queue that additionally supports operations that wait for the queue to become non-empty when retrieving an element, and wait for space to become available in the queue when storing an element.
+A Queue that additionally supports operations that:
+
+1. wait for the queue to become non-empty when retrieving an element
+2. wait for space to become available in the queue when storing an element.
 
 BlockingQueue methods come in four forms, with different ways of handling operations that cannot be satisfied immediately, but may be satisfied at some point in the future: one throws an exception, the second returns a special value (either null or false, depending on the operation), the third blocks the current thread indefinitely until the operation can succeed, and the fourth blocks for only a given maximum time limit before giving up. 
 
@@ -233,7 +236,7 @@ These methods are summarized in the following table:
 
 
 
-A BlockingQueue **does not accept null elements**. Implementations throw *NullPointerException* on attempts to add, put or offer a null. A null is used as a sentinel value to indicate failure of poll operations.
+A BlockingQueue **does not accept null elements**. Implementations throw **NullPointerException** on attempts to add, put or offer a null. A null is used as a sentinel value to indicate failure of *poll* operations.
 
 A BlockingQueue may be capacity bounded. At any given time it may have a remainingCapacity beyond which no additional elements can be put without blocking. A BlockingQueue without any intrinsic capacity constraints always reports a remaining capacity of Integer.MAX_VALUE.
 
