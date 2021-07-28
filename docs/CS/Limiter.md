@@ -10,7 +10,7 @@ Method
 
 ## Algorithms
 
-- 信号量 只适用瞬时并发峰值控制
+- Semaphore only for counts
 - 计数器
   - 固定窗口 瞬时峰值隐患
   - 滑动窗口 窗口粒度越小消耗资源高
@@ -21,7 +21,28 @@ Method
 
 
 
-### 令牌桶
+### Semaphore
+
+```java
+Semaphore semaphore = new Semaphore(10);
+for (int i = 0; i < 100; i++) {
+    executor.submit(new Runnable() {
+        @Override
+        public void run() {
+            semaphore.acquireUninterruptibly(1);
+            try {
+                doSomething();
+            } finally {
+                semaphore.release();
+            }
+        }
+    });
+}
+```
+
+
+
+### Token Bucket
 
 guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in `SmoothRateLimiter`.
 
@@ -31,9 +52,70 @@ guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in 
 
 
 
-RateLimiter rateLimiter = new SmoothBursty()
+#### Guava RateLimiter
+
+![Guava RateLimiter](./images/Ratelimiter.png)
+
+
 
 ```java
+// RateLimiter
+/**
+ * The underlying timer; used both to measure elapsed time and sleep as necessary. A separate
+ * object to facilitate testing.
+ */
+private final SleepingStopwatch stopwatch;
+
+// Can't be initialized in the constructor because mocks don't call the constructor.
+private volatile @Nullable Object mutexDoNotUseDirectly;
+
+// init mutexDoNotUseDirectly
+private Object mutex() {
+  Object mutex = mutexDoNotUseDirectly;
+  if (mutex == null) {
+    synchronized (this) {
+      mutex = mutexDoNotUseDirectly;
+      if (mutex == null) {
+        mutexDoNotUseDirectly = mutex = new Object();
+      }
+    }
+  }
+  return mutex;
+}
+```
+
+
+
+```java
+// SmoothRateLimiter
+
+/** The currently stored permits. */
+double storedPermits;
+
+/** The maximum number of stored permits. */
+double maxPermits;
+
+/**
+ * The interval between two unit requests, at our stable rate. E.g., a stable rate of 5 permits
+ * per second has a stable interval of 200ms.
+ */
+double stableIntervalMicros;
+
+/**
+ * The time when the next request (no matter its size) will be granted. After granting a request,
+ * this is pushed further in the future. Large requests push this further than small requests.
+ */
+private long nextFreeTicketMicros = 0L; // could be either in the past or future
+```
+
+
+
+##### SmoothBursty
+
+Default cache permits of 1 second
+
+```java
+// SmoothRateLimiter
 static RateLimiter create(double permitsPerSecond, SleepingStopwatch stopwatch) {
   //only save up permits of 1 second if unsed 
   RateLimiter rateLimiter = new SmoothBursty(stopwatch, 1.0);
@@ -41,6 +123,15 @@ static RateLimiter create(double permitsPerSecond, SleepingStopwatch stopwatch) 
   return rateLimiter;
 }
 
+// RateLimiter
+public final void setRate(double permitsPerSecond) {
+  // check rate permitsPerSecond be positive
+  synchronized (mutex()) {
+    doSetRate(permitsPerSecond, stopwatch.readMicros());
+  }
+}
+
+// SmoothRateLimiter
 final void doSetRate(double permitsPerSecond, long nowMicros) {
   resync(nowMicros);
   double stableIntervalMicros = SECONDS.toMicros(1L) / permitsPerSecond;
@@ -48,6 +139,7 @@ final void doSetRate(double permitsPerSecond, long nowMicros) {
   doSetRate(permitsPerSecond, stableIntervalMicros);
 }
 
+// SmoothRateLimiter
 /** Updates storedPermits and nextFreeTicketMicros based on the current time. */
 void resync(long nowMicros) {
   // if nextFreeTicket is in the past, resync to now
@@ -58,6 +150,7 @@ void resync(long nowMicros) {
   }
 }
 
+// SmoothBursty
 void doSetRate(double permitsPerSecond, double stableIntervalMicros) {
   double oldMaxPermits = this.maxPermits;
   maxPermits = maxBurstSeconds * permitsPerSecond;
@@ -77,13 +170,22 @@ void doSetRate(double permitsPerSecond, double stableIntervalMicros) {
 
 
 
-acquire
+```java
+// SmoothBursty
+@Override
+long storedPermitsToWaitTime(double storedPermits, double permitsToTake) {
+  return 0L;
+}
+```
+
+##### acquire
 
 ```java
+@CanIgnoreReturnValue
 public double acquire(int permits) {
-    long microsToWait = this.reserve(permits);
-    this.stopwatch.sleepMicrosUninterruptibly(microsToWait);
-    return 1.0D * (double)microsToWait / (double)TimeUnit.SECONDS.toMicros(1L);
+  long microsToWait = reserve(permits);
+  stopwatch.sleepMicrosUninterruptibly(microsToWait);
+  return 1.0 * microsToWait / SECONDS.toMicros(1L);
 }
 
 final long reserve(int permits) {
@@ -133,6 +235,84 @@ public boolean tryAcquire(int permits, long timeout, TimeUnit unit) {
     return true;
 }
 ```
+
+
+
+##### SmoothWarmingUp
+
+
+
+coldFactor always = 3
+
+```java
+public static RateLimiter create(double permitsPerSecond, long warmupPeriod, TimeUnit unit) {
+  checkArgument(warmupPeriod >= 0, "warmupPeriod must not be negative: %s", warmupPeriod);
+  return create(
+      permitsPerSecond, warmupPeriod, unit, 3.0, SleepingStopwatch.createFromSystemTimer());
+}
+
+@VisibleForTesting
+static RateLimiter create(
+    double permitsPerSecond,
+    long warmupPeriod,
+    TimeUnit unit,
+    double coldFactor,
+    SleepingStopwatch stopwatch) {
+  RateLimiter rateLimiter = new SmoothWarmingUp(stopwatch, warmupPeriod, unit, coldFactor);
+  rateLimiter.setRate(permitsPerSecond);
+  return rateLimiter;
+}
+```
+
+
+
+
+
+```java
+@Override
+void doSetRate(double permitsPerSecond, double stableIntervalMicros) {
+  double oldMaxPermits = maxPermits;
+  double coldIntervalMicros = stableIntervalMicros * coldFactor;
+  thresholdPermits = 0.5 * warmupPeriodMicros / stableIntervalMicros;
+  maxPermits =
+      thresholdPermits + 2.0 * warmupPeriodMicros / (stableIntervalMicros + coldIntervalMicros);
+  slope = (coldIntervalMicros - stableIntervalMicros) / (maxPermits - thresholdPermits);
+  if (oldMaxPermits == Double.POSITIVE_INFINITY) {
+    // if we don't special-case this, we would get storedPermits == NaN, below
+    storedPermits = 0.0;
+  } else {
+    storedPermits =
+        (oldMaxPermits == 0.0)
+            ? maxPermits // initial state is cold
+            : storedPermits * maxPermits / oldMaxPermits;
+  }
+}
+```
+
+
+
+```java
+@Override
+long storedPermitsToWaitTime(double storedPermits, double permitsToTake) {
+  double availablePermitsAboveThreshold = storedPermits - thresholdPermits;
+  long micros = 0;
+  // measuring the integral on the right part of the function (the climbing line)
+  if (availablePermitsAboveThreshold > 0.0) {
+    double permitsAboveThresholdToTake = min(availablePermitsAboveThreshold, permitsToTake);
+    // TODO(cpovirk): Figure out a good name for this variable.
+    double length =
+        permitsToTime(availablePermitsAboveThreshold)
+            + permitsToTime(availablePermitsAboveThreshold - permitsAboveThresholdToTake);
+    micros = (long) (permitsAboveThresholdToTake * length / 2.0);
+    permitsToTake -= permitsAboveThresholdToTake;
+  }
+  // measuring the integral on the left part of the function (the horizontal line)
+  micros += (long) (stableIntervalMicros * permitsToTake);
+  return micros;
+}
+```
+
+
 
 
 
