@@ -236,7 +236,7 @@ public List<Advisor> findAdvisorBeans() {
 
 
 
-`AbstractAutoProxyCreator` implements [*BeanPostProcessor*](/docs/CS/Java/Spring/IoC.md?id=BeanPostProcesor)
+`AbstractAutoProxyCreator` implements [***BeanPostProcessor***](/docs/CS/Java/Spring/IoC.md?id=BeanPostProcesor)
 
 ### postProcessBeforeInstantiation
 

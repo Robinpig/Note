@@ -61,14 +61,15 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 
 #### Concurrency
 [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)  is a process of executing multiple threads simultaneously.
-
 - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
 - [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
+ 
 
 
-##### Lock
+Lock
+
 - [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
 - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 - [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
