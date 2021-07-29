@@ -1,3 +1,28 @@
+## Create
+
+Threads are represented by the `Thread` class. The only way for a user to create a thread is to **create an object of this class**; each thread is associated with such an object. A thread will start when the `start()` method is invoked on the corresponding `Thread` object.
+
+```java
+// Allocates a new Thread object.
+public Thread() {
+    init(null, null, "Thread-" + nextThreadNum(), 0);
+}
+
+// Allocates a new Thread object with Runnable taarget.
+public Thread(Runnable target) {
+    init(null, target, "Thread-" + nextThreadNum(), 0);
+}
+```
+
+### Example
+
+1. create a thread extends Thread directly
+2. use ThreadLocalExecutor
+3. use CompletableFuture submit task
+4. use FutureTask
+
+
+
 
 
 ## Lifetime
@@ -18,35 +43,6 @@ A thread can be in one of the following states:
 | WATING       | A thread that is waiting indefinitely for another thread to perform a particular action is in this state. |
 | TIME_WAITING | A thread that is waiting for another thread to perform an action for up to a specified waiting time is in this state. |
 | TERMINATED   | A thread that has exited is in this state.                   |
-
-## Create
-
-*How to create a Thread instance?*
-
-***Just new a Thread instance.***
-
-```java
-/**
- * Allocates a new Thread object.
- */
-public Thread() {
-    init(null, null, "Thread-" + nextThreadNum(), 0);
-}
-
-/**
- * Allocates a new Thread object with Runnable taarget.
- */
-public Thread(Runnable target) {
-    init(null, target, "Thread-" + nextThreadNum(), 0);
-}
-```
-
-### Example
-
-1. create a thread extends Thread directly
-2. use ThreadLocalExecutor
-3. use CompletableFuture submit task
-4. use FutureTask
 
 
 
@@ -590,7 +586,11 @@ void JavaThread::thread_main_inner() {
 }
 ```
 
-## Order
+
+
+## Wait Sets and Notification
+
+
 
 ### join
 
@@ -627,8 +627,15 @@ throws InterruptedException {
 
 
 
-
 ### wait
+
+Every object, in addition to having an associated monitor, has an associated *wait set*. A wait set is a set of threads.
+
+When an object is first created, its wait set is empty. Elementary actions that add threads to and remove threads from wait sets are atomic. Wait sets are manipulated solely through the methods `Object``.``wait`, `Object``.``notify`, and `Object``.``notifyAll`.
+
+
+
+use `wait` in a while loop avoid **spurious wakeups**.
 
 Causes the current thread to wait until either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object, or a specified amount of time has elapsed.
 
@@ -649,7 +656,7 @@ public final void wait() throws InterruptedException {
 
 
 
-##### ObjectSynchronizer::wait
+#### ObjectSynchronizer::wait
 
 must get monitor by [ObjectSynchronizer::inflate]()
 
@@ -669,13 +676,13 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 }
 ```
 
-##### ObjectMonitor::wait
+#### ObjectMonitor::wait
 
 1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException())
 2. CHECK_OWNER
 3. AddWaiter, enter the wait queue
 4. exit monitor
-5. Park Self
+5. `Park` Self
 6. ReenterI  or enter when unPark by other Thread
 
 ```cpp
@@ -769,14 +776,13 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
 
 
 
-### notify
+### Notification
 
 wake up thread when exit the sync block
 
-|            | notify | notifyAll |
-| ---------- | ------ | --------- |
-| wake order | FIFO   | LIFO      |
-|            |        |           |
+|       | notify | notifyAll |
+| ----- | ------ | --------- |
+| order | FIFO   | LIFO      |
 
 notifyAll foreach from tail -> head
 
@@ -1081,9 +1087,6 @@ Exit protocol:
 
 ```cpp
 void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
-  assert(_owner == Self, "invariant");
-
-  _succ = Wakee->_thread;
   ParkEvent * Trigger = Wakee->_event;
 
   // Hygiene -- once we've set _owner = NULL we can't safely dereference Wakee again.
@@ -1103,25 +1106,146 @@ void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
 }
 ```
 
-### Sleep
 
 
 
-#### yield
 
-1. yield 跟 sleep 都能暂停当前线程，都不会释放锁资源，sleep 可以指定具体休眠的时间，而 yield 则依赖 CPU 的时间片划分
-2. sleep方法给其他线程运行机会时不考虑线程的优先级，因此会给低优先级的线程以运行的机会。yield方法只会给相同优先级或更高优先级的线程以运行的机会
-3. 调用 sleep 方法使线程进入等待状态，等待休眠时间达到，而调用我们的 yield方法，线程会进入就绪状态，也就是sleep需要等待设置的时间后才会进行就绪状态，而yield会立即进入就绪状态
-4. sleep方法声明会抛出 InterruptedException，而 yield 方法没有声明任何异常
-5. yield 不能被中断，而 sleep 则可以接受中断。
-6. sleep方法比yield方法具有更好的移植性(跟操作系统CPU调度相关)
 
-#### wait 跟 sleep 
 
-1. wait来自Object，sleep 来自 Thread
-2. wait 释放锁，sleep 不释放
-3. wait 必须在同步代码块中，sleep 可以任意使用
-4. wait 不需要捕获异常，sleep 需捕获异常
+### Interruptions
+
+*The `interrupt` method interrupts **this thread**.*
+Unless the current thread is interrupting itself, which is always permitted, the checkAccess method of this thread is invoked, which may cause a SecurityException to be thrown.
+
+1. If this thread is blocked in an invocation of the wait(), wait(long), or wait(long, int) methods of the Object class, or of the join(), join(long), join(long, int), sleep(long), or sleep(long, int), methods of this class, then its interrupt status will be cleared and it will receive an InterruptedException.
+
+2. If this thread is blocked in an I/O operation upon an InterruptibleChannel then the channel will be closed, the thread's interrupt status will be set, and the thread will receive a java.nio.channels.ClosedByInterruptException.
+   If this thread is blocked in a java.nio.channels.Selector then the thread's interrupt status will be set and it will return immediately from the selection operation, possibly with a non-zero value, just as if the selector's wakeup method were invoked.
+
+3. If none of the previous conditions hold then this thread's interrupt status will be set.
+
+4. Interrupting a thread that is not alive need not have any effect.
+
+*The `interrupted` method Tests whether the **current thread** has been interrupted and clear interrupted status.*
+*The `isInterrupted` method tests whether **this thread** has been interrupted. A thread interruption ignored because a thread was not alive at the time of the interrupt will be reflected by this method returning false.*
+
+```java
+public void interrupt() {
+    if (this != Thread.currentThread())
+        checkAccess();
+
+    synchronized (blockerLock) {
+        Interruptible b = blocker;
+        if (b != null) {
+            interrupt0();           // Just to set the interrupt flag
+            b.interrupt(this);
+            return;
+        }
+    }
+    interrupt0();
+}
+
+public static boolean interrupted() {
+    return currentThread().isInterrupted(true);
+}
+
+public boolean isInterrupted() {
+    return isInterrupted(false);
+}
+
+private native boolean isInterrupted(boolean ClearInterrupted);
+```
+
+
+
+
+
+#### See
+
+1. `OSThread::set_interrupted(true)`
+2. `ParkEvent::unpark`
+
+```c
+//Thread.c
+{"interrupt0",       "()V",        (void *)&JVM_Interrupt},
+```
+
+```cpp
+//jvm.cpp
+JVM_ENTRY(void, JVM_Interrupt(JNIEnv* env, jobject jthread))
+  JVMWrapper("JVM_Interrupt");
+
+  ThreadsListHandle tlh(thread);
+  JavaThread* receiver = NULL;
+  bool is_alive = tlh.cv_internal_thread_to_JavaThread(jthread, &receiver, NULL);
+  if (is_alive) {
+    // jthread refers to a live JavaThread.
+    Thread::interrupt(receiver);
+  }
+JVM_END
+
+//thread.cpp
+void Thread::interrupt(Thread* thread) {
+  os::interrupt(thread);
+}
+
+// os.posix.cpp
+void os::interrupt(Thread* thread) {
+  OSThread* osthread = thread->osthread();
+
+  if (!osthread->interrupted()) {
+    osthread->set_interrupted(true);
+    // More than one thread can get here with the same value of osthread,
+    // resulting in multiple notifications.  We do, however, want the store
+    // to interrupted() to be visible to other threads before we execute unpark().
+    OrderAccess::fence();
+    ParkEvent * const slp = thread->_SleepEvent ;
+    if (slp != NULL) slp->unpark() ;
+  }
+
+  // For JSR166. Unpark even if interrupt status already was set
+  if (thread->is_Java_thread())
+    ((JavaThread*)thread)->parker()->unpark();
+
+  ParkEvent * ev = thread->_ParkEvent ;
+  if (ev != NULL) ev->unpark() ;
+}
+```
+
+
+
+### Example
+
+Similarly, notifications cannot be lost due to interrupts. Assume that a set *s* of threads is in the wait set of an object *m*, and another thread performs a `notify` on *m*. Then either:
+
+- at least one thread in *s* must return normally from `wait`, or
+- all of the threads in *s* must exit `wait` by throwing `InterruptedException`
+
+Note that if a thread is both interrupted and woken via `notify`, and that thread returns from `wait` by throwing an `InterruptedException`, then some other thread in the wait set must be notified.
+
+Such as two threads wait for lock, may thread1 be notifyed and interrupt and the other thread still waiting
+
+```java
+synchronized (lock) {
+    thread1.interrupt();
+  	// Thread.yield(); 
+    lock.notify();
+}
+```
+
+
+
+## Sleep and Yield
+
+
+
+
+
+|              | wait      | yield       | sleep       |
+| ------------ | --------- | ----------- | ----------- |
+| From         | Object    | Thread      | Thread      |
+| Lock         | Dependent | Independent | Independent |
+| Interruption | Throws    |             | Throws      |
 
 
 
@@ -1316,114 +1440,11 @@ public void sleep(long timeout) throws InterruptedException {
 
 
 
-
-### Interrupt
-
-*The `interrupt` method interrupts **this thread**.*
-Unless the current thread is interrupting itself, which is always permitted, the checkAccess method of this thread is invoked, which may cause a SecurityException to be thrown.
-
-1. If this thread is blocked in an invocation of the wait(), wait(long), or wait(long, int) methods of the Object class, or of the join(), join(long), join(long, int), sleep(long), or sleep(long, int), methods of this class, then its interrupt status will be cleared and it will receive an InterruptedException.
-
-2. If this thread is blocked in an I/O operation upon an InterruptibleChannel then the channel will be closed, the thread's interrupt status will be set, and the thread will receive a java.nio.channels.ClosedByInterruptException.
-   If this thread is blocked in a java.nio.channels.Selector then the thread's interrupt status will be set and it will return immediately from the selection operation, possibly with a non-zero value, just as if the selector's wakeup method were invoked.
-
-3. If none of the previous conditions hold then this thread's interrupt status will be set.
-
-4. Interrupting a thread that is not alive need not have any effect.
-
-*The `interrupted` method Tests whether the **current thread** has been interrupted and clear interrupted status.*
-*The `isInterrupted` method tests whether **this thread** has been interrupted. A thread interruption ignored because a thread was not alive at the time of the interrupt will be reflected by this method returning false.*
-
-```java
-public void interrupt() {
-    if (this != Thread.currentThread())
-        checkAccess();
-
-    synchronized (blockerLock) {
-        Interruptible b = blocker;
-        if (b != null) {
-            interrupt0();           // Just to set the interrupt flag
-            b.interrupt(this);
-            return;
-        }
-    }
-    interrupt0();
-}
-
-public static boolean interrupted() {
-    return currentThread().isInterrupted(true);
-}
-
-public boolean isInterrupted() {
-    return isInterrupted(false);
-}
-
-private native boolean isInterrupted(boolean ClearInterrupted);
-```
-
-
-
-
-
-#### See
-
-1. `OSThread::set_interrupted(true)`
-2. `ParkEvent::unpark`
-
-```c
-//Thread.c
-{"interrupt0",       "()V",        (void *)&JVM_Interrupt},
-```
-
-```cpp
-//jvm.cpp
-JVM_ENTRY(void, JVM_Interrupt(JNIEnv* env, jobject jthread))
-  JVMWrapper("JVM_Interrupt");
-
-  ThreadsListHandle tlh(thread);
-  JavaThread* receiver = NULL;
-  bool is_alive = tlh.cv_internal_thread_to_JavaThread(jthread, &receiver, NULL);
-  if (is_alive) {
-    // jthread refers to a live JavaThread.
-    Thread::interrupt(receiver);
-  }
-JVM_END
-
-//thread.cpp
-void Thread::interrupt(Thread* thread) {
-  os::interrupt(thread);
-}
-
-// os.posix.cpp
-void os::interrupt(Thread* thread) {
-  OSThread* osthread = thread->osthread();
-
-  if (!osthread->interrupted()) {
-    osthread->set_interrupted(true);
-    // More than one thread can get here with the same value of osthread,
-    // resulting in multiple notifications.  We do, however, want the store
-    // to interrupted() to be visible to other threads before we execute unpark().
-    OrderAccess::fence();
-    ParkEvent * const slp = thread->_SleepEvent ;
-    if (slp != NULL) slp->unpark() ;
-  }
-
-  // For JSR166. Unpark even if interrupt status already was set
-  if (thread->is_Java_thread())
-    ((JavaThread*)thread)->parker()->unpark();
-
-  ParkEvent * ev = thread->_ParkEvent ;
-  if (ev != NULL) ev->unpark() ;
-}
-```
-
-
-
 ## Lock
 
 ### Dead Lock
 
-
+The Java programming language neither prevents nor requires detection of deadlock conditions. Programs where threads hold (directly or indirectly) locks on multiple objects should use conventional techniques for deadlock avoidance, creating higher-level locking primitives that do not deadlock, if necessary.
 
 产生死锁必须满足四个条件：
 
@@ -1442,7 +1463,17 @@ void os::interrupt(Thread* thread) {
 
 
 
-## JMM
+## Memory Model
+
+
+
+A *memory model* describes, given a program and an execution trace of that program, whether the execution trace is a legal execution of the program. The Java programming language memory model works by examining each read in an execution trace and checking that the write observed by that read is valid according to certain rules.
+
+The memory model describes possible behaviors of a program. An implementation is free to produce any code it likes, as long as all resulting executions of a program produce a result that can be predicted by the memory model.
+
+This provides a great deal of freedom for the implementor to perform a myriad of code transformations, including the reordering of actions and removal of unnecessary synchronization.
+
+
 
 *Utility classes commonly useful in concurrent programming. This package includes a few small standardized extensible frameworks, as well as some classes that provide useful functionality and are otherwise tedious or difficult to implement. Here are brief descriptions of the main components. See also the java.util.concurrent.locks and java.util.concurrent.atomic packages.*
 *Executors*
@@ -1484,4 +1515,12 @@ void os::interrupt(Thread* thread) {
 *Actions prior to "releasing" synchronizer methods such as Lock.unlock, Semaphore.release, and CountDownLatch.countDown happen-before actions subsequent to a successful "acquiring" method such as Lock.lock, Semaphore.acquire, Condition.await, and CountDownLatch.await on the same synchronizer object in another thread.*
 *For each pair of threads that successfully exchange objects via an Exchanger, actions prior to the exchange() in each thread happen-before those subsequent to the corresponding exchange() in another thread.*
 *Actions prior to calling CyclicBarrier.await and Phaser.awaitAdvance (as well as its variants) happen-before actions performed by the barrier action, and actions performed by the barrier action happen-before actions subsequent to a successful return from the corresponding await in other threads.*
+
+
+
+Reference
+
+1. [JLS - **Threads and Locks**](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html)
+2. [The JSR-133 Cookbook for Compiler Writers - Doug Lea](http://gee.cs.oswego.edu/dl/jmm/cookbook.html)
+3. [JSR 133 (Java Memory Model) FAQ - Jeremy Manson and Brian Goetz, February 2004](https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html)
 

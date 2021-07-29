@@ -21,9 +21,7 @@ benefits：
 
 ```java
 public interface Executor {
-   /**
-    * The command may execute in a new thread, in a pooled thread, or in the calling thread
-    */
+   //The command may execute in a new thread, in a pooled thread, or in the calling thread
     void execute(Runnable command);
 }
 ```
@@ -32,7 +30,7 @@ public interface Executor {
 
 ### ExecutorService
 
-> An Executor that provides methods to **manage termination** and methods that can produce a Future for tracking progress of one or more **asynchronous tasks**.
+An Executor that provides methods to **manage termination** and methods that can produce a Future for tracking progress of one or more **asynchronous tasks**.
 
 ```java
 public interface ExecutorService extends Executor {
@@ -74,9 +72,7 @@ public interface ExecutorService extends Executor {
 
 ### AbstractExecutorService
 
-
-
-Returns a RunnableFuture.
+wrap and return the task with [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask) . 
 
 ```java
 protected <T> RunnableFuture<T> newTaskFor(Runnable runnable, T value) {
