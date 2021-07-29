@@ -86,7 +86,9 @@ Also, typically, we should not configure fine-grained domain objects in the cont
 
 ![[]](./images/Beanfactory.png)
 
-BeanFactory接口定义了IoC容器最基本的形式 并且提供了IoC容器所应该遵守的最基本的服务契约 这也是我们使用IoC容器所应遵守的最底层和最基本的编程规范 这些接口定义勾画出了IoC的基本轮廓
+
+
+
 
 ```java
 public interface BeanFactory {
@@ -136,7 +138,7 @@ public interface BeanFactory {
 
 The Spring framework provides several implementations of the *ApplicationContext* interface: 
 
-*ClassPathXmlApplicationContext* and *FileSystemXmlApplicationContext* for standalone applications, and *WebApplicationContext* for web applications.
+*ClassPathXmlApplicationContext*, *FileSystemXmlApplicationContext* and *AnnotationConfigApplicationContext* and for standalone applications, and *WebApplicationContext* for web applications.
 
 
 
@@ -900,7 +902,7 @@ private void startBeans(boolean autoStartupOnly) {
 
 Start the specified bean as part of the given set of Lifecycle beans, making sure that any beans that it depends on are started first.
 
-
+See [Spring-Boot start](/docs/CS/Java/Spring_Boot/Start.md?id=refreshContext)
 
 ```java
 // org.springframework.context
@@ -909,7 +911,10 @@ public interface SmartLifecycle extends Lifecycle, Phased {}
 
 
 
+
+
 ## getBean
+
 
 ```java
 // AbstractBeanFactory
@@ -1094,7 +1099,7 @@ public static String transformedBeanName(String name) {
 }
 ```
 
-#### getSingleton
+### getSingleton
 
 1. get from singletonObjects, or null
 2. get from earlySingletonObjects, or null & allowEarlyReference
@@ -1136,7 +1141,7 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 }
 ```
 
-##### circular references
+### circular references
 
 
 ```java

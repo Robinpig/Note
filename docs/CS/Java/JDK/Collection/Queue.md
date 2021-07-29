@@ -309,7 +309,7 @@ This interface is a member of the Java Collections Framework.
 
 ### ArrayBlockingQueue
 
-only one lock
+1 lock 2 conditions
 
 ```java
 /** Main lock guarding all access */
@@ -374,12 +374,49 @@ private final Condition notFull = putLock.newCondition();
 
 
 
+```java
+public void put(E e) throws InterruptedException {
+    if (e == null) throw new NullPointerException();
+    final int c;
+    final Node<E> node = new Node<E>(e);
+    final ReentrantLock putLock = this.putLock;
+    final AtomicInteger count = this.count;
+    putLock.lockInterruptibly();
+    try {
+        /*
+         * Note that count is used in wait guard even though it is
+         * not protected by lock. This works because count can
+         * only decrease at this point (all other puts are shut
+         * out by lock), and we (or some other waiting put) are
+         * signalled if it ever changes from capacity. Similarly
+         * for all other uses of count in other wait guards.
+         */
+        while (count.get() == capacity) {
+            notFull.await();
+        }
+        enqueue(node);
+        c = count.getAndIncrement();
+        if (c + 1 < capacity)
+            notFull.signal();
+    } finally {
+        putLock.unlock();
+    }
+    if (c == 0) // isEmpty before current put
+        signalNotEmpty();
+}
+```
+
+
+
 ### DelayQueue
+
+
+
+
 
 ### SynchronousQueue
 
-*A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and
-vice versa**. A synchronous queue **does not have any internal capacity, not even a capacity of one**.*
+*A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**. A synchronous queue **does not have any internal capacity, not even a capacity of one**.*
 
 *you cannot insert an element (using any method) unless another thread is trying to remove it;*
 
@@ -418,6 +455,15 @@ private WaitQueue waitingConsumers;
   * instead of final here.
   */
 private transient volatile Transferer<E> transferer;
+
+abstract static class Transferer<E> {
+  // Performs a put or take.
+  abstract E transfer(E e, boolean timed, long nanos);
+}
+
+public SynchronousQueue(boolean fair) { // default false
+  transferer = fair ? new TransferQueue<E>() : new TransferStack<E>();
+}
 ```
 
 
@@ -448,6 +494,127 @@ public int size(){
 public int remainingCapacity(){
         return 0;
         }
+```
+
+
+
+#### transfer
+
+both of them call *transfer()*, and *put* send a param
+
+```java
+// Adds the specified element to this queue, waiting if necessary for another thread to receive it.
+public void put(E e) throws InterruptedException {
+    if (e == null) throw new NullPointerException();
+    if (transferer.transfer(e, false, 0) == null) {
+        Thread.interrupted();
+        throw new InterruptedException();
+    }
+}
+
+// Retrieves and removes the head of this queue, waiting if necessary for another thread to insert it.
+public E take() throws InterruptedException {
+    E e = transferer.transfer(null, false, 0);
+    if (e != null)
+        return e;
+    Thread.interrupted();
+    throw new InterruptedException();
+}
+```
+
+
+
+
+
+#### TransferStack 
+
+Basic algorithm is to loop trying one of three actions:
+1. If apparently empty or already containing nodes of same mode, try to push node on stack and wait for a match, returning it, or null if cancelled.
+2. If apparently containing node of complementary mode, try to push a fulfilling node on to stack, match with corresponding waiting node, pop both from stack, and return matched item. The matching or unlinking might not actually be necessary because of other threads performing action 3:
+3. If top of stack already holds another fulfilling node, help it out by doing its match and/or pop
+   operations, and then continue. The code for helping is essentially the same as for fulfilling, except that it doesn't return the item.
+
+```java
+/** 
+ * Puts or takes an item.
+ */
+@SuppressWarnings("unchecked")
+E transfer(E e, boolean timed, long nanos) {
+    SNode s = null; // constructed/reused as needed
+    int mode = (e == null) ? REQUEST : DATA;
+
+    for (;;) {
+        SNode h = head;
+        if (h == null || h.mode == mode) {  // empty or same-mode
+            if (timed && nanos <= 0L) {     // can't wait
+                if (h != null && h.isCancelled())
+                    casHead(h, h.next);     // pop cancelled node
+                else
+                    return null;
+            } else if (casHead(h, s = snode(s, e, h, mode))) {
+                SNode m = awaitFulfill(s, timed, nanos);
+                if (m == s) {               // wait was cancelled
+                    clean(s);
+                    return null;
+                }
+                if ((h = head) != null && h.next == s)
+                    casHead(h, s.next);     // help s's fulfiller
+                return (E) ((mode == REQUEST) ? m.item : s.item);
+            }
+        } else if (!isFulfilling(h.mode)) { // try to fulfill
+            if (h.isCancelled())            // already cancelled
+                casHead(h, h.next);         // pop and retry
+            else if (casHead(h, s=snode(s, e, h, FULFILLING|mode))) {
+                for (;;) { // loop until matched or waiters disappear
+                    SNode m = s.next;       // m is s's match
+                    if (m == null) {        // all waiters are gone
+                        casHead(s, null);   // pop fulfill node
+                        s = null;           // use new node next time
+                        break;              // restart main loop
+                    }
+                    SNode mn = m.next;
+                    if (m.tryMatch(s)) {
+                        casHead(s, mn);     // pop both s and m
+                        return (E) ((mode == REQUEST) ? m.item : s.item);
+                    } else                  // lost match
+                        s.casNext(m, mn);   // help unlink
+                }
+            }
+        } else {                            // help a fulfiller
+            SNode m = h.next;               // m is h's match
+            if (m == null)                  // waiter is gone
+                casHead(h, null);           // pop fulfilling node
+            else {
+                SNode mn = m.next;
+                if (m.tryMatch(h))          // help match
+                    casHead(h, mn);         // pop both h and m
+                else                        // lost match
+                    h.casNext(m, mn);       // help unlink
+            }
+        }
+    }
+}
+```
+
+
+
+
+
+```java
+static final class SNode {
+    volatile SNode next;        // next node in stack
+    volatile SNode match;       // the node matched to this
+    volatile Thread waiter;     // to control park/unpark
+    Object item;                // data; or null for REQUESTs
+    int mode;
+    // Note: item and mode fields don't need to be volatile
+    // since they are always written before, and read after,
+    // other volatile/atomic operations.
+
+    SNode(Object item) {
+        this.item = item;
+    }
+}
 ```
 
 #### TransferQueue
@@ -523,6 +690,24 @@ E transfer(E e, boolean timed, long nanos) {
             LockSupport.unpark(m.waiter);
             return (x != null) ? (E)x : e;
         }
+    }
+}
+```
+
+
+
+
+
+```java
+static final class QNode {
+    volatile QNode next;          // next node in queue
+    volatile Object item;         // CAS'ed to or from null
+    volatile Thread waiter;       // to control park/unpark
+    final boolean isData;
+
+    QNode(Object item, boolean isData) {
+        this.item = item;
+        this.isData = isData;
     }
 }
 ```
