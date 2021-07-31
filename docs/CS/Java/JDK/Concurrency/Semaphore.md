@@ -226,4 +226,3 @@ _For example, here is a class that uses a semaphore to control access to a pool 
 
 
 
-Semaphore 许可的数量和线程数不存在必然的联系

@@ -260,10 +260,11 @@ public void reset() {
 
 
 
-|              | CyclicBarrier                         | CountDownLatch                          |
-| ------------ | ------------------------------------- | --------------------------------------- |
-| Inner Class  | ReentrantLock & Condition             | Sync extends AbstractQueuedSynchronizer |
-| Reuse        | :white_check_mark:                    | :x:                                     |
-| Count        | same as Threads Number                | -                                       |
-| Block method | use `await` block and decrement count | use `await` block Threads               |
+|                  | CyclicBarrier             | CountDownLatch                          |
+| ---------------- | ------------------------- | --------------------------------------- |
+| Inner Class      | ReentrantLock & Condition | Sync extends AbstractQueuedSynchronizer |
+| Reuse            | :white_check_mark:        | :x:                                     |
+| Count            | same as Threads Number    | -                                       |
+| Block method     | `await`                   | `await`                                 |
+| Decrement method | `await`                   | `countDwon`                             |
 

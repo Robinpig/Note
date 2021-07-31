@@ -75,6 +75,10 @@ Lock
 - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 - [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
 - [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
+- [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
+- [CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
+- [Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
+- [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 
 #### JVM
 [JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.

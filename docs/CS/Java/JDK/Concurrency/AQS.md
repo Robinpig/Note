@@ -4,7 +4,7 @@
 
 
 
-![AQS](../images/AQS.png)
+![](../images/AQS.png)
 
 
 
@@ -92,20 +92,11 @@ static final long spinForTimeoutThreshold = 1000L;
 
 
 
-### CLH
-
-`CLH`是`A Q S`内部维护的`FIFO`（**先进先出**）双端双向队列（**方便尾部节点插入**），基于链表数据结构，当一个线程竞争资源失败，就会将等待资源的线程封装成一个`Node`节点，通过`C A S`原子操作插入队列尾部，最终不同的`Node`节点连接组成了一个`CLH`队列，所以说`A Q S`通过`CLH`队列管理竞争资源的线程，个人总结`CLH`队列具有如下几个优点：
-
-- 先进先出保证了公平性
-- 非阻塞的队列，通过自旋锁和`C A S`保证节点插入和移除的原子性，实现无锁快速插入
-- 采用了自旋锁思想，所以`CLH`也是一种基于链表的可扩展、高性能、公平的自旋锁
+## Queue
 
 | Queue  | Sync list               | Condition           |
 | ------ | ----------------------- | ------------------- |
 | Struct | use Node.prev/Node.next | use Node.nextWaiter |
-| Order  | FIFO                    | FIFO                |
-
-
 
 
 
@@ -312,30 +303,18 @@ Link to **next node waiting on condition**, or **the special value SHARED**. Bec
 
 
 
-### acquire
+## acquire
 
-1. tryAcquire implement by subclass
+1. `tryAcquire` implement by subclass
 2. addWaiter(Node.EXCLUSIVE)
 3. acquireQueued
    1. shouldParkAfterFailedAcquire
    2. parkAndCheckInterrupt
 4. selfInterrupt
 
-
+Acquires in exclusive mode, ignoring interrupts. Implemented by invoking at least once tryAcquire, returning on success. Otherwise the thread is queued, possibly repeatedly blocking and unblocking, invoking tryAcquire until success. This method can be used to implement method `Lock.lock`.
 
 ```java
-/**
- * Acquires in exclusive mode, ignoring interrupts.  Implemented
- * by invoking at least once {@link #tryAcquire},
- * returning on success.  Otherwise the thread is queued, possibly
- * repeatedly blocking and unblocking, invoking {@link
- * #tryAcquire} until success.  This method can be used
- * to implement method {@link Lock#lock}.
- *
- * @param arg the acquire argument.  This value is conveyed to
- *        {@link #tryAcquire} but is otherwise uninterpreted and
- *        can represent anything you like.
- */
 public final void acquire(int arg) {
     if (!tryAcquire(arg) &&
         acquireQueued(addWaiter(Node.EXCLUSIVE), arg))
@@ -558,7 +537,7 @@ private void cancelAcquire(Node node) {
 }
 ```
 
-### release
+## release
 
 ![Image](https://mmbiz.qpic.cn/mmbiz_png/23OQmC1ia8nxCUWZdarelXPLIZiasyibibYU06oZ2b3Rst707NOAkgIiafeYxibKp0zDYBTr20nyxK8uVgwjpgMR5l0A/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
