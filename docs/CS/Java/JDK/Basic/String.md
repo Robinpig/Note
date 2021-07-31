@@ -104,7 +104,6 @@ network transmission consumption.
 
        *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
 
-
 *using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)*
 
 Why use 31?
@@ -223,8 +222,116 @@ public AbstractStringBuilder delete(int start, int end) {
 }
 ```
 
-## Deduplication
-[JEP192](http://openjdk.java.net/jeps/192)
+
+
+## String Pool
+
+
+
+### intern
+
+```cpp
+// jvm.cpp
+JVM_ENTRY(jstring, JVM_InternString(JNIEnv *env, jstring str))
+  JVMWrapper("JVM_InternString");
+  JvmtiVMObjectAllocEventCollector oam;
+  if (str == NULL) return NULL;
+  oop string = JNIHandles::resolve_non_null(str);
+  oop result = StringTable::intern(string, CHECK_NULL); // intern
+  return (jstring) JNIHandles::make_local(env, result);
+JVM_END
+
+// stringTable.cpp
+// Interning
+oop StringTable::intern(Symbol* symbol, TRAPS) {
+  if (symbol == NULL) return NULL;
+  ResourceMark rm(THREAD);
+  int length;
+  jchar* chars = symbol->as_unicode(length);
+  Handle string;
+  oop result = intern(string, chars, length, CHECK_NULL);
+  return result;
+}
+
+
+oop StringTable::intern(Handle string_or_null_h, const jchar* name, int len, TRAPS) {
+  // shared table always uses java_lang_String::hash_code
+  unsigned int hash = java_lang_String::hash_code(name, len);
+  oop found_string = StringTable::the_table()->lookup_shared(name, len, hash);
+  if (found_string != NULL) {
+    return found_string;
+  }
+  if (StringTable::_alt_hash) {
+    hash = hash_string(name, len, true);
+  }
+  return StringTable::the_table()->do_intern(string_or_null_h, name, len,
+                                             hash, CHECK_NULL);
+}
+
+oop StringTable::do_intern(Handle string_or_null_h, const jchar* name,
+                           int len, uintx hash, TRAPS) {
+  HandleMark hm(THREAD);  // cleanup strings created
+  Handle string_h;
+
+  if (!string_or_null_h.is_null()) {
+    string_h = string_or_null_h;
+  } else {
+    string_h = java_lang_String::create_from_unicode(name, len, CHECK_NULL);
+  }
+
+  // Deduplicate the string before it is interned. Note that we should never
+  // deduplicate a string after it has been interned. Doing so will counteract
+  // compiler optimizations done on e.g. interned string literals.
+  Universe::heap()->deduplicate_string(string_h());
+
+  assert(java_lang_String::equals(string_h(), name, len),
+         "string must be properly initialized");
+  assert(len == java_lang_String::length(string_h()), "Must be same length");
+
+  StringTableLookupOop lookup(THREAD, hash, string_h);
+  StringTableGet stg(THREAD);
+
+  bool rehash_warning;
+  do {
+    if (_local_table->get(THREAD, lookup, stg, &rehash_warning)) {
+      update_needs_rehash(rehash_warning);
+      return stg.get_res_oop();
+    }
+    WeakHandle<vm_string_table_data> wh = WeakHandle<vm_string_table_data>::create(string_h);
+    // The hash table takes ownership of the WeakHandle, even if it's not inserted.
+    if (_local_table->insert(THREAD, lookup, wh, &rehash_warning)) {
+      update_needs_rehash(rehash_warning);
+      return wh.resolve();
+    }
+  } while(true);
+}
+```
+
+
+
+HashTable 
+
+1. JDK1.8 60013
+2. JDK15 65536
+
+
+
+SymbolTable 
+
+1.8 20011
+
+15 32768
+
+```
+-XX:+PrintStringTableStatistics
+-XX:StringTableSize=N
+```
+
+
+
+## String Deduplication in G1
+
+[JEP 192: String Deduplication in G1](http://openjdk.java.net/jeps/192)
 
 call `G1StringDedup::enqueue_from_evacuation()` when `G1ParScanThreadState::copy_to_survivor_space()`
 call `G1StringDedup::enqueue_from_mark()` when `G1FullGCMarker::mark_object()`
