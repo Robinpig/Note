@@ -163,6 +163,12 @@ static boolean tryHandlePending(boolean waitForNotify) {
 
 ## Type
 
+```java
+-XX:+PrintReferenceGC
+-XX:+TraceReferenceGC
+
+```
+
 ### SoftReference
 
 ```java
