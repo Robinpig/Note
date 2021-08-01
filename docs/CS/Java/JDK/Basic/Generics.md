@@ -28,6 +28,24 @@ In the heart of generics is “[**type safety**](https://en.wikipedia.org/wiki/T
 
 Another important term in java generics is “[**type erasure**](https://en.wikipedia.org/wiki/Type_erasure)“. It essentially means that all the extra information added using generics into source code will be removed from bytecode generated from it. Inside bytecode, it will be old java syntax which you will get if you don’t use generics at all. This necessarily helps in generating and executing code written prior to java 5 when generics were not added in language.
 
+## Type Erasure
+
+Type erasure is a mapping from types (possibly including parameterized types and type variables) to types (that are never parameterized types or type variables). We write |T| for the erasure of type T. The erasure mapping is defined as follows:
+
+- The erasure of a parameterized type ([§4.5](https://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.5)) G`<`T1,...,Tn`>` is |G|.
+- The erasure of a nested type T`.`C is |T|.C.
+- The erasure of an array type T`[]` is |T|`[]`.
+- The erasure of a type variable ([§4.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.4)) is the erasure of its leftmost bound.
+- The erasure of every other type is the type itself.
+
+Type erasure also maps the signature ([§8.4.2](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.2)) of a constructor or method to a signature that has no parameterized types or type variables. The erasure of a constructor or method signature s is a signature consisting of the same name as s and the erasures of all the formal parameter types given in s.
+
+The return type of a method ([§8.4.5](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.5)) and the type parameters of a generic method or constructor ([§8.4.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.4), [§8.8.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.8.4)) also undergo erasure if the method or constructor's signature is erased.
+
+The erasure of the signature of a generic method has no type parameters.
+
+
+
 generics not exist in JVM,only have List.class not List<Integer>.class
 
 ## Type Expression

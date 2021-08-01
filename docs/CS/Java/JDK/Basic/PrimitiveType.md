@@ -152,7 +152,53 @@ public static int highestOneBit(int i) {
 
 ### BigDecimal
 
-use compareTo
+use `compareTo()` rather than `equals()`
+
+`equals()` compares this BigDecimal with the specified Object for equality. Unlike compareTo, this method considers two BigDecimal objects equal only if they are **equal in value and scale** (thus 2.0 is not equal to 2.00 when compared by this method).
+
+```java
+@Override
+public boolean equals(Object x) {
+    if (!(x instanceof BigDecimal))
+        return false;
+    BigDecimal xDec = (BigDecimal) x;
+    if (x == this)
+        return true;
+    if (scale != xDec.scale) // compare scale
+        return false;
+    long s = this.intCompact;
+    long xs = xDec.intCompact;
+    if (s != INFLATED) {
+        if (xs == INFLATED)
+            xs = compactValFor(xDec.intVal);
+        return xs == s;
+    } else if (xs != INFLATED)
+        return xs == compactValFor(this.intVal);
+
+    return this.inflated().equals(xDec.inflated());
+}
+
+
+public int compareTo(BigDecimal val) {
+  // Quick path for equal scale and non-inflated case.
+  if (scale == val.scale) {
+    long xs = intCompact;
+    long ys = val.intCompact;
+    if (xs != INFLATED && ys != INFLATED)
+      return xs != ys ? ((xs > ys) ? 1 : -1) : 0;
+  }
+  int xsign = this.signum();
+  int ysign = val.signum();
+  if (xsign != ysign)
+    return (xsign > ysign) ? 1 : -1;
+  if (xsign == 0)
+    return 0;
+  int cmp = compareMagnitude(val);
+  return (xsign > 0) ? cmp : -cmp;
+}
+```
+
+
 
 use **BigDecimal(String)**  create object param must be notBlank
 
