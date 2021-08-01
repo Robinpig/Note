@@ -1,35 +1,19 @@
-# ClassLoader
+## Introduction
 
 
 
-## ClassLoader
+| ClassLoader            | Languages | Load path           | Parent                   |      |
+| ---------------------- | --------- | ------------------- | ------------------------ | ---- |
+| `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                          |      |
+| `ExtensionClassLoader` | Java      | <JAVA_HOME>/lib/ext | `BootstrapClassLoader`   |      |
+| `AppClassLoader`       | Java      | classpath/          | `ExtensionClassLoader`   |      |
+| `User ClassLoader`     | Java      | all                 | default `AppClassLoader` |      |
 
 
 
-| ClassLoader            | Lang | Load path           | Ext                            |      |
-| ---------------------- | ---- | ------------------- | ------------------------------ | ---- |
-| `BootstrapClassLoader` | C++  | <JAVA_HOME>/lib     |                                |      |
-| `ExtensionClassLoader` | Java | <JAVA_HOME>/lib/ext |                                |      |
-| `AppClassLoader`       | Java | classpath/          | extends `ExtensionClassLoader` |      |
-| `User ClassLoader`     | Java | all                 | extends `AppClassLoader`       |      |
+### Delegation model
 
-
-
-
-
-### 双亲委派
-
-1. 防止重复加载 
-2. Java核心API不被篡改 
-重写loadClass方法绕过双亲委托
-3. 使用组合方式进行加载而非继承
-
-破坏双亲委托
-
-1. override loadClass(), not findClass()
-2. SPI机制, JDBC JNDI,use contextClassLoader(most be ApplicationClassLoader)
-3. hotswap, `OSGI`(`Open Service Gateway Initiative`) or Spring devtools RestartClassLoader
-4. since JDK9, module 
+The ClassLoader class uses a **delegation model** to search for classes and resources. **Each instance of ClassLoader has an associated parent class loader.** When requested to find a class or resource, a ClassLoader instance will delegate the search for the class or resource to its parent class loader before attempting to find the class or resource itself. The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent but may serve as the parent of a ClassLoader instance.
 
 
 
@@ -41,6 +25,151 @@
 4. 当虚拟机启动时，用户需要指定一个要执行的主类（包含 main()方法的那个类），虚拟机会先初始化这个主类。
 5. 当使用 JDK 1.7 的动态语言支持时，如果一个 java.lang.invoke.MethodHandle 实例最后的解析结果 REF_getStatic、REF_putStatic、REF_invokeStatic 的方法句柄，并且这个方法句柄所对应的类没有进行过初始化，则需要先触发其初始化。
 
+
+
+Parallel
+
+Class loaders that support concurrent loading of classes are known as parallel capable class loaders and are required to register themselves at their class initialization time by invoking the ClassLoader.registerAsParallelCapable method. Note that the ClassLoader class is registered as parallel capable by default. However, its subclasses still need to register themselves if they are parallel capable. In environments in which the delegation model is not strictly hierarchical, class loaders need to be parallel capable, otherwise class loading can lead to deadlocks because the loader lock is held for the duration of the class loading process (see loadClass methods).
+
+In environments in which the delegation model is not strictly hierarchical, class loaders need to be parallel capable, otherwise class loading can lead to deadlocks because the loader lock is held for the duration of the class loading process (see `loadClass` methods).
+
+
+
+Loads the class with the specified binary name. The default implementation of this method searches for classes in the following order:
+
+1. Invoke findLoadedClass(String) to check if the class has already been loaded.
+2. **Invoke the loadClass method on the parent class loader.** If the parent is null the class loader built-in to the virtual machine is used, instead.
+3. Invoke the findClass(String) method to find the class.
+
+If the class was found using the above steps, and the resolve flag is true, this method will then invoke the resolveClass(Class) method on the resulting Class object.
+Subclasses of ClassLoader are encouraged to override findClass(String), rather than this method.
+Unless overridden, this method synchronizes on the result of getClassLoadingLock method during the entire class loading process.
+
+```java
+protected Class<?> loadClass(String name, boolean resolve)
+    throws ClassNotFoundException
+{
+    synchronized (getClassLoadingLock(name)) {
+        // First, check if the class has already been loaded
+        Class<?> c = findLoadedClass(name);
+        if (c == null) {
+            long t0 = System.nanoTime();
+            try {
+                if (parent != null) {
+                    c = parent.loadClass(name, false);
+                } else {
+                    c = findBootstrapClassOrNull(name);
+                }
+            } catch (ClassNotFoundException e) {
+                // ClassNotFoundException thrown if class not found
+                // from the non-null parent class loader
+            }
+
+            if (c == null) {
+                // If still not found, then invoke findClass in order
+                // to find the class.
+                long t1 = System.nanoTime();
+                c = findClass(name);
+
+                // this is the defining class loader; record the stats
+                sun.misc.PerfCounter.getParentDelegationTime().addTime(t1 - t0);
+                sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
+                sun.misc.PerfCounter.getFindClasses().increment();
+            }
+        }
+        if (resolve) {
+            resolveClass(c);
+        }
+        return c;
+    }
+}
+```
+
+
+
+Returns the lock object for class loading operations. For backward compatibility, the default implementation of this method behaves as follows. 
+
+1. If this ClassLoader object is registered as parallel capable, the method returns a dedicated object associated with the specified class name. 
+2. Otherwise, the method returns this ClassLoader object.
+
+```java
+protected Object getClassLoadingLock(String className) {
+    Object lock = this;
+    if (parallelLockMap != null) {
+        Object newLock = new Object();
+        lock = parallelLockMap.putIfAbsent(className, newLock);
+        if (lock == null) {
+            lock = newLock;
+        }
+    }
+    return lock;
+}
+
+// Maps class name to the corresponding lock object when the current
+// class loader is parallel capable.
+// Note: VM also uses this field to decide if the current class loader
+// is parallel capable and the appropriate lock object for class loading.
+private final ConcurrentHashMap<String, Object> parallelLockMap;
+```
+
+
+
+#### Destroy delegate model
+
+1. override loadClass(), not findClass()
+2. SPI, JDBC JNDI,use contextClassLoader(most be ApplicationClassLoader)
+3. hotswap, `OSGI`(`Open Service Gateway Initiative`), Tomcat WebApplicationClassLoader or Spring devtools RestartClassLoader
+4. since JDK9, module 
+
+
+
+### load source
+
+Normally, the Java virtual machine loads classes from the local file system in a platform-dependent manner. For example, on UNIX systems, the virtual machine loads classes from the directory defined by the CLASSPATH environment variable.
+However, some classes may not originate from a file; they may originate from other sources, such as the network, or they could be constructed by an application. The method defineClass converts an array of bytes into an instance of class Class. Instances of this newly defined class can be created using Class.newInstance.
+The methods and constructors of objects created by a class loader may reference other classes. To determine the class(es) referred to, the Java virtual machine invokes the loadClass method of the class loader that originally created the class.
+
+For example, an application could create a network class loader to download class files from a server. Sample code might look like:
+
+```java
+     ClassLoader loader = new NetworkClassLoader(host, port);
+     Object main = loader.loadClass("Main", true).newInstance();
+          . . .
+```
+
+The network class loader subclass must define the methods findClass and loadClassData to load a class from the network. Once it has downloaded the bytes that make up the class, it should use the method defineClass to create a class instance. 
+A sample implementation is:
+
+```java
+       class NetworkClassLoader extends ClassLoader {
+           String host;
+           int port;
+
+           public Class findClass(String name) {
+               byte[] b = loadClassData(name);
+               return defineClass(name, b, 0, b.length);
+           }
+      
+           private byte[] loadClassData(String name) {
+               // load the class data from the connection
+                . . .
+           }
+       }
+```
+
+
+
+### User ClassLoader Sample
+
+Creates a new class loader using the ClassLoader returned by the method getSystemClassLoader() as the parent class loader.
+If there is a security manager, its checkCreateClassLoader method is invoked. This may result in a security exception.
+
+```java
+// ClassLoader
+protected ClassLoader() {
+    this(checkCreateClassLoader(), getSystemClassLoader());
+}
+```
 
 
 
