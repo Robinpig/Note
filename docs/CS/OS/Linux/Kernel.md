@@ -86,3 +86,16 @@ inode保存文件大小、创建时间、文件的块大小等参数，以及对
 文件对象用于描述进程和文件交互关系，进程打开文件即动态创建一个文件对象，不同进程中文件对象不同。每个进程指向一个文件描述符表，里面维护打开的文件描述符。
 
 挂载
+
+## Spurious wakeup
+
+A spurious wakeup happens when a thread wakes up from waiting on a condition variable that's been signaled, only to discover that the condition it was waiting for isn't satisfied. It's called spurious because the thread has seemingly been awakened for no reason. But spurious wakeups don't happen for no reason: 
+
+*they usually happen because, in between the time when the condition variable was signaled and when the waiting thread finally ran, another thread ran and changed the condition.* There was a race condition between the threads, with the typical result that sometimes, the thread waking up on the condition variable runs first, winning the race, and sometimes it runs second, losing the race.
+
+On many systems, especially multiprocessor systems, the problem of spurious wakeups is exacerbated because if there are several threads waiting on the condition variable when it's signaled, the system may decide to wake them all up, treating every signal( ) to wake one thread as a broadcast( ) to wake all of them, thus breaking any possibly expected 1:1 relationship between signals and wakeups. If there are ten threads waiting, only one will win and the other nine will experience spurious wakeups.
+
+To allow for implementation flexibility in dealing with error conditions and races inside the operating system, condition variables may also be allowed to return from a wait even if not signaled, though it is not clear how many implementations actually do that. In the Solaris implementation of condition variables, a spurious wakeup may occur without the condition being signaled if the process is signaled; the wait system call aborts and returns EINTR. The Linux pthread implementation of condition variables guarantees it will not do that.
+
+Because spurious wakeups can happen whenever there's a race and possibly even in the absence of a race or a signal, when a thread wakes on a condition variable, it should always check that the condition it sought is satisfied. If it's not, it should go back to sleeping on the condition variable, waiting for another opportunity.
+
