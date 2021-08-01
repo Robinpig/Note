@@ -654,6 +654,14 @@ public List<Object> getInterceptorsAndDynamicInterceptionAdvice(
 
 ## ProxyFactoryBean
 
+ProxyFactoryBean is a FactoryBean implementation that builds an AOP proxy based on beans in Spring BeanFactory.
+
+
+
+MethodInterceptors and Advisors are identified by a list of bean names in the current bean factory, specified through the "interceptorNames" property. The last entry in the list can be the name of a target bean or a TargetSource; however, it is normally preferable to use the "targetName"/"target"/"targetSource" properties instead.
+
+
+
 Return a proxy. Invoked when clients obtain beans from this factory bean. Create an instance of the AOP proxy to be returned by this factory. The instance will be cached for a singleton, and create on each call to getObject() for a proxy.
 
 ```java
