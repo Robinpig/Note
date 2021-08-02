@@ -482,6 +482,10 @@ class WebServerStartStopLifecycle implements SmartLifecycle {
 
 
 
+`org.springframework.boot.web.server.WebServer` is a simple interface that represents a fully configured web server (for example Tomcat, Jetty, Netty). Allows the server to be started and stopped.
+
+
+
 
 
 ### afterRefresh
