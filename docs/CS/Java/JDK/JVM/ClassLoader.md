@@ -2,12 +2,12 @@
 
 
 
-| ClassLoader            | Languages | Load path           | Parent                   |      |
-| ---------------------- | --------- | ------------------- | ------------------------ | ---- |
-| `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                          |      |
-| `ExtensionClassLoader` | Java      | <JAVA_HOME>/lib/ext | `BootstrapClassLoader`   |      |
-| `AppClassLoader`       | Java      | classpath/          | `ExtensionClassLoader`   |      |
-| `User ClassLoader`     | Java      | all                 | default `AppClassLoader` |      |
+| ClassLoader            | Languages | Load path           | Parent                   | JDK11                                                     |
+| ---------------------- | --------- | ------------------- | ------------------------ | --------------------------------------------------------- |
+| `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                          |                                                           |
+| `ExtensionClassLoader` | Java      | <JAVA_HOME>/lib/ext | `BootstrapClassLoader`   | rename to PlatformClassLoader, not extends URLClassLoader |
+| `AppClassLoader`       | Java      | classpath/          | `ExtensionClassLoader`   | not extends URLClassLoader                                |
+| `User ClassLoader`     | Java      | all                 | default `AppClassLoader` |                                                           |
 
 
 
@@ -27,7 +27,7 @@ The ClassLoader class uses a **delegation model** to search for classes and reso
 
 
 
-Parallel
+### Parallel
 
 Class loaders that support concurrent loading of classes are known as parallel capable class loaders and are required to register themselves at their class initialization time by invoking the ClassLoader.registerAsParallelCapable method. Note that the ClassLoader class is registered as parallel capable by default. However, its subclasses still need to register themselves if they are parallel capable. In environments in which the delegation model is not strictly hierarchical, class loaders need to be parallel capable, otherwise class loading can lead to deadlocks because the loader lock is held for the duration of the class loading process (see loadClass methods).
 
@@ -89,8 +89,8 @@ protected Class<?> loadClass(String name, boolean resolve)
 
 Returns the lock object for class loading operations. For backward compatibility, the default implementation of this method behaves as follows. 
 
-1. If this ClassLoader object is registered as parallel capable, the method returns a dedicated object associated with the specified class name. 
-2. Otherwise, the method returns this ClassLoader object.
+1. If this ClassLoader object is registered as parallel capable, the method returns **a dedicated object associated with the specified class name**. 
+2. Otherwise, the method returns **this ClassLoader object**.
 
 ```java
 protected Object getClassLoadingLock(String className) {
@@ -171,11 +171,20 @@ protected ClassLoader() {
 }
 ```
 
+```shell
+-XX:+TraceClassLoading
+-Xlog: class+load=info # JDK11
+```
+
+
+
 
 
 
 
 ## Load Class
+
+![Screen Shot 2021-08-03 at 7.24.58 AM](/Users/robin/Desktop/Screen Shot 2021-08-03 at 7.24.58 AM.png)
 
 ClassLoader::load_class();
 
@@ -649,8 +658,17 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
 
 InstanceKlass::link_class_impl()
 
+classfile/rewriter.cpp 
 
-classfile/rewriter.cpp
+#### rewrite
+
+_return
+
+_lookupswitch
+
+
+
+
 
 
 #### Verification
@@ -686,6 +704,10 @@ prepare the memory in method area
 
 ### Initialization
 
+*Initialization* of a class or interface consists of executing its class or interface initialization method
+
+
+
 init when use `putstatic`,`getstatic`,`new`,`invokestatic`
 
 InstanceKlass::Initialize_impl()
@@ -697,5 +719,11 @@ InstanceKlass::Initialize_impl()
 
 
 ### Unloading
+
+```shell
+-XX:+ClassUnloading # default true
+```
+
+
 
 use ClassLoaderDataGraph::classed_do can iterate all loaded class when GC
