@@ -41,6 +41,14 @@ Todo benchmark
 
 
 
+### Method
+
+java.lang.Class.getMethods don't keep the order of methods
+
+because they are sorted by memory not name for improve performance
+
+
+
 
 
 ## Proxy
@@ -346,3 +354,9 @@ public Class<?> apply(ClassLoader loader, Class<?>[] interfaces) {
     }
 }
 ```
+
+
+
+## Reference
+
+1. [JVM源码分析之不保证顺序的Class.getMethods](http://lovestblog.cn/blog/2016/11/02/class-getmethods/)
