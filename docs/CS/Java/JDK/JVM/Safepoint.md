@@ -1,4 +1,6 @@
-#  safepoint
+## Introduction
+
+
 
 Main thread will print the num util sub thread ends, not after 1000ms we expected.
 
@@ -29,8 +31,9 @@ public static void main(String[] args) throws Throwable {
 
 ## PrintStatistics
 
-```
--XX:+PrintSafepointStatistics  -XX:PrintSafepointStatisticsCount=1
+```shell
+-XX:+PrintSafepointStatistics  -XX:PrintSafepointStatisticsCount = 1
+logsafepoint=debug # JDK11
 ```
 
 > Task :MainTest.main()
@@ -373,6 +376,8 @@ StubQueue::StubQueue(StubInterface* stub_interface, int buffer_size,
 }
 ```
 
+##### string/symbol table rehash
+
 
 
 #### SafepointSynchronize::begin
@@ -493,6 +498,49 @@ void SafepointSynchronize::end() {
   }
 }
 ```
+
+
+
+## Thread
+
+### in vm
+
+operation must be done than goto safepoint
+
+
+
+### in native
+
+Default be in safepoint
+
+
+
+### in java-interpreter
+
+Dispatch table
+
+1. normal table
+2. Safest table
+
+swtich dispatch table
+
+
+
+### in Java-JIT
+
+
+
+Polling page
+
+
+
+Thread local handkerchief 
+
+
+
+ 
+
+
 
 ## Reference
 

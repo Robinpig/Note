@@ -1,4 +1,4 @@
-# Tools
+## Introduction
 
 
 
@@ -65,3 +65,32 @@ jstack process_id  == jcmd process_id Thread.print
 
 ## JFR
 
+
+
+## jstat
+
+```shell
+> jstat -options # openjdk15
+-class
+-compiler
+-gc
+-gccapacity
+-gccause
+-gcmetacapacity
+-gcnew
+-gcnewcapacity
+-gcold
+-gcoldcapacity
+-gcutil
+-printcompilation
+```
+
+jstat_options file
+
+### PerfData
+
+
+
+## Reference
+
+1. [JVM源码分析之Jstat工具原理完全解读](https://lovestblog.cn/blog/2016/07/20/jstat/)
