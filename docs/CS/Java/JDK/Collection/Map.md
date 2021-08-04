@@ -21,6 +21,8 @@
 
 ## HashMap
 
+
+
 ### Introduction
 
 ```java
@@ -30,9 +32,12 @@ public class HashMap<K,V> extends AbstractMap<K,V>
 ```
 
 
-### Inner Class
 
-#### Node
+### Node
+
+**Why we need TreeNode?**
+
+O(n) -> O(logN)
 
 A class implements Map.Entry<K,V> and override hashCode and equals methods.
 
@@ -61,9 +66,7 @@ static class Node<K,V> implements Map.Entry<K,V> {
 
 
 
-
-
-#### TreeNode
+TreeNode
 
 JEP-180
 
@@ -234,7 +237,8 @@ final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
 
 
 ```java
- public V put(K key, V value) {
+// JDK1.8 
+public V put(K key, V value) {
    	//1. hash(key)
      return putVal(hash(key), key, value, false, true); 
  }  
@@ -242,7 +246,7 @@ final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
   final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                    boolean evict) {
     Node<K,V>[] tab; Node<K,V> p; int n, i;
-    // 2. table未初始化或者长度为0，resize
+    // 2. resize at first put
     if ((tab = table) == null || (n = tab.length) == 0)
         n = (tab = resize()).length;
     //3. empty bin, add newNode
@@ -299,6 +303,14 @@ final void putMapEntries(Map<? extends K, ? extends V> m, boolean evict) {
 
 ![put](../images/HashMap-put.png)
 
+
+
+JDK1.7 resize then insert
+
+JDK1.8 insert then resize
+
+
+
 ### hash
 
 HashMap 通过 key 的 hashCode 经过扰动函数处理过后得到 hash 值，数据分配的更加均匀
@@ -318,6 +330,7 @@ static final int hash(Object key) {
 check (e.hash & oldCap) == 0
 
 ```java
+// JDK1.8
 final Node<K,V>[] resize() {
     Node<K,V>[] oldTab = table;
     int oldCap = (oldTab == null) ? 0 : oldTab.length;
@@ -697,9 +710,30 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
 }
 ```
 
-### put
+**All arguments to all task methods must be non-null.**
+
+
 
 ```java
+public ConcurrentHashMap(int initialCapacity) {
+    if (initialCapacity < 0)
+        throw new IllegalArgumentException();
+    int cap = ((initialCapacity >= (MAXIMUM_CAPACITY >>> 1)) ?
+               MAXIMUM_CAPACITY :
+               tableSizeFor(initialCapacity + (initialCapacity >>> 1) + 1));
+    this.sizeCtl = cap;
+}
+```
+
+
+
+### put
+
+1. Empty bin use CAS add
+2. else synchronized first node
+
+```java
+// JDk1.8
 public V put(K key, V value) {
     return putVal(key, value, false);
 }
@@ -782,6 +816,37 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
 
 
 
+1. use [Thread.yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield) to spin
+2. CAS set sizeCtl = -1
+
+```java
+// Initializes table, using the size recorded in sizeCtl.
+private final Node<K,V>[] initTable() {
+    Node<K,V>[] tab; int sc;
+    while ((tab = table) == null || tab.length == 0) {
+        if ((sc = sizeCtl) < 0)
+            Thread.yield(); // lost initialization race; just spin
+        else if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {
+            try {
+                if ((tab = table) == null || tab.length == 0) {
+                    int n = (sc > 0) ? sc : DEFAULT_CAPACITY;
+                    @SuppressWarnings("unchecked")
+                    Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n];
+                    table = tab = nt;
+                    sc = n - (n >>> 2);
+                }
+            } finally {
+                sizeCtl = sc;
+            }
+            break;
+        }
+    }
+    return tab;
+}
+```
+
+
+
 **spread**
 
 like `HashMap::hash`
@@ -807,42 +872,30 @@ static final <K,V> boolean casTabAt(Node<K,V>[] tab, int i,
 
 
 
-*1st Node not null, `synchronized` it*
-
-往ConcurrentHashMap中插入新的键值对时，如果对应的数组下标元素不为null，那么会对数组下标存储的元素(也就是链表的头节点)加synchronized锁， 然后进行插入操作，
+### treeifyBin
 
 ```java
-Node<K,V> f = tabAt(tab, i = (n - 1) & hash));
-synchronized (f) {//f就是数组下标存储的元素
-    if (tabAt(tab, i) == f) {
-        if (fh >= 0) {//当前下标存的是链表
-            binCount = 1;
-            for (Node<K,V> e = f;; ++binCount) {//遍历链表
-                K ek;
-                if (e.hash == hash &&
-                    ((ek = e.key) == key ||
-                     (ek != null && key.equals(ek)))) {
-                    oldVal = e.val;
-                    if (!onlyIfAbsent)
-                        e.val = value;
-                    break;
+private final void treeifyBin(Node<K,V>[] tab, int index) {
+    Node<K,V> b; int n, sc;
+    if (tab != null) {
+        if ((n = tab.length) < MIN_TREEIFY_CAPACITY)
+            tryPresize(n << 1);
+        else if ((b = tabAt(tab, index)) != null && b.hash >= 0) {
+            synchronized (b) {
+                if (tabAt(tab, index) == b) {
+                    TreeNode<K,V> hd = null, tl = null;
+                    for (Node<K,V> e = b; e != null; e = e.next) {
+                        TreeNode<K,V> p =
+                            new TreeNode<K,V>(e.hash, e.key, e.val,
+                                              null, null);
+                        if ((p.prev = tl) == null)
+                            hd = p;
+                        else
+                            tl.next = p;
+                        tl = p;
+                    }
+                    setTabAt(tab, index, new TreeBin<K,V>(hd));
                 }
-                Node<K,V> pred = e;
-                if ((e = e.next) == null) {
-                    pred.next = new Node<K,V>(hash, key,
-                                              value, null);
-                    break;
-                }
-            }
-        }
-        else if (f instanceof TreeBin) {//当前下标存的是红黑树
-            Node<K,V> p;
-            binCount = 2;
-            if ((p = ((TreeBin<K,V>)f).putTreeVal(hash, key,
-                                           value)) != null) {
-                oldVal = p.val;
-                if (!onlyIfAbsent)
-                    p.val = value;
             }
         }
     }
@@ -851,7 +904,215 @@ synchronized (f) {//f就是数组下标存储的元素
 
 
 
-#### size
+```java
+private final void tryPresize(int size) {
+    int c = (size >= (MAXIMUM_CAPACITY >>> 1)) ? MAXIMUM_CAPACITY :
+        tableSizeFor(size + (size >>> 1) + 1);
+    int sc;
+    while ((sc = sizeCtl) >= 0) {
+        Node<K,V>[] tab = table; int n;
+        if (tab == null || (n = tab.length) == 0) {
+            n = (sc > c) ? sc : c;
+            if (U.compareAndSwapInt(this, SIZECTL, sc, -1)) {
+                try {
+                    if (table == tab) {
+                        @SuppressWarnings("unchecked")
+                        Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n];
+                        table = nt;
+                        sc = n - (n >>> 2);
+                    }
+                } finally {
+                    sizeCtl = sc;
+                }
+            }
+        }
+        else if (c <= sc || n >= MAXIMUM_CAPACITY)
+            break;
+        else if (tab == table) {
+            int rs = resizeStamp(n);
+            if (sc < 0) {
+                Node<K,V>[] nt;
+                if ((sc >>> RESIZE_STAMP_SHIFT) != rs || sc == rs + 1 ||
+                    sc == rs + MAX_RESIZERS || (nt = nextTable) == null ||
+                    transferIndex <= 0)
+                    break;
+                if (U.compareAndSwapInt(this, SIZECTL, sc, sc + 1)) //set sizeCtl + 1 
+                    transfer(tab, nt);
+            }
+            else if (U.compareAndSwapInt(this, SIZECTL, sc,
+                                         (rs << RESIZE_STAMP_SHIFT) + 2))
+                transfer(tab, null);
+        }
+    }
+}
+```
+
+### transfer
+
+```java
+private final void transfer(Node<K,V>[] tab, Node<K,V>[] nextTab) {
+    int n = tab.length, stride;
+    if ((stride = (NCPU > 1) ? (n >>> 3) / NCPU : n) < MIN_TRANSFER_STRIDE)
+        stride = MIN_TRANSFER_STRIDE; // subdivide range
+    if (nextTab == null) {            // initiating
+        try {
+            @SuppressWarnings("unchecked")
+            Node<K,V>[] nt = (Node<K,V>[])new Node<?,?>[n << 1];
+            nextTab = nt;
+        } catch (Throwable ex) {      // try to cope with OOME
+            sizeCtl = Integer.MAX_VALUE;
+            return;
+        }
+        nextTable = nextTab;
+        transferIndex = n;
+    }
+    int nextn = nextTab.length;
+    ForwardingNode<K,V> fwd = new ForwardingNode<K,V>(nextTab);
+    boolean advance = true;
+    boolean finishing = false; // to ensure sweep before committing nextTab
+    for (int i = 0, bound = 0;;) {
+        Node<K,V> f; int fh;
+        while (advance) {
+            int nextIndex, nextBound;
+            if (--i >= bound || finishing)
+                advance = false;
+            else if ((nextIndex = transferIndex) <= 0) {
+                i = -1;
+                advance = false;
+            }
+            else if (U.compareAndSwapInt
+                     (this, TRANSFERINDEX, nextIndex,
+                      nextBound = (nextIndex > stride ?
+                                   nextIndex - stride : 0))) {
+                bound = nextBound;
+                i = nextIndex - 1;
+                advance = false;
+            }
+        }
+        if (i < 0 || i >= n || i + n >= nextn) {
+            int sc;
+            if (finishing) {
+                nextTable = null;
+                table = nextTab;
+                sizeCtl = (n << 1) - (n >>> 1);
+                return;
+            }
+            if (U.compareAndSwapInt(this, SIZECTL, sc = sizeCtl, sc - 1)) {
+                if ((sc - 2) != resizeStamp(n) << RESIZE_STAMP_SHIFT)
+                    return;
+                finishing = advance = true;
+                i = n; // recheck before commit
+            }
+        }
+        else if ((f = tabAt(tab, i)) == null)
+            advance = casTabAt(tab, i, null, fwd);
+        else if ((fh = f.hash) == MOVED)
+            advance = true; // already processed
+        else {
+            synchronized (f) {
+                if (tabAt(tab, i) == f) {
+                    Node<K,V> ln, hn;
+                    if (fh >= 0) {
+                        int runBit = fh & n;
+                        Node<K,V> lastRun = f;
+                        for (Node<K,V> p = f.next; p != null; p = p.next) {
+                            int b = p.hash & n;
+                            if (b != runBit) {
+                                runBit = b;
+                                lastRun = p;
+                            }
+                        }
+                        if (runBit == 0) {
+                            ln = lastRun;
+                            hn = null;
+                        }
+                        else {
+                            hn = lastRun;
+                            ln = null;
+                        }
+                        for (Node<K,V> p = f; p != lastRun; p = p.next) {
+                            int ph = p.hash; K pk = p.key; V pv = p.val;
+                            if ((ph & n) == 0)
+                                ln = new Node<K,V>(ph, pk, pv, ln);
+                            else
+                                hn = new Node<K,V>(ph, pk, pv, hn);
+                        }
+                        setTabAt(nextTab, i, ln);
+                        setTabAt(nextTab, i + n, hn);
+                        setTabAt(tab, i, fwd);
+                        advance = true;
+                    }
+                    else if (f instanceof TreeBin) {
+                        TreeBin<K,V> t = (TreeBin<K,V>)f;
+                        TreeNode<K,V> lo = null, loTail = null;
+                        TreeNode<K,V> hi = null, hiTail = null;
+                        int lc = 0, hc = 0;
+                        for (Node<K,V> e = t.first; e != null; e = e.next) {
+                            int h = e.hash;
+                            TreeNode<K,V> p = new TreeNode<K,V>
+                                (h, e.key, e.val, null, null);
+                            if ((h & n) == 0) {
+                                if ((p.prev = loTail) == null)
+                                    lo = p;
+                                else
+                                    loTail.next = p;
+                                loTail = p;
+                                ++lc;
+                            }
+                            else {
+                                if ((p.prev = hiTail) == null)
+                                    hi = p;
+                                else
+                                    hiTail.next = p;
+                                hiTail = p;
+                                ++hc;
+                            }
+                        }
+                        ln = (lc <= UNTREEIFY_THRESHOLD) ? untreeify(lo) :
+                            (hc != 0) ? new TreeBin<K,V>(lo) : t;
+                        hn = (hc <= UNTREEIFY_THRESHOLD) ? untreeify(hi) :
+                            (lc != 0) ? new TreeBin<K,V>(hi) : t;
+                        setTabAt(nextTab, i, ln);
+                        setTabAt(nextTab, i + n, hn);
+                        setTabAt(tab, i, fwd);
+                        advance = true;
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+
+
+### get
+
+```java
+public V get(Object key) {
+    Node<K,V>[] tab; Node<K,V> e, p; int n, eh; K ek;
+    int h = spread(key.hashCode());
+    if ((tab = table) != null && (n = tab.length) > 0 &&
+        (e = tabAt(tab, (n - 1) & h)) != null) {
+        if ((eh = e.hash) == h) { // check header
+            if ((ek = e.key) == key || (ek != null && key.equals(ek)))
+                return e.val;
+        }
+        else if (eh < 0) // in resize or tree
+            return (p = e.find(h, key)) != null ? p.val : null;
+        while ((e = e.next) != null) { 
+            if (e.hash == h &&
+                ((ek = e.key) == key || (ek != null && key.equals(ek))))
+                return e.val;
+        }
+    }
+    return null;
+}
+```
+
+
+
+### size
 
 ```java
 public int size() {
