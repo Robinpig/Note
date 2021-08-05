@@ -13,47 +13,28 @@
 ```java
 public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparable<Channel> {
 
-    /**
-     * Returns the globally unique identifier of this {@link Channel}.
-     */
+    // Returns the globally unique identifier of this {@link Channel}.
     ChannelId id();
 
-    /**
-     * Return the {@link EventLoop} this {@link Channel} was registered to.
-     */
+    // Return the {@link EventLoop} this {@link Channel} was registered to.
     EventLoop eventLoop();
 
-    /**
-     * Returns the parent of this channel.
-     *
-     * @return the parent channel.
-     *         {@code null} if this channel does not have a parent channel.
-     */
+    // Returns the parent of this channel.
     Channel parent();
 
-    /**
-     * Returns the configuration of this channel.
-     */
+    // Returns the configuration of this channel.
     ChannelConfig config();
 
-    /**
-     * Returns {@code true} if the {@link Channel} is open and may get active later
-     */
+    // Returns {@code true} if the {@link Channel} is open and may get active later
     boolean isOpen();
 
-    /**
-     * Returns {@code true} if the {@link Channel} is registered with an {@link EventLoop}.
-     */
+    // Returns {@code true} if the {@link Channel} is registered with an {@link EventLoop}.
     boolean isRegistered();
 
-    /**
-     * Return {@code true} if the {@link Channel} is active and so connected.
-     */
+    // Return {@code true} if the {@link Channel} is active and so connected.
     boolean isActive();
 
-    /**
-     * Return the {@link ChannelMetadata} of the {@link Channel} which describe the nature of the {@link Channel}.
-     */
+    // Return the {@link ChannelMetadata} of the {@link Channel} which describe the nature of the {@link Channel}.
     ChannelMetadata metadata();
 
     /**
@@ -98,19 +79,13 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      */
     long bytesBeforeWritable();
 
-    /**
-     * Returns an <em>internal-use-only</em> object that provides unsafe operations.
-     */
+    // Returns an <em>internal-use-only</em> object that provides unsafe operations.
     Unsafe unsafe();
 
-    /**
-     * Return the assigned {@link ChannelPipeline}.
-     */
+    // Return the assigned {@link ChannelPipeline}.
     ChannelPipeline pipeline();
 
-    /**
-     * Return the assigned {@link ByteBufAllocator} which will be used to allocate {@link ByteBuf}s.
-     */
+    // Return the assigned {@link ByteBufAllocator} which will be used to allocate {@link ByteBuf}s.
     ByteBufAllocator alloc();
 
     @Override
@@ -120,6 +95,22 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
     Channel flush();
 
     
+}
+```
+
+
+
+
+
+#### isWritable
+
+See `WriteBufferWaterMark`
+
+```java
+@Override
+public boolean isWritable() {
+    ChannelOutboundBuffer buf = unsafe.outboundBuffer();
+    return buf != null && buf.isWritable();
 }
 ```
 
@@ -145,16 +136,10 @@ interface Unsafe {
      */
     RecvByteBufAllocator.Handle recvBufAllocHandle();
 
-    /**
-     * Return the {@link SocketAddress} to which is bound local or
-     * {@code null} if none.
-     */
+    // Return the {@link SocketAddress} to which is bound local or null if none.
     SocketAddress localAddress();
 
-    /**
-     * Return the {@link SocketAddress} to which is bound remote or
-     * {@code null} if none is bound yet.
-     */
+    // Return the {@link SocketAddress} to which is bound remote or null if none is bound yet.
     SocketAddress remoteAddress();
 
     /**
@@ -163,10 +148,7 @@ interface Unsafe {
      */
     void register(EventLoop eventLoop, ChannelPromise promise);
 
-    /**
-     * Bind the {@link SocketAddress} to the {@link Channel} of the {@link ChannelPromise} and notify
-     * it once its done.
-     */
+    // Bind the SocketAddress to the {@link Channel} of the ChannelPromise and notify it once its done.
     void bind(SocketAddress localAddress, ChannelPromise promise);
 
     /**
@@ -208,9 +190,7 @@ interface Unsafe {
      */
     void beginRead();
 
-    /**
-     * Schedules a write operation.
-     */
+    // Schedules a write operation.
     void write(Object msg, ChannelPromise promise);
 
     /**
@@ -232,9 +212,9 @@ interface Unsafe {
 }
 ```
 
-### AbstractChannel$AbstracrUnsafe#register()
+### register
 
-submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Java/Netty/Eventloop.md?id=nioeventloopexecute).
+submit a Runnable of `register0` to [EventLoop](/docs/CS/Java/Netty/Eventloop.md?id=execute).
 
 ```java
 //AbstractChannel$AbstracrUnsafe#register()
@@ -254,9 +234,6 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
                 }
             });
         } catch (Throwable t) {
-            logger.warn(
-                    "Force-closing a channel whose registration task was not accepted by an event loop: {}",
-                    AbstractChannel.this, t);
             closeForcibly();
             closeFuture.setClosed();
             safeSetFailure(promise, t);
@@ -265,13 +242,15 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 }
 ```
 
-**AbstractChannel$AbstracrUnsafe#register0** execute follow methods:
+**AbstractChannel$AbstracrUnsafe#register0** execute below methods:
 
-1. ChannelPipeline#invokeHandlerAddedIfNeeded()
-2. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/Channel.md?id=channelpipelinefirechannelactive-)
-3. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/Channel.md?id=abstractchannelbeginread-)
+1. `doRegister()` by [java.nio.channels.SelectableChannel]() to EventLoop
+2. `ChannelPipeline#invokeHandlerAddedIfNeeded()` ensure we call `handlerAdded()` before we actually notify the promise
+3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/ChannelHandler.md?id=firechannelactive)
+4. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/ChannelHandler.md?id=beginread) or fireChannelActive if active
 
 ```java
+// AbstractChannel$AbstracrUnsafe
 private void register0(ChannelPromise promise) {
     try {
         // check if the channel is still open as it could be closed in the mean time when the register
@@ -314,7 +293,7 @@ private void register0(ChannelPromise promise) {
 
 
 
-### close( )
+### close
 
 ```java
 @Override
@@ -422,9 +401,9 @@ protected void doClose() throws Exception {
 
 
 
+### beginRead
 
-
-### AbstractChannel#beginRead( )
+call `SelectionKey.interestOps()`
 
 ```java
 @Override
@@ -466,3 +445,176 @@ protected void doBeginRead() throws Exception {
 ```
 
 
+
+
+
+### finishConnect 
+
+call ChannelInboundHandler#channelActive() in `fulfillConnectPromise`
+
+```java
+// AbstractNioChannel$AbstractNioUnsafe
+@Override
+public final void finishConnect() {
+    // Note this method is invoked by the event loop only if the connection attempt was
+    // neither cancelled nor timed out.
+
+    assert eventLoop().inEventLoop();
+
+    try {
+        boolean wasActive = isActive();
+        doFinishConnect();
+        fulfillConnectPromise(connectPromise, wasActive);
+    } catch (Throwable t) {
+        fulfillConnectPromise(connectPromise, annotateConnectException(t, requestedRemoteAddress));
+    } finally {
+        // Check for null as the connectTimeoutFuture is only created if a connectTimeoutMillis > 0 is used
+        // See https://github.com/netty/netty/issues/1770
+        if (connectTimeoutFuture != null) {
+            connectTimeoutFuture.cancel(false);
+        }
+        connectPromise = null;
+    }
+}
+
+// call ChannelInboundHandler#channelActive()
+private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
+  if (promise == null) {
+    // Closed via cancellation and the promise has been notified already.
+    return;
+  }
+
+  // Get the state as trySuccess() may trigger an ChannelFutureListener that will close the Channel.
+  // We still need to ensure we call fireChannelActive() in this case.
+  boolean active = isActive();
+
+  // trySuccess() will return false if a user cancelled the connection attempt.
+  boolean promiseSet = promise.trySuccess();
+
+  // Regardless if the connection attempt was cancelled, channelActive() event should be triggered,
+  // because what happened is what happened.
+  if (!wasActive && active) {
+    pipeline().fireChannelActive();
+  }
+
+  // If a user cancelled the connection attempt, close the channel, which is followed by channelInactive().
+  if (!promiseSet) {
+    close(voidPromise());
+  }
+}
+```
+
+## 
+
+
+
+## ChannelConfig
+
+- A set of configuration properties of a [`Channel`](https://netty.io/4.1/api/io/netty/channel/Channel.html).
+
+  Please down-cast to more specific configuration type such as [`SocketChannelConfig`](https://netty.io/4.1/api/io/netty/channel/socket/SocketChannelConfig.html) or use [`setOptions(Map)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setOptions-java.util.Map-) to set the transport-specific properties:
+
+  ```java
+   Channel ch = ...;
+   SocketChannelConfig cfg = (SocketChannelConfig) ch.getConfig();
+   cfg.setTcpNoDelay(false);
+   
+  ```
+
+  ### Option map
+
+  An option map property is a dynamic write-only property which allows the configuration of a [`Channel`](https://netty.io/4.1/api/io/netty/channel/Channel.html) without down-casting its associated [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html). To update an option map, please call [`setOptions(Map)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setOptions-java.util.Map-).
+
+  All [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html) has the following options:
+
+  | Name                                                         | Associated setter method                                     |
+  | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | [`ChannelOption.CONNECT_TIMEOUT_MILLIS`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#CONNECT_TIMEOUT_MILLIS) | [`setConnectTimeoutMillis(int)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setConnectTimeoutMillis-int-) |
+  | [`ChannelOption.WRITE_SPIN_COUNT`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#WRITE_SPIN_COUNT) | [`setWriteSpinCount(int)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setWriteSpinCount-int-) |
+  | [`ChannelOption.WRITE_BUFFER_WATER_MARK`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#WRITE_BUFFER_WATER_MARK) | [`setWriteBufferWaterMark(WriteBufferWaterMark)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setWriteBufferWaterMark-io.netty.channel.WriteBufferWaterMark-) |
+  | [`ChannelOption.ALLOCATOR`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#ALLOCATOR) | [`setAllocator(ByteBufAllocator)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setAllocator-io.netty.buffer.ByteBufAllocator-) |
+  | [`ChannelOption.AUTO_READ`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#AUTO_READ) | [`setAutoRead(boolean)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setAutoRead-boolean-) |
+
+  More options are available in the sub-types of [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html). For example, you can configure the parameters which are specific to a TCP/IP socket as explained in [`SocketChannelConfig`](https://netty.io/4.1/api/io/netty/channel/socket/SocketChannelConfig.html).
+
+
+
+
+
+**Deprecated.** *Use [`MaxMessagesRecvByteBufAllocator`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html) and [`MaxMessagesRecvByteBufAllocator.maxMessagesPerRead()`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html#maxMessagesPerRead--).*
+
+*Returns the maximum number of messages to read per read loop. a* [`channelRead()`](https://netty.io/4.1/api/io/netty/channel/ChannelInboundHandler.html#channelRead-io.netty.channel.ChannelHandlerContext-java.lang.Object-) *event. If this value is greater than 1, an event loop might attempt to read multiple times to procure multiple messages.*
+
+```java
+@Deprecated
+int getMaxMessagesPerRead();
+
+@Deprecated
+ChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead);
+```
+
+
+
+Returns the maximum loop count for a write operation until [`WritableByteChannel.write(ByteBuffer)`](https://docs.oracle.com/javase/8/docs/api/java/nio/channels/WritableByteChannel.html?is-external=true#write-java.nio.ByteBuffer-) returns a non-zero value. It is similar to what a spin lock is used for in concurrency programming. It improves memory utilization and write throughput depending on the platform that JVM runs on. The default value is **`16`**.
+
+```java
+int getWriteSpinCount();
+```
+
+
+
+### WriteBufferWaterMark
+
+WriteBufferWaterMark is used to set low water mark and high water mark for the write buffer.
+
+1. If the number of bytes queued in the write buffer exceeds the high water mark, Channel.isWritable() will start to return false.
+2. If the number of bytes queued in the write buffer **exceeds the high water mark and then dropped down below the low water mark**, Channel.isWritable() will start to return true again.
+
+```java
+public final class WriteBufferWaterMark {
+
+    private static final int DEFAULT_LOW_WATER_MARK = 32 * 1024;
+    private static final int DEFAULT_HIGH_WATER_MARK = 64 * 1024;
+
+    public static final WriteBufferWaterMark DEFAULT =
+            new WriteBufferWaterMark(DEFAULT_LOW_WATER_MARK, DEFAULT_HIGH_WATER_MARK, false);
+}
+```
+
+
+
+## ChannelOption
+
+A [`ChannelOption`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html) allows to configure a [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html) in a type-safe way. Which [`ChannelOption`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html) is supported depends on the actual implementation of [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html) and may depend on the nature of the transport it belongs to.
+
+
+
+
+
+option是Netty为我们提供的配置选项，它包含但不限于；ChannelOption.SO_BACKLOG、ChannelOption.SO_TIMEOUT、ChannelOption.TCP_NODELAY等，option并不是非的配置，如果不配置也是可以正常启动的。
+
+ChannelOption.SO_BACKLOG
+
+ ChannelOption.SO_BACKLOG对应的是tcp/ip协议listen函数中的backlog参数，函数listen(int socketfd,int backlog)用来初始化服务端可连接队列，服务端处理客户端连接请求是顺序处理的，所以同一时间只能处理一个客户端连接，多个客户端来的时候，服务端将不能处理的客户端连接请求放在队列中等待处理，backlog参数指定了队列的大小
+
+ChannelOption.SO_REUSEADDR 
+
+ChanneOption.SO_REUSEADDR对应于套接字选项中的SO_REUSEADDR，这个参数表示允许重复使用本地地址和端口， 比如，某个服务器进程占用了TCP的80端口进行监听，此时再次监听该端口就会返回错误，使用该参数就可以解决问题，该参数允许共用该端口，这个在服务器程序中比较常使用， 比如某个进程非正常退出，该程序占用的端口可能要被占用一段时间才能允许其他进程使用，而且程序死掉以后，内核一需要一定的时间才能够释放此端口，不设置SO_REUSEADDR就无法正常使用该端口。
+
+ChannelOption.SO_KEEPALIVE 
+
+Channeloption.SO_KEEPALIVE参数对应于套接字选项中的SO_KEEPALIVE，该参数用于设置TCP连接，当设置该选项以后，连接会测试链接的状态，这个选项用于可能长时间没有数据交流的连接。当设置该选项以后，如果在两小时内没有数据的通信时，TCP会自动发送一个活动探测数据报文。
+
+ChannelOption.SO_SNDBUF和ChannelOption.SO_RCVBUF ChannelOption.SO_SNDBUF参数对应于套接字选项中的SO_SNDBUF，ChannelOption.SO_RCVBUF参数对应于套接字选项中的SO_RCVBUF这两个参数用于操作接收缓冲区和发送缓冲区的大小，接收缓冲区用于保存网络协议站内收到的数据，直到应用程序读取成功，发送缓冲区用于保存发送数据，直到发送成功。
+
+ChannelOption.SO_LINGER
+
+ ChannelOption.SO_LINGER参数对应于套接字选项中的SO_LINGER,Linux内核默认的处理方式是当用户调用close（）方法的时候，函数返回，在可能的情况下，尽量发送数据，不一定保证会发生剩余的数据，造成了数据的不确定性，使用SO_LINGER可以阻塞close()的调用时间，直到数据完全发送
+
+ChannelOption.TCP_NODELAY
+
+ ChannelOption.TCP_NODELAY参数对应于套接字选项中的TCP_NODELAY,该参数的使用与Nagle算法有关,Nagle算法是将小的数据包组装为更大的帧然后进行发送，而不是输入一次发送一次,因此在数据包不足的时候会等待其他数据的到了，组装成大的数据包进行发送，虽然该方式有效提高网络的有效负载，但是却造成了延时，而该参数的作用就是禁止使用Nagle算法，使用于小数据即时传输，于TCP_NODELAY相对应的是TCP_CORK，该选项是需要等到发送的数据量最大的时候，一次性发送数据，适用于文件传输。
+
+IP_TOS IP参数，设置IP头部的Type-of-Service字段，用于描述IP包的优先级和QoS选项。
+
+ALLOW_HALF_CLOSURE Netty参数，一个连接的远端关闭时本地端是否关闭，默认值为False。值为False时，连接自动关闭；为True时，触发ChannelInboundHandler的userEventTriggered()方法，事件为ChannelInputShutdownEvent。

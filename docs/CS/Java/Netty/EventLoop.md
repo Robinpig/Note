@@ -757,9 +757,10 @@ private boolean needsToSelectAgain;
 
 
 
-#### NioEventLoop#openSelector()
+#### openSelector
 
 ```java
+// NioEventLoop
 private SelectorTuple openSelector() {
     final Selector unwrappedSelector;
     try {
@@ -876,7 +877,7 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
 
 
-## execute()
+## execute
 startThread when execute first task
 
 ```java
@@ -917,7 +918,7 @@ private void execute(Runnable task, boolean immediate) {
 
 
 
-### startThread()
+### startThread
 
 `EventLoop.run() in for(;;) `
 
@@ -998,7 +999,9 @@ private void doStartThread() {
 
 
 
-### run( ) 
+### run
+
+call [processSelectedKeys](/docs/CS/Java/Netty/EventLoop.md?id=processSelectedKey)
 
 ```java
 // NioEventLoop
@@ -1110,9 +1113,7 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
     SelectedSelectionKeySet() {
         keys = new SelectionKey[1024];
     }
-/**
- * override add() iterator()
- */
+}
 ```
 
 
@@ -1190,7 +1191,11 @@ private void select(boolean oldWakenUp) throws IOException {
 
 
 
-#### processSelectedKeys( )
+#### processSelectedKey
+
+
+
+call [Channel#finishConnect()](/docs/CS/Java/Netty/Channel.md?id=finishConnect)
 
 ```java
 private void processSelectedKeys() {
@@ -1228,7 +1233,16 @@ private void processSelectedKeysOptimized() {
         }
     }
 }
+```
 
+In a serial loop, so it's not for upload file
+1. OP_CONNECT
+2. OP_WRITE
+3. read
+
+
+
+```java
 private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
     final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
     if (!k.isValid()) {
@@ -1284,7 +1298,14 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 }
 ```
 
-#### NioByteUnsafe#read( )
+
+
+#### read
+call NioByteUnsafe#read( )
+
+get [ByteBufAllocator]()
+
+
 
 ```java
 
@@ -1357,6 +1378,16 @@ protected int doReadMessages(List<Object> buf) throws Exception {
     return 0;
 }
 ```
+
+
+
+#### write
+
+
+
+
+
+
 
 
 

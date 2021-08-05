@@ -4,7 +4,7 @@
 
 
 
-## Create ServerBootStrap
+## Create
 
 ### group
 
@@ -47,23 +47,19 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
 
 
 
-## ServerBootstrap#bind( ) 
+## bind
 
-1. initAndRegister channel
-2. doBind0
+1. [initAndRegister channel]()
+2. then doBind0
 
 ```java
-/**
- * Create a new {@link Channel} and bind it.
- */
+// Create a new Channel and bind it.
 public ChannelFuture bind() {
   	//Validate all the parameters. Sub-classes may override this, 
   	//but should call the super method in that case.
     validate();
     SocketAddress localAddress = this.localAddress;
-    if (localAddress == null) {
-        throw new IllegalStateException("localAddress not set");
-    }
+    if (localAddress == null) { throw new IllegalStateException("");}
     return doBind(localAddress);
 }
 
@@ -106,9 +102,9 @@ private ChannelFuture doBind(final SocketAddress localAddress) {
 
 
 
-#### initAndRegister( ) 
+### initAndRegister
 
-1. new chcnnel and init 
+1. new and init chcnnel
 2. register
 
 ```java
@@ -153,7 +149,7 @@ final ChannelFuture initAndRegister() {
 
 
 
-##### new Channel
+#### new Channel
 
 The Class which is used to create Channel instances from. You either use this or channelFactory(io.netty.channel.ChannelFactory) if your Channel implementation has no no-args constructor.
 
@@ -212,9 +208,14 @@ ServerSocketChannelImpl(SelectorProvider sp) throws IOException {
 
 
 
-##### ServerBootstrap#init( ) 
+#### init Channel
+
+Add handler into ChannelPipeline will call handlerAdded of this handler.
+
+add `ServerBootstrapAcceptor`
 
 ```java
+// ServerBootstrap
 @Override
 void init(Channel channel) {
     setChannelOptions(channel, options0().entrySet().toArray(newOptionArray(0)), logger);
@@ -253,7 +254,24 @@ void init(Channel channel) {
 
 
 
-**ServerBootstrapAcceptor**
+```java
+// Bootstrap
+@Override
+ChannelFuture init(Channel channel) {
+    ChannelPromise promise = channel.newPromise();
+    ChannelPipeline p = channel.pipeline();
+    p.addLast(config.handler());
+
+    setChannelOptions(channel, newOptionsArray(), logger);
+    setAttributes(channel, attrs0().entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY));
+
+    return promise.setSuccess();
+}
+```
+
+
+
+### ServerBootstrapAcceptor
 
 ```java
 //ServerBootstrap$ServerBootstrapAcceptor
@@ -286,35 +304,7 @@ private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapte
         };
     }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public void channelRead(ChannelHandlerContext ctx, Object msg) {
-        final Channel child = (Channel) msg;
-
-        child.pipeline().addLast(childHandler);
-
-        setChannelOptions(child, childOptions, logger);
-        setAttributes(child, childAttrs);
-
-        try {
-            childGroup.register(child).addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture future) throws Exception {
-                    if (!future.isSuccess()) {
-                        forceClose(child, future.cause());
-                    }
-                }
-            });
-        } catch (Throwable t) {
-            forceClose(child, t);
-        }
-    }
-
-    private static void forceClose(Channel child, Throwable t) {
-        child.unsafe().closeForcibly();
-        logger.warn("Failed to register an accepted channel: {}", child, t);
-    }
-
+   
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
         final ChannelConfig config = ctx.channel().config();
@@ -331,11 +321,60 @@ private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapte
 }
 ```
 
+#### initChild
+
+```java
+@Override
+public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    final Channel child = (Channel) msg;
+
+    EventLoop childEventLoop = child.eventLoop();
+    // Ensure we always execute on the child EventLoop.
+    if (childEventLoop.inEventLoop()) {
+        initChild(child);
+    } else {
+        try {
+            childEventLoop.execute(() -> initChild(child));
+        } catch (Throwable cause) {
+            forceClose(child, cause); // close by AbstractChannel$AbstractUnsafe
+        }
+    }
+}
+```
 
 
-##### register 
 
-[AbstractChannel$AbstractUnsafe#register()](/docs/CS/Java/Netty/Channel.md?id=abstractchannelabstractunsaferegister) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Java/Netty/Eventloop.md?id=nioeventloopexecute).
+add ChildHandler 
+
+Set childOption
+
+call Channel#register()
+
+```java
+private void initChild(final Channel child) {
+    assert child.eventLoop().inEventLoop();
+    try {
+        child.pipeline().addLast(childHandler);
+
+        setChannelOptions(child, childOptions, logger);
+        setAttributes(child, childAttrs);
+
+        child.register().addListener((ChannelFutureListener) future -> {
+            if (!future.isSuccess()) {
+                forceClose(child, future.cause());
+            }
+        });
+    } catch (Throwable t) {
+        forceClose(child, t);
+    }
+}
+```
+
+
+
+### register 
+
+[AbstractChannel$AbstractUnsafe#register()](/docs/CS/Java/Netty/Channel.md?id=register) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Java/Netty/Eventloop.md?id=nioeventloopexecute).
 
 **AbstractChannel$AbstracrUnsafe#register0** execute follow methods:
 
@@ -346,7 +385,7 @@ private static class ServerBootstrapAcceptor extends ChannelInboundHandlerAdapte
 
 
 
-#### AbstractBootstrap#doBind0()
+### doBind0
 
 ```java
 //AbstractBootstrap#doBind0()
@@ -402,7 +441,7 @@ public ChannelFuture bind(final SocketAddress localAddress, final ChannelPromise
 
 
 
-##### AbstractChannel$AbstractUnsafe#bind()
+call [AbstractChannel$AbstractUnsafe#bind()]()
 
 ```java
 //AbstractChannel$AbstractUnsafe#bind()
@@ -462,12 +501,14 @@ private void doBind0(SocketAddress localAddress) throws Exception {
 
 
 
-## Bootstrap#connect( )
+## connect
+
+1. [initAndRegister Channel]()
+2. then doResolveAndConnect0
 
 ```java
-//Connect a {@link Channel} to the remote peer.
+//Connect a Channel to the remote peer.
 public ChannelFuture connect(SocketAddress remoteAddress, SocketAddress localAddress) {
-    ObjectUtil.checkNotNull(remoteAddress, "remoteAddress");
     validate();
     return doResolveAndConnect(remoteAddress, localAddress);
 }
@@ -606,25 +647,3 @@ public <T> B option(ChannelOption<T> option, T value) {
 ```
 
 
-
-ChannelOption
-
-option是Netty为我们提供的配置选项，它包含但不限于；ChannelOption.SO_BACKLOG、ChannelOption.SO_TIMEOUT、ChannelOption.TCP_NODELAY等，option并不是非的配置，如果不配置也是可以正常启动的。
-
-------
-
-1、ChannelOption.SO_BACKLOG ChannelOption.SO_BACKLOG对应的是tcp/ip协议listen函数中的backlog参数，函数listen(int socketfd,int backlog)用来初始化服务端可连接队列，服务端处理客户端连接请求是顺序处理的，所以同一时间只能处理一个客户端连接，多个客户端来的时候，服务端将不能处理的客户端连接请求放在队列中等待处理，backlog参数指定了队列的大小
-
-2、ChannelOption.SO_REUSEADDR ChanneOption.SO_REUSEADDR对应于套接字选项中的SO_REUSEADDR，这个参数表示允许重复使用本地地址和端口， 比如，某个服务器进程占用了TCP的80端口进行监听，此时再次监听该端口就会返回错误，使用该参数就可以解决问题，该参数允许共用该端口，这个在服务器程序中比较常使用， 比如某个进程非正常退出，该程序占用的端口可能要被占用一段时间才能允许其他进程使用，而且程序死掉以后，内核一需要一定的时间才能够释放此端口，不设置SO_REUSEADDR就无法正常使用该端口。
-
-3、ChannelOption.SO_KEEPALIVE Channeloption.SO_KEEPALIVE参数对应于套接字选项中的SO_KEEPALIVE，该参数用于设置TCP连接，当设置该选项以后，连接会测试链接的状态，这个选项用于可能长时间没有数据交流的连接。当设置该选项以后，如果在两小时内没有数据的通信时，TCP会自动发送一个活动探测数据报文。
-
-4、ChannelOption.SO_SNDBUF和ChannelOption.SO_RCVBUF ChannelOption.SO_SNDBUF参数对应于套接字选项中的SO_SNDBUF，ChannelOption.SO_RCVBUF参数对应于套接字选项中的SO_RCVBUF这两个参数用于操作接收缓冲区和发送缓冲区的大小，接收缓冲区用于保存网络协议站内收到的数据，直到应用程序读取成功，发送缓冲区用于保存发送数据，直到发送成功。
-
-5、ChannelOption.SO_LINGER ChannelOption.SO_LINGER参数对应于套接字选项中的SO_LINGER,Linux内核默认的处理方式是当用户调用close（）方法的时候，函数返回，在可能的情况下，尽量发送数据，不一定保证会发生剩余的数据，造成了数据的不确定性，使用SO_LINGER可以阻塞close()的调用时间，直到数据完全发送
-
-6、ChannelOption.TCP_NODELAY ChannelOption.TCP_NODELAY参数对应于套接字选项中的TCP_NODELAY,该参数的使用与Nagle算法有关,Nagle算法是将小的数据包组装为更大的帧然后进行发送，而不是输入一次发送一次,因此在数据包不足的时候会等待其他数据的到了，组装成大的数据包进行发送，虽然该方式有效提高网络的有效负载，但是却造成了延时，而该参数的作用就是禁止使用Nagle算法，使用于小数据即时传输，于TCP_NODELAY相对应的是TCP_CORK，该选项是需要等到发送的数据量最大的时候，一次性发送数据，适用于文件传输。
-
-7、IP_TOS IP参数，设置IP头部的Type-of-Service字段，用于描述IP包的优先级和QoS选项。
-
-8、ALLOW_HALF_CLOSURE Netty参数，一个连接的远端关闭时本地端是否关闭，默认值为False。值为False时，连接自动关闭；为True时，触发ChannelInboundHandler的userEventTriggered()方法，事件为ChannelInputShutdownEvent。
