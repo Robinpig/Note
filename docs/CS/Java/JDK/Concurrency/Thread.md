@@ -91,9 +91,9 @@ private void init(ThreadGroup g, Runnable target, String name,
 ### Example
 
 1. create a thread extends Thread directly
-2. use [ThreadLocalExecutor]()
-3. use [CompletableFuture]() submit task
-4. use [FutureTask]()
+2. use [ThreadLocalExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=ThreadPoolExecutor)
+3. use [CompletableFuture](/docs/CS/Java/JDK/Concurrency/Future.md?id=CompletableFuture) submit task
+4. use [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=FutureTask)
 
 
 
