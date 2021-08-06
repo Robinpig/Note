@@ -392,5 +392,7 @@ cc代表的是寄存器,memory代表是内存;这边同时用了”cc”和”me
 
 
 
+## Reference
 
+1. [The "Double-Checked Locking is Broken" Declaration](https://www.cs.umd.edu/~pugh/java/memoryModel/DoubleCheckedLocking.html)
 

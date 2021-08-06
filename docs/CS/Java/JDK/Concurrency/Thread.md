@@ -14,12 +14,86 @@ public Thread(Runnable target) {
 }
 ```
 
+### init
+
+```java
+private void init(ThreadGroup g, Runnable target, String name,
+                  long stackSize) {
+  init(g, target, name, stackSize, null, true);
+}
+
+private void init(ThreadGroup g, Runnable target, String name,
+                  long stackSize, AccessControlContext acc,
+                  boolean inheritThreadLocals) {
+  if (name == null) {
+    throw new NullPointerException("name cannot be null");
+  }
+
+  this.name = name;
+
+  Thread parent = currentThread();
+  SecurityManager security = System.getSecurityManager();
+  if (g == null) {
+    /* Determine if it's an applet or not */
+
+    /* If there is a security manager, ask the security manager
+               what to do. */
+    if (security != null) {
+      g = security.getThreadGroup();
+    }
+
+    /* If the security doesn't have a strong opinion of the matter
+               use the parent thread group. */
+    if (g == null) {
+      g = parent.getThreadGroup();
+    }
+  }
+
+  /* checkAccess regardless of whether or not threadgroup is
+           explicitly passed in. */
+  g.checkAccess();
+
+  /*
+         * Do we have the required permissions?
+         */
+  if (security != null) {
+    if (isCCLOverridden(getClass())) {
+      security.checkPermission(SUBCLASS_IMPLEMENTATION_PERMISSION);
+    }
+  }
+
+  g.addUnstarted();
+
+  this.group = g;
+  this.daemon = parent.isDaemon();
+  this.priority = parent.getPriority();
+  if (security == null || isCCLOverridden(parent.getClass()))
+    this.contextClassLoader = parent.getContextClassLoader();
+  else
+    this.contextClassLoader = parent.contextClassLoader;
+  this.inheritedAccessControlContext =
+    acc != null ? acc : AccessController.getContext();
+  this.target = target;
+  setPriority(priority);
+  if (inheritThreadLocals && parent.inheritableThreadLocals != null)
+    this.inheritableThreadLocals =
+    ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);
+  /* Stash the specified stack size in case the VM cares */
+  this.stackSize = stackSize;
+
+  /* Set thread ID */
+  tid = nextThreadID();
+}
+```
+
+
+
 ### Example
 
 1. create a thread extends Thread directly
-2. use ThreadLocalExecutor
-3. use CompletableFuture submit task
-4. use FutureTask
+2. use [ThreadLocalExecutor]()
+3. use [CompletableFuture]() submit task
+4. use [FutureTask]()
 
 
 
@@ -635,7 +709,7 @@ When an object is first created, its wait set is empty. Elementary actions that 
 
 
 
-use `wait` in a while loop avoid **spurious wakeups**.
+**Note**: use `wait` in a while loop avoid **spurious wakeups**.
 
 Causes the current thread to wait until either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object, or a specified amount of time has elapsed.
 
@@ -1221,7 +1295,7 @@ Similarly, notifications cannot be lost due to interrupts. Assume that a set *s*
 - at least one thread in *s* must return normally from `wait`, or
 - all of the threads in *s* must exit `wait` by throwing `InterruptedException`
 
-Note that if a thread is both interrupted and woken via `notify`, and that thread returns from `wait` by throwing an `InterruptedException`, then some other thread in the wait set must be notified.
+**Note that if a thread is both interrupted and woken via `notify`, and that thread returns from `wait` by throwing an `InterruptedException`, then some other thread in the wait set must be notified.**
 
 Such as two threads wait for lock, may thread1 be notifyed and interrupt and the other thread still waiting
 
@@ -1248,6 +1322,19 @@ synchronized (lock) {
 | Interruption | Throws    |             | Throws      |
 
 
+
+`Thread.sleep()` causes the currently executing thread to sleep (temporarily cease execution) for the specified duration, subject to the precision and accuracy of system timers and schedulers. The thread **does not lose ownership of any monitors**, and resumption of execution will depend on scheduling and the availability of processors on which to execute the thread.
+
+
+
+**It is important to note that neither Thread.sleep nor Thread.yield have any synchronization semantics.** In particular, the compiler does not have to flush writes cached in registers out to shared memory before a call to sleep or yield, nor does the compiler have to reload values cached in registers after a call to sleep or yield. For example, in the following (broken) code fragment, assume that this.done is a non-volatile boolean field:
+
+```java
+while (!this.done)
+	Thread.sleep(1000);
+```
+
+The compiler is free to read the field this.done just once, and reuse the cached value in each execution of the loop. This would mean that the loop would never terminate, even if another thread changed the value of this.done.
 
 #### See
 if millis = 0, `os::naked_yield()` like `Thread#yield()`

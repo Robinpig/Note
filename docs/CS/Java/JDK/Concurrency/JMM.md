@@ -2,6 +2,18 @@
 
 
 
+A memory model specifies how threads and objects interact
+
+- **Atomicity**
+  Locking to obtain mutual exclusion for field updates
+- **Visibility**
+  Ensuring that changes made in one thread are seen in
+  other threads
+- **Ordering**
+  Ensuring that you aren’t su
+
+
+
 ### Shared Variables
 
 Memory that can be shared between threads is called *shared memory* or *heap memory*.
@@ -14,17 +26,45 @@ Two accesses to (reads of or writes to) the same variable are said to be *confli
 
 
 
-Atomic
 
-Orderable
 
-Shareable
-
-### Orderable
+### Ordering
 
 compiler
 CPU
 Memory
+
+
+
+### volatile
+
+
+
+Variants of lock rule apply to volatile fields and thread control
+Writing a volatile has same basic memory effects as unlock
+Reading a volatile has same basic memory effects as lock
+Similarly for thread start and termination
+Details differ from locks in minor ways
+
+
+
+### Final fields
+All threads will read the final value so long as it is guaranteed
+to be assigned before the object could be made visible to other
+threads. So DON'T write:
+
+
+```java
+class Stupid implements Runnable {
+  final int id;
+  Stupid(int i) { new Thread(this).start(); id = i; }
+  public void run() { System.out.println(id); }
+}
+```
+
+Extremely weak rules for unsynchronized, non-volatile, non-final
+reads and writes
+type-safe, not-out-of-thin-air, but can be reordered, invisible
 
 
 
@@ -131,16 +171,32 @@ In a *happens-before consistent* set of actions, each read sees a write that it 
 
 
 
+## happens-before
 
-## happen-before
+Before presenting the Java memory model in full, we will present a simpler memory model, called the happens-before memory model. 
 
->- 程序顺序规则：一个线程中的每个操作，happens-before于该线程中的任意后续操作。
->- 监视器锁规则：对一个锁的解锁，happens-before于随后对这个锁的加锁。
->- volatile变量规则：对一个volatile域的写，happens-before于任意后续对这个volatile域的读。
->- 传递性：如果A happens-before B，且B happens-before C，那么A happens-before C。
->- start()规则：如果线程A执行操作ThreadB.start()（启动线程B），那么A线程的ThreadB.start()操作happens-before于线程B中的任意操作。
->- join()规则：如果线程A执行操作ThreadB.join()并成功返回，那么线程B中的任意操作happens-before于线程A从ThreadB.join()操作成功返回。
->- 线程中断规则:对线程interrupt方法的调用happens-before于被中断线程的代码检测到中断事件的发生。
+This model involves several properties/requirements: 
+
+- There is a total order over all synchronization actions, known as the synchronization order. This order is consistent with program order and with mutual exclusion of locks. 
+
+- Synchronization actions induce synchronizes-with edges between matched actions, as described in Section 5.
+
+- The transitive closure of the synchronizes-with edges and program order gives a partial order known as the happens-before order, as described in Section 5.
+
+- The values that can be seen by a non-volatile read are determined by a rule known as happensbefore consistency. 
+
+- The value seen by a volatile read are determined by a rule known as synchronization order consistency. 
+
+  
+
+Happens-before consistency says that a read r of a variable v is allowed to observe a write w to v if, in the happens-before partial order of the execution trace: 
+
+- r is not ordered before w (i.e., it is not the case that r hb → w), and 
+- there is no intervening write w 0 to v (i.e., no write w 0 to v such that w hb → w 0 hb → r). 
+
+Synchronization order consistency says that each read r of a volatile variable v returns the last write to v to come before it in the synchronization order. 
+
+For example, the behavior shown in Figure 1 is allowed by the happens-before memory model. There are no synchronizes-with or happens-before edges between threads, and each read is allowed to see the write by the other thread.
 
 
 
@@ -161,6 +217,8 @@ Modified（已修改）, Exclusive（独占的）,Shared（共享的），Invali
 由于MESI缓存一致性协议，需要不断对主线进行内存嗅探，大量的交互会导致总线带宽达到峰值。
 
 ### Memory Barries
+
+
 
 
 
