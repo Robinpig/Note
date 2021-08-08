@@ -25,8 +25,6 @@ Since:1.5
 
 ![Atomic](../images/Atomic.png)
 
-
-
 Instances of classes **AtomicBoolean, AtomicInteger, AtomicLong, and AtomicReference each provide access and updates to a single variable of the corresponding type**. Each class also provides appropriate utility methods for that type. For example, classes AtomicLong and AtomicInteger provide atomic increment methods. One application is to generate sequence numbers, as in:
 
 ```java
@@ -43,7 +41,7 @@ class Sequencer {
 
 *In addition to classes representing single values, this package contains Updater classes that can be used to obtain compareAndSet operations on any selected volatile field of any selected class. **AtomicReferenceFieldUpdater, AtomicIntegerFieldUpdater, and AtomicLongFieldUpdater are reflection-based utilities that provide access to the associated field types**. These are mainly of use in atomic data structures in which several volatile fields of the same node (for example, the links of a tree node) are independently subject to atomic updates. **These classes enable greater flexibility in how and when to use atomic updates, at the expense of more awkward reflection-based setup, less convenient usage, and weaker guarantees**.*
 
-*The **AtomicIntegerArray, AtomicLongArray, and AtomicReferenceArray classes further extend atomic operation support to arrays of these types**. These classes are also notable in **providing volatile access semantics for their array elements**, which is not supported for ordinary arrays.*
+The [`AtomicIntegerArray`](https://docs.oracle.com/javase/10/docs/api/java/util/concurrent/atomic/AtomicIntegerArray.html), [`AtomicLongArray`](https://docs.oracle.com/javase/10/docs/api/java/util/concurrent/atomic/AtomicLongArray.html), and [`AtomicReferenceArray`](https://docs.oracle.com/javase/10/docs/api/java/util/concurrent/atomic/AtomicReferenceArray.html) classes further extend atomic operation support to arrays of these types. These classes are also notable in providing `volatile` access semantics for their array elements.
 
 *The atomic classes also support method **weakCompareAndSet**, which has **limited applicability**. On some platforms, the weak version may be more efficient than compareAndSet in the normal case, but differs in that any given invocation of the **weakCompareAndSet method may return false spuriously (that is, for no apparent reason)**. A false return means only that the operation may be retried if desired, relying on the guarantee that repeated invocation when the variable holds expectedValue and no other thread is also attempting to set the variable will eventually succeed. (Such spurious failures may for example be due to memory contention effects that are unrelated to whether the expected and current values are equal.) Additionally **weakCompareAndSet does not provide ordering guarantees that are usually needed for synchronization control**. However, the method may be useful for updating counters and statistics when such updates are unrelated to the other happens-before orderings of a program. When a thread sees an update to an atomic variable caused by a weakCompareAndSet, it does not necessarily see updates to any other variables that occurred before the weakCompareAndSet. This may be acceptable when, for example, updating performance statistics, but rarely otherwise.*
 
@@ -165,3 +163,18 @@ inline static void read_barrier(){
 4. 插入读屏障，保证该屏障之前的读操作后后续的操作可见。
 5. 返回当前内存值
 6. 通过compareAndSwapInt操作对value进行+1操作，如果再执行该操作过程中，内存数据发生变更，则执行失败，但循环操作直至成功。
+
+
+
+## AtomicReference
+
+AtomicReference fix CAS
+
+Lock
+
+
+
+
+
+## LongAdder
+
