@@ -309,7 +309,7 @@ This interface is a member of the Java Collections Framework.
 
 ### ArrayBlockingQueue
 
-1 lock 2 conditions
+1 [ReentrantLock( default unfair )](), 2 conditions
 
 ```java
 /** Main lock guarding all access */
@@ -327,6 +327,25 @@ private final Condition notFull;
 
 
 ```java
+public ArrayBlockingQueue(int capacity) {
+  this(capacity, false);
+}
+
+/**
+  * Creates an {@code ArrayBlockingQueue} with the given (fixed)
+  * capacity and the specified access policy.
+  */
+public ArrayBlockingQueue(int capacity, boolean fair) {
+  if (capacity <= 0)
+    throw new IllegalArgumentException();
+  this.items = new Object[capacity];
+  lock = new ReentrantLock(fair);
+  notEmpty = lock.newCondition();
+  notFull =  lock.newCondition();
+}
+
+
+
 public ArrayBlockingQueue(int capacity, boolean fair,
                           Collection<? extends E> c) {
     this(capacity, fair);
@@ -734,31 +753,20 @@ private static final int DEFAULT_INITIAL_CAPACITY = 11;
  */
 private transient Object[] queue;
 
-/**
- * The number of elements in the priority queue.
- */
+// The number of elements in the priority queue.
 private transient int size;
 
-/**
- * The comparator, or null if priority queue uses elements'
- * natural ordering.
- */
+// The comparator, or null if priority queue uses elements' natural ordering.
 private transient Comparator<? super E> comparator;
 
-/**
- * Lock used for all public operations.
- */
+// Lock used for all public operations.
 private final ReentrantLock lock = new ReentrantLock();
 
-/**
- * Condition for blocking when empty.
- */
+// Condition for blocking when empty.
 @SuppressWarnings("serial") // Classes implementing Condition may be serializable.
 private final Condition notEmpty = lock.newCondition();
 
-/**
- * Spinlock for allocation, acquired via CAS.
- */
+// Spinlock for allocation, acquired via CAS.
 private transient volatile int allocationSpinLock;
 ```
 

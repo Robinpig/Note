@@ -333,10 +333,6 @@ ArayList use Object[], LinkedList use linked-list
 final transient ReentrantLock lock = new ReentrantLock();
 ```
 
-
-
-
-
 ```java
 /** The array, accessed only via getArray/setArray. */
 private transient volatile Object[] array;
@@ -344,7 +340,25 @@ private transient volatile Object[] array;
 
 
 
+### get
+
+no Lock
+
+```java
+public E get(int index) {
+    return elementAt(getArray(), index);
+}
+
+static <E> E elementAt(Object[] a, int index) {
+  return (E) a[index];
+}
+```
+
+
+
 ### add
+
+Use [ReentrantLock]()
 
 ```java
 public boolean add(E e) {
