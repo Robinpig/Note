@@ -52,6 +52,8 @@ MCSLock
 | Interruptibly | must be interruptibly |                                    |
 | wait time     |                       | could set a future time            |
 | Num           |                       | a Lock can use multiple Conditions |
+| Sleep         | Unsupported           | Supported                          |
+|               |                       |                                    |
 
 
 
