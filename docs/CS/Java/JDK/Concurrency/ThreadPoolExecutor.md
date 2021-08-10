@@ -427,9 +427,9 @@ public ThreadPoolExecutor(int corePoolSize,
 
 
 
-### [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
+### BlockingQueue
 
-Any BlockingQueue may be used to transfer and hold submitted tasks. The use of this queue interacts with pool sizing:
+Any [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue) may be used to transfer and hold submitted tasks. The use of this queue interacts with pool sizing:
 
 - If fewer than corePoolSize threads are running, the Executor always prefers adding a new thread rather than queuing.
 - If corePoolSize or more threads are running, the Executor always prefers queuing a request rather than adding a new thread.
@@ -484,13 +484,13 @@ public void execute(Runnable command) {
         throw new NullPointerException();
     
     int c = ctl.get();
-    if (workerCountOf(c) < corePoolSize) {
+    if (workerCountOf(c) < corePoolSize) { // addWaiter if less than corePoolSize
         if (addWorker(command, true))
             return;
         c = ctl.get();
     }
    
-    if (isRunning(c) && workQueue.offer(command)) {
+    if (isRunning(c) && workQueue.offer(command)) { // offer queue if isRunning
         int recheck = ctl.get();
         if (! isRunning(recheck) && remove(command))
             reject(command);
@@ -558,7 +558,7 @@ private boolean addWorker(Runnable firstTask, boolean core) {
         w = new Worker(firstTask);
         final Thread t = w.thread;
         if (t != null) {
-            final ReentrantLock mainLock = this.mainLock;
+            final ReentrantLock mainLock = this.mainLock; // need a mainLock
             mainLock.lock();
             try {
                 // Recheck while holding lock.
@@ -756,7 +756,7 @@ final void runWorker(Worker w) {
 
 
 
-Performs blocking or timed wait for a task, depending on current configuration settings, or returns null if this worker must exit because of any of: 
+Performs blocking or timed wait for a task, depending on current configuration settings, or **returns null if this worker must exit because of any of**: 
 
 1. There are more than maximumPoolSize workers (due to a call to setMaximumPoolSize). 
 2. The pool is stopped. 
@@ -1100,6 +1100,17 @@ public static ScheduledExecutorService newScheduledThreadPool(
     return new ScheduledThreadPoolExecutor(corePoolSize, threadFactory);
 }
 ```
+
+
+
+
+
+|            | Cache                | Fix                   |
+| ---------- | -------------------- | --------------------- |
+| threads    | all non-core threads | all core threads      |
+| None tasks | recycle after 60s    | block on queue.take() |
+|            |                      |                       |
+|            |                      |                       |
 
 
 
