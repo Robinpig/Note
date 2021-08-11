@@ -94,7 +94,7 @@ private:
 os_posix.cpp
 
 1. Check if prevoius `_counter` is > 0, return fast
-2. check pending interrupt, not clear interrupt
+2. check pending interrupt, **not clear interrupt**
 3. if has  pending interrupt or  **`pthread_mutex_trylock`** fail, return
 4. check _counter again, **`pthread_mutex_unlock`** and return
 5. Check time

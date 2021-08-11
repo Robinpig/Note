@@ -178,3 +178,170 @@ Lock
 
 ## LongAdder
 
+One or more variables that together maintain an initially zero long sum. When updates (method add) are contended across threads, the set of variables may grow dynamically to reduce contention. Method sum (or, equivalently, longValue) returns the current total combined across the variables maintaining the sum.
+This class is usually preferable to AtomicLong when multiple threads update a common sum that is used for purposes such as collecting statistics, not for fine-grained synchronization control. Under low update contention, the two classes have similar characteristics. But under high contention, expected throughput of this class is significantly higher, at the expense of higher space consumption.
+LongAdders can be used with a [java.util.concurrent.ConcurrentHashMap]() to maintain a scalable frequency map (a form of histogram or multiset). For example, to add a count to a ConcurrentHashMap<String,LongAdder> freqs, initializing if not already present, you can use freqs.computeIfAbsent(k -> new LongAdder()).increment();
+This class extends Number, but does not define methods such as equals, hashCode and compareTo because instances are expected to be mutated, and so are not useful as collection keys.
+
+```java
+public class LongAdder extends Striped64 implements Serializable {
+}
+```
+
+
+
+Padded variant of AtomicLong supporting only raw accesses plus **CAS**. JVM intrinsics note: It would be possible to use a release-only form of CAS here, if it were provided.
+
+```java
+// Striped64
+@sun.misc.Contended static final class Cell {
+    volatile long value;
+    Cell(long x) { value = x; }
+    final boolean cas(long cmp, long val) {
+        return UNSAFE.compareAndSwapLong(this, valueOffset, cmp, val);
+    }
+
+    // Unsafe mechanics
+    private static final sun.misc.Unsafe UNSAFE;
+    private static final long valueOffset;
+    static {
+        try {
+            UNSAFE = sun.misc.Unsafe.getUnsafe();
+            Class<?> ak = Cell.class;
+            valueOffset = UNSAFE.objectFieldOffset
+                (ak.getDeclaredField("value"));
+        } catch (Exception e) {
+            throw new Error(e);
+        }
+    }
+}
+```
+
+
+
+
+
+```java
+public void add(long x) {
+    Cell[] as; long b, v; int m; Cell a;
+    if ((as = cells) != null || !casBase(b = base, b + x)) {
+        boolean uncontended = true;
+        if (as == null || (m = as.length - 1) < 0 ||
+            (a = as[getProbe() & m]) == null ||
+            !(uncontended = a.cas(v = a.value, v + x)))
+            longAccumulate(x, null, uncontended);
+    }
+}
+```
+
+Handles cases of updates involving initialization, resizing, creating new Cells, and/or contention. See above for explanation. This method suffers the usual non-modularity problems of optimistic retry code, relying on rechecked sets of reads.
+
+```java
+// Striped64
+final void longAccumulate(long x, LongBinaryOperator fn,
+                          boolean wasUncontended) {
+    int h;
+    if ((h = getProbe()) == 0) {
+        ThreadLocalRandom.current(); // force initialization
+        h = getProbe();
+        wasUncontended = true;
+    }
+    boolean collide = false;                // True if last slot nonempty
+    for (;;) {
+        Cell[] as; Cell a; int n; long v;
+        if ((as = cells) != null && (n = as.length) > 0) {
+            if ((a = as[(n - 1) & h]) == null) {
+                if (cellsBusy == 0) {       // Try to attach new Cell
+                    Cell r = new Cell(x);   // Optimistically create
+                    if (cellsBusy == 0 && casCellsBusy()) {
+                        boolean created = false;
+                        try {               // Recheck under lock
+                            Cell[] rs; int m, j;
+                            if ((rs = cells) != null &&
+                                (m = rs.length) > 0 &&
+                                rs[j = (m - 1) & h] == null) {
+                                rs[j] = r;
+                                created = true;
+                            }
+                        } finally {
+                            cellsBusy = 0;
+                        }
+                        if (created)
+                            break;
+                        continue;           // Slot is now non-empty
+                    }
+                }
+                collide = false;
+            }
+            else if (!wasUncontended)       // CAS already known to fail
+                wasUncontended = true;      // Continue after rehash
+            else if (a.cas(v = a.value, ((fn == null) ? v + x :
+                                         fn.applyAsLong(v, x))))
+                break;
+            else if (n >= NCPU || cells != as)
+                collide = false;            // At max size or stale
+            else if (!collide)
+                collide = true;
+            else if (cellsBusy == 0 && casCellsBusy()) {
+                try {
+                    if (cells == as) {      // Expand table unless stale
+                        Cell[] rs = new Cell[n << 1];
+                        for (int i = 0; i < n; ++i)
+                            rs[i] = as[i];
+                        cells = rs;
+                    }
+                } finally {
+                    cellsBusy = 0;
+                }
+                collide = false;
+                continue;                   // Retry with expanded table
+            }
+            h = advanceProbe(h);
+        }
+        else if (cellsBusy == 0 && cells == as && casCellsBusy()) {
+            boolean init = false;
+            try {                           // Initialize table
+                if (cells == as) {
+                    Cell[] rs = new Cell[2];
+                    rs[h & 1] = new Cell(x);
+                    cells = rs;
+                    init = true;
+                }
+            } finally {
+                cellsBusy = 0;
+            }
+            if (init)
+                break;
+        }
+        else if (casBase(v = base, ((fn == null) ? v + x :
+                                    fn.applyAsLong(v, x))))
+            break;                          // Fall back on using base
+    }
+}
+```
+
+
+
+### LongAccumulator
+
+One or more variables that together maintain a running long value updated using a supplied function. When updates (method accumulate) are contended across threads, the set of variables may grow dynamically to reduce contention. Method get (or, equivalently, longValue) returns the current value across the variables maintaining updates.
+This class is usually preferable to AtomicLong when multiple threads update a common value that is used for purposes such as collecting statistics, not for fine-grained synchronization control. Under low update contention, the two classes have similar characteristics. But under high contention, expected throughput of this class is significantly higher, at the expense of higher space consumption.
+The order of accumulation within or across threads is not guaranteed and cannot be depended upon, so this class is only applicable to functions for which the order of accumulation does not matter. The supplied accumulator function should be side-effect-free, since it may be re-applied when attempted updates fail due to contention among threads. The function is applied with the current value as its first argument, and the given update as the second argument. For example, to maintain a running maximum value, you could supply Long::max along with Long.MIN_VALUE as the identity.
+Class LongAdder provides analogs of the functionality of this class for the common special case of maintaining counts and sums. *The call new LongAdder() is equivalent to new LongAccumulator((x, y) -> x + y, 0L.*
+This class extends Number, but does not define methods such as equals, hashCode and compareTo because instances are expected to be mutated, and so are not useful as collection keys.
+
+```java
+public void accumulate(long x) {
+    Cell[] as; long b, v, r; int m; Cell a;
+    if ((as = cells) != null ||
+        (r = function.applyAsLong(b = base, x)) != b && !casBase(b, r)) {
+        boolean uncontended = true;
+        if (as == null || (m = as.length - 1) < 0 ||
+            (a = as[getProbe() & m]) == null ||
+            !(uncontended =
+              (r = function.applyAsLong(v = a.value, x)) == v ||
+              a.cas(v, r)))
+            longAccumulate(x, function, uncontended);
+    }
+}
+```

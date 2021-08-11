@@ -509,6 +509,9 @@ public void execute(Runnable command) {
 2. *If a task can be successfully queued, then we still **need to double-check whether we should have added a thread (because existing ones died since last checking) or that the pool shut down** since entry into this method. So we recheck state and if necessary roll back the enqueuing if stopped, or start a new thread if there are none.*
 3. *If we cannot queue task, then we try to add a new thread.  If it fails, we know we are shut down or saturated and so reject the task.*
 
+**consider schedule threads in OS and GC cost**
+
+priority of I/O threads higher than business threads
 
 
 ### addWorker
