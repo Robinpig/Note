@@ -733,7 +733,7 @@ public interface ConcurrentMap<K,V> extends Map<K,V> {
 
 
 
-### init
+### Constructor
 
 ```java
 public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
@@ -742,8 +742,6 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
 ```
 
 **All arguments to all task methods must be non-null.**
-
-
 
 ```java
 public ConcurrentHashMap(int initialCapacity) {
@@ -843,9 +841,7 @@ final V putVal(K key, V value, boolean onlyIfAbsent) {
 }
 ```
 
-![image.png](http://notfound9.github.io/interviewGuide/static/3.png)
-
-
+### initTable
 
 1. use [Thread.yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield) to spin
 2. CAS set sizeCtl = -1

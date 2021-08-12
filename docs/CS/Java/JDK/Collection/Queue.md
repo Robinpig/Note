@@ -774,5 +774,12 @@ private transient volatile int allocationSpinLock;
 
 ## Summary
 
-
+| Queue                 | Boundary           | Lock     | Struct     |
+| --------------------- | ------------------ | -------- | ---------- |
+| ArrayBlockingQueue    | bounded            | lock     | arrayList  |
+| LinkedBlockingQueue   | optionally-bounded | lock     | linkedList |
+| ConcurrentlinkedQueue | unbounded          | Non-lock | linkedList |
+| LinkedTransferQueue   | unbounded          | Non-lock | linkedList |
+| PriorityBlockingQueue | unbounded          | lock     | heap       |
+| DealyQueue            | unbounded          | lock     | heap       |
 

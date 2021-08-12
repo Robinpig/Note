@@ -1565,9 +1565,8 @@ void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
 
 
 
-## Reference
-
-
+## References
 
 1. [Java Synchronized 偏向锁/轻量级锁/重量级锁的演变过程](https://www.jianshu.com/p/22b5a0a78a9b)
-2. [](https://openjdk.java.net/jeps/8183909)
+2. [JEP draft: Concurrent Monitor Deflation](https://openjdk.java.net/jeps/8183909)
+3. [Biased Locking in HotSpot](https://blogs.oracle.com/dave/biased-locking-in-hotspot)

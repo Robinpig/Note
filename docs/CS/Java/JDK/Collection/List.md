@@ -326,7 +326,7 @@ ArayList use Object[], LinkedList use linked-list
 
 ## CopyOnWriteArrayList
 
-
+Use [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) in add/remove
 
 ```java
 /** The lock protecting all mutators */
@@ -357,8 +357,6 @@ static <E> E elementAt(Object[] a, int index) {
 
 
 ### add
-
-Use [ReentrantLock]()
 
 ```java
 public boolean add(E e) {
