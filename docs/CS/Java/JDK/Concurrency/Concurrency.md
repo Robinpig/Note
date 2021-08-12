@@ -75,8 +75,6 @@
 
 ### synchronizer
 
-![img](https://upload-images.jianshu.io/upload_images/19073098-ad30778587f3b754.png?imageMogr2/auto-orient/strip|imageView2/2/w/1200)
-
 [Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
 
 [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)

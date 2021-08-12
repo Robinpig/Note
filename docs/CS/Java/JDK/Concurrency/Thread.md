@@ -754,9 +754,9 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 
 1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException())
 2. CHECK_OWNER
-3. AddWaiter, enter the wait queue
+3. **AddWaiter**, enter the wait queue
 4. exit monitor
-5. `Park` Self
+5. **`Park`** Self
 6. ReenterI  or enter when unPark by other Thread
 
 ```cpp
@@ -1313,8 +1313,6 @@ synchronized (lock) {
 
 
 
-
-
 |              | wait      | yield       | sleep       |
 | ------------ | --------- | ----------- | ----------- |
 | From         | Object    | Thread      | Thread      |
@@ -1336,7 +1334,7 @@ while (!this.done)
 
 The compiler is free to read the field this.done just once, and reuse the cached value in each execution of the loop. This would mean that the loop would never terminate, even if another thread changed the value of this.done.
 
-#### See
+#### sleep
 if millis = 0, `os::naked_yield()` like `Thread#yield()`
 ```cpp
 // jvm.cpp
@@ -1466,6 +1464,8 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
   }
 }
 ```
+
+#### yield
 
 
 

@@ -704,6 +704,37 @@ final Node<K,V> untreeify(HashMap<K,V> map) {
 
 ## ConcurrentHashMap
 
+A hash table supporting full concurrency of retrievals and high expected concurrency for updates. This class obeys the same functional specification as Hashtable, and includes versions of methods corresponding to each method of Hashtable. However, even though all operations are thread-safe, retrieval operations do not entail locking, and there is not any support for locking the entire table in a way that prevents all access. This class is fully interoperable with Hashtable in programs that rely on its thread safety but not on its synchronization details.
+
+
+
+### ConcurrentMap
+
+A Map providing thread safety and atomicity guarantees.
+To maintain the specified guarantees, default implementations of methods including putIfAbsent inherited from Map must be overridden by implementations of this interface. Similarly, implementations of the collections returned by methods keySet, values, and entrySet must override methods such as removeIf when necessary to preserve atomicity guarantees.
+Memory consistency effects: As with other concurrent collections, actions in a thread prior to placing an object into a ConcurrentMap as a key or value happen-before actions subsequent to the access or removal of that object from the ConcurrentMap in another thread.
+This interface is a member of the Java Collections Framework.
+
+```java
+public interface ConcurrentMap<K,V> extends Map<K,V> {
+  // If the specified key is not already associated with a value, like !map.containsKey(key)
+  V putIfAbsent(K key, V value);
+  
+  // Removes the entry for a key only if currently mapped to a given value. 
+  boolean remove(Object key, Object value);
+  
+  // Replaces the entry for a key only if currently mapped to a given value.
+  boolean replace(K key, V oldValue, V newValue);
+  
+  // Replaces the entry for a key only if currently mapped to some value.
+  V replace(K key, V value);
+}
+```
+
+
+
+### init
+
 ```java
 public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
     implements ConcurrentMap<K,V>, Serializable {
@@ -1114,6 +1145,119 @@ public V get(Object key) {
 
 ### size
 
+Returns the number of key-value mappings in this map. If the map contains more than Integer.MAX_VALUE elements, returns Integer.MAX_VALUE.
+
+```java
+public int size() {
+    long n = sumCount();
+    return ((n < 0L) ? 0 :
+            (n > (long)Integer.MAX_VALUE) ? Integer.MAX_VALUE :
+            (int)n);
+}
+```
+
+
+
+A padded cell for distributing counts. Adapted from [LongAdder]() and [Striped64](). See their internal docs for explanation.
+
+```java
+@jdk.internal.vm.annotation.Contended static final class CounterCell {
+    volatile long value;
+    CounterCell(long x) { value = x; }
+}
+
+final long sumCount() {
+  CounterCell[] cs = counterCells;
+  long sum = baseCount;
+  if (cs != null) {
+    for (CounterCell c : cs)
+      if (c != null)
+        sum += c.value;
+  }
+  return sum;
+}
+
+// See LongAdder version for explanation
+private final void fullAddCount(long x, boolean wasUncontended) {
+  int h;
+  if ((h = ThreadLocalRandom.getProbe()) == 0) {
+    ThreadLocalRandom.localInit();      // force initialization
+    h = ThreadLocalRandom.getProbe();
+    wasUncontended = true;
+  }
+  boolean collide = false;                // True if last slot nonempty
+  for (;;) {
+    CounterCell[] cs; CounterCell c; int n; long v;
+    if ((cs = counterCells) != null && (n = cs.length) > 0) {
+      if ((c = cs[(n - 1) & h]) == null) {
+        if (cellsBusy == 0) {            // Try to attach new Cell
+          CounterCell r = new CounterCell(x); // Optimistic create
+          if (cellsBusy == 0 &&
+              U.compareAndSetInt(this, CELLSBUSY, 0, 1)) {
+            boolean created = false;
+            try {               // Recheck under lock
+              CounterCell[] rs; int m, j;
+              if ((rs = counterCells) != null &&
+                  (m = rs.length) > 0 &&
+                  rs[j = (m - 1) & h] == null) {
+                rs[j] = r;
+                created = true;
+              }
+            } finally {
+              cellsBusy = 0;
+            }
+            if (created)
+              break;
+            continue;           // Slot is now non-empty
+          }
+        }
+        collide = false;
+      }
+      else if (!wasUncontended)       // CAS already known to fail
+        wasUncontended = true;      // Continue after rehash
+      else if (U.compareAndSetLong(c, CELLVALUE, v = c.value, v + x))
+        break;
+      else if (counterCells != cs || n >= NCPU)
+        collide = false;            // At max size or stale
+      else if (!collide)
+        collide = true;
+      else if (cellsBusy == 0 &&
+               U.compareAndSetInt(this, CELLSBUSY, 0, 1)) {
+        try {
+          if (counterCells == cs) // Expand table unless stale
+            counterCells = Arrays.copyOf(cs, n << 1);
+        } finally {
+          cellsBusy = 0;
+        }
+        collide = false;
+        continue;                   // Retry with expanded table
+      }
+      h = ThreadLocalRandom.advanceProbe(h);
+    }
+    else if (cellsBusy == 0 && counterCells == cs &&
+             U.compareAndSetInt(this, CELLSBUSY, 0, 1)) {
+      boolean init = false;
+      try {                           // Initialize table
+        if (counterCells == cs) {
+          CounterCell[] rs = new CounterCell[2];
+          rs[h & 1] = new CounterCell(x);
+          counterCells = rs;
+          init = true;
+        }
+      } finally {
+        cellsBusy = 0;
+      }
+      if (init)
+        break;
+    }
+    else if (U.compareAndSetLong(this, BASECOUNT, v = baseCount, v + x))
+      break;                          // Fall back on using base
+  }
+}
+```
+
+
+
 ```java
 public int size() {
     long n = sumCount();
@@ -1149,6 +1293,10 @@ static final class CounterCell {
 ```
 
 每次添加x个新的键值对后，会调用addCount()方法使用CAS操作对baseCount+x，如果操作失败，那么会新建一个CounterCell类型的对象，保存新增的数量x，并且将对象添加到CounterCells数组中去。 
+
+
+
+
 
 
 

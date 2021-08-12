@@ -835,6 +835,10 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
 ### get
 
+If state = NEW, it will block on `Future.get()`.
+
+Try to use `Future.get(long timeout, TimeUnit unit)` when using `DiscardPolicy` or `DiscardOldestPolicy`.
+
 ```java
 public V get() throws InterruptedException, ExecutionException {
     int s = state;
