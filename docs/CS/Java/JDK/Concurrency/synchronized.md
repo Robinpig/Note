@@ -479,6 +479,21 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 
 ### Heavy Weight Lock
 
+ContentionList LIFO Lock-Free
+only Owner thread can get elements from tail
+insert into head by CAS
+
+Owner thread move elements from ContentionList to EntryList and set Ready(OnDeck) of a element from EntryList(usually head)
+
+OnDeck thread change to Owner thread when get lock, 
+or still in EntryList
+
+if Owner thread block by wait, then to WaitSet and wait for notify/notifyAll/interrupt then to EntryList
+
+spin lock before insert into EntryList
+
+
+
 #### ObjectSynchronizer::inflate
 
 1. in loop
@@ -1570,3 +1585,4 @@ void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
 1. [Java Synchronized 偏向锁/轻量级锁/重量级锁的演变过程](https://www.jianshu.com/p/22b5a0a78a9b)
 2. [JEP draft: Concurrent Monitor Deflation](https://openjdk.java.net/jeps/8183909)
 3. [Biased Locking in HotSpot](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
+4. [Java中的锁机制](https://www.cnblogs.com/charlesblc/p/5994162.html)
