@@ -4,7 +4,7 @@
 
 ### using synchronized 
 
-use javap -c *.class
+use javap -c   *.class
 
 ```
 //synchronized with block finally add monitorexit
@@ -348,6 +348,9 @@ enum HeuristicsResult {
 
 
 #### ObjectSynchronizer::slow_enter
+1. is_neutral, cas set mark
+2. has_locker, set_displaced_header
+3. [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate) then [ObjectMonitor::enter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=ObjectMonitorenter)
 
 ```cpp
 // synchronizer.cpp
@@ -710,8 +713,6 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread * Self,
 
 #### objectMonitor
 
- 在hotspot虚拟机中，采用ObjectMonitor类来实现monitor ， 每个对象中都会内置一个ObjectMonitor对象 
-
 ```cpp
 // objectMonitor.hpp
 ObjectMonitor() {
@@ -908,10 +909,11 @@ void ObjectMonitor::enter(TRAPS) {
 
 1. tryLock
 2. trySpin
-3. wrap to node add push "Self" onto the front of the _cxq
+3. wrap to node add push "Self" onto **the front of the _cxq(ContentionList)**
 4. tryLock and trySpin in a loop with ParkEvent
-   1. if tryLock and trySpin fail, park
+   1. if tryLock and trySpin fail, park self
    2. unpark in exit by other Thread
+5. Unlink Self from the cxq or EntryList.
 
 ```cpp
    void ObjectMonitor::EnterI(TRAPS) {
@@ -1341,9 +1343,8 @@ int ObjectMonitor::TryLock (Thread * Self) {
 }
 ```
 
-#### Unlock
+#### ObjectMonitor::exit
 
-`ObjectMonitor::exit`，释放以后会通知被阻塞的线程去竞争锁
 
 1. if _owner != Self  & is_lock_owned(Light Lcok),那么将_owner指向当前线程
 2. 如果当前锁对象中的_owner指向当前线程，则判断当前线程重入锁的次数，如果不为0，继续执行ObjectMonitor::exit()，直到重入锁次数为0为止
