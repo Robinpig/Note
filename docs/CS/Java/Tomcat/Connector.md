@@ -109,9 +109,7 @@ public class Http11NioProtocol extends AbstractHttp11JsseProtocol<NioChannel> {
 NIO tailored thread pool, providing the following services:
 
 1. Socket acceptor thread, default 1
-
 2. Socket poller thread, default 1
-
 3. Worker threads pool, default 10
 
 
@@ -174,7 +172,7 @@ call init order
 2. NamingRespurcesImpl 
 3. StandardService 
 4. MapperListener
-5.  Connector
+5. Connector
 
 ```java
 // LifecycleBase
@@ -321,7 +319,7 @@ protected void initServerSocket() throws Exception {
 
 
 
-Start the NIO endpoint, creating acceptor, poller threads.
+Start the NIO endpoint, creating acceptor, poller threads and [executor](/docs/CS/Java/Tomcat/threads.md?id=ThreadPoolExecutor).
 
 ```java
 // AbstractProtocol
