@@ -214,6 +214,70 @@ This class and its iterator implement all of the optional methods of the Collect
 ```
 
 
+## ConcurrentLinkedQueue
+
+unbounded queue
+head tail volatile
+```java
+
+private static class Node<E> {
+   volatile E item;
+   volatile Node<E> next;
+
+   /**
+    * Constructs a new node.  Uses relaxed write because item can
+    * only be seen after publication via casNext.
+    */
+   Node(E item) {
+      UNSAFE.putObject(this, itemOffset, item);
+   }
+
+   boolean casItem(E cmp, E val) {
+      return UNSAFE.compareAndSwapObject(this, itemOffset, cmp, val);
+   }
+
+   void lazySetNext(Node<E> val) {
+      UNSAFE.putOrderedObject(this, nextOffset, val);
+   }
+
+   boolean casNext(Node<E> cmp, Node<E> val) {
+      return UNSAFE.compareAndSwapObject(this, nextOffset, cmp, val);
+   }
+
+   // Unsafe mechanics
+...
+}
+
+ /**
+  * A node from which the first live (non-deleted) node (if any)
+  * can be reached in O(1) time.
+  * Invariants:
+  * - all live nodes are reachable from head via succ()
+  * - head != null
+  * - (tmp = head).next != tmp || tmp != head
+  * Non-invariants:
+  * - head.item may or may not be null.
+  * - it is permitted for tail to lag behind head, that is, for tail
+  *   to not be reachable from head!
+  */
+ private transient volatile Node<E> head;
+
+ /**
+  * A node from which the last node on list (that is, the unique
+  * node with node.next == null) can be reached in O(1) time.
+  * Invariants:
+  * - the last node is always reachable from tail via succ()
+  * - tail != null
+  * Non-invariants:
+  * - tail.item may or may not be null.
+  * - it is permitted for tail to lag behind head, that is, for tail
+  *   to not be reachable from head!
+  * - tail.next may or may not be self-pointing to tail.
+  */
+ private transient volatile Node<E> tail;
+```
+
+cas
 
 
 
@@ -778,7 +842,7 @@ private transient volatile int allocationSpinLock;
 | --------------------- | ------------------ | -------- | ---------- |
 | ArrayBlockingQueue    | bounded            | lock     | arrayList  |
 | LinkedBlockingQueue   | optionally-bounded | lock     | linkedList |
-| ConcurrentlinkedQueue | unbounded          | Non-lock | linkedList |
+| ConcurrentLinkedQueue | unbounded          | Non-lock | linkedList |
 | LinkedTransferQueue   | unbounded          | Non-lock | linkedList |
 | PriorityBlockingQueue | unbounded          | lock     | heap       |
 | DealyQueue            | unbounded          | lock     | heap       |

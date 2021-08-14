@@ -61,13 +61,24 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 
 #### Concurrency
 [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)  is a process of executing multiple threads simultaneously.
+
+##### Thread
 - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+- [Java Memory Model](/docs/CS/Java/JDK/Concurrency/JMM.md)
+- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)  
+- [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)  
+
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
+  
+
+
 - [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
 - [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
 - [ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)
+
  
+
 
 
 ##### Lock

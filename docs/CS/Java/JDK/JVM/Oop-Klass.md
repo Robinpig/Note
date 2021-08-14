@@ -155,3 +155,15 @@ class markOopDesc: public oopDesc
 -XX:MaxTenuringThreshold=15
 ```
 
+
+
+### metadata
+
+
+
+Klass*
+
+Method*
+
+ConstantPool*
+
