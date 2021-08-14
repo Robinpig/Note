@@ -373,7 +373,7 @@ This interface is a member of the Java Collections Framework.
 
 ### ArrayBlockingQueue
 
-1 [ReentrantLock( default unfair )](), 2 conditions
+1 [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) and 2 conditions
 
 ```java
 /** Main lock guarding all access */
