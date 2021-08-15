@@ -27,7 +27,118 @@ ACC_SYNCHRONIZED
 
 
 
-### InterpreterRuntime::monitorenter
+### monitorenter
+
+```cpp
+// bytecodeInterpreter.cpp
+CASE(_monitorenter): {
+        oop lockee = STACK_OBJECT(-1);
+        // derefing's lockee ought to provoke implicit null check
+        CHECK_NULL(lockee);
+        // find a free monitor or one already allocated for this object
+        // if we find a matching object then we need a new monitor
+        // since this is recursive enter
+        BasicObjectLock* limit = istate->monitor_base();
+        BasicObjectLock* most_recent = (BasicObjectLock*) istate->stack_base();
+        BasicObjectLock* entry = NULL;
+        while (most_recent != limit ) {
+          if (most_recent->obj() == NULL) entry = most_recent;
+          else if (most_recent->obj() == lockee) break;
+          most_recent++;
+        }
+        if (entry != NULL) {
+          entry->set_obj(lockee);
+          int success = false;
+          uintptr_t epoch_mask_in_place = (uintptr_t)markOopDesc::epoch_mask_in_place;
+
+          markOop mark = lockee->mark();
+          intptr_t hash = (intptr_t) markOopDesc::no_hash;
+          // implies UseBiasedLocking
+          if (mark->has_bias_pattern()) {
+            uintptr_t thread_ident;
+            uintptr_t anticipated_bias_locking_value;
+            thread_ident = (uintptr_t)istate->thread();
+            anticipated_bias_locking_value =
+              (((uintptr_t)lockee->klass()->prototype_header() | thread_ident) ^ (uintptr_t)mark) &
+              ~((uintptr_t) markOopDesc::age_mask_in_place);
+
+            if  (anticipated_bias_locking_value == 0) {
+              // already biased towards this thread, nothing to do
+              if (PrintBiasedLockingStatistics) {
+                (* BiasedLocking::biased_lock_entry_count_addr())++;
+              }
+              success = true;
+            }
+            else if ((anticipated_bias_locking_value & markOopDesc::biased_lock_mask_in_place) != 0) {
+              // try revoke bias
+              markOop header = lockee->klass()->prototype_header();
+              if (hash != markOopDesc::no_hash) {
+                header = header->copy_set_hash(hash);
+              }
+              if (lockee->cas_set_mark(header, mark) == mark) {
+                if (PrintBiasedLockingStatistics)
+                  (*BiasedLocking::revoked_lock_entry_count_addr())++;
+              }
+            }
+            else if ((anticipated_bias_locking_value & epoch_mask_in_place) !=0) {
+              // try rebias
+              markOop new_header = (markOop) ( (intptr_t) lockee->klass()->prototype_header() | thread_ident);
+              if (hash != markOopDesc::no_hash) {
+                new_header = new_header->copy_set_hash(hash);
+              }
+              if (lockee->cas_set_mark(new_header, mark) == mark) {
+                if (PrintBiasedLockingStatistics)
+                  (* BiasedLocking::rebiased_lock_entry_count_addr())++;
+              }
+              else {
+                CALL_VM(InterpreterRuntime::monitorenter(THREAD, entry), handle_exception);
+              }
+              success = true;
+            }
+            else {
+              // try to bias towards thread in case object is anonymously biased
+              markOop header = (markOop) ((uintptr_t) mark & ((uintptr_t)markOopDesc::biased_lock_mask_in_place |
+                                                              (uintptr_t)markOopDesc::age_mask_in_place |
+                                                              epoch_mask_in_place));
+              if (hash != markOopDesc::no_hash) {
+                header = header->copy_set_hash(hash);
+              }
+              markOop new_header = (markOop) ((uintptr_t) header | thread_ident);
+              // debugging hint
+              DEBUG_ONLY(entry->lock()->set_displaced_header((markOop) (uintptr_t) 0xdeaddead);)
+              if (lockee->cas_set_mark(new_header, header) == header) {
+                if (PrintBiasedLockingStatistics)
+                  (* BiasedLocking::anonymously_biased_lock_entry_count_addr())++;
+              }
+              else {
+                CALL_VM(InterpreterRuntime::monitorenter(THREAD, entry), handle_exception);
+              }
+              success = true;
+            }
+          }
+
+          // traditional lightweight locking
+          if (!success) {
+            markOop displaced = lockee->mark()->set_unlocked();
+            entry->lock()->set_displaced_header(displaced);
+            bool call_vm = UseHeavyMonitors;
+            if (call_vm || lockee->cas_set_mark((markOop)entry, displaced) != displaced) {
+              // Is it simple recursive case?
+              if (!call_vm && THREAD->is_lock_owned((address) displaced->clear_lock_bits())) {
+                entry->lock()->set_displaced_header(NULL);
+              } else {
+                CALL_VM(InterpreterRuntime::monitorenter(THREAD, entry), handle_exception);
+              }
+            }
+          }
+          UPDATE_PC_AND_TOS_AND_CONTINUE(1, -1);
+        } else {
+          istate->set_msg(more_monitors);
+          UPDATE_PC_AND_RETURN(0); // Re-execute
+        }
+      }
+```
+
 
 ```cpp
 //interpreterRuntime.cpp
@@ -67,6 +178,67 @@ IRT_END
 
 
 
+
+### monitorexit
+
+```cpp
+// bytecodeInterpreter.cpp
+CASE(_monitorexit): {
+    oop lockee = STACK_OBJECT(-1);
+    CHECK_NULL(lockee);
+    // derefing's lockee ought to provoke implicit null check
+    // find our monitor slot
+    BasicObjectLock* limit = istate->monitor_base();
+    BasicObjectLock* most_recent = (BasicObjectLock*) istate->stack_base();
+    while (most_recent != limit ) {
+      if ((most_recent)->obj() == lockee) {
+        BasicLock* lock = most_recent->lock();
+        markOop header = lock->displaced_header();
+        most_recent->set_obj(NULL);
+        if (!lockee->mark()->has_bias_pattern()) {
+          bool call_vm = UseHeavyMonitors;
+          // If it isn't recursive we either must swap old header or call the runtime
+          if (header != NULL || call_vm) {
+            markOop old_header = markOopDesc::encode(lock);
+            if (call_vm || lockee->cas_set_mark(header, old_header) != old_header) {
+              // restore object for the slow case
+              most_recent->set_obj(lockee);
+              CALL_VM(InterpreterRuntime::monitorexit(THREAD, most_recent), handle_exception);
+            }
+          }
+        }
+        UPDATE_PC_AND_TOS_AND_CONTINUE(1, -1);
+      }
+      most_recent++;
+    }
+    // Need to throw illegal monitor state exception
+    CALL_VM(InterpreterRuntime::throw_illegal_monitor_state_exception(THREAD), handle_exception);
+    ShouldNotReachHere();
+  }
+```
+
+
+```cpp
+// interpreterRuntime.cpp
+IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, BasicObjectLock* elem))
+#ifdef ASSERT
+  thread->last_frame().interpreter_frame_verify_monitor(elem);
+#endif
+  Handle h_obj(thread, elem->obj());
+  assert(Universe::heap()->is_in_reserved_or_null(h_obj()),
+         "must be NULL or an object");
+  if (elem == NULL || h_obj()->is_unlocked()) {
+    THROW(vmSymbols::java_lang_IllegalMonitorStateException());
+  }
+  ObjectSynchronizer::slow_exit(h_obj(), elem->lock(), thread);
+  // Free entry. This must be done here, since a pending exception might be installed on
+  // exit. If it is not cleared, the exception handling code will try to unlock the monitor again.
+  elem->set_obj(NULL);
+#ifdef ASSERT
+  thread->last_frame().interpreter_frame_verify_monitor(elem);
+#endif
+IRT_END
+```
 
 
 
@@ -343,7 +515,7 @@ enum HeuristicsResult {
     JVM内部为每个类维护了一个偏向锁revoke计数器，对偏向锁撤销进行计数，当这个值达到指定阈值时，JVM会认为这个类的偏向锁有问题，需要重新偏向(rebias),对所有属于这个类的对象进行重偏向的操作成为 批量重偏向(bulk rebias)。
     在做bulk rebias时，会对这个类的epoch的值做递增，这个epoch会存储在对象头中的epoch字段。在判断这个对象是否获得偏向锁的条件是:MarkWord的 biased_lock:1、lock:01、threadid和当前线程id相等、epoch字段和所属类的epoch值相同，如果epoch的值不一样，要么就是撤销偏向锁、要么就是rebias； 如果这个类的revoke计数器的值继续增加到一个阈值，那么jvm会认为这个类不适合偏向锁，就需要进行bulk revoke操作 
 
-### Light Lock
+### Lightweight Lock
 
 
 
@@ -389,29 +561,6 @@ void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
 
 #### Unlock
 
-#### monitorexit
-
-```cpp
-// interpreterRuntime.cpp
-IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorexit(JavaThread* thread, BasicObjectLock* elem))
-#ifdef ASSERT
-  thread->last_frame().interpreter_frame_verify_monitor(elem);
-#endif
-  Handle h_obj(thread, elem->obj());
-  assert(Universe::heap()->is_in_reserved_or_null(h_obj()),
-         "must be NULL or an object");
-  if (elem == NULL || h_obj()->is_unlocked()) {
-    THROW(vmSymbols::java_lang_IllegalMonitorStateException());
-  }
-  ObjectSynchronizer::slow_exit(h_obj(), elem->lock(), thread);
-  // Free entry. This must be done here, since a pending exception might be installed on
-  // exit. If it is not cleared, the exception handling code will try to unlock the monitor again.
-  elem->set_obj(NULL);
-#ifdef ASSERT
-  thread->last_frame().interpreter_frame_verify_monitor(elem);
-#endif
-IRT_END
-```
 
 
 
@@ -480,7 +629,7 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 
 
 
-### Heavy Weight Lock
+### Heavyweight Lock
 
 ContentionList LIFO Lock-Free
 only Owner thread can get elements from tail
@@ -1587,3 +1736,4 @@ void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
 2. [JEP draft: Concurrent Monitor Deflation](https://openjdk.java.net/jeps/8183909)
 3. [Biased Locking in HotSpot](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
 4. [Java中的锁机制](https://www.cnblogs.com/charlesblc/p/5994162.html)
+5. [死磕Synchronized底层实现--偏向锁](https://github.com/farmerjohngit/myblog/issues/13)
