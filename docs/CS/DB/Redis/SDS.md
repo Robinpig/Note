@@ -119,11 +119,11 @@ len>44 raw, else embstr.
 
 debug object key
 
-1. 16byte for RedisObject
+1. 16byte for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
 2. 3byte for capacity +len +flags
 3. 1byte for NULL
 
-jemalloc apply 64byte
+jemalloc apply 64byte(for cache line)
 
 so a SDS max **embstr** string len is 64-16-3-1=44byte
 
@@ -242,7 +242,7 @@ void psetexCommand(client *c) {
 
 This object is encodable as a long. Try to use a shared object when maxmemory is not used
 
-1. INT
+1. INT use shared value or set value to *ptr
 2. RAW `createStringObjectFromLongLongWithOptions`
 3. EMBSTR `createEmbeddedStringObject`
 
@@ -291,7 +291,7 @@ robj *tryObjectEncoding(robj *o) {
             if (o->encoding == OBJ_ENCODING_RAW) {
                 sdsfree(o->ptr);
                 o->encoding = OBJ_ENCODING_INT;
-                o->ptr = (void*) value;
+                o->ptr = (void*) value; // set value to ptr
                 return o;
             } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
                 decrRefCount(o);

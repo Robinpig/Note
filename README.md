@@ -22,9 +22,8 @@
 #### Struct
 - [SDS](/docs/CS/DB/Redis/SDS.md)
 - [hash](/docs/CS/DB/Redis/hash.md)
-- [skiplist](/docs/CS/DB/Redis/skiplist.md)
-- [ziplist](/docs/CS/DB/Redis/ziplist.md)
-- [quicklist](/docs/CS/DB/Redis/quicklist.md)
+- [list](/docs/CS/DB/Redis/list.md)
+- [zset](/docs/CS/DB/Redis/zset.md)
   
 
 #### IO
