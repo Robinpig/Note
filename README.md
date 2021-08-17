@@ -18,11 +18,13 @@
 ### Redis
 
 - [start](/docs/CS/DB/Redis/start.md)
+- [db](/docs/CS/DB/Redis/redisDb.md)
 
 #### Struct
-- [SDS](/docs/CS/DB/Redis/SDS.md)
+- [string](/docs/CS/DB/Redis/SDS.md)
 - [hash](/docs/CS/DB/Redis/hash.md)
 - [list](/docs/CS/DB/Redis/list.md)
+- [set](/docs/CS/DB/Redis/set.md)
 - [zset](/docs/CS/DB/Redis/zset.md)
   
 

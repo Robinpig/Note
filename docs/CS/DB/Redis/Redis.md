@@ -1,8 +1,10 @@
 ## Introduction
 
-[Redis](https://redis.io)
+[Redis](https://redis.io) is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker. 
 
-Redis is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker. Redis provides data structures such as **strings, hashes, lists, sets, sorted sets** with **range queries, bitmaps, hyperloglogs, geospatial indexes, and streams**. Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
+Redis provides data structures such as **strings, hashes, lists, sets, sorted sets** with **range queries, bitmaps, hyperloglogs, geospatial indexes, and streams**. 
+
+Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
 [How fast is Redis?](https://redis.io/topics/benchmarks)
 
@@ -15,207 +17,18 @@ Redis is an open source (BSD licensed), in-memory data structure store, used as 
 
 
 
-## Data Type
+## Struct
 
-As you can see in the client structure above, arguments in a command
-are described as `robj` structures. The following is the full `robj`
-structure, which defines a *Redis object*:
 
-```c
-typedef struct redisObject {
-    unsigned type:4;
-    unsigned encoding:4;
-    unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
-                            * LFU data (least significant 8 bits frequency
-                            * and most significant 16 bits access time). */
-    int refcount;
-    void *ptr;
-} robj;
-```
 
-Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth. The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times. Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
 
-Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
 
 
-```c
-// server.h
-/* A redis object, that is a type able to hold a string / list / set */
 
-/* The actual Redis Object */
-#define OBJ_STRING 0    /* String object. */
-#define OBJ_LIST 1      /* List object. */
-#define OBJ_SET 2       /* Set object. */
-#define OBJ_ZSET 3      /* Sorted set object. */
-#define OBJ_HASH 4      /* Hash object. */
 
-/* The "module" object type is a special one that signals that the object
- * is one directly managed by a Redis module. In this case the value points
- * to a moduleValue struct, which contains the object value (which is only
- * handled by the module itself) and the RedisModuleType struct which lists
- * function pointers in order to serialize, deserialize, AOF-rewrite and
- * free the object.
- *
- * Inside the RDB file, module types are encoded as OBJ_MODULE followed
- * by a 64 bit module type ID, which has a 54 bits module-specific signature
- * in order to dispatch the loading to the right module, plus a 10 bits
- * encoding version. */
-#define OBJ_MODULE 5    /* Module object. */
-#define OBJ_STREAM 6    /* Stream object. */
-```
 
-
-
-```c
-/* Objects encoding. Some kind of objects like Strings and Hashes can be
- * internally represented in multiple ways. The 'encoding' field of the object
- * is set to one of this fields for this object. */
-#define OBJ_ENCODING_RAW 0     /* Raw representation */
-#define OBJ_ENCODING_INT 1     /* Encoded as integer */
-#define OBJ_ENCODING_HT 2      /* Encoded as hash table */
-#define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
-#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
-#define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
-#define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
-#define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
-#define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
-#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
-#define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
-```
-
-
-
-### createObject
-
-```c
-/* ===================== Creation and parsing of objects ==================== */
-// object.c
-robj *createObject(int type, void *ptr) {
-    robj *o = zmalloc(sizeof(*o));
-    o->type = type;
-    o->encoding = OBJ_ENCODING_RAW;
-    o->ptr = ptr;
-    o->refcount = 1;
-
-    /* Set the LRU to the current lruclock (minutes resolution), or
-     * alternatively the LFU counter. */
-    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
-        o->lru = (LFUGetTimeInMinutes()<<8) | LFU_INIT_VAL;
-    } else {
-        o->lru = LRU_CLOCK();
-    }
-    return o;
-}
-```
-
-
-
-## Redis keys
-
-Redis keys are binary safe, this means that you can use any binary sequence as a key, from a string like "foo" to the content of a JPEG file. The empty string is also a valid key.
-
-A few other rules about keys:
-
-- **Very long keys are not a good idea**. For instance a key of 1024 bytes is a bad idea not only memory-wise, but also because the lookup of the key in the dataset may require several costly key-comparisons. Even when the task at hand is to match the existence of a large value, hashing it (for example with SHA1) is a better idea, especially from the perspective of memory and bandwidth.
-- **Very short keys are often not a good idea**. There is little point in writing "u1000flw" as a key if you can instead write "`user:1000:followers`". The latter is more readable and the added space is minor compared to the space used by the key object itself and the value object. While short keys will obviously consume a bit less memory, your job is to find the right balance.
-- **Try to stick with a schema.** For instance "object-type:id" is a good idea, as in "user:1000". Dots or dashes are often used for multi-word fields, as in "`comment:1234:reply.to`" or "`comment:1234:reply-to`".
-- The maximum allowed key size is **512 MB**.
-
-
-
-### Key
-
-- 获取所有的键应采用SCAN而非KEYS（易阻塞）
-- 删除键（较大）时使用UNLINK较DEL性能更好
-- RENAME时可先EXISTS判断存在
-
-value过大，会导致慢查询，内存增长过快等等。
-
-> - 如果是String类型，单个value大小控制10k以内。
-> - 如果是hash、list、set、zset类型，元素个数一般不超过5000。
-
-Redis支持的常用5种数据类型指的是value类型，分别为：字符串String、列表List、哈希Hash、集合Set、有序集合Zset，但是Redis后续又丰富了几种数据类型分别是Bitmaps、HyperLogLogs、GEO
-
-### string
-
-Redis里所有键都为字符串 
-
-以业务名为key前缀，用冒号隔开，以防止key冲突覆盖。确保key的语义清晰
-
-key禁止包含特殊字符，如空格、换行、单双引号以及其他转义字符。
-
-Redis的key尽量设置ttl，以保证不使用的Key能被及时清理或淘汰。
-
-
-
-头插法
-
-
-
-
-
-### 列表
-
-双向链表
-
-### hash
-
-siphash
-
-not expand size when bgsave except out  of dict_force_resize_ratio 
-
-and elements less than 10% of array'length will reduce capacity
-
-### 集合
-
-listpack
-
-ziplist 级联更新 
-
-
-
-rax sort by key 
-
-zset sort by score
-
-
-
-### 有序集合
-
-在score相同的情况下，使用`字典排序`
-
-排行榜 score使用类snowflake算法 value+时间戳 等等
-
-### HLL
-
-HyperLogLog 实质是当作字符串存储
-
-### Geo
-
-实质存储为有序集合
-
-## 数据特性
-
-### bitmap
-
-bitcount
-
-bitpos
-
-bitfield KEY [GET type offset] [SET type offset value] [INCRBY type offset increment] [OVERFLOW WRAP|SAT|FAIL]
-
-- wrap cycle value 
-- sat keep the max/min value
-- fail return fail and do nothing
-
-底层数据类型为字符串，
-
-### 键过期时间
-
-键的过期时间为存储为一绝对UNIX时间戳
-
-### 管道
+## Pipeline
 
 使用管道将多个命令放入同一个执行队列中，减少往返时延消耗。
 
@@ -246,11 +59,6 @@ Redis的每个时间事件分为三个部分：
 事件处理函数 事件回调函数
 时间事件Time_Event结构：
 
-### 事务
-
-使用WATCH对键设置标志，使用MULTI启动事务，若发生非期待状态，放弃该事务。Redis事务无回滚功能
-
-
 
 ## Lua
 
@@ -260,14 +68,21 @@ EVAL
 
 
 
-## 持久化机制
+## Persistence
 
 ### RDB
 save
 bgsave
-快照snapshot，SAVE使用主线程同步转储，BGSAVEfork()出子进程转储。文件名默认为dump.rdb。但数据一致性不高，但转储恢复速度更快，占用存储空间更少。
+snapshot，
+SAVE使用主线程同步转储，BGSAVE create child process by calling fork() of glib.
+文件名默认为dump.rdb。但数据一致性不高，但转储恢复速度更快，占用存储空间更少。
+
 
 ### AOF
+
+like binlog in MySQL
+
+flushAppendOnlyFile
 
 写入操作的日志，fsync()将写缓冲区中内容刷新到磁盘，写入AOF文件。
 
@@ -283,11 +98,14 @@ AOF重写可压缩AOF文件，对键过期时间有变动的数据按情况处�
 
 备份数据，减轻读压力；缺陷是故障恢复无法自动化 写操作无法负载均衡 
 
-### 哨兵
+### Sentinel
+monitor
+choose new master from slaves when master down
+notify slaves to replicaof and notify clients to create connections with new master
 
 故障恢复自动化，故障恢复时服务不可用
 
-### 集群
+### Cluster
 
 ## 缓存
 
@@ -339,11 +157,14 @@ Redis Memcached
 
 被动失效是通过访问缓存对象的时候才去检查缓存对象是否失效，这样的好处是系统占用的CPU时间更少，但是风险是长期不被访问的缓存对象不会被系统清除。
 
-### 缓存淘汰策略
+### expire strategy
 
 缓存淘汰，又称为缓存逐出(cache replacement algorithms或者cache replacement policies)，是指在存储空间不足的情况下，缓存系统主动释放一些缓存对象获取更多的存储空间。
 
 对于大部分内存型的分布式缓存（非持久化），淘汰策略优先于失效策略，一旦空间不足，缓存对象即使没有过期也会被释放。这里只是简单介绍一下，相关的资料都很多，一般LRU用的比较多，可以重点了解一下。
+
+#### Random
+
 
 #### FIFO
 
@@ -356,6 +177,8 @@ Redis Memcached
 #### LFU
 
 最近最少使用（Least Frequently Used），这种策略根据最近访问的频率来进行淘汰，如果空间不足，会释放最近访问频率最低的对象。这个算法也是用优先队列实现的比较常见。
+
+#### no-eviction
 
 ### 分布式缓存的常见问题
 
@@ -382,7 +205,7 @@ DB中不存在数据，每次都穿过缓存查DB，造成DB的压力。一般�
 - 大量缓存设置了相同的失效时间，同一时间失效，造成服务瞬间性能急剧下降
 - 解决方案：缓存时间使用基本时间加上随机时间
 
-## 分布式锁
+## Distributed Lock
 
 ### 实现方案
 
@@ -542,7 +365,16 @@ public boolean unlock() {
     }
 }
 ```
+## Transaction
 
+support isolation and consistency, and support durability when use AOF and appendfsync is always
+
+**A command will still run when prior command run failed.**
+
+**can not rollback transaction**
+
+WATCH set sign of key
+MULTI start transaction
 
 
 ## command
@@ -620,5 +452,5 @@ LFU
 - 16bits last decrement time minutes
 
 
-## Reference
+## References
 1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
