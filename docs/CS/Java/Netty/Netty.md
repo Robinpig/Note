@@ -75,6 +75,20 @@ public class DiscardServer {
 
 AllocateByteBuf
 
+## Zero Copy
+
+Direct Memory
+Composite Buf
+File transfer
+
+
+
+## recycler
+count
+
+Chunk
+Page
+SubPage
 
 
 [Future and Promise](/docs/CS/Java/Netty/Future.md)
