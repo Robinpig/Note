@@ -526,6 +526,13 @@ This method returns false:
 If the thread creation fails, either due to the thread factory returning null, or due to an exception (typically OutOfMemoryError in Thread.start()), we roll back cleanly.
 
 ```java
+ /**
+  * Set containing all worker threads in pool. Accessed only when
+  * holding mainLock.
+  */
+private final HashSet<Worker> workers = new HashSet<Worker>();
+ 
+
 private boolean addWorker(Runnable firstTask, boolean core) {
     retry:
     for (;;) {
