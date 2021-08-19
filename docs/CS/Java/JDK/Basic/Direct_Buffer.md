@@ -2,6 +2,59 @@
 
 How to allocate direct memory?
 
+Allocates a new direct byte buffer.
+The new buffer's position will be zero, its limit will be its capacity, its mark will be undefined, and each of its elements will be initialized to zero. Whether or not it has a backing array is unspecified.
+```java
+// ByteBuffer
+public static ByteBuffer allocateDirect(int capacity) {
+        return new DirectByteBuffer(capacity);
+    }
+
+DirectByteBuffer(int cap) {                   // package-private
+   super(-1, 0, cap, cap);
+   boolean pa = VM.isDirectMemoryPageAligned();
+   int ps = Bits.pageSize();
+   long size = Math.max(1L, (long)cap + (pa ? ps : 0));
+   Bits.reserveMemory(size, cap);
+   
+   long base = 0;
+   try {
+   base = unsafe.allocateMemory(size);
+   } catch (OutOfMemoryError x) {
+   Bits.unreserveMemory(size, cap);
+   throw x;
+   }
+   unsafe.setMemory(base, size, (byte) 0);
+   if (pa && (base % ps != 0)) {
+   // Round up to page boundary
+   address = base + ps - (base & (ps - 1));
+   } else {
+   address = base;
+   }
+   cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
+   att = null;
+   
+
+
+}
+```
+-XX:MaxDirectMemorySize=<size>
+
+```java
+
+// A user-settable upper limit on the maximum amount of allocatable direct
+// buffer memory.  This value may be changed during VM initialization if
+// "java" is launched with "-XX:MaxDirectMemorySize=<size>".
+//
+// The initial value of this field is arbitrary; during JRE initialization
+// it will be reset to the value specified on the command line, if any,
+// otherwise to Runtime.getRuntime().maxMemory().
+//
+private static long directMemory = 64 * 1024 * 1024;
+
+```
+
+
 1. `ByteBuffer.allocteDirect` call `Unsafe.allocateMemory`
 2. `Unsafe.allocateMemory`
 
