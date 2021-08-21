@@ -83,9 +83,13 @@ private boolean hashIsZero; // Default to false;
 We usually use long or int to replace String in order to reduce
 network transmission consumption.
 
-## API
+## memory
 
 
+byte[] = 8+8=16
+a String("") = 40 Bytes
+
+byte[]
 
 
 

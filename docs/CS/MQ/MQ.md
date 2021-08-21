@@ -1,15 +1,12 @@
-# Message Queue
+## Introduction
 
-
-
-## 使用Mq有哪些优点？
 
 - 解耦：A系统依赖B,C,D系统，A只需要发送topic，B,C,D后期不需要消息自行取消消费即可，类似消息总线
 - 异步：异步执行消息发送，通知等
 - 消峰：应对突发的流量高峰时段（错峰与流控）
-- 复用：一次发送多次消费
 
-## 使用Mq有哪些缺点？
+
+issues
 
 - 系统复杂度提高
 - 系统可用性降低
@@ -228,5 +225,55 @@ kafka选举原理：就是利用zk临时节点，断开即删除，
 - 消费模式
 - 消费关系处理
 - 可以参考Pulsar，存储和计算分离的设计
+
+
+
+## High Avaliability
+
+RabbitMQ
+
+Mirroring Cluster
+
+
+Kafka
+
+Topic can be multiple partitions
+
+partitions have replicate in other brokers
+
+we can only read/write leader
+
+
+leader will sync data to followers, return ack when most of followers sync successfully
+
+
+## Duplicate Consume
+
+
+- Redis is always idempotent.
+- DB primary key is unique.
+- update wehn exist, insert when not exist.
+- every request has own id, check if has consumed(a set).
+
+## lost message
+
+
+RabbitMQ
+- producer confirm
+- broker storage
+- consumer confirm manually
+
+Kafka
+- broker 
+    - set topic repliaction factor > 1 : at least 2 partitions
+    - set broker min.insync.replicas > 1 : at least 1 follower
+    - set producer acks = all : must write to all replicas then ack
+    - set producer retries = MAX : retry util success
+    
+    
+## message ordering
+
+Kafka partition -> queue -> thread
+
 
 
