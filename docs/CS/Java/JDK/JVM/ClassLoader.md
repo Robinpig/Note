@@ -700,7 +700,9 @@ prepare the memory in method area
 
 #### Resolution
 
-可以在Initiailzation之后进行
+
+Lazy linked, loading other classes can be done after Initiailzation.
+It will run with no error when link a Error Class which not used.
 
 ### Initialization
 
@@ -708,11 +710,18 @@ prepare the memory in method area
 
 
 
-init when use `putstatic`,`getstatic`,`new`,`invokestatic`
+init when use `putstatic`,`getstatic`,`new`,`invokestatic` and mirrorKlass of it.
 
 InstanceKlass::Initialize_impl()
 
 <clinit>
+
+
+A superClass must be inited before child.
+But interface don't need to init super-interfaces.
+
+Init order same as the order of code.
+
 
 ### Using
 

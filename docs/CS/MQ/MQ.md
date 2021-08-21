@@ -276,4 +276,7 @@ Kafka
 Kafka partition -> queue -> thread
 
 
+## Backlog and recover
+
+
 
