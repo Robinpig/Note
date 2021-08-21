@@ -28,9 +28,7 @@ Factory used to create Queue instances that will be used to store tasks for an E
 ```java
 public interface EventLoopTaskQueueFactory {
 
-    /**
-     * Returns a new {@link Queue} to use.
-     */
+    // Returns a new Queue to use.
     Queue<Runnable> newTaskQueue(int maxCapacity);
 }
 ```
@@ -406,5 +404,8 @@ abstract class BaseMpscLinkedArrayQueuePad1<E> extends AbstractQueue<E> implemen
 
 ### BaseMpscLinkedArrayQueue
 
+```java
 
+public class MpscUnboundedAtomicArrayQueue<E> extends BaseMpscLinkedAtomicArrayQueue<E> {}
+```
 

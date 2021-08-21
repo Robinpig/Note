@@ -138,3 +138,188 @@ static {
         this.ctl = c;
     }
 ```
+
+## workQueue
+
+
+
+
+
+```java
+public <T> T invoke(ForkJoinTask<T> task) {
+    if (task == null)
+        throw new NullPointerException();
+    externalSubmit(task);
+    return task.join();
+}
+```
+
+
+
+## fork
+
+Arranges to asynchronously execute this task in the pool the current task is running in, if applicable, or using the ForkJoinPool.commonPool() if not inForkJoinPool. While it is not necessarily enforced, it is a usage error to fork a task more than once unless it has completed and been reinitialized. Subsequent modifications to the state of this task or any data it operates on are not necessarily consistently observable by any thread other than the one executing it unless preceded by a call to join or related methods, or a call to isDone returning true.
+
+```java
+public final ForkJoinTask<V> fork() {
+    Thread t;
+    if ((t = Thread.currentThread()) instanceof ForkJoinWorkerThread)
+        ((ForkJoinWorkerThread)t).workQueue.push(this);
+    else
+        ForkJoinPool.common.externalPush(this);
+    return this;
+}
+```
+
+
+
+## join
+
+Returns the result of the computation when it is done. This method differs from get() in that abnormal completion results in RuntimeException or Error, not ExecutionException, and that interrupts of the calling thread do not cause the method to abruptly return by throwing InterruptedException.
+
+1. if done, return
+2. ! instanceof ForkJoinWorkerThread, externalAwaitDone
+3. Or awaitJoin
+
+```java
+public final V join() {
+    int s;
+    if (((s = doJoin()) & ABNORMAL) != 0)
+        reportException(s);
+    return getRawResult();
+}
+
+private int doJoin() {
+  int s; Thread t; ForkJoinWorkerThread wt; ForkJoinPool.WorkQueue w;
+  return (s = status) < 0 ? s :
+  ((t = Thread.currentThread()) instanceof ForkJoinWorkerThread) ?
+    (w = (wt = (ForkJoinWorkerThread)t).workQueue).
+    tryUnpush(this) && (s = doExec()) < 0 ? s :
+  wt.pool.awaitJoin(w, this, 0L) :
+  externalAwaitDone();
+}
+```
+
+Pops the given task only if it is at the current top.
+
+```java
+final boolean tryUnpush(ForkJoinTask<?> task) {
+    boolean popped = false;
+    int s, cap; ForkJoinTask<?>[] a;
+    if ((a = array) != null && (cap = a.length) > 0 &&
+        (s = top) != base &&
+        (popped = QA.compareAndSet(a, (cap - 1) & --s, task, null)))
+        TOP.setOpaque(this, s);
+    return popped;
+}
+```
+
+
+
+```java
+final int doExec() {
+    int s; boolean completed;
+    if ((s = status) >= 0) {
+        try {
+            completed = exec();
+        } catch (Throwable rex) {
+            completed = false;
+            s = setExceptionalCompletion(rex);
+        }
+        if (completed)
+            s = setDone();
+    }
+    return s;
+}
+```
+
+
+
+```java
+final int awaitJoin(WorkQueue w, ForkJoinTask<?> task, long deadline) {
+    int s = 0;
+    int seed = ThreadLocalRandom.nextSecondarySeed();
+    if (w != null && task != null &&
+        (!(task instanceof CountedCompleter) ||
+         (s = w.helpCC((CountedCompleter<?>)task, 0, false)) >= 0)) {
+        w.tryRemoveAndExec(task);
+        int src = w.source, id = w.id;
+        int r = (seed >>> 16) | 1, step = (seed & ~1) | 2;
+        s = task.status;
+        while (s >= 0) {
+            WorkQueue[] ws;
+            int n = (ws = workQueues) == null ? 0 : ws.length, m = n - 1;
+            while (n > 0) {
+                WorkQueue q; int b;
+                if ((q = ws[r & m]) != null && q.source == id &&
+                    q.top != (b = q.base)) {
+                    ForkJoinTask<?>[] a; int cap, k;
+                    int qid = q.id;
+                    if ((a = q.array) != null && (cap = a.length) > 0) {
+                        ForkJoinTask<?> t = (ForkJoinTask<?>)
+                            QA.getAcquire(a, k = (cap - 1) & b);
+                        if (q.source == id && q.base == b++ &&
+                            t != null && QA.compareAndSet(a, k, t, null)) {
+                            q.base = b;
+                            w.source = qid;
+                            t.doExec();
+                            w.source = src;
+                        }
+                    }
+                    break;
+                }
+                else {
+                    r += step;
+                    --n;
+                }
+            }
+            if ((s = task.status) < 0)
+                break;
+            else if (n == 0) { // empty scan
+                long ms, ns; int block;
+                if (deadline == 0L)
+                    ms = 0L;                       // untimed
+                else if ((ns = deadline - System.nanoTime()) <= 0L)
+                    break;                         // timeout
+                else if ((ms = TimeUnit.NANOSECONDS.toMillis(ns)) <= 0L)
+                    ms = 1L;                       // avoid 0 for timed wait
+                if ((block = tryCompensate(w)) != 0) {
+                    task.internalWait(ms);
+                    CTL.getAndAdd(this, (block > 0) ? RC_UNIT : 0L);
+                }
+                s = task.status;
+            }
+        }
+    }
+    return s;
+}
+```
+
+
+
+```java
+private int externalAwaitDone() {
+    int s = tryExternalHelp();
+    if (s >= 0 && (s = (int)STATUS.getAndBitwiseOr(this, SIGNAL)) >= 0) {
+        boolean interrupted = false;
+        synchronized (this) {
+            for (;;) {
+                if ((s = status) >= 0) {
+                    try {
+                        wait(0L);
+                    } catch (InterruptedException ie) {
+                        interrupted = true;
+                    }
+                }
+                else {
+                    notifyAll();
+                    break;
+                }
+            }
+        }
+        if (interrupted)
+            Thread.currentThread().interrupt();
+    }
+    return s;
+}
+```

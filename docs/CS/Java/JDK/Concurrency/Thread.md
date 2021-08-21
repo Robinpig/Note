@@ -91,9 +91,9 @@ private void init(ThreadGroup g, Runnable target, String name,
 ### Example
 
 1. create a thread extends Thread directly
-2. use [ThreadLocalExecutor]()
-3. use [CompletableFuture]() submit task
-4. use [FutureTask]()
+2. use [ThreadLocalExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=ThreadPoolExecutor)
+3. use [CompletableFuture](/docs/CS/Java/JDK/Concurrency/Future.md?id=CompletableFuture) submit task
+4. use [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=FutureTask)
 
 
 
@@ -754,9 +754,9 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 
 1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException())
 2. CHECK_OWNER
-3. AddWaiter, enter the wait queue
+3. **AddWaiter**, enter the wait queue
 4. exit monitor
-5. `Park` Self
+5. **`Park`** Self
 6. ReenterI  or enter when unPark by other Thread
 
 ```cpp
@@ -1313,8 +1313,6 @@ synchronized (lock) {
 
 
 
-
-
 |              | wait      | yield       | sleep       |
 | ------------ | --------- | ----------- | ----------- |
 | From         | Object    | Thread      | Thread      |
@@ -1336,7 +1334,7 @@ while (!this.done)
 
 The compiler is free to read the field this.done just once, and reuse the cached value in each execution of the loop. This would mean that the loop would never terminate, even if another thread changed the value of this.done.
 
-#### See
+#### sleep
 if millis = 0, `os::naked_yield()` like `Thread#yield()`
 ```cpp
 // jvm.cpp
@@ -1466,6 +1464,8 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
   }
 }
 ```
+
+#### yield
 
 
 
@@ -1605,9 +1605,9 @@ This provides a great deal of freedom for the implementor to perform a myriad of
 
 
 
-Reference
+## References
 
 1. [JLS - **Threads and Locks**](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html)
 2. [The JSR-133 Cookbook for Compiler Writers - Doug Lea](http://gee.cs.oswego.edu/dl/jmm/cookbook.html)
 3. [JSR 133 (Java Memory Model) FAQ - Jeremy Manson and Brian Goetz, February 2004](https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html)
-
+4. [Understanding Threads and Locks](https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/geninfo/diagnos/thread_basics.html)

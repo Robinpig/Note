@@ -43,6 +43,7 @@ Memory
 Variants of lock rule apply to volatile fields and thread control
 Writing a volatile has same basic memory effects as unlock
 Reading a volatile has same basic memory effects as lock
+
 Similarly for thread start and termination
 Details differ from locks in minor ways
 
@@ -89,7 +90,7 @@ If we were to use sequential consistency as our memory model, many of the compil
 
 ### Synchronization Order
 
-Every execution has a *synchronization order*. A synchronization order is a total order over all of the synchronization actions of an execution. For each thread *t*, the synchronization order of the synchronization actions ([§17.4.2](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.2)) in *t* is consistent with the program order ([§17.4.3](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.3)) of *t*.
+**Every execution has a *synchronization order*.** A synchronization order is a total order over all of the synchronization actions of an execution. For each thread *t*, the synchronization order of the synchronization actions ([§17.4.2](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.2)) in *t* is consistent with the program order ([§17.4.3](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.3)) of *t*.
 
 Synchronization actions induce the *synchronized-with* relation on actions, defined as follows:
 
@@ -215,6 +216,8 @@ Modified（已修改）, Exclusive（独占的）,Shared（共享的），Invali
 总线嗅探技术有哪些缺点？
 
 由于MESI缓存一致性协议，需要不断对主线进行内存嗅探，大量的交互会导致总线带宽达到峰值。
+
+NUMA(Non-Uniform Memory Access Architecture)
 
 ### Memory Barries
 

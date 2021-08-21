@@ -36,59 +36,53 @@ private volatile int state;
 static final long spinForTimeoutThreshold = 1000L;
 ```
 
-#### hasQueuedPredecessors
+
+
+
+### hasQueuedPredecessors
+
+
 
 ```java
-
-    /**
-     * Queries whether any threads have been waiting to acquire longer
-     * than the current thread.
-     *
-     * <p>An invocation of this method is equivalent to (but may be
-     * more efficient than):
-     *  <pre> {@code
-     * getFirstQueuedThread() != Thread.currentThread() &&
-     * hasQueuedThreads()}</pre>
-     *
-     * <p>Note that because cancellations due to interrupts and
-     * timeouts may occur at any time, a {@code true} return does not
-     * guarantee that some other thread will acquire before the current
-     * thread.  Likewise, it is possible for another thread to win a
-     * race to enqueue after this method has returned {@code false},
-     * due to the queue being empty.
-     *
-     * <p>This method is designed to be used by a fair synchronizer to
-     * avoid <a href="AbstractQueuedSynchronizer#barging">barging</a>.
-     * Such a synchronizer's {@link #tryAcquire} method should return
-     * {@code false}, and its {@link #tryAcquireShared} method should
-     * return a negative value, if this method returns {@code true}
-     * (unless this is a reentrant acquire).  For example, the {@code
-     * tryAcquire} method for a fair, reentrant, exclusive mode
-     * synchronizer might look like this:
-     *
-     *  <pre> {@code
-     * protected boolean tryAcquire(int arg) {
-     *   if (isHeldExclusively()) {
-     *     // A reentrant acquire; increment hold count
-     *     return true;
-     *   } else if (hasQueuedPredecessors()) {
-     *     return false;
-     *   } else {
-     *     // try to acquire normally
-     *   }
-     * }}</pre>
-     */
-    public final boolean hasQueuedPredecessors() {
-        // The correctness of this depends on head being initialized
-        // before tail and on head.next being accurate if the current
-        // thread is first in queue.
-        Node t = tail; // Read fields in reverse initialization order
-        Node h = head;
-        Node s;
-        return h != t &&
-            ((s = h.next) == null || s.thread != Thread.currentThread());
-    }
+public final boolean hasQueuedPredecessors() {
+  // The correctness of this depends on head being initialized
+  // before tail and on head.next being accurate if the current
+  // thread is first in queue.
+  Node t = tail; // Read fields in reverse initialization order
+  Node h = head;
+  Node s;
+  return h != t &&
+    ((s = h.next) == null || s.thread != Thread.currentThread());
+}
 ```
+
+Queries whether any threads have been waiting to acquire longer than the current thread.
+An invocation of this method is equivalent to (but may be more efficient than):
+
+ getFirstQueuedThread() != Thread.currentThread() && hasQueuedThreads()
+
+Note that because cancellations due to interrupts and timeouts may occur at any time, a true return does not guarantee that some other thread will acquire before the current thread. Likewise, it is possible for another thread to win a race to enqueue after this method has returned false, due to the queue being empty.
+This method is designed to be used by **a fair synchronizer** to avoid barging. Such a synchronizer's tryAcquire method should return false, and its tryAcquireShared method should return a negative value, if this method returns true (unless this is a reentrant acquire). For example, the tryAcquire method for a fair, reentrant, exclusive mode synchronizer might look like this:
+
+```java
+protected boolean tryAcquire(int arg) {
+   if (isHeldExclusively()) {
+     // A reentrant acquire; increment hold count
+     return true;
+   } else if (hasQueuedPredecessors()) {
+     return false;
+   } else {
+     // try to acquire normally
+   }
+ }
+```
+
+
+### isHeldExclusively
+
+Returns true if synchronization is held exclusively with respect to the current (calling) thread. This method is invoked upon each call to a AbstractQueuedSynchronizer.ConditionObject method.
+The default implementation throws UnsupportedOperationException. **This method is invoked internally only within AbstractQueuedSynchronizer.ConditionObject methods, so need not be defined if conditions are not used.**
+
 
 
 
@@ -102,168 +96,118 @@ static final long spinForTimeoutThreshold = 1000L;
 
 ### Node
 
+The wait queue is a variant of a "CLH" (Craig, Landin, and Hagersten) lock queue. CLH locks are normally used for spinlocks.  We instead use them for blocking synchronizers by including explicit ("prev" and "next") links plus a "status" field that allow nodes to signal successors when releasing locks, and handle cancellation due to interrupts and timeouts.
+The status field includes bits that track whether a thread needs a signal (using LockSupport.unpark). Despite these additions, we maintain most CLH locality properties.
+
+To enqueue into a CLH lock, you atomically splice it in as new tail. To dequeue, you set the head field, so the next eligible waiter becomes first.
+
 ```java
-/**
- * Wait queue node class.
- *
- * <p>The wait queue is a variant of a "CLH" (Craig, Landin, and
- * Hagersten) lock queue. CLH locks are normally used for
- * spinlocks.  We instead use them for blocking synchronizers, but
- * use the same basic tactic of holding some of the control
- * information about a thread in the predecessor of its node.  A
- * "status" field in each node keeps track of whether a thread
- * should block.  A node is signalled when its predecessor
- * releases.  Each node of the queue otherwise serves as a
- * specific-notification-style monitor holding a single waiting
- * thread. The status field does NOT control whether threads are
- * granted locks etc though.  A thread may try to acquire if it is
- * first in the queue. But being first does not guarantee success;
- * it only gives the right to contend.  So the currently released
- * contender thread may need to rewait.
- *
- * <p>To enqueue into a CLH lock, you atomically splice it in as new
- * tail. To dequeue, you just set the head field.
- * <pre>
- *      +------+  prev +-----+       +-----+
+/**      +------+  prev +-----+       +-----+
  * head |      | <---- |     | <---- |     |  tail
  *      +------+       +-----+       +-----+
- * </pre>
- *
- * <p>Insertion into a CLH queue requires only a single atomic
- * operation on "tail", so there is a simple atomic point of
- * demarcation from unqueued to queued. Similarly, dequeuing
- * involves only updating the "head". However, it takes a bit
- * more work for nodes to determine who their successors are,
- * in part to deal with possible cancellation due to timeouts
- * and interrupts.
- *
- * <p>The "prev" links (not used in original CLH locks), are mainly
- * needed to handle cancellation. If a node is cancelled, its
- * successor is (normally) relinked to a non-cancelled
- * predecessor. For explanation of similar mechanics in the case
- * of spin locks, see the papers by Scott and Scherer at
- * http://www.cs.rochester.edu/u/scott/synchronization/
- *
- * <p>We also use "next" links to implement blocking mechanics.
- * The thread id for each node is kept in its own node, so a
- * predecessor signals the next node to wake up by traversing
- * next link to determine which thread it is.  Determination of
- * successor must avoid races with newly queued nodes to set
- * the "next" fields of their predecessors.  This is solved
- * when necessary by checking backwards from the atomically
- * updated "tail" when a node's successor appears to be null.
- * (Or, said differently, the next-links are an optimization
- * so that we don't usually need a backward scan.)
- *
- * <p>Cancellation introduces some conservatism to the basic
- * algorithms.  Since we must poll for cancellation of other
- * nodes, we can miss noticing whether a cancelled node is
- * ahead or behind us. This is dealt with by always unparking
- * successors upon cancellation, allowing them to stabilize on
- * a new predecessor, unless we can identify an uncancelled
- * predecessor who will carry this responsibility.
- *
- * <p>CLH queues need a dummy header node to get started. But
- * we don't create them on construction, because it would be wasted
- * effort if there is never contention. Instead, the node
- * is constructed and head and tail pointers are set upon first
- * contention.
- *
- * <p>Threads waiting on Conditions use the same nodes, but
- * use an additional link. Conditions only need to link nodes
- * in simple (non-concurrent) linked queues because they are
- * only accessed when exclusively held.  Upon await, a node is
- * inserted into a condition queue.  Upon signal, the node is
- * transferred to the main queue.  A special value of status
- * field is used to mark which queue a node is on.
- *
- * <p>Thanks go to Dave Dice, Mark Moir, Victor Luchangco, Bill
- * Scherer and Michael Scott, along with members of JSR-166
- * expert group, for helpful ideas, discussions, and critiques
- * on the design of this class.
  */
-static final class Node {
+```
 
-    //Status field
-    volatile int waitStatus;
 
-    /**
-     * Link to predecessor node that current node/thread relies on
-     * for checking waitStatus. Assigned during enqueuing, and nulled
-     * out (for sake of GC) only upon dequeuing.  Also, upon
-     * cancellation of a predecessor, we short-circuit while
-     * finding a non-cancelled one, which will always exist
-     * because the head node is never cancelled: A node becomes
-     * head only as a result of successful acquire. A
-     * cancelled thread never succeeds in acquiring, and a thread only
-     * cancels itself, not any other node.
-     */
-    volatile Node prev;
 
-    /**
-     * Link to the successor node that the current node/thread
-     * unparks upon release. Assigned during enqueuing, adjusted
-     * when bypassing cancelled predecessors, and nulled out (for
-     * sake of GC) when dequeued.  The enq operation does not
-     * assign next field of a predecessor until after attachment,
-     * so seeing a null next field does not necessarily mean that
-     * node is at end of queue. However, if a next field appears
-     * to be null, we can scan prev's from the tail to
-     * double-check.  The next field of cancelled nodes is set to
-     * point to the node itself instead of null, to make life
-     * easier for isOnSyncQueue.
-     */
-    volatile Node next;
+Insertion into a CLH queue requires only a single atomic operation on "tail", so there is a simple point of demarcation from unqueued to queued. The "next" link of the predecessor is set by the enqueuing thread after successful CAS. Even though non-atomic, this suffices to ensure that any blocked thread is signalled by a predecessor when eligible (although in the case of cancellation, possibly with the assistance of a signal in method cleanQueue). Signalling is based in part on a Dekker-like scheme in which the to-be waiting thread indicates WAITING status, then retries acquiring, and then rechecks status before blocking. The signaller atomically clears WAITING status when unparking.
 
-    /**
-     * The thread that enqueued this node.  Initialized on
-     * construction and nulled out after use.
-     */
-    volatile Thread thread;
 
-    Node nextWaiter;
 
-    //Returns true if node is waiting in shared mode.
-    final boolean isShared() {
-        return nextWaiter == SHARED;
+Dequeuing on acquire involves detaching (nulling) a node's "prev" node and then updating the "head". Other threads check if a node is or was dequeued by checking "prev" rather than head. We enforce the nulling then setting order by spin-waiting if necessary. Because of this, the lock algorithm is not itself strictly "lock-free" because an acquiring thread may need to wait for a previous acquire to make progress. When used with exclusive locks, such progress is required anyway. However Shared mode may (uncommonly) require a spin-wait before setting head field to ensure proper propagation. (Historical note: This allows some simplifications and efficiencies compared to previous versions of this class.)
+
+A node's predecessor can change due to cancellation while it is waiting, until the node is first in queue, at which point it cannot change. The acquire methods cope with this by rechecking "prev" before waiting. The prev and next fields are modified only via CAS by cancelled nodes in method cleanQueue. The unsplice strategy is reminiscent of Michael-Scott queues in that after a successful CAS to prev field, other threads help fix next fields.  Because cancellation often occurs in bunches that complicate decisions about necessary signals, each call to cleanQueue traverses the queue until a clean sweep. Nodes that become relinked as first are unconditionally unparked (sometimes unnecessarily, but those cases are not worth avoiding).
+
+
+
+A thread may try to acquire if it is first (frontmost) in the queue, and sometimes before.  Being first does not guarantee
+success; it only gives the right to contend. We balance throughput, overhead, and fairness by allowing incoming threads to "barge" and acquire the synchronizer while in the process of enqueuing, in which case an awakened first thread may need to rewait.  To counteract possible repeated unlucky rewaits, we exponentially increase retries (up to 256) to acquire each time a thread is unparked. Except in this case, AQS locks do not spin; they instead interleave attempts to acquire with bookkeeping steps. (Users who want spinlocks can use tryAcquire.)
+
+To improve garbage collectibility, fields of nodes not yet on list are null. (It is not rare to create and then throw away a
+node without using it.) Fields of nodes coming off the list are nulled out as soon as possible. This accentuates the challenge of externally determining the first waiting thread (as in method getFirstQueuedThread). This sometimes requires the fallback of traversing backwards from the atomically updated "tail" when fields appear null. (This is never needed in the process of signalling though.)
+
+
+
+
+
+CLH queues need a dummy header node to get started. But we don't create them on construction, because it would be wasted effort if there is never contention. Instead, the node is constructed and head and tail pointers are set upon first contention.
+Shared mode operations differ from Exclusive in that an acquire signals the next waiter to try to acquire if it is also
+Shared. The tryAcquireShared API allows users to indicate the degree of propagation, but in most applications, it is more efficient to ignore this, allowing the successor to try acquiring in any case.
+Threads waiting on Conditions use nodes with an additional link to maintain the (FIFO) list of conditions. Conditions only need to link nodes in simple (non-concurrent) linked queues because they are only accessed when exclusively held.  Upon await, a node is inserted into a condition queue.  Upon signal, the node is enqueued on the main queue.  A special status field value is used to track and atomically trigger this. Accesses to fields head, tail, and state use full Volatile mode, along with CAS. Node fields status, prev and next also do so while threads may be signallable, but sometimes use weaker modes otherwise. Accesses to field "waiter" (the thread to be signalled) are always sandwiched between other atomic accesses so are used in Plain mode. We use jdk.internal Unsafe versions of atomic access methods rather than VarHandles to avoid potential VM bootstrap issues.
+
+
+
+Most of the above is performed by primary internal method acquire, that is invoked in some way by all exported acquire
+methods.  (It is usually easy for compilers to optimize call-site specializations when heavily used.)
+There are several arbitrary decisions about when and how to check interrupts in both acquire and await before and/or after blocking. The decisions are less arbitrary in implementation updates because some users appear to rely on original behaviors in ways that are racy and so (rarely) wrong in general but hard to justify changing.
+
+Thanks go to Dave Dice, Mark Moir, Victor Luchangco, Bill Scherer and Michael Scott, along with members of JSR-166 expert group, for helpful ideas, discussions, and critiques on the design of this class.
+
+
+
+```java
+abstract static class Node {
+    volatile Node prev;       // initially attached via casTail
+    volatile Node next;       // visibly nonnull when signallable
+    Thread waiter;            // visibly nonnull when enqueued
+    volatile int status;      // written by owner, atomic bit ops by others
+
+    // methods for atomic operations
+    final boolean casPrev(Node c, Node v) {  // for cleanQueue
+        return U.weakCompareAndSetReference(this, PREV, c, v);
+    }
+    final boolean casNext(Node c, Node v) {  // for cleanQueue
+        return U.weakCompareAndSetReference(this, NEXT, c, v);
+    }
+    final int getAndUnsetStatus(int v) {     // for signalling
+        return U.getAndBitwiseAndInt(this, STATUS, ~v);
+    }
+    final void setPrevRelaxed(Node p) {      // for off-queue assignment
+        U.putReference(this, PREV, p);
+    }
+    final void setStatusRelaxed(int s) {     // for off-queue assignment
+        U.putInt(this, STATUS, s);
+    }
+    final void clearStatus() {               // for reducing unneeded signals
+        U.putIntOpaque(this, STATUS, 0);
     }
 
-    /**
-     * Returns previous node, or throws NullPointerException if null.
-     * Use when predecessor cannot be null.  The null check could
-     * be elided, but is present to help the VM.
-     */
-    final Node predecessor() throws NullPointerException {
-        Node p = prev;
-        if (p == null)
-            throw new NullPointerException();
-        else
-            return p;
-    }
-
-    Node() {    // Used to establish initial head or SHARED marker
-    }
-
-    Node(Thread thread, Node mode) {     // Used by addWaiter
-        this.nextWaiter = mode;
-        this.thread = thread;
-    }
-
-    Node(Thread thread, int waitStatus) { // Used by Condition
-        this.waitStatus = waitStatus;
-        this.thread = thread;
-    }
+    private static final long STATUS
+        = U.objectFieldOffset(Node.class, "status");
+    private static final long NEXT
+        = U.objectFieldOffset(Node.class, "next");
+    private static final long PREV
+        = U.objectFieldOffset(Node.class, "prev");
 }
 ```
 
 
 
 ```java
-/** Marker to indicate a node is waiting in shared mode */
-    static final Node SHARED = new Node();
-/** Marker to indicate a node is waiting in exclusive mode */
-static final Node EXCLUSIVE = null;
+// Concrete classes tagged by type
+static final class ExclusiveNode extends Node { }
+static final class SharedNode extends Node { }
+
+static final class ConditionNode extends Node
+    implements ForkJoinPool.ManagedBlocker {
+    ConditionNode nextWaiter;            // link to next waiting node
+
+    /**
+     * Allows Conditions to be used in ForkJoinPools without risking fixed pool exhaustion. 
+     * This is usable only for untimed Condition waits, not timed versions.
+     */
+    public final boolean isReleasable() {
+        return status <= 1 || Thread.currentThread().isInterrupted();
+    }
+
+    public final boolean block() {
+        while (!isReleasable()) LockSupport.park();
+        return true;
+    }
+}
 ```
+
+
 
 #### waitStatus
 
@@ -356,9 +300,7 @@ private Node addWaiter(Node mode) {
     return node;
 }
 
-/**
- * Inserts node into queue, initializing if necessary. See picture above.
- */
+// Inserts node into queue, initializing if necessary. See picture above.
 private Node enq(final Node node) {
     for (;;) {
         Node t = tail;
@@ -539,8 +481,6 @@ private void cancelAcquire(Node node) {
 
 ## release
 
-![Image](https://mmbiz.qpic.cn/mmbiz_png/23OQmC1ia8nxCUWZdarelXPLIZiasyibibYU06oZ2b3Rst707NOAkgIiafeYxibKp0zDYBTr20nyxK8uVgwjpgMR5l0A/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
-
 1. tryRelease
 2. unparkSuccessor
 
@@ -560,7 +500,7 @@ public final boolean release(int arg) {
 
 
 
-#### unparkSuccessor
+### unparkSuccessor
 
 ```java
 private void unparkSuccessor(Node node) {
@@ -593,7 +533,7 @@ private void unparkSuccessor(Node node) {
 
 
 
-
+## Shared
 
 
 
@@ -1131,11 +1071,21 @@ Here is a latch class that is like a CountDownLatch except that it only requires
 
 
 
+1. Exclusive ReentrantLock
+2. Share Semaphore/CountDownLatch
+3. Both ReadWriteLock/StampedLock
+
 
 
 ## Summary
 
 通过这篇文章基本将AQS队列的实现过程做了比较清晰的分析，主要是基于非公平锁的独占锁实现。在获得同步锁时，同步器维护一个同步队列，获取状态失败的线程都会被加入到队列中并在队列中进行自旋；移出队列（或停止自旋）的条件是前驱节点为头节点且成功获取了同步状态。在释放同步状态时，同步器调用tryRelease(int arg)方法释放同步状态，然后唤醒头节点的后继节点。
+
+
+
+## AOS
+
+AbstractOwnableSynchronizer
 
 
 

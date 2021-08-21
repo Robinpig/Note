@@ -162,15 +162,27 @@ public interface ScheduledExecutorService extends ExecutorService {
 
   *This class specializes ThreadPoolExecutor implementation by*
 
-  1. *Using a custom task type, ScheduledFutureTask for tasks, even those that don't require scheduling (i.e., those submitted using ExecutorService execute, not ScheduledExecutorService methods) which are treated as delayed tasks with a delay of zero.*
-     
-  2. *Using a custom queue (DelayedWorkQueue), a variant of unbounded DelayQueue. The lack of capacity constraint and the fact that corePoolSize and maximumPoolSize are effectively identical simplifies some execution mechanics (see delayedExecute) compared to ThreadPoolExecutor.*
-     
-  3. *Supporting optional run-after-shutdown parameters, which leads to overrides of shutdown methods to remove and cancel tasks that should NOT be run after shutdown, as well as different recheck logic when task (re)submission overlaps with a shutdown.*
-     
-        4. *Task decoration methods to allow interception and instrumentation, which are needed because subclasses cannot otherwise override submit methods to get this effect. These don't have any impact on pool control logic though.*
+    1. *Using a custom task type, ScheduledFutureTask for tasks, even those that don't require scheduling (i.e., those submitted using ExecutorService execute, not ScheduledExecutorService methods) which are treated as delayed tasks with a delay of zero.*
+    2. *Using a custom queue (DelayedWorkQueue), a variant of unbounded DelayQueue. The lack of capacity constraint and the fact that corePoolSize and maximumPoolSize are effectively identical simplifies some execution mechanics (see delayedExecute) compared to ThreadPoolExecutor.*
+    3. *Supporting optional run-after-shutdown parameters, which leads to overrides of shutdown methods to remove and cancel tasks that should NOT be run after shutdown, as well as different recheck logic when task (re)submission overlaps with a shutdown.*
+    4. *Task decoration methods to allow interception and instrumentation, which are needed because subclasses cannot otherwise override submit methods to get this effect. These don't have any impact on pool control logic though.*
 
 
+
+
+
+```java
+public void run() {
+    if (!canRunInCurrentRunState(this))
+        cancel(false);
+    else if (!isPeriodic())
+        super.run();
+    else if (super.runAndReset()) {
+        setNextRunTime();
+        reExecutePeriodic(outerTask);
+    }
+}
+```
 
 
 
@@ -194,5 +206,173 @@ public int compareTo(Delayed other) {
     }
     long diff = getDelay(NANOSECONDS) - other.getDelay(NANOSECONDS);
     return (diff < 0) ? -1 : (diff > 0) ? 1 : 0;
+}
+```
+
+
+
+## scheduleAtFixedRate
+
+```java
+public ScheduledFuture<?> scheduleAtFixedRate(Runnable command,
+                                              long initialDelay,
+                                              long period,
+                                              TimeUnit unit) {
+    if (command == null || unit == null)
+        throw new NullPointerException();
+    if (period <= 0L)
+        throw new IllegalArgumentException();
+    ScheduledFutureTask<Void> sft =
+        new ScheduledFutureTask<Void>(command,
+                                      null,
+                                      triggerTime(initialDelay, unit),
+                                      unit.toNanos(period),
+                                      sequencer.getAndIncrement());
+    RunnableScheduledFuture<Void> t = decorateTask(command, sft);
+    sft.outerTask = t;
+    delayedExecute(t);
+    return t;
+}
+```
+
+
+
+## scheduleWithFixedDelay
+
+```java
+public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command,
+                                                 long initialDelay,
+                                                 long delay,
+                                                 TimeUnit unit) {
+    if (command == null || unit == null)
+        throw new NullPointerException();
+    if (delay <= 0L)
+        throw new IllegalArgumentException();
+    ScheduledFutureTask<Void> sft =
+        new ScheduledFutureTask<Void>(command,
+                                      null,
+                                      triggerTime(initialDelay, unit),
+                                      -unit.toNanos(delay),
+                                      sequencer.getAndIncrement());
+    RunnableScheduledFuture<Void> t = decorateTask(command, sft);
+    sft.outerTask = t;
+    delayedExecute(t);
+    return t;
+}
+```
+
+
+
+
+
+```java
+private void delayedExecute(RunnableScheduledFuture<?> task) {
+    if (isShutdown())
+        reject(task);
+    else {
+        super.getQueue().add(task);
+        if (!canRunInCurrentRunState(task) && remove(task))
+            task.cancel(false);
+        else
+            ensurePrestart();
+    }
+}
+```
+
+
+
+Same as prestartCoreThread except arranges that at least one thread is started even if corePoolSize is 0.
+
+```java
+void ensurePrestart() {
+    int wc = workerCountOf(ctl.get());
+    if (wc < corePoolSize)
+        addWorker(null, true);
+    else if (wc == 0)
+        addWorker(null, false);
+}
+```
+
+
+
+## DelayedWorkQueue
+
+Specialized delay queue. To mesh with TPE declarations, this class must be declared as a BlockingQueue  even though it can only hold RunnableScheduledFutures.
+
+```java
+static class DelayedWorkQueue extends AbstractQueue<Runnable>
+    implements BlockingQueue<Runnable> {}
+```
+
+
+
+### take
+
+```java
+public RunnableScheduledFuture<?> take() throws InterruptedException {
+    final ReentrantLock lock = this.lock;
+    lock.lockInterruptibly();
+    try {
+        for (;;) {
+            RunnableScheduledFuture<?> first = queue[0];
+            if (first == null)
+                available.await();
+            else {
+                long delay = first.getDelay(NANOSECONDS);
+                if (delay <= 0L)
+                    return finishPoll(first);
+                first = null; // don't retain ref while waiting
+                if (leader != null)
+                    available.await();
+                else {
+                    Thread thisThread = Thread.currentThread();
+                    leader = thisThread;
+                    try {
+                        available.awaitNanos(delay);
+                    } finally {
+                        if (leader == thisThread)
+                            leader = null;
+                    }
+                }
+            }
+        }
+    } finally {
+        if (leader == null && queue[0] != null)
+            available.signal();
+        lock.unlock();
+    }
+}
+```
+
+
+
+### offer
+
+```java
+public boolean offer(Runnable x) {
+    if (x == null)
+        throw new NullPointerException();
+    RunnableScheduledFuture<?> e = (RunnableScheduledFuture<?>)x;
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        int i = size;
+        if (i >= queue.length)
+            grow();
+        size = i + 1;
+        if (i == 0) {
+            queue[0] = e;
+            setIndex(e, 0);
+        } else {
+            siftUp(i, e);
+        }
+        if (queue[0] == e) {
+            leader = null;
+            available.signal();
+        }
+    } finally {
+        lock.unlock();
+    }
+    return true;
 }
 ```

@@ -214,6 +214,70 @@ This class and its iterator implement all of the optional methods of the Collect
 ```
 
 
+## ConcurrentLinkedQueue
+
+unbounded queue
+head tail volatile
+```java
+
+private static class Node<E> {
+   volatile E item;
+   volatile Node<E> next;
+
+   /**
+    * Constructs a new node.  Uses relaxed write because item can
+    * only be seen after publication via casNext.
+    */
+   Node(E item) {
+      UNSAFE.putObject(this, itemOffset, item);
+   }
+
+   boolean casItem(E cmp, E val) {
+      return UNSAFE.compareAndSwapObject(this, itemOffset, cmp, val);
+   }
+
+   void lazySetNext(Node<E> val) {
+      UNSAFE.putOrderedObject(this, nextOffset, val);
+   }
+
+   boolean casNext(Node<E> cmp, Node<E> val) {
+      return UNSAFE.compareAndSwapObject(this, nextOffset, cmp, val);
+   }
+
+   // Unsafe mechanics
+...
+}
+
+ /**
+  * A node from which the first live (non-deleted) node (if any)
+  * can be reached in O(1) time.
+  * Invariants:
+  * - all live nodes are reachable from head via succ()
+  * - head != null
+  * - (tmp = head).next != tmp || tmp != head
+  * Non-invariants:
+  * - head.item may or may not be null.
+  * - it is permitted for tail to lag behind head, that is, for tail
+  *   to not be reachable from head!
+  */
+ private transient volatile Node<E> head;
+
+ /**
+  * A node from which the last node on list (that is, the unique
+  * node with node.next == null) can be reached in O(1) time.
+  * Invariants:
+  * - the last node is always reachable from tail via succ()
+  * - tail != null
+  * Non-invariants:
+  * - tail.item may or may not be null.
+  * - it is permitted for tail to lag behind head, that is, for tail
+  *   to not be reachable from head!
+  * - tail.next may or may not be self-pointing to tail.
+  */
+ private transient volatile Node<E> tail;
+```
+
+cas
 
 
 
@@ -309,7 +373,7 @@ This interface is a member of the Java Collections Framework.
 
 ### ArrayBlockingQueue
 
-1 lock 2 conditions
+1 [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) and 2 conditions
 
 ```java
 /** Main lock guarding all access */
@@ -327,6 +391,25 @@ private final Condition notFull;
 
 
 ```java
+public ArrayBlockingQueue(int capacity) {
+  this(capacity, false);
+}
+
+/**
+  * Creates an {@code ArrayBlockingQueue} with the given (fixed)
+  * capacity and the specified access policy.
+  */
+public ArrayBlockingQueue(int capacity, boolean fair) {
+  if (capacity <= 0)
+    throw new IllegalArgumentException();
+  this.items = new Object[capacity];
+  lock = new ReentrantLock(fair);
+  notEmpty = lock.newCondition();
+  notFull =  lock.newCondition();
+}
+
+
+
 public ArrayBlockingQueue(int capacity, boolean fair,
                           Collection<? extends E> c) {
     this(capacity, fair);
@@ -734,31 +817,20 @@ private static final int DEFAULT_INITIAL_CAPACITY = 11;
  */
 private transient Object[] queue;
 
-/**
- * The number of elements in the priority queue.
- */
+// The number of elements in the priority queue.
 private transient int size;
 
-/**
- * The comparator, or null if priority queue uses elements'
- * natural ordering.
- */
+// The comparator, or null if priority queue uses elements' natural ordering.
 private transient Comparator<? super E> comparator;
 
-/**
- * Lock used for all public operations.
- */
+// Lock used for all public operations.
 private final ReentrantLock lock = new ReentrantLock();
 
-/**
- * Condition for blocking when empty.
- */
+// Condition for blocking when empty.
 @SuppressWarnings("serial") // Classes implementing Condition may be serializable.
 private final Condition notEmpty = lock.newCondition();
 
-/**
- * Spinlock for allocation, acquired via CAS.
- */
+// Spinlock for allocation, acquired via CAS.
 private transient volatile int allocationSpinLock;
 ```
 
@@ -766,5 +838,12 @@ private transient volatile int allocationSpinLock;
 
 ## Summary
 
-
+| Queue                 | Boundary           | Lock     | Struct     |
+| --------------------- | ------------------ | -------- | ---------- |
+| ArrayBlockingQueue    | bounded            | lock     | arrayList  |
+| LinkedBlockingQueue   | optionally-bounded | lock     | linkedList |
+| ConcurrentLinkedQueue | unbounded          | Non-lock | linkedList |
+| LinkedTransferQueue   | unbounded          | Non-lock | linkedList |
+| PriorityBlockingQueue | unbounded          | lock     | heap       |
+| DealyQueue            | unbounded          | lock     | heap       |
 

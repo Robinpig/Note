@@ -329,6 +329,63 @@ Because every call will new SqlSession, please use transaction.
 
 ![](./images/MapperScan.png)
 
+
+
+### SpringBoot
+
+Auto-Configuration for Mybatis. Contributes a **SqlSessionFactory** and a **SqlSessionTemplate**. If `org.mybatis.spring.annotation.MapperScan` is used, or a configuration file is specified as a property, those will be considered, otherwise this auto-configuration will attempt to register mappers based on the interface definitions in or under the root auto-configuration package.
+
+```java
+@org.springframework.context.annotation.Configuration
+@ConditionalOnClass({ SqlSessionFactory.class, SqlSessionFactoryBean.class })
+@ConditionalOnSingleCandidate(DataSource.class)
+@EnableConfigurationProperties(MybatisProperties.class)
+@AutoConfigureAfter(DataSourceAutoConfiguration.class)
+public class MybatisAutoConfiguration implements InitializingBean {}
+```
+
+
+
+```java
+// MybatisAutoConfiguration
+@Bean
+@ConditionalOnMissingBean
+public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
+  SqlSessionFactoryBean factory = new SqlSessionFactoryBean();
+  factory.setDataSource(dataSource);
+  factory.setVfs(SpringBootVFS.class);
+  if (StringUtils.hasText(this.properties.getConfigLocation())) {
+    factory.setConfigLocation(this.resourceLoader.getResource(this.properties.getConfigLocation()));
+  }
+  applyConfiguration(factory);
+  if (this.properties.getConfigurationProperties() != null) {
+    factory.setConfigurationProperties(this.properties.getConfigurationProperties());
+  }
+  if (!ObjectUtils.isEmpty(this.interceptors)) { // set plugins
+    factory.setPlugins(this.interceptors);
+  }
+  if (this.databaseIdProvider != null) {
+    factory.setDatabaseIdProvider(this.databaseIdProvider);
+  }
+  if (StringUtils.hasLength(this.properties.getTypeAliasesPackage())) {
+    factory.setTypeAliasesPackage(this.properties.getTypeAliasesPackage());
+  }
+  if (this.properties.getTypeAliasesSuperType() != null) {
+    factory.setTypeAliasesSuperType(this.properties.getTypeAliasesSuperType());
+  }
+  if (StringUtils.hasLength(this.properties.getTypeHandlersPackage())) {
+    factory.setTypeHandlersPackage(this.properties.getTypeHandlersPackage());
+  }
+  if (!ObjectUtils.isEmpty(this.properties.resolveMapperLocations())) {
+    factory.setMapperLocations(this.properties.resolveMapperLocations());
+  }
+
+  return factory.getObject();
+}
+```
+
+
+
 ### use @MapperScan
 
 Use this annotation to register MyBatis mapper interfaces when using Java Config. It performs when same work as MapperScannerConfigurer via MapperScannerRegistrar.

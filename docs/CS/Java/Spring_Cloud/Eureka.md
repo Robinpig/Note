@@ -151,9 +151,263 @@ public class EurekaBootStrap implements ServletContextListener {
 
 
 
-### DiscoveryClient
+## DiscoveryClient
+
+```java
+// org.springframework.cloud.client.discovery.EnableDiscoveryClient
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@Import(EnableDiscoveryClientImportSelector.class)
+public @interface EnableDiscoveryClient {
+
+	// If true, the ServiceRegistry will automatically register the local server.
+	boolean autoRegister() default true;
+
+}
+```
+
+```java
+
+/**
+ * Represents read operations commonly available to discovery services such as Netflix
+ * Eureka or consul.io.
+ */
+public interface DiscoveryClient extends Ordered {
+
+	/**
+	 * Default order of the discovery client.
+	 */
+	int DEFAULT_ORDER = 0;
+
+	/**
+	 * A human-readable description of the implementation, used in HealthIndicator.
+	 * @return The description.
+	 */
+	String description();
+
+	/**
+	 * Gets all ServiceInstances associated with a particular serviceId.
+	 * @param serviceId The serviceId to query.
+	 * @return A List of ServiceInstance.
+	 */
+	List<ServiceInstance> getInstances(String serviceId);
+
+	/**
+	 * @return All known service IDs.
+	 */
+	List<String> getServices();
+
+	/**
+	 * Can be used to verify the client is valid and able to make calls.
+	 * <p>
+	 * A successful invocation with no exception thrown implies the client is able to make
+	 * calls.
+	 * <p>
+	 * The default implementation simply calls {@link #getServices()} - client
+	 * implementations can override with a lighter weight operation if they choose to.
+	 */
+	default void probe() {
+		getServices();
+	}
+
+	/**
+	 * Default implementation for getting order of discovery clients.
+	 * @return order
+	 */
+	@Override
+	default int getOrder() {
+		return DEFAULT_ORDER;
+	}
+
+}
+```
 
 
+```java
+
+/**
+ * A DiscoveryClient implementation for Eureka.
+ */
+public class EurekaDiscoveryClient implements DiscoveryClient {
+
+	public static final String DESCRIPTION = "Spring Cloud Eureka Discovery Client";
+
+	private final EurekaClient eurekaClient;
+
+	private final EurekaClientConfig clientConfig;
+
+	@Deprecated
+	public EurekaDiscoveryClient(EurekaInstanceConfig config, EurekaClient eurekaClient) {
+		this(eurekaClient, eurekaClient.getEurekaClientConfig());
+	}
+
+	public EurekaDiscoveryClient(EurekaClient eurekaClient,
+			EurekaClientConfig clientConfig) {
+		this.clientConfig = clientConfig;
+		this.eurekaClient = eurekaClient;
+	}
+
+	@Override
+	public String description() {
+		return DESCRIPTION;
+	}
+
+	@Override
+	public List<ServiceInstance> getInstances(String serviceId) {
+		List<InstanceInfo> infos = this.eurekaClient.getInstancesByVipAddress(serviceId,
+				false);
+		List<ServiceInstance> instances = new ArrayList<>();
+		for (InstanceInfo info : infos) {
+			instances.add(new EurekaServiceInstance(info));
+		}
+		return instances;
+	}
+
+	@Override
+	public List<String> getServices() {
+		Applications applications = this.eurekaClient.getApplications();
+		if (applications == null) {
+			return Collections.emptyList();
+		}
+		List<Application> registered = applications.getRegisteredApplications();
+		List<String> names = new ArrayList<>();
+		for (Application app : registered) {
+			if (app.getInstances().isEmpty()) {
+				continue;
+			}
+			names.add(app.getName().toLowerCase());
+
+		}
+		return names;
+	}
+
+	@Override
+	public int getOrder() {
+		return clientConfig instanceof Ordered ? ((Ordered) clientConfig).getOrder()
+				: DiscoveryClient.DEFAULT_ORDER;
+	}
+
+	/**
+	 * An Eureka-specific {@link ServiceInstance} implementation. Extends
+	 * {@link org.springframework.cloud.netflix.eureka.EurekaServiceInstance} for
+	 * backwards compatibility.
+	 *
+	 * @deprecated In favor of
+	 * {@link org.springframework.cloud.netflix.eureka.EurekaServiceInstance}.
+	 */
+	@Deprecated
+	public static class EurekaServiceInstance
+			extends org.springframework.cloud.netflix.eureka.EurekaServiceInstance {
+
+		public EurekaServiceInstance(InstanceInfo instance) {
+			super(instance);
+		}
+
+	}
+
+}
+```
+
+Define a simple interface over the current DiscoveryClient implementation. This interface does NOT try to clean up the current client interface for eureka 1.x. Rather it tries to provide an easier transition path from eureka 1.x to eureka 2.x. EurekaClient API contracts are: - provide the ability to get InstanceInfo(s) (in various different ways) - provide the ability to get data about the local Client (known regions, own AZ etc) - provide the ability to register and access the healthcheck handler for the client
+```java
+@ImplementedBy(DiscoveryClient.class)
+public interface EurekaClient extends LookupService {
+
+
+}
+```
+
+
+
+The class that is instrumental for interactions with Eureka Server.
+Eureka Client is responsible for a) Registering the instance with Eureka Server b) Renewalof the lease with Eureka Server c) Cancellation of the lease from Eureka Server during shutdown
+d) Querying the list of services/instances registered with Eureka Server
+
+Eureka Client needs a configured list of Eureka Server java.net.URLs to talk to.These java.net.URLs are typically amazon elastic eips which do not change. All of the functions defined above fail-over to other java.net.URLs specified in the list in the case of failure.
+
+```java
+// com.netflix.discovery.DiscoveryClient
+@Singleton
+public class DiscoveryClient implements EurekaClient {}
+```
+
+finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
+`com.netflix.discovery.DiscoveryClient#initScheduledTasks()`
+
+
+
+### register
+```java
+// com.netflix.discovery.DiscoveryClient
+/**
+ * Register with the eureka service by making the appropriate REST call.
+ */
+boolean register() throws Throwable {
+    logger.info(PREFIX + "{}: registering service...", appPathIdentifier);
+    EurekaHttpResponse<Void> httpResponse;
+    try {
+        httpResponse = eurekaTransport.registrationClient.register(instanceInfo);
+    } catch (Exception e) {
+        logger.warn(PREFIX + "{} - registration failed {}", appPathIdentifier, e.getMessage(), e);
+        throw e;
+    }
+    if (logger.isInfoEnabled()) {
+        logger.info(PREFIX + "{} - registration status: {}", appPathIdentifier, httpResponse.getStatusCode());
+    }
+    return httpResponse.getStatusCode() == Status.NO_CONTENT.getStatusCode();
+}
+```
+
+
+
+## EndpointUtils
+
+Get the list of all eureka service urls from properties file for the eureka client to talk to.
+
+Region Zone
+
+1 application 1 region, multiple zones
+
+
+```java
+// com.netflix.discovery.endpoint.EndpointUtils
+public static Map<String, List<String>> getServiceUrlsMapFromConfig(EurekaClientConfig clientConfig, String instanceZone, boolean preferSameZone) {
+        Map<String, List<String>> orderedUrls = new LinkedHashMap<>();
+        String region = getRegion(clientConfig); // only 1 region
+        String[] availZones = clientConfig.getAvailabilityZones(clientConfig.getRegion());
+        if (availZones == null || availZones.length == 0) {
+            availZones = new String[1];
+            availZones[0] = DEFAULT_ZONE;
+        }
+        int myZoneOffset = getZoneOffset(instanceZone, preferSameZone, availZones);
+
+        String zone = availZones[myZoneOffset];
+        List<String> serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
+        if (serviceUrls != null) {
+            orderedUrls.put(zone, serviceUrls);
+        }
+        int currentOffset = myZoneOffset == (availZones.length - 1) ? 0 : (myZoneOffset + 1);
+        while (currentOffset != myZoneOffset) {
+            zone = availZones[currentOffset];
+            serviceUrls = clientConfig.getEurekaServerServiceUrls(zone);
+            if (serviceUrls != null) {
+                orderedUrls.put(zone, serviceUrls);
+            }
+            if (currentOffset == (availZones.length - 1)) {
+                currentOffset = 0;
+            } else {
+                currentOffset++;
+            }
+        }
+
+        if (orderedUrls.size() < 1) {
+            throw new IllegalArgumentException("DiscoveryClient: invalid serviceUrl specified!");
+        }
+        return orderedUrls;
+    }
+```
 
 ### PeerAwareInstanceRegistry
 
@@ -211,45 +465,20 @@ static class CircularQueue<E> extends AbstractQueue<E> {
         this.delegate = new ArrayBlockingQueue(capacity);
     }
 
-    public Iterator<E> iterator() {
-        return this.delegate.iterator();
-    }
-
-    public int size() {
-        return this.delegate.size();
-    }
-
+    // discard first node
     public boolean offer(E e) {
         while(!this.delegate.offer(e)) {
             this.delegate.poll();
         }
         return true;
     }
-
-    public E poll() {
-        return this.delegate.poll();
-    }
-
-    public E peek() {
-        return this.delegate.peek();
-    }
-
-    public void clear() {
-        this.delegate.clear();
-    }
-
-    public Object[] toArray() {
-        return this.delegate.toArray();
-    }
+...
 }
 ```
 
 
 
 ### RateLimitingFilter
-
-
-
 
 
 

@@ -168,6 +168,10 @@ static boolean tryHandlePending(boolean waitForNotify) {
 -XX:+TraceReferenceGC
 
 ```
+### StrongReference
+Strong references provide direct access to the target object.
+Will not be recycled.
+
 
 ### SoftReference
 

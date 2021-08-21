@@ -176,8 +176,6 @@ It’s very easy to figure out whether an operation is eager or lazy: **look at 
 2. 即使都要处理整个数据集，一个过滤器还是要比一个迭代器稍微快些
 3. 多个过滤器有些开销，所以要确保编写好用的过滤器
 
-- 
-
 
 
 ### Generate Stream
@@ -202,12 +200,68 @@ iterate() generate()
 
 
 
-###  Type
+###  Parallel
 
-- stream() : 单管道
-- parallelStream()
-  - 多管道，并行流式处理，底层使用 ForkJoinPool 实现
-  - 强制要求有序 : forEachOrdered()
+Returns an equivalent stream that is parallel. May return itself, either because the stream was already parallel, or because the underlying stream state was modified to be parallel.
+This is an intermediate operation.
+
+```java
+// BaseStream
+S parallel();
+
+// AbstractPipeline
+@Override
+@SuppressWarnings("unchecked")
+public final S parallel() {
+  sourceStage.parallel = true;
+  return (S) this;
+}
+```
+
+
+
+```java
+// Stream
+T reduce(T identity, BinaryOperator<T> accumulator);
+
+// ReferencePipeline extends AbstractPipeline implements Stream
+@Override
+public final P_OUT reduce(final P_OUT identity, final BinaryOperator<P_OUT> accumulator) {
+  return evaluate(ReduceOps.makeRef(identity, accumulator, accumulator)); // ReduceOps
+}
+
+final <R> R evaluate(TerminalOp<E_OUT, R> terminalOp) {
+    assert getOutputShape() == terminalOp.inputShape();
+    if (linkedOrConsumed)
+        throw new IllegalStateException(MSG_STREAM_LINKED);
+    linkedOrConsumed = true;
+
+    return isParallel()
+           ? terminalOp.evaluateParallel(this, sourceSpliterator(terminalOp.getOpFlags()))
+           : terminalOp.evaluateSequential(this, sourceSpliterator(terminalOp.getOpFlags()));
+}
+```
+
+
+
+ReduceTask is a [ForkJoinTask](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md) for performing a parallel reduce operation.
+
+based on `ForkJoinPool.commonPool()`
+
+```java
+// ReduceOps
+@Override
+public <P_IN> R evaluateParallel(PipelineHelper<T> helper,
+                                 Spliterator<P_IN> spliterator) {
+    return new ReduceTask<>(this, helper, spliterator).invoke().get();
+}
+```
+
+
+
+
+
+
 
 
 
@@ -245,10 +299,6 @@ use Predicate interface
 
 *A significant performance advantage can be had by **using primitive specialized lambda expressions and streams** such as IntStream.*
 
-
-### Parallel Stream
-
-based on `ForkJoinPool.commonPool()`
 
 
 ## Reference

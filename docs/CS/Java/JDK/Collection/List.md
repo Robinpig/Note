@@ -326,20 +326,32 @@ ArayList use Object[], LinkedList use linked-list
 
 ## CopyOnWriteArrayList
 
-
+Use [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) in add/remove
 
 ```java
 /** The lock protecting all mutators */
 final transient ReentrantLock lock = new ReentrantLock();
 ```
 
-
-
-
-
 ```java
 /** The array, accessed only via getArray/setArray. */
 private transient volatile Object[] array;
+```
+
+
+
+### get
+
+no Lock
+
+```java
+public E get(int index) {
+    return elementAt(getArray(), index);
+}
+
+static <E> E elementAt(Object[] a, int index) {
+  return (E) a[index];
+}
 ```
 
 

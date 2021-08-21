@@ -32,21 +32,22 @@ Nacos provides four major functions.
 
 
 
-Sentinel
+## Sentinel
 
-RocketMQ
+## RocketMQ
 
 
 
-Seata
+## Seata
 
-Alibaba Cloud ACM
 
-Alibaba Cloud OSS
 
-Alibaba Cloud ScheduleX
+## Dubbo
+
+
+
+ Alibaba Cloud OSS
+
+Alibaba Cloud SchedulerX
 
 Alibaba Cloud SMS
-
-
-
