@@ -344,7 +344,7 @@ netstat -s|grep overflowed
 ```
 
 
-### 四次挥手
+### four-way handshaking
 
 FIN -> ACK   FIN -> ACK
 

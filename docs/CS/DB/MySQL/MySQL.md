@@ -243,3 +243,19 @@ duplicate key error
 **MySQL字符集**
 采用类似继承方式 表的默认字符集是数据库的字符集 未指定使用时采用默认
 
+## Master-Slave
+### replication
+
+master write to binary log
+slaves get binary log events by I/O threads and write to relay log
+slaves SQL threads replay SQL from relay log
+
+
+Notes:
+- same OS version
+- same DB version
+- same data
+- same server id
+
+
+
