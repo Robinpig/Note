@@ -731,6 +731,21 @@ public interface ConcurrentMap<K,V> extends Map<K,V> {
 }
 ```
 
+### ForwardingNode
+```java
+
+/**
+ * A node inserted at head of bins during transfer operations.
+ */
+static final class ForwardingNode<K,V> extends Node<K,V> {
+    final Node<K, V>[] nextTable;
+
+    ForwardingNode(Node<K, V>[] tab) {
+        super(MOVED, null, null);
+        this.nextTable = tab;
+    }
+}
+```
 
 
 ### Constructor
