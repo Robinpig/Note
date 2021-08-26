@@ -90,10 +90,11 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 - [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
 - [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 
-##### 
+##### Synchronizer
 - [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
 - [CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
 - [Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
+- [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)
 
 #### JVM
 [JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
