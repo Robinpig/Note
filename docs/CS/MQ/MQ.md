@@ -1,8 +1,13 @@
 ## Introduction
 
 
+
+In computer science, message queues and mailboxes are software-engineering components typically used for inter-process communication (IPC), or for inter-thread communication within the same process. They use a queue for messaging – the passing of control or of content. Group communication systems provide similar kinds of functionality.
+
+
+
+
 - 解耦：A系统依赖B,C,D系统，A只需要发送topic，B,C,D后期不需要消息自行取消消费即可，类似消息总线
-- 异步：异步执行消息发送，通知等
 - 消峰：应对突发的流量高峰时段（错峰与流控）
 
 
@@ -10,6 +15,28 @@ issues
 
 - 系统复杂度提高
 - 系统可用性降低
+
+## Model
+
+Queue
+
+Pub/Sub
+
+
+
+### Pull/Push
+
+#### push
+
+
+
+#### pull
+
+Long waiting
+
+
+
+
 
 ## Mq怎么选型，各个Mq中间件的优缺点？
 
@@ -25,13 +52,77 @@ issues
 
 
 
-## 使用Mq会带来哪些问题？
+## issues
 
-### 一致性问题
 
-使用可靠消息最终一致性的分布式事务方案来保障
 
-### 消息顺序问题
+
+
+### High Avaliability
+
+RabbitMQ
+
+Mirroring Cluster
+
+
+Kafka
+
+Topic can be multiple partitions
+
+partitions have replicate in other brokers
+
+we can only read/write leader
+
+
+leader will sync data to followers, return ack when most of followers sync successfully
+
+### lost message
+
+
+RabbitMQ
+
+- producer confirm
+- broker storage
+- consumer confirm manually
+
+Kafka
+
+- broker 
+
+  - set topic repliaction factor > 1 : at least 2 partitions
+  - set broker min.insync.replicas > 1 : at least 1 follower
+  - set producer acks = all : must write to all replicas then ack
+  - set producer retries = MAX : retry util success
+
+
+
+
+### Duplicate Consume
+
+Based on no message losing
+
+
+- Redis is always idempotent.
+- DB primary key is unique.
+- update wehn exist, insert when not exist.
+- every request has own id, check if has consumed(a set).
+
+
+
+### message ordering
+
+Kafka partition -> queue -> thread
+
+
+### Backlog and recover
+
+
+
+### Consistency
+
+ 使用可靠消息最终一致性的分布式事务方案来保障
+
+### Ordering
 
 一笔订单产生了3条消息，分别是订单创建、订单付款、订单完成。消费时，要按照顺序依次消费才有意义
 
@@ -54,7 +145,7 @@ issues
 - 保证同一个唯一标识（订单号）只发送到指定Mq Server上
 - 保证同一个唯一标识（订单号）只在一个接收方节点上消费
 
-### 消息堆积问题
+### Backlog
 
 - 临时扩容，以更快的速度去消费数据了，先修复consumer的问题，确保其恢复消费速度，然后将现有consumer都停掉。临时建立好原先10倍或者20倍的queue数量(新建一个topic，partition是原来的10倍)。然后写一个临时分发消息的consumer程序，这个程序部署上去消费积压的消息，消费之后不做耗时处理，直接均匀轮询写入临时建好分10数量的queue里面。紧接着征用10倍的机器来部署consumer，每一批consumer消费一个临时queue的消息。
 
@@ -225,58 +316,6 @@ kafka选举原理：就是利用zk临时节点，断开即删除，
 - 消费模式
 - 消费关系处理
 - 可以参考Pulsar，存储和计算分离的设计
-
-
-
-## High Avaliability
-
-RabbitMQ
-
-Mirroring Cluster
-
-
-Kafka
-
-Topic can be multiple partitions
-
-partitions have replicate in other brokers
-
-we can only read/write leader
-
-
-leader will sync data to followers, return ack when most of followers sync successfully
-
-
-## Duplicate Consume
-
-
-- Redis is always idempotent.
-- DB primary key is unique.
-- update wehn exist, insert when not exist.
-- every request has own id, check if has consumed(a set).
-
-## lost message
-
-
-RabbitMQ
-- producer confirm
-- broker storage
-- consumer confirm manually
-
-Kafka
-- broker 
-    - set topic repliaction factor > 1 : at least 2 partitions
-    - set broker min.insync.replicas > 1 : at least 1 follower
-    - set producer acks = all : must write to all replicas then ack
-    - set producer retries = MAX : retry util success
-    
-    
-## message ordering
-
-Kafka partition -> queue -> thread
-
-
-## Backlog and recover
 
 
 
