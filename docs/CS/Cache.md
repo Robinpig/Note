@@ -1,10 +1,4 @@
-# Cache
-
-
-
-
-
-## 前言
+## Introduction
 
 适用互联网高并发，高性能场景，解决mysql磁盘慢问题
 
@@ -89,7 +83,7 @@ db，缓存一致性问题，缓存竞争后面讨论解决方案
 2. 磁盘
 3. 数据库
 
-## 缓存分类
+## Type
 
 ### Local Cache
 
@@ -103,17 +97,17 @@ db，缓存一致性问题，缓存竞争后面讨论解决方案
 
 
 
-Guava Cache
+#### Guava Cache
 
 
 
-Spring Cache
+#### Spring Cache
 
 ### Distribution Cache
 
-Memcached
+#### Memcached
 
-Redis
+#### Redis
 
 
 
@@ -129,6 +123,16 @@ Redis
 > - 如果缓存数据库是分布式部署，将热点数据均匀分布。
 > - 设置热点数据永远不过期。
 
+集群部署
+
+限流降级
+
+提前演练
+
+
+
+
+
 ### 缓存穿透
 
 是指缓存和数据库中都没有的数据，而用户不断发起请求，缓存没有起到压力缓冲的作用
@@ -140,6 +144,18 @@ Redis
 > - 针对key做布隆过滤器
 > - 采用灰度发布的方式，先接入少量请求，再逐步增加系统的请求数量，直到全部请求都切换完成
 > - 提前缓存预热或定时预热
+
+布隆过滤器
+
+数据变动性低, 不需实时
+
+缓存空对象
+
+占用内存多 会存在数据不一致情况:消息系统更新 适合数据变动频繁场景
+
+
+
+
 
 ### 缓存击穿
 
@@ -185,14 +201,16 @@ Redis
 
 
 
-## 缓存一致性
+## Consistency
 
-### Cache Aside Pattern 旁路缓存
+### Cache Aside Pattern
 
 - Read：先读缓存，如果没有命中，读数据库，再set回缓存
-- 写请求：update DB, then delete Cache
+- Write：update DB, then delete Cache
 
 ### 为什么建议淘汰缓存，不修改缓存
+
+Delete 幂等
 
 在1和2两个并发写发生时，由于无法保证时序，此时不管先操作缓存还是先操作数据库，都可能出现：
 
@@ -233,4 +251,6 @@ Cache Aside 在高并发场景下也会出现数据不一致。 读操作A，没
 
 ## Reference
 
-1. [缓存那些事 - 美团技术团队](https://tech.meituan.com/2017/03/17/cache-about.html)
+1. [Wiki - Cache (computing)](https://en.wikipedia.org/wiki/Cache_(computing))
+2. [A Guide To Caching in Spring](https://www.baeldung.com/spring-cache-tutorial)
+3. [缓存那些事 - 美团技术团队](https://tech.meituan.com/2017/03/17/cache-about.html)

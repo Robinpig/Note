@@ -1,11 +1,33 @@
-# Spring Boot
+## Introduction
+[Spring Boot](https://spring.io/projects/spring-boot) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
+
+![packages.png](./images/packages.png)
+
+Convention Over Configuration
+
+spring-boot
+spring-boot-autoconfigure
+
+spring-boot-starters
+
+spring-boot-test
 
 
-### [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
 
-## Web
 
-![SpringBoot Web Annotation](./images/springboot-web-annotation.png)
+
+## AutoConfiguration
+
+- Cache
+- Log - LoggingApplicationListener
+
+
+
+
+
+## [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
+
+
 
 ## YAML
 
@@ -62,7 +84,7 @@ It's need JDK15 to build Junit5,.
 
 ##### @SpringBootTest
 
-
+@AutoConfigureMockMvc
 
 | Junit5                                      | Junit4                                  |
 | ------------------------------------------- | --------------------------------------- |
@@ -103,12 +125,6 @@ Admin
 
 
 Starter
-
-
-
-
-
-
 
 
 
