@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 A memory model specifies how threads and objects interact
 
 - **Atomicity**
@@ -10,7 +8,7 @@ A memory model specifies how threads and objects interact
   Ensuring that changes made in one thread are seen in
   other threads
 - **Ordering**
-  Ensuring that you aren’t su
+  Ensuring that you aren’t surprised by the order in which statements are executed
 
 
 

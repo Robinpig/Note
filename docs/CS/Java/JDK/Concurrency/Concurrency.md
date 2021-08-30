@@ -22,23 +22,16 @@
 
 
 
-#### [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=CAS)
-
-#### [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
-
-#### [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
+- [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=CAS)
+- [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
+- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 
 
 #### Thread
-
-[Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
-
-[ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
-
-[ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
-
-
-### [atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md)
+- [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+- [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
+- [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
+- [Atomics](/docs/CS/Java/JDK/Concurrency/Atomic.md)
 
 
 
@@ -47,47 +40,33 @@
 1. fail-fast for Collections in `java.util`, such as `HashMap`, `ArrayList`
 2. fail-safe for Collections in `java.util.concurrent`, such as `ConcurrentHashMap`, `CopyOnWriteArrayList`
 
-[CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList)
-
-[ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap)
-
-[ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap)
-
-
-#### [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
+- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList)
+- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap)
+- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap)
+- [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
 
 
 
-### locks
+### Locks
 
 ![locks](../images/juc-locks.png)
 
-[Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
-
-[AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
-
-[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
-
-[ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
-
-[StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
+- [Lock and Conditions](/docs/CS/Java/JDK/Concurrency/Lock.md)
+- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+- [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
+- [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
+- [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 
 
-### synchronizer
-
-[Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
-
-[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
-
-[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
+### Synchronizers
+- [Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
+- [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
+- [CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
+- [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)
 
 ### Executor
 
-[ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
-
-[ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)
-
-
-#### [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
-
+- [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
+- [ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)
+- [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
 

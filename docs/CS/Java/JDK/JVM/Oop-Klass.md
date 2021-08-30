@@ -167,3 +167,53 @@ Method*
 
 ConstantPool*
 
+
+## klass
+
+_layout_helper:
+instance >0
+array <0
+tag primer type or OOP type
+hsz first element offset
+ebt primer type element
+esz element size
+others =0
+
+_name
+
+_access_flags
+
+_java_mirror: Class object  instance
+
+_super
+
+_subklass
+point the first subkclass
+
+_next_sibling
+
+is a linked list to get all of sibling klasses
+
+_methods
+
+_method_ordering
+
+_local_interfaces: implement
+
+_transitive_interfaces: extends
+
+_fields
+
+_constants
+
+_class_loader
+
+_protection_domain
+
+vtables
+
+itables
+
+static fields
+
+non-static oop-map block

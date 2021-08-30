@@ -1,3 +1,4 @@
+## Introduction
 
 
 **1.面向对象和面向过程的区别**
@@ -44,4 +45,54 @@ BASE理论是对CAP中的一致性和可用性进行一个权衡的结果，理�
 - 高可用：引入中间件或者协调者时，避免单点故障。分布式系统的高可用必然会牺牲部分一致性。
 - 可扩展：降低引入的业务耦合。
 - 伸缩性：系统能够弹性伸缩。
+
+
+## Prims
+
+define open interface
+
+- JNI
+- JVM
+- Perf
+- JVMTI
+
+
+## Mudule
+
+- Services - for JMX
+  - Management
+  - MemoryService
+  - MemoryPool
+  - MemoryManager
+  - RuntimeService
+  - ThreadService
+  - ClassLoadingService
+  - AttachListener
+  - HeapDumper
+- Runtime
+  - Thread
+  - Arguments
+  - Frame
+  - StubRoutines/StubCodeGenerator
+  - CompilationPolicy
+  - Init
+  - VmThread
+  - VmOperation
+- Oops
+- Compiler
+- Interpreter
+- Code
+- Memory
+- GC
+- C1/Opto/Shark
+
+## launcher
+use java/javaw
+
+start:
+1. get args
+2. pre env
+3. load libjvm
+4. parse args path
+5. new thread create VM and invoke main method
 
