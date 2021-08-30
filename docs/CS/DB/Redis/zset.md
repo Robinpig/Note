@@ -464,6 +464,14 @@ zset-max-ziplist-value 64
 
 ## ziplist
 
+```
+# redis.conf
+# Hashes are encoded using a memory efficient data structure when they have a
+# small number of entries, and the biggest entry does not exceed a given
+# threshold. These thresholds can be configured using the following directives.
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+```
 
 
 ```c

@@ -113,6 +113,8 @@ static inline size_t sdslen(const sds s) {
 
 ## create SDS
 
+
+
 ### createStringObject
 
 len>44 raw, else embstr.
@@ -125,7 +127,7 @@ debug object key
 
 jemalloc apply 64byte(for cache line)
 
-so a SDS max **embstr** string len is 64-16-3-1=44byte
+so a SDS max **embstr** string len is 64-16-3-1= **44 byte**
 
 ```c
 // object.c
@@ -694,7 +696,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
 
 
-
+**1MB**
 
 ```c
 // sds.h

@@ -22,12 +22,6 @@ Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and
 
 
 
-
-
-
-
-
-
 ## Pipeline
 
 使用管道将多个命令放入同一个执行队列中，减少往返时延消耗。
@@ -88,7 +82,7 @@ flushAppendOnlyFile
 
 AOF重写可压缩AOF文件，对键过期时间有变动的数据按情况处理。
 
-## 集群演变
+## Cluster
 
 ### 单机 
 
@@ -98,14 +92,14 @@ AOF重写可压缩AOF文件，对键过期时间有变动的数据按情况处�
 
 备份数据，减轻读压力；缺陷是故障恢复无法自动化 写操作无法负载均衡 
 
-### Sentinel
+### Redis Sentinel
 monitor
 choose new master from slaves when master down
 notify slaves to replicaof and notify clients to create connections with new master
 
 故障恢复自动化，故障恢复时服务不可用
 
-### Cluster
+### Redis Cluster
 
 ## 缓存
 
@@ -365,6 +359,48 @@ public boolean unlock() {
     }
 }
 ```
+## Performance
+
+monitor
+
+### Block
+
+using wrong API or struct Slow get n : get n slow Sqls > 10ms
+
+CPU overflow
+
+Persistence:
+
+- fork
+- AOF flush to disk
+- enable THP
+
+CPU race
+
+swap
+
+- make sure have enough memory
+- Prefer not use swap
+
+Network
+
+connection refused
+
+timeout
+
+network soft interrupt
+
+
+
+## memory
+
+Used_memor_rss
+
+- Used_memory
+- memory chip
+
+
+
 ## Transaction
 
 support isolation and consistency, and support durability when use AOF and appendfsync is always
@@ -451,6 +487,11 @@ LFU
 - 8bits logistic counter log
 - 16bits last decrement time minutes
 
+## THP
+Transparent Huge Pages（THP）
+copy-on-write期间复制内存页从4KB变成2MB
+fork子进程的速度变慢
+高并发下开启容易造成内存溢出，建议关闭
 
 ## References
 1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
