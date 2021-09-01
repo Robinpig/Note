@@ -281,6 +281,126 @@ cas
 
 
 
+## PriorityQueue
+
+|             |              |        |
+| ----------- | ------------ | ------ |
+| Root index  | 0            | 1      |
+| Left index  | 2i+1         | 2i     |
+| Right index | 2i+2         | 2i+1   |
+| Get parent  | (i - 1) >>>1 | i >>>1 |
+
+
+
+### siftUp
+
+```java
+/**
+ * Inserts item x at position k, maintaining heap invariant by
+ * promoting x up the tree until it is greater than or equal to
+ * its parent, or is the root.
+ *
+ * To simplify and speed up coercions and comparisons, the
+ * Comparable and Comparator versions are separated into different
+ * methods that are otherwise identical. (Similarly for siftDown.)
+ *
+ * @param k the position to fill
+ * @param x the item to insert
+ */
+private void siftUp(int k, E x) {
+    if (comparator != null)
+        siftUpUsingComparator(k, x, queue, comparator);
+    else
+        siftUpComparable(k, x, queue);
+}
+
+private static <T> void siftUpComparable(int k, T x, Object[] es) {
+    Comparable<? super T> key = (Comparable<? super T>) x;
+    while (k > 0) {
+        int parent = (k - 1) >>> 1;
+        Object e = es[parent];
+        if (key.compareTo((T) e) >= 0)
+            break;
+        es[k] = e;
+        k = parent;
+    }
+    es[k] = key;
+}
+
+private static <T> void siftUpUsingComparator(
+    int k, T x, Object[] es, Comparator<? super T> cmp) {
+    while (k > 0) {
+        int parent = (k - 1) >>> 1;
+        Object e = es[parent];
+        if (cmp.compare(x, (T) e) >= 0)
+            break;
+        es[k] = e;
+        k = parent;
+    }
+    es[k] = x;
+}
+```
+
+
+
+### siftDown
+
+```java
+/**
+ * Inserts item x at position k, maintaining heap invariant by
+ * demoting x down the tree repeatedly until it is less than or
+ * equal to its children or is a leaf.
+ *
+ * @param k the position to fill
+ * @param x the item to insert
+ */
+private void siftDown(int k, E x) {
+    if (comparator != null)
+        siftDownUsingComparator(k, x, queue, size, comparator);
+    else
+        siftDownComparable(k, x, queue, size);
+}
+
+private static <T> void siftDownComparable(int k, T x, Object[] es, int n) {
+    // assert n > 0;
+    Comparable<? super T> key = (Comparable<? super T>)x;
+    int half = n >>> 1;           // loop while a non-leaf
+    while (k < half) {
+        int child = (k << 1) + 1; // assume left child is least
+        Object c = es[child];
+        int right = child + 1;
+        if (right < n &&
+            ((Comparable<? super T>) c).compareTo((T) es[right]) > 0)
+            c = es[child = right];
+        if (key.compareTo((T) c) <= 0)
+            break;
+        es[k] = c;
+        k = child;
+    }
+    es[k] = key;
+}
+
+private static <T> void siftDownUsingComparator(
+    int k, T x, Object[] es, int n, Comparator<? super T> cmp) {
+    // assert n > 0;
+    int half = n >>> 1;
+    while (k < half) {
+        int child = (k << 1) + 1;
+        Object c = es[child];
+        int right = child + 1;
+        if (right < n && cmp.compare((T) c, (T) es[right]) > 0)
+            c = es[child = right];
+        if (cmp.compare(x, (T) c) <= 0)
+            break;
+        es[k] = c;
+        k = child;
+    }
+    es[k] = x;
+}
+```
+
+
+
 ## BlockingQueue
 
 A Queue that additionally supports operations that:
