@@ -1,36 +1,23 @@
 ## Introduction
 
 
-
-**长度限制? 使用hash存储,占用空间**
-
-**expire will be delete after reset value**
-
-
-
-SDS为了能够**使用部分C字符串函数**，遵循了C字符串以空字符结尾的惯例，保存空字符的1字节不计算在SDSlen属性中，并且为空字符分配额外的1字节空间，以及添加空字符到字符串末尾等操作，都是由SDS函数自动完成的，可以说**空字符对使用者是透明的** 。
-
-- O(1) get len
-
-- 杜绝缓冲区溢出 可以在超过free空间时自动动态扩展内存
-
-- 减少修改字符串时带来的内存重分配次数
-
-    -  空间预分配 当字符串长度小于 **1M** 时，扩容都是加倍现有的空间，如果超过 1M，扩容时一次只会多扩 1M 的空间。(字符串最大长度为 **512M**)
-
-    -  惰性空间释放 free可以用以记录未被使用的空间，不需重新构建新的字符串对象。
-
-- 二进制安全 **字节数组**，不同于C语言的字符数组。
-
-
-
-
+**expire will be delete after set value again** -- set is idempotent
 
 when create string, len=capacity, usually we don't append string.
 
 ## Type
 
 
+
+| Type  | len  | alloc | flag                             | buf  |
+| ----- | ---- | ----- | -------------------------------- | ---- |
+| hdr5  | /    | /     | 3 lsb of type,  5 msb of  length |      |
+| hdr8  | 1    | 1     | 3 lsb of type, 5 unused bits     |      |
+| hdr16 | 2    | 2     | 3 lsb of type, 5 unused bits     |      |
+| hdr32 | 4    | 4     | 3 lsb of type, 5 unused bits     |      |
+| hdr64 | 8    | 8     | 3 lsb of type, 5 unused bits     |      |
+
+`(__packed__)` of 1byte
 
 ```c
 typedef char *sds;
@@ -65,9 +52,8 @@ struct __attribute__ ((__packed__)) sdshdr64 {
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
     char buf[];
 };
-```
 
-```c
+// 3lsb in flags
 #define SDS_TYPE_5  0
 #define SDS_TYPE_8  1
 #define SDS_TYPE_16 2
@@ -83,12 +69,12 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 
 
 
-### sdslen
+get Length O(1)
 
 ```c
 // sds.h
 static inline size_t sdslen(const sds s) {
-    unsigned char flags = s[-1];
+    unsigned char flags = s[-1]; // because of packed 1 byte
     switch(flags&SDS_TYPE_MASK) {
         case SDS_TYPE_5:
             return SDS_TYPE_5_LEN(flags);
@@ -111,104 +97,7 @@ static inline size_t sdslen(const sds s) {
 
 
 
-## create SDS
-
-
-
-### createStringObject
-
-len>44 raw, else embstr.
-
-debug object key
-
-1. 16byte for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
-2. 3byte for capacity +len +flags
-3. 1byte for NULL
-
-jemalloc apply 64byte(for cache line)
-
-so a SDS max **embstr** string len is 64-16-3-1= **44 byte**
-
-```c
-// object.c
-/* Create a string object with EMBSTR encoding if it is smaller than
- * OBJ_ENCODING_EMBSTR_SIZE_LIMIT, otherwise the RAW encoding is
- * used.
- *
- * The current limit of 44 is chosen so that the biggest string object
- * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
-#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
-robj *createStringObject(const char *ptr, size_t len) {
-    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
-        return createEmbeddedStringObject(ptr,len);
-    else
-        return createRawStringObject(ptr,len); // createObject & sdsnewlen
-}
-```
-
-
-
-#### sdsMakeRoomFor
-
-```c
-// sds.c
-#define SDS_MAX_PREALLOC (1024*1024)
-
-/* Enlarge the free space at the end of the sds string so that the caller
- * is sure that after calling this function can overwrite up to addlen
- * bytes after the end of the string, plus one more byte for nul term.
- *
- * Note: this does not change the *length* of the sds string as returned
- * by sdslen(), but only the free buffer space we have. */
-sds sdsMakeRoomFor(sds s, size_t addlen) {
-    void *sh, *newsh;
-    size_t avail = sdsavail(s);
-    size_t len, newlen;
-    char type, oldtype = s[-1] & SDS_TYPE_MASK;
-    int hdrlen;
-
-    /* Return ASAP if there is enough space left. */
-    if (avail >= addlen) return s;
-
-    len = sdslen(s);
-    sh = (char*)s-sdsHdrSize(oldtype);
-    newlen = (len+addlen);
-    if (newlen < SDS_MAX_PREALLOC)
-        newlen *= 2;
-    else
-        newlen += SDS_MAX_PREALLOC;
-
-    type = sdsReqType(newlen);
-
-    /* Don't use type 5: the user is appending to the string and type 5 is
-     * not able to remember empty space, so sdsMakeRoomFor() must be called
-     * at every appending operation. */
-    if (type == SDS_TYPE_5) type = SDS_TYPE_8;
-
-    hdrlen = sdsHdrSize(type);
-    if (oldtype==type) {
-        newsh = s_realloc(sh, hdrlen+newlen+1);
-        if (newsh == NULL) return NULL;
-        s = (char*)newsh+hdrlen;
-    } else {
-        /* Since the header size changes, need to move the string forward,
-         * and can't use realloc */
-        newsh = s_malloc(hdrlen+newlen+1);
-        if (newsh == NULL) return NULL;
-        memcpy((char*)newsh+hdrlen, s, len+1);
-        s_free(sh);
-        s = (char*)newsh+hdrlen;
-        s[-1] = type;
-        sdssetlen(s, len);
-    }
-    sdssetalloc(s, newlen);
-    return s;
-}
-```
-
-
-
-## set
+## setCommand
 
 ```c
 // server.c
@@ -218,6 +107,9 @@ sds sdsMakeRoomFor(sds s, size_t addlen) {
  "write use-memory @string",
  0,NULL,1,1,1,0,0,0}
 ```
+
+Set request:
+![Image](https://mmbiz.qpic.cn/mmbiz_png/655VFpRwHAC2CwibLs5ibAm2IZadq8qbsQaAjaK2TTqFPTWibCsdKdXgiazJRJfCENRhpicERvhfyac4A2s7KarIENA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
 
 
@@ -250,8 +142,43 @@ void psetexCommand(client *c) {
 ```
 
 
+**createStringObject**
 
-#### tryObjectEncoding
+```c
+// object.c
+#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
+```
+
+len>44 raw, else embstr.
+
+debug object key
+
+1. 16byte for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
+2. 3byte for capacity +len +flags
+3. 1byte for NULL
+
+jemalloc apply 64byte(for cache line)
+
+so a SDS max **embstr** string len is 64-16-3-1= **44 byte**
+
+```c
+// object.c
+/* Create a string object with EMBSTR encoding if it is smaller than
+ * OBJ_ENCODING_EMBSTR_SIZE_LIMIT, otherwise the RAW encoding is
+ * used.
+ *
+ * The current limit of 44 is chosen so that the biggest string object
+ * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
+robj *createStringObject(const char *ptr, size_t len) {
+    if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
+        return createEmbeddedStringObject(ptr,len);
+    else
+        return createRawStringObject(ptr,len); // createObject & sdsnewlen
+}
+```
+
+
+### tryObjectEncoding
 
 This object is encodable as a long. Try to use a shared object when maxmemory is not used
 
@@ -304,7 +231,7 @@ robj *tryObjectEncoding(robj *o) {
             if (o->encoding == OBJ_ENCODING_RAW) {
                 sdsfree(o->ptr);
                 o->encoding = OBJ_ENCODING_INT;
-                o->ptr = (void*) value; // set value to ptr
+                o->ptr = (void*) value; // set value to ptr if int
                 return o;
             } else if (o->encoding == OBJ_ENCODING_EMBSTR) {
                 decrRefCount(o);
@@ -391,6 +318,7 @@ zmolloc twice
 2. [sdsnewlen in sdsfromlonglong](/docs/CS/DB/Redis/SDS?id=sdsnewlen)
 
 ```c
+// object.c
 /* Create a string object from a long long value. When possible returns a
  * shared integer object, or at least an integer encoded one.
  *
@@ -427,7 +355,13 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
 
 
 
-##### sdsnewlen
+
+
+
+
+#### sdsnewlen
+
+Don't use sdshdr5, turn to SDS_TYPE_8.
 
 
 ```c
@@ -438,6 +372,13 @@ sds sdsfromlonglong(long long value) {
     char buf[SDS_LLSTR_SIZE];
     int len = sdsll2str(buf,value);
     return sdsnewlen(buf,len);
+}
+
+
+/* Create a string object with encoding OBJ_ENCODING_RAW, that is a plain
+ * string object where o->ptr points to a proper sds string. */
+robj *createRawStringObject(const char *ptr, size_t len) {
+    return createObject(OBJ_STRING, sdsnewlen(ptr,len));
 }
 
 /* Create a new sds string with the content specified by the 'init' pointer
@@ -463,7 +404,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
     int hdrlen = sdsHdrSize(type);
     unsigned char *fp; /* flags pointer. */
 
-    sh = s_malloc(hdrlen+initlen+1);
+    sh = s_malloc(hdrlen+initlen+1); // +1 for '\0' 
     if (sh == NULL) return NULL;
     if (init==SDS_NOINIT)
         init = NULL;
@@ -508,7 +449,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
     if (initlen && init)
         memcpy(s, init, initlen);
     s[initlen] = '\0'; // for c
-    return s;
+    return s; // return ptr of buf[]
 }
 ```
 
@@ -516,7 +457,7 @@ sds sdsnewlen(const void *init, size_t initlen) {
 
 
 
-#### setGenericCommand
+### setGenericCommand
 
 
 The setGenericCommand() function implements the SET operation with differen options and variants. This function is called in order to implement the following commands: SET, SETEX, PSETEX, SETNX.
@@ -526,10 +467,6 @@ The setGenericCommand() function implements the SET operation with differen opti
 
 If ok_reply is NULL "+OK" is used.
 If abort_reply is NULL, "$-1" is used.
-
-
-
-genericSetKey
 
 
 ```c
@@ -571,6 +508,9 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
 ```
 
 
+#### genericSetKey
+
+call [dictCreate](/docs/CS/DB/Redis/hash.md?id=create)
 
 ```c
 /* High level Set operation. This function can be used in order to set
@@ -599,58 +539,6 @@ void genericSetKey(client *c, redisDb *db, robj *key, robj *val, int keepttl, in
 
 
 
-```c
-/* Add the key to the DB. It's up to the caller to increment the reference
- * counter of the value if needed.
- *
- * The program is aborted if the key already exists. */
-void dbAdd(redisDb *db, robj *key, robj *val) {
-    sds copy = sdsdup(key->ptr);
-    int retval = dictAdd(db->dict, copy, val);
-
-    serverAssertWithInfo(NULL,key,retval == DICT_OK);
-    if (val->type == OBJ_LIST ||
-        val->type == OBJ_ZSET ||
-        val->type == OBJ_STREAM)
-        signalKeyAsReady(db, key);
-    if (server.cluster_enabled) slotToKeyAdd(key->ptr);
-}
-```
-
-
-
-Set request
-
-![Image](https://mmbiz.qpic.cn/mmbiz_png/655VFpRwHAC2CwibLs5ibAm2IZadq8qbsQaAjaK2TTqFPTWibCsdKdXgiazJRJfCENRhpicERvhfyac4A2s7KarIENA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
-
-
-
-```c
-/* Compare two sds strings s1 and s2 with memcmp().
- *
- * Return value:
- *
- *     positive if s1 > s2.
- *     negative if s1 < s2.
- *     0 if s1 and s2 are exactly the same binary string.
- *
- * If two strings share exactly the same prefix, but one of the two has
- * additional characters, the longer string is considered to be greater than
- * the smaller one. */
-int sdscmp(const sds s1, const sds s2) {
-    size_t l1, l2, minlen;
-    int cmp;
-
-    l1 = sdslen(s1);
-    l2 = sdslen(s2);
-    minlen = (l1 < l2) ? l1 : l2;
-    cmp = memcmp(s1,s2,minlen);
-    if (cmp == 0) return l1>l2? 1: (l1<l2? -1: 0);
-    return cmp;
-}
-```
-
-
 
 ## sdscatjoin
 
@@ -675,7 +563,7 @@ sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen) {
 
 
 
-
+### sdscatlen
 ```c
 /* Append the specified binary-safe string pointed by 't' of 'len' bytes to the
  * end of the specified sds string 's'.
@@ -696,7 +584,11 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
 
 
-**1MB**
+
+### _sdsMakeRoomFor
+1. avail >= addlen, return
+2. expand pow of 2 when len < 1M, or else expand 1M util 512M
+3. calc new Type, if same Type return, or else allocate new memory and `memcpy`
 
 ```c
 // sds.h
@@ -772,10 +664,12 @@ sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
 
 ## free
 
-
+use `sdsclear` rather than `sdsfree`
 
 ```c
 /* Free an sds string. No operation is performed if 's' is NULL. */
+#define s_free zfree
+
 void sdsfree(sds s) {
     if (s == NULL) return;
     s_free((char*)s-sdsHdrSize(s[-1]));
@@ -794,3 +688,11 @@ void sdsclear(sds s) {
     s[0] = '\0';
 }
 ```
+
+## Summary
+
+- packed and always append '\0'
+- expand pow of 2 when len < 1M, or else expand 1M util 512M
+- use sdsclear rather than sdsfree
+
+## References
