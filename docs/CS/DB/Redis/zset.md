@@ -187,9 +187,9 @@ void zaddGenericCommand(client *c, int flags) {
         if (server.zset_max_ziplist_entries == 0 ||
             server.zset_max_ziplist_value < sdslen(c->argv[scoreidx+1]->ptr))
         {
-            zobj = createZsetObject();
+            zobj = createZsetObject(); // skiplist
         } else {
-            zobj = createZsetZiplistObject();
+            zobj = createZsetZiplistObject(); // ziplist
         }
         dbAdd(c->db,key,zobj);
     }
@@ -235,8 +235,6 @@ cleanup:
 
 
 
-
-
 ```c
 typedef struct zset {
     dict *dict;
@@ -247,8 +245,6 @@ typedef struct zset {
 
 
 ### zsetAdd
-
-
 
 **Remove and re-insert when score changes.**
 
@@ -426,7 +422,8 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
 
 
 
-
+## zsetConvertToZiplistIfNeeded
+call by geo or ZUNION, ZINTER, ZDIFF, ZUNIONSTORE, ZINTERSTORE, ZDIFFSTORE
 ```c
 // t_zset.c
 /* Convert the sorted set object into a ziplist if it is not already a ziplist
@@ -444,11 +441,11 @@ void zsetConvertToZiplistIfNeeded(robj *zobj, size_t maxelelen) {
 
 
 
-
-
-
-
 in redis conf
+
+zset default use ziplist.
+
+**not convert to ziplist when delete node**
 
 ```conf
 # Similarly to hashes and lists, sorted sets are also specially encoded in
@@ -463,6 +460,10 @@ zset-max-ziplist-value 64
 
 
 ## ziplist
+
+[hash](/docs/CS/DB/Redis/hash.md) and zset default use ziplist.
+
+[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/list.md?id=skiplist).
 
 ```
 # redis.conf
@@ -486,7 +487,14 @@ robj *createZiplistObject(void) {
 
 
 
+Struct:
 
+- Total count: 4bytes = 2^32 -1
+- last item offset: 4bytes
+- number of item fields; 16bits = 65535
+- end 1byte; always 255
+
+so init 4 + 4 + 2 + 1 = **11bytes**
 
 ```c
 // ziplist.c
@@ -500,11 +508,22 @@ unsigned char *ziplistNew(void) {
     zl[bytes-1] = ZIP_END;
     return zl;
 }
+
+
+/* The size of a ziplist header: two 32 bit integers for the total
+ * bytes count and last item offset. One 16 bit integer for the number
+ * of items field. */
+#define ZIPLIST_HEADER_SIZE     (sizeof(uint32_t)*2+sizeof(uint16_t))
+
+/* Size of the "end of ziplist" entry. Just one byte. */
+#define ZIPLIST_END_SIZE        (sizeof(uint8_t))
+
+#define ZIP_END 255         /* Special "end of ziplist" entry. */
 ```
 
 
 
-
+[prevrawlen cascadeUpdate](/docs/CS/DB/Redis/zset.md?id=cascadeUpdate)
 
 ```c
 /* We use this function to receive information about a ziplist entry.
@@ -568,11 +587,386 @@ void memrev32(void *p) {
 
 
 
+### insert
+
+1. encode content
+2. Allocate memory
+3. memory copy
+
+
+
+```c
+// ziplist.c
+unsigned char *ziplistPush(unsigned char *zl, unsigned char *s, unsigned int slen, int where) {
+    unsigned char *p;
+    p = (where == ZIPLIST_HEAD) ? ZIPLIST_ENTRY_HEAD(zl) : ZIPLIST_ENTRY_END(zl);
+    return __ziplistInsert(zl,p,s,slen);
+}
+
+/* Insert item at "p". */
+unsigned char *__ziplistInsert(unsigned char *zl, unsigned char *p, unsigned char *s, unsigned int slen) {
+    size_t curlen = intrev32ifbe(ZIPLIST_BYTES(zl)), reqlen, newlen;
+    unsigned int prevlensize, prevlen = 0;
+    size_t offset;
+    int nextdiff = 0;
+    unsigned char encoding = 0;
+    long long value = 123456789; /* initialized to avoid warning. Using a value
+                                    that is easy to see if for some reason
+                                    we use it uninitialized. */
+    zlentry tail;
+
+    /* Find out prevlen for the entry that is inserted. */
+    if (p[0] != ZIP_END) {
+        ZIP_DECODE_PREVLEN(p, prevlensize, prevlen);
+    } else {
+        unsigned char *ptail = ZIPLIST_ENTRY_TAIL(zl);
+        if (ptail[0] != ZIP_END) {
+            prevlen = zipRawEntryLengthSafe(zl, curlen, ptail);
+        }
+    }
+
+    /* See if the entry can be encoded */
+    if (zipTryEncoding(s,slen,&value,&encoding)) {
+        /* 'encoding' is set to the appropriate integer encoding */
+        reqlen = zipIntSize(encoding);
+    } else {
+        /* 'encoding' is untouched, however zipStoreEntryEncoding will use the
+         * string length to figure out how to encode it. */
+        reqlen = slen;
+    }
+    /* We need space for both the length of the previous entry and
+     * the length of the payload. */
+    reqlen += zipStorePrevEntryLength(NULL,prevlen);
+    reqlen += zipStoreEntryEncoding(NULL,encoding,slen);
+
+    /* When the insert position is not equal to the tail, we need to
+     * make sure that the next entry can hold this entry's length in
+     * its prevlen field. */
+    int forcelarge = 0;
+    nextdiff = (p[0] != ZIP_END) ? zipPrevLenByteDiff(p,reqlen) : 0;
+    if (nextdiff == -4 && reqlen < 4) {
+        nextdiff = 0;
+        forcelarge = 1;
+    }
+
+    /* Store offset because a realloc may change the address of zl. */
+    offset = p-zl;
+    newlen = curlen+reqlen+nextdiff;
+    zl = ziplistResize(zl,newlen);
+    p = zl+offset;
+
+    /* Apply memory move when necessary and update tail offset. */
+    if (p[0] != ZIP_END) {
+        /* Subtract one because of the ZIP_END bytes */
+        memmove(p+reqlen,p-nextdiff,curlen-offset-1+nextdiff);
+
+        /* Encode this entry's raw length in the next entry. */
+        if (forcelarge)
+            zipStorePrevEntryLengthLarge(p+reqlen,reqlen);
+        else
+            zipStorePrevEntryLength(p+reqlen,reqlen);
+
+        /* Update offset for tail */
+        ZIPLIST_TAIL_OFFSET(zl) =
+            intrev32ifbe(intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl))+reqlen);
+
+        /* When the tail contains more than one entry, we need to take
+         * "nextdiff" in account as well. Otherwise, a change in the
+         * size of prevlen doesn't have an effect on the *tail* offset. */
+        assert(zipEntrySafe(zl, newlen, p+reqlen, &tail, 1));
+        if (p[reqlen+tail.headersize+tail.len] != ZIP_END) {
+            ZIPLIST_TAIL_OFFSET(zl) =
+                intrev32ifbe(intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl))+nextdiff);
+        }
+    } else {
+        /* This element will be the new tail. */
+        ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(p-zl);
+    }
+
+    /* When nextdiff != 0, the raw length of the next entry has changed, so
+     * we need to cascade the update throughout the ziplist */
+    if (nextdiff != 0) {
+        offset = p-zl;
+        zl = __ziplistCascadeUpdate(zl,p+reqlen);
+        p = zl+offset;
+    }
+
+    /* Write the entry */
+    p += zipStorePrevEntryLength(p,prevlen);
+    p += zipStoreEntryEncoding(p,encoding,slen);
+    if (ZIP_IS_STR(encoding)) {
+        memcpy(p,s,slen);
+    } else {
+        zipSaveInteger(p,value,encoding);
+    }
+    ZIPLIST_INCR_LENGTH(zl,1);
+    return zl;
+}
+```
+
+### delete
+
+1. calc deleted length
+2. Memory copy
+3. Reallocate memory
+
+```c
+// ziplist
+
+/* Delete a single entry from the ziplist, pointed to by *p.
+ * Also update *p in place, to be able to iterate over the
+ * ziplist, while deleting entries. */
+unsigned char *ziplistDelete(unsigned char *zl, unsigned char **p) {
+    size_t offset = *p-zl;
+    zl = __ziplistDelete(zl,*p,1);
+
+    /* Store pointer to current element in p, because ziplistDelete will
+     * do a realloc which might result in a different "zl"-pointer.
+     * When the delete direction is back to front, we might delete the last
+     * entry and end up with "p" pointing to ZIP_END, so check this. */
+    *p = zl+offset;
+    return zl;
+}
+
+/* Delete "num" entries, starting at "p". Returns pointer to the ziplist. */
+unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int num) {
+    unsigned int i, totlen, deleted = 0;
+    size_t offset;
+    int nextdiff = 0;
+    zlentry first, tail;
+    size_t zlbytes = intrev32ifbe(ZIPLIST_BYTES(zl));
+
+    zipEntry(p, &first); /* no need for "safe" variant since the input pointer was validated by the function that returned it. */
+    for (i = 0; p[0] != ZIP_END && i < num; i++) {
+        p += zipRawEntryLengthSafe(zl, zlbytes, p);
+        deleted++;
+    }
+
+    assert(p >= first.p);
+    totlen = p-first.p; /* Bytes taken by the element(s) to delete. */
+    if (totlen > 0) {
+        uint32_t set_tail;
+        if (p[0] != ZIP_END) {
+            /* Storing `prevrawlen` in this entry may increase or decrease the
+             * number of bytes required compare to the current `prevrawlen`.
+             * There always is room to store this, because it was previously
+             * stored by an entry that is now being deleted. */
+            nextdiff = zipPrevLenByteDiff(p,first.prevrawlen);
+
+            /* Note that there is always space when p jumps backward: if
+             * the new previous entry is large, one of the deleted elements
+             * had a 5 bytes prevlen header, so there is for sure at least
+             * 5 bytes free and we need just 4. */
+            p -= nextdiff;
+            assert(p >= first.p && p<zl+zlbytes-1);
+            zipStorePrevEntryLength(p,first.prevrawlen);
+
+            /* Update offset for tail */
+            set_tail = intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl))-totlen;
+
+            /* When the tail contains more than one entry, we need to take
+             * "nextdiff" in account as well. Otherwise, a change in the
+             * size of prevlen doesn't have an effect on the *tail* offset. */
+            assert(zipEntrySafe(zl, zlbytes, p, &tail, 1));
+            if (p[tail.headersize+tail.len] != ZIP_END) {
+                set_tail = set_tail + nextdiff;
+            }
+
+            /* Move tail to the front of the ziplist */
+            /* since we asserted that p >= first.p. we know totlen >= 0,
+             * so we know that p > first.p and this is guaranteed not to reach
+             * beyond the allocation, even if the entries lens are corrupted. */
+            size_t bytes_to_move = zlbytes-(p-zl)-1;
+            memmove(first.p,p,bytes_to_move);
+        } else {
+            /* The entire tail was deleted. No need to move memory. */
+            set_tail = (first.p-zl)-first.prevrawlen;
+        }
+
+        /* Resize the ziplist */
+        offset = first.p-zl;
+        zlbytes -= totlen - nextdiff;
+        zl = ziplistResize(zl, zlbytes);
+        p = zl+offset;
+
+        /* Update record count */
+        ZIPLIST_INCR_LENGTH(zl,-deleted);
+
+        /* Set the tail offset computed above */
+        assert(set_tail <= zlbytes - ZIPLIST_END_SIZE);
+        ZIPLIST_TAIL_OFFSET(zl) = intrev32ifbe(set_tail);
+
+        /* When nextdiff != 0, the raw length of the next entry has changed, so
+         * we need to cascade the update throughout the ziplist */
+        if (nextdiff != 0)
+            zl = __ziplistCascadeUpdate(zl,p);
+    }
+    return zl;
+}
+```
+
+
+
+### cascadeUpdate
+
+```c
+// ziplist.c
+/* When an entry is inserted, we need to set the prevlen field of the next
+ * entry to equal the length of the inserted entry. It can occur that this
+ * length cannot be encoded in 1 byte and the next entry needs to be grow
+ * a bit larger to hold the 5-byte encoded prevlen. This can be done for free,
+ * because this only happens when an entry is already being inserted (which
+ * causes a realloc and memmove). However, encoding the prevlen may require
+ * that this entry is grown as well. This effect may cascade throughout
+ * the ziplist when there are consecutive entries with a size close to
+ * ZIP_BIG_PREVLEN, so we need to check that the prevlen can be encoded in
+ * every consecutive entry.
+ *
+ * Note that this effect can also happen in reverse, where the bytes required
+ * to encode the prevlen field can shrink. This effect is deliberately ignored,
+ * because it can cause a "flapping" effect where a chain prevlen fields is
+ * first grown and then shrunk again after consecutive inserts. Rather, the
+ * field is allowed to stay larger than necessary, because a large prevlen
+ * field implies the ziplist is holding large entries anyway.
+ *
+ * The pointer "p" points to the first entry that does NOT need to be
+ * updated, i.e. consecutive fields MAY need an update. */
+unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
+    zlentry cur;
+    size_t prevlen, prevlensize, prevoffset; /* Informat of the last changed entry. */
+    size_t firstentrylen; /* Used to handle insert at head. */
+    size_t rawlen, curlen = intrev32ifbe(ZIPLIST_BYTES(zl));
+    size_t extra = 0, cnt = 0, offset;
+    size_t delta = 4; /* Extra bytes needed to update a entry's prevlen (5-1). */
+    unsigned char *tail = zl + intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl));
+
+    /* Empty ziplist */
+    if (p[0] == ZIP_END) return zl;
+
+    zipEntry(p, &cur); /* no need for "safe" variant since the input pointer was validated by the function that returned it. */
+    firstentrylen = prevlen = cur.headersize + cur.len;
+    prevlensize = zipStorePrevEntryLength(NULL, prevlen);
+    prevoffset = p - zl;
+    p += prevlen;
+
+    /* Iterate ziplist to find out how many extra bytes do we need to update it. */
+    while (p[0] != ZIP_END) {
+        assert(zipEntrySafe(zl, curlen, p, &cur, 0));
+
+        /* Abort when "prevlen" has not changed. */
+        if (cur.prevrawlen == prevlen) break;
+
+        /* Abort when entry's "prevlensize" is big enough. */
+        if (cur.prevrawlensize >= prevlensize) {
+            if (cur.prevrawlensize == prevlensize) {
+                zipStorePrevEntryLength(p, prevlen);
+            } else {
+                /* This would result in shrinking, which we want to avoid.
+                 * So, set "prevlen" in the available bytes. */
+                zipStorePrevEntryLengthLarge(p, prevlen);
+            }
+            break;
+        }
+
+        /* cur.prevrawlen means cur is the former head entry. */
+        assert(cur.prevrawlen == 0 || cur.prevrawlen + delta == prevlen);
+
+        /* Update prev entry's info and advance the cursor. */
+        rawlen = cur.headersize + cur.len;
+        prevlen = rawlen + delta; 
+        prevlensize = zipStorePrevEntryLength(NULL, prevlen);
+        prevoffset = p - zl;
+        p += rawlen;
+        extra += delta;
+        cnt++;
+    }
+
+    /* Extra bytes is zero all update has been done(or no need to update). */
+    if (extra == 0) return zl;
+
+    /* Update tail offset after loop. */
+    if (tail == zl + prevoffset) {
+        /* When the the last entry we need to update is also the tail, update tail offset
+         * unless this is the only entry that was updated (so the tail offset didn't change). */
+        if (extra - delta != 0) {
+            ZIPLIST_TAIL_OFFSET(zl) =
+                intrev32ifbe(intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl))+extra-delta);
+        }
+    } else {
+        /* Update the tail offset in cases where the last entry we updated is not the tail. */
+        ZIPLIST_TAIL_OFFSET(zl) =
+            intrev32ifbe(intrev32ifbe(ZIPLIST_TAIL_OFFSET(zl))+extra);
+    }
+
+    /* Now "p" points at the first unchanged byte in original ziplist,
+     * move data after that to new ziplist. */
+    offset = p - zl;
+    zl = ziplistResize(zl, curlen + extra);
+    p = zl + offset;
+    memmove(p + extra, p, curlen - offset - 1);
+    p += extra;
+
+    /* Iterate all entries that need to be updated tail to head. */
+    while (cnt) {
+        zipEntry(zl + prevoffset, &cur); /* no need for "safe" variant since we already iterated on all these entries above. */
+        rawlen = cur.headersize + cur.len;
+        /* Move entry to tail and reset prevlen. */
+        memmove(p - (rawlen - cur.prevrawlensize), 
+                zl + prevoffset + cur.prevrawlensize, 
+                rawlen - cur.prevrawlensize);
+        p -= (rawlen + delta);
+        if (cur.prevrawlen == 0) {
+            /* "cur" is the previous head entry, update its prevlen with firstentrylen. */
+            zipStorePrevEntryLength(p, firstentrylen);
+        } else {
+            /* An entry's prevlen can only increment 4 bytes. */
+            zipStorePrevEntryLength(p, cur.prevrawlen+delta);
+        }
+        /* Foward to previous entry. */
+        prevoffset -= cur.prevrawlen;
+        cnt--;
+    }
+    return zl;
+}
+```
+
 
 
 ## skiplist
 
+ele is a [sds](/docs/CS/DB/Redis/SDS.md)
 
+order by score, then ele
+
+forward
+backward
+
+
+```c
+// server.h
+/* ZSETs use a specialized version of Skiplists */
+typedef struct zskiplistNode {
+    sds ele;
+    double score;
+    struct zskiplistNode *backward;
+    struct zskiplistLevel {
+        struct zskiplistNode *forward;
+        unsigned long span;
+    } level[];
+} zskiplistNode;
+
+typedef struct zskiplist {
+    struct zskiplistNode *header, *tail;
+    unsigned long length;
+    int level;
+} zskiplist;
+```
+
+
+
+
+### create
+create header node with ZSKIPLIST_MAXLEVEL(32) zskiplistLevel
 
 ```c
 // t_zset.c
@@ -610,29 +1004,12 @@ zskiplistNode *zslCreateNode(int level, double score, sds ele) {
 
 
 
-```c
-// server.h
-/* ZSETs use a specialized version of Skiplists */
-typedef struct zskiplistNode {
-    sds ele;
-    double score;
-    struct zskiplistNode *backward;
-    struct zskiplistLevel {
-        struct zskiplistNode *forward;
-        unsigned long span;
-    } level[];
-} zskiplistNode;
-
-typedef struct zskiplist {
-    struct zskiplistNode *header, *tail;
-    unsigned long length;
-    int level;
-} zskiplist;
-```
-
-
-
 ### insert
+
+1. find position
+2. set level
+3. Insert node
+4. Update backward
 
 ```c
 /* Insert a new node in the skiplist. Assumes the element does not already
@@ -700,6 +1077,23 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
 
 #### randomLevel
 
+p = ZSKIPLIST_P
+
+E = except level
+
+- 1 = 1 - p
+- 2 = p(1 - p)
+- 3 = p^2(1-p)
+- ...
+
+$$
+\begin{align}
+E &= 1 \times (1-p) + 2\times p(1-p)+... \hspace{1cm}\\
+&=(1-p)\sum_{i=1}^{+\infty}{ip^{i-1}} \\
+&= 1/(1-p)\\
+\end{align}
+$$
+
 ```c
 #define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
 #define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^64 elements */
@@ -722,7 +1116,8 @@ int zslRandomLevel(void) {
 
 ### delete
 
-
+1. find node to update
+2. update span and forward
 
 ```c
 /* Internal function used by zslDelete, zslDeleteRangeByScore and
@@ -809,4 +1204,12 @@ void zslFree(zskiplist *zsl) {
     zfree(zsl);
 }
 ```
+
+## Summary
+
+- zset default use ziplist, then skiplist and never convert back.
+
+- zset compare with score and ele(sds)
+
+  
 
