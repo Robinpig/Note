@@ -5,6 +5,10 @@
 
 when create string, len=capacity, usually we don't append string.
 
+
+counter/limiter
+cache (shared sessions)
+
 ## Type
 
 
@@ -153,8 +157,8 @@ len>44 raw, else embstr.
 
 debug object key
 
-1. 16byte for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
-2. 3byte for capacity +len +flags
+1. 16bytes for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
+2. 3bytes for capacity +len +flags
 3. 1byte for NULL
 
 jemalloc apply 64byte(for cache line)
@@ -665,5 +669,7 @@ void sdsclear(sds s) {
 - packed and always append '\0'
 - expand pow of 2 when len < 1M, or else expand 1M util 512M
 - use sdsclear rather than sdsfree
+- encoding int value in ptr
+- encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
 
 ## References

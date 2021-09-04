@@ -25,6 +25,16 @@ Redis objects are used extensively in the Redis internals, however in order to a
 
 
 
+object
+- [string](/docs/CS/DB/Redis/SDS.md)
+- [list](/docs/CS/DB/Redis/list.md)
+- [set](/docs/CS/DB/Redis/set.md)
+- [zset](/docs/CS/DB/Redis/zset.md)
+- [hash](/docs/CS/DB/Redis/hash.md)
+- [Stream](/docs/CS/DB/Redis/Stream.md)
+- [geo](/docs/CS/DB/Redis/geo.md)
+- [HyperLogLog](/docs/CS/DB/Redis/HyperLogLog.md)
+
 ```c
 // server.h
 /* A redis object, that is a type able to hold a string / list / set */
@@ -52,6 +62,14 @@ Redis objects are used extensively in the Redis internals, however in order to a
 ```
 
 
+struct
+- [int embstr raw](/docs/CS/DB/Redis/SDS.md?id=type)
+- [hashtable](/docs/CS/DB/Redis/hash.md)
+- [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist)
+- [intset](/docs/CS/DB/Redis/set.md?id=intset)
+- [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist)
+- [ziplist](/docs/CS/DB/Redis/list.md?id=quciklist)
+- [Stream](/docs/CS/DB/Redis/Stream.md?id=rax)
 
 ```c
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
@@ -61,7 +79,6 @@ Redis objects are used extensively in the Redis internals, however in order to a
 #define OBJ_ENCODING_INT 1     /* Encoded as integer */
 #define OBJ_ENCODING_HT 2      /* Encoded as hash table */
 #define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
-#define OBJ_ENCODING_LINKEDLIST 4 /* No longer used: old list encoding. */
 #define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
 #define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
 #define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
@@ -69,27 +86,6 @@ Redis objects are used extensively in the Redis internals, however in order to a
 #define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
 #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
 ```
-
-object
-- [string](/docs/CS/DB/Redis/SDS.md)
-- [hash](/docs/CS/DB/Redis/hash.md)
-- [list](/docs/CS/DB/Redis/list.md)
-- [set](/docs/CS/DB/Redis/set.md)
-- [zset](/docs/CS/DB/Redis/zset.md)
-
-
-struct
-- [sds](/docs/CS/DB/Redis/SDS.md)
-- [dict](/docs/CS/DB/Redis/hash.md)
-- [list](/docs/CS/DB/Redis/list.md)
-- [intset](/docs/CS/DB/Redis/set.md?id=intset)
-- [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist)
-- [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist)
-- [rax](/docs/CS/DB/Redis/Stream.md?id=rax)
-
-
-
-
 
 
 ### Redis keys
@@ -126,32 +122,6 @@ $5 = 7
 - use UNLINK rather than DEL when delete big data
 - check if EXISTS before RENAME
 
-## string
-
-### example
-counter/limiter
-cache (shared sessions)
-
-## list
-
-blocking queue
- lpush + brpop
-
-
-
-## hash
-
-## set
-tags
-combine
-
-
-## zset
-
-sorted-set
-
-
-
 ## bitmap
 
 bitcount
@@ -164,4 +134,3 @@ bitfield KEY [GET type offset] [SET type offset value] [INCRBY type offset incre
 - sat keep the max/min value
 - fail return fail and do nothing
 
-## HLL

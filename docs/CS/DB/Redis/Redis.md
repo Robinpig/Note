@@ -15,6 +15,12 @@ Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and
 - make source
 - apt-get(Ubuntu) yum(RedHat) brew(Mac)
 
+## sys
+
+struct redisServer and struct client in server.h
+
+struct redisCommand redisCommandTable[] in server.c
+
 
 
 ## Struct

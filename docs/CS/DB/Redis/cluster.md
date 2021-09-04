@@ -1,15 +1,11 @@
 ## Introduction
 
 
-
-
-
 Redis Cluster 16384 slots for master
 
 `gossip`
 
-#### [gossip 协议](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=gossip-协议)
-
+#### gossip 
 gossip 协议包含多种消息，包含 `ping` , `pong` , `meet` , `fail` 等等。
 
 - meet：某个节点发送 meet 给新加入的节点，让新节点加入集群中，然后新节点就会开始与其它节点进行通信。
@@ -204,3 +200,27 @@ Jedis中的ShardedJedis是该方案的实现。
 ### 结束
 
 分布式redis深度历险系列到此为止了，之后一个系列会详细讲讲单机Redis的实现，包括Redis的底层数据结构、对内存占用的优化、基于事件的处理机制、持久化的实现等等偏底层的内容，敬请期待~
+
+## Msg
+
+```c
+// cluster.h
+
+/* Message types.
+ *
+ * Note that the PING, PONG and MEET messages are actually the same exact
+ * kind of packet. PONG is the reply to ping, in the exact format as a PING,
+ * while MEET is a special PING that forces the receiver to add the sender
+ * as a node (if it is not already in the list). */
+#define CLUSTERMSG_TYPE_PING 0          /* Ping */
+#define CLUSTERMSG_TYPE_PONG 1          /* Pong (reply to Ping) */
+#define CLUSTERMSG_TYPE_MEET 2          /* Meet "let's join" message */
+#define CLUSTERMSG_TYPE_FAIL 3          /* Mark node xxx as failing */
+#define CLUSTERMSG_TYPE_PUBLISH 4       /* Pub/Sub Publish propagation */
+#define CLUSTERMSG_TYPE_FAILOVER_AUTH_REQUEST 5 /* May I failover? */
+#define CLUSTERMSG_TYPE_FAILOVER_AUTH_ACK 6     /* Yes, you have my vote */
+#define CLUSTERMSG_TYPE_UPDATE 7        /* Another node slots configuration */
+#define CLUSTERMSG_TYPE_MFSTART 8       /* Pause clients for manual failover */
+#define CLUSTERMSG_TYPE_MODULE 9        /* Module cluster API message. */
+#define CLUSTERMSG_TYPE_COUNT 10        /* Total number of message types. */
+```

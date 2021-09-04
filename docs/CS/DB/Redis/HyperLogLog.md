@@ -33,15 +33,13 @@ Redis is also able to perform the union of HLLs, please check the [full document
 
 add HyperLogLog since 2.8.9
 
-基数统计
+cardinality counting
 
-在输入元素的数量或者体积非常非常大时，计算基数所需的空间总是固定的，并且是很小的
 
 
 
 12KB
 
-只会根据输入元素来计算基数，而不会储存输入元素本身，所以HyperLogLog不能像集合那样，返回输入的各个元素
 
 
 
@@ -75,3 +73,6 @@ pfmerge newlog loglog
 
 begin with HYLL
 
+## References
+1. [HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
+2. [New cardinality estimation algorithms for HyperLogLog sketches](https://arxiv.org/pdf/1702.01284.pdf)

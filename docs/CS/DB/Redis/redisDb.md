@@ -71,9 +71,13 @@ typedef struct dictEntry {
 
 
 ## redisObject
+16bytes:
+- type : 4bits get type by `type keyName`
+- encoding : 4bits get encoding  by `object encoding keyName`
+- lru : 24bits
+- refcount : 4bytes
+- *ptr : 8bytes
 
-get type by `type keyName`
-get encoding  by `object encoding keyName`
 
 ```c
 // server.h
@@ -89,7 +93,29 @@ typedef struct redisObject {
 ```
 
 
+decrRefCount
 
+```c
+// object.c
+void decrRefCount(robj *o) {
+    if (o->refcount == 1) {
+        switch(o->type) {
+        case OBJ_STRING: freeStringObject(o); break;
+        case OBJ_LIST: freeListObject(o); break;
+        case OBJ_SET: freeSetObject(o); break;
+        case OBJ_ZSET: freeZsetObject(o); break;
+        case OBJ_HASH: freeHashObject(o); break;
+        case OBJ_MODULE: freeModuleObject(o); break;
+        case OBJ_STREAM: freeStreamObject(o); break;
+        default: serverPanic("Unknown object type"); break;
+        }
+        zfree(o);
+    } else {
+        if (o->refcount <= 0) serverPanic("decrRefCount against refcount <= 0");
+        if (o->refcount != OBJ_SHARED_REFCOUNT) o->refcount--;
+    }
+}
+```
 
 
 ### createObject
@@ -197,7 +223,8 @@ int expireIfNeeded(redisDb *db, robj *key) {
 }
 ```
 
-call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind)
+call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind) to find dictEntry, then update lfu or lru access time
+
 ```c
 // db.c
 
@@ -225,6 +252,40 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
     }
 }
 ```
+
+### updateLFU
+```c
+// db.c
+/* Update LFU when an object is accessed.
+ * Firstly, decrement the counter if the decrement time is reached.
+ * Then logarithmically increment the counter, and update the access time. */
+void updateLFU(robj *val) {
+    unsigned long counter = LFUDecrAndReturn(val);
+    counter = LFULogIncr(counter);
+    val->lru = (LFUGetTimeInMinutes()<<8) | counter;
+}
+
+
+/* If the object decrement time is reached decrement the LFU counter but
+ * do not update LFU fields of the object, we update the access time
+ * and counter in an explicit way when the object is really accessed.
+ * And we will times halve the counter according to the times of
+ * elapsed time than server.lfu_decay_time.
+ * Return the object frequency counter.
+ *
+ * This function is used in order to scan the dataset for the best object
+ * to fit: as we check for the candidate, we incrementally decrement the
+ * counter of the scanned objects if needed. */
+unsigned long LFUDecrAndReturn(robj *o) {
+    unsigned long ldt = o->lru >> 8;
+    unsigned long counter = o->lru & 255;
+    unsigned long num_periods = server.lfu_decay_time ? LFUTimeElapsed(ldt) / server.lfu_decay_time : 0;
+    if (num_periods)
+        counter = (num_periods > counter) ? 0 : counter - num_periods;
+    return counter;
+}
+```
+
 
 ### dictFind
 call [rehash](/docs/CS/DB/Redis/hash.md?id=rehash) when dictIsRehashing
@@ -408,7 +469,7 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
 ```
 
 ### overwrite
-1. dictFind
+1. [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind)
 2. unlink+add
 
 ```c

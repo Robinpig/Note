@@ -18,20 +18,11 @@
 
 ### Redis
 
-- [start](/docs/CS/DB/Redis/start.md)
+- [start](/docs/CS/DB/Redis/start.md?id=main)
+- [exec](/docs/CS/DB/Redis/start.md?id=do)
 - [db](/docs/CS/DB/Redis/redisDb.md)
-
-#### Struct
-- [string](/docs/CS/DB/Redis/SDS.md)
-- [hash](/docs/CS/DB/Redis/hash.md)
-- [list](/docs/CS/DB/Redis/list.md)
-- [set](/docs/CS/DB/Redis/set.md)
-- [zset](/docs/CS/DB/Redis/zset.md)
-- [Stream](/docs/CS/DB/Redis/Stream.md)
-  
-
-#### IO
-- [ae](/docs/CS/DB/Redis/ae.md)
+- [Struct](/docs/CS/DB/Redis/struct.md)
+- [IO](/docs/CS/DB/Redis/ae.md)
 
 
 ## MQ

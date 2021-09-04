@@ -233,7 +233,7 @@ int main(int argc, char **argv) {
 ### initServerConfig
 
 1. Set properties of redisServer
-2. initCommandTable
+2. initCommandTable array -> dict
 3. initConfigValues
 
 ```c
@@ -1103,8 +1103,11 @@ void setupSignalHandlers(void) {
 
 #### createSharedObjects
 
+shared objects 0 ~ 10000
 ```c
 // server.c
+#define OBJ_SHARED_INTEGERS 10000
+
 void createSharedObjects(void) {
     int j;
 
@@ -1746,9 +1749,7 @@ void aeMain(aeEventLoop *eventLoop) {
 
 
 
-
-
-#### aeProcessEvents
+#### processEvents
 
 Process every pending time event, then every pending file event (that may be registered by time event callbacks just processed). Without special flags the function sleeps until some file event fires, or when the next time event occurs (if any).
 
