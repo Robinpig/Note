@@ -90,7 +90,10 @@ robj *createSetObject(void) {
 
 
 ### setTypeAdd
+[dictAddRaw in hash](/docs/CS/DB/Redis/hash.md?id=dictAddRaw)
 
+- if isSdsRepresentableAsLongLong, add to intset, when over max_intset_entries(512) convert to [dict](/docs/CS/DB/Redis/hash.md)
+- or else [dictAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
 ```c
 // t-set.c
 /* Add the specified value into a set.
@@ -135,10 +138,18 @@ int setTypeAdd(robj *subject, sds value) {
 ```
 
 
+## intset
 
+```c
+// intset.h
 
-
-#### intsetAdd
+typedef struct intset {
+    uint32_t encoding;
+    uint32_t length;
+    int8_t contents[];
+} intset;
+```
+### add
 
 ```c
 // intset.c
@@ -172,8 +183,3 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     return is;
 }
 ```
-
-
-
-#### dictAdd
-call [dictAddRaw](/docs/CS/DB/Redis/hash.md?id=dictAddRaw)

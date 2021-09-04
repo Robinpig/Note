@@ -468,7 +468,7 @@ The setGenericCommand() function implements the SET operation with differen opti
 If ok_reply is NULL "+OK" is used.
 If abort_reply is NULL, "$-1" is used.
 
-
+[genericSetKey](/docs/CS/DB/Redis/redisDb.md?id=genericSetKey)
 ```c
 // t_string.c
 #define OBJ_SET_NO_FLAGS 0
@@ -507,35 +507,6 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
 }
 ```
 
-
-#### genericSetKey
-
-call [dictCreate](/docs/CS/DB/Redis/hash.md?id=create)
-
-```c
-/* High level Set operation. This function can be used in order to set
- * a key, whatever it was existing or not, to a new object.
- *
- * 1) The ref count of the value object is incremented.
- * 2) clients WATCHing for the destination key notified.
- * 3) The expire time of the key is reset (the key is made persistent),
- *    unless 'keepttl' is true.
- *
- * All the new keys in the database should be created via this interface.
- * The client 'c' argument may be set to NULL if the operation is performed
- * in a context where there is no clear client performing the operation. */
-// db.c
-void genericSetKey(client *c, redisDb *db, robj *key, robj *val, int keepttl, int signal) {
-    if (lookupKeyWrite(db,key) == NULL) {
-        dbAdd(db,key,val);
-    } else {
-        dbOverwrite(db,key,val);
-    }
-    incrRefCount(val);
-    if (!keepttl) removeExpire(db,key);
-    if (signal) signalModifiedKey(c,db,key);
-}
-```
 
 
 

@@ -111,3 +111,91 @@ quicklist *quicklistCreate(void) {
 
 
 convertFromZiplist in rdb.c
+
+
+```c
+// t_list.c
+
+/* The function pushes an element to the specified list object 'subject',
+ * at head or tail position as specified by 'where'.
+ *
+ * There is no need for the caller to increment the refcount of 'value' as
+ * the function takes care of it if needed. */
+void listTypePush(robj *subject, robj *value, int where) {
+    if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
+        int pos = (where == LIST_HEAD) ? QUICKLIST_HEAD : QUICKLIST_TAIL;
+        if (value->encoding == OBJ_ENCODING_INT) {
+            char buf[32];
+            ll2string(buf, 32, (long)value->ptr);
+            quicklistPush(subject->ptr, buf, strlen(buf), pos);
+        } else {
+            quicklistPush(subject->ptr, value->ptr, sdslen(value->ptr), pos);
+        }
+    } else {
+        serverPanic("Unknown list encoding");
+    }
+}
+```
+
+call [ziplistPush](/docs/CS/DB/Redis/zset.md?id=insert)
+
+
+```c
+//quicklist.c
+
+/* Wrapper to allow argument-based switching between HEAD/TAIL pop */
+void quicklistPush(quicklist *quicklist, void *value, const size_t sz,
+                   int where) {
+    if (where == QUICKLIST_HEAD) {
+        quicklistPushHead(quicklist, value, sz);
+    } else if (where == QUICKLIST_TAIL) {
+        quicklistPushTail(quicklist, value, sz);
+    }
+}
+
+/* Add new entry to head node of quicklist.
+ *
+ * Returns 0 if used existing head.
+ * Returns 1 if new head created. */
+int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
+    quicklistNode *orig_head = quicklist->head;
+    if (likely(
+            _quicklistNodeAllowInsert(quicklist->head, quicklist->fill, sz))) {
+        quicklist->head->zl =
+            ziplistPush(quicklist->head->zl, value, sz, ZIPLIST_HEAD);
+        quicklistNodeUpdateSz(quicklist->head);
+    } else {
+        quicklistNode *node = quicklistCreateNode();
+        node->zl = ziplistPush(ziplistNew(), value, sz, ZIPLIST_HEAD);
+
+        quicklistNodeUpdateSz(node);
+        _quicklistInsertNodeBefore(quicklist, quicklist->head, node);
+    }
+    quicklist->count++;
+    quicklist->head->count++;
+    return (orig_head != quicklist->head);
+}
+
+/* Add new entry to tail node of quicklist.
+ *
+ * Returns 0 if used existing tail.
+ * Returns 1 if new tail created. */
+int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
+    quicklistNode *orig_tail = quicklist->tail;
+    if (likely(
+            _quicklistNodeAllowInsert(quicklist->tail, quicklist->fill, sz))) {
+        quicklist->tail->zl =
+            ziplistPush(quicklist->tail->zl, value, sz, ZIPLIST_TAIL);
+        quicklistNodeUpdateSz(quicklist->tail);
+    } else {
+        quicklistNode *node = quicklistCreateNode();
+        node->zl = ziplistPush(ziplistNew(), value, sz, ZIPLIST_TAIL);
+
+        quicklistNodeUpdateSz(node);
+        _quicklistInsertNodeAfter(quicklist, quicklist->tail, node);
+    }
+    quicklist->count++;
+    quicklist->tail->count++;
+    return (orig_tail != quicklist->tail);
+}
+```

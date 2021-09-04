@@ -70,6 +70,22 @@ Redis objects are used extensively in the Redis internals, however in order to a
 #define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
 ```
 
+object
+- [string](/docs/CS/DB/Redis/SDS.md)
+- [hash](/docs/CS/DB/Redis/hash.md)
+- [list](/docs/CS/DB/Redis/list.md)
+- [set](/docs/CS/DB/Redis/set.md)
+- [zset](/docs/CS/DB/Redis/zset.md)
+
+
+struct
+- [sds](/docs/CS/DB/Redis/SDS.md)
+- [dict](/docs/CS/DB/Redis/hash.md)
+- [list](/docs/CS/DB/Redis/list.md)
+- [intset](/docs/CS/DB/Redis/set.md?id=intset)
+- [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist)
+- [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist)
+
 
 
 
@@ -77,7 +93,9 @@ Redis objects are used extensively in the Redis internals, however in order to a
 
 ### Redis keys
 
-Redis keys are binary safe, this means that you can use any binary sequence as a key, from a string like "foo" to the content of a JPEG file. The empty string is also a valid key.
+Redis keys are binary safe, this means that you can use any binary sequence as a key, from a string like "foo" to the content of a JPEG file. 
+
+The empty string is also a valid key.
 
 A few other rules about keys:
 
@@ -86,6 +104,21 @@ A few other rules about keys:
 - **Try to stick with a schema.** For instance "object-type:id" is a good idea, as in "user:1000". Dots or dashes are often used for multi-word fields, as in "`comment:1234:reply.to`" or "`comment:1234:reply-to`".
 - The maximum allowed key size is **512 MB**.
 
+```shell
+# client
+127.0.0.1:6379> set 111.111 hello
+
+# server
+gdb redis-server
+(gdb) r
+(gdb) b dictGenHashFunction
+
+(gdb) c
+(gdb) p (char*) key
+$4 = 0x7ffff1a1b0d3 "111.111"
+(gdb) p len
+$5 = 7
+```
 
 ### tips
 - use SCAN rather than KEYS（block）to get all keys

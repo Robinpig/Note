@@ -37,6 +37,19 @@ struct dict {
     char ht_size_exp[2]; /* exponent of size. (size = 1<<exp) */
 };
 ```
+[dicht in hash](/docs/CS/DB/Redis/hash.md?id=dicht)
+
+```c
+// dict.c
+typedef struct dict {
+    dictType *type;
+    void *privdata;
+    dictht ht[2];
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    unsigned long iterators; /* number of iterators currently running */
+} dict;
+```
+
 
 
 
@@ -56,20 +69,6 @@ typedef struct dictEntry {
 
 
 
-
-
-
-```c
-// hiredis/dict.h
-typedef struct dictType {
-unsigned int (*hashFunction)(const void *key);
-void *(*keyDup)(void *privdata, const void *key);
-void *(*valDup)(void *privdata, const void *obj);
-int (*keyCompare)(void *privdata, const void *key1, const void *key2);
-void (*keyDestructor)(void *privdata, void *key);
-void (*valDestructor)(void *privdata, void *obj);
-} dictType;
-```
 
 ## redisObject
 
@@ -115,10 +114,26 @@ robj *createObject(int type, void *ptr) {
 }
 ```
 
-## lookupKeyWrite
+
+## get
+
+
+### lookupKey
 
 ```c
 // db.c
+robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply) {
+    robj *o = lookupKeyRead(c->db, key);
+    if (!o) SentReplyOnKeyMiss(c, reply);
+    return o;
+}
+
+/* Like lookupKeyReadWithFlags(), but does not use any flag, which is the
+ * common case. */
+robj *lookupKeyRead(redisDb *db, robj *key) {
+    return lookupKeyReadWithFlags(db,key,LOOKUP_NONE);
+}
+
 robj *lookupKeyWrite(redisDb *db, robj *key) {
     return lookupKeyWriteWithFlags(db, key, LOOKUP_NONE);
 }
@@ -182,7 +197,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
 }
 ```
 
-
+call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind)
 ```c
 // db.c
 
@@ -211,6 +226,7 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
 }
 ```
 
+### dictFind
 call [rehash](/docs/CS/DB/Redis/hash.md?id=rehash) when dictIsRehashing
 
 ```c
@@ -223,7 +239,7 @@ dictEntry *dictFind(dict *d, const void *key)
     if (dictSize(d) == 0) return NULL; /* dict is empty */
     if (dictIsRehashing(d)) _dictRehashStep(d);
     h = dictHashKey(d, key);
-    for (table = 0; table <= 1; table++) {
+    for (table = 0; table <= 1; table++) { // two table
         idx = h & DICTHT_SIZE_MASK(d->ht_size_exp[table]);
         he = d->ht_table[table][idx];
         while(he) {
@@ -237,12 +253,46 @@ dictEntry *dictFind(dict *d, const void *key)
 }
 ```
 
-## add
+
+
+## set
+
+### genericSetKey
+- if [lookup] is NULL, call [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
+- or else [overwrite](/docs/CS/DB/Redis/redisDb.md?id=overwrite)
 
 ```c
+/* High level Set operation. This function can be used in order to set
+ * a key, whatever it was existing or not, to a new object.
+ *
+ * 1) The ref count of the value object is incremented.
+ * 2) clients WATCHing for the destination key notified.
+ * 3) The expire time of the key is reset (the key is made persistent),
+ *    unless 'keepttl' is true.
+ *
+ * All the new keys in the database should be created via this interface.
+ * The client 'c' argument may be set to NULL if the operation is performed
+ * in a context where there is no clear client performing the operation. */
 // db.c
+void genericSetKey(client *c, redisDb *db, robj *key, robj *val, int keepttl, int signal) {
+    if (lookupKeyWrite(db,key) == NULL) {
+        dbAdd(db,key,val);
+    } else {
+        dbOverwrite(db,key,val);
+    }
+    incrRefCount(val);
+    if (!keepttl) removeExpire(db,key);
+    if (signal) signalModifiedKey(c,db,key);
+}
+```
 
 
+
+### add
+
+call [dictAddRaw in hash](/docs/CS/DB/Redis/redisDb.md?id=dictAddRaw)
+```c
+// db.c
 /* Add the key to the DB. It's up to the caller to increment the reference
  * counter of the value if needed.
  *
@@ -268,14 +318,15 @@ int dictAdd(dict *d, void *key, void *val)
 }
 ```
 
+
+#### dictAddRaw
+
 **Insert the element in top**
 
 add new object in ht[1] when rehashing
 
-
+[expand if needed](/docs/CS/DB/Redis/hash.md?id=expand)
 ```c
-// db.c
-
 /* Low level add or find:
  * This function adds the entry but instead of setting a value returns the
  * dictEntry structure to the user, that will make sure to fill the value
@@ -322,4 +373,236 @@ dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
     return entry;
 }
 
+
+/* Returns the index of a free slot that can be populated with
+ * a hash entry for the given 'key'.
+ * If the key already exists, -1 is returned
+ * and the optional output parameter may be filled.
+ *
+ * Note that if we are in the process of rehashing the hash table, the
+ * index is always returned in the context of the second (new) hash table. */
+static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **existing)
+{
+    unsigned long idx, table;
+    dictEntry *he;
+    if (existing) *existing = NULL;
+
+    /* Expand the hash table if needed */
+    if (_dictExpandIfNeeded(d) == DICT_ERR)
+        return -1;
+    for (table = 0; table <= 1; table++) {
+        idx = hash & d->ht[table].sizemask;
+        /* Search if this slot does not already contain the given key */
+        he = d->ht[table].table[idx];
+        while(he) {
+            if (key==he->key || dictCompareKeys(d, key, he->key)) {
+                if (existing) *existing = he;
+                return -1;
+            }
+            he = he->next;
+        }
+        if (!dictIsRehashing(d)) break;
+    }
+    return idx;
+}
 ```
+
+### overwrite
+1. dictFind
+2. unlink+add
+
+```c
+// db.c
+/* Overwrite an existing key with a new value. Incrementing the reference
+ * count of the new value is up to the caller.
+ * This function does not modify the expire time of the existing key.
+ *
+ * The program is aborted if the key was not already present. */
+void dbOverwrite(redisDb *db, robj *key, robj *val) {
+    dictEntry *de = dictFind(db->dict,key->ptr);
+
+    serverAssertWithInfo(NULL,key,de != NULL);
+    dictEntry auxentry = *de;
+    robj *old = dictGetVal(de);
+    if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+        val->lru = old->lru;
+    }
+    /* Although the key is not really deleted from the database, we regard 
+    overwrite as two steps of unlink+add, so we still need to call the unlink 
+    callback of the module. */
+    moduleNotifyKeyUnlink(key,old);
+    dictSetVal(db->dict, de, val);
+
+    if (server.lazyfree_lazy_server_del) {
+        freeObjAsync(key,old);
+        dictSetVal(db->dict, &auxentry, NULL);
+    }
+
+    dictFreeVal(db->dict, &auxentry);
+}
+```
+
+## delete
+
+```c
+// db.c
+/* This is a wrapper whose behavior depends on the Redis lazy free
+ * configuration. Deletes the key synchronously or asynchronously. */
+int dbDelete(redisDb *db, robj *key) {
+    return server.lazyfree_lazy_server_del ? dbAsyncDelete(db,key) :
+                                             dbSyncDelete(db,key);
+}
+```
+
+```c
+// db.c
+/* Delete a key, value, and associated expiration entry if any, from the DB.
+ * If there are enough allocations to free the value object may be put into
+ * a lazy free list instead of being freed synchronously. The lazy free list
+ * will be reclaimed in a different bio.c thread. */
+#define LAZYFREE_THRESHOLD 64
+int dbAsyncDelete(redisDb *db, robj *key) {
+    /* Deleting an entry from the expires dict will not free the sds of
+     * the key, because it is shared with the main dictionary. */
+    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+
+    /* If the value is composed of a few allocations, to free in a lazy way
+     * is actually just slower... So under a certain limit we just free
+     * the object synchronously. */
+    dictEntry *de = dictUnlink(db->dict,key->ptr);
+    if (de) {
+        robj *val = dictGetVal(de);
+
+        /* Tells the module that the key has been unlinked from the database. */
+        moduleNotifyKeyUnlink(key,val);
+
+        size_t free_effort = lazyfreeGetFreeEffort(key,val);
+
+        /* If releasing the object is too much work, do it in the background
+         * by adding the object to the lazy free list.
+         * Note that if the object is shared, to reclaim it now it is not
+         * possible. This rarely happens, however sometimes the implementation
+         * of parts of the Redis core may call incrRefCount() to protect
+         * objects, and then call dbDelete(). In this case we'll fall
+         * through and reach the dictFreeUnlinkedEntry() call, that will be
+         * equivalent to just calling decrRefCount(). */
+        if (free_effort > LAZYFREE_THRESHOLD && val->refcount == 1) {
+            atomicIncr(lazyfree_objects,1);
+            bioCreateLazyFreeJob(lazyfreeFreeObject,1, val);
+            dictSetVal(db->dict,de,NULL);
+        }
+    }
+
+    /* Release the key-val pair, or just the key if we set the val
+     * field to NULL in order to lazy free it later. */
+    if (de) {
+        dictFreeUnlinkedEntry(db->dict,de);
+        if (server.cluster_enabled) slotToKeyDel(key->ptr);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+```
+### dictDelete
+
+```c
+// dict.c
+/* Remove an element, returning DICT_OK on success or DICT_ERR if the
+ * element was not found. */
+int dictDelete(dict *ht, const void *key) {
+    return dictGenericDelete(ht,key,0) ? DICT_OK : DICT_ERR;
+}
+
+
+/* Search and remove an element. This is an helper function for
+ * dictDelete() and dictUnlink(), please check the top comment
+ * of those functions. */
+static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
+    uint64_t h, idx;
+    dictEntry *he, *prevHe;
+    int table;
+
+    if (d->ht[0].used == 0 && d->ht[1].used == 0) return NULL;
+
+    if (dictIsRehashing(d)) _dictRehashStep(d);
+    h = dictHashKey(d, key);
+
+    for (table = 0; table <= 1; table++) {
+        idx = h & d->ht[table].sizemask;
+        he = d->ht[table].table[idx];
+        prevHe = NULL;
+        while(he) {
+            if (key==he->key || dictCompareKeys(d, key, he->key)) {
+                /* Unlink the element from the list */
+                if (prevHe)
+                    prevHe->next = he->next;
+                else
+                    d->ht[table].table[idx] = he->next;
+                if (!nofree) {
+                    dictFreeKey(d, he);
+                    dictFreeVal(d, he);
+                    zfree(he);
+                }
+                d->ht[table].used--;
+                return he;
+            }
+            prevHe = he;
+            he = he->next;
+        }
+        if (!dictIsRehashing(d)) break;
+    }
+    return NULL; /* not found */
+}
+```
+
+## resize
+call by databaseCron
+
+[rehash](/docs/CS/DB/Redis/hash.md?id=rehash) or [expand](/docs/CS/DB/Redis/hash.md?id=expand) when filled less than 10%
+```c
+// server.c
+/* If the percentage of used slots in the HT reaches HASHTABLE_MIN_FILL
+ * we resize the hash table to save memory */
+void tryResizeHashTables(int dbid) {
+    if (htNeedsResize(server.db[dbid].dict))
+        dictResize(server.db[dbid].dict);
+    if (htNeedsResize(server.db[dbid].expires))
+        dictResize(server.db[dbid].expires);
+}
+
+
+/* This is the initial size of every hash table */
+#define DICT_HT_INITIAL_SIZE     4
+
+/* Hash table parameters */
+#define HASHTABLE_MIN_FILL        10      /* Minimal hash table fill 10% */
+
+int htNeedsResize(dict *dict) {
+    long long size, used;
+
+    size = dictSlots(dict);
+    used = dictSize(dict);
+    return (size > DICT_HT_INITIAL_SIZE &&
+            (used*100/size < HASHTABLE_MIN_FILL));
+}
+
+
+
+/* Resize the table to the minimal size that contains all the elements,
+ * but with the invariant of a USED/BUCKETS ratio near to <= 1 */
+int dictResize(dict *d)
+{
+    unsigned long minimal;
+
+    if (!dict_can_resize || dictIsRehashing(d)) return DICT_ERR;
+    minimal = d->ht[0].used;
+    if (minimal < DICT_HT_INITIAL_SIZE)
+        minimal = DICT_HT_INITIAL_SIZE;
+    return dictExpand(d, minimal);
+}
+```
+
+## Summary
+Set:
+- Insert the element in top

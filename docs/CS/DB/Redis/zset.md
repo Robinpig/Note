@@ -521,9 +521,7 @@ unsigned char *ziplistNew(void) {
 #define ZIP_END 255         /* Special "end of ziplist" entry. */
 ```
 
-
-
-[prevrawlen cascadeUpdate](/docs/CS/DB/Redis/zset.md?id=cascadeUpdate)
+prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/zset.md?id=cascadeUpdate)
 
 ```c
 /* We use this function to receive information about a ziplist entry.

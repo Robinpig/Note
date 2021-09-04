@@ -4,18 +4,12 @@
 
 [redisDb](/docs/CS/DB/Redis/redisDb.md) also a hashtable
 
-```c
-// dict.c
-typedef struct dict {
-    dictType *type;
-    void *privdata;
-    dictht ht[2];
-    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    unsigned long iterators; /* number of iterators currently running */
-} dict;
-```
+times33
+
+hash(i) = hash(i - 1) * 33 + str[3]
 
 
+### dicht
 
 ```c
 /* This is our hash table structure. Every dictionary has two of this as we
@@ -56,6 +50,76 @@ typedef struct dictType {
 } dictType;
 ```
 
+### siphash
+
+
+```c
+// dict.c
+
+uint64_t dictGenHashFunction(const void *key, int len) {
+    return siphash(key,len,dict_hash_function_seed);
+}
+
+// siphash.c
+uint64_t siphash(const uint8_t *in, const size_t inlen, const uint8_t *k) {
+#ifndef UNALIGNED_LE_CPU
+    uint64_t hash;
+    uint8_t *out = (uint8_t*) &hash;
+#endif
+    uint64_t v0 = 0x736f6d6570736575ULL;
+    uint64_t v1 = 0x646f72616e646f6dULL;
+    uint64_t v2 = 0x6c7967656e657261ULL;
+    uint64_t v3 = 0x7465646279746573ULL;
+    uint64_t k0 = U8TO64_LE(k);
+    uint64_t k1 = U8TO64_LE(k + 8);
+    uint64_t m;
+    const uint8_t *end = in + inlen - (inlen % sizeof(uint64_t));
+    const int left = inlen & 7;
+    uint64_t b = ((uint64_t)inlen) << 56;
+    v3 ^= k1;
+    v2 ^= k0;
+    v1 ^= k1;
+    v0 ^= k0;
+
+    for (; in != end; in += 8) {
+        m = U8TO64_LE(in);
+        v3 ^= m;
+
+        SIPROUND;
+
+        v0 ^= m;
+    }
+
+    switch (left) {
+    case 7: b |= ((uint64_t)in[6]) << 48; /* fall-thru */
+    case 6: b |= ((uint64_t)in[5]) << 40; /* fall-thru */
+    case 5: b |= ((uint64_t)in[4]) << 32; /* fall-thru */
+    case 4: b |= ((uint64_t)in[3]) << 24; /* fall-thru */
+    case 3: b |= ((uint64_t)in[2]) << 16; /* fall-thru */
+    case 2: b |= ((uint64_t)in[1]) << 8; /* fall-thru */
+    case 1: b |= ((uint64_t)in[0]); break;
+    case 0: break;
+    }
+
+    v3 ^= b;
+
+    SIPROUND;
+
+    v0 ^= b;
+    v2 ^= 0xff;
+
+    SIPROUND;
+    SIPROUND;
+
+    b = v0 ^ v1 ^ v2 ^ v3;
+#ifndef UNALIGNED_LE_CPU
+    U64TO8_LE(out, b);
+    return hash;
+#else
+    return b;
+#endif
+}
+```
 
 
 ## hset
@@ -217,6 +281,13 @@ dict *dictCreate(dictType *type)
 }
 
 
+/* This is the initial size of every hash table */
+#define DICT_HT_INITIAL_SIZE     4
+
+
+/* Hash table parameters */
+#define HASHTABLE_MIN_FILL        10      /* Minimal hash table fill 10% */
+
 /* Initialize the hash table */
 int _dictInit(dict *d, dictType *type)
 {
@@ -229,54 +300,88 @@ int _dictInit(dict *d, dictType *type)
 }
 ```
 
-### dictAddRaw
+
+
+## expand
+```c
+// dict.c
+/* Expand the hash table if needed */
+static int _dictExpandIfNeeded(dict *d)
+{
+    /* Incremental rehashing already in progress. Return. */
+    if (dictIsRehashing(d)) return DICT_OK;
+
+    /* If the hash table is empty expand it to the initial size. */
+if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
+
+    /* If we reached the 1:1 ratio, and we are allowed to resize the hash
+     * table (global setting) or we should avoid it but the ratio between
+     * elements/buckets is over the "safe" threshold, we resize doubling
+     * the number of buckets. */
+if (d->ht[0].used >= d->ht[0].size &&
+        (dict_can_resize ||
+         d->ht[0].used/d->ht[0].size > dict_force_resize_ratio) &&
+        dictTypeExpandAllowed(d))
+    {
+        return dictExpand(d, d->ht[0].used + 1);
+}
+    return DICT_OK;
+}
+```
+
 
 ```c
-/* Low level add or find:
- * This function adds the entry but instead of setting a value returns the
- * dictEntry structure to the user, that will make sure to fill the value
- * field as they wish.
- *
- * This function is also directly exposed to the user API to be called
- * mainly in order to store non-pointers inside the hash value, example:
- *
- * entry = dictAddRaw(dict,mykey,NULL);
- * if (entry != NULL) dictSetSignedIntegerVal(entry,1000);
- *
- * Return values:
- *
- * If key already exists NULL is returned, and "*existing" is populated
- * with the existing entry if existing is not NULL.
- *
- * If key was added, the hash entry is returned to be manipulated by the caller.
- */
-dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
-{
-    long index;
-    dictEntry *entry;
-    int htidx;
 
-    if (dictIsRehashing(d)) _dictRehashStep(d);
-
-    /* Get the index of the new element, or -1 if
-     * the element already exists. */
-    if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1)
-        return NULL;
-
-    /* Allocate the memory and store the new entry.
-     * Insert the element in top, with the assumption that in a database
-     * system it is more likely that recently added entries are accessed
-     * more frequently. */
-    htidx = dictIsRehashing(d) ? 1 : 0;
-    entry = zmalloc(sizeof(*entry));
-    entry->next = d->ht_table[htidx][index];
-    d->ht_table[htidx][index] = entry;
-    d->ht_used[htidx]++;
-
-    /* Set the hash entry fields. */
-    dictSetKey(d, entry, key);
-    return entry;
+/* return DICT_ERR if expand was not performed */
+int dictExpand(dict *d, unsigned long size) {
+    return _dictExpand(d, size, NULL);
 }
+
+
+/* Expand or create the hash table,
+ * when malloc_failed is non-NULL, it'll avoid panic if malloc fails (in which case it'll be set to 1).
+ * Returns DICT_OK if expand was performed, and DICT_ERR if skipped. */
+int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
+{
+    if (malloc_failed) *malloc_failed = 0;
+
+    /* the size is invalid if it is smaller than the number of
+     * elements already inside the hash table */
+    if (dictIsRehashing(d) || d->ht[0].used > size)
+        return DICT_ERR;
+
+    dictht n; /* the new hash table */
+    unsigned long realsize = _dictNextPower(size);
+
+    /* Rehashing to the same table size is not useful. */
+    if (realsize == d->ht[0].size) return DICT_ERR;
+
+    /* Allocate the new hash table and initialize all pointers to NULL */
+    n.size = realsize;
+    n.sizemask = realsize-1;
+    if (malloc_failed) {
+        n.table = ztrycalloc(realsize*sizeof(dictEntry*));
+        *malloc_failed = n.table == NULL;
+        if (*malloc_failed)
+            return DICT_ERR;
+    } else
+        n.table = zcalloc(realsize*sizeof(dictEntry*));
+
+    n.used = 0;
+
+    /* Is this the first initialization? If so it's not really a rehashing
+     * we just set the first hash table so that it can accept keys. */
+    if (d->ht[0].table == NULL) {
+        d->ht[0] = n;
+        return DICT_OK;
+    }
+
+    /* Prepare a second hash table for incremental rehashing */
+    d->ht[1] = n;
+    d->rehashidx = 0;
+    return DICT_OK;
+}
+
 ```
 
 ## rehash
@@ -383,5 +488,32 @@ int dictRehash(dict *d, int n) {
 }
 ```
 
+## iteator
+```c
+//dict.h
+
+/* If safe is set to 1 this is a safe iterator, that means, you can call
+ * dictAdd, dictFind, and other functions against the dictionary even while
+ * iterating. Otherwise it is a non safe iterator, and only dictNext()
+ * should be called while iterating. */
+typedef struct dictIterator {
+    dict *d;
+    long index;
+    int table, safe;
+    dictEntry *entry, *nextEntry;
+    /* unsafe iterator fingerprint for misuse detection. */
+    long long fingerprint;
+} dictIterator;
+```
+- normal iterator: only iterate
+- safe iterator: delete when iterate
+
+stop rehash when using safe iterator
 
 
+reverse binary iteration
+
+## Summary
+
+- hash table init size 4
+- hash table minimal fill 10%
