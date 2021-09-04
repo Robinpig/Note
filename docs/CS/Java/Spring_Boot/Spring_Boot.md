@@ -21,7 +21,10 @@ spring-boot-test
 - Cache
 - Log - LoggingApplicationListener
 
-
+- JdbcTemplateAutoConfiguration
+- DataSourceAutoConfiguration
+- DispatcherServletAutoConfiguration
+- WebMvcAutoConfiguration
 
 
 
