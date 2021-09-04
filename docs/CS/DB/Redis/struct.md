@@ -85,6 +85,7 @@ struct
 - [intset](/docs/CS/DB/Redis/set.md?id=intset)
 - [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist)
 - [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist)
+- [rax](/docs/CS/DB/Redis/Stream.md?id=rax)
 
 
 
