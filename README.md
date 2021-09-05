@@ -140,28 +140,6 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 
 [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Ordinary Java Objects) to database records.
 
-#### Infrastructure
-- [Binding](/docs/CS/Java/MyBatis/binding.md)
-- [Log](/docs/CS/Java/MyBatis/Logging.md)
-- [Cache](/docs/CS/Java/MyBatis/Cache.md)
-- [DataSource](/docs/CS/Java/MyBatis/DataSource.md)
-- [Reflector](/docs/CS/Java/MyBatis/Reflector.md)
-
-
-#### Execute
-
-- [Executor](/docs/CS/Java/MyBatis/Executor.md)
-- [StatementHandler](/docs/CS/Java/MyBatis/StatementHandler.md)
-- [ResultSetHandler](/docs/CS/Java/MyBatis/ResultSetHandler.md)
-- [Interceptor](/docs/CS/Java/MyBatis/Interceptor.md)
-- [KeyGenerator](/docs/CS/Java/MyBatis/KeyGenerator.md)
-- [SqlSession](/docs/CS/Java/MyBatis/SqlSession.md)
-
-
-#### Extension
-- [MyBatis-Spring](/docs/CS/Java/MyBatis/MyBatis-Spring.md)
-- [Init](/docs/CS/Java/MyBatis/Init.md)
-- [Extension](/docs/CS/Java/MyBatis/Extension.md)
 
 
 ### Dubbo

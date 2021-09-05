@@ -1,6 +1,49 @@
-# Tomcat 
+## Introduction
 
+ 
 
+## Lifecycle
+
+```java
+package org.apache.catalina;
+
+public interface Lifecycle {
+    String BEFORE_INIT_EVENT = "before_init";
+    String AFTER_INIT_EVENT = "after_init";
+    String START_EVENT = "start";
+    String BEFORE_START_EVENT = "before_start";
+    String AFTER_START_EVENT = "after_start";
+    String STOP_EVENT = "stop";
+    String BEFORE_STOP_EVENT = "before_stop";
+    String AFTER_STOP_EVENT = "after_stop";
+    String AFTER_DESTROY_EVENT = "after_destroy";
+    String BEFORE_DESTROY_EVENT = "before_destroy";
+    String PERIODIC_EVENT = "periodic";
+    String CONFIGURE_START_EVENT = "configure_start";
+    String CONFIGURE_STOP_EVENT = "configure_stop";
+
+    void addLifecycleListener(LifecycleListener var1);
+
+    LifecycleListener[] findLifecycleListeners();
+
+    void removeLifecycleListener(LifecycleListener var1);
+
+    void init() throws LifecycleException;
+
+    void start() throws LifecycleException;
+
+    void stop() throws LifecycleException;
+
+    void destroy() throws LifecycleException;
+
+    LifecycleState getState();
+
+    String getStateName();
+
+    public interface SingleUse {
+    }
+}
+```
 
 1. 管理socket连接, 转换Request/Response和网络字节流
 2. 加载管理Servlet, 处理Request请求

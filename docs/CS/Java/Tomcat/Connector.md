@@ -71,7 +71,7 @@ public static ProtocolHandler create(String protocol)
 }
 ```
 
-default use NioEndpoint
+default use HTTP1.1 NioEndpoint
 
 ```java
 // Http11NioProtocol
@@ -82,7 +82,7 @@ public Http11NioProtocol() {
 
 
 
-Endpoint 
+### Endpoint 
 
 
 
@@ -811,7 +811,411 @@ protected boolean process() {
 }
 ```
 
+## process
 
+AbstractProcessorLight implements Processor
+
+AbstractProcessorLight is a light-weight abstract processor implementation that is intended as a basis for all Processor implementations from the light-weight upgrade processors to the HTTP/AJP processors.
+
+
+AbstractProcessorLight.service()
+
+get Valve by getPipeline().getFirst(), then Value.invoke()
+```java
+// CoyoteAdapter extends AbstractProcessorLight
+@Override
+public void service(org.apache.coyote.Request req, org.apache.coyote.Response res)
+        throws Exception {
+
+        Request request = (Request) req.getNote(ADAPTER_NOTES);
+        Response response = (Response) res.getNote(ADAPTER_NOTES);
+
+        if (request == null) {
+        // Create objects
+        request = connector.createRequest();
+        request.setCoyoteRequest(req);
+        response = connector.createResponse();
+        response.setCoyoteResponse(res);
+
+        // Link objects
+        request.setResponse(response);
+        response.setRequest(request);
+
+        // Set as notes
+        req.setNote(ADAPTER_NOTES, request);
+        res.setNote(ADAPTER_NOTES, response);
+
+        // Set query string encoding
+        req.getParameters().setQueryStringCharset(connector.getURICharset());
+        }
+
+        if (connector.getXpoweredBy()) {
+        response.addHeader("X-Powered-By", POWERED_BY);
+        }
+
+        boolean async = false;
+        boolean postParseSuccess = false;
+
+        req.getRequestProcessor().setWorkerThreadName(THREAD_NAME.get());
+
+        try {
+        // Parse and set Catalina and configuration specific
+        // request parameters
+        postParseSuccess = postParseRequest(req, request, res, response);
+        if (postParseSuccess) {
+        //check valves if we support async
+        request.setAsyncSupported(
+        connector.getService().getContainer().getPipeline().isAsyncSupported());
+        // Calling the container
+        connector.getService().getContainer().getPipeline().getFirst().invoke(
+        request, response);
+        }
+        if (request.isAsync()) {
+        async = true;
+        ReadListener readListener = req.getReadListener();
+        if (readListener != null && request.isFinished()) {
+        // Possible the all data may have been read during service()
+        // method so this needs to be checked here
+        ClassLoader oldCL = null;
+        try {
+        oldCL = request.getContext().bind(false, null);
+        if (req.sendAllDataReadEvent()) {
+        req.getReadListener().onAllDataRead();
+        }
+        } finally {
+        request.getContext().unbind(false, oldCL);
+        }
+        }
+
+        Throwable throwable =
+        (Throwable) request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+
+        // If an async request was started, is not going to end once
+        // this container thread finishes and an error occurred, trigger
+        // the async error process
+        if (!request.isAsyncCompleting() && throwable != null) {
+        request.getAsyncContextInternal().setErrorState(throwable, true);
+        }
+        } else {
+        request.finishRequest();
+        response.finishResponse();
+        }
+
+        } catch (IOException e) {
+        // Ignore
+        } finally {
+        AtomicBoolean error = new AtomicBoolean(false);
+        res.action(ActionCode.IS_ERROR, error);
+
+        if (request.isAsyncCompleting() && error.get()) {
+        // Connection will be forcibly closed which will prevent
+        // completion happening at the usual point. Need to trigger
+        // call to onComplete() here.
+        res.action(ActionCode.ASYNC_POST_PROCESS,  null);
+        async = false;
+        }
+
+        // Access log
+        if (!async && postParseSuccess) {
+        // Log only if processing was invoked.
+        // If postParseRequest() failed, it has already logged it.
+        Context context = request.getContext();
+        Host host = request.getHost();
+        // If the context is null, it is likely that the endpoint was
+        // shutdown, this connection closed and the request recycled in
+        // a different thread. That thread will have updated the access
+        // log so it is OK not to update the access log here in that
+        // case.
+        // The other possibility is that an error occurred early in
+        // processing and the request could not be mapped to a Context.
+        // Log via the host or engine in that case.
+        long time = System.nanoTime() - req.getStartTimeNanos();
+        if (context != null) {
+        context.logAccess(request, response, time, false);
+        } else if (response.isError()) {
+        if (host != null) {
+        host.logAccess(request, response, time, false);
+        } else {
+        connector.getService().getContainer().logAccess(
+        request, response, time, false);
+        }
+        }
+        }
+
+        req.getRequestProcessor().setWorkerThreadName(null);
+
+        // Recycle the wrapper request and response
+        if (!async) {
+        updateWrapperErrorCount(request, response);
+        request.recycle();
+        response.recycle();
+        }
+        }
+        }
+```
+
+### invoke
+StandardWrapperValve.invoke()
+
+// Create the filter chain for this request
+ApplicationFilterChain filterChain =
+ApplicationFilterFactory.createFilterChain(request, wrapper, servlet);
+```java
+
+    /**
+     * Invoke the servlet we are managing, respecting the rules regarding
+     * servlet lifecycle and SingleThreadModel support.
+     *
+     * @param request Request to be processed
+     * @param response Response to be produced
+     *
+     * @exception IOException if an input/output error occurred
+     * @exception ServletException if a servlet error occurred
+     */
+    @Override
+    public final void invoke(Request request, Response response)
+        throws IOException, ServletException {
+
+        // Initialize local variables we may need
+        boolean unavailable = false;
+        Throwable throwable = null;
+        // This should be a Request attribute...
+        long t1=System.currentTimeMillis();
+        requestCount.incrementAndGet();
+        StandardWrapper wrapper = (StandardWrapper) getContainer();
+        Servlet servlet = null;
+        Context context = (Context) wrapper.getParent();
+
+        // Check for the application being marked unavailable
+        if (!context.getState().isAvailable()) {
+            response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                           sm.getString("standardContext.isUnavailable"));
+            unavailable = true;
+        }
+
+        // Check for the servlet being marked unavailable
+        if (!unavailable && wrapper.isUnavailable()) {
+            container.getLogger().info(sm.getString("standardWrapper.isUnavailable",
+                    wrapper.getName()));
+            long available = wrapper.getAvailable();
+            if ((available > 0L) && (available < Long.MAX_VALUE)) {
+                response.setDateHeader("Retry-After", available);
+                response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                        sm.getString("standardWrapper.isUnavailable",
+                                wrapper.getName()));
+            } else if (available == Long.MAX_VALUE) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                        sm.getString("standardWrapper.notFound",
+                                wrapper.getName()));
+            }
+            unavailable = true;
+        }
+
+        // Allocate a servlet instance to process this request
+        try {
+            if (!unavailable) {
+                servlet = wrapper.allocate();
+            }
+        } catch (UnavailableException e) {
+            container.getLogger().error(
+                    sm.getString("standardWrapper.allocateException",
+                            wrapper.getName()), e);
+            long available = wrapper.getAvailable();
+            if ((available > 0L) && (available < Long.MAX_VALUE)) {
+                response.setDateHeader("Retry-After", available);
+                response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                           sm.getString("standardWrapper.isUnavailable",
+                                        wrapper.getName()));
+            } else if (available == Long.MAX_VALUE) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                           sm.getString("standardWrapper.notFound",
+                                        wrapper.getName()));
+            }
+        } catch (ServletException e) {
+            container.getLogger().error(sm.getString("standardWrapper.allocateException",
+                             wrapper.getName()), StandardWrapper.getRootCause(e));
+            throwable = e;
+            exception(request, response, e);
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            container.getLogger().error(sm.getString("standardWrapper.allocateException",
+                             wrapper.getName()), e);
+            throwable = e;
+            exception(request, response, e);
+            servlet = null;
+        }
+
+        MessageBytes requestPathMB = request.getRequestPathMB();
+        DispatcherType dispatcherType = DispatcherType.REQUEST;
+        if (request.getDispatcherType()==DispatcherType.ASYNC) dispatcherType = DispatcherType.ASYNC;
+        request.setAttribute(Globals.DISPATCHER_TYPE_ATTR,dispatcherType);
+        request.setAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR,
+                requestPathMB);
+        // Create the filter chain for this request
+        ApplicationFilterChain filterChain =
+                ApplicationFilterFactory.createFilterChain(request, wrapper, servlet);
+
+        // Call the filter chain for this request
+        // NOTE: This also calls the servlet's service() method
+        Container container = this.container;
+        try {
+            if ((servlet != null) && (filterChain != null)) {
+                // Swallow output if needed
+                if (context.getSwallowOutput()) {
+                    try {
+                        SystemLogHandler.startCapture();
+                        if (request.isAsyncDispatching()) {
+                            request.getAsyncContextInternal().doInternalDispatch();
+                        } else {
+                            filterChain.doFilter(request.getRequest(),
+                                    response.getResponse());
+                        }
+                    } finally {
+                        String log = SystemLogHandler.stopCapture();
+                        if (log != null && log.length() > 0) {
+                            context.getLogger().info(log);
+                        }
+                    }
+                } else {
+                    if (request.isAsyncDispatching()) {
+                        request.getAsyncContextInternal().doInternalDispatch();
+                    } else {
+                        filterChain.doFilter
+                            (request.getRequest(), response.getResponse());
+                    }
+                }
+
+            }
+        } catch (ClientAbortException | CloseNowException e) {
+            if (container.getLogger().isDebugEnabled()) {
+                container.getLogger().debug(sm.getString(
+                        "standardWrapper.serviceException", wrapper.getName(),
+                        context.getName()), e);
+            }
+            throwable = e;
+            exception(request, response, e);
+        } catch (IOException e) {
+            container.getLogger().error(sm.getString(
+                    "standardWrapper.serviceException", wrapper.getName(),
+                    context.getName()), e);
+            throwable = e;
+            exception(request, response, e);
+        } catch (UnavailableException e) {
+            container.getLogger().error(sm.getString(
+                    "standardWrapper.serviceException", wrapper.getName(),
+                    context.getName()), e);
+            //            throwable = e;
+            //            exception(request, response, e);
+            wrapper.unavailable(e);
+            long available = wrapper.getAvailable();
+            if ((available > 0L) && (available < Long.MAX_VALUE)) {
+                response.setDateHeader("Retry-After", available);
+                response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
+                           sm.getString("standardWrapper.isUnavailable",
+                                        wrapper.getName()));
+            } else if (available == Long.MAX_VALUE) {
+                response.sendError(HttpServletResponse.SC_NOT_FOUND,
+                            sm.getString("standardWrapper.notFound",
+                                        wrapper.getName()));
+            }
+            // Do not save exception in 'throwable', because we
+            // do not want to do exception(request, response, e) processing
+        } catch (ServletException e) {
+            Throwable rootCause = StandardWrapper.getRootCause(e);
+            if (!(rootCause instanceof ClientAbortException)) {
+                container.getLogger().error(sm.getString(
+                        "standardWrapper.serviceExceptionRoot",
+                        wrapper.getName(), context.getName(), e.getMessage()),
+                        rootCause);
+            }
+            throwable = e;
+            exception(request, response, e);
+        } catch (Throwable e) {
+            ExceptionUtils.handleThrowable(e);
+            container.getLogger().error(sm.getString(
+                    "standardWrapper.serviceException", wrapper.getName(),
+                    context.getName()), e);
+            throwable = e;
+            exception(request, response, e);
+        } finally {
+            // Release the filter chain (if any) for this request
+            if (filterChain != null) {
+                filterChain.release();
+            }
+
+            // Deallocate the allocated servlet instance
+            try {
+                if (servlet != null) {
+                    wrapper.deallocate(servlet);
+                }
+            } catch (Throwable e) {
+                ExceptionUtils.handleThrowable(e);
+                container.getLogger().error(sm.getString("standardWrapper.deallocateException",
+                                 wrapper.getName()), e);
+                if (throwable == null) {
+                    throwable = e;
+                    exception(request, response, e);
+                }
+            }
+
+            // If this servlet has been marked permanently unavailable,
+            // unload it and release this instance
+            try {
+                if ((servlet != null) &&
+                    (wrapper.getAvailable() == Long.MAX_VALUE)) {
+                    wrapper.unload();
+                }
+            } catch (Throwable e) {
+                ExceptionUtils.handleThrowable(e);
+                container.getLogger().error(sm.getString("standardWrapper.unloadException",
+                                 wrapper.getName()), e);
+                if (throwable == null) {
+                    exception(request, response, e);
+                }
+            }
+            long t2=System.currentTimeMillis();
+
+            long time=t2-t1;
+            processingTime += time;
+            if( time > maxTime) maxTime=time;
+            if( time < minTime) minTime=time;
+        }
+    }
+```
+
+ApplicationFilterChain.internalDoFilter call servlet.service()
+```java
+// ApplicationFilterChain
+ @Override
+    public void doFilter(ServletRequest request, ServletResponse response)
+        throws IOException, ServletException {
+
+        if( Globals.IS_SECURITY_ENABLED ) {
+            final ServletRequest req = request;
+            final ServletResponse res = response;
+            try {
+                java.security.AccessController.doPrivileged(
+                        (java.security.PrivilegedExceptionAction<Void>) () -> {
+                            internalDoFilter(req,res);
+                            return null;
+                        }
+                );
+            } catch( PrivilegedActionException pe) {
+                Exception e = pe.getException();
+                if (e instanceof ServletException)
+                    throw (ServletException) e;
+                else if (e instanceof IOException)
+                    throw (IOException) e;
+                else if (e instanceof RuntimeException)
+                    throw (RuntimeException) e;
+                else
+                    throw new ServletException(e.getMessage(), e);
+            }
+        } else {
+            internalDoFilter(request,response);
+        }
+    }
+```
 
 ## Reference
 
