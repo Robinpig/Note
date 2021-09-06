@@ -1,7 +1,13 @@
-### Collection Hierarchy
+## Introduction
 
+### Collection Hierarchy
 ![Collection](../images/Collection.png)
 
+
+- [List](/docs/CS/Java/JDK/Collection/List.md)
+- [Map](/docs/CS/Java/JDK/Collection/Map.md)
+- [Set](/docs/CS/Java/JDK/Collection/Set.md)
+- [Queue](/docs/CS/Java/JDK/Collection/Queue.md)
 
 
 ### Collection

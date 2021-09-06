@@ -1,51 +1,14 @@
 ## Introduction
 
 
-**1.面向对象和面向过程的区别**
-
-面向对象语言：Java、C++、
-- 低耦合、易复用、维护与扩展
-- 可能不能直接编译成机器码执行、效率降低
-
-
-面向过程语言：C、Fortran
-- 自顶向下、逐步求精
-- 关注过程与算法
-- C语言直接编译成机器码执行、效率高
-- 高耦合、不易复用、维护与扩展
-
-**2.CAP**
-
-WEB服务无法同时满足一下3个属性：
-
-- 一致性(Consistency) ： 客户端知道一系列的操作都会同时发生(生效)
-- 可用性(Availability) ： 每个操作都必须以可预期的响应结束
-- 分区容错性(Partition tolerance) ： 即使出现单个组件无法可用，操作依然可以完成
-
-在分布式系统中，在任何数据库设计中，一个Web应用至多只能同时支持上面的两个属性。
-
-_BASE理论_
-
-在分布式系统中，我们往往追求的是可用性，它的重要程序比一致性要高，那么如何实现高可用性呢？ 前人已经给我们提出来了另外一个理论，就是BASE理论，它是用来对CAP定理进行进一步扩充的。BASE理论指的是：
-
-     Basically Available（基本可用）
-     Soft state（软状态）
-     Eventually consistent（最终一致性）
-BASE理论是对CAP中的一致性和可用性进行一个权衡的结果，理论的核心思想就是：我们无法做到强一致，但每个应用都可以根据自身的业务特点，采用适当的方式来使系统达到最终一致性（Eventual consistency）。
-
-需求分析
-
-功能需求
-
-功能需求最主要的是满足分布式事务的一致性，涉及的事务组中的操作为多个写操作，当产生一个或多个写操作失败时，回滚整个事务组中的操作。
-
-非功能需求
-
-- 性能：分布式事务对系统的性能必然是有影响的，需要寻找平衡的点。
-- 高可用：引入中间件或者协调者时，避免单点故障。分布式系统的高可用必然会牺牲部分一致性。
-- 可扩展：降低引入的业务耦合。
-- 伸缩性：系统能够弹性伸缩。
-
+- [Object](/docs/CS/Java/JDK/Basic/Object.md)
+- [String](/docs/CS/Java/JDK/Basic/String.md)
+- [SPI](/docs/CS/Java/JDK/Basic/SPI.md)
+- [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
+- [Ref](/docs/CS/Java/JDK/Basic/Ref.md)
+- [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
+- [Direct Buffer](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
+- [Effective Java](/docs/CS/Java/JDK/Basic/EffectiveJava.md)
 
 ## Prims
 
@@ -57,7 +20,7 @@ define open interface
 - JVMTI
 
 
-## Mudule
+## Module
 
 - Services - for JMX
   - Management

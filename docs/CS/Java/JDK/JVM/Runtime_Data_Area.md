@@ -31,7 +31,7 @@
 
 ##### Local Variables Table 
 
-编译时确定最大容量
+in compiler file
 
 Non-static method has **this** param default;
 
@@ -39,7 +39,12 @@ slot复用
 
 ##### Operand Stack
 
-编译时确定最大深度
+in runtime
+shared memory for optimize return value
+
+
+##### Reference
+
 
 
 

@@ -37,28 +37,14 @@
 ## C++
 
 ## Java
-[Java](/docs/CS/Java/Java.md)
-        
 ### JDK
 
 #### Basics
 [Basics of Java](/docs/CS/Java/JDK/Basic/Basic.md)
                 
-- [Object](/docs/CS/Java/JDK/Basic/Object.md)
-- [String](/docs/CS/Java/JDK/Basic/String.md)
-- [SPI](/docs/CS/Java/JDK/Basic/SPI.md)
-- [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
-- [Ref](/docs/CS/Java/JDK/Basic/Ref.md)
-- [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
-- [Direct Buffer](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
 
 #### Collection
 The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framework that provides an architecture to store and manipulate the group of objects.
-
-- [List](/docs/CS/Java/JDK/Collection/List.md)
-- [Map](/docs/CS/Java/JDK/Collection/Map.md)
-- [Set](/docs/CS/Java/JDK/Collection/Set.md)
-- [Queue](/docs/CS/Java/JDK/Collection/Queue.md)
 
 #### Concurrency
 [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)  is a process of executing multiple threads simultaneously.
