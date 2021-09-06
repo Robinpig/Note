@@ -230,3 +230,9 @@ protected class ContainerBackgroundProcessor implements Runnable {
 ```
 
 一个 Context 容器对应一个类加载器，类加载器在销毁的过程中会把它加载的所有类也全部销毁。Context 容器在启动过程中，会创建一个新的类加载器来加载新的类文件
+
+## Upgrade
+
+Comet
+
+Websocket

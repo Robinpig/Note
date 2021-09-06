@@ -18,8 +18,8 @@
 
 ```java
 public static void main(String[] args) throws LifecycleException {
-    final Tomcat tomcat = new Tomcat();
-    final Connector connector = new Connector();
+    Tomcat tomcat = new Tomcat();
+    Connector connector = new Connector();
     connector.setPort(8080);
     tomcat.setConnector(connector);
     tomcat.start();
@@ -406,6 +406,7 @@ protected void startAcceptorThread() {
 
 ### Acceptor
 
+call in Endpoint
 ```java
 // Acceptor
 @Override
@@ -575,7 +576,7 @@ public void register(final NioSocketWrapper socketWrapper) {
 ```
 
 ### Poller
-
+call in Endpoint
 ```java
 public class Poller implements Runnable {
 
