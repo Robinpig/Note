@@ -1,4 +1,5 @@
-# Git
+## Introduction
+
 
 
 
@@ -22,3 +23,29 @@ Hash Map
 git
 
 Port 9418
+
+## Command
+
+### pull
+```git
+git pull -a //
+```
+
+
+### delete
+```shell
+# delete remote branch 
+git push origin --delete branchName
+```
+
+### branch
+```shell
+git branch
+
+git branch -r 
+
+git branch -a
+
+# delete local branch
+git branch -d branchName
+```

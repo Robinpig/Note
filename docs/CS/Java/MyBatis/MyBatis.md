@@ -49,6 +49,3 @@ Compare with Hibernate
 `Load Mybatis-config.xml, create Configuration and SqlsessionFactory`
 
 #### [Extension](/docs/CS/Java/MyBatis/Extension.md)
-
-
-

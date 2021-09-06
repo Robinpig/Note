@@ -1,9 +1,9 @@
+## Introduction
 
 
+## Basic
 
-### Basic
-
-#### Memory Model
+### Memory Model
 
 [JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
 
@@ -27,7 +27,7 @@
 - [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 
 
-#### Thread
+## Thread Fundamentals
 - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
@@ -35,7 +35,7 @@
 
 
 
-### Collections
+## Concurrent Collections
 
 1. fail-fast for Collections in `java.util`, such as `HashMap`, `ArrayList`
 2. fail-safe for Collections in `java.util.concurrent`, such as `ConcurrentHashMap`, `CopyOnWriteArrayList`
@@ -47,7 +47,7 @@
 
 
 
-### Locks
+## Locks
 
 ![locks](../images/juc-locks.png)
 
@@ -58,15 +58,15 @@
 - [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 
 
-### Synchronizers
+## Synchronizers
 - [Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
 - [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
 - [CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
 - [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)
+- [Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md)
 
-### Executor
+## Executor
 
 - [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
 - [ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)
 - [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
-

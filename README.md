@@ -63,36 +63,6 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 #### Concurrency
 [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)  is a process of executing multiple threads simultaneously.
 
-##### Thread Fundamentals
-- [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
-- [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
-- [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
-- [Java Memory Model](/docs/CS/Java/JDK/Concurrency/JMM.md)
-- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)  
-- [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)  
-  
-
-##### Executor
-- [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
-- [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
-- [ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)
-
-
-##### Lock
-- [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
-- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
-- [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
-- [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
-- [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
-
-##### Synchronizer
-- [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)
-- [Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
-- [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
-- [CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
-- [Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md)
-
-##### Concurrent Collections
 
 #### JVM
 [JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.

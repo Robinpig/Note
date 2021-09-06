@@ -2537,7 +2537,7 @@ public Object postProcessBeforeInitialization(Object bean, String beanName) thro
 ```
 
 
-
+### postProcessBeanFactory
 ```java
 // AbstractRefreshableWebApplicationContext
 // Register request/session scopes, a {@link ServletContextAwareProcessor}, etc.
@@ -2551,6 +2551,9 @@ protected void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactor
   WebApplicationContextUtils.registerEnvironmentBeans(beanFactory, this.servletContext, this.servletConfig);
 }
 ```
+
+### onRefresh
+
 
 
 
