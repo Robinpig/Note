@@ -23,7 +23,8 @@ Basically this structure can represent all the basic Redis data types like strin
 
 Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
-
+## Type
+![](./images/struct.png)
 
 object
 - [string](/docs/CS/DB/Redis/SDS.md)
