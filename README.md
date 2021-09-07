@@ -52,9 +52,7 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 
 #### JVM
 [JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
-- [GC](/docs/CS/Java/JDK/JVM/GC.md)
-- [G1](/docs/CS/Java/JDK/JVM/G1.md)
-- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
+
 
 ### Spring Framework
 The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform.
