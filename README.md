@@ -57,10 +57,7 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 ### Spring Framework
 The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform.
  makes programming Java quicker, easier, and safer for everybody. Spring’s focus on speed, simplicity, and productivity has made it the world's most popular Java framework.
-- [IoC](/docs/CS/Java/Spring/IoC.md)
-- [AOP](/docs/CS/Java/Spring/AOP.md)
-- [MVC](/docs/CS/Java/Spring/MVC.md)
-- [webflux](/docs/CS/Java/Spring/webflux.md)
+
 
 ### Spring Boot
 [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".

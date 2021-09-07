@@ -31,7 +31,7 @@
 spring.cloud.sentinel.transport.dashboard = localhost:8080
 ```
 
-
+3. Test using JMeter
 
 
 
