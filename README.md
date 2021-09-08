@@ -28,6 +28,7 @@
 ## MQ
 
 ### Kafka
+[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
 
 ### RocketMQ
 
@@ -61,8 +62,7 @@ The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive 
 
 ### Spring Boot
 [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
-- [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
-- [actuator](/docs/CS/Java/Spring_Boot/actuator.md)
+
 
 ### Spring Cloud
 Spring Cloud provides tools for developers to quickly build some of the common patterns in distributed systems (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
@@ -79,13 +79,6 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 ### Netty
 [Netty](/docs/CS/Java/Netty/Netty.md) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
 
-- [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
-- [Chanel](/docs/CS/Java/Netty/Channel.md)
-- [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
-- [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
-- [Future](/docs/CS/Java/Netty/Future.md)
-- [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
-
 
 ### MyBatis
 
@@ -96,19 +89,11 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 ### Dubbo
 [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md) is a high-performance, java based open source RPC framework.
 
-- [SPI](/docs/CS/Java/Dubbo/SPI.md)
-- [Registry](/docs/CS/Java/Dubbo/registry.md)
-- [Remoting](/docs/CS/Java/Dubbo/remoting.md)
-- [cluster](/docs/CS/Java/Dubbo/cluster.md)
-- [LoadBalance](/docs/CS/Java/Dubbo/LoadBalance.md)
 
 ### Tomcat
 
 [The Apache Tomcat® software](/docs/CS/Java/Tomcat/Tomcat.md) is an open source implementation of the [Jakarta Servlet](https://projects.eclipse.org/projects/ee4j.servlet), [Jakarta Server Pages](https://projects.eclipse.org/projects/ee4j.jsp), [Jakarta Expression Language](https://projects.eclipse.org/projects/ee4j.el), [Jakarta WebSocket](https://projects.eclipse.org/projects/ee4j.websocket), [Jakarta Annotations](https://projects.eclipse.org/projects/ee4j.ca) and [Jakarta Authentication](https://projects.eclipse.org/projects/ee4j.authentication) specifications. These specifications are part of the [Jakarta EE platform](https://projects.eclipse.org/projects/ee4j.jakartaee-platform).
 
-- [start](/docs/CS/Java/Tomcat/Start.md)
-- [ClassLoader](/docs/CS/Java/Tomcat/ClassLoader.md)
-- [Connector](/docs/CS/Java/Tomcat/Connector.md)
 
 ## Go
 

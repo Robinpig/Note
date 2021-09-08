@@ -1,71 +1,49 @@
-# Kafka
+## Introduction
+
+
 
 [Apache Kafka](https://kafka.apache.org/) is an open-source distributed **event streaming** platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
 
 
 
-## event streaming
+### event streaming
 
 > Event streaming is the digital equivalent of the human body's central nervous system. It is the technological foundation for the 'always-on' world where businesses are increasingly software-defined and automated, and where the user of software is more software.
 >
 > Technically speaking, event streaming is the practice of capturing data in real-time from event sources like databases, sensors, mobile devices, cloud services, and software applications in the form of streams of events; storing these event streams durably for later retrieval; manipulating, processing, and reacting to the event streams in real-time as well as retrospectively; and routing the event streams to different destination technologies as needed. Event streaming thus ensures a continuous flow and interpretation of data so that the right information is at the right place, at the right time.
 
+### Apache Kafka® is an event streaming platform. What does that mean?
+Kafka combines three key capabilities so you can implement your use cases for event streaming end-to-end with a single battle-tested solution:
+
+To publish (write) and subscribe to (read) streams of events, including continuous import/export of your data from other systems.
+To store streams of events durably and reliably for as long as you want.
+To process streams of events as they occur or retrospectively.
+And all this functionality is provided in a distributed, highly scalable, elastic, fault-tolerant, and secure manner. Kafka can be deployed on bare-metal hardware, virtual machines, and containers, and on-premises as well as in the cloud. You can choose between self-managing your Kafka environments and using fully managed services offered by a variety of vendors.
+
+### How does Kafka work in a nutshell?
+Kafka is a distributed system consisting of servers and clients that communicate via a high-performance TCP network protocol. It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
+
+**Servers**: Kafka is run as a cluster of one or more servers that can span multiple datacenters or cloud regions. Some of these servers form the storage layer, called the brokers. Other servers run Kafka Connect to continuously import and export data as event streams to integrate Kafka with your existing systems such as relational databases as well as other Kafka clusters. To let you implement mission-critical use cases, a Kafka cluster is highly scalable and fault-tolerant: if any of its servers fails, the other servers will take over their work to ensure continuous operations without any data loss.
+
+**Clients**: They allow you to write distributed applications and microservices that read, write, and process streams of events in parallel, at scale, and in a fault-tolerant manner even in the case of network problems or machine failures. Kafka ships with some such clients included, which are augmented by dozens of clients provided by the Kafka community: clients are available for Java and Scala including the higher-level Kafka Streams library, for Go, Python, C/C++, and many other programming languages as well as REST APIs.
 
 
+
+### quick start
 [Install](https://kafka.apache.org/quickstart)
 
 Notes:
 
 1. check the `server.properties` before start Kafka
-2. 
 
 
 
-## 基本组成
 
-- **Broker**
+- Consumer Group improve TPS
 
-   				一台服务器即为一个Broker，Broker集群中没有主从区别，一个Broker有多个Topic。
-
-- **Topic**
-
-   				Topic 队列实现 可逻辑上分布在多个Broker中，但不需关心数据实际存放位置 但只能保证在一个Broker上topic顺序
-
-- **Partition**
-
-   				Topic可被分布成多个Partition到多台Broker中，每条消息分配一个自增Id（Offset），保证一个Partition中顺序，但不保证单个Topic中多个Partition之间顺序。Partition 可提高吞吐量
-
-- **Offset**
-
-  自增Id
-
-- **Replica**
-
-  Partition含有N个Replia，一个为Leader，其余为Follower，Leader处理读写请求，Follower定期同步Leader数据。
-
-  提高容灾能力
-
-- **Message**
-
-- **Producer**
-
-- **Consumer**
-
-- **Consumer Group**
-
-- **Zookeeper**
-
-- 存放Kafka集群相关元数据的组件，保存组件的信息。
-
-## 拓扑结构
+Rebalance
 
 
-
-## 内部通信协议
-
-## Broker
-
-### KafkaServer
 
 
 
@@ -154,3 +132,9 @@ controller
 why
 1. 强依赖 维护困难
 2. Zookeeper CP 影响性能
+
+
+
+## References
+
+1. [Kafka Documentation](https://kafka.apache.org/documentation/#design)
