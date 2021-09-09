@@ -1,7 +1,4 @@
 
-
- [Computer Science](/docs/CS/CS.md) is the study of algorithmic processes, computational machines and computation itself.
-
 ## Algorithms
 
 ## Operating System
@@ -17,12 +14,7 @@
 ## DataBase
 
 ### Redis
-
-- [start](/docs/CS/DB/Redis/start.md?id=main)
-- [exec](/docs/CS/DB/Redis/start.md?id=do)
-- [db](/docs/CS/DB/Redis/redisDb.md)
-- [Struct](/docs/CS/DB/Redis/struct.md)
-- [IO](/docs/CS/DB/Redis/ae.md)
+[Redis](/docs/CS/DB/Redis/Redis.md) is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker.
 
 
 ## MQ

@@ -144,9 +144,7 @@ transient Object[] elementData; // non-private to simplify nested class access
 
 private int size;
 
-/**
- * Constructs an empty list with the specified initial capacity.
- */
+// Constructs an empty list with the specified initial capacity.
 public ArrayList(int initialCapacity) {
     if (initialCapacity > 0) {
         this.elementData = new Object[initialCapacity];
@@ -158,9 +156,7 @@ public ArrayList(int initialCapacity) {
     }
 }
 
-/**
- * Constructs an empty list with an initial capacity of ten.
- */
+// Constructs an empty list with an initial capacity of ten.
 public ArrayList() {
     this.elementData = DEFAULTCAPACITY_EMPTY_ELEMENTDATA;
 }
@@ -338,8 +334,6 @@ final transient ReentrantLock lock = new ReentrantLock();
 private transient volatile Object[] array;
 ```
 
-
-
 ### get
 
 no Lock
@@ -353,8 +347,6 @@ static <E> E elementAt(Object[] a, int index) {
   return (E) a[index];
 }
 ```
-
-
 
 ### add
 

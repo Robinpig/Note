@@ -9,7 +9,7 @@
 
 ![packages.png](./images/packages.png)
 
-Convention Over Configuration
+**Convention Over Configuration**
 
 spring-boot
 spring-boot-autoconfigure
@@ -134,6 +134,23 @@ Admin
 
 
 Starter
+
+
+
+```java
+@ControllerAdvice
+@ResponseBody
+@Slf4j
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(NullPointerException.class) // set handle Exception 
+    @ResponseStatus(value = HttpStatus.INTERNAL_SERVER_ERROR) // set Response Http Status
+    public JsonResult handleTypeMismatchException(NullPointerException ex) {
+        log.error("NullPointer，{}", ex.getMessage());
+        return new JsonResult("500", "NullPointer");
+    }
+}
+```
 
 
 
