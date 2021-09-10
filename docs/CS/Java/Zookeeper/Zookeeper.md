@@ -1,29 +1,62 @@
 ## Introduction
 
-ZooKeeper是一个分布式的，开放源码的分布式应用程序协调服务，是Google的Chubby一个开源的实现，它是集群的管理者，监视着集群中各个节点的状态根据节点提交的反馈进行下一步合理操作。最终，将简单易用的接口和性能高效、功能稳定的系统提供给用户
+ZooKeeper is a centralized service for maintaining configuration information, naming, providing distributed synchronization, and providing group services. All of these kinds of services are used in some form or another by distributed applications. Each time they are implemented there is a lot of work that goes into fixing the bugs and race conditions that are inevitable. Because of the difficulty of implementing these kinds of services, applications initially usually skimp on them, which make them brittle in the presence of change and difficult to manage. Even when done correctly, different implementations of these services lead to management complexity when the applications are deployed.
+
+
+## Overview
+
+### Data model and the hierarchical namespace
+
+The namespace provided by ZooKeeper is much like that of a standard file system. A name is a sequence of path elements separated by a slash (/). Every node in ZooKeeper's namespace is identified by a path.
+ZooKeeper's Hierarchical Namespace
+
+![ZooKeeper's Hierarchical Namespace](https://zookeeper.apache.org/doc/current/images/zknamespace.jpg)
+
+### Nodes and ephemeral nodes
+
+Unlike standard file systems, each node in a ZooKeeper namespace can have data associated with it as well as children. It is like having a file-system that allows a file to also be a directory. (ZooKeeper was designed to store coordination data: status information, configuration, location information, etc., so the data stored at each node is usually small, in the byte to kilobyte range.) We use the term znode to make it clear that we are talking about ZooKeeper data nodes.
+
+Znodes maintain a stat structure that includes version numbers for data changes, ACL changes, and timestamps, to allow cache validations and coordinated updates. Each time a znode's data changes, the version number increases. For instance, whenever a client retrieves data it also receives the version of the data.
+
+The data stored at each znode in a namespace is read and written atomically. Reads get all the data bytes associated with a znode and a write replaces all the data. Each node has an Access Control List (ACL) that restricts who can do what.
+
+ZooKeeper also has the notion of ephemeral nodes. These znodes exists as long as the session that created the znode is active. When the session ends the znode is deleted.
 
 
 
+Container node
 
+### Conditional updates and watches
 
-### 文件系统
+ZooKeeper supports the concept of watches. Clients can set a watch on a znode. A watch will be triggered and removed when the znode changes. When a watch is triggered, the client receives a packet saying that the znode has changed. If the connection between the client and one of the ZooKeeper servers is broken, the client will receive a local notification.
 
-Zookeeper文件系统每个子目录项如 NameService 都被称作为znode，和文件系统一样，我们能够自由的增加、删除znode，在一个znode下增加、删除子znode，唯一的不同在于znode是可以存储数据的。 
-
-### znode： 
-
-1. PERSISTENT-持久化目录节点 客户端与zookeeper断开连接后，该节点依旧存在 
-2. PERSISTENT_SEQUENTIAL-持久化顺序编号目录节点 客户端与zookeeper断开连接后，该节点依旧存在，只是Zookeeper给该节点名称进行顺序编号
-3. EPHEMERAL-临时目录节点 客户端与zookeeper断开连接后，该节点被删除 
-4. EPHEMERAL_SEQUENTIAL-临时顺序编号目录节点 客户端与zookeeper断开连接后，该节点被删除，只是Zookeeper给该节点名称进行顺序编号 4.Zookeeper通知机制客户端注册监听它关心的目录节点，当目录节点发生变化（数据改变、被删除、子目录节点增加删除）时，zookeeper会通知客户端。
+**New in 3.6.0:** Clients can also set permanent, recursive watches on a znode that are not removed when triggered and that trigger for changes on the registered znode as well as any children znodes recursively.
 
 
 
-### 集群管理  
+### Guarantees
+
+ZooKeeper is very fast and very simple. Since its goal, though, is to be a basis for the construction of more complicated services, such as synchronization, it provides a set of guarantees. These are:
+
+- Sequential Consistency - Updates from a client will be applied in the order that they were sent.
+- Atomicity - Updates either succeed or fail. No partial results.
+- Single System Image - A client will see the same view of the service regardless of the server that it connects to. i.e., a client will never see an older view of the system even if the client fails over to a different server with the same session.
+- Reliability - Once an update has been applied, it will persist from that time forward until a client overwrites the update.
+- Timeliness - The clients view of the system is guaranteed to be up-to-date within a certain time bound.
 
 
 
-### 分布式锁
+### Simple API
+
+One of the design goals of ZooKeeper is providing a very simple programming interface. As a result, it supports only these operations:
+
+- *create* : creates a node at a location in the tree
+- *delete* : deletes a node
+- *exists* : tests if a node exists at a location
+- *get data* : reads the data from a node
+- *set data* : writes data to a node
+- *get children* : retrieves a list of children of a node
+- *sync* : waits for data to be propagated
 
 
 
@@ -146,9 +179,6 @@ Follower的消息循环处理如下几种来自Leader的消息：
 基于 Redis
 使用 setNX(key) setEX(timeout) 命令，只有在该 key 不存在的时候创建这个 key，就相当于获取了锁。由于有超时时间，所以过了规定时间会自动删除，这样也可以避免死锁。
 
-### exclusive lock
-
-use watcher notify when node delete
 
 ### Read-Write Lock
 
