@@ -12,9 +12,23 @@ public class Application {
 }
 ```
 
+
+
+1. new SpringApplication instance
+2. SpringApplication.run()
+
+```java
+public static ConfigurableApplicationContext run(Class<?>[] primarySources, String[] args) {
+   return new SpringApplication(primarySources).run(args);
+}
+```
+
+
+
 ## Prepare
 
-### Load Resources 
+### Annotation
+
 @SpringBootApplication
 
 ```java
@@ -51,6 +65,8 @@ public @interface SpringBootConfiguration {}
 public @interface EnableAutoConfiguration {}
 ```
 
+
+
 In class AutoConfigurationImportSelector, **getAutoConfigurationEntry** load configurations.
 
 ```java
@@ -81,7 +97,8 @@ protected List<String> getCandidateConfigurations(AnnotationMetadata metadata, A
 
 ```
 
-getResources from `META-INF/spring.factories`
+getResources from `META-INF/spring.factories` by **SpringFactoriesLoader**.
+
 ```java
 //SpringFactoriesLoader.java
 public static List<String> loadFactoryNames(Class<?> factoryType, @Nullable ClassLoader classLoader) {
@@ -125,6 +142,46 @@ private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoad
         }
 }
 ```
+
+## new SpringApplication instance
+Create a new SpringApplication instance. The application context will load beans from the specified primary sources (see class-level documentation for details. The instance can be customized before calling run(String...).
+
+1. deduceFromClasspath
+2. load ApplicationContextInitializer
+3. load ApplicationListener
+4. deduceMainApplicationClass
+
+```java
+public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
+   this.resourceLoader = resourceLoader;
+   Assert.notNull(primarySources, "PrimarySources must not be null");
+   this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+   this.webApplicationType = WebApplicationType.deduceFromClasspath();
+   setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+   setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+   this.mainApplicationClass = deduceMainApplicationClass();
+}
+```
+
+deduceFromClasspath
+
+```java
+static WebApplicationType deduceFromClasspath() {
+   if (ClassUtils.isPresent(WEBFLUX_INDICATOR_CLASS, null) && !ClassUtils.isPresent(WEBMVC_INDICATOR_CLASS, null)
+         && !ClassUtils.isPresent(JERSEY_INDICATOR_CLASS, null)) {
+      return WebApplicationType.REACTIVE;
+   }
+   for (String className : SERVLET_INDICATOR_CLASSES) {
+      if (!ClassUtils.isPresent(className, null)) {
+         return WebApplicationType.NONE;
+      }
+   }
+   return WebApplicationType.SERVLET;
+}
+```
+
+
+
 ## run 
 
 1. getRunListeners and starting
