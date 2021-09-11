@@ -2275,3 +2275,12 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
 
 }
 ```
+
+
+
+
+
+## References
+
+1. [阿里技术专家详解 Dubbo 实践，演进及未来规划](https://www.infoq.cn/article/IwZCAp3jo_H5fJFbWOZu)
+

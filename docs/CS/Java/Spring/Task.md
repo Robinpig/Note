@@ -1,6 +1,3 @@
-# Task
-
-
 
 ## Async
 
@@ -356,6 +353,8 @@ protected Executor getDefaultExecutor(@Nullable BeanFactory beanFactory) {
 #### doSubmit
 
 *Delegate for actually executing the given task with the chosen executor.*
+
+[CompletableFuture.supplyAsync()](/docs/CS/Java/JDK/Concurrency/Future.md?id=CompeletedFuture)
 
 ```java
 //AsyncExecutionAspectSupport#doSubmit()

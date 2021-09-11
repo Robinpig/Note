@@ -1,6 +1,34 @@
-# Kernel
+## Introduction
 
 
+## Directory
+
+| Directory |        |      |
+| --------- | ------ | ---- |
+| arch      |        |      |
+| block     |        |      |
+| crypto    |        |      |
+| drivers   |        |      |
+| fs        | VFS    |      |
+| firmware  |        |      |
+| include   |        |      |
+| init      |        |      |
+| ipc       |        |      |
+| kernel    |        |      |
+| lib       |        |      |
+| mm        | memory |      |
+| virt      |        |      |
+| usr       |        |      |
+| net       |        |      |
+| security  |        |      |
+| tools     |        |      |
+| scripts   |        |      |
+|           |        |      |
+|           |        |      |
+|           |        |      |
+|           |        |      |
+|           |        |      |
+|           |        |      |
 
 
 
