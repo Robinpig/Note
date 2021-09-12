@@ -2656,7 +2656,7 @@ Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBund
 
 
 
-## Reference
+## References
 
 1. [Intro to Inversion of Control and Dependency Injection with Spring](https://www.baeldung.com/inversion-control-and-dependency-injection-in-spring#what-is-inversion-of-control)
-
+2. [Inversion of Control Containers and the Dependency Injection pattern](https://martinfowler.com/articles/injection.html)
