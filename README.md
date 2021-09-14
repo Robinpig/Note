@@ -62,11 +62,15 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 - [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
 
 ### Spring Cloud Alibaba
-
 [Spring Cloud Alibaba](/docs/CS/Java/Spring_Cloud_Alibaba/Spring_Cloud_Alibaba.md) provides a one-stop solution for distributed application development. It contains all the components required to develop distributed applications, making it easy for you to develop your applications using Spring Cloud.
 
 #### Nacos
+[Nacos](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/Nacos.md) is an easy-to-use dynamic service discovery, configuration and service management platform for building cloud native applications.
+
 - [registry](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/registry.md)
+
+#### Sentinel
+[Sentinel](/docs/CS/Java/Spring_Cloud_Alibaba/Sentinel/Sentinel.md) is a powerful flow control component that takes "flow" as the breakthrough point and covers multiple fields including flow control, concurrency limiting, circuit breaking, and adaptive system protection to guarantee the reliability of microservices
 
 ### Netty
 [Netty](/docs/CS/Java/Netty/Netty.md) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
