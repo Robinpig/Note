@@ -21,7 +21,12 @@ To distinguish invocation from different origin (declared in ContextUtil.enter(S
 - The ClusterNode is uniquely identified by the ResourceId; 
 - the DefaultNode is identified by both the resource id and Context. In other words, one resource id will generate multiple DefaultNode for each distinct context, but only one ClusterNode.
 
-
+### StatisticNode
+The statistic node keep three kinds of real-time statistics metrics:
+- metrics in second level (rollingCounterInSecond)
+- metrics in minute level (rollingCounterInMinute)
+- thread count
+Sentinel use sliding window to record and count the resource statistics in real-time. The sliding window infrastructure behind the ArrayMetric is LeapArray.
 
 
 
