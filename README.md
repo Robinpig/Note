@@ -46,6 +46,9 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 #### JVM
 [JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
 
+### Quartz
+[Quartz](/docs/CS/Java/Quartz/Quartz.md) can be used to create simple or complex schedules for executing tens, hundreds, or even tens-of-thousands of jobs.
+
 
 ### Spring Framework
 The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform.

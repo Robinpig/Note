@@ -495,3 +495,6 @@ protected void startInternal() throws LifecycleException {
     }
 }
 ```
+
+## References
+1. [Tomcat 高并发之道原理拆解与性能调优 - 码哥字节](https://mp.weixin.qq.com/s?__biz=MzkzMDI1NjcyOQ==&mid=2247487712&idx=1&sn=a77efe0871bf0c5d1dc9d0a3ae138d5e&source=41#wechat_redirect)

@@ -1,7 +1,7 @@
 
 
-## [What is SPI ?](/docs/CS/Java/JDK/Basic/SPI.md)
 
+## [Java SPI](/docs/CS/Java/JDK/Basic/SPI.md)
 
 ## Introduction
 
@@ -39,7 +39,7 @@ public interface Protocol {
 
 
 
-Changes on extension configuration file Use Protocol as an example, its configuration file 'META-INF/dubbo/com.xxx.Protocol' is changed from: 
+Changes on extension configuration file Use Protocol as an example, its configuration file `'META-INF/dubbo/com.xxx.Protocol'` is changed from: 
        com.foo.XxxProtocol
        com.foo.YyyProtocol
 
@@ -129,9 +129,6 @@ public class ExtensionLoader<T> {
 
 ### getExtensionLoader
 
-1. getExtensionLoader
-2. getAdaptiveExtension
-
 ```java
 @SuppressWarnings("unchecked")
 public static <T> ExtensionLoader<T> getExtensionLoader(Class<T> type) {
@@ -152,10 +149,14 @@ private ExtensionLoader(Class<?> type) {
     }
 ```
 
+1. getExtension
+2. getAdaptiveExtension
+3. getActivateExtension
+
+
 
 
 ### getAdaptiveExtension
-
 
 
 1. if cachedAdaptiveInstance, return
