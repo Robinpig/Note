@@ -83,7 +83,7 @@ public class RateLimiterController implements TrafficShapingController {
 
 
 
-WarmUp
+## WarmUp
 
 
 The principle idea comes from Guava. However, the calculation of Guava is rate-based, which means that we need to translate rate to QPS.

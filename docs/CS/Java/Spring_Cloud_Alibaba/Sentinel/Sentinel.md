@@ -33,10 +33,12 @@ spring.cloud.sentinel.transport.dashboard = localhost:8080
 
 3. Test using JMeter
 
+- [How Sentinel works](/docs/CS/Java/Spring_Cloud_Alibaba/Sentinel/work.md)
+- [CircuitBreaker](/docs/CS/Java/Spring_Cloud_Alibaba/Sentinel/CircuitBreaker.md)
+
 
 
 ## References
 
 1. [Sentinel Dashboard](https://sentinelguard.io/en-us/docs/dashboard.html)
 2. [Quick Start](https://sentinelguard.io/en-us/docs/quick-start.html)
-
