@@ -119,12 +119,6 @@ public interface BeanFactory {
 
 
 
-#### BeanFactory vs FactoryBean
-
-- **FactoryBean** 是一个Bean 能产生或者修饰对象生成的工厂Bean 实现与设计模式中的工厂模式和修饰器模式类似 注意和作为
-- **BeanFactory** 是Factory 也就是IoC容器或对象工厂  所有的Bean都是由BeanFactory（也就是IoC容器）来进行管理的
-
-
 
 ### ApplicationContext
 
@@ -133,195 +127,203 @@ The Spring framework provides several implementations of the *ApplicationContext
 *ClassPathXmlApplicationContext* and *FileSystemXmlApplicationContext* for standalone applications, and *WebApplicationContext* for web applications.
 
 
+### FactoryBean
+Interface to be implemented by objects used within a BeanFactory which are themselves factories for individual objects. If a bean implements this interface, it is used as a factory for an object to expose, not directly as a bean instance that will be exposed itself.
 
-## getBean
+**NB: A bean that implements this interface cannot be used as a normal bean.** A FactoryBean is defined in a bean style, but **the object exposed for bean references (getObject()) is always the object that it creates**.
+
+FactoryBeans can support singletons and prototypes, and can either create objects lazily on demand or eagerly on startup. The SmartFactoryBean interface allows for exposing more fine-grained behavioral metadata.
+
+This interface is heavily used within the framework itself, for example for the AOP org.springframework.aop.framework.ProxyFactoryBean or the org.springframework.jndi.JndiObjectFactoryBean. It can be used for custom components as well; however, this is only common for infrastructure code.
+
+FactoryBean is a programmatic contract. Implementations are not supposed to rely on annotation-driven injection or other reflective facilities. getObjectType() getObject() invocations may arrive early in the bootstrap process, even ahead of any post-processor setup. If you need access to other beans, implement BeanFactoryAware and obtain them programmatically.
+
+The container is only responsible for managing the lifecycle of the FactoryBean instance, not the lifecycle of the objects created by the FactoryBean. Therefore, a destroy method on an exposed bean object (such as java.io.Closeable.close() will not be called automatically. Instead, a FactoryBean should implement DisposableBean and delegate any such close call to the underlying object.
+
+Finally, FactoryBean objects participate in the containing BeanFactory's synchronization of bean creation. There is usually no need for internal synchronization other than for purposes of lazy initialization within the FactoryBean itself (or the like).
 
 ```java
-// AbstractBeanFactory
-@Override
-	public Object getBean(String name, Object... args) throws BeansException {
-		return doGetBean(name, null, args, false);
+public interface FactoryBean<T> {
+
+	String OBJECT_TYPE_ATTRIBUTE = "factoryBeanObjectType";
+
+	@Nullable
+	T getObject() throws Exception;
+
+	@Nullable
+	Class<?> getObjectType();
+
+	default boolean isSingleton() {
+		return true;
 	}
+}
 
-
-protected <T> T doGetBean(
-			String name, @Nullable Class<T> requiredType, @Nullable Object[] args, boolean typeCheckOnly)
-			throws BeansException {
-
-		String beanName = transformedBeanName(name);
-		Object bean;
-
-		// Eagerly check singleton cache for manually registered singletons.
-		Object sharedInstance = getSingleton(beanName);
-		if (sharedInstance != null && args == null) {
-			bean = getObjectForBeanInstance(sharedInstance, name, beanName, null);
-		}
-
-		else {
-			// Fail if we're already creating this bean instance:
-			// We're assumably within a circular reference.
-			if (isPrototypeCurrentlyInCreation(beanName)) {
-				throw new BeanCurrentlyInCreationException(beanName);
-			}
-
-			// Check if bean definition exists in this factory.
-			BeanFactory parentBeanFactory = getParentBeanFactory();
-			if (parentBeanFactory != null && !containsBeanDefinition(beanName)) {
-				// Not found -> check parent.
-				String nameToLookup = originalBeanName(name);
-				if (parentBeanFactory instanceof AbstractBeanFactory) {
-					return ((AbstractBeanFactory) parentBeanFactory).doGetBean(
-							nameToLookup, requiredType, args, typeCheckOnly);
-				}
-				else if (args != null) {
-					// Delegation to parent with explicit args.
-					return (T) parentBeanFactory.getBean(nameToLookup, args);
-				}
-				else if (requiredType != null) {
-					// No args -> delegate to standard getBean method.
-					return parentBeanFactory.getBean(nameToLookup, requiredType);
-				}
-				else {
-					return (T) parentBeanFactory.getBean(nameToLookup);
-				}
-			}
-
-			if (!typeCheckOnly) {
-				markBeanAsCreated(beanName);
-			}
-
-			try {
-				RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
-				checkMergedBeanDefinition(mbd, beanName, args);
-
-				// Guarantee initialization of beans that the current bean depends on.
-				String[] dependsOn = mbd.getDependsOn();
-				if (dependsOn != null) {
-					for (String dep : dependsOn) {
-						if (isDependent(beanName, dep)) {
-							throw new BeanCreationException(mbd.getResourceDescription(), beanName,
-									"Circular depends-on relationship between '" + beanName + "' and '" + dep + "'");
-						}
-						registerDependentBean(dep, beanName);
-						try {
-							getBean(dep);
-						}
-						catch (NoSuchBeanDefinitionException ex) {
-							throw new BeanCreationException(mbd.getResourceDescription(), beanName,
-									"'" + beanName + "' depends on missing bean '" + dep + "'", ex);
-						}
-					}
-				}
-
-				// Create bean instance.
-				if (mbd.isSingleton()) {
-					sharedInstance = getSingleton(beanName, () -> {
-						try {
-							return createBean(beanName, mbd, args);
-						}
-						catch (BeansException ex) {
-							// Explicitly remove instance from singleton cache: It might have been put there
-							// eagerly by the creation process, to allow for circular reference resolution.
-							// Also remove any beans that received a temporary reference to the bean.
-							destroySingleton(beanName);
-							throw ex;
-						}
-					});
-					bean = getObjectForBeanInstance(sharedInstance, name, beanName, mbd);
-				}
-
-				else if (mbd.isPrototype()) {
-					// It's a prototype -> create a new instance.
-					Object prototypeInstance = null;
-					try {
-						beforePrototypeCreation(beanName);
-						prototypeInstance = createBean(beanName, mbd, args);
-					}
-					finally {
-						afterPrototypeCreation(beanName);
-					}
-					bean = getObjectForBeanInstance(prototypeInstance, name, beanName, mbd);
-				}
-
-				else {
-					String scopeName = mbd.getScope();
-					if (!StringUtils.hasLength(scopeName)) {
-						throw new IllegalStateException("No scope name defined for bean ´" + beanName + "'");
-					}
-					Scope scope = this.scopes.get(scopeName);
-					if (scope == null) {
-						throw new IllegalStateException("No Scope registered for scope name '" + scopeName + "'");
-					}
-					try {
-						Object scopedInstance = scope.get(beanName, () -> {
-							beforePrototypeCreation(beanName);
-							try {
-								return createBean(beanName, mbd, args);
-							}
-							finally {
-								afterPrototypeCreation(beanName);
-							}
-						});
-						bean = getObjectForBeanInstance(scopedInstance, name, beanName, mbd);
-					}
-					catch (IllegalStateException ex) {
-						throw new BeanCreationException(beanName,
-								"Scope '" + scopeName + "' is not active for the current thread; consider " +
-								"defining a scoped proxy for this bean if you intend to refer to it from a singleton",
-								ex);
-					}
-				}
-			}
-			catch (BeansException ex) {
-				cleanupAfterBeanCreationFailure(beanName);
-				throw ex;
-			}
-		}
-
-		// Check if required type matches the type of the actual bean instance.
-		if (requiredType != null && !requiredType.isInstance(bean)) {
-			try {
-				T convertedBean = getTypeConverter().convertIfNecessary(bean, requiredType);
-				if (convertedBean == null) {
-					throw new BeanNotOfRequiredTypeException(name, requiredType, bean.getClass());
-				}
-				return convertedBean;
-			}
-			catch (TypeMismatchException ex) {
-				throw new BeanNotOfRequiredTypeException(name, requiredType, bean.getClass());
-			}
-		}
-		return (T) bean;
-	}
 ```
 
 
+## getBean
+1. resolve aliases to canonical beanName
+2. [eagerly check singleton cache](/docs/CS/Java/Spring/IoC.md?id=getSingleton), allows for an early reference to a currently created singleton (resolving a [circular reference](/docs/CS/Java/Spring/IoC.md?id=circular-references)). 
+   1. [Get the object if the non-null bean instance](/docs/CS/Java/Spring/IoC.md?id=getObjectForBeanInstance)
+3. or else check isPrototypeCurrentlyInCreation 
+4. getBean from parentBeanFactory
+5. merge BeanDefinition
+6. check dependOn
+7. [createBean](/docs/CS/Java/Spring/IoC.md?id=createBean)
 
 ```java
-/**
- * Return the actual bean name, stripping out the factory dereference
- * prefix (if any, also stripping repeated factory prefixes if found).
- * @param name the name of the bean
- * @return the transformed name
- * @see BeanFactory#FACTORY_BEAN_PREFIX
- */
-public static String transformedBeanName(String name) {
-   if (!name.startsWith(BeanFactory.FACTORY_BEAN_PREFIX)) {
-      return name;
-   }
-   return transformedBeanNameCache.computeIfAbsent(name, beanName -> {
-      do {
-         beanName = beanName.substring(BeanFactory.FACTORY_BEAN_PREFIX.length());
+public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport implements ConfigurableBeanFactory {
+ 
+  @Override
+  public Object getBean(String name, Object... args) throws BeansException {
+   return doGetBean(name, null, args, false);
+  }
+ 
+ 
+  protected <T> T doGetBean(
+          String name, @Nullable Class<T> requiredType, @Nullable Object[] args, boolean typeCheckOnly)
+          throws BeansException {
+   // Return the bean name, stripping out the factory dereference prefix if necessary, and resolving aliases to canonical names.
+   String beanName = transformedBeanName(name);
+   Object bean;
+ 
+   // Eagerly check singleton cache for manually registered singletons.
+   Object sharedInstance = getSingleton(beanName);
+   if (sharedInstance != null && args == null) {
+    bean = getObjectForBeanInstance(sharedInstance, name, beanName, null);
+   } else {
+    // Fail if we're already creating this bean instance:
+    // We're assumably within a circular reference.
+    if (isPrototypeCurrentlyInCreation(beanName)) {
+     throw new BeanCurrentlyInCreationException(beanName);
+    }
+ 
+    // Check if bean definition exists in this factory.
+    BeanFactory parentBeanFactory = getParentBeanFactory();
+    if (parentBeanFactory != null && !containsBeanDefinition(beanName)) {
+     // Not found -> check parent.
+     String nameToLookup = originalBeanName(name);
+     if (parentBeanFactory instanceof AbstractBeanFactory) {
+      return ((AbstractBeanFactory) parentBeanFactory).doGetBean(
+              nameToLookup, requiredType, args, typeCheckOnly);
+     } else if (args != null) {
+      // Delegation to parent with explicit args.
+      return (T) parentBeanFactory.getBean(nameToLookup, args);
+     } else if (requiredType != null) {
+      // No args -> delegate to standard getBean method.
+      return parentBeanFactory.getBean(nameToLookup, requiredType);
+     } else {
+      return (T) parentBeanFactory.getBean(nameToLookup);
+     }
+    }
+ 
+    if (!typeCheckOnly) {
+     markBeanAsCreated(beanName);
+    }
+ 
+    try {
+     RootBeanDefinition mbd = getMergedLocalBeanDefinition(beanName);
+     checkMergedBeanDefinition(mbd, beanName, args);
+ 
+     // Guarantee initialization of beans that the current bean depends on.
+     String[] dependsOn = mbd.getDependsOn();
+     if (dependsOn != null) {
+      for (String dep : dependsOn) {
+       if (isDependent(beanName, dep)) {
+        throw new BeanCreationException(mbd.getResourceDescription(), beanName,
+                "Circular depends-on relationship between '" + beanName + "' and '" + dep + "'");
+       }
+       registerDependentBean(dep, beanName);
+       try {
+        getBean(dep);
+       } catch (NoSuchBeanDefinitionException ex) {
+        throw new BeanCreationException(mbd.getResourceDescription(), beanName,
+                "'" + beanName + "' depends on missing bean '" + dep + "'", ex);
+       }
       }
-      while (beanName.startsWith(BeanFactory.FACTORY_BEAN_PREFIX));
-      return beanName;
-   });
+     }
+ 
+     // Create bean instance.
+     if (mbd.isSingleton()) {
+      sharedInstance = getSingleton(beanName, () -> {
+       try {
+        return createBean(beanName, mbd, args);
+       } catch (BeansException ex) {
+        // Explicitly remove instance from singleton cache: It might have been put there
+        // eagerly by the creation process, to allow for circular reference resolution.
+        // Also remove any beans that received a temporary reference to the bean.
+        destroySingleton(beanName);
+        throw ex;
+       }
+      });
+      bean = getObjectForBeanInstance(sharedInstance, name, beanName, mbd);
+     } else if (mbd.isPrototype()) {
+      // It's a prototype -> create a new instance.
+      Object prototypeInstance = null;
+      try {
+       beforePrototypeCreation(beanName);
+       prototypeInstance = createBean(beanName, mbd, args);
+      } finally {
+       afterPrototypeCreation(beanName);
+      }
+      bean = getObjectForBeanInstance(prototypeInstance, name, beanName, mbd);
+     } else {
+      String scopeName = mbd.getScope();
+      if (!StringUtils.hasLength(scopeName)) {
+       throw new IllegalStateException("No scope name defined for bean ´" + beanName + "'");
+      }
+      Scope scope = this.scopes.get(scopeName);
+      if (scope == null) {
+       throw new IllegalStateException("No Scope registered for scope name '" + scopeName + "'");
+      }
+      try {
+       Object scopedInstance = scope.get(beanName, () -> {
+        beforePrototypeCreation(beanName);
+        try {
+         return createBean(beanName, mbd, args);
+        } finally {
+         afterPrototypeCreation(beanName);
+        }
+       });
+       bean = getObjectForBeanInstance(scopedInstance, name, beanName, mbd);
+      } catch (IllegalStateException ex) {
+       throw new BeanCreationException(beanName,
+               "Scope '" + scopeName + "' is not active for the current thread; consider " +
+                       "defining a scoped proxy for this bean if you intend to refer to it from a singleton",
+               ex);
+      }
+     }
+    } catch (BeansException ex) {
+     cleanupAfterBeanCreationFailure(beanName);
+     throw ex;
+    }
+   }
+ 
+   // Check if required type matches the type of the actual bean instance.
+   if (requiredType != null && !requiredType.isInstance(bean)) {
+    try {
+     T convertedBean = getTypeConverter().convertIfNecessary(bean, requiredType);
+     if (convertedBean == null) {
+      throw new BeanNotOfRequiredTypeException(name, requiredType, bean.getClass());
+     }
+     return convertedBean;
+    } catch (TypeMismatchException ex) {
+     throw new BeanNotOfRequiredTypeException(name, requiredType, bean.getClass());
+    }
+   }
+   return (T) bean;
+  }
 }
 ```
 
-#### getSingleton
 
-1. get from singletonObjects, or null
+
+
+### getSingleton
+Return the (raw) singleton object registered under the given name.
+Checks already instantiated singletons and also allows for an early reference to a currently created singleton (resolving a circular reference).
+
+1. get from singletonObjects
 2. get from earlySingletonObjects, or null & allowEarlyReference
 3. get singletonFactory from singletonFactories, use it create singletonObject to earlySingletonObjects, remove singletonFactory from singletonFactories
 
@@ -336,11 +338,6 @@ private final Map<String, ObjectFactory<?>> singletonFactories = new HashMap<>(1
 /** Cache of early singleton objects: bean name to bean instance. */
 private final Map<String, Object> earlySingletonObjects = new HashMap<>(16);
 
-/**
- * Return the (raw) singleton object registered under the given name.
- * <p>Checks already instantiated singletons and also allows for an early
- * reference to a currently created singleton (resolving a circular reference).
- */
 @Nullable
 protected Object getSingleton(String beanName, boolean allowEarlyReference) {
    Object singletonObject = this.singletonObjects.get(beanName);
@@ -361,7 +358,7 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 }
 ```
 
-##### circular references
+#### circular references
 
 
 ```java
@@ -447,18 +444,10 @@ change load bean order
 
 
 
-#### getObjectForBeanInstance
+### getObjectForBeanInstance
 
+Get the object for the given bean instance, either the bean instance itself or its created object in case of a FactoryBean.
 ```java
-/**
- * Get the object for the given bean instance, either the bean
- * instance itself or its created object in case of a FactoryBean.
- * @param beanInstance the shared bean instance
- * @param name the name that may include factory dereference prefix
- * @param beanName the canonical bean name
- * @param mbd the merged bean definition
- * @return the object to expose for the bean
- */
 protected Object getObjectForBeanInstance(
       Object beanInstance, String name, String beanName, @Nullable RootBeanDefinition mbd) {
 
@@ -601,7 +590,7 @@ protected void afterSingletonCreation(String beanName) {
 
 #### postProcessObjectFromFactoryBean
 
-**BeanPostProcessor** done
+call [BeanPostProcessor](/docs/CS/Java/Spring/IoC.md?id=PostBean)
 
 ```java
 /**
@@ -616,24 +605,65 @@ protected Object postProcessObjectFromFactoryBean(Object object, String beanName
 }
 ```
 
+#### postBean
 ```java
-@Override
-public Object applyBeanPostProcessorsAfterInitialization(Object existingBean, String beanName)
-      throws BeansException {
-
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory
+        implements AutowireCapableBeanFactory {
+    
+  @Override
+  public Object applyBeanPostProcessorsAfterInitialization(Object existingBean, String beanName)
+          throws BeansException {
+ 
    Object result = existingBean;
    for (BeanPostProcessor processor : getBeanPostProcessors()) {
-      Object current = processor.postProcessAfterInitialization(result, beanName);
-      if (current == null) {
-         return result;
-      }
-      result = current;
+    Object current = processor.postProcessAfterInitialization(result, beanName);
+    if (current == null) {
+     return result;
+    }
+    result = current;
    }
    return result;
+  }
+ }
+```
+
+
+##### BeanPostProcessor
+
+Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies(AOP)](/docs/CS/Java/Spring/AOP.md?id=createProxy).
+
+Typically, post-processors that populate beans via marker interfaces or the like will implement postProcessBeforeInitialization, while post-processors that wrap beans with proxies will normally implement postProcessAfterInitialization.
+
+Registration
+An ApplicationContext can autodetect BeanPostProcessor beans in its bean definitions and apply those post-processors to any beans subsequently created. A plain BeanFactory allows for programmatic registration of post-processors, applying them to all beans created through the bean factory.
+
+Ordering
+BeanPostProcessor beans that are autodetected in an ApplicationContext will be ordered according to `org.springframework.core.PriorityOrdered` and `org.springframework.core.Ordered` semantics. In contrast, BeanPostProcessor beans that are registered programmatically with a BeanFactory will be applied in the order of registration; any ordering semantics expressed through implementing the PriorityOrdered or Ordered interface will be ignored for programmatically registered post-processors. Furthermore, the @Order annotation is not taken into account for BeanPostProcessor beans.
+
+```java
+public interface BeanPostProcessor {
+    
+   @Nullable
+   default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+      return bean;
+   }
+   
+   @Nullable
+   default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
+      return bean;
+   }
+
 }
 ```
 
-#### createBean
+
+
+
+
+### createBean
+1. Prepare method overrides
+2. resolveBeforeInstantiation(AOP) if bean not null
+3. doCreateBean
 
 ```java
 // AbstractAutowireCapableBeanFactory
@@ -688,15 +718,10 @@ protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable O
 ```
 
 #### resolveBeforeInstantiation
+Apply before-instantiation post-processors, resolving whether there is a before-instantiation shortcut for the specified bean.
 
+call [BeanPostProcessor](/docs/CS/Java/Spring/IoC.md?id=postBean) if bean != null.
 ```java
-/**
- * Apply before-instantiation post-processors, resolving whether there is a
- * before-instantiation shortcut for the specified bean.
- * @param beanName the name of the bean
- * @param mbd the bean definition for the bean
- * @return the shortcut-determined bean instance, or {@code null} if none
- */
 @Nullable
 protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition mbd) {
    Object bean = null;
@@ -1897,47 +1922,6 @@ BeanDefinitionValueResolver
 
 AbstractPropertyAccessor
 
-### finishBeanFactoryInitialization
-
-lazy-init false in refresh()->finishBeanFactoryInitialization
-
-```java
-/**
- * Finish the initialization of this context's bean factory,
- * initializing all remaining singleton beans.
- */
-protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
-   // Initialize conversion service for this context.
-   if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
-         beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
-      beanFactory.setConversionService(
-            beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
-   }
-
-   // Register a default embedded value resolver if no BeanFactoryPostProcessor
-   // (such as a PropertySourcesPlaceholderConfigurer bean) registered any before:
-   // at this point, primarily for resolution in annotation attribute values.
-   if (!beanFactory.hasEmbeddedValueResolver()) {
-      beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
-   }
-
-   // Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
-   String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
-   for (String weaverAwareName : weaverAwareNames) {
-      getBean(weaverAwareName);
-   }
-
-   // Stop using the temporary ClassLoader for type matching.
-   beanFactory.setTempClassLoader(null);
-
-   // Allow for caching all bean definition metadata, not expecting further changes.
-   beanFactory.freezeConfiguration();
-
-   // Instantiate all remaining (non-lazy-init) singletons.
-   beanFactory.preInstantiateSingletons();
-}
-```
-
 ### ApplicationContext
 
 ApplicationContext refresh ⽅法⾥⾯的操作不只是 IoC，是⾼级容器的所有功能（包括 IoC），
@@ -1952,9 +1936,6 @@ IoC 的功能在低级容器⾥就可以实现
 > - **其它附加服务** 这些服务使得基本IoC容器的功能更丰富
 
 ## refresh
-
-declared in `ConfigurableApplicationContext`
-
 
 ```java
 // AbstractApplicationContext#refresh()
@@ -2058,8 +2039,7 @@ protected void prepareRefresh() {
 
 ### obtainFreshBeanFactory
 
-Tell the subclass to refresh the internal bean factory.
-
+Tell the subclass to refresh and return the internal bean factory.
 
 ```java
 protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
@@ -2471,89 +2451,75 @@ protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 
 
 
-#### BeanPostProcessor
+### BeanFactoryPostProcessor
 
-Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies](/docs/CS/Java/Spring/AOP.md?id=createProxy).
-
-Typically, post-processors that populate beans via marker interfaces or the like will implement postProcessBeforeInitialization, while post-processors that wrap beans with proxies will normally implement postProcessAfterInitialization.
-
-Registration
-An ApplicationContext can autodetect BeanPostProcessor beans in its bean definitions and apply those post-processors to any beans subsequently created. A plain BeanFactory allows for programmatic registration of post-processors, applying them to all beans created through the bean factory.
-
-Ordering
-BeanPostProcessor beans that are autodetected in an ApplicationContext will be ordered according to `org.springframework.core.PriorityOrdered` and `org.springframework.core.Ordered` semantics. In contrast, BeanPostProcessor beans that are registered programmatically with a BeanFactory will be applied in the order of registration; any ordering semantics expressed through implementing the PriorityOrdered or Ordered interface will be ignored for programmatically registered post-processors. Furthermore, the @Order annotation is not taken into account for BeanPostProcessor beans.
 
 ```java
-public interface BeanPostProcessor {
+// AbstractApplicationContext
+protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
+		PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors());
 
-   /**
-    * Apply this {@code BeanPostProcessor} to the given new bean instance <i>before</i> any bean
-    * initialization callbacks (like InitializingBean's {@code afterPropertiesSet}
-    * or a custom init-method). The bean will already be populated with property values.
-    * The returned bean instance may be a wrapper around the original.
-    * <p>The default implementation returns the given {@code bean} as-is.
-    */
-   @Nullable
-   default Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
-      return bean;
-   }
-
-   /**
-    * Apply this {@code BeanPostProcessor} to the given new bean instance <i>after</i> any bean
-    * initialization callbacks (like InitializingBean's {@code afterPropertiesSet}
-    * or a custom init-method). The bean will already be populated with property values.
-    * The returned bean instance may be a wrapper around the original.
-    * <p>In case of a FactoryBean, this callback will be invoked for both the FactoryBean
-    * instance and the objects created by the FactoryBean (as of Spring 2.0). The
-    * post-processor can decide whether to apply to either the FactoryBean or created
-    * objects or both through corresponding {@code bean instanceof FactoryBean} checks.
-    * <p>This callback will also be invoked after a short-circuiting triggered by a
-    * {@link InstantiationAwareBeanPostProcessor#postProcessBeforeInstantiation} method,
-    * in contrast to all other {@code BeanPostProcessor} callbacks.
-    * <p>The default implementation returns the given {@code bean} as-is.
-    */
-   @Nullable
-   default Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
-      return bean;
-   }
-
-}
+		// Detect a LoadTimeWeaver and prepare for weaving, if found in the meantime
+		// (e.g. through an @Bean method registered by ConfigurationClassPostProcessor)
+		if (beanFactory.getTempClassLoader() == null && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
+			beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
+			beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
+		}
+	}
 ```
 
-
-
 ```java
-// ServletContextAwareProcessor
-@Override
-public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
-   if (getServletContext() != null && bean instanceof ServletContextAware) {
-      ((ServletContextAware) bean).setServletContext(getServletContext());
-   }
-   if (getServletConfig() != null && bean instanceof ServletConfigAware) {
-      ((ServletConfigAware) bean).setServletConfig(getServletConfig());
-   }
-   return bean;
-}
-```
+@FunctionalInterface
+public interface BeanFactoryPostProcessor {
 
+	void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException;
 
-### postProcessBeanFactory
-```java
-// AbstractRefreshableWebApplicationContext
-// Register request/session scopes, a {@link ServletContextAwareProcessor}, etc.
-@Override
-protected void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) {
-  beanFactory.addBeanPostProcessor(new ServletContextAwareProcessor(this.servletContext, this.servletConfig));
-  beanFactory.ignoreDependencyInterface(ServletContextAware.class);
-  beanFactory.ignoreDependencyInterface(ServletConfigAware.class);
-
-  WebApplicationContextUtils.registerWebApplicationScopes(beanFactory, this.servletContext);
-  WebApplicationContextUtils.registerEnvironmentBeans(beanFactory, this.servletContext, this.servletConfig);
 }
 ```
 
 ### onRefresh
 
+
+### finishBeanFactoryInitialization
+
+lazy-init false in refresh()->finishBeanFactoryInitialization
+
+```java
+/**
+ * Finish the initialization of this context's bean factory,
+ * initializing all remaining singleton beans.
+ */
+protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
+   // Initialize conversion service for this context.
+   if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
+         beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
+      beanFactory.setConversionService(
+            beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
+   }
+
+   // Register a default embedded value resolver if no BeanFactoryPostProcessor
+   // (such as a PropertySourcesPlaceholderConfigurer bean) registered any before:
+   // at this point, primarily for resolution in annotation attribute values.
+   if (!beanFactory.hasEmbeddedValueResolver()) {
+      beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
+   }
+
+   // Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
+   String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
+   for (String weaverAwareName : weaverAwareNames) {
+      getBean(weaverAwareName);
+   }
+
+   // Stop using the temporary ClassLoader for type matching.
+   beanFactory.setTempClassLoader(null);
+
+   // Allow for caching all bean definition metadata, not expecting further changes.
+   beanFactory.freezeConfiguration();
+
+   // Instantiate all remaining (non-lazy-init) singletons.
+   beanFactory.preInstantiateSingletons();
+}
+```
 
 
 
