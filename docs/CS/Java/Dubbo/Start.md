@@ -962,27 +962,65 @@ public interface ProxyFactory {
 
 
 
-## ShutdownHook
+## Shutdown
 
+destroy registries and protocols(servers then clients), wait for pending tasks completed.
 
+### ShutdownHook
+The shutdown hook thread to do the clean up stuff. This is a **singleton** in order to ensure there is only one shutdown hook registered. 
+
+Because ApplicationShutdownHooks use `java.util.IdentityHashMap` to store the shutdown hooks.
 
 ```java
 public class DubboShutdownHook extends Thread {
-  @Override
-  public void run() {
-      callback(); // foreach ShutdownHookCallbacks run callBack
-      doDestroy();
-  }
-  ...
+    /**
+     * Destroy all the resources, including registries and protocols.
+     */
+    public void destroyAll() {
+        if (!destroyed.compareAndSet(false, true)) {
+            return;
+        }
+        // destroy all the registries
+        AbstractRegistryFactory.destroyAll();
+        // destroy all the protocols
+        ExtensionLoader<Protocol> loader = ExtensionLoader.getExtensionLoader(Protocol.class);
+        for (String protocolName : loader.getLoadedExtensions()) {
+            try {
+                Protocol protocol = loader.getLoadedExtension(protocolName);
+                if (protocol != null) {
+                    protocol.destroy();
+                }
+            } catch (Throwable t) {
+                logger.warn(t.getMessage(), t);
+            }
+        }
+    }
 }
 ```
 
-
+### Spring Extension
 
 ```java
-@SPI
-public interface ShutdownHookCallback extends Prioritized {
-    // Callback execution
-    void callback() throws Throwable;
+package org.apache.dubbo.config.spring.extension;
+        
+public class SpringExtensionFactory implements ExtensionFactory, Lifecycle {
+    public static void addApplicationContext(ApplicationContext context) {
+        CONTEXTS.add(context);
+        if (context instanceof ConfigurableApplicationContext) {
+            ((ConfigurableApplicationContext) context).registerShutdownHook();
+            // see https://github.com/apache/dubbo/issues/7093
+            DubboShutdownHook.getDubboShutdownHook().unregister();
+        }
+    }
+}
+
+public class DubboBootstrapApplicationListener implements ApplicationListener, ApplicationContextAware, Ordered {
+
+    private void onContextClosedEvent(ContextClosedEvent event) {
+        if (dubboBootstrap.getTakeoverMode() == BootstrapTakeoverMode.SPRING) {
+            // will call dubboBootstrap.stop() through shutdown callback.
+            DubboShutdownHook.getDubboShutdownHook().run();
+        }
+    }
 }
 ```
