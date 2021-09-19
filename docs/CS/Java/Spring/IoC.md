@@ -2525,57 +2525,67 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 ## Close
 
-
-
-在容器要关闭时 也需要完成一系列的工作 这些工作在doClose（）方法中完成(AbstractApplicationContext声明）先发出容器关闭的信号 然后将Bean逐个关闭 最后关闭容器自身
-
+Register a shutdown hook named SpringContextShutdownHook with the JVM runtime, closing this context on JVM shutdown unless it has already been closed at that time.
+Delegates to doClose() for the actual closing procedure.
 ```java
-	protected void doClose() {
-		// Check whether an actual close attempt is necessary...
-		if (this.active.get() && this.closed.compareAndSet(false, true)) {
-			if (logger.isDebugEnabled()) {
-				logger.debug("Closing " + this);
-			}
+public abstract class AbstractApplicationContext extends DefaultResourceLoader implements ConfigurableApplicationContext {
+    @Override
+    public void registerShutdownHook() {
+        if (this.shutdownHook == null) {
+            // No shutdown hook registered yet.
+            this.shutdownHook = new Thread(SHUTDOWN_HOOK_THREAD_NAME) {
+                @Override
+                public void run() {
+                    synchronized (startupShutdownMonitor) {
+                        doClose();
+                    }
+                }
+            };
+            Runtime.getRuntime().addShutdownHook(this.shutdownHook);
+        }
+    }
+    
+    protected void doClose() {
+        // Check whether an actual close attempt is necessary...
+        if (this.active.get() && this.closed.compareAndSet(false, true)) {
+            LiveBeansView.unregisterApplicationContext(this);
 
-			LiveBeansView.unregisterApplicationContext(this);
+            try {
+                // Publish shutdown event.
+                publishEvent(new ContextClosedEvent(this));
+            } catch (Throwable ex) {
+                logger.warn("Exception thrown from ApplicationListener handling ContextClosedEvent", ex);
+            }
 
-			try {
-				// Publish shutdown event.
-				publishEvent(new ContextClosedEvent(this));
-			}
-			catch (Throwable ex) {
-				logger.warn("Exception thrown from ApplicationListener handling ContextClosedEvent", ex);
-			}
+            // Stop all Lifecycle beans, to avoid delays during individual destruction.
+            if (this.lifecycleProcessor != null) {
+                try {
+                    this.lifecycleProcessor.onClose();
+                } catch (Throwable ex) {
+                    logger.warn("Exception thrown from LifecycleProcessor on context close", ex);
+                }
+            }
 
-			// Stop all Lifecycle beans, to avoid delays during individual destruction.
-			if (this.lifecycleProcessor != null) {
-				try {
-					this.lifecycleProcessor.onClose();
-				}
-				catch (Throwable ex) {
-					logger.warn("Exception thrown from LifecycleProcessor on context close", ex);
-				}
-			}
+            // Destroy all cached singletons in the context's BeanFactory.
+            destroyBeans();
 
-			// Destroy all cached singletons in the context's BeanFactory.
-			destroyBeans();
+            // Close the state of this context itself.
+            closeBeanFactory();
 
-			// Close the state of this context itself.
-			closeBeanFactory();
+            // Let subclasses do some final clean-up if they wish...
+            onClose();
 
-			// Let subclasses do some final clean-up if they wish...
-			onClose();
+            // Reset local application listeners to pre-refresh state.
+            if (this.earlyApplicationListeners != null) {
+                this.applicationListeners.clear();
+                this.applicationListeners.addAll(this.earlyApplicationListeners);
+            }
 
-			// Reset local application listeners to pre-refresh state.
-			if (this.earlyApplicationListeners != null) {
-				this.applicationListeners.clear();
-				this.applicationListeners.addAll(this.earlyApplicationListeners);
-			}
-
-			// Switch to inactive.
-			this.active.set(false);
-		}
-	}
+            // Switch to inactive.
+            this.active.set(false);
+        }
+    }
+}
 ```
 
 ## Bean Lifecycle
@@ -2595,10 +2605,68 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 ## EventListener
 
-EventPublisher
+### Example
 
-ApplicationListener
+#### ApplicationEvent 
+```java
+public class BlockedListEvent extends ApplicationEvent {
 
+    private final String address;
+    private final String content;
+
+    public BlockedListEvent(Object source, String address, String content) {
+        super(source);
+        this.address = address;
+        this.content = content;
+    }
+
+    // accessor and other methods...
+}
+```
+#### EventPublisher
+```java
+public class EmailService implements ApplicationEventPublisherAware {
+
+    private List<String> blockedList;
+    private ApplicationEventPublisher publisher;
+
+    public void setBlockedList(List<String> blockedList) {
+        this.blockedList = blockedList;
+    }
+
+    public void setApplicationEventPublisher(ApplicationEventPublisher publisher) {
+        this.publisher = publisher;
+    }
+
+    public void sendEmail(String address, String content) {
+        if (blockedList.contains(address)) {
+            publisher.publishEvent(new BlockedListEvent(this, address, content));
+            return;
+        }
+        // send email...
+    }
+}
+```
+
+#### EventListener 
+```java
+public class BlockedListNotifier {
+
+    private String notificationAddress;
+
+    public void setNotificationAddress(String notificationAddress) {
+        this.notificationAddress = notificationAddress;
+    }
+
+    @EventListener
+    public void processBlockedListEvent(BlockedListEvent event) {
+        // notify appropriate parties via notificationAddress...
+    }
+}
+```
+
+### Usage Example
+- ZuulRefreshListener
 
 
 ## Message Resolution
@@ -2626,3 +2694,4 @@ Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBund
 
 1. [Intro to Inversion of Control and Dependency Injection with Spring](https://www.baeldung.com/inversion-control-and-dependency-injection-in-spring#what-is-inversion-of-control)
 2. [Inversion of Control Containers and the Dependency Injection pattern](https://martinfowler.com/articles/injection.html)
+3. [Standard and Custom Events - Spring](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#context-functionality-events)

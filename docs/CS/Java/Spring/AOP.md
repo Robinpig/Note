@@ -901,3 +901,6 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 | Invoke method | Fast      | Slow      |
 | Prefer        | Singleton | Prototype |
 
+
+## References
+1. [Spring AOP APIs](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#aop-api)
