@@ -132,3 +132,4 @@ bool Threads::destroy_vm() {
   return true;
 }
 ```
+Last thread running calls `java.lang.Shutdown.shutdown()`
