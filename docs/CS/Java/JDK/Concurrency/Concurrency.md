@@ -1,27 +1,20 @@
 ## Introduction
 
+1. Safety Hazards
+2. Liveness Hazards(deadlock, starvation and livelock)
+3. Performance Hazards
 
-## Basic
+A liveness failure occurs when an activity gets into a state such that it is permanently unable to make forward progress.
+
+If multiple threads access the same mutable state variable without appropriate synchronization, your program is broken. There are three ways to fix it:
+- Don't share the state variable across threads;
+- Make the state variable immutable; or
+- Use synchronization whenever accessing the state variable.
+
 
 ### Memory Model
 
-[JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
-
-
-线程各自的本地内存对其它线程是不可见的；多个线程写入主存时可能会存在脏数据；指令重排导致结果不可控。
-多线程交互需要解决上述三个问题，这三个问题也是线程并发的核心：
-
-> 1、可见性
-> 2、原子性
-> 3、有序性
-
-同步是在互斥的基础上增加了等待-通知机制，实现了对互斥资源的有序访问，因此同步本身已经实现了互斥。
-
-> 同步是种复杂的互斥
-> 互斥是种特殊的同步
-
-
-
+- [JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
 - [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=CAS)
 - [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
 - [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)

@@ -521,3 +521,5 @@ public Map<String, Service> chooseServiceMap(String namespaceId) {
         return NamingResponseCode.OK;
     }
 ```
+
+namingLoadCacheAtStart

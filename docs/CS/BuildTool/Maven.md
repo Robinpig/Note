@@ -56,3 +56,5 @@ deploy
 
 ## Plugin
 
+## References
+1. [Calendar Versioning](https://calver.org/)
