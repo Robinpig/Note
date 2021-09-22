@@ -29,12 +29,15 @@ We refer collectively to `check-then-act` and `read-modify-write` sequences as c
 
 **To preserve state consistency, update related state variables in a single atomic operation.**
 
+
+
+
 ### Memory Model
 
 - [JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
 - [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=CAS)
 - [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
-- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
+- [synchronized Block](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 
 
 ## Thread Fundamentals
