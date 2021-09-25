@@ -3,9 +3,9 @@
 JDK
 
 - TimeTask
+  Timer does have support for scheduling based on absolute, not relative time, so that tasks can be sensitive to changes in the system clock;
 - ScheduledExecuteService
-
-Compare TimeTask & ScheduledExecuteService
+  ScheduledThreadPoolExecutor supports only relative time.
 
 线程角度
 Timer是单线程模式，如果某个TimerTask任务的执行时间比较久，会影响到其他任务的调度执

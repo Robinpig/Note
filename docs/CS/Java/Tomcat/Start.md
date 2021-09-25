@@ -180,6 +180,7 @@ public void load() {
 1. start Server
 2. start Service
 3. start [Connector](/docs/CS/Java/Tomcat/Connector.md)
+4. use [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
 ```java
 //org.apache.catalina.startup.Catalina.java
 public void start() {

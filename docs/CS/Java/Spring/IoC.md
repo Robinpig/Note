@@ -2525,7 +2525,8 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 ## Close
 
-Register a shutdown hook named SpringContextShutdownHook with the JVM runtime, closing this context on JVM shutdown unless it has already been closed at that time.
+Register a shutdown hook named SpringContextShutdownHook with the JVM runtime, closing this context on [JVM shutdown](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) unless it has already been closed at that time.
+
 Delegates to doClose() for the actual closing procedure.
 ```java
 public abstract class AbstractApplicationContext extends DefaultResourceLoader implements ConfigurableApplicationContext {

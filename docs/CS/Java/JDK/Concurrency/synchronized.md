@@ -1,6 +1,9 @@
 
 
 ## Introduction
+The Java monitor pattern is inspired by Hoare's work on monitors (Hoare, 1974), though there are significant differences between this pattern and a true monitor. 
+
+The bytecode instructions for entering and exiting a synchronized block are even called `monitorenter` and `monitorexit`, and Java's built‐in (intrinsic) locks are sometimes called monitor locks or monitors.
 
 ### using synchronized 
 

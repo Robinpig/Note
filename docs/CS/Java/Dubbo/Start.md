@@ -966,8 +966,8 @@ public interface ProxyFactory {
 
 destroy registries and protocols(servers then clients), wait for pending tasks completed.
 
-### ShutdownHook
-The shutdown hook thread to do the clean up stuff. This is a **singleton** in order to ensure there is only one shutdown hook registered. 
+### Shutdown Hooks
+The [shutdown hook](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) thread to do the clean up stuff. This is a **singleton** in order to ensure there is only one shutdown hook registered. 
 
 Because ApplicationShutdownHooks use `java.util.IdentityHashMap` to store the shutdown hooks.
 

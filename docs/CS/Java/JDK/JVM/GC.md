@@ -39,20 +39,17 @@ Mark-Compact
 
 分代
 
+interceptor and JIT use Write Barrier to maintain Card Table
 
+Premature Promotion
 
-## Reference Types
+Promotion Failure
 
-- 强引用：
-- 软引用:
-- 弱引用:
-- 虚引用:
+[Reference](/docs/CS/Java/JDK/Basic/Ref.md)
 
-
-
-GC 
 
 gcCause.cpp
+
 
 
 
@@ -78,7 +75,7 @@ gcCause.cpp
 
 
 
-文字写的真慢，上图吧还是~![img](https://user-gold-cdn.xitu.io/2020/6/30/1730111bfa01fba7?imageView2/0/w/1280/h/960/format/webp/ignore-error/1)
+![img](https://user-gold-cdn.xitu.io/2020/6/30/1730111bfa01fba7?imageView2/0/w/1280/h/960/format/webp/ignore-error/1)
 
 
 
@@ -119,3 +116,5 @@ gcCause.cpp
 
 ## References
 1. [Unnecessary GCLocker-initiated young GCs](https://bugs.openjdk.java.net/browse/JDK-8048556)
+2. [Exploiting the Weak Generational Hypothesis for Write Reduction and Object Recycling](https://openscholarship.wustl.edu/eng_etds/169/)
+3. [Java Platform, Standard Edition HotSpot Virtual Machine Garbage Collection Tuning Guide](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/generations.html)

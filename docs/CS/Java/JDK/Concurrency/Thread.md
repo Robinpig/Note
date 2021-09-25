@@ -15,7 +15,11 @@ public Thread(Runnable target) {
 ```
 
 ### init
+Threads are divided into two types: normal threads and daemon threads.
 
+Normal threads and daemon threads differ only in what happens when they exit. When a thread exits, the JVM performs an inventory of running threads, and if the only threads that are left are daemon threads, it initiates an orderly shutdown. When the JVM halts, any remaining daemon threads are abandoned ‐ finally blocks are not executed, stacks are not unwound ‐ the JVM just exits.
+
+*Daemon threads are not a good substitute for properly managing the lifecycle of services within an application.*
 ```java
 private void init(ThreadGroup g, Runnable target, String name,
                   long stackSize) {
