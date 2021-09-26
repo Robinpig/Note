@@ -1226,3 +1226,6 @@ private static Object reportJoin(Object r) {
   return r;
 }
 ```
+
+## References
+1. [FutureTask.isDone returns true when task has not yet completed](https://bugs.openjdk.java.net/browse/JDK-8073704)

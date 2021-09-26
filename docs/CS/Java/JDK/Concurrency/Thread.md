@@ -1,3 +1,7 @@
+## Introduction
+
+One of the primary reasons to use threads is to improve performance.[1] Using threads can improve resource utilization by letting applications more easily exploit available processing capacity, and can improve responsiveness by letting applications begin processing new tasks immediately while existing tasks are still running.
+
 ## Create
 
 Threads are represented by the `Thread` class. The only way for a user to create a thread is to **create an object of this class**; each thread is associated with such an object. A thread will start when the `start()` method is invoked on the corresponding `Thread` object.

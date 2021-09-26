@@ -372,3 +372,6 @@ public class DefaultChannelPromise extends DefaultPromise<Void> implements Chann
  ... 
 }
 ```
+
+## References
+1. [method io.netty.util.concurrent.DefaultPromise#cancel/isDone violates contract?](https://github.com/netty/netty/issues/7712)

@@ -202,6 +202,31 @@ For example, the behavior shown in Figure 1 is allowed by the happens-before mem
 snooping
 
 
+The rules for happens‐before are:
+- Program order rule. Each action in a thread happens‐before every action in that thread that comes later in the program order.
+- Monitor lock rule. An unlock on a monitor lock happens‐before every subsequent lock on that same monitor lock.(Locks and unlocks on explicit Lock objects have the same memory semantics as intrinsic locks.)
+- Volatile variable rule. A write to a volatile field happens‐before every subsequent read of that same field.(Reads and writes of atomic variables have the same memory semantics as volatile variables.)
+- Thread start rule. A call to Thread.start on a thread happens‐before every action in the started thread.
+- Thread termination rule. Any action in a thread happens‐before any other thread detects that thread has terminated, either by successfully return from Thread.join or by Thread.isAlive returning false.
+- Interruption rule. A thread calling interrupt on another thread happens‐before the interrupted thread detects the interrupt (either by having InterruptedException thrown, or invoking isInterrupted or interrupted).
+- Finalizer rule. The end of a constructor for an object happens‐before the start of the finalizer for that object.
+- Transitivity. If A happens‐before B, and B happens‐before C, then A happens‐before C.
+
+### Piggybacking on Synchronization
+The implementation of the protected AbstractQueuedSynchronizer methods in FutureTask illustrates piggybacking. AQS maintains an integer of synchronizer state that FutureTask uses to store the task state: running, completed, or cancelled. But FutureTask also maintains additional variables, such as the result of the computation. When one thread calls set to save the result and another thread calls get to retrieve it, the two had better be ordered by happens‐before. This could be done by making the reference to the result volatile, but it is possible to exploit existing synchronization to achieve the same result at lower cost.
+
+FutureTask is carefully crafted to ensure that a successful call to tryReleaseShared always happens‐before a subsequent call to TRyAcquireShared; try-ReleaseShared always writes to a volatile variable that is read by TRyAcquire-Shared. Listing 16.2 shows the innerSet and innerGet methods that are called when the result is saved or retrieved; since innerSet writes result before calling releaseShared (which calls tryReleaseShared) and innerGet reads result after calling acquireShared (which calls TRyAcquireShared), the program order rule combines with the volatile variable rule to ensure that the write of result in innerGet happens‐before the read of result in innerGet.
+
+We call this technique "piggybacking" because it uses an existing happens‐before ordering that was created for some other reason to ensure the visibility of object X, rather than creating a happens‐before ordering specifically for publishing X.
+
+Other happens‐before orderings guaranteed by the class library include:
+- Placing an item in a thread‐safe collection happens‐before another thread retrieves that item from the collection;
+- Counting down on a CountDownLatch happens‐before a thread returns from await on that latch;
+- Releasing a permit to a Semaphore happens‐before acquiring a permit from that same Semaphore;
+- Actions taken by the task represented by a Future happens‐before another thread successfully returns from Future.get;
+- Submitting a Runnable or Callable to an Executor happens‐before the task begins execution; and
+- A thread arriving at a CyclicBarrier or Exchanger happens‐before the other threads are released from that same barrier or exchange point. If CyclicBarrier uses a barrier action, arriving at the barrier happens‐before the barrier action, which in turn happens‐before threads are released from the barrier.
+
 
 ### MESI
 
