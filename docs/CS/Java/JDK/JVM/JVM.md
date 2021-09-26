@@ -1,12 +1,15 @@
 ## Introduction
 
+[Class File and compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
+
+
 ## ClassLoader
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 
 
 
 
-## Memory
+## Runtime
 - [Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
 - Heap
 - JVM Stack
@@ -17,14 +20,14 @@
 
 
 ## Collector
-
+- [CMS](/docs/CS/Java/JDK/JVM/CMS.md)
 - [GC](/docs/CS/Java/JDK/JVM/GC.md)
 - [G1](/docs/CS/Java/JDK/JVM/G1.md)
 
 
 ### Execution Engine
 
-### Native Method Inteface
+### Native Method Interface
 
 
 
