@@ -115,3 +115,6 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 
 ## Psychology
 [Psychology](/docs/Psychology/Psychology.md)
+
+## Philosophy
+[Philosophy](/docs/Philosophy/Philosophy.md)
