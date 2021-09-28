@@ -2,6 +2,21 @@
 
 
 
+- magic
+- minor_version & major_version
+- constant_pool_count & constant_pool
+- access_flags
+- this_class & super_class
+- interfaces_count & interfaces
+- fields_count & fields
+- methods_count & methods
+- attributes_count & attributes
+
+### Constant Pool
+storage Literal and Symbolic References
+
+
+
 Code
 
 LineNumberTable
@@ -21,4 +36,4 @@ LocalVariableTable
 
 
 
-invokeinterface get a thisv object to get Klass 
+invokeinterface get a this object to get Klass 
