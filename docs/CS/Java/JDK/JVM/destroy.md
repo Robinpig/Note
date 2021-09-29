@@ -3,11 +3,12 @@ The JVM can shut down in either an orderly or abrupt manner. An orderly shutdown
 
 
 
+## destroy_vm
+
+- `Threads::destroy_vm()` is normally called from `jni_DestroyJavaVM()` when the program falls off the end of main().
+- Another VM exit path is through vm_exit() when the program calls `System.exit()` to return a value or when there is a serious error in VM.
+  
 The two shutdown paths are not exactly the same, but they share Shutdown.shutdown() at Java level and before_exit() and VM_Exit op at VM level.
-
-- `Threads::destroy_vm()` is normally called from `jni_DestroyJavaVM()` when the program falls off the end of main(). 
-- Another VM exit path is through vm_exit() when the program calls `System.exit()` to return a value or when there is a serious error in VM. 
-
 ```
 Shutdown sequence:
 + Shutdown native memory tracking if it is on
