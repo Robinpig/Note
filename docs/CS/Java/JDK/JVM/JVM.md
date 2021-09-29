@@ -12,7 +12,6 @@
 
 
 ## Object
-[Mark Word](/docs/CS/Java/JDK/JVM/Markword.md)
 [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 

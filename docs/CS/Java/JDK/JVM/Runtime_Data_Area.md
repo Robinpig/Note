@@ -85,10 +85,19 @@ Java虚拟机栈管理Java方法的调用，而本地方法栈用于管理本地
 Eden:from:to=8:1:1
 
 
-
-
-
-### allocate memory for instance
+FastTLABRefill                            = true  
+MinTLABSize                               = 2048
+PrintTLAB                                 = false
+ResizeTLAB                                = true  
+TLABAllocationWeight                      = 35   
+TLABRefillWasteFraction                   = 64   
+TLABSize                                  = 0    
+TLABStats                                 = true
+TLABWasteIncrement                        = 4    
+TLABWasteTargetPercent                    = 1
+UseTLAB                                   = true
+ZeroTLAB                                  = false
+### new instance
 
 1. is_unresolved_klass, slow case allocation
 2. Enable fastpath_allocated, try UseTLAB
