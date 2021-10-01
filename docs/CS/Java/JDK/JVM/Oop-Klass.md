@@ -280,3 +280,6 @@ itables
 static fields
 
 non-static oop-map block
+
+### vtable
+

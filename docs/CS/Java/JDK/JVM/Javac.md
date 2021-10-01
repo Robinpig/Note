@@ -431,7 +431,7 @@ all tokens in `com.sun.tools.javac.parser.Tokens.TokenKind`
 
 see `com.sun.tools.javac.parser.JavaTokenizer.readToken`
 
-## Grammar Analysis
+## Syntax Analysis
 
 ```java
 public class TreeMaker implements JCTree.Factory {
@@ -454,7 +454,46 @@ public class TreeMaker implements JCTree.Factory {
     }
 }
 ```
+
+### process
+[JSR 269 Maintenance Review](https://jcp.org/aboutJava/communityprocess/maintenance/jsr269/JSR269-MR.html)
+
+Processor
+
+
 ## Semantic Analysis
+
+### desugar
+
+#### Type erasure
+```java
+public class TransTypes extends TreeTranslator {
+    private Type erasure(Type t) {
+        return types.erasure(t);
+    }
+}
+
+public class Types {
+
+    // <editor-fold defaultstate="collapsed" desc="erasure">
+
+    /**
+     * The erasure of t {@code |t|} -- the type that results when all
+     * type parameters in t are deleted.
+     */
+    public Type erasure(Type t) {
+        return eraseNotNeeded(t) ? t : erasure(t, false);
+    }
+
+    private Type erasure(Type t, boolean recurse) {
+        if (t.isPrimitive())
+            return t; /* fast special case */
+        else
+            return erasure.visit(t, recurse);
+    }
+}
+```
+
 
 ## Generate Byte Code
 ```java

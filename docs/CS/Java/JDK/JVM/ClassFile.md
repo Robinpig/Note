@@ -12,6 +12,10 @@
 - methods_count & methods
 - attributes_count & attributes
 
+### access flags
+
+
+
 ### Constant Pool
 storage Literal and Symbolic References
 
