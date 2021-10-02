@@ -438,6 +438,13 @@ int main(int argc, char**argv) {
 ```
 
 ## JavaMain
+write a Hello.java and compile it
+
+```shell
+gdb -args java Hello
+gdb> b java.c:JavaMain
+```
+
 
 1. RegisterThread
 2. InitializeJVM   CreateJavaVM
