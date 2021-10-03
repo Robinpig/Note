@@ -1,7 +1,40 @@
-# MySQL
+## Install
+
+```shell
+cat /etc/sysconfig/selinux
+
+```
+
+## databases
+information_schema
+- tables
+- processlist
+- global_status
+- global_variables
+- partitions
+innodb
+- innodb_trx
+- innodb_locks
+- innodb_lock_waits
 
 
+innodb shutdown handler
+innodb purge coordinator
+innodb purge worker * 3
 
+max_delayed_threads 20
+thread_stack 299008
+
+thread_pool_idle_timeout 60
+thread_pool_max_threads 65536
+innodb_purge_threads 4
+innodb_write_io_threads 4
+innodb_read_io_threads 4
+innodb_undo_logs 128
+
+
+innodb_adaptive_hash_index_parts 8
+innodb_adaptive_hash_index ON
 ## Transaction
 
 **Implement on engine layer, and only innodb support transaction.**
@@ -61,7 +94,7 @@ virtual table
 - 优化器 内部实现 执行计划 选择索引 
 - 执行器 检验有权限后调用引擎接口 返回执行结果
 - 日志模块 binlog公有 redolog只InnoDB有
-### Engine
+## Storage Engine
 
 ```shell
 mysql> select version();
@@ -103,7 +136,13 @@ mysql> select version();
 
 
 
-#### MyISAM vs InnoDB 
+### MyISAM vs InnoDB 
+| Different | MyISAM | Innodb |
+| --- | --- | --- |
+| transactions | not support | support |
+| lock | full-table | row-level |
+| files | MYD & MYI | lbd |
+| count(*) | O(1) | O(n) |
 
   MyISAM:
 
@@ -142,6 +181,18 @@ storage file
 
 支持事务 外键 行级锁 MVCC 支持真正的在线热备份
 
+
+innodb_page_size 16384
+
+
+
+File header
+Page header
+Infimum + supremum
+Row records
+Free space
+Page directory
+File trailer
 
 #### Q1
 一张表，里面有 ID 自增主键，当 insert 了 17 条记录之后，删除了第 15,16,17 条记录，
@@ -258,4 +309,63 @@ Notes:
 - same server id
 
 
+## log
 
+### binary log
+
+log_bin
+log_bin_basename
+log_bin_compress
+log_bin_compress_min_len 256
+log_bin_index
+log_bin_trust_function_creators
+sql_log_bin
+
+
+binlog_annotate_row_events	ON
+binlog_cache_size	32768 32KB
+binlog_checksum	CRC32
+binlog_commit_wait_count	0
+binlog_commit_wait_usec	100000
+binlog_direct_non_transactional_updates	OFF
+binlog_file_cache_size	16384
+binlog_format	MIXED
+binlog_optimize_thread_scheduling	ON
+binlog_row_image	FULL
+binlog_stmt_cache_size	32768
+encrypt_binlog	OFF
+gtid_binlog_pos
+gtid_binlog_state
+innodb_locks_unsafe_for_binlog	OFF
+max_binlog_cache_size	18446744073709547520
+max_binlog_size	1073741824 1G
+max_binlog_stmt_cache_size	18446744073709547520
+read_binlog_speed_limit	0
+sync_binlog	0
+wsrep_forced_binlog_format	NONE
+
+### slow log
+
+log_slow_admin_statements	ON
+log_slow_disabled_statements	sp
+log_slow_filter	admin,filesort,filesort_on_disk,filesort_priority_queue,full_join,full_scan,query_cache,query_cache_miss,tmp_table,tmp_table_on_disk
+log_slow_rate_limit	1
+log_slow_slave_statements	ON
+log_slow_verbosity
+slow_launch_time	2
+slow_query_log	OFF
+slow_query_log_file	demo-slow.log
+
+
+### general log
+log_output	FILE
+
+##
+
+show status
+
+explain 
+
+show profiles
+show profile
+    show profile source for
