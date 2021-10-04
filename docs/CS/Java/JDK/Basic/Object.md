@@ -384,6 +384,7 @@ public String toString() {
 ### finalize
 *Avoid finalizers.*
 
+
 Since finalizers can run in a thread(Finalizer Thread) managed by the JVM, any state accessed by a finalizer will be accessed by more than one thread and therefore must be accessed with synchronization. Finalizers offer no guarantees on when or even if they run, and they impose a significant performance cost on objects with nontrivial finalizers. They are also extremely difficult to write correctly. In most cases, the combination of `finally blocks` and explicit close methods does a better job of resource management than finalizers; the sole exception is when you need to manage objects that hold resources acquired by native methods.
 ```java
 protected void finalize() throws Throwable { }

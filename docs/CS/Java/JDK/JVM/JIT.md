@@ -29,7 +29,7 @@ Tiered compilation is enabled by default since Java 8.
 
 **JVM doesn't use the generic CompileThreshold parameter when tiered compilation is enabled.**
 
-final并没有提升
+final not optimize
 
 ### code cache
 
@@ -88,6 +88,119 @@ inline
 
 
 EscapeAnalysis
+
+
+
+
+
+```cpp
+CompileBroker::compile_method
+  
+// CompileBroker::invoke_compiler_on_method
+// Compile a method.
+```
+
+
+
+1. Iterative Global Value Numbering
+2. Inline
+3. eliminate boxing
+4. cut edge from root to loop safepoints
+5. cleanup_expensive_nodes
+6. Perform escape analysis
+7. Optimize out fields loads from scalar replaceable allocations.
+8. Loop transforms on the ideal graph.  Range Check Elimination, peeling, unrolling, etc.
+9. Conditional Constant Propagation
+10. Iterative Global Value Numbering, including ideal transforms
+11. 
+
+```cpp
+// Given a graph, optimize it.
+void Compile::Optimize() {
+```
+
+
+
+call `method::set_code()`
+
+```cpp
+// ciEnv::register_method
+void ciEnv::register_method(...) {
+  VM_ENTRY_MARK;
+  nmethod* nm = NULL;
+  {
+    nm =  nmethod::new_nmethod(...);
+
+    // Free codeBlobs
+    code_buffer->free_blob();
+
+    if (nm != NULL) {
+      // Record successful registration.
+      // (Put nm into the task handle *before* publishing to the Java heap.)
+      if (task() != NULL) {
+        task()->set_code(nm);
+      }
+
+      if (entry_bci == InvocationEntryBci) {
+        // Allow the code to be executed
+        method->set_code(method, nm);
+      } else {
+        method->method_holder()->add_osr_nmethod(nm);
+      }
+      nm->make_in_use();
+    }
+  }  // safepoints are allowed again
+}
+```
+
+
+
+### adapter
+
+```cpp
+// SharedRuntime.cpp
+
+
+  // Generate I2C and C2I adapters. These adapters are simple argument marshalling
+  // blobs. Unlike adapters in the tiger and earlier releases the code in these
+  // blobs does not create a new frame and are therefore virtually invisible
+  // to the stack walking code. In general these blobs extend the callers stack
+  // as needed for the conversion of argument locations.
+
+  // When calling a c2i blob the code will always call the interpreter even if
+  // by the time we reach the blob there is compiled code available. This allows
+  // the blob to pass the incoming stack pointer (the sender sp) in a known
+  // location for the interpreter to record. This is used by the frame code
+  // to correct the sender code to match up with the stack pointer when the
+  // thread left the compiled code. In addition it allows the interpreter
+  // to remove the space the c2i adapter allocated to do its argument conversion.
+
+  // Although a c2i blob will always run interpreted even if compiled code is
+  // present if we see that compiled code is present the compiled call site
+  // will be patched/re-resolved so that later calls will run compiled.
+
+  // Additionally a c2i blob need to have a unverified entry because it can be reached
+  // in situations where the call site is an inlined cache site and may go megamorphic.
+
+  // A i2c adapter is simpler than the c2i adapter. This is because it is assumed
+  // that the interpreter before it does any call dispatch will record the current
+  // stack pointer in the interpreter frame. On return it will restore the stack
+  // pointer as needed. This means the i2c adapter code doesn't need any special
+  // handshaking path with compiled code to keep the stack walking correct.
+
+  static AdapterHandlerEntry* generate_i2c2i_adapters(MacroAssembler *_masm,
+                                                      int total_args_passed,
+                                                      int max_arg,
+                                                      const BasicType *sig_bt,
+                                                      const VMRegPair *regs,
+                                                      AdapterFingerPrint* fingerprint);
+
+  static void gen_i2c_adapter(MacroAssembler *_masm,
+                              int total_args_passed,
+                              int comp_args_on_stack,
+                              const BasicType *sig_bt,
+                              const VMRegPair *regs);
+```
 
 
 ## References

@@ -9,7 +9,7 @@
 
 ## Memory Barrier
 
-Fence like `volatile`
+Fence like `volatile`  JEP171
 
 ```java
     //Ensures lack of reordering of loads before the fence with loads or stores after the fence.

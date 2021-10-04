@@ -1,4 +1,8 @@
 
+## build
+[build](https://github.com/openjdk/jdk/blob/master/doc/building.md)
+
+regression test jtreg
 based on JDK12
 
 start main()
@@ -440,6 +444,9 @@ int main(int argc, char**argv) {
 ## JavaMain
 write a Hello.java and compile it
 
+-XX:+PauseAtStartup
+-XX:+PauseAtExit
+
 ```shell
 gdb -args java Hello
 gdb> b java.c:JavaMain
@@ -703,15 +710,17 @@ And JNI_CreateJavaVM call Thread.create_vm(see jni.cpp)
 1. Initialize library-based TLS
 2. Initialize the output stream module
 3. Initialize the os module
-4. Initialize global data structures and create system classes in heap
-5. Attach the main thread to this os thread
-5. Initialize Java-Level synchronization subsystem
-6. Initialize global modules
-7. Create the VMThread
-8. initialize_java_lang_classes
-8. start Signal Dispatcher before VMInit event is posted
-11. initialize compiler(s)
-12. post vm initialized
+4. os::init_container_support()
+5. Initialize global data structures and create system classes in heap
+6. Attach the main thread to this os thread
+7. Enable guard page *after* os::create_main_thread()
+8. Initialize Java-Level synchronization subsystem
+9. Initialize global modules
+10. Create the VMThread
+11. initialize_java_lang_classes
+12. start Signal Dispatcher before VMInit event is posted
+13. initialize compiler(s)
+14. post vm initialized
 ```cpp
 // thread.cpp
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {

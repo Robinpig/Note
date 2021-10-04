@@ -335,15 +335,13 @@ HashTable
 
 
 
-SymbolTable 
-
-1.8 20011
-
-15 32768
-
 ```
 -XX:+PrintStringTableStatistics
 -XX:StringTableSize=N
+```
+
+```shell
+jcmd <pid> VM.stringtable
 ```
 
 
