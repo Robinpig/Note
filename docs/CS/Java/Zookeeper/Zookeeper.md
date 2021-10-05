@@ -22,9 +22,9 @@ The data stored at each znode in a namespace is read and written atomically. Rea
 
 ZooKeeper also has the notion of ephemeral nodes. These znodes exists as long as the session that created the znode is active. When the session ends the znode is deleted.
 
-
-
 Container node
+
+TTL time to live
 
 ### Conditional updates and watches
 
