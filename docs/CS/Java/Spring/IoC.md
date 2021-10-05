@@ -2689,7 +2689,9 @@ Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBund
 |                |             |                    |
 |                |             |                    |
 
+## Usage Example
 
+ObjectProvider： a factory get defined type instances
 
 ## References
 
