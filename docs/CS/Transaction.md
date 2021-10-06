@@ -8,14 +8,18 @@
 
 
 ## ACID
+
+### Properties
+
 A transaction is a unit of work enjoying the following properties:
+
 - Atomicity
 - Consistency
 - Isolation
 - Durability
 
 
-### Atomicity
+#### Atomicity
 A transaction is an atomic transformation from the initial state to the final state
 Possible behaviors:
 1. Commit work: SUCCESS
@@ -23,23 +27,24 @@ Possible behaviors:
 3. Fault after commit: REDO
 
 
-### Consistency
+#### Consistency
 The transaction satisfies the integrity constraints Consequence:
 - If the initial state is consistent
 - Then the final state is also consistent
 
-### Isolation
+#### Isolation
 A transaction is not affected by the behavior of other, concurrent transactions Consequence:
 - Its intermediate states are not exposed
 - The “domino effect” is avoided
 
 
-### Durability
+#### Durability
 The effect of a transaction that has successfully committed will
 last “forever”
 - Independently of any system fault
 
-### Transaction Properties and Mechanisms
+### Isolation Levels
+
 - Atomicity
   - Abort-rollback-restart
   - Commit protocols
@@ -51,14 +56,57 @@ last “forever”
   - Recovery management
 
 
-
-
 | Isolation level  | Dirty Read               | Non-Repeatable Read | Phantom Read |
 | ---------------- | ------------------------ | ------------------- | ------------ |
 | READ-UNCOMMITTED | :white_check_mark:  | :white_check_mark: | :white_check_mark: |
 | READ-COMMITTED   | :x:    | :white_check_mark: | :white_check_mark: |
 | REPEATABLE-READ  | :x: | :x: | :white_check_mark: |
 | SERIALIZABLE     | :x: | :x: | :x: |
+
+### Phenomena
+
+#### Dirty Read
+
+A dirty read happens when a transaction is **allowed to read uncommitted changes of some other running transaction**. This happens because there is no locking preventing it. 
+
+Taking a business decision on a value that has not been committed is risky because uncommitted changes might get rolled back.
+
+#### Non-Repeatable Read
+
+A non-repeatable read manifests when consecutive reads yield **different results due to a concurring transaction that has just updated the record we’re reading**. This is undesirable since we end up using stale data. 
+
+This is prevented by holding a shared lock (read lock) on the read record for the whole duration of the current transaction.
+
+#### Phantom Read
+
+A phantom read happens when **a subsequent transaction inserts a row that matches the filtering criteria of a previous query executed by a concurrent transaction**.
+
+The [2PL-based](https://vladmihalcea.com/2pl-two-phase-locking/) Serializable isolation prevents Phantom Reads through the use of predicate locking while [MVCC (Multi-Version Concurrency Control)](https://vladmihalcea.com/how-does-mvcc-multi-version-concurrency-control-work/) database engines address the Phantom Read anomaly by returning consistent snapshots.
+
+
+
+#### Lost updates
+
+Read Committed accommodates more concurrent transactions than other stricter isolation levels, but less locking leads to better chances of losing updates.
+
+- Using Repeatable Read (as well as Serializable which offers an even stricter isolation level) can prevent lost updates across concurrent database transactions.
+- Another solution would be to use the `FOR UPDATE` with the default Read Committed isolation level. This locking clause acquires the same write locks as with UPDATE and DELETE statements.
+- Replace pessimistic locking with an optimistic locking mechanism. Like MVCC. optimistic locking defines a versioning concurrency control model that works without acquiring additional database write locks.
+
+#### Read skew
+
+Using **Repeatable Read** (as well as Serializable which offers an even stricter isolation level) can prevent read skews across concurrent database transactions.
+
+
+
+#### Write skew
+
+- Write skew is prevalent among [MVCC (Multi-Version Concurrency Control)](https://vladmihalcea.com/how-does-mvcc-multi-version-concurrency-control-work/) mechanisms and Oracle cannot prevent it even when claiming to be using Serializable, which in fact is just the Snapshot Isolation level.
+- SQL Server default locking-based isolation levels can prevent write skews when using Repeatable Read and Serializable. Neither one of its MVCC-based isolation levels ([MVCC](https://vladmihalcea.com/how-does-mvcc-multi-version-concurrency-control-work/)-based) can prevent/detect it instead.
+- PostgreSQL prevents it by using its more advanced Serializable Snapshot Isolation level.
+- [MySQL employs shared locks when using Serializable](https://vladmihalcea.com/write-skew-2pl-mvcc/) so the write skew can be prevented even if InnoDB is also MVCC-based.
+
+
 
 
 
@@ -113,3 +161,4 @@ and consistency are essential.
 
 ## References
 1. [ACID vs. BASE and SQL vs. NoSQL](https://marcobrambillapolimi.files.wordpress.com/2019/01/01-nosql-overview.pdf)
+2. [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf)
