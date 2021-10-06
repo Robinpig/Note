@@ -249,6 +249,7 @@ duplicate key error
 
 
 ### MVCC
+[MVCC](/docs/CS/DB/MySQL/MVCC.md)
 
 多版本并发控制
     只使用于读提交和可重复读

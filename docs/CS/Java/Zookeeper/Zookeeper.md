@@ -158,7 +158,6 @@ Follower的消息循环处理如下几种来自Leader的消息：
 5. REVALIDATE消息：根据Leader的REVALIDATE结果，关闭待revalidate的session还是允许其接受消息
 6. SYNC消息：返回SYNC结果到客户端，这个消息最初由客户端发起，用来强制得到最新的更新。
 
-
 ## Distributed Lock
 
 
