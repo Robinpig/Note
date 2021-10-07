@@ -75,7 +75,7 @@ IntegerCache
 private final boolean value;
 ```
 
-实现Cpmpare接口，重写compare方法
+implements Compare
 
 ```java
 public static int compare(boolean x, boolean y) {
@@ -98,13 +98,15 @@ public static Boolean valueOf(boolean b) {
 }
 ```
 
-重写了hashCode方法，实质调用静态方法返回1231或1237
+override hashCode()
 
     public static int hashCode(boolean value) {
             return value ? 1231 : 1237;
         }
 
-1.8版本增加logicAnd\logicOr\logicXor方法
+add logicAnd\logicOr\logicXor methods since 1.8
+
+#### implement by int
 
 ### Integer
 

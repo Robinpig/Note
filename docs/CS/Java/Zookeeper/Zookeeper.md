@@ -160,7 +160,7 @@ Follower的消息循环处理如下几种来自Leader的消息：
 
 ## Distributed Lock
 
-
+[locks](http://zookeeper.apache.org/doc/r3.4.9/recipes.html#sc_recipes_Locks)
 
 ### Read-Write Lock
 
