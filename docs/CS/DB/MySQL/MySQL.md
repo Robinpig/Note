@@ -127,19 +127,7 @@ Storage engines are MySQL components that handle the SQL operations for differen
 
 
 ### MVCC
-[MVCC](/docs/CS/DB/MySQL/MVCC.md)
 
-多版本并发控制
-    只使用于读提交和可重复读
-    InnoDB 存储引擎实现隔离级别的一种具体方式，用于实现提交读和可重复读这两种隔离级别
-    版本号
-        系统版本号 开启一个事务 就会递增
-        事务版本号 事务开始时系统版本号
-    隐藏列：    每行记录后有两个隐藏列版本号
-        创建版本号 创建时系统版本号
-        删除版本号 删除版本未定义或大于当前事务版本号则该快照有效
-    Undo日志
-        使用的快照存储在Undo日志 通过回滚指针把一个行所有快照连接
 
 
 
