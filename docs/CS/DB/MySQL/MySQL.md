@@ -109,142 +109,20 @@ virtual table
 - 优化器 内部实现 执行计划 选择索引 
 - 执行器 检验有权限后调用引擎接口 返回执行结果
 - 日志模块 binlog公有 redolog只InnoDB有
+
+
+
+## Character Sets, Collations, Unicode
+
+MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations. The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
+
 ## Storage Engine
 
-```shell
-mysql> select version();
-10.3.27-MariaDB
-```
+Storage engines are MySQL components that handle the SQL operations for different table types. [`InnoDB`](https://dev.mysql.com/doc/refman/5.7/en/innodb-storage-engine.html) is the default and most general-purpose storage engine.
 
-| Engine | Support | Comment | Transactions | XA   | Savepoints |
-| ------ | ------- | ------- | ------------ | ---- | ---------- |
-| MEMORY	| YES	| Hash based, stored in memory, useful for temporary tables	| NO	| NO | NO |
-| MRG_MyISAM	| YES	| Collection of identical MyISAM tables	| NO	| NO	| NO |
-| CSV	| YES	| Stores tables as CSV files	| NO	| NO	| NO |
-| BLACKHOLE	| YES	| /dev/null storage engine (anything you write to it disappears)	| NO	| NO	| NO |
-| MyISAM	| YES	| Non-transactional engine with good performance and small data footprint	| NO	| NO	| NO |
-| ARCHIVE	| YES	| gzip-compresses tables for a low storage footprint	| NO	| NO	| NO |
-| FEDERATED	| YES	| Allows to access tables on other MariaDB servers, supports transactions and more	| YES	| NO	| YES |
-| PERFORMANCE_SCHEMA	| YES	| Performance Schema	| NO	| NO	NO |
-| SEQUENCE	| YES	| Generated tables filled with sequential values	| YES	NO	| YES |
-| InnoDB	| DEFAULT	| Supports transactions, row-level locking, foreign keys and encryption for tables	| YES	| YES	| YES |
-| Aria	| YES	| Crash-safe tables with MyISAM heritage	| NO	| NO	| NO |
+### [The InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
 
-
-
-```shell
-mysql> select version();
-5.7.34
-```
-
-| Engine | Support | Comment | Transactions | XA   | Savepoints |
-| ------ | ------- | ------- | ------------ | ---- | ---------- |
-| InnoDB | DEFAULT | Supports transactions, row-level locking, and foreign keys | YES  | YES  | YES  |
-| MRG_MYISAM | YES | Collection of identical MyISAM tables | NO | NO | NO |
-| MEMORY | YES | Hash based, stored in memory, useful for temporary tables | NO | NO | NO |
-| BLACKHOLE | YES | /dev/null storage engine (anything you write to it disappears) | NO | NO | NO |
-| MyISAM | YES | MyISAM storage engine | NO | NO | NO |
-| CSV | YES | CSV storage engine | NO | NO | NO |
-| ARCHIVE | YES | Archive storage engine | NO | NO | NO |
-| PERFORMANCE_SCHEMA | YES | Performance Schema | NO | NO   | NO |
-| FEDERATED | NO | Federated MySQL storage engine | NULL | NULL | NULL |
-
-
-
-### MyISAM vs InnoDB 
-| Different | MyISAM | Innodb |
-| --- | --- | --- |
-| transactions | not support | support |
-| lock | full-table | row-level |
-| files | MYD & MYI | lbd |
-| count(*) | O(1) | O(n) |
-
-  MyISAM:
-
-Select immediately 
-
-数据文件毁坏后不易恢复
-
-Not support:
-
-- transactions, row-level locking, foreign keys and encryption for tables
-- 
-
-Support:
-- Full-Text, B-Tree, R-Tree index
-
-    
-
-Storage file
-
-- .frm defintion of tables
-- .MYD data
-- .MYI index
-
-
-
-###  InnoDB
-[InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
-
-
-storage file
-
-- .frm
-- .ibd 索引和data一起
-
-查询先定位到数据块 再到行 较MyISAM直接定位慢
-
-支持事务 外键 行级锁 MVCC 支持真正的在线热备份
-
-
-innodb_page_size 16384
-
-
-
-File header
-Page header
-Infimum + supremum
-Row records
-Free space
-Page directory
-File trailer
-
-#### Q1
-一张表，里面有 ID 自增主键，当 insert 了 17 条记录之后，删除了第 15,16,17 条记录，
-再把 Mysql 重启，再 insert 一条记录，这条记录的 ID 是 18 还是 15 ？
-(1)如果表的类型是 MyISAM，那么是 18
-因为 MyISAM 表会把自增主键的最大 ID 记录到数据文件里，重启 MySQL 自增主键的最大
-ID 也不会丢失
-（ 2）如果表的类型是 InnoDB，那么是 15
-InnoDB 表只是把自增主键的最大 ID 记录到内存中，所以重启数据库或者是对表进行
-OPTIMIZE 操作，都会导致最大 ID 丢失
-
-#### What HEAP table is?
-HEAP 表存在于内存中，用于临时高速存储。
-BLOB 或 TEXT 字段是不允许的
-只能使用比较运算符=， <， >， =>， = <
-HEAP 表不支持 AUTO_INCREMENT
-索引不可为 NULL
-
-#### Auto Increment overflow
-duplicate key error
-### Memory
-
-表描述文件frm在磁盘 表数据全在内存 使用Hash Index
-
-
-
-### Index  
-
-    Hash索引：
-        InnoDB当索引使用频繁时在B+Tree上再建哈希索引
-    B+Tree索引：
-    Fractal Tree索引：
-    全文索引：
-        MyISAM支持全文索引 用以查找文本关键字 而不是直接比较是否相等
-        MATCH AGAINST 不是WHERE InnoDB 5.6.4后支持全文索引
-    空间数据索引：
-        MyISAM支持空间数据索引（R-Tree） 地理数据存储
+### [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
 
 
 
@@ -307,8 +185,13 @@ duplicate key error
 - 对应同一列进行 or 判断时，使用 in 代替 or
 - WHERE 从句中禁止对列进行函数转换和计算
 
-**MySQL字符集**
-采用类似继承方式 表的默认字符集是数据库的字符集 未指定使用时采用默认
+
+
+
+
+
+
+### InnoDB memcached Plugin
 
 ## Master-Slave
 ### replication
@@ -385,3 +268,7 @@ explain
 show profiles
 show profile
     show profile source for
+
+## Optimization
+
+[Optimization](/docs/CS/DB/MySQL/Optimization.md) involves configuring, tuning, and measuring performance, at several levels. Depending on your job role (developer, DBA, or a combination of both), you might optimize at the level of individual SQL statements, entire applications, a single database server, or multiple networked database servers. Sometimes you can be proactive and plan in advance for performance, while other times you might troubleshoot a configuration or code issue after a problem occurs. Optimizing CPU and memory usage can also improve scalability, allowing the database to handle more load without slowing down.

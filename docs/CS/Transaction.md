@@ -81,6 +81,8 @@ This is prevented by holding a shared lock (read lock) on the read record for th
 
 A phantom read happens when **a subsequent transaction inserts a row that matches the filtering criteria of a previous query executed by a concurrent transaction**.
 
+The so-called phantom problem occurs within a transaction when the same query produces different sets of rows at different times. For example, if a [`SELECT`](https://dev.mysql.com/doc/refman/8.0/en/select.html) is executed twice, but returns a row the second time that was not returned the first time, the row is a “phantom” row.
+
 The [2PL-based](https://vladmihalcea.com/2pl-two-phase-locking/) Serializable isolation prevents Phantom Reads through the use of predicate locking while [MVCC (Multi-Version Concurrency Control)](https://vladmihalcea.com/how-does-mvcc-multi-version-concurrency-control-work/) database engines address the Phantom Read anomaly by returning consistent snapshots.
 
 
