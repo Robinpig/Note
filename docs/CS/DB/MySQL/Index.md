@@ -1,31 +1,52 @@
-# Index
+## Introduction
+
+A data structure that provides a fast lookup capability for **rows** of a **table**, typically by forming a tree structure (**B-tree)** representing all the values of a particular **column** or set of columns.
+
+`InnoDB` tables always have a **clustered index** representing the **primary key**. They can also have one or more **secondary indexes** defined on one or more columns. Depending on their structure, secondary indexes can be classified as **partial**, **column**, or **composite** indexes.
+
+Indexes are a crucial aspect of **query** performance. Database architects design tables, queries, and indexes to allow fast lookups for data needed by applications. The ideal database design uses a **covering index** where practical; the query results are computed entirely from the index, without reading the actual table data. Each **foreign key** constraint also requires an index, to efficiently check whether values exist in both the **parent** and **child** tables.
+
+Although a B-tree index is the most common, a different kind of data structure is used for **hash indexes**, as in the `MEMORY` storage engine and the `InnoDB` **adaptive hash index**. **R-tree** indexes are used for spatial indexing of multi-dimensional information.
+
+See Also [adaptive hash index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_adaptive_hash_index), [B-tree](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_b_tree), [child table](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_child_table), [clustered index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_clustered_index), [column index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_column_index), [composite index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_composite_index), [covering index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_covering_index), [foreign key](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_foreign_key), [hash index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_hash_index), [parent table](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_parent_table), [partial index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_partial_index), [primary key](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_primary_key), [query](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_query), [R-tree](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_r_tree), [row](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_row), [secondary index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_secondary_index), [table](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_table).
+
+Most MySQL indexes (`PRIMARY KEY`, `UNIQUE`, `INDEX`, and `FULLTEXT`) are stored in [B-trees](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_b_tree). Exceptions: Indexes on spatial data types use R-trees; `MEMORY` tables also support [hash indexes](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_hash_index); `InnoDB` uses inverted lists for `FULLTEXT` indexes.
+
+### Clustered and Secondary Indexes
+
+Each `InnoDB` table has a special index called the clustered index that stores row data. Typically, the clustered index is synonymous with the primary key. To get the best performance from queries, inserts, and other database operations, it is important to understand how `InnoDB` uses the clustered index to optimize the common lookup and DML operations.
+
+- When you define a `PRIMARY KEY` on a table, `InnoDB` uses it as the clustered index. A primary key should be defined for each table. If there is no logical unique and non-null column or set of columns to use a the primary key, add an auto-increment column. Auto-increment column values are unique and are added automatically as new rows are inserted.
+- If you do not define a `PRIMARY KEY` for a table, `InnoDB` uses the first `UNIQUE` index with all key columns defined as `NOT NULL` as the clustered index.
+- If a table has no `PRIMARY KEY` or suitable `UNIQUE` index, `InnoDB` generates a hidden clustered index named `GEN_CLUST_INDEX` on a synthetic column that contains row ID values. The rows are ordered by the row ID that `InnoDB` assigns. The row ID is a 6-byte field that increases monotonically as new rows are inserted. Thus, the rows ordered by the row ID are physically in order of insertion.
+
+##### How the Clustered Index Speeds Up Queries
+
+Accessing a row through the clustered index is fast because the index search leads directly to the page that contains the row data. If a table is large, the clustered index architecture often saves a disk I/O operation when compared to storage organizations that store row data using a different page from the index record.
+
+##### How Secondary Indexes Relate to the Clustered Index
+
+Indexes other than the clustered index are known as secondary indexes. In `InnoDB`, each record in a secondary index contains the primary key columns for the row, as well as the columns specified for the secondary index. `InnoDB` uses this primary key value to search for the row in the clustered index.
+
+If the primary key is long, the secondary indexes use more space, so it is advantageous to have a short primary key.
+
+For guidelines to take advantage of `InnoDB` clustered and secondary indexes, see [Section 8.3, “Optimization and Indexes”](https://dev.mysql.com/doc/refman/8.0/en/optimization-indexes.html).
 
 
 
-## Why?
-
-**索引**，用于提升数据库的查找速度。
+### The Physical Structure of an InnoDB Index
 
 
 
-## 类型
+With the exception of spatial indexes, `InnoDB` indexes are [B-tree](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_b_tree) data structures. Spatial indexes use [R-trees](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_r_tree), which are specialized data structures for indexing multi-dimensional data. Index records are stored in the leaf pages of their B-tree or R-tree data structure. The default size of an index page is 16KB. The page size is determined by the [`innodb_page_size`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_page_size) setting when when the MySQL instance is initialized. See [Section 15.8.1, “InnoDB Startup Configuration”](https://dev.mysql.com/doc/refman/8.0/en/innodb-init-startup-configuration.html).
 
-- 主键索引 唯一且不为null
+When new records are inserted into an `InnoDB` [clustered index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_clustered_index), `InnoDB` tries to leave 1/16 of the page free for future insertions and updates of the index records. If index records are inserted in a sequential order (ascending or descending), the resulting index pages are about 15/16 full. If records are inserted in a random order, the pages are from 1/2 to 15/16 full.
 
-- 普通索引 无限制
+`InnoDB` performs a bulk load when creating or rebuilding B-tree indexes. This method of index creation is known as a sorted index build. The [`innodb_fill_factor`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_fill_factor) variable defines the percentage of space on each B-tree page that is filled during a sorted index build, with the remaining space reserved for future index growth. Sorted index builds are not supported for spatial indexes. For more information, see [Section 15.6.2.3, “Sorted Index Builds”](https://dev.mysql.com/doc/refman/8.0/en/sorted-index-builds.html). An [`innodb_fill_factor`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_fill_factor) setting of 100 leaves 1/16 of the space in clustered index pages free for future index growth.
 
-- 唯一索引 唯一 允许空
+If the fill factor of an `InnoDB` index page drops below the `MERGE_THRESHOLD`, which is 50% by default if not specified, `InnoDB` tries to contract the index tree to free the page. The `MERGE_THRESHOLD` setting applies to both B-tree and R-tree indexes. For more information, see [Section 15.8.11, “Configuring the Merge Threshold for Index Pages”](https://dev.mysql.com/doc/refman/8.0/en/index-page-merge-threshold.html).
 
-- 全文索引 只能在文本类型CHAR,VARCHAR,TEXT类型字段上创建全文索引
 
-- 空间索引 MySQL在5.7之后的版本支持了空间索引，而且支持OpenGIS几何数据模型。MySQL在空间索引这方面遵循OpenGIS几何数据模型规则
-- 前缀索引 在文本类型如CHAR,VARCHAR,TEXT类列上创建索引时，可以指定索引列的长度，但是数值类型不能指定， 但不能在Group by 或Order by，不能使用覆盖索引
-
-又可分为
-
-- 单列索引
-
-- 组合索引 
 
 ## 数据结构
 

@@ -38,49 +38,9 @@
 | **Transactions**                                             | Yes                                                          |
 | **Update statistics for data dictionary**                    | Yes                                                          |
 
-## InnoDB and the ACID Model
-
-The following sections discuss how MySQL features, in particular the `InnoDB` storage engine, interact with the categories of the [ACID model](/docs/CS/Transaction.md?id=ACID):
-
-### Atomicity
-
-The **atomicity** aspect of the ACID model mainly involves `InnoDB` [transactions](https://dev.mysql.com/doc/refman/5.7/en/glossary.html#glos_transaction). Related MySQL features include:
-
-- The [`autocommit`](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_autocommit) setting.
-- The [`COMMIT`](https://dev.mysql.com/doc/refman/5.7/en/commit.html) statement.
-- The [`ROLLBACK`](https://dev.mysql.com/doc/refman/5.7/en/commit.html) statement.
-
-### Consistency
-
-The **consistency** aspect of the ACID model mainly involves internal `InnoDB` processing to protect data from crashes. Related MySQL features include:
-
-- The `InnoDB` doublewrite buffer. See [Section 14.6.5, “Doublewrite Buffer”](https://dev.mysql.com/doc/refman/5.7/en/innodb-doublewrite-buffer.html).
-- `InnoDB` crash recovery. See [InnoDB Crash Recovery](https://dev.mysql.com/doc/refman/5.7/en/innodb-recovery.html#innodb-crash-recovery).
-
-### Isolation
-
-The **isolation** aspect of the ACID model mainly involves `InnoDB` [transactions](https://dev.mysql.com/doc/refman/5.7/en/glossary.html#glos_transaction), in particular the [isolation level](https://dev.mysql.com/doc/refman/5.7/en/glossary.html#glos_isolation_level) that applies to each transaction. Related MySQL features include:
-
-- The [`autocommit`](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_autocommit) setting.
-- Transaction isolation levels and the [`SET TRANSACTION`](https://dev.mysql.com/doc/refman/5.7/en/set-transaction.html) statement. See [Section 14.7.2.1, “Transaction Isolation Levels”](https://dev.mysql.com/doc/refman/5.7/en/innodb-transaction-isolation-levels.html).
-- The low-level details of `InnoDB` [locking](https://dev.mysql.com/doc/refman/5.7/en/glossary.html#glos_locking). Details can be viewed in the `INFORMATION_SCHEMA` tables. See [Section 14.16.2, “InnoDB INFORMATION_SCHEMA Transaction and Locking Information”](https://dev.mysql.com/doc/refman/5.7/en/innodb-information-schema-transactions.html).
-
-### Durability
-
-The **durability** aspect of the ACID model involves MySQL software features interacting with your particular hardware configuration. Because of the many possibilities depending on the capabilities of your CPU, network, and storage devices, this aspect is the most complicated to provide concrete guidelines for. (And those guidelines might take the form of “buy new hardware”.) Related MySQL features include:
-
-- The `InnoDB` doublewrite buffer. See [Section 14.6.5, “Doublewrite Buffer”](https://dev.mysql.com/doc/refman/5.7/en/innodb-doublewrite-buffer.html).
-- The [`innodb_flush_log_at_trx_commit`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_flush_log_at_trx_commit) variable.
-- The [`sync_binlog`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#sysvar_sync_binlog) variable.
-- The [`innodb_file_per_table`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_file_per_table) variable.
-- The write buffer in a storage device, such as a disk drive, SSD, or RAID array.
-- A battery-backed cache in a storage device.
-- The operating system used to run MySQL, in particular its support for the `fsync()` system call.
-- An uninterruptible power supply (UPS) protecting the electrical power to all computer servers and storage devices that run MySQL servers and store MySQL data.
-- Your backup strategy, such as frequency and types of backups, and backup retention periods.
-- For distributed or hosted data applications, the particular characteristics of the data centers where the hardware for the MySQL servers is located, and network connections between the data centers.
 
 
+## [InnoDB Locking and Transaction Model](/docs/CS/DB/MySQL/Transaction.md)
 
 ## InnoDB Architecture
 

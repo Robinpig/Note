@@ -4,6 +4,76 @@ To implement a large-scale, busy, or highly reliable database application, to po
 
 
 
+## InnoDB and the ACID Model
+
+The following sections discuss how MySQL features, in particular the `InnoDB` storage engine, interact with the categories of the ACID model:
+
+### Atomicity
+
+The **atomicity** aspect of the ACID model mainly involves `InnoDB` transactions. Related MySQL features include:
+
+- The [`autocommit`](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_autocommit) setting.
+- The [`COMMIT`](https://dev.mysql.com/doc/refman/5.7/en/commit.html) statement.
+- The [`ROLLBACK`](https://dev.mysql.com/doc/refman/5.7/en/commit.html) statement.
+
+### Consistency
+
+The **consistency** aspect of the ACID model mainly involves internal `InnoDB` processing to protect data from crashes. Related MySQL features include:
+
+- The `InnoDB` doublewrite buffer. See [Section 14.6.5, “Doublewrite Buffer”](https://dev.mysql.com/doc/refman/5.7/en/innodb-doublewrite-buffer.html).
+- `InnoDB` crash recovery. See [InnoDB Crash Recovery](https://dev.mysql.com/doc/refman/5.7/en/innodb-recovery.html#innodb-crash-recovery).
+
+### Isolation
+
+The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions, in particular the isolation level that applies to each transaction. Related MySQL features include:
+
+- The [`autocommit`](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_autocommit) setting.
+- Transaction isolation levels and the `SET TRANSACTION` statement.
+- The low-level details of `InnoDB` locking. Details can be viewed in the `INFORMATION_SCHEMA` tables.
+
+### Durability
+
+The **durability** aspect of the ACID model involves MySQL software features interacting with your particular hardware configuration. Because of the many possibilities depending on the capabilities of your CPU, network, and storage devices, this aspect is the most complicated to provide concrete guidelines for. (And those guidelines might take the form of “buy new hardware”.) Related MySQL features include:
+
+- The `InnoDB` doublewrite buffer. See [Section 14.6.5, “Doublewrite Buffer”](https://dev.mysql.com/doc/refman/5.7/en/innodb-doublewrite-buffer.html).
+- The [`innodb_flush_log_at_trx_commit`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_flush_log_at_trx_commit) variable.
+- The [`sync_binlog`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#sysvar_sync_binlog) variable.
+- The [`innodb_file_per_table`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_file_per_table) variable.
+- The write buffer in a storage device, such as a disk drive, SSD, or RAID array.
+- A battery-backed cache in a storage device.
+- The operating system used to run MySQL, in particular its support for the `fsync()` system call.
+- An uninterruptible power supply (UPS) protecting the electrical power to all computer servers and storage devices that run MySQL servers and store MySQL data.
+- Your backup strategy, such as frequency and types of backups, and backup retention periods.
+- For distributed or hosted data applications, the particular characteristics of the data centers where the hardware for the MySQL servers is located, and network connections between the data centers.
+
+
+
+### Transaction Isolation Levels
+
+#### READ UNCOMMITTED
+Transactions running at the `READ UNCOMMITTED` level **do not issue shared locks to prevent other transactions from modifying data read by the current transaction**. `READ UNCOMMITTED` transactions are also not blocked by exclusive locks that would prevent the current transaction from reading rows that have been modified but not committed by other transactions. When this option is set, it is possible to read uncommitted modifications, which are called dirty reads. Values in the data can be changed and rows can appear or disappear in the data set before the end of the transaction. **This option has the same effect as setting NOLOCK on all tables in all SELECT statements in a transaction.** This is the least restrictive of the isolation levels.
+
+#### READ COMMITTED
+
+Each consistent read, even within the same transaction, sets and reads its own fresh snapshot. 
+
+Because gap locking is disabled, `phantom row` problems may occur, as other sessions can insert new rows into the gaps. 
+
+Only row-based binary logging is supported with the `READ COMMITTED` isolation level. If you use `READ COMMITTED` with [`binlog_format=MIXED`](https://dev.mysql.com/doc/refman/8.0/en/replication-options-binary-log.html#sysvar_binlog_format), the server automatically uses row-based logging.
+
+Using `READ COMMITTED` has additional effects:
+
+- For `UPDATE` or `DELETE` statements, `InnoDB` holds locks only for rows that it updates or deletes. Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition. This greatly reduces the probability of deadlocks, but they can still happen.
+- For `UPDATE` statements, if a row is already locked, `InnoDB` performs a “semi-consistent” read, returning the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`. If the row matches (must be updated), MySQL reads the row again and this time `InnoDB` either locks it or waits for a lock on it.
+
+#### REPEATABLE READ
+
+This is the default isolation level for InnoDB. Consistent reads within the same transaction **read the snapshot established by the first read**(any SELECT or UPDATE/INSERT/DELETE). This means that if you issue several plain (nonlocking) SELECT statements within the same transaction, these SELECT statements are consistent also with respect to each other.
+
+For locking reads (SELECT with FOR UPDATE or LOCK IN SHARE MODE), UPDATE, and DELETE statements, locking depends on whether the statement uses a unique index with a unique search condition or a range-type search condition.
+- For a unique index with a unique search condition, InnoDB locks only the index record found, not the gap before it.
+- For other search conditions, InnoDB locks the index range scanned, using gap locks or next-key locks to block insertions by other sessions into the gaps covered by the range.
+
 ## InnoDB Transaction Model
 
 The `InnoDB` transaction model aims combine the best properties of a multi-versioning database with traditional two-phase locking. `InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read) by default, in the style of Oracle. The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed. Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
@@ -404,6 +474,39 @@ void ReadView::prepare(trx_id_t id) {
   ut_d(m_view_low_limit_no = m_low_limit_no);
   m_closed = false;
 }
+```
+
+
+
+
+
+```c
+
+  /** Check whether the changes by id are visible.
+  @param[in]	id	transaction id to check against the view
+  @param[in]	name	table name
+  @return whether the view sees the modifications of id. */
+  bool changes_visible(trx_id_t id, const table_name_t &name) const
+      MY_ATTRIBUTE((warn_unused_result)) {
+    ut_ad(id > 0);
+
+    if (id < m_up_limit_id || id == m_creator_trx_id) {
+      return (true);
+    }
+
+    check_trx_id_sanity(id, name);
+
+    if (id >= m_low_limit_id) {
+      return (false);
+
+    } else if (m_ids.empty()) {
+      return (true);
+    }
+
+    const ids_t::value_type *p = m_ids.data();
+
+    return (!std::binary_search(p, p + m_ids.size(), id));
+  }
 ```
 
 
