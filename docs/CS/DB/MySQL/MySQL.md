@@ -118,15 +118,11 @@ MySQL includes character set support that enables you to store data using a vari
 
 ## Storage Engine
 
-Storage engines are MySQL components that handle the SQL operations for different table types. [`InnoDB`](https://dev.mysql.com/doc/refman/5.7/en/innodb-storage-engine.html) is the default and most general-purpose storage engine.
+Storage engines are MySQL components that handle the SQL operations for different table types. `InnoDB` is the default and most general-purpose storage engine.
 
 ### [The InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
 
 ### [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
-
-
-
-### MVCC
 
 
 

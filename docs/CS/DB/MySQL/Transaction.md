@@ -172,7 +172,7 @@ While Oracle and MySQL use the [undo log](https://vladmihalcea.com/how-does-a-re
 Internally, `InnoDB` adds three fields to each row stored in the database:
 
 - A 6-byte `DB_TRX_ID` field indicates the transaction identifier for the last transaction that inserted or updated the row. Also, a deletion is treated internally as an update where a special bit in the row is set to mark it as deleted.
-- A 7-byte `DB_ROLL_PTR` field called the roll pointer. The roll pointer points to an undo log record written to the rollback segment. If the row was updated, the undo log record contains the information necessary to rebuild the content of the row before it was updated.
+- A 7-byte `DB_ROLL_PTR` field called the roll pointer. The roll pointer points to an **undo log** record written to the rollback segment. If the row was updated, the undo log record contains the information necessary to rebuild the content of the row before it was updated.
 - A 6-byte `DB_ROW_ID` field contains a row ID that increases monotonically as new rows are inserted. If `InnoDB` generates a clustered index automatically, the index contains row ID values. Otherwise, the `DB_ROW_ID` column does not appear in any index.
 
 Undo logs in the rollback segment are divided into insert and update undo logs. Insert undo logs are needed only in transaction rollback and can be discarded as soon as the transaction commits. Update undo logs are used also in consistent reads, but they can be discarded only after there is no transaction present for which `InnoDB` has assigned a snapshot that in a consistent read could require the information in the update undo log to build an earlier version of a database row.
@@ -219,6 +219,192 @@ If a secondary index record is marked for deletion or the secondary index page i
 However, if the [index condition pushdown (ICP)](https://dev.mysql.com/doc/refman/8.0/en/index-condition-pushdown-optimization.html) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index, the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index. If no matching records are found, the clustered index lookup is avoided. If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
 
 
+
+### Source Code
+
+
+
+```c
+// dict0dict.cc
+/** Adds system columns to a table object. */
+void dict_table_add_system_columns(dict_table_t *table, mem_heap_t *heap) {
+  ut_ad(table);
+  ut_ad(table->n_def == (table->n_cols - table->get_n_sys_cols()));
+  ut_ad(table->magic_n == DICT_TABLE_MAGIC_N);
+  ut_ad(!table->cached);
+
+  /* NOTE: the system columns MUST be added in the following order
+  (so that they can be indexed by the numerical value of DATA_ROW_ID,
+  etc.) and as the last columns of the table memory object.
+  The clustered index will not always physically contain all system
+  columns.
+  Intrinsic table don't need DB_ROLL_PTR as UNDO logging is turned off
+  for these tables. */
+
+  dict_mem_table_add_col(table, heap, "DB_ROW_ID", DATA_SYS,
+                         DATA_ROW_ID | DATA_NOT_NULL, DATA_ROW_ID_LEN, false);
+
+  dict_mem_table_add_col(table, heap, "DB_TRX_ID", DATA_SYS,
+                         DATA_TRX_ID | DATA_NOT_NULL, DATA_TRX_ID_LEN, false);
+
+  if (!table->is_intrinsic()) {
+    dict_mem_table_add_col(table, heap, "DB_ROLL_PTR", DATA_SYS,
+                           DATA_ROLL_PTR | DATA_NOT_NULL, DATA_ROLL_PTR_LEN,
+                           false);
+
+    /* This check reminds that if a new system column is added to
+    the program, it should be dealt with here */
+  }
+}
+```
+
+
+
+
+
+
+
+```c
+// trx0sys.h
+/** The transaction system central memory data structure. */
+struct trx_sys_t {  
+	TrxSysMutex mutex;
+  
+  MVCC *mvcc; /** Multi version concurrency control manager */
+ 
+  /** Minimum trx->id of active RW transactions (minimum in the rw_trx_ids).
+  Protected by the trx_sys_t::mutex but might be read without the mutex. */
+  std::atomic<trx_id_t> min_active_trx_id;
+  
+  std::atomic<trx_id_t> rw_max_trx_id; /** Max trx id of read-write transactions which exist or existed. */
+  
+ /** Array of Read write transaction IDs for MVCC snapshot. A ReadView would
+  take a snapshot of these transactions whose changes are not visible to it.
+  We should remove transactions from the list before committing in memory and
+  releasing locks to ensure right order of removal and consistent snapshot. */
+  trx_ids_t rw_trx_ids;
+  
+  Rsegs rsegs; /** Vector of pointers to rollback segments. */
+  // ...
+ };
+```
+
+
+
+
+
+```c
+// read0read.h
+/** The MVCC read view manager */
+class MVCC {
+ 
+  public:
+  void view_open(ReadView *&view, trx_t *trx);
+
+  void view_close(ReadView *&view, bool own_mutex);
+
+  void view_release(ReadView *&view);
+
+  void clone_oldest_view(ReadView *view);
+
+  static bool is_view_active(ReadView *view) {
+    ut_a(view != reinterpret_cast<ReadView *>(0x1));
+    return (view != nullptr && !(intptr_t(view) & 0x1));
+  }
+  
+ private:
+  typedef UT_LIST_BASE_NODE_T(ReadView, m_view_list) view_list_t;
+
+  /** Free views ready for reuse. */
+  view_list_t m_free;
+
+  /** Active and closed views, the closed views will have the
+  creator trx id set to TRX_ID_MAX */
+  view_list_t m_views;
+}
+```
+
+
+
+```c
+// read0types.h
+/** Read view lists the trx ids of those transactions for which a consistent
+read should not see the modifications to the database. */
+class ReadView {
+
+ private:
+  /** The read should not see any transaction with trx id >= this
+  value. In other words, this is the "high water mark". */
+  trx_id_t m_low_limit_id;
+
+  /** The read should see all trx ids which are strictly
+  smaller (<) than this value.  In other words, this is the
+  low water mark". */
+  trx_id_t m_up_limit_id;
+
+  /** trx id of creating transaction, set to TRX_ID_MAX for free
+  views. */
+  trx_id_t m_creator_trx_id;
+
+  /** Set of RW transactions that was active when this snapshot
+  was taken */
+  ids_t m_ids;
+
+  /** The view does not need to see the undo logs for transactions
+  whose transaction number is strictly smaller (<) than this value:
+  they can be removed in purge if not needed by other views */
+  trx_id_t m_low_limit_no;
+
+#ifdef UNIV_DEBUG
+  /** The low limit number up to which read views don't need to access
+  undo log records for MVCC. This could be higher than m_low_limit_no
+  if purge is blocked for GTID persistence. Currently used for debug
+  variable INNODB_PURGE_VIEW_TRX_ID_AGE. */
+  trx_id_t m_view_low_limit_no;
+#endif /* UNIV_DEBUG */
+
+  /** AC-NL-RO transaction view that has been "closed". */
+  bool m_closed;
+}
+```
+
+
+
+
+
+```cpp
+
+/**
+Opens a read view where exactly the transactions serialized before this
+point in time are seen in the view.
+@param id		Creator transaction id */
+
+void ReadView::prepare(trx_id_t id) {
+  ut_ad(trx_sys_mutex_own());
+
+  m_creator_trx_id = id;
+
+  m_low_limit_no = trx_get_serialisation_min_trx_no();
+
+  m_low_limit_id = trx_sys_get_next_trx_id_or_no();
+
+  ut_a(m_low_limit_no <= m_low_limit_id);
+
+  if (!trx_sys->rw_trx_ids.empty()) {
+    copy_trx_ids(trx_sys->rw_trx_ids);
+  } else {
+    m_ids.clear();
+  }
+
+  /* The first active transaction has the smallest id. */
+  m_up_limit_id = !m_ids.empty() ? m_ids.front() : m_low_limit_id;
+
+  ut_a(m_up_limit_id <= m_low_limit_id);
+
+  ut_d(m_view_low_limit_no = m_low_limit_no);
+  m_closed = false;
+}
+```
 
 
 

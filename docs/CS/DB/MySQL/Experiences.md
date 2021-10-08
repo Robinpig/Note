@@ -1,8 +1,4 @@
-# Experiences
-
-
-
-
+## Configurations
 
 ### Forgot password
 
@@ -13,10 +9,6 @@
 #Mariadb 
 >/bin/mysqld_safe --skip-grant-tables&
 ```
-
-
-
-
 
 2. Rest password
 
@@ -31,6 +23,10 @@ MariaDB [mysql]> exit;
 
 
 3. Restart db as normal
+
+
+
+## Using
 
 
 ### Search Limit
