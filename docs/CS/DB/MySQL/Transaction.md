@@ -6,6 +6,8 @@ To implement a large-scale, busy, or highly reliable database application, to po
 
 ## InnoDB and the ACID Model
 
+The `InnoDB` transaction model aims combine the best properties of a multi-versioning database with traditional two-phase locking. `InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read) by default, in the style of Oracle. The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed. Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
+
 The following sections discuss how MySQL features, in particular the `InnoDB` storage engine, interact with the categories of the ACID model:
 
 ### Atomicity
@@ -74,11 +76,9 @@ For locking reads (SELECT with FOR UPDATE or LOCK IN SHARE MODE), UPDATE, and DE
 - For a unique index with a unique search condition, InnoDB locks only the index record found, not the gap before it.
 - For other search conditions, InnoDB locks the index range scanned, using gap locks or next-key locks to block insertions by other sessions into the gaps covered by the range.
 
-## InnoDB Transaction Model
-
-The `InnoDB` transaction model aims combine the best properties of a multi-versioning database with traditional two-phase locking. `InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read) by default, in the style of Oracle. The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed. Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
-
 ## Locking
+
+### Locking Types
 
 #### Shared and Exclusive Locks
 
@@ -165,11 +165,11 @@ An `AUTO-INC` lock is a special table-level lock taken by transactions inserting
 
 The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking. It allows you to choose how to trade off between predictable sequences of auto-increment values and maximum concurrency for insert operations.
 
-## Deadlocks
+### Deadlocks
 
 A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs. Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
 
-### Minimize and Handle Deadlocks
+#### Minimize and Handle Deadlocks
 
 You can cope with deadlocks and reduce the likelihood of their occurrence with the following techniques:
 
@@ -199,7 +199,7 @@ You can cope with deadlocks and reduce the likelihood of their occurrence with t
 
 
 
-### Deadlock Detection
+#### Deadlock Detection
 
 A mechanism that automatically detects when a **deadlock** occurs, and automatically **rolls back** one of the **transactions** involved (the **victim**). Deadlock detection can be disabled using the `innodb_deadlock_detect` configuration option.
 
