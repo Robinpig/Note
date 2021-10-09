@@ -2,15 +2,12 @@
 
 [MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
 
-## Install
+## [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
 ```shell
 cat /etc/sysconfig/selinux
 
 ```
-
-### upgrade
-
 
 
 ## databases
@@ -49,32 +46,6 @@ innodb_adaptive_hash_index ON
   - my.cnf
 - data
 
-
-## Transaction
-
-**Implement on engine layer, and only innodb support transaction.**
-
-- Atomicity
-- Consistency
-- Isolation
-- Durability
-
-
-
-Isolation Problem
-
-- Dirty read
-- Non-repeatable read
-- Phantom read
-
-
-
-Isolation level
-
-- Read uncommitted
-- Read committed default in Oracle SQL server, only see committed data from other transactions
-- Repetable read **default level in MySQL**, and use MVCC avoid Phantom read
-- Serializable
 
 
 
@@ -123,54 +94,6 @@ Storage engines are MySQL components that handle the SQL operations for differen
 ### [The InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
 
 ### [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
-
-
-
-
-### 锁机制：
-  三级封锁协议
-     
-
- - 写与写互斥 防止数据覆盖
- - 读不允许写 防止脏读
- - 读不允许写 防止不可重复读
-
-  两段锁协议
-
- - 加锁与解锁分成两个阶段
-
- 意向锁都是表级锁 相互兼容
-### 数据库优化
-限制查询 少用*
-读写分离 主库写 从库查
-垂直分区 数据表列拆分 拆成多表 对事务要求更复杂
-    MySQL分区表 物理上为多文件 逻辑上为一个表 跨分区查询效率低 建议采用物理分表
-水平分区 分库 事务逻辑复杂
-
-#### 数据库字段设计规范
-
-- 字符串转换成数字类型存储 IP地址 inet_aton inet_ntoa 
-- 非负数数据（如自增ID）优先无符号整型
-- 避免使用TEXT BLOB 大数据 内存临时表不支持 只能磁盘临时表 只能前缀索引 
-- 避免使用ENUM 操作复杂
-- 尽可能所有列都为非空 索引NULL列需要额外空间 比较计算也要特殊处理
-- 存储时间不用字符串 占用更大空间 无法直接比较
-- 财务金额使用decimal
-
-  #### 索引设计规范
-- 限制每张表上的索引数量,建议单张表索引不超过 5 个
-- 禁止给表中的每一列都建立单独的索引
-- 每个 Innodb 表必须有个主键
-- 频繁的查询优先考虑使用覆盖索引 避免 Innodb 表进行索引的二次查询  随机 IO 变成顺序 IO 
-- 尽量避免使用外键约束
-- 避免使用子查询，可以把子查询优化为 join 操作
-- 避免使用 JOIN 关联太多的表
-- 减少同数据库的交互次数
-- 对应同一列进行 or 判断时，使用 in 代替 or
-- WHERE 从句中禁止对列进行函数转换和计算
-
-
-
 
 
 
@@ -243,7 +166,6 @@ slow_query_log_file	demo-slow.log
 ### general log
 log_output	FILE
 
-##
 
 show status
 
@@ -251,8 +173,7 @@ explain
 
 show profiles
 show profile
+
     show profile source for
 
-## Optimization
-
-[Optimization](/docs/CS/DB/MySQL/Optimization.md) involves configuring, tuning, and measuring performance, at several levels. Depending on your job role (developer, DBA, or a combination of both), you might optimize at the level of individual SQL statements, entire applications, a single database server, or multiple networked database servers. Sometimes you can be proactive and plan in advance for performance, while other times you might troubleshoot a configuration or code issue after a problem occurs. Optimizing CPU and memory usage can also improve scalability, allowing the database to handle more load without slowing down.
+## [Optimization](/docs/CS/DB/MySQL/Optimization.md)

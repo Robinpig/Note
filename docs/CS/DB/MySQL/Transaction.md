@@ -59,7 +59,7 @@ Transactions running at the `READ UNCOMMITTED` level **do not issue shared locks
 
 Each consistent read, even within the same transaction, sets and reads its own fresh snapshot. 
 
-Because gap locking is disabled, `phantom row` problems may occur, as other sessions can insert new rows into the gaps. 
+**Because gap locking is disabled, `phantom row` problems may occur, as other sessions can insert new rows into the gaps**. 
 
 Only row-based binary logging is supported with the `READ COMMITTED` isolation level. If you use `READ COMMITTED` with [`binlog_format=MIXED`](https://dev.mysql.com/doc/refman/8.0/en/replication-options-binary-log.html#sysvar_binlog_format), the server automatically uses row-based logging.
 
@@ -153,7 +153,7 @@ There are also other effects of using the `READ COMMITTED` isolation level. Reco
 
 For the last interval, the next-key lock locks the gap above the largest value in the index and the “supremum” pseudo-record having a value higher than any value actually in the index. The supremum is not a real index record, so, in effect, this next-key lock locks only the gap following the largest index value.
 
-By default, `InnoDB` operates in `REPEATABLE READ` transaction isolation level. In this case, `InnoDB` uses next-key locks for searches and index scans, which prevents [phantom rows](/docs/CS/Transaction.md?id=phantom-read).
+By default, `InnoDB` operates in `REPEATABLE READ` transaction isolation level. In this case, **`InnoDB` uses next-key locks for searches and index scans, which prevents `phantom rows`**.
 
 #### Insert Intention Locks
 
@@ -438,9 +438,9 @@ class ReadView {
 }
 ```
 
+#### ReadView
 
-
-
+row_search_mvcc -> trx_assign_read_view -> MVCC::view_open -> ReadView::prepare
 
 ```cpp
 
@@ -508,6 +508,48 @@ void ReadView::prepare(trx_id_t id) {
     return (!std::binary_search(p, p + m_ids.size(), id));
   }
 ```
+
+
+
+```c
+
+/** Updates a record when the update causes no size changes in its fields.  */
+dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
+                                const upd_t *update, ulint cmpl_info,
+                                que_thr_t *thr, trx_id_t trx_id, mtr_t *mtr) {
+ 
+  rec = btr_cur_get_rec(cursor);
+  
+  // ...
+  /* The insert buffer tree should never be updated in place. */
+  // ...
+  
+  /* Check that enough space is available on the compressed page. */
+ // ...
+
+  /* Do lock checking and undo logging */
+  err = btr_cur_upd_lock_and_undo(flags, cursor, offsets, update, cmpl_info,
+                                  thr, mtr, &roll_ptr);
+
+  if (!(flags & BTR_KEEP_SYS_FLAG) && !index->table->is_intrinsic()) {
+    // update trx_id, roll_ptr
+    row_upd_rec_sys_fields(rec, nullptr, index, offsets, thr_get_trx(thr),
+                           roll_ptr);
+  }
+
+  // ...
+  row_upd_rec_in_place(rec, index, offsets, update, page_zip);
+
+ // ...
+  
+  // write redo log
+  btr_cur_update_in_place_log(flags, rec, index, update, trx_id, roll_ptr, mtr);
+
+  return (err);
+}
+```
+
+
 
 
 
