@@ -53,11 +53,11 @@ The **durability** aspect of the ACID model involves MySQL software features int
 ### Transaction Isolation Levels
 
 #### READ UNCOMMITTED
-Transactions running at the `READ UNCOMMITTED` level **do not issue shared locks to prevent other transactions from modifying data read by the current transaction**. `READ UNCOMMITTED` transactions are also not blocked by exclusive locks that would prevent the current transaction from reading rows that have been modified but not committed by other transactions. When this option is set, it is possible to read uncommitted modifications, which are called dirty reads. Values in the data can be changed and rows can appear or disappear in the data set before the end of the transaction. **This option has the same effect as setting NOLOCK on all tables in all SELECT statements in a transaction.** This is the least restrictive of the isolation levels.
+Transactions running at the `READ UNCOMMITTED` level **do not issue shared locks to prevent other transactions from modifying data read by the current transaction**. `READ UNCOMMITTED` transactions are also not blocked by exclusive locks that would prevent the current transaction from reading rows that have been modified but not committed by other transactions.  **This option has the same effect as setting NOLOCK on all tables in all SELECT statements in a transaction.** 
 
 #### READ COMMITTED
 
-Each consistent read, even within the same transaction, sets and reads its own fresh snapshot. 
+Each consistent read, even within the same transaction, sets and reads its own **fresh snapshot.** 
 
 **Because gap locking is disabled, `phantom row` problems may occur, as other sessions can insert new rows into the gaps**. 
 
@@ -79,6 +79,12 @@ For locking reads (SELECT with FOR UPDATE or LOCK IN SHARE MODE), UPDATE, and DE
 ## Locking
 
 ### Locking Types
+
+```mysql
+mysql> select * from information_schema.innodb_locks;
+```
+
+
 
 #### Shared and Exclusive Locks
 
@@ -157,7 +163,7 @@ By default, `InnoDB` operates in `REPEATABLE READ` transaction isolation level. 
 
 #### Insert Intention Locks
 
-An insert intention lock is a type of gap lock set by `INSERT` operations prior to row insertion. This lock signals the intent to insert in such a way that multiple transactions inserting into the same index gap need not wait for each other if they are not inserting at the same position within the gap. Suppose that there are index records with values of 4 and 7. Separate transactions that attempt to insert values of 5 and 6, respectively, each lock the gap between 4 and 7 with insert intention locks prior to obtaining the exclusive lock on the inserted row, but do not block each other because the rows are nonconflicting.
+**An insert intention lock is a type of gap lock set by `INSERT` operations prior to row insertion**. This lock signals the intent to insert in such a way that multiple transactions inserting into the same index gap need not wait for each other if they are not inserting at the same position within the gap. Suppose that there are index records with values of 4 and 7. Separate transactions that attempt to insert values of 5 and 6, respectively, each lock the gap between 4 and 7 with insert intention locks prior to obtaining the exclusive lock on the inserted row, but do not block each other because the rows are nonconflicting.
 
 #### AUTO-INC Locks
 
@@ -557,4 +563,5 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
 
 1. [How does a relational database work](https://vladmihalcea.com/how-does-a-relational-database-work/)
 2. [Detailed explanation of MySQL mvcc mechanism](https://developpaper.com/detailed-explanation-of-mysql-mvcc-mechanism/)
+3. [解决死锁之路 - 学习事务与隔离级别](https://www.aneasystone.com/archives/2017/10/solving-dead-locks-one.html)
 

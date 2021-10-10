@@ -50,6 +50,18 @@ typedef struct dictType {
 } dictType;
 ```
 
+final struct dict
+```c
+// dict.c
+typedef struct dict {
+    dictType *type;
+    void *privdata;
+    dictht ht[2];
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    unsigned long iterators; /* number of iterators currently running */
+} dict;
+```
+
 ### siphash
 
 

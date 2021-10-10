@@ -1,9 +1,5 @@
 ## Introduction
 
-
-
-
-
 ```c
 typedef struct list {
     listNode *head;
@@ -15,7 +11,6 @@ typedef struct list {
 } list;
 
 /* Node, List, and Iterator are the only data structures used currently. */
-
 typedef struct listNode {
     struct listNode *prev;
     struct listNode *next;
