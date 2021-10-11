@@ -210,7 +210,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
 }
 ```
 
-call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind) to find dictEntry, then update lfu or lru access time
+call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind) to find dictEntry, then **update lfu or lru access time**
 
 ```c
 // db.c

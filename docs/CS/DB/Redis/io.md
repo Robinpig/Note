@@ -1,6 +1,5 @@
 ## Introduction
 
-
 ```c
 // bio.h
 /* Background job opcodes */
@@ -9,7 +8,6 @@
 #define BIO_LAZY_FREE     2 /* Deferred objects freeing. */
 #define BIO_NUM_OPS       3
 ```
-
 
 ```c
 // bio.c
@@ -25,6 +23,7 @@ struct bio_job {
 ```
 
 job queue
+
 ```c
 
 
@@ -35,18 +34,22 @@ static pthread_cond_t bio_step_cond[BIO_NUM_OPS];
 static list *bio_jobs[BIO_NUM_OPS];
 ```
 
-The following array is used to hold the number of pending jobs for every OP type. This allows us to export the bioPendingJobsOfType() API that is useful when the main thread wants to perform some operation that may involve objects shared with the background thread. The main thread will just wait that there are no longer jobs of this type to be executed before performing the sensible operation. This data is also useful for reporting.
+The following array is used to hold the number of pending jobs for every OP type. This allows us to export the
+bioPendingJobsOfType() API that is useful when the main thread wants to perform some operation that may involve objects
+shared with the background thread. The main thread will just wait that there are no longer jobs of this type to be
+executed before performing the sensible operation. This data is also useful for reporting.
+
 ```c
 
 static unsigned long long bio_pending[BIO_NUM_OPS];
 ```
-
 
 called by [InitServerLast](/docs/CS/DB/Redis/start.md?id=InitServerLast)
 
 pthread_create
 
 invoke `bioProcessBackgroundJobs`
+
 ```c
 
 /* Initialize the background system, spawning the thread. */
@@ -182,6 +185,7 @@ void *bioProcessBackgroundJobs(void *arg) {
 ```
 
 create job
+
 ```c
 
 void bioCreateFsyncJob(int fd) {
@@ -203,6 +207,7 @@ void bioSubmitJob(int type, struct bio_job *job) {
 ```
 
 lazy free
+
 ```c
 
 void bioCreateLazyFreeJob(lazy_free_fn free_fn, int arg_count, ...) {
@@ -218,5 +223,203 @@ void bioCreateLazyFreeJob(lazy_free_fn free_fn, int arg_count, ...) {
     }
     va_end(valist);
     bioSubmitJob(BIO_LAZY_FREE, job);
+}
+```
+
+```c
+
+struct redisServer {
+  /* Lazy free */
+    int lazyfree_lazy_eviction;
+    int lazyfree_lazy_expire;
+    int lazyfree_lazy_server_del;
+    int lazyfree_lazy_user_del;
+    int lazyfree_lazy_user_flush;
+    // ...
+    }
+```
+
+```config
+// redis.conf
+lazyfree-lazy-eviction no
+lazyfree-lazy-expire no
+lazyfree-lazy-server-del no
+replica-lazy-flush no
+```
+
+Return the amount of work needed in order to free an object. 
+
+- The return value is not always the actual number of allocations the object is composed of, but a number proportional to it. 
+- For strings the function always returns 1. 
+- For aggregated objects represented by hash tables or other data structures the function just returns the number of elements the object is composed of. 
+- Objects composed of single allocations are always reported as having a single item even if they are actually logical composed of multiple elements. 
+- For lists the function returns the number of elements in the quicklist representing the list.
+```c
+// lazyfree.c
+
+
+/* Delete a key, value, and associated expiration entry if any, from the DB.
+ * If there are enough allocations to free the value object may be put into
+ * a lazy free list instead of being freed synchronously. The lazy free list
+ * will be reclaimed in a different bio.c thread. */
+#define LAZYFREE_THRESHOLD 64
+
+size_t lazyfreeGetFreeEffort(robj *key, robj *obj) {
+    if (obj->type == OBJ_LIST) {
+        quicklist *ql = obj->ptr;
+        return ql->len;
+    } else if (obj->type == OBJ_SET && obj->encoding == OBJ_ENCODING_HT) {
+        dict *ht = obj->ptr;
+        return dictSize(ht);
+    } else if (obj->type == OBJ_ZSET && obj->encoding == OBJ_ENCODING_SKIPLIST){
+        zset *zs = obj->ptr;
+        return zs->zsl->length;
+    } else if (obj->type == OBJ_HASH && obj->encoding == OBJ_ENCODING_HT) {
+        dict *ht = obj->ptr;
+        return dictSize(ht);
+    } else if (obj->type == OBJ_STREAM) {
+        size_t effort = 0;
+        stream *s = obj->ptr;
+
+        /* Make a best effort estimate to maintain constant runtime. Every macro
+         * node in the Stream is one allocation. */
+        effort += s->rax->numnodes;
+
+        /* Every consumer group is an allocation and so are the entries in its
+         * PEL. We use size of the first group's PEL as an estimate for all
+         * others. */
+        if (s->cgroups && raxSize(s->cgroups)) {
+            raxIterator ri;
+            streamCG *cg;
+            raxStart(&ri,s->cgroups);
+            raxSeek(&ri,"^",NULL,0);
+            /* There must be at least one group so the following should always
+             * work. */
+            serverAssert(raxNext(&ri));
+            cg = ri.data;
+            effort += raxSize(s->cgroups)*(1+raxSize(cg->pel));
+            raxStop(&ri);
+        }
+        return effort;
+    } else if (obj->type == OBJ_MODULE) {
+        moduleValue *mv = obj->ptr;
+        moduleType *mt = mv->type;
+        if (mt->free_effort != NULL) {
+            size_t effort  = mt->free_effort(key,mv->value);
+            /* If the module's free_effort returns 0, it will use asynchronous free
+             memory by default */
+            return effort == 0 ? ULONG_MAX : effort;
+        } else {
+            return 1;
+        }
+    } else {
+        return 1; /* Everything else is a single allocation. */
+    }
+}
+```
+
+
+```c
+int dbAsyncDelete(redisDb *db, robj *key) {
+    /* Deleting an entry from the expires dict will not free the sds of
+     * the key, because it is shared with the main dictionary. */
+    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+
+    /* If the value is composed of a few allocations, to free in a lazy way
+     * is actually just slower... So under a certain limit we just free
+     * the object synchronously. */
+    dictEntry *de = dictUnlink(db->dict,key->ptr);
+    if (de) {
+        robj *val = dictGetVal(de);
+
+        /* Tells the module that the key has been unlinked from the database. */
+        moduleNotifyKeyUnlink(key,val);
+
+        size_t free_effort = lazyfreeGetFreeEffort(key,val);
+
+        /* If releasing the object is too much work, do it in the background
+         * by adding the object to the lazy free list.
+         * Note that if the object is shared, to reclaim it now it is not
+         * possible. This rarely happens, however sometimes the implementation
+         * of parts of the Redis core may call incrRefCount() to protect
+         * objects, and then call dbDelete(). In this case we'll fall
+         * through and reach the dictFreeUnlinkedEntry() call, that will be
+         * equivalent to just calling decrRefCount(). */
+        if (free_effort > LAZYFREE_THRESHOLD && val->refcount == 1) {
+            atomicIncr(lazyfree_objects,1);
+            bioCreateLazyFreeJob(lazyfreeFreeObject,1, val);
+            dictSetVal(db->dict,de,NULL);
+        }
+    }
+
+    /* Release the key-val pair, or just the key if we set the val
+     * field to NULL in order to lazy free it later. */
+    if (de) {
+        dictFreeUnlinkedEntry(db->dict,de);
+        if (server.cluster_enabled) slotToKeyDel(key->ptr);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
+
+/* Free an object, if the object is huge enough, free it in async way. */
+void freeObjAsync(robj *key, robj *obj) {
+    size_t free_effort = lazyfreeGetFreeEffort(key,obj);
+    if (free_effort > LAZYFREE_THRESHOLD && obj->refcount == 1) {
+        atomicIncr(lazyfree_objects,1);
+        bioCreateLazyFreeJob(lazyfreeFreeObject,1,obj);
+    } else {
+        decrRefCount(obj);
+    }
+}
+```
+
+compare with dbSyncDelete
+```c
+// db.c
+
+/* Delete a key, value, and associated expiration entry if any, from the DB */
+int dbSyncDelete(redisDb *db, robj *key) {
+    /* Deleting an entry from the expires dict will not free the sds of
+     * the key, because it is shared with the main dictionary. */
+    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+    dictEntry *de = dictUnlink(db->dict,key->ptr);
+    if (de) {
+        robj *val = dictGetVal(de);
+        /* Tells the module that the key has been unlinked from the database. */
+        moduleNotifyKeyUnlink(key,val);
+        dictFreeUnlinkedEntry(db->dict,de);
+        if (server.cluster_enabled) slotToKeyDel(key->ptr);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+```
+Empty the slots-keys map of Redis CLuster by **creating a new empty one and freeing the old one**.
+```c
+// db.c
+void slotToKeyFlush(int async) {
+    rax *old = server.cluster->slots_to_keys;
+
+    server.cluster->slots_to_keys = raxNew();
+    memset(server.cluster->slots_keys_count,0,
+           sizeof(server.cluster->slots_keys_count));
+    freeSlotsToKeysMap(old, async);
+}
+```
+
+
+Empty a Redis DB asynchronously. What the function does actually is to **create a new empty set of hash tables and scheduling the old ones for lazy freeing**. 
+```c
+void emptyDbAsync(redisDb *db) {
+    dict *oldht1 = db->dict, *oldht2 = db->expires;
+    db->dict = dictCreate(&dbDictType,NULL);
+    db->expires = dictCreate(&dbExpiresDictType,NULL);
+    atomicIncr(lazyfree_objects,dictSize(oldht1));
+    bioCreateLazyFreeJob(lazyfreeFreeDatabase,2,oldht1,oldht2);
 }
 ```
