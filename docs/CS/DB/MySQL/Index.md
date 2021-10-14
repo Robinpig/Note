@@ -10,7 +10,7 @@ Although a B-tree index is the most common, a different kind of data structure i
 
 Most MySQL indexes (`PRIMARY KEY`, `UNIQUE`, `INDEX`, and `FULLTEXT`) are stored in `B-trees`. Exceptions: Indexes on spatial data types use `R-trees`; `MEMORY` tables also support `hash indexes`; `InnoDB` uses inverted lists for `FULLTEXT` indexes.
 
-#### adaptive hash index
+### Adaptive Hash Index
 
 An optimization for `InnoDB` tables that can speed up lookups using `=` and `IN` operators, by constructing a **hash index** in memory. MySQL monitors index searches for `InnoDB` tables, and if queries could benefit from a hash index, it builds one automatically for index **pages** that are frequently accessed. In a sense, the adaptive hash index configures MySQL at runtime to take advantage of ample main memory, coming closer to the architecture of main-memory databases. This feature is controlled by the `innodb_adaptive_hash_index` configuration option. Because this feature benefits some workloads and not others, and the memory used for the hash index is reserved in the **buffer pool**, typically you should benchmark with this feature both enabled and disabled.
 

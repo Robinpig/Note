@@ -44,26 +44,5 @@ The LSN became an **8-byte unsigned integer** in MySQL 5.6.3 when the redo log f
 > An InnoDB optimization that performs some low-level I/O operations (log write) once for a set of `commit` operations, rather than flushing and syncing separately for each commit.
 
 
-### Log buffer
+## [Log Buffer](/docs/CS/DB/MySQL/memory.md?id=Log_buffer)
 
-The log buffer is the memory area that holds data to be written to the log files on disk. 
-Log buffer size is defined by the `innodb_log_buffer_size` variable. The default size is 16MB. The contents of the log buffer are periodically flushed to disk. A large log buffer enables large transactions to run without the need to write `redo log` data to disk before the transactions commit. Thus, if you have transactions that update, insert, or delete many rows, increasing the size of the log buffer saves disk I/O.
-
-```mysql
-mysql> show variables like 'innodb_log_buffer_size';
-innodb_log_buffer_size	16777216 -- 16M
-```
-
-
-The `innodb_flush_log_at_trx_commit` variable controls how the contents of the log buffer are written and flushed to disk. 
-
-```mysql
-mysql> show variables like 'innodb_flush_log_at_trx_commit';
-innodb_flush_log_at_trx_commit	1
-```
-The `innodb_flush_log_at_timeout` variable controls log flushing frequency.
-
-```mysql
-mysql> show variables like 'innodb_flush_log_at_timeout';
-innodb_flush_log_at_timeout	1
-```

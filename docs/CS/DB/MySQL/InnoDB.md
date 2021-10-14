@@ -48,12 +48,8 @@ The following diagram shows in-memory and on-disk structures that comprise the `
 
 ![InnoDB architecture diagram showing in-memory and on-disk structures. In-memory structures include the buffer pool, adaptive hash index, change buffer, and log buffer. On-disk structures include tablespaces, redo logs, and doublewrite buffer files.](https://dev.mysql.com/doc/refman/8.0/en/images/innodb-architecture.png)
 
-### InnoDB In-Memory Structures
+### [InnoDB In-Memory Structures](/docs/CS/DB/MySQL/memory.md)
 
-- [15.5.1 Buffer Pool](https://dev.mysql.com/doc/refman/8.0/en/innodb-buffer-pool.html)
-- [15.5.2 Change Buffer](https://dev.mysql.com/doc/refman/8.0/en/innodb-change-buffer.html)
-- [15.5.3 Adaptive Hash Index](https://dev.mysql.com/doc/refman/8.0/en/innodb-adaptive-hash.html)
-- [15.5.4 Log Buffer](https://dev.mysql.com/doc/refman/8.0/en/innodb-redo-log-buffer.html)
 
 ### InnoDB On-Disk Structures
 
