@@ -171,6 +171,66 @@ An `AUTO-INC` lock is a special table-level lock taken by transactions inserting
 
 The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking. It allows you to choose how to trade off between predictable sequences of auto-increment values and maximum concurrency for insert operations.
 
+
+#### Source Code
+```cpp
+
+/** Lock modes and types */
+/** @{ */
+#define LOCK_MODE_MASK                          \
+  0xFUL /*!< mask used to extract mode from the \
+        type_mode field in a lock */
+/** Lock types */
+#define LOCK_TABLE 16 /*!< table lock */
+#define LOCK_REC 32   /*!< record lock */
+#define LOCK_TYPE_MASK                                \
+  0xF0UL /*!< mask used to extract lock type from the \
+         type_mode field in a lock */
+#if LOCK_MODE_MASK & LOCK_TYPE_MASK
+#error "LOCK_MODE_MASK & LOCK_TYPE_MASK"
+#endif
+
+#define LOCK_WAIT                          \
+  256 /*!< Waiting lock flag; when set, it \
+      means that the lock has not yet been \
+      granted, it is just waiting for its  \
+      turn in the wait queue */
+/* Precise modes */
+#define LOCK_ORDINARY                     \
+  0 /*!< this flag denotes an ordinary    \
+    next-key lock in contrast to LOCK_GAP \
+    or LOCK_REC_NOT_GAP */
+#define LOCK_GAP                                     \
+  512 /*!< when this bit is set, it means that the   \
+      lock holds only on the gap before the record;  \
+      for instance, an x-lock on the gap does not    \
+      give permission to modify the record on which  \
+      the bit is set; locks of this type are created \
+      when records are removed from the index chain  \
+      of records */
+#define LOCK_REC_NOT_GAP                            \
+  1024 /*!< this bit means that the lock is only on \
+       the index record and does NOT block inserts  \
+       to the gap before the index record; this is  \
+       used in the case when we retrieve a record   \
+       with a unique key, and is also used in       \
+       locking plain SELECTs (not part of UPDATE    \
+       or DELETE) when the user has set the READ    \
+       COMMITTED isolation level */
+#define LOCK_INSERT_INTENTION                                             \
+  2048                       /*!< this bit is set when we place a waiting \
+                          gap type record lock request in order to let    \
+                          an insert of an index record to wait until      \
+                          there are no conflicting locks by other         \
+                          transactions on the gap; note that this flag    \
+                          remains set when the waiting lock is granted,   \
+                          or if the lock is inherited to a neighboring    \
+                          record */
+#define LOCK_PREDICATE 8192  /*!< Predicate lock */
+#define LOCK_PRDT_PAGE 16384 /*!< Page lock */
+```
+
+
 ### Deadlocks
 
 A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs. Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
@@ -180,7 +240,8 @@ A deadlock is a situation where different transactions are unable to proceed bec
 You can cope with deadlocks and reduce the likelihood of their occurrence with the following techniques:
 
 - At any time, issue `SHOW ENGINE INNODB STATUS` to determine the cause of the most recent deadlock. That can help you to tune your application to avoid deadlocks.
-
+- `SHOW FULL PROCESSLIST`
+- table `INNODB_TRX`, `INNODB_LOCKS`, `INNODB_LOCK_WAITS` in information_schema
 - If frequent deadlock warnings cause concern, collect more extensive debugging information by enabling the `innodb_print_all_deadlocks` variable. Information about each deadlock, not just the latest one, is recorded in the MySQL [error log](). Disable this option when you are finished debugging.
 
 - Always be prepared to re-issue a transaction if it fails due to deadlock. Deadlocks are not dangerous. Just try again.

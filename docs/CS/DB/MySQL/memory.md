@@ -7,6 +7,11 @@ For efficiency of high-volume read operations, the buffer pool is divided into p
 
 Knowing how to take advantage of the buffer pool to keep frequently accessed data in memory is an important aspect of MySQL tuning.
 
+
+```mysql
+mysql> SELECT * FROM information_schema.INNODB_BUFFER_POOL_STATS;
+```
+
 ### Buffer Pool LRU Algorithm
 The buffer pool is managed as a list using a variation of the LRU algorithm. When room is needed to add a new page to the buffer pool, the least recently used page is evicted and a new page is added to the middle of the list. This midpoint insertion strategy treats the list as two sublists:
 
@@ -36,10 +41,38 @@ You can control the insertion point in the LRU list and choose whether `InnoDB` 
 The optimization that keeps the buffer pool from being churned by read-ahead can avoid similar problems due to table or index scans. In these scans, a data page is typically accessed a few times in quick succession and is never touched again. The configuration parameter [`innodb_old_blocks_time`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_old_blocks_time) specifies the time window (in milliseconds) after the first access to a page during which it can be accessed without being moved to the front (most-recently used end) of the LRU list. The default value of [`innodb_old_blocks_time`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_old_blocks_time) is `1000`. Increasing this value makes more and more blocks likely to age out faster from the buffer pool.
 
 
-free list
 
-flush list
+LRU list
 
+```mysql
+mysql> SELECT TABLE_NAME,PAGE_NUMBER,PAGE_TYPE,INDEX_NAME,SPACE FROM information_schema.INNODB_BUFFER_PAGE_LRU WHERE SPACE = 1;
+```
+
+Free List
+
+
+Flush List
+```mysql
+mysql> SELECT COUNT(*) FROM information_schema.INNODB_BUFFER_PAGE_LRU  WHERE OLDEST_MODIFICATION > 0;
+```
+
+```
+// using SHOW ENGINE INNODB STATUS;
+Modified db pages
+```
+
+
+checkpoint
+
+```
+Log sequence number
+```
+
+
+```
+innodb_max_dirty_pages_pct	75.000000
+innodb_max_dirty_pages_pct_lwm	0.000000
+```
 
 ### Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
 

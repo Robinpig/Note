@@ -46,42 +46,6 @@ innodb_old_blocks_pct 37  -- 3/8
 innodb_old_blocks_time	1000
 
 
-buffer pool
-```mysql
-mysql> SELECT * FROM information_schema.INNODB_BUFFER_POOL_STATS;
-```
-
-LRU list
-
-```mysql
-mysql> SELECT TABLE_NAME,PAGE_NUMBER,PAGE_TYPE,INDEX_NAME,SPACE FROM information_schema.INNODB_BUFFER_PAGE_LRU WHERE SPACE = 1;
-```
-
-Free List
-
-
-Flush List
-```mysql
-mysql> SELECT COUNT(*) FROM information_schema.INNODB_BUFFER_PAGE_LRU  WHERE OLDEST_MODIFICATION > 0;
-```
-
-```
-// using SHOW ENGINE INNODB STATUS;
-Modified db pages
-```
-
-
-checkpoint
-
-```
-Log sequence number
-```
-
-
-```
-innodb_max_dirty_pages_pct	75.000000
-innodb_max_dirty_pages_pct_lwm	0.000000
-```
 
 ### Threads
 Master
@@ -129,7 +93,7 @@ void srv_master_thread() {
 }
 ```
 
-
+#### main loop
 ```cpp
 
 /** Executes the main loop of the master thread.
@@ -184,7 +148,78 @@ static void srv_master_main_loop(srv_slot_t *slot) {
   }
 }
 ```
+#### srv_master_do_active_tasks
+```cpp
 
+/** Perform the tasks that the master thread is supposed to do when the
+ server is active. There are two types of tasks. The first category is
+ of such tasks which are performed at each inovcation of this function.
+ We assume that this function is called roughly every second when the
+ server is active. The second category is of such tasks which are
+ performed at some interval e.g.: purge, dict_LRU cleanup etc. */
+static void srv_master_do_active_tasks(void) {
+  const auto cur_time = ut_time_monotonic();
+  auto counter_time = ut_time_monotonic_us();
+
+  /* First do the tasks that we are suppose to do at each
+  invocation of this function. */
+
+  ++srv_main_active_loops;
+
+  MONITOR_INC(MONITOR_MASTER_ACTIVE_LOOPS);
+
+  /* ALTER TABLE in MySQL requires on Unix that the table handler
+  can drop tables lazily after there no longer are SELECT
+  queries to them. */
+  srv_main_thread_op_info = "doing background drop tables";
+  row_drop_tables_for_mysql_in_background();
+  MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_BACKGROUND_DROP_TABLE_MICROSECOND,
+                                 counter_time);
+
+  ut_d(srv_master_do_disabled_loop());
+
+  if (srv_shutdown_state.load() >=
+      SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    return;
+  }
+
+  /* Do an ibuf merge */
+  srv_main_thread_op_info = "doing insert buffer merge";
+  counter_time = ut_time_monotonic_us();
+  ibuf_merge_in_background(false);
+  MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_IBUF_MERGE_MICROSECOND,
+                                 counter_time);
+
+  /* Flush logs if needed */
+  log_buffer_sync_in_background();
+
+  /* Now see if various tasks that are performed at defined
+  intervals need to be performed. */
+
+  if (srv_shutdown_state.load() >=
+      SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    return;
+  }
+
+  srv_update_cpu_usage();
+
+  if (trx_sys->rseg_history_len.load() > 0) {
+    srv_wake_purge_thread_if_not_active();
+  }
+
+  if (cur_time % SRV_MASTER_DICT_LRU_INTERVAL == 0) {
+    srv_main_thread_op_info = "enforcing dict cache limit";
+    ulint n_evicted = srv_master_evict_from_table_cache(50);
+    if (n_evicted != 0) {
+      MONITOR_INC_VALUE(MONITOR_SRV_DICT_LRU_EVICT_COUNT, n_evicted);
+    }
+    MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_DICT_LRU_MICROSECOND,
+                                   counter_time);
+  }
+}
+```
+
+#### purge
 ```cpp
 
 void fil_purge() { fil_system->purge(); }
@@ -281,6 +316,13 @@ uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
 ```
 
 ## Files
+
+### [Server Log](/docs/CS/DB/MySQL/serverlog.md)
+
+### [Redo Log](/docs/CS/DB/MySQL/redolog.md)
+
+### [undo Log](/docs/CS/DB/MySQL/undolog.md)
+
 - config
   - my.cnf
 - data
@@ -352,93 +394,5 @@ Notes:
 - same DB version
 - same data
 - same server id
-
-
-## log
-
-### binary log
-
-log_bin
-log_bin_basename
-log_bin_compress
-log_bin_compress_min_len 256
-log_bin_index
-log_bin_trust_function_creators
-sql_log_bin
-
-
-binlog_annotate_row_events	ON
-binlog_cache_size	32768 32KB
-binlog_checksum	CRC32
-binlog_commit_wait_count	0
-binlog_commit_wait_usec	100000
-binlog_direct_non_transactional_updates	OFF
-binlog_file_cache_size	16384
-binlog_format	MIXED
-binlog_optimize_thread_scheduling	ON
-binlog_row_image	FULL
-binlog_stmt_cache_size	32768
-encrypt_binlog	OFF
-gtid_binlog_pos
-gtid_binlog_state
-innodb_locks_unsafe_for_binlog	OFF
-max_binlog_cache_size	18446744073709547520
-max_binlog_size	1073741824 1G
-max_binlog_stmt_cache_size	18446744073709547520
-read_binlog_speed_limit	0
-sync_binlog	0
-wsrep_forced_binlog_format	NONE
-
-### slow log
-
-
-```
-long_query_time	10.000000
-log_slow_admin_statements	ON
-log_slow_disabled_statements	sp
-log_slow_filter	admin,filesort,filesort_on_disk,filesort_priority_queue,full_join,full_scan,query_cache,query_cache_miss,tmp_table,tmp_table_on_disk
-log_slow_rate_limit	1
-log_slow_slave_statements	ON
-log_slow_verbosity
-slow_launch_time	2
-
-slow_query_log	ON // must be ON
-log_queries_not_using_indexes	ON
-
-slow_query_log_file	demo-slow.log
-```
-
-```mysql
-
-mysql> SELECT * FROM mysql.slow_log;
-```
-
-
-### general log
-log_output	FILE
-
-
-show status
-
-explain 
-
-show profiles
-show profile
-
-
-    show profile source for
-
-
-
-```mysql
-
-mysql> SELECT * FROM mysql.general_log;
-```
-
-### error log
-
-```
-log_error	/var/log/mariadb/mariadb.log
-```
 
 ## [Optimization](/docs/CS/DB/MySQL/Optimization.md)
