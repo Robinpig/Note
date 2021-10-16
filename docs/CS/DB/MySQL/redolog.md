@@ -4,7 +4,7 @@
 
 The redo log is a disk-based data structure used during crash recovery to correct data written by incomplete transactions. During normal operations, the redo log encodes requests to **change table data**(except SELECT/SHOW) that result from SQL statements or low-level API calls. Modifications that did not finish updating the data files before an unexpected shutdown are replayed automatically during initialization, and before connections are accepted. 
 
-By default, the redo log is physically represented on disk by two 5MB files named `ib_logfile0` and `ib_logfile1`. MySQL writes to the redo log files in a circular fashion. Data in the redo log is encoded in terms of records affected; this data is collectively referred to as redo. The passage of data through the redo log is represented by an ever-increasing [LSN](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_lsn) value.
+By default, the redo log is physically represented on disk by two 5MB files named `ib_logfile0` and `ib_logfile1`. MySQL writes to the redo log files in a **circular fashion**. Data in the redo log is encoded in terms of records affected; this data is collectively referred to as redo. The passage of data through the redo log is represented by an ever-increasing `LSN` value.
 
 
 
@@ -46,3 +46,7 @@ The LSN became an **8-byte unsigned integer** in MySQL 5.6.3 when the redo log f
 
 ## [Log Buffer](/docs/CS/DB/MySQL/memory.md?id=Log_buffer)
 
+## Configuration
+
+Configure the `innodb_log_write_ahead_size` configuration option to avoid “`read-on-write`”. This option defines the write-ahead block size for the redo log.
+Valid values for innodb_log_write_ahead_size are multiples of the InnoDB log file block size (2n). The minimum value is the InnoDB log file block size (512). 

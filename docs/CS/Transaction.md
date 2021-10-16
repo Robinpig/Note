@@ -81,9 +81,9 @@ This is prevented by holding a shared lock (read lock) on the read record for th
 
 A phantom read happens when **a subsequent transaction inserts a row that matches the filtering criteria of a previous query executed by a concurrent transaction**.
 
-The so-called phantom problem occurs within a transaction when the same query produces different sets of rows at different times. For example, if a [`SELECT`](https://dev.mysql.com/doc/refman/8.0/en/select.html) is executed twice, but returns a row the second time that was not returned the first time, the row is a “phantom” row.
+The so-called phantom problem occurs within a transaction when the same query produces different sets of rows at different times. For example, if a `SELECT` is executed twice, but returns a row the second time that was not returned the first time, the row is a “phantom” row.
 
-The [2PL-based](https://vladmihalcea.com/2pl-two-phase-locking/) Serializable isolation prevents Phantom Reads through the use of predicate locking while [MVCC (Multi-Version Concurrency Control)](https://vladmihalcea.com/how-does-mvcc-multi-version-concurrency-control-work/) database engines address the Phantom Read anomaly by returning consistent snapshots.
+The `2PL-based` Serializable isolation prevents Phantom Reads through the use of predicate locking while MVCC (Multi-Version Concurrency Control) database engines address the Phantom Read anomaly by returning consistent snapshots.
 
 
 
@@ -92,8 +92,10 @@ The [2PL-based](https://vladmihalcea.com/2pl-two-phase-locking/) Serializable is
 Read Committed accommodates more concurrent transactions than other stricter isolation levels, but less locking leads to better chances of losing updates.
 
 - Using Repeatable Read (as well as Serializable which offers an even stricter isolation level) can prevent lost updates across concurrent database transactions.
-- Another solution would be to use the `FOR UPDATE` with the default Read Committed isolation level. This locking clause acquires the same write locks as with UPDATE and DELETE statements.
+- Another solution would be to use the `FOR UPDATE` with the default Read Committed isolation level. This locking clause acquires the same write locks as with `UPDATE` and `DELETE` statements.
 - Replace pessimistic locking with an optimistic locking mechanism. Like MVCC. optimistic locking defines a versioning concurrency control model that works without acquiring additional database write locks.
+
+MySQL avoids this issue at all isolation levels.
 
 #### Read skew
 
@@ -103,10 +105,10 @@ Using **Repeatable Read** (as well as Serializable which offers an even stricter
 
 #### Write skew
 
-- Write skew is prevalent among [MVCC (Multi-Version Concurrency Control)](https://vladmihalcea.com/how-does-mvcc-multi-version-concurrency-control-work/) mechanisms and Oracle cannot prevent it even when claiming to be using Serializable, which in fact is just the Snapshot Isolation level.
-- SQL Server default locking-based isolation levels can prevent write skews when using Repeatable Read and Serializable. Neither one of its MVCC-based isolation levels ([MVCC](https://vladmihalcea.com/how-does-mvcc-multi-version-concurrency-control-work/)-based) can prevent/detect it instead.
+- Write skew is prevalent among MVCC (Multi-Version Concurrency Control) mechanisms and Oracle cannot prevent it even when claiming to be using Serializable, which in fact is just the Snapshot Isolation level.
+- SQL Server default locking-based isolation levels can prevent write skews when using Repeatable Read and Serializable. Neither one of its MVCC-based isolation levels ([MVCC-based) can prevent/detect it instead.
 - PostgreSQL prevents it by using its more advanced Serializable Snapshot Isolation level.
-- [MySQL employs shared locks when using Serializable](https://vladmihalcea.com/write-skew-2pl-mvcc/) so the write skew can be prevented even if InnoDB is also MVCC-based.
+- MySQL employs shared locks when using Serializable so the write skew can be prevented even if InnoDB is also MVCC-based.
 
 
 

@@ -32,13 +32,13 @@ By default, the algorithm operates as follows:
 - Accessing a page in the old sublist makes it “young”, moving it to the head of the new sublist. If the page was read because it was required by a user-initiated operation, the first access occurs immediately and the page is made young. If the page was read due to a read-ahead operation, the first access does not occur immediately and might not occur at all before the page is evicted.
 - As the database operates, pages in the buffer pool that are not accessed “age” by moving toward the tail of the list. Pages in both the new and old sublists age as other pages are made new. Pages in the old sublist also age as pages are inserted at the midpoint. Eventually, a page that remains unused reaches the tail of the old sublist and is evicted.
 
-By default, pages read by queries are immediately moved into the new sublist, meaning they stay in the buffer pool longer. A table scan, performed for a [**mysqldump**](https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html) operation or a `SELECT` statement with no `WHERE` clause, for example, can bring a large amount of data into the buffer pool and evict an equivalent amount of older data, even if the new data is never used again. Similarly, pages that are loaded by the read-ahead background thread and accessed only once are moved to the head of the new list. These situations can push frequently used pages to the old sublist where they become subject to eviction. 
+By default, pages read by queries are immediately moved into the new sublist, meaning they stay in the buffer pool longer. A table scan, performed for a **mysqldump** operation or a `SELECT` statement with no `WHERE` clause, for example, can bring a large amount of data into the buffer pool and evict an equivalent amount of older data, even if the new data is never used again. Similarly, pages that are loaded by the read-ahead background thread and accessed only once are moved to the head of the new list. These situations can push frequently used pages to the old sublist where they become subject to eviction. 
 
 
 
-You can control the insertion point in the LRU list and choose whether `InnoDB` applies the same optimization to blocks brought into the buffer pool by table or index scans. The configuration parameter [`innodb_old_blocks_pct`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_old_blocks_pct) controls the percentage of “old” blocks in the LRU list. The default value of [`innodb_old_blocks_pct`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_old_blocks_pct) is `37`, corresponding to the original fixed ratio of 3/8. The value range is `5` (new pages in the buffer pool age out very quickly) to `95` (only 5% of the buffer pool is reserved for hot pages, making the algorithm close to the familiar LRU strategy).
+You can control the insertion point in the LRU list and choose whether `InnoDB` applies the same optimization to blocks brought into the buffer pool by table or index scans. The configuration parameter `innodb_old_blocks_pct` controls the percentage of “old” blocks in the LRU list. The default value of `innodb_old_blocks_pct` is `37`, corresponding to the original fixed ratio of 3/8. The value range is `5` (new pages in the buffer pool age out very quickly) to `95` (only 5% of the buffer pool is reserved for hot pages, making the algorithm close to the familiar LRU strategy).
 
-The optimization that keeps the buffer pool from being churned by read-ahead can avoid similar problems due to table or index scans. In these scans, a data page is typically accessed a few times in quick succession and is never touched again. The configuration parameter [`innodb_old_blocks_time`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_old_blocks_time) specifies the time window (in milliseconds) after the first access to a page during which it can be accessed without being moved to the front (most-recently used end) of the LRU list. The default value of [`innodb_old_blocks_time`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_old_blocks_time) is `1000`. Increasing this value makes more and more blocks likely to age out faster from the buffer pool.
+The optimization that keeps the buffer pool from being churned by read-ahead can avoid similar problems due to table or index scans. In these scans, a data page is typically accessed a few times in quick succession and is never touched again. The configuration parameter `innodb_old_blocks_time` specifies the time window (in milliseconds) after the first access to a page during which it can be accessed without being moved to the front (most-recently used end) of the LRU list. The default value of `innodb_old_blocks_time` is `1000`. Increasing this value makes more and more blocks likely to age out faster from the buffer pool.
 
 
 
@@ -52,6 +52,9 @@ Free List
 
 
 Flush List
+
+dirty pages
+
 ```mysql
 mysql> SELECT COUNT(*) FROM information_schema.INNODB_BUFFER_PAGE_LRU  WHERE OLDEST_MODIFICATION > 0;
 ```
@@ -64,21 +67,42 @@ Modified db pages
 
 checkpoint
 
+- Fuzzy Checkpoint
+  - Master
+  - Flush_lru_list
+  - Async/Sync Flush
+  - Dirty Page too much
+- Sharp Checkpoint
+
+
+Page Cleaner Thread
+
+Flush_lru_list 
 ```
-Log sequence number
+innodb_lru_scan_depth	1024
 ```
 
 
+
+
+Dirty Page too much
 ```
 innodb_max_dirty_pages_pct	75.000000
 innodb_max_dirty_pages_pct_lwm	0.000000
 ```
+adaptive flushing
+
+```
+innodb_adaptive_flushing	ON
+innodb_adaptive_flushing_lwm	10.000000
+```
+
 
 ### Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
 
 
 
-A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages. The requests bring in all the pages in one [extent](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_extent). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
+A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages. The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extend). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
 
 **Linear** read-ahead is a technique that predicts what pages might be needed soon based on pages in the buffer pool being accessed sequentially. You control when `InnoDB` performs a read-ahead operation by adjusting the number of sequential page accesses required to trigger an asynchronous read request, using the configuration parameter `innodb_read_ahead_threshold`. Before this parameter was added, `InnoDB` would only calculate whether to issue an asynchronous prefetch request for the entire next extent when it read the last page of the current extent.
 

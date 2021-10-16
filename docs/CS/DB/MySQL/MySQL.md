@@ -148,7 +148,24 @@ static void srv_master_main_loop(srv_slot_t *slot) {
   }
 }
 ```
+
+#### srv_master_do_idle_tasks
+per 10 seconds
+- flush log buffer
+- merge max 5 change buffer
+- flush max 100 buffer pool pages(might)
+- purge unused undo log
+
 #### srv_master_do_active_tasks
+per second
+
+- flush log buffer
+- merge change buffer(might)
+- flush max 100 buffer pool pages(might)
+- jump into background loop
+
+
+
 ```cpp
 
 /** Perform the tasks that the master thread is supposed to do when the
@@ -220,6 +237,13 @@ static void srv_master_do_active_tasks(void) {
 ```
 
 #### purge
+
+```
+innodb_purge_batch_size	300
+innodb_purge_rseg_truncate_frequency	128
+innodb_purge_threads	4
+```
+
 ```cpp
 
 void fil_purge() { fil_system->purge(); }
@@ -323,11 +347,7 @@ uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
 
 ### [undo Log](/docs/CS/DB/MySQL/undolog.md)
 
-- config
-  - my.cnf
-- data
-
-
+### [File](/docs/CS/DB/MySQL/file.md)
 
 
 ![image-20210430214713744](./images/SQL.png)
@@ -369,6 +389,10 @@ virtual table
 MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations. The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
 
 ## Storage Engine
+
+**MySQL Architecture with Pluggable Storage Engines**
+
+![MySQL architecture diagram showing connectors, interfaces, pluggable storage engines, the file system with files and logs.](https://dev.mysql.com/doc/refman/8.0/en/images/mysql-architecture.png)
 
 Storage engines are MySQL components that handle the SQL operations for different table types. `InnoDB` is the default and most general-purpose storage engine.
 

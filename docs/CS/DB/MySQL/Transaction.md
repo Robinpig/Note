@@ -24,7 +24,7 @@ The **consistency** aspect of the ACID model mainly involves internal `InnoDB` p
 
 - The `InnoDB` doublewrite buffer. See [Section 14.6.5, “Doublewrite Buffer”](https://dev.mysql.com/doc/refman/5.7/en/innodb-doublewrite-buffer.html).
 - `InnoDB` crash recovery. See [InnoDB Crash Recovery](https://dev.mysql.com/doc/refman/5.7/en/innodb-recovery.html#innodb-crash-recovery).
-
+- `undo log`
 ### Isolation
 
 The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions, in particular the isolation level that applies to each transaction. Related MySQL features include:
@@ -37,7 +37,7 @@ The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions
 
 The **durability** aspect of the ACID model involves MySQL software features interacting with your particular hardware configuration. Because of the many possibilities depending on the capabilities of your CPU, network, and storage devices, this aspect is the most complicated to provide concrete guidelines for. (And those guidelines might take the form of “buy new hardware”.) Related MySQL features include:
 
-- The `InnoDB` doublewrite buffer. See [Section 14.6.5, “Doublewrite Buffer”](https://dev.mysql.com/doc/refman/5.7/en/innodb-doublewrite-buffer.html).
+- The `InnoDB` doublewrite buffer.
 - The [`innodb_flush_log_at_trx_commit`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_flush_log_at_trx_commit) variable.
 - The [`sync_binlog`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#sysvar_sync_binlog) variable.
 - The [`innodb_file_per_table`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_file_per_table) variable.
@@ -615,6 +615,13 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
   return (err);
 }
 ```
+
+
+## Distributed Transaction
+XA : isolation level must be `SERIALIZABLE`
+
+- RM
+- TM
 
 
 
