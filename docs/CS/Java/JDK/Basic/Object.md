@@ -391,3 +391,23 @@ create a object
 ### wait & notify
 
 See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Order)
+
+
+## Serialization
+
+Deserialization of untrusted streams can result in remote code execution (RCE), denial-of-service (DoS), and a range of other exploits. Applications can be vulnerable to these attacks even if they did nothing wrong.
+
+**The best way to avoid serialization exploits is never to deserialize anything**. 
+
+**There is no reason to use Java serialization in any new system you write**.
+
+If you can’t avoid Java serialization entirely, perhaps because you’re working in the context of a legacy system that requires it, your next best alternative is to **never deserialize untrusted data**.
+
+
+Implement Serializable with great caution:
+1. A major cost of implementing Serializable is that it decreases the flexibility to change a class’s implementation once it has been released.
+2. A second cost of implementing Serializable is that it increases the likelihood of bugs and security holes.
+3. A third cost of implementing Serializable is that it increases the testing burden associated with releasing a new version of a class.
+
+
+Write readObject methods defensively. For instance control, prefer [enum](/docs/CS/Java/JDK/Basic/enum.md?id=Serialization) types to.
