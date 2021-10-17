@@ -30,6 +30,16 @@ jcmd process_id command optional_arguments
 
 ### jvisualvm
 
+### hsdb
+
+```shell
+java -cp .;%JAVA_HOME%/lib/sa-jdi.jar sun.jvm.hotspot.HSDB 
+
+jhsdb hsdb --pid <pid>
+```
+
+
+
 ## Monitoring Tools
 
 ### jps
@@ -93,7 +103,7 @@ jol
 
 
 
-## Reference
+## References
 
 1. [JVM源码分析之Jstat工具原理完全解读](https://lovestblog.cn/blog/2016/07/20/jstat/)
 2. [JDK Tools and Utilities](https://docs.oracle.com/javase/7/docs/technotes/tools/index.html)

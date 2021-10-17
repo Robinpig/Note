@@ -22,9 +22,9 @@ The data stored at each znode in a namespace is read and written atomically. Rea
 
 ZooKeeper also has the notion of ephemeral nodes. These znodes exists as long as the session that created the znode is active. When the session ends the znode is deleted.
 
-
-
 Container node
+
+TTL time to live
 
 ### Conditional updates and watches
 
@@ -158,32 +158,78 @@ Follower的消息循环处理如下几种来自Leader的消息：
 5. REVALIDATE消息：根据Leader的REVALIDATE结果，关闭待revalidate的session还是允许其接受消息
 6. SYNC消息：返回SYNC结果到客户端，这个消息最初由客户端发起，用来强制得到最新的更新。
 
+### Leader Election
+
+A simple way of doing leader election with ZooKeeper is to use the **SEQUENCE|EPHEMERAL** flags when creating znodes that represent "proposals" of clients. The idea is to have a znode, say "/election", such that each znode creates a child znode "/election/n_" with both flags SEQUENCE|EPHEMERAL. With the sequence flag, ZooKeeper automatically appends a sequence number that is greater that any one previously appended to a child of "/election". The process that created the znode with the smallest appended sequence number is the leader.
+
+That's not all, though. It is important to watch for failures of the leader, so that a new client arises as the new leader in the case the current leader fails. A trivial solution is to have all application processes watching upon the current smallest znode, and checking if they are the new leader when the smallest znode goes away (note that the smallest znode will go away if the leader fails because the node is ephemeral). But this causes a herd effect: upon of failure of the current leader, all other processes receive a notification, and execute getChildren on "/election" to obtain the current list of children of "/election". If the number of clients is large, it causes a spike on the number of operations that ZooKeeper servers have to process. To avoid the herd effect, it is sufficient to watch for the next znode down on the sequence of znodes. If a client receives a notification that the znode it is watching is gone, then it becomes the new leader in the case that there is no smaller znode. Note that this avoids the herd effect by not having all clients watching the same znode.
+
+Here's the pseudo code:
+
+Let ELECTION be a path of choice of the application. To volunteer to be a leader:
+
+1. Create znode z with path "ELECTION/n_" with both SEQUENCE and EPHEMERAL flags;
+2. Let C be the children of "ELECTION", and i be the sequence number of z;
+3. Watch for changes on "ELECTION/n_j", where j is the largest sequence number such that j < i and n_j is a znode in C;
+
+Upon receiving a notification of znode deletion:
+
+1. Let C be the new set of children of ELECTION;
+2. If z is the smallest node in C, then execute leader procedure;
+3. Otherwise, watch for changes on "ELECTION/n_j", where j is the largest sequence number such that j < i and n_j is a znode in C;
+
+Note that the znode having no preceding znode on the list of children does not imply that the creator of this znode is aware that it is the current leader. Applications may consider creating a separate znode to acknowledge that the leader has executed the leader procedure.
 
 ## Distributed Lock
 
+Clients wishing to obtain a lock do the following:
 
-可以创建一张表，将其中的某个字段设置为唯一索引，当多个请求过来的时候只有新建记录成功的请求才算获取到锁，当使用完毕删除这条记录的时候即释放锁。
+1. Call **create( )** with a pathname of "_locknode_/lock-" and the *sequence* and *ephemeral* flags set.
+2. Call **getChildren( )** on the lock node *without* setting the watch flag (this is important to avoid the herd effect).
+3. If the pathname created in step **1** has the lowest sequence number suffix, the client has the lock and the client exits the protocol.
+4. The client calls **exists( )** with the watch flag set on the path in the lock directory with the next lowest sequence number.
+5. if **exists( )** returns false, go to step **2**. Otherwise, wait for a notification for the pathname from the previous step before going to step **2**.
 
-存在的问题:
+The unlock protocol is very simple: clients wishing to release a lock simply delete the node they created in step 1.
 
-数据库单点问题，挂了怎么办？
-不是重入锁，同一进程无法在释放锁之前再次获得锁，因为数据库中已经存在了一条记录了。
-锁是非阻塞的，一旦 insert 失败则会立即返回，并不会进入阻塞队列只能下一次再次获取。
-锁没有失效时间，如果那个进程解锁失败那就没有请求可以再次获取锁了。
-解决方案:
+Here are a few things to notice:
 
-数据库切换为主从，不存在单点。
-在表中加入一个同步状态字段，每次获取锁的是加 1 ，释放锁的时候-1，当状态为 0 的时候就删除这条记录，即释放锁。
-非阻塞的情况可以用 while 循环来实现，循环的时候记录时间，达到 X 秒记为超时，break。
-可以开启一个定时任务每隔一段时间扫描找出多少 X 秒都没有被删除的记录，主动删除这条记录。
-基于 Redis
-使用 setNX(key) setEX(timeout) 命令，只有在该 key 不存在的时候创建这个 key，就相当于获取了锁。由于有超时时间，所以过了规定时间会自动删除，这样也可以避免死锁。
+- The removal of a node will only cause one client to wake up since each node is watched by exactly one client. In this way, you avoid the herd effect.
+
+- There is no polling or timeouts.
+
+- Because of the way you implement locking, it is easy to see the amount of lock contention, break locks, debug locking problems, etc.
 
 
-### Read-Write Lock
 
-service watch own node, notify by watcher
+#### Shared Locks
+
+You can implement shared locks by with a few changes to the lock protocol:
+
+#### Recoverable Shared Locks
+
+With minor modifications to the Shared Lock protocol, you make shared locks revocable by modifying the shared lock protocol:
+
+In step **1**, of both obtain reader and writer lock protocols, call **getData( )** with *watch* set, immediately after the call to **create( )**. If the client subsequently receives notification for the node it created in step **1**, it does another **getData( )** on that node, with *watch* set and looks for the string "unlock", which signals to the client that it must release the lock. This is because, according to this shared lock protocol, you can request the client with the lock give up the lock by calling **setData()** on the lock node, writing "unlock" to that node.
+
+Note that this protocol requires the lock holder to consent to releasing the lock. Such consent is important, especially if the lock holder needs to do some processing before releasing the lock. Of course you can always implement *Revocable Shared Locks with Freaking Laser Beams* by stipulating in your protocol that the revoker is allowed to delete the lock node if after some length of time the lock isn't deleted by the lock holder.
+
+### Two-phased Commit
+
+A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
+
+In ZooKeeper, you can implement a two-phased commit by having a coordinator create a transaction node, say "/app/Tx", and one child node per participating site, say "/app/Tx/s_i". When coordinator creates the child node, it leaves the content undefined. Once each site involved in the transaction receives the transaction from the coordinator, the site reads each child node and sets a watch. Each site then processes the query and votes "commit" or "abort" by writing to its respective node. Once the write completes, the other sites are notified, and as soon as all sites have all votes, they can decide either "abort" or "commit". Note that a node can decide "abort" earlier if some site votes for "abort".
+
+An interesting aspect of this implementation is that the only role of the coordinator is to decide upon the group of sites, to create the ZooKeeper nodes, and to propagate the transaction to the corresponding sites. In fact, even propagating the transaction can be done through ZooKeeper by writing it in the transaction node.
+
+There are two important drawbacks of the approach described above. One is the message complexity, which is O(n²). The second is the impossibility of detecting failures of sites through ephemeral nodes. To detect the failure of a site using ephemeral nodes, it is necessary that the site create the node.
+
+To solve the first problem, you can have only the coordinator notified of changes to the transaction nodes, and then notify the sites once coordinator reaches a decision. Note that this approach is scalable, but it's is slower too, as it requires all communication to go through the coordinator.
+
+To address the second problem, you can have the coordinator propagate the transaction to the sites, and have each site creating its own ephemeral node.
 
 
 ## References
-[1] [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+1. [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+2. [Distributed Locks are Dead; Long Live Distributed Locks!](https://hazelcast.com/blog/long-live-distributed-locks/)
+3. [ZooKeeper Programmer's Guide](https://zookeeper.apache.org/doc/current/zookeeperProgrammers.html)

@@ -1,10 +1,14 @@
+## Overview
+The JVM can shut down in either an orderly or abrupt manner. An orderly shutdown is initiated when the last "normal"(non‐daemon) thread terminates, someone calls `System.exit`, or by other platform‐specific means (such as sending a `SIGINT` or hitting `Ctrl-C`). While this is the standard and preferred way for the JVM to shut down, it can also be shut down abruptly by calling `Runtime.halt` or by killing the JVM process through the operating system (such as sending a `SIGKILL`).
 
 
+
+## destroy_vm
+
+- `Threads::destroy_vm()` is normally called from `jni_DestroyJavaVM()` when the program falls off the end of main().
+- Another VM exit path is through vm_exit() when the program calls `System.exit()` to return a value or when there is a serious error in VM.
+  
 The two shutdown paths are not exactly the same, but they share Shutdown.shutdown() at Java level and before_exit() and VM_Exit op at VM level.
-
-- `Threads::destroy_vm()` is normally called from `jni_DestroyJavaVM()` when the program falls off the end of main(). 
-- Another VM exit path is through vm_exit() when the program calls `System.exit()` to return a value or when there is a serious error in VM. 
-
 ```
 Shutdown sequence:
 + Shutdown native memory tracking if it is on
@@ -133,3 +137,14 @@ bool Threads::destroy_vm() {
 }
 ```
 Last thread running calls `java.lang.Shutdown.shutdown()`
+
+## Shutdown Hooks
+*In an orderly shutdown, the JVM first starts all registered shutdown hooks.* Shutdown hooks are unstarted threads that are registered with `Runtime.addShutdownHook`. The JVM makes no guarantees on the order in which shutdown hooks are started. If any application threads (daemon or nondaemon) are still running at shutdown time, they continue to run concurrently with the shutdown process. When all shutdown hooks have completed, the JVM may choose to run finalizers if runFinalizersOnExit is true, and then halts. The JVM makes no attempt to stop or interrupt any application threads that are still running at shutdown time; they are abruptly terminated when the JVM eventually halts. If the shutdown hooks or finalizers don't complete, then the orderly shutdown process "hangs" and the JVM must be shut down abruptly. 
+
+*In an abrupt shutdown, the JVM is not required to do anything other than halt the JVM; shutdown hooks will not run.*
+
+**Shutdown hooks should be thread‐safe**: they must use synchronization when accessing shared data and should be careful to avoid deadlock, just like any other concurrent code. Further, they should not make assumptions about the state of the application (such as whether other services have shut down already or all normal threads have completed)or about why the JVM is shutting down, and must therefore be coded extremely defensively. Finally, they should exit as quickly as possible, since their existence delays JVM termination at a time when the user may be expecting the JVM to terminate quickly.
+
+Shutdown hooks can be used for service or application cleanup, such as deleting temporary files or cleaning up resources that are not automatically cleaned up by the OS. 
+
+Because shutdown hooks all run concurrently, closing the log file could cause trouble for other shutdown hooks who want to use the logger. To avoid this problem, shutdown hooks should not rely on services that can be shut down by the application or other shutdown hooks. One way to accomplish this is to use a single shutdown hook for all services, rather than one for each service, and have it call a series of shutdown actions. For example [DubboShutdownHook](/docs/CS/Java/Dubbo/Start.md?id=shutdown-hooks)

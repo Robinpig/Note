@@ -39,19 +39,6 @@ struct dict {
 ```
 [dicht in hash](/docs/CS/DB/Redis/hash.md?id=dicht)
 
-```c
-// dict.c
-typedef struct dict {
-    dictType *type;
-    void *privdata;
-    dictht ht[2];
-    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    unsigned long iterators; /* number of iterators currently running */
-} dict;
-```
-
-
-
 
 ```c
 // dict.h
@@ -223,7 +210,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
 }
 ```
 
-call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind) to find dictEntry, then update lfu or lru access time
+call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind) to find dictEntry, then **update lfu or lru access time**
 
 ```c
 // db.c

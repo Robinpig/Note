@@ -85,10 +85,19 @@ Java虚拟机栈管理Java方法的调用，而本地方法栈用于管理本地
 Eden:from:to=8:1:1
 
 
-
-
-
-### allocate memory for instance
+FastTLABRefill                            = true  
+MinTLABSize                               = 2048
+PrintTLAB                                 = false
+ResizeTLAB                                = true  
+TLABAllocationWeight                      = 35   
+TLABRefillWasteFraction                   = 64   
+TLABSize                                  = 0    
+TLABStats                                 = true
+TLABWasteIncrement                        = 4    
+TLABWasteTargetPercent                    = 1
+UseTLAB                                   = true
+ZeroTLAB                                  = false
+### new instance
 
 1. is_unresolved_klass, slow case allocation
 2. Enable fastpath_allocated, try UseTLAB
@@ -169,71 +178,6 @@ CASE(_new): {
 
 
 
-#### InstanceKlass::allocate_instance
-
-also allow use TLAB
-
-```cpp
-instanceOop InstanceKlass::allocate_instance(TRAPS) {
-  bool has_finalizer_flag = has_finalizer(); // Query before possible GC
-  int size = size_helper();  // Query before forming handle.
-
-  instanceOop i;
-
-  i = (instanceOop)Universe::heap()->obj_allocate(this, size, CHECK_NULL);
-  if (has_finalizer_flag && !RegisterFinalizersAtInit) {
-    i = register_finalizer(i, CHECK_NULL);
-  }
-  return i;
-}
-```
-
-
-```cpp
-// collectedHeap.cpp
-oop CollectedHeap::obj_allocate(Klass* klass, int size, TRAPS) {
-  ObjAllocator allocator(klass, size, THREAD);
-  return allocator.allocate();
-}
-```
-
-
-
-```cpp
-// shenandoahHeap.cpp
-oop ShenandoahHeap::obj_allocate(Klass* klass, int size, TRAPS) {
-  ObjAllocator initializer(klass, size, THREAD);
-  ShenandoahMemAllocator allocator(initializer, klass, size, THREAD);
-  return allocator.allocate();
-}
-```
-
-```cpp
-// memAllocator.cpp
-oop MemAllocator::allocate() const {
-  oop obj = NULL;
-  {
-    Allocation allocation(*this, &obj);
-    HeapWord* mem = mem_allocate(allocation);
-    if (mem != NULL) {
-      obj = initialize(mem);
-    }
-  }
-  return obj;
-}
-
-HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
-  if (UseTLAB) {
-    HeapWord* result = allocate_inside_tlab(allocation);
-    if (result != NULL) {
-      return result;
-    }
-  }
-
-  return allocate_outside_tlab(allocation);
-}
-```
-
 
 
 
@@ -301,7 +245,15 @@ Class 元信息
 
 Class 文件中的常量池（编译器生成的字面量和符号引用）会在类加载后被放入这个区域。
 
-除了在编译期生成的常量，还允许动态生成，例如 String 类的 intern()。
+Constant Pool SymbolTable use ref count
+
+
+
+SymbolTable
+
+1.8 20011
+
+15 32768
 
 ## 直接内存
 

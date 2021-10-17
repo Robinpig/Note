@@ -1,4 +1,284 @@
-# VM Thread
+```
+StackRedPages                             = 1   
+StackShadowPages                          = 20  
+StackTraceInThrowable                     = true
+StackYellowPages                          = 2   
+```
+
+
+
+
+
+```cpp
+// vmOperations.hpp
+class VM_Operation: public CHeapObj<mtInternal> {
+ public:
+  enum Mode {
+    _safepoint,       // blocking,        safepoint, vm_op C-heap allocated
+    _no_safepoint,    // blocking,     no safepoint, vm_op C-Heap allocated
+    _concurrent,      // non-blocking, no safepoint, vm_op C-Heap allocated
+    _async_safepoint  // non-blocking,    safepoint, vm_op C-Heap allocated
+  };
+
+  enum VMOp_Type {
+    VM_OPS_DO(VM_OP_ENUM)
+    VMOp_Terminating
+  };
+
+ private:
+  Thread*         _calling_thread;
+  ThreadPriority  _priority;
+  long            _timestamp;
+  VM_Operation*   _next;
+  VM_Operation*   _prev;
+
+  // The VM operation name array
+  static const char* _names[];
+  
+}
+```
+
+
+
+```cpp
+// vframe.hpp
+
+// vframes are virtual stack frames representing source level activations.
+// A single frame may hold several source level activations in the case of
+// optimized code. The debugging stored with the optimized code enables
+// us to unfold a frame as a stack of vframes.
+// A cVFrame represents an activation of a non-java method.
+
+// The vframe inheritance hierarchy:
+// - vframe
+//   - javaVFrame
+//     - interpretedVFrame
+//     - compiledVFrame     ; (used for both compiled Java methods and native stubs)
+//   - externalVFrame
+//     - entryVFrame        ; special frame created when calling Java from C
+
+// - BasicLock
+
+class vframe: public ResourceObj {
+ protected:
+  frame        _fr;      // Raw frame behind the virtual frame.
+  RegisterMap  _reg_map; // Register map for the raw frame (used to handle callee-saved registers).
+  JavaThread*  _thread;  // The thread owning the raw frame.
+}
+```
+
+
+
+CPU_HEADER associate to `frame_<CPU_arch>.hpp`, such as frame_x86.hpp
+
+```cpp
+// frame.hpp
+
+// A frame represents a physical stack frame (an activation).  Frames
+// can be C or Java frames, and the Java frames can be interpreted or
+// compiled.  In contrast, vframes represent source-level activations,
+// so that one physical frame can correspond to multiple source level
+// frames because of inlining.
+
+class frame {
+ private:
+  // Instance variables:
+  intptr_t* _sp; // stack pointer (from Thread::last_Java_sp)
+  address   _pc; // program counter (the next instruction after the call)
+
+  CodeBlob* _cb; // CodeBlob that "owns" pc
+  enum deopt_state {
+    not_deoptimized,
+    is_deoptimized,
+    unknown
+  };
+
+  deopt_state _deopt_state;
+  
+  
+#include CPU_HEADER(frame)
+}
+```
+
+
+
+```cpp
+// frame.hpp
+void oops_do(OopClosure* f, CodeBlobClosure* cf, RegisterMap* map) { oops_do_internal(f, cf, map, true); }
+
+// frame.cpp
+void frame::oops_do_internal(OopClosure* f, CodeBlobClosure* cf, RegisterMap* map, bool use_interpreter_oop_map_cache) {
+#ifndef PRODUCT
+#if defined(__SUNPRO_CC) && __SUNPRO_CC >= 0x5140
+#pragma error_messages(off, SEC_NULL_PTR_DEREF)
+#endif
+  // simulate GC crash here to dump java thread in error report
+  if (CrashGCForDumpingJavaThread) {
+    char *t = NULL;
+    *t = 'c';
+  }
+#endif
+  if (is_interpreted_frame()) {
+    oops_interpreted_do(f, map, use_interpreter_oop_map_cache);
+  } else if (is_entry_frame()) {
+    oops_entry_do(f, map);
+  } else if (CodeCache::contains(pc())) {
+    oops_code_blob_do(f, cf, map);
+  } else {
+    ShouldNotReachHere();
+  }
+}
+```
+
+
+
+
+
+```cpp
+// JavaCalls.cpp
+
+void JavaCalls::call_helper(JavaValue* result, const methodHandle& method, JavaCallArguments* args, TRAPS) {
+
+  JavaThread* thread = (JavaThread*)THREAD;
+  assert(thread->is_Java_thread(), "must be called by a java thread");
+  assert(method.not_null(), "must have a method to call");
+  assert(!SafepointSynchronize::is_at_safepoint(), "call to Java code during VM operation");
+  assert(!thread->handle_area()->no_handle_mark_active(), "cannot call out to Java here");
+
+
+  CHECK_UNHANDLED_OOPS_ONLY(thread->clear_unhandled_oops();)
+
+#if INCLUDE_JVMCI
+  // Gets the nmethod (if any) that should be called instead of normal target
+  nmethod* alternative_target = args->alternative_target();
+  if (alternative_target == NULL) {
+#endif
+// Verify the arguments
+
+  if (CheckJNICalls)  {
+    args->verify(method, result->get_type());
+  }
+  else debug_only(args->verify(method, result->get_type()));
+#if INCLUDE_JVMCI
+  }
+#else
+
+  // Ignore call if method is empty
+  if (method->is_empty_method()) {
+    assert(result->get_type() == T_VOID, "an empty method must return a void value");
+    return;
+  }
+#endif
+
+#ifdef ASSERT
+  { InstanceKlass* holder = method->method_holder();
+    // A klass might not be initialized since JavaCall's might be used during the executing of
+    // the <clinit>. For example, a Thread.start might start executing on an object that is
+    // not fully initialized! (bad Java programming style)
+    assert(holder->is_linked(), "rewriting must have taken place");
+  }
+#endif
+
+  CompilationPolicy::compile_if_required(method, CHECK);
+
+  // Since the call stub sets up like the interpreter we call the from_interpreted_entry
+  // so we can go compiled via a i2c. Otherwise initial entry method will always
+  // run interpreted.
+  address entry_point = method->from_interpreted_entry();
+  if (JvmtiExport::can_post_interpreter_events() && thread->is_interp_only_mode()) {
+    entry_point = method->interpreter_entry();
+  }
+
+  // Figure out if the result value is an oop or not (Note: This is a different value
+  // than result_type. result_type will be T_INT of oops. (it is about size)
+  BasicType result_type = runtime_type_from(result);
+  bool oop_result_flag = (result->get_type() == T_OBJECT || result->get_type() == T_ARRAY);
+
+  // NOTE: if we move the computation of the result_val_address inside
+  // the call to call_stub, the optimizer produces wrong code.
+  intptr_t* result_val_address = (intptr_t*)(result->get_value_addr());
+
+  // Find receiver
+  Handle receiver = (!method->is_static()) ? args->receiver() : Handle();
+
+  // When we reenter Java, we need to reenable the reserved/yellow zone which
+  // might already be disabled when we are in VM.
+  if (!thread->stack_guards_enabled()) {
+    thread->reguard_stack();
+  }
+
+  // Check that there are shadow pages available before changing thread state
+  // to Java. Calculate current_stack_pointer here to make sure
+  // stack_shadow_pages_available() and bang_stack_shadow_pages() use the same sp.
+  address sp = os::current_stack_pointer();
+  if (!os::stack_shadow_pages_available(THREAD, method, sp)) {
+    // Throw stack overflow exception with preinitialized exception.
+    Exceptions::throw_stack_overflow_exception(THREAD, __FILE__, __LINE__, method);
+    return;
+  } else {
+    // Touch pages checked if the OS needs them to be touched to be mapped.
+    os::map_stack_shadow_pages(sp);
+  }
+
+#if INCLUDE_JVMCI
+  if (alternative_target != NULL) {
+    if (alternative_target->is_alive() && !alternative_target->is_unloading()) {
+      thread->set_jvmci_alternate_call_target(alternative_target->verified_entry_point());
+      entry_point = method->adapter()->get_i2c_entry();
+    } else {
+      THROW(vmSymbols::jdk_vm_ci_code_InvalidInstalledCodeException());
+    }
+  }
+#endif
+
+  // do call
+  { JavaCallWrapper link(method, receiver, result, CHECK);
+    { HandleMark hm(thread);  // HandleMark used by HandleMarkCleaner
+
+      StubRoutines::call_stub()(
+        (address)&link,
+        // (intptr_t*)&(result->_value), // see NOTE above (compiler problem)
+        result_val_address,          // see NOTE above (compiler problem)
+        result_type,
+        method(),
+        entry_point,
+        args->parameters(),
+        args->size_of_parameters(),
+        CHECK
+      );
+
+      result = link.result();  // circumvent MS C++ 5.0 compiler bug (result is clobbered across call)
+      // Preserve oop return value across possible gc points
+      if (oop_result_flag) {
+        thread->set_vm_result((oop) result->get_jobject());
+      }
+    }
+  } // Exit JavaCallWrapper (can block - potential return oop must be preserved)
+
+  // Check if a thread stop or suspend should be executed
+  // The following assert was not realistic.  Thread.stop can set that bit at any moment.
+  //assert(!thread->has_special_runtime_exit_condition(), "no async. exceptions should be installed");
+
+  // Restore possible oop return
+  if (oop_result_flag) {
+    result->set_jobject((jobject)thread->vm_result());
+    thread->set_vm_result(NULL);
+  }
+}
+```
+
+
+
+```cpp
+// StubRoutines.hpp
+static CallStub call_stub()                              { return CAST_TO_FN_PTR(CallStub, _call_stub_entry); }
+```
+
+
+
+_call_stub_entry by `generate_call_stub()` 
+
+
 
 
 
@@ -37,204 +317,6 @@
 | VM Thread                                      | JVM          | 这个线程就比较牛b了，是jvm里面的线程母体，根据hotspot源码（vmThread.hpp）里面的注释，它是一个单例的对象（最原始的线程）会产生或触发所有其他的线程，这个单个的VM线程是会被其他线程所使用来做一些VM操作（如，清扫垃圾等）。在 VMThread的结构体里有一个VMOperationQueue列队，所有的VM线程操作(vm_operation)都会被保存到这个列队当中，VMThread本身就是一个线程，它的线程负责执行一个自轮询的loop函数(具体可以参考：VMThread.cpp里面的void VMThread::loop())，该loop函数从VMOperationQueue列队中按照优先级取出当前需要执行的操作对象(VM_Operation)，并且调用VM_Operation->evaluate函数去执行该操作类型本身的业务逻辑。ps：VM操作类型被定义在vm_operations.hpp文件内，列举几个：ThreadStop、ThreadDump、PrintThreads、GenCollectFull、GenCollectFullConcurrent、CMS_Initial_Mark、CMS_Final_Remark…..有兴趣的同学，可以自己去查看源文件。 |
 
 
-## destroy
-
-Always detach the main thread so that it appears to have ended when the application's main method exits.  This will invoke the uncaught exception handler machinery if main threw an exception.  An uncaught exception handler cannot change the launcher's return code except by calling System.exit.
-
-Wait for all non-daemon threads to end, then destroy the VM.
-This will actually create a trivial new Java waiter thread named "`DestroyJavaVM`", but this will be seen as a different thread from the one that executed main, even though they are me C thread.  This allows mainThread.join() and mainThread.isAlive() to work as expected.
-```c
-// java.c
-#define LEAVE() \
-    do { \
-        if ((*vm)->DetachCurrentThread(vm) != JNI_OK) { \
-            JLI_ReportErrorMessage(JVM_ERROR2); \
-            ret = 1; \
-        } \
-        if (JNI_TRUE) { \
-            (*vm)->DestroyJavaVM(vm); \
-            return ret; \
-        } \
-    } while (JNI_FALSE)
-```
-
-
-
-Invoke main method.
-LEAVE();
-```c
-// java.c
-
-int JNICALL
-JavaMain(void * _args)
-{
-    JavaMainArgs *args = (JavaMainArgs *)_args;
-    int argc = args->argc;
-    char **argv = args->argv;
-    int mode = args->mode;
-    char *what = args->what;
-    InvocationFunctions ifn = args->ifn;
-
-    JavaVM *vm = 0;
-    JNIEnv *env = 0;
-    jclass mainClass = NULL;
-    jclass appClass = NULL; // actual application class being launched
-    jmethodID mainID;
-    jobjectArray mainArgs;
-    int ret = 0;
-    jlong start, end;
-
-    RegisterThread();
-
-    /* Initialize the virtual machine */
-    start = CounterGet();
-    if (!InitializeJVM(&vm, &env, &ifn)) {
-        JLI_ReportErrorMessage(JVM_ERROR1);
-        exit(1);
-    }
-
-    if (showSettings != NULL) {
-        ShowSettings(env, showSettings);
-        CHECK_EXCEPTION_LEAVE(1);
-    }
-
-    // show resolved modules and continue
-    if (showResolvedModules) {
-        ShowResolvedModules(env);
-        CHECK_EXCEPTION_LEAVE(1);
-    }
-
-    // list observable modules, then exit
-    if (listModules) {
-        ListModules(env);
-        CHECK_EXCEPTION_LEAVE(1);
-        LEAVE();
-    }
-
-    // describe a module, then exit
-    if (describeModule != NULL) {
-        DescribeModule(env, describeModule);
-        CHECK_EXCEPTION_LEAVE(1);
-        LEAVE();
-    }
-
-    if (printVersion || showVersion) {
-        PrintJavaVersion(env, showVersion);
-        CHECK_EXCEPTION_LEAVE(0);
-        if (printVersion) {
-            LEAVE();
-        }
-    }
-
-    // modules have been validated at startup so exit
-    if (validateModules) {
-        LEAVE();
-    }
-
-    /* If the user specified neither a class name nor a JAR file */
-    if (printXUsage || printUsage || what == 0 || mode == LM_UNKNOWN) {
-        PrintUsage(env, printXUsage);
-        CHECK_EXCEPTION_LEAVE(1);
-        LEAVE();
-    }
-
-    FreeKnownVMs(); /* after last possible PrintUsage */
-
-    if (JLI_IsTraceLauncher()) {
-        end = CounterGet();
-        JLI_TraceLauncher("%ld micro seconds to InitializeJVM\n",
-               (long)(jint)Counter2Micros(end-start));
-    }
-
-    /* At this stage, argc/argv have the application's arguments */
-    if (JLI_IsTraceLauncher()){
-        int i;
-        printf("%s is '%s'\n", launchModeNames[mode], what);
-        printf("App's argc is %d\n", argc);
-        for (i=0; i < argc; i++) {
-            printf("    argv[%2d] = '%s'\n", i, argv[i]);
-        }
-    }
-
-    ret = 1;
-
-    /*
-     * Get the application's main class. It also checks if the main
-     * method exists.
-     *
-     * See bugid 5030265.  The Main-Class name has already been parsed
-     * from the manifest, but not parsed properly for UTF-8 support.
-     * Hence the code here ignores the value previously extracted and
-     * uses the pre-existing code to reextract the value.  This is
-     * possibly an end of release cycle expedient.  However, it has
-     * also been discovered that passing some character sets through
-     * the environment has "strange" behavior on some variants of
-     * Windows.  Hence, maybe the manifest parsing code local to the
-     * launcher should never be enhanced.
-     *
-     * Hence, future work should either:
-     *     1)   Correct the local parsing code and verify that the
-     *          Main-Class attribute gets properly passed through
-     *          all environments,
-     *     2)   Remove the vestages of maintaining main_class through
-     *          the environment (and remove these comments).
-     *
-     * This method also correctly handles launching existing JavaFX
-     * applications that may or may not have a Main-Class manifest entry.
-     */
-    mainClass = LoadMainClass(env, mode, what);
-    CHECK_EXCEPTION_NULL_LEAVE(mainClass);
-    /*
-     * In some cases when launching an application that needs a helper, e.g., a
-     * JavaFX application with no main method, the mainClass will not be the
-     * applications own main class but rather a helper class. To keep things
-     * consistent in the UI we need to track and report the application main class.
-     */
-    appClass = GetApplicationClass(env);
-    NULL_CHECK_RETURN_VALUE(appClass, -1);
-
-    /* Build platform specific argument array */
-    mainArgs = CreateApplicationArgs(env, argv, argc);
-    CHECK_EXCEPTION_NULL_LEAVE(mainArgs);
-
-    if (dryRun) {
-        ret = 0;
-        LEAVE();
-    }
-
-    /*
-     * PostJVMInit uses the class name as the application name for GUI purposes,
-     * for example, on OSX this sets the application name in the menu bar for
-     * both SWT and JavaFX. So we'll pass the actual application class here
-     * instead of mainClass as that may be a launcher or helper class instead
-     * of the application class.
-     */
-    PostJVMInit(env, appClass, vm);
-    CHECK_EXCEPTION_LEAVE(1);
-
-    /*
-     * The LoadMainClass not only loads the main class, it will also ensure
-     * that the main method's signature is correct, therefore further checking
-     * is not required. The main method is invoked here so that extraneous java
-     * stacks are not in the application stack trace.
-     */
-    mainID = (*env)->GetStaticMethodID(env, mainClass, "main",
-                                       "([Ljava/lang/String;)V");
-    CHECK_EXCEPTION_NULL_LEAVE(mainID);
-
-    // Invoke main method.
-    (*env)->CallStaticVoidMethod(env, mainClass, mainID, mainArgs);
-
-    /*
-     * The launcher's exit code (in the absence of calls to
-     * System.exit) will be non-zero if main threw an exception.
-     */
-    ret = (*env)->ExceptionOccurred(env) == NULL ? 0 : 1;
-
-    LEAVE();
-}
-
-```
 
 ## Reference
 

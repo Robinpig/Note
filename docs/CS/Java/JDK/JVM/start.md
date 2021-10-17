@@ -1,6 +1,375 @@
+
+## build
+[build](https://github.com/openjdk/jdk/blob/master/doc/building.md)
+
+regression test jtreg
+based on JDK12
+
+start main()
+#### main
+```c
+// main.c
+JNIEXPORT int
+main(int argc, char **argv)
+{
+    int margc;
+    char** margv;
+    int jargc;
+    char** jargv;
+    const jboolean const_javaw = JNI_FALSE;
+#endif /* JAVAW */
+    {
+        int i, main_jargc, extra_jargc;
+        JLI_List list;
+
+        main_jargc = (sizeof(const_jargs) / sizeof(char *)) > 1
+            ? sizeof(const_jargs) / sizeof(char *)
+            : 0; // ignore the null terminator index
+
+        extra_jargc = (sizeof(const_extra_jargs) / sizeof(char *)) > 1
+            ? sizeof(const_extra_jargs) / sizeof(char *)
+            : 0; // ignore the null terminator index
+
+        if (main_jargc > 0 && extra_jargc > 0) { // combine extra java args
+            jargc = main_jargc + extra_jargc;
+            list = JLI_List_new(jargc + 1);
+
+            for (i = 0 ; i < extra_jargc; i++) {
+                JLI_List_add(list, JLI_StringDup(const_extra_jargs[i]));
+            }
+
+            for (i = 0 ; i < main_jargc ; i++) {
+                JLI_List_add(list, JLI_StringDup(const_jargs[i]));
+            }
+
+            // terminate the list
+            JLI_List_add(list, NULL);
+            jargv = list->elements;
+         } else if (extra_jargc > 0) { // should never happen
+            fprintf(stderr, "EXTRA_JAVA_ARGS defined without JAVA_ARGS");
+            abort();
+         } else { // no extra args, business as usual
+            jargc = main_jargc;
+            jargv = (char **) const_jargs;
+         }
+    }
+
+    JLI_InitArgProcessing(jargc > 0, const_disable_argfile);
+
+#ifdef _WIN32
+    {
+        int i = 0;
+        if (getenv(JLDEBUG_ENV_ENTRY) != NULL) {
+            printf("Windows original main args:\n");
+            for (i = 0 ; i < __argc ; i++) {
+                printf("wwwd_args[%d] = %s\n", i, __argv[i]);
+            }
+        }
+    }
+    JLI_CmdToArgs(GetCommandLine());
+    margc = JLI_GetStdArgc();
+    // add one more to mark the end
+    margv = (char **)JLI_MemAlloc((margc + 1) * (sizeof(char *)));
+    {
+        int i = 0;
+        StdArg *stdargs = JLI_GetStdArgs();
+        for (i = 0 ; i < margc ; i++) {
+            margv[i] = stdargs[i].arg;
+        }
+        margv[i] = NULL;
+    }
+#else /* *NIXES */
+    {
+        // accommodate the NULL at the end
+        JLI_List args = JLI_List_new(argc + 1);
+        int i = 0;
+
+        // Add first arg, which is the app name
+        JLI_List_add(args, JLI_StringDup(argv[0]));
+        // Append JDK_JAVA_OPTIONS
+        if (JLI_AddArgsFromEnvVar(args, JDK_JAVA_OPTIONS)) {
+            // JLI_SetTraceLauncher is not called yet
+            // Show _JAVA_OPTIONS content along with JDK_JAVA_OPTIONS to aid diagnosis
+            if (getenv(JLDEBUG_ENV_ENTRY)) {
+                char *tmp = getenv("_JAVA_OPTIONS");
+                if (NULL != tmp) {
+                    JLI_ReportMessage(ARG_INFO_ENVVAR, "_JAVA_OPTIONS", tmp);
+                }
+            }
+        }
+        // Iterate the rest of command line
+        for (i = 1; i < argc; i++) {
+            JLI_List argsInFile = JLI_PreprocessArg(argv[i], JNI_TRUE);
+            if (NULL == argsInFile) {
+                JLI_List_add(args, JLI_StringDup(argv[i]));
+            } else {
+                int cnt, idx;
+                cnt = argsInFile->size;
+                for (idx = 0; idx < cnt; idx++) {
+                    JLI_List_add(args, argsInFile->elements[idx]);
+                }
+                // Shallow free, we reuse the string to avoid copy
+                JLI_MemFree(argsInFile->elements);
+                JLI_MemFree(argsInFile);
+            }
+        }
+        margc = args->size;
+        // add the NULL pointer at argv[argc]
+        JLI_List_add(args, NULL);
+        margv = args->elements;
+    }
+#endif /* WIN32 */
+    return JLI_Launch(margc, margv,
+                   jargc, (const char**) jargv,
+                   0, NULL,
+                   VERSION_STRING,
+                   DOT_VERSION,
+                   (const_progname != NULL) ? const_progname : *margv,
+                   (const_launcher != NULL) ? const_launcher : *margv,
+                   jargc > 0,
+                   const_cpwildcard, const_javaw, 0);
+}
+```
+
+#### JLI_Launch
+```c
+// java.c
+/*
+ * Entry point.
+ */
+JNIEXPORT int JNICALL
+JLI_Launch(int argc, char ** argv,              /* main argc, argv */
+        int jargc, const char** jargv,          /* java args */
+        int appclassc, const char** appclassv,  /* app classpath */
+        const char* fullversion,                /* full version defined */
+        const char* dotversion,                 /* UNUSED dot version defined */
+        const char* pname,                      /* program name */
+        const char* lname,                      /* launcher name */
+        jboolean javaargs,                      /* JAVA_ARGS */
+        jboolean cpwildcard,                    /* classpath wildcard*/
+        jboolean javaw,                         /* windows-only javaw */
+        jint ergo                               /* unused */
+)
+{
+    int mode = LM_UNKNOWN;
+    char *what = NULL;
+    char *main_class = NULL;
+    int ret;
+    InvocationFunctions ifn;
+    jlong start, end;
+    char jvmpath[MAXPATHLEN];
+    char jrepath[MAXPATHLEN];
+    char jvmcfg[MAXPATHLEN];
+
+    _fVersion = fullversion;
+    _launcher_name = lname;
+    _program_name = pname;
+    _is_java_args = javaargs;
+    _wc_enabled = cpwildcard;
+
+    InitLauncher(javaw);
+    DumpState();
+    if (JLI_IsTraceLauncher()) {
+        int i;
+        printf("Java args:\n");
+        for (i = 0; i < jargc ; i++) {
+            printf("jargv[%d] = %s\n", i, jargv[i]);
+        }
+        printf("Command line args:\n");
+        for (i = 0; i < argc ; i++) {
+            printf("argv[%d] = %s\n", i, argv[i]);
+        }
+        AddOption("-Dsun.java.launcher.diag=true", NULL);
+    }
+
+    /*
+     * SelectVersion() has several responsibilities:
+     *
+     *  1) Disallow specification of another JRE.  With 1.9, another
+     *     version of the JRE cannot be invoked.
+     *  2) Allow for a JRE version to invoke JDK 1.9 or later.  Since
+     *     all mJRE directives have been stripped from the request but
+     *     the pre 1.9 JRE [ 1.6 thru 1.8 ], it is as if 1.9+ has been
+     *     invoked from the command line.
+     */
+    SelectVersion(argc, argv, &main_class);
+
+    CreateExecutionEnvironment(&argc, &argv,
+                               jrepath, sizeof(jrepath),
+                               jvmpath, sizeof(jvmpath),
+                               jvmcfg,  sizeof(jvmcfg));
+
+    if (!IsJavaArgs()) {
+        SetJvmEnvironment(argc,argv);
+    }
+
+    ifn.CreateJavaVM = 0;
+    ifn.GetDefaultJavaVMInitArgs = 0;
+
+    if (JLI_IsTraceLauncher()) {
+        start = CounterGet();
+    }
+
+    if (!LoadJavaVM(jvmpath, &ifn)) {
+        return(6);
+    }
+
+    if (JLI_IsTraceLauncher()) {
+        end   = CounterGet();
+    }
+
+    JLI_TraceLauncher("%ld micro seconds to LoadJavaVM\n",
+             (long)(jint)Counter2Micros(end-start));
+
+    ++argv;
+    --argc;
+
+    if (IsJavaArgs()) {
+        /* Preprocess wrapper arguments */
+        TranslateApplicationArgs(jargc, jargv, &argc, &argv);
+        if (!AddApplicationOptions(appclassc, appclassv)) {
+            return(1);
+        }
+    } else {
+        /* Set default CLASSPATH */
+        char* cpath = getenv("CLASSPATH");
+        if (cpath != NULL) {
+            SetClassPath(cpath);
+        }
+    }
+
+    /* Parse command line options; if the return value of
+     * ParseArguments is false, the program should exit.
+     */
+    if (!ParseArguments(&argc, &argv, &mode, &what, &ret, jrepath)) {
+        return(ret);
+    }
+
+    /* Override class path if -jar flag was specified */
+    if (mode == LM_JAR) {
+        SetClassPath(what);     /* Override class path */
+    }
+
+    /* set the -Dsun.java.command pseudo property */
+    SetJavaCommandLineProp(what, argc, argv);
+
+    /* Set the -Dsun.java.launcher pseudo property */
+    SetJavaLauncherProp();
+
+    /* set the -Dsun.java.launcher.* platform properties */
+    SetJavaLauncherPlatformProps();
+
+    return JVMInit(&ifn, threadStackSize, argc, argv, mode, what, ret);
+}
+```
+
+call ContinueInNewThread in java.c
+
+```c
+// java_md_macosx.m
+// MacOSX we may continue in the same thread
+int
+JVMInit(InvocationFunctions* ifn, jlong threadStackSize,
+                 int argc, char **argv,
+                 int mode, char *what, int ret) {
+    if (sameThread) {
+        JLI_TraceLauncher("In same thread\n");
+        // need to block this thread against the main thread
+        // so signals get caught correctly
+        __block int rslt = 0;
+        NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+        {
+            NSBlockOperation *op = [NSBlockOperation blockOperationWithBlock: ^{
+                JavaMainArgs args;
+                args.argc = argc;
+                args.argv = argv;
+                args.mode = mode;
+                args.what = what;
+                args.ifn  = *ifn;
+                rslt = JavaMain(&args);
+            }];
+
+            /*
+             * We cannot use dispatch_sync here, because it blocks the main dispatch queue.
+             * Using the main NSRunLoop allows the dispatch queue to run properly once
+             * SWT (or whatever toolkit this is needed for) kicks off it's own NSRunLoop
+             * and starts running.
+             */
+            [op performSelectorOnMainThread:@selector(start) withObject:nil waitUntilDone:YES];
+        }
+        [pool drain];
+        return rslt;
+    } else {
+        return ContinueInNewThread(ifn, threadStackSize, argc, argv, mode, what, ret);
+    }
+}
+```
+
+call JavaMain
+```c
+// java.c
+int
+ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
+                    int argc, char **argv,
+                    int mode, char *what, int ret)
+{
+
+    /*
+     * If user doesn't specify stack size, check if VM has a preference.
+     * Note that HotSpot no longer supports JNI_VERSION_1_1 but it will
+     * return its default stack size through the init args structure.
+     */
+    if (threadStackSize == 0) {
+      struct JDK1_1InitArgs args1_1;
+      memset((void*)&args1_1, 0, sizeof(args1_1));
+      args1_1.version = JNI_VERSION_1_1;
+      ifn->GetDefaultJavaVMInitArgs(&args1_1);  /* ignore return value */
+      if (args1_1.javaStackSize > 0) {
+         threadStackSize = args1_1.javaStackSize;
+      }
+    }
+
+    { /* Create a new thread to create JVM and invoke main method */
+      JavaMainArgs args;
+      int rslt;
+
+      args.argc = argc;
+      args.argv = argv;
+      args.mode = mode;
+      args.what = what;
+      args.ifn = *ifn;
+
+      rslt = ContinueInNewThread0(JavaMain, threadStackSize, (void*)&args);
+      /* If the caller has deemed there is an error we
+       * simply return that, otherwise we return the value of
+       * the callee
+       */
+      return (ret != 0) ? ret : rslt;
+    }
+}
+```
+
+
 ### launcher
 ```cpp
 // launcher.c
+#include <stdlib.h>
+#include <strings.h>
+#include <dlfcn.h>
+
+#include "jni.h"
+
+typedef jint (*create_vm_func)(JavaVM **, void**, void*);
+
+void *JNU_FindCreateJavaVM(char *vmlibpath) {
+    void *libVM = dlopen(vmlibpath, RTLD_LAZY);
+    if (libVM == NULL) {
+        return NULL;
+    }
+    return dlsym(libVM, "JNI_CreateJavaVM");
+}
+
+#define CP_PROP  "-Djava.class.path="
 
 int main(int argc, char**argv) {
      JNIEnv *env;
@@ -69,7 +438,20 @@ int main(int argc, char**argv) {
 
      return 0;
  }
+
 ```
+
+## JavaMain
+write a Hello.java and compile it
+
+-XX:+PauseAtStartup
+-XX:+PauseAtExit
+
+```shell
+gdb -args java Hello
+gdb> b java.c:JavaMain
+```
+
 
 1. RegisterThread
 2. InitializeJVM   CreateJavaVM
@@ -77,6 +459,8 @@ int main(int argc, char**argv) {
 3. LoadMainClass 
 4. PostJVMInit
 5. invoke main method
+6. DetachCurrentThread
+7. [DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
 
 ```cpp
 // java.c
@@ -248,10 +632,95 @@ JavaMain(void* _args)
     LEAVE();
 }
 
+#define LEAVE() \
+    do { \
+        if ((*vm)->DetachCurrentThread(vm) != JNI_OK) { \
+            JLI_ReportErrorMessage(JVM_ERROR2); \
+            ret = 1; \
+        } \
+        if (JNI_TRUE) { \
+            (*vm)->DestroyJavaVM(vm); \
+            return ret; \
+        } \
+    } while (JNI_FALSE)
 ```
 
+### InitializeJVM
+
+```c
+// java.c
+
+/*
+ * Initializes the Java Virtual Machine. Also frees options array when
+ * finished.
+ */
+static jboolean
+InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
+{
+    JavaVMInitArgs args;
+    jint r;
+
+    memset(&args, 0, sizeof(args));
+    args.version  = JNI_VERSION_1_2;
+    args.nOptions = numOptions;
+    args.options  = options;
+    args.ignoreUnrecognized = JNI_FALSE;
+
+    if (JLI_IsTraceLauncher()) {
+        int i = 0;
+        printf("JavaVM args:\n    ");
+        printf("version 0x%08lx, ", (long)args.version);
+        printf("ignoreUnrecognized is %s, ",
+               args.ignoreUnrecognized ? "JNI_TRUE" : "JNI_FALSE");
+        printf("nOptions is %ld\n", (long)args.nOptions);
+        for (i = 0; i < numOptions; i++)
+            printf("    option[%2d] = '%s'\n",
+                   i, args.options[i].optionString);
+    }
+
+    r = ifn->CreateJavaVM(pvm, (void **)penv, &args);
+    JLI_MemFree(options);
+    return r == JNI_OK;
+}
+```
+
+call JNI_CreateJavaVM
+```c
+// java_md_solinux.c
+jboolean
+LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
+{
+...
+
+    ifn->CreateJavaVM = (CreateJavaVM_t)
+        dlsym(libjvm, "JNI_CreateJavaVM");
+        
+    ifn->GetDefaultJavaVMInitArgs = (GetDefaultJavaVMInitArgs_t)
+        dlsym(libjvm, "JNI_GetDefaultJavaVMInitArgs");
+        
+    ifn->GetCreatedJavaVMs = (GetCreatedJavaVMs_t)
+        dlsym(libjvm, "JNI_GetCreatedJavaVMs");
+...
+}
+```
+
+And JNI_CreateJavaVM call Thread.create_vm(see jni.cpp)
 
 ### create_vm
+1. Initialize library-based TLS
+2. Initialize the output stream module
+3. Initialize the os module
+4. os::init_container_support()
+5. Initialize global data structures and create system classes in heap
+6. Attach the main thread to this os thread
+7. Enable guard page *after* os::create_main_thread()
+8. Initialize Java-Level synchronization subsystem
+9. Initialize global modules
+10. Create the VMThread
+11. initialize_java_lang_classes
+12. start Signal Dispatcher before VMInit event is posted
+13. initialize compiler(s)
+14. post vm initialized
 ```cpp
 // thread.cpp
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
@@ -639,12 +1108,86 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 }
 ```
 
+### init
+```cpp
+// init.cpp
+void vm_init_globals() {
+  check_ThreadShadow();
+  basic_types_init();
+  eventlog_init();
+  mutex_init();
+  chunkpool_init();
+  perfMemory_init();
+  SuspendibleThreadSet_init();
+}
 
+
+jint init_globals() {
+  HandleMark hm;
+  management_init();
+  bytecodes_init();
+  classLoader_init1();
+  compilationPolicy_init();
+  codeCache_init();
+  VM_Version_init();
+  os_init_globals();
+  stubRoutines_init1();
+  jint status = universe_init();  // dependent on codeCache_init and
+                                  // stubRoutines_init1 and metaspace_init.
+  if (status != JNI_OK)
+    return status;
+
+  gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
+  interpreter_init();        // before any methods loaded
+  invocationCounter_init();  // before any methods loaded
+  accessFlags_init();
+  templateTable_init();
+  InterfaceSupport_init();
+  SharedRuntime::generate_stubs();
+  universe2_init();  // dependent on codeCache_init and stubRoutines_init1
+  javaClasses_init();// must happen after vtable initialization, before referenceProcessor_init
+  referenceProcessor_init();
+  jni_handles_init();
+#if INCLUDE_VM_STRUCTS
+  vmStructs_init();
+#endif // INCLUDE_VM_STRUCTS
+
+  vtableStubs_init();
+  InlineCacheBuffer_init();
+  compilerOracle_init();
+  dependencyContext_init();
+
+  if (!compileBroker_init()) {
+    return JNI_EINVAL;
+  }
+  VMRegImpl::set_regName();
+
+  if (!universe_post_init()) {
+    return JNI_ERR;
+  }
+  stubRoutines_init2(); // note: StubRoutines need 2-phase init
+  MethodHandles::generate_adapters();
+
+#if INCLUDE_NMT
+  // Solaris stack is walkable only after stubRoutines are set up.
+  // On Other platforms, the stack is always walkable.
+  NMT_stack_walkable = true;
+#endif // INCLUDE_NMT
+
+  // All the flags that get adjusted by VM_Version_init and os::init_2
+  // have been set so dump the flags now.
+  if (PrintFlagsFinal || PrintFlagsRanges) {
+    JVMFlag::printFlags(tty, false, PrintFlagsRanges);
+  }
+
+  return JNI_OK;
+}
+```
+#### universe_post_init
 
 Init_globals -> universe_post_init
 
 init OutOfMemoryError allocate instances
-### universe_post_init
 
 ```cpp
 // universe.cpp
@@ -763,3 +1306,5 @@ bool universe_post_init() {
 }
 ```
 
+#### init classloader
+Initialize the class loader's access to methods in libzip.  Parse and process the boot classpath into a list ClassPathEntry objects.  Once this list has been created, it must not change order (see class PackageInfo) it can be appended to and is by jvmti and the kernel vm.

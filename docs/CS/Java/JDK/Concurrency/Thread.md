@@ -1,3 +1,7 @@
+## Introduction
+
+One of the primary reasons to use threads is to improve performance.[1] Using threads can improve resource utilization by letting applications more easily exploit available processing capacity, and can improve responsiveness by letting applications begin processing new tasks immediately while existing tasks are still running.
+
 ## Create
 
 Threads are represented by the `Thread` class. The only way for a user to create a thread is to **create an object of this class**; each thread is associated with such an object. A thread will start when the `start()` method is invoked on the corresponding `Thread` object.
@@ -15,7 +19,11 @@ public Thread(Runnable target) {
 ```
 
 ### init
+Threads are divided into two types: normal threads and daemon threads.
 
+Normal threads and daemon threads differ only in what happens when they exit. When a thread exits, the JVM performs an inventory of running threads, and if the only threads that are left are daemon threads, it initiates an orderly shutdown. When the JVM halts, any remaining daemon threads are abandoned ‐ finally blocks are not executed, stacks are not unwound ‐ the JVM just exits.
+
+*Daemon threads are not a good substitute for properly managing the lifecycle of services within an application.*
 ```java
 private void init(ThreadGroup g, Runnable target, String name,
                   long stackSize) {

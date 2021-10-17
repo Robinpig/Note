@@ -1,56 +1,338 @@
-# MySQL
+## Introduction
+
+[MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
+
+## [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
+
+```shell
+cat /etc/sysconfig/selinux
+
+```
+
+
+## databases
+information_schema
+- tables
+- processlist
+- global_status
+- global_variables
+- partitions
+innodb
+- innodb_trx
+- innodb_locks
+- innodb_lock_waits
+
+
+innodb shutdown handler
+innodb purge coordinator
+innodb purge worker * 3
+
+max_delayed_threads 20
+thread_stack 299008
+
+thread_pool_idle_timeout 60
+thread_pool_max_threads 65536
+innodb_purge_threads 4
+innodb_write_io_threads 4
+innodb_read_io_threads 4
+innodb_undo_logs 128
+
+
+innodb_adaptive_hash_index_parts 8
+innodb_adaptive_hash_index ON
+
+
+innodb_old_blocks_pct 37  -- 3/8
+innodb_old_blocks_time	1000
 
 
 
-## Transaction
+### Threads
+Master
 
-**Implement on engine layer, and only innodb support transaction.**
+```
+// using SHOW ENGINE INNODB STATUS;
+srv_master_thread loops: 177 srv_active, 0 srv_shutdown, 2772864 srv_idle
+srv_master_thread log flush and writes: 2773038
+```
 
-- Atomicity
-- Consistency
-- Isolation
-- Durability
+```cpp
+// srv0srv.cc
+/** The master thread controlling the server. */
+void srv_master_thread() {
+
+  srv_slot_t *slot;
+
+  THD *thd = create_thd(false, true, true, 0);
+
+  ut_ad(!srv_read_only_mode);
+
+  srv_main_thread_process_no = os_proc_get_number();
+  srv_main_thread_id = std::this_thread::get_id();
+
+  slot = srv_reserve_slot(SRV_MASTER);
+  ut_a(slot == srv_sys->sys_threads);
+
+  srv_master_main_loop(slot);
+
+  srv_master_pre_dd_shutdown_loop();
+
+  os_event_set(srv_threads.m_master_ready_for_dd_shutdown);
+
+  /* This is just for test scenarios. */
+  srv_thread_delay_cleanup_if_needed(true);
+
+  while (srv_shutdown_state.load() < SRV_SHUTDOWN_MASTER_STOP) {
+    srv_master_wait(slot);
+  }
+
+  srv_master_shutdown_loop();
+
+  srv_main_thread_op_info = "exiting";
+  destroy_thd(thd);
+}
+```
+
+#### main loop
+```cpp
+
+/** Executes the main loop of the master thread.
+@param[in]   slot     slot reserved as SRV_MASTER */
+static void srv_master_main_loop(srv_slot_t *slot) {
+  if (srv_force_recovery >= SRV_FORCE_NO_BACKGROUND) {
+    /* When innodb_force_recovery is at least SRV_FORCE_NO_BACKGROUND,
+    we avoid performing active/idle master's tasks. However, we still
+    need to ensure that:
+      srv_shutdown_state >= SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS,
+    after we exited srv_master_main_loop(). Keep waiting until that
+    is satisfied and then exit. */
+    while (srv_shutdown_state.load() <
+           SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+      srv_master_wait(slot);
+    }
+    return;
+  }
+
+  ulint old_activity_count = srv_get_activity_count();
+
+  while (srv_shutdown_state.load() <
+         SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    srv_master_sleep();
+
+    MONITOR_INC(MONITOR_MASTER_THREAD_SLEEP);
+
+    /* Just in case - if there is not much free space in redo,
+    try to avoid asking for troubles because of extra work
+    performed in such background thread. */
+    srv_main_thread_op_info = "checking free log space";
+    log_free_check();
+
+    if (srv_check_activity(old_activity_count)) {
+      old_activity_count = srv_get_activity_count();
+      srv_master_do_active_tasks();
+    } else {
+      srv_master_do_idle_tasks();
+    }
+
+    /* Let clone wait when redo/undo log encryption is set. If clone is already
+    in progress we skip the check and come back later. */
+    if (!clone_mark_wait()) {
+      continue;
+    }
+
+    /* Allow any blocking clone to progress. */
+    clone_mark_free();
+
+    /* Purge any deleted tablespace pages. */
+    fil_purge();
+  }
+}
+```
+
+#### srv_master_do_idle_tasks
+per 10 seconds
+- flush log buffer
+- merge max 5 change buffer
+- flush max 100 buffer pool pages(might)
+- purge unused undo log
+
+#### srv_master_do_active_tasks
+per second
+
+- flush log buffer
+- merge change buffer(might)
+- flush max 100 buffer pool pages(might)
+- jump into background loop
 
 
 
-Isolation Problem
+```cpp
 
-- Dirty read
-- Non-repeatable read
-- Phantom read
+/** Perform the tasks that the master thread is supposed to do when the
+ server is active. There are two types of tasks. The first category is
+ of such tasks which are performed at each inovcation of this function.
+ We assume that this function is called roughly every second when the
+ server is active. The second category is of such tasks which are
+ performed at some interval e.g.: purge, dict_LRU cleanup etc. */
+static void srv_master_do_active_tasks(void) {
+  const auto cur_time = ut_time_monotonic();
+  auto counter_time = ut_time_monotonic_us();
+
+  /* First do the tasks that we are suppose to do at each
+  invocation of this function. */
+
+  ++srv_main_active_loops;
+
+  MONITOR_INC(MONITOR_MASTER_ACTIVE_LOOPS);
+
+  /* ALTER TABLE in MySQL requires on Unix that the table handler
+  can drop tables lazily after there no longer are SELECT
+  queries to them. */
+  srv_main_thread_op_info = "doing background drop tables";
+  row_drop_tables_for_mysql_in_background();
+  MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_BACKGROUND_DROP_TABLE_MICROSECOND,
+                                 counter_time);
+
+  ut_d(srv_master_do_disabled_loop());
+
+  if (srv_shutdown_state.load() >=
+      SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    return;
+  }
+
+  /* Do an ibuf merge */
+  srv_main_thread_op_info = "doing insert buffer merge";
+  counter_time = ut_time_monotonic_us();
+  ibuf_merge_in_background(false);
+  MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_IBUF_MERGE_MICROSECOND,
+                                 counter_time);
+
+  /* Flush logs if needed */
+  log_buffer_sync_in_background();
+
+  /* Now see if various tasks that are performed at defined
+  intervals need to be performed. */
+
+  if (srv_shutdown_state.load() >=
+      SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    return;
+  }
+
+  srv_update_cpu_usage();
+
+  if (trx_sys->rseg_history_len.load() > 0) {
+    srv_wake_purge_thread_if_not_active();
+  }
+
+  if (cur_time % SRV_MASTER_DICT_LRU_INTERVAL == 0) {
+    srv_main_thread_op_info = "enforcing dict cache limit";
+    ulint n_evicted = srv_master_evict_from_table_cache(50);
+    if (n_evicted != 0) {
+      MONITOR_INC_VALUE(MONITOR_SRV_DICT_LRU_EVICT_COUNT, n_evicted);
+    }
+    MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_DICT_LRU_MICROSECOND,
+                                   counter_time);
+  }
+}
+```
+
+#### purge
+
+```
+innodb_purge_batch_size	300
+innodb_purge_rseg_truncate_frequency	128
+innodb_purge_threads	4
+```
+
+```cpp
+
+void fil_purge() { fil_system->purge(); }
+
+/** Clean up the shards. */
+void purge() {
+  for (auto shard : m_shards) {
+    shard->purge();
+  }
+}
 
 
+/** Purge entries from m_deleted_spaces that are no longer referenced by a
+buffer pool page. This is no longer required to be done during checkpoint -
+this is done here for historical reasons - it has to be done periodically
+somewhere. */
+void purge() {
+  /* Avoid cleaning up old undo files while this is on. */
+  DBUG_EXECUTE_IF("ib_undo_trunc_checkpoint_off", return;);
 
-Isolation level
+  mutex_acquire();
+  for (auto it = m_deleted_spaces.begin(); it != m_deleted_spaces.end();) {
+    auto space = it->second;
 
-- Read uncommitted
-- Read committed default in Oracle SQL server, only see committed data from other transactions
-- Repetable read **default level in MySQL**, and use MVCC avoid Phantom read
-- Serializable
+    if (space->has_no_references()) {
+      ut_a(space->files.front().n_pending == 0);
+
+      space_free_low(space);
+
+      it = m_deleted_spaces.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  mutex_release();
+}  
+  
+  
+/** Free a tablespace object on which fil_space_detach() was invoked.
+There must not be any pending I/O's or flushes on the files.
+@param[in,out]	space		tablespace */
+void Fil_shard::space_free_low(fil_space_t *&space) {
+#ifndef UNIV_HOTBACKUP
+  {
+    /* Temporary and undo tablespaces IDs are assigned from a large but
+    fixed size pool of reserved IDs. Therefore we must ensure that a
+    fil_space_t instance can't be dropped until all the pages that point
+    to it are also purged from the buffer pool. */
+
+    ut_a(srv_shutdown_state.load() == SRV_SHUTDOWN_LAST_PHASE ||
+         space->has_no_references());
+  }
+#endif /* !UNIV_HOTBACKUP */
+
+  for (auto &file : space->files) {
+    ut_d(space->size -= file.size);
+
+    os_event_destroy(file.sync_event);
+
+    ut_free(file.name);
+  }
+
+  call_destructor(&space->files);
+
+  ut_ad(space->size == 0);
+
+  rw_lock_free(&space->latch);
+  ut_free(space->name);
+  ut_free(space);
+
+  space = nullptr;
+}
+  
+```
 
 
+## Files
 
-![image-20210430214713744](./images/SQL.png)
+### [Server Log](/docs/CS/DB/MySQL/serverlog.md)
 
-Table
+### [Redo Log](/docs/CS/DB/MySQL/redolog.md)
 
-笛卡尔积
+### [undo Log](/docs/CS/DB/MySQL/undolog.md)
 
-Forever table
-
-temp table
-
-- union union all
-- Temptable algorithm
-- distinct and order by
+### [File](/docs/CS/DB/MySQL/file.md)
 
 
-
-virtual table
-
-2
-
-### Server
+## Server
 
 
 
@@ -61,187 +343,29 @@ virtual table
 - 优化器 内部实现 执行计划 选择索引 
 - 执行器 检验有权限后调用引擎接口 返回执行结果
 - 日志模块 binlog公有 redolog只InnoDB有
-### Engine
-
-```shell
-mysql> select version();
-10.3.27-MariaDB
-```
-
-| Engine | Support | Comment | Transactions | XA   | Savepoints |
-| ------ | ------- | ------- | ------------ | ---- | ---------- |
-| MEMORY	| YES	| Hash based, stored in memory, useful for temporary tables	| NO	| NO | NO |
-| MRG_MyISAM	| YES	| Collection of identical MyISAM tables	| NO	| NO	| NO |
-| CSV	| YES	| Stores tables as CSV files	| NO	| NO	| NO |
-| BLACKHOLE	| YES	| /dev/null storage engine (anything you write to it disappears)	| NO	| NO	| NO |
-| MyISAM	| YES	| Non-transactional engine with good performance and small data footprint	| NO	| NO	| NO |
-| ARCHIVE	| YES	| gzip-compresses tables for a low storage footprint	| NO	| NO	| NO |
-| FEDERATED	| YES	| Allows to access tables on other MariaDB servers, supports transactions and more	| YES	| NO	| YES |
-| PERFORMANCE_SCHEMA	| YES	| Performance Schema	| NO	| NO	NO |
-| SEQUENCE	| YES	| Generated tables filled with sequential values	| YES	NO	| YES |
-| InnoDB	| DEFAULT	| Supports transactions, row-level locking, foreign keys and encryption for tables	| YES	| YES	| YES |
-| Aria	| YES	| Crash-safe tables with MyISAM heritage	| NO	| NO	| NO |
 
 
 
-```shell
-mysql> select version();
-5.7.34
-```
+## Character Sets, Collations, Unicode
 
-| Engine | Support | Comment | Transactions | XA   | Savepoints |
-| ------ | ------- | ------- | ------------ | ---- | ---------- |
-| InnoDB | DEFAULT | Supports transactions, row-level locking, and foreign keys | YES  | YES  | YES  |
-| MRG_MYISAM | YES | Collection of identical MyISAM tables | NO | NO | NO |
-| MEMORY | YES | Hash based, stored in memory, useful for temporary tables | NO | NO | NO |
-| BLACKHOLE | YES | /dev/null storage engine (anything you write to it disappears) | NO | NO | NO |
-| MyISAM | YES | MyISAM storage engine | NO | NO | NO |
-| CSV | YES | CSV storage engine | NO | NO | NO |
-| ARCHIVE | YES | Archive storage engine | NO | NO | NO |
-| PERFORMANCE_SCHEMA | YES | Performance Schema | NO | NO   | NO |
-| FEDERATED | NO | Federated MySQL storage engine | NULL | NULL | NULL |
+MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations. The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
 
+## Storage Engine
 
+**MySQL Architecture with Pluggable Storage Engines**
 
-#### MyISAM vs InnoDB 
+![MySQL architecture diagram showing connectors, interfaces, pluggable storage engines, the file system with files and logs.](https://dev.mysql.com/doc/refman/8.0/en/images/mysql-architecture.png)
 
-  MyISAM:
+Storage engines are MySQL components that handle the SQL operations for different table types. `InnoDB` is the default and most general-purpose storage engine.
 
-Select immediately 
+### [The InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
 
-数据文件毁坏后不易恢复
-
-Not support:
-
-- transactions, row-level locking, foreign keys and encryption for tables
-- 
-
-Support:
-- Full-Text, B-Tree, R-Tree index
-
-    
-
-Storage file
-
-- .frm defintion of tables
-- .MYD data
-- .MYI index
+### [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
 
 
 
-  InnoDB:
 
-
-
-storage file
-
-- .frm
-- .ibd 索引和data一起
-
-查询先定位到数据块 再到行 较MyISAM直接定位慢
-
-支持事务 外键 行级锁 MVCC 支持真正的在线热备份
-
-
-#### Q1
-一张表，里面有 ID 自增主键，当 insert 了 17 条记录之后，删除了第 15,16,17 条记录，
-再把 Mysql 重启，再 insert 一条记录，这条记录的 ID 是 18 还是 15 ？
-(1)如果表的类型是 MyISAM，那么是 18
-因为 MyISAM 表会把自增主键的最大 ID 记录到数据文件里，重启 MySQL 自增主键的最大
-ID 也不会丢失
-（ 2）如果表的类型是 InnoDB，那么是 15
-InnoDB 表只是把自增主键的最大 ID 记录到内存中，所以重启数据库或者是对表进行
-OPTIMIZE 操作，都会导致最大 ID 丢失
-
-#### What HEAP table is?
-HEAP 表存在于内存中，用于临时高速存储。
-BLOB 或 TEXT 字段是不允许的
-只能使用比较运算符=， <， >， =>， = <
-HEAP 表不支持 AUTO_INCREMENT
-索引不可为 NULL
-
-#### Auto Increment overflow
-duplicate key error
-### Memory
-
-表描述文件frm在磁盘 表数据全在内存 使用Hash Index
-
-
-
-### Index  
-
-    Hash索引：
-        InnoDB当索引使用频繁时在B+Tree上再建哈希索引
-    B+Tree索引：
-    Fractal Tree索引：
-    全文索引：
-        MyISAM支持全文索引 用以查找文本关键字 而不是直接比较是否相等
-        MATCH AGAINST 不是WHERE InnoDB 5.6.4后支持全文索引
-    空间数据索引：
-        MyISAM支持空间数据索引（R-Tree） 地理数据存储
-
-
-
-### MVCC
-
-多版本并发控制
-    只使用于读提交和可重复读
-    InnoDB 存储引擎实现隔离级别的一种具体方式，用于实现提交读和可重复读这两种隔离级别
-    版本号
-        系统版本号 开启一个事务 就会递增
-        事务版本号 事务开始时系统版本号
-    隐藏列：    每行记录后有两个隐藏列版本号
-        创建版本号 创建时系统版本号
-        删除版本号 删除版本未定义或大于当前事务版本号则该快照有效
-    Undo日志
-        使用的快照存储在Undo日志 通过回滚指针把一个行所有快照连接
-
-
-
-### 锁机制：
-  三级封锁协议
-     
-
- - 写与写互斥 防止数据覆盖
- - 读不允许写 防止脏读
- - 读不允许写 防止不可重复读
-
-  两段锁协议
-
- - 加锁与解锁分成两个阶段
-
- 意向锁都是表级锁 相互兼容
-### 数据库优化
-限制查询 少用*
-读写分离 主库写 从库查
-垂直分区 数据表列拆分 拆成多表 对事务要求更复杂
-    MySQL分区表 物理上为多文件 逻辑上为一个表 跨分区查询效率低 建议采用物理分表
-水平分区 分库 事务逻辑复杂
-
-#### 数据库字段设计规范
-
-- 字符串转换成数字类型存储 IP地址 inet_aton inet_ntoa 
-- 非负数数据（如自增ID）优先无符号整型
-- 避免使用TEXT BLOB 大数据 内存临时表不支持 只能磁盘临时表 只能前缀索引 
-- 避免使用ENUM 操作复杂
-- 尽可能所有列都为非空 索引NULL列需要额外空间 比较计算也要特殊处理
-- 存储时间不用字符串 占用更大空间 无法直接比较
-- 财务金额使用decimal
-
-  #### 索引设计规范
-- 限制每张表上的索引数量,建议单张表索引不超过 5 个
-- 禁止给表中的每一列都建立单独的索引
-- 每个 Innodb 表必须有个主键
-- 频繁的查询优先考虑使用覆盖索引 避免 Innodb 表进行索引的二次查询  随机 IO 变成顺序 IO 
-- 尽量避免使用外键约束
-- 避免使用子查询，可以把子查询优化为 join 操作
-- 避免使用 JOIN 关联太多的表
-- 减少同数据库的交互次数
-- 对应同一列进行 or 判断时，使用 in 代替 or
-- WHERE 从句中禁止对列进行函数转换和计算
-
-**MySQL字符集**
-采用类似继承方式 表的默认字符集是数据库的字符集 未指定使用时采用默认
+### InnoDB memcached Plugin
 
 ## Master-Slave
 ### replication
@@ -257,5 +381,4 @@ Notes:
 - same data
 - same server id
 
-
-
+## [Optimization](/docs/CS/DB/MySQL/Optimization.md)

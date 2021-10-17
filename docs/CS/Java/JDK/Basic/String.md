@@ -1,109 +1,118 @@
 ## Introduction
-
 *The **String class represents character strings. All string literals in Java programs are implemented as instances of this class**.*
-  `Strings are constant; their values cannot be changed after they are created. `
+**Strings are constant; their values cannot be changed after they are created.**
+
+String is such a class ‐ but this relies on delicate reasoning about benign data races that requires a deep understanding of the Java Memory Model.
 
 *String buffers support mutable strings. Because String objects are immutable they can be shared.* 
 
-*Case mapping is **based on the Unicode Standard version specified by the Character class**.*
-*The Java language provides special support for the string concatenation operator ( + ), and for conversion of other objects to strings. **String concatenation is implemented through the StringBuilder(or StringBuffer) class and its append method**.*
+Case mapping is **based on the Unicode Standard version specified by the Character class**.
+The Java language provides special support for the string concatenation operator ( + ), and for conversion of other objects to strings. **String concatenation is implemented through the StringBuilder(or StringBuffer) class and its append method**.
 
-*A String represents a string in the **UTF-16** format in which supplementary characters are represented by surrogate pairs (see the section Unicode Character Representations in the Character class for more information). Index values refer to char code units, so a supplementary character uses two positions in a String.*
-
-
+A String represents a string in the **UTF-16** format in which supplementary characters are represented by surrogate pairs (see the section Unicode Character Representations in the Character class for more information). Index values refer to char code units, so a supplementary character uses two positions in a String.
 
 
+The implementation of the string concatenation operator is left to the discretion of a Java compiler, as long as the compiler ultimately conforms to The Java Language Specification. For example, the javac compiler may implement the operator with `StringBuffer`, `StringBuilder`, or `java.lang.invoke.StringConcatFactory` depending on the JDK version. The implementation of string conversion is typically through the method toString, defined by Object and inherited by all classes in Java.
+
+## structure
+
+
+### value
 ```java
 public final class String
     implements java.io.Serializable, Comparable<String>, CharSequence {
     /** The value is used for character storage. */
     private final char value[];
 
-    /** Cache the hash code for the string */
-    private int hash; // Default to 0
-  //...
 }
 ```
 
 
-
-
-`From JDK11, value change to byte[].`
-
-The value is used for character storage.
-Implementation Note:
-This field is trusted by the VM, and is a subject to constant folding if String instance is constant. Overwriting this field after construction will cause problems. Additionally, it is marked with Stable to trust the contents of the array. No other facility in JDK provides this functionality (yet). Stable is safe here, because value is never null.
-
+`From JDK11, value change to byte[] and add byte coder.`
 ```java
-public final class String
-    implements java.io.Serializable, Comparable<String>, CharSequence,
-               Constable, ConstantDesc {
-
-    /**
-     * The value is used for character storage.
-     *
-     * @implNote This field is trusted by the VM, and is a subject to
-     * constant folding if String instance is constant. Overwriting this
-     * field after construction will cause problems.
-     *
-     * Additionally, it is marked with {@link Stable} to trust the contents
-     * of the array. No other facility in JDK provides this functionality (yet).
-     * {@link Stable} is safe here, because value is never null.
-     */
+    /** The value is used for character storage. */
     @Stable
     private final byte[] value;
 
-/**
- * The identifier of the encoding used to encode the bytes in
- * {@code value}. The supported values in this implementation are
- *
- * LATIN1
- * UTF16
- *
- * @implNote This field is trusted by the VM, and is a subject to
- * constant folding if String instance is constant. Overwriting this
- * field after construction will cause problems.
- */
-private final byte coder;
+    /**
+     * The identifier of the encoding used to encode the bytes in
+     * {@code value}. The supported values in this implementation are
+     *
+     * LATIN1 UTF16
+     */
+    private final byte coder;
+```
+This field(value) is trusted by the VM, and is a subject to constant folding if String instance is constant. Overwriting this field after construction will cause problems. Additionally, it is marked with Stable to trust the contents of the array. No other facility in JDK provides this functionality (yet). Stable is safe here, because value is never null.
 
-/** Cache the hash code for the string */
-private int hash; // Default to 0
+This field(coder) is trusted by the VM, and is a subject to constant folding if String instance is constant. Overwriting this field after construction will cause problems.
 
-/**
- * Cache if the hash has been calculated as actually being zero, enabling
- * us to avoid recalculating this.
- */
-private boolean hashIsZero; // Default to false;
-...     
-}
+
+#### compact
+```java
+
+    /**
+     * If String compaction is disabled, the bytes in {@code value} are
+     * always encoded in UTF16.
+     *
+     * For methods with several possible implementation paths, when String
+     * compaction is disabled, only one code path is taken.
+     *
+     * The instance field value is generally opaque to optimizing JIT
+     * compilers. Therefore, in performance-sensitive place, an explicit
+     * check of the static boolean {@code COMPACT_STRINGS} is done first
+     * before checking the {@code coder} field since the static boolean
+     * {@code COMPACT_STRINGS} would be constant folded away by an
+     * optimizing JIT compiler. The idioms for these cases are as follows.
+     *
+     * For code such as:
+     *
+     *    if (coder == LATIN1) { ... }
+     *
+     * can be written more optimally as
+     *
+     *    if (coder() == LATIN1) { ... }
+     *
+     * or:
+     *
+     *    if (COMPACT_STRINGS && coder == LATIN1) { ... }
+     *
+     * An optimizing JIT compiler can fold the above conditional as:
+     *
+     *    COMPACT_STRINGS == true  => if (coder == LATIN1) { ... }
+     *    COMPACT_STRINGS == false => if (false)           { ... }
+     *
+     * @implNote
+     * The actual value for this field is injected by JVM. The static
+     * initialization block is used to set the value here to communicate
+     * that this static final field is not statically foldable, and to
+     * avoid any possible circular dependency during vm initialization.
+     */
+    static final boolean COMPACT_STRINGS;
+
+    static {
+        COMPACT_STRINGS = true;
+    }
+```
+
+### hash
+
+String lazily computes the hash code the first time hashCode is called and caches it in a non‐final field.
+```java
+
+    /** Cache the hash code for the string */
+    private int hash; // Default to 0
+
+    /**
+     * Cache if the hash has been calculated as actually being zero, enabling
+     * us to avoid recalculating this.
+     */
+    private boolean hashIsZero; // Default to false;
 ```
 
 
+We usually use long or int to replace String in order to reduce network transmission consumption.
 
-We usually use long or int to replace String in order to reduce
-network transmission consumption.
-
-## memory
-
-
-byte[] = 8+8=16
-a String("") = 40 Bytes
-
-byte[]
-
-
-
-首先字符串的内容是由一个字符数组 char[] 来存储的，由于数组的长度及索引是整数，且String类中返回字符串长度的方法length() 的返回值也是int ，所以通过查看java源码中的类Integer我们可以看到Integer的最大范围是2^31 -1,由于数组是从0开始的，所以数组的最大长度可以使【0~2^31-1】通过计算是大概4GB。
-
-但是通过翻阅java虚拟机手册对class文件格式的定义以及常量池中对String类型的结构体定义我们可以知道对于索引定义了u2，就是无符号占2个字节，2个字节可以表示的最大范围是2^16 -1 = 65535。
-其实是65535，但是由于JVM需要1个字节表示结束指令，所以这个范围就为65534了。超出这个范围在编译时期是会报错的，但是运行时拼接或者赋值的话范围是在整形的最大范围。
-
-
-
-### hashCode
-
-
-
+#### hashCode
 *Returns a hash code for this string. The hash code for a String object is computed as*
 
        *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
@@ -112,21 +121,13 @@ byte[]
 
 Why use 31?
 
-1. 碰撞概率小
-2. 计算方便
-3. 散列均匀,不会有199这样会溢出的风险
+1. avoid hash collision
+2. Easy to calculate
+3. The hash is uniform, there is no risk of overflowing like 199
 
 
 
 ```java
-/** Cache the hash code for the string */
-private int hash; // Default to 0
-
-/**
- * Cache if the hash has been calculated as actually being zero, enabling
- * us to avoid recalculating this.
- */
-private boolean hashIsZero; // Default to false;
 
 public int hashCode() {
     // The hash or hashIsZero fields are subject to a benign data race,
@@ -151,7 +152,7 @@ public int hashCode() {
 }
 ```
 
-### equals
+#### equals
 ```java
     /**
      * Compares this string to the specified object.  The result is {@code
@@ -184,6 +185,20 @@ public int hashCode() {
         return false;
     }
 ```
+
+
+## memory
+
+
+byte[] = 8+8=16
+a String("") = 40 Bytes
+
+byte[]
+
+
+
+65534 when compile
+Integer.Max in runtime
 
 
 
@@ -320,15 +335,13 @@ HashTable
 
 
 
-SymbolTable 
-
-1.8 20011
-
-15 32768
-
 ```
 -XX:+PrintStringTableStatistics
 -XX:StringTableSize=N
+```
+
+```shell
+jcmd <pid> VM.stringtable
 ```
 
 

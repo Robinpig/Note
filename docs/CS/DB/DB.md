@@ -1,6 +1,8 @@
-# DB
+## Introduction
 
 
+
+## Architecture
 
 Storage data layer
 
@@ -22,266 +24,80 @@ concurrency
 
 
 
-# 一、基本概念
 
-概念一：单库
 
-![image.png](https://p6-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/77ad8039e17f4514a57c78f7321c7c36~tplv-k3u1fbpfcp-watermark.image)
+## Concurrency Control
 
-概念二、分片
+### Why is concurrency control needed?
 
-![image.png](https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4c3c69165d094c8bb7fd664c8afa42a9~tplv-k3u1fbpfcp-watermark.image)
+If transactions are executed *serially*, i.e., sequentially with no overlap in time, no transaction concurrency exists. However, if concurrent transactions with interleaving operations are allowed in an uncontrolled manner, some unexpected, undesirable results may occur, such as:
 
-分片解决“数据量太大”这一问题，也就是通常说的“水平切分”。
+1. The lost update problem: A second transaction writes a second value of a data-item (datum) on top of a first value written by a first concurrent transaction, and the first value is lost to other transactions running concurrently which need, by their precedence, to read the first value. The transactions that have read the wrong value end with incorrect results.
+2. The dirty read problem: Transactions read a value written by a transaction that has been later aborted. This value disappears from the database upon abort, and should not have been read by any transaction ("dirty read"). The reading transactions end with incorrect results.
+3. The incorrect summary problem: While one transaction takes a summary over the values of all the instances of a repeated data-item, a second transaction updates some instances of that data-item. The resulting summary does not reflect a correct result for any (usually needed for correctness) precedence order between the two transactions (if one is executed before the other), but rather some random result, depending on the timing of the updates, and whether certain update results have been included in the summary or not.
 
-一旦引入分片，势必面临“数据路由”的新问题，数据到底要访问哪个库。路由规则通常有3种方法：
+Most high-performance transactional systems need to run transactions concurrently to meet their performance requirements. Thus, without concurrency control such systems can neither provide correct results nor maintain their databases consistently.
 
-**（1）范围：range**
+###  Concurrency control mechanisms
 
-优点：简单，容易扩展。
+#### Categories
 
-缺点：各库压力不均（新号段更活跃）。
+The main categories of concurrency control mechanisms are:
 
-**（2）哈希：hash**
+- **[Optimistic](https://en.wikipedia.org/wiki/Optimistic_concurrency_control)** - Delay the checking of whether a transaction meets the isolation and other integrity rules (e.g., [serializability](https://en.wikipedia.org/wiki/Serializability) and [recoverability](https://en.wikipedia.org/wiki/Serializability#Correctness_-_recoverability)) until its end, without blocking any of its (read, write) operations ("...and be optimistic about the rules being met..."), and then abort a transaction to prevent the violation, if the desired rules are to be violated upon its commit. An aborted transaction is immediately restarted and re-executed, which incurs an obvious overhead (versus executing it to the end only once). If not too many transactions are aborted, then being optimistic is usually a good strategy.
+- **Pessimistic** - Block an operation of a transaction, if it may cause violation of the rules, until the possibility of violation disappears. Blocking operations is typically involved with performance reduction.
+- **Semi-optimistic** - Block operations in some situations, if they may cause violation of some rules, and do not block in other situations while delaying rules checking (if needed) to transaction's end, as done with optimistic.
 
-优点：简单，数据均衡，负载均匀。
+Different categories provide different performance, i.e., different average transaction completion rates (*throughput*), depending on transaction types mix, computing level of parallelism, and other factors. If selection and knowledge about trade-offs are available, then category and method should be chosen to provide the highest performance.
 
-缺点：迁移麻烦（2库扩3库数据要迁移）。
+The mutual blocking between two transactions (where each one blocks the other) or more results in a [deadlock](https://en.wikipedia.org/wiki/Deadlock), where the transactions involved are stalled and cannot reach completion. Most non-optimistic mechanisms (with blocking) are prone to deadlocks which are resolved by an intentional abort of a stalled transaction (which releases the other transactions in that deadlock), and its immediate restart and re-execution. The likelihood of a deadlock is typically low.
 
-**（3）统一路由服务：router-config-server**
+Blocking, deadlocks, and aborts all result in performance reduction, and hence the trade-offs between the categories.
 
-优点：灵活性强，业务与路由算法解耦。
+#### Methods
 
-缺点：每次访问数据库前多一次查询。
+Many methods for concurrency control exist. Most of them can be implemented within either main category above. The major methods,[[1\]](https://en.wikipedia.org/wiki/Concurrency_control#cite_note-Bern2009-1) which have each many variants, and in some cases may overlap or be combined, are:
 
-大部分互联网公司采用的方案二：哈希路由。
+1. Locking (e.g., **[Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)** - 2PL) - Controlling access to data by [locks](https://en.wikipedia.org/wiki/Lock_(computer_science)) assigned to the data. Access of a transaction to a data item (database object) locked by another transaction may be blocked (depending on lock type and access operation type) until lock release.
+2. **Serialization [graph checking](https://en.wikipedia.org/wiki/Serializability#Testing_conflict_serializability)** (also called Serializability, or Conflict, or Precedence graph checking) - Checking for [cycles](https://en.wikipedia.org/wiki/Cycle_(graph_theory)) in the schedule's [graph](https://en.wikipedia.org/wiki/Directed_graph) and breaking them by aborts.
+3. **[Timestamp ordering](https://en.wikipedia.org/wiki/Timestamp-based_concurrency_control)** (TO) - Assigning timestamps to transactions, and controlling or checking access to data by timestamp order.
+4. **[Commitment ordering](https://en.wikipedia.org/wiki/Commitment_ordering)** (or Commit ordering; CO) - Controlling or checking transactions' chronological order of commit events to be compatible with their respective [precedence order](https://en.wikipedia.org/wiki/Serializability#Testing_conflict_serializability).
 
-**概念三、分组**
+Other major concurrency control types that are utilized in conjunction with the methods above include:
 
-![image.png](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/ae8e3787bbb04083b8cb4a1e69995130~tplv-k3u1fbpfcp-watermark.image)
+- **[Multiversion concurrency control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)** (MVCC) - Increasing concurrency and performance by generating a new version of a database object each time the object is written, and allowing transactions' read operations of several last relevant versions (of each object) depending on scheduling method.
+- **[Index concurrency control](https://en.wikipedia.org/wiki/Index_locking)** - Synchronizing access operations to [indexes](https://en.wikipedia.org/wiki/Index_(database)), rather than to user data. Specialized methods provide substantial performance gains.
+- **Private workspace model** (**Deferred update**) - Each transaction maintains a private workspace for its accessed data, and its changed data become visible outside the transaction only upon its commit (e.g., [Weikum and Vossen 2001](https://en.wikipedia.org/wiki/Concurrency_control#Weikum01)). This model provides a different concurrency control behavior with benefits in many cases.
 
-分组解决“可用性，性能提升”这一问题，分组通常通过主从复制的方式实现。
+The most common mechanism type in database systems since their early days in the 1970s has been *[Strong strict Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)* (SS2PL; also called *Rigorous scheduling* or *Rigorous 2PL*) which is a special case (variant) of both [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking) (2PL) and [Commitment ordering](https://en.wikipedia.org/wiki/Commitment_ordering) (CO). It is pessimistic. In spite of its long name (for historical reasons) the idea of the **SS2PL** mechanism is simple: "Release all locks applied by a transaction only after the transaction has ended." SS2PL (or Rigorousness) is also the name of the set of all schedules that can be generated by this mechanism, i.e., these are SS2PL (or Rigorous) schedules, have the SS2PL (or Rigorousness) property.
 
-互联网公司数据库实际软件架构是“既分片，又分组”：
+### Optimistic concurrency control
 
-![image.png](https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/f529cc198bca41f6a88402ac55f727ff~tplv-k3u1fbpfcp-watermark.image)
+**Optimistic concurrency control** (**OCC**) is a [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) method applied to transactional systems such as [relational database management systems](https://en.wikipedia.org/wiki/Relational_database_management_systems) and [software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory). OCC assumes that multiple transactions can frequently complete without interfering with each other. While running, transactions use data resources without acquiring locks on those resources. Before committing, each transaction verifies that no other transaction has modified the data it has read. If the check reveals conflicting modifications, the committing transaction rolls back and can be restarted.[[1\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-1) Optimistic concurrency control was first proposed by [H. T. Kung](https://en.wikipedia.org/wiki/H._T._Kung) and John T. Robinson.[[2\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-KungRobinson1981-2)
 
-数据库软件架构，究竟设计些什么呢，至少要考虑以下四点：
+OCC is generally used in environments with low [data contention](https://en.wikipedia.org/wiki/Block_contention). When conflicts are rare, transactions can complete without the expense of managing locks and without having transactions wait for other transactions' locks to clear, leading to higher throughput than other concurrency control methods. However, if contention for data resources is frequent, the cost of repeatedly restarting transactions hurts performance significantly, in which case other [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) methods may be better suited. However, locking-based ("pessimistic") methods also can deliver poor performance because locking can drastically limit effective concurrency even when deadlocks are avoided.
 
-- 如何保证数据可用性
-- 如何提高数据库读性能（大部分应用读多写少，读会先成为瓶颈）
-- 如何保证一致性
-- 如何提高扩展性
 
-## 二、如何保证数据的可用性？
 
-解决可用性问题的思路是：冗余。
+#### Phases of optimistic concurrency control
 
-如何保证站点的可用性？冗余站点。
+Optimistic concurrency control transactions involve these phases:
 
-如何保证服务的可用性？冗余服务。
+- **Begin**: Record a timestamp marking the transaction's beginning.
+- **Modify**: Read database values, and tentatively write changes.
+- **Validate**: Check whether other transactions have modified data that this transaction has used (read or written). This includes transactions that completed after this transaction's start time, and optionally, transactions that are still active at validation time.
+- **Commit/Rollback**: If there is no conflict, make all changes take effect. If there is a conflict, resolve it, typically by aborting the transaction, although other resolution schemes are possible. Care must be taken to avoid a [time-of-check to time-of-use](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use) bug, particularly if this phase and the previous one are not performed as a single [atomic](https://en.wikipedia.org/wiki/Linearizability) operation.
 
-如何保证数据的可用性？冗余数据。
 
-数据的冗余，会带来一个副作用：一致性问题。
 
-如何保证数据库“读”高可用？
 
-冗余读库。
 
-![image.png](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
+### Two-phase locking
+In [databases](https://en.wikipedia.org/wiki/Database) and [transaction processing](https://en.wikipedia.org/wiki/Transaction_processing), **two-phase locking** (**2PL**) is a [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) method that guarantees [serializability](https://en.wikipedia.org/wiki/Serializability).[[1\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Bern1987-1)[[2\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Weikum2001-2) It is also the name of the resulting set of [database transaction](https://en.wikipedia.org/wiki/Database_transaction) [schedules](https://en.wikipedia.org/wiki/Schedule_(computer_science)) (histories). The protocol utilizes [locks](https://en.wikipedia.org/wiki/Lock_(computer_science)), applied by a transaction to data, which may block (interpreted as signals to stop) other transactions from accessing the same data during the transaction's life.
 
-冗余读库带来什么副作用？
+By the 2PL protocol, locks are applied and removed in two phases:
 
-读写有延时，数据可能不一致。
+1. Expanding phase: locks are acquired and no locks are released.
+2. Shrinking phase: locks are released and no locks are acquired.
 
-上图是很多互联网公司mysql的架构，写仍然是单点，不能保证写高可用。
-
-**如何保证数据库“写”高可用？**
-
-冗余写库。
-
-![image.png](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-采用双主互备的方式，可以冗余写库。
-
-冗余写库带来什么副作用？
-
-双写同步，数据可能冲突（例如“自增id”同步冲突）。
-
-如何解决同步冲突，有两种常见解决方案：
-
-（1）两个写库使用不同的初始值，相同的步长来增加id：1写库的id为0,2,4,6...；2写库的id为1,3,5,7…；
-
-（2）不使用数据的id，业务层自己生成唯一的id，保证数据不冲突；
-
-阿里云的RDS服务号称写高可用，是如何实现的呢？
-
-他们采用的就是类似于“双主同步”的方式（不再有从库了）。
-
-![image.png](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-仍是双主，但只有一个主提供读写服务，另一个主是“shadow-master”，只用来保证高可用，平时不提供服务。
-
-master挂了，shadow-master顶上，虚IP漂移，对业务层透明，不需要人工介入。
-
-这种方式的好处：
-
-（1）读写没有延时，无一致性问题；
-
-（2）读写高可用；
-
-不足是：
-
-（1）不能通过加从库的方式扩展读性能；
-
-（2）资源利用率为50%，一台冗余主没有提供服务；
-
-画外音：所以，高可用RDS还挺贵的。
-
-三、如何扩展读性能？
-
-提高读性能的方式大致有三种，第一种是增加索引。
-
-这种方式不展开，要提到的一点是，不同的库可以建立不同的索引。
-
-![image.png](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-如上图：
-
-（1）写库不建立索引；
-
-（2）线上读库建立线上访问索引，例如uid；
-
-（3）线下读库建立线下访问索引，例如time；
-
-第二种扩充读性能的方式是，增加从库。
-
-这种方法大家用的比较多，存在两个缺点：
-
-（1）从库越多，同步越慢；
-
-（2）同步越慢，数据不一致窗口越大；
-
-第三种增加系统读性能的方式是，增加缓存。
-
-常见的缓存架构如下：
-
-![image.png](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-（1）上游是业务应用；
-
-（2）下游是主库，从库（读写分离），缓存；
-
-如果系统架构实施了服务化：
-
-（1）上游是业务应用；
-
-（2）中间是服务；
-
-（3）下游是主库，从库，缓存；
-
-![image.png](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-业务层不直接面向db和cache，服务层屏蔽了底层db、cache的复杂性。
-
-不管采用主从的方式扩展读性能，还是缓存的方式扩展读性能，数据都要复制多份（主+从，db+cache），一定会引发一致性问题。
-
-四、如何保证一致性？
-
-主从数据库的一致性，通常有两种解决方案：
-
-![image.png](https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/721d670f2af74a45ab0717c10eb3d520~tplv-k3u1fbpfcp-watermark.image)
-
-如果某一个key有写操作，在不一致时间窗口内，中间件会将这个key的读操作也路由到主库上。
-
-![image.png](https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e0465e3cd2a74348ab32d503f6984cfa~tplv-k3u1fbpfcp-watermark.image)
-
-**（2）强制读主**
-
-![image.png](https://p1-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/cd3569cec88d4c74a17b9f4597db9ee9~tplv-k3u1fbpfcp-watermark.image)
-
-“双主高可用”的架构，主从一致性的问题能够大大缓解。
-
-第二类不一致，是db与缓存间的不一致。
-
-![image.png](https://p9-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/d6dcdc1b6d64429bb6d962504708421e~tplv-k3u1fbpfcp-watermark.image)
-
-这一类不一致，《[缓存架构，一篇足够？](http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=2651961368&idx=1&sn=82a59f41332e11a29c5759248bc1ba17&chksm=bd2d0dc48a5a84d293f5999760b994cee9b7e20e240c04d0ed442e139f84ebacf608d51f4342&scene=21#wechat_redirect)》里有非常详细的叙述，本文不再展开。
-
-另外建议，所有允许cache miss的业务场景，缓存中的KEY都设置一个超时时间，这样即使出现不一致，有机会得到自修复。
-
-**五、如何保障数据库的扩展性？**
-
-秒级成倍数据库扩容：
-
-《[亿级数据DB秒级平滑扩容](http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=2651962231&idx=1&sn=1b51d042c243f0b3ce0b748ddbcff865&chksm=bd2d0eab8a5a87bdcbe7dd08fb4c969ad76fa0ea00b2c78645db8561fd2a78d813d7b8bef2ac&scene=21#wechat_redirect)》
-
-如果不是成倍扩容：
-
-《[100亿数据平滑数据迁移,不影响服务](http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=2651962270&idx=1&sn=3131888f29d0d137d02703a6dc91fa56&chksm=bd2d0e428a5a87547dfc6a0a292a7746ad50b74a078e29b4b8024633fa42db6ccc5f47435063&scene=21#wechat_redirect)》
-
-也可能，是要对字段进行扩展：
-
-《[1万属性，100亿数据，架构设计？](http://mp.weixin.qq.com/s?__biz=MjM5ODYxMDA5OQ==&mid=2651962219&idx=1&sn=30545c7a9f46fa74a61cc09323a6a8c9&chksm=bd2d0eb78a5a87a1c16b1d10fbb688adb2848345b70fa2fbc161b3a566c7c3e02adaccd5981e&scene=21#wechat_redirect)》
-
-这些方案，都有相关文章展开写过，本文不再赘述。
-
-**数据库软件架构，到底要设计些什么？**
-
-- 可用性
-- 读性能
-- 一致性
-- 扩展性
-
-希望对大家系统性理解数据库软件架构有帮助。
-
-对于主键与唯一索引约束：
-
-（1）执行insert和update时，会触发约束检查；
-
-（2）**InnoDB**违反约束时，会回滚对应SQL；
-
-（3）**MyISAM**违反约束时，会中断对应的SQL，可能造成不符合预期的结果集；
-
-（4）可以使用 insert … on duplicate key 来指定触发约束时的动作；
-
-（5）通常使用 show warnings; 来查看与调试违反约束的ERROR；
-
-
- 互联网大数据量高并发量业务，**为了大家的身心健康，请使用InnoDB**。
-
-
-
-### 数据库优化
-
-*在现实的开发环境之中所谓的数据库优化是不存在的，实际上所谓数据库的优化有很多层次。*
-
-**1.语句上的优化**：尽量不要使用多表查询，不要频繁地使用各种神奇的统计查询，如果需要，建议使用子查询来代替（子查询只是一种折中方案，不是最好的，只是相对的，当数据量大的时候，所有认知的规则全部都将改变）。
-
-**2.数据库的优化只能够体现在查询上**，而这个查询还是在认知范围内的数据量，例如使用索引，一旦使用索引，就不能够进行频繁的修改，例如：在主键往往会设置索引，但是从另一个角度，数据不应该进行物理删除，而要进行逻辑删除，只是为了保证索引不被重新创建；
--空间换时间，时间换空间：你的数据是否需要进行同步处理操作。
-
-**3.当存在有多个RPC业务端的时候，可以考虑进行垂直拆库的做法**，这个时候只能够按照功能进行拆分，这个是需要强大的接口技术支持的。
-
-**4.当分库也无法解决问题的时候就需要考虑数据库的水平拆分问题。**（认知范围内的唯一可以使用的最后方案）
-
-**5.如果需要保证强大的查询性能**，那么就需要再次引入搜索引擎的概念进行分词处理。
-
-
-
-
-
-#### 连接池实现原理
-
-------
-
-如果想要实现一个连接池，本质的实现思想就是一个Connection的对象数组，这个对象数组并不是无限开辟的，是有上限的，最初的数据库手工连接池的实现可以采用Map集合完成。在进行处理的时候，Map集合里面保存有全部连接池的可用连接（最小维持数、最大可打开数，最大等待时间），实现思路：
-
-**-** 所有的连接对象被Map集合所管理，但是这个Map集合受到最大连接数的控制，如果现在需要获取数据库连接，发现已经没有可用的连接了，这个时候应该开辟新的连接，同时需要保证连接池是有上限的。
-
-**-** 在获取连接的时候如果发现连接已经满了，这个时候应该追加一个等待唤醒机制，对于连接池的控制，如果发现没有连接，则等待新的连接到来，就可以采用线程的等待与唤醒机制来完成。
-
-**-** 连接池中的连接使用完成后一定要关闭，这个关闭并不是彻底关闭数据库的连接，而是说将这个连接的可用性重新放回到连接池中，也就是说为连接池里设置一个标记（标记为true，就表示该连接可用，如果没有true的连接了，就表示连接池满了，当把连接放回去之后将这个标记设置为false，就表示有空余连接了）。
-
-**-** 如果现在要去考虑连接池的实现，最好的做法就是使用ConcurrentHashMap子类来实现，这个类考虑到了并发性，并且也可以有很好的同步处理效果。
+Two types of locks are utilized by the basic protocol: *Shared* and *Exclusive* locks. Refinements of the basic protocol may utilize more lock types. Using locks that block processes, 2PL may be subject to [deadlocks](https://en.wikipedia.org/wiki/Deadlock) that result from the mutual blocking of two or more transactions.

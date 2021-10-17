@@ -1,21 +1,33 @@
 ## Introduction
 
-线程过多会带来额外的开销，其中包括创建销毁线程的开销、调度线程的开销等等，同时也降低了计算机的整体性能。线程池维护多个线程，等待监督管理者分配可并发执行的任务。这种做法，一方面避免了处理任务时创建销毁线程开销的代价，另一方面避免了线程数量膨胀导致的过分调度问题，保证了对内核的充分利用
-
+### Disadvantages of Unbounded Thread Creation
+- Thread lifecycle overhead
+  Thread creation and teardown are not free. The actual overhead varies across platforms, but
+  thread creation takes time, introducing latency into request processing, and requires some processing activity by the
+  JVM and OS.
+- Resource consumption
+  Active threads consume system resources, especially memory. When there are more runnable
+  threads than available processors, threads sit idle.
+- Stability
+  There is a limit on how many threads can be created.
 
 
 benefits：
-
-- **降低资源消耗**：通过池化技术重复利用已创建的线程，降低线程创建和销毁造成的损耗。
-- **提高响应速度**：任务到达时，无需等待线程创建即可立即执行。
-- **提高线程的可管理性**：线程是稀缺资源，如果无限制创建，不仅会消耗系统资源，还会因为线程的不合理分布导致资源调度失衡，降低系统的稳定性。使用线程池可以进行统一的分配、调优和监控。
-- **提供更多更强大的功能**：线程池具备可拓展性，允许开发人员向其中增加更多的功能。比如延时定时线程池ScheduledThreadPoolExecutor，就允许任务延期执行或定期执行。
 
 
 
 ![ThreadPoolExecutor](../images/ThreadPoolExecutor.png)
 
 ## Executor
+
+
+Thread pools offer the same benefit for thread management, and `java.util.concurrent` provides a flexible thread pool implementation as part of the Executor framework. The primary abstraction for task execution in the Java class libraries is not Thread, but `Executor`.
+```java
+public interface Executor {
+   //The command may execute in a new thread, in a pooled thread, or in the calling thread
+    void execute(Runnable command);
+}
+```
 
 *An object that executes submitted **Runnable** tasks. This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.*
 
@@ -25,12 +37,6 @@ The command may execute:
 2. in a pooled thread,
 3. in the calling thread
 
-```java
-public interface Executor {
-   //The command may execute in a new thread, in a pooled thread, or in the calling thread
-    void execute(Runnable command);
-}
-```
 
 
 
@@ -233,11 +239,18 @@ public interface ScheduledExecutorService extends ExecutorService {
 }
 ```
 
+## CompletionService
+A service that decouples the production of new asynchronous tasks from the consumption of the results of completed tasks. Producers submit tasks for execution. Consumers take completed tasks and process their results in the order they complete. A CompletionService can for example be used to manage asynchronous I/O, in which tasks that perform reads are submitted in one part of a program or system, and then acted upon in a different part of the program when the reads complete, possibly in a different order than they were requested.
+Typically, a CompletionService relies on a separate Executor to actually execute the tasks, in which case the CompletionService only manages an internal completion queue. The ExecutorCompletionService class provides an implementation of this approach.
+
+**Memory consistency effects:** Actions in a thread prior to submitting a task to a CompletionService happen-before actions taken by that task, which in turn happen-before actions following a successful return from the corresponding take().
 
 
 ## ThreadPoolExecutor
 
 An ExecutorService that executes each submitted task using one of possibly several pooled threads, normally  configured using Executors factory methods.
+
+A thread pool, as its name suggests, manages a homogeneous pool of worker threads. A thread pool is tightly bound to a work queue holding tasks waiting to be executed. Worker threads have a simple life: request the next task from the work queue, execute it, and go back to waiting for another task
 
 Thread pools address two different problems: 
 
