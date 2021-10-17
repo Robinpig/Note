@@ -156,6 +156,26 @@ The type of data cached in the change buffer is governed by the `innodb_change_b
 Change buffering is not supported for a secondary index if the index contains a descending index column or if the primary key includes a descending index column.
 
 
+### insert buffer
+for secondary non_unique index
+```
+// using SHOW ENGINE INNODB STATUS;
+Ibuf: size 1, free list len 0, seg size 2, 0 merges
+merged operations:
+insert 0, delete mark 0, delete 0
+discarded operations:
+insert 0, delete mark 0, delete 0
+```
+
+```cpp
+
+/** Maximum on-disk size of change buffer in terms of percentage
+of the buffer pool. */
+uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
+
+```
+
+
 How much space does InnoDB use for the change buffer?
 
 Prior to the introduction of the innodb_change_buffer_max_size configuration option in MySQL 5.6, the maximum size of the on-disk change buffer in the system tablespace was 1/3 of the InnoDB buffer pool size.

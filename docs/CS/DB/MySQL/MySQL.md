@@ -320,24 +320,6 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
   
 ```
 
-### insert buffer
-for secondary non_unique index
-```
-// using SHOW ENGINE INNODB STATUS;
-Ibuf: size 1, free list len 0, seg size 2, 0 merges
-merged operations:
-insert 0, delete mark 0, delete 0
-discarded operations:
-insert 0, delete mark 0, delete 0
-```
-
-```cpp
-
-/** Maximum on-disk size of change buffer in terms of percentage
-of the buffer pool. */
-uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
-
-```
 
 ## Files
 
@@ -350,27 +332,7 @@ uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
 ### [File](/docs/CS/DB/MySQL/file.md)
 
 
-![image-20210430214713744](./images/SQL.png)
-
-Table
-
-笛卡尔积
-
-Forever table
-
-temp table
-
-- union union all
-- Temptable algorithm
-- distinct and order by
-
-
-
-virtual table
-
-2
-
-### Server
+## Server
 
 
 

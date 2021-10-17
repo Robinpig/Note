@@ -14,22 +14,22 @@ The following sections discuss how MySQL features, in particular the `InnoDB` st
 
 The **atomicity** aspect of the ACID model mainly involves `InnoDB` transactions. Related MySQL features include:
 
-- The [`autocommit`](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_autocommit) setting.
-- The [`COMMIT`](https://dev.mysql.com/doc/refman/5.7/en/commit.html) statement.
-- The [`ROLLBACK`](https://dev.mysql.com/doc/refman/5.7/en/commit.html) statement.
+- The `autocommit` setting.
+- The `COMMIT` statement.
+- The `ROLLBACK` statement.
 
 ### Consistency
 
 The **consistency** aspect of the ACID model mainly involves internal `InnoDB` processing to protect data from crashes. Related MySQL features include:
 
-- The `InnoDB` doublewrite buffer. See [Section 14.6.5, “Doublewrite Buffer”](https://dev.mysql.com/doc/refman/5.7/en/innodb-doublewrite-buffer.html).
-- `InnoDB` crash recovery. See [InnoDB Crash Recovery](https://dev.mysql.com/doc/refman/5.7/en/innodb-recovery.html#innodb-crash-recovery).
-- `undo log`
+- The `InnoDB` [doublewrite buffer](/docs/CS/DB/MySQL/disk.md?id=Doublewrite_Buffer).
+- `InnoDB` crash recovery.
+
 ### Isolation
 
 The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions, in particular the isolation level that applies to each transaction. Related MySQL features include:
 
-- The [`autocommit`](https://dev.mysql.com/doc/refman/5.7/en/server-system-variables.html#sysvar_autocommit) setting.
+- The [`autocommit` setting.
 - Transaction isolation levels and the `SET TRANSACTION` statement.
 - The low-level details of `InnoDB` locking. Details can be viewed in the `INFORMATION_SCHEMA` tables.
 
@@ -38,9 +38,9 @@ The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions
 The **durability** aspect of the ACID model involves MySQL software features interacting with your particular hardware configuration. Because of the many possibilities depending on the capabilities of your CPU, network, and storage devices, this aspect is the most complicated to provide concrete guidelines for. (And those guidelines might take the form of “buy new hardware”.) Related MySQL features include:
 
 - The `InnoDB` doublewrite buffer.
-- The [`innodb_flush_log_at_trx_commit`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_flush_log_at_trx_commit) variable.
-- The [`sync_binlog`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-binary-log.html#sysvar_sync_binlog) variable.
-- The [`innodb_file_per_table`](https://dev.mysql.com/doc/refman/5.7/en/innodb-parameters.html#sysvar_innodb_file_per_table) variable.
+- The `innodb_flush_log_at_trx_commit` variable.
+- The `sync_binlog` variable.
+- The `innodb_file_per_table` variable.
 - The write buffer in a storage device, such as a disk drive, SSD, or RAID array.
 - A battery-backed cache in a storage device.
 - The operating system used to run MySQL, in particular its support for the `fsync()` system call.
@@ -61,7 +61,7 @@ Each consistent read, even within the same transaction, sets and reads its own *
 
 **Because gap locking is disabled, `phantom row` problems may occur, as other sessions can insert new rows into the gaps**. 
 
-Only row-based binary logging is supported with the `READ COMMITTED` isolation level. If you use `READ COMMITTED` with [`binlog_format=MIXED`](https://dev.mysql.com/doc/refman/8.0/en/replication-options-binary-log.html#sysvar_binlog_format), the server automatically uses row-based logging.
+Only row-based binary logging is supported with the `READ COMMITTED` isolation level. If you use `READ COMMITTED` with `binlog_format=MIXED`, the server automatically uses row-based logging.
 
 Using `READ COMMITTED` has additional effects:
 
@@ -300,7 +300,7 @@ In order to specify the aforementioned Reader/Writer non-locking behavior, the C
 
 While 2PL is pretty much standard, there’s no standard MVCC implementation, each database taking a slightly different approach. In this article, we are going to use PostgreSQL since its MVCC implementation is the easiest one to visualize.
 
-While Oracle and MySQL use the [undo log](https://vladmihalcea.com/how-does-a-relational-database-work/) to capture uncommitted changes so that rows can be reconstructed to their previously committed version, PostgreSQL stores all row versions in the table data structure.
+While Oracle and MySQL use the [undo log](/docs/CS/DB/MySQL/undolog.md) to capture uncommitted changes so that rows can be reconstructed to their previously committed version, PostgreSQL stores all row versions in the table data structure.
 
 ### InnoDB Multi-Versioning
 
@@ -324,20 +324,21 @@ If you insert and delete rows in smallish batches at about the same rate in the 
 
 ### Locking Reads
 
-A [`SELECT`](https://dev.mysql.com/doc/refman/8.0/en/select.html) statement that also performs a **locking** operation on an `InnoDB` table. Either `SELECT ... FOR UPDATE` or `SELECT ... LOCK IN SHARE MODE`. It has the potential to produce a **deadlock**, depending on the **isolation level** of the transaction. The opposite of a **non-locking read**. Not allowed for global tables in a **read-only transaction**.
+A `SELECT` statement that also performs a **locking** operation on an `InnoDB` table. Either `SELECT ... FOR UPDATE` or `SELECT ... LOCK IN SHARE MODE`. It has the potential to produce a **deadlock**, depending on the **isolation level** of the transaction. The opposite of a **non-locking read**. Not allowed for global tables in a **read-only transaction**.
 
 `SELECT ... FOR SHARE` replaces `SELECT ... LOCK IN SHARE MODE` in MySQL 8.0.1, but `LOCK IN SHARE MODE` remains available for backward compatibility.
 
 ### Consistent Nonlocking Reads
 
-A [consistent read](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_consistent_read) means that `InnoDB` uses multi-versioning to present to a query a snapshot of the database at a point in time. The query sees the changes made by transactions that committed before that point in time, and no changes made by later or uncommitted transactions. The exception to this rule is that the query sees the changes made by earlier statements within the same transaction. This exception causes the following anomaly: If you update some rows in a table, a [`SELECT`](https://dev.mysql.com/doc/refman/8.0/en/select.html) sees the latest version of the updated rows, but it might also see older versions of any rows. If other sessions simultaneously update the same table, the anomaly means that you might see the table in a state that never existed in the database.
+A `consistent read` means that `InnoDB` uses multi-versioning to present to a query a snapshot of the database at a point in time. The query sees the changes made by transactions that committed before that point in time, and no changes made by later or uncommitted transactions. The exception to this rule is that the query sees the changes made by earlier statements within the same transaction. This exception causes the following anomaly: 
+If you update some rows in a table, a `SELECT` sees the latest version of the updated rows, but it might also see older versions of any rows. If other sessions simultaneously update the same table, the anomaly means that you might see the table in a state that never existed in the database.
 
-- If the transaction [isolation level](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_isolation_level) is [`REPEATABLE READ`](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html#isolevel_repeatable-read) (the default level), all consistent reads within the same transaction read the snapshot established by the first such read in that transaction. You can get a fresher snapshot for your queries by committing the current transaction and after that issuing new queries.
-- With [`READ COMMITTED`](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html#isolevel_read-committed) isolation level, each consistent read within a transaction sets and reads its own fresh snapshot.
+- If the transaction isolation level is `REPEATABLE READ` (the default level), all consistent reads within the same transaction read the snapshot established by the first such read in that transaction. You can get a fresher snapshot for your queries by committing the current transaction and after that issuing new queries.
+- With `READ COMMITTED` isolation level, each consistent read within a transaction sets and reads its own fresh snapshot.
 
-Consistent read is the default mode in which `InnoDB` processes [`SELECT`](https://dev.mysql.com/doc/refman/8.0/en/select.html) statements in [`READ COMMITTED`](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html#isolevel_read-committed) and [`REPEATABLE READ`](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html#isolevel_repeatable-read) isolation levels. A consistent read does not set any locks on the tables it accesses, and therefore other sessions are free to modify those tables at the same time a consistent read is being performed on the table.
+Consistent read is the default mode in which `InnoDB` processes `SELECT` statements in `READ COMMITTED` and `REPEATABLE READ` isolation levels. A consistent read does not set any locks on the tables it accesses, and therefore other sessions are free to modify those tables at the same time a consistent read is being performed on the table.
 
-Suppose that you are running in the default [`REPEATABLE READ`](https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html#isolevel_repeatable-read) isolation level. When you issue a consistent read (that is, an ordinary [`SELECT`](https://dev.mysql.com/doc/refman/8.0/en/select.html) statement), `InnoDB` gives your transaction a timepoint according to which your query sees the database. **If another transaction deletes a row and commits after your timepoint was assigned, you do not see the row as having been deleted. Inserts and updates are treated similarly.**
+Suppose that you are running in the default `REPEATABLE READ` isolation level. When you issue a consistent read (that is, an ordinary `SELECT` statement), `InnoDB` gives your transaction a timepoint according to which your query sees the database. **If another transaction deletes a row and commits after your timepoint was assigned, you do not see the row as having been deleted. Inserts and updates are treated similarly.**
 
 **The snapshot of the database state applies to `SELECT` statements within a transaction, not necessarily to `DML` statements`**.
 
@@ -351,9 +352,9 @@ Suppose that you are running in the default [`REPEATABLE READ`](https://dev.mysq
 
 When a secondary index column is updated, old secondary index records are delete-marked, new records are inserted, and delete-marked records are eventually purged. When a secondary index record is delete-marked or the secondary index page is updated by a newer transaction, `InnoDB` looks up the database record in the clustered index. In the clustered index, the record's `DB_TRX_ID` is checked, and the correct version of the record is retrieved from the undo log if the record was modified after the reading transaction was initiated.
 
-If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_covering_index) technique is not used. Instead of returning values from the index structure, `InnoDB` looks up the record in the clustered index.
+If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md?id=covering_index) technique is not used. Instead of returning values from the index structure, `InnoDB` looks up the record in the clustered index.
 
-However, if the [index condition pushdown (ICP)](https://dev.mysql.com/doc/refman/8.0/en/index-condition-pushdown-optimization.html) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index, the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index. If no matching records are found, the clustered index lookup is avoided. If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
+However, if the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index, the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index. If no matching records are found, the clustered index lookup is avoided. If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
 
 
 
@@ -399,7 +400,10 @@ void dict_table_add_system_columns(dict_table_t *table, mem_heap_t *heap) {
 
 
 
-
+trx_sys_t:
+1. MVCC
+2. trx_id
+3. [Rsegs](/docs/CS/DB/MySQL/Transaction.md?id=Rollback_Segment)
 
 ```c
 // trx0sys.h
@@ -422,13 +426,20 @@ struct trx_sys_t {
   trx_ids_t rw_trx_ids;
   
   Rsegs rsegs; /** Vector of pointers to rollback segments. */
+  
+  Rsegs tmp_rsegs; /** Vector of pointers to rollback segments within the temp tablespace; */
+  
+  /** A list of undo tablespace IDs found in the TRX_SYS page.
+  This cannot be part of the trx_sys_t object because it is initialized before
+  that object is created. */
+  extern Space_Ids *trx_sys_undo_spaces; 
   // ...
  };
 ```
 
 
 
-
+MVCC read view
 
 ```c
 // read0read.h
@@ -617,6 +628,119 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
 ```
 
 
+#### prepare
+1. set insert_undo & update_undo
+2. redo log
+```c
+// trx0trx.cc
+/** Prepares a transaction for given rollback segment.
+ @return lsn_t: lsn assigned for commit of scheduled rollback segment */
+static lsn_t trx_prepare_low(
+
+    // ...
+    
+    /* Change the undo log segment states from TRX_UNDO_ACTIVE to
+    TRX_UNDO_PREPARED: these modifications to the file data
+    structure define the transaction as prepared in the file-based
+    world, at the serialization point of lsn. */
+
+    rseg->latch();
+
+    if (undo_ptr->insert_undo != nullptr) {
+      /* It is not necessary to obtain trx->undo_mutex here
+      because only a single OS thread is allowed to do the
+      transaction prepare for this transaction. */
+      trx_undo_set_state_at_prepare(trx, undo_ptr->insert_undo, false, &mtr);
+    }
+
+    if (undo_ptr->update_undo != nullptr) {
+      if (!noredo_logging) {
+        trx_undo_gtid_set(trx, undo_ptr->update_undo, true);
+      }
+      trx_undo_set_state_at_prepare(trx, undo_ptr->update_undo, false, &mtr);
+    }
+
+    rseg->unlatch();
+    
+    
+    /*--------------*/
+    /* This mtr commit makes the transaction prepared in
+    file-based world. */
+    mtr_commit(&mtr);
+    /*--------------*/
+
+    if (!noredo_logging) {
+      const lsn_t lsn = mtr.commit_lsn();
+      ut_ad(lsn > 0 || !mtr_t::s_logging.is_enabled());
+      return lsn;
+    }
+}    
+```
+
+#### commit
+If transaction involves insert then truncate undo logs.
+
+If transaction involves update then add rollback segments
+to purge queue.
+
+Update the latest MySQL binlog name and offset information
+in trx sys header only if MySQL binary logging is on and clone
+is has ensured commit order at final stage.
+
+```c
+
+/** Commits a transaction and a mini-transaction.
+@param[in,out] trx Transaction
+@param[in,out] mtr Mini-transaction (will be committed), or null if trx made no
+modifications */
+void trx_commit_low(trx_t *trx, mtr_t *mtr) {
+    assert_trx_nonlocking_or_in_list(trx)
+    
+    
+    
+  bool serialised;
+
+    serialised = trx_write_serialisation_history(trx, mtr);
+    
+
+}
+
+
+
+
+/** Assign the transaction its history serialisation number and write the
+ update UNDO log record to the assigned rollback segment.
+ @return true if a serialisation log was written */
+static bool trx_write_serialisation_history(
+    trx_t *trx, /*!< in/out: transaction */
+    mtr_t *mtr) /*!< in/out: mini-transaction */
+{
+  
+  // ...
+  
+  
+  /* If transaction involves insert then truncate undo logs. */
+  if (trx->rsegs.m_redo.insert_undo != nullptr) {
+    trx_undo_set_state_at_finish(trx->rsegs.m_redo.insert_undo, mtr);
+  }
+
+  
+  /* If transaction involves update then add rollback segments
+  to purge queue. */
+
+
+  /* Update the latest MySQL binlog name and offset information
+  in trx sys header only if MySQL binary logging is on and clone
+  is has ensured commit order at final stage. */
+  if (Clone_handler::need_commit_order()) {
+    trx_sys_update_mysql_binlog_offset(trx, mtr);
+  }
+
+}
+
+```
+
+
 ## Distributed Transaction
 XA : isolation level must be `SERIALIZABLE`
 
@@ -632,4 +756,5 @@ XA : isolation level must be `SERIALIZABLE`
 1. [How does a relational database work](https://vladmihalcea.com/how-does-a-relational-database-work/)
 2. [Detailed explanation of MySQL mvcc mechanism](https://developpaper.com/detailed-explanation-of-mysql-mvcc-mechanism/)
 3. [解决死锁之路 - 学习事务与隔离级别](https://www.aneasystone.com/archives/2017/10/solving-dead-locks-one.html)
+
 
