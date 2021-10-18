@@ -41,6 +41,12 @@ Java object identifiers are *actually* “object references.” **And everything
 
 
 ## Method
+Check parameters for validity. In other words, failure to validate parameters, can result in a violation of failure atomicity.
+
+- Use varargs judiciously
+- Return empty collections or arrays, not nulls
+- Return optionals judiciously
+- Write doc comments for all exposed API elements
 
 ### identify
 
@@ -54,9 +60,15 @@ Reason :  You can not use return value types to distinguish **overloaded methods
 
 ###  Overload & Override
 
+Selection among overloaded methods is static, while selection among overridden methods is dynamic.
+
 **Overload**
 
 Same class and method name with different argument lists 
+
+The choice of which overloading to invoke is made at compile time.
+
+You can always give methods different names instead of overloading them.
 
 **Override**
 
@@ -110,6 +122,12 @@ create a object
 - superclass first, then class
 - fields first, then block and constructor
 
+Consider a builder when faced with many constructor parameters
+
+Enforce the singleton property with a private constructor or an enum type  
+Enforce noninstantiability with a private constructor
+
+Prefer dependency injection to hardwiring resources
 
 
 ### registerNatives
@@ -138,7 +156,7 @@ public final native Class<?> getClass();
 ### equals
 
 Indicates whether some other object is "equal to" this one.
-The equals method implements an equivalence relation on non-null object references:
+**Obey the general contract when overriding equals**. The equals method implements an equivalence relation on non-null object references:
 
 - It is reflexive: for any non-null reference value x, x.equals(x) should return true.
 - It is symmetric: for any non-null reference values x and y, x.equals(y) should return true if and only if y.equals(x) returns true.
@@ -148,7 +166,7 @@ The equals method implements an equivalence relation on non-null object referenc
 
 The equals method for class Object implements the most discriminating possible equivalence relation on objects; that is: For **any non-null reference values** x and y, this method **returns true if and only if x and y refer to the same object** (x == y has the value true).
 
-*Note that it is generally necessary to override the hashCode method whenever this method is overridden, so as to maintain the general contract for the hashCode method, which states that equal objects must have equal hash codes.*
+**Always override hashCode when you override equals**. *Note that it is generally necessary to override the hashCode method whenever this method is overridden, so as to maintain the general contract for the hashCode method, which states that equal objects must have equal hash codes.*
 
 ```java
 public boolean equals(Object obj) {
@@ -374,7 +392,7 @@ protected native Object clone() throws CloneNotSupportedException;
 ```
 
 ### toString
-
+**Always override toString**. Providing a good toString implementation makes your class much more pleasant to use and makes systems using the class easier to debug.
 ```java
 public String toString() {
     return getClass().getName() + "@" + Integer.toHexString(hashCode());
@@ -382,7 +400,7 @@ public String toString() {
 ```
 
 ### finalize
-*Avoid finalizers.*
+**Avoid finalizers and cleaners**.
 
 
 Since finalizers can run in a thread(Finalizer Thread) managed by the JVM, any state accessed by a finalizer will be accessed by more than one thread and therefore must be accessed with synchronization. Finalizers offer no guarantees on when or even if they run, and they impose a significant performance cost on objects with nontrivial finalizers. They are also extremely difficult to write correctly. In most cases, the combination of `finally blocks` and explicit close methods does a better job of resource management than finalizers; the sole exception is when you need to manage objects that hold resources acquired by native methods.
@@ -395,7 +413,7 @@ protected void finalize() throws Throwable { }
 
 ### wait & notify
 
-See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Order)
+Prefer concurrency utilities to wait and notify . See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Order)
 
 
 ## Serialization

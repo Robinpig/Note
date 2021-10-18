@@ -4,6 +4,7 @@
 
 That is, instead of creating the variable by using **new**, an “automatic” variable is created that is *not a reference*. The variable holds the value, and it’s **placed on the stack**, so it’s much more efficient. 
 
+**Prefer primitive types to boxed primitives**.
 ### Size
 
 Java determines the size of each primitive type. These sizes don’t change from one machine architecture to another as they do in most languages.
@@ -151,6 +152,8 @@ public static int highestOneBit(int i) {
 }
 ```
 
+## Float
+**Avoid float and double if exact answers are required**.
 
 ### BigDecimal
 

@@ -14,6 +14,12 @@ A String represents a string in the **UTF-16** format in which supplementary cha
 
 The implementation of the string concatenation operator is left to the discretion of a Java compiler, as long as the compiler ultimately conforms to The Java Language Specification. For example, the javac compiler may implement the operator with `StringBuffer`, `StringBuilder`, or `java.lang.invoke.StringConcatFactory` depending on the JDK version. The implementation of string conversion is typically through the method toString, defined by Object and inherited by all classes in Java.
 
+Avoid strings where other types are more appropriate:
+- Strings are poor substitutes for other value types.
+- Strings are poor substitutes for enum types.
+- Strings are poor substitutes for aggregate types.
+
+
 ## structure
 
 

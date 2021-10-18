@@ -1,9 +1,11 @@
 
 
+####  Prefer for-each loops to traditional for loops.
+
+#### Prefer try-with-resources to try-finally
 
 
-## try finally
+## interface
 
-
-
-finally block will execute after try block / catch block
+- Refer to objects by their interfaces  
+- Prefer interfaces to reflection  
