@@ -26,7 +26,7 @@ struct redisCommand redisCommandTable[] in server.c
 
 
 ## [Struct](/docs/CS/DB/Redis/struct.md)
-## [Persistence](/docs/CS/DB/Redis/RDB.md)
+## [Persistence](/docs/CS/DB/Redis/persist.md)
 
 ### RDB
 save

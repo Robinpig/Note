@@ -73,6 +73,15 @@ struct Tablespace {
 
 ### Rollback Segment
 
+
+```
+srv_start() -> trx_rseg_adjust_rollback_segments() -> trx_rseg_create() 
+
+                                                   -> trx_rseg_mem_create()
+```
+
+rollback segment memory object
+
 ```c
 /** The rollback segment memory object */
 struct trx_rseg_t {
@@ -138,7 +147,7 @@ struct trx_rseg_t {
 
 ### Truncate
 
-fil_truncate_tablespace()
+trx_undo_truncate_tablespace() -> fil_truncate_tablespace()
 
 
 ## purge

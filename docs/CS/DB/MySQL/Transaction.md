@@ -678,7 +678,7 @@ static lsn_t trx_prepare_low(
 ```
 
 #### commit
-If transaction involves insert then truncate undo logs.
+If transaction involves insert then [truncate undo logs](/docs/CS/DB/MySQL/undolog.md?id=Truncate).
 
 If transaction involves update then add rollback segments
 to purge queue.
@@ -724,10 +724,20 @@ static bool trx_write_serialisation_history(
     trx_undo_set_state_at_finish(trx->rsegs.m_redo.insert_undo, mtr);
   }
 
+  if (trx->rsegs.m_noredo.insert_undo != nullptr) {
+    trx_undo_set_state_at_finish(trx->rsegs.m_noredo.insert_undo, &temp_mtr);
+  }
+
+  bool serialised = false;
+  
   
   /* If transaction involves update then add rollback segments
   to purge queue. */
 
+   /* Will set trx->no and will add rseg to purge queue. */
+    serialised = trx_serialisation_number_get(trx, redo_rseg_undo_ptr,
+                                              temp_rseg_undo_ptr)
+      
 
   /* Update the latest MySQL binlog name and offset information
   in trx sys header only if MySQL binary logging is on and clone
@@ -736,6 +746,54 @@ static bool trx_write_serialisation_history(
     trx_sys_update_mysql_binlog_offset(trx, mtr);
   }
 
+}
+
+
+
+/** Set the transaction serialisation number.
+ @return true if the transaction number was added to the serialisation_list. */
+static bool trx_serialisation_number_get(
+    trx_t *trx,                         /*!< in/out: transaction */
+    trx_undo_ptr_t *redo_rseg_undo_ptr, /*!< in/out: Set trx
+                                        serialisation number in
+                                        referred undo rseg. */
+    trx_undo_ptr_t *temp_rseg_undo_ptr) /*!< in/out: Set trx
+                                        serialisation number in
+                                        referred undo rseg. */
+{
+  bool added_trx_no;
+  trx_rseg_t *redo_rseg = nullptr;
+  trx_rseg_t *temp_rseg = nullptr;
+	
+  // ...
+
+  /* If the rollack segment is not empty then the
+  new trx_t::no can't be less than any trx_t::no
+  already in the rollback segment. User threads only
+  produce events when a rollback segment is empty. */
+  if ((redo_rseg != nullptr && redo_rseg->last_page_no == FIL_NULL) ||
+      (temp_rseg != nullptr && temp_rseg->last_page_no == FIL_NULL)) {
+    TrxUndoRsegs elem;
+
+    if (redo_rseg != nullptr && redo_rseg->last_page_no == FIL_NULL) {
+      elem.insert(redo_rseg);
+    }
+
+    if (temp_rseg != nullptr && temp_rseg->last_page_no == FIL_NULL) {
+      elem.insert(temp_rseg);
+    }
+
+    // ...
+
+    purge_sys->purge_queue->push(std::move(elem));
+
+    mutex_exit(&purge_sys->pq_mutex);
+
+  } else {
+    added_trx_no = trx_add_to_serialisation_list(trx);
+  }
+
+  return (added_trx_no);
 }
 
 ```
@@ -756,5 +814,4 @@ XA : isolation level must be `SERIALIZABLE`
 1. [How does a relational database work](https://vladmihalcea.com/how-does-a-relational-database-work/)
 2. [Detailed explanation of MySQL mvcc mechanism](https://developpaper.com/detailed-explanation-of-mysql-mvcc-mechanism/)
 3. [解决死锁之路 - 学习事务与隔离级别](https://www.aneasystone.com/archives/2017/10/solving-dead-locks-one.html)
-
 
