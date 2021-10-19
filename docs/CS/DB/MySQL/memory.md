@@ -64,6 +64,41 @@ mysql> SELECT COUNT(*) FROM information_schema.INNODB_BUFFER_PAGE_LRU  WHERE OLD
 Modified db pages
 ```
 
+```c
+// buf0buf.h
+/** The buffer control block structure */
+class buf_page_t 
+ /** This is set to TRUE when fsp frees a page in buffer pool;
+  protected by buf_pool->zip_mutex or buf_block_t::mutex. */
+  bool file_page_was_freed;
+
+  /** TRUE if in buf_pool->flush_list; when buf_pool->flush_list_mutex
+  is free, the following should hold:
+    in_flush_list == (state == BUF_BLOCK_FILE_PAGE ||
+                      state == BUF_BLOCK_ZIP_DIRTY)
+  Writes to this field must be covered by both buf_pool->flush_list_mutex
+  and block->mutex. Hence reads can happen while holding any one of the
+  two mutexes */
+  bool in_flush_list;
+
+  /** true if in buf_pool->free; when buf_pool->free_list_mutex is free, the
+  following should hold: in_free_list == (state == BUF_BLOCK_NOT_USED) */
+  bool in_free_list;
+
+  /** true if the page is in the LRU list; used in debugging */
+  bool in_LRU_list;
+
+  /** true if in buf_pool->page_hash */
+  bool in_page_hash;
+
+  /** true if in buf_pool->zip_hash */
+  bool in_zip_hash;
+#endif /* UNIV_DEBUG */
+
+#endif /* !UNIV_HOTBACKUP */
+};
+```
+
 
 checkpoint
 
