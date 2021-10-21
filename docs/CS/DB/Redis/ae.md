@@ -1,5 +1,31 @@
 ## Introduction
 
+For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/) Redis uses its own event library.
+
+Redis implements its own event library. The event library is implemented in `ae.c`.
+
+`initServer` function defined in `redis.c` initializes the numerous fields of the `redisServer` structure variable. One such field is the Redis event loop `el`:
+
+```c
+aeEventLoop *el
+```
+
+`initServer` initializes `server.el` field by calling `aeCreateEventLoop` defined in `ae.c`. The definition of `aeEventLoop` is below:
+
+```c
+typedef struct aeEventLoop
+{
+    int maxfd;
+    long long timeEventNextId;
+    aeFileEvent events[AE_SETSIZE]; /* Registered events */
+    aeFiredEvent fired[AE_SETSIZE]; /* Fired events */
+    aeTimeEvent *timeEventHead;
+    int stop;
+    void *apidata; /* This is used for polling API specific data */
+    aeBeforeSleepProc *beforesleep;
+} aeEventLoop;
+```
+
 
 
 ## epoll
@@ -173,4 +199,10 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask) {
 | **aeApiPoll**     | epoll_wait   | kevent | FD_ISSET |             |
 |                   |              |        |          |             |
 |                   |              |        |          |             |
+
+
+
+## References
+
+1. [Redis Event Library](https://redis.io/topics/internals-rediseventlib)
 

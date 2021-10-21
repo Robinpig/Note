@@ -1,6 +1,12 @@
+## Introduction
 
 
 ## RDB
+save
+bgsave
+snapshot，
+SAVE use sync，BGSAVE create child process by calling fork() of glib.
+file Name: dump.rdb
 
 
 ```c
@@ -26,6 +32,10 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
 ```
 
 ## AOF
+
+
+like binlog in MySQL
+
 bgrewriteaof
 
 

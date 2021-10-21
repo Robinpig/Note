@@ -27,21 +27,6 @@ struct redisCommand redisCommandTable[] in server.c
 
 ## [Struct](/docs/CS/DB/Redis/struct.md)
 ## [Persistence](/docs/CS/DB/Redis/persist.md)
-
-### RDB
-save
-bgsave
-snapshot，
-SAVE use sync，BGSAVE create child process by calling fork() of glib.
-file Name: dump.rdb
-
-
-### AOF
-
-like binlog in MySQL
-
-flushAppendOnlyFile
-
 ## [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
 
 ### Event
@@ -213,6 +198,15 @@ Transparent Huge Pages（THP）
 copy-on-write期间复制内存页从4KB变成2MB
 fork子进程的速度变慢
 高并发下开启容易造成内存溢出，建议关闭
+
+## Tools
+- redis-server
+- redis-sentinel
+- redis-cli
+- redis-check-rdb
+- redis-check-aof
+- redis-benchmark
+
 
 ## References
 1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
