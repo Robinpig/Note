@@ -161,7 +161,8 @@ when compared to the simplicity of ACID transactions.
 and consistency are essential.
 
 
-
+## Two-phased Commit
+A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
 
 ## References
 1. [ACID vs. BASE and SQL vs. NoSQL](https://marcobrambillapolimi.files.wordpress.com/2019/01/01-nosql-overview.pdf)

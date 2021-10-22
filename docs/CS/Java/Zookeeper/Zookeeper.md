@@ -182,38 +182,13 @@ Note that the znode having no preceding znode on the list of children does not i
 
 ## Distributed Lock
 
-Clients wishing to obtain a lock do the following:
-
-1. Call **create( )** with a pathname of "_locknode_/lock-" and the *sequence* and *ephemeral* flags set.
-2. Call **getChildren( )** on the lock node *without* setting the watch flag (this is important to avoid the herd effect).
-3. If the pathname created in step **1** has the lowest sequence number suffix, the client has the lock and the client exits the protocol.
-4. The client calls **exists( )** with the watch flag set on the path in the lock directory with the next lowest sequence number.
-5. if **exists( )** returns false, go to step **2**. Otherwise, wait for a notification for the pathname from the previous step before going to step **2**.
-
-The unlock protocol is very simple: clients wishing to release a lock simply delete the node they created in step 1.
+See [Zookeeper Locks](https://zookeeper.apache.org/doc/current/recipes.html)
 
 Here are a few things to notice:
 
 - The removal of a node will only cause one client to wake up since each node is watched by exactly one client. In this way, you avoid the herd effect.
-
 - There is no polling or timeouts.
-
 - Because of the way you implement locking, it is easy to see the amount of lock contention, break locks, debug locking problems, etc.
-
-
-
-#### Shared Locks
-
-You can implement shared locks by with a few changes to the lock protocol:
-
-#### Recoverable Shared Locks
-
-With minor modifications to the Shared Lock protocol, you make shared locks revocable by modifying the shared lock protocol:
-
-In step **1**, of both obtain reader and writer lock protocols, call **getData( )** with *watch* set, immediately after the call to **create( )**. If the client subsequently receives notification for the node it created in step **1**, it does another **getData( )** on that node, with *watch* set and looks for the string "unlock", which signals to the client that it must release the lock. This is because, according to this shared lock protocol, you can request the client with the lock give up the lock by calling **setData()** on the lock node, writing "unlock" to that node.
-
-Note that this protocol requires the lock holder to consent to releasing the lock. Such consent is important, especially if the lock holder needs to do some processing before releasing the lock. Of course you can always implement *Revocable Shared Locks with Freaking Laser Beams* by stipulating in your protocol that the revoker is allowed to delete the lock node if after some length of time the lock isn't deleted by the lock holder.
-
 ### Two-phased Commit
 
 A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.

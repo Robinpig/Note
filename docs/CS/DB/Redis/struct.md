@@ -23,7 +23,7 @@ Basically this structure can represent all the basic Redis data types like strin
 
 Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
-## Type
+## Data Types
 ![](./images/struct.png)
 
 object
@@ -123,15 +123,50 @@ $5 = 7
 - use UNLINK rather than DEL when delete big data
 - check if EXISTS before RENAME
 
-## bitmap
+## Data Features
 
-bitcount
+### bitmap
+[Bitmaps](/docs/CS/DB/Redis/bitmap.md) can be used in lieu of strings to save memory space under some circumstances.
 
-bitpos
+### expiration keys
 
-bitfield KEY [GET type offset] [SET type offset value] [INCRBY type offset increment] [OVERFLOW WRAP|SAT|FAIL]
+### sort
+Sometimes we may need to get a sorted copy of a Redis list or set in some order, or sort elements in a Redis sorted set by an order other than scores. Redis provides a convenient command called SORT for this purpose. 
 
-- wrap cycle value
-- sat keep the max/min value
-- fail return fail and do nothing
+### pipeline
+
+
+### Transaction
+
+support isolation and consistency, and support durability when use AOF and appendfsync is always
+
+It's important to note that **even when a command fails, all the other commands in the queue are processed** – Redis will *not* stop the processing of commands.
+
+#### Why Redis does not support roll backs?
+
+- Redis commands can fail only if called with a wrong syntax (and the problem is not detectable during the command queueing), or against keys holding the wrong data type: this means that in practical terms a failing command is the result of a **programming errors**, and a kind of error that is very likely to be detected during development, and not in production.
+- Redis is internally simplified and faster because it does not need the ability to roll back.
+
+**In general the roll back does not save you from programming errors**.
+
+
+
+#### Optimistic locking using check-and-set
+
+[WATCH](https://redis.io/commands/watch) is used to provide a check-and-set (CAS) behavior to Redis transactions.
+
+`WATCH`ed keys are monitored in order to detect changes against them. If at least one watched key is modified before the [EXEC](https://redis.io/commands/exec) command, the whole transaction aborts, and [EXEC](https://redis.io/commands/exec) returns a [Null reply](https://redis.io/topics/protocol#nil-reply) to notify that the transaction failed.
+
+We just have to repeat the operation hoping this time we'll not get a new race. This form of locking is called *optimistic locking* and is a very powerful form of locking.
+
+
+
+A [Redis script](/docs/CS/DB/Redis/struct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
+
+### PubSub
+[Publish-Subscribe (PubSub)](/docs/CS/DB/Redis/PubSub.md) is a classic messaging pattern which has a long history, as far back as 1987 according to Wikipedia.
+
+### Lua scripts
+[Lua](/docs/CS/DB/Redis/Lua.md), a lightweight script language, has been introduced into Redis since version 2.6.
+
 

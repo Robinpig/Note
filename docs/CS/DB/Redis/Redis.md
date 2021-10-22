@@ -107,18 +107,6 @@ Used_memor_rss
 
 
 
-## Transaction
-
-support isolation and consistency, and support durability when use AOF and appendfsync is always
-
-**A command will still run when prior command run failed.**
-
-**can not rollback transaction**
-
-WATCH set sign of key
-MULTI start transaction
-
-
 ## command
 
 
