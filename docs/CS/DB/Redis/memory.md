@@ -99,3 +99,31 @@ int performEvictions(void)
 ```
 
 `evictionPoolPopulate` called by `performEvictions`
+
+## Optimization
+Special encoding of small aggregate data types
+Since Redis 2.2 many data types are optimized to use less space up to a certain size. Hashes, Lists, Sets composed of just integers, and Sorted Sets, when smaller than a given number of elements, and up to a maximum element size, are encoded in a very memory efficient way that uses up to 10 times less memory (with 5 time less memory used being the average saving).
+
+This is completely transparent from the point of view of the user and API. Since this is a CPU / memory trade off it is possible to tune the maximum number of elements and maximum element size for special encoded types using the following redis.conf directives.
+```
+hash-max-ziplist-entries 512
+hash-max-ziplist-value 64
+zset-max-ziplist-entries 128
+zset-max-ziplist-value 64
+set-max-intset-entries 512
+```
+
+Bit and byte level operations
+Redis 2.2 introduced new bit and byte level operations: GETRANGE, SETRANGE, GETBIT and SETBIT. Using these commands you can treat the Redis string type as a random access array. For instance if you have an application where users are identified by a unique progressive integer number, you can use a bitmap in order to save information about the subscription of users in a mailing list, setting the bit for subscribed and clearing it for unsubscribed, or the other way around. With 100 million users this data will take just 12 megabytes of RAM in a Redis instance. You can do the same using GETRANGE and SETRANGE in order to store one byte of information for each user. This is just an example but it is actually possible to model a number of problems in very little space with these new primitives.
+
+Use hashes when possible
+Small hashes are encoded in a very small space, so you should try representing your data using hashes whenever possible. For instance if you have objects representing users in a web application, instead of using different keys for name, surname, email, password, use a single hash with all the required fields.
+
+**A few keys use a lot more memory than a single key containing a hash with a few fields**.
+## References
+1. [Memory Optimization](https://redis.io/topics/memory-optimization)
+2. [Optimising session key storage in Redis](https://deliveroo.engineering/2016/10/07/optimising-session-key-storage.html)
+3. [Partitioning: how to split data among multiple Redis instances.](https://redis.io/topics/partitioning)
+4. [Why is Redis different compared to other key-value stores?](https://redis.io/topics/faq#what-is-the-maximum-number-of-keys-a-single-redis-instance-can-hold-and-what-the-max-number-of-elements-in-a-hash-list-set-sorted-set)
+5. [Using Redis as an LRU cache](https://redis.io/topics/lru-cache)
+6. [Storing hundreds of millions of simple key-value pairs in Redis](https://instagram-engineering.com/storing-hundreds-of-millions-of-simple-key-value-pairs-in-redis-1091ae80f74c)

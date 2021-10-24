@@ -315,6 +315,22 @@ int _dictInit(dict *d, dictType *type)
 
 
 ## expand
+
+
+```c
+
+/* Using dictEnableResize() / dictDisableResize() we make possible to
+ * enable/disable resizing of the hash table as needed. This is very important
+ * for Redis, as we use copy-on-write and don't want to move too much memory
+ * around when there is a child performing saving operations.
+ *
+ * Note that even when dict_can_resize is set to 0, not all resizes are
+ * prevented: a hash table is still allowed to grow if the ratio between
+ * the number of elements and the buckets > dict_force_resize_ratio. */
+static int dict_can_resize = 1;
+static unsigned int dict_force_resize_ratio = 5;
+```
+### expandIfNeeded
 ```c
 // dict.c
 /* Expand the hash table if needed */
@@ -338,6 +354,17 @@ if (d->ht[0].used >= d->ht[0].size &&
         return dictExpand(d, d->ht[0].used + 1);
 }
     return DICT_OK;
+}
+
+
+/* Because we may need to allocate huge memory chunk at once when dict
+ * expands, we will check this allocation is allowed or not if the dict
+ * type has expandAllowed member function. */
+static int dictTypeExpandAllowed(dict *d) {
+    if (d->type->expandAllowed == NULL) return 1;
+    return d->type->expandAllowed(
+                    _dictNextPower(d->ht[0].used + 1) * sizeof(dictEntry*),
+                    (double)d->ht[0].used / d->ht[0].size);
 }
 ```
 

@@ -135,6 +135,8 @@ Sometimes we may need to get a sorted copy of a Redis list or set in some order,
 
 ### pipeline
 
+Like batch
+
 
 ### Transaction
 
@@ -170,3 +172,7 @@ A [Redis script](/docs/CS/DB/Redis/struct.md?id=lua-scripts) is transactional by
 [Lua](/docs/CS/DB/Redis/Lua.md), a lightweight script language, has been introduced into Redis since version 2.6.
 
 
+
+### Using the correct data types
+
+### Using the correct Redis APIs

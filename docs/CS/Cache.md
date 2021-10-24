@@ -254,3 +254,4 @@ Cache Aside 在高并发场景下也会出现数据不一致。 读操作A，没
 1. [Wiki - Cache (computing)](https://en.wikipedia.org/wiki/Cache_(computing))
 2. [A Guide To Caching in Spring](https://www.baeldung.com/spring-cache-tutorial)
 3. [缓存那些事 - 美团技术团队](https://tech.meituan.com/2017/03/17/cache-about.html)
+4. [Thundering Herds & Promises](https://instagram-engineering.com/thundering-herds-promises-82191c8af57d)
