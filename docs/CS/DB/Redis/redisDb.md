@@ -1,5 +1,12 @@
 ## Introduction
 
+The most important functions inside `db.c` which are used in many command implementations are the following:
+* [lookupKeyRead()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) and [lookupKeyWrite()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) are used in order to get a pointer to the value associated to a given key, or `NULL` if the key does not exist.
+* [dbAdd()](/docs/CS/DB/Redis/redisDb.md?id=add) and its higher level counterpart `setKey()` create a new key in a Redis database.
+* [dbDelete()](/docs/CS/DB/Redis/redisDb.md?id=delete) removes a key and its associated value.
+* `emptyDb()` removes an entire single database or all the databases defined.
+
+
 
 
 ```java
@@ -56,9 +63,19 @@ typedef struct dictEntry {
 
 
 
-
 ## redisObject
-16bytes:
+
+The `robj` structure defining Redis objects was already described. Inside `object.c` there are all the functions that operate with Redis objects at a basic level, like functions to allocate new objects, handle the reference counting and so forth. Notable functions inside this file:
+
+- `incrRefCount()` and `decrRefCount()` are used in order to increment or decrement an object reference count. When it drops to 0 the object is finally freed.
+- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object. There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
+
+This file also implements the `OBJECT` command.
+
+**Layout:**
+
+16bytes
+
 - type : 4bits get type by `type keyName`
 - encoding : 4bits get encoding  by `object encoding keyName`
 - lru : 24bits

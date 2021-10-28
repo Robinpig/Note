@@ -61,3 +61,9 @@ By default we optimize for low latency, but in very high traffic conditions or w
 ```
 repl-disable-tcp-nodelay no
 ```
+
+
+
+## References
+
+1. [Redis Replication](https://redis.io/topics/replication#partial-resynchronizations-after-restarts-and-failovers)

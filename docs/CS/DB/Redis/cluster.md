@@ -224,3 +224,6 @@ Jedis中的ShardedJedis是该方案的实现。
 #define CLUSTERMSG_TYPE_MODULE 9        /* Module cluster API message. */
 #define CLUSTERMSG_TYPE_COUNT 10        /* Total number of message types. */
 ```
+
+## References
+1. [Twemproxy, a Redis proxy from Twitter](http://antirez.com/news/44)
