@@ -56,7 +56,7 @@
 
 
 
-## volatile 的使用优化
+## Using volatile
 
 著名的 Java 并发编程大师 Doug lea 在 JDK7 的并发包里新增一个队列集合类 LinkedTransferQueue，他在使用 Volatile 变量时，用一种追加字节的方式来优化队列出队和入队的性能。
 

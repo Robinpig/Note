@@ -202,7 +202,7 @@ For example, the behavior shown in Figure 1 is allowed by the happens-before mem
 snooping
 
 
-The rules for happens‐before are:
+**The rules for happens‐before are:**
 - Program order rule. Each action in a thread happens‐before every action in that thread that comes later in the program order.
 - Monitor lock rule. An unlock on a monitor lock happens‐before every subsequent lock on that same monitor lock.(Locks and unlocks on explicit Lock objects have the same memory semantics as intrinsic locks.)
 - Volatile variable rule. A write to a volatile field happens‐before every subsequent read of that same field.(Reads and writes of atomic variables have the same memory semantics as volatile variables.)
