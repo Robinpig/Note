@@ -111,23 +111,27 @@ db，缓存一致性问题，缓存竞争后面讨论解决方案
 
 
 
-## 缓存问题
+## Cache Issues
 
 ### 缓存雪崩
 
+A lot of keys expire at the same time or cache server down abnormally during numerous concurrent requests.
+
 是指缓存中数据大批量到过期时间，而查询数据量巨大，引起数据库压力过大甚至宕机
 
-解决方案：
+#### How to fix it
+**Circular Breaker:**
 
-> - 冷热数据区分，采用不同的实效时间，缓存数据的过期时间设置随机，防止同一时间大量数据过期现象发生。
-> - 如果缓存数据库是分布式部署，将热点数据均匀分布。
-> - 设置热点数据永远不过期。
+Avoid too many requests accessing DataBases.
 
-集群部署
 
-限流降级
+**Prevent Beforehand:**
 
-提前演练
+Using random expire timestamps(or never expire).
+
+Using cluster cache servers.
+
+
 
 
 
@@ -145,14 +149,9 @@ db，缓存一致性问题，缓存竞争后面讨论解决方案
 > - 采用灰度发布的方式，先接入少量请求，再逐步增加系统的请求数量，直到全部请求都切换完成
 > - 提前缓存预热或定时预热
 
-布隆过滤器
-
-数据变动性低, 不需实时
-
-缓存空对象
-
-占用内存多 会存在数据不一致情况:消息系统更新 适合数据变动频繁场景
-
+- assert illegal requests
+- BloomFilter
+- cache Null/Default values
 
 
 

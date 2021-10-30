@@ -1,6 +1,6 @@
-##
-memory
-
+## Introduction
+use `INFO memory`:
+```
 - used_memory
   - process memory
   - data memory
@@ -12,6 +12,7 @@ memory
     - copy buffer
     - AOF buffer
 - fragmentation
+```
 
 mem_fragmentation_ratio usually 1.03
 
@@ -29,6 +30,8 @@ big : << 4KB
 huge : << 4MB
 
 ## maxMemory
+
+evict policy:
 ```c
 //server.h
 
@@ -63,13 +66,71 @@ typedef struct redisObject {
 } robj;
 ```
 
+
+
 1000 ms
+
+### LRU
+
+
+
 ```c
 
 #define LRU_BITS 24
 #define LRU_CLOCK_MAX ((1<<LRU_BITS)-1) /* Max value of obj->lru */
 #define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
 ```
+
+```
+maxmemory-samples
+
+```
+
+### LFU
+
+LFU is approximated like LRU: it uses a probabilistic counter, called a [Morris counter](https://en.wikipedia.org/wiki/Approximate_counting_algorithm) in order to estimate the object access frequency using just a few bits per object, combined with a decay period so that the counter is reduced over time: at some point we no longer want to consider keys as frequently accessed, even if they were in the past, so that the algorithm can adapt to a shift in the access pattern.
+
+Those informations are sampled similarly to what happens for LRU (as explained in the previous section of this documentation) in order to select a candidate for eviction.
+
+However unlike LRU, LFU has certain tunable parameters: for instance, how fast should a frequent item lower in rank if it gets no longer accessed? It is also possible to tune the Morris counters range in order to better adapt the algorithm to specific use cases.
+
+By default Redis 4.0 is configured to:
+
+- Saturate the counter at, around, one million requests.
+- Decay the counter every one minute.
+
+Those should be reasonable values and were tested experimental, but the user may want to play with these configuration settings in order to pick optimal values.
+
+Instructions about how to tune these parameters can be found inside the example `redis.conf` file in the source distribution, but briefly, they are:
+
+```
+lfu-log-factor 10
+lfu-decay-time 1
+```
+
+The decay time is the obvious one, it is the amount of minutes a counter should be decayed, when sampled and found to be older than that value. A special value of `0` means: always decay the counter every time is scanned, and is rarely useful.
+
+The counter *logarithm factor* changes how many hits are needed in order to saturate the frequency counter, which is just in the range 0-255. The higher the factor, the more accesses are needed in order to reach the maximum. The lower the factor, the better is the resolution of the counter for low accesses, according to the following table:
+
+```
++--------+------------+------------+------------+------------+------------+
+| factor | 100 hits   | 1000 hits  | 100K hits  | 1M hits    | 10M hits   |
++--------+------------+------------+------------+------------+------------+
+| 0      | 104        | 255        | 255        | 255        | 255        |
++--------+------------+------------+------------+------------+------------+
+| 1      | 18         | 49         | 255        | 255        | 255        |
++--------+------------+------------+------------+------------+------------+
+| 10     | 10         | 18         | 142        | 255        | 255        |
++--------+------------+------------+------------+------------+------------+
+| 100    | 8          | 11         | 49         | 143        | 255        |
++--------+------------+------------+------------+------------+------------+
+```
+
+
+
+
+
+prefer `allkeys-lru` or `volatile-lru`
 
 
 ### evict
@@ -100,7 +161,72 @@ int performEvictions(void)
 
 `evictionPoolPopulate` called by `performEvictions`
 
+
+
+### Memory Fragmentation
+Fragmentation is a natural process that happens with every allocator (but less so with `Jemalloc`, fortunately) and certain workloads. Normally a server restart is needed in order to lower the fragmentation, or at least to flush away all the data and create it again. However thanks to this feature implemented by Oran Agra for Redis 4.0 this process can happen at runtime in a "hot" way, while the server is running.
+
+```
+INFO memory
+used_memory_rss
+used_memory
+
+mem_fragmentation_ratio: x.xx
+```
+
+mem_fragmentation_ratio = used_memory_rss / used_memory
+
+usually ratio < 1.5
+
+#### active defragmentation
+
+Active (online) defragmentation allows a Redis server to compact the spaces left between small allocations and deallocations of data in memory, thus allowing to reclaim back memory.
+
+Basically when the fragmentation is over a certain level (see the configuration options below) Redis will start to create new copies of the values in contiguous memory regions by exploiting certain specific Jemalloc features (in order to understand if an allocation is causing fragmentation and to allocate it in a better place), and at the same time, will release the old copies of the data. This process, repeated incrementally for all the keys will cause the fragmentation to drop back to normal values.
+
+Important things to understand:
+
+1. This feature is disabled by default, and only works if you compiled Redis to use the copy of Jemalloc we ship with the source code of Redis. This is the default with Linux builds.
+
+2. You never need to enable this feature if you don't have fragmentation issues.
+
+3. Once you experience fragmentation, you can enable this feature when needed with the command "`CONFIG SET activedefrag yes`".
+
+The configuration parameters are able to fine tune the behavior of the defragmentation process. If you are not sure about what they mean it is a good idea to leave the defaults untouched.
+
+```
+Enabled active defragmentation
+activedefrag yes
+
+Minimum amount of fragmentation waste to start active defrag
+active-defrag-ignore-bytes 100mb
+
+Minimum percentage of fragmentation to start active defrag
+active-defrag-threshold-lower 10
+
+Maximum percentage of fragmentation at which we use maximum effort
+active-defrag-threshold-upper 100
+
+Minimal effort for defrag in CPU percentage, to be used when the lower
+threshold is reached
+active-defrag-cycle-min 1
+
+Maximal effort for defrag in CPU percentage, to be used when the upper
+threshold is reached
+active-defrag-cycle-max 25
+
+Maximum number of set/hash/zset/list fields that will be processed from
+the main dictionary scan
+active-defrag-max-scan-fields 1000
+
+Jemalloc background thread for purging will be enabled by default
+jemalloc-bg-thread yes
+```
+
+
+
 ## Optimization
+
 Special encoding of small aggregate data types
 Since Redis 2.2 many data types are optimized to use less space up to a certain size. Hashes, Lists, Sets composed of just integers, and Sorted Sets, when smaller than a given number of elements, and up to a maximum element size, are encoded in a very memory efficient way that uses up to 10 times less memory (with 5 time less memory used being the average saving).
 
