@@ -2,6 +2,74 @@
 
 
 
+Sentinels by default run **listening for connections to TCP port 26379**, so for Sentinels to work, port 26379 of your servers **must be open** to receive connections from the IP addresses of the other Sentinel instances. Otherwise Sentinels can't talk and can't agree about what to do, so failover will never be performed.
+
+
+
+In practical terms this means during failures **Sentinel never starts a failover if the majority of Sentinel processes are unable to talk** (aka no failover in the minority partition).
+
+
+
+```
+down-after-milliseconds
+```
+
+
+
+1. If the replica priority is set to 0, the replica is never promoted to master.
+2. Replicas with a *lower* priority number are preferred by Sentinel.
+
+```
+slave-priority
+```
+
+
+
+max
+
+```
+slave_repl_offset
+```
+
+
+
+min id
+
+
+
+`__sentinel__:hello`
+
+
+
+## Testing the failover
+
+At this point our toy Sentinel deployment is ready to be tested. We can just kill our master and check if the configuration changes. To do so we can just do:
+
+```
+redis-cli -p 6379 DEBUG sleep 30
+```
+
+This command will make our master no longer reachable, sleeping for 30 seconds. It basically simulates a master hanging for some reason.
+
+If you check the Sentinel logs, you should be able to see a lot of action:
+
+1. Each Sentinel detects the master is down with an `+sdown` event.
+2. This event is later escalated to `+odown`, which means that multiple Sentinels agree about the fact the master is not reachable.
+3. Sentinels vote a Sentinel that will start the first failover attempt.
+4. The failover happens.
+
+If you ask again what is the current master address for `mymaster`, eventually we should get a different reply this time:
+
+```
+127.0.0.1:5000> SENTINEL get-master-addr-by-name mymaster
+1) "127.0.0.1"
+2) "6380"
+```
+
+So far so good... At this point you may jump to create your Sentinel deployment or can read more to understand all the Sentinel commands and internals.
+
+
+
 sentinel，中文名是哨兵。哨兵是 Redis 集群架构中非常重要的一个组件，主要有以下功能：
 
 - 集群监控：负责监控 Redis master 和 slave 进程是否正常工作。

@@ -425,8 +425,8 @@ int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
 
 ## rehash
 
-1. not BGSAVE BGREWRITEAOF && load factor >=1 expand
-2. In BGSAVE BGREWRITEAOF && load factor >=5 expand
+1. not in `BGSAVE`/`BGREWRITEAOF` && load factor >=1, expand
+2. In `BGSAVE`/`BGREWRITEAOF` && load factor >=5, expand
 3. Load factor < 0.1, narrow
 
 

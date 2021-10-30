@@ -1,5 +1,10 @@
 ## Introduction
 
+GeoHash encode to a binary value and use Sorted-Set
 
-geohash
+
+
+
+
+Location-Based Service (LBS)
 
