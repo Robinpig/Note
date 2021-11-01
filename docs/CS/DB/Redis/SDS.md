@@ -21,7 +21,7 @@ cache (shared sessions)
 | hdr32 | 4    | 4     | 3 lsb of type, 5 unused bits     |      |
 | hdr64 | 8    | 8     | 3 lsb of type, 5 unused bits     |      |
 
-`(__packed__)` of 1byte
+`__attribute__ ((__packed__))` to save memory
 
 ```c
 typedef char *sds;
@@ -606,7 +606,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
 
 
-### _sdsMakeRoomFor
+### sdsMakeRoomFor
 1. avail >= addlen, return
 2. expand pow of 2 when len < 1M, or else expand 1M util 512M
 3. calc new Type, if same Type return, or else allocate new memory and `memcpy`
@@ -711,8 +711,8 @@ void sdsclear(sds s) {
 ```
 
 ## Summary
-
-- packed and always append '\0'
+- O(1) getLen
+- **packed** and always append '\0'
 - expand pow of 2 when len < 1M, or else expand 1M util 512M
 - use sdsclear rather than sdsfree
 - encoding int value in ptr

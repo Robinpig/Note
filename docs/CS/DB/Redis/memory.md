@@ -133,7 +133,7 @@ The counter *logarithm factor* changes how many hits are needed in order to satu
 prefer `allkeys-lru` or `volatile-lru`
 
 
-### evict
+## evict
 
 To improve the quality of the LRU approximation we take a set of keys that are good candidate for eviction across performEvictions() calls.
 
