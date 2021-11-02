@@ -145,7 +145,7 @@ void psetexCommand(client *c) {
 }
 ```
 
-**createStringObject**
+### createStringObject
 
 ```c
 // object.c

@@ -125,6 +125,9 @@ $5 = 7
 
 ## Data Features
 
+### Shared Objects
+see [createSharedObjects](/docs/CS/DB/Redis/start.md?id=createSharedObjects)
+
 ### bitmap
 [Bitmaps](/docs/CS/DB/Redis/bitmap.md) can be used in lieu of strings to save memory space under some circumstances.
 

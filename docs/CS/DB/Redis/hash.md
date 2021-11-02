@@ -10,10 +10,9 @@ hash(i) = hash(i - 1) * 33 + str[3]
 
 
 ### dicht
-
+This is our hash table structure. Every dictionary has **two of this** as we
+implement **incremental rehashing**, for the old to the new table.
 ```c
-/* This is our hash table structure. Every dictionary has two of this as we
- * implement incremental rehashing, for the old to the new table. */
 typedef struct dictht {
     dictEntry **table;
     unsigned long size;
@@ -23,7 +22,7 @@ typedef struct dictht {
 ```
 
 
-
+**dictEntry:**
 ```c
 typedef struct dictEntry {
     void *key; // always string
@@ -331,22 +330,27 @@ static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
 ```
 ### expandIfNeeded
+Expand the hash table if needed(check loadFactor & if has active childProcess):
+
+1. If the hash table is empty expand it to the initial size.
+2. If we reached the 1:1 ratio, and we are allowed to resize the hash
+   table (avoid `hasActiveChildProcess`) 
+3. or we should avoid it but the ratio between
+   elements/buckets is over the "safe" threshold, we resize doubling
+   the number of buckets.
 ```c
 // dict.c
-/* Expand the hash table if needed */
+static int dict_can_resize = 1;
+static unsigned int dict_force_resize_ratio = 5;
+
 static int _dictExpandIfNeeded(dict *d)
 {
     /* Incremental rehashing already in progress. Return. */
     if (dictIsRehashing(d)) return DICT_OK;
 
-    /* If the hash table is empty expand it to the initial size. */
-if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
+    if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
 
-    /* If we reached the 1:1 ratio, and we are allowed to resize the hash
-     * table (global setting) or we should avoid it but the ratio between
-     * elements/buckets is over the "safe" threshold, we resize doubling
-     * the number of buckets. */
-if (d->ht[0].used >= d->ht[0].size &&
+    if (d->ht[0].used >= d->ht[0].size &&
         (dict_can_resize ||
          d->ht[0].used/d->ht[0].size > dict_force_resize_ratio) &&
         dictTypeExpandAllowed(d))
@@ -355,11 +359,34 @@ if (d->ht[0].used >= d->ht[0].size &&
 }
     return DICT_OK;
 }
+```
 
+This function is called once a background process of some kind terminates, as we want to avoid resizing the hash tables when there is a child in order
+to play well with `copy-on-write` (otherwise when a resize happens lots of memory pages are copied). The goal of this function is to update the ability
+for `dict.c` to resize the hash tables accordingly to the fact we have an active fork child running.
 
-/* Because we may need to allocate huge memory chunk at once when dict
- * expands, we will check this allocation is allowed or not if the dict
- * type has expandAllowed member function. */
+```c
+// server.c
+void updateDictResizePolicy(void) {
+    if (!hasActiveChildProcess())
+        dictEnableResize();
+    else
+        dictDisableResize();
+}
+
+// dict.c
+void dictEnableResize(void) {
+    dict_can_resize = 1;
+}
+
+void dictDisableResize(void) {
+    dict_can_resize = 0;
+}
+```
+Because we may need to allocate huge memory chunk at once when dict
+expands, we will check this allocation is allowed or not if the dict
+type has expandAllowed member function.
+```c
 static int dictTypeExpandAllowed(dict *d) {
     if (d->type->expandAllowed == NULL) return 1;
     return d->type->expandAllowed(
@@ -370,13 +397,6 @@ static int dictTypeExpandAllowed(dict *d) {
 
 
 ```c
-
-/* return DICT_ERR if expand was not performed */
-int dictExpand(dict *d, unsigned long size) {
-    return _dictExpand(d, size, NULL);
-}
-
-
 /* Expand or create the hash table,
  * when malloc_failed is non-NULL, it'll avoid panic if malloc fails (in which case it'll be set to 1).
  * Returns DICT_OK if expand was performed, and DICT_ERR if skipped. */
@@ -423,10 +443,7 @@ int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
 
 ```
 
-## rehash
-
-1. not in `BGSAVE`/`BGREWRITEAOF` && load factor >=1, expand
-2. In `BGSAVE`/`BGREWRITEAOF` && load factor >=5, expand
+### incremental rehash
 3. Load factor < 0.1, narrow
 
 
@@ -450,24 +467,15 @@ long long timeInMilliseconds(void) {
     return (((long long)tv.tv_sec)*1000)+(tv.tv_usec/1000);
 }
 ```
+This function performs just a step of rehashing, and only if hashing has not been paused for our hash table. When we have iterators in the middle of a rehashing we can't mess with the two hash tables otherwise some element can be missed or duplicated.
 
+This function is called by **common lookup or update operations** in the dictionary so that the hash table `automatically migrates` from H1 to H2 while it is actively used.
 ```c
 // dict.c
-
-/* This function performs just a step of rehashing, and only if hashing has
- * not been paused for our hash table. When we have iterators in the
- * middle of a rehashing we can't mess with the two hash tables otherwise
- * some element can be missed or duplicated.
- *
- * This function is called by common lookup or update operations in the
- * dictionary so that the hash table automatically migrates from H1 to H2
- * while it is actively used. */
 static void _dictRehashStep(dict *d) {
     if (d->pauserehash == 0) dictRehash(d,1);
 }
 ```
-
-
 
 Max number of empty buckets to visit **1000**
 
