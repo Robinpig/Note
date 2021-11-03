@@ -233,7 +233,7 @@ cleanup:
 
 ```
 
-
+using [hash table](/docs/CS/DB/Redis/hash.md) and zskiplist
 
 ```c
 typedef struct zset {
@@ -460,16 +460,31 @@ zset-max-ziplist-value 64
 
 
 ## ziplist
+The ziplist is a specially encoded dually linked list that is designed
+to be very memory efficient. It stores both strings and integer values,
+where **integers are encoded as actual integers instead of a series of
+characters**. It allows push and pop operations on either side of the list
+in O(1) time. However, because every operation requires a reallocation of
+the memory used by the ziplist, the actual complexity is related to the
+amount of memory used by the ziplist.
+
+```c
+/**
+ * The general layout of the ziplist is as follows:
+ *
+ * <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
+ */
+ ```
+
 
 [hash](/docs/CS/DB/Redis/hash.md) and zset default use ziplist.
 
 [list use quicklist( based on ziplist)](/docs/CS/DB/Redis/list.md?id=skiplist).
 
+Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a given threshold. These thresholds can be configured using the following directives.
+
 ```
 # redis.conf
-# Hashes are encoded using a memory efficient data structure when they have a
-# small number of entries, and the biggest entry does not exceed a given
-# threshold. These thresholds can be configured using the following directives.
 hash-max-ziplist-entries 512
 hash-max-ziplist-value 64
 ```
@@ -523,10 +538,10 @@ unsigned char *ziplistNew(void) {
 
 prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/zset.md?id=cascadeUpdate)
 
+We use this function to receive information about a ziplist entry.
+Note that this is not how the data is actually encoded, is just what we
+get filled by a function in order to operate more easily.
 ```c
-/* We use this function to receive information about a ziplist entry.
- * Note that this is not how the data is actually encoded, is just what we
- * get filled by a function in order to operate more easily. */
 typedef struct zlentry {
     unsigned int prevrawlensize; /* Bytes used to encode the previous entry len*/
     unsigned int prevrawlen;     /* Previous entry len. */
@@ -806,28 +821,18 @@ unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int
 
 
 ### cascadeUpdate
+When an entry is inserted, we need to set the prevlen field of the next entry to equal the length of the inserted entry. It can occur that this
+length cannot be encoded in 1 byte and the next entry needs to be grow a bit larger to hold the 5-byte encoded prevlen. This can be done for free,
+because this only happens when an entry is already being inserted (which causes a realloc and memmove). However, encoding the prevlen may require
+that this entry is grown as well. This effect may cascade throughout the ziplist when there are consecutive entries with a size close to
+ZIP_BIG_PREVLEN, so we need to check that the prevlen can be encoded in every consecutive entry.
 
+Note that this effect can also happen in reverse, where the bytes required to encode the prevlen field can shrink. This effect is deliberately ignored,
+because it can cause a "flapping" effect where a chain prevlen fields is first grown and then shrunk again after consecutive inserts. Rather, the
+field is allowed to stay larger than necessary, because a large prevlen field implies the ziplist is holding large entries anyway.
 ```c
 // ziplist.c
-/* When an entry is inserted, we need to set the prevlen field of the next
- * entry to equal the length of the inserted entry. It can occur that this
- * length cannot be encoded in 1 byte and the next entry needs to be grow
- * a bit larger to hold the 5-byte encoded prevlen. This can be done for free,
- * because this only happens when an entry is already being inserted (which
- * causes a realloc and memmove). However, encoding the prevlen may require
- * that this entry is grown as well. This effect may cascade throughout
- * the ziplist when there are consecutive entries with a size close to
- * ZIP_BIG_PREVLEN, so we need to check that the prevlen can be encoded in
- * every consecutive entry.
- *
- * Note that this effect can also happen in reverse, where the bytes required
- * to encode the prevlen field can shrink. This effect is deliberately ignored,
- * because it can cause a "flapping" effect where a chain prevlen fields is
- * first grown and then shrunk again after consecutive inserts. Rather, the
- * field is allowed to stay larger than necessary, because a large prevlen
- * field implies the ziplist is holding large entries anyway.
- *
- * The pointer "p" points to the first entry that does NOT need to be
+/* The pointer "p" points to the first entry that does NOT need to be
  * updated, i.e. consecutive fields MAY need an update. */
 unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
     zlentry cur;
@@ -932,13 +937,14 @@ unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
 
 ## skiplist
 
-ele is a [sds](/docs/CS/DB/Redis/SDS.md)
 
-order by score, then ele
-
-forward
-backward
-
+Node:
+- ele is a [sds](/docs/CS/DB/Redis/SDS.md)
+- order by score, then ele
+- *backward
+- level[]
+    - *forward
+    - span
 
 ```c
 // server.h
@@ -1204,7 +1210,7 @@ void zslFree(zskiplist *zsl) {
 ```
 
 ## Summary
-
+- zset compose hash table and skip list
 - zset default use ziplist, then skiplist and never convert back.
 
 - zset compare with score and ele(sds)
