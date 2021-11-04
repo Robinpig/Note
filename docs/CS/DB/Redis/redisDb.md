@@ -65,23 +65,15 @@ typedef struct dictEntry {
 
 ## redisObject
 
-The `robj` structure defining Redis objects was already described. Inside `object.c` there are all the functions that operate with Redis objects at a basic level, like functions to allocate new objects, handle the reference counting and so forth. Notable functions inside this file:
 
-- `incrRefCount()` and `decrRefCount()` are used in order to increment or decrement an object reference count. When it drops to 0 the object is finally freed.
-- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object. There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
+Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth. The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times. Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
 
-This file also implements the `OBJECT` command.
-
-**Layout:**
-
-16bytes
-
+**Layout:** 16bytes
 - type : 4bits get type by `type keyName`
 - encoding : 4bits get encoding  by `object encoding keyName`
 - lru : 24bits
 - refcount : 4bytes
 - *ptr : 8bytes
-
 
 ```c
 // server.h
@@ -96,6 +88,16 @@ typedef struct redisObject {
 } robj;
 ```
 
+Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
+
+The `robj` structure defining Redis objects was already described. Inside `object.c` there are all the functions that operate with Redis objects at a basic level, like functions to allocate new objects, handle the reference counting and so forth. Notable functions inside this file:
+
+- `incrRefCount()` and `decrRefCount()` are used in order to increment or decrement an object reference count. When it drops to 0 the object is finally freed.
+- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object. There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
+
+
+
+### refCount
 
 decrRefCount
 

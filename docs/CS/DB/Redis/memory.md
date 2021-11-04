@@ -24,7 +24,9 @@ fragmentation by
 - usually using append setrange
 - delete lots of expire keys
 
-allocate memory by jemelloc
+
+Redis is compiled and linked against libc malloc by default, with the exception of `jemalloc` being the default on Linux systems. This default was picked because `jemalloc` has proven to have **fewer fragmentation problems** than `libc` malloc.
+
 small: << 8byte
 big : << 4KB
 huge : << 4MB
