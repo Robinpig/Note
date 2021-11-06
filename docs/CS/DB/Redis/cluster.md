@@ -3,9 +3,32 @@
 
 Redis Cluster 16384 slots for master
 
-`gossip`
+max 1000
 
 #### gossip 
+Initially we don't know our "name", but we'll find it once we connect to the first node, using the getsockname() function. Then we'll use this address for all the next messages.
+
+
+```c
+typedef struct {
+    char nodename[CLUSTER_NAMELEN];
+    uint32_t ping_sent;
+    uint32_t pong_received;
+    char ip[NET_IP_STR_LEN];  /* IP address last time it was seen */
+    uint16_t port;              /* base port last time it was seen */
+    uint16_t cport;             /* cluster port last time it was seen */
+    uint16_t flags;             /* node->flags copy */
+    uint16_t pport;             /* plaintext-port, when base port is TLS */
+    uint16_t notused1;
+} clusterMsgDataGossip;
+```
+
+Cluster node timeout is the amount of milliseconds a node must be unreachable for it to be considered in failure state. Most other internal time limits are a multiple of the node timeout.
+
+```
+cluster-node-timeout 15000
+```
+
 gossip 协议包含多种消息，包含 `ping` , `pong` , `meet` , `fail` 等等。
 
 - meet：某个节点发送 meet 给新加入的节点，让新节点加入集群中，然后新节点就会开始与其它节点进行通信。

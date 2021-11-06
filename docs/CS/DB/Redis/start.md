@@ -1,3 +1,20 @@
+
+
+There are two special functions called periodically by the event loop:
+
+1. `serverCron()` is called periodically (according to `server.hz` frequency), and performs tasks that must be performed from time to time, like checking for timed out clients.
+2. `beforeSleep()` is called every time the event loop fired, Redis served a few requests, and is returning back into the event loop.
+
+
+Inside server.c you can find code that handles other vital things of the Redis server:
+
+* `call()` is used in order to call a given command in the context of a given client.
+* `activeExpireCycle()` handles eviction of keys with a time to live set via the `EXPIRE` command.
+* `performEvictions()` is called when a new write command should be performed but Redis is out of memory according to the `maxmemory` directive.
+* The global variable `redisCommandTable` defines all the Redis commands, specifying the name of the command, the function implementing the command, the number of arguments required, and other properties of each command.
+
+
+
 ## main
 
 
@@ -230,7 +247,36 @@ int main(int argc, char **argv) {
 
 
 
-### initServerConfig
+
+
+### daemon
+
+
+
+```c
+void daemonize(void) {
+    int fd;
+
+    if (fork() != 0) exit(0); /* parent exits */
+    setsid(); /* create a new session */
+
+    /* Every output goes to /dev/null. If Redis is daemonized but
+     * the 'logfile' is set to 'stdout' in the configuration file
+     * it will not log at all. */
+    if ((fd = open("/dev/null", O_RDWR, 0)) != -1) {
+        dup2(fd, STDIN_FILENO);
+        dup2(fd, STDOUT_FILENO);
+        dup2(fd, STDERR_FILENO);
+        if (fd > STDERR_FILENO) close(fd);
+    }
+}
+```
+
+
+
+
+
+## initServerConfig
 
 1. Set properties of redisServer
 2. initCommandTable array -> dict
@@ -847,7 +893,7 @@ void loadServerConfig(char *filename, char *options) {
 
 
 
-### initServer
+## initServer
 
 1. setupSignalHandlers
 2. createSharedObjects
@@ -1692,6 +1738,188 @@ void InitServerLast() {
 
 
 
+#### bioInit
+
+```c
+// bio.c
+/* Background job opcodes */
+#define BIO_CLOSE_FILE    0 /* Deferred close(2) syscall. */
+#define BIO_AOF_FSYNC     1 /* Deferred AOF fsync. */
+#define BIO_LAZY_FREE     2 /* Deferred objects freeing. */
+#define BIO_NUM_OPS       3
+
+
+/* Make sure we have enough stack to perform all the things we do in the
+ * main thread. */
+#define REDIS_THREAD_STACK_SIZE (1024*1024*4)
+
+static pthread_t bio_threads[BIO_NUM_OPS];
+static pthread_mutex_t bio_mutex[BIO_NUM_OPS];
+static pthread_cond_t bio_newjob_cond[BIO_NUM_OPS];
+static pthread_cond_t bio_step_cond[BIO_NUM_OPS];
+static list *bio_jobs[BIO_NUM_OPS];
+static unsigned long long bio_pending[BIO_NUM_OPS];
+```
+
+
+
+```c
+/* Initialize the background system, spawning the thread. */
+void bioInit(void) {
+    pthread_attr_t attr;
+    pthread_t thread;
+    size_t stacksize;
+    int j;
+
+    /* Initialization of state vars and objects */
+    for (j = 0; j < BIO_NUM_OPS; j++) {
+        pthread_mutex_init(&bio_mutex[j],NULL);
+        pthread_cond_init(&bio_newjob_cond[j],NULL);
+        pthread_cond_init(&bio_step_cond[j],NULL);
+        bio_jobs[j] = listCreate();
+        bio_pending[j] = 0;
+    }
+
+    /* Set the stack size as by default it may be small in some system */
+    pthread_attr_init(&attr);
+    pthread_attr_getstacksize(&attr,&stacksize);
+    if (!stacksize) stacksize = 1; /* The world is full of Solaris Fixes */
+    while (stacksize < REDIS_THREAD_STACK_SIZE) stacksize *= 2;
+    pthread_attr_setstacksize(&attr, stacksize);
+
+    /* Ready to spawn our threads. We use the single argument the thread
+     * function accepts in order to pass the job ID the thread is
+     * responsible of. */
+    for (j = 0; j < BIO_NUM_OPS; j++) {
+        void *arg = (void*)(unsigned long) j;
+        if (pthread_create(&thread,&attr,bioProcessBackgroundJobs,arg) != 0) {
+            serverLog(LL_WARNING,"Fatal: Can't initialize Background Jobs.");
+            exit(1);
+        }
+        bio_threads[j] = thread;
+    }
+}
+```
+
+
+
+
+
+```c
+void *bioProcessBackgroundJobs(void *arg) {
+    struct bio_job *job;
+    unsigned long type = (unsigned long) arg;
+    sigset_t sigset;
+
+    /* Check that the type is within the right interval. */
+    if (type >= BIO_NUM_OPS) {
+        serverLog(LL_WARNING,
+            "Warning: bio thread started with wrong type %lu",type);
+        return NULL;
+    }
+
+    switch (type) {
+    case BIO_CLOSE_FILE:
+        redis_set_thread_title("bio_close_file");
+        break;
+    case BIO_AOF_FSYNC:
+        redis_set_thread_title("bio_aof_fsync");
+        break;
+    case BIO_LAZY_FREE:
+        redis_set_thread_title("bio_lazy_free");
+        break;
+    }
+
+    redisSetCpuAffinity(server.bio_cpulist);
+
+    makeThreadKillable();
+
+    pthread_mutex_lock(&bio_mutex[type]);
+    /* Block SIGALRM so we are sure that only the main thread will
+     * receive the watchdog signal. */
+    sigemptyset(&sigset);
+    sigaddset(&sigset, SIGALRM);
+    if (pthread_sigmask(SIG_BLOCK, &sigset, NULL))
+        serverLog(LL_WARNING,
+            "Warning: can't mask SIGALRM in bio.c thread: %s", strerror(errno));
+
+    while(1) {
+        listNode *ln;
+
+        /* The loop always starts with the lock hold. */
+        if (listLength(bio_jobs[type]) == 0) {
+            pthread_cond_wait(&bio_newjob_cond[type],&bio_mutex[type]);
+            continue;
+        }
+        /* Pop the job from the queue. */
+        ln = listFirst(bio_jobs[type]);
+        job = ln->value;
+        /* It is now possible to unlock the background system as we know have
+         * a stand alone job structure to process.*/
+        pthread_mutex_unlock(&bio_mutex[type]);
+
+        /* Process the job accordingly to its type. */
+        if (type == BIO_CLOSE_FILE) {
+            close(job->fd);
+        } else if (type == BIO_AOF_FSYNC) {
+            /* The fd may be closed by main thread and reused for another
+             * socket, pipe, or file. We just ignore these errno because
+             * aof fsync did not really fail. */
+            if (redis_fsync(job->fd) == -1 &&
+                errno != EBADF && errno != EINVAL)
+            {
+                int last_status;
+                atomicGet(server.aof_bio_fsync_status,last_status);
+                atomicSet(server.aof_bio_fsync_status,C_ERR);
+                atomicSet(server.aof_bio_fsync_errno,errno);
+                if (last_status == C_OK) {
+                    serverLog(LL_WARNING,
+                        "Fail to fsync the AOF file: %s",strerror(errno));
+                }
+            } else {
+                atomicSet(server.aof_bio_fsync_status,C_OK);
+            }
+        } else if (type == BIO_LAZY_FREE) {
+            job->free_fn(job->free_args);
+        } else {
+            serverPanic("Wrong job type in bioProcessBackgroundJobs().");
+        }
+        zfree(job);
+
+        /* Lock again before reiterating the loop, if there are no longer
+         * jobs to process we'll block again in pthread_cond_wait(). */
+        pthread_mutex_lock(&bio_mutex[type]);
+        listDelNode(bio_jobs[type],ln);
+        bio_pending[type]--;
+
+        /* Unblock threads blocked on bioWaitStepOfType() if any. */
+        pthread_cond_broadcast(&bio_step_cond[type]);
+    }
+}
+```
+
+Create jobs
+
+```c
+bioCreateLazyFreeJob
+  bioCreateCloseJob
+  bioCreateFsyncJob
+  
+
+  void bioSubmitJob(int type, struct bio_job *job) {
+    job->time = time(NULL);
+    pthread_mutex_lock(&bio_mutex[type]);
+    listAddNodeTail(bio_jobs[type],job);
+    bio_pending[type]++;
+    pthread_cond_signal(&bio_newjob_cond[type]);
+    pthread_mutex_unlock(&bio_mutex[type]);
+}
+```
+
+
+
+#### Multiple I/O
+
 ```c
 /* Initialize the data structures needed for threaded I/O. */
 void initThreadedIO(void) {
@@ -1786,7 +2014,7 @@ void *IOThreadMain(void *myid) {
 
 
 
-### aeMain
+## aeMain
 
 `ae.c:aeMain` called from `redis.c:main` does the job of processing the event loop that is initialized in the previous phase.
 
@@ -1823,7 +2051,7 @@ The `tvp` structure variable along with the event loop variable is passed to `ae
 
 Now, `aeProcessEvents` calls the `redis.c:acceptHandler` registered as the callback. `acceptHandler` executes [accept](http://man.cx/accept) on the *listening descriptor* returning a *connected descriptor* with the client. `redis.c:createClient` adds a file event on the *connected descriptor* through a call to `ae.c:aeCreateFileEvent` like below:
 
-```
+```c
 if (aeCreateFileEvent(server.el, c->fd, AE_READABLE,
     readQueryFromClient, c) == AE_ERR) {
     freeClient(c);

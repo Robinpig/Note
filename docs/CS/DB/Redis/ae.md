@@ -1,5 +1,17 @@
 ## Introduction
 
+This file defines all the I/O functions with clients, masters and replicas
+(which in Redis are just special clients):
+
+* `createClient()` allocates and initializes a new client.
+* the `addReply*()` family of functions are used by command implementations in order to append data to the client structure, that will be transmitted to the client as a reply for a given command executed.
+* `writeToClient()` transmits the data pending in the output buffers to the client and is called by the *writable event handler* `sendReplyToClient()`.
+* `readQueryFromClient()` is the *readable event handler* and accumulates data read from the client into the query buffer.
+* `processInputBuffer()` is the entry point in order to parse the client query buffer according to the Redis protocol. Once commands are ready to be processed, it calls `processCommand()` which is defined inside `server.c` in order to actually execute the command.
+* `freeClient()` deallocates, disconnects and removes a client.
+
+
+
 For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/) Redis uses its own event library.
 
 Redis implements its own event library. The event library is implemented in `ae.c`.
@@ -50,6 +62,60 @@ typedef struct aeEventLoop
 
 ```
 
+### multi IO
+
+Redis is mostly single threaded, however there are certain threaded operations such as UNLINK, slow I/O accesses and other things that are performed on side threads.
+
+Now it is also possible to handle Redis clients socket reads and writes in different I/O threads. Since especially writing is so slow, normally Redis users use pipelining in order to speed up the Redis performances per core, and spawn multiple instances in order to scale more. Using I/O threads it is possible to easily speedup two times Redis without resorting to pipelining nor sharding of the instance.
+
+By default threading is disabled, we suggest enabling it only in machines that have at least 4 or more cores, leaving at least one spare core.
+
+Using more than 8 threads is unlikely to help much. We also recommend using threaded I/O only if you actually have performance problems, with Redis instances being able to use a quite big percentage of CPU time, otherwise there is no point in using this feature.
+
+So for instance if you have a four cores boxes, try to use 2 or 3 I/O threads, if you have a 8 cores, try to use 6 threads. In order to enable I/O threads use the following configuration directive:
+```
+io-threads 4
+```
+
+Setting io-threads to 1 will just use the main thread as usual. When I/O threads are enabled, we only use threads for writes, that is to thread the write(2) syscall and transfer the client buffers to the socket. However it is also possible to enable threading of reads and protocol parsing using the following configuration directive, by setting it to yes:
+
+```
+io-threads-do-reads no
+```
+
+Usually threading reads doesn't help much.
+- **NOTE 1:** This configuration directive cannot be changed at runtime via CONFIG SET. Aso this feature currently does not work when SSL is enabled.
+- **NOTE 2:** If you want to test the Redis speedup using redis-benchmark, make sure you also run the benchmark itself in threaded mode, using the --threads option to match the number of Redis threads, otherwise you'll not be able to notice the improvements.
+
+
+
+## Events
+
+
+
+```c
+/* File event structure */
+typedef struct aeFileEvent {
+    int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
+    aeFileProc *rfileProc;
+    aeFileProc *wfileProc;
+    void *clientData;
+} aeFileEvent;
+```
+
+
+
+
+
+### Summary
+
+
+
+| Event Type  | Socket Type | Callback Method     | For              |
+| ----------- | ----------- | ------------------- | ---------------- |
+| AE_READABLE | Listen      | acceptTCPHandler    | connect          |
+| AE_READABLE | connected   | readQueryFromClient | read and execute |
+| AE_WRITABLE | connected   | sendReplyToClient   | Return data      |
 
 
 

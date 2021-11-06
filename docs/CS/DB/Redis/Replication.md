@@ -79,6 +79,9 @@ When replicas connect to masters, they use the [PSYNC](https://redis.io/commands
 replication buffer
 
 
+One of the most important functions inside this file is `replicationFeedSlaves()` that writes commands to the clients representing replica instances connected to our master, so that the replicas can get the writes performed by the clients:
+this way their data set will remain synchronized with the one in the master.
+
 
 ## References
 
