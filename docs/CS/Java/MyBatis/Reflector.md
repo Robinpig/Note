@@ -4,15 +4,11 @@
 
 ### Reflector Hierarchy
 
-
-
 <img src="./images/Reflector.png" style="zoom:150%;" />
 
 
 
 ## Factory
-
-
 
 
 
@@ -427,7 +423,7 @@ public class Reflector {
 
 ### ReflectorFactory
 
-use ConcurrentMap cache all Reflectors
+use [ConcurrentMap](/docs/CS/Java/JDK/Collection/Map?id=ConcurrentMap) cache all Reflectors
 
 ```java
 public interface ReflectorFactory {

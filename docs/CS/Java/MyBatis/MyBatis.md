@@ -6,9 +6,7 @@
 - MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. 
 - MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
 
-Compare with Hibernate
-
-
+**Compare with Hibernate**
 
 |      | MyBatis            | Hibernate      |
 | ---- | ------------------ | -------------- |
@@ -17,6 +15,10 @@ Compare with Hibernate
 |      |                    |                |
 
 ## Architecture
+
+[Init](/docs/CS/Java/MyBatis/Init.md)
+
+
 
 ### Infrastructure
 #### [Binding](/docs/CS/Java/MyBatis/binding.md)
@@ -31,8 +33,9 @@ Compare with Hibernate
 
 `Reflector class represents a cached set of class definition information that allows for easy mapping between property names and getter/setter methods.`
 
+## [How SQL works](/docs/CS/Java/MyBatis/Execute.md)
 
-### Execute
+
 
 #### [Executor](/docs/CS/Java/MyBatis/Executor.md)
 #### [StatementHandler](/docs/CS/Java/MyBatis/StatementHandler.md)
@@ -42,9 +45,9 @@ Compare with Hibernate
 #### [SqlSession](/docs/CS/Java/MyBatis/SqlSession.md)
 
 
-### Extension
+## Extension
 #### [MyBatis-Spring](/docs/CS/Java/MyBatis/MyBatis-Spring.md)
-#### [Init](/docs/CS/Java/MyBatis/Init.md)
+#### 
 
 `Load Mybatis-config.xml, create Configuration and SqlsessionFactory`
 
