@@ -61,249 +61,124 @@ MethodInterceptor Enhancer
 
 ### newProxyInstance
 
-Returns an instance of a proxy class for the specified interfaces that dispatches method invocations to the specified invocation handler.
+Returns a proxy instance for the specified interfaces that dispatches method invocations to the specified invocation handler.
+
+IllegalArgumentException will be thrown if any of the following restrictions is violated:
+- All of Class objects in the given interfaces array must represent interfaces, not classes or primitive types.
+- No two elements in the interfaces array may refer to identical Class objects.
+- All of the interface types must be visible by name through the specified class loader. In other words, for class loader cl and every interface i, the following expression must be true:
+- Class.forName(i.getName(), false, cl) == i
+- All of the types referenced by all public method signatures of the specified interfaces and those inherited by their superinterfaces must be visible by name through the specified class loader.
+- All non-public interfaces must be in the same package and module, defined by the specified class loader and the module of the non-public interfaces can access all of the interface types; otherwise, it would not be possible for the proxy class to implement all of the interfaces, regardless of what package it is defined in.
+- For any set of member methods of the specified interfaces that have the same signature:
+    - If the return type of any of the methods is a primitive type or void, then all of the methods must have that same return type.
+    - Otherwise, one of the methods must have a return type that is assignable to all of the return types of the rest of the methods.
+- The resulting proxy class must not exceed any limits imposed on classes by the virtual machine. For example, the VM may limit the number of interfaces that a class may implement to 65535; in that case, the size of the interfaces array must not exceed 65535.
+
+Note that the order of the specified proxy interfaces is significant: two requests for a proxy class with the same combination of interfaces but in a different order will result in two distinct proxy classes.
+
+```java
+    @CallerSensitive
+    public static Object newProxyInstance(ClassLoader loader,
+                                          Class<?>[] interfaces,
+                                          InvocationHandler h) {
+        Objects.requireNonNull(h);
+
+        final Class<?> caller = System.getSecurityManager() == null ? null : Reflection.getCallerClass();
+
+        /** Look up or generate the designated proxy class and its constructor. */
+        Constructor<?> cons = getProxyConstructor(caller, loader, interfaces);
+
+        return newProxyInstance(caller, cons, h);
+    }
+
+    private static Object newProxyInstance(Class<?> caller, // null if no SecurityManager
+                                           Constructor<?> cons,
+                                           InvocationHandler h) {
+        /** Invoke its constructor with the designated invocation handler. */
+        try {
+            if (caller != null) {
+                checkNewProxyPermission(caller, cons.getDeclaringClass());
+            }
+
+            return cons.newInstance(new Object[]{h});
+        } catch (IllegalAccessException | InstantiationException e) {
+            throw new InternalError(e.toString(), e);
+        } catch (InvocationTargetException e) {
+            ...
+        }
+    }
+```
+
+
+Uses the constructor represented by this Constructor object to create and initialize a new instance of the constructor's declaring class, with the specified initialization parameters. Individual parameters are automatically unwrapped to match primitive formal parameters, and both primitive and reference parameters are subject to method invocation conversions as necessary.
+
+If the number of formal parameters required by the underlying constructor is 0, the supplied initargs array may be of length 0 or null.
+
+If the constructor's declaring class is an inner class in a non-static context, the first argument to the constructor needs to be the enclosing instance; see section 15.9.3 of The Java Language Specification.
+
+If the required access and argument checks succeed and the instantiation will proceed, the constructor's declaring class is initialized if it has not already been initialized.
+
+If the constructor completes normally, returns the newly created and initialized instance.
+
+
 ```java
 @CallerSensitive
-public static Object newProxyInstance(ClassLoader loader,
-                                      Class<?>[] interfaces,
-                                      InvocationHandler h)
-    throws IllegalArgumentException
+@ForceInline // to ensure Reflection.getCallerClass optimization
+public T newInstance(Object ... initargs)
+    throws InstantiationException, IllegalAccessException,
+           IllegalArgumentException, InvocationTargetException
 {
-    Objects.requireNonNull(h);
-
-    final Class<?>[] intfs = interfaces.clone();
-    final SecurityManager sm = System.getSecurityManager();
-    if (sm != null) {
-        checkProxyAccess(Reflection.getCallerClass(), loader, intfs);
-    }
-
-    /*
-     * Look up or generate the designated proxy class.
-     */
-    Class<?> cl = getProxyClass0(loader, intfs);
-
-    /*
-     * Invoke its constructor with the designated invocation handler.
-     */
-    try {
-        if (sm != null) {
-            checkNewProxyPermission(Reflection.getCallerClass(), cl);
-        }
-
-        final Constructor<?> cons = cl.getConstructor(constructorParams);
-        final InvocationHandler ih = h;
-        if (!Modifier.isPublic(cl.getModifiers())) {
-            AccessController.doPrivileged(new PrivilegedAction<Void>() {
-                public Void run() {
-                    cons.setAccessible(true);
-                    return null;
-                }
-            });
-        }
-        return cons.newInstance(new Object[]{h});
-    } catch (IllegalAccessException|InstantiationException e) {
-        throw new InternalError(e.toString(), e);
-    } catch (InvocationTargetException e) {
-        Throwable t = e.getCause();
-        if (t instanceof RuntimeException) {
-            throw (RuntimeException) t;
-        } else {
-            throw new InternalError(t.toString(), t);
-        }
-    } catch (NoSuchMethodException e) {
-        throw new InternalError(e.toString(), e);
-    }
+    Class<?> caller = override ? null : Reflection.getCallerClass();
+    return newInstanceWithCaller(initargs, !override, caller);
 }
 ```
 
 
 
-Generate a proxy class.  Must call the checkProxyAccess method to perform permission checks before calling this.
-```java
-private static Class<?> getProxyClass0(ClassLoader loader,
-                                       Class<?>... interfaces) {
-    if (interfaces.length > 65535) {
-        throw new IllegalArgumentException("interface limit exceeded");
-    }
 
-    // If the proxy class defined by the given loader implementing
-    // the given interfaces exists, this will simply return the cached copy;
-    // otherwise, it will create the proxy class via the ProxyClassFactory
-    return proxyClassCache.get(loader, interfaces);
+```java
+
+ /* package-private */
+T newInstanceWithCaller(Object[] args, boolean checkAccess, Class<?> caller)
+  throws InstantiationException, IllegalAccessException,
+InvocationTargetException
+{
+  if (checkAccess)
+    checkAccess(caller, clazz, clazz, modifiers);
+
+  if ((clazz.getModifiers() & Modifier.ENUM) != 0)
+    throw new IllegalArgumentException("Cannot reflectively create enum objects");
+
+  ConstructorAccessor ca = constructorAccessor;   // read volatile
+  if (ca == null) {
+    ca = acquireConstructorAccessor();
+  }
+  @SuppressWarnings("unchecked")
+  T inst = (T) ca.newInstance(args);
+  return inst;
 }
 ```
 
-
-
-```java
-/**
- * Look-up the value through the cache. This always evaluates the
- * {@code subKeyFactory} function and optionally evaluates
- * {@code valueFactory} function if there is no entry in the cache for given
- * pair of (key, subKey) or the entry has already been cleared.
- *
- * @param key       possibly null key
- * @param parameter parameter used together with key to create sub-key and
- *                  value (should not be null)
- * @return the cached value (never null)
- * @throws NullPointerException if {@code parameter} passed in or
- *                              {@code sub-key} calculated by
- *                              {@code subKeyFactory} or {@code value}
- *                              calculated by {@code valueFactory} is null.
- */
-public V get(K key, P parameter) {
-    Objects.requireNonNull(parameter);
-
-    expungeStaleEntries();
-
-    Object cacheKey = CacheKey.valueOf(key, refQueue);
-
-    // lazily install the 2nd level valuesMap for the particular cacheKey
-    ConcurrentMap<Object, Supplier<V>> valuesMap = map.get(cacheKey);
-    if (valuesMap == null) {
-        ConcurrentMap<Object, Supplier<V>> oldValuesMap
-            = map.putIfAbsent(cacheKey,
-                              valuesMap = new ConcurrentHashMap<>());
-        if (oldValuesMap != null) {
-            valuesMap = oldValuesMap;
-        }
-    }
-
-    // create subKey and retrieve the possible Supplier<V> stored by that
-    // subKey from valuesMap
-    Object subKey = Objects.requireNonNull(subKeyFactory.apply(key, parameter));
-    Supplier<V> supplier = valuesMap.get(subKey);
-    Factory factory = null;
-
-    while (true) {
-        if (supplier != null) {
-            // supplier might be a Factory or a CacheValue<V> instance
-            V value = supplier.get();
-            if (value != null) {
-                return value;
-            }
-        }
-        // else no supplier in cache
-        // or a supplier that returned null (could be a cleared CacheValue
-        // or a Factory that wasn't successful in installing the CacheValue)
-
-        // lazily construct a Factory
-        if (factory == null) {
-            factory = new Factory(key, parameter, subKey, valuesMap);
-        }
-
-        if (supplier == null) {
-            supplier = valuesMap.putIfAbsent(subKey, factory);
-            if (supplier == null) {
-                // successfully installed Factory
-                supplier = factory;
-            }
-            // else retry with winning supplier
-        } else {
-            if (valuesMap.replace(subKey, supplier, factory)) {
-                // successfully replaced
-                // cleared CacheEntry / unsuccessful Factory
-                // with our Factory
-                supplier = factory;
-            } else {
-                // retry with current supplier
-                supplier = valuesMap.get(subKey);
-            }
-        }
-    }
-}
-```
-
-
+Uses Unsafe.allocateObject() to instantiate classes; only used for bootstrapping.
 
 ```java
-@Override
-public Class<?> apply(ClassLoader loader, Class<?>[] interfaces) {
+class BootstrapConstructorAccessorImpl extends ConstructorAccessorImpl {
+    private final Constructor<?> constructor;
 
-    Map<Class<?>, Boolean> interfaceSet = new IdentityHashMap<>(interfaces.length);
-    for (Class<?> intf : interfaces) {
-        /*
-         * Verify that the class loader resolves the name of this
-         * interface to the same Class object.
-         */
-        Class<?> interfaceClass = null;
+    BootstrapConstructorAccessorImpl(Constructor<?> c) {
+        this.constructor = c;
+    }
+
+    public Object newInstance(Object[] args)
+        throws IllegalArgumentException, InvocationTargetException
+    {
         try {
-            interfaceClass = Class.forName(intf.getName(), false, loader);
-        } catch (ClassNotFoundException e) {
+            return UnsafeFieldAccessorImpl.unsafe.
+                allocateInstance(constructor.getDeclaringClass());
+        } catch (InstantiationException e) {
+            throw new InvocationTargetException(e);
         }
-        if (interfaceClass != intf) {
-            throw new IllegalArgumentException(
-                intf + " is not visible from class loader");
-        }
-        /*
-         * Verify that the Class object actually represents an
-         * interface.
-         */
-        if (!interfaceClass.isInterface()) {
-            throw new IllegalArgumentException(
-                interfaceClass.getName() + " is not an interface");
-        }
-        /*
-         * Verify that this interface is not a duplicate.
-         */
-        if (interfaceSet.put(interfaceClass, Boolean.TRUE) != null) {
-            throw new IllegalArgumentException(
-                "repeated interface: " + interfaceClass.getName());
-        }
-    }
-
-    String proxyPkg = null;     // package to define proxy class in
-    int accessFlags = Modifier.PUBLIC | Modifier.FINAL;
-
-    /*
-     * Record the package of a non-public proxy interface so that the
-     * proxy class will be defined in the same package.  Verify that
-     * all non-public proxy interfaces are in the same package.
-     */
-    for (Class<?> intf : interfaces) {
-        int flags = intf.getModifiers();
-        if (!Modifier.isPublic(flags)) {
-            accessFlags = Modifier.FINAL;
-            String name = intf.getName();
-            int n = name.lastIndexOf('.');
-            String pkg = ((n == -1) ? "" : name.substring(0, n + 1));
-            if (proxyPkg == null) {
-                proxyPkg = pkg;
-            } else if (!pkg.equals(proxyPkg)) {
-                throw new IllegalArgumentException(
-                    "non-public interfaces from different packages");
-            }
-        }
-    }
-
-    if (proxyPkg == null) {
-        // if no non-public proxy interfaces, use com.sun.proxy package
-        proxyPkg = ReflectUtil.PROXY_PACKAGE + ".";
-    }
-
-    /*
-     * Choose a name for the proxy class to generate.
-     */
-    long num = nextUniqueNumber.getAndIncrement();
-    String proxyName = proxyPkg + proxyClassNamePrefix + num;
-
-    /*
-     * Generate the specified proxy class.
-     */
-    byte[] proxyClassFile = ProxyGenerator.generateProxyClass(
-        proxyName, interfaces, accessFlags);
-    try {
-        return defineClass0(loader, proxyName,
-                            proxyClassFile, 0, proxyClassFile.length);
-    } catch (ClassFormatError e) {
-        /*
-         * A ClassFormatError here means that (barring bugs in the
-         * proxy class generation code) there was some other
-         * invalid aspect of the arguments supplied to the proxy
-         * class creation (such as virtual machine limitations
-         * exceeded).
-         */
-        throw new IllegalArgumentException(e.toString());
     }
 }
 ```
