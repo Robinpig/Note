@@ -72,9 +72,277 @@ typedef struct redisObject {
 
 1000 ms
 
+### performEvictions
+
+Check that memory usage is within the current "maxmemory" limit.  If over "maxmemory", attempt to free memory by evicting data (if it's safe to do so).
+
+It's possible for Redis to suddenly be significantly over the "maxmemory" setting.  This can happen if there is a large allocation (like a hash table resize) or even if the "maxmemory" setting is manually adjusted.  Because of this, it's important to evict for a managed period of time - otherwise Redis would become unresponsive while evicting.
+
+The goal of this function is to improve the memory situation - not to immediately resolve it.  In the case that some items have been evicted but the "maxmemory" limit has not been achieved, an aeTimeProc will be started which will continue to evict items until memory limits are achieved or
+nothing more is evictable.
+
+This should be called before execution of commands.  If EVICT_FAIL is returned, commands which will result in increased memory usage should be rejected.
+
+Returns:
+- EVICT_OK       - memory is OK or it's not possible to perform evictions now
+- EVICT_RUNNING  - memory is over the limit, but eviction is still processing
+- EVICT_FAIL     - memory is over the limit, and there's nothing to evict
+
+```c
+int performEvictions(void) {
+    if (!isSafeToPerformEvictions()) return EVICT_OK;
+
+    int keys_freed = 0;
+    size_t mem_reported, mem_tofree;
+    long long mem_freed; /* May be negative */
+    mstime_t latency, eviction_latency;
+    long long delta;
+    int slaves = listLength(server.slaves);
+    int result = EVICT_FAIL;
+
+    if (getMaxmemoryState(&mem_reported,NULL,&mem_tofree,NULL) == C_OK)
+        return EVICT_OK;
+
+    if (server.maxmemory_policy == MAXMEMORY_NO_EVICTION)
+        return EVICT_FAIL;  /* We need to free memory, but policy forbids. */
+
+    unsigned long eviction_time_limit_us = evictionTimeLimitUs();
+
+    mem_freed = 0;
+
+    latencyStartMonitor(latency);
+
+    monotime evictionTimer;
+    elapsedStart(&evictionTimer);
+
+    while (mem_freed < (long long)mem_tofree) {
+        int j, k, i;
+        static unsigned int next_db = 0;
+        sds bestkey = NULL;
+        int bestdbid;
+        redisDb *db;
+        dict *dict;
+        dictEntry *de;
+
+        if (server.maxmemory_policy & (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU) ||
+            server.maxmemory_policy == MAXMEMORY_VOLATILE_TTL)
+        {
+            struct evictionPoolEntry *pool = EvictionPoolLRU;
+
+            while(bestkey == NULL) {
+                unsigned long total_keys = 0, keys;
+
+                /* We don't want to make local-db choices when expiring keys,
+                 * so to start populate the eviction pool sampling keys from
+                 * every DB. */
+                for (i = 0; i < server.dbnum; i++) {
+                    db = server.db+i;
+                    dict = (server.maxmemory_policy & MAXMEMORY_FLAG_ALLKEYS) ?
+                            db->dict : db->expires;
+                    if ((keys = dictSize(dict)) != 0) {
+                        evictionPoolPopulate(i, dict, db->dict, pool);
+                        total_keys += keys;
+                    }
+                }
+                if (!total_keys) break; /* No keys to evict. */
+
+                /* Go backward from best to worst element to evict. */
+                for (k = EVPOOL_SIZE-1; k >= 0; k--) {
+                    if (pool[k].key == NULL) continue;
+                    bestdbid = pool[k].dbid;
+
+                    if (server.maxmemory_policy & MAXMEMORY_FLAG_ALLKEYS) {
+                        de = dictFind(server.db[pool[k].dbid].dict,
+                            pool[k].key);
+                    } else {
+                        de = dictFind(server.db[pool[k].dbid].expires,
+                            pool[k].key);
+                    }
+
+                    /* Remove the entry from the pool. */
+                    if (pool[k].key != pool[k].cached)
+                        sdsfree(pool[k].key);
+                    pool[k].key = NULL;
+                    pool[k].idle = 0;
+
+                    /* If the key exists, is our pick. Otherwise it is
+                     * a ghost and we need to try the next element. */
+                    if (de) {
+                        bestkey = dictGetKey(de);
+                        break;
+                    } else {
+                        /* Ghost... Iterate again. */
+                    }
+                }
+            }
+        }
+
+        /* volatile-random and allkeys-random policy */
+        else if (server.maxmemory_policy == MAXMEMORY_ALLKEYS_RANDOM ||
+                 server.maxmemory_policy == MAXMEMORY_VOLATILE_RANDOM)
+        {
+            /* When evicting a random key, we try to evict a key for
+             * each DB, so we use the static 'next_db' variable to
+             * incrementally visit all DBs. */
+            for (i = 0; i < server.dbnum; i++) {
+                j = (++next_db) % server.dbnum;
+                db = server.db+j;
+                dict = (server.maxmemory_policy == MAXMEMORY_ALLKEYS_RANDOM) ?
+                        db->dict : db->expires;
+                if (dictSize(dict) != 0) {
+                    de = dictGetRandomKey(dict);
+                    bestkey = dictGetKey(de);
+                    bestdbid = j;
+                    break;
+                }
+            }
+        }
+
+        /* Finally remove the selected key. */
+        if (bestkey) {
+            db = server.db+bestdbid;
+            robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
+            propagateExpire(db,keyobj,server.lazyfree_lazy_eviction);
+            /* We compute the amount of memory freed by db*Delete() alone.
+             * It is possible that actually the memory needed to propagate
+             * the DEL in AOF and replication link is greater than the one
+             * we are freeing removing the key, but we can't account for
+             * that otherwise we would never exit the loop.
+             *
+             * Same for CSC invalidation messages generated by signalModifiedKey.
+             *
+             * AOF and Output buffer memory will be freed eventually so
+             * we only care about memory used by the key space. */
+            delta = (long long) zmalloc_used_memory();
+            latencyStartMonitor(eviction_latency);
+            if (server.lazyfree_lazy_eviction)
+                dbAsyncDelete(db,keyobj);
+            else
+                dbSyncDelete(db,keyobj);
+            latencyEndMonitor(eviction_latency);
+            latencyAddSampleIfNeeded("eviction-del",eviction_latency);
+            delta -= (long long) zmalloc_used_memory();
+            mem_freed += delta;
+            server.stat_evictedkeys++;
+            signalModifiedKey(NULL,db,keyobj);
+            notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted",
+                keyobj, db->id);
+            decrRefCount(keyobj);
+            keys_freed++;
+
+            if (keys_freed % 16 == 0) {
+                /* When the memory to free starts to be big enough, we may
+                 * start spending so much time here that is impossible to
+                 * deliver data to the replicas fast enough, so we force the
+                 * transmission here inside the loop. */
+                if (slaves) flushSlavesOutputBuffers();
+
+                /* Normally our stop condition is the ability to release
+                 * a fixed, pre-computed amount of memory. However when we
+                 * are deleting objects in another thread, it's better to
+                 * check, from time to time, if we already reached our target
+                 * memory, since the "mem_freed" amount is computed only
+                 * across the dbAsyncDelete() call, while the thread can
+                 * release the memory all the time. */
+                if (server.lazyfree_lazy_eviction) {
+                    if (getMaxmemoryState(NULL,NULL,NULL,NULL) == C_OK) {
+                        break;
+                    }
+                }
+
+                /* After some time, exit the loop early - even if memory limit
+                 * hasn't been reached.  If we suddenly need to free a lot of
+                 * memory, don't want to spend too much time here.  */
+                if (elapsedUs(evictionTimer) > eviction_time_limit_us) {
+                    // We still need to free memory - start eviction timer proc
+                    if (!isEvictionProcRunning) {
+                        isEvictionProcRunning = 1;
+                        aeCreateTimeEvent(server.el, 0,
+                                evictionTimeProc, NULL, NULL);
+                    }
+                    break;
+                }
+            }
+        } else {
+            goto cant_free; /* nothing to free... */
+        }
+    }
+    /* at this point, the memory is OK, or we have reached the time limit */
+    result = (isEvictionProcRunning) ? EVICT_RUNNING : EVICT_OK;
+
+cant_free:
+    if (result == EVICT_FAIL) {
+        /* At this point, we have run out of evictable items.  It's possible
+         * that some items are being freed in the lazyfree thread.  Perform a
+         * short wait here if such jobs exist, but don't wait long.  */
+        if (bioPendingJobsOfType(BIO_LAZY_FREE)) {
+            usleep(eviction_time_limit_us);
+            if (getMaxmemoryState(NULL,NULL,NULL,NULL) == C_OK) {
+                result = EVICT_OK;
+            }
+        }
+    }
+
+    latencyEndMonitor(latency);
+    latencyAddSampleIfNeeded("eviction-cycle",latency);
+    return result;
+}
+```
+### propagate
+```c
+
+/* Propagate the specified command (in the context of the specified database id)
+ * to AOF and Slaves.
+ *
+ * flags are an xor between:
+ * + PROPAGATE_NONE (no propagation of command at all)
+ * + PROPAGATE_AOF (propagate into the AOF file if is enabled)
+ * + PROPAGATE_REPL (propagate into the replication link)
+ *
+ * This should not be used inside commands implementation since it will not
+ * wrap the resulting commands in MULTI/EXEC. Use instead alsoPropagate(),
+ * preventCommandPropagation(), forceCommandPropagation().
+ *
+ * However for functions that need to (also) propagate out of the context of a
+ * command execution, for example when serving a blocked client, you
+ * want to use propagate().
+ */
+void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
+               int flags)
+{
+    if (!server.replication_allowed)
+        return;
+
+    /* Propagate a MULTI request once we encounter the first command which
+     * is a write command.
+     * This way we'll deliver the MULTI/..../EXEC block as a whole and
+     * both the AOF and the replication link will have the same consistency
+     * and atomicity guarantees. */
+    if (server.in_exec && !server.propagate_in_transaction)
+        execCommandPropagateMulti(dbid);
+
+    /* This needs to be unreachable since the dataset should be fixed during 
+     * client pause, otherwise data may be lossed during a failover. */
+    serverAssert(!(areClientsPaused() && !server.client_pause_in_transaction));
+
+    if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
+        feedAppendOnlyFile(cmd,dbid,argv,argc);
+    if (flags & PROPAGATE_REPL)
+        replicationFeedSlaves(server.slaves,dbid,argv,argc);
+}
+```
+
+
 ### LRU
 
-
+```c
+void initServerConfig(void) {
+    // ...
+    unsigned int lruclock = getLRUClock();
+    atomicSet(server.lruclock,lruclock);
+    // ...
+}
+```
 
 ```c
 
@@ -86,6 +354,17 @@ typedef struct redisObject {
 ```
 maxmemory-samples
 
+```
+
+```c
+#define EVPOOL_SIZE 16
+#define EVPOOL_CACHED_SDS_SIZE 255
+struct evictionPoolEntry {
+    unsigned long long idle;    /* Object idle time (inverse frequency for LFU) */
+    sds key;                    /* Key name. */
+    sds cached;                 /* Cached SDS object for key name. */
+    int dbid;                   /* Key DB number. */
+};
 ```
 
 ### LFU

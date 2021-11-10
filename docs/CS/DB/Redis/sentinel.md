@@ -70,6 +70,79 @@ So far so good... At this point you may jump to create your Sentinel deployment 
 
 
 
+### sentinelTimer
+
+called by serverCron
+
+```c
+void sentinelTimer(void) {
+    sentinelCheckTiltCondition();
+    sentinelHandleDictOfRedisInstances(sentinel.masters);
+    sentinelRunPendingScripts();
+    sentinelCollectTerminatedScripts();
+    sentinelKillTimedoutScripts();
+
+    /* We continuously change the frequency of the Redis "timer interrupt"
+     * in order to desynchronize every Sentinel from every other.
+     * This non-determinism avoids that Sentinels started at the same time
+     * exactly continue to stay synchronized asking to be voted at the
+     * same time again and again (resulting in nobody likely winning the
+     * election because of split brain voting). */
+    server.hz = CONFIG_DEFAULT_HZ + rand() % CONFIG_DEFAULT_HZ;
+}
+```
+
+
+
+
+
+```c
+/* Every kind of instance */
+sentinelCheckSubjectivelyDown(ri);
+
+ sentinelCheckObjectivelyDown(ri);
+```
+
+
+
+
+
+```c
+/* Vote for the sentinel with 'req_runid' or return the old vote if already
+ * voted for the specified 'req_epoch' or one greater.
+ *
+ * If a vote is not available returns NULL, otherwise return the Sentinel
+ * runid and populate the leader_epoch with the epoch of the vote. */
+char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char *req_runid, uint64_t *leader_epoch) {
+    if (req_epoch > sentinel.current_epoch) {
+        sentinel.current_epoch = req_epoch;
+        sentinelFlushConfig();
+        sentinelEvent(LL_WARNING,"+new-epoch",master,"%llu",
+            (unsigned long long) sentinel.current_epoch);
+    }
+
+    if (master->leader_epoch < req_epoch && sentinel.current_epoch <= req_epoch)
+    {
+        sdsfree(master->leader);
+        master->leader = sdsnew(req_runid);
+        master->leader_epoch = sentinel.current_epoch;
+        sentinelFlushConfig();
+        sentinelEvent(LL_WARNING,"+vote-for-leader",master,"%s %llu",
+            master->leader, (unsigned long long) master->leader_epoch);
+        /* If we did not voted for ourselves, set the master failover start
+         * time to now, in order to force a delay before we can start a
+         * failover for the same master. */
+        if (strcasecmp(master->leader,sentinel.myid))
+            master->failover_start_time = mstime()+rand()%SENTINEL_MAX_DESYNC;
+    }
+
+    *leader_epoch = master->leader_epoch;
+    return master->leader ? sdsnew(master->leader) : NULL;
+}
+```
+
+
+
 sentinel，中文名是哨兵。哨兵是 Redis 集群架构中非常重要的一个组件，主要有以下功能：
 
 - 集群监控：负责监控 Redis master 和 slave 进程是否正常工作。

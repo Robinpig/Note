@@ -378,3 +378,6 @@ public class TransactionalCache implements Cache {
 
 }
 ```
+
+## References
+1. [Cache - MyBatis](https://mybatis.org/mybatis-3/zh/sqlmap-xml.html#cache)

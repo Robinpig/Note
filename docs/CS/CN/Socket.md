@@ -1,4 +1,19 @@
-# Socket
+## Introduction
+
+
+### port
+```shell
+cat /proc/sys/net/ipv4/ip_local_port_range 
+32768	60999
+```
+
+```shell
+cat /proc/net/snmp
+
+cat /proc/net/netstat
+
+```
+
 
 socket 套接字是一种数据结构。
 

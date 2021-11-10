@@ -9,6 +9,8 @@ Redis provides a different range of persistence options:
 
 The most important thing to understand is the different trade-offs between the RDB and AOF persistence. Let's start with RDB:
 
+Redis uses a persistence model based on the `fork()`system call in order to create a thread with the same (shared) memory content of the main Redis thread. This secondary thread dumps the content of the memory on disk. This is used by `rdb.c` to create the snapshots on disk and by `aof.c` in order to perform the AOF rewrite when the append only file gets too big.
+
 
 
 ## RDB advantages
@@ -236,11 +238,50 @@ void flushAppendOnlyFile(int force)
 
 ```
 
+
+
+
+
+Max wait 2 seconds
+
+```c
+// aof.flushAppendOnlyFile
+if (server.aof_fsync == AOF_FSYNC_EVERYSEC && !force) {
+    /* With this append fsync policy we do background fsyncing.
+     * If the fsync is still in progress we can try to delay
+     * the write for a couple of seconds. */
+    if (sync_in_progress) {
+        if (server.aof_flush_postponed_start == 0) {
+            /* No previous write postponing, remember that we are
+             * postponing the flush and return. */
+            server.aof_flush_postponed_start = server.unixtime;
+            return;
+        } else if (server.unixtime - server.aof_flush_postponed_start < 2) {
+            /* We were already waiting for fsync to finish, but for less
+             * than two seconds this is still ok. Postpone again. */
+            return;
+        }
+        /* Otherwise fall trough, and go write since we can't wait
+         * over two seconds. */
+        server.aof_delayed_fsync++;
+        serverLog(LL_NOTICE,"Asynchronous AOF fsync is taking too long (disk is busy?). Writing the AOF buffer without waiting for fsync to complete, this may slow down Redis.");
+    }
+}
+```
+
 ### Log rewriting
 
 Whenever you issue a [BGREWRITEAOF](https://redis.io/commands/bgrewriteaof) Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory. 
 
+call by:
 
+1. startAppendOnly
+2. bgrewriteaofCommand
+3. serverCron
+
+```c
+rewriteAppendOnlyFileBackground
+```
 
 #### How it works
 
