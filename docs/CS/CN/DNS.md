@@ -1,4 +1,5 @@
-# DNS
+## Introduction
+
 
 `Domain Name System`
 
@@ -18,17 +19,17 @@ DNS解析流程
 域名与IP绑定时添加的记录
 
 A
-域名指向IPv4
+Address
 
 AAAA
 主机名或域名指向IPv6
 
 
 CNAME
-域名指向域名 用作Alias
+Canonical Name(Alias) for another domain
 
 MX
-电子邮箱服务 指向邮件服务器地址
+Mail Exchange
 
 NS
 子域名指定域名服务器解析
@@ -49,3 +50,21 @@ URL转发
 * 显性 转发地址 修改地址栏
 * 隐性 转发地址 不修改地址栏
 
+```shell
+
+cat /etc/resolv.conf
+
+nslookup
+
+# +trace
+dig
+
+
+```
+
+also cache DNS
+
+in JAVA
+`InetAddress`
+
+please using singleton to avoid resolving DNS each time
