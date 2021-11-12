@@ -1,8 +1,6 @@
-# Go
+## Introduction
 
 http://play.golang.org
-
-《Go IN ACTION》 https://github.com/goinaction/code.git
 
 
 
@@ -33,8 +31,7 @@ Traits
 
 
 
-
-compile
+[compile](/docs/CS/Go/Basic/compile.md)
 
 
 goroutine
