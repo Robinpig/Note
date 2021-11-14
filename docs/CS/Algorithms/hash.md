@@ -65,7 +65,7 @@ The insert can insert an item in a deleted slot, but the search doesn’t stop a
 
 - [ThreadLocalMap in Java](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md?id=hash)
 - HashMap in Python
-
+- [map - Golang](/docs/CS/Go/Basic/map.md)
 
 ## Dynamic resizing
 
