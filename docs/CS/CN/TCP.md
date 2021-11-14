@@ -49,7 +49,123 @@ SYN -> SYN + ACK ->ACK
 
 
 初始序列号ISN生成基于时钟 RFC1948
-RFC793
+From [RFC793 - Transmission Control Protocol](https://datatracker.ietf.org/doc/rfc793/)
+
+```
+																					 Transmission Control Protocol
+                                                Functional Specification
+                                                
+                                                
+                              +---------+ ---------\      active OPEN
+                              |  CLOSED |            \    -----------
+                              +---------+<---------\   \   create TCB
+                                |     ^              \   \  snd SYN
+                   passive OPEN |     |   CLOSE        \   \
+                   ------------ |     | ----------       \   \
+                    create TCB  |     | delete TCB         \   \
+                                V     |                      \   \
+                              +---------+            CLOSE    |    \
+                              |  LISTEN |          ---------- |     |
+                              +---------+          delete TCB |     |
+                   rcv SYN      |     |     SEND              |     |
+                  -----------   |     |    -------            |     V
+ +---------+      snd SYN,ACK  /       \   snd SYN          +---------+
+ |         |<-----------------           ------------------>|         |
+ |   SYN   |                    rcv SYN                     |   SYN   |
+ |   RCVD  |<-----------------------------------------------|   SENT  |
+ |         |                    snd ACK                     |         |
+ |         |------------------           -------------------|         |
+ +---------+   rcv ACK of SYN  \       /  rcv SYN,ACK       +---------+
+   |           --------------   |     |   -----------
+   |                  x         |     |     snd ACK
+   |                            V     V
+   |  CLOSE                   +---------+
+   | -------                  |  ESTAB  |
+   | snd FIN                  +---------+
+   |                   CLOSE    |     |    rcv FIN
+   V                  -------   |     |    -------
+ +---------+          snd FIN  /       \   snd ACK          +---------+
+ |  FIN    |<-----------------           ------------------>|  CLOSE  |
+ | WAIT-1  |------------------                              |   WAIT  |
+ +---------+          rcv FIN  \                            +---------+
+   | rcv ACK of FIN   -------   |                            CLOSE  |
+   | --------------   snd ACK   |                           ------- |
+   V        x                   V                           snd FIN V
+ +---------+                  +---------+                   +---------+
+ |FINWAIT-2|                  | CLOSING |                   | LAST-ACK|
+ +---------+                  +---------+                   +---------+
+   |                rcv ACK of FIN |                 rcv ACK of FIN |
+   |  rcv FIN       -------------- |    Timeout=2MSL -------------- |
+   |  -------              x       V    ------------        x       V
+    \ snd ACK                 +---------+delete TCB         +---------+
+     ------------------------>|TIME WAIT|------------------>| CLOSED  |
+                              +---------+                   +---------+
+```
+
+
+
+TCP Header Format
+
+```
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          Source Port          |       Destination Port        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        Sequence Number                        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Acknowledgment Number                      |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |  Data |           |U|A|P|R|S|F|                               |
+   | Offset| Reserved  |R|C|S|S|Y|I|            Window             |
+   |       |           |G|K|H|T|N|N|                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |           Checksum            |         Urgent Pointer        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Options                    |    Padding    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                             data                              |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+                            TCP Header Format
+
+          Note that one tick mark represents one bit position.
+```
+
+​    
+
+| Name                  | Length  | Description                                                  |      |
+| --------------------- | ------- | ------------------------------------------------------------ | ---- |
+| Source Port           | 16 bits | The source port number.                                      |      |
+| Destination Port      | 16 bits | The destination port number..                                |      |
+| Sequence Number       | 32 bits | The sequence number of the first data octet in this segment (except     when SYN is present). If SYN is present the sequence number is the     initial sequence number (ISN) and the first data octet is ISN+1. |      |
+| Acknowledgment Number | 32 bits | If the ACK control bit is set this field contains the value of the     next sequence number the sender of the segment is expecting to     receive.  Once a connection is established this is always sent. |      |
+| Data Offset           | 4 bits |                                                              |      |
+| Reserved              | 6 bits |                                                              |      |
+| Control Bits          | 6 bits |                                                              |      |
+| Window                | 16 bits |                                                              |      |
+| Checksum              | 16 bits |                                                              |      |
+| Urgent Pointer              | 16 bits |                                                              |      |
+| Options              | variable |                                                              |      |
+| Padding              | variable |                                                              |      |
+
+
+
+
+
+Window Scale
+
+a window size 16 bits == 64K
+
+Timestamps
+
+RTTM(`Round Trip Time Measurement`), RTO(`Retransmission timeout`)
+
+PAWS(`Protect Against Wrapped Sequences`)
+
+
+
+
 
 客户端和服务端ISN不相同：
 
@@ -141,6 +257,7 @@ keepalive 不足
    3. TCP Keepalive无法检测应用层状态，如进程阻塞、死锁、TCP缓冲区满等情况；
    4. TCP Keepalive容易与TCP重传控制冲突，从而导致失效。
       
+
 对于TCP状态无法反应应用层状态问题，这里稍微介绍几个场景。第一个是TCP连接成功建立，不代表对端应用感知到了该连接，因为TCP三次握手是内核中完成的，虽然连接已建立完成，但对端可能根本没有Accept；
 因此，一些场景仅通过TCP连接能否建立成功来判断对端应用的健康状况是不准确的，这种方案仅能探测进程是否存活。另一个是，本地TCP写操作成功，但数据可能还在本地写缓冲区中、网络链路设备中、对端读缓冲区中，并不代表对端应用读取到了数据。
 
