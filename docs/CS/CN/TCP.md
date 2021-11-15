@@ -49,11 +49,13 @@ SYN -> SYN + ACK ->ACK
 
 
 初始序列号ISN生成基于时钟 RFC1948
+
+
 From [RFC793 - Transmission Control Protocol](https://datatracker.ietf.org/doc/rfc793/)
 
+####  TCP Connection State
+
 ```
-																					 Transmission Control Protocol
-                                                Functional Specification
                                                 
                                                 
                               +---------+ ---------\      active OPEN
@@ -101,10 +103,26 @@ From [RFC793 - Transmission Control Protocol](https://datatracker.ietf.org/doc/r
      ------------------------>|TIME WAIT|------------------>| CLOSED  |
                               +---------+                   +---------+
 ```
+TCP Connection State Diagram
+
+
+Connect：
+client： closed - snd SYN -> SYN-SENT - rcv SYN+ACK and snd ACK -> ESTAB
+
+sever： closed - listen -> Listen - rcv SYN - snd SYN+ACK -> SYN_RCV and rcv ACK -> ESTAB
+
+
+disconnect：
+ESTAB - snd FIN -> FINWAIT-1
+- rcv ACK -> FINWAIT-2 - rcv FIN and snd ACK -> TIME_WAIT
+- rcv FIN and snd ACK -> CLOSING -> rcv ACK -> TIME_WAIT
+- 2MSL -> CLOSED
+
+ESTAB - rcv FIN -> CLOSE WAIT - close and snd FIN -> LAST-ACK -> rcv ACK-> CLOSED
 
 
 
-TCP Header Format
+### Header Format
 
 ```
     0                   1                   2                   3
