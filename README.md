@@ -5,7 +5,16 @@
 
 
 ## Algorithms
+
+
+### Data Structures
 - [hash](/docs/CS/Algorithms/hash.md)
+- [Trie](/docs/CS/Algorithms/Trie.md)
+- [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
+- [Red-Black Tree](/docs/CS/Algorithms/Red-Black%20Tree.md)
+
+### Page Replacement Algorithms
+- [LRU](/docs/CS/Algorithms/LRU.md)
 
 ## Operating System
 

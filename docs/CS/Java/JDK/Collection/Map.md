@@ -102,6 +102,8 @@ static class Entry<K,V> extends HashMap.Node<K,V> {
 
 ### Fields
 
+Treeify and untreeify using different threshold to improve performance. 
+
 ```java
 //The default initial capacity - MUST be a power of two.
 static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16
@@ -1322,7 +1324,7 @@ static final class CounterCell {
 
 *This implementation spares its clients from the unspecified, generally chaotic ordering provided by HashMap (and Hashtable), without incurring the increased cost associated with TreeMap.* 
 
-
+[Other LRU implements](/docs/CS/Algorithms/LRU.md)
 
 ### Entry
 
