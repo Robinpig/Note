@@ -361,7 +361,10 @@ However, if the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.
 ### Source Code
 
 
-
+#### System Columns
+1. DATA_ROW_ID
+2. DATA_TRX_ID
+3. DATA_ROLL_PTR
 ```c
 // dict0dict.cc
 /** Adds system columns to a table object. */
@@ -395,9 +398,6 @@ void dict_table_add_system_columns(dict_table_t *table, mem_heap_t *heap) {
   }
 }
 ```
-
-
-
 
 
 trx_sys_t:
@@ -518,6 +518,46 @@ class ReadView {
 
 #### ReadView
 
+
+`mysqldump` use `START TRANSACTION WITH CONSISTENT SNAPSHOT` get a read view
+
+row_search_mvcc -> lock_clust_rec_cons_read_sees
+
+call changes_visible
+```c
+
+/** Checks that a record is seen in a consistent read.
+ @return true if sees, or false if an earlier version of the record
+ should be retrieved */
+bool lock_clust_rec_cons_read_sees(
+    const rec_t *rec,     /*!< in: user record which should be read or
+                          passed over by a read cursor */
+    dict_index_t *index,  /*!< in: clustered index */
+    const ulint *offsets, /*!< in: rec_get_offsets(rec, index) */
+    ReadView *view)       /*!< in: consistent read view */
+{
+  ut_ad(index->is_clustered());
+  ut_ad(page_rec_is_user_rec(rec));
+  ut_ad(rec_offs_validate(rec, index, offsets));
+
+  /* Temp-tables are not shared across connections and multiple
+  transactions from different connections cannot simultaneously
+  operate on same temp-table and so read of temp-table is
+  always consistent read. */
+  if (srv_read_only_mode || index->table->is_temporary()) {
+    ut_ad(view == nullptr || index->table->is_temporary());
+    return (true);
+  }
+
+  /* NOTE that we call this function while holding the search
+  system latch. */
+
+  trx_id_t trx_id = row_get_rec_trx_id(rec, index, offsets);
+
+  return (view->changes_visible(trx_id, index->table->name));
+}
+```
+
 row_search_mvcc -> trx_assign_read_view -> MVCC::view_open -> ReadView::prepare
 
 ```cpp
@@ -556,7 +596,7 @@ void ReadView::prepare(trx_id_t id) {
 
 
 
-
+changes_visible
 
 ```c
 

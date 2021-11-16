@@ -1,59 +1,202 @@
-# TCP
+## Introduction
 
-`Transmission Control Protocol`
+The Transmission Control Protocol (TCP) is intended for use as a highly reliable host-to-host protocol between hosts in packet-switched computer communication networks, and in interconnected systems of such networks.
 
-理论最大连接数 2<sup>48</sup>
+```
+                           Protocol Layering
 
-文件描述符限制 ulimit
+                        +---------------------+
+                        |     higher-level    |
+                        +---------------------+
+                        |        TCP          |
+                        +---------------------+
+                        |  internet protocol  |
+                        +---------------------+
+                        |communication network|
+                        +---------------------+
+```
 
-内存限制
-
-面向连接
+### Purpose
 
 
+The primary purpose of the TCP is to provide reliable, securable logical circuit or connection service between pairs of processes.  To provide this service on top of a less reliable internet communication system requires facilities in the following areas:
 
-需要建立连接后发送数据
-
-传输包有顺序控制
-
-头部字节20
-
-有错误校验和重传机制
-
-握手协议
-
-可靠传输
-
-## Connection
-
-![tcp_shakehand](./images/tcp_shake.png)
-
-### three-way handshaking
-check network and ack initial sequence number
-
-| 类型    | Name            | 描述         |
-| :------ | --------------- | ------------ |
-| SYN     | synchronize     | 初始建立连接 |
-| ACK     | acknowledgement | 确认SYN      |
-| SYN-ACK |                 |              |
-| FIN     |                 | 断开连接     |
-
-`Synchronize Sequence Numbers`
-
-`Acknowledge character`
-
-SYN -> SYN + ACK ->ACK
-
- 第三次握手方可携带数据
+   - Basic Data Transfer
+   - Reliability
+   - Flow Control
+   - Multiplexing
+   - Connections
+   - Precedence and Security
 
 
 
-初始序列号ISN生成基于时钟 RFC1948
+### Connections
+
+To identify the separate data streams that a TCP may handle, the TCP provides a port identifier.  Since port identifiers are selected  independently by each TCP they might not be unique.  To provide for  unique addresses within each TCP, we concatenate an internet address  identifying the TCP with a port identifier to create a [socket]() which will be unique throughout all networks connected together.
+
+A connection is fully specified by the pair of sockets at the ends.  A  local socket may participate in many connections to different foreign  sockets.  A connection can be used to carry data in both directions, that is, it is `"full duplex"`.
 
 
-From [RFC793 - Transmission Control Protocol](https://datatracker.ietf.org/doc/rfc793/)
 
-####  TCP Connection State
+
+
+The procedures to establish connections utilize the synchronize (SYN)  control flag and involves an exchange of three messages.  This  exchange has been termed a `three-way hand shake `.
+
+
+
+### Relation to Other Protocols
+
+The following diagram illustrates the place of the TCP in the protocol  hierarchy:
+
+```
+                              
+       +------+ +-----+ +-----+       +-----+                    
+       |Telnet| | FTP | |Voice|  ...  |     |  Application Level 
+       +------+ +-----+ +-----+       +-----+                    
+             |   |         |             |                       
+            +-----+     +-----+       +-----+                    
+            | TCP |     | RTP |  ...  |     |  Host Level        
+            +-----+     +-----+       +-----+                    
+               |           |             |                       
+            +-------------------------------+                    
+            |    Internet Protocol & ICMP   |  Gateway Level     
+            +-------------------------------+                    
+                           |                                     
+              +---------------------------+                      
+              |   Local Network Protocol  |    Network Level     
+              +---------------------------+                      
+
+                         Protocol Relationships
+```
+
+
+
+
+
+
+
+### Header Format
+
+```
+    0                   1                   2                   3
+    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |          Source Port          |       Destination Port        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                        Sequence Number                        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Acknowledgment Number                      |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |  Data |           |U|A|P|R|S|F|                               |
+   | Offset| Reserved  |R|C|S|S|Y|I|            Window             |
+   |       |           |G|K|H|T|N|N|                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |           Checksum            |         Urgent Pointer        |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                    Options                    |    Padding    |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                             data                              |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+                            TCP Header Format
+
+          Note that one tick mark represents one bit position.
+```
+
+​    
+
+| Name                  | Length   | Description                                                  |      |
+| --------------------- | -------- | ------------------------------------------------------------ | ---- |
+| Source Port           | 16 bits  | The source port number.                                      |      |
+| Destination Port      | 16 bits  | The destination port number..                                |      |
+| Sequence Number       | 32 bits  | The sequence number of the first data octet in this segment (except     when SYN is present). If SYN is present the sequence number is the     initial sequence number (ISN) and the first data octet is ISN+1. |      |
+| Acknowledgment Number | 32 bits  | If the ACK control bit is set this field contains the value of the     next sequence number the sender of the segment is expecting to     receive.  Once a connection is established this is always sent. |      |
+| Data Offset           | 4 bits   | The number of 32 bit words in the TCP Header.  This indicates where the data begins.  The TCP header (even one including options) is an     integral number of 32 bits long. |      |
+| Reserved              | 6 bits   |                                                              |      |
+| Control Bits          | 6 bits   | URG:  Urgent Pointer field significant     ACK:  Acknowledgment field significant     PSH:  Push Function     RST:  Reset the connection     SYN:  Synchronize sequence numbers     FIN:  No more data from sender |      |
+| Window                | 16 bits  | The number of data octets beginning with the one indicated in the     acknowledgment field which the sender of this segment is willing to     accept. |      |
+| Checksum              | 16 bits  |                                                              |      |
+| Urgent Pointer        | 16 bits  |                                                              |      |
+| Options               | variable |                                                              |      |
+| Padding               | variable | The TCP header padding is used to ensure that the TCP header ends     and data begins on a 32 bit boundary.  The padding is composed of     zeros. |      |
+
+#### Options
+
+Options may occupy space at the end of the TCP header and are a multiple of 8 bits in length.  All options are included in the checksum.  An option may begin on any octet boundary.  There are two cases for the format of an option:
+**Case 1:**  A single octet of option-kind.
+
+```
+       End of Option List
+      
+              +--------+
+              |00000000|
+              +--------+
+               Kind=0
+               
+       No-Operation
+      
+              +--------+
+              |00000001|
+              +--------+
+               Kind=1 
+```
+
+**Case 2:**  An octet of option-kind, an octet of option-length, and the actual option-data octets.
+
+```
+      Maximum Segment Size
+
+        +--------+--------+---------+--------+
+        |00000010|00000100|   max seg size   |
+        +--------+--------+---------+--------+
+         Kind=2   Length=4
+```
+
+
+
+###  Connection State
+
+  A connection progresses through a series of states during its
+  lifetime.  The states are:  LISTEN, SYN-SENT, SYN-RECEIVED,
+  ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, CLOSING, LAST-ACK,
+  TIME-WAIT, and the fictional state CLOSED.  CLOSED is fictional
+  because it represents the state when there is no TCB, and therefore,
+  no connection.  Briefly the meanings of the states are:
+
+- LISTEN - represents waiting for a connection request from any remote
+    TCP and port.
+- SYN-SENT - represents waiting for a matching connection request
+    after having sent a connection request.
+    
+- SYN-RECEIVED - represents waiting for a confirming connection
+    request acknowledgment after having both received and sent a
+    connection request.
+    
+- ESTABLISHED - represents an open connection, data received can be
+    delivered to the user.  The normal state for the data transfer phase
+    of the connection.
+    
+- FIN-WAIT-1 - represents waiting for a connection termination request
+    from the remote TCP, or an acknowledgment of the connection
+    termination request previously sent.
+    
+- FIN-WAIT-2 - represents waiting for a connection termination request
+    from the remote TCP.
+    
+- CLOSE-WAIT - represents waiting for a connection termination request
+    from the local user.
+    
+- CLOSING - represents waiting for a connection termination request
+    acknowledgment from the remote TCP.
+    
+- LAST-ACK - represents waiting for an acknowledgment of the
+    connection termination request previously sent to the remote TCP
+    (which includes an acknowledgment of its connection termination
+    request).
+- TIME-WAIT - represents waiting for enough time to pass to be sure
+      the remote TCP received the acknowledgment of its connection
+      termination request.
+- CLOSED - represents no connection state at all.
 
 ```
                                                 
@@ -103,6 +246,7 @@ From [RFC793 - Transmission Control Protocol](https://datatracker.ietf.org/doc/r
      ------------------------>|TIME WAIT|------------------>| CLOSED  |
                               +---------+                   +---------+
 ```
+
 TCP Connection State Diagram
 
 
@@ -111,10 +255,10 @@ client： closed - snd SYN -> SYN-SENT - rcv SYN+ACK and snd ACK -> ESTAB
 
 sever： closed - listen -> Listen - rcv SYN - snd SYN+ACK -> SYN_RCV and rcv ACK -> ESTAB
 
-
 disconnect：
-ESTAB - snd FIN -> FINWAIT-1
-- rcv ACK -> FINWAIT-2 - rcv FIN and snd ACK -> TIME_WAIT
+ESTAB - snd FIN -> FIN-WAIT-1
+
+- rcv ACK -> FIN-WAIT-2 - rcv FIN and snd ACK -> TIME_WAIT
 - rcv FIN and snd ACK -> CLOSING -> rcv ACK -> TIME_WAIT
 - 2MSL -> CLOSED
 
@@ -122,67 +266,177 @@ ESTAB - rcv FIN -> CLOSE WAIT - close and snd FIN -> LAST-ACK -> rcv ACK-> CLOSE
 
 
 
-### Header Format
+
+
+
+
+## Connection
+
+![tcp_shakehand](./images/tcp_shake.png)
+
+### Establish Connection
+
+three-way handshaking
+
+check network and ack initial sequence number
+
+| 类型    | Name            | 描述         |
+| :------ | --------------- | ------------ |
+| SYN     | synchronize     | 初始建立连接 |
+| ACK     | acknowledgement | 确认SYN      |
+| SYN-ACK |                 |              |
+| FIN     |                 | 断开连接     |
+
+`Synchronize Sequence Numbers`
+
+`Acknowledge character`
+
+SYN -> SYN + ACK ->ACK
+
+ 第三次握手方可携带数据
+
+
+
+初始序列号ISN生成基于时钟 RFC1948
+
+
+
+
+
+### Window Scale
+
+see [RFC 1323 - TCP Extensions for High Performance](https://datatracker.ietf.org/doc/rfc1323/).
+
+
+
+**Window Size Limit:** 
+
+The TCP header uses a 16 bit field to report the receive window size to the sender.  Therefore, the largest window that can be used is 2**16 = 65K bytes.
 
 ```
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |          Source Port          |       Destination Port        |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                        Sequence Number                        |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                    Acknowledgment Number                      |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |  Data |           |U|A|P|R|S|F|                               |
-   | Offset| Reserved  |R|C|S|S|Y|I|            Window             |
-   |       |           |G|K|H|T|N|N|                               |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |           Checksum            |         Urgent Pointer        |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                    Options                    |    Padding    |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                             data                              |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+TCP Window Scale Option (WSopt):
 
-                            TCP Header Format
+         Kind: 3 Length: 3 bytes
 
-          Note that one tick mark represents one bit position.
+                +---------+---------+---------+
+                | Kind=3  |Length=3 |shift.cnt|
+                +---------+---------+---------+
 ```
 
-​    
+The window field (SEG.WND) in the header of every incoming segment, with the exception of SYN segments, is left-shifted by Snd.Wind.Scale bits before updating SND.WND:
+              `SND.WND = SEG.WND << Snd.Wind.Scale`
 
-| Name                  | Length  | Description                                                  |      |
-| --------------------- | ------- | ------------------------------------------------------------ | ---- |
-| Source Port           | 16 bits | The source port number.                                      |      |
-| Destination Port      | 16 bits | The destination port number..                                |      |
-| Sequence Number       | 32 bits | The sequence number of the first data octet in this segment (except     when SYN is present). If SYN is present the sequence number is the     initial sequence number (ISN) and the first data octet is ISN+1. |      |
-| Acknowledgment Number | 32 bits | If the ACK control bit is set this field contains the value of the     next sequence number the sender of the segment is expecting to     receive.  Once a connection is established this is always sent. |      |
-| Data Offset           | 4 bits |                                                              |      |
-| Reserved              | 6 bits |                                                              |      |
-| Control Bits          | 6 bits |                                                              |      |
-| Window                | 16 bits |                                                              |      |
-| Checksum              | 16 bits |                                                              |      |
-| Urgent Pointer              | 16 bits |                                                              |      |
-| Options              | variable |                                                              |      |
-| Padding              | variable |                                                              |      |
+The window field (SEG.WND) of every outgoing segment, with the exception of SYN segments, is right-shifted by Rcv.Wind.Scale bits:
+              `SEG.WND = RCV.WND >> Rcv.Wind.Scale`
 
 
 
-
-
-Window Scale
-
-a window size 16 bits == 64K
-
-Timestamps
-
-RTTM(`Round Trip Time Measurement`), RTO(`Retransmission timeout`)
-
-PAWS(`Protect Against Wrapped Sequences`)
+**Recovery from Losses:**
 
 
 
+**Round-Trip Measurement:**
+
+TCP implements reliable data delivery by retransmitting segments that are not acknowledged within some retransmission timeout (RTO) interval.
+
+New TCP option, `"Timestamps"`, and then defines a mechanism using this option that allows nearly every segment, including retransmissions, to be timed at negligible computational cost.  We use the mnemonic RTTM(`Round Trip Time Measurement)` for this mechanism, to distinguish it from other uses of the `Timestamps` option.
+
+#### RTTM
+
+
+
+#### PAWS
+
+We call PAWS(`Protect Against Wrapped Sequence numbers`), to extend TCP reliability to transfer rates well beyond the foreseeable upper limit of network bandwidths.
+
+
+
+The PAWS algorithm requires the following processing to be performed on all incoming segments for a synchronized connection:
+
+
+- If there is a Timestamps option in the arriving segment and SEG.TSval < TS.Recent and if TS.Recent is valid (see later discussion), then treat the arriving segment as not acceptable:
+
+  - Send an acknowledgement in reply as specified in RFC-793 page 69 and drop the segment.
+
+  - Note: it is necessary to send an ACK segment in order to retain TCP's mechanisms for detecting and recovering from half-open connections.  For example, see Figure 10 of RFC-793.
+
+- If the segment is outside the window, reject it (normal TCP processing)
+
+- If an arriving segment satisfies: SEG.SEQ <= Last.ACK.sent (see Section 3.4), then record its timestamp in TS.Recent.
+
+- If an arriving segment is in-sequence (i.e., at the left window edge), then accept it normally.
+  
+- Otherwise, treat the segment as a normal in-window, out-of-sequence TCP segment (e.g., queue it for later delivery to the user).
+
+
+
+### Fast Open
+
+
+
+
+The key component of TFO is the Fast Open Cookie (cookie), a message authentication code (MAC) tag generated by the server.  The client requests a cookie in one regular TCP connection, then uses it for future TCP connections to exchange data during the 3WHS:
+
+   Requesting a Fast Open Cookie:
+
+   1. The client sends a SYN with a Fast Open option with an empty
+      cookie field to request a cookie.
+   2. The server generates a cookie and sends it through the Fast Open
+      option of a SYN-ACK packet.
+   3. The client caches the cookie for future TCP Fast Open connections
+      (see below).
+
+
+
+Requesting Fast Open Cookie in connection 1:
+
+```
+   TCP A (Client)                                      TCP B (Server)
+   ______________                                      ______________
+   CLOSED                                                      LISTEN
+
+   #1 SYN-SENT       ----- <SYN,CookieOpt=NIL>  ---------->  SYN-RCVD
+
+   #2 ESTABLISHED    <---- <SYN,ACK,CookieOpt=C> ----------  SYN-RCVD
+```
+
+Performing TCP Fast Open in connection 2:
+
+```
+   TCP A (Client)                                      TCP B (Server)
+   ______________                                      ______________
+   CLOSED                                                      LISTEN
+
+   #1 SYN-SENT       ----- <SYN=x,CookieOpt=C,DATA_A> ---->  SYN-RCVD
+
+   #2 ESTABLISHED    <---- <SYN=y,ACK=x+len(DATA_A)+1> ----  SYN-RCVD
+
+   #3 ESTABLISHED    <---- <ACK=x+len(DATA_A)+1,DATA_B>----  SYN-RCVD
+
+   #4 ESTABLISHED    ----- <ACK=y+1>--------------------> ESTABLISHED
+
+   #5 ESTABLISHED    --- <ACK=y+len(DATA_B)+1>----------> ESTABLISHED
+```
+
+
+
+
+
+```
+                                   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                                   |      Kind     |    Length     |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   |                                                               |
+   ~                            Cookie                             ~
+   |                                                               |
+   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+   Kind            1 byte: value = 34
+   Length          1 byte: range 6 to 18 (bytes); limited by
+                           remaining space in the options field.
+                           The number MUST be even.
+   Cookie          0, or 4 to 16 bytes (Length - 2)
+```
 
 
 客户端和服务端ISN不相同：
@@ -298,11 +552,47 @@ default send  retries
 
 
 
-
-
-#### `sack`
+### Sack
 
 `sack (Selective Acknowledgment)`
+
+
+
+```
+       TCP Sack-Permitted Option:
+       Kind: 4
+       +---------+---------+
+       | Kind=4  | Length=2|
+       +---------+---------+
+```
+
+
+
+Sack Option Format
+
+```
+       TCP SACK Option:
+       Kind: 5
+       Length: Variable
+
+                         +--------+--------+
+                         | Kind=5 | Length |
+       +--------+--------+--------+--------+
+       |      Left Edge of 1st Block       |
+       +--------+--------+--------+--------+
+       |      Right Edge of 1st Block      |
+       +--------+--------+--------+--------+
+       |                                   |
+       /            . . .                  /
+       |                                   |
+       +--------+--------+--------+--------+
+       |      Left Edge of nth Block       |
+       +--------+--------+--------+--------+
+       |      Right Edge of nth Block      |
+       +--------+--------+--------+--------+
+```
+
+
 
 当发送方收到三个重复ack，立刻触发快速重传，立即重传丢失数据包
 
@@ -479,7 +769,7 @@ netstat -s|grep overflowed
 ```
 
 
-### four-way handshaking
+### Close Connection
 
 FIN -> ACK   FIN -> ACK
 
@@ -526,7 +816,63 @@ cat /proc/sys/net/ipv4/tcp_fin_timeout	#60
 
 
 
-TIME_WAIT
+### TIME_WAIT
+
+
+
+#### TWA
+
+The TCP mechanisms to protect against old duplicate segments, below if in TIME_WAIT:
+
+**Unreliable:** TIME-WAIT state removes the hazard of old duplicates for "fast" or "long" connections, in which clock-driven ISN selection is unable to prevent overlap of the old and new sequence spaces. The TIME-WAIT delay allows all old duplicate segments time enough to die in the Internet before the connection is reopened.
+
+TIME-WAIT state can be prematurely terminated ("assassinated") by an old duplicate data or ACK segment from the current or an earlier incarnation of the same connection.  We refer to this as "`TIME-WAIT Assassination`" (**TWA**).
+
+```
+       TCP A                                                TCP B
+
+   1.  ESTABLISHED                                          ESTABLISHED
+
+       (Close)
+   2.  FIN-WAIT-1  --> <SEQ=100><ACK=300><CTL=FIN,ACK>  --> CLOSE-WAIT
+
+   3.  FIN-WAIT-2  <-- <SEQ=300><ACK=101><CTL=ACK>      <-- CLOSE-WAIT
+
+                                                            (Close)
+   4.  TIME-WAIT   <-- <SEQ=300><ACK=101><CTL=FIN,ACK>  <-- LAST-ACK
+
+   5.  TIME-WAIT   --> <SEQ=101><ACK=301><CTL=ACK>      --> CLOSED
+
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+   5.1. TIME-WAIT   <--  <SEQ=255><ACK=33> ... old duplicate
+
+   5.2  TIME-WAIT   --> <SEQ=101><ACK=301><CTL=ACK>    -->  ????
+
+   5.3  CLOSED      <-- <SEQ=301><CTL=RST>             <--  ????
+      (prematurely)
+
+                         TWA Example
+```
+
+
+ If the connection is immediately reopened after a TWA event, the new incarnation will be exposed to old duplicate segments (except for the initial <SYN> segment, which is handled by the 3-way handshake).  There are three possible hazards that result:
+
+-   Old duplicate data may be accepted erroneously.
+- The new connection may be de-synchronized, with the two ends in permanent disagreement on the state.  Following the spec of RFC-793, this desynchronization results in an infinite ACK loop.  (It might be reasonable to change this aspect of RFC- 793 and kill the connection instead.) This hazard results from acknowledging something that was not sent.  This may result from an old duplicate ACK or as a side-effect of hazard H1.
+- The new connection may die. A duplicate segment (data or ACK) arriving in SYN-SENT state may kill the new connection after it has apparently opened successfully.
+
+##### Fixes for TWA Hazards
+
+
+We discuss three possible fixes to TCP to avoid these hazards.
+- Ignore RST segments in TIME-WAIT state. If the 2 minute MSL is enforced, this fix avoids all three hazards.
+ This is the simplest fix.  One could also argue that it is formally the correct thing to do; since allowing time for old duplicate segments to die is one of TIME-WAIT state's functions, the state should not be truncated by a RST segment. [see Linux](/d)
+- Use PAWS to avoid the hazards.
+- Use 64-bit Sequence Numbers
+
+
+
 
 1. 防止接收到旧连接的数据
 2. 保证连接尽量正常关闭
@@ -546,7 +892,7 @@ cat /proc/sys/net/ipv4/tcp_tw_reuse #3
 cat /proc/sys/net/ipv4/tcp_timestamps #1 enable
 ```
 
-[RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
+see [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
 
 ```shell
 net.ipv4.tcp_tw_recycle # 1 enable quick recycle TIME_WAIT sockets
@@ -613,6 +959,7 @@ socket的SO_SNDBUF/SO_RCVBUF会关闭缓存区动态调整功能
    
 
 2 占用资源限制
+
 ```shell
 sysctl -a | grep rmem
 net.ipv4.tcp_rmem = 4096 87380 8388608
@@ -628,3 +975,30 @@ slabtop
 cause:
 1. forget invoke close/shutdown to send FIN
 2. backlog too large
+
+
+
+## Congestion Control
+
+Active Queue Management
+
+
+
+### ECN
+
+Explicit Congestion Notification in IP
+
+
+
+## References
+
+1. [RFC 793 - Transmission Control Protocol](https://datatracker.ietf.org/doc/rfc793/)
+2. [RFC 1122 - Requirements for Internet Hosts - Communication Layers](https://datatracker.ietf.org/doc/rfc1122/)
+3. [RFC 1323 - TCP Extensions for High Performance](https://datatracker.ietf.org/doc/rfc1323/)
+3. [RFC 1337 - TIME-WAIT Assassination Hazards in TCP](https://datatracker.ietf.org/doc/rfc1337/)
+4. [RFC 2018 - TCP Selective Acknowledgment Options](https://datatracker.ietf.org/doc/rfc2018/)
+6. [RFC 2525 - Known TCP Implementation Problems](https://datatracker.ietf.org/doc/rfc2525/)
+7. [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP](https://datatracker.ietf.org/doc/rfc3168/)
+8. [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
+9. [RFC 6937 - Proportional Rate Reduction for TCP](https://datatracker.ietf.org/doc/html/rfc6937)
+10. [RFC 7413 - TCP Fast Open](https://datatracker.ietf.org/doc/html/rfc7413)

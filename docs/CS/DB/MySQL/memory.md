@@ -100,7 +100,7 @@ class buf_page_t
 ```
 
 
-checkpoint
+### checkpoint
 
 - Fuzzy Checkpoint
   - Master
