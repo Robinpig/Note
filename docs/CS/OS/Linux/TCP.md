@@ -74,11 +74,11 @@ struct proto tcp_prot = {
 ```
 
 
+## send
 
 
 
-
-
+### tcp_sendmsg
 ```c
 // net/ipv4/tcp.c
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
@@ -348,7 +348,7 @@ out_err:
 
 
 #### FastOpen
-
+tcp_sendmsg_fastopen
 ```c
 static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
                             int *copied, size_t size,
@@ -398,7 +398,7 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 }
 ```
 
-#### push
+### push
 
 ##### forced_push
 
@@ -412,7 +412,7 @@ static inline bool forced_push(const struct tcp_sock *tp)
 ```
 
 
-
+mark_push
 ```c
 static inline void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb)
 {
@@ -422,7 +422,7 @@ static inline void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb)
 ```
 
 
-
+tcp_push call __tcp_push_pending_frames
 ```c
 void tcp_push(struct sock *sk, int flags, int mss_now,
              int nonagle, int size_goal)
@@ -460,6 +460,7 @@ void tcp_push(struct sock *sk, int flags, int mss_now,
 ```
 
 
+tcp_push_one
 
 Send _single_ skb sitting at the send head. This function requires true push pending frames to setup probe timer etc.
 
@@ -475,10 +476,9 @@ void tcp_push_one(struct sock *sk, unsigned int mss_now)
 ```
 
 
-
+__tcp_push_pending_frames
 
 Push out any pending frames which were held back due to TCP_CORK or attempt at coalescing tiny packets. The socket must be locked by the caller.
-
 
 ```c
 void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
@@ -497,7 +497,9 @@ void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
 }
 ```
 
+### write
 
+#### tcp_write_xmit
 
 This routine writes packets to the network.  It advances the send_head.  This happens as incoming acks open up the remote window for us.
 
@@ -638,11 +640,11 @@ repair:
 }
 ```
 
-
+#### tcp_transmit_skb
 
 This routine actually transmits TCP packets queued in by tcp_do_sendmsg().  This is used by both the initial transmission and possible later retransmissions.
 
-All SKB's seen here are completely headerless.  It is our job to build the TCP header, and pass the packet down to IP so it can do the same plus pass the packet off to the device.
+All SKB's seen here are completely headerless.  It is our job to **build the TCP header**, and **pass the packet down to IP** so it can do the same plus pass the packet off to the device.
 
 We are working here with either a clone of the original SKB, or a fresh unique copy made by the retransmit engine.
 
@@ -821,6 +823,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	tcp_add_tx_delay(skb, tp);
 
+    /** add ip_queue_xmit   */
 	err = INDIRECT_CALL_INET(icsk->icsk_af_ops->queue_xmit,
 				 inet6_csk_xmit, ip_queue_xmit,
 				 sk, skb, &inet->cork.fl);
@@ -838,15 +841,28 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 ```
 
 
-
-##### select window
+Enter CWR state. Disable cwnd undo since congestion is proven with ECN
 
 ```c
-/* Chose a new window to advertise, update state in tcp_sock for the
- * socket, and return result with RFC1323 scaling applied.  The return
- * value can be stuffed directly into th->window for an outgoing
- * frame.
- */
+void tcp_enter_cwr(struct sock *sk)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+
+	tp->prior_ssthresh = 0;
+	if (inet_csk(sk)->icsk_ca_state < TCP_CA_CWR) {
+		tp->undo_marker = 0;
+		tcp_init_cwnd_reduction(sk);
+		tcp_set_ca_state(sk, TCP_CA_CWR);
+	}
+}
+```
+
+
+
+#### select window
+Chose a new window to advertise, update state in tcp_sock for the socket, and return result with RFC1323 scaling applied.  
+The return value can be stuffed directly into th->window for an outgoing frame.
+```c
 static u16 tcp_select_window(struct sock *sk)
 {
        struct tcp_sock *tp = tcp_sk(sk);
@@ -898,7 +914,147 @@ static u16 tcp_select_window(struct sock *sk)
 ```
 
 
+##### __tcp_select_window
 
+This function returns the amount that we can raise the
+usable window based on the following constraints
+1. The window can never be shrunk once it is offered (RFC 793)
+2. We limit memory per socket
+   
+RFC 1122:
+"the suggested [SWS] avoidance algorithm for the receiver is to keep
+RECV.NEXT + RCV.WIN fixed until:
+RCV.BUFF - RCV.USER - RCV.WINDOW >= min(1/2 RCV.BUFF, MSS)"
+
+i.e. don't raise the right edge of the window until you can raise
+it at least MSS bytes.
+
+Unfortunately, the recommended algorithm breaks header prediction,
+since header prediction assumes th->window stays fixed.
+
+Strictly speaking, keeping th->window fixed violates the receiver
+side SWS prevention criteria. The problem is that under this rule
+a stream of single byte packets will cause the right side of the
+window to always advance by a single byte.
+
+Of course, if the sender implements sender side SWS prevention
+then this will not be a problem.
+
+BSD seems to make the following compromise:
+
+If the free space is less than the 1/4 of the maximum
+space available and the free space is less than 1/2 mss,
+then set the window to 0.
+[ Actually, bsd uses MSS and 1/4 of maximal _window_ ]
+Otherwise, just prevent the window from shrinking
+and from being larger than the largest representable value.
+
+This prevents incremental opening of the window in the regime
+where TCP is limited by the speed of the reader side taking
+data out of the TCP receive queue. It does nothing about
+those cases where the window is constrained on the sender side
+because the pipeline is full.
+
+BSD also seems to "accidentally" limit itself to windows that are a multiple of MSS, at least until the free space gets quite small. This would appear to be a side effect of the mbuf implementation.
+Combining these two algorithms results in the observed behavior of having a fixed window size at almost all times.
+
+Below we obtain similar behavior by forcing the offered window to
+a multiple of the mss when it is feasible to do so.
+
+Note, we don't "adjust" for TIMESTAMP or SACK option bytes.
+Regular options like TIMESTAMP are taken into account.
+```c
+u32 __tcp_select_window(struct sock *sk)
+{
+	struct inet_connection_sock *icsk = inet_csk(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
+	/* MSS for the peer's data.  Previous versions used mss_clamp
+	 * here.  I don't know if the value based on our guesses
+	 * of peer's MSS is better for the performance.  It's more correct
+	 * but may be worse for the performance because of rcv_mss
+	 * fluctuations.  --SAW  1998/11/1
+	 */
+	int mss = icsk->icsk_ack.rcv_mss;
+	int free_space = tcp_space(sk);
+	int allowed_space = tcp_full_space(sk);
+	int full_space, window;
+
+	if (sk_is_mptcp(sk))
+		mptcp_space(sk, &free_space, &allowed_space);
+
+	full_space = min_t(int, tp->window_clamp, allowed_space);
+
+	if (unlikely(mss > full_space)) {
+		mss = full_space;
+		if (mss <= 0)
+			return 0;
+	}
+	if (free_space < (full_space >> 1)) {
+		icsk->icsk_ack.quick = 0;
+
+		if (tcp_under_memory_pressure(sk))
+			tp->rcv_ssthresh = min(tp->rcv_ssthresh,
+					       4U * tp->advmss);
+
+		/* free_space might become our new window, make sure we don't
+		 * increase it due to wscale.
+		 */
+		free_space = round_down(free_space, 1 << tp->rx_opt.rcv_wscale);
+
+		/* if free space is less than mss estimate, or is below 1/16th
+		 * of the maximum allowed, try to move to zero-window, else
+		 * tcp_clamp_window() will grow rcv buf up to tcp_rmem[2], and
+		 * new incoming data is dropped due to memory limits.
+		 * With large window, mss test triggers way too late in order
+		 * to announce zero window in time before rmem limit kicks in.
+		 */
+		if (free_space < (allowed_space >> 4) || free_space < mss)
+			return 0;
+	}
+
+	if (free_space > tp->rcv_ssthresh)
+		free_space = tp->rcv_ssthresh;
+
+	/* Don't do rounding if we are using window scaling, since the
+	 * scaled window will not line up with the MSS boundary anyway.
+	 */
+	if (tp->rx_opt.rcv_wscale) {
+		window = free_space;
+
+		/* Advertise enough space so that it won't get scaled away.
+		 * Import case: prevent zero window announcement if
+		 * 1<<rcv_wscale > mss.
+		 */
+		window = ALIGN(window, (1 << tp->rx_opt.rcv_wscale));
+	} else {
+		window = tp->rcv_wnd;
+		/* Get the largest window that is a nice multiple of mss.
+		 * Window clamp already applied above.
+		 * If our current window offering is within 1 mss of the
+		 * free space we just keep it. This prevents the divide
+		 * and multiply from happening most of the time.
+		 * We also don't do any window rounding when the free space
+		 * is too small.
+		 */
+		if (window <= free_space - mss || window > free_space)
+			window = rounddown(free_space, mss);
+		else if (mss == full_space &&
+			 free_space > window + (full_space >> 1))
+			window = free_space;
+	}
+
+	return window;
+}
+```
+
+
+
+## recv
+
+recv read recvfrom at application layer
+
+
+### tcp_v4_do_rcv
 The socket must have it's spinlock held when we get here, unless it is a TCP_LISTEN socket.
 
 We have a potential double-lock case here, so even when doing backlog processing we use the BH locking scheme. This is because we cannot sleep with the original spinlock held.

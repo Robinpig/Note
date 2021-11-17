@@ -1,7 +1,8 @@
 ## Introduction
 
 
-
+## Structure
+### sock
 struct sock_common - minimal network layer representation of sockets
 
 This is the minimal network layer representation of sockets, the header for struct sock and struct inet_timewait_sock.
@@ -322,11 +323,8 @@ struct request_sock {
 
 struct sk_buff - socket buffer
 
-
-
-
-
 ```c
+// include/linux/skbuff.h
 struct sk_buff {
 union {
 		struct {
@@ -357,6 +355,702 @@ union {
 		u64		skb_mstamp_ns; /* earliest departure time */
 	};
 
+    /*
+	 * This is the control buffer. It is free to use for every
+	 * layer. Please put your private variables there. If you
+	 * want to keep them across layers you have to do a skb_clone()
+	 * first. This is owned by whoever has the skb queued ATM.
+	 */
+	char			cb[48] __aligned(8);
+
+    unsigned int		len,
+				data_len;
+	__u16			mac_len,
+				hdr_len;
   // ...
 }
 ```
+
+msghdr
+
+As we do 4.4BSD message passing we use a 4.4BSD message passing system, not 4.3. Thus msg_accrights(len) are now missing. They belong in an obscure libc emulation or the bin.
+```c
+// include/linux/socket.h
+struct msghdr {
+	void		*msg_name;	/* ptr to socket address structure */
+	int		msg_namelen;	/* size of socket address structure */
+	struct iov_iter	msg_iter;	/* data */
+
+	/*
+	 * Ancillary data. msg_control_user is the user buffer used for the
+	 * recv* side when msg_control_is_user is set, msg_control is the kernel
+	 * buffer used for all other cases.
+	 */
+	union {
+		void		*msg_control;
+		void __user	*msg_control_user;
+	};
+	bool		msg_control_is_user : 1;
+	__kernel_size_t	msg_controllen;	/* ancillary data buffer length */
+	unsigned int	msg_flags;	/* flags on received message */
+	struct kiocb	*msg_iocb;	/* ptr to iocb for async requests */
+};
+```
+
+
+### inet
+ip_options
+```c
+// include/net/inet_sock.h
+struct ip_options {
+	__be32		faddr;
+	__be32		nexthop;
+	unsigned char	optlen;
+	unsigned char	srr;
+	unsigned char	rr;
+	unsigned char	ts;
+	unsigned char	is_strictroute:1,
+			srr_is_hit:1,
+			is_changed:1,
+			rr_needaddr:1,
+			ts_needtime:1,
+			ts_needaddr:1;
+	unsigned char	router_alert;
+	unsigned char	cipso;
+	unsigned char	__pad2;
+	unsigned char	__data[];
+};
+
+struct ip_options_rcu {
+	struct rcu_head rcu;
+	struct ip_options opt;
+};
+```
+
+
+inet_request_sock
+```c
+// include/net/inet_sock.h
+struct inet_request_sock {
+	struct request_sock	req;
+#define ir_loc_addr		req.__req_common.skc_rcv_saddr
+#define ir_rmt_addr		req.__req_common.skc_daddr
+#define ir_num			req.__req_common.skc_num
+#define ir_rmt_port		req.__req_common.skc_dport
+#define ir_v6_rmt_addr		req.__req_common.skc_v6_daddr
+#define ir_v6_loc_addr		req.__req_common.skc_v6_rcv_saddr
+#define ir_iif			req.__req_common.skc_bound_dev_if
+#define ir_cookie		req.__req_common.skc_cookie
+#define ireq_net		req.__req_common.skc_net
+#define ireq_state		req.__req_common.skc_state
+#define ireq_family		req.__req_common.skc_family
+
+	u16			snd_wscale : 4,
+				rcv_wscale : 4,
+				tstamp_ok  : 1,
+				sack_ok	   : 1,
+				wscale_ok  : 1,
+				ecn_ok	   : 1,
+				acked	   : 1,
+				no_srccheck: 1,
+				smc_ok	   : 1;
+	u32                     ir_mark;
+	union {
+		struct ip_options_rcu __rcu	*ireq_opt;
+#if IS_ENABLED(CONFIG_IPV6)
+		struct {
+			struct ipv6_txoptions	*ipv6_opt;
+			struct sk_buff		*pktopts;
+		};
+#endif
+	};
+};
+```
+
+inet_connection_sock_af_ops
+
+Pointers to address related TCP functions
+(i.e. things that depend on the address family)
+```c
+// include/net/inet_connection_sock.h
+struct inet_connection_sock_af_ops {
+	int	    (*queue_xmit)(struct sock *sk, struct sk_buff *skb, struct flowi *fl);
+	void	    (*send_check)(struct sock *sk, struct sk_buff *skb);
+	int	    (*rebuild_header)(struct sock *sk);
+	void	    (*sk_rx_dst_set)(struct sock *sk, const struct sk_buff *skb);
+	int	    (*conn_request)(struct sock *sk, struct sk_buff *skb);
+	struct sock *(*syn_recv_sock)(const struct sock *sk, struct sk_buff *skb,
+				      struct request_sock *req,
+				      struct dst_entry *dst,
+				      struct request_sock *req_unhash,
+				      bool *own_req);
+	u16	    net_header_len;
+	u16	    net_frag_header_len;
+	u16	    sockaddr_len;
+	int	    (*setsockopt)(struct sock *sk, int level, int optname,
+				  sockptr_t optval, unsigned int optlen);
+	int	    (*getsockopt)(struct sock *sk, int level, int optname,
+				  char __user *optval, int __user *optlen);
+	void	    (*addr2sockaddr)(struct sock *sk, struct sockaddr *);
+	void	    (*mtu_reduced)(struct sock *sk);
+};
+```
+
+
+inet_connection_sock - INET connection oriented sock
+```c
+// include/net/inet_connection_sock.h
+struct inet_connection_sock {
+	/* inet_sock has to be the first member! */
+	struct inet_sock	  icsk_inet;
+	struct request_sock_queue icsk_accept_queue;    /** FIFO of established children    */
+	struct inet_bind_bucket	  *icsk_bind_hash;
+	unsigned long		  icsk_timeout;
+ 	struct timer_list	  icsk_retransmit_timer;
+ 	struct timer_list	  icsk_delack_timer;
+	__u32			  icsk_rto;
+	__u32                     icsk_rto_min;
+	__u32                     icsk_delack_max;
+	__u32			  icsk_pmtu_cookie;
+	const struct tcp_congestion_ops *icsk_ca_ops;
+	const struct inet_connection_sock_af_ops *icsk_af_ops;
+	const struct tcp_ulp_ops  *icsk_ulp_ops;
+	void __rcu		  *icsk_ulp_data;
+	void (*icsk_clean_acked)(struct sock *sk, u32 acked_seq);
+	struct hlist_node         icsk_listen_portaddr_node;
+	unsigned int		  (*icsk_sync_mss)(struct sock *sk, u32 pmtu);
+	__u8			  icsk_ca_state:5,
+				  icsk_ca_initialized:1,
+				  icsk_ca_setsockopt:1,
+				  icsk_ca_dst_locked:1;
+	__u8			  icsk_retransmits;
+	__u8			  icsk_pending;
+	__u8			  icsk_backoff;
+	__u8			  icsk_syn_retries;
+	__u8			  icsk_probes_out;
+	__u16			  icsk_ext_hdr_len;
+	struct {
+		__u8		  pending;	 /* ACK is pending			   */
+		__u8		  quick;	 /* Scheduled number of quick acks	   */
+		__u8		  pingpong;	 /* The session is interactive		   */
+		__u8		  retry;	 /* Number of attempts			   */
+		__u32		  ato;		 /* Predicted tick of soft clock	   */
+		unsigned long	  timeout;	 /* Currently scheduled timeout		   */
+		__u32		  lrcvtime;	 /* timestamp of last received data packet */
+		__u16		  last_seg_size; /* Size of last incoming segment	   */
+		__u16		  rcv_mss;	 /* MSS used for delayed ACK decisions	   */
+	} icsk_ack;
+	struct {
+		/* Range of MTUs to search */
+		int		  search_high;
+		int		  search_low;
+
+		/* Information on the current probe. */
+		u32		  probe_size:31,
+		/* Is the MTUP feature enabled for this connection? */
+				  enabled:1;
+
+		u32		  probe_timestamp;
+	} icsk_mtup;
+	u32			  icsk_probes_tstamp;
+	u32			  icsk_user_timeout;
+
+	u64			  icsk_ca_priv[104 / sizeof(u64)];
+#define ICSK_CA_PRIV_SIZE      (13 * sizeof(u64))
+};
+
+```
+
+
+inet_timewait_sock
+
+This is a TIME_WAIT sock. It works around the memory consumption problems of sockets in such a state on heavily loaded servers, but without violating the protocol specification.
+```c
+// include/net/inet_timewait_sock.h
+struct inet_timewait_sock {
+	/*
+	 * Now struct sock also uses sock_common, so please just
+	 * don't add nothing before this first member (__tw_common) --acme
+	 */
+	struct sock_common	__tw_common;
+#define tw_family		__tw_common.skc_family
+#define tw_state		__tw_common.skc_state
+#define tw_reuse		__tw_common.skc_reuse
+#define tw_reuseport		__tw_common.skc_reuseport
+#define tw_ipv6only		__tw_common.skc_ipv6only
+#define tw_bound_dev_if		__tw_common.skc_bound_dev_if
+#define tw_node			__tw_common.skc_nulls_node
+#define tw_bind_node		__tw_common.skc_bind_node
+#define tw_refcnt		__tw_common.skc_refcnt
+#define tw_hash			__tw_common.skc_hash
+#define tw_prot			__tw_common.skc_prot
+#define tw_net			__tw_common.skc_net
+#define tw_daddr        	__tw_common.skc_daddr
+#define tw_v6_daddr		__tw_common.skc_v6_daddr
+#define tw_rcv_saddr    	__tw_common.skc_rcv_saddr
+#define tw_v6_rcv_saddr    	__tw_common.skc_v6_rcv_saddr
+#define tw_dport		__tw_common.skc_dport
+#define tw_num			__tw_common.skc_num
+#define tw_cookie		__tw_common.skc_cookie
+#define tw_dr			__tw_common.skc_tw_dr
+
+	__u32			tw_mark;
+	volatile unsigned char	tw_substate;
+	unsigned char		tw_rcv_wscale;
+
+	/* Socket demultiplex comparisons on incoming packets. */
+	/* these three are in inet_sock */
+	__be16			tw_sport;
+	/* And these are ours. */
+	unsigned int		tw_kill		: 1,
+				tw_transparent  : 1,
+				tw_flowlabel	: 20,
+				tw_pad		: 2,	/* 2 bits hole */
+				tw_tos		: 8;
+	u32			tw_txhash;
+	u32			tw_priority;
+	struct timer_list	tw_timer;
+	struct inet_bind_bucket	*tw_tb;
+};
+```
+
+sockaddr
+```c
+// include/linux/socket.h
+struct sockaddr {
+	sa_family_t	sa_family;	/* address family, AF_xxx	*/
+	char		sa_data[14];	/* 14 bytes of protocol address	*/
+};
+```
+
+sockaddr_in - Structure describing an Internet (IP) socket address.
+```c
+// include/uapi/linux/in.h
+struct sockaddr_in {
+  __kernel_sa_family_t	sin_family;	/* Address family		*/
+  __be16		sin_port;	/* Port number			*/
+  struct in_addr	sin_addr;	/* Internet address		*/
+
+  /* Pad to size of `struct sockaddr'. */
+  unsigned char		__pad[__SOCK_SIZE__ - sizeof(short int) -
+			sizeof(unsigned short int) - sizeof(struct in_addr)];
+};
+```
+
+### Route
+
+dst_entry
+```c
+
+
+struct dst_entry {
+	struct net_device       *dev;
+	struct  dst_ops	        *ops;
+	unsigned long		_metrics;
+	unsigned long           expires;
+#ifdef CONFIG_XFRM
+	struct xfrm_state	*xfrm;
+#else
+	void			*__pad1;
+#endif
+	int			(*input)(struct sk_buff *);
+	int			(*output)(struct net *net, struct sock *sk, struct sk_buff *skb);
+
+	unsigned short		flags;
+#define DST_NOXFRM		0x0002
+#define DST_NOPOLICY		0x0004
+#define DST_NOCOUNT		0x0008
+#define DST_FAKE_RTABLE		0x0010
+#define DST_XFRM_TUNNEL		0x0020
+#define DST_XFRM_QUEUE		0x0040
+#define DST_METADATA		0x0080
+
+	/* A non-zero value of dst->obsolete forces by-hand validation
+	 * of the route entry.  Positive values are set by the generic
+	 * dst layer to indicate that the entry has been forcefully
+	 * destroyed.
+	 *
+	 * Negative values are used by the implementation layer code to
+	 * force invocation of the dst_ops->check() method.
+	 */
+	short			obsolete;
+#define DST_OBSOLETE_NONE	0
+#define DST_OBSOLETE_DEAD	2
+#define DST_OBSOLETE_FORCE_CHK	-1
+#define DST_OBSOLETE_KILL	-2
+	unsigned short		header_len;	/* more space at head required */
+	unsigned short		trailer_len;	/* space to reserve at tail */
+
+	/*
+	 * __refcnt wants to be on a different cache line from
+	 * input/output/ops or performance tanks badly
+	 */
+#ifdef CONFIG_64BIT
+	atomic_t		__refcnt;	/* 64-bit offset 64 */
+#endif
+	int			__use;
+	unsigned long		lastuse;
+	struct lwtunnel_state   *lwtstate;
+	struct rcu_head		rcu_head;
+	short			error;
+	short			__pad;
+	__u32			tclassid;
+#ifndef CONFIG_64BIT
+	atomic_t		__refcnt;	/* 32-bit offset 64 */
+#endif
+};
+```
+
+
+rtable
+
+has a dst_entry
+```c
+// include/net/route.h
+struct rtable {
+	struct dst_entry	dst;
+
+	int			rt_genid;
+	unsigned int		rt_flags;
+	__u16			rt_type;
+	__u8			rt_is_input;
+	__u8			rt_uses_gateway;
+
+	int			rt_iif;
+
+	u8			rt_gw_family;
+	/* Info on neighbour */
+	union {
+		__be32		rt_gw4;
+		struct in6_addr	rt_gw6;
+	};
+
+	/* Miscellaneous cached information */
+	u32			rt_mtu_locked:1,
+				rt_pmtu:31;
+
+	struct list_head	rt_uncached;
+	struct uncached_list	*rt_uncached_list;
+};
+
+```
+
+flowi
+```c
+
+struct flowi {
+	union {
+		struct flowi_common	__fl_common;
+		struct flowi4		ip4;
+		struct flowi6		ip6;
+		struct flowidn		dn;
+	} u;
+#define flowi_oif	u.__fl_common.flowic_oif
+#define flowi_iif	u.__fl_common.flowic_iif
+#define flowi_mark	u.__fl_common.flowic_mark
+#define flowi_tos	u.__fl_common.flowic_tos
+#define flowi_scope	u.__fl_common.flowic_scope
+#define flowi_proto	u.__fl_common.flowic_proto
+#define flowi_flags	u.__fl_common.flowic_flags
+#define flowi_secid	u.__fl_common.flowic_secid
+#define flowi_tun_key	u.__fl_common.flowic_tun_key
+#define flowi_uid	u.__fl_common.flowic_uid
+} __attribute__((__aligned__(BITS_PER_LONG/8)));
+```
+
+### Tcp
+tcphdr
+
+tcp header
+```c
+// include/uapi/linux/tcp.h
+struct tcphdr {
+	__be16	source;
+	__be16	dest;
+	__be32	seq;
+	__be32	ack_seq;
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+	__u16	res1:4,
+		doff:4,
+		fin:1,
+		syn:1,
+		rst:1,
+		psh:1,
+		ack:1,
+		urg:1,
+		ece:1,
+		cwr:1;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+	__u16	doff:4,
+		res1:4,
+		cwr:1,
+		ece:1,
+		urg:1,
+		ack:1,
+		psh:1,
+		rst:1,
+		syn:1,
+		fin:1;
+#else
+#error	"Adjust your <asm/byteorder.h> defines"
+#endif
+	__be16	window;
+	__sum16	check;
+	__be16	urg_ptr;
+};
+```
+
+```c
+
+#define TCPHDR_FIN 0x01
+#define TCPHDR_SYN 0x02
+#define TCPHDR_RST 0x04
+#define TCPHDR_PSH 0x08
+#define TCPHDR_ACK 0x10
+#define TCPHDR_URG 0x20
+#define TCPHDR_ECE 0x40
+#define TCPHDR_CWR 0x80
+
+#define TCPHDR_SYN_ECN	(TCPHDR_SYN | TCPHDR_ECE | TCPHDR_CWR)
+```
+
+
+tcp_options_received
+```c
+// include/linux/tcp.h
+struct tcp_options_received {
+/*	PAWS/RTTM data	*/
+	int	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
+	u32	ts_recent;	/* Time stamp to echo next		*/
+	u32	rcv_tsval;	/* Time stamp value             	*/
+	u32	rcv_tsecr;	/* Time stamp echo reply        	*/
+	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
+		tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
+		dsack : 1,	/* D-SACK is scheduled			*/
+		wscale_ok : 1,	/* Wscale seen on SYN packet		*/
+		sack_ok : 3,	/* SACK seen on SYN packet		*/
+		smc_ok : 1,	/* SMC seen on SYN packet		*/
+		snd_wscale : 4,	/* Window scaling received from sender	*/
+		rcv_wscale : 4;	/* Window scaling to send to receiver	*/
+	u8	saw_unknown:1,	/* Received unknown option		*/
+		unused:7;
+	u8	num_sacks;	/* Number of SACK blocks		*/
+	u16	user_mss;	/* mss requested by user in ioctl	*/
+	u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
+};
+```
+
+tcp_sacktag_state
+```c
+// net/ipv4/tcp_input.c
+struct tcp_sacktag_state {
+	/* Timestamps for earliest and latest never-retransmitted segment
+	 * that was SACKed. RTO needs the earliest RTT to stay conservative,
+	 * but congestion control should still get an accurate delay signal.
+	 */
+	u64	first_sackt;
+	u64	last_sackt;
+	u32	reord;
+	u32	sack_delivered;
+	int	flag;
+	unsigned int mss_now;
+	struct rate_sample *rate;
+};
+```
+
+
+tcp sock
+```c
+
+
+struct tcp_sock {
+	/* inet_connection_sock has to be the first member of tcp_sock */
+	struct inet_connection_sock	inet_conn;
+	u16	tcp_header_len;	/* Bytes of tcp header to send		*/
+	u16	gso_segs;	/* Max number of segs per GSO packet	*/
+
+/*
+ *	Header prediction flags
+ *	0x5?10 << 16 + snd_wnd in net byte order
+ */
+	__be32	pred_flags;
+
+/*
+ *	RFC793 variables by their proper names. This means you can
+ *	read the code and the spec side by side (and laugh ...)
+ *	See RFC793 and RFC1122. The RFC writes these in capitals.
+ */
+	u64	bytes_received;	/* RFC4898 tcpEStatsAppHCThruOctetsReceived
+				 * sum(delta(rcv_nxt)), or how many bytes
+				 * were acked.
+				 */
+	u32	segs_in;	/* RFC4898 tcpEStatsPerfSegsIn
+				 * total number of segments in.
+				 */
+	u32	data_segs_in;	/* RFC4898 tcpEStatsPerfDataSegsIn
+				 * total number of data segments in.
+				 */
+
+
+    // ...				 
+}
+```
+
+tcp_fastopen_cookie
+
+TCP Fast Open Cookie as stored in memory
+```c
+
+struct tcp_fastopen_cookie {
+	__le64	val[DIV_ROUND_UP(TCP_FASTOPEN_COOKIE_MAX, sizeof(u64))];
+	s8	len;
+	bool	exp;	/* In RFC6994 experimental option format */
+};
+```
+
+
+tcp_fastopen_request
+```c
+struct tcp_fastopen_request {
+	/* Fast Open cookie. Size 0 means a cookie request */
+	struct tcp_fastopen_cookie	cookie;
+	struct msghdr			*data;  /* data in MSG_FASTOPEN */
+	size_t				size;
+	int				copied;	/* queued in tcp_connect() */
+	struct ubuf_info		*uarg;
+};
+```
+
+tcp_request_sock
+
+contain inet_request_sock
+```c
+
+struct tcp_request_sock {
+	struct inet_request_sock 	req;
+	const struct tcp_request_sock_ops *af_specific;
+	u64				snt_synack; /* first SYNACK sent time */
+	bool				tfo_listener;
+	bool				is_mptcp;
+#if IS_ENABLED(CONFIG_MPTCP)
+	bool				drop_req;
+#endif
+	u32				txhash;
+	u32				rcv_isn;
+	u32				snt_isn;
+	u32				ts_off;
+	u32				last_oow_ack_time; /* last SYNACK */
+	u32				rcv_nxt; /* the ack # by SYNACK. For
+						  * FastOpen it's the seq#
+						  * after data-in-SYN.
+						  */
+	u8				syn_tos;
+};
+```
+
+tcp_skb_cb
+
+This is what the send packet queuing engine uses to pass TCP per-packet control information to the transmission code.
+
+We also store the host-order sequence numbers in here too.
+
+This is 44 bytes if IPV6 is enabled.
+
+If this grows please adjust skbuff.h:skbuff->cb[xxx] size appropriately.
+```c
+
+#define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
+
+struct tcp_skb_cb {
+	__u32		seq;		/* Starting sequence number	*/
+	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
+	union {
+		/* Note : tcp_tw_isn is used in input path only
+		 *	  (isn chosen by tcp_timewait_state_process())
+		 *
+		 * 	  tcp_gso_segs/size are used in write queue only,
+		 *	  cf tcp_skb_pcount()/tcp_skb_mss()
+		 */
+		__u32		tcp_tw_isn;
+		struct {
+			u16	tcp_gso_segs;
+			u16	tcp_gso_size;
+		};
+	};
+	__u8		tcp_flags;	/* TCP header flags. (tcp[13])	*/
+
+	__u8		sacked;		/* State flags for SACK.	*/
+#define TCPCB_SACKED_ACKED	0x01	/* SKB ACK'd by a SACK block	*/
+#define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
+#define TCPCB_LOST		0x04	/* SKB is lost			*/
+#define TCPCB_TAGBITS		0x07	/* All tag bits			*/
+#define TCPCB_REPAIRED		0x10	/* SKB repaired (no skb_mstamp_ns)	*/
+#define TCPCB_EVER_RETRANS	0x80	/* Ever retransmitted frame	*/
+#define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS| \
+				TCPCB_REPAIRED)
+
+	__u8		ip_dsfield;	/* IPv4 tos or IPv6 dsfield	*/
+	__u8		txstamp_ack:1,	/* Record TX timestamp for ack? */
+			eor:1,		/* Is skb MSG_EOR marked? */
+			has_rxtstamp:1,	/* SKB has a RX timestamp	*/
+			unused:5;
+	__u32		ack_seq;	/* Sequence number ACK'd	*/
+	union {
+		struct {
+			/* There is space for up to 24 bytes */
+			__u32 in_flight:30,/* Bytes in flight at transmit */
+			      is_app_limited:1, /* cwnd not fully used? */
+			      unused:1;
+			/* pkts S/ACKed so far upon tx of skb, incl retrans: */
+			__u32 delivered;
+			/* start of send pipeline phase */
+			u64 first_tx_mstamp;
+			/* when we reached the "delivered" count */
+			u64 delivered_mstamp;
+		} tx;   /* only used for outgoing skbs */
+		union {
+			struct inet_skb_parm	h4;
+#if IS_ENABLED(CONFIG_IPV6)
+			struct inet6_skb_parm	h6;
+#endif
+		} header;	/* For incoming skbs */
+	};
+};
+```
+
+
+
+
+tcp_out_options
+```c
+
+#define OPTION_SACK_ADVERTISE	(1 << 0)
+#define OPTION_TS		(1 << 1)
+#define OPTION_MD5		(1 << 2)
+#define OPTION_WSCALE		(1 << 3)
+#define OPTION_FAST_OPEN_COOKIE	(1 << 8)
+#define OPTION_SMC		(1 << 9)
+#define OPTION_MPTCP		(1 << 10)
+
+struct tcp_out_options {
+	u16 options;		/* bit field of OPTION_* */
+	u16 mss;		/* 0 to disable */
+	u8 ws;			/* window scale, 0 to disable */
+	u8 num_sack_blocks;	/* number of SACK blocks to include */
+	u8 hash_size;		/* bytes in hash_location */
+	u8 bpf_opt_len;		/* length of BPF hdr option */
+	__u8 *hash_location;	/* temporary pointer, overloaded */
+	__u32 tsval, tsecr;	/* need to include OPTION_TS */
+	struct tcp_fastopen_cookie *fastopen_cookie;	/* Fast open cookie */
+	struct mptcp_out_options mptcp;
+};
+```
+
+
+
+
+
+
+
+
+
