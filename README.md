@@ -19,12 +19,13 @@
 ## Operating System
 
 ### Linux
-- [thundering herd](/docs/CS/OS/Linux/thundering_herd.md)
-- [fork](/docs/CS/OS/Linux/fork.md)
+
+[Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
 
 ## Network
 
 - [WebSocket](/docs/CS/CN/WebSocket.md)
+- [TCP](/docs/CS/CN/TCP.md)
 
 ## DataBase
 
