@@ -68,3 +68,15 @@ in JAVA
 `InetAddress`
 
 please using singleton to avoid resolving DNS each time
+
+
+
+
+
+DNS劫持
+
+DNS调用次数 服务多了之后域名多需要解析更多域名
+
+客户端程序启动时跑马测试出最快的IP, 之后使用IP直连
+
+自建DNS

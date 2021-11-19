@@ -67,7 +67,7 @@ Accessing a row through the clustered index is fast because the index search lea
 
 Indexes other than the clustered index are known as secondary indexes. In `InnoDB`, each record in a secondary index contains the primary key columns for the row, as well as the columns specified for the secondary index. `InnoDB` uses this primary key value to search for the row in the clustered index.
 
-If the primary key is long, the secondary indexes use more space, so it is advantageous to have a short primary key.
+If the primary key is long, the secondary indexes use more space, so **it is advantageous to have a short primary key**.
 
 
 
