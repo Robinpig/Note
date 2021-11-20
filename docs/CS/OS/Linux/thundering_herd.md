@@ -1095,6 +1095,7 @@ void sock_def_readable(struct sock *sk)
 }
 ```
 
+#### wake up
 ```c
 // wait.h
 #define wake_up_interruptible_sync_poll(x, m)                               \
@@ -1127,7 +1128,7 @@ void __wake_up_sync_key(struct wait_queue_head *wq_head, unsigned int mode,
        if (unlikely(!wq_head))
               return;
 
-       __wake_up_common_lock(wq_head, mode, 1, WF_SYNC, key);
+       __wake_up_common_lock(wq_head, mode, 1, WF_SYNC, key); /* nr_exclusive = 1 */
 }
 EXPORT_SYMBOL_GPL(__wake_up_sync_key);
 

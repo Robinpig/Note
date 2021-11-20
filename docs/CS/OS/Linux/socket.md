@@ -1050,7 +1050,107 @@ struct tcp_out_options {
 
 
 
+## Create
 
+### create socket
+
+
+
+```c
+
+/**
+ *	__sock_create - creates a socket
+ *	@net: net namespace
+ *	@family: protocol family (AF_INET, ...)
+ *	@type: communication type (SOCK_STREAM, ...)
+ *	@protocol: protocol (0, ...)
+ *	@res: new socket
+ *	@kern: boolean for kernel space sockets
+ *
+ *	Creates a new socket and assigns it to @res, passing through LSM.
+ *	Returns 0 or an error. On failure @res is set to %NULL. @kern must
+ *	be set to true if the socket resides in kernel space.
+ *	This function internally uses GFP_KERNEL.
+ */
+int __sock_create(struct net *net, int family, int type, int protocol,
+			 struct socket **res, int kern)
+{
+	int err;
+	struct socket *sock;
+	const struct net_proto_family *pf;
+
+	/* Compatibility.
+	   This uglymoron is moved from INET layer to here to avoid
+	   deadlock in module load.
+	 */
+	if (family == PF_INET && type == SOCK_PACKET) {
+		family = PF_PACKET;
+	}
+
+	err = security_socket_create(family, type, protocol, kern);
+	/*
+	 *	Allocate the socket and allow the family to set things up. if
+	 *	the protocol is 0, the family is instructed to select an appropriate
+	 *	default.
+	 */
+	sock = sock_alloc();
+
+	pf = rcu_dereference(net_families[family]);
+	
+	err = pf->create(net, sock, protocol, kern);
+}
+```
+
+### inet socket
+
+#### inet_create
+
+```c
+
+/*
+ *	Create an inet socket.
+ */
+
+static int inet_create(struct net *net, struct socket *sock, int protocol,
+		       int kern)
+{
+
+	/* Look for the requested type/protocol pair. */
+lookup_protocol:
+  		...
+			/* Check for the two wild cases. */
+			if (IPPROTO_IP == protocol) {
+				protocol = answer->protocol;
+      }
+	
+	sk = sk_alloc(net, PF_INET, GFP_KERNEL, answer_prot, kern);
+
+	sock_init_data(sock, sk);
+	...
+
+}
+```
+
+
+
+
+#### sock_init_data
+set sk_data_ready = sock_def_readable
+```c
+
+void sock_init_data(struct socket *sock, struct sock *sk)
+{
+	sk_init_common(sk);
+	...
+    
+	sk->sk_state_change	=	sock_def_wakeup;
+	sk->sk_data_ready	=	sock_def_readable;
+	sk->sk_write_space	=	sock_def_write_space;
+	sk->sk_error_report	=	sock_def_error_report;
+	sk->sk_destruct		=	sock_def_destruct;
+	...
+}
+```
 
 
 

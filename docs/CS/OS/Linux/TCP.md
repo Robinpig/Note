@@ -921,6 +921,7 @@ usable window based on the following constraints
 1. The window can never be shrunk once it is offered (RFC 793)
 2. We limit memory per socket
    
+
 RFC 1122:
 "the suggested [SWS] avoidance algorithm for the receiver is to keep
 RECV.NEXT + RCV.WIN fixed until:
@@ -1051,7 +1052,11 @@ u32 __tcp_select_window(struct sock *sk)
 
 ## Recv
 
-recv read recvfrom at application layer
+`Ip_rcv` call tcp_v4_rcv
+
+recv read recvfrom at application layer call [tcp_recvmsg]()
+
+
 
 
 ### tcp_v4_rcv
@@ -1369,11 +1374,278 @@ csum_err:
 }
 ```
 
+#### tcp_rcv_established
+
+
+
+```c
+
+/*
+ *	TCP receive function for the ESTABLISHED state.
+ *
+ *	It is split into a fast path and a slow path. The fast path is
+ * 	disabled when:
+ *	- A zero window was announced from us - zero window probing
+ *        is only handled properly in the slow path.
+ *	- Out of order segments arrived.
+ *	- Urgent data is expected.
+ *	- There is no buffer space left
+ *	- Unexpected TCP flags/window values/header lengths are received
+ *	  (detected by checking the TCP header against pred_flags)
+ *	- Data is sent in both directions. Fast path only supports pure senders
+ *	  or pure receivers (this means either the sequence number or the ack
+ *	  value must stay constant)
+ *	- Unexpected TCP option.
+ *
+ *	When these conditions are not satisfied it drops into a standard
+ *	receive procedure patterned after RFC793 to handle all cases.
+ *	The first three cases are guaranteed by proper pred_flags setting,
+ *	the rest is checked inline. Fast processing is turned on in
+ *	tcp_data_queue when everything is OK.
+ */
+void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
+{
+	const struct tcphdr *th = (const struct tcphdr *)skb->data;
+	struct tcp_sock *tp = tcp_sk(sk);
+	unsigned int len = skb->len;
+
+	/* TCP congestion window tracking */
+	trace_tcp_probe(sk, skb);
+
+	tcp_mstamp_refresh(tp);
+	if (unlikely(!sk->sk_rx_dst))
+		inet_csk(sk)->icsk_af_ops->sk_rx_dst_set(sk, skb);
+	/*
+	 *	Header prediction.
+	 *	The code loosely follows the one in the famous
+	 *	"30 instruction TCP receive" Van Jacobson mail.
+	 *
+	 *	Van's trick is to deposit buffers into socket queue
+	 *	on a device interrupt, to call tcp_recv function
+	 *	on the receive process context and checksum and copy
+	 *	the buffer to user space. smart...
+	 *
+	 *	Our current scheme is not silly either but we take the
+	 *	extra cost of the net_bh soft interrupt processing...
+	 *	We do checksum and copy also but from device to kernel.
+	 */
+
+	tp->rx_opt.saw_tstamp = 0;
+
+	/*	pred_flags is 0xS?10 << 16 + snd_wnd
+	 *	if header_prediction is to be made
+	 *	'S' will always be tp->tcp_header_len >> 2
+	 *	'?' will be 0 for the fast path, otherwise pred_flags is 0 to
+	 *  turn it off	(when there are holes in the receive
+	 *	 space for instance)
+	 *	PSH flag is ignored.
+	 */
+
+	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags &&
+	    TCP_SKB_CB(skb)->seq == tp->rcv_nxt &&
+	    !after(TCP_SKB_CB(skb)->ack_seq, tp->snd_nxt)) {
+		int tcp_header_len = tp->tcp_header_len;
+
+		/* Timestamp header prediction: tcp_header_len
+		 * is automatically equal to th->doff*4 due to pred_flags
+		 * match.
+		 */
+
+		/* Check timestamp */
+		if (tcp_header_len == sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) {
+			/* No? Slow path! */
+			if (!tcp_parse_aligned_timestamp(tp, th))
+				goto slow_path;
+
+			/* If PAWS failed, check it more carefully in slow path */
+			if ((s32)(tp->rx_opt.rcv_tsval - tp->rx_opt.ts_recent) < 0)
+				goto slow_path;
+
+			/* DO NOT update ts_recent here, if checksum fails
+			 * and timestamp was corrupted part, it will result
+			 * in a hung connection since we will drop all
+			 * future packets due to the PAWS test.
+			 */
+		}
+
+		if (len <= tcp_header_len) {
+			/* Bulk data transfer: sender */
+			if (len == tcp_header_len) {
+				/* Predicted packet is in window by definition.
+				 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
+				 * Hence, check seq<=rcv_wup reduces to:
+				 */
+				if (tcp_header_len ==
+				    (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) &&
+				    tp->rcv_nxt == tp->rcv_wup)
+					tcp_store_ts_recent(tp);
+
+				/* We know that such packets are checksummed
+				 * on entry.
+				 */
+				tcp_ack(sk, skb, 0);
+				__kfree_skb(skb);
+				tcp_data_snd_check(sk);
+				/* When receiving pure ack in fast path, update
+				 * last ts ecr directly instead of calling
+				 * tcp_rcv_rtt_measure_ts()
+				 */
+				tp->rcv_rtt_last_tsecr = tp->rx_opt.rcv_tsecr;
+				return;
+			} else { /* Header too small */
+				TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
+				goto discard;
+			}
+		} else {
+			int eaten = 0;
+			bool fragstolen = false;
+
+			if (tcp_checksum_complete(skb))
+				goto csum_error;
+
+			if ((int)skb->truesize > sk->sk_forward_alloc)
+				goto step5;
+
+			/* Predicted packet is in window by definition.
+			 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
+			 * Hence, check seq<=rcv_wup reduces to:
+			 */
+			if (tcp_header_len ==
+			    (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) &&
+			    tp->rcv_nxt == tp->rcv_wup)
+				tcp_store_ts_recent(tp);
+
+			tcp_rcv_rtt_measure_ts(sk, skb);
+
+			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPHPHITS);
+
+			/* Bulk data transfer: receiver */
+			__skb_pull(skb, tcp_header_len);
+			eaten = tcp_queue_rcv(sk, skb, &fragstolen);
+
+			tcp_event_data_recv(sk, skb);
+
+			if (TCP_SKB_CB(skb)->ack_seq != tp->snd_una) {
+				/* Well, only one small jumplet in fast path... */
+				tcp_ack(sk, skb, FLAG_DATA);
+				tcp_data_snd_check(sk);
+				if (!inet_csk_ack_scheduled(sk))
+					goto no_ack;
+			} else {
+				tcp_update_wl(tp, TCP_SKB_CB(skb)->seq);
+			}
+
+			__tcp_ack_snd_check(sk, 0);
+no_ack:
+			if (eaten)
+				kfree_skb_partial(skb, fragstolen);
+			tcp_data_ready(sk);
+			return;
+		}
+	}
+
+slow_path:
+	if (len < (th->doff << 2) || tcp_checksum_complete(skb))
+		goto csum_error;
+
+	if (!th->ack && !th->rst && !th->syn)
+		goto discard;
+
+	/*
+	 *	Standard slow path.
+	 */
+	if (!tcp_validate_incoming(sk, skb, th, 1))
+		return;
+
+step5:
+	if (tcp_ack(sk, skb, FLAG_SLOWPATH | FLAG_UPDATE_TS_RECENT) < 0)
+		goto discard;
+
+	tcp_rcv_rtt_measure_ts(sk, skb);
+
+	/* Process urgent data. */
+	tcp_urg(sk, skb, th);
+
+	/* step 7: process the segment text */
+	tcp_data_queue(sk, skb);
+
+	tcp_data_snd_check(sk);
+	tcp_ack_snd_check(sk);
+	return;
+
+csum_error:
+	trace_tcp_bad_csum(skb);
+	TCP_INC_STATS(sock_net(sk), TCP_MIB_CSUMERRORS);
+	TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
+
+discard:
+	tcp_drop(sk, skb);
+}
+```
+
+
+
+#### tcp_queue_rcv
+
+```c
+
+static int __must_check tcp_queue_rcv(struct sock *sk, struct sk_buff *skb,
+				      bool *fragstolen)
+{
+	int eaten;
+	struct sk_buff *tail = skb_peek_tail(&sk->sk_receive_queue);
+
+	eaten = (tail &&
+		 tcp_try_coalesce(sk, tail,
+				  skb, fragstolen)) ? 1 : 0;
+	tcp_rcv_nxt_update(tcp_sk(sk), TCP_SKB_CB(skb)->end_seq);
+	if (!eaten) {
+		__skb_queue_tail(&sk->sk_receive_queue, skb);
+		skb_set_owner_r(skb, sk);
+	}
+	return eaten;
+}
+```
+
+
+
+#### tcp_data_ready
+
+```c
+void tcp_data_ready(struct sock *sk)
+{
+	if (tcp_epollin_ready(sk, sk->sk_rcvlowat) || sock_flag(sk, SOCK_DONE))
+		sk->sk_data_ready(sk);
+}
+```
+
+`sk_data_ready` = `sock_def_readable` , see [Socket]()
+
+```c
+void sock_def_readable(struct sock *sk)
+{
+	struct socket_wq *wq;
+
+	rcu_read_lock();
+	wq = rcu_dereference(sk->sk_wq);
+	if (skwq_has_sleeper(wq))
+		wake_up_interruptible_sync_poll(&wq->wait, EPOLLIN | EPOLLPRI |
+						EPOLLRDNORM | EPOLLRDBAND);
+	sk_wake_async(sk, SOCK_WAKE_WAITD, POLL_IN);
+	rcu_read_unlock();
+}
+```
+
+`wake_up_interruptible_sync_poll` see Thundering Hred
+
+
+
+
 
 
 ### tcp_recvmsg
 
-
+`recvfrom` -> `inet_recvmsg` -> `tcp_recvmsg`
 
 ```c
 int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
@@ -1390,27 +1662,280 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
            sk->sk_state == TCP_ESTABLISHED)
               sk_busy_loop(sk, nonblock);
 
-       lock_sock(sk);
        ret = tcp_recvmsg_locked(sk, msg, len, nonblock, flags, &tss,
                              &cmsg_flags);
-       release_sock(sk);
-
-       if (cmsg_flags && ret >= 0) {
-              if (cmsg_flags & TCP_CMSG_TS)
-                     tcp_recv_timestamp(msg, sk, &tss);
-              if (cmsg_flags & TCP_CMSG_INQ) {
-                     inq = tcp_inq_hint(sk);
-                     put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
-              }
-       }
+       ...
        return ret;
 }
 ```
 
-tcp_recvmsg_locked
+#### tcp_recvmsg_locked
+
 ```c
 
+static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
+			      int nonblock, int flags,
+			      struct scm_timestamping_internal *tss,
+			      int *cmsg_flags)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+	int copied = 0;
+	u32 peek_seq;
+	u32 *seq;
+	unsigned long used;
+	int err;
+	int target;		/* Read at least this many bytes */
+	long timeo;
+	struct sk_buff *skb, *last;
+	u32 urg_hole = 0;
+
+	err = -ENOTCONN;
+	if (sk->sk_state == TCP_LISTEN)
+		goto out;
+
+	if (tp->recvmsg_inq)
+		*cmsg_flags = TCP_CMSG_INQ;
+	timeo = sock_rcvtimeo(sk, nonblock);
+
+	/* Urgent data needs to be handled specially. */
+	if (flags & MSG_OOB)
+		goto recv_urg;
+
+	if (unlikely(tp->repair)) {
+		err = -EPERM;
+		if (!(flags & MSG_PEEK))
+			goto out;
+
+		if (tp->repair_queue == TCP_SEND_QUEUE)
+			goto recv_sndq;
+
+		err = -EINVAL;
+		if (tp->repair_queue == TCP_NO_QUEUE)
+			goto out;
+
+		/* 'common' recv queue MSG_PEEK-ing */
+	}
+
+	seq = &tp->copied_seq;
+	if (flags & MSG_PEEK) {
+		peek_seq = tp->copied_seq;
+		seq = &peek_seq;
+	}
+
+	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
+
+	do {
+		u32 offset;
+
+		/* Are we at urgent data? Stop if we have read anything or have SIGURG pending. */
+		if (tp->urg_data && tp->urg_seq == *seq) {
+			if (copied)
+				break;
+			if (signal_pending(current)) {
+				copied = timeo ? sock_intr_errno(timeo) : -EAGAIN;
+				break;
+			}
+		}
+
+		/* Next get a buffer. */
+
+		last = skb_peek_tail(&sk->sk_receive_queue);
+		skb_queue_walk(&sk->sk_receive_queue, skb) {
+			last = skb;
+			/* Now that we have two receive queues this
+			 * shouldn't happen.
+			 */
+			if (WARN(before(*seq, TCP_SKB_CB(skb)->seq),
+				 "TCP recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
+				 *seq, TCP_SKB_CB(skb)->seq, tp->rcv_nxt,
+				 flags))
+				break;
+
+			offset = *seq - TCP_SKB_CB(skb)->seq;
+			if (unlikely(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
+				pr_err_once("%s: found a SYN, please report !\n", __func__);
+				offset--;
+			}
+			if (offset < skb->len)
+				goto found_ok_skb;
+			if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+				goto found_fin_ok;
+			WARN(!(flags & MSG_PEEK),
+			     "TCP recvmsg seq # bug 2: copied %X, seq %X, rcvnxt %X, fl %X\n",
+			     *seq, TCP_SKB_CB(skb)->seq, tp->rcv_nxt, flags);
+		}
+
+		/* Well, if we have backlog, try to process it now yet. */
+
+		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail))
+			break;
+
+		if (copied) {
+			if (sk->sk_err ||
+			    sk->sk_state == TCP_CLOSE ||
+			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
+			    !timeo ||
+			    signal_pending(current))
+				break;
+		} else {
+			if (sock_flag(sk, SOCK_DONE))
+				break;
+
+			if (sk->sk_err) {
+				copied = sock_error(sk);
+				break;
+			}
+
+			if (sk->sk_shutdown & RCV_SHUTDOWN)
+				break;
+
+			if (sk->sk_state == TCP_CLOSE) {
+				/* This occurs when user tries to read
+				 * from never connected socket.
+				 */
+				copied = -ENOTCONN;
+				break;
+			}
+
+			if (!timeo) {
+				copied = -EAGAIN;
+				break;
+			}
+
+			if (signal_pending(current)) {
+				copied = sock_intr_errno(timeo);
+				break;
+			}
+		}
+
+		tcp_cleanup_rbuf(sk, copied);
+
+		if (copied >= target) {
+			/* Do not sleep, just process backlog. */
+			release_sock(sk);
+			lock_sock(sk);
+		} else { /* Wait if none enough data */
+			sk_wait_data(sk, &timeo, last);
+		}
+
+		if ((flags & MSG_PEEK) &&
+		    (peek_seq - copied - urg_hole != tp->copied_seq)) {
+			net_dbg_ratelimited("TCP(%s:%d): Application bug, race in MSG_PEEK\n",
+					    current->comm,
+					    task_pid_nr(current));
+			peek_seq = tp->copied_seq;
+		}
+		continue;
+
+found_ok_skb:
+		/* Ok so how much can we use? */
+		used = skb->len - offset;
+		if (len < used)
+			used = len;
+
+		/* Do we have urgent data here? */
+		if (tp->urg_data) {
+			u32 urg_offset = tp->urg_seq - *seq;
+			if (urg_offset < used) {
+				if (!urg_offset) {
+					if (!sock_flag(sk, SOCK_URGINLINE)) {
+						WRITE_ONCE(*seq, *seq + 1);
+						urg_hole++;
+						offset++;
+						used--;
+						if (!used)
+							goto skip_copy;
+					}
+				} else
+					used = urg_offset;
+			}
+		}
+
+		if (!(flags & MSG_TRUNC)) {
+			err = skb_copy_datagram_msg(skb, offset, msg, used);
+			if (err) {
+				/* Exception. Bailout! */
+				if (!copied)
+					copied = -EFAULT;
+				break;
+			}
+		}
+
+		WRITE_ONCE(*seq, *seq + used);
+		copied += used;
+		len -= used;
+
+		tcp_rcv_space_adjust(sk);
+
+skip_copy:
+		if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
+			tp->urg_data = 0;
+			tcp_fast_path_check(sk);
+		}
+
+		if (TCP_SKB_CB(skb)->has_rxtstamp) {
+			tcp_update_recv_tstamps(skb, tss);
+			*cmsg_flags |= TCP_CMSG_TS;
+		}
+
+		if (used + offset < skb->len)
+			continue;
+
+		if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
+			goto found_fin_ok;
+		if (!(flags & MSG_PEEK))
+			sk_eat_skb(sk, skb);
+		continue;
+
+found_fin_ok:
+		/* Process the FIN. */
+		WRITE_ONCE(*seq, *seq + 1);
+		if (!(flags & MSG_PEEK))
+			sk_eat_skb(sk, skb);
+		break;
+	} while (len > 0);
+
+	/* According to UNIX98, msg_name/msg_namelen are ignored
+	 * on connected socket. I was just happy when found this 8) --ANK
+	 */
+
+	/* Clean up data we have read: This will do ACK frames. */
+	tcp_cleanup_rbuf(sk, copied);
+	return copied;
+
+out:
+	return err;
+
+recv_urg:
+	err = tcp_recv_urg(sk, msg, len, flags);
+	goto out;
+
+recv_sndq:
+	err = tcp_peek_sndq(sk, msg, len);
+	goto out;
+}
 ```
+#### sk_wait_data
+
+wait for data to arrive at sk_receive_queue
+
+```c
+int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
+{
+	DEFINE_WAIT_FUNC(wait, woken_wake_function);
+	int rc;
+
+	add_wait_queue(sk_sleep(sk), &wait);
+	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);
+	
+  sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+	remove_wait_queue(sk_sleep(sk), &wait);
+	return rc;
+}
+```
+
+
 
 
 
@@ -3597,11 +4122,11 @@ segments sent by peer and our ACKs. This time may be calculated from RTO.
 
 When TIME-WAIT socket receives RST, it means that another end
 finally closed and we are allowed to kill TIME-WAIT too.
- 
+
 Second purpose of TIME-WAIT is catching old duplicate segments.
 Well, certainly it is pure paranoia, but if we load TIME-WAIT
 with this semantics, we MUST NOT kill TIME-WAIT state with RSTs.
- 
+
 If we invented some more clever way to catch duplicates
 (f.e. based on PAWS), we could truncate TIME-WAIT to several RTOs.
 The algorithm below is based on FORMAL INTERPRETATION of RFCs.
