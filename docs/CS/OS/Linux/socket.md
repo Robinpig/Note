@@ -1,8 +1,27 @@
 ## Introduction
 
 
-## Structure
-### sock
+
+```c
+/* struct socket - general BSD socket */
+struct socket {
+	socket_state		state;
+	short			type;
+	unsigned long		flags;
+
+	struct file		*file;
+	struct sock		*sk;
+	const struct proto_ops	*ops;
+
+	struct socket_wq	wq;
+};
+```
+
+
+
+## sock
+
+### sock_common
 struct sock_common - minimal network layer representation of sockets
 
 This is the minimal network layer representation of sockets, the header for struct sock and struct inet_timewait_sock.
@@ -399,7 +418,8 @@ struct msghdr {
 
 
 ### inet
-ip_options
+#### ip_options
+
 ```c
 // include/net/inet_sock.h
 struct ip_options {
@@ -428,7 +448,52 @@ struct ip_options_rcu {
 ```
 
 
-inet_request_sock
+
+
+
+#### inet_stream_ops
+
+```c
+const struct proto_ops inet_stream_ops = {
+	.family		   = PF_INET,
+	.owner		   = THIS_MODULE,
+	.release	   = inet_release,
+	.bind		   = inet_bind,
+	.connect	   = inet_stream_connect,
+	.socketpair	   = sock_no_socketpair,
+	.accept		   = inet_accept,
+	.getname	   = inet_getname,
+	.poll		   = tcp_poll,
+	.ioctl		   = inet_ioctl,
+	.gettstamp	   = sock_gettstamp,
+	.listen		   = inet_listen,
+	.shutdown	   = inet_shutdown,
+	.setsockopt	   = sock_common_setsockopt,
+	.getsockopt	   = sock_common_getsockopt,
+	.sendmsg	   = inet_sendmsg,
+	.recvmsg	   = inet_recvmsg,
+#ifdef CONFIG_MMU
+	.mmap		   = tcp_mmap,
+#endif
+	.sendpage	   = inet_sendpage,
+	.splice_read	   = tcp_splice_read,
+	.read_sock	   = tcp_read_sock,
+	.sendmsg_locked    = tcp_sendmsg_locked,
+	.sendpage_locked   = tcp_sendpage_locked,
+	.peek_len	   = tcp_peek_len,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl	   = inet_compat_ioctl,
+#endif
+	.set_rcvlowat	   = tcp_set_rcvlowat,
+};
+```
+
+
+
+### inet_request_sock
+
+Contains [request_sock]()
+
 ```c
 // include/net/inet_sock.h
 struct inet_request_sock {
@@ -639,7 +704,8 @@ struct sockaddr_in {
 
 ### Route
 
-dst_entry
+#### dst_entry
+
 ```c
 
 
@@ -701,8 +767,7 @@ struct dst_entry {
 };
 ```
 
-
-rtable
+#### rtable
 
 has a dst_entry
 ```c
@@ -735,7 +800,8 @@ struct rtable {
 
 ```
 
-flowi
+#### flowi
+
 ```c
 
 struct flowi {
@@ -759,7 +825,7 @@ struct flowi {
 ```
 
 ### Tcp
-tcphdr
+#### tcphdr
 
 tcp header
 ```c
@@ -814,8 +880,8 @@ struct tcphdr {
 #define TCPHDR_SYN_ECN	(TCPHDR_SYN | TCPHDR_ECE | TCPHDR_CWR)
 ```
 
+#### tcp_options_received
 
-tcp_options_received
 ```c
 // include/linux/tcp.h
 struct tcp_options_received {
@@ -858,8 +924,8 @@ struct tcp_sacktag_state {
 };
 ```
 
+#### tcp_sock
 
-tcp sock
 ```c
 
 
@@ -896,7 +962,7 @@ struct tcp_sock {
 }
 ```
 
-tcp_fastopen_cookie
+#### tcp_fastopen_cookie
 
 TCP Fast Open Cookie as stored in memory
 ```c
@@ -908,8 +974,8 @@ struct tcp_fastopen_cookie {
 };
 ```
 
+#### tcp_fastopen_request
 
-tcp_fastopen_request
 ```c
 struct tcp_fastopen_request {
 	/* Fast Open cookie. Size 0 means a cookie request */
@@ -921,9 +987,9 @@ struct tcp_fastopen_request {
 };
 ```
 
-tcp_request_sock
+### tcp_request_sock
 
-contain inet_request_sock
+Contains [inet_request_sock]()
 ```c
 
 struct tcp_request_sock {
@@ -1020,8 +1086,8 @@ struct tcp_skb_cb {
 
 
 
+#### tcp_out_options
 
-tcp_out_options
 ```c
 
 #define OPTION_SACK_ADVERTISE	(1 << 0)
@@ -1100,6 +1166,39 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	err = pf->create(net, sock, protocol, kern);
 }
 ```
+
+
+
+#### sock_alloc
+
+Allocate a new inode and socket object. The two are bound together and initialised. The socket is then returned. If we are out of inodes NULL is returned. This functions uses GFP_KERNEL internally.
+
+```c
+// net/socket.c
+struct socket *sock_alloc(void)
+{
+	struct inode *inode;
+	struct socket *sock;
+
+	inode = new_inode_pseudo(sock_mnt->mnt_sb);
+	if (!inode)
+		return NULL;
+
+	sock = SOCKET_I(inode);
+
+	inode->i_ino = get_next_ino();
+	inode->i_mode = S_IFSOCK | S_IRWXUGO;
+	inode->i_uid = current_fsuid();
+	inode->i_gid = current_fsgid();
+	inode->i_op = &sockfs_inode_ops;
+
+	return sock;
+}
+```
+
+
+
+
 
 ### inet socket
 
