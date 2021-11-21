@@ -240,6 +240,161 @@ TODO:
 
 ## sendfile
 
+
+
+## select
+
+
+
+```c
+static __attribute__((unused))
+int select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeval *timeout)
+{
+	int ret = sys_select(nfds, rfds, wfds, efds, timeout);
+
+	if (ret < 0) {
+		SET_ERRNO(-ret);
+		ret = -1;
+	}
+	return ret;
+}
+```
+
+
+
+
+
+```c
+
+static __attribute__((unused))
+int sys_select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeval *timeout)
+{
+#if defined(__ARCH_WANT_SYS_OLD_SELECT) && !defined(__NR__newselect)
+	struct sel_arg_struct {
+		unsigned long n;
+		fd_set *r, *w, *e;
+		struct timeval *t;
+	} arg = { .n = nfds, .r = rfds, .w = wfds, .e = efds, .t = timeout };
+	return my_syscall1(__NR_select, &arg);
+#elif defined(__ARCH_WANT_SYS_PSELECT6) && defined(__NR_pselect6)
+	struct timespec t;
+
+	if (timeout) {
+		t.tv_sec  = timeout->tv_sec;
+		t.tv_nsec = timeout->tv_usec * 1000;
+	}
+	return my_syscall6(__NR_pselect6, nfds, rfds, wfds, efds, timeout ? &t : NULL, NULL);
+#elif defined(__NR__newselect) || defined(__NR_select)
+#ifndef __NR__newselect
+#define __NR__newselect __NR_select
+#endif
+	return my_syscall5(__NR__newselect, nfds, rfds, wfds, efds, timeout);
+#else
+#error None of __NR_select, __NR_pselect6, nor __NR__newselect defined, cannot implement sys_select()
+#endif
+}
+```
+
+
+
+
+
+```c
+// fs/select.c
+
+static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
+		struct timespec64 *end_time)
+{
+	struct poll_wqueues table;
+	int err = -EFAULT, fdcount, len;
+	/* Allocate small arguments on the stack to save memory and be
+	   faster - use long to make sure the buffer is aligned properly
+	   on 64 bit archs to avoid unaligned access */
+	long stack_pps[POLL_STACK_ALLOC/sizeof(long)];
+	struct poll_list *const head = (struct poll_list *)stack_pps;
+ 	struct poll_list *walk = head;
+ 	unsigned long todo = nfds;
+
+	if (nfds > rlimit(RLIMIT_NOFILE))
+		return -EINVAL;
+
+	len = min_t(unsigned int, nfds, N_STACK_PPS);
+	for (;;) {
+		walk->next = NULL;
+		walk->len = len;
+		if (!len)
+			break;
+
+		if (copy_from_user(walk->entries, ufds + nfds-todo,
+					sizeof(struct pollfd) * walk->len))
+			goto out_fds;
+
+		todo -= walk->len;
+		if (!todo)
+			break;
+
+		len = min(todo, POLLFD_PER_PAGE);
+		walk = walk->next = kmalloc(struct_size(walk, entries, len),
+					    GFP_KERNEL);
+		if (!walk) {
+			err = -ENOMEM;
+			goto out_fds;
+		}
+	}
+
+	poll_initwait(&table);
+	fdcount = do_poll(head, &table, end_time);
+	poll_freewait(&table);
+
+	if (!user_write_access_begin(ufds, nfds * sizeof(*ufds)))
+		goto out_fds;
+
+	for (walk = head; walk; walk = walk->next) {
+		struct pollfd *fds = walk->entries;
+		int j;
+
+		for (j = walk->len; j; fds++, ufds++, j--)
+			unsafe_put_user(fds->revents, &ufds->revents, Efault);
+  	}
+	user_write_access_end();
+
+	err = fdcount;
+out_fds:
+	walk = head->next;
+	while (walk) {
+		struct poll_list *pos = walk;
+		walk = walk->next;
+		kfree(pos);
+	}
+
+	return err;
+
+Efault:
+	user_write_access_end();
+	err = -EFAULT;
+	goto out_fds;
+}
+```
+
+
+
+## poll
+
+
+
+```c
+// include/upai/asm-generic/poll.h
+struct pollfd {
+	int fd;
+	short events;
+	short revents;
+};
+```
+
+
+
+
+
 ## References
 
 1. [打破砂锅挖到底—— Epoll 多路复用是如何转起来的？](https://mp.weixin.qq.com/s/Py2TE9CdQ92fGLpg-SEj_g)
