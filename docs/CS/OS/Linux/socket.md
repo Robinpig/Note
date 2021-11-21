@@ -532,7 +532,7 @@ struct inet_request_sock {
 };
 ```
 
-inet_connection_sock_af_ops
+#### inet_connection_sock_af_ops
 
 Pointers to address related TCP functions
 (i.e. things that depend on the address family)
@@ -561,7 +561,7 @@ struct inet_connection_sock_af_ops {
 };
 ```
 
-
+#### inet_connection_sock
 inet_connection_sock - INET connection oriented sock
 ```c
 // include/net/inet_connection_sock.h

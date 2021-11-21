@@ -14,9 +14,6 @@ The  epoll  API  performs  a similar task to `poll`: monitoring multiple file de
   tered on an epoll instance is sometimes called an epoll set.
 * epoll_wait(2) waits for I/O events, blocking the calling thread if no events are currently available.
 
-![](https://mmbiz.qpic.cn/mmbiz_png/BBjAFF4hcwolcxS62c1ZRibFc0NUVCJ46h2GrIOb4GbapWqATZwAALWXWH8505zthGzEEyiawU3TicRQgHMj0B0eg/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
-
-
 
 ```c
 int main(){
@@ -596,6 +593,15 @@ static __poll_t ep_item_poll(const struct epitem *epi, poll_table *pt,
 }
 
 
+// include/linux/poll.h
+static inline __poll_t vfs_poll(struct file *file, struct poll_table_struct *pt)
+{
+	if (unlikely(!file->f_op->poll))
+		return DEFAULT_POLLMASK;
+	return file->f_op->poll(file, pt);
+}
+
+// fs/eventpoll.c
 static __poll_t __ep_eventpoll_poll(struct file *file, poll_table *wait, int depth)
 {
 	struct eventpoll *ep = file->private_data;
@@ -724,23 +730,10 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
               timed_out = 1;
        }
 
-       /*
-        * This call is racy: We may or may not see events that are being added
-        * to the ready list under the lock (e.g., in IRQ callbacks). For cases
-        * with a non-zero timeout, this thread will check the ready list under
-        * lock and will add to the wait queue.  For cases with a zero
-        * timeout, the user by definition should not care and will have to
-        * recheck again.
-        */
        eavail = ep_events_available(ep);
 
        while (1) {
               if (eavail) {
-                     /*
-                      * Try to transfer events to user space. In case we get
-                      * 0 events and there's still timeout left over, we go
-                      * trying again in search of more luck.
-                      */
                      res = ep_send_events(ep, events, maxevents);
                      if (res)
                             return res;
@@ -865,6 +858,8 @@ int default_wake_function(wait_queue_entry_t *curr, unsigned mode, int wake_flag
 
 Checks if ready events might be available.
 
+This call is racy: We may or may not see events that are being added to the ready list under the lock (e.g., in IRQ callbacks). For cases with a non-zero timeout, this thread will check the ready list under lock and will add to the wait queue.  For cases with a zero timeout, the user by definition should not care and will have to recheck again.
+
 ```c
 
 static inline int ep_events_available(struct eventpoll *ep)
@@ -907,7 +902,8 @@ static inline void __add_wait_queue(struct wait_queue_head *wq_head, struct wait
 
 
 #### ep_send_events
-
+Try to transfer events to user space. In case we get 0 events and there's still timeout left over, we go trying again in search of more luck.
+call [ep_item_poll](/docs/CS/OS/Linux/epoll.md?id=ep_item_poll)
 ```c
 
 static int ep_send_events(struct eventpoll *ep,
@@ -1001,7 +997,7 @@ If this file has been added with Level Trigger mode, we need to insert back insi
 
 
 
-
+#### schedule_hrtimeout_range
 
 ```c
 
@@ -1089,47 +1085,36 @@ schedule_hrtimeout_range_clock(ktime_t *expires, u64 delta,
 
 ### schedule
 
+ __schedule() is the main scheduler function.
+
+The main means of driving the scheduler and thus entering this function are:
+  1. Explicit blocking: mutex, semaphore, waitqueue, etc.
+  2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return
+     paths. For example, see arch/x86/entry_64.S.
+     To drive preemption between tasks, the scheduler sets the flag in timer
+     interrupt handler scheduler_tick().
+  3. Wakeups don't really cause entry into schedule(). They add a
+     task to the run-queue and that's it.
+
+Now, if the new task added to the run-queue preempts the current
+task, then the wakeup sets TIF_NEED_RESCHED and schedule() gets
+called on the nearest possible occasion:
+ - If the kernel is preemptible (CONFIG_PREEMPTION=y):
+   - in syscall or exception context, at the next outmost
+     preempt_enable(). (this might be as soon as the wake_up()'s
+     spin_unlock()!)
+   - in IRQ context, return from interrupt-handler to
+     preemptible context
+ - If the kernel is not preemptible (CONFIG_PREEMPTION is not set)
+   then at the next:
+    - cond_resched() call
+    - explicit schedule() call
+    - return from syscall or exception to user-space
+    - return from interrupt-handler to user-space
+
 ```c
 
-/*
- * __schedule() is the main scheduler function.
- *
- * The main means of driving the scheduler and thus entering this function are:
- *
- *   1. Explicit blocking: mutex, semaphore, waitqueue, etc.
- *
- *   2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return
- *      paths. For example, see arch/x86/entry_64.S.
- *
- *      To drive preemption between tasks, the scheduler sets the flag in timer
- *      interrupt handler scheduler_tick().
- *
- *   3. Wakeups don't really cause entry into schedule(). They add a
- *      task to the run-queue and that's it.
- *
- *      Now, if the new task added to the run-queue preempts the current
- *      task, then the wakeup sets TIF_NEED_RESCHED and schedule() gets
- *      called on the nearest possible occasion:
- *
- *       - If the kernel is preemptible (CONFIG_PREEMPTION=y):
- *
- *         - in syscall or exception context, at the next outmost
- *           preempt_enable(). (this might be as soon as the wake_up()'s
- *           spin_unlock()!)
- *
- *         - in IRQ context, return from interrupt-handler to
- *           preemptible context
- *
- *       - If the kernel is not preemptible (CONFIG_PREEMPTION is not set)
- *         then at the next:
- *
- *          - cond_resched() call
- *          - explicit schedule() call
- *          - return from syscall or exception to user-space
- *          - return from interrupt-handler to user-space
- *
- * WARNING: must be called with preemption disabled!
- */
+/*  WARNING: must be called with preemption disabled! */
 static void __sched notrace __schedule(unsigned int sched_mode)
 {
 	struct task_struct *prev, *next;
@@ -1613,3 +1598,6 @@ bugs, and the latest version of this page, can be found at https://www.kernel.or
 2. epitem add to ready list
 3. Wake up process from wq
 
+
+## References
+1. [epoll(7) — Linux manual page](https://man7.org/linux/man-pages/man7/epoll.7.html)

@@ -263,7 +263,7 @@ static const struct net_protocol icmp_protocol = {
 
 
 
-### 
+#### inet_init
 
 ```c
 static int __init inet_init(void)
@@ -758,29 +758,99 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
   
   ```
 }
-```
+## Optimization
 
 
 
+### Limits 
 
-## TCP
+1. OS `/proc/sys/fs/file-max`
+2. Process fs.nr_open
+3. User process in `/etc/security/limits.conf`
 
-Client建立连接限制 ip_local_port_range
 ```shell
-# cat /proc/sys/net/ipv4/ip_local_port_range
-32768	60999
+> cat /proc/sys/fs/file-max 
+174837
 
+# vi /etc/sysctl.conf 
+> sysctl -a |grep nr_open
+fs.nr_open = 1048576
+
+# hard limit <= fs.nr_open
+> cat /etc/security/limits.conf
+root soft nofile 65535
+root hard nofile 65535
 ```
 
-//修改整个系统能打开的⽂件描述符为20W
-echo 200000 > /proc/sys/fs/file-max
-//修改所有⽤户每个进程可打开⽂件描述符为20W
-#vi /etc/sysctl.conf
-fs.nr_open=210000
-#sysctl -p
-#vi /etc/security/limits.conf
-* soft nofile 200000
-* hard nofile 200000
 
-limits中的hard limit不能超过nr_open, 所以要先改nr_open。⽽且最好是在sysctl.conf中
-改。避免重启的时候 hard limit⽣效了， nr_open不⽣效导致启动问题
+
+
+
+```shell
+> sysctl -a |grep rmem
+net.core.rmem_default = 212992
+net.core.rmem_max = 212992
+net.ipv4.tcp_rmem = 4096        87380   6291456
+net.ipv4.udp_rmem_min = 4096
+```
+
+
+
+
+
+```shell
+> sysctl -a |grep wmem
+net.core.wmem_default = 212992
+net.core.wmem_max = 212992
+net.ipv4.tcp_wmem = 4096        16384   4194304
+net.ipv4.udp_wmem_min = 4096
+vm.lowmem_reserve_ratio = 256   256     32      0       0
+```
+
+
+
+```shell
+> sysctl -a |grep range
+net.ipv4.ip_local_port_range = 32768    60999
+```
+
+
+
+
+
+empty establish : 3.3KB
+
+
+strace
+
+
+
+```shell
+# 
+> watch 'netstat -s |grep LISTEN'
+
+# 
+> watch 'netstat -s |grep overflowed'
+```
+
+
+
+```shell
+> cat  /proc/sys/net/ipv4/tcp_max_syn_backlog 
+1024
+```
+
+
+
+```shell
+
+> cat /proc/sys/net/core/somaxconn 
+128
+```
+
+check network
+
+```shell
+ss -nlt
+```
+

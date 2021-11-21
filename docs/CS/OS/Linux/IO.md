@@ -1,3 +1,201 @@
+
+
+
+## Listen
+
+**listen for socket connections and limit the queue of incoming connections** -- see [listen(3) - Linux man page](https://linux.die.net/man/3/listen)
+
+
+Perform a listen. Basically, we allow the protocol to do anything
+necessary for a listen, and if that works, we mark the socket as
+ready for listening.
+
+
+
+
+Max_ack_backlog = Min(backlog,net.core.somaxconn)
+```c
+// socket.c
+SYSCALL_DEFINE2(listen, int, fd, int, backlog)
+{
+       return __sys_listen(fd, backlog);
+}
+
+
+int __sys_listen(int fd, int backlog)
+{
+       struct socket *sock;
+       int err, fput_needed;
+       int somaxconn;
+
+       sock = sockfd_lookup_light(fd, &err, &fput_needed);
+       if (sock) {
+              somaxconn = sock_net(sock->sk)->core.sysctl_somaxconn;
+              if ((unsigned int)backlog > somaxconn)
+                     backlog = somaxconn;
+
+              err = security_socket_listen(sock, backlog);
+              if (!err)
+                     err = sock->ops->listen(sock, backlog);
+
+              fput_light(sock->file, fput_needed);
+       }
+       return err;
+}
+```
+
+#### inet_listen
+
+```c
+/* af_inet.c
+ *     Move a socket into listening state.
+ */
+int inet_listen(struct socket *sock, int backlog)
+{
+       struct sock *sk = sock->sk;
+       unsigned char old_state;
+       int err, tcp_fastopen;
+
+       lock_sock(sk);
+
+       err = -EINVAL;
+       if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
+              goto out;
+
+       old_state = sk->sk_state;
+       if (!((1 << old_state) & (TCPF_CLOSE | TCPF_LISTEN)))
+              goto out;
+
+       WRITE_ONCE(sk->sk_max_ack_backlog, backlog); /** set max ack backlog */
+       /* Really, if the socket is already in listen state
+        * we can only allow the backlog to be adjusted.
+        */
+       if (old_state != TCP_LISTEN) {
+              /* Enable TFO w/o requiring TCP_FASTOPEN socket option.
+               * Note that only TCP sockets (SOCK_STREAM) will reach here.
+               * Also fastopen backlog may already been set via the option
+               * because the socket was in TCP_LISTEN state previously but
+               * was shutdown() rather than close().
+               */
+              tcp_fastopen = sock_net(sk)->ipv4.sysctl_tcp_fastopen;
+              if ((tcp_fastopen & TFO_SERVER_WO_SOCKOPT1) &&
+                  (tcp_fastopen & TFO_SERVER_ENABLE) &&
+                  !inet_csk(sk)->icsk_accept_queue.fastopenq.max_qlen) {
+                     fastopen_queue_tune(sk, backlog);
+                     tcp_fastopen_init_key_once(sock_net(sk));
+              }
+
+              err = inet_csk_listen_start(sk, backlog);
+              if (err)
+                     goto out;
+              tcp_call_bpf(sk, BPF_SOCK_OPS_TCP_LISTEN_CB, 0, NULL);
+       }
+       err = 0;
+
+out:
+       release_sock(sk);
+       return err;
+}
+```
+
+
+
+
+#### inet_csk_listen_start
+inet_connection_sock see [socket](/docs/CS/OS/Linux/socket.md?id=inet_connection_sock)
+```c
+// net/ipv4/iinet_connection_sock.c
+int inet_csk_listen_start(struct sock *sk, int backlog)
+{
+       struct inet_connection_sock *icsk = inet_csk(sk);
+       struct inet_sock *inet = inet_sk(sk);
+       int err = -EADDRINUSE;
+
+       reqsk_queue_alloc(&icsk->icsk_accept_queue);
+
+       sk->sk_ack_backlog = 0;
+       inet_csk_delack_init(sk);
+
+       /* There is race window here: we announce ourselves listening,
+        * but this transition is still not validated by get_port().
+        * It is OK, because this socket enters to hash table only
+        * after validation is complete.
+        */
+       inet_sk_state_store(sk, TCP_LISTEN);
+       if (!sk->sk_prot->get_port(sk, inet->inet_num)) {
+              inet->inet_sport = htons(inet->inet_num);
+
+              sk_dst_reset(sk);
+              err = sk->sk_prot->hash(sk);
+
+              if (likely(!err))
+                     return 0;
+       }
+
+       inet_sk_set_state(sk, TCP_CLOSE);
+       return err;
+}
+```
+
+### accept queue
+
+#### reqsk_queue_alloc
+Maximum number of SYN_RECV sockets in queue per LISTEN socket.
+One SYN_RECV socket costs about 80bytes on a 32bit machine.
+
+It would be better to replace it with a global counter for all sockets
+but then some measure against one socket starving all other sockets
+would be needed.
+
+The minimum value of it is 128. Experiments with real servers show that
+it is absolutely not enough even at 100conn/sec. 256 cures most
+of problems.
+
+This value is adjusted to 128 for low memory machines,
+and it will increase in proportion to the memory of machine.
+
+Note : Dont forget somaxconn that may limit backlog too.
+```c
+// request_sock.c
+void reqsk_queue_alloc(struct request_sock_queue *queue)
+{
+       spin_lock_init(&queue->rskq_lock);
+
+       spin_lock_init(&queue->fastopenq.lock);
+       queue->fastopenq.rskq_rst_head = NULL;
+       queue->fastopenq.rskq_rst_tail = NULL;
+       queue->fastopenq.qlen = 0;
+
+       queue->rskq_accept_head = NULL;
+}
+```
+
+
+
+#### request_sock_queue
+struct request_sock_queue -  queue of request_socks
+```c
+// request_sock.h 
+struct request_sock_queue {
+       spinlock_t            rskq_lock;
+       u8                   rskq_defer_accept; /** User waits for some data after accept() */
+
+       u32                  synflood_warned;
+       atomic_t              qlen;
+       atomic_t              young;
+
+       /** FIFO established children    */
+       struct request_sock    *rskq_accept_head;
+       struct request_sock    *rskq_accept_tail;
+       
+       struct fastopen_queue  fastopenq;  /* Check max_qlen != 0 to determine
+                                        * if TFO is enabled.
+                                        */
+};
+```
+
+
+
 ## accept
 
 ```c
@@ -244,7 +442,9 @@ TODO:
 
 ## select
 
-
+1. copy fd_set to kernelspace from userspace
+2. register `__pollwait` callback
+3. iterate all fds
 
 ```c
 static __attribute__((unused))
