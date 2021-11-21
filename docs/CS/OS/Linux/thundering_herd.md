@@ -63,27 +63,41 @@ int wake_up_process(struct task_struct *p)
 EXPORT_SYMBOL(wake_up_process);
 ```
 
+wake up threads blocked on a waitqueue.
+
+```c
+
+/**
+ * __wake_up - 
+ * @wq_head: the waitqueue
+ * @mode: which threads
+ * @nr_exclusive: how many wake-one or wake-many threads to wake up
+ * @key: is directly passed to the wakeup function
+ *
+ * If this function wakes up a task, it executes a full memory barrier before
+ * accessing the task state.
+ */
+void __wake_up(struct wait_queue_head *wq_head, unsigned int mode,
+			int nr_exclusive, void *key)
+{
+	__wake_up_common_lock(wq_head, mode, nr_exclusive, 0, key);
+}
+```
 
 
 
+#### wake_up_common
 
-#### __wake_up_common
+The core wakeup function. Non-exclusive wakeups (nr_exclusive == 0) just wake everything up. If it's an exclusive wakeup (nr_exclusive == small +ve number) then we wake that number of exclusive tasks, and potentially all the non-exclusive tasks. Normally, exclusive tasks will be at the end of the list and any non-exclusive tasks will be woken first. A priority task may be at the head of the list, and can consume the event without any other tasks being woken.
+
+There are circumstances in which we can try to wake a task which has already started to run but is not in state TASK_RUNNING. `try_to_wake_up()` returns zero in this (rare) case, and we handle it by continuing to scan the queue.
+
+call func:
+
+- if use [epoll](), callback is `ep_poll_callback`
 
 ```c
 // wait.c
-/*
- * The core wakeup function. Non-exclusive wakeups (nr_exclusive == 0) just
- * wake everything up. If it's an exclusive wakeup (nr_exclusive == small +ve
- * number) then we wake that number of exclusive tasks, and potentially all
- * the non-exclusive tasks. Normally, exclusive tasks will be at the end of
- * the list and any non-exclusive tasks will be woken first. A priority task
- * may be at the head of the list, and can consume the event without any other
- * tasks being woken.
- *
- * There are circumstances in which we can try to wake a task which has already
- * started to run but is not in state TASK_RUNNING. try_to_wake_up() returns
- * zero in this (rare) case, and we handle it by continuing to scan the queue.
- */
 static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
                      int nr_exclusive, int wake_flags, void *key,
                      wait_queue_entry_t *bookmark)

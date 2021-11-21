@@ -1304,7 +1304,125 @@ do_time_wait:
 ```
 
 
+
+##### inet_lookup
+
+```c
+// include/net/inet_hashtables.h
+static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
+					     struct sk_buff *skb,
+					     int doff,
+					     const __be16 sport,
+					     const __be16 dport,
+					     const int sdif,
+					     bool *refcounted)
+{
+	struct sock *sk = skb_steal_sock(skb, refcounted);
+	const struct iphdr *iph = ip_hdr(skb);
+
+	if (sk)
+		return sk;
+
+	return __inet_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
+			     doff, iph->saddr, sport,
+			     iph->daddr, dport, inet_iif(skb), sdif,
+			     refcounted);
+}
+
+static inline struct sock *__inet_lookup(struct net *net,
+					 struct inet_hashinfo *hashinfo,
+					 struct sk_buff *skb, int doff,
+					 const __be32 saddr, const __be16 sport,
+					 const __be32 daddr, const __be16 dport,
+					 const int dif, const int sdif,
+					 bool *refcounted)
+{
+	u16 hnum = ntohs(dport);
+	struct sock *sk;
+
+	sk = __inet_lookup_established(net, hashinfo, saddr, sport,
+				       daddr, hnum, dif, sdif);
+	*refcounted = true;
+	if (sk)
+		return sk;
+	*refcounted = false;
+	return __inet_lookup_listener(net, hashinfo, skb, doff, saddr,
+				      sport, daddr, hnum, dif, sdif);
+}
+```
+
+
+
+```c
+// net/ipv4/inet_hashtables.c
+struct sock *__inet_lookup_established(struct net *net,
+				  struct inet_hashinfo *hashinfo,
+				  const __be32 saddr, const __be16 sport,
+				  const __be32 daddr, const u16 hnum,
+				  const int dif, const int sdif)
+{
+	INET_ADDR_COOKIE(acookie, saddr, daddr);
+	const __portpair ports = INET_COMBINED_PORTS(sport, hnum);
+	struct sock *sk;
+	const struct hlist_nulls_node *node;
+	/* Optimize here for direct hit, only listening connections can
+	 * have wildcards anyways.
+	 */
+	unsigned int hash = inet_ehashfn(net, daddr, hnum, saddr, sport);
+	unsigned int slot = hash & hashinfo->ehash_mask;
+	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];
+
+begin:
+	sk_nulls_for_each_rcu(sk, node, &head->chain) {
+		if (sk->sk_hash != hash)
+			continue;
+		if (likely(INET_MATCH(sk, net, acookie,
+				      saddr, daddr, ports, dif, sdif))) {
+			if (unlikely(!refcount_inc_not_zero(&sk->sk_refcnt)))
+				goto out;
+			if (unlikely(!INET_MATCH(sk, net, acookie,
+						 saddr, daddr, ports,
+						 dif, sdif))) {
+				sock_gen_put(sk);
+				goto begin;
+			}
+			goto found;
+		}
+	}
+	/*
+	 * if the nulls value we got at the end of this lookup is
+	 * not the expected one, we must restart lookup.
+	 * We probably met an item that was moved to another chain.
+	 */
+	if (get_nulls_value(node) != slot)
+		goto begin;
+out:
+	sk = NULL;
+found:
+	return sk;
+}
+```
+
+
+
+```c
+// include/net/inet_hashtables.h
+#define INET_MATCH(__sk, __net, __cookie, __saddr, __daddr, __ports, __dif, __sdif) \
+	(((__sk)->sk_portpair == (__ports))		&&		\
+	 ((__sk)->sk_daddr	== (__saddr))		&&		\
+	 ((__sk)->sk_rcv_saddr	== (__daddr))		&&		\
+	 (((__sk)->sk_bound_dev_if == (__dif))		||		\
+	  ((__sk)->sk_bound_dev_if == (__sdif)))	&&		\
+	 net_eq(sock_net(__sk), (__net)))
+#endif /* 64-bit arch */
+```
+
+
+
+
+
 #### tcp_v4_do_rcv
+
 The socket must have it's spinlock held when we get here, unless it is a TCP_LISTEN socket.
 
 We have a potential double-lock case here, so even when doing backlog processing we use the BH locking scheme. This is because we cannot sleep with the original spinlock held.
@@ -1376,33 +1494,32 @@ csum_err:
 
 #### tcp_rcv_established
 
+TCP receive function for the ESTABLISHED state.
+It is split into a fast path and a slow path. The fast path is
+disabled when:
+- A zero window was announced from us - zero window probing
+      is only handled properly in the slow path.
+- Out of order segments arrived.
+- Urgent data is expected.
+- There is no buffer space left
+- Unexpected TCP flags/window values/header lengths are received
+  (detected by checking the TCP header against pred_flags)
+- Data is sent in both directions. Fast path only supports pure senders
+  or pure receivers (this means either the sequence number or the ack
+  value must stay constant)
+- Unexpected TCP option.
 
+When these conditions are not satisfied it drops into a standard
+receive procedure patterned after RFC793 to handle all cases.
+The first three cases are guaranteed by proper pred_flags setting,
+the rest is checked inline. Fast processing is turned on in
+tcp_data_queue when everything is OK.
+
+1. `tcp_queue_rcv`
+2. `tcp_data_ready`
 
 ```c
-
-/*
- *	TCP receive function for the ESTABLISHED state.
- *
- *	It is split into a fast path and a slow path. The fast path is
- * 	disabled when:
- *	- A zero window was announced from us - zero window probing
- *        is only handled properly in the slow path.
- *	- Out of order segments arrived.
- *	- Urgent data is expected.
- *	- There is no buffer space left
- *	- Unexpected TCP flags/window values/header lengths are received
- *	  (detected by checking the TCP header against pred_flags)
- *	- Data is sent in both directions. Fast path only supports pure senders
- *	  or pure receivers (this means either the sequence number or the ack
- *	  value must stay constant)
- *	- Unexpected TCP option.
- *
- *	When these conditions are not satisfied it drops into a standard
- *	receive procedure patterned after RFC793 to handle all cases.
- *	The first three cases are guaranteed by proper pred_flags setting,
- *	the rest is checked inline. Fast processing is turned on in
- *	tcp_data_queue when everything is OK.
- */
+// net/ipv4/tcp_input.c
 void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 {
 	const struct tcphdr *th = (const struct tcphdr *)skb->data;

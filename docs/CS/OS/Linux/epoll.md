@@ -16,6 +16,24 @@ The  epoll  API  performs  a similar task to `poll`: monitoring multiple file de
 
 ![](https://mmbiz.qpic.cn/mmbiz_png/BBjAFF4hcwolcxS62c1ZRibFc0NUVCJ46h2GrIOb4GbapWqATZwAALWXWH8505zthGzEEyiawU3TicRQgHMj0B0eg/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
+
+
+```c
+int main(){
+listen(lfd, ...);
+cfd1 = accept(...);
+cfd2 = accept(...);
+efd = epoll_create(...);
+epoll_ctl(efd, EPOLL_CTL_ADD, cfd1, ...);
+epoll_ctl(efd, EPOLL_CTL_ADD, cfd2, ...);
+epoll_wait(efd, ...)
+}
+```
+
+
+
+
+
 ## epoll_create
 
 create struct eventpoll
@@ -35,41 +53,23 @@ static int do_epoll_create(int flags)
 	struct eventpoll *ep = NULL;
 	struct file *file;
 
-	/* Check the EPOLL_* constant for consistency.  */
-	BUILD_BUG_ON(EPOLL_CLOEXEC != O_CLOEXEC);
-
-	if (flags & ~EPOLL_CLOEXEC)
-		return -EINVAL;
-	/*
-	 * Create the internal data structure ("struct eventpoll").
-	 */
+	
+	/* Create the internal data structure ("struct eventpoll"). */
 	error = ep_alloc(&ep);
-	if (error < 0)
-		return error;
+	
 	/*
 	 * Creates all the items needed to setup an eventpoll file. That is,
 	 * a file structure and a free file descriptor.
 	 */
 	fd = get_unused_fd_flags(O_RDWR | (flags & O_CLOEXEC));
-	if (fd < 0) {
-		error = fd;
-		goto out_free_ep;
-	}
-	file = anon_inode_getfile("[eventpoll]", &eventpoll_fops, ep,
+
+  file = anon_inode_getfile("[eventpoll]", &eventpoll_fops, ep,
 				 O_RDWR | (flags & O_CLOEXEC));
-	if (IS_ERR(file)) {
-		error = PTR_ERR(file);
-		goto out_free_fd;
-	}
+
 	ep->file = file;
 	fd_install(fd, file);
 	return fd;
 
-out_free_fd:
-	put_unused_fd(fd);
-out_free_ep:
-	ep_free(ep);
-	return error;
 }
 ```
 
@@ -189,9 +189,38 @@ struct epitem {
 };
 ```
 
-### ep_alloc
+### event
+
 ```c
-//linux/fs/eventpoll.c
+// include/uapi/linux/eventpoll.h
+struct epoll_event {
+	__poll_t events;
+	__u64 data;
+} EPOLL_PACKED;
+
+/* Epoll event masks */
+#define EPOLLIN		(__force __poll_t)0x00000001
+#define EPOLLPRI	(__force __poll_t)0x00000002
+#define EPOLLOUT	(__force __poll_t)0x00000004
+#define EPOLLERR	(__force __poll_t)0x00000008
+#define EPOLLHUP	(__force __poll_t)0x00000010
+#define EPOLLNVAL	(__force __poll_t)0x00000020
+#define EPOLLRDNORM	(__force __poll_t)0x00000040
+#define EPOLLRDBAND	(__force __poll_t)0x00000080
+#define EPOLLWRNORM	(__force __poll_t)0x00000100
+#define EPOLLWRBAND	(__force __poll_t)0x00000200
+#define EPOLLMSG	(__force __poll_t)0x00000400
+#define EPOLLRDHUP	(__force __poll_t)0x00002000
+```
+
+
+
+
+
+### ep_alloc
+
+```c
+// fs/eventpoll.c
 static int ep_alloc(struct eventpoll **pep)
 {
 	int error;
@@ -199,13 +228,11 @@ static int ep_alloc(struct eventpoll **pep)
 	struct eventpoll *ep;
 
 	user = get_current_user();
-	error = -ENOMEM;
-	ep = kzalloc(sizeof(*ep), GFP_KERNEL);
-	if (unlikely(!ep))
-		goto free_uid;
 
-	mutex_init(&ep->mtx);
-	rwlock_init(&ep->lock);
+  ep = kzalloc(sizeof(*ep), GFP_KERNEL);
+
+	...
+    
 	init_waitqueue_head(&ep->wq);
 	init_waitqueue_head(&ep->poll_wait);
 	INIT_LIST_HEAD(&ep->rdllist);
@@ -216,21 +243,19 @@ static int ep_alloc(struct eventpoll **pep)
 	*pep = ep;
 
 	return 0;
-
-free_uid:
-	free_uid(user);
-	return error;
 }
 ```
 
 ## epoll_ctl
+
+The following function implements the controller interface for the eventpoll file that enables the insertion/removal/change of file descriptors inside the interest set.
+
+1. create epitem
+2. Add socket to wait queue, set callback `ep_poll_callback`
+3. insert epitem into rbtree
+
 ```c
-//linux/fs/eventpoll.c
-/*
- * The following function implements the controller interface for
- * the eventpoll file that enables the insertion/removal/change of
- * file descriptors inside the interest set.
- */
+// fs/eventpoll.c
 SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 		struct epoll_event __user *, event)
 {
@@ -253,15 +278,10 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
        struct epitem *epi;
        struct eventpoll *tep = NULL;
 
-       error = -EBADF;
        f = fdget(epfd);
-       if (!f.file)
-              goto error_return;
 
        /* Get the "struct file *" for the target file */
        tf = fdget(fd);
-       if (!tf.file)
-              goto error_fput;
 
        /* The target file descriptor must support poll */
        error = -EPERM;
@@ -316,8 +336,6 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
         * EPOLL_CTL_ADD operations.
         */
        error = epoll_mutex_lock(&ep->mtx, 0, nonblock);
-       if (error)
-              goto error_tgt_fput;
        if (op == EPOLL_CTL_ADD) {
               if (READ_ONCE(f.file->f_ep) || ep->gen == loop_check_gen ||
                   is_file_epoll(tf.file)) {
@@ -346,7 +364,6 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
         */
        epi = ep_find(ep, tf.file, fd);
 
-       error = -EINVAL;
        switch (op) {
        case EPOLL_CTL_ADD:
               if (!epi) {
@@ -373,25 +390,16 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
        }
        mutex_unlock(&ep->mtx);
 
-error_tgt_fput:
-       if (full_check) {
-              clear_tfile_check_list();
-              loop_check_gen++;
-              mutex_unlock(&epmutex);
-       }
-
-       fdput(tf);
-error_fput:
-       fdput(f);
-error_return:
-
-       return error;
 }
 ```
 
 ### ep_insert
 
-insert into rb
+1. zmalloc epitem
+2. insert into rb
+3. Initialize the poll table in `ep_ptable_queue_proc`
+4. set revents = `ep_item_poll`
+
 ```c
 /*
  * Must be called with "mtx" held.
@@ -408,8 +416,6 @@ static int ep_insert(struct eventpoll *ep, const struct epoll_event *event,
 
 	if (is_file_epoll(tfile))
 		tep = tfile->private_data;
-
-	lockdep_assert_irqs_enabled();
 
 	user_watches = atomic_long_read(&ep->user->epoll_watches);
 	if (unlikely(user_watches >= max_user_watches))
@@ -512,12 +518,135 @@ static int ep_insert(struct eventpoll *ep, const struct epoll_event *event,
 }
 ```
 
+#### ep_ptable_queue_proc
+
+Initialize the poll table using the queue callback = `ep_poll_callback`
+
+```c
+
+/*
+ * This is the callback that is used to add our wait queue to the
+ * target file wakeup lists.
+ */
+static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
+				 poll_table *pt)
+{
+
+	pwq = kmem_cache_alloc(pwq_cache, GFP_KERNEL);
+	
+
+	init_waitqueue_func_entry(&pwq->wait, ep_poll_callback);
+	
+  if (epi->event.events & EPOLLEXCLUSIVE)
+		add_wait_queue_exclusive(whead, &pwq->wait);
+	else
+		add_wait_queue(whead, &pwq->wait);
+}
+```
+
+
+
+```c
+// include/linux/wait.h
+
+static inline void
+init_waitqueue_func_entry(struct wait_queue_entry *wq_entry, wait_queue_func_t func)
+{
+	wq_entry->flags		= 0;
+	wq_entry->private	= NULL;
+	wq_entry->func		= func;
+}
+```
+
+
+
+```c
+// kernel/sched/wait.c
+void add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
+{
+	unsigned long flags;
+
+	wq_entry->flags |= WQ_FLAG_EXCLUSIVE;
+	spin_lock_irqsave(&wq_head->lock, flags);
+	__add_wait_queue_entry_tail(wq_head, wq_entry);
+	spin_unlock_irqrestore(&wq_head->lock, flags);
+}
+```
+
+
+
+#### ep_item_poll
+
+```c
+/*
+ * Differs from ep_eventpoll_poll() in that internal callers already have
+ * the ep->mtx so we need to start from depth=1, such that mutex_lock_nested()
+ * is correctly annotated.
+ */
+static __poll_t ep_item_poll(const struct epitem *epi, poll_table *pt,
+				 int depth)
+{
+	struct file *file = epi->ffd.file;
+	__poll_t res;
+
+	pt->_key = epi->event.events;
+	if (!is_file_epoll(file))
+		res = vfs_poll(file, pt);
+	else
+		res = __ep_eventpoll_poll(file, pt, depth);
+	return res & epi->event.events;
+}
+
+
+static __poll_t __ep_eventpoll_poll(struct file *file, poll_table *wait, int depth)
+{
+	struct eventpoll *ep = file->private_data;
+	LIST_HEAD(txlist);
+	struct epitem *epi, *tmp;
+	poll_table pt;
+	__poll_t res = 0;
+
+	init_poll_funcptr(&pt, NULL);
+
+	/* Insert inside our poll wait queue */
+	poll_wait(file, &ep->poll_wait, wait);
+
+	/*
+	 * Proceed to find out if wanted events are really available inside
+	 * the ready list.
+	 */
+	mutex_lock_nested(&ep->mtx, depth);
+	ep_start_scan(ep, &txlist);
+	list_for_each_entry_safe(epi, tmp, &txlist, rdllink) {
+		if (ep_item_poll(epi, &pt, depth + 1)) {
+			res = EPOLLIN | EPOLLRDNORM;
+			break;
+		} else {
+			/*
+			 * Item has been dropped into the ready list by the poll
+			 * callback, but it's not actually ready, as far as
+			 * caller requested events goes. We can remove it here.
+			 */
+			__pm_relax(ep_wakeup_source(epi));
+			list_del_init(&epi->rdllink);
+		}
+	}
+	ep_done_scan(ep, &txlist);
+	mutex_unlock(&ep->mtx);
+	return res;
+}
+```
+
+
+
+
+
 ## epoll_wait
 
 
 
 ```c
-// /linux/fs/eventpoll.c
+// fs/eventpoll.c
 SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
               int, maxevents, int, timeout)
 {
@@ -567,33 +696,14 @@ static int do_epoll_wait(int epfd, struct epoll_event __user *events,
 
        /* Time to fish for events ... */
        error = ep_poll(ep, events, maxevents, to);
-
-error_fput:
-       fdput(f);
-       return error;
 }
 ```
 
 ### ep_poll
 
+Retrieves ready events, and delivers them to the caller-supplied event buffer.
 ```c
-/**
- * ep_poll - Retrieves ready events, and delivers them to the caller-supplied
- *           event buffer.
- *
- * @ep: Pointer to the eventpoll context.
- * @events: Pointer to the userspace buffer where the ready events should be
- *          stored.
- * @maxevents: Size (in terms of number of events) of the caller event buffer.
- * @timeout: Maximum timeout for the ready events fetch operation, in
- *           timespec. If the timeout is zero, the function will not block,
- *           while if the @timeout ptr is NULL, the function will block
- *           until at least one event has been retrieved (or an error
- *           occurred).
- *
- * Return: the number of ready events which have been fetched, or an
- *          error code, in case of error.
- */
+
 static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
                  int maxevents, struct timespec64 *timeout)
 {
@@ -648,17 +758,7 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
               if (signal_pending(current))
                      return -EINTR;
 
-              /*
-               * Internally init_wait() uses autoremove_wake_function(),
-               * thus wait entry is removed from the wait queue on each
-               * wakeup. Why it is important? In case of several waiters
-               * each new wakeup will hit the next waiter, giving it the
-               * chance to harvest new event. Otherwise wakeup can be
-               * lost. This is also good performance-wise, because on
-               * normal wakeup path no need to call __remove_wait_queue()
-               * explicitly, thus ep->lock is not taken, which halts the
-               * event delivery.
-               */
+          
               init_wait(&wait);
 
               write_lock_irq(&ep->lock);
@@ -714,33 +814,486 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
 
 
 
-ep_poll_callback
+#### init_wait
 
-tcp 内存使用slab分配
+Internally init_wait() uses `default_wake_function()`, thus wait entry is removed from the wait queue on each wakeup. Why it is important? In case of several waiters each new wakeup will hit the next waiter, giving it the chance to harvest new event. 
 
-dmidecode 查看CPU 内存信息
-每个CPU和它直接相连的内存条组成Node
+Otherwise wakeup can be lost. This is also good performance-wise, because on normal wakeup path no need to call `__remove_wait_queue()` explicitly, thus ep->lock is not taken, which halts the event delivery.
 
-numactl --hardware
-查看Node情况
-Node划分为Zone
+```c
+// include/linux/wait.h
+#define init_wait(wait)								\
+	do {									\
+		(wait)->private = current;					\
+		(wait)->func = autoremove_wake_function;			\
+		INIT_LIST_HEAD(&(wait)->entry);					\
+		(wait)->flags = 0;						\
+	} while (0)
 
-```shell
-cat /proc/zoneinfo #查看zone信息
 ```
 
-Zone包含Page 一般为4KB
 
 
-```shell
-cat /proc/slabinfo
-slabtop
+```c
+// kernel/sched/wait.c
+int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key)
+{
+	int ret = default_wake_function(wq_entry, mode, sync, key);
+
+	if (ret)
+		list_del_init_careful(&wq_entry->entry);
+
+	return ret;
+}
 ```
-slab_def.h
 
-mm/slab.h
 
-空establish 连接占用3.3KB左右
+
+```c
+// kernel/sched/core.c
+int default_wake_function(wait_queue_entry_t *curr, unsigned mode, int wake_flags,
+			  void *key)
+{
+	WARN_ON_ONCE(IS_ENABLED(CONFIG_SCHED_DEBUG) && wake_flags & ~WF_SYNC);
+	return try_to_wake_up(curr->private, mode, wake_flags);
+}
+```
+
+
+
+
+
+#### ep_events_available
+
+Checks if ready events might be available.
+
+```c
+
+static inline int ep_events_available(struct eventpoll *ep)
+{
+	return !list_empty_careful(&ep->rdllist) ||
+		READ_ONCE(ep->ovflist) != EP_UNACTIVE_PTR;
+}
+```
+
+
+
+#### add_wait_queue
+
+Used for wake-one threads:
+
+```c
+// include/linux/wait.h
+static inline void
+__add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
+{
+	wq_entry->flags |= WQ_FLAG_EXCLUSIVE;
+	__add_wait_queue(wq_head, wq_entry);
+}
+
+
+static inline void __add_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
+{
+	struct list_head *head = &wq_head->head;
+	struct wait_queue_entry *wq;
+
+	list_for_each_entry(wq, &wq_head->head, entry) {
+		if (!(wq->flags & WQ_FLAG_PRIORITY))
+			break;
+		head = &wq->entry;
+	}
+	list_add(&wq_entry->entry, head);
+}
+```
+
+
+
+```c
+
+/**
+ * schedule_hrtimeout_range - sleep until timeout
+ * @expires:	timeout value (ktime_t)
+ * @delta:	slack in expires timeout (ktime_t)
+ * @mode:	timer mode
+ *
+ * Make the current task sleep until the given expiry time has
+ * elapsed. The routine will return immediately unless
+ * the current task state has been set (see set_current_state()).
+ *
+ * The @delta argument gives the kernel the freedom to schedule the
+ * actual wakeup to a time that is both power and performance friendly.
+ * The kernel give the normal best effort behavior for "@expires+@delta",
+ * but may decide to fire the timer earlier, but no earlier than @expires.
+ *
+ * You can set the task state as follows -
+ *
+ * %TASK_UNINTERRUPTIBLE - at least @timeout time is guaranteed to
+ * pass before the routine returns unless the current task is explicitly
+ * woken up, (e.g. by wake_up_process()).
+ *
+ * %TASK_INTERRUPTIBLE - the routine may return early if a signal is
+ * delivered to the current task or the current task is explicitly woken
+ * up.
+ *
+ * The current task state is guaranteed to be TASK_RUNNING when this
+ * routine returns.
+ *
+ * Returns 0 when the timer has expired. If the task was woken before the
+ * timer expired by a signal (only possible in state TASK_INTERRUPTIBLE) or
+ * by an explicit wakeup, it returns -EINTR.
+ */
+int __sched schedule_hrtimeout_range(ktime_t *expires, u64 delta,
+				     const enum hrtimer_mode mode)
+{
+	return schedule_hrtimeout_range_clock(expires, delta, mode,
+					      CLOCK_MONOTONIC);
+}
+
+
+/** sleep until timeout */
+int __sched
+schedule_hrtimeout_range_clock(ktime_t *expires, u64 delta,
+			       const enum hrtimer_mode mode, clockid_t clock_id)
+{
+	struct hrtimer_sleeper t;
+
+	/*
+	 * Optimize when a zero timeout value is given. It does not
+	 * matter whether this is an absolute or a relative time.
+	 */
+	if (expires && *expires == 0) {
+		__set_current_state(TASK_RUNNING);
+		return 0;
+	}
+
+	/*
+	 * A NULL parameter means "infinite"
+	 */
+	if (!expires) {
+		schedule();
+		return -EINTR;
+	}
+
+	hrtimer_init_sleeper_on_stack(&t, clock_id, mode);
+	hrtimer_set_expires_range_ns(&t.timer, *expires, delta);
+	hrtimer_sleeper_start_expires(&t, mode);
+
+	if (likely(t.task))
+		schedule();
+
+	hrtimer_cancel(&t.timer);
+	destroy_hrtimer_on_stack(&t.timer);
+
+	__set_current_state(TASK_RUNNING);
+
+	return !t.task ? 0 : -EINTR;
+}
+```
+
+
+
+### schedule
+
+```c
+
+/*
+ * __schedule() is the main scheduler function.
+ *
+ * The main means of driving the scheduler and thus entering this function are:
+ *
+ *   1. Explicit blocking: mutex, semaphore, waitqueue, etc.
+ *
+ *   2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return
+ *      paths. For example, see arch/x86/entry_64.S.
+ *
+ *      To drive preemption between tasks, the scheduler sets the flag in timer
+ *      interrupt handler scheduler_tick().
+ *
+ *   3. Wakeups don't really cause entry into schedule(). They add a
+ *      task to the run-queue and that's it.
+ *
+ *      Now, if the new task added to the run-queue preempts the current
+ *      task, then the wakeup sets TIF_NEED_RESCHED and schedule() gets
+ *      called on the nearest possible occasion:
+ *
+ *       - If the kernel is preemptible (CONFIG_PREEMPTION=y):
+ *
+ *         - in syscall or exception context, at the next outmost
+ *           preempt_enable(). (this might be as soon as the wake_up()'s
+ *           spin_unlock()!)
+ *
+ *         - in IRQ context, return from interrupt-handler to
+ *           preemptible context
+ *
+ *       - If the kernel is not preemptible (CONFIG_PREEMPTION is not set)
+ *         then at the next:
+ *
+ *          - cond_resched() call
+ *          - explicit schedule() call
+ *          - return from syscall or exception to user-space
+ *          - return from interrupt-handler to user-space
+ *
+ * WARNING: must be called with preemption disabled!
+ */
+static void __sched notrace __schedule(unsigned int sched_mode)
+{
+	struct task_struct *prev, *next;
+	unsigned long *switch_count;
+	unsigned long prev_state;
+	struct rq_flags rf;
+	struct rq *rq;
+	int cpu;
+
+	cpu = smp_processor_id();
+	rq = cpu_rq(cpu);
+	prev = rq->curr;
+
+	schedule_debug(prev, !!sched_mode);
+
+	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
+		hrtick_clear(rq);
+
+	local_irq_disable();
+	rcu_note_context_switch(!!sched_mode);
+
+	/*
+	 * Make sure that signal_pending_state()->signal_pending() below
+	 * can't be reordered with __set_current_state(TASK_INTERRUPTIBLE)
+	 * done by the caller to avoid the race with signal_wake_up():
+	 *
+	 * __set_current_state(@state)		signal_wake_up()
+	 * schedule()				  set_tsk_thread_flag(p, TIF_SIGPENDING)
+	 *					  wake_up_state(p, state)
+	 *   LOCK rq->lock			    LOCK p->pi_state
+	 *   smp_mb__after_spinlock()		    smp_mb__after_spinlock()
+	 *     if (signal_pending_state())	    if (p->state & @state)
+	 *
+	 * Also, the membarrier system call requires a full memory barrier
+	 * after coming from user-space, before storing to rq->curr.
+	 */
+	rq_lock(rq, &rf);
+	smp_mb__after_spinlock();
+
+	/* Promote REQ to ACT */
+	rq->clock_update_flags <<= 1;
+	update_rq_clock(rq);
+
+	switch_count = &prev->nivcsw;
+
+	/*
+	 * We must load prev->state once (task_struct::state is volatile), such
+	 * that:
+	 *
+	 *  - we form a control dependency vs deactivate_task() below.
+	 *  - ptrace_{,un}freeze_traced() can change ->state underneath us.
+	 */
+	prev_state = READ_ONCE(prev->__state);
+	if (!(sched_mode & SM_MASK_PREEMPT) && prev_state) {
+		if (signal_pending_state(prev_state, prev)) {
+			WRITE_ONCE(prev->__state, TASK_RUNNING);
+		} else {
+			prev->sched_contributes_to_load =
+				(prev_state & TASK_UNINTERRUPTIBLE) &&
+				!(prev_state & TASK_NOLOAD) &&
+				!(prev->flags & PF_FROZEN);
+
+			if (prev->sched_contributes_to_load)
+				rq->nr_uninterruptible++;
+
+			/*
+			 * __schedule()			ttwu()
+			 *   prev_state = prev->state;    if (p->on_rq && ...)
+			 *   if (prev_state)		    goto out;
+			 *     p->on_rq = 0;		  smp_acquire__after_ctrl_dep();
+			 *				  p->state = TASK_WAKING
+			 *
+			 * Where __schedule() and ttwu() have matching control dependencies.
+			 *
+			 * After this, schedule() must not care about p->state any more.
+			 */
+			deactivate_task(rq, prev, DEQUEUE_SLEEP | DEQUEUE_NOCLOCK);
+
+			if (prev->in_iowait) {
+				atomic_inc(&rq->nr_iowait);
+				delayacct_blkio_start();
+			}
+		}
+		switch_count = &prev->nvcsw;
+	}
+
+	next = pick_next_task(rq, prev, &rf);
+	clear_tsk_need_resched(prev);
+	clear_preempt_need_resched();
+#ifdef CONFIG_SCHED_DEBUG
+	rq->last_seen_need_resched_ns = 0;
+#endif
+
+	if (likely(prev != next)) {
+		rq->nr_switches++;
+		/*
+		 * RCU users of rcu_dereference(rq->curr) may not see
+		 * changes to task_struct made by pick_next_task().
+		 */
+		RCU_INIT_POINTER(rq->curr, next);
+		/*
+		 * The membarrier system call requires each architecture
+		 * to have a full memory barrier after updating
+		 * rq->curr, before returning to user-space.
+		 *
+		 * Here are the schemes providing that barrier on the
+		 * various architectures:
+		 * - mm ? switch_mm() : mmdrop() for x86, s390, sparc, PowerPC.
+		 *   switch_mm() rely on membarrier_arch_switch_mm() on PowerPC.
+		 * - finish_lock_switch() for weakly-ordered
+		 *   architectures where spin_unlock is a full barrier,
+		 * - switch_to() for arm64 (weakly-ordered, spin_unlock
+		 *   is a RELEASE barrier),
+		 */
+		++*switch_count;
+
+		migrate_disable_switch(rq, prev);
+		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
+
+		trace_sched_switch(sched_mode & SM_MASK_PREEMPT, prev, next);
+
+		/* Also unlocks the rq: */
+		rq = context_switch(rq, prev, next, &rf);
+	} else {
+		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
+
+		rq_unpin_lock(rq, &rf);
+		__balance_callbacks(rq);
+		raw_spin_rq_unlock_irq(rq);
+	}
+}
+```
+
+
+
+
+
+#### ep_poll_callback
+
+This is the callback that is passed to the wait queue wakeup mechanism. It is called by the stored file descriptors when they have events to report.
+This callback takes a read lock in order not to contend with concurrent events from another file descriptor, thus all modifications to ->rdllist or ->ovflist are lockless.  Read lock is paired with the write lock from ep_scan_ready_list(), which stops all list modifications and guarantees that lists state is seen correctly.
+
+Another thing worth to mention is that ep_poll_callback() can be called concurrently for the same @epi from different CPUs if poll table was inited with several wait queues entries.  Plural wakeup from different CPUs of a
+single wait queue is serialized by wq.lock, but the case when multiple wait queues are used should be detected accordingly.  This is detected using cmpxchg() operation.
+
+1. get epitem from wait
+2. add event to ready list
+3. Wake up ( if active ) both the eventpoll wait list and the ->poll() wait list.
+
+```c
+//
+static int ep_poll_callback(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
+{
+	int pwake = 0;
+	struct epitem *epi = ep_item_from_wait(wait);
+	struct eventpoll *ep = epi->ep;
+	__poll_t pollflags = key_to_poll(key);
+	unsigned long flags;
+	int ewake = 0;
+
+	read_lock_irqsave(&ep->lock, flags);
+
+	ep_set_busy_poll_napi_id(epi);
+
+	/*
+	 * If the event mask does not contain any poll(2) event, we consider the
+	 * descriptor to be disabled. This condition is likely the effect of the
+	 * EPOLLONESHOT bit that disables the descriptor when an event is received,
+	 * until the next EPOLL_CTL_MOD will be issued.
+	 */
+	if (!(epi->event.events & ~EP_PRIVATE_BITS))
+		goto out_unlock;
+
+	/*
+	 * Check the events coming with the callback. At this stage, not
+	 * every device reports the events in the "key" parameter of the
+	 * callback. We need to be able to handle both cases here, hence the
+	 * test for "key" != NULL before the event match test.
+	 */
+	if (pollflags && !(pollflags & epi->event.events))
+		goto out_unlock;
+
+	/*
+	 * If we are transferring events to userspace, we can hold no locks
+	 * (because we're accessing user memory, and because of linux f_op->poll()
+	 * semantics). All the events that happen during that period of time are
+	 * chained in ep->ovflist and requeued later on.
+	 */
+	if (READ_ONCE(ep->ovflist) != EP_UNACTIVE_PTR) {
+		if (chain_epi_lockless(epi))
+			ep_pm_stay_awake_rcu(epi);
+	} else if (!ep_is_linked(epi)) {
+		/* In the usual case, add event to ready list. */
+		if (list_add_tail_lockless(&epi->rdllink, &ep->rdllist))
+			ep_pm_stay_awake_rcu(epi);
+	}
+
+	/*
+	 * Wake up ( if active ) both the eventpoll wait list and the ->poll()
+	 * wait list.
+	 */
+	if (waitqueue_active(&ep->wq)) {
+		if ((epi->event.events & EPOLLEXCLUSIVE) &&
+					!(pollflags & POLLFREE)) {
+			switch (pollflags & EPOLLINOUT_BITS) {
+			case EPOLLIN:
+				if (epi->event.events & EPOLLIN)
+					ewake = 1;
+				break;
+			case EPOLLOUT:
+				if (epi->event.events & EPOLLOUT)
+					ewake = 1;
+				break;
+			case 0:
+				ewake = 1;
+				break;
+			}
+		}
+		wake_up(&ep->wq); /** call __wake_up_common */
+	}
+	if (waitqueue_active(&ep->poll_wait))
+		pwake++;
+
+out_unlock:
+	read_unlock_irqrestore(&ep->lock, flags);
+
+	/* We have to call this outside the lock */
+	if (pwake)
+		ep_poll_safewake(ep, epi);
+
+	if (!(epi->event.events & EPOLLEXCLUSIVE))
+		ewake = 1;
+
+	if (pollflags & POLLFREE) {
+		/*
+		 * If we race with ep_remove_wait_queue() it can miss
+		 * ->whead = NULL and do another remove_wait_queue() after
+		 * us, so we can't use __remove_wait_queue().
+		 */
+		list_del_init(&wait->entry);
+		/*
+		 * ->whead != NULL protects us from the race with ep_free()
+		 * or ep_remove(), ep_remove_wait_queue() takes whead->lock
+		 * held by the caller. Once we nullify it, nothing protects
+		 * ep/epi or even wait.
+		 */
+		smp_store_release(&ep_pwq_from_wait(wait)->whead, NULL);
+	}
+
+	return ewake;
+}
+
+```
+
+
+
+## ET & LT
+
+
 
 Level-triggered and edge-triggered
 The epoll event distribution interface is able to behave both as edge-triggered (ET) and as level-triggered (LT).  The differ‐
@@ -806,13 +1359,6 @@ The following interfaces can be used to limit the amount of kernel memory consum
               the system.  The limit is per real user ID.  Each registered file descriptor costs roughly 90 bytes on a 32-bit kernel,
               and roughly 160 bytes on a 64-bit kernel.  Currently, the default value for max_user_watches is 1/25 (4%) of the avail‐
               able low memory, divided by the registration cost in bytes.
-
-
-## ET & LT
-
-Edge Triggered
-
-Level Triggered
 
 
 
@@ -986,4 +1532,19 @@ epoll_create(2), epoll_create1(2), epoll_ctl(2), epoll_wait(2), poll(2), select(
 COLOPHON
 This page is part of release 4.15 of the Linux man-pages project.  A description of the project, information  about  reporting
 bugs, and the latest version of this page, can be found at https://www.kernel.org/doc/man-pages/.
+
+
+
+## Summary
+
+1. `epoll_create` create `eventpoll`
+2. `epoll_ctl` add socket to rbr
+3. `epoll_wait` check if in ready list, or else wait
+4. Woken up, recheck list
+
+
+
+1. socket get data
+2. epitem add to ready list
+3. Wake up process
 
