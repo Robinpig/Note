@@ -1305,7 +1305,7 @@ do_time_wait:
 
 
 
-##### inet_lookup
+#### inet_lookup
 
 ```c
 // include/net/inet_hashtables.h
@@ -1352,7 +1352,7 @@ static inline struct sock *__inet_lookup(struct net *net,
 ```
 
 
-
+##### inet_lookup_established
 ```c
 // net/ipv4/inet_hashtables.c
 struct sock *__inet_lookup_established(struct net *net,
@@ -1403,7 +1403,50 @@ found:
 }
 ```
 
+##### inet_lookup_listener
+```c
 
+struct sock *__inet_lookup_listener(struct net *net,
+				    struct inet_hashinfo *hashinfo,
+				    struct sk_buff *skb, int doff,
+				    const __be32 saddr, __be16 sport,
+				    const __be32 daddr, const unsigned short hnum,
+				    const int dif, const int sdif)
+{
+	struct inet_listen_hashbucket *ilb2;
+	struct sock *result = NULL;
+	unsigned int hash2;
+
+	/* Lookup redirect from BPF */
+	if (static_branch_unlikely(&bpf_sk_lookup_enabled)) {
+		result = inet_lookup_run_bpf(net, hashinfo, skb, doff,
+					     saddr, sport, daddr, hnum);
+		if (result)
+			goto done;
+	}
+
+	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
+	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
+
+	result = inet_lhash2_lookup(net, ilb2, skb, doff,
+				    saddr, sport, daddr, hnum,
+				    dif, sdif);
+	if (result)
+		goto done;
+
+	/* Lookup lhash2 with INADDR_ANY */
+	hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
+	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
+
+	result = inet_lhash2_lookup(net, ilb2, skb, doff,
+				    saddr, sport, htonl(INADDR_ANY), hnum,
+				    dif, sdif);
+done:
+	if (IS_ERR(result))
+		return NULL;
+	return result;
+}
+```
 
 ```c
 // include/net/inet_hashtables.h
@@ -1492,7 +1535,7 @@ csum_err:
 }
 ```
 
-#### tcp_rcv_established
+### tcp_rcv_established
 
 TCP receive function for the ESTABLISHED state.
 It is split into a fast path and a slow path. The fast path is
@@ -1984,13 +2027,20 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	tcp_synack_rtt_meas(child, req);
 	*req_stolen = !own_req;
 	return inet_csk_complete_hashdance(sk, child, req, own_req);
+```
 
+tcp_abort_on_overflow
+```c
 listen_overflow:
 	if (!sock_net(sk)->ipv4.sysctl_tcp_abort_on_overflow) {
 		inet_rsk(req)->acked = 1;
 		return NULL;
 	}
 
+```
+
+
+```c
 embryonic_reset:
 	if (!(flg & TCP_FLAG_RST)) {
 		/* Received a bad SYN pkt - for TFO We try not to reset
@@ -2014,6 +2064,25 @@ embryonic_reset:
 }
 ```
 
+#### inet_csk_complete_hashdance
+call `inet_csk_reqsk_queue_add` add into accept queue
+```c
+
+struct sock *inet_csk_complete_hashdance(struct sock *sk, struct sock *child,
+					 struct request_sock *req, bool own_req)
+{
+	if (own_req) {
+		inet_csk_reqsk_queue_drop(sk, req);
+		reqsk_queue_removed(&inet_csk(sk)->icsk_accept_queue, req);
+		if (inet_csk_reqsk_queue_add(sk, req, child))
+			return child;
+	}
+	/* Too bad, another child took ownership of the request, undo. */
+	bh_unlock_sock(child);
+	sock_put(child);
+	return NULL;
+}
+```
 
 
 ### tcp_recvmsg
@@ -2530,6 +2599,72 @@ int tcp_connect(struct sock *sk)
 }
 ```
 
+#### reqsk_timer_handler
+
+```c
+
+static void reqsk_timer_handler(struct timer_list *t)
+{
+	struct request_sock *req = from_timer(req, t, rsk_timer);
+	struct sock *sk_listener = req->rsk_listener;
+	struct net *net = sock_net(sk_listener);
+	struct inet_connection_sock *icsk = inet_csk(sk_listener);
+	struct request_sock_queue *queue = &icsk->icsk_accept_queue;
+	int max_syn_ack_retries, qlen, expire = 0, resend = 0;
+
+	if (inet_sk_state_load(sk_listener) != TCP_LISTEN)
+		goto drop;
+
+	max_syn_ack_retries = icsk->icsk_syn_retries ? : net->ipv4.sysctl_tcp_synack_retries;
+	/* Normally all the openreqs are young and become mature
+	 * (i.e. converted to established socket) for first timeout.
+	 * If synack was not acknowledged for 1 second, it means
+	 * one of the following things: synack was lost, ack was lost,
+	 * rtt is high or nobody planned to ack (i.e. synflood).
+	 * When server is a bit loaded, queue is populated with old
+	 * open requests, reducing effective size of queue.
+	 * When server is well loaded, queue size reduces to zero
+	 * after several minutes of work. It is not synflood,
+	 * it is normal operation. The solution is pruning
+	 * too old entries overriding normal timeout, when
+	 * situation becomes dangerous.
+	 *
+	 * Essentially, we reserve half of room for young
+	 * embrions; and abort old ones without pity, if old
+	 * ones are about to clog our table.
+	 */
+	qlen = reqsk_queue_len(queue);
+	if ((qlen << 1) > max(8U, READ_ONCE(sk_listener->sk_max_ack_backlog))) {
+		int young = reqsk_queue_len_young(queue) << 1;
+
+		while (max_syn_ack_retries > 2) {
+			if (qlen < young)
+				break;
+			max_syn_ack_retries--;
+			young <<= 1;
+		}
+	}
+	syn_ack_recalc(req, max_syn_ack_retries, READ_ONCE(queue->rskq_defer_accept),
+		       &expire, &resend);
+	req->rsk_ops->syn_ack_timeout(req);
+	if (!expire &&
+	    (!resend ||
+	     !inet_rtx_syn_ack(sk_listener, req) ||
+	     inet_rsk(req)->acked)) {
+		unsigned long timeo;
+
+		if (req->num_timeout++ == 0)
+			atomic_dec(&queue->young);
+		timeo = min(TCP_TIMEOUT_INIT << req->num_timeout, TCP_RTO_MAX);
+		mod_timer(&req->rsk_timer, jiffies + timeo);
+		return;
+	}
+drop:
+	inet_csk_reqsk_queue_drop_and_put(sk_listener, req);
+}
+```
+
+
 ### rcv SYNACK
 
 
@@ -2872,6 +3007,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		if (th->rst)
 			goto discard;
 
+```
+SYN when LISTEN, call [tcp_conn_request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
+```c
 		if (th->syn) {
 			if (th->fin)
 				goto discard;
@@ -2890,6 +3028,10 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			return 0;
 		}
 		goto discard;
+```
+
+
+```c
 
 	case TCP_SYN_SENT:
 		tp->rx_opt.saw_tstamp = 0;
@@ -3124,6 +3266,16 @@ static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb)
 ```
 
 #### tcp_conn_request
+
+```c
+
+const struct inet_connection_sock_af_ops ipv4_specific = {
+	.conn_request	   = tcp_v4_conn_request,
+	.syn_recv_sock	   = tcp_v4_syn_recv_sock,
+    ...
+};
+```
+##### tcp_v4_conn_request
 ```c
 
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
@@ -3210,7 +3362,10 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 
 	if (tmp_opt.tstamp_ok)
 		tcp_rsk(req)->ts_off = af_ops->init_ts_off(net, skb);
+```
 
+drop if `qlen` > (`max_syn_backlog` >> 2)
+```c
 	if (!want_cookie && !isn) {
 		/* Kill the following clause, if you dislike this way. */
 		if (!net->ipv4.sysctl_tcp_syncookies &&
@@ -3231,7 +3386,10 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 
 		isn = af_ops->init_seq(skb);
 	}
+```
 
+
+```c
 	tcp_ecn_create_request(req, skb, sk, dst);
 
 	if (want_cookie) {
@@ -3252,6 +3410,9 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	if (fastopen_sk) {
 		af_ops->send_synack(fastopen_sk, dst, &fl, req,
 				    &foc, TCP_SYNACK_FASTOPEN, skb);
+```
+call [inet_csk_reqsk_queue_add](/docs/CS/OS/Linux/IO.md?id=inet_csk_reqsk_queue_add)
+```c
 		/* Add the child socket directly into the accept queue */
 		if (!inet_csk_reqsk_queue_add(sk, req, fastopen_sk)) {
 			reqsk_fastopen_remove(fastopen_sk, req, false);
@@ -3259,6 +3420,9 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 			sock_put(fastopen_sk);
 			goto drop_and_free;
 		}
+```
+
+```c
 		sk->sk_data_ready(sk);
 		bh_unlock_sock(fastopen_sk);
 		sock_put(fastopen_sk);
@@ -3288,7 +3452,7 @@ drop:
 	return 0;
 }
 ```
-inet_csk_reqsk_queue_is_full
+##### inet_csk_reqsk_queue_is_full
 ```c
 
 static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
@@ -3312,6 +3476,8 @@ static inline bool sk_acceptq_is_full(const struct sock *sk)
 ```
 
 ##### inet_csk_reqsk_queue_hash_add
+1. reqsk_queue_hash_req
+2. [accept queue added](/docs/CS/OS/Linux/IO.md?id=accept-queue) inc young and `qlen`
 ```c
 
 void inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_sock *req,
