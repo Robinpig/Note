@@ -3763,6 +3763,36 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 
 
 ## Congestion Control
+Congestion control is essentially ”feedback-control”
+- If senders get acknowledgment of receipt of packets
+    - They know if packets are dropped or not
+- Based on this, senders can infer the following
+    - If packets are not dropped 
+      − sender is sending at rate lower than the capacity
+    - If packets are dropped 
+      − sender is sending at rate higher than capacity
+    - Use drops of packets as “signal of congestion”
+    - Change rate as a reaction to packet drop so as to achieve “fair-share”
+
+
+Drop Detection and Rate-Control are key ideas behind current congestion control protocols.
+
+Current TCP:
+- Packet conservation: inject new packet when old packet wave has
+reached destination
+- Slow-start: search for capacity starting from zero
+- Rate-control: control rate via packet drop feedback, and be “good user"
+  
+
+Sender Algorithm
+- Slow Start
+- Sliding Window
+
+Receiver Algorithm
+- Packet-loss Detection
+
+
+
 ### State
 #### tcp_ca_state
 ```c
@@ -5169,3 +5199,4 @@ static inline int tcp_fin_time(const struct sock *sk)
 
 ## References
 1. [Analysis_TCP_in_Linux](https://github.com/fzyz999/Analysis_TCP_in_Linux)
+2. [Congestion Control - MIT6.976](https://web.mit.edu/6.976/www/notes/Notes3.pdf)
