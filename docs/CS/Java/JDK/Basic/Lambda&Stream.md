@@ -69,6 +69,8 @@ BootstrapMethods:
       #30 ()V
 ```
 
+MethodType
+
 CallSite
 
 java.lang.invoke.CallSite
@@ -81,6 +83,10 @@ Compare
 - Anonymous Inner Class create object every time and GC immediately
 - Lambda in need not to load Class
 
+
+```
+-Djdk.internal.lambda.dumpProxyClasses=/DUMP/PATH
+```
 
 
 ## Functional Interface

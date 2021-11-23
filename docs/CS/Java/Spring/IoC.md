@@ -2672,7 +2672,7 @@ public class BlockedListNotifier {
 
 ## Message Resolution
 
-Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBundleMessageSource* ](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/support/ResourceBundleMessageSource.html)and [*StaticMessageSource*](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/support/StaticMessageSource.html).
+Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBundleMessageSource*](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/support/ResourceBundleMessageSource.html) and [*StaticMessageSource*](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/support/StaticMessageSource.html).
 
 
 
@@ -2692,6 +2692,14 @@ Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBund
 ## Usage Example
 
 ObjectProvider： a factory get defined type instances
+
+### Prototype
+
+Using `@Autowired` to get prototype beans will always get same bean because `AutowiredAnnotationBeanPostProcessor` only inject once
+1. use ApplicationContext.getBean()
+2. use `@Lookup` Annotation a @Bean method(No matter what it actually does), see `CglibSubclassingInstantiationStrategy.LookupOverrideMethodInterceptor`
+3. set proxyMode
+
 
 ## References
 

@@ -58,6 +58,24 @@ gcCause.cpp
 
 ### Young GC 问题
 
+```
+-XX:+UsePSAdaptiveSurvivorSizePolicy
+
+-XX:SurvivorRatio
+
+-XX:TargetSurvivorRatio
+```
+
+Card Table
+
+write barrier
+```
+CARD_TABLE [this address >> 9] = DIRTY;
+```
+-XX:+UseCondCardMark
+
+
+
 ####  YGC耗时异常 
 
 - toot对象扫描+标记时间过长                

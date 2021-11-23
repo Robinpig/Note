@@ -271,6 +271,8 @@ You can cope with deadlocks and reduce the likelihood of their occurrence with t
 A mechanism that automatically detects when a **deadlock** occurs, and automatically **rolls back** one of the **transactions** involved (the **victim**). Deadlock detection can be disabled using the `innodb_deadlock_detect` configuration option.
 
 
+#### examples
+see [mysql-deadlocks - github](https://github.com/aneasystone/mysql-deadlocks)
 
 
 ## MVCC

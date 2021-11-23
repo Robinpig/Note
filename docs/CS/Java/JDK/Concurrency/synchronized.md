@@ -1740,3 +1740,4 @@ void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
 3. [Biased Locking in HotSpot](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
 4. [Java中的锁机制](https://www.cnblogs.com/charlesblc/p/5994162.html)
 5. [死磕Synchronized底层实现--偏向锁](https://github.com/farmerjohngit/myblog/issues/13)
+6. [Synchronization - OpenJDKwiki](https://wiki.openjdk.java.net/display/HotSpot/Synchronization)
