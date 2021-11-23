@@ -397,10 +397,13 @@ non-static oop-map block
 
 ### vtable
 
+array 
+
 -Xlog:vtables=trace
 
 update_inherited_vtable
 
+#### initialize_vtable
 ```cpp
 // klassVtable.cpp
 // Revised lookup semantics   introduced 1.3 (Kestrel beta)

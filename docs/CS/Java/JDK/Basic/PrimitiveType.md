@@ -25,9 +25,11 @@ Java determines the size of each primitive type. These sizes don’t change from
 
 All numeric types are **signed**, so don’t look for unsigned types.
 
-The size of the **boolean** type is not explicitly specified; it is only defined to be able to take the literal values **true** or **false**. 
+The size of the **boolean** type is not explicitly specified; it is only defined to be able to take the literal values **true**(1) or **false**(0). 
 
 The “wrapper” classes for the primitive data types allow you to make a nonprimitive object on the heap to represent that primitive type. 
+
+
 
 #### Java has no “sizeof”
 
@@ -69,7 +71,10 @@ IntegerCache
 -XX:AutoBoxCacheMax = 
 ```
 
-### Boolean
+### The `boolean` Type and boolean Values
+
+The `boolean` type has two values, represented by the *boolean literals* `true` and `false`, formed from ASCII letters.
+
 私有属性
 
 ```java

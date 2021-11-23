@@ -12,7 +12,7 @@
 
 
 
-**`An object has state, behavior and identity.`**
+An *object* is a *class instance* or an *array*.`An object has state, behavior and identity.`
 
 This means that an object can have internal data (which gives it state), methods (to produce behavior), and each object can be uniquely distinguished from every other object—to put this in a concrete sense, each object has a unique address in memory.
 

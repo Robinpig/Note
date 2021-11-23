@@ -9,6 +9,45 @@
 - [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
 - [Direct Buffer](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
 - [JDK Tools and Utilities](/docs/CS/Java/JDK/Basic/Tools.md)
+
+
+
+### Reference Types and Values
+
+There are four kinds of *reference types*: class types, interface types, type variables, and array types.
+
+```
+ReferenceType:
+	ClassOrInterfaceType 
+	TypeVariable 
+	ArrayType
+	
+ClassOrInterfaceType:
+ 	ClassType 
+ 	InterfaceType
+ 	
+ClassType:
+	{Annotation} TypeIdentifier [TypeArguments] 
+	PackageName . {Annotation} TypeIdentifier [TypeArguments] 
+	ClassOrInterfaceType . {Annotation} TypeIdentifier [TypeArguments]
+
+InterfaceType:
+	ClassType
+
+TypeVariable:
+	{Annotation} TypeIdentifier
+
+ArrayType:
+	PrimitiveType Dims 
+	ClassOrInterfaceType Dims 
+	TypeVariable Dims
+
+Dims:
+	{Annotation} [ ] {{Annotation} [ ]}
+```
+
+
+
 ## Prims
 
 define open interface

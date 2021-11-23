@@ -1848,3 +1848,11 @@ void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
 ```
 
 use ClassLoaderDataGraph::classed_do can iterate all loaded class when GC
+
+
+
+
+
+## References
+
+1. [New Class Loader Implementations - JDK 9 Migration Guide](https://docs.oracle.com/javase/9/migrate/toc.htm#JSMIG-GUID-A868D0B9-026F-4D46-B979-901834343F9E)

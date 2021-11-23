@@ -183,8 +183,23 @@ class BootstrapConstructorAccessorImpl extends ConstructorAccessorImpl {
 }
 ```
 
+Threshold
+```
+# default 15
+-Dsun.reflect.inflationThreshold=
+
+-Dsun.reflect.noInflation=true
+```
+
+NativeMethodAccessorImpl
+DelegatingMethodAccessorImpl
+
+```shell
+java -verbose:class Main.class
+```
+gather than threshold, only use DelegatingMethodAccessor, GeneratedMethodAccessor1, 
 
 
-## Reference
+## References
 
 1. [JVM源码分析之不保证顺序的Class.getMethods](http://lovestblog.cn/blog/2016/11/02/class-getmethods/)
