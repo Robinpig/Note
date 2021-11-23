@@ -45,11 +45,11 @@ int __sys_listen(int fd, int backlog)
 ```
 
 #### inet_listen
+Move a socket into listening state.
 
+sk_max_ack_backlog = backlog
 ```c
-/* af_inet.c
- *     Move a socket into listening state.
- */
+// af_inet.c
 int inet_listen(struct socket *sock, int backlog)
 {
        struct sock *sk = sock->sk;
@@ -139,6 +139,68 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
 
 ### accept queue
 
+```c
+// include/net/sock.h
+static inline void sk_acceptq_removed(struct sock *sk)
+{
+	WRITE_ONCE(sk->sk_ack_backlog, sk->sk_ack_backlog - 1);
+}
+
+static inline void sk_acceptq_added(struct sock *sk)
+{
+	WRITE_ONCE(sk->sk_ack_backlog, sk->sk_ack_backlog + 1);
+}
+```
+#### inet_csk_reqsk_queue_add
+call `sk_acceptq_added`
+```c
+//
+struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
+				      struct request_sock *req,
+				      struct sock *child)
+{
+	struct request_sock_queue *queue = &inet_csk(sk)->icsk_accept_queue;
+
+	spin_lock(&queue->rskq_lock);
+	if (unlikely(sk->sk_state != TCP_LISTEN)) {
+		inet_child_forget(sk, req, child);
+		child = NULL;
+	} else {
+		req->sk = child;
+		req->dl_next = NULL;
+		if (queue->rskq_accept_head == NULL)
+			WRITE_ONCE(queue->rskq_accept_head, req);
+		else
+			queue->rskq_accept_tail->dl_next = req;
+		queue->rskq_accept_tail = req;
+		sk_acceptq_added(sk);
+	}
+	spin_unlock(&queue->rskq_lock);
+	return child;
+}
+```
+
+#### reqsk_queue_remove
+```c
+
+static inline struct request_sock *reqsk_queue_remove(struct request_sock_queue *queue,
+						      struct sock *parent)
+{
+	struct request_sock *req;
+
+	spin_lock_bh(&queue->rskq_lock);
+	req = queue->rskq_accept_head;
+	if (req) {
+		sk_acceptq_removed(parent);
+		WRITE_ONCE(queue->rskq_accept_head, req->dl_next);
+		if (queue->rskq_accept_head == NULL)
+			queue->rskq_accept_tail = NULL;
+	}
+	spin_unlock_bh(&queue->rskq_lock);
+	return req;
+}
+```
+
 #### reqsk_queue_alloc
 Maximum number of SYN_RECV sockets in queue per LISTEN socket.
 One SYN_RECV socket costs about 80bytes on a 32bit machine.
@@ -194,6 +256,9 @@ struct request_sock_queue {
 };
 ```
 
+### SYN queue
+SYN queue - logic queue
+see [qlen and max_syn_backlog](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_conn_request)
 
 
 ## accept
@@ -428,7 +493,101 @@ do_err:
 }
 ```
 
+call `inet_csk_accept`
+```c
+// net/ipv4/tcp_ipv4.c
+struct proto tcp_prot = {
+	.name			= "TCP",
+	.accept			= inet_csk_accept,
+	...
+};
+```
 
+#### inet_csk_accept
+This will accept the next outstanding connection.
+call [reqsk_queue_remove](/docs/CS/OS/Linux/IO.md?id=reqsk_queue_remove)
+```c
+// 
+struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
+{
+	struct inet_connection_sock *icsk = inet_csk(sk);
+	struct request_sock_queue *queue = &icsk->icsk_accept_queue;
+	struct request_sock *req;
+	struct sock *newsk;
+	int error;
+
+	lock_sock(sk);
+
+	/* We need to make sure that this socket is listening,
+	 * and that it has something pending.
+	 */
+	error = -EINVAL;
+	if (sk->sk_state != TCP_LISTEN)
+		goto out_err;
+
+	/* Find already established connection */
+	if (reqsk_queue_empty(queue)) {
+		long timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
+
+		/* If this is a non blocking socket don't sleep */
+		error = -EAGAIN;
+		if (!timeo)
+			goto out_err;
+
+		error = inet_csk_wait_for_connect(sk, timeo);
+		if (error)
+			goto out_err;
+	}
+	req = reqsk_queue_remove(queue, sk);
+	newsk = req->sk;
+
+	if (sk->sk_protocol == IPPROTO_TCP &&
+	    tcp_rsk(req)->tfo_listener) {
+		spin_lock_bh(&queue->fastopenq.lock);
+		if (tcp_rsk(req)->tfo_listener) {
+			/* We are still waiting for the final ACK from 3WHS
+			 * so can't free req now. Instead, we set req->sk to
+			 * NULL to signify that the child socket is taken
+			 * so reqsk_fastopen_remove() will free the req
+			 * when 3WHS finishes (or is aborted).
+			 */
+			req->sk = NULL;
+			req = NULL;
+		}
+		spin_unlock_bh(&queue->fastopenq.lock);
+	}
+
+out:
+	release_sock(sk);
+	if (newsk && mem_cgroup_sockets_enabled) {
+		int amt;
+
+		/* atomically get the memory usage, set and charge the
+		 * newsk->sk_memcg.
+		 */
+		lock_sock(newsk);
+
+		/* The socket has not been accepted yet, no need to look at
+		 * newsk->sk_wmem_queued.
+		 */
+		amt = sk_mem_pages(newsk->sk_forward_alloc +
+				   atomic_read(&newsk->sk_rmem_alloc));
+		mem_cgroup_sk_alloc(newsk);
+		if (newsk->sk_memcg && amt)
+			mem_cgroup_charge_skmem(newsk->sk_memcg, amt);
+
+		release_sock(newsk);
+	}
+	if (req)
+		reqsk_put(req);
+	return newsk;
+out_err:
+	newsk = NULL;
+	req = NULL;
+	*err = error;
+	goto out;
+}
+```
 
 TODO:
 

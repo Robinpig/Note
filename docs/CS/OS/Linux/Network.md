@@ -370,6 +370,8 @@ Network Interface Controller -> Network Driver DMA into Memory RingBuffer and se
 
 like UDP will add into socket accept queue
 
+TODO: [tcp-rcv](https://www.processon.com/diagraming/6195c8be07912906e6ab82c8)
+
 ### driver process
 
 
