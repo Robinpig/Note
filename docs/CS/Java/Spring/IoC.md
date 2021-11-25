@@ -2700,6 +2700,32 @@ Using `@Autowired` to get prototype beans will always get same bean because `Aut
 2. use `@Lookup` Annotation a @Bean method(No matter what it actually does), see `CglibSubclassingInstantiationStrategy.LookupOverrideMethodInterceptor`
 3. set proxyMode
 
+### inject
+
+#### multiple implements
+see `BeanPostProcessor.postProcessProperties()`
+1. `@Primary` at defining Bean
+2. `@Qualifier` at injecting bean
+3. InnerClass Bean
+    1. `Qualifier` outerBean.innerClass
+    2. set beanName at defining Bean
+    3. override BeanNameGenerator
+    
+#### multiple beans
+`DefaultListableBeanFactory.resolveMultipleBeans`
+
+#### @Value
+1. allows bean
+2. allows properties(probably override by default properties)
+
+
+### Lifecycle
+
+1. implements `InitializingBean`
+2. use init method with `@PostConstruct`
+
+Disposable
+
 
 ## References
 
