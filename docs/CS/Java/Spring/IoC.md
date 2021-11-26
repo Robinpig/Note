@@ -2591,15 +2591,20 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader i
 
 ## Bean Lifecycle
 
-- Bean实例的创建
-- 为Bean实例设置属性
-- 调用Bean的初始化方法
-- 应用可以通过IoC容器使用Bean
-- 当容器关闭时 调用Bean的销毁方法
+- create
+- populate
+- init
+- using
+- destroy
 
 用户可声明Bean的init-method和destroy-method
- 在调用Bean的初始化方法之前 会调用一系列的aware接口实现 把相关的BeanName BeanClassLoader  以及BeanFactoy注入到Bean中去 对invokeInitMethods的调用   启动afterPropertiesSet需要Bean实现InitializingBean的接口  对应的初始化处理可以在InitializingBean接口的afterPropertiesSet方法中实现 这里同样是对Bean的一个回调
- Bean的销毁过程 首先对postProcessBeforeDestruction进行调用 然后调用Bean的destroy方法 最后是对Bean的自定义销毁方法的调用
+
+在调用Bean的初始化方法之前 会调用一系列的aware接口实现 把相关的BeanName BeanClassLoader  以及BeanFactoy注入到Bean中去 
+
+对invokeInitMethods的调用   启动afterPropertiesSet需要Bean实现InitializingBean的接口  对应的初始化处理可以在InitializingBean接口的afterPropertiesSet方法中实现 这里同样是对Bean的一个回调
+
+
+Bean的销毁过程 首先对postProcessBeforeDestruction进行调用 然后调用Bean的destroy方法 最后是对Bean的自定义销毁方法的调用
  ![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019114800284.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
 
 
@@ -2696,9 +2701,10 @@ ObjectProvider： a factory get defined type instances
 ### Prototype
 
 Using `@Autowired` to get prototype beans will always get same bean because `AutowiredAnnotationBeanPostProcessor` only inject once
-1. use ApplicationContext.getBean()
-2. use `@Lookup` Annotation a @Bean method(No matter what it actually does), see `CglibSubclassingInstantiationStrategy.LookupOverrideMethodInterceptor`
-3. set proxyMode
+1. use `ApplicationContext.getBean()`
+2. use `@Lookup` Annotation a getBean method(No matter what it actually does), see `CglibSubclassingInstantiationStrategy.LookupOverrideMethodInterceptor`
+3. set `proxyMode = ScopedProxyMode.TARGET_CLASS` in `@Scope`
+
 
 ### inject
 
