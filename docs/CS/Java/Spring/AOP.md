@@ -902,5 +902,18 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 | Prefer        | Singleton | Prototype |
 
 
+### Unsupported
+1. use this
+
+### Extension
+`AopContext` with `@EnableAspectJAutoProxy(exposeProxy=true)`, a ThreadLocal. Using `AopContext.currentProxy()`
+
+
+`spring.objenesis.ignore`  if ignore init Proxy class fields
+
+1. `java.lang.Class.newInstance()`
+2. `java.lang.reflect.Constructor.newInstance()`
+3. `sun.reflect.ReflectionFactory.newConstructorForSerialization().newInstance()`
+
 ## References
 1. [Spring AOP APIs](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#aop-api)
