@@ -132,6 +132,7 @@ protected void initBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 
 
 
+
 *AspectJAwareAdvisorAutoProxyCreator subclass that processes all **AspectJ annotation aspects** in the current application context, as well as Spring Advisors.*
 Any AspectJ annotated classes will automatically be recognized, and their advice applied if Spring AOP's proxy-based model is capable of applying it. This covers method execution joinpoints.
 If the <aop:include> element is used, only @AspectJ beans with names matched by an include pattern will be considered as defining aspects to use for Spring auto-proxying.
@@ -139,6 +140,8 @@ If the <aop:include> element is used, only @AspectJ beans with names matched by 
 Processing of Spring Advisors follows the rules established in `org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator`.
 
 
+#### findEligibleAdvisors
+Find all eligible Advisors for auto-proxying this class.
 
 ```java
 // AbstractAdvisorAutoProxyCreator
@@ -230,7 +233,7 @@ public List<Advisor> findAdvisorBeans() {
 
 
 
-## createProxy
+## Create Proxy
 
 ![](./images/AnnotationAwareAspectJAutoProxyCreator.png)
 
@@ -273,6 +276,24 @@ public Object postProcessBeforeInstantiation(Class<?> beanClass, String beanName
    return null;
 }
 ```
+
+#### getAdvicesAndAdvisorsForBean
+
+Return whether the given bean is to be proxied, what additional advices (e.g. AOP Alliance interceptors) and advisors to apply.
+```java
+@Override
+	@Nullable
+	protected Object[] getAdvicesAndAdvisorsForBean(
+			Class<?> beanClass, String beanName, @Nullable TargetSource targetSource) {
+
+		List<Advisor> advisors = findEligibleAdvisors(beanClass, beanName);
+		if (advisors.isEmpty()) {
+			return DO_NOT_PROXY;
+		}
+		return advisors.toArray();
+	}
+```
+
 
 ### postProcessAfterInitialization
 
@@ -324,7 +345,7 @@ protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) 
 ```
 
 
-
+### createProxy
 Create an AOP proxy for the given bean.
 
 ```java
@@ -365,9 +386,44 @@ protected Object createProxy(Class<?> beanClass, @Nullable String beanName,
    return proxyFactory.getProxy(classLoader);
 }
 ```
+#### buildAdvisors
+Determine the advisors for the given bean, including the specific interceptors as well as the common interceptor, all adapted to the Advisor interface.
 
+```java
+protected Advisor[] buildAdvisors(@Nullable String beanName, @Nullable Object[] specificInterceptors) {
+		// Handle prototypes correctly...
+		Advisor[] commonInterceptors = resolveInterceptorNames();
 
+		List<Object> allInterceptors = new ArrayList<>();
+		if (specificInterceptors != null) {
+			if (specificInterceptors.length > 0) {
+				// specificInterceptors may equal PROXY_WITHOUT_ADDITIONAL_INTERCEPTORS
+				allInterceptors.addAll(Arrays.asList(specificInterceptors));
+			}
+			if (commonInterceptors.length > 0) {
+				if (this.applyCommonInterceptorsFirst) {
+					allInterceptors.addAll(0, Arrays.asList(commonInterceptors));
+				}
+				else {
+					allInterceptors.addAll(Arrays.asList(commonInterceptors));
+				}
+			}
+		}
+		if (logger.isTraceEnabled()) {
+			int nrOfCommonInterceptors = commonInterceptors.length;
+			int nrOfSpecificInterceptors = (specificInterceptors != null ? specificInterceptors.length : 0);
+			logger.trace("Creating implicit proxy for bean '" + beanName + "' with " + nrOfCommonInterceptors +
+					" common interceptors and " + nrOfSpecificInterceptors + " specific interceptors");
+		}
 
+		Advisor[] advisors = new Advisor[allInterceptors.size()];
+		for (int i = 0; i < allInterceptors.size(); i++) {
+			advisors[i] = this.advisorAdapterRegistry.wrap(allInterceptors.get(i));
+		}
+		return advisors;
+	}
+
+```
 
 
 ### ProxyFactory
@@ -652,21 +708,114 @@ public List<Object> getInterceptorsAndDynamicInterceptionAdvice(
 }
 ```
 
+### getAdvisors
+
+```java
+
+	@Override
+	public List<Advisor> getAdvisors(MetadataAwareAspectInstanceFactory aspectInstanceFactory) {
+		Class<?> aspectClass = aspectInstanceFactory.getAspectMetadata().getAspectClass();
+		String aspectName = aspectInstanceFactory.getAspectMetadata().getAspectName();
+		validate(aspectClass);
+
+		// We need to wrap the MetadataAwareAspectInstanceFactory with a decorator
+		// so that it will only instantiate once.
+		MetadataAwareAspectInstanceFactory lazySingletonAspectInstanceFactory =
+				new LazySingletonAspectInstanceFactoryDecorator(aspectInstanceFactory);
+
+		List<Advisor> advisors = new ArrayList<>();
+		for (Method method : getAdvisorMethods(aspectClass)) {
+			// Prior to Spring Framework 5.2.7, advisors.size() was supplied as the declarationOrderInAspect
+			// to getAdvisor(...) to represent the "current position" in the declared methods list.
+			// However, since Java 7 the "current position" is not valid since the JDK no longer
+			// returns declared methods in the order in which they are declared in the source code.
+			// Thus, we now hard code the declarationOrderInAspect to 0 for all advice methods
+			// discovered via reflection in order to support reliable advice ordering across JVM launches.
+			// Specifically, a value of 0 aligns with the default value used in
+			// AspectJPrecedenceComparator.getAspectDeclarationOrder(Advisor).
+			Advisor advisor = getAdvisor(method, lazySingletonAspectInstanceFactory, 0, aspectName);
+			if (advisor != null) {
+				advisors.add(advisor);
+			}
+		}
+
+		// If it's a per target aspect, emit the dummy instantiating aspect.
+		if (!advisors.isEmpty() && lazySingletonAspectInstanceFactory.getAspectMetadata().isLazilyInstantiated()) {
+			Advisor instantiationAdvisor = new SyntheticInstantiationAdvisor(lazySingletonAspectInstanceFactory);
+			advisors.add(0, instantiationAdvisor);
+		}
+
+		// Find introduction fields.
+		for (Field field : aspectClass.getDeclaredFields()) {
+			Advisor advisor = getDeclareParentsAdvisor(field);
+			if (advisor != null) {
+				advisors.add(advisor);
+			}
+		}
+
+		return advisors;
+	}
+```
+
+#### getAdvisorMethods
+```java
+private List<Method> getAdvisorMethods(Class<?> aspectClass) {
+		List<Method> methods = new ArrayList<>();
+		ReflectionUtils.doWithMethods(aspectClass, methods::add, adviceMethodFilter);
+		if (methods.size() > 1) {
+			methods.sort(adviceMethodComparator);
+		}
+		return methods;
+	}
+```
+
+### Order
+Factory that can create Spring AOP Advisors given AspectJ classes from classes honoring AspectJ's annotation syntax, using reflection to invoke the corresponding advice methods.
+
+
+Note: although @After is ordered before @AfterReturning and @AfterThrowing, an @After advice method will actually be invoked after @AfterReturning and @AfterThrowing methods due to the fact that AspectJAfterAdvice.invoke(MethodInvocation) invokes proceed() in a `try` block and only invokes the @After advice method in a corresponding `finally` block.
+
+- Order: `Around` -> `Before` -> `After` -> `AfterReturning` -> `AfterThrowing`
+- Actual invoke: `Around` -> `Before` -> `AfterReturning` -> `AfterThrowing` -> `After`
+
+thenComparing by **method.getName()**
+
+```java
+public class ReflectiveAspectJAdvisorFactory extends AbstractAspectJAdvisorFactory implements Serializable {
+
+    // Exclude @Pointcut methods
+    private static final MethodFilter adviceMethodFilter = ReflectionUtils.USER_DECLARED_METHODS
+            .and(method -> (AnnotationUtils.getAnnotation(method, Pointcut.class) == null));
+
+    private static final Comparator<Method> adviceMethodComparator;
+
+
+    static {
+        Comparator<Method> adviceKindComparator = new ConvertingComparator<>(
+                new InstanceComparator<>(
+                        Around.class, Before.class, After.class, AfterReturning.class, AfterThrowing.class),
+                (Converter<Method, Annotation>) method -> {
+                    AspectJAnnotation<?> ann = AbstractAspectJAdvisorFactory.findAspectJAnnotationOnMethod(method);
+                    return (ann != null ? ann.getAnnotation() : null);
+                });
+        Comparator<Method> methodNameComparator = new ConvertingComparator<>(Method::getName);
+        adviceMethodComparator = adviceKindComparator.thenComparing(methodNameComparator);
+    }
+}
+```
+
+
+
+
 ## ProxyFactoryBean
 
 ProxyFactoryBean is a FactoryBean implementation that builds an AOP proxy based on beans in Spring BeanFactory.
 
-
-
 MethodInterceptors and Advisors are identified by a list of bean names in the current bean factory, specified through the "interceptorNames" property. The last entry in the list can be the name of a target bean or a TargetSource; however, it is normally preferable to use the "targetName"/"target"/"targetSource" properties instead.
-
-
 
 Return a proxy. Invoked when clients obtain beans from this factory bean. Create an instance of the AOP proxy to be returned by this factory. The instance will be cached for a singleton, and create on each call to getObject() for a proxy.
 
 ```java
-@Override
-@Nullable
 public Object getObject() throws BeansException {
    initializeAdvisorChain();
    if (isSingleton()) {
@@ -902,18 +1051,20 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 | Prefer        | Singleton | Prototype |
 
 
-### Unsupported
-1. use this
-
-### Extension
-`AopContext` with `@EnableAspectJAutoProxy(exposeProxy=true)`, a ThreadLocal. Using `AopContext.currentProxy()`
+### Do not get bean directly
+get bean by `@Autowired` or method or `ApplicationContext` rather than using `this.field`
 
 
-`spring.objenesis.ignore`  if ignore init Proxy class fields
+Using `AopContext.currentProxy()`(get a [ThreadLocal which default contains null](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)) must set `exposeProxy = true` in `@EnableAspectJAutoProxy`
 
-1. `java.lang.Class.newInstance()`
-2. `java.lang.reflect.Constructor.newInstance()`
-3. `sun.reflect.ReflectionFactory.newConstructorForSerialization().newInstance()`
+`ObjenesisCglibAopProxy`:
+- Objenesis-based extension of CglibAopProxy to **create proxy instances without invoking the constructor of the class**. Used by default as of Spring 4.
+- default use `sun.reflect.ReflectionFactory.newConstructorForSerialization().newInstance()`, and use `this.field` to do something that may cause `NPE`
+
+
+set `spring.objenesis.ignore = true`  to invoke the constructor of the class, but we suggest getting bean by method or `@Autowired`
+
+
 
 ## References
 1. [Spring AOP APIs](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#aop-api)
