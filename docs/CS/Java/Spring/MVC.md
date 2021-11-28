@@ -413,74 +413,55 @@ protected void initStrategies(ApplicationContext context) {
 
 
 
-### DispatcherServlet
 
 
+## dispatch
 
+All HTTP requests  call `processRequest`
 ```java
-/**
- * Service dispatcher Servlet.
- */
-public class DispatcherServlet extends HttpServlet {
-
-    private static final Map<Integer, HttpHandler> HANDLERS = new ConcurrentHashMap<Integer, HttpHandler>();
-    private static DispatcherServlet INSTANCE;
-
-    public DispatcherServlet() {
-        DispatcherServlet.INSTANCE = this;
-    }
-		...
+public abstract class FrameworkServlet extends HttpServletBean implements ApplicationContextAware {
     @Override
-    protected void service(HttpServletRequest request, HttpServletResponse response)
+    protected final void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        HttpHandler handler = HANDLERS.get(request.getLocalPort());
-        if (handler == null) {// service not found.
-            response.sendError(HttpServletResponse.SC_NOT_FOUND, "Service not found.");
-        } else {
-            handler.handle(request, response);
-        }
+
+        processRequest(request, response);
     }
 }
 ```
-
-
-
-## dipatch
-
-All HTTP requests  call `processRequest`
-
+### processRequest
 Process this request, publishing an event regardless of the outcome.
 The actual event handling is performed by the abstract doService template method.
 
 ```java
-// FrameworkServlet
-protected final void processRequest(HttpServletRequest request, HttpServletResponse response)
-      throws ServletException, IOException {
+public abstract class FrameworkServlet extends HttpServletBean implements ApplicationContextAware {
+    protected final void processRequest(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
 
-   long startTime = System.currentTimeMillis();
-   Throwable failureCause = null;
+        long startTime = System.currentTimeMillis();
+        Throwable failureCause = null;
 
-   LocaleContext previousLocaleContext = LocaleContextHolder.getLocaleContext();
-   LocaleContext localeContext = buildLocaleContext(request);
+        LocaleContext previousLocaleContext = LocaleContextHolder.getLocaleContext();
+        LocaleContext localeContext = buildLocaleContext(request);
 
-   RequestAttributes previousAttributes = RequestContextHolder.getRequestAttributes();
-   ServletRequestAttributes requestAttributes = buildRequestAttributes(request, response, previousAttributes);
+        RequestAttributes previousAttributes = RequestContextHolder.getRequestAttributes();
+        ServletRequestAttributes requestAttributes = buildRequestAttributes(request, response, previousAttributes);
 
-   WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
-   asyncManager.registerCallableInterceptor(FrameworkServlet.class.getName(), new RequestBindingInterceptor());
+        WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+        asyncManager.registerCallableInterceptor(FrameworkServlet.class.getName(), new RequestBindingInterceptor());
 
-   initContextHolders(request, localeContext, requestAttributes);
+        initContextHolders(request, localeContext, requestAttributes);
 
-   doService(request, response); // doService
+        doService(request, response); // doService
   
-   finally {
-      resetContextHolders(request, previousLocaleContext, previousAttributes);
-      if (requestAttributes != null) {
-         requestAttributes.requestCompleted();
-      }
-  
-      publishRequestHandledEvent(request, response, startTime, failureCause);
-   }
+   finally{
+            resetContextHolders(request, previousLocaleContext, previousAttributes);
+            if (requestAttributes != null) {
+                requestAttributes.requestCompleted();
+            }
+
+            publishRequestHandledEvent(request, response, startTime, failureCause);
+        }
+    }
 }
 ```
 
@@ -643,3 +624,19 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 8. HandlerExceptionResolver hande Exception
 9. View
 10. interceptor afterCompletion
+
+## Filter
+
+1. @WebFilter @ServletComponentScan FilterRegistration
+2. @Component + implements Filter
+
+see [FilterChain.doFilter() in Tomcat](/docs/CS/Java/Tomcat/Connector.md?id=doFilter)
+
+
+
+
+
+
+## Extension
+1. must declare @PathVariable @RequestParam or @RequestBody
+2. Nested Validation need to add `@Valid` at field

@@ -961,19 +961,10 @@ StandardWrapperValve.invoke()
 // Create the filter chain for this request
 ApplicationFilterChain filterChain =
 ApplicationFilterFactory.createFilterChain(request, wrapper, servlet);
+
+Invoke the servlet we are managing, respecting the rules regarding servlet lifecycle and SingleThreadModel support.
 ```java
 
-    /**
-     * Invoke the servlet we are managing, respecting the rules regarding
-     * servlet lifecycle and SingleThreadModel support.
-     *
-     * @param request Request to be processed
-     * @param response Response to be produced
-     *
-     * @exception IOException if an input/output error occurred
-     * @exception ServletException if a servlet error occurred
-     */
-    @Override
     public final void invoke(Request request, Response response)
         throws IOException, ServletException {
 
@@ -1184,40 +1175,171 @@ ApplicationFilterFactory.createFilterChain(request, wrapper, servlet);
     }
 ```
 
-ApplicationFilterChain.internalDoFilter call servlet.service()
+#### createFilterChain
+Construct a FilterChain implementation that will wrap the execution of the specified servlet instance.
 ```java
-// ApplicationFilterChain
- @Override
-    public void doFilter(ServletRequest request, ServletResponse response)
-        throws IOException, ServletException {
 
-        if( Globals.IS_SECURITY_ENABLED ) {
-            final ServletRequest req = request;
-            final ServletResponse res = response;
-            try {
-                java.security.AccessController.doPrivileged(
-                        (java.security.PrivilegedExceptionAction<Void>) () -> {
-                            internalDoFilter(req,res);
-                            return null;
-                        }
-                );
-            } catch( PrivilegedActionException pe) {
-                Exception e = pe.getException();
-                if (e instanceof ServletException)
-                    throw (ServletException) e;
-                else if (e instanceof IOException)
-                    throw (IOException) e;
-                else if (e instanceof RuntimeException)
-                    throw (RuntimeException) e;
-                else
-                    throw new ServletException(e.getMessage(), e);
+    // org.apache.catalina.core.ApplicationFilterFactory
+    public static ApplicationFilterChain createFilterChain(ServletRequest request,
+            Wrapper wrapper, Servlet servlet) {
+
+        // Create and initialize a filter chain object
+        ApplicationFilterChain filterChain = null;
+        if (request instanceof Request) {
+            Request req = (Request) request;
+            if (Globals.IS_SECURITY_ENABLED) {
+                // Security: Do not recycle
+                filterChain = new ApplicationFilterChain();
+            } else {
+                filterChain = (ApplicationFilterChain) req.getFilterChain();
+                if (filterChain == null) {
+                    filterChain = new ApplicationFilterChain();
+                    req.setFilterChain(filterChain);
+                }
             }
         } else {
-            internalDoFilter(request,response);
+            // Request dispatcher in use
+            filterChain = new ApplicationFilterChain();
         }
+
+        filterChain.setServlet(servlet);
+        filterChain.setServletSupportsAsync(wrapper.isAsyncSupported());
+
+        // Acquire the filter mappings for this Context
+        StandardContext context = (StandardContext) wrapper.getParent();
+        FilterMap filterMaps[] = context.findFilterMaps();
+
+        // Acquire the information we will need to match filter mappings
+        DispatcherType dispatcher =
+                (DispatcherType) request.getAttribute(Globals.DISPATCHER_TYPE_ATTR);
+
+        String requestPath = null;
+        Object attribute = request.getAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR);
+        if (attribute != null){
+            requestPath = attribute.toString();
+        }
+
+        String servletName = wrapper.getName();
+
+        // Add the relevant path-mapped filters to this filter chain
+        for (FilterMap filterMap : filterMaps) {
+            if (!matchDispatcher(filterMap, dispatcher)) {
+                continue;
+            }
+            if (!matchFiltersURL(filterMap, requestPath)) {
+                continue;
+            }
+            ApplicationFilterConfig filterConfig = (ApplicationFilterConfig)
+                    context.findFilterConfig(filterMap.getFilterName());
+            if (filterConfig == null) {
+                // FIXME - log configuration problem
+                continue;
+            }
+            filterChain.addFilter(filterConfig);
+        }
+
+        // Add filters that match on servlet name second
+        for (FilterMap filterMap : filterMaps) {
+            if (!matchDispatcher(filterMap, dispatcher)) {
+                continue;
+            }
+            if (!matchFiltersServlet(filterMap, servletName)) {
+                continue;
+            }
+            ApplicationFilterConfig filterConfig = (ApplicationFilterConfig)
+                    context.findFilterConfig(filterMap.getFilterName());
+            if (filterConfig == null) {
+                // FIXME - log configuration problem
+                continue;
+            }
+            filterChain.addFilter(filterConfig);
+        }
+
+        // Return the completed filter chain
+        return filterChain;
     }
 ```
 
-## Reference
+
+#### doFilter
+Invoke the next filter in this chain, passing the specified request and response. 
+If there are no more filters in this chain, invoke the service() method of the servlet itself.
+
+```java
+public final class ApplicationFilterChain implements FilterChain {
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response)
+            throws IOException, ServletException {
+
+        if (Globals.IS_SECURITY_ENABLED) {
+            final ServletRequest req = request;
+            final ServletResponse res = response;
+            // ignore try block
+            java.security.AccessController.doPrivileged(
+                    (java.security.PrivilegedExceptionAction<Void>) () -> {
+                        internalDoFilter(req, res);
+                        return null;
+                    }
+            );
+            // ...
+        } else {
+            internalDoFilter(request, response);
+        }
+    }
+
+    private void internalDoFilter(ServletRequest request,
+                                  ServletResponse response)
+            throws IOException, ServletException {
+
+        // Call the next filter if there is one
+        // ignore try block
+        ApplicationFilterConfig filterConfig = filters[pos++];
+        Filter filter = filterConfig.getFilter();
+        // ...
+        filter.doFilter(request, response, this);
+
+        // We fell off the end of the chain -- call the servlet instance
+        // ignore try block
+        servlet.service(request, response);
+    }
+}
+```
+
+### service
+
+see `doPost` override by [org.springframework.web.servlet.FrameworkServlet](/docs/CS/Java/Spring/MVC.md?id=dispatch)
+```java
+public abstract class HttpServlet extends GenericServlet {
+    public void service(ServletRequest req, ServletResponse res)
+            throws ServletException, IOException {
+
+        HttpServletRequest request;
+        HttpServletResponse response;
+
+        try {
+            request = (HttpServletRequest) req;
+            response = (HttpServletResponse) res;
+        } catch (ClassCastException e) {
+            throw new ServletException(lStrings.getString("http.non_http"));
+        }
+        service(request, response);
+    }
+
+    protected void service(HttpServletRequest req, HttpServletResponse resp)
+            throws ServletException, IOException {
+
+        String method = req.getMethod();
+        // ...
+        
+        if (method.equals(METHOD_POST)) {
+            doPost(req, resp);
+        } 
+    }
+}
+```
+
+
+
+## References
 
 1. [Tomcat 中的 NIO 源码分析](https://www.javadoop.com/post/tomcat-nio)
