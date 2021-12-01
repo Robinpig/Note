@@ -23,6 +23,18 @@ Char read 1 char depends on encoding
 
 
 
+TelnetInputStream
+
+only ByteArray or Buffered support mark
+
+
+
+```java
+void flush()
+```
+
+
+
 
 
 ## write
