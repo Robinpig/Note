@@ -1,4 +1,255 @@
 
+## bind
+Bind a name to a socket. Nothing much to do here since it's
+the protocol's responsibility to handle the local address.
+
+We move the socket address to kernel space before we call
+the protocol layer (having also checked the address is ok).
+
+1. move_addr_to_kernel
+2. inet_bind
+```c
+
+SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
+{
+	return __sys_bind(fd, umyaddr, addrlen);
+}
+
+int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
+{
+	struct socket *sock;
+	struct sockaddr_storage address;
+	int err, fput_needed;
+
+	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+	if (sock) {
+		err = move_addr_to_kernel(umyaddr, addrlen, &address);
+		if (!err) {
+			err = security_socket_bind(sock,
+						   (struct sockaddr *)&address,
+						   addrlen);
+			if (!err)
+				err = sock->ops->bind(sock,
+						      (struct sockaddr *)
+						      &address, addrlen);
+		}
+		fput_light(sock->file, fput_needed);
+	}
+	return err;
+}
+
+```
+### move addr
+
+Support routines.
+Move socket addresses back and forth across the kernel/user
+divide and look after the messy bits.
+
+
+move_addr_to_kernel	-	copy a socket address into kernel space
+- uaddr: Address in user space
+- kaddr: Address in kernel space
+- ulen: Length in user space
+
+The address is copied into kernel space. If the provided address is
+too long an error code of -EINVAL is returned. If the copy gives
+invalid addresses -EFAULT is returned. On a success 0 is returned.
+```c
+
+int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr_storage *kaddr)
+{
+	if (ulen < 0 || ulen > sizeof(struct sockaddr_storage))
+		return -EINVAL;
+	if (ulen == 0)
+		return 0;
+	if (copy_from_user(kaddr, uaddr, ulen))
+		return -EFAULT;
+	return audit_sockaddr(ulen, kaddr);
+}
+```
+move_addr_to_user	-	copy an address to user space
+- kaddr: kernel space address
+- klen: length of address in kernel
+- uaddr: user space address
+- ulen: pointer to user length field
+
+The value pointed to by ulen on entry is the buffer length available.
+This is overwritten with the buffer space used. -EINVAL is returned if an overlong buffer is specified or a negative buffer size. -EFAULT is returned if either the buffer or the length field are not accessible.
+
+After copying the data up to the limit the user specifies, the true length of the data is written over the length limit the user specified. Zero is returned for a success.
+
+```c
+//
+static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
+			     void __user *uaddr, int __user *ulen)
+{
+	int err;
+	int len;
+
+	BUG_ON(klen > sizeof(struct sockaddr_storage));
+	err = get_user(len, ulen);
+	if (err)
+		return err;
+	if (len > klen)
+		len = klen;
+	if (len < 0)
+		return -EINVAL;
+	if (len) {
+		if (audit_sockaddr(klen, kaddr))
+			return -ENOMEM;
+		if (copy_to_user(uaddr, kaddr, len))
+			return -EFAULT;
+	}
+	/*
+	 *      "fromlen shall refer to the value before truncation.."
+	 *                      1003.1g
+	 */
+	return __put_user(klen, ulen);
+}
+```
+
+### inet_bind
+
+```c
+
+```c
+const struct proto_ops inet_stream_ops = {
+	.family		   = PF_INET,
+	.bind		   = inet_bind
+	...
+}
+```
+
+
+```c
+// net/ipv4/af_inet.c
+int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
+{
+	struct sock *sk = sock->sk;
+	u32 flags = BIND_WITH_LOCK;
+	int err;
+
+	/* If the socket has its own bind function then use it. (RAW) */
+	if (sk->sk_prot->bind) {
+		return sk->sk_prot->bind(sk, uaddr, addr_len);
+	}
+	if (addr_len < sizeof(struct sockaddr_in))
+		return -EINVAL;
+
+	/* BPF prog is run before any checks are done so that if the prog
+	 * changes context in a wrong way it will be caught.
+	 */
+	err = BPF_CGROUP_RUN_PROG_INET_BIND_LOCK(sk, uaddr,
+						 BPF_CGROUP_INET4_BIND, &flags);
+	if (err)
+		return err;
+
+	return __inet_bind(sk, uaddr, addr_len, flags);
+}
+```
+
+
+```c
+
+int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
+		u32 flags)
+{
+	struct sockaddr_in *addr = (struct sockaddr_in *)uaddr;
+	struct inet_sock *inet = inet_sk(sk);
+	struct net *net = sock_net(sk);
+	unsigned short snum;
+	int chk_addr_ret;
+	u32 tb_id = RT_TABLE_LOCAL;
+	int err;
+
+	if (addr->sin_family != AF_INET) {
+		/* Compatibility games : accept AF_UNSPEC (mapped to AF_INET)
+		 * only if s_addr is INADDR_ANY.
+		 */
+		err = -EAFNOSUPPORT;
+		if (addr->sin_family != AF_UNSPEC ||
+		    addr->sin_addr.s_addr != htonl(INADDR_ANY))
+			goto out;
+	}
+
+	tb_id = l3mdev_fib_table_by_index(net, sk->sk_bound_dev_if) ? : tb_id;
+	chk_addr_ret = inet_addr_type_table(net, addr->sin_addr.s_addr, tb_id);
+
+	/* Not specified by any standard per-se, however it breaks too
+	 * many applications when removed.  It is unfortunate since
+	 * allowing applications to make a non-local bind solves
+	 * several problems with systems using dynamic addressing.
+	 * (ie. your servers still start up even if your ISDN link
+	 *  is temporarily down)
+	 */
+	err = -EADDRNOTAVAIL;
+	if (!inet_can_nonlocal_bind(net, inet) &&
+	    addr->sin_addr.s_addr != htonl(INADDR_ANY) &&
+	    chk_addr_ret != RTN_LOCAL &&
+	    chk_addr_ret != RTN_MULTICAST &&
+	    chk_addr_ret != RTN_BROADCAST)
+		goto out;
+
+	snum = ntohs(addr->sin_port);
+	err = -EACCES;
+	if (!(flags & BIND_NO_CAP_NET_BIND_SERVICE) &&
+	    snum && inet_port_requires_bind_service(net, snum) &&
+	    !ns_capable(net->user_ns, CAP_NET_BIND_SERVICE))
+		goto out;
+
+	/*      We keep a pair of addresses. rcv_saddr is the one
+	 *      used by hash lookups, and saddr is used for transmit.
+	 *
+	 *      In the BSD API these are the same except where it
+	 *      would be illegal to use them (multicast/broadcast) in
+	 *      which case the sending device address is used.
+	 */
+	if (flags & BIND_WITH_LOCK)
+		lock_sock(sk);
+
+	/* Check these errors (active socket, double bind). */
+	err = -EINVAL;
+	if (sk->sk_state != TCP_CLOSE || inet->inet_num)
+		goto out_release_sock;
+
+	inet->inet_rcv_saddr = inet->inet_saddr = addr->sin_addr.s_addr;
+	if (chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
+		inet->inet_saddr = 0;  /* Use device */
+
+	/* Make sure we are allowed to bind here. */
+	if (snum || !(inet->bind_address_no_port ||
+		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
+		if (sk->sk_prot->get_port(sk, snum)) {
+			inet->inet_saddr = inet->inet_rcv_saddr = 0;
+			err = -EADDRINUSE;
+			goto out_release_sock;
+		}
+		if (!(flags & BIND_FROM_BPF)) {
+			err = BPF_CGROUP_RUN_PROG_INET4_POST_BIND(sk);
+			if (err) {
+				inet->inet_saddr = inet->inet_rcv_saddr = 0;
+				goto out_release_sock;
+			}
+		}
+	}
+
+	if (inet->inet_rcv_saddr)
+		sk->sk_userlocks |= SOCK_BINDADDR_LOCK;
+	if (snum)
+		sk->sk_userlocks |= SOCK_BINDPORT_LOCK;
+	inet->inet_sport = htons(inet->inet_num);
+	inet->inet_daddr = 0;
+	inet->inet_dport = 0;
+	sk_dst_reset(sk);
+	err = 0;
+out_release_sock:
+	if (flags & BIND_WITH_LOCK)
+		release_sock(sk);
+out:
+	return err;
+}
+```
+
 
 
 ## Listen

@@ -43,6 +43,81 @@ static int __init sock_init(void)
 ```
 
 
+## sockaddr
+
+
+```c
+// include/linux/socket.h
+struct sockaddr {
+	sa_family_t	sa_family;	/* address family, AF_xxx	*/
+	char		sa_data[14];	/* 14 bytes of protocol address	*/
+};
+```
+
+address families
+```c
+
+
+/* Supported address families. */
+#define AF_UNSPEC	0
+#define AF_UNIX		1	/* Unix domain sockets 		*/
+#define AF_LOCAL	1	/* POSIX name for AF_UNIX	*/
+#define AF_INET		2	/* Internet IP Protocol 	*/
+#define AF_INET6	10	/* IP version 6			*/
+...
+
+```
+
+Protocol and Address families
+```c
+
+
+/* Protocol families, same as address families. */
+#define PF_LOCAL	AF_LOCAL
+#define PF_INET		AF_INET
+#define PF_INET6	AF_INET6
+...
+```
+
+
+
+
+### sockaddr_in
+Structure describing an Internet (IP) socket address.
+```c
+// include/uapi/linux/in.h
+struct sockaddr_in {
+  __kernel_sa_family_t	sin_family;	/* Address family		*/
+  __be16		sin_port;	/* Port number			*/
+  struct in_addr	sin_addr;	/* Internet address		*/
+
+  /* Pad to size of `struct sockaddr'. */
+  unsigned char		__pad[__SOCK_SIZE__ - sizeof(short int) -
+			sizeof(unsigned short int) - sizeof(struct in_addr)];
+};
+```
+
+
+```c
+
+#if __UAPI_DEF_SOCKADDR_IN6
+struct sockaddr_in6 {
+	unsigned short int	sin6_family;    /* AF_INET6 */
+	__be16			sin6_port;      /* Transport layer port # */
+	__be32			sin6_flowinfo;  /* IPv6 flow information */
+	struct in6_addr		sin6_addr;      /* IPv6 address */
+	__u32			sin6_scope_id;  /* scope id (new in RFC2553) */
+};
+```
+
+```c
+
+struct sockaddr_un {
+	__kernel_sa_family_t sun_family; /* AF_UNIX */
+	char sun_path[UNIX_PATH_MAX];	/* pathname */
+};
+```
+
 
 ## sock
 
@@ -729,29 +804,6 @@ struct inet_timewait_sock {
 };
 ```
 
-sockaddr
-```c
-// include/linux/socket.h
-struct sockaddr {
-	sa_family_t	sa_family;	/* address family, AF_xxx	*/
-	char		sa_data[14];	/* 14 bytes of protocol address	*/
-};
-```
-
-sockaddr_in - Structure describing an Internet (IP) socket address.
-```c
-// include/uapi/linux/in.h
-struct sockaddr_in {
-  __kernel_sa_family_t	sin_family;	/* Address family		*/
-  __be16		sin_port;	/* Port number			*/
-  struct in_addr	sin_addr;	/* Internet address		*/
-
-  /* Pad to size of `struct sockaddr'. */
-  unsigned char		__pad[__SOCK_SIZE__ - sizeof(short int) -
-			sizeof(unsigned short int) - sizeof(struct in_addr)];
-};
-```
-
 ### Route
 
 #### dst_entry
@@ -1168,11 +1220,49 @@ struct tcp_out_options {
 
 ## Create
 
+
+
+```c
+
+SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
+{
+	return __sys_socket(family, type, protocol);
+}
+
+int __sys_socket(int family, int type, int protocol)
+{
+	int retval;
+	struct socket *sock;
+	int flags;
+
+	/* Check the SOCK_* constants for consistency.  */
+	BUILD_BUG_ON(SOCK_CLOEXEC != O_CLOEXEC);
+	BUILD_BUG_ON((SOCK_MAX | SOCK_TYPE_MASK) != SOCK_TYPE_MASK);
+	BUILD_BUG_ON(SOCK_CLOEXEC & SOCK_TYPE_MASK);
+	BUILD_BUG_ON(SOCK_NONBLOCK & SOCK_TYPE_MASK);
+
+	flags = type & ~SOCK_TYPE_MASK;
+	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
+		return -EINVAL;
+	type &= SOCK_TYPE_MASK;
+
+	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
+		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
+
+	retval = sock_create(family, type, protocol, &sock);
+	if (retval < 0)
+		return retval;
+
+	return sock_map_fd(sock, flags & (O_CLOEXEC | O_NONBLOCK));
+}
+
+```
+
 ### create socket
 
 A wrapper around __sock_create().
 - family: protocol family (AF_INET, ...)
-- type: communication type (SOCK_STREAM, ...)
+- type: communication type (SOCK_STREAM, SOCK_DGRAM, ...)
 - protocol: protocol (0, ...)
 - res: new socket
 ```c
