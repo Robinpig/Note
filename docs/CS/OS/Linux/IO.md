@@ -5,15 +5,16 @@
 
 **listen for socket connections and limit the queue of incoming connections** -- see [listen(3) - Linux man page](https://linux.die.net/man/3/listen)
 
-
 Perform a listen. Basically, we allow the protocol to do anything
 necessary for a listen, and if that works, we mark the socket as
 ready for listening.
 
 
 
+`Max_ack_backlog = Min(backlog,net.core.somaxconn)`
 
-Max_ack_backlog = Min(backlog,net.core.somaxconn)
+
+
 ```c
 // socket.c
 SYSCALL_DEFINE2(listen, int, fd, int, backlog)
@@ -44,7 +45,21 @@ int __sys_listen(int fd, int backlog)
 }
 ```
 
+call [inet_listen](/docs/CS/OS/Linux/IO.md?id=inet_listen)
+
+```c
+// net/ipv4/af_inet.c
+const struct proto_ops inet_stream_ops = {
+       .family                  = PF_INET,
+       .listen                  = inet_listen
+				...
+}
+```
+
+
+
 #### inet_listen
+
 Move a socket into listening state.
 
 sk_max_ack_backlog = backlog
@@ -103,6 +118,9 @@ out:
 
 #### inet_csk_listen_start
 inet_connection_sock see [socket](/docs/CS/OS/Linux/socket.md?id=inet_connection_sock)
+
+call `reqsk_queue_alloc`
+
 ```c
 // net/ipv4/iinet_connection_sock.c
 int inet_csk_listen_start(struct sock *sk, int backlog)
@@ -126,13 +144,77 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
               inet->inet_sport = htons(inet->inet_num);
 
               sk_dst_reset(sk);
-              err = sk->sk_prot->hash(sk);
+              err = sk->sk_prot->hash(sk); /** enter to haah table  **/
 
               if (likely(!err))
                      return 0;
        }
 
        inet_sk_set_state(sk, TCP_CLOSE);
+       return err;
+}
+```
+
+
+
+```c
+// net/ipv4/tcp_ipv4.c
+struct proto tcp_prot = {
+       .name                = "TCP",
+       .hash                = inet_hash,
+			 ...
+}
+```
+
+#### inet_hash
+
+```c
+// net/ipv4/inet_hashtables.c
+int inet_hash(struct sock *sk)
+{
+       int err = 0;
+
+       if (sk->sk_state != TCP_CLOSE) {
+              local_bh_disable();
+              err = __inet_hash(sk, NULL);
+              local_bh_enable();
+       }
+
+       return err;
+}
+
+
+int __inet_hash(struct sock *sk, struct sock *osk)
+{
+       struct inet_hashinfo *hashinfo = sk->sk_prot->h.hashinfo;
+       struct inet_listen_hashbucket *ilb;
+       int err = 0;
+
+       if (sk->sk_state != TCP_LISTEN) {
+              inet_ehash_nolisten(sk, osk, NULL);
+              return 0;
+       }
+       WARN_ON(!sk_unhashed(sk));
+       ilb = &hashinfo->listening_hash[inet_sk_listen_hashfn(sk)];
+
+       spin_lock(&ilb->lock);
+       if (sk->sk_reuseport) {
+              err = inet_reuseport_add_sock(sk, ilb);
+              if (err)
+                     goto unlock;
+       }
+       if (IS_ENABLED(CONFIG_IPV6) && sk->sk_reuseport &&
+              sk->sk_family == AF_INET6)
+              __sk_nulls_add_node_tail_rcu(sk, &ilb->nulls_head);
+       else
+              __sk_nulls_add_node_rcu(sk, &ilb->nulls_head);
+       inet_hash2(hashinfo, sk);
+       ilb->count++;
+       sock_set_flag(sk, SOCK_RCU_FREE);
+       sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
+unlock:
+       spin_unlock(&ilb->lock);
+
        return err;
 }
 ```

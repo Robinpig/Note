@@ -2,6 +2,54 @@
 
 
 
+## Init
+
+[Init](/docs/CS/OS/Linux/init.md)
+
+```c
+// net/socket.c
+core_initcall(sock_init);	/* early initcall */
+
+
+static int __init sock_init(void)
+{
+	int err;
+  
+	/* Initialize the network sysctl infrastructure. */
+	err = net_sysctl_init();
+
+	/* Initialize skbuff SLAB cache */
+	skb_init();
+
+	/* nitialize the protocols module. */
+	init_inodecache();
+
+	err = register_filesystem(&sock_fs_type);
+
+	sock_mnt = kern_mount(&sock_fs_type);
+
+
+	/* The real protocol initialization is performed in later initcalls. */
+
+  #ifdef CONFIG_NETFILTER
+	err = netfilter_init();
+	if (err)
+		goto out;
+#endif
+
+	ptp_classifier_init();
+
+}
+```
+
+
+
+## sock
+
+
+
+
+
 ```c
 /* struct socket - general BSD socket */
 struct socket {
@@ -19,7 +67,9 @@ struct socket {
 
 
 
-## sock
+
+
+
 
 ### sock_common
 struct sock_common - minimal network layer representation of sockets
@@ -1120,24 +1170,30 @@ struct tcp_out_options {
 
 ### create socket
 
-
-
+A wrapper around __sock_create().
+- family: protocol family (AF_INET, ...)
+- type: communication type (SOCK_STREAM, ...)
+- protocol: protocol (0, ...)
+- res: new socket
 ```c
+// net/socket.c
+int sock_create(int family, int type, int protocol, struct socket **res)
+{
+	return __sock_create(current->nsproxy->net_ns, family, type, protocol, res, 0);
+}
+```
 
-/**
- *	__sock_create - creates a socket
- *	@net: net namespace
- *	@family: protocol family (AF_INET, ...)
- *	@type: communication type (SOCK_STREAM, ...)
- *	@protocol: protocol (0, ...)
- *	@res: new socket
- *	@kern: boolean for kernel space sockets
- *
- *	Creates a new socket and assigns it to @res, passing through LSM.
- *	Returns 0 or an error. On failure @res is set to %NULL. @kern must
- *	be set to true if the socket resides in kernel space.
- *	This function internally uses GFP_KERNEL.
- */
+Creates a new socket and assigns it to @res, passing through LSM.
+Returns 0 or an error. On failure @res is set to %NULL. @kern must
+be set to true if the socket resides in kernel space.
+- net: net namespace
+- family: protocol family (AF_INET, ...)
+- type: communication type (SOCK_STREAM, ...)
+- protocol: protocol (0, ...)
+- res: new socket
+- kern: boolean for kernel space sockets
+```c
+// net/socket.c
 int __sock_create(struct net *net, int family, int type, int protocol,
 			 struct socket **res, int kern)
 {
