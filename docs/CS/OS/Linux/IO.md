@@ -928,9 +928,507 @@ TODO:
 
 ## mmap
 
+
+### do_mmap
+```c
+// mm/mmap.c
+/*
+ * The caller must write-lock current->mm->mmap_lock.
+ */
+unsigned long do_mmap(struct file *file, unsigned long addr,
+			unsigned long len, unsigned long prot,
+			unsigned long flags, unsigned long pgoff,
+			unsigned long *populate, struct list_head *uf)
+{
+	struct mm_struct *mm = current->mm;
+	vm_flags_t vm_flags;
+	int pkey = 0;
+
+	*populate = 0;
+
+	if (!len)
+		return -EINVAL;
+
+	/*
+	 * Does the application expect PROT_READ to imply PROT_EXEC?
+	 *
+	 * (the exception is when the underlying filesystem is noexec
+	 *  mounted, in which case we dont add PROT_EXEC.)
+	 */
+	if ((prot & PROT_READ) && (current->personality & READ_IMPLIES_EXEC))
+		if (!(file && path_noexec(&file->f_path)))
+			prot |= PROT_EXEC;
+
+	/* force arch specific MAP_FIXED handling in get_unmapped_area */
+	if (flags & MAP_FIXED_NOREPLACE)
+		flags |= MAP_FIXED;
+
+	if (!(flags & MAP_FIXED))
+		addr = round_hint_to_min(addr);
+
+	/* Careful about overflows.. */
+	len = PAGE_ALIGN(len);
+	if (!len)
+		return -ENOMEM;
+
+	/* offset overflow? */
+	if ((pgoff + (len >> PAGE_SHIFT)) < pgoff)
+		return -EOVERFLOW;
+
+	/* Too many mappings? */
+	if (mm->map_count > sysctl_max_map_count)
+		return -ENOMEM;
+
+	/* Obtain the address to map to. we verify (or select) it and ensure
+	 * that it represents a valid section of the address space.
+	 */
+	addr = get_unmapped_area(file, addr, len, pgoff, flags);
+	if (IS_ERR_VALUE(addr))
+		return addr;
+
+	if (flags & MAP_FIXED_NOREPLACE) {
+		if (find_vma_intersection(mm, addr, addr + len))
+			return -EEXIST;
+	}
+
+	if (prot == PROT_EXEC) {
+		pkey = execute_only_pkey(mm);
+		if (pkey < 0)
+			pkey = 0;
+	}
+
+	/* Do simple checking here so the lower-level routines won't have
+	 * to. we assume access permissions have been handled by the open
+	 * of the memory object, so we don't do any here.
+	 */
+	vm_flags = calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(flags) |
+			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+
+	if (flags & MAP_LOCKED)
+		if (!can_do_mlock())
+			return -EPERM;
+
+	if (mlock_future_check(mm, vm_flags, len))
+		return -EAGAIN;
+
+	if (file) {
+		struct inode *inode = file_inode(file);
+		unsigned long flags_mask;
+
+		if (!file_mmap_ok(file, inode, pgoff, len))
+			return -EOVERFLOW;
+
+		flags_mask = LEGACY_MAP_MASK | file->f_op->mmap_supported_flags;
+
+		switch (flags & MAP_TYPE) {
+		case MAP_SHARED:
+			/*
+			 * Force use of MAP_SHARED_VALIDATE with non-legacy
+			 * flags. E.g. MAP_SYNC is dangerous to use with
+			 * MAP_SHARED as you don't know which consistency model
+			 * you will get. We silently ignore unsupported flags
+			 * with MAP_SHARED to preserve backward compatibility.
+			 */
+			flags &= LEGACY_MAP_MASK;
+			fallthrough;
+		case MAP_SHARED_VALIDATE:
+			if (flags & ~flags_mask)
+				return -EOPNOTSUPP;
+			if (prot & PROT_WRITE) {
+				if (!(file->f_mode & FMODE_WRITE))
+					return -EACCES;
+				if (IS_SWAPFILE(file->f_mapping->host))
+					return -ETXTBSY;
+			}
+
+			/*
+			 * Make sure we don't allow writing to an append-only
+			 * file..
+			 */
+			if (IS_APPEND(inode) && (file->f_mode & FMODE_WRITE))
+				return -EACCES;
+
+			vm_flags |= VM_SHARED | VM_MAYSHARE;
+			if (!(file->f_mode & FMODE_WRITE))
+				vm_flags &= ~(VM_MAYWRITE | VM_SHARED);
+			fallthrough;
+		case MAP_PRIVATE:
+			if (!(file->f_mode & FMODE_READ))
+				return -EACCES;
+			if (path_noexec(&file->f_path)) {
+				if (vm_flags & VM_EXEC)
+					return -EPERM;
+				vm_flags &= ~VM_MAYEXEC;
+			}
+
+			if (!file->f_op->mmap)
+				return -ENODEV;
+			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
+				return -EINVAL;
+			break;
+
+		default:
+			return -EINVAL;
+		}
+	} else {
+		switch (flags & MAP_TYPE) {
+		case MAP_SHARED:
+			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
+				return -EINVAL;
+			/*
+			 * Ignore pgoff.
+			 */
+			pgoff = 0;
+			vm_flags |= VM_SHARED | VM_MAYSHARE;
+			break;
+		case MAP_PRIVATE:
+			/*
+			 * Set pgoff according to addr for anon_vma.
+			 */
+			pgoff = addr >> PAGE_SHIFT;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	/*
+	 * Set 'VM_NORESERVE' if we should not account for the
+	 * memory use of this mapping.
+	 */
+	if (flags & MAP_NORESERVE) {
+		/* We honor MAP_NORESERVE if allowed to overcommit */
+		if (sysctl_overcommit_memory != OVERCOMMIT_NEVER)
+			vm_flags |= VM_NORESERVE;
+
+		/* hugetlb applies strict overcommit unless MAP_NORESERVE */
+		if (file && is_file_hugepages(file))
+			vm_flags |= VM_NORESERVE;
+	}
+
+	addr = mmap_region(file, addr, len, vm_flags, pgoff, uf);
+	if (!IS_ERR_VALUE(addr) &&
+	    ((vm_flags & VM_LOCKED) ||
+	     (flags & (MAP_POPULATE | MAP_NONBLOCK)) == MAP_POPULATE))
+		*populate = len;
+	return addr;
+}
+```
+
 ## sendfile
 
 
+```c
+// fs/read_write.c
+
+
+static ssize_t do_sendfile(int out_fd, int in_fd, loff_t *ppos,
+		  	   size_t count, loff_t max)
+{
+	struct fd in, out;
+	struct inode *in_inode, *out_inode;
+	struct pipe_inode_info *opipe;
+	loff_t pos;
+	loff_t out_pos;
+	ssize_t retval;
+	int fl;
+
+	/*
+	 * Get input file, and verify that it is ok..
+	 */
+	retval = -EBADF;
+	in = fdget(in_fd);
+	if (!in.file)
+		goto out;
+	if (!(in.file->f_mode & FMODE_READ))
+		goto fput_in;
+	retval = -ESPIPE;
+	if (!ppos) {
+		pos = in.file->f_pos;
+	} else {
+		pos = *ppos;
+		if (!(in.file->f_mode & FMODE_PREAD))
+			goto fput_in;
+	}
+	retval = rw_verify_area(READ, in.file, &pos, count);
+	if (retval < 0)
+		goto fput_in;
+	if (count > MAX_RW_COUNT)
+		count =  MAX_RW_COUNT;
+
+	/*
+	 * Get output file, and verify that it is ok..
+	 */
+	retval = -EBADF;
+	out = fdget(out_fd);
+	if (!out.file)
+		goto fput_in;
+	if (!(out.file->f_mode & FMODE_WRITE))
+		goto fput_out;
+	in_inode = file_inode(in.file);
+	out_inode = file_inode(out.file);
+	out_pos = out.file->f_pos;
+
+	if (!max)
+		max = min(in_inode->i_sb->s_maxbytes, out_inode->i_sb->s_maxbytes);
+
+	if (unlikely(pos + count > max)) {
+		retval = -EOVERFLOW;
+		if (pos >= max)
+			goto fput_out;
+		count = max - pos;
+	}
+
+	fl = 0;
+#if 0
+	/*
+	 * We need to debate whether we can enable this or not. The
+	 * man page documents EAGAIN return for the output at least,
+	 * and the application is arguably buggy if it doesn't expect
+	 * EAGAIN on a non-blocking file descriptor.
+	 */
+	if (in.file->f_flags & O_NONBLOCK)
+		fl = SPLICE_F_NONBLOCK;
+#endif
+	opipe = get_pipe_info(out.file, true);
+	if (!opipe) {
+		retval = rw_verify_area(WRITE, out.file, &out_pos, count);
+		if (retval < 0)
+			goto fput_out;
+		file_start_write(out.file);
+		retval = do_splice_direct(in.file, &pos, out.file, &out_pos,
+					  count, fl);
+		file_end_write(out.file);
+	} else {
+		retval = splice_file_to_pipe(in.file, opipe, &pos, count, fl);
+	}
+
+	if (retval > 0) {
+		add_rchar(current, retval);
+		add_wchar(current, retval);
+		fsnotify_access(in.file);
+		fsnotify_modify(out.file);
+		out.file->f_pos = out_pos;
+		if (ppos)
+			*ppos = pos;
+		else
+			in.file->f_pos = pos;
+	}
+
+	inc_syscr(current);
+	inc_syscw(current);
+	if (pos > max)
+		retval = -EOVERFLOW;
+
+fput_out:
+	fdput(out);
+fput_in:
+	fdput(in);
+out:
+	return retval;
+}
+
+SYSCALL_DEFINE4(sendfile, int, out_fd, int, in_fd, off_t __user *, offset, size_t, count)
+{
+	loff_t pos;
+	off_t off;
+	ssize_t ret;
+
+	if (offset) {
+		if (unlikely(get_user(off, offset)))
+			return -EFAULT;
+		pos = off;
+		ret = do_sendfile(out_fd, in_fd, &pos, count, MAX_NON_LFS);
+		if (unlikely(put_user(pos, offset)))
+			return -EFAULT;
+		return ret;
+	}
+
+	return do_sendfile(out_fd, in_fd, NULL, count, 0);
+}
+```
+
+
+### do_splice_direct
+
+splices data directly between two files
+- in:		file to splice from
+- ppos:	input file offset
+- out:	file to splice to
+- opos:	output file offset
+- len:	number of bytes to splice
+- flags:	splice modifier flags
+
+Description:
+  
+For use by do_sendfile(). splice can easily emulate sendfile, but doing it in the application would incur an extra system call(splice in + splice out, as compared to just sendfile()). So this helper
+can splice directly through a process-private pipe.
+```c
+// fs/splice.c
+long do_splice_direct(struct file *in, loff_t *ppos, struct file *out,
+		      loff_t *opos, size_t len, unsigned int flags)
+{
+	struct splice_desc sd = {
+		.len		= len,
+		.total_len	= len,
+		.flags		= flags,
+		.pos		= *ppos,
+		.u.file		= out,
+		.opos		= opos,
+	};
+	long ret;
+
+	if (unlikely(!(out->f_mode & FMODE_WRITE)))
+		return -EBADF;
+
+	if (unlikely(out->f_flags & O_APPEND))
+		return -EINVAL;
+
+	ret = rw_verify_area(WRITE, out, opos, len);
+	if (unlikely(ret < 0))
+		return ret;
+
+	ret = splice_direct_to_actor(in, &sd, direct_splice_actor);
+	if (ret > 0)
+		*ppos = sd.pos;
+
+	return ret;
+}
+```
+
+### splice_direct_to_actor
+splices data directly between two non-pipes
+- in:		file to splice from
+- sd:		actor information on where to splice to
+- actor:	handles the data splicing
+
+Description:
+
+This is a special case helper to splice directly between two
+points, without requiring an explicit pipe. Internally an allocated
+pipe is cached in the process, and reused during the lifetime of
+that process.
+
+```c
+// fs/splice.c
+ssize_t splice_direct_to_actor(struct file *in, struct splice_desc *sd,
+			       splice_direct_actor *actor)
+{
+	struct pipe_inode_info *pipe;
+	long ret, bytes;
+	umode_t i_mode;
+	size_t len;
+	int i, flags, more;
+
+	/*
+	 * We require the input being a regular file, as we don't want to
+	 * randomly drop data for eg socket -> socket splicing. Use the
+	 * piped splicing for that!
+	 */
+	i_mode = file_inode(in)->i_mode;
+	if (unlikely(!S_ISREG(i_mode) && !S_ISBLK(i_mode)))
+		return -EINVAL;
+
+	/*
+	 * neither in nor out is a pipe, setup an internal pipe attached to
+	 * 'out' and transfer the wanted data from 'in' to 'out' through that
+	 */
+	pipe = current->splice_pipe;
+	if (unlikely(!pipe)) {
+		pipe = alloc_pipe_info();
+		if (!pipe)
+			return -ENOMEM;
+
+		/*
+		 * We don't have an immediate reader, but we'll read the stuff
+		 * out of the pipe right after the splice_to_pipe(). So set
+		 * PIPE_READERS appropriately.
+		 */
+		pipe->readers = 1;
+
+		current->splice_pipe = pipe;
+	}
+
+	/*
+	 * Do the splice.
+	 */
+	ret = 0;
+	bytes = 0;
+	len = sd->total_len;
+	flags = sd->flags;
+
+	/*
+	 * Don't block on output, we have to drain the direct pipe.
+	 */
+	sd->flags &= ~SPLICE_F_NONBLOCK;
+	more = sd->flags & SPLICE_F_MORE;
+
+	WARN_ON_ONCE(!pipe_empty(pipe->head, pipe->tail));
+
+	while (len) {
+		size_t read_len;
+		loff_t pos = sd->pos, prev_pos = pos;
+
+		ret = do_splice_to(in, &pos, pipe, len, flags);
+		if (unlikely(ret <= 0))
+			goto out_release;
+
+		read_len = ret;
+		sd->total_len = read_len;
+
+		/*
+		 * If more data is pending, set SPLICE_F_MORE
+		 * If this is the last data and SPLICE_F_MORE was not set
+		 * initially, clears it.
+		 */
+		if (read_len < len)
+			sd->flags |= SPLICE_F_MORE;
+		else if (!more)
+			sd->flags &= ~SPLICE_F_MORE;
+		/*
+		 * NOTE: nonblocking mode only applies to the input. We
+		 * must not do the output in nonblocking mode as then we
+		 * could get stuck data in the internal pipe:
+		 */
+		ret = actor(pipe, sd);
+		if (unlikely(ret <= 0)) {
+			sd->pos = prev_pos;
+			goto out_release;
+		}
+
+		bytes += ret;
+		len -= ret;
+		sd->pos = pos;
+
+		if (ret < read_len) {
+			sd->pos = prev_pos + ret;
+			goto out_release;
+		}
+	}
+
+done:
+	pipe->tail = pipe->head = 0;
+	file_accessed(in);
+	return bytes;
+
+out_release:
+	/*
+	 * If we did an incomplete transfer we must release
+	 * the pipe buffers in question:
+	 */
+	for (i = 0; i < pipe->ring_size; i++) {
+		struct pipe_buffer *buf = &pipe->bufs[i];
+
+		if (buf->ops)
+			pipe_buf_release(pipe, buf);
+	}
+
+	if (!bytes)
+		bytes = ret;
+
+	goto done;
+}
+```
 
 ## select
 
@@ -954,7 +1452,7 @@ int select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeval *t
 
 
 
-
+sys_select
 
 ```c
 
@@ -989,11 +1487,10 @@ int sys_select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeva
 
 
 
-
+do_sys_poll
 
 ```c
 // fs/select.c
-
 static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 		struct timespec64 *end_time)
 {
