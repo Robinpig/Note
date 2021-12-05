@@ -51,3 +51,9 @@ state in native is RUNNABLE
 
 ## JNI and GC
 
+
+
+## References
+
+1. [Java Programming Tutorial Java Native Interface (JNI)](https://www3.ntu.edu.sg/home/ehchua/programming/java/JavaNativeInterface.html)
+2. [Java Native Interface Specification Contents](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/index.html)

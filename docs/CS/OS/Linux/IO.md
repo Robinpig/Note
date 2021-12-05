@@ -251,6 +251,19 @@ out:
 ```
 
 
+### reuse
+
+ip_autobind_reuse - BOOLEAN
+
+By default, bind() does not select the ports automatically even if
+the new socket and all sockets bound to the port have SO_REUSEADDR.
+ip_autobind_reuse allows bind() to reuse the port and this is useful
+when you use bind()+connect(), but may break some applications.
+The preferred solution is to use IP_BIND_ADDRESS_NO_PORT and this
+option should only be set by experts.
+
+Default: 0
+
 
 ## Listen
 
@@ -1570,7 +1583,7 @@ Efault:
 ## poll
 
 
-
+pollfd
 ```c
 // include/upai/asm-generic/poll.h
 struct pollfd {
@@ -1578,6 +1591,41 @@ struct pollfd {
 	short events;
 	short revents;
 };
+```
+
+```c
+// include/upai/asm-generic/poll.h
+
+/* These are specified by iBCS2 */
+#define POLLIN		0x0001
+#define POLLPRI		0x0002
+#define POLLOUT		0x0004
+#define POLLERR		0x0008
+#define POLLHUP		0x0010
+#define POLLNVAL	0x0020
+
+/* The rest seem to be more-or-less nonstandard. Check them! */
+#define POLLRDNORM	0x0040
+#define POLLRDBAND	0x0080
+#ifndef POLLWRNORM
+#define POLLWRNORM	0x0100
+#endif
+#ifndef POLLWRBAND
+#define POLLWRBAND	0x0200
+#endif
+#ifndef POLLMSG
+#define POLLMSG		0x0400
+#endif
+#ifndef POLLREMOVE
+#define POLLREMOVE	0x1000
+#endif
+#ifndef POLLRDHUP
+#define POLLRDHUP       0x2000
+#endif
+
+#define POLLFREE	(__force __poll_t)0x4000	/* currently only for epoll */
+
+#define POLL_BUSY_LOOP	(__force __poll_t)0x8000
 ```
 
 

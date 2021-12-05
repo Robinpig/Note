@@ -512,14 +512,12 @@ cat /proc/sys/net/ipv4/tcp_synack_retries #2
 
 ##### ack fail
 
+##### keepalive
 **scenario**: client into ESTABLISH after send ack, server can not receive ack
 
 server continue send syn+ack, syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主动关闭了连接
 
-客户端：
-
-1. 连接未使用时，会等待tcp的keepalive机制触发才能发现一个已被关闭的连接 7875 sec
-
+7875 = 7200 + 75 * 9
 ```shell
 cat /proc/sys/net/ipv4/tcp_keepalive_time	#7200
 cat /proc/sys/net/ipv4/tcp_keepalive_intvl	#75
@@ -1017,7 +1015,27 @@ cat /proc/sys/net/ipv4/tcp_fin_timeout	#60
 
 ### TIME_WAIT
 
+make sure packets are received(even if ACK lost)
 
+how long to wait to destroy TIME state, about 60 seconds
+
+```c
+#define TCP_TIMEWAIT_LEN (60*HZ)
+```
+
+tcp_tw_reuse - INTEGER
+
+Enable reuse of TIME-WAIT sockets for new connections when it is
+safe from protocol viewpoint.
+
+	- 0 - disable
+	- 1 - global enable
+	- 2 - enable for loopback traffic only
+
+	It should not be changed without advice/request of technical
+	experts.
+
+	Default: 2
 
 #### TWA
 

@@ -5169,11 +5169,23 @@ void tcp_fin(struct sock *sk)
 ### send ACK
 
 ### send FIN
+
+close decrement ref, when ref=0, close both sides.
+
+shutdown could close one side
+
+
+
 like [send FIN in Active Close](/docs/CS/OS/Linux/TCP.md?id=send-FIN)
 ### rcv ACK
 see [tcp_rcv_state_process](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_state_process)
 
+TIME_WAIT 60s
 
+```c
+#define TCP_TIMEWAIT_LEN (60*HZ) /* how long to wait to destroy TIME-WAIT
+                              * state, about 60 seconds    */
+```
 
 
 ## Others
@@ -5194,6 +5206,10 @@ static inline int tcp_fin_time(const struct sock *sk)
 	return fin_timeout;
 }
 ```
+
+
+
+### keepalive
 
 
 

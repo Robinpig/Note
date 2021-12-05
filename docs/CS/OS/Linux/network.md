@@ -114,6 +114,16 @@ enum
 
 
 ### init net dev
+
+initcall see [kernel_init]()
+
+```c
+// net/core/dev.c
+subsys_initcall(net_dev_init);
+```
+
+
+
 Initialize the DEV module. At boot time this walks the device list and
 unhooks any devices that fail to initialise (normally hardware not
 present) and leaves us with a valid list of present and active devices.
@@ -123,7 +133,7 @@ to take the rtnl semaphore.
 
 registe [net_rx_action]()
 ```c
-//
+// net/core/dev.c
 static int __init net_dev_init(void)
 {
 	int i, rc = -ENOMEM;
@@ -200,7 +210,6 @@ out:
 	return rc;
 }
 
-subsys_initcall(net_dev_init);
 ```
 
 
@@ -272,7 +281,69 @@ static int process_backlog(struct napi_struct *napi, int quota)
 ```
 
 
-### inet init
+### init inet 
+
+```c
+fs_initcall(inet_init);
+```
+
+Registe protocols:
+
+1. ICMP
+2. UDP
+3. TCP
+4. IGMP
+5. ...
+
+```c
+static int __init inet_init(void)
+{
+	...
+	/* Add all the base protocols. 	*/
+	if (inet_add_protocol(&icmp_protocol, IPPROTO_ICMP) < 0)
+		pr_crit("%s: Cannot add ICMP protocol\n", __func__);
+	if (inet_add_protocol(&udp_protocol, IPPROTO_UDP) < 0)
+		pr_crit("%s: Cannot add UDP protocol\n", __func__);
+	if (inet_add_protocol(&tcp_protocol, IPPROTO_TCP) < 0)
+		pr_crit("%s: Cannot add TCP protocol\n", __func__);
+#ifdef CONFIG_IP_MULTICAST
+	if (inet_add_protocol(&igmp_protocol, IPPROTO_IGMP) < 0)
+		pr_crit("%s: Cannot add IGMP protocol\n", __func__);
+#endif
+
+	...
+    
+  dev_add_pack(&ip_packet_type);
+}
+
+
+```
+
+#### net_protocol
+
+This is used to register protocols.
+
+```c
+// include/net/protocol.h
+struct net_protocol {
+       int                  (*early_demux)(struct sk_buff *skb);
+       int                  (*early_demux_handler)(struct sk_buff *skb);
+       int                  (*handler)(struct sk_buff *skb);
+
+       /* This returns an error if we weren't able to handle the error. */
+       int                  (*err_handler)(struct sk_buff *skb, u32 info);
+
+       unsigned int          no_policy:1,
+                            netns_ok:1,
+                            /* does the protocol do more stringent
+                             * icmp tag validation than simple
+                             * socket lookup?
+                             */
+                            icmp_strict_tag_validation:1;
+};
+```
+
+
 
 ip_packet_type net protocols
 
@@ -315,35 +386,7 @@ static const struct net_protocol icmp_protocol = {
 };
 ```
 
-
-
-#### inet_init
-
-```c
-static int __init inet_init(void)
-{
-	...
-	/* Add all the base protocols. 	*/
-	if (inet_add_protocol(&icmp_protocol, IPPROTO_ICMP) < 0)
-		pr_crit("%s: Cannot add ICMP protocol\n", __func__);
-	if (inet_add_protocol(&udp_protocol, IPPROTO_UDP) < 0)
-		pr_crit("%s: Cannot add UDP protocol\n", __func__);
-	if (inet_add_protocol(&tcp_protocol, IPPROTO_TCP) < 0)
-		pr_crit("%s: Cannot add TCP protocol\n", __func__);
-#ifdef CONFIG_IP_MULTICAST
-	if (inet_add_protocol(&igmp_protocol, IPPROTO_IGMP) < 0)
-		pr_crit("%s: Cannot add IGMP protocol\n", __func__);
-#endif
-
-	...
-    
-  dev_add_pack(&ip_packet_type);
-}
-
-fs_initcall(inet_init);
-```
-
-
+#### inet_add_protocol
 
 ```c
 // net/ipv4/protocol.c
@@ -813,7 +856,7 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 		...
 	}
   
-  ```
+```
 }
 ## Optimization
 

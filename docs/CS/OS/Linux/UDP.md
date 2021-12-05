@@ -1,10 +1,13 @@
 ## Introduction
 
 
+only need bind 
 
 
 
-
+sendto 
+recvfrom
+### udp_rcv
 
 ```c
 
@@ -15,7 +18,7 @@ int udp_rcv(struct sk_buff *skb)
 ```
 
 
-
+__udp4_lib_rcv
 ```c
 /*
  *	All we need to do is get the socket, and then do a checksum.
