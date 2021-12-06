@@ -24,8 +24,13 @@ struct packet_type {
 
 ## Init
 
+### sock_init
+
 [Init](/docs/CS/OS/Linux/init.md)
 
+call register_filesystem
+
+kern_mount
 ```c
 // net/socket.c
 core_initcall(sock_init);	/* early initcall */
