@@ -215,45 +215,18 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 	return mnt;
 }
 ```
-
-
-##### fc_mount
+call alloc_fs_context in fs_context_for_mount
 ```c
 
-
-struct vfsmount *fc_mount(struct fs_context *fc)
+struct fs_context *fs_context_for_mount(struct file_system_type *fs_type,
+					unsigned int sb_flags)
 {
-	int err = vfs_get_tree(fc);
-	if (!err) {
-		up_write(&fc->root->d_sb->s_umount);
-		return vfs_create_mount(fc);
-	}
-	return ERR_PTR(err);
-}
-
-// fs/fs_context.c
-/*
- * Get a mountable root with the legacy mount command.
- */
-static int legacy_get_tree(struct fs_context *fc)
-{
-	struct legacy_fs_context *ctx = fc->fs_private;
-	struct super_block *sb;
-	struct dentry *root;
-
-	root = fc->fs_type->mount(fc->fs_type, fc->sb_flags,
-				      fc->source, ctx->legacy_data);
-	if (IS_ERR(root))
-		return PTR_ERR(root);
-
-	sb = root->d_sb;
-	BUG_ON(!sb);
-
-	fc->root = root;
-	return 0;
+	return alloc_fs_context(fs_type, NULL, sb_flags, 0,
+					FS_CONTEXT_FOR_MOUNT);
 }
 ```
 
+#### init_fs_context
 
 ##### alloc_fs_context
 alloc_fs_context - Create a filesystem context.
@@ -306,15 +279,20 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 		fc->root = dget(reference);
 		break;
 	}
+```
+Make all filesystems support this unconditionally
 
-	/* TODO: Make all filesystems support this unconditionally */
+call `init_fs_context` by file_system_type:
+1. [sockfs](/docs/CS/OS/Linux/socket.md?id=sockfs_init_fs_context)
+
+```c
+	
 	init_fs_context = fc->fs_type->init_fs_context;
 	if (!init_fs_context)
 		init_fs_context = legacy_init_fs_context;
 
 	ret = init_fs_context(fc);
-	if (ret < 0)
-		goto err_fc;
+	
 	fc->need_free = true;
 	return fc;
 
@@ -323,19 +301,15 @@ err_fc:
 	return ERR_PTR(ret);
 }
 ```
-call `init_fs_context` by file_system_type
+
+#### fs_context
+Filesystem context for holding the parameters used in the creation or
+reconfiguration of a superblock.
+Superblock creation fills in ->root whereas reconfiguration begins with this
+already set.
+See Documentation/filesystems/mount_api.rst
 ```c
-
-
-/*
- * Filesystem context for holding the parameters used in the creation or
- * reconfiguration of a superblock.
- *
- * Superblock creation fills in ->root whereas reconfiguration begins with this
- * already set.
- *
- * See Documentation/filesystems/mount_api.rst
- */
+//
 struct fs_context {
 	const struct fs_context_operations *ops;
 	struct mutex		uapi_mutex;	/* Userspace access mutex */

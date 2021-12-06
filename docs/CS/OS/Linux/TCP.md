@@ -2064,6 +2064,52 @@ embryonic_reset:
 }
 ```
 
+
+#### tcp_rtx_synack
+```c
+int inet_rtx_syn_ack(const struct sock *parent, struct request_sock *req)
+{
+	int err = req->rsk_ops->rtx_syn_ack(parent, req);
+
+	if (!err)
+		req->num_retrans++;
+	return err;
+}
+
+
+struct request_sock_ops tcp_request_sock_ops __read_mostly = {
+	.family		=	PF_INET,
+	.obj_size	=	sizeof(struct tcp_request_sock),
+	.rtx_syn_ack	=	tcp_rtx_synack,
+	.send_ack	=	tcp_v4_reqsk_send_ack,
+	.destructor	=	tcp_v4_reqsk_destructor,
+	.send_reset	=	tcp_v4_send_reset,
+	.syn_ack_timeout =	tcp_syn_ack_timeout,
+};
+```
+
+```c
+
+int tcp_rtx_synack(const struct sock *sk, struct request_sock *req)
+{
+	const struct tcp_request_sock_ops *af_ops = tcp_rsk(req)->af_specific;
+	struct flowi fl;
+	int res;
+
+	tcp_rsk(req)->txhash = net_tx_rndhash();
+	res = af_ops->send_synack(sk, NULL, &fl, req, NULL, TCP_SYNACK_NORMAL,
+				  NULL);
+	if (!res) {
+		__TCP_INC_STATS(sock_net(sk), TCP_MIB_RETRANSSEGS);
+		__NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPSYNRETRANS);
+		if (unlikely(tcp_passive_fastopen(sk)))
+			tcp_sk(sk)->total_retrans++;
+		trace_tcp_retransmit_synack(sk, req);
+	}
+	return res;
+}
+```
+
 #### inet_csk_complete_hashdance
 call `inet_csk_reqsk_queue_add` add into accept queue
 ```c
@@ -2999,7 +3045,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 	switch (sk->sk_state) {
 	case TCP_CLOSE:
 		goto discard;
-
+```
+ack when LISTEN, 
+```c
 	case TCP_LISTEN:
 		if (th->ack)
 			return 1;
@@ -3008,7 +3056,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			goto discard;
 
 ```
-SYN when LISTEN, call [tcp_conn_request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
+syn when LISTEN, call [tcp_conn_request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
 ```c
 		if (th->syn) {
 			if (th->fin)
@@ -3030,7 +3078,7 @@ SYN when LISTEN, call [tcp_conn_request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_re
 		goto discard;
 ```
 
-
+rcv syn+ack
 ```c
 
 	case TCP_SYN_SENT:
@@ -3267,32 +3315,7 @@ static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb)
 
 #### tcp_conn_request
 
-```c
-
-const struct inet_connection_sock_af_ops ipv4_specific = {
-	.conn_request	   = tcp_v4_conn_request,
-	.syn_recv_sock	   = tcp_v4_syn_recv_sock,
-    ...
-};
-```
-##### tcp_v4_conn_request
-```c
-
-int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
-{
-	/* Never answer to SYNs send to broadcast or multicast */
-	if (skb_rtable(skb)->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST))
-		goto drop;
-
-	return tcp_conn_request(&tcp_request_sock_ops,
-				&tcp_request_sock_ipv4_ops, sk, skb);
-
-drop:
-	tcp_listendrop(sk);
-	return 0;
-}
-```
-tcp_conn_request
+tcp_conn_request for syn
 ```c
 
 int tcp_conn_request(struct request_sock_ops *rsk_ops,
@@ -3314,6 +3337,11 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	 * limitations, they conserve resources and peer is
 	 * evidently real one.
 	 */
+	 
+```
+
+tcp_syncookies == 2, skip check if check [reqsk queue is full]()
+```c
 	if ((net->ipv4.sysctl_tcp_syncookies == 2 ||
 	     inet_csk_reqsk_queue_is_full(sk)) && !isn) {
 		want_cookie = tcp_syn_flood_action(sk, rsk_ops->slab_name);
@@ -3321,6 +3349,9 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 			goto drop;
 	}
 
+```
+check if [accept queue is full]()
+```c
 	if (sk_acceptq_is_full(sk)) {
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_LISTENOVERFLOWS);
 		goto drop;
@@ -3452,7 +3483,9 @@ drop:
 	return 0;
 }
 ```
-##### inet_csk_reqsk_queue_is_full
+##### queue is full
+
+
 ```c
 
 static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
@@ -3462,11 +3495,9 @@ static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
 ```
 
 
-Note: If you think the test should be:
-
-return READ_ONCE(sk->sk_ack_backlog) >= READ_ONCE(sk->sk_max_ack_backlog);
-
-Then please take a look at commit 64a146513f8f ("[NET]: Revert incorrect accept queue backlog changes.")
+> Note: If you think the test should be:
+> return READ_ONCE(sk->sk_ack_backlog) >= READ_ONCE(sk->sk_max_ack_backlog);
+> Then please take a look at commit 64a146513f8f ("[NET]: Revert incorrect accept queue backlog changes.")
 ```c
 // 
 static inline bool sk_acceptq_is_full(const struct sock *sk)
@@ -3549,6 +3580,50 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 
 ### send SYNACK
 
+#### tcp_send_synack
+```c
+
+/* Send a crossed SYN-ACK during socket establishment.
+ * WARNING: This routine must only be called when we have already sent
+ * a SYN packet that crossed the incoming SYN that caused this routine
+ * to get called. If this assumption fails then the initial rcv_wnd
+ * and rcv_wscale values will not be correct.
+ */
+int tcp_send_synack(struct sock *sk)
+{
+	struct sk_buff *skb;
+
+	skb = tcp_rtx_queue_head(sk);
+	if (!skb || !(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
+		pr_err("%s: wrong queue state\n", __func__);
+		return -EFAULT;
+	}
+	if (!(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_ACK)) {
+		if (skb_cloned(skb)) {
+			struct sk_buff *nskb;
+
+			tcp_skb_tsorted_save(skb) {
+				nskb = skb_copy(skb, GFP_ATOMIC);
+			} tcp_skb_tsorted_restore(skb);
+			if (!nskb)
+				return -ENOMEM;
+			INIT_LIST_HEAD(&nskb->tcp_tsorted_anchor);
+			tcp_highest_sack_replace(sk, skb, nskb);
+			tcp_rtx_queue_unlink_and_free(skb, sk);
+			__skb_header_release(nskb);
+			tcp_rbtree_insert(&sk->tcp_rtx_queue, nskb);
+			sk_wmem_queued_add(sk, nskb->truesize);
+			sk_mem_charge(sk, nskb->truesize);
+			skb = nskb;
+		}
+
+		TCP_SKB_CB(skb)->tcp_flags |= TCPHDR_ACK;
+		tcp_ecn_send_synack(sk, skb);
+	}
+	return tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
+}
+
+```
 #### tcp_v4_send_synack
 
 tcp_v4_send_synack
@@ -5212,6 +5287,17 @@ static inline int tcp_fin_time(const struct sock *sk)
 ### keepalive
 
 
+### test
+
+send window and congestion window
+
+Nagle
+
+delay ack
+
+writev reduce send frequency
+
+SO_REUSEADDR vs. tw_reuse
 
 ## References
 1. [Analysis_TCP_in_Linux](https://github.com/fzyz999/Analysis_TCP_in_Linux)

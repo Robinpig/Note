@@ -1,5 +1,182 @@
 
+
+### socketcall
+
+```c
+// net/socket.c
+
+#ifdef __ARCH_WANT_SYS_SOCKETCALL
+/* Argument list sizes for sys_socketcall */
+#define AL(x) ((x) * sizeof(unsigned long))
+static const unsigned char nargs[21] = {
+       AL(0), AL(3), AL(3), AL(3), AL(2), AL(3),
+       AL(3), AL(3), AL(4), AL(4), AL(4), AL(6),
+       AL(6), AL(2), AL(5), AL(5), AL(3), AL(3),
+       AL(4), AL(5), AL(4)
+};
+
+#undef AL
+
+/*
+ *     System call vectors.
+ *
+ *     Argument checking cleaned up. Saved 20% in size.
+ *  This function doesn't need to set the kernel lock because
+ *  it is set by the callees.
+ */
+
+SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
+{
+       unsigned long a[AUDITSC_ARGS];
+       unsigned long a0, a1;
+       int err;
+       unsigned int len;
+
+       if (call < 1 || call > SYS_SENDMMSG)
+              return -EINVAL;
+       call = array_index_nospec(call, SYS_SENDMMSG + 1);
+
+       len = nargs[call];
+       if (len > sizeof(a))
+              return -EINVAL;
+
+       /* copy_from_user should be SMP safe. */
+       if (copy_from_user(a, args, len))
+              return -EFAULT;
+
+       err = audit_socketcall(nargs[call] / sizeof(unsigned long), a);
+       if (err)
+              return err;
+
+       a0 = a[0];
+       a1 = a[1];
+
+       switch (call) {
+       case SYS_SOCKET:
+              err = __sys_socket(a0, a1, a[2]);
+              break;
+       case SYS_BIND:
+              err = __sys_bind(a0, (struct sockaddr __user *)a1, a[2]);
+              break;
+       case SYS_CONNECT:
+              err = __sys_connect(a0, (struct sockaddr __user *)a1, a[2]);
+              break;
+       case SYS_LISTEN:
+              err = __sys_listen(a0, a1);
+              break;
+       case SYS_ACCEPT:
+              err = __sys_accept4(a0, (struct sockaddr __user *)a1,
+                                (int __user *)a[2], 0);
+              break;
+       case SYS_GETSOCKNAME:
+              err =
+                  __sys_getsockname(a0, (struct sockaddr __user *)a1,
+                                  (int __user *)a[2]);
+              break;
+       case SYS_GETPEERNAME:
+              err =
+                  __sys_getpeername(a0, (struct sockaddr __user *)a1,
+                                  (int __user *)a[2]);
+              break;
+       case SYS_SOCKETPAIR:
+              err = __sys_socketpair(a0, a1, a[2], (int __user *)a[3]);
+              break;
+       case SYS_SEND:
+              err = __sys_sendto(a0, (void __user *)a1, a[2], a[3],
+                               NULL, 0);
+              break;
+       case SYS_SENDTO:
+              err = __sys_sendto(a0, (void __user *)a1, a[2], a[3],
+                               (struct sockaddr __user *)a[4], a[5]);
+              break;
+       case SYS_RECV:
+              err = __sys_recvfrom(a0, (void __user *)a1, a[2], a[3],
+                                 NULL, NULL);
+              break;
+       case SYS_RECVFROM:
+              err = __sys_recvfrom(a0, (void __user *)a1, a[2], a[3],
+                                 (struct sockaddr __user *)a[4],
+                                 (int __user *)a[5]);
+              break;
+       case SYS_SHUTDOWN:
+              err = __sys_shutdown(a0, a1);
+              break;
+       case SYS_SETSOCKOPT:
+              err = __sys_setsockopt(a0, a1, a[2], (char __user *)a[3],
+                                   a[4]);
+              break;
+       case SYS_GETSOCKOPT:
+              err =
+                  __sys_getsockopt(a0, a1, a[2], (char __user *)a[3],
+                                 (int __user *)a[4]);
+              break;
+       case SYS_SENDMSG:
+              err = __sys_sendmsg(a0, (struct user_msghdr __user *)a1,
+                                a[2], true);
+              break;
+       case SYS_SENDMMSG:
+              err = __sys_sendmmsg(a0, (struct mmsghdr __user *)a1, a[2],
+                                 a[3], true);
+              break;
+       case SYS_RECVMSG:
+              err = __sys_recvmsg(a0, (struct user_msghdr __user *)a1,
+                                a[2], true);
+              break;
+       case SYS_RECVMMSG:
+              if (IS_ENABLED(CONFIG_64BIT))
+                     err = __sys_recvmmsg(a0, (struct mmsghdr __user *)a1,
+                                        a[2], a[3],
+                                        (struct __kernel_timespec __user *)a[4],
+                                        NULL);
+              else
+                     err = __sys_recvmmsg(a0, (struct mmsghdr __user *)a1,
+                                        a[2], a[3], NULL,
+                                        (struct old_timespec32 __user *)a[4]);
+              break;
+       case SYS_ACCEPT4:
+              err = __sys_accept4(a0, (struct sockaddr __user *)a1,
+                                (int __user *)a[2], a[3]);
+              break;
+       default:
+              err = -EINVAL;
+              break;
+       }
+       return err;
+}
+
+#endif                      /* __ARCH_WANT_SYS_SOCKETCALL */
+```
+
+
+
+```c
+// include/uapi/linux/net.h
+#define SYS_SOCKET     1             /* sys_socket(2)              */
+#define SYS_BIND       2             /* sys_bind(2)               */
+#define SYS_CONNECT    3             /* sys_connect(2)             */
+#define SYS_LISTEN     4             /* sys_listen(2)              */
+#define SYS_ACCEPT     5             /* sys_accept(2)              */
+#define SYS_GETSOCKNAME        6             /* sys_getsockname(2)         */
+#define SYS_GETPEERNAME        7             /* sys_getpeername(2)         */
+#define SYS_SOCKETPAIR 8             /* sys_socketpair(2)          */
+#define SYS_SEND       9             /* sys_send(2)               */
+#define SYS_RECV       10            /* sys_recv(2)               */
+#define SYS_SENDTO     11            /* sys_sendto(2)              */
+#define SYS_RECVFROM   12            /* sys_recvfrom(2)            */
+#define SYS_SHUTDOWN   13            /* sys_shutdown(2)            */
+#define SYS_SETSOCKOPT 14            /* sys_setsockopt(2)          */
+#define SYS_GETSOCKOPT 15            /* sys_getsockopt(2)          */
+#define SYS_SENDMSG    16            /* sys_sendmsg(2)             */
+#define SYS_RECVMSG    17            /* sys_recvmsg(2)             */
+#define SYS_ACCEPT4    18            /* sys_accept4(2)             */
+#define SYS_RECVMMSG   19            /* sys_recvmmsg(2)            */
+#define SYS_SENDMMSG   20            /* sys_sendmmsg(2)            */
+```
+
+
+
 ## bind
+
 Bind a name to a socket. Nothing much to do here since it's
 the protocol's responsibility to handle the local address.
 
@@ -318,15 +495,38 @@ const struct proto_ops inet_stream_ops = {
        .listen                  = inet_listen
 				...
 }
+
+const struct proto_ops inet_dgram_ops = {
+       .family                  = PF_INET,
+       .listen                  = sock_no_listen,
+       ...
+};
 ```
-
-
 
 #### inet_listen
 
 Move a socket into listening state.
 
 sk_max_ack_backlog = backlog
+
+>-- [listen(2) — Linux manual page](https://man7.org/linux/man-pages/man2/listen.2.html)
+>
+>  The behavior of the backlog argument on TCP sockets changed with
+>  Linux 2.2.  Now it specifies the queue length for completely
+>  established sockets waiting to be accepted, instead of the number
+>  of incomplete connection requests.  The maximum length of the
+>  queue for incomplete sockets can be set using
+>  /proc/sys/net/ipv4/tcp_max_syn_backlog.  When syncookies are
+>  enabled there is no logical maximum length and this setting is
+>  ignored.  See tcp(7) for more information.
+>
+>  If the backlog argument is greater than the value in
+>  /proc/sys/net/core/somaxconn, then it is silently capped to that
+>  value.  Since Linux 5.4, the default in this file is 4096; in
+>  earlier kernels, the default value is 128.  In kernels before
+>  2.4.25, this limit was a hard coded value, SOMAXCONN, with the
+>  value 128.
+
 ```c
 // af_inet.c
 int inet_listen(struct socket *sock, int backlog)
@@ -338,13 +538,21 @@ int inet_listen(struct socket *sock, int backlog)
        lock_sock(sk);
 
        err = -EINVAL;
+```
+
+must unconnected to any socket and type must be `SOCK_STREAM`
+```c
        if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
               goto out;
-
+```
+old_state must be `TCPF_CLOSE` or `TCPF_LISTEN`
+```c
        old_state = sk->sk_state;
        if (!((1 << old_state) & (TCPF_CLOSE | TCPF_LISTEN)))
               goto out;
+```
 
+```
        WRITE_ONCE(sk->sk_max_ack_backlog, backlog); /** set max ack backlog */
        /* Really, if the socket is already in listen state
         * we can only allow the backlog to be adjusted.
@@ -363,7 +571,9 @@ int inet_listen(struct socket *sock, int backlog)
                      fastopen_queue_tune(sk, backlog);
                      tcp_fastopen_init_key_once(sock_net(sk));
               }
-
+```
+call inet_csk_listen_start
+```c
               err = inet_csk_listen_start(sk, backlog);
               if (err)
                      goto out;
@@ -383,7 +593,6 @@ out:
 #### inet_csk_listen_start
 inet_connection_sock see [socket](/docs/CS/OS/Linux/socket.md?id=inet_connection_sock)
 
-call `reqsk_queue_alloc`
 
 ```c
 // net/ipv4/iinet_connection_sock.c
@@ -392,9 +601,13 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
        struct inet_connection_sock *icsk = inet_csk(sk);
        struct inet_sock *inet = inet_sk(sk);
        int err = -EADDRINUSE;
+```
 
+call `reqsk_queue_alloc`
+```c
        reqsk_queue_alloc(&icsk->icsk_accept_queue);
-
+```
+```c
        sk->sk_ack_backlog = 0;
        inet_csk_delack_init(sk);
 
@@ -408,7 +621,7 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
               inet->inet_sport = htons(inet->inet_num);
 
               sk_dst_reset(sk);
-              err = sk->sk_prot->hash(sk); /** enter to haah table  **/
+              err = sk->sk_prot->hash(sk); /** enter to listen haah table  **/
 
               if (likely(!err))
                      return 0;
@@ -419,7 +632,7 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
 }
 ```
 
-
+call inet_hash
 
 ```c
 // net/ipv4/tcp_ipv4.c
@@ -482,6 +695,71 @@ unlock:
        return err;
 }
 ```
+
+##### inet_hashinfo
+
+```c
+struct inet_hashinfo {
+       /* This is for sockets with full identity only.  Sockets here will
+        * always be without wildcards and will have the following invariant:
+        *
+        *          TCP_ESTABLISHED <= sk->sk_state < TCP_CLOSE
+        *
+        */
+       struct inet_ehash_bucket       *ehash;
+       spinlock_t                   *ehash_locks;
+       unsigned int                 ehash_mask;
+       unsigned int                 ehash_locks_mask;
+
+       /* Ok, let's try this, I give up, we do need a local binding
+        * TCP hash as well as the others for fast bind/connect.
+        */
+       struct kmem_cache             *bind_bucket_cachep;
+       struct inet_bind_hashbucket    *bhash;
+       unsigned int                 bhash_size;
+
+       /* The 2nd listener table hashed by local port and address */
+       unsigned int                 lhash2_mask;
+       struct inet_listen_hashbucket  *lhash2;
+
+       /* All the above members are written once at bootup and
+        * never written again _or_ are predominantly read-access.
+        *
+        * Now align to a new cache line as all the following members
+        * might be often dirty.
+        */
+       /* All sockets in TCP_LISTEN state will be in listening_hash.
+        * This is the only table where wildcard'd TCP sockets can
+        * exist.  listening_hash is only hashed by local port number.
+        * If lhash2 is initialized, the same socket will also be hashed
+        * to lhash2 by port and address.
+        */
+       struct inet_listen_hashbucket  listening_hash[INET_LHTABLE_SIZE]
+                                   ____cacheline_aligned_in_smp;
+};
+```
+
+
+
+```c
+// net/ipv4/inet_hashtables.c
+bool inet_ehash_nolisten(struct sock *sk, struct sock *osk, bool *found_dup_sk)
+{
+       bool ok = inet_ehash_insert(sk, osk, found_dup_sk);
+
+       if (ok) {
+              sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
+       } else {
+              percpu_counter_inc(sk->sk_prot->orphan_count);
+              inet_sk_set_state(sk, TCP_CLOSE);
+              sock_set_flag(sk, SOCK_DEAD);
+              inet_csk_destroy_sock(sk);
+       }
+       return ok;
+}
+```
+
+
 
 ### accept queue
 
@@ -604,7 +882,157 @@ struct request_sock_queue {
 
 ### SYN queue
 SYN queue - logic queue
-see [qlen and max_syn_backlog](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_conn_request)
+see [qlen and max_syn_backlog](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
+
+```c
+
+const struct inet_connection_sock_af_ops ipv4_specific = {
+	.conn_request	   = tcp_v4_conn_request,
+	.syn_recv_sock	   = tcp_v4_syn_recv_sock,
+    ...
+};
+```
+```c
+
+int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
+{
+	/* Never answer to SYNs send to broadcast or multicast */
+	if (skb_rtable(skb)->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST))
+		goto drop;
+
+	return tcp_conn_request(&tcp_request_sock_ops,
+				&tcp_request_sock_ipv4_ops, sk, skb);
+
+drop:
+	tcp_listendrop(sk);
+	return 0;
+}
+```
+
+#### tcp_v4_syn_recv_sock
+The three way handshake has completed - we got a valid synack - now create the new socket.
+```c
+//
+struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
+				  struct request_sock *req,
+				  struct dst_entry *dst,
+				  struct request_sock *req_unhash,
+				  bool *own_req)
+{
+	struct inet_request_sock *ireq;
+	bool found_dup_sk = false;
+	struct inet_sock *newinet;
+	struct tcp_sock *newtp;
+	struct sock *newsk;
+#ifdef CONFIG_TCP_MD5SIG
+	const union tcp_md5_addr *addr;
+	struct tcp_md5sig_key *key;
+	int l3index;
+#endif
+	struct ip_options_rcu *inet_opt;
+
+	if (sk_acceptq_is_full(sk))
+		goto exit_overflow;
+
+	newsk = tcp_create_openreq_child(sk, req, skb);
+	if (!newsk)
+		goto exit_nonewsk;
+
+	newsk->sk_gso_type = SKB_GSO_TCPV4;
+	inet_sk_rx_dst_set(newsk, skb);
+
+	newtp		      = tcp_sk(newsk);
+	newinet		      = inet_sk(newsk);
+	ireq		      = inet_rsk(req);
+	sk_daddr_set(newsk, ireq->ir_rmt_addr);
+	sk_rcv_saddr_set(newsk, ireq->ir_loc_addr);
+	newsk->sk_bound_dev_if = ireq->ir_iif;
+	newinet->inet_saddr   = ireq->ir_loc_addr;
+	inet_opt	      = rcu_dereference(ireq->ireq_opt);
+	RCU_INIT_POINTER(newinet->inet_opt, inet_opt);
+	newinet->mc_index     = inet_iif(skb);
+	newinet->mc_ttl	      = ip_hdr(skb)->ttl;
+	newinet->rcv_tos      = ip_hdr(skb)->tos;
+	inet_csk(newsk)->icsk_ext_hdr_len = 0;
+	if (inet_opt)
+		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
+	newinet->inet_id = prandom_u32();
+
+	/* Set ToS of the new socket based upon the value of incoming SYN.
+	 * ECT bits are set later in tcp_init_transfer().
+	 */
+	if (sock_net(sk)->ipv4.sysctl_tcp_reflect_tos)
+		newinet->tos = tcp_rsk(req)->syn_tos & ~INET_ECN_MASK;
+
+	if (!dst) {
+		dst = inet_csk_route_child_sock(sk, newsk, req);
+		if (!dst)
+			goto put_and_exit;
+	} else {
+		/* syncookie case : see end of cookie_v4_check() */
+	}
+	sk_setup_caps(newsk, dst);
+
+	tcp_ca_openreq_child(newsk, dst);
+
+	tcp_sync_mss(newsk, dst_mtu(dst));
+	newtp->advmss = tcp_mss_clamp(tcp_sk(sk), dst_metric_advmss(dst));
+
+	tcp_initialize_rcv_mss(newsk);
+
+#ifdef CONFIG_TCP_MD5SIG
+	l3index = l3mdev_master_ifindex_by_index(sock_net(sk), ireq->ir_iif);
+	/* Copy over the MD5 key from the original socket */
+	addr = (union tcp_md5_addr *)&newinet->inet_daddr;
+	key = tcp_md5_do_lookup(sk, l3index, addr, AF_INET);
+	if (key) {
+		/*
+		 * We're using one, so create a matching key
+		 * on the newsk structure. If we fail to get
+		 * memory, then we end up not copying the key
+		 * across. Shucks.
+		 */
+		tcp_md5_do_add(newsk, addr, AF_INET, 32, l3index, key->flags,
+			       key->key, key->keylen, GFP_ATOMIC);
+		sk_nocaps_add(newsk, NETIF_F_GSO_MASK);
+	}
+#endif
+
+	if (__inet_inherit_port(sk, newsk) < 0)
+		goto put_and_exit;
+	*own_req = inet_ehash_nolisten(newsk, req_to_sk(req_unhash),
+				       &found_dup_sk);
+	if (likely(*own_req)) {
+		tcp_move_syn(newtp, req);
+		ireq->ireq_opt = NULL;
+	} else {
+		newinet->inet_opt = NULL;
+
+		if (!req_unhash && found_dup_sk) {
+			/* This code path should only be executed in the
+			 * syncookie case only
+			 */
+			bh_unlock_sock(newsk);
+			sock_put(newsk);
+			newsk = NULL;
+		}
+	}
+	return newsk;
+
+exit_overflow:
+	NET_INC_STATS(sock_net(sk), LINUX_MIB_LISTENOVERFLOWS);
+exit_nonewsk:
+	dst_release(dst);
+exit:
+	tcp_listendrop(sk);
+	return NULL;
+put_and_exit:
+	newinet->inet_opt = NULL;
+	inet_csk_prepare_forced_close(newsk);
+	tcp_done(newsk);
+	goto exit;
+}
+```
 
 
 ## accept
@@ -626,7 +1054,7 @@ For accept, we attempt to create a new socket, set up the link with the client, 
 2. fd_install
 
 ```c
-
+// net/socket.c
 int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 		  int __user *upeer_addrlen, int flags)
 {
@@ -1273,7 +1701,7 @@ splices data directly between two files
 - flags:	splice modifier flags
 
 Description:
-  
+
 For use by do_sendfile(). splice can easily emulate sendfile, but doing it in the application would incur an extra system call(splice in + splice out, as compared to just sendfile()). So this helper
 can splice directly through a process-private pipe.
 ```c
@@ -1631,6 +2059,12 @@ struct pollfd {
 
 
 
+
+## AIO
+
+Linux only support local file AIO, and use io_uring now
+
+Windows supports AIO(IOCP) Proactor
 
 ## References
 

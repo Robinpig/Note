@@ -66,11 +66,41 @@ static int __init sock_init(void)
 
 }
 ```
+#### sockfs
 
+
+Convert the sockfs filesystem to the new internal mount API as the old one will be obsoleted and removed. This allows greater flexibility in communication of mount parameters between userspace, the VFS and the filesystem.
+> From:  .mount =	sockfs_mount
+> To:    .init_fs_context = sockfs_init_fs_context
+```c
+
+static struct file_system_type sock_fs_type = {
+	.name =		"sockfs",
+	.init_fs_context = sockfs_init_fs_context,
+	.kill_sb =	kill_anon_super,
+};
+```
+call sockfs_init_fs_context when [mount fs](/docs/CS/OS/Linux/fs.md?id=init_fs_context)
+
+```c
+
+static int sockfs_init_fs_context(struct fs_context *fc)
+{
+	struct pseudo_fs_context *ctx = init_pseudo(fc, SOCKFS_MAGIC);
+	if (!ctx)
+		return -ENOMEM;
+	ctx->ops = &sockfs_ops;
+	ctx->dops = &sockfs_dentry_operations;
+	ctx->xattr = sockfs_xattr_handlers;
+	return 0;
+}
+```
 
 ## sockaddr
 
 
+### init sock
+see init 
 ```c
 // include/linux/socket.h
 struct sockaddr {
@@ -103,6 +133,7 @@ Protocol and Address families
 #define PF_INET6	AF_INET6
 ...
 ```
+
 
 
 
@@ -1246,9 +1277,9 @@ struct tcp_out_options {
 ## Create
 
 
-
+### sys_socket
 ```c
-
+// net/socket.c
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 {
 	return __sys_socket(family, type, protocol);
@@ -1307,6 +1338,11 @@ be set to true if the socket resides in kernel space.
 - protocol: protocol (0, ...)
 - res: new socket
 - kern: boolean for kernel space sockets
+
+1. sock_alloc
+2. inet_create
+    1. sk_alloc
+    2. sock_init_data
 ```c
 // net/socket.c
 int __sock_create(struct net *net, int family, int type, int protocol,
@@ -1338,6 +1374,16 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 }
 ```
 
+
+call [inet_create]()
+```c
+// net/ipv4/af_inet.c
+static const struct net_proto_family inet_family_ops = {
+	.family = PF_INET,
+	.create = inet_create,
+	.owner	= THIS_MODULE,
+};
+```
 
 
 #### sock_alloc
@@ -1371,9 +1417,9 @@ struct socket *sock_alloc(void)
 
 
 
-### inet socket
-
 #### inet_create
+1. sk_alloc
+2. sock_init_data
 
 ```c
 
@@ -1401,7 +1447,51 @@ lookup_protocol:
 }
 ```
 
+#### sk_alloc
 
+All socket objects are allocated here
+- net: the applicable net namespace
+- family: protocol family
+- priority: for allocation (%GFP_KERNEL, %GFP_ATOMIC, etc)
+- prot: struct proto associated with this new sock instance
+- kern: is this to be a kernel socket?
+```c
+// net/core/sock.c
+struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
+		      struct proto *prot, int kern)
+{
+	struct sock *sk;
+
+	sk = sk_prot_alloc(prot, priority | __GFP_ZERO, family);
+	if (sk) {
+		sk->sk_family = family;
+		/*
+		 * See comment in struct sock definition to understand
+		 * why we need sk_prot_creator -acme
+		 */
+		sk->sk_prot = sk->sk_prot_creator = prot;
+		sk->sk_kern_sock = kern;
+		sock_lock_init(sk);
+		sk->sk_net_refcnt = kern ? 0 : 1;
+		if (likely(sk->sk_net_refcnt)) {
+			get_net(net);
+			sock_inuse_add(net, 1);
+		}
+
+		sock_net_set(sk, net);
+		refcount_set(&sk->sk_wmem_alloc, 1);
+
+		mem_cgroup_sk_alloc(sk);
+		cgroup_sk_alloc(&sk->sk_cgrp_data);
+		sock_update_classid(&sk->sk_cgrp_data);
+		sock_update_netprioidx(&sk->sk_cgrp_data);
+		sk_tx_queue_clear(sk);
+	}
+
+	return sk;
+}
+EXPORT_SYMBOL(sk_alloc);
+```
 
 
 #### sock_init_data
@@ -1420,6 +1510,18 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	sk->sk_destruct		=	sock_def_destruct;
 	...
 }
+```
+
+Take into consideration the size of the struct sk_buff overhead in the determination of these values, since that is non-constant across platforms.  
+This makes socket queueing behavior and performance not depend upon such differences.
+
+64K
+```c
+// include/net/sock.h
+#define _SK_MEM_PACKETS		256
+#define _SK_MEM_OVERHEAD	SKB_TRUESIZE(256)
+#define SK_WMEM_MAX		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
+#define SK_RMEM_MAX		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
 ```
 
 
