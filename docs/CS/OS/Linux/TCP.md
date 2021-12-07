@@ -3442,7 +3442,7 @@ drop if `qlen` > (`max_syn_backlog` >> 2)
 		af_ops->send_synack(fastopen_sk, dst, &fl, req,
 				    &foc, TCP_SYNACK_FASTOPEN, skb);
 ```
-call [inet_csk_reqsk_queue_add](/docs/CS/OS/Linux/IO.md?id=inet_csk_reqsk_queue_add)
+call [inet_csk_reqsk_queue_add](/docs/CS/OS/Linux/Calls.md?id=inet_csk_reqsk_queue_add)
 ```c
 		/* Add the child socket directly into the accept queue */
 		if (!inet_csk_reqsk_queue_add(sk, req, fastopen_sk)) {
@@ -3508,7 +3508,7 @@ static inline bool sk_acceptq_is_full(const struct sock *sk)
 
 ##### inet_csk_reqsk_queue_hash_add
 1. reqsk_queue_hash_req
-2. [accept queue added](/docs/CS/OS/Linux/IO.md?id=accept-queue) inc young and `qlen`
+2. [accept queue added](/docs/CS/OS/Linux/Calls.md?id=accept-queue) inc young and `qlen`
 ```c
 
 void inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_sock *req,

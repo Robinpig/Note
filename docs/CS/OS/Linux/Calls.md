@@ -486,7 +486,7 @@ int __sys_listen(int fd, int backlog)
 }
 ```
 
-call [inet_listen](/docs/CS/OS/Linux/IO.md?id=inet_listen)
+call [inet_listen](/docs/CS/OS/Linux/Calls.md?id=inet_listen)
 
 ```c
 // net/ipv4/af_inet.c
@@ -1279,7 +1279,7 @@ struct proto tcp_prot = {
 
 #### inet_csk_accept
 This will accept the next outstanding connection.
-call [reqsk_queue_remove](/docs/CS/OS/Linux/IO.md?id=reqsk_queue_remove)
+call [reqsk_queue_remove](/docs/CS/OS/Linux/Calls.md?id=reqsk_queue_remove)
 ```c
 // 
 struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
