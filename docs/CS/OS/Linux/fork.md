@@ -1,11 +1,20 @@
 ## call
 
 ### fork
+Link: [fork: introduce kernel_clone()](https://lore.kernel.org/all/20200819104655.436656-2-christian.brauner@ubuntu.com/)
+>  The old _do_fork() helper doesn't follow naming conventions of in-kernel helpers for syscalls. 
+> The process creation cleanup in [1] didn't change the name to something more reasonable mainly because _do_fork() was used in quite a few places. 
+> So sending this as a separate series seemed the better strategy.  
+> This commit does two things: 
+>   	1.renames _do_fork() to kernel_clone() but keeps _do_fork() as a simple static inline wrapper around kernel_clone(). 
+>   	2.Changes the return type from long to pid_t. This aligns kernel_thread() and kernel_clone(). 
+> 
+> Also, the return value from kernel_clone that is surfaced in fork(), vfork(), clone(), and clone3() is taken from pid_vrn() which returns a pid_t too.  
+> Follow-up patches will switch each caller of _do_fork() and each place where it is referenced over to kernel_clone(). 
+> After all these changes are done, we can remove _do_fork() completely and will only be left with kernel_clone().
+
 ```c
 // kernel/fork.c
-/*
- * Create a kernel thread.
- */
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
        struct kernel_clone_args args = {
@@ -20,7 +29,7 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 }
 
 ```
-
+systemcall
 
 ```c
 #ifdef __ARCH_WANT_SYS_FORK
@@ -156,15 +165,14 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 1. dup_task_struct
 2. 
 
+This creates a new process as a copy of the old one,
+but does not actually start it yet.
+
+It copies the registers, and all the appropriate
+parts of the process environment (as per the clone
+flags). The actual kick-off is left to the caller.
 ```c
-/*
- * This creates a new process as a copy of the old one,
- * but does not actually start it yet.
- *
- * It copies the registers, and all the appropriate
- * parts of the process environment (as per the clone
- * flags). The actual kick-off is left to the caller.
- */
+//
 static __latent_entropy struct task_struct *copy_process(
                                    struct pid *pid,
                                    int trace,
