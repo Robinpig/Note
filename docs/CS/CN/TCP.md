@@ -503,11 +503,13 @@ cat /proc/sys/net/ipv4/tcp_syn_retries #5
 1. client retry syn until `tcp_syn_retries`, every trying will reset count of server syn+ack
 2. server also will retry send syn+ack until `tcp_synack_retries`
 
-syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主动关闭了连接
+
+Number of times SYNACKs for a passive TCP connection attempt will be retransmitted. 
+Should not be higher than 255. Default value is 5, which corresponds to 31seconds till the last retransmission with the current initial RTO of 1second. 
+With this the final timeout for a passive TCP connection will happen after 63seconds.
 
 ```shell
-# in linux
-cat /proc/sys/net/ipv4/tcp_synack_retries #2
+cat /proc/sys/net/ipv4/tcp_synack_retries #5
 ```
 
 ##### ack fail
@@ -625,8 +627,10 @@ static int tcp_write_timeout(struct sock *sk)
 ```
 #### tcp_write_timeout
 
-1. if in TCPF_SYN_SENT | TCPF_SYN_RECV,  see `tcp_syn_retries`
-2. __dst_negative_advice
+- if in TCPF_SYN_SENT | TCPF_SYN_RECV,  see `tcp_syn_retries`
+- else , `tcp_retries1` tcp_mtu_probing, __dst_negative_advice
+- `tcp_retries2`
+- if SOCK_DEAD, see`tcp_orphan_retries`
 ```c
 
 /* A write timeout has occurred. Process the after effects. */
@@ -916,24 +920,11 @@ netstat -s|grep "SYNs to LISTEN"
 ss -lnt
 ```
 
-in listening
-
-Recv-Q/Send-Q
-
 |        | in Listening              | non-listening             |
 | ------ | ------------------------- | ------------------------- |
 | Recv-Q | current accept queue size | recv & not read byte size |
 | Send-Q | max accept queue size     | send & not ack byte size  |
 
-
-
-max accept queue size = `min(backlog,somaxconn)`
-
-backlog are set in `listen(int socked,int backlog)`
-
-```shell
-cat /proc/sys/net/core/somaxconn #128
-```
 
 
 
@@ -953,6 +944,12 @@ wrk -t 6 -c 30000 -d 60s http://xxx.xxx.xxx.xxx
 建议使用0以防止应用只是短暂的连接过多，利用客户端重试机制尽量可以得到响应而不是直接重置连接
 
 if see `connection reset by peer`, might be accept queue overflow, default will be connection timeout
+
+
+> If listening service is too slow to accept new connections, reset them. 
+> Default state is FALSE. It means that if overflow occurred due to a burst, connection will recover. E
+> nable this option _only_ if you are really sure that listening daemon cannot be tuned to accept connections faster. 
+> Enabling this option can harm clients of your server.
 
 ```shell
 # 0 dicard, 1 dicard and return RST

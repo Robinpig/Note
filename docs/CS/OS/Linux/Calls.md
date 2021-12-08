@@ -454,7 +454,14 @@ ready for listening.
 
 `Max_ack_backlog = Min(backlog,net.core.somaxconn)`
 
+> somaxconn - INTEGER
+> Limit of socket listen() backlog, known in userspace as SOMAXCONN.
+> Defaults to 4096. (Was 128 before linux-5.4)
+> See also tcp_max_syn_backlog for additional tuning for TCP sockets.
 
+```shell
+cat /proc/sys/net/core/somaxconn
+```
 
 ```c
 // socket.c
@@ -2059,12 +2066,6 @@ struct pollfd {
 
 
 
-
-## AIO
-
-Linux only support local file AIO, and use io_uring now
-
-Windows supports AIO(IOCP) Proactor
 
 ## References
 

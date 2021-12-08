@@ -3313,6 +3313,22 @@ static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb)
 }
 ```
 
+Check if a ack sequence number is a valid syncookie.
+Return the decoded mss if it is, or 0 if not.
+
+```c
+// net/ipv4/syncookies.c
+int __cookie_v4_check(const struct iphdr *iph, const struct tcphdr *th,
+                    u32 cookie)
+{
+       __u32 seq = ntohl(th->seq) - 1;
+       __u32 mssind = check_tcp_syn_cookie(cookie, iph->saddr, iph->daddr,
+                                       th->source, th->dest, seq);
+
+       return mssind < ARRAY_SIZE(msstab) ? msstab[mssind] : 0;
+}
+```
+
 #### tcp_conn_request
 
 tcp_conn_request for syn
