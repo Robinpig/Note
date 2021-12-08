@@ -836,3 +836,4 @@ submit:
 1. [An Introduction to the io_uring Asynchronous I/O Framework](https://blogs.oracle.com/site/linux/post/an-introduction-to-the-io-uring-asynchronous-io-framework)
 2. [Improved_Storage_Performance_Using_the_New_Linux_Kernel_I.O_Interface](https://www.snia.org/sites/default/files/SDC/2019/presentations/Storage_Performance/Kariuki_John_Verma_Vishal_Improved_Storage_Performance_Using_the_New_Linux_Kernel_I.O_Interface.pdf)
 3. [Efficient IO with io_uring](https://kernel.dk/io_uring.pdf)
+4. [What’s new with io_uring](https://kernel.dk/io_uring-whatsnew.pdf)
