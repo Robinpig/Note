@@ -1276,6 +1276,13 @@ struct tcp_out_options {
 
 ## Create
 
+socket() creates an endpoint for communication and returns a file descriptor that refers to that endpoint.  
+The file descriptor returned by a successful call will be the lowest-numbered file descriptor not currently open for the process.
+```
+sys_socket -> sock_create -> sock_alloc 
+                          -> inet_create -> sk_alloc
+                                         -> sock_init_data
+```
 
 ### sys_socket
 ```c
@@ -1314,7 +1321,7 @@ int __sys_socket(int family, int type, int protocol)
 
 ```
 
-### create socket
+### sock_create
 
 A wrapper around __sock_create().
 - family: protocol family (AF_INET, ...)
@@ -1329,7 +1336,7 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 }
 ```
 
-Creates a new socket and assigns it to @res, passing through LSM.
+Creates a new socket and assigns it to res, passing through LSM.
 Returns 0 or an error. On failure @res is set to %NULL. @kern must
 be set to true if the socket resides in kernel space.
 - net: net namespace
@@ -1351,22 +1358,25 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	int err;
 	struct socket *sock;
 	const struct net_proto_family *pf;
-
-	/* Compatibility.
-	   This uglymoron is moved from INET layer to here to avoid
-	   deadlock in module load.
-	 */
+```
+Compatibility.
+This uglymoron is moved from INET layer to here to avoid
+deadlock in module load.
+```c
 	if (family == PF_INET && type == SOCK_PACKET) {
 		family = PF_PACKET;
 	}
 
-	err = security_socket_create(family, type, protocol, kern);
-	/*
-	 *	Allocate the socket and allow the family to set things up. if
-	 *	the protocol is 0, the family is instructed to select an appropriate
-	 *	default.
-	 */
+	err = security_socket_create(family, type, protocol, kern); /** do nothing **/
+```
+Allocate the socket and allow the family to set things up. if
+the protocol is 0, the family is instructed to select an appropriate
+default.
+```c
 	sock = sock_alloc();
+```
+get pf by RCU and call inet_create
+```c
 
 	pf = rcu_dereference(net_families[family]);
 	
@@ -1375,7 +1385,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 ```
 
 
-call [inet_create]()
+call [inet_create](/docs/CS/OS/Linux/socket.md?id=inet_create)
 ```c
 // net/ipv4/af_inet.c
 static const struct net_proto_family inet_family_ops = {
@@ -1418,15 +1428,12 @@ struct socket *sock_alloc(void)
 
 
 #### inet_create
+Create an inet socket.
 1. sk_alloc
 2. sock_init_data
 
 ```c
-
-/*
- *	Create an inet socket.
- */
-
+// 
 static int inet_create(struct net *net, struct socket *sock, int protocol,
 		       int kern)
 {
@@ -1447,7 +1454,7 @@ lookup_protocol:
 }
 ```
 
-#### sk_alloc
+##### sk_alloc
 
 All socket objects are allocated here
 - net: the applicable net namespace
@@ -1494,7 +1501,7 @@ EXPORT_SYMBOL(sk_alloc);
 ```
 
 
-#### sock_init_data
+##### sock_init_data
 set sk_data_ready = sock_def_readable
 ```c
 
@@ -1515,7 +1522,7 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 Take into consideration the size of the struct sk_buff overhead in the determination of these values, since that is non-constant across platforms.  
 This makes socket queueing behavior and performance not depend upon such differences.
 
-64K
+buffer maxsize 64K
 ```c
 // include/net/sock.h
 #define _SK_MEM_PACKETS		256

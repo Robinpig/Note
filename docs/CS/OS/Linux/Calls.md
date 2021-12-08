@@ -173,7 +173,8 @@ SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
 #define SYS_SENDMMSG   20            /* sys_sendmmsg(2)            */
 ```
 
-
+## socket
+see [sys_socket](/docs/CS/OS/Linux/socket.md?id=create)
 
 ## bind
 
@@ -183,10 +184,11 @@ the protocol's responsibility to handle the local address.
 We move the socket address to kernel space before we call
 the protocol layer (having also checked the address is ok).
 
+### sys_bind
 1. move_addr_to_kernel
 2. inet_bind
-```c
 
+```c
 SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 {
 	return __sys_bind(fd, umyaddr, addrlen);
@@ -463,6 +465,10 @@ ready for listening.
 cat /proc/sys/net/core/somaxconn
 ```
 
+1. sockfd_lookup_light
+2. set backlog
+3. call inet_listen/sock_no_listen
+
 ```c
 // socket.c
 SYSCALL_DEFINE2(listen, int, fd, int, backlog)
@@ -483,7 +489,7 @@ int __sys_listen(int fd, int backlog)
               if ((unsigned int)backlog > somaxconn)
                      backlog = somaxconn;
 
-              err = security_socket_listen(sock, backlog);
+              err = security_socket_listen(sock, backlog); /** do nothing */
               if (!err)
                      err = sock->ops->listen(sock, backlog);
 
@@ -494,6 +500,7 @@ int __sys_listen(int fd, int backlog)
 ```
 
 call [inet_listen](/docs/CS/OS/Linux/Calls.md?id=inet_listen)
+
 
 ```c
 // net/ipv4/af_inet.c
@@ -1043,6 +1050,7 @@ put_and_exit:
 
 
 ## accept
+accept, accept4 - accept a connection on a socket
 
 ```c
 // net/socket.c
@@ -1373,6 +1381,14 @@ out_err:
 TODO:
 
 > 127.0.0.1 本机网络IO不需要经过网卡， 不经过Ring Buffer 直接把skb传送给协议接收栈， 可以通过BPF绕过内核协议栈，减少开销（Istio的sidecar代理与本地进程通信）
+
+
+## connect
+
+
+## sendto
+
+## recv
 
 ## mmap
 

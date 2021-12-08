@@ -1,6 +1,17 @@
 ## Introduction
 
 
+see [TCP protocol](/docs/CS/CN/TCP.md)
+
+see system calls:
+1. [socket](/docs/CS/OS/Linux/socket.md?id=create)
+2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
+3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
+5. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
+6. [send](/docs/CS/OS/Linux/TCP.md?id=send)
+7. [recv](/docs/CS/OS/Linux/TCP.md?id=recv)
+
+
 ```c
 // Server
 socket(...,SOCK_STREAM,0);
@@ -1052,9 +1063,102 @@ u32 __tcp_select_window(struct sock *sk)
 
 ## Recv
 
-`Ip_rcv` call tcp_v4_rcv
 
-recv read recvfrom at application layer call [tcp_recvmsg]()
+### call tcp_v4_rcv
+`ip_rcv` -> ip_rcv_finish -> dst_input -> ip_local_deliver -> [tcp_v4_rcv](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_rcv)
+
+### call tcp_recvmsg
+
+recv/recvfrom -> sys_recvfrom -> sock_recvmsg -> inet_recvmsg -> [tcp_recvmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_recvmsg)
+
+
+Receive a frame from the socket and optionally record the address of the
+sender. We verify the buffers are writable and if needed move the
+sender address from kernel to user space.
+
+1. sock_recvmsg
+2. move_addr_to_user
+
+```c
+//
+int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
+		   struct sockaddr __user *addr, int __user *addr_len)
+{
+	struct socket *sock;
+	struct iovec iov;
+	struct msghdr msg;
+	struct sockaddr_storage address;
+	...
+	
+	err = sock_recvmsg(sock, &msg, flags);
+
+	if (err >= 0 && addr != NULL) {
+		err2 = move_addr_to_user(&address,
+					 msg.msg_namelen, addr, addr_len);
+	}
+	return err;
+}
+```
+
+Receives msg from sock, passing through LSM. Returns the total number of bytes received, or an error.
+```c
+// 
+int sock_recvmsg(struct socket *sock, struct msghdr *msg, int flags)
+{
+	int err = security_socket_recvmsg(sock, msg, msg_data_left(msg), flags);
+	return err ?: sock_recvmsg_nosec(sock, msg, flags);
+}
+```
+call inet_recvmsg or inet6_recvmsg
+```c
+static inline int sock_recvmsg_nosec(struct socket *sock, struct msghdr *msg,
+				     int flags)
+{
+	return INDIRECT_CALL_INET(sock->ops->recvmsg, inet6_recvmsg,
+				  inet_recvmsg, sock, msg, msg_data_left(msg),
+				  flags);
+}
+```
+inet_recvmsg calls:
+1. tcp_recvmsg
+2. udp_recvmsg
+```c
+// net/ipv4/af_inet.c
+int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
+		 int flags)
+{
+	struct sock *sk = sock->sk;
+	int addr_len = 0;
+	int err;
+
+	err = INDIRECT_CALL_2(sk->sk_prot->recvmsg, tcp_recvmsg, udp_recvmsg,
+			      sk, msg, size, flags & MSG_DONTWAIT,
+			      flags & ~MSG_DONTWAIT, &addr_len);
+	if (err >= 0)
+		msg->msg_namelen = addr_len;
+	return err;
+}
+```
+inet6_recvmsg calls:
+1. tcp_recvmsg
+2. udpv6_recvmsg
+```c
+// net/ipv6/af_inet6.c
+int inet6_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
+		  int flags)
+{
+	struct sock *sk = sock->sk;
+	int addr_len = 0;
+	int err;
+
+	err = INDIRECT_CALL_2(sk->sk_prot->recvmsg, tcp_recvmsg, udpv6_recvmsg,
+			      sk, msg, size, flags & MSG_DONTWAIT,
+			      flags & ~MSG_DONTWAIT, &addr_len);
+	if (err >= 0)
+		msg->msg_namelen = addr_len;
+	return err;
+}
+```
 
 
 
