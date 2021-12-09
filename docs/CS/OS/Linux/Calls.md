@@ -819,8 +819,9 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 ```
 
 #### reqsk_queue_remove
+remove head established connection from reqsk_queue and backlog - 1
 ```c
-
+// 
 static inline struct request_sock *reqsk_queue_remove(struct request_sock_queue *queue,
 						      struct sock *parent)
 {
@@ -1306,15 +1307,15 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 	int error;
 
 	lock_sock(sk);
-
-	/* We need to make sure that this socket is listening,
-	 * and that it has something pending.
-	 */
+```
+We need to make sure that this socket is listening, and that it has something pending.
+```c
 	error = -EINVAL;
 	if (sk->sk_state != TCP_LISTEN)
 		goto out_err;
-
-	/* Find already established connection */
+```
+Try to find already established connection, if isEmpty wait or return(`O_NONBLOCK`)
+```c
 	if (reqsk_queue_empty(queue)) {
 		long timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
 
@@ -1327,6 +1328,9 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 		if (error)
 			goto out_err;
 	}
+```
+remove from 
+```c
 	req = reqsk_queue_remove(queue, sk);
 	newsk = req->sk;
 

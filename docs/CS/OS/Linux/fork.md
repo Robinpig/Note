@@ -183,6 +183,52 @@ Link: [fork: introduce kernel_clone()](https://lore.kernel.org/all/2020081910465
 > Follow-up patches will switch each caller of _do_fork() and each place where it is referenced over to kernel_clone(). 
 > After all these changes are done, we can remove _do_fork() completely and will only be left with kernel_clone().
 
+
+
+#### clone flags
+```c
+
+/*
+ * cloning flags:
+ */
+#define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
+#define CLONE_VM	0x00000100	/* set if VM shared between processes */
+#define CLONE_FS	0x00000200	/* set if fs info shared between processes */
+#define CLONE_FILES	0x00000400	/* set if open files shared between processes */
+#define CLONE_SIGHAND	0x00000800	/* set if signal handlers and blocked signals shared */
+#define CLONE_PIDFD	0x00001000	/* set if a pidfd should be placed in parent */
+#define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
+#define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
+#define CLONE_PARENT	0x00008000	/* set if we want to have the same parent as the cloner */
+#define CLONE_THREAD	0x00010000	/* Same thread group? */
+#define CLONE_NEWNS	0x00020000	/* New mount namespace group */
+#define CLONE_SYSVSEM	0x00040000	/* share system V SEM_UNDO semantics */
+#define CLONE_SETTLS	0x00080000	/* create a new TLS for the child */
+#define CLONE_PARENT_SETTID	0x00100000	/* set the TID in the parent */
+#define CLONE_CHILD_CLEARTID	0x00200000	/* clear the TID in the child */
+#define CLONE_DETACHED		0x00400000	/* Unused, ignored */
+#define CLONE_UNTRACED		0x00800000	/* set if the tracing process can't force CLONE_PTRACE on this clone */
+#define CLONE_CHILD_SETTID	0x01000000	/* set the TID in the child */
+#define CLONE_NEWCGROUP		0x02000000	/* New cgroup namespace */
+#define CLONE_NEWUTS		0x04000000	/* New utsname namespace */
+#define CLONE_NEWIPC		0x08000000	/* New ipc namespace */
+#define CLONE_NEWUSER		0x10000000	/* New user namespace */
+#define CLONE_NEWPID		0x20000000	/* New pid namespace */
+#define CLONE_NEWNET		0x40000000	/* New network namespace */
+#define CLONE_IO		0x80000000	/* Clone io context */
+
+/* Flags for the clone3() syscall. */
+#define CLONE_CLEAR_SIGHAND 0x100000000ULL /* Clear any signal handler and reset to SIG_DFL. */
+#define CLONE_INTO_CGROUP 0x200000000ULL /* Clone into a specific cgroup given the right permissions. */
+
+/*
+ * cloning flags intersect with CSIGNAL so can be used with unshare and clone3
+ * syscalls only:
+ */
+#define CLONE_NEWTIME	0x00000080	/* New time namespace */
+
+```
+
 ```c
 // kernel/fork.c
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
@@ -333,7 +379,7 @@ pid_t kernel_clone(struct kernel_clone_args *args)
 ### copy_process
 
 1. dup_task_struct
-2. 
+
 
 This creates a new process as a copy of the old one,
 but does not actually start it yet.
@@ -483,16 +529,16 @@ static __latent_entropy struct task_struct *copy_process(
        retval = copy_creds(p, clone_flags);
        if (retval < 0)
               goto bad_fork_free;
+```
 
-       /*
-        * If multiple threads are within copy_process(), then this check
-        * triggers too late. This doesn't hurt, the check is only there
-        * to stop root fork bombs.
-        */
+If multiple threads are within copy_process(), then this check triggers too late. This doesn't hurt, the check is only there to stop root fork bombs.
+```c
        retval = -EAGAIN;
        if (data_race(nr_threads >= max_threads))
               goto bad_fork_cleanup_count;
+```
 
+```c
        delayacct_tsk_init(p); /* Must remain after dup_task_struct() */
        p->flags &= ~(PF_SUPERPRIV | PF_WQ_WORKER | PF_IDLE);
        p->flags |= PF_FORKNOEXEC;
@@ -576,11 +622,16 @@ static __latent_entropy struct task_struct *copy_process(
        RCU_INIT_POINTER(p->bpf_storage, NULL);
 #endif
 
-       /* Perform scheduler related setup. Assign this task to a CPU. */
+```
+Perform scheduler related setup. Assign this task to a CPU.
+```
        retval = sched_fork(clone_flags, p);
        if (retval)
               goto bad_fork_cleanup_policy;
+```
 
+
+```c
        retval = perf_event_init_task(p, clone_flags);
        if (retval)
               goto bad_fork_cleanup_policy;
@@ -894,6 +945,140 @@ fork_out:
 ```
 
 
+#### dup_task_struct
+```c
+// kernel/fork.c
+
+static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
+{
+	struct task_struct *tsk;
+	unsigned long *stack;
+	struct vm_struct *stack_vm_area __maybe_unused;
+	int err;
+
+	if (node == NUMA_NO_NODE)
+		node = tsk_fork_get_node(orig);
+	tsk = alloc_task_struct_node(node);
+	if (!tsk)
+		return NULL;
+
+	stack = alloc_thread_stack_node(tsk, node);
+	if (!stack)
+		goto free_tsk;
+
+	if (memcg_charge_kernel_stack(tsk))
+		goto free_stack;
+
+	stack_vm_area = task_stack_vm_area(tsk);
+
+	err = arch_dup_task_struct(tsk, orig);
+
+	/*
+	 * arch_dup_task_struct() clobbers the stack-related fields.  Make
+	 * sure they're properly initialized before using any stack-related
+	 * functions again.
+	 */
+	tsk->stack = stack;
+#ifdef CONFIG_VMAP_STACK
+	tsk->stack_vm_area = stack_vm_area;
+#endif
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+	refcount_set(&tsk->stack_refcount, 1);
+#endif
+
+	if (err)
+		goto free_stack;
+
+	err = scs_prepare(tsk, node);
+	if (err)
+		goto free_stack;
+
+#ifdef CONFIG_SECCOMP
+	/*
+	 * We must handle setting up seccomp filters once we're under
+	 * the sighand lock in case orig has changed between now and
+	 * then. Until then, filter must be NULL to avoid messing up
+	 * the usage counts on the error path calling free_task.
+	 */
+	tsk->seccomp.filter = NULL;
+#endif
+```
+setup_thread_stack: set pointers between task_struct and thread_info
+```
+	setup_thread_stack(tsk, orig);
+	clear_user_return_notifier(tsk);
+	clear_tsk_need_resched(tsk);
+	set_task_stack_end_magic(tsk);
+	clear_syscall_work_syscall_user_dispatch(tsk);
+
+#ifdef CONFIG_STACKPROTECTOR
+	tsk->stack_canary = get_random_canary();
+#endif
+	if (orig->cpus_ptr == &orig->cpus_mask)
+		tsk->cpus_ptr = &tsk->cpus_mask;
+	dup_user_cpus_ptr(tsk, orig, node);
+
+	/*
+	 * One for the user space visible state that goes away when reaped.
+	 * One for the scheduler.
+	 */
+	refcount_set(&tsk->rcu_users, 2);
+	/* One for the rcu users */
+	refcount_set(&tsk->usage, 1);
+#ifdef CONFIG_BLK_DEV_IO_TRACE
+	tsk->btrace_seq = 0;
+#endif
+	tsk->splice_pipe = NULL;
+	tsk->task_frag.page = NULL;
+	tsk->wake_q.next = NULL;
+	tsk->pf_io_worker = NULL;
+
+	account_kernel_stack(tsk, 1);
+
+	kcov_task_init(tsk);
+	kmap_local_fork(tsk);
+
+#ifdef CONFIG_FAULT_INJECTION
+	tsk->fail_nth = 0;
+#endif
+
+#ifdef CONFIG_BLK_CGROUP
+	tsk->throttle_queue = NULL;
+	tsk->use_memdelay = 0;
+#endif
+
+#ifdef CONFIG_MEMCG
+	tsk->active_memcg = NULL;
+#endif
+	return tsk;
+
+free_stack:
+	free_thread_stack(tsk);
+free_tsk:
+	free_task_struct(tsk);
+	return NULL;
+}
+```
+implements by different arches
+
+```c
+// arch/x86/kernel/process.c
+/*
+ * this gets called so that we can store lazy state into memory and copy the
+ * current task into the new thread.
+ */
+int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
+{
+	memcpy(dst, src, arch_task_struct_size);
+#ifdef CONFIG_VM86
+	dst->thread.vm86 = NULL;
+#endif
+	/* Drop the copied pointer to current's fpstate */
+	dst->thread.fpu.fpstate = NULL;
+
+	return 0;
+}
+```
 
 ### copy_mm
 
@@ -912,236 +1097,82 @@ if (clone_flags & CLONE_VM) {
 
 
 
-## schedule
+max threads
 
-__schedule() is the main scheduler function.
+```c
 
-The main means of driving the scheduler and thus entering this function are:
-1. Explicit blocking: mutex, semaphore, waitqueue, etc.
-2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return
-   paths. For example, see arch/x86/entry_64.S.
-   To drive preemption between tasks, the scheduler sets the flag in timer
-   interrupt handler scheduler_tick().
-3. Wakeups don't really cause entry into schedule(). They add a
-   task to the run-queue and that's it.
+/*
+ * Protected counters by write_lock_irq(&tasklist_lock)
+ */
+unsigned long total_forks;	/* Handle normal Linux uptimes. */
+int nr_threads;			/* The idle threads do not count.. */
 
-Now, if the new task added to the run-queue preempts the current
-task, then the wakeup sets TIF_NEED_RESCHED and schedule() gets
-called on the nearest possible occasion:
-- If the kernel is preemptible (CONFIG_PREEMPTION=y):
-    - in syscall or exception context, at the next outmost
-      preempt_enable(). (this might be as soon as the wake_up()'s
-      spin_unlock()!)
-    - in IRQ context, return from interrupt-handler to
-      preemptible context
-- If the kernel is not preemptible (CONFIG_PREEMPTION is not set)
-  then at the next:
-    - cond_resched() call
-    - explicit schedule() call
-    - return from syscall or exception to user-space
-    - return from interrupt-handler to user-space
+static int max_threads;		/* tunable limit on nr_threads */
+```
 
-WARNING: must be called with preemption disabled!
+### sched_fork
+fork()/clone()-time setup:
 ```c
 // kernel/sched/core.c
-static void __sched notrace __schedule(bool preempt)
+int sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
-	struct task_struct *prev, *next;
-	unsigned long *switch_count;
-	unsigned long prev_state;
-	struct rq_flags rf;
-	struct rq *rq;
-	int cpu;
-
-	cpu = smp_processor_id();
-	rq = cpu_rq(cpu);
-	prev = rq->curr;
-
-	schedule_debug(prev, preempt);
-
-	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
-		hrtick_clear(rq);
-
-	local_irq_disable();
-	rcu_note_context_switch(preempt);
+	__sched_fork(clone_flags, p);
+	/*
+	 * We mark the process as NEW here. This guarantees that
+	 * nobody will actually run it, and a signal or other external
+	 * event cannot wake it up and insert it on the runqueue either.
+	 */
+	p->__state = TASK_NEW;
 
 	/*
-	 * Make sure that signal_pending_state()->signal_pending() below
-	 * can't be reordered with __set_current_state(TASK_INTERRUPTIBLE)
-	 * done by the caller to avoid the race with signal_wake_up():
-	 *
-	 * __set_current_state(@state)		signal_wake_up()
-	 * schedule()				  set_tsk_thread_flag(p, TIF_SIGPENDING)
-	 *					  wake_up_state(p, state)
-	 *   LOCK rq->lock			    LOCK p->pi_state
-	 *   smp_mb__after_spinlock()		    smp_mb__after_spinlock()
-	 *     if (signal_pending_state())	    if (p->state & @state)
-	 *
-	 * Also, the membarrier system call requires a full memory barrier
-	 * after coming from user-space, before storing to rq->curr.
+	 * Make sure we do not leak PI boosting priority to the child.
 	 */
-	rq_lock(rq, &rf);
-	smp_mb__after_spinlock();
+	p->prio = current->normal_prio;
 
-	/* Promote REQ to ACT */
-	rq->clock_update_flags <<= 1;
-	update_rq_clock(rq);
-
-	switch_count = &prev->nivcsw;
+	uclamp_fork(p);
 
 	/*
-	 * We must load prev->state once (task_struct::state is volatile), such
-	 * that:
-	 *
-	 *  - we form a control dependency vs deactivate_task() below.
-	 *  - ptrace_{,un}freeze_traced() can change ->state underneath us.
+	 * Revert to default priority/policy on fork if requested.
 	 */
-	prev_state = prev->state;
-	if (!preempt && prev_state) {
-		if (signal_pending_state(prev_state, prev)) {
-			prev->state = TASK_RUNNING;
-		} else {
-			prev->sched_contributes_to_load =
-				(prev_state & TASK_UNINTERRUPTIBLE) &&
-				!(prev_state & TASK_NOLOAD) &&
-				!(prev->flags & PF_FROZEN);
+	if (unlikely(p->sched_reset_on_fork)) {
+		if (task_has_dl_policy(p) || task_has_rt_policy(p)) {
+			p->policy = SCHED_NORMAL;
+			p->static_prio = NICE_TO_PRIO(0);
+			p->rt_priority = 0;
+		} else if (PRIO_TO_NICE(p->static_prio) < 0)
+			p->static_prio = NICE_TO_PRIO(0);
 
-			if (prev->sched_contributes_to_load)
-				rq->nr_uninterruptible++;
+		p->prio = p->normal_prio = p->static_prio;
+		set_load_weight(p, false);
 
-			/*
-			 * __schedule()			ttwu()
-			 *   prev_state = prev->state;    if (p->on_rq && ...)
-			 *   if (prev_state)		    goto out;
-			 *     p->on_rq = 0;		  smp_acquire__after_ctrl_dep();
-			 *				  p->state = TASK_WAKING
-			 *
-			 * Where __schedule() and ttwu() have matching control dependencies.
-			 *
-			 * After this, schedule() must not care about p->state any more.
-			 */
-			deactivate_task(rq, prev, DEQUEUE_SLEEP | DEQUEUE_NOCLOCK);
-
-			if (prev->in_iowait) {
-				atomic_inc(&rq->nr_iowait);
-				delayacct_blkio_start();
-			}
-		}
-		switch_count = &prev->nvcsw;
+		/*
+		 * We don't need the reset flag anymore after the fork. It has
+		 * fulfilled its duty:
+		 */
+		p->sched_reset_on_fork = 0;
 	}
-```
 
-pick next task
-```c
+	if (dl_prio(p->prio))
+		return -EAGAIN;
+	else if (rt_prio(p->prio))
+		p->sched_class = &rt_sched_class;
+	else
+		p->sched_class = &fair_sched_class;
 
-	next = pick_next_task(rq, prev, &rf);
-	clear_tsk_need_resched(prev);
-	clear_preempt_need_resched();
-#ifdef CONFIG_SCHED_DEBUG
-	rq->last_seen_need_resched_ns = 0;
+	init_entity_runnable_average(&p->se);
+
+#ifdef CONFIG_SCHED_INFO
+	if (likely(sched_info_on()))
+		memset(&p->sched_info, 0, sizeof(p->sched_info));
 #endif
-
-	if (likely(prev != next)) {
-		rq->nr_switches++;
-		/*
-		 * RCU users of rcu_dereference(rq->curr) may not see
-		 * changes to task_struct made by pick_next_task().
-		 */
-		RCU_INIT_POINTER(rq->curr, next);
-		/*
-		 * The membarrier system call requires each architecture
-		 * to have a full memory barrier after updating
-		 * rq->curr, before returning to user-space.
-		 *
-		 * Here are the schemes providing that barrier on the
-		 * various architectures:
-		 * - mm ? switch_mm() : mmdrop() for x86, s390, sparc, PowerPC.
-		 *   switch_mm() rely on membarrier_arch_switch_mm() on PowerPC.
-		 * - finish_lock_switch() for weakly-ordered
-		 *   architectures where spin_unlock is a full barrier,
-		 * - switch_to() for arm64 (weakly-ordered, spin_unlock
-		 *   is a RELEASE barrier),
-		 */
-		++*switch_count;
-
-		migrate_disable_switch(rq, prev);
-		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
-
-		trace_sched_switch(preempt, prev, next);
-
-		/* Also unlocks the rq: */
-		rq = context_switch(rq, prev, next, &rf);
-	} else {
-		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
-
-		rq_unpin_lock(rq, &rf);
-		__balance_callbacks(rq);
-		raw_spin_unlock_irq(&rq->lock);
-	}
-}
-
-```
-
-
-### context switch
-context_switch - switch to the new MM and the new thread's register state.
-```c
-// kernel/linux/core.c
-static __always_inline struct rq *
-context_switch(struct rq *rq, struct task_struct *prev,
-	       struct task_struct *next, struct rq_flags *rf)
-{
-	prepare_task_switch(rq, prev, next);
-
-	/*
-	 * For paravirt, this is coupled with an exit in switch_to to
-	 * combine the page table reload and the switch backend into
-	 * one hypercall.
-	 */
-	arch_start_context_switch(prev);
-
-	/*
-	 * kernel -> kernel   lazy + transfer active
-	 *   user -> kernel   lazy + mmgrab() active
-	 *
-	 * kernel ->   user   switch + mmdrop() active
-	 *   user ->   user   switch
-	 */
-	if (!next->mm) {                                // to kernel
-		enter_lazy_tlb(prev->active_mm, next);
-
-		next->active_mm = prev->active_mm;
-		if (prev->mm)                           // from user
-			mmgrab(prev->active_mm);
-		else
-			prev->active_mm = NULL;
-	} else {                                        // to user
-		membarrier_switch_mm(rq, prev->active_mm, next->mm);
-		/*
-		 * sys_membarrier() requires an smp_mb() between setting
-		 * rq->curr / membarrier_switch_mm() and returning to userspace.
-		 *
-		 * The below provides this either through switch_mm(), or in
-		 * case 'prev->active_mm == next->mm' through
-		 * finish_task_switch()'s mmdrop().
-		 */
-		switch_mm_irqs_off(prev->active_mm, next->mm, next);
-
-		if (!prev->mm) {                        // from kernel
-			/* will mmdrop() in finish_task_switch(). */
-			rq->prev_mm = prev->active_mm;
-			prev->active_mm = NULL;
-		}
-	}
-
-	rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
-
-	prepare_lock_switch(rq, next, rf);
-
-	/* Here we just switch the register state and the stack. */
-	switch_to(prev, next, prev);
-	barrier();
-
-	return finish_task_switch(prev);
+#if defined(CONFIG_SMP)
+	p->on_cpu = 0;
+#endif
+	init_task_preempt_count(p);
+#ifdef CONFIG_SMP
+	plist_node_init(&p->pushable_tasks, MAX_PRIO);
+	RB_CLEAR_NODE(&p->pushable_dl_tasks);
+#endif
+	return 0;
 }
 ```

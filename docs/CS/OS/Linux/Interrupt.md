@@ -1,209 +1,36 @@
-# Interrupt
-
-
-
-什么是中断？简单来说就是**CPU停下当前的工作任务，去处理其他事情，处理完后回来继续执行刚才的任务**，这一过程便是中断。
-
-本文旨在进一步揭开中断机制的面纱，理清中断的过程，就中断做出以下几个方面的介绍：
-
-中断分类，中断描述符表，中断控制器，和中断过程
-
-
-
-## 中断分类
-
-- 外部
-  - 可屏蔽
-  - 不可屏蔽
-- 内部
-  - 陷阱
-  - 故障
-  - 终止
-
-
-
-
-
-### 外部中断
-
-**1、可屏蔽中断**：**通过INTR线向CPU请求的中断**，主要来自外部设备如硬盘，打印机，网卡等。此类中断并不会影响系统运行，可随时处理，甚至不处理，所以名为可屏蔽中断。
-
-**2、不可屏蔽中断**：**通过NMI线向CPU请求的中断**，如电源掉电，硬件线路故障等。这里不可屏蔽的意思不是不可以屏蔽，不建议屏蔽，而是问题太大，屏蔽不了，不能屏蔽的意思。
-
-注：INTR和NMI都是CPU的引脚
-
-
-
-### 内部中断
-
-(软中断，异常)
-
-**1、陷阱：是一种有意的，预先安排的异常事件**，一般是在编写程序时故意设下的陷阱指令，而后执行到陷阱指令后，CPU将会调用特定程序进行相应的处理，**处理结束后返回到陷阱指令的下一条指令**。如系统调用，程序调试功能等。
-
-尽管我们平时写程序时似乎并没有设下陷阱，那是因为平常所用的高级语言对底层的指令进行了太多层的抽象封装，已看不到底层的实现，但其实是存在的。例如**printf函数，最底层的实现中会有一条int 0x80指令**，这就是一条陷阱指令，使用0x80号中断进行系统调用。
-
-**2、故障：故障是在引起故障的指令被执行，但还没有执行结束时，CPU检测到的一类的意外事件。**出错时交由故障处理程序处理，**如果能处理修正这个错误，就将控制返回到引起故障的指令即CPU重新执这条指令。如果不能处理就报错**。
-
-常见的故障为缺页，当CPU引用的虚拟地址对应的物理页不存在时就会发生故障。缺页异常是能够修正的，有着专门的缺页处理程序，它会将缺失的物理页从磁盘中重新调进主存。而后再次执行引起故障的指令时便能够顺利执行了。
-
-**3、终止：执行指令的过程中发生了致命错误，不可修复，程序无法继续运行，只能终止，通常会是一些硬件的错误。**终止处理程序不会将控制返回给原程序，而是直接终止原程序
-
-
-
-## 中断描述符表
-
-中断描述符表类似全局描述附表，表内存放的描述符，与GDT不同的是IDT内可以存放4种描述符：任务门描述符，陷阱门描述符，调用门描述符，中断门描述符。
-
-咱们在此只介绍中断门描述符，4种描述符除了任务门其他都类似，中断门也是最常用的，如Linux的系统调用就是使用中断门实现的。
-
-
-
-### 中断描述符
-
-![一文讲透计算机的“中断”](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/72a699d5ec644da5be09800ef3dd880b~tplv-k3u1fbpfcp-zoom-1.image)
-
-中断描述符的结构如上，重要字段和属性为已标出，有个了解就好，不必深究各个位的具体含义。
-
-### 中断向量号
-
-在介绍中断向量号之前，我们先引入一个段选择子（segment selector）的概念。所谓段选择子，就是段寄存器的值，段选择子的高13位为全局描述符表的索引号，其他的位置是属性位，这就好比是数组下标索引数组元素。
-
-至于中断向量号，作用等同于段选择子的高13位，用来在IDT中索引相对的中断描述符，但没有相应的类似段选择子的结构。
-
-部分中断向量表，需要了解的部分如下图所示：
-
-![一文讲透计算机的“中断”](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-**3**
-
-中断描述符表寄存器IDTR
-
-![一文讲透计算机的“中断”](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-IDTR也类似于GDTR，存放的是48位数据信息，高32位是IDT的地址，低16位表示IDT的界限。
-
-同GDTR，IDTR也有相应的加载指令：**lidt m16&32**，m是那48位数据信息，lidt指令将其加载到IDTR寄存器，使得CPU知道IDT在哪。
-
-
-
-## 中断控制器
-
-每个独立运行的外设都可以是一个中断源，能够向CPU发送中断请求，为了方便管理和减少引脚数目，设立了中断控制器，让所有的可屏蔽中断都通过INTR信号线与CPU进行交流。
-
-中断控制器中较为流行的是Intel 8259A芯片，下面对8259A作简单介绍：
-
-**1**
-
-级联
-
-**单个8259A芯片只有8根中断请求信号线**（IRQ0, IRQ1, … , IRQ7），这是不够用的，所以采用多个8259A芯片。将它们如下图一样像串联的方式组合起来，这种组合方式就叫做级联。
-
-![一文讲透计算机的“中断”](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
-
-**级联时只能有一个主片，其余的均为从片**，最多可级联9个，即最多支持64个中断。为什么不是8 * 9 = 72个呢？从上图可以看出**级联时后面的芯片会占用前面芯片的一个IRQ接口**，而最后一个8259A没有其他人占用，所以8259A的个数和支持的中断数关系为7n + 1。
-
-**2**
-
-8259A的一些功寄存器和功能部件
-
-1、IMR：Interrupt Mask Register，中断屏蔽寄存器，其中的每个位标志着一个外设，1表示屏蔽该外设，0表示中断允许。
-
-2、IRR：Interrrupt Request Register，中断请求寄存器，请求中断的外设在IRR对应的位 值为1。当有多个中断请求时，IRR寄存器中多位将会置1，相当于维持了一个请求中断的队列。
-
-3、ISR：In_Service Register，中断服务寄存器，正在进行处理的中断在ISR对应的位值为1。
-
-4、PR：Priority Resolver，优先级裁决器，用于从IRR中挑选一个优先级最大的中断。(IRQ接口号小的优先级大)。
-
-
-
-## 中断过程
-
-
-
-### 中断请求
-
-**1、**当外设发出中断信号后，信号被送入8259A；
-
-**2、**8259A检查IMR寄存器中是否屏蔽了来自该IRQ的信号，若IMR寄存器中对应的位为1，表示屏蔽了IRQ代表的中断，则丢掉此中断信号，若IMR寄存器中对应的位为0，表示未屏蔽此中断，则将IRR寄存器中与此中断对应的位 置1。
-
-**3、**PR优先级裁决器从IRR寄存器中挑选一个优先级最大的中断，然后8259A向CPU发送INTR信号。
-
-**2**
-
-### 中断响应
-
-**1、**CPU收到INTR信号后便知道有新的中断了，在执行完当前指令后，向8259A发送一个中断回复信号。
-
-**2、**8259A收到回复信号后，将选出来的优先级最大的中断在ISR寄存器中相应的位 置1，表示该中断正在处理，同时将此中断在IRR寄存器中相应的位 置0，相当于将此中断从中断请求队列中去掉。
-
-**3、**CPU再次向8259A发送INTR信号，表示想要获取中断向量号。
-
-**4、**8259A通过数据总线向CPU发送中断向量号，**中断向量号 = 起始向量号 + IRQ接口号**，一般起始向量号为32，从中断向量表可看出0—31已经被占用，后面的32—127是分配给可屏蔽中断的，所以此处外设的中断设置的起始向量号便为32。
-
-**3**
-
-### 保护现场——压栈
-
-**1、**CPU据中断向量号去IDT中获取中断描述符，取出选择子中的DPL与当前特权级CPL进行比较，若特权级发生变化，则需要切换栈。（不同特权级有着不同的栈，如Linux使用了0， 3特权级，则有两个栈，一个内核栈，一个用户栈）
-
-**2、**于是处理器临时保存当前的旧栈SS和ESP的值，从TSS（每一个任务有一个TSS结构，其中保存着不同特权级栈的SS和ESP值）中获取与DPL特权级同的栈信息加载到SS和ESP寄存器。再将旧栈SS和ESP的值压入新栈中。若没有特权级变化，则跳过此步骤。
-
-3、压入程序状态信息，即EFLAGS寄存器
-
-4、压入断点，即返回地址，即当前任务的CS，EIP值。
-
-5、若该中断有错误码，压入错误码
-
-
-
-### 定位中断服务程序
-
-具体步骤如下：
-
-**1、**据中断向量号去IDT中索引中断描述符，具体操作：取出IDTR中的IDT地址，加上中断向量号 * 8，得到的地址指向所要的中断描述符。
-
-**2、**据中断描述符中的段选择子去GDT中索引段描述符，具体操作：取出GDTR中的GDT地址。加上段选择子高13位 * 8， 得到的地址为中断处理程序所在段的段基址。
-
-**3、**上一步得到的段基址加上段描述符中的段内偏移量得到的地址变为中断服务程序的地址。
-
-**5**
-
-### 中断处理过程
-
-中断的实际处理过程就是执行中断处理程序，Linux将中断处理程序分为上下两部分，需要紧急处理立即执行的归为上半部，不那么紧急的归为下半部。
-
-这便涉及到了开关中断的问题。开中断，即EFLAGS的IF位置1，表示允许响应中断；关中断，即EFLAGS的IF位置0，表示不允许响应中断。
-
-**1、**上半部分是刻不容缓的，需要立即执行的部分，所以要在关中断的状态下执行。
-
-**2、**而下半部分不那么紧急，在开中断的情况下进行，如果此时有新的中断发生，当前中断处理程序便会换下CPU，CPU会另寻时间重新调度，完成整个中断处理程序。
-
-**6**
-
-### 中断返回——出栈
-
-中断返回就是出栈的过程，将第三步保护现场压入栈中的信息弹出。
-
-**1、**有错误码弹出错误码。
-
-**2、**此时的栈顶指针ESP应指向EIP_old，剩余栈中的信息使用iret指令弹出，CPU执行到iret指令时再次检查和比较特权级是否变化。
-
-**3、**弹出EIP_old, CS_old
-
-**4、**若特权级变化，将ESP_old, SS_old, 加载到ESP，SS寄存器。
-
-至此，中断已返回，中断也已处理。
-
-上述的中断过程是我根据资料照着自己的理解分为了6步，每步又有许多微操作，可能跟某些书籍资料等所划分的步骤不同，甚至一些微操作的顺序也不太一样，比如说中断处理时什么时候关中断，我查阅了许多资料和书籍，讲述得都有区别。
-
-不同操作系统在中断方面的实现有所不同，但总体来说都会经历上述的步骤，可能细微之处略有差别，却也不影响我们了解中断的过程。
-
-
-
-## END
-
-中断是操作系统重要的机制，没有中断，操作系统什么也干不了，没法输入没法输出，不能管理硬件资源，也不能向上层应用提供服务。而且操作系统本身就像是一个死循环，等待事件发生需求来临，然后为其提供服务解决问题。而这事件的发生与处理就是靠中断机制来控制的，所以说中断对于操作系统来说有着举足轻重的作用，而我们也有必要了解中断，理清中断的过程。
-
+## Introduction
+
+
+Bit masks for desc->core_internal_state__do_not_mess_with_it
+```c
+// kernal/irq/internals.h
+/*
+ * IRQS_AUTODETECT		- autodetection in progress
+ * IRQS_SPURIOUS_DISABLED	- was disabled due to spurious interrupt
+ *				  detection
+ * IRQS_POLL_INPROGRESS		- polling in progress
+ * IRQS_ONESHOT			- irq is not unmasked in primary handler
+ * IRQS_REPLAY			- irq is replayed
+ * IRQS_WAITING			- irq is waiting
+ * IRQS_PENDING			- irq is pending and replayed later
+ * IRQS_SUSPENDED		- irq is suspended
+ * IRQS_NMI			- irq line is used to deliver NMIs
+ */
+enum {
+	IRQS_AUTODETECT		= 0x00000001,
+	IRQS_SPURIOUS_DISABLED	= 0x00000002,
+	IRQS_POLL_INPROGRESS	= 0x00000008,
+	IRQS_ONESHOT		= 0x00000020,
+	IRQS_REPLAY		= 0x00000040,
+	IRQS_WAITING		= 0x00000080,
+	IRQS_PENDING		= 0x00000200,
+	IRQS_SUSPENDED		= 0x00000800,
+	IRQS_TIMINGS		= 0x00001000,
+	IRQS_NMI		= 0x00002000,
+};
+```
+
+### request_irq
 
 request_irq - Add a handler for an interrupt line
 - irq:	The interrupt line to allocate
@@ -293,7 +120,9 @@ int retval;
 		kfree(action);
 		return retval;
 	}
-
+```
+call __setup_irq
+```c
 	retval = __setup_irq(irq, desc, action);
 
 	if (retval) {
@@ -301,7 +130,9 @@ int retval;
 		kfree(action->secondary);
 		kfree(action);
 	}
+```
 
+```c
 #ifdef CONFIG_DEBUG_SHIRQ_FIXME
 	if (!retval && (irqflags & IRQF_SHARED)) {
 		/*
@@ -442,3 +273,662 @@ __visible const sys_call_ptr_t ia32_sys_call_table[] = {
 #include <asm/syscalls_32.h>
 };
 ```
+
+
+#### handle_irq_event_percpu
+```c
+// kernel/irq/handle.c
+irqreturn_t handle_irq_event_percpu(struct irq_desc *desc)
+{
+	irqreturn_t retval;
+	unsigned int flags = 0;
+
+	retval = __handle_irq_event_percpu(desc, &flags);
+
+	add_interrupt_randomness(desc->irq_data.irq, flags);
+
+	if (!irq_settings_no_debug(desc))
+		note_interrupt(desc, retval);
+	return retval;
+}
+
+
+irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags)
+{
+	irqreturn_t retval = IRQ_NONE;
+	unsigned int irq = desc->irq_data.irq;
+	struct irqaction *action;
+
+	record_irq_time(desc);
+
+	for_each_action_of_desc(desc, action) {
+		irqreturn_t res;
+
+		/*
+		 * If this IRQ would be threaded under force_irqthreads, mark it so.
+		 */
+		if (irq_settings_can_thread(desc) &&
+		    !(action->flags & (IRQF_NO_THREAD | IRQF_PERCPU | IRQF_ONESHOT)))
+			lockdep_hardirq_threaded();
+
+		trace_irq_handler_entry(irq, action);
+		res = action->handler(irq, action->dev_id);
+		trace_irq_handler_exit(irq, action, res);
+
+		if (WARN_ONCE(!irqs_disabled(),"irq %u handler %pS enabled interrupts\n",
+			      irq, action->handler))
+			local_irq_disable();
+
+		switch (res) {
+		case IRQ_WAKE_THREAD:
+			/*
+			 * Catch drivers which return WAKE_THREAD but
+			 * did not set up a thread function
+			 */
+			if (unlikely(!action->thread_fn)) {
+				warn_no_thread(irq, action);
+				break;
+			}
+
+			__irq_wake_thread(desc, action);
+
+			fallthrough;	/* to add to randomness */
+		case IRQ_HANDLED:
+			*flags |= action->flags;
+			break;
+
+		default:
+			break;
+		}
+
+		retval |= res;
+	}
+
+	return retval;
+}
+```
+
+### setup_irq
+Internal function to register an irqaction - typically used to
+allocate special interrupts that are part of the architecture.
+
+Locking rules:
+- desc->request_mutex	Provides serialization against a concurrent free_irq()
+- chip_bus_lock	Provides serialization for slow bus operations
+- desc->lock	Provides serialization against hard interrupts
+
+chip_bus_lock and desc->lock are sufficient for all other management and
+interrupt related functions. desc->request_mutex solely serializes
+request/free_irq().
+```c
+// kernel/irq/manage.c
+static int
+__setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
+{
+	struct irqaction *old, **old_ptr;
+	unsigned long flags, thread_mask = 0;
+	int ret, nested, shared = 0;
+
+	if (!desc)
+		return -EINVAL;
+
+	if (desc->irq_data.chip == &no_irq_chip)
+		return -ENOSYS;
+	if (!try_module_get(desc->owner))
+		return -ENODEV;
+
+	new->irq = irq;
+
+	/*
+	 * If the trigger type is not specified by the caller,
+	 * then use the default for this interrupt.
+	 */
+	if (!(new->flags & IRQF_TRIGGER_MASK))
+		new->flags |= irqd_get_trigger_type(&desc->irq_data);
+
+	/*
+	 * Check whether the interrupt nests into another interrupt
+	 * thread.
+	 */
+	nested = irq_settings_is_nested_thread(desc);
+	if (nested) {
+		if (!new->thread_fn) {
+			ret = -EINVAL;
+			goto out_mput;
+		}
+		/*
+		 * Replace the primary handler which was provided from
+		 * the driver for non nested interrupt handling by the
+		 * dummy function which warns when called.
+		 */
+		new->handler = irq_nested_primary_handler;
+	} else {
+		if (irq_settings_can_thread(desc)) {
+			ret = irq_setup_forced_threading(new);
+			if (ret)
+				goto out_mput;
+		}
+	}
+
+	/*
+	 * Create a handler thread when a thread function is supplied
+	 * and the interrupt does not nest into another interrupt
+	 * thread.
+	 */
+	if (new->thread_fn && !nested) {
+		ret = setup_irq_thread(new, irq, false);
+		if (ret)
+			goto out_mput;
+		if (new->secondary) {
+			ret = setup_irq_thread(new->secondary, irq, true);
+			if (ret)
+				goto out_thread;
+		}
+	}
+
+	/*
+	 * Drivers are often written to work w/o knowledge about the
+	 * underlying irq chip implementation, so a request for a
+	 * threaded irq without a primary hard irq context handler
+	 * requires the ONESHOT flag to be set. Some irq chips like
+	 * MSI based interrupts are per se one shot safe. Check the
+	 * chip flags, so we can avoid the unmask dance at the end of
+	 * the threaded handler for those.
+	 */
+	if (desc->irq_data.chip->flags & IRQCHIP_ONESHOT_SAFE)
+		new->flags &= ~IRQF_ONESHOT;
+
+	/*
+	 * Protects against a concurrent __free_irq() call which might wait
+	 * for synchronize_hardirq() to complete without holding the optional
+	 * chip bus lock and desc->lock. Also protects against handing out
+	 * a recycled oneshot thread_mask bit while it's still in use by
+	 * its previous owner.
+	 */
+	mutex_lock(&desc->request_mutex);
+
+	/*
+	 * Acquire bus lock as the irq_request_resources() callback below
+	 * might rely on the serialization or the magic power management
+	 * functions which are abusing the irq_bus_lock() callback,
+	 */
+	chip_bus_lock(desc);
+
+	/* First installed action requests resources. */
+	if (!desc->action) {
+		ret = irq_request_resources(desc);
+		if (ret) {
+			pr_err("Failed to request resources for %s (irq %d) on irqchip %s\n",
+			       new->name, irq, desc->irq_data.chip->name);
+			goto out_bus_unlock;
+		}
+	}
+
+	/*
+	 * The following block of code has to be executed atomically
+	 * protected against a concurrent interrupt and any of the other
+	 * management calls which are not serialized via
+	 * desc->request_mutex or the optional bus lock.
+	 */
+	raw_spin_lock_irqsave(&desc->lock, flags);
+	old_ptr = &desc->action;
+	old = *old_ptr;
+	if (old) {
+		/*
+		 * Can't share interrupts unless both agree to and are
+		 * the same type (level, edge, polarity). So both flag
+		 * fields must have IRQF_SHARED set and the bits which
+		 * set the trigger type must match. Also all must
+		 * agree on ONESHOT.
+		 * Interrupt lines used for NMIs cannot be shared.
+		 */
+		unsigned int oldtype;
+
+		if (desc->istate & IRQS_NMI) {
+			pr_err("Invalid attempt to share NMI for %s (irq %d) on irqchip %s.\n",
+				new->name, irq, desc->irq_data.chip->name);
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+
+		/*
+		 * If nobody did set the configuration before, inherit
+		 * the one provided by the requester.
+		 */
+		if (irqd_trigger_type_was_set(&desc->irq_data)) {
+			oldtype = irqd_get_trigger_type(&desc->irq_data);
+		} else {
+			oldtype = new->flags & IRQF_TRIGGER_MASK;
+			irqd_set_trigger_type(&desc->irq_data, oldtype);
+		}
+
+		if (!((old->flags & new->flags) & IRQF_SHARED) ||
+		    (oldtype != (new->flags & IRQF_TRIGGER_MASK)) ||
+		    ((old->flags ^ new->flags) & IRQF_ONESHOT))
+			goto mismatch;
+
+		/* All handlers must agree on per-cpuness */
+		if ((old->flags & IRQF_PERCPU) !=
+		    (new->flags & IRQF_PERCPU))
+			goto mismatch;
+
+		/* add new interrupt at end of irq queue */
+		do {
+			/*
+			 * Or all existing action->thread_mask bits,
+			 * so we can find the next zero bit for this
+			 * new action.
+			 */
+			thread_mask |= old->thread_mask;
+			old_ptr = &old->next;
+			old = *old_ptr;
+		} while (old);
+		shared = 1;
+	}
+
+	/*
+	 * Setup the thread mask for this irqaction for ONESHOT. For
+	 * !ONESHOT irqs the thread mask is 0 so we can avoid a
+	 * conditional in irq_wake_thread().
+	 */
+	if (new->flags & IRQF_ONESHOT) {
+		/*
+		 * Unlikely to have 32 resp 64 irqs sharing one line,
+		 * but who knows.
+		 */
+		if (thread_mask == ~0UL) {
+			ret = -EBUSY;
+			goto out_unlock;
+		}
+		/*
+		 * The thread_mask for the action is or'ed to
+		 * desc->thread_active to indicate that the
+		 * IRQF_ONESHOT thread handler has been woken, but not
+		 * yet finished. The bit is cleared when a thread
+		 * completes. When all threads of a shared interrupt
+		 * line have completed desc->threads_active becomes
+		 * zero and the interrupt line is unmasked. See
+		 * handle.c:irq_wake_thread() for further information.
+		 *
+		 * If no thread is woken by primary (hard irq context)
+		 * interrupt handlers, then desc->threads_active is
+		 * also checked for zero to unmask the irq line in the
+		 * affected hard irq flow handlers
+		 * (handle_[fasteoi|level]_irq).
+		 *
+		 * The new action gets the first zero bit of
+		 * thread_mask assigned. See the loop above which or's
+		 * all existing action->thread_mask bits.
+		 */
+		new->thread_mask = 1UL << ffz(thread_mask);
+
+	} else if (new->handler == irq_default_primary_handler &&
+		   !(desc->irq_data.chip->flags & IRQCHIP_ONESHOT_SAFE)) {
+		/*
+		 * The interrupt was requested with handler = NULL, so
+		 * we use the default primary handler for it. But it
+		 * does not have the oneshot flag set. In combination
+		 * with level interrupts this is deadly, because the
+		 * default primary handler just wakes the thread, then
+		 * the irq lines is reenabled, but the device still
+		 * has the level irq asserted. Rinse and repeat....
+		 *
+		 * While this works for edge type interrupts, we play
+		 * it safe and reject unconditionally because we can't
+		 * say for sure which type this interrupt really
+		 * has. The type flags are unreliable as the
+		 * underlying chip implementation can override them.
+		 */
+		pr_err("Threaded irq requested with handler=NULL and !ONESHOT for %s (irq %d)\n",
+		       new->name, irq);
+		ret = -EINVAL;
+		goto out_unlock;
+	}
+
+	if (!shared) {
+		init_waitqueue_head(&desc->wait_for_threads);
+
+		/* Setup the type (level, edge polarity) if configured: */
+		if (new->flags & IRQF_TRIGGER_MASK) {
+			ret = __irq_set_trigger(desc,
+						new->flags & IRQF_TRIGGER_MASK);
+
+			if (ret)
+				goto out_unlock;
+		}
+
+		/*
+		 * Activate the interrupt. That activation must happen
+		 * independently of IRQ_NOAUTOEN. request_irq() can fail
+		 * and the callers are supposed to handle
+		 * that. enable_irq() of an interrupt requested with
+		 * IRQ_NOAUTOEN is not supposed to fail. The activation
+		 * keeps it in shutdown mode, it merily associates
+		 * resources if necessary and if that's not possible it
+		 * fails. Interrupts which are in managed shutdown mode
+		 * will simply ignore that activation request.
+		 */
+		ret = irq_activate(desc);
+		if (ret)
+			goto out_unlock;
+
+		desc->istate &= ~(IRQS_AUTODETECT | IRQS_SPURIOUS_DISABLED | \
+				  IRQS_ONESHOT | IRQS_WAITING);
+		irqd_clear(&desc->irq_data, IRQD_IRQ_INPROGRESS);
+
+		if (new->flags & IRQF_PERCPU) {
+			irqd_set(&desc->irq_data, IRQD_PER_CPU);
+			irq_settings_set_per_cpu(desc);
+			if (new->flags & IRQF_NO_DEBUG)
+				irq_settings_set_no_debug(desc);
+		}
+
+		if (noirqdebug)
+			irq_settings_set_no_debug(desc);
+
+		if (new->flags & IRQF_ONESHOT)
+			desc->istate |= IRQS_ONESHOT;
+
+		/* Exclude IRQ from balancing if requested */
+		if (new->flags & IRQF_NOBALANCING) {
+			irq_settings_set_no_balancing(desc);
+			irqd_set(&desc->irq_data, IRQD_NO_BALANCING);
+		}
+
+		if (!(new->flags & IRQF_NO_AUTOEN) &&
+		    irq_settings_can_autoenable(desc)) {
+			irq_startup(desc, IRQ_RESEND, IRQ_START_COND);
+		} else {
+			/*
+			 * Shared interrupts do not go well with disabling
+			 * auto enable. The sharing interrupt might request
+			 * it while it's still disabled and then wait for
+			 * interrupts forever.
+			 */
+			WARN_ON_ONCE(new->flags & IRQF_SHARED);
+			/* Undo nested disables: */
+			desc->depth = 1;
+		}
+
+	} else if (new->flags & IRQF_TRIGGER_MASK) {
+		unsigned int nmsk = new->flags & IRQF_TRIGGER_MASK;
+		unsigned int omsk = irqd_get_trigger_type(&desc->irq_data);
+
+		if (nmsk != omsk)
+			/* hope the handler works with current  trigger mode */
+			pr_warn("irq %d uses trigger mode %u; requested %u\n",
+				irq, omsk, nmsk);
+	}
+
+	*old_ptr = new;
+
+	irq_pm_install_action(desc, new);
+
+	/* Reset broken irq detection when installing new handler */
+	desc->irq_count = 0;
+	desc->irqs_unhandled = 0;
+
+	/*
+	 * Check whether we disabled the irq via the spurious handler
+	 * before. Reenable it and give it another chance.
+	 */
+	if (shared && (desc->istate & IRQS_SPURIOUS_DISABLED)) {
+		desc->istate &= ~IRQS_SPURIOUS_DISABLED;
+		__enable_irq(desc);
+	}
+
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+	chip_bus_sync_unlock(desc);
+	mutex_unlock(&desc->request_mutex);
+
+	irq_setup_timings(desc, new);
+
+	/*
+	 * Strictly no need to wake it up, but hung_task complains
+	 * when no hard interrupt wakes the thread up.
+	 */
+	if (new->thread)
+		wake_up_process(new->thread);
+	if (new->secondary)
+		wake_up_process(new->secondary->thread);
+
+	register_irq_proc(irq, desc);
+	new->dir = NULL;
+	register_handler_proc(irq, new);
+	return 0;
+
+mismatch:
+	if (!(new->flags & IRQF_PROBE_SHARED)) {
+		pr_err("Flags mismatch irq %d. %08x (%s) vs. %08x (%s)\n",
+		       irq, new->flags, new->name, old->flags, old->name);
+#ifdef CONFIG_DEBUG_SHIRQ
+		dump_stack();
+#endif
+	}
+	ret = -EBUSY;
+
+out_unlock:
+	raw_spin_unlock_irqrestore(&desc->lock, flags);
+
+	if (!desc->action)
+		irq_release_resources(desc);
+out_bus_unlock:
+	chip_bus_sync_unlock(desc);
+	mutex_unlock(&desc->request_mutex);
+
+out_thread:
+	if (new->thread) {
+		struct task_struct *t = new->thread;
+
+		new->thread = NULL;
+		kthread_stop(t);
+		put_task_struct(t);
+	}
+	if (new->secondary && new->secondary->thread) {
+		struct task_struct *t = new->secondary->thread;
+
+		new->secondary->thread = NULL;
+		kthread_stop(t);
+		put_task_struct(t);
+	}
+out_mput:
+	module_put(desc->owner);
+	return ret;
+}
+```
+
+## softirq
+
+
+
+```c
+
+/* PLEASE, avoid to allocate new softirqs, if you need not _really_ high
+   frequency threaded job scheduling. For almost all the purposes
+   tasklets are more than enough. F.e. all serial device BHs et
+   al. should be converted to tasklets, not to softirqs.
+ */
+
+enum
+{
+	HI_SOFTIRQ=0,
+	TIMER_SOFTIRQ,
+	NET_TX_SOFTIRQ,
+	NET_RX_SOFTIRQ,
+	BLOCK_SOFTIRQ,
+	IRQ_POLL_SOFTIRQ,
+	TASKLET_SOFTIRQ,
+	SCHED_SOFTIRQ,
+	HRTIMER_SOFTIRQ,
+	RCU_SOFTIRQ,    /* Preferable RCU should always be the last softirq */
+
+	NR_SOFTIRQS
+};
+```
+### init
+call by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
+```c
+// 
+void __init softirq_init(void)
+{
+	int cpu;
+
+	for_each_possible_cpu(cpu) {
+		per_cpu(tasklet_vec, cpu).tail =
+			&per_cpu(tasklet_vec, cpu).head;
+		per_cpu(tasklet_hi_vec, cpu).tail =
+			&per_cpu(tasklet_hi_vec, cpu).head;
+	}
+
+	open_softirq(TASKLET_SOFTIRQ, tasklet_action);
+	open_softirq(HI_SOFTIRQ, tasklet_hi_action);
+}
+```
+
+#### open_softirq
+
+```c
+// kernel/softirq.c
+void open_softirq(int nr, void (*action)(struct softirq_action *))
+{
+	softirq_vec[nr].action = action;
+}
+```
+
+
+#### raise_softirq
+```c
+
+// kernel/softirq.c
+void __raise_softirq_irqoff(unsigned int nr)
+{
+	lockdep_assert_irqs_disabled();
+	trace_softirq_raise(nr);
+	or_softirq_pending(1UL << nr);
+}
+
+
+static int ksoftirqd_should_run(unsigned int cpu)
+{
+	return local_softirq_pending();
+}
+```
+
+
+
+```c
+// include/linux/interrupt.h
+#ifndef local_softirq_pending_ref
+#define local_softirq_pending_ref irq_stat.__softirq_pending
+#endif
+
+#define local_softirq_pending()	(__this_cpu_read(local_softirq_pending_ref))
+#define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
+#define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
+```
+
+
+
+#### run_ksoftirqd
+```c
+
+static void run_ksoftirqd(unsigned int cpu)
+{
+	ksoftirqd_run_begin();
+	if (local_softirq_pending()) {
+		/*
+		 * We can safely run softirq on inline stack, as we are not deep
+		 * in the task stack here.
+		 */
+		__do_softirq();
+		ksoftirqd_run_end();
+		cond_resched();
+		return;
+	}
+	ksoftirqd_run_end();
+}
+```
+
+
+#### do_softirq
+```c
+
+asmlinkage __visible void __softirq_entry __do_softirq(void)
+{
+	unsigned long end = jiffies + MAX_SOFTIRQ_TIME;
+	unsigned long old_flags = current->flags;
+	int max_restart = MAX_SOFTIRQ_RESTART;
+	struct softirq_action *h;
+	bool in_hardirq;
+	__u32 pending;
+	int softirq_bit;
+
+	/*
+	 * Mask out PF_MEMALLOC as the current task context is borrowed for the
+	 * softirq. A softirq handled, such as network RX, might set PF_MEMALLOC
+	 * again if the socket is related to swapping.
+	 */
+	current->flags &= ~PF_MEMALLOC;
+
+	pending = local_softirq_pending();
+
+	softirq_handle_begin();
+	in_hardirq = lockdep_softirq_start();
+	account_softirq_enter(current);
+
+restart:
+	/* Reset the pending bitmask before enabling irqs */
+	set_softirq_pending(0);
+
+	local_irq_enable();
+
+	h = softirq_vec;
+
+	while ((softirq_bit = ffs(pending))) {
+		unsigned int vec_nr;
+		int prev_count;
+
+		h += softirq_bit - 1;
+
+		vec_nr = h - softirq_vec;
+		prev_count = preempt_count();
+
+		kstat_incr_softirqs_this_cpu(vec_nr);
+
+		trace_softirq_entry(vec_nr);
+		h->action(h);
+		trace_softirq_exit(vec_nr);
+		if (unlikely(prev_count != preempt_count())) {
+			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
+			       vec_nr, softirq_to_name[vec_nr], h->action,
+			       prev_count, preempt_count());
+			preempt_count_set(prev_count);
+		}
+		h++;
+		pending >>= softirq_bit;
+	}
+
+	if (!IS_ENABLED(CONFIG_PREEMPT_RT) &&
+	    __this_cpu_read(ksoftirqd) == current)
+		rcu_softirq_qs();
+
+	local_irq_disable();
+
+	pending = local_softirq_pending();
+	if (pending) {
+		if (time_before(jiffies, end) && !need_resched() &&
+		    --max_restart)
+			goto restart;
+
+		wakeup_softirqd();
+	}
+
+	account_softirq_exit(current);
+	lockdep_softirq_end(in_hardirq);
+	softirq_handle_end();
+	current_restore_flags(old_flags, PF_MEMALLOC);
+}
+```
+
+### tasklet
+

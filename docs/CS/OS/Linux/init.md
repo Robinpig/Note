@@ -5,13 +5,74 @@
 ## Init
 
 
+```c
+
+/*
+ * The following fragment of code is executed with the MMU enabled.
+ *
+ *   x0 = __PHYS_OFFSET
+ */
+SYM_FUNC_START_LOCAL(__primary_switched)
+	adr_l	x4, init_task
+	init_cpu_task x4, x5, x6
+
+	adr_l	x8, vectors			// load VBAR_EL1 with virtual
+	msr	vbar_el1, x8			// vector table address
+	isb
+
+	stp	x29, x30, [sp, #-16]!
+	mov	x29, sp
+
+	str_l	x21, __fdt_pointer, x5		// Save FDT pointer
+
+	ldr_l	x4, kimage_vaddr		// Save the offset between
+	sub	x4, x4, x0			// the kernel virtual and
+	str_l	x4, kimage_voffset, x5		// physical mappings
+
+	// Clear BSS
+	adr_l	x0, __bss_start
+	mov	x1, xzr
+	adr_l	x2, __bss_stop
+	sub	x2, x2, x0
+	bl	__pi_memset
+	dsb	ishst				// Make zero page visible to PTW
+
+#if defined(CONFIG_KASAN_GENERIC) || defined(CONFIG_KASAN_SW_TAGS)
+	bl	kasan_early_init
+#endif
+	mov	x0, x21				// pass FDT address in x0
+	bl	early_fdt_map			// Try mapping the FDT early
+	bl	init_feature_override		// Parse cpu feature overrides
+#ifdef CONFIG_RANDOMIZE_BASE
+	tst	x23, ~(MIN_KIMG_ALIGN - 1)	// already running randomized?
+	b.ne	0f
+	bl	kaslr_early_init		// parse FDT for KASLR options
+	cbz	x0, 0f				// KASLR disabled? just proceed
+	orr	x23, x23, x0			// record KASLR offset
+	ldp	x29, x30, [sp], #16		// we must enable KASLR, return
+	ret					// to __primary_switch()
+0:
+#endif
+	bl	switch_to_vhe			// Prefer VHE if possible
+	ldp	x29, x30, [sp], #16
+	bl	start_kernel
+	ASM_BUG()
+SYM_FUNC_END(__primary_switched)
+
+	.pushsection ".rodata", "a"
+SYM_DATA_START(kimage_vaddr)
+	.quad		_text
+SYM_DATA_END(kimage_vaddr)
+EXPORT_SYMBOL(kimage_vaddr)
+	.popsection
+```
+
+
 The code scanning for EFI embedded-firmware runs near the end of start_kernel(), just before calling rest_init(). For normal drivers and subsystems using subsys_initcall() to register themselves this does not matter. This means that code running earlier cannot use EFI embedded-firmware.
 
 ### start_kernel
 
 
-
-call [rest_init(kernel_init)]()
 
 ```c
 asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
@@ -227,10 +288,17 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        acpi_subsystem_init();
        arch_post_acpi_subsys_init();
        kcsan_init();
+```
 
+
+call rest_init -> [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
+```c
        /* Do the rest non-__init'ed, we're now alive */
        arch_call_rest_init();
 
+```
+
+```c
        prevent_tail_call_optimization();
 }
 ```

@@ -981,6 +981,22 @@ EXPORT_SYMBOL(init_task);
 ```
 
 
+#### thread_info
+
+
+```c
+// arch/x86/include/asm/thread_info.h
+struct thread_info {
+	unsigned long		flags;		/* low level flags */
+	unsigned long		syscall_work;	/* SYSCALL_WORK_ flags */
+	u32			status;		/* thread synchronous flags */
+#ifdef CONFIG_SMP
+	u32			cpu;		/* current CPU */
+#endif
+}
+```
+
+
 #### exit
 ```c
 // kernel/exit.c

@@ -86,36 +86,11 @@ early_initcall(spawn_ksoftirqd);
 
 
 
-```c
-
-/* PLEASE, avoid to allocate new softirqs, if you need not _really_ high
-   frequency threaded job scheduling. For almost all the purposes
-   tasklets are more than enough. F.e. all serial device BHs et
-   al. should be converted to tasklets, not to softirqs.
- */
-
-enum
-{
-	HI_SOFTIRQ=0,
-	TIMER_SOFTIRQ,
-	NET_TX_SOFTIRQ,
-	NET_RX_SOFTIRQ,
-	BLOCK_SOFTIRQ,
-	IRQ_POLL_SOFTIRQ,
-	TASKLET_SOFTIRQ,
-	SCHED_SOFTIRQ,
-	HRTIMER_SOFTIRQ,
-	RCU_SOFTIRQ,    /* Preferable RCU should always be the last softirq */
-
-	NR_SOFTIRQS
-};
-```
-
 
 
 ### init net dev
 
-initcall see [kernel_init]()
+initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 
 ```c
 // net/core/dev.c
@@ -198,7 +173,10 @@ static int __init net_dev_init(void)
 
 	if (register_pernet_device(&default_device_ops))
 		goto out;
+```
 
+registe [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+```c
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
 	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
 
@@ -213,14 +191,6 @@ out:
 ```
 
 
-
-```c
-// kernel/softirq.c
-void open_softirq(int nr, void (*action)(struct softirq_action *))
-{
-	softirq_vec[nr].action = action;
-}
-```
 
 #### process_backlog
 
@@ -312,8 +282,22 @@ static int __init inet_init(void)
 #endif
 
 	...
+	
+	arp_init();
+
+	ip_init();
+
+	tcp_init();
+
+	udp_init();
+
+	udplite4_register();
+
+	raw_init();
+
+	ping_init();
     
-  dev_add_pack(&ip_packet_type);
+  `dev_add_pack(&ip_packet_type);
 }
 
 
@@ -559,7 +543,7 @@ static int ksoftirqd_should_run(unsigned int cpu)
 ```
 
 
-
+#### run_ksoftirqd
 ```c
 
 static void run_ksoftirqd(unsigned int cpu)
