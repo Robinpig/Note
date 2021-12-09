@@ -1,4 +1,4 @@
-
+`
 
 ### socketcall
 
@@ -446,24 +446,12 @@ Default: 0
 
 ## Listen
 
-**listen for socket connections and limit the queue of incoming connections** -- see [listen(3) - Linux man page](https://linux.die.net/man/3/listen)
+**listen for socket connections and limit the queue of incoming connections**
 
 Perform a listen. Basically, we allow the protocol to do anything
 necessary for a listen, and if that works, we mark the socket as
 ready for listening.
 
-
-
-`Max_ack_backlog = Min(backlog,net.core.somaxconn)`
-
-> somaxconn - INTEGER
-> Limit of socket listen() backlog, known in userspace as SOMAXCONN.
-> Defaults to 4096. (Was 128 before linux-5.4)
-> See also tcp_max_syn_backlog for additional tuning for TCP sockets.
-
-```shell
-cat /proc/sys/net/core/somaxconn
-```
 
 1. sockfd_lookup_light
 2. set backlog
@@ -476,7 +464,6 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
        return __sys_listen(fd, backlog);
 }
 
-
 int __sys_listen(int fd, int backlog)
 {
        struct socket *sock;
@@ -485,6 +472,10 @@ int __sys_listen(int fd, int backlog)
 
        sock = sockfd_lookup_light(fd, &err, &fput_needed);
        if (sock) {
+```
+get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(backlog, net.core.somaxconn)`
+
+```c
               somaxconn = sock_net(sock->sk)->core.sysctl_somaxconn;
               if ((unsigned int)backlog > somaxconn)
                      backlog = somaxconn;
@@ -526,17 +517,21 @@ sk_max_ack_backlog = backlog
 >-- [listen(2) — Linux manual page](https://man7.org/linux/man-pages/man2/listen.2.html)
 >
 >  The behavior of the backlog argument on TCP sockets changed with
->  Linux 2.2.  Now it specifies the queue length for completely
+>  Linux 2.2.  
+> Now it specifies the queue length for completely
 >  established sockets waiting to be accepted, instead of the number
->  of incomplete connection requests.  The maximum length of the
+>  of incomplete connection requests.  
+> The maximum length of the
 >  queue for incomplete sockets can be set using
->  /proc/sys/net/ipv4/tcp_max_syn_backlog.  When syncookies are
+>  /proc/sys/net/ipv4/tcp_max_syn_backlog.  
+> When syncookies are
 >  enabled there is no logical maximum length and this setting is
 >  ignored.  See tcp(7) for more information.
 >
 >  If the backlog argument is greater than the value in
 >  /proc/sys/net/core/somaxconn, then it is silently capped to that
->  value.  Since Linux 5.4, the default in this file is 4096; in
+>  value.  
+> Since Linux 5.4, the default in this file is 4096; in
 >  earlier kernels, the default value is 128.  In kernels before
 >  2.4.25, this limit was a hard coded value, SOMAXCONN, with the
 >  value 128.
@@ -2089,4 +2084,4 @@ struct pollfd {
 
 ## References
 
-1. [打破砂锅挖到底—— Epoll 多路复用是如何转起来的？](https://mp.weixin.qq.com/s/Py2TE9CdQ92fGLpg-SEj_g)
+1. [打破砂锅挖到底—— Epoll 多路复用是如何转起来的？](https://mp.weixin.qq.com/s/Py2TE9CdQ92fGLpg-SEj_g)`

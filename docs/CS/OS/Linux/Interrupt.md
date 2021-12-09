@@ -766,7 +766,7 @@ enum
 };
 ```
 ### init
-call by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
+called by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
 ```c
 // 
 void __init softirq_init(void)
@@ -796,40 +796,7 @@ void open_softirq(int nr, void (*action)(struct softirq_action *))
 ```
 
 
-#### raise_softirq
-```c
-
-// kernel/softirq.c
-void __raise_softirq_irqoff(unsigned int nr)
-{
-	lockdep_assert_irqs_disabled();
-	trace_softirq_raise(nr);
-	or_softirq_pending(1UL << nr);
-}
-
-
-static int ksoftirqd_should_run(unsigned int cpu)
-{
-	return local_softirq_pending();
-}
-```
-
-
-
-```c
-// include/linux/interrupt.h
-#ifndef local_softirq_pending_ref
-#define local_softirq_pending_ref irq_stat.__softirq_pending
-#endif
-
-#define local_softirq_pending()	(__this_cpu_read(local_softirq_pending_ref))
-#define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
-#define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
-```
-
-
-
-#### run_ksoftirqd
+### run_ksoftirqd
 ```c
 
 static void run_ksoftirqd(unsigned int cpu)
@@ -896,7 +863,7 @@ restart:
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		trace_softirq_entry(vec_nr);
-		h->action(h);
+		h->action(h);   // do action func
 		trace_softirq_exit(vec_nr);
 		if (unlikely(prev_count != preempt_count())) {
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
@@ -930,5 +897,112 @@ restart:
 }
 ```
 
+
+### raise_softirq
+```c
+
+// kernel/softirq.c
+void __raise_softirq_irqoff(unsigned int nr)
+{
+	lockdep_assert_irqs_disabled();
+	trace_softirq_raise(nr);
+	or_softirq_pending(1UL << nr);
+}
+
+
+static int ksoftirqd_should_run(unsigned int cpu)
+{
+	return local_softirq_pending();
+}
+```
+
+
+
+```c
+// include/linux/interrupt.h
+#ifndef local_softirq_pending_ref
+#define local_softirq_pending_ref irq_stat.__softirq_pending
+#endif
+
+#define local_softirq_pending()	(__this_cpu_read(local_softirq_pending_ref))
+#define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
+#define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
+```
+
+
+
+
 ### tasklet
 
+#### tasklet_action
+```c
+
+static __latent_entropy void tasklet_action(struct softirq_action *a)
+{
+	tasklet_action_common(a, this_cpu_ptr(&tasklet_vec), TASKLET_SOFTIRQ);
+}
+
+
+static void tasklet_action_common(struct softirq_action *a,
+				  struct tasklet_head *tl_head,
+				  unsigned int softirq_nr)
+{
+	struct tasklet_struct *list;
+
+	local_irq_disable();
+	list = tl_head->head;
+	tl_head->head = NULL;
+	tl_head->tail = &tl_head->head;
+	local_irq_enable();
+
+	while (list) {
+		struct tasklet_struct *t = list;
+
+		list = list->next;
+
+		if (tasklet_trylock(t)) {
+			if (!atomic_read(&t->count)) {
+				if (tasklet_clear_sched(t)) {
+					if (t->use_callback)
+						t->callback(t);
+					else
+						t->func(t->data);
+				}
+				tasklet_unlock(t);
+				continue;
+			}
+			tasklet_unlock(t);
+		}
+
+		local_irq_disable();
+		t->next = NULL;
+		*tl_head->tail = t;
+		tl_head->tail = &t->next;
+```
+call raise_softirq
+
+```c
+		__raise_softirq_irqoff(softirq_nr);
+		local_irq_enable();
+	}
+}
+```
+
+
+#### tasklet_schedule
+```c
+
+void __tasklet_schedule(struct tasklet_struct *t)
+{
+	__tasklet_schedule_common(t, &tasklet_vec,
+				  TASKLET_SOFTIRQ);
+}
+```
+
+## syscall
+
+```c
+// 
+#define IA32_SYSCALL_VECTOR		0x80
+
+```

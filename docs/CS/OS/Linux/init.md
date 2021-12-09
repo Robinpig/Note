@@ -134,6 +134,9 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        vfs_caches_init_early();
        sort_main_extable();
        trap_init();
+```
+
+```c
        mm_init();
 
        ftrace_init();

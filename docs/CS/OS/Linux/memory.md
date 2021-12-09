@@ -2,13 +2,76 @@
 
 
 
+## init
+
+Set up kernel memory allocators
+called by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
+```c
+// init/main.c
+static void __init mm_init(void)
+{
+	/*
+	 * page_ext requires contiguous pages,
+	 * bigger than MAX_ORDER unless SPARSEMEM.
+	 */
+	page_ext_init_flatmem();
+	init_mem_debugging_and_hardening();
+	kfence_alloc_pool();
+	report_meminit();
+	stack_depot_init();
+	mem_init();
+	mem_init_print_info();
+	/* page_owner must be initialized after buddy is ready */
+	page_ext_init_flatmem_late();
+	kmem_cache_init();
+	kmemleak_init();
+	pgtable_init();
+	debug_objects_mem_init();
+	vmalloc_init();
+	/* Should be run before the first non-init thread is created */
+	init_espfix_bsp();
+	/* Should be run after espfix64 is set up. */
+	pti_init();
+}
+```
 
 
 
 
+#### free_pages
 
+Free pages allocated with alloc_pages().
 
+- page: The page pointer returned from alloc_pages().
+- order: The order of the allocation.
 
+This function can free multi-page allocations that are not compound
+pages.  It does not check that the @order passed in matches that of
+the allocation, so it is easy to leak memory.  Freeing more memory
+than was allocated will probably emit a warning.
+
+If the last reference to this page is speculative, it will be released
+by put_page() which only frees the first page of a non-compound
+allocation.  
+
+To prevent the remaining pages from being leaked, we free
+the subsequent pages here.  If you want to use the page's reference
+count to decide when to free the allocation, you should allocate a
+compound page, and use put_page() instead of __free_pages().
+
+Context: May be called in interrupt context or while holding a normal
+spinlock, but not in NMI context or while holding a raw spinlock.
+```c
+
+void __free_pages(struct page *page, unsigned int order)
+{
+	if (put_page_testzero(page))
+		free_the_page(page, order);
+	else if (!PageHead(page))
+		while (order-- > 0)
+			free_the_page(page + (1 << order), order);
+}
+```
 
 
 Check memory
