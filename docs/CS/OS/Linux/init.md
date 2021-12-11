@@ -321,12 +321,14 @@ noinline void __ref rest_init(void)
        int pid;
 
        rcu_scheduler_starting();
-       /*
-        * We need to spawn init first so that it obtains pid 1, however
-        * the init task will end up wanting to create kthreads, which, if
-        * we schedule it before we create kthreadd, will OOPS.
-        */
+```
+We need to spawn init first so that it obtains pid 1, however the init task will end up wanting to create kthreads, which, if we schedule it before we create kthreadd, will OOPS.
+```c
        pid = kernel_thread(kernel_init, NULL, CLONE_FS);
+```
+
+
+```c       
        /*
         * Pin init on the boot CPU. Task migration is not properly working
         * until sched_init_smp() has been run. It will set the allowed
