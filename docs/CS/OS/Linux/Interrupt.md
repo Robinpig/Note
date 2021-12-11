@@ -766,6 +766,9 @@ enum
 };
 ```
 ### init
+
+
+
 called by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
 ```c
 // 
@@ -784,6 +787,10 @@ void __init softirq_init(void)
 	open_softirq(HI_SOFTIRQ, tasklet_hi_action);
 }
 ```
+
+
+
+
 
 #### open_softirq
 
@@ -897,6 +904,80 @@ restart:
 }
 ```
 
+
+
+
+
+#### spawn_ksoftirqd
+
+```c
+/*
+ * CPU type, hardware bug flags, and per-CPU state.  Frequently used state comes earlier:
+ */
+struct cpuinfo_ia64 {
+ ...
+   struct task_struct *ksoftirqd; /* kernel softirq daemon for this CPU */
+ ... 
+}
+```
+
+
+
+
+
+
+
+```c
+/**
+ * smpboot_register_percpu_thread - Register a per_cpu thread related
+ * 					    to hotplug
+ * @plug_thread:	Hotplug thread descriptor
+ *
+ * Creates and starts the threads on all online cpus.
+ */
+int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
+{
+	unsigned int cpu;
+	int ret = 0;
+
+	cpus_read_lock();
+	mutex_lock(&smpboot_threads_lock);
+	for_each_online_cpu(cpu) {
+		ret = __smpboot_create_thread(plug_thread, cpu);
+		if (ret) {
+			smpboot_destroy_threads(plug_thread);
+			goto out;
+		}
+		smpboot_unpark_thread(plug_thread, cpu);
+	}
+	list_add(&plug_thread->list, &hotplug_threads);
+out:
+	mutex_unlock(&smpboot_threads_lock);
+	cpus_read_unlock();
+	return ret;
+}
+```
+
+
+```c
+
+static struct smp_hotplug_thread softirq_threads = {
+	.store			= &ksoftirqd,
+	.thread_should_run	= ksoftirqd_should_run,
+	.thread_fn		= run_ksoftirqd,
+	.thread_comm		= "ksoftirqd/%u",
+};
+
+static __init int spawn_ksoftirqd(void)
+{
+	cpuhp_setup_state_nocalls(CPUHP_SOFTIRQ_DEAD, "softirq:dead", NULL,
+				  takeover_tasklets);
+	BUG_ON(smpboot_register_percpu_thread(&softirq_threads));
+
+	return 0;
+}
+early_initcall(spawn_ksoftirqd);
+```
 
 ### raise_softirq
 ```c

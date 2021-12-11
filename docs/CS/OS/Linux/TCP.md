@@ -201,9 +201,11 @@ struct proto tcp_prot = {
 
 ## Send
 
-
-
+see [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send)
 ### tcp_sendmsg
+called by inet_sendmsg
+
+write to internet by [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
 ```c
 // net/ipv4/tcp.c
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
@@ -426,6 +428,9 @@ new_segment:
 			tcp_mark_push(tp, skb);
 			__tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
 		} else if (skb == tcp_send_head(sk))
+```
+call tcp_push_one
+```c
 			tcp_push_one(sk, mss_now);
 		continue;
 
@@ -537,7 +542,7 @@ static inline bool forced_push(const struct tcp_sock *tp)
 ```
 
 
-mark_push
+##### mark_push
 ```c
 static inline void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb)
 {
@@ -546,7 +551,7 @@ static inline void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb)
 }
 ```
 
-
+##### tcp_push
 tcp_push call __tcp_push_pending_frames
 ```c
 void tcp_push(struct sock *sk, int flags, int mss_now,
@@ -585,7 +590,7 @@ void tcp_push(struct sock *sk, int flags, int mss_now,
 ```
 
 
-tcp_push_one
+##### tcp_push_one
 
 Send _single_ skb sitting at the send head. This function requires true push pending frames to setup probe timer etc.
 
@@ -726,7 +731,9 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
                */
               if (TCP_SKB_CB(skb)->end_seq == TCP_SKB_CB(skb)->seq)
                      break;
-
+```
+call [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
+```c
               if (unlikely(tcp_transmit_skb(sk, skb, 1, gfp)))
                      break;
 
@@ -948,7 +955,9 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	tcp_add_tx_delay(skb, tp);
 
-    /** add ip_queue_xmit   */
+```
+call [ip_queue_xmit](/docs/CS/OS/Linux/IP.md?id=ip_queue_xmit)
+```
 	err = INDIRECT_CALL_INET(icsk->icsk_af_ops->queue_xmit,
 				 inet6_csk_xmit, ip_queue_xmit,
 				 sk, skb, &inet->cork.fl);
@@ -5379,6 +5388,9 @@ static void tcp_v4_send_ack(const struct sock *sk,
 	ctl_sk->sk_priority = (sk->sk_state == TCP_TIME_WAIT) ?
 			   inet_twsk(sk)->tw_priority : sk->sk_priority;
 	transmit_time = tcp_transmit_time(sk);
+```
+call ip_send_unicast_reply -> ip_push_pending_frames
+```c
 	ip_send_unicast_reply(ctl_sk,
 			      skb, &TCP_SKB_CB(skb)->header.h4.opt,
 			      ip_hdr(skb)->saddr, ip_hdr(skb)->daddr,

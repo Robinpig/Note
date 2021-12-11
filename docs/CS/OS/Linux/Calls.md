@@ -1377,15 +1377,92 @@ out_err:
 }
 ```
 
-TODO:
-
-> 127.0.0.1 本机网络IO不需要经过网卡， 不经过Ring Buffer 直接把skb传送给协议接收栈， 可以通过BPF绕过内核协议栈，减少开销（Istio的sidecar代理与本地进程通信）
-
-
 ## connect
 
 
-## sendto
+## send
+Send a datagram down a socket.
+
+```c
+// net/socket.c
+SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags, struct sockaddr __user *, addr,
+		int, addr_len)
+{
+	return __sys_sendto(fd, buff, len, flags, addr, addr_len);
+}
+
+SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags)
+{
+	return __sys_sendto(fd, buff, len, flags, NULL, 0);
+}
+```
+Send a datagram to a given address. We move the address into kernel space and check the user space data area is readable before invoking the protocol.
+```c
+// net/socket.c
+int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
+		 struct sockaddr __user *addr,  int addr_len)
+{
+	struct socket *sock;
+	struct sockaddr_storage address;
+	int err;
+	struct msghdr msg;
+	struct iovec iov;
+	int fput_needed;
+
+	err = import_single_range(WRITE, buff, len, &iov, &msg.msg_iter);
+	if (unlikely(err))
+		return err;
+	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+	if (!sock)
+		goto out;
+
+	msg.msg_name = NULL;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_namelen = 0;
+	if (addr) {
+		err = move_addr_to_kernel(addr, addr_len, &address);
+		if (err < 0)
+			goto out_put;
+		msg.msg_name = (struct sockaddr *)&address;
+		msg.msg_namelen = addr_len;
+	}
+	if (sock->file->f_flags & O_NONBLOCK)
+		flags |= MSG_DONTWAIT;
+	msg.msg_flags = flags;
+```
+call sock_sendmsg
+```c
+	err = sock_sendmsg(sock, &msg);
+
+out_put:
+	fput_light(sock->file, fput_needed);
+out:
+	return err;
+}
+```
+
+
+sock_sendmsg -> inet_sendmsg
+```c
+int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
+{
+	struct sock *sk = sock->sk;
+
+	if (unlikely(inet_send_prepare(sk)))
+		return -EAGAIN;
+
+	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
+			       sk, msg, size);
+}
+```
+
+
+> inet_sendmsg -> [udp_sendmsg](/docs/CS/OS/Linux/UDP.md?id=udp_sendmsg)
+> 
+> inet_sendmsg -> [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_sendmsg)
 
 ## recv
 

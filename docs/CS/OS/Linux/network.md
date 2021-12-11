@@ -12,80 +12,8 @@ protocol: kernel & net
 
 
 
-```c
-/*
- * CPU type, hardware bug flags, and per-CPU state.  Frequently used state comes earlier:
- */
-struct cpuinfo_ia64 {
- ...
-   struct task_struct *ksoftirqd; /* kernel softirq daemon for this CPU */
- ... 
-}
-```
-
-
-
-
-
-
-
-```c
-/**
- * smpboot_register_percpu_thread - Register a per_cpu thread related
- * 					    to hotplug
- * @plug_thread:	Hotplug thread descriptor
- *
- * Creates and starts the threads on all online cpus.
- */
-int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
-{
-	unsigned int cpu;
-	int ret = 0;
-
-	cpus_read_lock();
-	mutex_lock(&smpboot_threads_lock);
-	for_each_online_cpu(cpu) {
-		ret = __smpboot_create_thread(plug_thread, cpu);
-		if (ret) {
-			smpboot_destroy_threads(plug_thread);
-			goto out;
-		}
-		smpboot_unpark_thread(plug_thread, cpu);
-	}
-	list_add(&plug_thread->list, &hotplug_threads);
-out:
-	mutex_unlock(&smpboot_threads_lock);
-	cpus_read_unlock();
-	return ret;
-}
-```
-
-
-
-
-
-```c
-
-static struct smp_hotplug_thread softirq_threads = {
-	.store			= &ksoftirqd,
-	.thread_should_run	= ksoftirqd_should_run,
-	.thread_fn		= run_ksoftirqd,
-	.thread_comm		= "ksoftirqd/%u",
-};
-
-static __init int spawn_ksoftirqd(void)
-{
-	cpuhp_setup_state_nocalls(CPUHP_SOFTIRQ_DEAD, "softirq:dead", NULL,
-				  takeover_tasklets);
-	BUG_ON(smpboot_register_percpu_thread(&softirq_threads));
-
-	return 0;
-}
-early_initcall(spawn_ksoftirqd);
-```
-
-
-
+## init softirq
+based on [softirq](/docs/CS/OS/Linux/Interrupt.md?id=spawn_ksoftirqd)
 
 
 ### init net dev
@@ -106,7 +34,7 @@ present) and leaves us with a valid list of present and active devices.
 This is called single threaded during boot, so no need
 to take the rtnl semaphore.
 
-registe [net_rx_action]()
+registe [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action)
 ```c
 // net/core/dev.c
 static int __init net_dev_init(void)
@@ -175,7 +103,7 @@ static int __init net_dev_init(void)
 		goto out;
 ```
 
-registe [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+registe func [net_rx_action]() in [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
 ```c
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
 	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
@@ -194,7 +122,6 @@ out:
 
 #### process_backlog
 
-call [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb)
 ```c
 // net/core/dev.c
 static int process_backlog(struct napi_struct *napi, int quota)
@@ -217,6 +144,10 @@ static int process_backlog(struct napi_struct *napi, int quota)
 
 		while ((skb = __skb_dequeue(&sd->process_queue))) {
 			rcu_read_lock();
+```
+
+call [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb)
+```c
 			__netif_receive_skb(skb);
 			rcu_read_unlock();
 			input_queue_head_incr(sd);
@@ -447,7 +378,13 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 
 ## process
 
-Network Interface Controller -> Network Driver DMA into Memory RingBuffer and send a interrupt to CPU -> CPU set soft interrupt and release CPU -> ksoftirqd thread check soft interrupt, disable hard interrupts  and call `poll` get packet, then send to TCP/IP stack`(ip_rcv`) -> `tcp_rcv` or `udp_rcv`
+Network Interface Controller 
+-> Network Driver DMA into Memory RingBuffer and send a interrupt to CPU 
+-> CPU set soft interrupt and release CPU 
+-> ksoftirqd thread check soft interrupt, 
+disable hard interrupts  and call `poll` get packet, 
+then send to TCP/IP stack`(ip_rcv`) 
+-> `tcp_rcv` or `udp_rcv`
 
 like UDP will add into socket accept queue
 
@@ -504,143 +441,10 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 	...
     
 	list_add_tail(&napi->poll_list, &sd->poll_list);
+```
+call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to invoke [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action)
+```c
 	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
-}
-```
-
-
-
-### ksoftirqd process
-
-```c
-
-// kernel/softirq.c
-void __raise_softirq_irqoff(unsigned int nr)
-{
-	lockdep_assert_irqs_disabled();
-	trace_softirq_raise(nr);
-	or_softirq_pending(1UL << nr);
-}
-
-
-static int ksoftirqd_should_run(unsigned int cpu)
-{
-	return local_softirq_pending();
-}
-```
-
-
-
-```c
-// include/linux/interrupt.h
-#ifndef local_softirq_pending_ref
-#define local_softirq_pending_ref irq_stat.__softirq_pending
-#endif
-
-#define local_softirq_pending()	(__this_cpu_read(local_softirq_pending_ref))
-#define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
-#define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
-```
-
-
-#### run_ksoftirqd
-```c
-
-static void run_ksoftirqd(unsigned int cpu)
-{
-	ksoftirqd_run_begin();
-	if (local_softirq_pending()) {
-		/*
-		 * We can safely run softirq on inline stack, as we are not deep
-		 * in the task stack here.
-		 */
-		__do_softirq();
-		ksoftirqd_run_end();
-		cond_resched();
-		return;
-	}
-	ksoftirqd_run_end();
-}
-```
-
-
-#### do_softirq
-```c
-
-asmlinkage __visible void __softirq_entry __do_softirq(void)
-{
-	unsigned long end = jiffies + MAX_SOFTIRQ_TIME;
-	unsigned long old_flags = current->flags;
-	int max_restart = MAX_SOFTIRQ_RESTART;
-	struct softirq_action *h;
-	bool in_hardirq;
-	__u32 pending;
-	int softirq_bit;
-
-	/*
-	 * Mask out PF_MEMALLOC as the current task context is borrowed for the
-	 * softirq. A softirq handled, such as network RX, might set PF_MEMALLOC
-	 * again if the socket is related to swapping.
-	 */
-	current->flags &= ~PF_MEMALLOC;
-
-	pending = local_softirq_pending();
-
-	softirq_handle_begin();
-	in_hardirq = lockdep_softirq_start();
-	account_softirq_enter(current);
-
-restart:
-	/* Reset the pending bitmask before enabling irqs */
-	set_softirq_pending(0);
-
-	local_irq_enable();
-
-	h = softirq_vec;
-
-	while ((softirq_bit = ffs(pending))) {
-		unsigned int vec_nr;
-		int prev_count;
-
-		h += softirq_bit - 1;
-
-		vec_nr = h - softirq_vec;
-		prev_count = preempt_count();
-
-		kstat_incr_softirqs_this_cpu(vec_nr);
-
-		trace_softirq_entry(vec_nr);
-		h->action(h);
-		trace_softirq_exit(vec_nr);
-		if (unlikely(prev_count != preempt_count())) {
-			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
-			       vec_nr, softirq_to_name[vec_nr], h->action,
-			       prev_count, preempt_count());
-			preempt_count_set(prev_count);
-		}
-		h++;
-		pending >>= softirq_bit;
-	}
-
-	if (!IS_ENABLED(CONFIG_PREEMPT_RT) &&
-	    __this_cpu_read(ksoftirqd) == current)
-		rcu_softirq_qs();
-
-	local_irq_disable();
-
-	pending = local_softirq_pending();
-	if (pending) {
-		if (time_before(jiffies, end) && !need_resched() &&
-		    --max_restart)
-			goto restart;
-
-		wakeup_softirqd();
-	}
-
-	account_softirq_exit(current);
-	lockdep_softirq_end(in_hardirq);
-	softirq_handle_end();
-	current_restore_flags(old_flags, PF_MEMALLOC);
 }
 ```
 
@@ -697,11 +501,43 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 	net_rps_action_and_irq_enable(sd);
 }
 ```
+xgbe_one_poll ->
+xgbe_tx_poll ->
+xgbe_rx_poll ->
+napi_gro_receive
 
+
+```c
+// net/core/dev.c
+gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
+{
+	skb_gro_reset_offset(skb, 0);
+	return napi_skb_finish(napi, skb, dev_gro_receive(napi, skb));
+}
+
+
+static gro_result_t napi_skb_finish(struct napi_struct *napi,
+				    struct sk_buff *skb,
+				    gro_result_t ret)
+{
+	switch (ret) {
+	case GRO_NORMAL:
+		gro_normal_one(napi, skb, 1);
+		break;
+    ...
+	}
+
+	return ret;
+}
+```
+
+napi_gro_receive -> napi_skb_finish -> gro_normal_one 
+-> gro_normal_list -> netif_receive_skb_list_internal
+-> __netif_receive_skb_list -> deliver_skb
 
 
 #### netif_receive_skb
-
+call deliver_skb
 ```c
 
 static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
