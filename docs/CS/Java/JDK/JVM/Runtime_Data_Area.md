@@ -6,69 +6,28 @@
 
 ## Memory
 
+Run-Time Data Areas
+- The pc Register
+- Java Virtual Machine Stacks
 - Heap
-- JVM Stack
-- Native Method Stack
 - Method Area
-- Direct Memory
-- Program Counter Register
+- Run-Time Constant Pool
+- Native Method Stacks
 
 
 
 
 
-#### Stack Frame
 
-1. Local Variables
-2. Operand Stack
-3. Reference 
-4. Return Address
-5. Dynamic Linking
+## Heap
+The Java Virtual Machine has a heap that is shared among all Java Virtual Machine threads. The heap is the run-time data area from which memory for all class instances and arrays is allocated.
 
+The heap is created on virtual machine start-up. Heap storage for objects is reclaimed by an automatic storage management system (known as a garbage collector); objects are never explicitly deallocated. The Java Virtual Machine assumes no particular type of automatic storage management system, and the storage management technique may be chosen according to the implementor’s system requirements. The heap may be of a fixed size or may be expanded as required by the computation and may be contracted if a larger heap becomes unnecessary. The memory for the heap does not need to be contiguous.
 
+If a computation requires more heap than can be made available by the automatic storage management system, the Java Virtual Machine throws an **OutOfMemoryError**.
 
 
-
-##### Local Variables Table 
-
-in compiler file
-
-Non-static method has **this** param default;
-
-slot复用
-
-##### Operand Stack
-
-in runtime
-shared memory for optimize return value
-
-
-##### Reference
-
-
-
-
-### Native Method Stack
-
-Java虚拟机栈管理Java方法的调用，而本地方法栈用于管理本地方法的调用
-
-本地方法栈，也是线程私有的。
-
-允许被实现成固定或者是可动态扩展的内存大小。 内存溢出情况和Java虚拟机栈相同
-
-使用C语言实现
-
-具体做法是Native Method Stack 中登记native方法，在Execution Engine执行时加载到本地方法库
-
-当某个线程调用一个本地方法时，就会进入一个全新，不受虚拟机限制的世界，它和虚拟机拥有同样的权限。
-
-并不是所有的JVM都支持本地方法，因为Java虚拟机规范并没有明确要求本地方法栈的使用语言，具体实现方式，数据结构等
-
-**Hotspot JVM中，直接将本地方法栈和虚拟机栈合二为一**
-
-
-
-### Heap
+Generation see https://dl.acm.org/doi/10.1145/800020.808261
 
 1. Young Generation
    1. Eden
@@ -181,8 +140,12 @@ CASE(_new): {
 
 
 
-### Method Area
+## Method Area
 
+The Java Virtual Machine has a method area that is shared among all Java Virtual Machine threads. The method area is analogous to the storage area for compiled code of a conventional language or analogous to the “text” segment in an operating system process. It stores per-class structures such as the run-time constant pool, field and method data, and the code for methods and constructors, including the special methods used in class and interface initialization and in instance initialization.
+
+
+If memory in the method area cannot be made available to satisfy an allocation request, the Java Virtual Machine throws an OutOfMemoryError.
 
 
 ```java
@@ -206,44 +169,61 @@ Class 元信息
 [JEP 122: Remove the Permanent Generation](https://openjdk.java.net/jeps/122)
 
 
-## 程序计数器
+## Program Counter Register
 
-## 本地方法栈
 
-## 虚拟机栈
 
-### 栈帧：
 
-     每个 Java 方法在执行的同时会创建一个栈帧用于存储局部变量表、操作数栈、 函数调用的上下文 和方法出口。从方法调用直至执行完成的过程，对应着一个栈帧在 Java 虚拟机栈中入栈和出栈的过程，会抛出StackOverflowError 异常和OutOfMemoryError 异常 。
+## Native Method Stacks
 
-操作数栈负责具体指令执行。
+Java虚拟机栈管理Java方法的调用，而本地方法栈用于管理本地方法的调用
 
-## 堆
+本地方法栈，也是线程私有的。
 
-所有对象都在这里分配内存，是垃圾收集的主要区域（"GC 堆"）。
+允许被实现成固定或者是可动态扩展的内存大小。 内存溢出情况和Java虚拟机栈相同
 
-现代的垃圾收集器基本都是采用分代收集算法，其主要的思想是针对不同类型的对象采取不同的垃圾回收算法。可以将堆分成两块：
+使用C语言实现
 
-   - 新生代（Young Generation）
-   - 老年代（Old Generation）
+具体做法是Native Method Stack 中登记native方法，在Execution Engine执行时加载到本地方法库
 
-会抛出 OutOfMemoryError 异常
+当某个线程调用一个本地方法时，就会进入一个全新，不受虚拟机限制的世界，它和虚拟机拥有同样的权限。
 
-可以通过 -Xms 和 -Xmx 这两个虚拟机参数来指定一个程序的堆内存大小，第一个参数设置初始值，第二个参数设置最大值。
+并不是所有的JVM都支持本地方法，因为Java虚拟机规范并没有明确要求本地方法栈的使用语言，具体实现方式，数据结构等
 
-## 方法区
+**Hotspot JVM中，直接将本地方法栈和虚拟机栈合二为一**
 
-用于存放已被加载的类信息、常量、静态变量、即时编译器编译后的代码等数据。
 
-会抛出 OutOfMemoryError 异常。
+## Java Virtual Machine Stacks
 
-对这块区域进行垃圾回收的主要目标是对常量池的回收和对类的卸载，但是一般比较难实现。
 
-会抛出 OutOfMemoryError 异常从 JDK 1.8 开始，移除永久代，并把方法区移至元空间，它位于本地内存中，而不是虚拟机内存中。元空间存储类的元信息，静态变量和常量池等放入堆中。
 
-### 运行时常量池
+### Frames
+- Local Variables
+- Operand Stacks
+- Dynamic Linking
+- Normal Method Invocation Completion
+- Abrupt Method Invocation Completion
 
-Class 文件中的常量池（编译器生成的字面量和符号引用）会在类加载后被放入这个区域。
+
+#### Local Variables Table 
+
+in compiler file
+
+Non-static method has **this** param default;
+
+slot复用
+
+#### Operand Stack
+
+in runtime
+shared memory for optimize return value
+
+
+
+
+## Run-Time Constant Pool
+
+
 
 Constant Pool SymbolTable use ref count
 
@@ -254,11 +234,6 @@ SymbolTable
 1.8 20011
 
 15 32768
-
-## 直接内存
-
-在 JDK 1.4 中新引入了 NIO 类，它可以使用 Native 函数库直接分配堆外内存，然后通过 Java 堆里的 DirectByteBuffer 对象作为这块内存的引用进行操作。这样能在一些场景中显著提高性能，因为避免了在堆内存和堆外内存来回拷贝数据。
-
 
 
 ## Metaspace
@@ -287,3 +262,6 @@ jstat
 
 
 
+
+## Direct Memory
+not a part of Run-Time Data Areas

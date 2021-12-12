@@ -17,12 +17,7 @@
 
 ### Run-Time Data Areas
 - [Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
-- Heap
-- JVM Stack
-- Native Method Stack
-- Method Area
-- Direct Memory
-- Program Counter Register
+
 
 ## The class File Format
 
