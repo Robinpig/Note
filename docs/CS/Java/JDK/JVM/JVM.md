@@ -16,8 +16,16 @@
 
 
 ### Run-Time Data Areas
-- [Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
+The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md) that are used during execution of a program. 
+Some of these data areas are created on Java Virtual Machine start-up and are destroyed only when the Java Virtual Machine exits. 
+Other data areas are per thread. Per-thread data areas are created when a thread is created and destroyed when the thread exits.
 
+###  Representation of Objects
+The Java Virtual Machine does not mandate any particular internal structure for objects.
+
+In some of Oracle’s implementations of the Java Virtual Machine, a reference to a class instance is a pointer to a handle that is itself a pair of pointers(see [OOP-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)):
+- one to a table containing the methods of the object and a pointer to the Class object that represents the type of the object
+- and the other to the memory allocated from the heap for the object data.
 
 ## The class File Format
 
@@ -157,6 +165,8 @@ void TemplateTable::iop2(Operation op) {
   *         |--- utilities          # hashtable, JSON parser, elf, etc.
  */
 ```
+
+## Compiling for the Java Virtual Machine
 
 
 ## Reference
