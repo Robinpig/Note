@@ -1380,6 +1380,10 @@ out_err:
 ## connect
 
 
+
+
+
+
 ## send
 Send a datagram down a socket.
 
@@ -1465,6 +1469,20 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 > inet_sendmsg -> [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_sendmsg)
 
 ## recv
+
+
+> recv 		---+--- 		recvfrom
+>         			 |
+>  				    \\|/
+> 			sys_recvfrom ---> sock_recvmsg ---> inet_recvmsg
+> 																						 |
+> 																						\\|/
+> 													  [tcp_recvmsg](/) 	   ----+----      [udp_recvmsg](/docs/CS/OS/Linux/UDP.md?id=udp_recvmsg)
+
+​						
+
+
+
 
 ## mmap
 

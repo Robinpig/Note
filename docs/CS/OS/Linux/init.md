@@ -448,3 +448,7 @@ kernel_init -> kernel_init_freeable -> do_basic_setup -> do_initcalls -> do_init
 // include/linux/init.h
 #define core_initcall(fn)		__define_initcall(fn, 1)
 ```
+
+
+## Links
+Return [Linux](/docs/CS/OS/Linux/Linux.md)
