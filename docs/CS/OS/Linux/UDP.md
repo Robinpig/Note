@@ -525,7 +525,7 @@ csum_partial:
 	if (uh->check == 0)
 		uh->check = CSUM_MANGLED_0;
 ```
-call ip_send_skb
+call [ip_send_skb](/docs/CS/OS/Linux/IP.md?id=ip_send_skb)
 ```c
 send:
 	err = ip_send_skb(sock_net(sk), skb);
