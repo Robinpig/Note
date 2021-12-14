@@ -3,7 +3,7 @@
 Garbage Collection 
 
 ## When an instance is dead？ 
-#### 引用计数算法：
+### Reference Counting
 
    为对象添加一个引用计数器，当对象增加一个引用时计数器加 1，
         引用失效时计数器减 1。引用计数为 0 的对象可被回收，
@@ -11,7 +11,7 @@ Garbage Collection
 
 
 
-#### 可达性分析算法：
+### Reachability Analysis
 
   以 GC Roots 为起始点进行搜索，可达的对象都是存活的，不可达的对象可被回收。
   Java 虚拟机使用该算法来判断对象是否可被回收，GC Roots 一般包含以下内容：
@@ -20,15 +20,34 @@ Garbage Collection
 
 **GC Roots:**
 
-- `ClassLoaderDataGraph::roots_cld_do()`
+`ClassLoaderDataGraph::roots_cld_do()`
 
-  - 虚拟机栈中局部变量表中引用的对象
-  - 本地方法栈中 JNI 中引用的对象 包括global handles和local handles
-  - 方法区中类静态属性引用的对象
-  - 方法区中的常量引用的对象
-  - 所有当前被加载的Java类
-  - JVM内部数据结构的一些引用，比如`sun.jvm.hotspot.memory.Universe`类
-  - 用于同步的监控对象，比如调用了对象的`wait()`方法
+
+Examples of such Garbage Collection roots are:
+
+- Classes loaded by system class loader (not custom class loaders)
+- Live threads
+- Local variables and parameters of the currently executing methods
+- Local variables and parameters of JNI methods
+- Global JNI reference
+- Objects used as a monitor for synchronization
+- Objects held from garbage collection by JVM for its purposes
+
+
+Tri-color Marking
+
+#### Incremental Update
+
+CMS
+
+#### Snapshot At The Beginning
+
+G1 Shenandoah
+
+
+### References
+Link: [References](/docs/CS/Java/JDK/Basic/Ref.md)
+
 
 
 
@@ -54,7 +73,105 @@ Promotion Failure
 gcCause.cpp
 
 
+## Generational Garbage Collection
 
+
+Generation see https://dl.acm.org/doi/10.1145/800020.808261
+
+1. Young Generation
+    1. Eden
+    2. Survivor
+        1. From
+        2. To
+2. Old Generation
+
+
+
+default old/young=2:1
+
+Eden:from:to=8:1:1
+
+```
+FastTLABRefill                            = true  
+MinTLABSize                               = 2048
+PrintTLAB                                 = false
+ResizeTLAB                                = true  
+TLABAllocationWeight                      = 35   
+TLABRefillWasteFraction                   = 64   
+TLABSize                                  = 0    
+TLABStats                                 = true
+TLABWasteIncrement                        = 4    
+TLABWasteTargetPercent                    = 1
+UseTLAB                                   = true
+ZeroTLAB                                  = false
+```
+
+### Young Generation
+Newly created objects start in the Young Generation. The Young Generation is further subdivided into:
+- Eden space - all new objects start here, and initial memory is allocated to them
+- Survivor spaces (FromSpace and ToSpace) - objects are moved here from Eden after surviving one garbage collection cycle.
+
+When objects are garbage collected from the Young Generation, it is a `minor garbage collection` event.
+
+When Eden space is filled with objects, a Minor GC is performed. 
+All the dead objects are deleted, and all the live objects are moved to one of the survivor spaces. 
+Minor GC also checks the objects in a survivor space, and moves them to the other survivor space.
+
+Take the following sequence as an example:
+- Eden has all objects (live and dead)
+- Minor GC occurs - all dead objects are removed from Eden. All live objects are moved to S1 (FromSpace). Eden and S2 are now empty.
+- New objects are created and added to Eden. Some objects in Eden and S1 become dead.
+- Minor GC occurs - all dead objects are removed from Eden and S1. All live objects are moved to S2 (ToSpace). Eden and S1 are now empty.
+
+So, at any time, one of the survivor spaces is always empty. When the surviving objects reach a certain threshold of moving around the survivor spaces, they are moved to the Old Generation.
+
+You can use the `-Xmn` flag to set the size of the Young Generation.
+
+#### Handle Promotion
+
+
+### Old Generation
+
+Objects that are long-lived are eventually moved from the Young Generation to the Old Generation. 
+This is also known as Tenured Generation, and contains objects that have remained in the survivor spaces for a long time.
+
+When objects are garbage collected from the Old Generation, it is a `major garbage collection` event.
+
+You can use the -Xms and -Xmx flags to set the size of the initial and maximum size of the Heap memory.
+
+
+### Intergenerational Reference Hypothesis
+
+Remembered Set
+- bits
+- objects
+- Card Table
+
+
+
+False Sharing
+```
+  product(bool, UseCondCardMark, false,                                     \
+          "Check for already marked card before updating card table")       \
+```
+
+
+## Algorithms
+
+Mark-Sweep
+
+
+
+### 
+
+
+
+## MetaSpace
+Starting with Java 8, the MetaSpace memory space replaces the PermGen space. The implementation differs from the PermGen and this space of the heap is now automatically resized.
+
+This avoids the problem of applications running out of memory due to the limited size of the PermGen space of the heap. The Metaspace memory can be garbage collected and the classes that are no longer used can be automatically cleaned when the Metaspace reaches its maximum size.
+
+-Xnoclassgc -verbose:class -XX:+TraceClassLoading -XX:+TraceClassUnLoading
 
 ### Young GC 问题
 
@@ -95,10 +212,6 @@ CARD_TABLE [this address >> 9] = DIRTY;
 - 堆大小动态调整          
 
 
-
-
-
-![GC Collector](../images/GC-collector.png)
 
 
 
@@ -239,16 +352,37 @@ void DefNewGeneration::collect(bool   full,
 
 
 
-## Collector
+## Garbage Collector
+
+
+![GC Collector](../images/GC-collector.png)
+
+[JEP 173: Retire Some Rarely-Used GC Combinations](https://openjdk.java.net/jeps/173)
+
+CMS only with ParNew since [JEP 214: Remove GC Combinations Deprecated in JDK 8](https://openjdk.java.net/jeps/214)
+
+
 
 ### Epsilon
-[JEP 318: Epsilon: A No-Op Garbage Collector](https://openjdk.java.net/jeps/318)
-Develop a GC that handles memory allocation but does not implement any actual memory reclamation mechanism. Once the available Java heap is exhausted, the JVM will shut down.
-### serial
 
 
-### parallel
+Epsilon is a do-nothing (no-op) garbage collector that was released as part of JDK 11( see [JEP 318: Epsilon: A No-Op Garbage Collector](https://openjdk.java.net/jeps/318)).
+It handles memory allocation but does not implement any actual memory reclamation mechanism.
+Once the available Java heap is exhausted, the JVM shuts down.
 
+
+### Serial
+
+
+#### Serial Old
+- with Parallel JDK5
+- CMS Concurrent Mode Failure
+
+
+### Parallel Scavenge
+
+Parallel Scavenge and Parallel Old
+```
 - GCTimeRatio                               = 99
 - MaxGCPauseMillis                          = 18446744073709551615
 
@@ -256,6 +390,8 @@ Develop a GC that handles memory allocation but does not implement any actual me
 - UseParallelGC                            := true
 - UseParallelOldGC                          = true
 - UseAdaptiveGCBoundary                     = false
+```
+
 
 ### Concurrent
 The mostly concurrent collector trades processor resources (which would otherwise be available to the application) for shorter major collection pause times. The most visible overhead is the use of one or more processors during the concurrent parts of the collection. On an N processor system, the concurrent part of the collection will use K/N of the available processors, where 1<=K<=ceiling{N/4}. (Note that the precise choice of and bounds on K are subject to change.) In addition to the use of processors during concurrent phases, additional overhead is incurred to enable concurrency. Thus while garbage collection pauses are typically much shorter with the concurrent collector, application throughput also tends to be slightly lower than with the other collectors.
@@ -264,15 +400,27 @@ On a machine with more than one processing core, processors are available for ap
 
 Because at least one processor is used for garbage collection during the concurrent phases, the concurrent collectors do not normally provide any benefit on a uniprocessor (single-core) machine. However, there is a separate mode available for CMS (not G1) that can achieve low pauses on systems with only one or two processors; see Incremental Mode in Concurrent Mark Sweep (CMS) Collector for details. This feature is being deprecated in Java SE 8 and may be removed in a later major release.
 
-### cms
+### CMS
 
-### g1
+### G1
 
 ### shenandoah
+Shenandoah is a new GC that was released as part of JDK 12. 
+Shenandoah’s key advantage over G1 is that it does more of its garbage collection cycle work concurrently with the application threads. 
+G1 can evacuate its heap regions only when the application is paused, while Shenandoah can relocate objects concurrently with the application.
 
-### z
+Shenandoah can compact live objects, clean garbage, and release RAM back to the OS almost immediately after detecting free memory. 
+Since all of this happens concurrently while the application is running, Shenandoah is more CPU intensive.
 
-### 
+The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC`.
+
+
+### ZGC
+ZGC is another GC that was released as part of JDK 11 and has been improved in JDK 12. It is intended for applications which require low latency (less than 10 ms pauses) and/or use a very large heap (multi-terabytes).
+
+The primary goals of ZGC are low latency, scalability, and ease of use. To achieve this, ZGC allows a Java application to continue running while it performs all garbage collection operations. By default, ZGC uncommits unused memory and returns it to the operating system.
+
+The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimentalVMOptions -XX:+UseZGC`.
 
 
 
@@ -288,3 +436,4 @@ Because at least one processor is used for garbage collection during the concurr
 2. [Exploiting the Weak Generational Hypothesis for Write Reduction and Object Recycling](https://openscholarship.wustl.edu/eng_etds/169/)
 3. [Java Platform, Standard Edition HotSpot Virtual Machine Garbage Collection Tuning Guide](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/toc.html)
 4. [Our Collectors](https://blogs.oracle.com/jonthecollector/our-collectors)
+5. [Garbage Collection in Java – What is GC and How it Works in the JVM](https://www.freecodecamp.org/news/garbage-collection-in-java-what-is-gc-and-how-it-works-in-the-jvm/)

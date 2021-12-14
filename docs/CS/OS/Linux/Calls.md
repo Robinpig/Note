@@ -1385,6 +1385,18 @@ out_err:
 
 
 ## send
+```c
+/**
+ *    send 	---+--- 	sendto
+ *                |
+ * 			  \|/
+ *			sys_sendto ---> sock_sendmsg ---> inet_sendmsg
+ *                                                     |
+ *											        \|/
+ *					            tcp_sendmsg      ----+----      udp_sendmsg
+ */
+```
+
 Send a datagram down a socket.
 
 ```c
@@ -1470,16 +1482,17 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 
 ## recv
 
-
-> recv 		---+--- 		recvfrom
->         			 |
->  				    \\|/
-> 			sys_recvfrom ---> sock_recvmsg ---> inet_recvmsg
-> 																						 |
-> 																						\\|/
-> 													  [tcp_recvmsg](/) 	   ----+----      [udp_recvmsg](/docs/CS/OS/Linux/UDP.md?id=udp_recvmsg)
-
-​						
+```c
+/**
+ *    recv 	---+--- 	recvfrom
+ *                |
+ * 			  \|/
+ *			sys_recvfrom ---> sock_recvmsg ---> inet_recvmsg
+ *                                                     |
+ *											        \|/
+ *					            tcp_recvmsg      ----+----      udp_recvmsg
+ */
+```
 
 
 

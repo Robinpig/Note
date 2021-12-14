@@ -26,36 +26,6 @@ The heap is created on virtual machine start-up. Heap storage for objects is rec
 
 If a computation requires more heap than can be made available by the automatic storage management system, the Java Virtual Machine throws an **OutOfMemoryError**.
 
-
-Generation see https://dl.acm.org/doi/10.1145/800020.808261
-
-1. Young Generation
-   1. Eden
-   2. Survivor
-      1. From
-      2. To
-      3. 
-2. Old Generation
-
-
-
-默认old/young=2:1
-
-Eden:from:to=8:1:1
-
-
-FastTLABRefill                            = true  
-MinTLABSize                               = 2048
-PrintTLAB                                 = false
-ResizeTLAB                                = true  
-TLABAllocationWeight                      = 35   
-TLABRefillWasteFraction                   = 64   
-TLABSize                                  = 0    
-TLABStats                                 = true
-TLABWasteIncrement                        = 4    
-TLABWasteTargetPercent                    = 1
-UseTLAB                                   = true
-ZeroTLAB                                  = false
 ### new instance
 
 1. is_unresolved_klass, slow case allocation
@@ -68,6 +38,9 @@ ZeroTLAB                                  = false
 CASE(_new): {
         u2 index = Bytes::get_Java_u2(pc+1);
         ConstantPool* constants = istate->method()->constants();
+```
+make sure is resolved klass
+```cpp
         if (!constants->tag_at(index).is_unresolved_klass()) {
           // Make sure klass is initialized and doesn't have a finalizer
           Klass* entry = constants->resolved_klass_at(index);
@@ -80,13 +53,15 @@ CASE(_new): {
             if (UseTLAB) {
               result = (oop) THREAD->tlab().allocate(obj_size);
             }
-            // Disable non-TLAB-based fast-path, because profiling requires that all
-            // allocations go through InterpreterRuntime::_new() if THREAD->tlab().allocate
-            // returns NULL.
+```
+Disable non-TLAB-based fast-path, because profiling requires that all allocations go through InterpreterRuntime::_new() if THREAD->tlab().allocate returns NULL.
+```
 #ifndef CC_INTERP_PROFILE
             if (result == NULL) {
               need_zero = true;
-              // Try allocate in shared eden
+```
+Try allocate in shared eden, use CAS retry
+```cpp
             retry:
               HeapWord* compare_to = *Universe::heap()->top_addr();
               HeapWord* new_top = compare_to + obj_size;
@@ -99,7 +74,9 @@ CASE(_new): {
             }
 #endif
             if (result != NULL) {
-              // Initialize object (if nonzero size and need) and then the header
+```
+Initialize object (if nonzero size and need) and then the header
+```cpp
               if (need_zero ) {
                 HeapWord* to_zero = (HeapWord*) result + sizeof(oopDesc) / oopSize;
                 obj_size -= sizeof(oopDesc) / oopSize;
@@ -107,6 +84,9 @@ CASE(_new): {
                   memset(to_zero, 0, obj_size * HeapWordSize);
                 }
               }
+```
+if UseBiasedLocking
+```cpp
               if (UseBiasedLocking) {
                 result->set_mark(ik->prototype_header());
               } else {
@@ -122,12 +102,17 @@ CASE(_new): {
             }
           }
         }
-        // Slow case allocation
+```
+Slow case allocation
+```
         CALL_VM(InterpreterRuntime::_new(THREAD, METHOD->constants(), index),
                 handle_exception);
         // Must prevent reordering of stores for object initialization
         // with stores that publish the new object.
         OrderAccess::storestore();
+```
+Set stack object and update pc register and continue
+```
         SET_STACK_OBJECT(THREAD->vm_result(), 0);
         THREAD->set_vm_result(NULL);
         UPDATE_PC_AND_TOS_AND_CONTINUE(3, 1);
@@ -194,6 +179,9 @@ Java虚拟机栈管理Java方法的调用，而本地方法栈用于管理本地
 
 
 ## Java Virtual Machine Stacks
+
+Consider using the "-J-Xss<size>" command line option to increase the memory allocated for the Java stack.
+
 
 
 
@@ -285,3 +273,10 @@ jstat
 
 ## Direct Memory
 not a part of Run-Time Data Areas
+
+```hpp
+// globals.hpp
+  product(uint64_t, MaxDirectMemorySize, 0,                                 \
+          "Maximum total size of NIO direct-buffer allocations")            \
+          range(0, max_jlong)                                               \
+```

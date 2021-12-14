@@ -1,6 +1,10 @@
 ## Introduction
 
 
+### Preemptive Suspension
+
+### Voluntary Suspension
+
 
 Main thread will print the num util sub thread ends, not after 1000ms we expected.
 
