@@ -158,8 +158,12 @@ False Sharing
 
 ## Algorithms
 
-Mark-Sweep
+### Mark-Copy
 
+### Mark-Sweep
+
+
+### Mark-Compact
 
 
 ### 
@@ -353,7 +357,7 @@ void DefNewGeneration::collect(bool   full,
 
 
 ## Garbage Collector
-From JVM:
+From [JVM](https://book.douban.com/subject/34907497/):
 ![Our Collectors](../images/our-collectors.png)
 
 And
@@ -363,6 +367,11 @@ And
 [JEP 173: Retire Some Rarely-Used GC Combinations](https://openjdk.java.net/jeps/173)
 
 CMS only with ParNew since [JEP 214: Remove GC Combinations Deprecated in JDK 8](https://openjdk.java.net/jeps/214)
+
+
+- Footprint
+- Throughput
+- Latency
 
 
 
@@ -375,7 +384,10 @@ Once the available Java heap is exhausted, the JVM shuts down.
 
 
 ### Serial
+The serial collector uses a single thread to perform all garbage collection work, which makes it relatively efficient because there is no communication overhead between threads.
 
+It's best-suited to single processor machines because it can't take advantage of multiprocessor hardware, although it can be useful on multiprocessors for applications with small data sets (up to approximately 100 MB). 
+The serial collector is selected by default on certain hardware and operating system configurations, or can be explicitly enabled with the option `-XX:+UseSerialGC`.
 
 #### Serial Old
 - with Parallel JDK5
@@ -383,6 +395,11 @@ Once the available Java heap is exhausted, the JVM shuts down.
 
 
 ### Parallel Scavenge
+The parallel collector is also known as throughput collector, it's a generational collector similar to the serial collector. 
+The primary difference between the serial and parallel collectors is that the parallel collector has multiple threads that are used to speed up garbage collection.
+
+The parallel collector is intended for applications with medium-sized to large-sized data sets that are run on multiprocessor or multithreaded hardware. 
+You can enable it by using the `-XX:+UseParallelGC` option.
 
 Parallel Scavenge and Parallel Old
 ```
@@ -407,7 +424,17 @@ Because at least one processor is used for garbage collection during the concurr
 
 ### CMS
 
+[JEP 291: Deprecate the Concurrent Mark Sweep (CMS) Garbage Collector](https://openjdk.java.net/jeps/291)
+
 ### G1
+
+
+Low-Latency Garbage Collector
+
+Low-Pause-Time garbage Collector
+
+
+[JEP 307: Parallel Full GC for G1](https://openjdk.java.net/jeps/307)
 
 ### shenandoah
 Shenandoah is a new GC that was released as part of JDK 12. 
@@ -419,9 +446,20 @@ Since all of this happens concurrently while the application is running, Shenand
 
 The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC`.
 
+[JEP 189: Shenandoah: A Low-Pause-Time Garbage Collector (Experimental)](https://openjdk.java.net/jeps/189)
+
+
+Connection Matrix
+
+
 
 ### ZGC
-ZGC is another GC that was released as part of JDK 11 and has been improved in JDK 12. It is intended for applications which require low latency (less than 10 ms pauses) and/or use a very large heap (multi-terabytes).
+
+The Z Garbage Collector (ZGC) is a scalable low latency garbage collector. ZGC performs all expensive work concurrently, without stopping the execution of application threads.
+
+ZGC is intended for applications which require low latency (less than 10 ms pauses) and/or use a very large heap (multi-terabytes). You can enable is by using the -XX:+UseZGC option.
+
+ZGC is available as an experimental feature, starting with JDK 11 and has been improved in JDK 12. It is intended for applications which require low latency (less than 10 ms pauses) and/or use a very large heap (multi-terabytes).
 
 The primary goals of ZGC are low latency, scalability, and ease of use. To achieve this, ZGC allows a Java application to continue running while it performs all garbage collection operations. By default, ZGC uncommits unused memory and returns it to the operating system.
 
@@ -442,3 +480,4 @@ The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimenta
 3. [Java Platform, Standard Edition HotSpot Virtual Machine Garbage Collection Tuning Guide](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/toc.html)
 4. [Our Collectors](https://blogs.oracle.com/jonthecollector/our-collectors)
 5. [Garbage Collection in Java – What is GC and How it Works in the JVM](https://www.freecodecamp.org/news/garbage-collection-in-java-what-is-gc-and-how-it-works-in-the-jvm/)
+6. [HotSpot Virtual Machine Garbage Collection Tuning Guide - JDK11](https://docs.oracle.com/en/java/javase/11/gctuning/index.html)

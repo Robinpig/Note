@@ -8,7 +8,7 @@ Before CMS, Serial, Parallel all STW.
 
 CMS for Old GC, and Young GC still a pause by other collectors.
 
-- Init Mark(STW)
+- Initial Mark(STW)
 - Concurrent Mark
 - Remark Mark(STW) remark from `GC ROOT`, `Writter Barrier`
 - Concurrent Sweep
@@ -23,7 +23,15 @@ UseParNewGC                              := true
 
 
 #### Concurrent Mode Failure
-The CMS collector uses one or more garbage collector threads that run simultaneously with the application threads with the goal of completing the collection of the tenured generation before it becomes full. As described previously, in normal operation, the CMS collector does most of its tracing and sweeping work with the application threads still running, so only brief pauses are seen by the application threads. **However, if the CMS collector is unable to finish reclaiming the unreachable objects before the tenured generation fills up, or if an allocation cannot be satisfied with the available free space blocks in the tenured generation, then the application is paused and the collection is completed with all the application threads stopped.** The inability to complete a collection concurrently is referred to as `concurrent mode failure` and indicates the need to adjust the CMS collector parameters. If a concurrent collection is interrupted by an explicit garbage collection (`System.gc()`) or for a garbage collection needed to provide information for diagnostic tools, then a `concurrent mode interruption` is reported.
+The CMS collector uses one or more garbage collector threads that run simultaneously with the application threads with the goal of completing the collection of the tenured generation before it becomes full. 
+As described previously, in normal operation, the CMS collector does most of its tracing and sweeping work with the application threads still running, so only brief pauses are seen by the application threads. 
+
+**However, if the CMS collector is unable to finish reclaiming the unreachable objects before the tenured generation fills up, 
+or if an allocation cannot be satisfied with the available free space blocks in the tenured generation, 
+then the application is paused and the collection is completed with all the application threads stopped.** 
+
+The inability to complete a collection concurrently is referred to as `concurrent mode failure` and indicates the need to adjust the CMS collector parameters. 
+If a concurrent collection is interrupted by an explicit garbage collection (`System.gc()`) or for a garbage collection needed to provide information for diagnostic tools, then a `concurrent mode interruption` is reported.
 
 #### Excessive GC Time and OutOfMemoryError
 The CMS collector throws an OutOfMemoryError if too much time is being spent in garbage collection: if more than 98% of the total time is spent in garbage collection and less than 2% of the heap is recovered, then an OutOfMemoryError is thrown. This feature is designed to prevent applications from running for an extended period of time while making little or no progress because the heap is too small. If necessary, this feature can be disabled by adding the option -XX:-UseGCOverheadLimit to the command line.

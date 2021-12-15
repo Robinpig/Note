@@ -1,3 +1,4 @@
+## Introduction
 
 
 Young GC concurrent, partial
@@ -5,7 +6,14 @@ Young GC concurrent, partial
 Old GC support Concurrent Compact
 
 
+Forwarding Pointer/Indirection Pointer
 
+
+Memory Protection Trap
+
+CAS implement concurrent update
+
+Shenandoah GC in JDK 13, Part I: Load Reference Barriers
 ### Heap Structure
 
 Shenandoah is a regionalized GC
@@ -19,6 +27,7 @@ Shenandoah is a regionalized GC
 
 
 
+
 ## Cycle
 
 ### Overview
@@ -27,7 +36,6 @@ Three major phases:
 1. Snapshot-at-the-beginning concurrent mark
 2. Concurrent evacuation
 3. Concurrent update references (optional)
-
 
 
 ## Concurrent Mark
@@ -49,6 +57,19 @@ Assign colors to the objects:
 
 ### SATB
 
+### Concurrent Cleanup
+
+Immediate Garbage Region
+
+### Concurrent Evacuation
+
+Brooks Pointers
+
+### Initial Update Reference
+
+### Concurrent Update Reference
+
+### Final Update Reference
 
 
 ### Two Pauses
@@ -63,3 +84,7 @@ Final Mark:
 1. Stop the mutator to avoid races
 2. Drain the SATB buffers
 3. Finish work from SATB updates ← most heavy-weight
+
+
+## References
+1. [Shenandoah GC in JDK 13, Part I: Load Reference Barriers](https://rkennke.wordpress.com/2019/05/15/shenandoah-gc-in-jdk13-part-i-load-reference-barriers/)

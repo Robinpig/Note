@@ -172,3 +172,4 @@ void TemplateTable::iop2(Operation op) {
 ## Reference
 1. [Java T point](https://www.javatpoint.com/jvm-java-virtual-machine)
 2. [The Java® Virtual Machine Specification Java SE 17 Edition](https://docs.oracle.com/javase/specs/jvms/se17/html/)
+3. [深入理解Java虚拟机（第3版）- 周志明](https://book.douban.com/subject/34907497/)
