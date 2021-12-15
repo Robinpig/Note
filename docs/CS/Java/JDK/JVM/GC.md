@@ -353,7 +353,10 @@ void DefNewGeneration::collect(bool   full,
 
 
 ## Garbage Collector
+From JVM:
+![Our Collectors](../images/our-collectors.png)
 
+And
 
 ![GC Collector](../images/GC-collector.png)
 
@@ -391,6 +394,8 @@ Parallel Scavenge and Parallel Old
 - UseParallelOldGC                          = true
 - UseAdaptiveGCBoundary                     = false
 ```
+
+see [Garbage Collector Ergonomics](https://docs.oracle.com/javase/7/docs/technotes/guides/vm/gc-ergonomics.html)
 
 
 ### Concurrent
