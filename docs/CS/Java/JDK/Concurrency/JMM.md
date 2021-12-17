@@ -11,6 +11,24 @@ A memory model specifies how threads and objects interact
   Ensuring that you aren’t surprised by the order in which statements are executed
 
 
+## Cache Coherence
+
+
+### MESI
+
+
+
+Modified（已修改）, Exclusive（独占的）,Shared（共享的），Invalid（无效的）
+
+总线风暴
+
+总线嗅探技术有哪些缺点？
+
+由于MESI缓存一致性协议，需要不断对主线进行内存嗅探，大量的交互会导致总线带宽达到峰值。
+
+NUMA(Non-Uniform Memory Access Architecture)
+
+## Java Memory Model
 
 ### Shared Variables
 
@@ -28,9 +46,9 @@ Two accesses to (reads of or writes to) the same variable are said to be *confli
 
 ### Ordering
 
-compiler
-CPU
-Memory
+- compiler, JIT Instruction Reorder
+- CPU
+- Memory
 
 
 
@@ -39,12 +57,16 @@ Memory
 
 
 Variants of lock rule apply to volatile fields and thread control
-Writing a volatile has same basic memory effects as unlock
-Reading a volatile has same basic memory effects as lock
+- Writing a volatile has same basic memory effects as unlock
+- Reading a volatile has same basic memory effects as lock
 
 Similarly for thread start and termination
+
 Details differ from locks in minor ways
 
+
+- visually
+- prevent reorder
 
 
 ### Final fields
@@ -228,19 +250,6 @@ Other happens‐before orderings guaranteed by the class library include:
 - A thread arriving at a CyclicBarrier or Exchanger happens‐before the other threads are released from that same barrier or exchange point. If CyclicBarrier uses a barrier action, arriving at the barrier happens‐before the barrier action, which in turn happens‐before threads are released from the barrier.
 
 
-### MESI
-
-
-
-Modified（已修改）, Exclusive（独占的）,Shared（共享的），Invalid（无效的）
-
-总线风暴
-
-总线嗅探技术有哪些缺点？
-
-由于MESI缓存一致性协议，需要不断对主线进行内存嗅探，大量的交互会导致总线带宽达到峰值。
-
-NUMA(Non-Uniform Memory Access Architecture)
 
 ### Memory Barries
 

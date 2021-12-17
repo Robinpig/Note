@@ -193,10 +193,11 @@ The general contract of hashCode is:
 As much as is reasonably practical, the hashCode method defined by class Object does return distinct integers for distinct objects. (This is typically implemented by converting the internal address of the object into an integer, but this implementation technique is not required by the Java™ programming language.)
 
 ```java
+// return Identify Hash Code
 public native int hashCode();
 ```
 
-will use [**ObjectSynchronizer::inflate**]()
+call `Object::hashCode()` will use [ObjectSynchronizer::inflate()](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate)
 
 **return 0 if object is NULL**
 
