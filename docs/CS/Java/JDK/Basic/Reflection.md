@@ -200,6 +200,62 @@ java -verbose:class Main.class
 gather than threshold, only use DelegatingMethodAccessor, GeneratedMethodAccessor1, 
 
 
+
+### saveProxyFiles
+
+set property
+> System.getProperties().put("sun.misc.ProxyGenerator.saveGeneratedFiles", "true");
+
+saveFies
+```java
+public class ProxyGenerator {
+  /** debugging flag for saving generated class files */
+  private final static boolean saveGeneratedFiles =
+          java.security.AccessController.doPrivileged(
+                  new GetBooleanAction(
+                          "sun.misc.ProxyGenerator.saveGeneratedFiles")).booleanValue();
+
+
+
+  /**
+   * Generate a proxy class given a name and a list of proxy interfaces.
+   */
+  public static byte[] generateProxyClass(final String name,
+                                          Class<?>[] interfaces,
+                                          int accessFlags)
+  {
+    ProxyGenerator gen = new ProxyGenerator(name, interfaces, accessFlags);
+    final byte[] classFile = gen.generateClassFile();
+
+    if (saveGeneratedFiles) {
+      java.security.AccessController.doPrivileged(
+              new java.security.PrivilegedAction<Void>() {
+                public Void run() {
+                  try {
+                    int i = name.lastIndexOf('.');
+                    Path path;
+                    if (i > 0) {
+                      Path dir = Paths.get(name.substring(0, i).replace('.', File.separatorChar));
+                      Files.createDirectories(dir);
+                      path = dir.resolve(name.substring(i+1, name.length()) + ".class");
+                    } else {
+                      path = Paths.get(name + ".class");
+                    }
+                    Files.write(path, classFile);
+                    return null;
+                  } catch (IOException e) {
+                    throw new InternalError(
+                            "I/O exception saving generated file: " + e);
+                  }
+                }
+              });
+    }
+
+    return classFile;
+  }
+}
+```
+
 ## References
 
 1. [JVM源码分析之不保证顺序的Class.getMethods](http://lovestblog.cn/blog/2016/11/02/class-getmethods/)

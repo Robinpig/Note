@@ -447,6 +447,8 @@ public Class<?> defineAnonymousClass(Class<?> hostClass, byte[] data, Object[] c
 }
 ```
 
+Method Handle like Function Pointer in C/C++ 
+
 ## Instance
 
 

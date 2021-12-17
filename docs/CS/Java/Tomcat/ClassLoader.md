@@ -3,7 +3,7 @@
 
 #### initClassLoaders
 
-commonLoader is parent(delegate) of catalinaLoader and sharedLoader
+commonLoader is a parent(delegate) of catalinaLoader and sharedLoader
 
 ```java
 //Bootstrap.java

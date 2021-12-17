@@ -1,6 +1,6 @@
 ## Introduction
 
-| ClassLoader            | Languages | Load path           | Parent                   | JDK11                                                     |
+| ClassLoader            | Languages | Load path           | Parent(Composition)                   | JDK11                                                     |
 | ---------------------- | --------- | ------------------- | ------------------------ | --------------------------------------------------------- |
 | `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                          |                                                           |
 | `ExtensionClassLoader` | Java      | <JAVA_HOME>/lib/ext | `BootstrapClassLoader`   | rename to PlatformClassLoader, not extends URLClassLoader |
@@ -15,14 +15,6 @@ delegate the search for the class or resource to its parent class loader before 
 itself. The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent
 but may serve as the parent of a ClassLoader instance.
 
-加载时机
-
-1. 使用 new 关键字实例化对象的时候、读取或设置一个类的静态字段（被final修饰、已在编译期把结果放入常量池的静态字段除外）的时候，以及调用一个类的静态方法的时候。
-2. 使用 java.lang.reflect 包的方法对类进行反射调用的时候，如果类没有进行过初始化，则需要先触发其初始化。
-3. 当初始化一个类的时候，如果发现其父类还没有进行过初始化，则需要先触发其父类的初始化。
-4. 当虚拟机启动时，用户需要指定一个要执行的主类（包含 main()方法的那个类），虚拟机会先初始化这个主类。
-5. 当使用 JDK 1.7 的动态语言支持时，如果一个 java.lang.invoke.MethodHandle 实例最后的解析结果 REF_getStatic、REF_putStatic、REF_invokeStatic
-   的方法句柄，并且这个方法句柄所对应的类没有进行过初始化，则需要先触发其初始化。
 
 ### Parallel
 
