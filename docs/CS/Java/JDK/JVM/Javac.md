@@ -233,8 +233,12 @@ public class Main {
 ```
 
 
+2. initProcessAnnotations
+3. enterTrees
 1. parseFiles
-2. 
+
+processAnnotations
+
 ```java
 public class JavaCompiler {
     public void compile(List<JavaFileObject> sourceFileObjects,
@@ -455,6 +459,8 @@ public class TreeMaker implements JCTree.Factory {
 }
 ```
 
+
+
 ### process
 [JSR 269 Maintenance Review](https://jcp.org/aboutJava/communityprocess/maintenance/jsr269/JSR269-MR.html)
 
@@ -465,6 +471,188 @@ Processor
 
 ### desugar
 
+```java
+public class JavaCompiler {
+    /**
+     * Prepare attributed parse trees, in conjunction with their attribution contexts,
+     * for source or code generation. If the file was not listed on the command line,
+     * the current implicitSourcePolicy is taken into account.
+     * The preparation stops as soon as an error is found.
+     */
+    protected void desugar(final Env<AttrContext> env, Queue<Pair<Env<AttrContext>, JCClassDecl>> results) {
+        if (shouldStop(CompileState.TRANSTYPES))
+            return;
+
+        if (implicitSourcePolicy == ImplicitSourcePolicy.NONE
+                && !inputFiles.contains(env.toplevel.sourcefile)) {
+            return;
+        }
+
+        if (!modules.multiModuleMode && env.toplevel.modle != modules.getDefaultModule()) {
+            //can only generate classfiles for a single module:
+            return;
+        }
+
+        if (compileStates.isDone(env, CompileState.LOWER)) {
+            results.addAll(desugaredEnvs.get(env));
+            return;
+        }
+
+        /**
+         * Ensure that superclasses of C are desugared before C itself. This is
+         * required for two reasons: (i) as erasure (TransTypes) destroys
+         * information needed in flow analysis and (ii) as some checks carried
+         * out during lowering require that all synthetic fields/methods have
+         * already been added to C and its superclasses.
+         */
+        class ScanNested extends TreeScanner {
+            Set<Env<AttrContext>> dependencies = new LinkedHashSet<>();
+            protected boolean hasLambdas;
+
+            @Override
+            public void visitClassDef(JCClassDecl node) {
+                Type st = types.supertype(node.sym.type);
+                boolean envForSuperTypeFound = false;
+                while (!envForSuperTypeFound && st.hasTag(CLASS)) {
+                    ClassSymbol c = st.tsym.outermostClass();
+                    Env<AttrContext> stEnv = enter.getEnv(c);
+                    if (stEnv != null && env != stEnv) {
+                        if (dependencies.add(stEnv)) {
+                            boolean prevHasLambdas = hasLambdas;
+                            try {
+                                scan(stEnv.tree);
+                            } finally {
+                                /*
+                                 * ignore any updates to hasLambdas made during
+                                 * the nested scan, this ensures an initalized
+                                 * LambdaToMethod is available only to those
+                                 * classes that contain lambdas
+                                 */
+                                hasLambdas = prevHasLambdas;
+                            }
+                        }
+                        envForSuperTypeFound = true;
+                    }
+                    st = types.supertype(st);
+                }
+                super.visitClassDef(node);
+            }
+
+            @Override
+            public void visitLambda(JCLambda tree) {
+                hasLambdas = true;
+                super.visitLambda(tree);
+            }
+
+            @Override
+            public void visitReference(JCMemberReference tree) {
+                hasLambdas = true;
+                super.visitReference(tree);
+            }
+        }
+        ScanNested scanner = new ScanNested();
+        scanner.scan(env.tree);
+        for (Env<AttrContext> dep : scanner.dependencies) {
+            if (!compileStates.isDone(dep, CompileState.FLOW))
+```
+call desugar, flow
+```java
+                desugaredEnvs.put(dep, desugar(flow(attribute(dep))));
+        }
+
+        //We need to check for error another time as more classes might
+        //have been attributed and analyzed at this stage
+        if (shouldStop(CompileState.TRANSTYPES))
+            return;
+
+        if (verboseCompilePolicy)
+            printNote("[desugar " + env.enclClass.sym + "]");
+
+        JavaFileObject prev = log.useSource(env.enclClass.sym.sourcefile != null ?
+                env.enclClass.sym.sourcefile :
+                env.toplevel.sourcefile);
+        try {
+            //save tree prior to rewriting
+            JCTree untranslated = env.tree;
+
+            make.at(Position.FIRSTPOS);
+            TreeMaker localMake = make.forToplevel(env.toplevel);
+
+            if (env.tree.hasTag(JCTree.Tag.PACKAGEDEF) || env.tree.hasTag(JCTree.Tag.MODULEDEF)) {
+                if (!(sourceOutput)) {
+                    if (shouldStop(CompileState.LOWER))
+                        return;
+                    List<JCTree> def = lower.translateTopLevelClass(env, env.tree, localMake);
+                    if (def.head != null) {
+                        Assert.check(def.tail.isEmpty());
+                        results.add(new Pair<>(env, (JCClassDecl) def.head));
+                    }
+                }
+                return;
+            }
+
+            if (shouldStop(CompileState.TRANSTYPES))
+                return;
+
+            env.tree = transTypes.translateTopLevelClass(env.tree, localMake);
+            compileStates.put(env, CompileState.TRANSTYPES);
+
+            if (Feature.LAMBDA.allowedInSource(source) && scanner.hasLambdas) {
+                if (shouldStop(CompileState.UNLAMBDA))
+                    return;
+
+                env.tree = LambdaToMethod.instance(context).translateTopLevelClass(env, env.tree, localMake);
+                compileStates.put(env, CompileState.UNLAMBDA);
+            }
+
+            if (shouldStop(CompileState.LOWER))
+                return;
+
+            if (sourceOutput) {
+                //emit standard Java source file, only for compilation
+                //units enumerated explicitly on the command line
+                JCClassDecl cdef = (JCClassDecl) env.tree;
+                if (untranslated instanceof JCClassDecl &&
+                        rootClasses.contains((JCClassDecl) untranslated)) {
+                    results.add(new Pair<>(env, cdef));
+                }
+                return;
+            }
+
+            //translate out inner classes
+            List<JCTree> cdefs = lower.translateTopLevelClass(env, env.tree, localMake);
+            compileStates.put(env, CompileState.LOWER);
+
+            if (shouldStop(CompileState.LOWER))
+                return;
+
+            //generate code for each class
+            for (List<JCTree> l = cdefs; l.nonEmpty(); l = l.tail) {
+                JCClassDecl cdef = (JCClassDecl) l.head;
+                results.add(new Pair<>(env, cdef));
+            }
+        } finally {
+            log.useSource(prev);
+        }
+
+    }
+}
+```
+
+Perform dataflow checks on attributed parse trees.
+These include checks for definite assignment and unreachable statements.
+If any errors occur, an empty list will be returned.
+
+```java
+// JavaCompiler
+public Queue<Env<AttrContext>> flow(Queue<Env<AttrContext>> envs) {
+        ListBuffer<Env<AttrContext>> results = new ListBuffer<>();
+        for (Env<AttrContext> env: envs) {
+        flow(env, results);
+        }
+        return stopIfError(CompileState.FLOW, results);
+}
+```
 #### Type erasure
 ```java
 public class TransTypes extends TreeTranslator {

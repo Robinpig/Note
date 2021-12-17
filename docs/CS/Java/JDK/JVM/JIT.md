@@ -13,11 +13,14 @@ Historically, we used C1 for short-lived applications and applications where sta
 
 C2 – Server Compiler
 
-The server compiler, also called C2, is a type of a JIT compiler optimized for better overall performance. C2 observes and analyzes the code over a longer period of time compared to C1. This allows C2 to make better optimizations in the compiled code.
+The server compiler, also called C2(Opto), is a type of a JIT compiler optimized for better overall performance. C2 observes and analyzes the code over a longer period of time compared to C1. This allows C2 to make better optimizations in the compiled code.
 
 Historically, we used C2 for long-running server-side applications. Prior to Java 8, we had to specify the -server flag to use the C2 compiler. However, this flag will have no effect in Java 8 or higher.
 
 We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
+
+### On-stack Replacement
+On-stack replacement (OSR) is a programming language implementation technique that allows a running program to switch to a different version of code.
 
 
 ### Tiered Compilation
@@ -30,6 +33,16 @@ Tiered compilation is enabled by default since Java 8.
 **JVM doesn't use the generic CompileThreshold parameter when tiered compilation is enabled.**
 
 final not optimize
+
+
+### Counter
+
+- Invocation Counter
+- Back Edge Counter
+
+
+- from_compiled_entry
+- from_interpreted_entry
 
 ### code cache
 
@@ -202,7 +215,44 @@ void ciEnv::register_method(...) {
                               const VMRegPair *regs);
 ```
 
+## Optimization
+
+### Inline Method
+
+
+### Escape Analysis
+
+#### Stack Allocations
+support escape method, not support escape thread
+
+
+#### Scalar Replacement
+
+like a special situation of Stack Allocations
+
+use many primitive fields replace a Aggregate
+
+not support escape method
+
+#### Synchronization Elimination
+
+### Common Subexpression Elimination
+
+### Array bounds Checking Elimination
+
+### Autobox Elimination
+
+### Safepoint Elimination
+
+### Dereflection
+
+
+
+
+
 
 ## References
 1. [Tiered Compilation in JVM](https://www.baeldung.com/jvm-tiered-compilation)
 2. [Compilation Optimization - Java Platform, Standard Edition JRockit to HotSpot Migration Guide](https://docs.oracle.com/javacomponents/jrockit-hotspot/migration-guide/comp-opt.htm#JRHMG117)
+3. [Bril JIT with On-Stack Replacement](https://www.cs.cornell.edu/courses/cs6120/2019fa/blog/bril-osr/)
+4. [深入浅出 Java 10 的实验性 JIT 编译器 Graal](https://www.infoq.cn/article/java-10-jit-compiler-graal)
