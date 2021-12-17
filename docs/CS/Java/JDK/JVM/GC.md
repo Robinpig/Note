@@ -5,17 +5,9 @@ Garbage Collection
 ## When an instance is dead？ 
 ### Reference Counting
 
-   为对象添加一个引用计数器，当对象增加一个引用时计数器加 1，
-        引用失效时计数器减 1。引用计数为 0 的对象可被回收，
-        但存在循环引用而无法回收问题，已不再适用。
-
 
 
 ### Reachability Analysis
-
-  以 GC Roots 为起始点进行搜索，可达的对象都是存活的，不可达的对象可被回收。
-  Java 虚拟机使用该算法来判断对象是否可被回收，GC Roots 一般包含以下内容：
-
 
 
 **GC Roots:**
@@ -53,13 +45,6 @@ Link: [References](/docs/CS/Java/JDK/Basic/Ref.md)
 
 ### Recycle
 
-Copying
-
-Mark-Sweep
-
-Mark-Compact
-
-分代
 
 interceptor and JIT use Write Barrier to maintain Card Table
 
@@ -67,10 +52,14 @@ Premature Promotion
 
 Promotion Failure
 
-[Reference](/docs/CS/Java/JDK/Basic/Ref.md)
-
 
 gcCause.cpp
+
+
+### mark
+- at oop like serial
+- bitMap out of object like G1 Shenandoah
+- Colored Pointer like ZGC
 
 
 ## Generational Garbage Collection
@@ -356,6 +345,32 @@ void DefNewGeneration::collect(bool   full,
 
 
 
+for Serial and ParNew
+```cpp
+    // gc-globals.hpp
+  product(size_t, PretenureSizeThreshold, 0,                                \
+          "Maximum size in bytes of objects allocated in DefNew "           \
+          "generation; zero means no maximum")                              \
+          range(0, max_uintx)                                               \
+```
+
+Handle Promotion
+
+```cpp
+// tenuredGeneration.hpp
+bool TenuredGeneration::promotion_attempt_is_safe(size_t max_promotion_in_bytes) const {
+  size_t available = max_contiguous_available();
+  size_t av_promo  = (size_t)gc_stats()->avg_promoted()->padded_average();
+  bool   res = (available >= av_promo) || (available >= max_promotion_in_bytes);
+
+  log_trace(gc)("Tenured: promo attempt is%s safe: available(" SIZE_FORMAT ") %s av_promo(" SIZE_FORMAT "), max_promo(" SIZE_FORMAT ")",
+    res? "":" not", available, res? ">=":"<", av_promo, max_promotion_in_bytes);
+
+  return res;
+}
+```
+
+
 ## Garbage Collector
 From [JVM](https://book.douban.com/subject/34907497/):
 ![Our Collectors](../images/our-collectors.png)
@@ -369,11 +384,21 @@ And
 CMS only with ParNew since [JEP 214: Remove GC Combinations Deprecated in JDK 8](https://openjdk.java.net/jeps/214)
 
 
+| GC | Optimized For |
+| --- | --- |
+| Serial | Memory Footprint |
+| Parallel | Throughput |
+| G1 | Throughput/Latency Balance |
+| ZGC/Shenandoah | Low Latency |
+
 - Footprint
 - Throughput
 - Latency
 
 
+[JEP 304: Garbage Collector Interface](https://openjdk.java.net/jeps/304)
+
+[JEP 312: Thread-Local Handshakes](https://openjdk.java.net/jeps/312)
 
 ### Epsilon
 
@@ -434,8 +459,6 @@ Low-Latency Garbage Collector
 Low-Pause-Time garbage Collector
 
 
-[JEP 307: Parallel Full GC for G1](https://openjdk.java.net/jeps/307)
-
 ### shenandoah
 Shenandoah is a new GC that was released as part of JDK 12. 
 Shenandoah’s key advantage over G1 is that it does more of its garbage collection cycle work concurrently with the application threads. 
@@ -449,11 +472,12 @@ The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimenta
 [JEP 189: Shenandoah: A Low-Pause-Time Garbage Collector (Experimental)](https://openjdk.java.net/jeps/189)
 
 
-Connection Matrix
+**Connection Matrix** for InterRegional Reference Hypothesis
 
 
 
 ### ZGC
+[JEP 333: ZGC: A Scalable Low-Latency Garbage Collector (Experimental)](https://openjdk.java.net/jeps/333)
 
 The Z Garbage Collector (ZGC) is a scalable low latency garbage collector. ZGC performs all expensive work concurrently, without stopping the execution of application threads.
 
