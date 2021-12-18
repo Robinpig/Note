@@ -222,6 +222,22 @@ void ciEnv::register_method(...) {
 
 ### Escape Analysis
 
+```cpp
+// c2_globals.hpp
+  notproduct(bool, PrintEscapeAnalysis, false,                              \
+          "Print the results of escape analysis")                           \
+                                                                            \
+  product(bool, EliminateAllocations, true,                                 \
+          "Use escape analysis to eliminate allocations")                   \
+                                                                            \
+  notproduct(bool, PrintEliminateAllocations, false,                        \
+          "Print out when allocations are eliminated")                      \
+                                                                            \
+  product(intx, EliminateAllocationArraySizeLimit, 64,                      \
+          "Array size (number of elements) limit for scalar replacement")   \
+          range(0, max_jint)                                                \
+```
+
 #### Stack Allocations
 support escape method, not support escape thread
 

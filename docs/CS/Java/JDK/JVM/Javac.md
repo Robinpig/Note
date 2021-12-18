@@ -1,7 +1,12 @@
 ## Introduction
 
+Very few optimizations are done during compilation by javac, 
+and the resulting bytecode is still quite readable and recognizable as Java code when viewed in a disassembly tool, 
+such as the standard `javap`.
 
-[git clone javac source code](git@github.com:Robinpig/javac-source-code-reading.git) and copy to a new project.
+
+
+[git clone javac source code](https://github.com/Robinpig/javac-source-code-reading)
 
 
 ## Lexical Analysis

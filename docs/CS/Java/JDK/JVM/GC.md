@@ -494,8 +494,34 @@ The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimenta
 
 
 
+## Performance
+
+If a system is exhibiting high levels of system CPU usage, then it is definitely not spending a significant amount of its time in GC, 
+as GC activity burns user space CPU cycles and does not impact kernel space utilization.
+
+On the other hand, if a JVM process is using 100% (or close to that) of CPU in user space, then garbage collection is often the culprit. 
+When analyzing a performance problem, if simple tools (such as vmstat) show consistent 100% CPU usage, but with almost all cycles being consumed by user space, 
+then we should ask, “Is it the JVM or user code that is responsible for this utilization?” 
+In almost all cases, high user space utilization by the JVM is caused by the GC subsystem, so a useful rule of thumb is to check the GC log and see how often new entries are being added to it.
 
 
+### Performance Testing
+
+- Latency test
+What is the end-to-end transaction time?
+- Throughput test
+How many concurrent transactions can the current system capacity deal with?
+- Load test
+Can the system handle a specific load?
+- Stress test
+What is the breaking point of the system?
+- Endurance test
+What performance anomalies are discovered when the system is run for an extended period?
+- Capacity planning test
+Does the system scale as expected when additional resources are added?
+- Degradation
+What happens when the system is partially failed? `Chaos Monkey`
+  
 
 
 ## References

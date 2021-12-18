@@ -1,5 +1,8 @@
 ## Introduction
 
+A class in the system is identified by the classloader used to load it as well as the fully qualified class name (which includes the package name).
+
+
 | ClassLoader            | Languages | Load path           | Parent(Composition)                   | JDK11                                                     |
 | ---------------------- | --------- | ------------------- | ------------------------ | --------------------------------------------------------- |
 | `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                          |                                                           |
