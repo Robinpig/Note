@@ -50,28 +50,16 @@ Sync
 
 
 ## await
-
-
-
 Causes the current thread to wait until the latch has counted down to zero, unless the thread is interrupted, or the specified waiting time elapses.
-
 1. If the current count is zero then this method returns immediately with the value true.
-
 2. If the current count is greater than zero then the current thread becomes disabled for thread scheduling purposes and lies dormant until one of three things happen:
    1. The count reaches zero due to invocations of the countDown method; or
    2. Some other thread interrupts the current thread; or
    3. The specified waiting time elapses.
-
-3.  If the count reaches zero then the method returns with the value true.
-    
+3. If the count reaches zero then the method returns with the value true.
 4. If the current thread:
-
       1. has its interrupted status set on entry to this method; 
-
-      2. or is interrupted while waiting,
-
-            then InterruptedException is thrown and the current thread's interrupted status is cleared.
-
+      2. or is interrupted while waiting, then InterruptedException is thrown and the current thread's interrupted status is cleared.
 5. If the specified waiting time elapses then the value false is returned. If the time is less than or equal to zero, the method will not wait at all.
 
 ```java
@@ -98,11 +86,11 @@ protected int tryAcquireShared(int acquires) {
 
 ## countDown
 
-Decrements the count of the latch, releasing all waiting threads if the count reaches zero.
-If the current count is greater than zero then it is decremented. If the new count is zero then all waiting threads are re-enabled for thread scheduling purposes.
-If the current count equals zero then nothing happens.
+Decrements the count of the latch, releasing all waiting threads(see [doReleaseShared in AQS](/docs/CS/Java/JDK/Concurrency/AQS.md?id=doReleaseShared)) if the count reaches zero.
+- If the current count is greater than zero then it is decremented. If the new count is zero then all waiting threads are re-enabled for thread scheduling purposes.
+- If the current count equals zero then nothing happens.
 
-singalAll by `doReleaseShared` in AQS
+
 
 ```java
 public void countDown() {
@@ -112,6 +100,9 @@ public void countDown() {
 protected boolean tryReleaseShared(int releases) {
     for (;;) {
         int c = getState();
+```
+check if c == 0 to avoid being negative when [await](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md?id=await)
+```java
         if (c == 0)
             return false;
         int nextc = c-1;
@@ -205,8 +196,7 @@ class Driver2 { // ...
 ## Summary
 
 
-
 1. Implement AQS
 2. Use sharedLock
-3. only block threads which call `await` method
+3. only block threads which call `await` method when state not zero
 4. Decrement state -> 0 and can not reset

@@ -174,18 +174,7 @@ public synchronized void start() {
 private native void start0();
 ```
 
-### JVM_StartThread
-
-JVM_StartThread:
-
-1. `native_thread = new JavaThread`
-   1. `os::create_thread invoke pthread_create()`
-   2. ` while (state  == ALLOCATED), Monitor::wait(Mutex::_no_safepoint_check_flag)`
-   3. `after Monitor::notify, thread->call_run()`
-2. `Thread::start(native_thread)`
-   1. `os::start_thread(thread), set_state(RUNNABLE)`
-   2. `pd_start_thread invoke Monitor::notify`
-
+call [JVM_StartThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=JVM_StartThread)
 ```c
 //Thread.c
 static JNINativeMethod methods[] = {
@@ -206,12 +195,20 @@ static JNINativeMethod methods[] = {
     {"dumpThreads",      "([" THD ")[[" STE, (void *)&JVM_DumpThreads},
     {"setNativeName",    "(" STR ")V", (void *)&JVM_SetNativeThreadName},
 };
-
-//jvm.h
-JNIEXPORT void JNICALL
-JVM_StartThread(JNIEnv *env, jobject thread);
 ```
 
+
+### JVM_StartThread
+
+JVM_StartThread:
+
+1. `native_thread = new JavaThread`
+   1. `os::create_thread invoke pthread_create()`
+   2. ` while (state  == ALLOCATED), Monitor::wait(Mutex::_no_safepoint_check_flag)`
+   3. `after Monitor::notify, thread->call_run()`
+2. `Thread::start(native_thread)`
+   1. `os::start_thread(thread), set_state(RUNNABLE)`
+   2. `pd_start_thread invoke Monitor::notify`
 
 
 ```cpp
@@ -246,13 +243,18 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
 
       jlong size =
              java_lang_Thread::stackSize(JNIHandles::resolve_non_null(jthread));
-      // Allocate the C++ Thread structure and create the native thread.  The
-      // stack size retrieved from java is 64-bit signed, but the constructor takes
-      // size_t (an unsigned type), which may be 32 or 64-bit depending on the platform.
-      //  - Avoid truncating on 32-bit platforms if size is greater than UINT_MAX.
-      //  - Avoid passing negative values which would result in really large stacks.
+```
+Allocate the C++ Thread structure and create the native thread.  The
+stack size retrieved from java is 64-bit signed, but the constructor takes
+size_t (an unsigned type), which may be 32 or 64-bit depending on the platform.
+ - Avoid truncating on 32-bit platforms if size is greater than UINT_MAX.
+ - Avoid passing negative values which would result in really large stacks.
+```
       NOT_LP64(if (size > SIZE_MAX) size = SIZE_MAX;)
       size_t sz = size > 0 ? (size_t) size : 0;
+```
+call [new JavaThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=JavaThreadJavaThread)
+```cpp
       native_thread = new JavaThread(&thread_entry, sz);
 
       // At this point it may be possible that no osthread was created for the
@@ -272,8 +274,6 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
     THROW(vmSymbols::java_lang_IllegalThreadStateException());
   }
 
-  assert(native_thread != NULL, "Starting null thread?");
-
   if (native_thread->osthread() == NULL) {
     // No one should hold a reference to the 'native_thread'.
     native_thread->smr_delete();
@@ -287,7 +287,6 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
   }
 
   Thread::start(native_thread);
-
 JVM_END
 ```
 
@@ -646,9 +645,11 @@ void JavaThread::run() {
 }
 
 void JavaThread::thread_main_inner() {
-  // Execute thread entry point unless this thread has a pending exception
-  // or has been stopped before starting.
-  // Note: Due to JVM_StopThread we can have pending exceptions already!
+```
+Execute thread entry point unless this thread has a pending exception
+or has been stopped before starting.
+Note: Due to `JVM_StopThread` we can have pending exceptions already!
+```cpp
   if (!this->has_pending_exception() &&
       !java_lang_Thread::is_stillborn(this->threadObj())) {
     {
@@ -657,11 +658,11 @@ void JavaThread::thread_main_inner() {
       this->set_native_thread_name(this->get_thread_name());
     }
     HandleMark hm(this);
-    //execute entry_point -> run_method_name
+```
+execute entry_point -> run_method_name(`Thread.run()`)
+```cpp
     this->entry_point()(this, this);
   }
-
-  DTRACE_THREAD_PROBE(stop, this);
 
   this->exit(false);
   this->smr_delete();
@@ -672,58 +673,31 @@ void JavaThread::thread_main_inner() {
 
 ## Wait Sets and Notification
 
-
-
-### join
-
-Waits at most millis milliseconds for this thread to die. A timeout of 0 means to wait forever.
-This implementation uses **a loop of this.wait** calls conditioned on this.isAlive. As a thread terminates the this.notifyAll method is invoked. It is recommended that applications not use wait, notify, or notifyAll on Thread instances.
-
-```java
-public final synchronized void join(long millis)
-throws InterruptedException {
-    long base = System.currentTimeMillis();
-    long now = 0;
-
-    if (millis < 0) {
-        throw new IllegalArgumentException("timeout value is negative");
-    }
-
-    if (millis == 0) {
-        while (isAlive()) {
-            wait(0);
-        }
-    } else {
-        while (isAlive()) {
-            long delay = millis - now;
-            if (delay <= 0) {
-                break;
-            }
-            wait(delay);
-            now = System.currentTimeMillis() - base;
-        }
-    }
-}
-```
-`ObjectSynchronizer::notifyall` in `JavaThread::exit()`
-
-
-
-### wait
-
 Every object, in addition to having an associated monitor, has an associated *wait set*. A wait set is a set of threads.
 
-When an object is first created, its wait set is empty. Elementary actions that add threads to and remove threads from wait sets are atomic. Wait sets are manipulated solely through the methods `Object``.``wait`, `Object``.``notify`, and `Object``.``notifyAll`.
+When an object is first created, its wait set is empty. Elementary actions that add threads to and remove threads from wait sets are atomic.
 
+Wait sets are manipulated solely through the methods `Object``.``wait`, `Object``.``notify`, and `Object``.``notifyAll`.
 
+### wait
+**The current thread must own this object's monitor.** use `CHECK_OWNER`.
 
 **Note**: use `wait` in a while loop avoid **spurious wakeups**.
 
-Causes the current thread to wait until either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object, or a specified amount of time has elapsed.
+Causes the current thread to wait until:
+- either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object
+- or a specified amount of time has elapsed.
+- or if any thread interrupted the current thread. **The <i>interrupted status</i> of the current thread is cleared when this exception is thrown.**
 
-**The current thread must own this object's monitor.** use `CHECK_OWNER`.
+Each thread must determine an order over the events that could cause it to be removed from a wait set. 
+That order does not have to be consistent with other orderings, but the thread must behave as though those events occurred in that order.
 
-InterruptedException if any thread interrupted the current thread before or while the current thread was waiting for a notification.  **The <i>interrupted status</i> of the current thread is cleared when this exception is thrown.**
+For example, if a thread t is in the wait set for m, and then both an interrupt of t and a notification of m occur, there must be an order over these events. 
+If the interrupt is deemed to have occurred first, then t will eventually return from wait by throwing InterruptedException, 
+and some other thread in the wait set for m (if any exist at the time of the notification) must receive the notification. 
+If the notification is deemed to have occurred first, then t will eventually return normally from wait with an interrupt still pending.
+
+
 ```java
 public final native void wait(long timeout) throws InterruptedException;
 
@@ -737,10 +711,29 @@ public final void wait() throws InterruptedException {
 ```
 
 
+#### join
+
+Waits at most millis milliseconds for this thread to die. A timeout of 0 means to wait forever.
+This implementation uses **a loop of this.wait** calls conditioned on this.isAlive.
+As a thread terminates the this.notifyAll method is invoked.
+**It is recommended that applications not use wait, notify, or notifyAll on Thread instances.**
+
+
+Actually call [wait](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait)
+```java
+public final synchronized void join(long millis) throws InterruptedException {
+    ...
+    while (isAlive()) {
+        wait(0);
+    }
+}
+```
+
+
 
 #### ObjectSynchronizer::wait
 
-must get monitor by [ObjectSynchronizer::inflate]()
+must get monitor by [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate)
 
 ```cpp
 // NOTE: must use heavy weight monitor to handle wait()
@@ -879,14 +872,15 @@ public final native void notifyAll();
 
 **TODO**: *Consider: If the lock is cool (cxq == null && succ == null) and we're on an MP system then instead of transferring a thread from the WaitSet to the EntryList we might just dequeue a thread from the WaitSet and directly unpark() it.*
 
-*Consider: a not-uncommon synchronization bug is to use notify() when notifyAll() is more appropriate, potentially resulting in stranded threads; this is one example of a lost wakeup. A useful diagnostic option is to force all notify() operations to behave as notifyAll().*
+*Consider: a not-uncommon synchronization bug is to use `notify()` when `notifyAll()` is more appropriate, potentially resulting in stranded threads; 
+this is one example of a lost wakeup. A useful diagnostic option is to force all notify() operations to behave as notifyAll().*
 
-*Note: We can also detect many such problems with a "minimum wait". When the "minimum wait" is set to a small non-zero timeout value and the program does not hang whereas it did absent "minimum wait", that suggests a lost wakeup bug.*
+*Note: We can also detect many such problems with a "minimum wait". 
+When the "minimum wait" is set to a small non-zero timeout value and the program does not hang whereas it did absent "minimum wait", that suggests a lost wakeup bug.*
 
 
 
 dequeue from the WaitSet to the EntryList or _cxq
-
 
 ```cpp
 void ObjectMonitor::notify(TRAPS) {
@@ -954,7 +948,9 @@ void ObjectMonitor::INotify(Thread * Self) {
 
 
 
-*_WaitSetLock protects the wait queue, not the EntryList.  We could move the add-to-EntryList operation, above, outside the critical section protected by _WaitSetLock.  In practice that's not useful.  With the exception of  wait() timeouts and interrupts the monitor owner is the only thread that grabs _WaitSetLock.  **There's almost no contention on _WaitSetLock** so it's not profitable to reduce the length of the critical section.*
+*_WaitSetLock protects the wait queue, not the EntryList.  We could move the add-to-EntryList operation, above, outside the critical section protected by _WaitSetLock.  
+In practice that's not useful.  With the exception of  wait() timeouts and interrupts the monitor owner is the only thread that grabs _WaitSetLock.  
+**There's almost no contention on _WaitSetLock** so it's not profitable to reduce the length of the critical section.*
 
 **notifyAll** when JavaThread exit
 
@@ -1238,11 +1234,7 @@ public boolean isInterrupted() {
 private native boolean isInterrupted(boolean ClearInterrupted);
 ```
 
-
-
-
-
-#### See
+#### JVM_Interrupt
 
 1. `OSThread::set_interrupted(true)`
 2. `ParkEvent::unpark`
@@ -1296,16 +1288,23 @@ void os::interrupt(Thread* thread) {
 
 
 
-### Example
+### Interactions of Waits, Notification, and Interruption
+> From JLS:
+> 
+> If a thread is both notified and interrupted while waiting, it may either:
+> - return normally from wait, while still having a pending interrupt (in other words, a call to `Thread.interrupted` would return true)
+> - return from wait by throwing an `InterruptedException`
+> The thread may not reset its interrupt status and return normally from the call to `wait`.
+> 
+> Similarly, **notifications cannot be lost due to interrupts**. 
+> Assume that a set *s* of threads is in the wait set of an object *m*, and another thread performs a `notify` on *m*. Then either:
+> 
+> - at least one thread in *s* must return normally from `wait`, or
+> - all of the threads in *s* must exit `wait` by throwing `InterruptedException`
+> 
+> **Note that if a thread is both interrupted and woken via `notify`, and that thread returns from `wait` by throwing an `InterruptedException`, then some other thread in the wait set must be notified.**
 
-Similarly, notifications cannot be lost due to interrupts. Assume that a set *s* of threads is in the wait set of an object *m*, and another thread performs a `notify` on *m*. Then either:
-
-- at least one thread in *s* must return normally from `wait`, or
-- all of the threads in *s* must exit `wait` by throwing `InterruptedException`
-
-**Note that if a thread is both interrupted and woken via `notify`, and that thread returns from `wait` by throwing an `InterruptedException`, then some other thread in the wait set must be notified.**
-
-Such as two threads wait for lock, may thread1 be notifyed and interrupt and the other thread still waiting
+Such as two threads wait for lock, may thread1 be notified and `Thread.interrupted` return true while the other thread still waiting
 
 ```java
 synchronized (lock) {
@@ -1320,6 +1319,24 @@ synchronized (lock) {
 ## Sleep and Yield
 
 
+`Thread.sleep()` causes the currently executing thread to sleep (temporarily cease execution) for the specified duration, 
+subject to the precision and accuracy of system timers and schedulers. The thread **does not lose ownership of any monitors**, 
+and resumption of execution will depend on scheduling and the availability of processors on which to execute the thread.
+
+**It is important to note that neither Thread.sleep nor Thread.yield have any synchronization semantics.** 
+In particular, the compiler does not have to flush writes cached in registers out to shared memory before a call to sleep or yield, 
+nor does the compiler have to reload values cached in registers after a call to sleep or yield. 
+
+> For example, in the following (broken) code fragment, assume that this.done is a non-volatile boolean field:
+
+```java
+        while (!this.done)
+        Thread.sleep(1000);
+```
+> The compiler is free to read the field this.done just once, and reuse the cached value in each execution of the loop.
+> This would mean that the loop would never terminate, even if another thread changed the value of this.done.
+
+
 
 |              | wait      | yield       | sleep       |
 | ------------ | --------- | ----------- | ----------- |
@@ -1328,22 +1345,18 @@ synchronized (lock) {
 | Interruption | Throws    |             | Throws      |
 
 
+### sleep
+if millis = 0, `os::naked_yield()` like `Thread#yield()`
+```cpp
 
-`Thread.sleep()` causes the currently executing thread to sleep (temporarily cease execution) for the specified duration, subject to the precision and accuracy of system timers and schedulers. The thread **does not lose ownership of any monitors**, and resumption of execution will depend on scheduling and the availability of processors on which to execute the thread.
-
-
-
-**It is important to note that neither Thread.sleep nor Thread.yield have any synchronization semantics.** In particular, the compiler does not have to flush writes cached in registers out to shared memory before a call to sleep or yield, nor does the compiler have to reload values cached in registers after a call to sleep or yield. For example, in the following (broken) code fragment, assume that this.done is a non-volatile boolean field:
-
-```java
-while (!this.done)
-	Thread.sleep(1000);
+```c
+//Thread.c
+static JNINativeMethod methods[] = {
+    {"sleep",            "(J)V",       (void *)&JVM_Sleep},
+    ...
+};
 ```
 
-The compiler is free to read the field this.done just once, and reuse the cached value in each execution of the loop. This would mean that the loop would never terminate, even if another thread changed the value of this.done.
-
-#### sleep
-if millis = 0, `os::naked_yield()` like `Thread#yield()`
 ```cpp
 // jvm.cpp
 JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
@@ -1473,8 +1486,15 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
 }
 ```
 
-#### yield
+### yield
 
+```c
+//Thread.c
+static JNINativeMethod methods[] = {
+    {"yield",            "()V",        (void *)&JVM_Yield},
+    ...
+};
+```
 
 
 ### TimeUnit
