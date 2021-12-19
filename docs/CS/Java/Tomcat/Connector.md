@@ -105,7 +105,7 @@ public class Http11NioProtocol extends AbstractHttp11JsseProtocol<NioChannel> {
 ```
 
 
-
+#### NioEndPoint
 NIO tailored thread pool, providing the following services:
 
 1. Socket acceptor thread, default 1
@@ -407,97 +407,105 @@ protected void startAcceptorThread() {
 ### Acceptor
 
 call in Endpoint
+
+- if we have reached max connections, wait
+- Accept the next incoming connection from the server socket
+- [setSocketOptions()](/docs/CS/Java/Tomcat/Connector.md?id=setSocketOptions) will hand the socket off to an appropriate processor if successful
 ```java
-// Acceptor
-@Override
-public void run() {
+package org.apache.tomcat.util.net;
+public class Acceptor<U> implements Runnable {
+    @Override
+    public void run() {
 
-    int errorDelay = 0;
+        int errorDelay = 0;
 
-    try {
-        // Loop until we receive a shutdown command
-        while (!stopCalled) {
+        try {
+            // Loop until we receive a shutdown command
+            while (!stopCalled) {
 
-            // Loop if endpoint is paused
-            while (endpoint.isPaused() && !stopCalled) {
-                state = AcceptorState.PAUSED;
-                try {
-                    Thread.sleep(50);
-                } catch (InterruptedException e) {
-                    // Ignore
-                }
-            }
-
-            if (stopCalled) {
-                break;
-            }
-            state = AcceptorState.RUNNING;
-
-            try {
-                //if we have reached max connections, wait
-                endpoint.countUpOrAwaitConnection();
-
-                // Endpoint might have been paused while waiting for latch
-                // If that is the case, don't accept new connections
-                if (endpoint.isPaused()) {
-                    continue;
+                // Loop if endpoint is paused
+                while (endpoint.isPaused() && !stopCalled) {
+                    state = AcceptorState.PAUSED;
+                    try {
+                        Thread.sleep(50);
+                    } catch (InterruptedException e) {
+                        // Ignore
+                    }
                 }
 
-                U socket = null;
+                if (stopCalled) {
+                    break;
+                }
+                state = AcceptorState.RUNNING;
+
                 try {
-                    // Accept the next incoming connection from the server
-                    // socket
-                    socket = endpoint.serverSocketAccept();
-                } catch (Exception ioe) {
-                    // We didn't get a socket
-                    endpoint.countDownConnection();
-                    if (endpoint.isRunning()) {
-                        // Introduce delay if necessary
-                        errorDelay = handleExceptionWithDelay(errorDelay);
-                        // re-throw
-                        throw ioe;
+                    //if we have reached max connections, wait
+                    endpoint.countUpOrAwaitConnection();
+
+                    // Endpoint might have been paused while waiting for latch
+                    // If that is the case, don't accept new connections
+                    if (endpoint.isPaused()) {
+                        continue;
+                    }
+
+                    U socket = null;
+                    try {
+                        // Accept the next incoming connection from the server
+                        // socket
+                        socket = endpoint.serverSocketAccept();
+                    } catch (Exception ioe) {
+                        // We didn't get a socket
+                        endpoint.countDownConnection();
+                        if (endpoint.isRunning()) {
+                            // Introduce delay if necessary
+                            errorDelay = handleExceptionWithDelay(errorDelay);
+                            // re-throw
+                            throw ioe;
+                        } else {
+                            break;
+                        }
+                    }
+                    // Successful accept, reset the error delay
+                    errorDelay = 0;
+
+                    // Configure the socket
+                    if (!stopCalled && !endpoint.isPaused()) {
+                        // setSocketOptions() will hand the socket off to
+                        // an appropriate processor if successful
+                        if (!endpoint.setSocketOptions(socket)) {
+                            endpoint.closeSocket(socket);
+                        }
                     } else {
-                        break;
+                        endpoint.destroySocket(socket);
+                    }
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    String msg = sm.getString("endpoint.accept.fail");
+                    // APR specific.
+                    // Could push this down but not sure it is worth the trouble.
+                    if (t instanceof Error) {
+                        Error e = (Error) t;
+                        if (e.getError() == 233) {
+                            // Not an error on HP-UX so log as a warning
+                            // so it can be filtered out on that platform
+                            // See bug 50273
+                        }
                     }
                 }
-                // Successful accept, reset the error delay
-                errorDelay = 0;
-
-                // Configure the socket
-                if (!stopCalled && !endpoint.isPaused()) {
-                    // setSocketOptions() will hand the socket off to
-                    // an appropriate processor if successful
-                    if (!endpoint.setSocketOptions(socket)) {
-                        endpoint.closeSocket(socket);
-                    }
-                } else {
-                    endpoint.destroySocket(socket);
-                }
-            } catch (Throwable t) {
-                ExceptionUtils.handleThrowable(t);
-                String msg = sm.getString("endpoint.accept.fail");
-                // APR specific.
-                // Could push this down but not sure it is worth the trouble.
-                if (t instanceof Error) {
-                    Error e = (Error) t;
-                    if (e.getError() == 233) {
-                        // Not an error on HP-UX so log as a warning
-                        // so it can be filtered out on that platform
-                        // See bug 50273
-                    } 
-                } 
             }
+        } finally {
+            stopLatch.countDown();
         }
-    } finally {
-        stopLatch.countDown();
+        state = AcceptorState.ENDED;
     }
-    state = AcceptorState.ENDED;
 }
 ```
 
 
-
+#### setSocketOptions
 Process the specified connection.
+
+call [register](/docs/CS/Java/Tomcat/Connector.md?id=register)
 
 ```java
 // NioEndpoint
@@ -555,27 +563,129 @@ protected boolean setSocketOptions(SocketChannel socket) {
 ```
 
 
-
+#### register
 Registers a newly created socket with the poller.
 
+events is a SynchronizedQueue
 ```java
-// NioEndpoint
-public void register(final NioSocketWrapper socketWrapper) {
-  socketWrapper.interestOps(SelectionKey.OP_READ);//this is what OP_REGISTER turns into.
-  PollerEvent event = null;
-  if (eventCache != null) {
-    event = eventCache.pop();
-  }
-  if (event == null) {
-    event = new PollerEvent(socketWrapper, OP_REGISTER);
-  } else {
-    event.reset(socketWrapper, OP_REGISTER);
-  }
-  addEvent(event);
+public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {
+
+    private final SynchronizedQueue<PollerEvent> events =
+            new SynchronizedQueue<>();
+    
+    public void register(final NioSocketWrapper socketWrapper) {
+        socketWrapper.interestOps(SelectionKey.OP_READ);//this is what OP_REGISTER turns into.
+        PollerEvent event = null;
+        if (eventCache != null) {
+            event = eventCache.pop();
+        }
+        if (event == null) {
+            event = new PollerEvent(socketWrapper, OP_REGISTER);
+        } else {
+            event.reset(socketWrapper, OP_REGISTER);
+        }
+        addEvent(event);
+    }
+
+    private void addEvent(PollerEvent event) {
+        events.offer(event);
+        if (wakeupCounter.incrementAndGet() == 0) {
+            selector.wakeup();
+        }
+    }
 }
 ```
 
-### Poller
+### SynchronizedQueue
+
+SynchronizedQueueThis is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ConcurrentLinkedQueue)
+when the requirement is to create an unbounded queue with no requirement to shrink the queue.
+The aim is to provide the bare minimum of required functionality as quickly as possible with minimum garbage.
+
+```java
+public class SynchronizedQueue<T> {
+
+    public static final int DEFAULT_SIZE = 128;
+
+    private Object[] queue;
+    private int size;
+    private int insert = 0;
+    private int remove = 0;
+
+    public SynchronizedQueue() {
+        this(DEFAULT_SIZE);
+    }
+
+    public SynchronizedQueue(int initialSize) {
+        queue = new Object[initialSize];
+        size = initialSize;
+    }
+
+    public synchronized boolean offer(T t) {
+        queue[insert++] = t;
+
+        // Wrap
+        if (insert == size) {
+            insert = 0;
+        }
+
+        if (insert == remove) {
+            expand();
+        }
+        return true;
+    }
+
+    public synchronized T poll() {
+        if (insert == remove) {
+            // empty
+            return null;
+        }
+
+        @SuppressWarnings("unchecked")
+        T result = (T) queue[remove];
+        queue[remove] = null;
+        remove++;
+
+        // Wrap
+        if (remove == size) {
+            remove = 0;
+        }
+
+        return result;
+    }
+
+    private void expand() {
+        int newSize = size * 2;
+        Object[] newQueue = new Object[newSize];
+
+        System.arraycopy(queue, insert, newQueue, 0, size - insert);
+        System.arraycopy(queue, 0, newQueue, size - insert, insert);
+
+        insert = size;
+        remove = 0;
+        queue = newQueue;
+        size = newSize;
+    }
+
+    public synchronized int size() {
+        int result = insert - remove;
+        if (result < 0) {
+            result += size;
+        }
+        return result;
+    }
+
+    public synchronized void clear() {
+        queue = new Object[size];
+        insert = 0;
+        remove = 0;
+    }
+}
+```
+
+
+
+## Poller
 call in Endpoint
 ```java
 public class Poller implements Runnable {
@@ -598,6 +708,76 @@ public class Poller implements Runnable {
 ...
 }
 ```
+### run
+
+The background thread that adds sockets to the Poller, 
+checks the poller for triggered events and hands the associated socket off to an appropriate [processor](/docs/CS/Java/Tomcat/Connector.md?id=SocketProcessor) as events occur.
+
+```java
+public class Poller implements Runnable {
+    @Override
+    public void run() {
+        // Loop until destroy() is called
+        while (true) {
+
+            boolean hasEvents = false;
+
+            try {
+                if (!close) {
+                    hasEvents = events();
+                    if (wakeupCounter.getAndSet(-1) > 0) {
+                        // If we are here, means we have other stuff to do
+                        // Do a non blocking select
+                        keyCount = selector.selectNow();
+                    } else {
+                        keyCount = selector.select(selectorTimeout);
+                    }
+                    wakeupCounter.set(0);
+                }
+                if (close) {
+                    events();
+                    timeout(0, false);
+                    try {
+                        selector.close();
+                    } catch (IOException ioe) {
+                        log.error(sm.getString("endpoint.nio.selectorCloseFail"), ioe);
+                    }
+                    break;
+                }
+                // Either we timed out or we woke up, process events first
+                if (keyCount == 0) {
+                    hasEvents = (hasEvents | events());
+                }
+            } catch (Throwable x) {
+                ExceptionUtils.handleThrowable(x);
+                log.error(sm.getString("endpoint.nio.selectorLoopError"), x);
+                continue;
+            }
+
+            Iterator<SelectionKey> iterator =
+                    keyCount > 0 ? selector.selectedKeys().iterator() : null;
+            // Walk through the collection of ready keys and dispatch
+            // any active event.
+            while (iterator != null && iterator.hasNext()) {
+                SelectionKey sk = iterator.next();
+                iterator.remove();
+                NioSocketWrapper socketWrapper = (NioSocketWrapper) sk.attachment();
+                // Attachment may be null if another thread has called
+                // cancelledKey()
+                if (socketWrapper != null) {
+                    processKey(sk, socketWrapper);
+                }
+            }
+
+            // Process timeouts
+            timeout(keyCount, hasEvents);
+        }
+
+        getStopLatch().countDown();
+    }
+}
+```
+
 
 #### events
 
@@ -656,80 +836,6 @@ public boolean events() {
     return result;
 }
 ```
-
-
-
-
-
-The background thread that adds sockets to the Poller, checks the poller for triggered events and hands the associated socket off to an appropriate processor as events occur.
-
-```java
-// NioEndpoint$Poller
-@Override
-public void run() {
-    // Loop until destroy() is called
-    while (true) {
-
-        boolean hasEvents = false;
-
-        try {
-            if (!close) {
-                hasEvents = events();
-                if (wakeupCounter.getAndSet(-1) > 0) {
-                    // If we are here, means we have other stuff to do
-                    // Do a non blocking select
-                    keyCount = selector.selectNow();
-                } else {
-                    keyCount = selector.select(selectorTimeout);
-                }
-                wakeupCounter.set(0);
-            }
-            if (close) {
-                events();
-                timeout(0, false);
-                try {
-                    selector.close();
-                } catch (IOException ioe) {
-                    log.error(sm.getString("endpoint.nio.selectorCloseFail"), ioe);
-                }
-                break;
-            }
-            // Either we timed out or we woke up, process events first
-            if (keyCount == 0) {
-                hasEvents = (hasEvents | events());
-            }
-        } catch (Throwable x) {
-            ExceptionUtils.handleThrowable(x);
-            log.error(sm.getString("endpoint.nio.selectorLoopError"), x);
-            continue;
-        }
-
-        Iterator<SelectionKey> iterator =
-            keyCount > 0 ? selector.selectedKeys().iterator() : null;
-        // Walk through the collection of ready keys and dispatch
-        // any active event.
-        while (iterator != null && iterator.hasNext()) {
-            SelectionKey sk = iterator.next();
-            iterator.remove();
-            NioSocketWrapper socketWrapper = (NioSocketWrapper) sk.attachment();
-            // Attachment may be null if another thread has called
-            // cancelledKey()
-            if (socketWrapper != null) {
-                processKey(sk, socketWrapper);
-            }
-        }
-
-        // Process timeouts
-        timeout(keyCount,hasEvents);
-    }
-
-    getStopLatch().countDown();
-}
-```
-
-
-
-
 
 #### processKey
 
@@ -794,64 +900,445 @@ protected void processKey(SelectionKey sk, NioSocketWrapper socketWrapper) {
 ```
 
 
-
+#### processSocket
+Process the given SocketWrapper with the given status. 
+Used to trigger processing as if the Poller (for those endpoints that have one) selected the socket.
 ```java
-protected boolean process() {
-    try {
-        getEndpoint().getExecutor().execute(this);
+public abstract class AbstractEndpoint<S,U> {
+    public boolean processSocket(SocketWrapperBase<S> socketWrapper,
+                                 SocketEvent event, boolean dispatch) {
+        try {
+            if (socketWrapper == null) {
+                return false;
+            }
+            SocketProcessorBase<S> sc = null;
+            if (processorCache != null) {
+                sc = processorCache.pop();
+            }
+            if (sc == null) {
+```
+create SocketProcessor
+```java
+                sc = createSocketProcessor(socketWrapper, event);
+            } else {
+                sc.reset(socketWrapper, event);
+            }
+```
+execute SocketProcessor in workers
+```java
+            Executor executor = getExecutor();
+            if (dispatch && executor != null) {
+                executor.execute(sc);
+            } else {
+                sc.run();
+            }
+        } catch (RejectedExecutionException ree) {
+            getLog().warn(sm.getString("endpoint.executor.fail", socketWrapper), ree);
+            return false;
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            // This means we got an OOM or similar creating a thread, or that
+            // the pool and its queue are full
+            getLog().error(sm.getString("endpoint.process.fail"), t);
+            return false;
+        }
         return true;
-    } catch (RejectedExecutionException ree) {
-        log.warn(sm.getString("endpoint.executor.fail", SocketWrapperBase.this) , ree);
-    } catch (Throwable t) {
-        ExceptionUtils.handleThrowable(t);
-        // This means we got an OOM or similar creating a thread, or that
-        // the pool and its queue are full
-        log.error(sm.getString("endpoint.process.fail"), t);
     }
-    return false;
 }
 ```
 
+#### SocketProcessor
+`SocketProcessor` is the equivalent of the Worker, but will simply use in an
+external Executor thread pool.
+```java
+protected class SocketProcessor extends SocketProcessorBase<NioChannel> {
+
+    public SocketProcessor(SocketWrapperBase<NioChannel> socketWrapper, SocketEvent event) {
+        super(socketWrapper, event);
+    }
+
+    @Override
+    protected void doRun() {
+        /*
+         * Do not cache and re-use the value of socketWrapper.getSocket() in
+         * this method. If the socket closes the value will be updated to
+         * CLOSED_NIO_CHANNEL and the previous value potentially re-used for
+         * a new connection. That can result in a stale cached value which
+         * in turn can result in unintentionally closing currently active
+         * connections.
+         */
+        Poller poller = NioEndpoint.this.poller;
+        if (poller == null) {
+            socketWrapper.close();
+            return;
+        }
+
+        try {
+            int handshake = -1;
+            try {
+                if (socketWrapper.getSocket().isHandshakeComplete()) {
+                    // No TLS handshaking required. Let the handler
+                    // process this socket / event combination.
+                    handshake = 0;
+                } else if (event == SocketEvent.STOP || event == SocketEvent.DISCONNECT ||
+                        event == SocketEvent.ERROR) {
+                    // Unable to complete the TLS handshake. Treat it as
+                    // if the handshake failed.
+                    handshake = -1;
+                } else {
+                    handshake = socketWrapper.getSocket().handshake(event == SocketEvent.OPEN_READ, event == SocketEvent.OPEN_WRITE);
+                    // The handshake process reads/writes from/to the
+                    // socket. status may therefore be OPEN_WRITE once
+                    // the handshake completes. However, the handshake
+                    // happens when the socket is opened so the status
+                    // must always be OPEN_READ after it completes. It
+                    // is OK to always set this as it is only used if
+                    // the handshake completes.
+                    event = SocketEvent.OPEN_READ;
+                }
+            } catch (IOException | CancelledKeyException ckx) {
+                handshake = -1;
+            }
+            if (handshake == 0) {
+                SocketState state = SocketState.OPEN;
+```
+Process the request from this socket, call `AbstractProtocol.process()` -> [Processor.process()](/docs/CS/Java/Tomcat/Connector.md?id=Processor)
+```java
+                if (event == null) {
+                    state = getHandler().process(socketWrapper, SocketEvent.OPEN_READ);
+                } else {
+                    state = getHandler().process(socketWrapper, event);
+                }
+                if (state == SocketState.CLOSED) {
+                    poller.cancelledKey(getSelectionKey(), socketWrapper);
+                }
+            } else if (handshake == -1) {
+                getHandler().process(socketWrapper, SocketEvent.CONNECT_FAIL);
+                poller.cancelledKey(getSelectionKey(), socketWrapper);
+            } else if (handshake == SelectionKey.OP_READ) {
+                socketWrapper.registerReadInterest();
+            } else if (handshake == SelectionKey.OP_WRITE) {
+                socketWrapper.registerWriteInterest();
+            }
+        } catch (CancelledKeyException cx) {
+            poller.cancelledKey(getSelectionKey(), socketWrapper);
+        } catch (VirtualMachineError vme) {
+            ExceptionUtils.handleThrowable(vme);
+        } catch (Throwable t) {
+            log.error(sm.getString("endpoint.processing.fail"), t);
+            poller.cancelledKey(getSelectionKey(), socketWrapper);
+        } finally {
+            socketWrapper = null;
+            event = null;
+            //return to cache
+            if (running && !paused && processorCache != null) {
+                processorCache.push(this);
+            }
+        }
+    }
+}
+```
+
+
 ## process
 
-AbstractProcessorLight implements Processor
-
-AbstractProcessorLight is a light-weight abstract processor implementation that is intended as a basis for all Processor implementations from the light-weight upgrade processors to the HTTP/AJP processors.
 
 
-AbstractProcessorLight.service()
+### Processor
 
+AbstractProcessorLight is a light-weight abstract processor implementation that is intended as a basis
+for all Processor implementations from the light-weight upgrade processors to the HTTP/AJP processors.
+
+`AbstractProcessorLight.process()` 
+-> [Http11Processor.service()](/docs/CS/Java/Tomcat/Connector.md?id=Http11Processor)
+-> [CoyoteAdapter.service()](/docs/CS/Java/Tomcat/Connector.md?id=CoyoteAdapter)
+-> [StandardWrapperValve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke)
+
+#### Http11Processor
+```java
+
+public class Http11Processor extends AbstractProcessor {
+    @Override
+    public SocketState service(SocketWrapperBase<?> socketWrapper)
+            throws IOException {
+        RequestInfo rp = request.getRequestProcessor();
+        rp.setStage(org.apache.coyote.Constants.STAGE_PARSE);
+
+        // Setting up the I/O
+        setSocketWrapper(socketWrapper);
+
+        // Flags
+        keepAlive = true;
+        openSocket = false;
+        readComplete = true;
+        boolean keptAlive = false;
+        SendfileState sendfileState = SendfileState.DONE;
+
+        while (!getErrorState().isError() && keepAlive && !isAsync() && upgradeToken == null &&
+                sendfileState == SendfileState.DONE && !protocol.isPaused()) {
+
+            // Parsing the request header
+            try {
+                if (!inputBuffer.parseRequestLine(keptAlive, protocol.getConnectionTimeout(),
+                        protocol.getKeepAliveTimeout())) {
+                    if (inputBuffer.getParsingRequestLinePhase() == -1) {
+                        return SocketState.UPGRADING;
+                    } else if (handleIncompleteRequestLineRead()) {
+                        break;
+                    }
+                }
+
+                // Process the Protocol component of the request line
+                // Need to know if this is an HTTP 0.9 request before trying to
+                // parse headers.
+                prepareRequestProtocol();
+
+                if (protocol.isPaused()) {
+                    // 503 - Service unavailable
+                    response.setStatus(503);
+                    setErrorState(ErrorState.CLOSE_CLEAN, null);
+                } else {
+                    keptAlive = true;
+                    // Set this every time in case limit has been changed via JMX
+                    request.getMimeHeaders().setLimit(protocol.getMaxHeaderCount());
+                    // Don't parse headers for HTTP/0.9
+                    if (!http09 && !inputBuffer.parseHeaders()) {
+                        // We've read part of the request, don't recycle it
+                        // instead associate it with the socket
+                        openSocket = true;
+                        readComplete = false;
+                        break;
+                    }
+                    if (!protocol.getDisableUploadTimeout()) {
+                        socketWrapper.setReadTimeout(protocol.getConnectionUploadTimeout());
+                    }
+                }
+            } catch (IOException e) {
+                if (log.isDebugEnabled()) {
+                    log.debug(sm.getString("http11processor.header.parse"), e);
+                }
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+                break;
+            } catch (Throwable t) {
+                ExceptionUtils.handleThrowable(t);
+                UserDataHelper.Mode logMode = userDataHelper.getNextMode();
+                if (logMode != null) {
+                    String message = sm.getString("http11processor.header.parse");
+                    switch (logMode) {
+                        case INFO_THEN_DEBUG:
+                            message += sm.getString("http11processor.fallToDebug");
+                            //$FALL-THROUGH$
+                        case INFO:
+                            log.info(message, t);
+                            break;
+                        case DEBUG:
+                            log.debug(message, t);
+                    }
+                }
+                // 400 - Bad Request
+                response.setStatus(400);
+                setErrorState(ErrorState.CLOSE_CLEAN, t);
+            }
+
+            // Has an upgrade been requested?
+            if (isConnectionToken(request.getMimeHeaders(), "upgrade")) {
+                // Check the protocol
+                String requestedProtocol = request.getHeader("Upgrade");
+
+                UpgradeProtocol upgradeProtocol = protocol.getUpgradeProtocol(requestedProtocol);
+                if (upgradeProtocol != null) {
+                    if (upgradeProtocol.accept(request)) {
+                        // Create clone of request for upgraded protocol
+                        Request upgradeRequest = null;
+                        try {
+                            upgradeRequest = cloneRequest(request);
+                        } catch (ByteChunk.BufferOverflowException ioe) {
+                            response.setStatus(HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE);
+                            setErrorState(ErrorState.CLOSE_CLEAN, null);
+                        } catch (IOException ioe) {
+                            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                            setErrorState(ErrorState.CLOSE_CLEAN, ioe);
+                        }
+
+                        if (upgradeRequest != null) {
+                            // Complete the HTTP/1.1 upgrade process
+                            response.setStatus(HttpServletResponse.SC_SWITCHING_PROTOCOLS);
+                            response.setHeader("Connection", "Upgrade");
+                            response.setHeader("Upgrade", requestedProtocol);
+                            action(ActionCode.CLOSE, null);
+                            getAdapter().log(request, response, 0);
+
+                            // Continue processing using new protocol
+                            InternalHttpUpgradeHandler upgradeHandler =
+                                    upgradeProtocol.getInternalUpgradeHandler(socketWrapper, getAdapter(), upgradeRequest);
+                            UpgradeToken upgradeToken = new UpgradeToken(upgradeHandler, null, null, requestedProtocol);
+                            action(ActionCode.UPGRADE, upgradeToken);
+                            return SocketState.UPGRADING;
+                        }
+                    }
+                }
+            }
+
+            if (getErrorState().isIoAllowed()) {
+                // Setting up filters, and parse some request headers
+                rp.setStage(org.apache.coyote.Constants.STAGE_PREPARE);
+                try {
+                    prepareRequest();
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    if (log.isDebugEnabled()) {
+                        log.debug(sm.getString("http11processor.request.prepare"), t);
+                    }
+                    // 500 - Internal Server Error
+                    response.setStatus(500);
+                    setErrorState(ErrorState.CLOSE_CLEAN, t);
+                }
+            }
+
+            int maxKeepAliveRequests = protocol.getMaxKeepAliveRequests();
+            if (maxKeepAliveRequests == 1) {
+                keepAlive = false;
+            } else if (maxKeepAliveRequests > 0 &&
+                    socketWrapper.decrementKeepAlive() <= 0) {
+                keepAlive = false;
+            }
+```
+Process the request in the [adapter](/docs/CS/Java/Tomcat/Connector.md?id=CoyoteAdapter)
+```java
+            if (getErrorState().isIoAllowed()) {
+                try {
+                    rp.setStage(org.apache.coyote.Constants.STAGE_SERVICE);
+                    getAdapter().service(request, response);
+                    // Handle when the response was committed before a serious
+                    // error occurred.  Throwing a ServletException should both
+                    // set the status to 500 and set the errorException.
+                    // If we fail here, then the response is likely already
+                    // committed, so we can't try and set headers.
+                    if (keepAlive && !getErrorState().isError() && !isAsync() &&
+                            statusDropsConnection(response.getStatus())) {
+                        setErrorState(ErrorState.CLOSE_CLEAN, null);
+                    }
+                } catch (InterruptedIOException e) {
+                    setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+                } catch (HeadersTooLargeException e) {
+                    log.error(sm.getString("http11processor.request.process"), e);
+                    // The response should not have been committed but check it
+                    // anyway to be safe
+                    if (response.isCommitted()) {
+                        setErrorState(ErrorState.CLOSE_NOW, e);
+                    } else {
+                        response.reset();
+                        response.setStatus(500);
+                        setErrorState(ErrorState.CLOSE_CLEAN, e);
+                        response.setHeader("Connection", "close"); // TODO: Remove
+                    }
+                } catch (Throwable t) {
+                    ExceptionUtils.handleThrowable(t);
+                    log.error(sm.getString("http11processor.request.process"), t);
+                    // 500 - Internal Server Error
+                    response.setStatus(500);
+                    setErrorState(ErrorState.CLOSE_CLEAN, t);
+                    getAdapter().log(request, response, 0);
+                }
+            }
+
+            // Finish the handling of the request
+            rp.setStage(org.apache.coyote.Constants.STAGE_ENDINPUT);
+            if (!isAsync()) {
+                // If this is an async request then the request ends when it has
+                // been completed. The AsyncContext is responsible for calling
+                // endRequest() in that case.
+                endRequest();
+            }
+            rp.setStage(org.apache.coyote.Constants.STAGE_ENDOUTPUT);
+
+            // If there was an error, make sure the request is counted as
+            // and error, and update the statistics counter
+            if (getErrorState().isError()) {
+                response.setStatus(500);
+            }
+
+            if (!isAsync() || getErrorState().isError()) {
+                request.updateCounters();
+                if (getErrorState().isIoAllowed()) {
+                    inputBuffer.nextRequest();
+                    outputBuffer.nextRequest();
+                }
+            }
+
+            if (!protocol.getDisableUploadTimeout()) {
+                int connectionTimeout = protocol.getConnectionTimeout();
+                if (connectionTimeout > 0) {
+                    socketWrapper.setReadTimeout(connectionTimeout);
+                } else {
+                    socketWrapper.setReadTimeout(0);
+                }
+            }
+
+            rp.setStage(org.apache.coyote.Constants.STAGE_KEEPALIVE);
+
+            sendfileState = processSendfile(socketWrapper);
+        }
+
+        rp.setStage(org.apache.coyote.Constants.STAGE_ENDED);
+
+        if (getErrorState().isError() || (protocol.isPaused() && !isAsync())) {
+            return SocketState.CLOSED;
+        } else if (isAsync()) {
+            return SocketState.LONG;
+        } else if (isUpgrade()) {
+            return SocketState.UPGRADING;
+        } else {
+            if (sendfileState == SendfileState.PENDING) {
+                return SocketState.SENDFILE;
+            } else {
+                if (openSocket) {
+                    if (readComplete) {
+                        return SocketState.OPEN;
+                    } else {
+                        return SocketState.LONG;
+                    }
+                } else {
+                    return SocketState.CLOSED;
+                }
+            }
+        }
+    }
+}
+```
+
+#### CoyoteAdapter
 get Valve by getPipeline().getFirst(), then Value.invoke()
 ```java
-// CoyoteAdapter extends AbstractProcessorLight
-@Override
-public void service(org.apache.coyote.Request req, org.apache.coyote.Response res)
-        throws Exception {
+public class CoyoteAdapter implements Adapter {
+    @Override
+    public void service(org.apache.coyote.Request req, org.apache.coyote.Response res)
+            throws Exception {
 
         Request request = (Request) req.getNote(ADAPTER_NOTES);
         Response response = (Response) res.getNote(ADAPTER_NOTES);
 
         if (request == null) {
-        // Create objects
-        request = connector.createRequest();
-        request.setCoyoteRequest(req);
-        response = connector.createResponse();
-        response.setCoyoteResponse(res);
+            // Create objects
+            request = connector.createRequest();
+            request.setCoyoteRequest(req);
+            response = connector.createResponse();
+            response.setCoyoteResponse(res);
 
-        // Link objects
-        request.setResponse(response);
-        response.setRequest(request);
+            // Link objects
+            request.setResponse(response);
+            response.setRequest(request);
 
-        // Set as notes
-        req.setNote(ADAPTER_NOTES, request);
-        res.setNote(ADAPTER_NOTES, response);
+            // Set as notes
+            req.setNote(ADAPTER_NOTES, request);
+            res.setNote(ADAPTER_NOTES, response);
 
-        // Set query string encoding
-        req.getParameters().setQueryStringCharset(connector.getURICharset());
+            // Set query string encoding
+            req.getParameters().setQueryStringCharset(connector.getURICharset());
         }
 
         if (connector.getXpoweredBy()) {
-        response.addHeader("X-Powered-By", POWERED_BY);
+            response.addHeader("X-Powered-By", POWERED_BY);
         }
 
         boolean async = false;
@@ -860,119 +1347,118 @@ public void service(org.apache.coyote.Request req, org.apache.coyote.Response re
         req.getRequestProcessor().setWorkerThreadName(THREAD_NAME.get());
 
         try {
-        // Parse and set Catalina and configuration specific
-        // request parameters
-        postParseSuccess = postParseRequest(req, request, res, response);
-        if (postParseSuccess) {
-        //check valves if we support async
-        request.setAsyncSupported(
-        connector.getService().getContainer().getPipeline().isAsyncSupported());
-        // Calling the container
-        connector.getService().getContainer().getPipeline().getFirst().invoke(
-        request, response);
-        }
-        if (request.isAsync()) {
-        async = true;
-        ReadListener readListener = req.getReadListener();
-        if (readListener != null && request.isFinished()) {
-        // Possible the all data may have been read during service()
-        // method so this needs to be checked here
-        ClassLoader oldCL = null;
-        try {
-        oldCL = request.getContext().bind(false, null);
-        if (req.sendAllDataReadEvent()) {
-        req.getReadListener().onAllDataRead();
-        }
-        } finally {
-        request.getContext().unbind(false, oldCL);
-        }
-        }
+            // Parse and set Catalina and configuration specific
+            // request parameters
+            postParseSuccess = postParseRequest(req, request, res, response);
+            if (postParseSuccess) {
+                //check valves if we support async
+                request.setAsyncSupported(
+                        connector.getService().getContainer().getPipeline().isAsyncSupported());
+```
+Call the first [Valve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke) of Pipeline
+```java            
+                connector.getService().getContainer().getPipeline().getFirst().invoke(
+                        request, response);
+            }
+            if (request.isAsync()) {
+                async = true;
+                ReadListener readListener = req.getReadListener();
+                if (readListener != null && request.isFinished()) {
+                    // Possible the all data may have been read during service()
+                    // method so this needs to be checked here
+                    ClassLoader oldCL = null;
+                    try {
+                        oldCL = request.getContext().bind(false, null);
+                        if (req.sendAllDataReadEvent()) {
+                            req.getReadListener().onAllDataRead();
+                        }
+                    } finally {
+                        request.getContext().unbind(false, oldCL);
+                    }
+                }
 
-        Throwable throwable =
-        (Throwable) request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+                Throwable throwable =
+                        (Throwable) request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
 
-        // If an async request was started, is not going to end once
-        // this container thread finishes and an error occurred, trigger
-        // the async error process
-        if (!request.isAsyncCompleting() && throwable != null) {
-        request.getAsyncContextInternal().setErrorState(throwable, true);
-        }
-        } else {
-        request.finishRequest();
-        response.finishResponse();
-        }
+                // If an async request was started, is not going to end once
+                // this container thread finishes and an error occurred, trigger
+                // the async error process
+                if (!request.isAsyncCompleting() && throwable != null) {
+                    request.getAsyncContextInternal().setErrorState(throwable, true);
+                }
+            } else {
+                request.finishRequest();
+                response.finishResponse();
+            }
 
         } catch (IOException e) {
-        // Ignore
+            // Ignore
         } finally {
-        AtomicBoolean error = new AtomicBoolean(false);
-        res.action(ActionCode.IS_ERROR, error);
+            AtomicBoolean error = new AtomicBoolean(false);
+            res.action(ActionCode.IS_ERROR, error);
 
-        if (request.isAsyncCompleting() && error.get()) {
-        // Connection will be forcibly closed which will prevent
-        // completion happening at the usual point. Need to trigger
-        // call to onComplete() here.
-        res.action(ActionCode.ASYNC_POST_PROCESS,  null);
-        async = false;
-        }
+            if (request.isAsyncCompleting() && error.get()) {
+                // Connection will be forcibly closed which will prevent
+                // completion happening at the usual point. Need to trigger
+                // call to onComplete() here.
+                res.action(ActionCode.ASYNC_POST_PROCESS, null);
+                async = false;
+            }
 
-        // Access log
-        if (!async && postParseSuccess) {
-        // Log only if processing was invoked.
-        // If postParseRequest() failed, it has already logged it.
-        Context context = request.getContext();
-        Host host = request.getHost();
-        // If the context is null, it is likely that the endpoint was
-        // shutdown, this connection closed and the request recycled in
-        // a different thread. That thread will have updated the access
-        // log so it is OK not to update the access log here in that
-        // case.
-        // The other possibility is that an error occurred early in
-        // processing and the request could not be mapped to a Context.
-        // Log via the host or engine in that case.
-        long time = System.nanoTime() - req.getStartTimeNanos();
-        if (context != null) {
-        context.logAccess(request, response, time, false);
-        } else if (response.isError()) {
-        if (host != null) {
-        host.logAccess(request, response, time, false);
-        } else {
-        connector.getService().getContainer().logAccess(
-        request, response, time, false);
-        }
-        }
-        }
+            // Access log
+            if (!async && postParseSuccess) {
+                // Log only if processing was invoked.
+                // If postParseRequest() failed, it has already logged it.
+                Context context = request.getContext();
+                Host host = request.getHost();
+                // If the context is null, it is likely that the endpoint was
+                // shutdown, this connection closed and the request recycled in
+                // a different thread. That thread will have updated the access
+                // log so it is OK not to update the access log here in that
+                // case.
+                // The other possibility is that an error occurred early in
+                // processing and the request could not be mapped to a Context.
+                // Log via the host or engine in that case.
+                long time = System.nanoTime() - req.getStartTimeNanos();
+                if (context != null) {
+                    context.logAccess(request, response, time, false);
+                } else if (response.isError()) {
+                    if (host != null) {
+                        host.logAccess(request, response, time, false);
+                    } else {
+                        connector.getService().getContainer().logAccess(
+                                request, response, time, false);
+                    }
+                }
+            }
 
-        req.getRequestProcessor().setWorkerThreadName(null);
+            req.getRequestProcessor().setWorkerThreadName(null);
 
-        // Recycle the wrapper request and response
-        if (!async) {
-        updateWrapperErrorCount(request, response);
-        request.recycle();
-        response.recycle();
+            // Recycle the wrapper request and response
+            if (!async) {
+                updateWrapperErrorCount(request, response);
+                request.recycle();
+                response.recycle();
+            }
         }
-        }
-        }
+    }
+}
 ```
 
 ### invoke
-StandardWrapperValve.invoke()
 
-// Create the filter chain for this request
-ApplicationFilterChain filterChain =
-ApplicationFilterFactory.createFilterChain(request, wrapper, servlet);
-
-Invoke the servlet we are managing, respecting the rules regarding servlet lifecycle and SingleThreadModel support.
+1. Create the [filter chain](/docs/CS/Java/Tomcat/Connector.md?id=createFilterChain) for this request
+2. Invoke the servlet we are managing in [doFilter](/docs/CS/Java/Tomcat/Connector.md?id=doFilter), respecting the rules regarding servlet lifecycle and SingleThreadModel support.
 ```java
-
+final class StandardWrapperValve extends ValveBase {
     public final void invoke(Request request, Response response)
-        throws IOException, ServletException {
+            throws IOException, ServletException {
 
         // Initialize local variables we may need
         boolean unavailable = false;
         Throwable throwable = null;
         // This should be a Request attribute...
-        long t1=System.currentTimeMillis();
+        long t1 = System.currentTimeMillis();
         requestCount.incrementAndGet();
         StandardWrapper wrapper = (StandardWrapper) getContainer();
         Servlet servlet = null;
@@ -981,7 +1467,7 @@ Invoke the servlet we are managing, respecting the rules regarding servlet lifec
         // Check for the application being marked unavailable
         if (!context.getState().isAvailable()) {
             response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
-                           sm.getString("standardContext.isUnavailable"));
+                    sm.getString("standardContext.isUnavailable"));
             unavailable = true;
         }
 
@@ -1016,22 +1502,22 @@ Invoke the servlet we are managing, respecting the rules regarding servlet lifec
             if ((available > 0L) && (available < Long.MAX_VALUE)) {
                 response.setDateHeader("Retry-After", available);
                 response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
-                           sm.getString("standardWrapper.isUnavailable",
-                                        wrapper.getName()));
+                        sm.getString("standardWrapper.isUnavailable",
+                                wrapper.getName()));
             } else if (available == Long.MAX_VALUE) {
                 response.sendError(HttpServletResponse.SC_NOT_FOUND,
-                           sm.getString("standardWrapper.notFound",
-                                        wrapper.getName()));
+                        sm.getString("standardWrapper.notFound",
+                                wrapper.getName()));
             }
         } catch (ServletException e) {
             container.getLogger().error(sm.getString("standardWrapper.allocateException",
-                             wrapper.getName()), StandardWrapper.getRootCause(e));
+                    wrapper.getName()), StandardWrapper.getRootCause(e));
             throwable = e;
             exception(request, response, e);
         } catch (Throwable e) {
             ExceptionUtils.handleThrowable(e);
             container.getLogger().error(sm.getString("standardWrapper.allocateException",
-                             wrapper.getName()), e);
+                    wrapper.getName()), e);
             throwable = e;
             exception(request, response, e);
             servlet = null;
@@ -1039,8 +1525,8 @@ Invoke the servlet we are managing, respecting the rules regarding servlet lifec
 
         MessageBytes requestPathMB = request.getRequestPathMB();
         DispatcherType dispatcherType = DispatcherType.REQUEST;
-        if (request.getDispatcherType()==DispatcherType.ASYNC) dispatcherType = DispatcherType.ASYNC;
-        request.setAttribute(Globals.DISPATCHER_TYPE_ATTR,dispatcherType);
+        if (request.getDispatcherType() == DispatcherType.ASYNC) dispatcherType = DispatcherType.ASYNC;
+        request.setAttribute(Globals.DISPATCHER_TYPE_ATTR, dispatcherType);
         request.setAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR,
                 requestPathMB);
         // Create the filter chain for this request
@@ -1073,7 +1559,7 @@ Invoke the servlet we are managing, respecting the rules regarding servlet lifec
                         request.getAsyncContextInternal().doInternalDispatch();
                     } else {
                         filterChain.doFilter
-                            (request.getRequest(), response.getResponse());
+                                (request.getRequest(), response.getResponse());
                     }
                 }
 
@@ -1103,12 +1589,12 @@ Invoke the servlet we are managing, respecting the rules regarding servlet lifec
             if ((available > 0L) && (available < Long.MAX_VALUE)) {
                 response.setDateHeader("Retry-After", available);
                 response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE,
-                           sm.getString("standardWrapper.isUnavailable",
-                                        wrapper.getName()));
+                        sm.getString("standardWrapper.isUnavailable",
+                                wrapper.getName()));
             } else if (available == Long.MAX_VALUE) {
                 response.sendError(HttpServletResponse.SC_NOT_FOUND,
-                            sm.getString("standardWrapper.notFound",
-                                        wrapper.getName()));
+                        sm.getString("standardWrapper.notFound",
+                                wrapper.getName()));
             }
             // Do not save exception in 'throwable', because we
             // do not want to do exception(request, response, e) processing
@@ -1143,7 +1629,7 @@ Invoke the servlet we are managing, respecting the rules regarding servlet lifec
             } catch (Throwable e) {
                 ExceptionUtils.handleThrowable(e);
                 container.getLogger().error(sm.getString("standardWrapper.deallocateException",
-                                 wrapper.getName()), e);
+                        wrapper.getName()), e);
                 if (throwable == null) {
                     throwable = e;
                     exception(request, response, e);
@@ -1154,34 +1640,34 @@ Invoke the servlet we are managing, respecting the rules regarding servlet lifec
             // unload it and release this instance
             try {
                 if ((servlet != null) &&
-                    (wrapper.getAvailable() == Long.MAX_VALUE)) {
+                        (wrapper.getAvailable() == Long.MAX_VALUE)) {
                     wrapper.unload();
                 }
             } catch (Throwable e) {
                 ExceptionUtils.handleThrowable(e);
                 container.getLogger().error(sm.getString("standardWrapper.unloadException",
-                                 wrapper.getName()), e);
+                        wrapper.getName()), e);
                 if (throwable == null) {
                     exception(request, response, e);
                 }
             }
-            long t2=System.currentTimeMillis();
+            long t2 = System.currentTimeMillis();
 
-            long time=t2-t1;
+            long time = t2 - t1;
             processingTime += time;
-            if( time > maxTime) maxTime=time;
-            if( time < minTime) minTime=time;
+            if (time > maxTime) maxTime = time;
+            if (time < minTime) minTime = time;
         }
     }
+}
 ```
 
 #### createFilterChain
 Construct a FilterChain implementation that will wrap the execution of the specified servlet instance.
 ```java
-
-    // org.apache.catalina.core.ApplicationFilterFactory
+public final class ApplicationFilterFactory {
     public static ApplicationFilterChain createFilterChain(ServletRequest request,
-            Wrapper wrapper, Servlet servlet) {
+                                                           Wrapper wrapper, Servlet servlet) {
 
         // Create and initialize a filter chain object
         ApplicationFilterChain filterChain = null;
@@ -1215,7 +1701,7 @@ Construct a FilterChain implementation that will wrap the execution of the speci
 
         String requestPath = null;
         Object attribute = request.getAttribute(Globals.DISPATCHER_REQUEST_PATH_ATTR);
-        if (attribute != null){
+        if (attribute != null) {
             requestPath = attribute.toString();
         }
 
@@ -1258,12 +1744,13 @@ Construct a FilterChain implementation that will wrap the execution of the speci
         // Return the completed filter chain
         return filterChain;
     }
+}
 ```
 
 
 #### doFilter
 Invoke the next filter in this chain, passing the specified request and response. 
-If there are no more filters in this chain, invoke the service() method of the servlet itself.
+If there are no more filters in this chain, invoke the [service()](/docs/CS/Java/Tomcat/Connector.md?id=service) method of the servlet itself.
 
 ```java
 public final class ApplicationFilterChain implements FilterChain {
@@ -1297,9 +1784,10 @@ public final class ApplicationFilterChain implements FilterChain {
         Filter filter = filterConfig.getFilter();
         // ...
         filter.doFilter(request, response, this);
+```
 
-        // We fell off the end of the chain -- call the servlet instance
-        // ignore try block
+We fell off the end of the chain -- call the servlet instance ignore try block
+```java
         servlet.service(request, response);
     }
 }
