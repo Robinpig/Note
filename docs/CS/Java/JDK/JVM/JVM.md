@@ -4,16 +4,61 @@
 [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 
 
-## Object
+## projects
+
+- Amber
+- Coin
+- Graal
+- jigsaw
+- Kulla
+- Loom
+- Panama
+- Shenandoah
+- Sumatra
+- Tsan
+- Valhalla
+- ZGC
+
+
+
+```java
+/** based on JDK12
+  * 
+  *     |--- cpu                     
+  *     |--- os
+  *     |--- os_cpu
+  *     |--- share
+  *         |--- adlc               # 
+  *         |--- aot                # 
+  *         |--- asm                # 
+  *         |--- c1                 # C1 JIT
+  *         |--- ci                 # compiler interface
+  *         |--- classfile          #
+  *         |--- code               
+  *         |--- compiler           
+  *         |--- gc                 
+  *         |--- include            
+  *         |--- interpreter        
+  *         |--- jfr                # Java Flight Record
+  *         |--- jvmci              
+  *         |--- libadt             
+  *         |--- logging            
+  *         |--- memory             
+  *         |--- metaprogramming    
+  *         |--- oops               
+  *         |--- opto               # C2 JIT
+  *         |--- precompiled        
+  *         |--- prims              # implement JNI, JVMTI, Unsafe
+  *         |--- runtime            
+  *         |--- services           # HeapDump, MXBean, jcmd, jinfo
+  *         |--- utilities          # hashtable, JSON parser, elf, etc.
+ */
+```
+
+
+## Runtime
 [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
-
-
-
-## The Structure of the Java Virtual Machine
-
-
-
 
 ### Run-Time Data Areas
 The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md) that are used during execution of a program. 
@@ -42,7 +87,7 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 - [Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 
 
-## Collector
+### Collectors
 
 ```cpp
 // share/gc/shared/gcConfiguration.cpp
@@ -163,59 +208,6 @@ void TemplateTable::iop2(Operation op) {
   }
 }
 ```
-
-## projects
-
-- Amber
-- Coin
-- Graal
-- jigsaw
-- Kulla
-- Loom
-- Panama
-- Shenandoah
-- Sumatra
-- Tsan
-- Valhalla
-- ZGC
-
-
-
-```java
-/** based on JDK12
-  * 
-  *     |--- cpu                     
-  *     |--- os
-  *     |--- os_cpu
-  *     |--- share
-  *         |--- adlc               # 
-  *         |--- aot                # 
-  *         |--- asm                # 
-  *         |--- c1                 # C1 JIT
-  *         |--- ci                 # compiler interface
-  *         |--- classfile          #
-  *         |--- code               
-  *         |--- compiler           
-  *         |--- gc                 
-  *         |--- include            
-  *         |--- interpreter        
-  *         |--- jfr                # Java Flight Record
-  *         |--- jvmci              
-  *         |--- libadt             
-  *         |--- logging            
-  *         |--- memory             
-  *         |--- metaprogramming    
-  *         |--- oops               
-  *         |--- opto               # C2 JIT
-  *         |--- precompiled        
-  *         |--- prims              # implement JNI, JVMTI, Unsafe
-  *         |--- runtime            
-  *         |--- services           # HeapDump, MXBean, jcmd, jinfo
-  *         |--- utilities          # hashtable, JSON parser, elf, etc.
- */
-```
-
-## Compiling for the Java Virtual Machine
 
 
 All classes in adlc may be derived from one of the following allocation classes:
