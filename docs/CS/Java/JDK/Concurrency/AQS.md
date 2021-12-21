@@ -2,6 +2,14 @@
 
 ## Introduction
 
+Provides a framework for [implementing blocking locks](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=Locks) and related [synchronizers](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=synchronizers) (semaphores, events, etc) that rely on first-in-first-out (**FIFO**) [wait queues](/docs/CS/Java/JDK/Concurrency/AQS.md?id=Wait-Queue). 
+
+This class is designed to be a useful basis for most kinds of synchronizers that rely on a single atomic int value to represent state. 
+
+Subclasses must define the protected methods that change this state, and which define what that state means in terms of this object being acquired or released. 
+Given these, the other methods in this class carry out all queuing and blocking mechanics. 
+
+Subclasses can maintain other state fields, but only the atomically updated int value manipulated using methods getState, setState and compareAndSetState is tracked with respect to synchronization.
 
 
 ![](../images/AQS.png)
@@ -86,7 +94,7 @@ The default implementation throws UnsupportedOperationException. **This method i
 
 
 
-## Queue
+## Wait Queue
 
 | Queue  | Sync list               | Condition           |
 | ------ | ----------------------- | ------------------- |
@@ -985,7 +993,7 @@ final boolean transferForSignal(Node node) {
 ```
 
 ## Example
-
+From JDK:
 ```java
 class Mutex implements Lock, java.io.Serializable {
 
@@ -1043,8 +1051,11 @@ class Mutex implements Lock, java.io.Serializable {
      return sync.tryAcquireNanos(1, unit.toNanos(timeout));
    }
  }
+```
+
 Here is a latch class that is like a CountDownLatch except that it only requires a single signal to fire. Because a latch is non-exclusive, it uses the shared acquire and release methods.
-  
+
+```java
  class BooleanLatch {
 
    private static class Sync extends AbstractQueuedSynchronizer {
@@ -1069,8 +1080,6 @@ Here is a latch class that is like a CountDownLatch except that it only requires
  }
 ```
 
-
-
 1. Exclusive ReentrantLock
 2. Share Semaphore/CountDownLatch
 3. Both ReadWriteLock/StampedLock
@@ -1078,9 +1087,6 @@ Here is a latch class that is like a CountDownLatch except that it only requires
 
 
 ## Summary
-
-通过这篇文章基本将AQS队列的实现过程做了比较清晰的分析，主要是基于非公平锁的独占锁实现。在获得同步锁时，同步器维护一个同步队列，获取状态失败的线程都会被加入到队列中并在队列中进行自旋；移出队列（或停止自旋）的条件是前驱节点为头节点且成功获取了同步状态。在释放同步状态时，同步器调用tryRelease(int arg)方法释放同步状态，然后唤醒头节点的后继节点。
-
 
 
 ## AOS
@@ -1094,12 +1100,12 @@ AbstractOwnableSynchronizer
 
 
 1. [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
-2. ReentrantReadWriteLcok
-3. ThreadPoolExecutor.Worker
+2. [ReentrantReadWriteLcok](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
+3. [ThreadPoolExecutor.Worker](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=Worker)
 
 
 
-## Reference
+## References
 
 
 
