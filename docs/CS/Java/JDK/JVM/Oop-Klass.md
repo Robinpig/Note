@@ -86,7 +86,7 @@ oop ShenandoahHeap::obj_allocate(Klass* klass, int size, TRAPS) {
 
 also allow use TLAB
 ```cpp
-// memAllocator.cpp
+// share/gc/shared/memAllocator.cpp
 oop MemAllocator::allocate() const {
   oop obj = NULL;
   {
@@ -109,6 +109,14 @@ HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
 
   return allocate_outside_tlab(allocation);
 }
+
+
+HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
+  allocation._allocated_outside_tlab = true;
+  HeapWord* mem = _heap->mem_allocate(_word_size, &allocation._overhead_limit_exceeded);
+  if (mem == NULL) {
+    return mem;
+  }
 ```
 
 
