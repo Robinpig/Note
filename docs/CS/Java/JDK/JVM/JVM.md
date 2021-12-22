@@ -1,8 +1,5 @@
 ## Introduction
 
-[start](/docs/CS/Java/JDK/JVM/start.md)
-[destroy](/docs/CS/Java/JDK/JVM/destroy.md)
-
 
 ## projects
 
@@ -55,10 +52,23 @@
  */
 ```
 
+## The class File Format
+
+[Class File and compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
+[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
+
 
 ## Runtime
-[Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
-[Thread](/docs/CS/Java/JDK/JVM/Thread.md)
+
+
+[start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
+
+
+### Class
+
+- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
+- [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
+- [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
 ### Run-Time Data Areas
 The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md) that are used during execution of a program. 
@@ -71,16 +81,6 @@ The Java Virtual Machine does not mandate any particular internal structure for 
 In some of Oracle’s implementations of the Java Virtual Machine, a reference to a class instance is a pointer to a handle that is itself a pair of pointers(see [OOP-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)):
 - one to a table containing the methods of the object and a pointer to the Class object that represents the type of the object
 - and the other to the memory allocated from the heap for the object data.
-
-## The class File Format
-
-[Class File and compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
-[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
-
-
-## Loading, Linking, and Initializing
-
-- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 
 
 ## GC

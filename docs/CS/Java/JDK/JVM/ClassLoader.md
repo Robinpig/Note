@@ -10,6 +10,11 @@ A class in the system is identified by the classloader used to load it as well a
 | `AppClassLoader`       | Java      | classpath/          | `ExtensionClassLoader`   | not extends URLClassLoader                                |
 | `User ClassLoader`     | Java      | all                 | default `AppClassLoader` |                                                           |
 
+
+Here are ClassLoaders in **JDK17**:
+
+![](../images/ClassLoader.png)
+
 ### Delegation model
 
 The ClassLoader class uses a **delegation model** to search for classes and resources. **Each instance of ClassLoader
@@ -178,42 +183,24 @@ protected ClassLoader(){
 -Xlog: class+load=info # JDK11
 ```
 
-## Load Class
-
-![Screen Shot 2021-08-03 at 7.24.58 AM](/Users/robin/Desktop/Screen Shot 2021-08-03 at 7.24.58 AM.png)
-
-ClassLoader::load_class();
-
-ClassLoaderData
+## Class Lifetime
 
 1. Loading
 2. Linking
-    1. Verification
-    2. Preparation
-    3. Resolution
+   1. Verification
+   2. Preparation
+   3. Resolution
 3. Initialization
 4. Using
 5. Unloading
 
-### Loading
 
-负责从文件系统或者网络中加载Class文件，Class文件开头有特定Magic Number ， 4Byte
+## Loading
 
-Classloader只负责class文件的加载，至于是否可运行，则由执行引擎决定
+![Screen Shot 2021-08-03 at 7.24.58 AM](/Users/robin/Desktop/Screen Shot 2021-08-03 at 7.24.58 AM.png)
 
-加载的类信息存放于称为方法区的内存空间，除了类信息，方法区还会存放运行时常量池信息，还可能包括字符串字面量和数字常量
+ClassLoaderData
 
-常量池运行时加载到内存中，即运行时常量池
-
-1. 通过一个类的全限定名获取定义此类的二进制字节流
-    1. 本地系统获取网络获取，
-    2. Web Appletzip压缩包获取，jar，war
-    3. 运行时计算生成，
-    4. 动态代理有其他文件生成，
-    5. jsp专有数据库提取.class文件，
-    6. 比较少见加密文件中获取，防止Class文件被反编译的保护措施
-2. 将这个字节流所代表的的静态存储结果转化为方法区的运行时数据结构
-3. 在内存中生成一个代表这个类的java.lang.Class对象，作为方法区这个类的各种数据访问入口
 
 Loads the class with the specified binary name. The default implementation of this method searches for classes in the
 following order:
@@ -229,55 +216,44 @@ findClass(String), rather than this method. Unless overridden, this method synch
 getClassLoadingLock method during the entire class loading process.
 
 ```java
-protected Class<?> loadClass(String name,boolean resolve)
-        throws ClassNotFoundException
-        {
-synchronized (getClassLoadingLock(name)){
-        // First, check if the class has already been loaded
-        Class<?> c=findLoadedClass(name);
-        if(c==null){
-        long t0=System.nanoTime();
-        try{
-        if(parent!=null){
-        c=parent.loadClass(name,false);
-        }else{
-        c=findBootstrapClassOrNull(name);
-        }
-        }catch(ClassNotFoundException e){
-// ClassNotFoundException thrown if class not found
-// from the non-null parent class loader
-        }
+public abstract class ClassLoader {
+   protected Class<?> loadClass(String name, boolean resolve)
+           throws ClassNotFoundException {
+      synchronized (getClassLoadingLock(name)) {
+         // First, check if the class has already been loaded
+         Class<?> c = findLoadedClass(name);
+         if (c == null) {
+            long t0 = System.nanoTime();
+            try {
+               if (parent != null) {
+                  c = parent.loadClass(name, false);
+               } else {
+                  c = findBootstrapClassOrNull(name);
+               }
+            } catch (ClassNotFoundException e) {
+               // ClassNotFoundException thrown if class not found
+               // from the non-null parent class loader
+            }
 
-        if(c==null){
-        // If still not found, then invoke findClass in order
-        // to find the class.
-        long t1=System.nanoTime();
-        c=findClass(name);
+            if (c == null) {
+               // If still not found, then invoke findClass in order
+               // to find the class.
+               long t1 = System.nanoTime();
+               c = findClass(name);
 
-        // this is the defining class loader; record the stats
-        sun.misc.PerfCounter.getParentDelegationTime().addTime(t1-t0);
-        sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
-        sun.misc.PerfCounter.getFindClasses().increment();
-        }
-        }
-        if(resolve){
-        resolveClass(c);
-        }
-        return c;
-        }
-        }
-
-protected Object getClassLoadingLock(String className){
-        Object lock=this;
-        if(parallelLockMap!=null){
-        Object newLock=new Object();
-        lock=parallelLockMap.putIfAbsent(className,newLock);
-        if(lock==null){
-        lock=newLock;
-        }
-        }
-        return lock;
-        }
+               // this is the defining class loader; record the stats
+               PerfCounter.getParentDelegationTime().addTime(t1 - t0);
+               PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
+               PerfCounter.getFindClasses().increment();
+            }
+         }
+         if (resolve) {
+            resolveClass(c);
+         }
+         return c;
+      }
+   }
+}
 ```
 
 *Links the specified class. This (misleadingly named) method may be used by a class loader to link a class. If the class
@@ -292,6 +268,36 @@ protected final void resolveClass(Class<?> c){
 private native void resolveClass0(Class<?> c);
 ```
 
+```java
+// JDK17
+static native Class<?> defineClass1(ClassLoader loader, String name, byte[] b, int off, int len,
+        ProtectionDomain pd, String source);
+
+static native Class<?> defineClass2(ClassLoader loader, String name, java.nio.ByteBuffer b,
+        int off, int len, ProtectionDomain pd,
+        String source);
+```
+
+### load Class
+
+#### loadClass
+
+```c
+SystemDictionary::resolve_or_fail
+  \|/
+SystemDictionary::resolve_or_null
+   |        \|/
+   |      resolve_array_class_or_null 
+  \|/       \|/
+SystemDictionary::resolve_instance_class_or_null 
+-> SystemDictionary::load_instance_class 
+-> SystemDictionary::load_instance_class_impl 
+-> ClassLoader::load_class
+-> KlassFactory::create_from_stream
+```
+
+
+call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
 ```cpp
 //classLoader.cpp
 // Called by the boot classloader to load classes
@@ -305,101 +311,39 @@ InstanceKlass* ClassLoader::load_class(Symbol* name, bool search_append_only, TR
 }
 ```
 
-or Java_java_lang_ClassLoader_defineClass1
+#### defineClass
 
-defineClass2 also call  `JVM_DefineClassWithSource`
-
+defineClass1 and defineClass2 both call JVM_DefineClassWithSource -> jvm_define_class_common
 ```c
-// ClassLoader.c
-JNIEXPORT jclass JNICALL
-Java_java_lang_ClassLoader_defineClass1(JNIEnv *env, jclass cls, jobject loader,
-                                        jstring name, jbyteArray data, jint offset,
-                                        jint length, jobject pd, jstring source)
-{
-
-    jclass result = 0;
-    ...
-    result = JVM_DefineClassWithSource(env, utfName, loader, body, length, pd, utfSource);
-		...
-    return result;
-}
-```
-
-call `SystemDictionary::resolve_from_stream`
-
-```cpp
 // jvm.cpp
 JVM_ENTRY(jclass, JVM_DefineClassWithSource(JNIEnv *env, const char *name, jobject loader, const jbyte *buf, jsize len, jobject pd, const char *source))
-  JVMWrapper("JVM_DefineClassWithSource");
 
-  return jvm_define_class_common(env, name, loader, buf, len, pd, source, THREAD);
+  return jvm_define_class_common(name, loader, buf, len, pd, source, THREAD);
 JVM_END
 ```
 
-```cpp
-// common code for JVM_DefineClass() and JVM_DefineClassWithSource()
-static jclass jvm_define_class_common(JNIEnv *env, const char *name,
-                                      jobject loader, const jbyte *buf,
-                                      jsize len, jobject pd, const char *source,
-                                      TRAPS) {
-
-
-
-  Handle class_loader (THREAD, JNIHandles::resolve(loader));
-  
-  Handle protection_domain (THREAD, JNIHandles::resolve(pd));
-  
-  Klass* k = SystemDictionary::resolve_from_stream(class_name,
-                                                   class_loader,
-                                                   protection_domain,
-                                                   &st,
-                                                   CHECK_NULL);
-
-  return (jclass) JNIHandles::make_local(env, k->java_mirror());
-}
+call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream) too
+```
+jni_DefineClass -----+----- JVM_DefineClass
+                     |
+                    \|/
+            jvm_define_class_common
+                    \|/
+    SystemDictionary::resolve_from_stream
+                    \|/
+        KlassFactory::create_from_stream
 ```
 
-```cpp
-// systemDictionary.cpp
-// Add a klass to the system from a stream (called by jni_DefineClass and
-// JVM_DefineClass).
-// Note: class_name can be NULL. In that case we do not know the name of
-// the class until we have parsed the stream.
 
-InstanceKlass* SystemDictionary::resolve_from_stream(Symbol* class_name,
-                                                     Handle class_loader,
-                                                     Handle protection_domain,
-                                                     ClassFileStream* st,
-                                                     TRAPS) {
 
-  
-  ClassLoaderData* loader_data = register_loader(class_loader);
 
-  
-  // Parse the stream and create a klass.
-  // Note that we do this even though this klass might
-  // already be present in the SystemDictionary, otherwise we would not
-  // throw potential ClassFormatErrors.
- InstanceKlass* k = NULL;
 
-#if INCLUDE_CDS
-  if (!DumpSharedSpaces) {
-    k = SystemDictionaryShared::lookup_from_stream(class_name, class_loader,
-                                                   protection_domain, st, CHECK_NULL);
-  }
-#endif
 
-    k = KlassFactory::create_from_stream(st, class_name, loader_data, protection_domain,
-                                         NULL, // unsafe_anonymous_host
-                                         NULL, // cp_patches
-                                         CHECK_NULL);
-  ...
-  return k;
-}
-```
+### create_from_stream
+
 
 ```cpp
-//klassFactory.cpp
+// klassFactory.cpp
 InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
                                                 Symbol* name,
                                                 ClassLoaderData* loader_data,
@@ -413,19 +357,23 @@ InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
                                         &cached_class_file, CHECK_NULL);
   }
   
-  // parse stream
+```
+[parse_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream)
+```cpp
   ClassFileParser parser(stream, name, loader_data, &cl_info,
                          ClassFileParser::BROADCAST, // publicity level
                          CHECK_NULL);
 	
-  // create_instance_klass
+```
+[create_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_instance_klass)
+```cpp
   InstanceKlass* result = parser.create_instance_klass(old_stream != stream, *cl_inst_info, CHECK_NULL);
 
   return result;
 }
 ```
 
-#### parse_stream
+### parse_stream
 
 ```cpp
 ClassFileParser::ClassFileParser(...) {
@@ -436,7 +384,7 @@ ClassFileParser::ClassFileParser(...) {
   post_process_parsed_stream(stream, _cp, CHECK);
 }
 ```
-
+parse_stream
 ```cpp
 //classFileParser.cpp
 void ClassFileParser::parse_stream(const ClassFileStream* const stream,
@@ -492,10 +440,11 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
 }
 ```
 
-#### create_instance_klass
 
-1. InstanceKlass::allocate_instance_klass()
-2. fill_instance_klass()
+### create_instance_klass
+
+1. [InstanceKlass::allocate_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=allocate_instance_klass)
+2. [ClassFileParser::fill_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=fill_instance_klass)
 
 ```cpp
 //classFileParser.cpp
@@ -517,7 +466,7 @@ InstanceKlass* ClassFileParser::create_instance_klass(bool changed_by_loadhook,
 }
 ```
 
-##### allocate_instance_klass
+#### allocate_instance_klass
 
 ```cpp
 // instanceKlass.cpp
@@ -546,7 +495,7 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
 }
 ```
 
-##### fill_instance_klass
+#### fill_instance_klass
 
 ClassLoaderData
 
@@ -769,7 +718,7 @@ void ClassLoaderData::init_null_class_loader_data() {
 
 ```
 
-#### create_mirror
+##### create_mirror
 
 ```cpp
 // javaClasses.cpp
@@ -797,7 +746,7 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
 }
 ```
 
-### Linking
+## Linking
 
 1. verification & rewriting
 2. relocate jsrs and link methods after they are all rewritten
@@ -1276,7 +1225,7 @@ JEP350 DynamicCDS
 
 
 
-### Initialization
+## Initialization
 
 *Initialization* of a class or interface consists of executing its class or interface initialization method.
 
@@ -1554,21 +1503,23 @@ redefineClasses(JNIEnv * jnienv, JPLISAgent * agent, jobjectArray classDefinitio
 ```
 
 
+redefine_single_class
 
+
+Install the redefinition of a class:
+- house keeping (flushing breakpoints and caches, deoptimizing
+  dependent compiled code)
+- replacing parts in the_class with parts from scratch_class
+- adding a weak reference to track the obsolete but interesting
+  parts of the_class
+ - adjusting constant pool caches and vtables in other classes
+   that refer to methods in the_class. These adjustments use the
+   ClassLoaderDataGraph::classes_do() facility which only allows
+   a helper method to be specified. The interesting parameters
+   that we would like to pass to the helper method are saved in
+   static global fields in the VM operation.
 ```cpp
 // jvmtiRedefineClasses.cpp
-// Install the redefinition of a class:
-//    - house keeping (flushing breakpoints and caches, deoptimizing
-//      dependent compiled code)
-//    - replacing parts in the_class with parts from scratch_class
-//    - adding a weak reference to track the obsolete but interesting
-//      parts of the_class
-//    - adjusting constant pool caches and vtables in other classes
-//      that refer to methods in the_class. These adjustments use the
-//      ClassLoaderDataGraph::classes_do() facility which only allows
-//      a helper method to be specified. The interesting parameters
-//      that we would like to pass to the helper method are saved in
-//      static global fields in the VM operation.
 void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
        InstanceKlass* scratch_class, TRAPS) {
 
@@ -1834,9 +1785,9 @@ void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
 
 
 
-### Using
+## Using
 
-### Unloading
+## Unloading
 
 ```shell
 -XX:+ClassUnloading # default true
@@ -1846,6 +1797,8 @@ use ClassLoaderDataGraph::classed_do can iterate all loaded class when GC
 
 
 
+
+ClassLoaderDataGraph::classes_do
 
 
 ## References

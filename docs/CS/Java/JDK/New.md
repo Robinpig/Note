@@ -1,8 +1,12 @@
 ## Introduction
 
-## JDK8
+## 8
 
-## JDK9
+Lambda
+
+
+## 9
+### JShell
 
 ### 接口私有方法
 
@@ -26,11 +30,10 @@ public interface PrivateInterface {
   var privateInterface = new PrivateInterfaceImpl();
   privateInterface.getPassword();
  }
-复制代码
 ```
 
 
-## jdk10
+## 10
 ### var 类型推断
 
 
@@ -55,7 +58,7 @@ var 是 Java10 版本中新出的特性，用它来定义局部变量。var 不�
   Map map = new HashMap();
  }
 ```
-## JDK12
+## 12
 
 ### switch 表达式
 
@@ -97,8 +100,8 @@ var 是 Java10 版本中新出的特性，用它来定义局部变量。var 不�
 复制代码
 ```
 
-## JDK13
-### 文本块
+## 13
+### Text Block
 
 在我们日常的工作中，有时候需要用到一大段的字符串，这些字符串需要换行，需要排版，需要转义。在一个文本编辑器中，这当然是非常容易的事情。但是在 java 代码中，就是一个噩梦了。而新的文本块使用"""这个符号，进行拼接。
 
@@ -160,7 +163,7 @@ since jdk9
   var numbers = Map.of(1, "one", 2, "two", 3, "three");
  }
 ```
-## JDK14
+## 14
 ### Records
 
 
@@ -179,7 +182,7 @@ public record Demo(String username, String password) {
 
 ```
 
-## JDK15
+## 15
 ### Sealed 类封闭
 
 
@@ -206,3 +209,6 @@ public final class Cat implements Pet {
 
 
 
+## 17
+
+### Record
