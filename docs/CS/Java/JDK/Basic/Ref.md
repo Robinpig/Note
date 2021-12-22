@@ -647,6 +647,9 @@ final class Finalizer extends FinalReference<Object> {
     }
 ```
 
+##### register
+
+
 #### runFinalizer
 
 use `JavaLangAccess#invokeFinalize()` run `finalize` method
