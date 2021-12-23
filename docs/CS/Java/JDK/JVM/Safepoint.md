@@ -83,7 +83,7 @@ Other methods
 
 `SafepointMechanism::default_initialize`
 
-*Safepoint actually a page of memory*
+*SafePoint actually a page of memory*
 
 
 
@@ -297,7 +297,9 @@ bool VMThread::no_op_safepoint_needed(bool check_time) {
 bool SafepointSynchronize::is_cleanup_needed() {
   // Need a safepoint if there are many monitors to deflate.
   if (ObjectSynchronizer::is_cleanup_needed()) return true;
-  // Need a safepoint if some inline cache buffers is non-empty
+```  
+Need a safepoint if some inline cache buffers is non-empty
+```  
   if (!InlineCacheBuffer::is_empty()) return true;
   return false;
 }
@@ -324,59 +326,33 @@ bool ObjectSynchronizer::is_cleanup_needed() {
 
 ##### some inline cache buffers is non-empty
 
+check if [StubQueue](/docs/CS/Java/JDK/JVM/interpreter.md?id=StubQueue) is non-empty
 ```cpp
 // icBuffer.cpp
-bool InlineCacheBuffer::is_empty() {
-  return buffer()->number_of_stubs() == 0;
+lass InlineCacheBuffer: public AllStatic {
+ private:
+  // friends
+  friend class ICStub;
+
+  static int ic_stub_code_size();
+
+  static StubQueue* _buffer;
+
+  static CompiledICHolder* _pending_released;
+  static int _pending_count;
+
+  static StubQueue* buffer()                         { return _buffer;         }
+
+  static ICStub* new_ic_stub();
+
+  // Machine-dependent implementation of ICBuffer
+  static void    assemble_ic_buffer_code(address code_begin, void* cached_value, address entry_point);
+  static address ic_buffer_entry_point  (address code_begin);
+  static void*   ic_buffer_cached_value (address code_begin);
 }
 
-// stubs.cpp
-// Implementation of StubQueue
-//
-// Standard wrap-around queue implementation; the queue dimensions
-// are specified by the _queue_begin & _queue_end indices. The queue
-// can be in two states (transparent to the outside):
-//
-// a) contiguous state: all queue entries in one block (or empty)
-//
-// Queue: |...|XXXXXXX|...............|
-//        ^0  ^begin  ^end            ^size = limit
-//            |_______|
-//            one block
-//
-// b) non-contiguous state: queue entries in two blocks
-//
-// Queue: |XXX|.......|XXXXXXX|.......|
-//        ^0  ^end    ^begin  ^limit  ^size
-//        |___|       |_______|
-//         1st block  2nd block
-//
-// In the non-contiguous state, the wrap-around point is
-// indicated via the _buffer_limit index since the last
-// queue entry may not fill up the queue completely in
-// which case we need to know where the 2nd block's end
-// is to do the proper wrap-around. When removing the
-// last entry of the 2nd block, _buffer_limit is reset
-// to _buffer_size.
-//
-// CAUTION: DO NOT MESS WITH THIS CODE IF YOU CANNOT PROVE
-// ITS CORRECTNESS! THIS CODE IS MORE SUBTLE THAN IT LOOKS!
-
-
-StubQueue::StubQueue(StubInterface* stub_interface, int buffer_size,
-                     Mutex* lock, const char* name) : _mutex(lock) {
-  intptr_t size = align_up(buffer_size, 2*BytesPerWord);
-  BufferBlob* blob = BufferBlob::create(name, size);
-  if( blob == NULL) {
-    vm_exit_out_of_memory(size, OOM_MALLOC_ERROR, "CodeCache: no room for %s", name);
-  }
-  _stub_interface  = stub_interface;
-  _buffer_size     = blob->content_size();
-  _buffer_limit    = blob->content_size();
-  _stub_buffer     = blob->content_begin();
-  _queue_begin     = 0;
-  _queue_end       = 0;
-  _number_of_stubs = 0;
+bool InlineCacheBuffer::is_empty() {
+  return buffer()->number_of_stubs() == 0;
 }
 ```
 

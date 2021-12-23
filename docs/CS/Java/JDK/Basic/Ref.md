@@ -5,10 +5,15 @@
 ### Ref Hierarchy
 
 
+```java
+-XX:+PrintReferenceGC
+-XX:+TraceReferenceGC
+
+```
 
 ![java.lang.ref](../images/Ref.png)
 
-### Reference
+### Abstract Reference
 
 ```java
 public abstract class Reference<T> {
@@ -161,19 +166,12 @@ static boolean tryHandlePending(boolean waitForNotify) {
 
 
 
-## Type
-
-```java
--XX:+PrintReferenceGC
--XX:+TraceReferenceGC
-
-```
-### StrongReference
+## StrongReference
 Strong references provide direct access to the target object.
 Will not be recycled.
 
 
-### SoftReference
+## SoftReference
 
 ```java
 public class SoftReference<T> extends Reference<T> {
@@ -252,7 +250,7 @@ size_t ReferenceProcessor::process_soft_ref_reconsider_work(DiscoveredList&    r
 
 
 
-#### referencePolicy
+### referencePolicy
 
 referencePolicy is used to determine when soft reference objects should be cleared.
 
@@ -332,7 +330,7 @@ void ReferenceProcessor::init_statics() {
 
 
 
-### WeakReference
+## WeakReference
 
 ```java
 /**
@@ -424,7 +422,7 @@ size_t ReferenceProcessor::process_soft_weak_final_refs_work(DiscoveredList&    
 }
 ```
 
-### Phantom Reference
+## Phantom Reference
 
 
 
@@ -493,7 +491,7 @@ void DiscoveredListIterator::complete_enqueue() {
 
 
 
-### FinalReference
+## FinalReference
 
 Final references, used to implement finalization
 
@@ -541,7 +539,7 @@ size_t ReferenceProcessor::process_final_keep_alive_work(DiscoveredList& refs_li
 }
 ```
 
-#### Finalizer
+## Finalizer
 
 Package-private; must be in same package as the Reference class
 
@@ -647,10 +645,47 @@ final class Finalizer extends FinalReference<Object> {
     }
 ```
 
-##### register
+### register
 
 
-#### runFinalizer
+
+```cpp
+
+IRT_ENTRY(void, InterpreterRuntime::register_finalizer(JavaThread* thread, oopDesc* obj))
+  assert(oopDesc::is_oop(obj), "must be a valid oop");
+  assert(obj->klass()->has_finalizer(), "shouldn't be here otherwise");
+  InstanceKlass::register_finalizer(instanceOop(obj), CHECK);
+IRT_END
+```
+
+```cpp
+// globals.hpp
+product(bool, RegisterFinalizersAtInit, true,                             \
+"Register finalizable objects at end of Object.<init> or "        \
+"after allocation")
+```
+
+call `Finalizer#register()` after  [allocation](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=allocate_instance)
+```cpp
+// instanceKlass.cpp
+instanceOop InstanceKlass::allocate_instance(TRAPS) {
+  bool has_finalizer_flag = has_finalizer(); // Query before possible GC
+  int size = size_helper();  // Query before forming handle.
+
+  instanceOop i;
+
+  i = (instanceOop)Universe::heap()->obj_allocate(this, size, CHECK_NULL);
+  if (has_finalizer_flag && !RegisterFinalizersAtInit) {
+    i = register_finalizer(i, CHECK_NULL);
+  }
+  return i;
+}
+```
+
+
+rewrite _return to _return_register_finalizer in [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_Object_init) when Linking Class
+
+### runFinalizer
 
 use `JavaLangAccess#invokeFinalize()` run `finalize` method
 **after invoke finalize method, the reference set null so can't run finalize method twice**
@@ -683,7 +718,7 @@ use `JavaLangAccess#invokeFinalize()` run `finalize` method
     }
 ```
 
-#### FinalizerThread
+### FinalizerThread
 
 ```java
 private static class FinalizerThread extends Thread {
@@ -722,80 +757,8 @@ private static class FinalizerThread extends Thread {
 
 
 
-#### When VM invoke register?
 
-```cpp
-
-IRT_ENTRY(void, InterpreterRuntime::register_finalizer(JavaThread* thread, oopDesc* obj))
-  assert(oopDesc::is_oop(obj), "must be a valid oop");
-  assert(obj->klass()->has_finalizer(), "shouldn't be here otherwise");
-  InstanceKlass::register_finalizer(instanceOop(obj), CHECK);
-IRT_END
-```
-
-```cpp
-// globals.hpp
-product(bool, RegisterFinalizersAtInit, true,                             \
-"Register finalizable objects at end of Object.<init> or "        \
-"after allocation")
-```
-
-also clone will call `Finalizer#register()`
-```cpp
-// instanceKlass.cpp
-instanceOop InstanceKlass::allocate_instance(TRAPS) {
-  bool has_finalizer_flag = has_finalizer(); // Query before possible GC
-  int size = size_helper();  // Query before forming handle.
-
-  instanceOop i;
-
-  i = (instanceOop)Universe::heap()->obj_allocate(this, size, CHECK_NULL);
-  if (has_finalizer_flag && !RegisterFinalizersAtInit) {
-    i = register_finalizer(i, CHECK_NULL);
-  }
-  return i;
-}
-```
-
-#### Rewriter::rewrite_Object_init
-The new finalization semantics says that registration of finalizable objects must be performed on successful return from the Object.<init> constructor.  We could implement this trivially if <init> were never rewritten but since JVMTI allows this to occur, a more complicated solution is required.  A special return bytecode is used only by Object.<init> to signal the finalization registration point.  Additionally local 0 must be preserved so it's available to pass to the registration function.  For simplicity we require that local 0 is never overwritten so it's available as an argument for registration.
-
-
-rewrite _return to _return_register_finalizer
-```cpp
-// rewriter.cpp
-void Rewriter::rewrite_Object_init(const methodHandle& method, TRAPS) {
-  RawBytecodeStream bcs(method);
-  while (!bcs.is_last_bytecode()) {
-    Bytecodes::Code opcode = bcs.raw_next();
-    switch (opcode) {
-      case Bytecodes::_return: *bcs.bcp() = Bytecodes::_return_register_finalizer; break;
-
-      case Bytecodes::_istore:
-      case Bytecodes::_lstore:
-      case Bytecodes::_fstore:
-      case Bytecodes::_dstore:
-      case Bytecodes::_astore:
-        if (bcs.get_index() != 0) continue;
-
-        // fall through
-      case Bytecodes::_istore_0:
-      case Bytecodes::_lstore_0:
-      case Bytecodes::_fstore_0:
-      case Bytecodes::_dstore_0:
-      case Bytecodes::_astore_0:
-        THROW_MSG(vmSymbols::java_lang_IncompatibleClassChangeError(),
-                  "can't overwrite local 0 in Object.<init>");
-        break;
-
-      default:
-        break;
-    }
-  }
-}
-```
-
-### Cleaner
+## Cleaner
 
 ```java
 public class Cleaner

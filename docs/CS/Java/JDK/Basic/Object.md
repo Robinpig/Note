@@ -311,15 +311,19 @@ intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
     // Any change to stack may not propagate to other threads
     // correctly.
   }
-
-  // Inflate the monitor to set hash code
+```
+[Inflate the monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate) to set hash code
+```cpp
   monitor = ObjectSynchronizer::inflate(Self, obj, inflate_cause_hash_code);
   // Load displaced header and check it has hash code
   mark = monitor->header();
   assert(mark->is_neutral(), "invariant");
   hash = mark->hash();
   if (hash == 0) {
-    hash = get_next_hash(Self, obj);// get hash
+```
+get_next_hash and merge into header
+```cpp
+    hash = get_next_hash(Self, obj);
     temp = mark->copy_set_hash(hash); // merge hash code into header
     assert(temp->is_neutral(), "invariant");
     test = Atomic::cmpxchg(temp, monitor->header_addr(), mark);
@@ -335,7 +339,10 @@ intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
   // We finally get the hash
   return hash;
 }
+```
+#### get_next_hash
 
+```cpp
 static inline intptr_t get_next_hash(Thread * Self, oop obj) {
   intptr_t value = 0;
   if (hashCode == 0) {

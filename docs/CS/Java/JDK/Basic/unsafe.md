@@ -16,7 +16,10 @@ A collection of methods for performing low-level, unsafe operations. Although th
 
 ## Memory Barrier
 
-Fence like `volatile`  JEP171
+
+Fence like `volatile` 
+
+see [JEP 171: Fence Intrinsics](https://openjdk.java.net/jeps/171)
 
 ```java
     //Ensures lack of reordering of loads before the fence with loads or stores after the fence.

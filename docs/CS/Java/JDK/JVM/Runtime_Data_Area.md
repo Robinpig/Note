@@ -28,10 +28,18 @@ If a computation requires more heap than can be made available by the automatic 
 
 ### new instance
 
-1. is_unresolved_klass, slow case allocation
-2. Enable fastpath_allocated, try UseTLAB
-3. CAS retry allocate in shared_eden, fail slow allocation
-4. Initialize object set mark
+Allocate the instance:
+  - If TLAB is enabled:
+    - Try to allocate in the TLAB.
+    - If fails, go to the slow path.
+  - Else If inline contiguous allocations are enabled:
+    - Try to allocate in eden.
+    - If fails due to heap end, go to slow path.
+  - If TLAB is enabled OR inline contiguous is enabled:
+    - Initialize the allocation.
+    - Exit.
+  - Go to slow path.
+
 
 ```cpp
 // bytecodeInterpreter.cpp
@@ -54,7 +62,9 @@ make sure is resolved klass
               result = (oop) THREAD->tlab().allocate(obj_size);
             }
 ```
-Disable non-TLAB-based fast-path, because profiling requires that all allocations go through InterpreterRuntime::_new() if THREAD->tlab().allocate returns NULL.
+Disable non-TLAB-based fast-path, because profiling requires that all allocations go through `InterpreterRuntime::_new()` -> `mem_allocate()` of different collectors
+
+if THREAD->tlab().allocate returns NULL.
 ```
 #ifndef CC_INTERP_PROFILE
             if (result == NULL) {
