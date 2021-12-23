@@ -4,7 +4,9 @@ One of the primary reasons to use threads is to improve performance.[1] Using th
 
 ## Create
 
-Threads are represented by the `Thread` class. The only way for a user to create a thread is to **create an object of this class**; each thread is associated with such an object. A thread will start when the `start()` method is invoked on the corresponding `Thread` object.
+Threads are represented by the `Thread` class. The only way for a user to create a thread is to **create an object of this class**; 
+each thread is associated with such an object. 
+A thread will start when the `start()` method is invoked on the corresponding `Thread` object.
 
 ```java
 // Allocates a new Thread object.
@@ -1346,7 +1348,7 @@ nor does the compiler have to reload values cached in registers after a call to 
 
 
 ### sleep
-if millis = 0, `os::naked_yield()` like `Thread#yield()`
+if millis = 0, `os::naked_yield()` like [Thread#yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield)
 ```cpp
 
 ```c
@@ -1355,9 +1357,7 @@ static JNINativeMethod methods[] = {
     {"sleep",            "(J)V",       (void *)&JVM_Sleep},
     ...
 };
-```
 
-```cpp
 // jvm.cpp
 JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
   JVMWrapper("JVM_Sleep");
@@ -1405,10 +1405,11 @@ JVM_ENTRY(void, JVM_Sleep(JNIEnv* env, jclass threadClass, jlong millis))
 JVM_END
 ```
 
+#### os::sleep
 1. `OSThread::set_interrupted(true)`
 2. `ParkEvent::park`
 
-When `ParkEvent::unpark` by `interrupt()`, use `OSThread::set_interrupted(true)` at next iteration.
+When `ParkEvent::unpark` by [interrupt()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=JVM_Interrupt), use `OSThread::set_interrupted(true)` at next iteration.
 
 ```cpp
 // os_posix.cpp
@@ -1487,21 +1488,44 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
 ```
 
 ### yield
-
+call os::naked_yield()
 ```c
 //Thread.c
 static JNINativeMethod methods[] = {
     {"yield",            "()V",        (void *)&JVM_Yield},
     ...
 };
+
+// jvm.cpp
+JVM_ENTRY(void, JVM_Yield(JNIEnv *env, jclass threadClass))
+  if (os::dont_yield()) return;
+  HOTSPOT_THREAD_YIELD();
+  os::naked_yield();
+JVM_END
 ```
 
+Linux CFS scheduler (since 2.6.23) does not guarantee sched_yield(2) will actually give up the CPU. Since skip buddy (v2.6.28):
+- Sets the yielding task as skip buddy for current CPU's run queue.
+- Picks next from run queue, if empty, picks a skip buddy (can be the yielding task).
+- Clears skip buddies for this run queue (yielding task no longer a skip buddy).
+  An alternative is calling os::naked_short_nanosleep with a small number to avoid
+  getting re-scheduled immediately.
+
+```cpp
+// os_linux.cpp
+void os::naked_yield() {
+  sched_yield();
+}
+```
 
 ### TimeUnit
 
-*A TimeUnit represents time durations at a given unit of granularity and provides utility methods to convert across units, and to perform timing and delay operations in these units. A TimeUnit does not maintain time information, but only helps organize and use time representations that may be maintained separately across various contexts.*
-*A TimeUnit is mainly used to inform time-based methods how a given timing parameter should be interpreted.*
-*Note however, that there is no guarantee that a particular timeout implementation will be able to notice the passage of time at the same granularity as the given TimeUnit.*
+A TimeUnit represents time durations at a given unit of granularity and provides utility methods to convert across units, and to perform timing and delay operations in these units. 
+A TimeUnit does not maintain time information, but only helps organize and use time representations that may be maintained separately across various contexts.
+
+A TimeUnit is mainly used to inform time-based methods how a given timing parameter should be interpreted.
+
+Note however, that there is no guarantee that a particular timeout implementation will be able to notice the passage of time at the same granularity as the given TimeUnit.
 
 
 

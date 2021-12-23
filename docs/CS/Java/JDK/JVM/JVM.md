@@ -85,7 +85,7 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 
 
 ## GC
-- [Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
+- [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 
 
 ### Collectors

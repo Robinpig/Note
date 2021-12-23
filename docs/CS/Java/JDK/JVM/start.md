@@ -1,12 +1,12 @@
 
 ## build
-[build](https://github.com/openjdk/jdk/blob/master/doc/building.md)
+[Building the JDK](https://github.com/openjdk/jdk/blob/master/doc/building.md)
 
 regression test jtreg
 based on JDK12
 
 start main()
-#### main
+### main
 ```c
 // main.c
 JNIEXPORT int
@@ -131,7 +131,7 @@ main(int argc, char **argv)
 }
 ```
 
-#### JLI_Launch
+### JLI_Launch
 ```c
 // java.c
 /*
@@ -351,16 +351,10 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize,
 
 
 ### launcher
+
+call JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
 ```cpp
 // launcher.c
-#include <stdlib.h>
-#include <strings.h>
-#include <dlfcn.h>
-
-#include "jni.h"
-
-typedef jint (*create_vm_func)(JavaVM **, void**, void*);
-
 void *JNU_FindCreateJavaVM(char *vmlibpath) {
     void *libVM = dlopen(vmlibpath, RTLD_LAZY);
     if (libVM == NULL) {
@@ -454,7 +448,7 @@ gdb> b java.c:JavaMain
 
 
 1. RegisterThread
-2. InitializeJVM   CreateJavaVM
+2. InitializeJVM  -> JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
 2. check args
 3. LoadMainClass 
 4. PostJVMInit
@@ -684,14 +678,15 @@ InitializeJVM(JavaVM **pvm, JNIEnv **penv, InvocationFunctions *ifn)
 }
 ```
 
-call JNI_CreateJavaVM
+call JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+
 ```c
 // java_md_solinux.c
 jboolean
 LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
 {
-...
-
+    ...
+    
     ifn->CreateJavaVM = (CreateJavaVM_t)
         dlsym(libjvm, "JNI_CreateJavaVM");
         
@@ -703,8 +698,6 @@ LoadJavaVM(const char *jvmpath, InvocationFunctions *ifn)
 ...
 }
 ```
-
-And JNI_CreateJavaVM call Thread.create_vm(see jni.cpp)
 
 ### create_vm
 1. Initialize library-based TLS
@@ -721,6 +714,7 @@ And JNI_CreateJavaVM call Thread.create_vm(see jni.cpp)
 12. start Signal Dispatcher before VMInit event is posted
 13. initialize compiler(s)
 14. post vm initialized
+
 ```cpp
 // thread.cpp
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
@@ -791,13 +785,13 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   // Timing (must come after argument parsing)
   TraceTime timer("Create VM", TRACETIME_LOG(Info, startuptime));
-
-#ifdef CAN_SHOW_REGISTERS_ON_ASSERT
-  // Initialize assert poison page mechanism.
-  if (ShowRegistersOnAssert) {
-    initialize_assert_poison();
-  }
-#endif // CAN_SHOW_REGISTERS_ON_ASSERT
+  
+  #ifdef CAN_SHOW_REGISTERS_ON_ASSERT
+    // Initialize assert poison page mechanism.
+    if (ShowRegistersOnAssert) {
+      initialize_assert_poison();
+    }
+  #endif // CAN_SHOW_REGISTERS_ON_ASSERT
 
   // Initialize the os module after parsing the args
   jint os_init_2_result = os::init_2();
@@ -830,16 +824,17 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Initialize global data structures and create system classes in heap
   vm_init_globals();
 
-#if INCLUDE_JVMCI
-  if (JVMCICounterSize > 0) {
-    JavaThread::_jvmci_old_thread_counters = NEW_C_HEAP_ARRAY(jlong, JVMCICounterSize, mtInternal);
-    memset(JavaThread::_jvmci_old_thread_counters, 0, sizeof(jlong) * JVMCICounterSize);
-  } else {
-    JavaThread::_jvmci_old_thread_counters = NULL;
-  }
-#endif // INCLUDE_JVMCI
-
-  // Attach the main thread to this os thread
+  #if INCLUDE_JVMCI
+    if (JVMCICounterSize > 0) {
+      JavaThread::_jvmci_old_thread_counters = NEW_C_HEAP_ARRAY(jlong, JVMCICounterSize, mtInternal);
+      memset(JavaThread::_jvmci_old_thread_counters, 0, sizeof(jlong) * JVMCICounterSize);
+    } else {
+      JavaThread::_jvmci_old_thread_counters = NULL;
+    }
+  #endif // INCLUDE_JVMCI
+```
+Attach the main thread to this os thread
+```cpp
   JavaThread* main_thread = new JavaThread();
   main_thread->set_thread_state(_thread_in_vm);
   main_thread->initialize_thread_current();
@@ -855,9 +850,11 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     *canTryAgain = false; // don't let caller call JNI_CreateJavaVM again
     return JNI_ENOMEM;
   }
+```
+Enable guard page *after* os::create_main_thread(), otherwise it would crash Linux VM, see notes in os_linux.cpp. 
 
-  // Enable guard page *after* os::create_main_thread(), otherwise it would
-  // crash Linux VM, see notes in os_linux.cpp.
+see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.net/jeps/270)
+```cpp
   main_thread->create_stack_guard_pages();
 
   // Initialize Java-Level synchronization subsystem
@@ -885,20 +882,21 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
   // Any JVMTI raw monitors entered in onload will transition into
   // real raw monitor. VM is setup enough here for raw monitor enter.
   JvmtiExport::transition_pending_onload_raw_monitors();
-
-  // Create the VMThread
+```
+Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
+```cpp
   { TraceTime timer("Start VMThread", TRACETIME_LOG(Info, startuptime));
 
-  VMThread::create();
+    VMThread::create();
     Thread* vmthread = VMThread::vm_thread();
 
     if (!os::create_thread(vmthread, os::vm_thread)) {
       vm_exit_during_initialization("Cannot create VM thread. "
                                     "Out of system resources.");
     }
-
-    // Wait for the VM thread to become ready, and VMThread::run to initialize
-    // Monitors can have spurious returns, must always check another state flag
+```
+Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag
+```cpp
     {
       MutexLocker ml(Notify_lock);
       os::start_thread(vmthread);
@@ -971,11 +969,21 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     create_vm_init_libraries();
   }
 
-  if (CleanChunkPoolAsync) {
     Chunk::start_chunk_pool_cleaner_task();
-  }
+```
+[Start the service thread](/docs/CS/Java/JDK/JVM/Thread.md?id=ServiceThreadinitialize)
 
-  // initialize compiler(s)
+The service thread enqueues JVMTI deferred events and does various hashtable and other cleanups.  
+Needs to start before the compilers start posting events.
+```cpp
+  ServiceThread::initialize();
+```
+[Start the monitor deflation thread](/docs/CS/Java/JDK/JVM/Thread.md?id=MonitorDeflationThreadinitialize):
+```
+  MonitorDeflationThread::initialize();
+```
+initialize compiler(s) with [compilation_init_phase1](/docs/CS/Java/JDK/JVM/Thread.md?id=compilation_init_phase1)
+```cpp
 #if defined(COMPILER1) || COMPILER2_OR_JVMCI
 #if INCLUDE_JVMCI
   bool force_JVMCI_intialization = false;
@@ -1082,8 +1090,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
   {
     MutexLocker ml(PeriodicTask_lock);
-    // Make sure the WatcherThread can be started by WatcherThread::start()
-    // or by dynamic enrollment.
+```
+Make sure the WatcherThread can be started by [WatcherThread::start()](/docs/CS/Java/JDK/JVM/Thread.md?id=WatcherThreadstart) or by dynamic enrollment.
+```cpp
     WatcherThread::make_startable();
     // Start up the WatcherThread if there are any periodic tasks
     // NOTE:  All PeriodicTasks should be registered by now. If they
@@ -1121,13 +1130,19 @@ void vm_init_globals() {
   SuspendibleThreadSet_init();
 }
 
+```
 
+### init_globals
+```cpp
 jint init_globals() {
   HandleMark hm;
   management_init();
   bytecodes_init();
   classLoader_init1();
   compilationPolicy_init();
+```
+init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
+```cpp
   codeCache_init();
   VM_Version_init();
   os_init_globals();
