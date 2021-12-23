@@ -27,7 +27,7 @@ typedef class     typeArrayOopDesc*            typeArrayOop;
 ```
 
 
-
+metadata hierarchy
 ```cpp
 // The metadata hierarchy is separate from the oop hierarchy
 
@@ -45,8 +45,9 @@ class   CompiledICHolder;
 ## oop
 
 
-#### InstanceKlass::allocate_instance
+#### allocate_instance
 
+called by `java.lang.reflect.Constructor` or `new Klass(args ...)` or etc.
 
 ```cpp
 instanceOop InstanceKlass::allocate_instance(TRAPS) {
@@ -70,22 +71,7 @@ oop CollectedHeap::obj_allocate(Klass* klass, int size, TRAPS) {
   ObjAllocator allocator(klass, size, THREAD);
   return allocator.allocate();
 }
-```
 
-
-
-```cpp
-// shenandoahHeap.cpp
-oop ShenandoahHeap::obj_allocate(Klass* klass, int size, TRAPS) {
-  ObjAllocator initializer(klass, size, THREAD);
-  ShenandoahMemAllocator allocator(initializer, klass, size, THREAD);
-  return allocator.allocate();
-}
-```
-
-
-also allow use TLAB
-```cpp
 // share/gc/shared/memAllocator.cpp
 oop MemAllocator::allocate() const {
   oop obj = NULL;
@@ -93,12 +79,39 @@ oop MemAllocator::allocate() const {
     Allocation allocation(*this, &obj);
     HeapWord* mem = mem_allocate(allocation);
     if (mem != NULL) {
-      obj = initialize(mem); // clear_mem & set markOop
+```
+clear_mem & set markOop
+```cpp
+      obj = initialize(mem); // 
     }
   }
   return obj;
 }
+```
 
+```cpp
+// share/gc/shared/memAllocator.cpp
+
+oop ObjAllocator::initialize(HeapWord* mem) const {
+  mem_clear(mem);
+  return finish(mem);
+}
+
+oop MemAllocator::finish(HeapWord* mem) const {
+  // May be bootstrapping
+  oopDesc::set_mark(mem, markWord::prototype()); // no_hash_in_place | no_lock_in_place
+  
+  // Need a release store to ensure array/class length, mark word, and
+  // object zeroing are visible before setting the klass non-NULL, for
+  // concurrent collectors.
+  oopDesc::release_set_klass(mem, _klass);
+  return cast_to_oop(mem);
+}
+```
+
+
+
+```cpp
 HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
   if (UseTLAB) {
     HeapWord* result = allocate_inside_tlab(allocation);
@@ -124,42 +137,14 @@ HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
 2. metadata
 
 ```cpp
-//oop.hpp
+// oop.hpp
 class oopDesc {
-  friend class VMStructs;
-  friend class JVMCIVMStructs;
  private:
   volatile markOop _mark;
   union _metadata {
     Klass*      _klass;
     narrowKlass _compressed_klass;
   } _metadata;
-
- public:
-  inline markOop  mark()          const;
-  inline markOop  mark_raw()      const;
-  inline markOop* mark_addr_raw() const;
-
-  inline void set_mark(volatile markOop m);
-  inline void set_mark_raw(volatile markOop m);
-  static inline void set_mark_raw(HeapWord* mem, markOop m);
-
-  inline void release_set_mark(markOop m);
-  inline markOop cas_set_mark(markOop new_mark, markOop old_mark);
-  inline markOop cas_set_mark_raw(markOop new_mark, markOop old_mark, atomic_memory_order order = memory_order_conservative);
-
-  // Used only to re-initialize the mark word (e.g., of promoted
-  // objects during a GC) -- requires a valid klass pointer
-  inline void init_mark();
-  inline void init_mark_raw();
-
-  inline Klass* klass() const;
-  inline Klass* klass_or_null() const volatile;
-  inline Klass* klass_or_null_acquire() const volatile;
-  static inline Klass** klass_addr(HeapWord* mem);
-  static inline narrowKlass* compressed_klass_addr(HeapWord* mem);
-  inline Klass** klass_addr();
-  inline narrowKlass* compressed_klass_addr();
 ...
 }
 ```
@@ -384,7 +369,7 @@ ConstantPool*
 
 
 
-
+### klass hierarchy
 
 ```cpp
 // The klass hierarchy is separate from the oop hierarchy.
@@ -399,10 +384,10 @@ class     ObjArrayKlass;
 class     TypeArrayKlass;
 ```
 
-## 
+#### follow_object
 
 ```cpp
-// MarkSweep.cpp
+// share/gc/serial/markSweep.cpp
 inline void MarkSweep::follow_object(oop obj) {
   if (obj->is_objArray()) {
     // Handle object arrays explicitly to allow them to
@@ -427,12 +412,11 @@ ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_maps(oop obj, OopClosureTyp
     oop_oop_iterate_oop_map<T>(map, obj, closure);
   }
 }
+```
+The iteration over the oops in objects is a hot path in the GC code.
+By force inlining the following functions, we get similar GC performance as the previous macro based implementation.
 
-
-// The iteration over the oops in objects is a hot path in the GC code.
-// By force inlining the following functions, we get similar GC performance
-// as the previous macro based implementation.
-
+```cpp
 template <typename T, class OopClosureType>
 ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_map(OopMapBlock* map, oop obj, OopClosureType* closure) {
   T* p         = (T*)obj->obj_field_addr_raw<T>(map->offset());
@@ -501,9 +485,11 @@ array
 update_inherited_vtable
 
 #### initialize_vtable
+called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
+
+Revised lookup semantics   introduced 1.3 (Kestrel beta)
 ```cpp
-// klassVtable.cpp
-// Revised lookup semantics   introduced 1.3 (Kestrel beta)
+// share/oops/klassVtable.cpp
 void klassVtable::initialize_vtable(bool checkconstraints, TRAPS) {
 
   // Note:  Arrays can have intermediate array supers.  Use java_super to skip them.
@@ -539,25 +525,27 @@ void klassVtable::initialize_vtable(bool checkconstraints, TRAPS) {
     Array<Method*>* methods = ik()->methods();
     int len = methods->length();
     int initialized = super_vtable_len;
-
-    // Check each of this class's methods against super;
-    // if override, replace in copy of super vtable, otherwise append to end
+```
+Check each of this class's methods against super;
+if override, replace in copy of super vtable, otherwise append to end
+```cpp
     for (int i = 0; i < len; i++) {
-      // update_inherited_vtable can stop for gc - ensure using handles
       HandleMark hm(THREAD);
-      assert(methods->at(i)->is_method(), "must be a Method*");
       methodHandle mh(THREAD, methods->at(i));
 
+```
+update_inherited_vtable can stop for gc - ensure using handles
+```cpp
       bool needs_new_entry = update_inherited_vtable(ik(), mh, super_vtable_len, -1, checkconstraints, CHECK);
-
       if (needs_new_entry) {
         put_method_at(mh(), initialized);
         mh()->set_vtable_index(initialized); // set primary vtable index
         initialized++;
       }
     }
-
-    // update vtable with default_methods
+```
+update vtable with default_methods
+```cpp
     Array<Method*>* default_methods = ik()->default_methods();
     if (default_methods != NULL) {
       len = default_methods->length();
@@ -625,7 +613,18 @@ OR return true if a new vtable entry is required.
 Only called for InstanceKlass's, i.e. not for arrays
 If that changed, could not use _klass as handle for klass
 
+#### initialize_itable
+called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
 
+```cpp
+// share/oops/klassVtable.cpp
+void klassItable::initialize_itable(GrowableArray<Method*>* supers) {
+  if (_klass->is_interface()) {
+    // This needs to go after vtable indices are assigned but
+    // before implementors need to know the number of itable indices.
+    assign_itable_indices_for_interface(InstanceKlass::cast(_klass));
+  }
+```
 
 
 ### CLD
@@ -723,3 +722,6 @@ void ClassLoaderData::classes_do(KlassClosure* klass_closure) {
   }
 }
 ```
+## Links
+- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+## References

@@ -781,7 +781,7 @@ Because linking involves the allocation of new data structures, it may fail with
 1. [verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification) 
 2. [Rewriting](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Rewriting) after verification but before the first method of the class is executed
 2. relocate jsrs and link methods after they are all rewritten
-3. Initialize_vtable and initialize_itable
+3. [Initialize_vtable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_vtable) and [initialize_itable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_itable)
 4. set_init_state
 
 ```cpp
@@ -1980,8 +1980,6 @@ void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
 
 
 
-
-## Using
 
 ## Unloading
 
