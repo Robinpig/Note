@@ -1662,6 +1662,9 @@ see Loom
 
 Preemptive Threads-Scheduling
 
+## Links
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [JVM Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
 
 ## References

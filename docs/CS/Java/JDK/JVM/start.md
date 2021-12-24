@@ -1146,6 +1146,9 @@ init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
   codeCache_init();
   VM_Version_init();
   os_init_globals();
+```
+init [stub](/docs/CS/Java/JDK/JVM/Stub.md?id=init)
+```cpp
   stubRoutines_init1();
   jint status = universe_init();  // dependent on codeCache_init and
                                   // stubRoutines_init1 and metaspace_init.
@@ -1153,19 +1156,25 @@ init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
     return status;
 
   gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
-  interpreter_init();        // before any methods loaded
-  invocationCounter_init();  // before any methods loaded
+```
+interpreter_init_stub before methods get loaded
+```cpp
+  interpreter_init_stub();
   accessFlags_init();
-  templateTable_init();
   InterfaceSupport_init();
+  VMRegImpl::set_regName(); // need this before generate_stubs (for printing oop maps).
   SharedRuntime::generate_stubs();
   universe2_init();  // dependent on codeCache_init and stubRoutines_init1
   javaClasses_init();// must happen after vtable initialization, before referenceProcessor_init
+```
+interpreter_init_code after javaClasses_init and before any method gets linked
+```cpp
+  interpreter_init_code();
   referenceProcessor_init();
   jni_handles_init();
-#if INCLUDE_VM_STRUCTS
+  #if INCLUDE_VM_STRUCTS
   vmStructs_init();
-#endif // INCLUDE_VM_STRUCTS
+  #endif // INCLUDE_VM_STRUCTS
 
   vtableStubs_init();
   InlineCacheBuffer_init();
@@ -1183,11 +1192,11 @@ init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
   stubRoutines_init2(); // note: StubRoutines need 2-phase init
   MethodHandles::generate_adapters();
 
-#if INCLUDE_NMT
+  #if INCLUDE_NMT
   // Solaris stack is walkable only after stubRoutines are set up.
   // On Other platforms, the stack is always walkable.
   NMT_stack_walkable = true;
-#endif // INCLUDE_NMT
+  #endif // INCLUDE_NMT
 
   // All the flags that get adjusted by VM_Version_init and os::init_2
   // have been set so dump the flags now.
@@ -1323,3 +1332,7 @@ bool universe_post_init() {
 
 #### init classloader
 Initialize the class loader's access to methods in libzip.  Parse and process the boot classpath into a list ClassPathEntry objects.  Once this list has been created, it must not change order (see class PackageInfo) it can be appended to and is by jvmti and the kernel vm.
+
+
+## Links
+- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
