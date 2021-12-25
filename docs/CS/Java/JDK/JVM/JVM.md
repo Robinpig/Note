@@ -1,8 +1,6 @@
 ## Introduction
 
-Based on hotspot
 ### projects
-[Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
 
 - Amber
 - Coin
@@ -17,59 +15,58 @@ Based on hotspot
 - Valhalla
 - ZGC
 
+### Directories
+Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
 
-
-```java
-/** based on JDK12
-  * hotspot
-  *     |--- cpu                     
-  *     |--- os
-  *     |--- os_cpu
-  *     |--- share
-  *         |--- adlc               # 
-  *         |--- aot                # 
-  *         |--- asm                # 
-  *         |--- c1                 # C1 JIT
-  *         |--- ci                 # compiler interface
-  *         |--- classfile          #
-  *         |--- code               
-  *         |--- compiler           
-  *         |--- gc                 
-  *         |--- include            
-  *         |--- interpreter        
-  *         |--- jfr                # Java Flight Record
-  *         |--- jvmci              
-  *         |--- libadt             
-  *         |--- logging            
-  *         |--- memory             
-  *         |--- metaprogramming    
-  *         |--- oops               
-  *         |--- opto               # C2 JIT
-  *         |--- precompiled        
-  *         |--- prims              # implement JNI, JVMTI, Unsafe
-  *         |--- runtime            
-  *         |--- services           # HeapDump, MXBean, jcmd, jinfo
-  *         |--- utilities          # hashtable, JSON parser, elf, etc.
- */
+```
+hotspot
+    |--- cpu                     
+    |--- os
+    |--- os_cpu
+    |--- share
+        |--- adlc               # 
+        |--- aot                # 
+        |--- asm                # 
+        |--- c1                 # C1 JIT
+        |--- ci                 # compiler interface
+        |--- classfile          #
+        |--- code               
+        |--- compiler           
+        |--- gc                 
+        |--- include            
+        |--- interpreter        
+        |--- jfr                # Java Flight Record
+        |--- jvmci              
+        |--- libadt             
+        |--- logging            
+        |--- memory             
+        |--- metaprogramming    
+        |--- oops               
+        |--- opto               # C2 JIT
+        |--- precompiled        
+        |--- prims              # implement JNI, JVMTI, Unsafe
+        |--- runtime            
+        |--- services           # HeapDump, MXBean, jcmd, jinfo
+        |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
 
 ## The class File Format
 
-[Class File and compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
-[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
+- [Class File and compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [Javac](/docs/CS/Java/JDK/JVM/Javac.md)
 
 
 ## Runtime
 
 
-[start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
+- [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
+- [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
 
 ### Class
 
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 - [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
-- [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
 ### Run-Time Data Areas
 The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md) that are used during execution of a program. 
