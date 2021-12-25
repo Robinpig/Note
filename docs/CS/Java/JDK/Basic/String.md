@@ -352,7 +352,7 @@ jcmd <pid> VM.stringtable
 
 
 
-## String Deduplication in G1
+## String Deduplication
 
 [JEP 192: String Deduplication in G1](http://openjdk.java.net/jeps/192)
 

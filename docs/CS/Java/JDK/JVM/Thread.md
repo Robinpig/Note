@@ -247,13 +247,15 @@ Notify_lock is destroyed by [Threads::create_vm()](/docs/CS/Java/JDK/JVM/start.m
   // priorities and I am *explicitly* using OS priorities so that it's
   // possible to set the VM thread priority higher than any Java thread.
   os::set_native_priority( this, prio );
-
-  // Wait for VM_Operations until termination
+```
+Wait for VM_Operations until termination
+```
   this->loop();
+```
+Note the intention to exit before safepointing. 
 
-  // Note the intention to exit before safepointing.
-  // 6295565  This has the effect of waiting for any large tty
-  // outputs to finish.
+This has the effect of waiting for any large tty outputs to finish.
+```cpp
   if (xtty != NULL) {
     ttyLocker ttyl;
     xtty->begin_elem("destroy_vm");
@@ -262,7 +264,9 @@ Notify_lock is destroyed by [Threads::create_vm()](/docs/CS/Java/JDK/JVM/start.m
     assert(should_terminate(), "termination flag must be set");
   }
 
-  // 4526887 let VM thread exit at Safepoint
+```
+let VM thread exit at [Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md?id=begin)
+```cpp
   _cur_vm_operation = &halt_op;
   SafepointSynchronize::begin();
 
@@ -306,7 +310,114 @@ Notify_lock is destroyed by [Threads::create_vm()](/docs/CS/Java/JDK/JVM/start.m
 }
 ```
 
+#### loop
 
+```cpp
+void VMThread::loop() {
+  assert(_cur_vm_operation == NULL, "no current one should be executing");
+
+  SafepointSynchronize::init(_vm_thread);
+
+  // Need to set a calling thread for ops not passed
+  // via the normal way.
+  cleanup_op.set_calling_thread(_vm_thread);
+  safepointALot_op.set_calling_thread(_vm_thread);
+
+  while (true) {
+    if (should_terminate()) break;
+    wait_for_operation();
+    if (should_terminate()) break;
+    assert(_next_vm_operation != NULL, "Must have one");
+```
+call inner_execute
+```cpp
+    inner_execute(_next_vm_operation);
+  }
+}
+```
+
+### inner_execute
+
+```cpp
+
+void VMThread::inner_execute(VM_Operation* op) {
+  assert(Thread::current()->is_VM_thread(), "Must be the VM thread");
+
+  VM_Operation* prev_vm_operation = NULL;
+  if (_cur_vm_operation != NULL) {
+    // Check that the VM operation allows nested VM operation.
+    // This is normally not the case, e.g., the compiler
+    // does not allow nested scavenges or compiles.
+    if (!_cur_vm_operation->allow_nested_vm_operations()) {
+      fatal("Unexpected nested VM operation %s requested by operation %s",
+            op->name(), _cur_vm_operation->name());
+    }
+    op->set_calling_thread(_cur_vm_operation->calling_thread());
+    prev_vm_operation = _cur_vm_operation;
+  }
+
+  _cur_vm_operation = op;
+
+  HandleMark hm(VMThread::vm_thread());
+  EventMarkVMOperation em("Executing %sVM operation: %s", prev_vm_operation != NULL ? "nested " : "", op->name());
+
+```
+if is_at_safepoint, **evaluate_operation** between [SafepointSynchronize::begin()](/docs/CS/Java/JDK/JVM/Safepoint.md?id=begin) 
+and [SafepointSynchronize::end()](/docs/CS/Java/JDK/JVM/Safepoint.md?id=end)
+```cpp
+  log_debug(vmthread)("Evaluating %s %s VM operation: %s",
+                       prev_vm_operation != NULL ? "nested" : "",
+                      _cur_vm_operation->evaluate_at_safepoint() ? "safepoint" : "non-safepoint",
+                      _cur_vm_operation->name());
+
+  bool end_safepoint = false;
+  bool has_timeout_task = (_timeout_task != nullptr);
+  if (_cur_vm_operation->evaluate_at_safepoint() &&
+      !SafepointSynchronize::is_at_safepoint()) {
+    SafepointSynchronize::begin();
+    if (has_timeout_task) {
+      _timeout_task->arm(_cur_vm_operation->name());
+    }
+    end_safepoint = true;
+  }
+
+  evaluate_operation(_cur_vm_operation);
+
+  if (end_safepoint) {
+    if (has_timeout_task) {
+      _timeout_task->disarm();
+    }
+    SafepointSynchronize::end();
+  }
+
+  _cur_vm_operation = prev_vm_operation;
+}
+```
+
+#### evaluate_operation
+
+```cpp
+void VMThread::evaluate_operation(VM_Operation* op) {
+  ResourceMark rm;
+
+  {
+    PerfTraceTime vm_op_timer(perf_accumulated_vm_operation_time());
+    HOTSPOT_VMOPS_BEGIN(
+                     (char *) op->name(), strlen(op->name()),
+                     op->evaluate_at_safepoint() ? 0 : 1);
+
+    EventExecuteVMOperation event;
+    op->evaluate();
+    if (event.should_commit()) {
+      post_vm_operation_event(&event, op);
+    }
+
+    HOTSPOT_VMOPS_END(
+                     (char *) op->name(), strlen(op->name()),
+                     op->evaluate_at_safepoint() ? 0 : 1);
+  }
+
+}```
 
 ## CompilerThread
 
@@ -487,6 +598,7 @@ This is creating a JVMCICompiler singleton.
 
 ## Links
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 
 ## References
 
