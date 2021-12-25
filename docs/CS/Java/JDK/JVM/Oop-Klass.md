@@ -4,29 +4,6 @@ One reason for the oop/klass dichotomy in the implementation is that we don't wa
 
 
 
-```cpp
-// oopsHierarchy.hpp
-
-// OBJECT hierarchy
-// This hierarchy is a representation hierarchy, i.e. if A is a superclass
-// of B, A's representation is a prefix of B's representation.
-
-typedef juint narrowOop; // Offset instead of address for an oop within a java object
-
-// If compressed klass pointers then use narrowKlass.
-typedef juint  narrowKlass;
-
-typedef void* OopOrNarrowOopStar;
-typedef class   markOopDesc*                markOop;
-
-typedef class oopDesc*                            oop;
-typedef class   instanceOopDesc*            instanceOop;
-typedef class   arrayOopDesc*                    arrayOop;
-typedef class     objArrayOopDesc*            objArrayOop;
-typedef class     typeArrayOopDesc*            typeArrayOop;
-```
-
-
 metadata hierarchy
 ```cpp
 // The metadata hierarchy is separate from the oop hierarchy
@@ -44,6 +21,28 @@ class   CompiledICHolder;
 
 ## oop
 
+![](../images/oop.svg)
+
+
+
+```cpp
+// oopsHierarchy.hpp
+
+// OBJECT hierarchy
+// This hierarchy is a representation hierarchy, i.e. if A is a superclass
+// of B, A's representation is a prefix of B's representation.
+
+typedef juint narrowOop; // Offset instead of address for an oop within a java object
+
+// If compressed klass pointers then use narrowKlass.
+typedef juint  narrowKlass;
+
+typedef class oopDesc*                            oop;
+typedef class   instanceOopDesc*            instanceOop;
+typedef class   arrayOopDesc*                    arrayOop;
+typedef class     objArrayOopDesc*            objArrayOop;
+typedef class     typeArrayOopDesc*            typeArrayOop;
+```
 
 #### allocate_instance
 
@@ -359,21 +358,18 @@ Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 
 
 
-Klass*
-
-Method*
-
-ConstantPool*
+- Klass
+- Method
+- MethodData
+- MethodCounters
+- ConstantPool
 
 ## klass
 
-
-
 ### klass hierarchy
 
+he klass hierarchy is separate from the oop hierarchy.
 ```cpp
-// The klass hierarchy is separate from the oop hierarchy.
-
 class Klass;
 class   InstanceKlass;
 class     InstanceMirrorKlass;
@@ -383,6 +379,9 @@ class   ArrayKlass;
 class     ObjArrayKlass;
 class     TypeArrayKlass;
 ```
+
+![](../images/Klass.svg)
+
 
 #### follow_object
 
