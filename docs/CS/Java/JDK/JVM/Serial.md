@@ -1,0 +1,490 @@
+## Introduction
+
+
+
+for Serial and ParNew
+```cpp
+    // gc-globals.hpp
+  product(size_t, PretenureSizeThreshold, 0,                                \
+          "Maximum size in bytes of objects allocated in DefNew "           \
+          "generation; zero means no maximum")                              \
+          range(0, max_uintx)                                               \
+```
+
+
+## New collect
+
+1. collection_attempt_is_safe
+2. young_process_roots
+
+```cpp
+void DefNewGeneration::collect(bool   full,
+                               bool   clear_all_soft_refs,
+                               size_t size,
+                               bool   is_tlab) {
+...
+  _old_gen = heap->old_gen();
+```
+If the next generation is too full to accommodate promotion from this generation, pass on collection;
+let the next generation do it.
+```cpp
+  if (!collection_attempt_is_safe()) {
+    heap->set_incremental_collection_failed(); // Slight lie: we did not even attempt one
+    return;
+  }
+
+  heap->trace_heap_before_gc(&gc_tracer);
+
+  // These can be shared for all code paths
+  IsAliveClosure is_alive(this);
+  ScanWeakRefClosure scan_weak_ref(this);
+
+  age_table()->clear();
+  to()->clear(SpaceDecorator::Mangle);
+  // The preserved marks should be empty at the start of the GC.
+  _preserved_marks_set.init(1);
+
+  heap->rem_set()->prepare_for_younger_refs_iterate(false);
+
+  FastScanClosure fsc_with_no_gc_barrier(this, false);
+  FastScanClosure fsc_with_gc_barrier(this, true);
+
+  CLDScanClosure cld_scan_closure(&fsc_with_no_gc_barrier,
+                                  heap->rem_set()->cld_rem_set()->accumulate_modified_oops());
+
+  set_promo_failure_scan_stack_closure(&fsc_with_no_gc_barrier);
+  FastEvacuateFollowersClosure evacuate_followers(heap,
+                                                  &fsc_with_no_gc_barrier,
+                                                  &fsc_with_gc_barrier);
+  {
+```
+DefNew needs to run with n_threads == 0(STW), to make sure the serial version of the card table scanning code is used.
+
+See: CardTableRS::non_clean_card_iterate_possibly_parallel.
+```cpp
+    StrongRootsScope srs(0);
+
+    heap->young_process_roots(&srs,
+                              &fsc_with_no_gc_barrier,
+                              &fsc_with_gc_barrier,
+                              &cld_scan_closure);
+  }
+
+  // "evacuate followers".
+  evacuate_followers.do_void();
+
+  FastKeepAliveClosure keep_alive(this, &scan_weak_ref);
+  ReferenceProcessor* rp = ref_processor();
+  rp->setup_policy(clear_all_soft_refs);
+  ReferenceProcessorPhaseTimes pt(_gc_timer, rp->max_num_queues());
+  const ReferenceProcessorStats& stats =
+  rp->process_discovered_references(&is_alive, &keep_alive, &evacuate_followers,
+                                    NULL, &pt);
+  gc_tracer.report_gc_reference_stats(stats);
+  gc_tracer.report_tenuring_threshold(tenuring_threshold());
+  pt.print_all_references();
+
+  WeakProcessor::weak_oops_do(&is_alive, &keep_alive);
+```
+Swap the survivor spaces.
+```cpp
+  if (!_promotion_failed) {
+    eden()->clear(SpaceDecorator::Mangle);
+    from()->clear(SpaceDecorator::Mangle);
+    if (ZapUnusedHeapArea) {
+      // This is now done here because of the piece-meal mangling which
+      // can check for valid mangling at intermediate points in the
+      // collection(s).  When a young collection fails to collect
+      // sufficient space resizing of the young generation can occur
+      // an redistribute the spaces in the young generation.  Mangle
+      // here so that unzapped regions don't get distributed to
+      // other spaces.
+      to()->mangle_unused_area();
+    }
+    swap_spaces();
+
+    adjust_desired_tenuring_threshold();
+
+    // A successful scavenge should restart the GC time limit count which is
+    // for full GC's.
+    AdaptiveSizePolicy* size_policy = heap->size_policy();
+    size_policy->reset_gc_overhead_limit_count();
+    assert(!heap->incremental_collection_failed(), "Should be clear");
+  } else {
+    _promo_failure_scan_stack.clear(true); // Clear cached segments.
+
+    remove_forwarding_pointers();
+    log_info(gc, promotion)("Promotion failed");
+    // Add to-space to the list of space to compact
+    // when a promotion failure has occurred.  In that
+    // case there can be live objects in to-space
+    // as a result of a partial evacuation of eden
+    // and from-space.
+    swap_spaces();   // For uniformity wrt ParNewGeneration.
+    from()->set_next_compaction_space(to());
+    heap->set_incremental_collection_failed();
+
+    // Inform the next generation that a promotion failure occurred.
+    _old_gen->promotion_failure_occurred();
+    gc_tracer.report_promotion_failed(_promotion_failed_info);
+
+    // Reset the PromotionFailureALot counters.
+    NOT_PRODUCT(heap->reset_promotion_should_fail();)
+  }
+  // We should have processed and cleared all the preserved marks.
+  _preserved_marks_set.reclaim();
+  // set new iteration safe limit for the survivor spaces
+  from()->set_concurrent_iteration_safe_limit(from()->top());
+  to()->set_concurrent_iteration_safe_limit(to()->top());
+
+  // We need to use a monotonically non-decreasing time in ms
+  // or we will see time-warp warnings and os::javaTimeMillis()
+  // does not guarantee monotonicity.
+  jlong now = os::javaTimeNanos() / NANOSECS_PER_MILLISEC;
+  update_time_of_last_gc(now);
+
+  heap->trace_heap_after_gc(&gc_tracer);
+
+  _gc_timer->register_gc_end();
+
+  gc_tracer.report_gc_end(_gc_timer->gc_end(), _gc_timer->time_partitions());
+}
+```
+
+#### collection_attempt_is_safe
+
+```cpp
+inline void FastScanClosure<Derived>::do_oop_work(T* p) {
+  T heap_oop = RawAccess<>::oop_load(p);
+  // Should we copy the obj?
+  if (!CompressedOops::is_null(heap_oop)) {
+    oop obj = CompressedOops::decode_not_null(heap_oop);
+    if (cast_from_oop<HeapWord*>(obj) < _young_gen_end) {
+      assert(!_young_gen->to()->is_in_reserved(obj), "Scanning field twice?");
+      oop new_obj = obj->is_forwarded() ? obj->forwardee()
+                                        : _young_gen->copy_to_survivor_space(obj);
+      RawAccess<IS_NOT_NULL>::oop_store(p, new_obj);
+
+      static_cast<Derived*>(this)->barrier(p);
+    }
+  }
+}
+```
+
+```cpp
+bool DefNewGeneration::collection_attempt_is_safe() {
+  if (!to()->is_empty()) {
+    log_trace(gc)(":: to is not empty ::");
+    return false;
+  }
+  if (_old_gen == NULL) {
+    GenCollectedHeap* gch = GenCollectedHeap::heap();
+    _old_gen = gch->old_gen();
+  }
+  return _old_gen->promotion_attempt_is_safe(used());
+}
+```
+
+#### copy_to_survivor_space
+
+```cpp
+// share/gc/serial/defNewGeneration.cpp
+oop DefNewGeneration::copy_to_survivor_space(oop old) {
+  assert(is_in_reserved(old) && !old->is_forwarded(),
+         "shouldn't be scavenging this oop");
+  size_t s = old->size();
+  oop obj = NULL;
+```
+Try allocating obj in to-space (unless too old)
+```cpp
+  if (old->age() < tenuring_threshold()) {
+    obj = cast_to_oop(to()->allocate(s));
+  }
+
+  bool new_obj_is_tenured = false;
+```
+try allocating obj tenured
+```cpp
+  if (obj == NULL) {
+    obj = _old_gen->promote(old, s);
+    if (obj == NULL) {
+      handle_promotion_failure(old);
+      return old;
+    }
+    new_obj_is_tenured = true;
+  } 
+```
+Copy obj
+```cpp
+  else {
+    // Prefetch beyond obj
+    const intx interval = PrefetchCopyIntervalInBytes;
+    Prefetch::write(obj, interval);
+
+    Copy::aligned_disjoint_words(cast_from_oop<HeapWord*>(old), cast_from_oop<HeapWord*>(obj), s);
+```
+Increment age if obj still in new generation
+```cpp
+    obj->incr_age();
+    age_table()->add(obj, s);
+  }
+```
+Done, insert forward pointer to obj in this header
+```cpp
+  old->forward_to(obj);
+
+  if (SerialStringDedup::is_candidate_from_evacuation(obj, new_obj_is_tenured)) {
+    // Record old; request adds a new weak reference, which reference
+    // processing expects to refer to a from-space object.
+    _string_dedup_requests.add(old);
+  }
+  return obj;
+}
+```
+
+
+#### collection_attempt_is_safe
+Handle Promotion
+
+```cpp
+// tenuredGeneration.hpp
+bool TenuredGeneration::promotion_attempt_is_safe(size_t max_promotion_in_bytes) const {
+  size_t available = max_contiguous_available();
+  size_t av_promo  = (size_t)gc_stats()->avg_promoted()->padded_average();
+  bool   res = (available >= av_promo) || (available >= max_promotion_in_bytes);
+
+  log_trace(gc)("Tenured: promo attempt is%s safe: available(" SIZE_FORMAT ") %s av_promo(" SIZE_FORMAT "), max_promo(" SIZE_FORMAT ")",
+    res? "":" not", available, res? ">=":"<", av_promo, max_promotion_in_bytes);
+
+  return res;
+}
+```
+
+## Tenured collect
+
+```cpp
+
+void TenuredGeneration::collect(bool   full,
+                                bool   clear_all_soft_refs,
+                                size_t size,
+                                bool   is_tlab) {
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+
+  // Temporarily expand the span of our ref processor, so
+  // refs discovery is over the entire heap, not just this generation
+  ReferenceProcessorSpanMutator
+    x(ref_processor(), gch->reserved_region());
+
+  STWGCTimer* gc_timer = GenMarkSweep::gc_timer();
+  gc_timer->register_gc_start();
+
+  SerialOldTracer* gc_tracer = GenMarkSweep::gc_tracer();
+  gc_tracer->report_gc_start(gch->gc_cause(), gc_timer->gc_start());
+
+  gch->pre_full_gc_dump(gc_timer);
+```
+Invoke [Full collect](/docs/CS/Java/JDK/JVM/Serial.md?id=Full-collect)
+```cpp
+  GenMarkSweep::invoke_at_safepoint(ref_processor(), clear_all_soft_refs);
+
+  gch->post_full_gc_dump(gc_timer);
+
+  gc_timer->register_gc_end();
+
+  gc_tracer->report_gc_end(gc_timer->gc_end(), gc_timer->time_partitions());
+}
+```
+
+## Full collect
+
+```cpp
+
+void GenMarkSweep::invoke_at_safepoint(ReferenceProcessor* rp, bool clear_all_softrefs) {
+  assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
+
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+  #ifdef ASSERT
+  if (gch->soft_ref_policy()->should_clear_all_soft_refs()) {
+    assert(clear_all_softrefs, "Policy should have been checked earlier");
+  }
+  #endif
+
+  // hook up weak ref data so it can be used during Mark-Sweep
+  assert(ref_processor() == NULL, "no stomping");
+  assert(rp != NULL, "should be non-NULL");
+  set_ref_processor(rp);
+
+  gch->trace_heap_before_gc(_gc_tracer);
+
+  // Increment the invocation count
+  _total_invocations++;
+
+  // Capture used regions for each generation that will be
+  // subject to collection, so that card table adjustments can
+  // be made intelligently (see clear / invalidate further below).
+  gch->save_used_regions();
+
+  allocate_stacks();
+
+  mark_sweep_phase1(clear_all_softrefs);
+
+  mark_sweep_phase2();
+
+  // Don't add any more derived pointers during phase3
+  #if COMPILER2_OR_JVMCI
+  assert(DerivedPointerTable::is_active(), "Sanity");
+  DerivedPointerTable::set_active(false);
+  #endif
+
+  mark_sweep_phase3();
+
+  mark_sweep_phase4();
+
+  restore_marks();
+
+  // Set saved marks for allocation profiler (and other things? -- dld)
+  // (Should this be in general part?)
+  gch->save_marks();
+
+  deallocate_stacks();
+
+  MarkSweep::_string_dedup_requests->flush();
+
+  // If compaction completely evacuated the young generation then we
+  // can clear the card table.  Otherwise, we must invalidate
+  // it (consider all cards dirty).  In the future, we might consider doing
+  // compaction within generations only, and doing card-table sliding.
+  CardTableRS* rs = gch->rem_set();
+  Generation* old_gen = gch->old_gen();
+
+  // Clear/invalidate below make use of the "prev_used_regions" saved earlier.
+  if (gch->young_gen()->used() == 0) {
+    // We've evacuated the young generation.
+    rs->clear_into_younger(old_gen);
+  } else {
+    // Invalidate the cards corresponding to the currently used
+    // region and clear those corresponding to the evacuated region.
+    rs->invalidate_or_clear(old_gen);
+  }
+
+  gch->prune_scavengable_nmethods();
+
+  // refs processing: clean slate
+  set_ref_processor(NULL);
+
+  // Update heap occupancy information which is used as
+  // input to soft ref clearing policy at the next gc.
+  Universe::heap()->update_capacity_and_used_at_gc();
+
+  // Signal that we have completed a visit to all live objects.
+  Universe::heap()->record_whole_heap_examined_timestamp();
+
+  gch->trace_heap_after_gc(_gc_tracer);
+}
+```
+
+### follow_root
+
+```cpp
+
+template <class T> inline void MarkSweep::follow_root(T* p) {
+  assert(!Universe::heap()->is_in(p),
+         "roots shouldn't be things within the heap");
+  T heap_oop = RawAccess<>::oop_load(p);
+  if (!CompressedOops::is_null(heap_oop)) {
+    oop obj = CompressedOops::decode_not_null(heap_oop);
+    if (!obj->mark().is_marked()) {
+      mark_object(obj);
+      follow_object(obj);
+    }
+  }
+  follow_stack();
+}
+```
+
+#### follow_stack
+```cpp
+
+void MarkSweep::follow_stack() {
+  do {
+    while (!_marking_stack.is_empty()) {
+      oop obj = _marking_stack.pop();
+      assert (obj->is_gc_marked(), "p must be marked");
+      follow_object(obj);
+    }
+    // Process ObjArrays one at a time to avoid marking stack bloat.
+    if (!_objarray_stack.is_empty()) {
+      ObjArrayTask task = _objarray_stack.pop();
+      follow_array_chunk(objArrayOop(task.obj()), task.index());
+    }
+  } while (!_marking_stack.is_empty() || !_objarray_stack.is_empty());
+}
+```
+
+#### follow_object
+
+```cpp
+
+inline void MarkSweep::follow_object(oop obj) {
+  assert(obj->is_gc_marked(), "should be marked");
+  if (obj->is_objArray()) {
+    // Handle object arrays explicitly to allow them to
+    // be split into chunks if needed.
+    MarkSweep::follow_array((objArrayOop)obj);
+  } else {
+    obj->oop_iterate(&mark_and_push_closure);
+  }
+}
+
+
+inline void MarkSweep::follow_array(objArrayOop array) {
+  MarkSweep::follow_klass(array->klass());
+  // Don't push empty arrays to avoid unnecessary work.
+  if (array->length() > 0) {
+    MarkSweep::push_objarray(array, 0);
+  }
+}
+```
+
+```cpp
+
+void MarkSweep::push_objarray(oop obj, size_t index) {
+  ObjArrayTask task(obj, index);
+  assert(task.is_valid(), "bad ObjArrayTask");
+  _objarray_stack.push(task);
+}
+```
+
+
+```cpp
+
+template <class T> inline void MarkSweep::mark_and_push(T* p) {
+  T heap_oop = RawAccess<>::oop_load(p);
+  if (!CompressedOops::is_null(heap_oop)) {
+    oop obj = CompressedOops::decode_not_null(heap_oop);
+    if (!obj->mark().is_marked()) {
+      mark_object(obj);
+      _marking_stack.push(obj);
+    }
+  }
+}
+```
+#### mark_object
+```cpp
+inline void MarkSweep::mark_object(oop obj) {
+  if (StringDedup::is_enabled() &&
+      java_lang_String::is_instance(obj) &&
+      SerialStringDedup::is_candidate_from_mark(obj)) {
+    _string_dedup_requests->add(obj);
+  }
+
+  // some marks may contain information we need to preserve so we store them away
+  // and overwrite the mark.  We'll restore it at the end of markSweep.
+  markWord mark = obj->mark();
+  obj->set_mark(markWord::prototype().set_marked());
+
+  if (obj->mark_must_be_preserved(mark)) {
+    preserve_mark(obj, mark);
+  }
+}
+```
