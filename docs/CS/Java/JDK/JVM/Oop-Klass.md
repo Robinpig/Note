@@ -21,16 +21,14 @@ class   CompiledICHolder;
 
 ## oop
 
-![](../images/oop.svg)
+### OBJECT hierarchy
 
+This hierarchy is a representation hierarchy, i.e. 
+if A is a superclass of B, A's representation is a prefix of B's representation.
 
 
 ```cpp
 // oopsHierarchy.hpp
-
-// OBJECT hierarchy
-// This hierarchy is a representation hierarchy, i.e. if A is a superclass
-// of B, A's representation is a prefix of B's representation.
 
 typedef juint narrowOop; // Offset instead of address for an oop within a java object
 
@@ -43,6 +41,8 @@ typedef class   arrayOopDesc*                    arrayOop;
 typedef class     objArrayOopDesc*            objArrayOop;
 typedef class     typeArrayOopDesc*            typeArrayOop;
 ```
+![](../images/oop.svg)
+
 
 #### allocate_instance
 
@@ -149,7 +149,7 @@ class oopDesc {
 ```
 
 
-### markOop
+### markWord
 The markOop describes the header of an object.
 
 Note that the mark is not a real oop but just a word.
@@ -222,8 +222,7 @@ unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS fr
 We assume that stack/thread pointers have the lowest two bits cleared.
 
 
-
-
+In JDK12, and now `markOopDesc` changed to `markWord`
 ```cpp
 //markOop.hpp
 class markOopDesc: public oopDesc
@@ -232,9 +231,25 @@ class markOopDesc: public oopDesc
     // Use xor instead of &~ to provide one extra tag-bit check.
     return (ObjectMonitor*) (value() ^ monitor_value);//monitor_value = 2
   }
-...
+  ...
 }
 ```
+
+
+```cpp
+// share/oops/markWord.hpp
+class markWord {
+ private:
+  uintptr_t _value;
+
+ public:
+  explicit markWord(uintptr_t value) : _value(value) {}
+
+  markWord() = default;         // Doesn't initialize _value.
+}
+```
+
+
 
 
 

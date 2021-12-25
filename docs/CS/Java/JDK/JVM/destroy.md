@@ -1,11 +1,16 @@
 ## Overview
-The JVM can shut down in either an orderly or abrupt manner. An orderly shutdown is initiated when the last "normal"(non‐daemon) thread terminates, someone calls `System.exit`, or by other platform‐specific means (such as sending a `SIGINT` or hitting `Ctrl-C`). While this is the standard and preferred way for the JVM to shut down, it can also be shut down abruptly by calling `Runtime.halt` or by killing the JVM process through the operating system (such as sending a `SIGKILL`).
+The JVM can shut down in either an orderly or abrupt manner. 
+An orderly shutdown is initiated when the last "normal"(non‐daemon) thread terminates, 
+someone calls `System.exit`, or by other platform‐specific means (such as sending a `SIGINT` or hitting `Ctrl-C`). 
+
+While this is the standard and preferred way for the JVM to shut down, 
+it can also be shut down abruptly by calling `Runtime.halt` or by killing the JVM process through the operating system (such as sending a `SIGKILL`).
 
 
 
 ## destroy_vm
 
-- `Threads::destroy_vm()` is normally called from `jni_DestroyJavaVM()` when the program falls off the end of main().
+- `Threads::destroy_vm()` is normally called from `jni_DestroyJavaVM()` when the program falls off the end of [main()](/docs/CS/Java/JDK/JVM/start.md?id=main).
 - Another VM exit path is through vm_exit() when the program calls `System.exit()` to return a value or when there is a serious error in VM.
   
 The two shutdown paths are not exactly the same, but they share Shutdown.shutdown() at Java level and before_exit() and VM_Exit op at VM level.
@@ -148,3 +153,8 @@ Last thread running calls `java.lang.Shutdown.shutdown()`
 Shutdown hooks can be used for service or application cleanup, such as deleting temporary files or cleaning up resources that are not automatically cleaned up by the OS. 
 
 Because shutdown hooks all run concurrently, closing the log file could cause trouble for other shutdown hooks who want to use the logger. To avoid this problem, shutdown hooks should not rely on services that can be shut down by the application or other shutdown hooks. One way to accomplish this is to use a single shutdown hook for all services, rather than one for each service, and have it call a series of shutdown actions. For example [DubboShutdownHook](/docs/CS/Java/Dubbo/Start.md?id=shutdown-hooks)
+
+
+## Links
+- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Start JVM](/docs/CS/Java/JDK/JVM/start.md)

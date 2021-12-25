@@ -149,7 +149,7 @@ Once it has downloaded the bytes that make up the class, it should use the metho
 instance. A sample implementation is:
 
 ```java
-       class NetworkClassLoader extends ClassLoader {
+class NetworkClassLoader extends ClassLoader {
     String host;
     int port;
 
@@ -181,6 +181,34 @@ protected ClassLoader(){
 ```shell
 -XX:+TraceClassLoading
 -Xlog: class+load=info # JDK11
+```
+
+## init
+
+```cpp
+// share/classfile/systemDictionary.cpp
+void SystemDictionary::compute_java_loaders(TRAPS) {
+  JavaValue result(T_OBJECT);
+  InstanceKlass* class_loader_klass = vmClasses::ClassLoader_klass();
+```
+call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and its parent
+```cpp
+  JavaCalls::call_static(&result,
+                         class_loader_klass,
+                         vmSymbols::getSystemClassLoader_name(),
+                         vmSymbols::void_classloader_signature(),
+                         CHECK);
+
+  _java_system_loader = OopHandle(Universe::vm_global(), result.get_oop());
+
+  JavaCalls::call_static(&result,
+                         class_loader_klass,
+                         vmSymbols::getPlatformClassLoader_name(),
+                         vmSymbols::void_classloader_signature(),
+                         CHECK);
+
+  _java_platform_loader = OopHandle(Universe::vm_global(), result.get_oop());
+}
 ```
 
 ## Class Lifetime
