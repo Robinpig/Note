@@ -1236,6 +1236,24 @@ public boolean isInterrupted() {
 private native boolean isInterrupted(boolean ClearInterrupted);
 ```
 
+```cpp
+// share/runtime/thread.cpp
+void JavaThread::interrupt() {
+  // All callers should have 'this' thread protected by a
+  // ThreadsListHandle so that it cannot terminate and deallocate
+  // itself.
+
+  // For Thread.sleep
+  _SleepEvent->unpark();
+
+  // For JSR166 LockSupport.park
+  parker()->unpark();
+
+  // For ObjectMonitor and JvmtiRawMonitor
+  _ParkEvent->unpark();
+}
+```
+
 #### JVM_Interrupt
 
 1. `OSThread::set_interrupted(true)`

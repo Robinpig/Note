@@ -48,22 +48,22 @@ StubGenerator(CodeBuffer* code, bool all) : StubCodeGenerator(code) {
 ```
 
 Generates all stubs and initializes the entry points
+
+entry points that exist in all platforms Note: 
+This is code that could be shared among different platforms - however the
+benefit seems to be smaller than the disadvantage of having a much more complicated generator structure. 
+
+See also comment in stubRoutines.hpp.
 ```cpp
 // cpu/zero/stubGenerator_zero.cpp
 void generate_initial() {
-  // 
-
-  // entry points that exist in all platforms Note: This is code
-  // that could be shared among different platforms - however the
-  // benefit seems to be smaller than the disadvantage of having a
-  // much more complicated generator structure. See also comment in
-  // stubRoutines.hpp.
-
   StubRoutines::_forward_exception_entry   = ShouldNotCallThisStub();
   StubRoutines::_call_stub_entry           = (address) call_stub;
   ...
 }
 ```
+And generate_initial -> [generate_call_stub](/docs/CS/Java/JDK/JVM/Stub.md?id=generate_call_stub)
+
 
 ### call_stub
 The call stub is used to call Java from C
@@ -139,8 +139,6 @@ Make the call
 }
 ```
 
-
-And generate_initial -> generate_call_stub
 
 ### generate_call_stub
 

@@ -1722,7 +1722,53 @@ void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
    }
 }
 ```
+## PlatformEvent
 
+### unpark
+
+```cpp
+
+void os::PlatformEvent::unpark() {
+  // Transitions for _event:
+  //    0 => 1 : just return
+  //    1 => 1 : just return
+  //   -1 => either 0 or 1; must signal target thread
+  //         That is, we can safely transition _event from -1 to either
+  //         0 or 1.
+  // See also: "Semaphores in Plan 9" by Mullender & Cox
+  //
+  // Note: Forcing a transition from "-1" to "1" on an unpark() means
+  // that it will take two back-to-back park() calls for the owning
+  // thread to block. This has the benefit of forcing a spurious return
+  // from the first park() call after an unpark() call which will help
+  // shake out uses of park() and unpark() without checking state conditions
+  // properly. This spurious return doesn't manifest itself in any user code
+  // but only in the correctly written condition checking loops of ObjectMonitor,
+  // Mutex/Monitor, and JavaThread::sleep
+
+  if (Atomic::xchg(&_event, 1) >= 0) return;
+
+  int status = pthread_mutex_lock(_mutex);
+  assert_status(status == 0, status, "mutex_lock");
+  int anyWaiters = _nParked;
+  assert(anyWaiters == 0 || anyWaiters == 1, "invariant");
+  status = pthread_mutex_unlock(_mutex);
+  assert_status(status == 0, status, "mutex_unlock");
+
+  // Note that we signal() *after* dropping the lock for "immortal" Events.
+  // This is safe and avoids a common class of futile wakeups.  In rare
+  // circumstances this can cause a thread to return prematurely from
+  // cond_{timed}wait() but the spurious wakeup is benign and the victim
+  // will simply re-test the condition and re-park itself.
+  // This provides particular benefit if the underlying platform does not
+  // provide wait morphing.
+
+  if (anyWaiters != 0) {
+    status = pthread_cond_signal(_cond);
+    assert_status(status == 0, status, "cond_signal");
+  }
+}
+```
 
 ## Summary
 
