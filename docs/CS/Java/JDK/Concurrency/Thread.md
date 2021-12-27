@@ -1687,7 +1687,7 @@ Preemptive Threads-Scheduling
 
 ## References
 
-1. [JLS - **Threads and Locks**](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html)
+1. [JLS - Threads and Locks](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html)
 2. [The JSR-133 Cookbook for Compiler Writers - Doug Lea](http://gee.cs.oswego.edu/dl/jmm/cookbook.html)
 3. [JSR 133 (Java Memory Model) FAQ - Jeremy Manson and Brian Goetz, February 2004](https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html)
 4. [Understanding Threads and Locks](https://docs.oracle.com/cd/E13150_01/jrockit_jvm/jrockit/geninfo/diagnos/thread_basics.html)

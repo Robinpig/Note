@@ -44,7 +44,7 @@ typedef class     typeArrayOopDesc*            typeArrayOop;
 ![](../images/oop.svg)
 
 
-#### allocate_instance
+## allocate_instance
 
 called by `java.lang.reflect.Constructor` or `new Klass(args ...)` or etc.
 
@@ -88,28 +88,7 @@ clear_mem & set markOop
 }
 ```
 
-```cpp
-// share/gc/shared/memAllocator.cpp
-
-oop ObjAllocator::initialize(HeapWord* mem) const {
-  mem_clear(mem);
-  return finish(mem);
-}
-
-oop MemAllocator::finish(HeapWord* mem) const {
-  // May be bootstrapping
-  oopDesc::set_mark(mem, markWord::prototype()); // no_hash_in_place | no_lock_in_place
-  
-  // Need a release store to ensure array/class length, mark word, and
-  // object zeroing are visible before setting the klass non-NULL, for
-  // concurrent collectors.
-  oopDesc::release_set_klass(mem, _klass);
-  return cast_to_oop(mem);
-}
-```
-
-
-
+### allocate
 ```cpp
 HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
   if (UseTLAB) {
@@ -131,25 +110,137 @@ HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
   }
 ```
 
-
-1. markOop
-2. metadata
+#### inside tlab
 
 ```cpp
-// oop.hpp
-class oopDesc {
- private:
-  volatile markOop _mark;
-  union _metadata {
-    Klass*      _klass;
-    narrowKlass _compressed_klass;
-  } _metadata;
-...
+
+HeapWord* MemAllocator::allocate_inside_tlab(Allocation& allocation) const {
+  assert(UseTLAB, "should use UseTLAB");
+
+  // Try allocating from an existing TLAB.
+  HeapWord* mem = _thread->tlab().allocate(_word_size);
+  if (mem != NULL) {
+    return mem;
+  }
+
+  // Try refilling the TLAB and allocating the object in it.
+  return allocate_inside_tlab_slow(allocation);
+}
+
+HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const {
+  HeapWord* mem = NULL;
+  ThreadLocalAllocBuffer& tlab = _thread->tlab();
+
+  if (JvmtiExport::should_post_sampled_object_alloc()) {
+    tlab.set_back_allocation_end();
+    mem = tlab.allocate(_word_size);
+
+    // We set back the allocation sample point to try to allocate this, reset it
+    // when done.
+    allocation._tlab_end_reset_for_sample = true;
+
+    if (mem != NULL) {
+      return mem;
+    }
+  }
+
+  // Retain tlab and allocate object in shared space if
+  // the amount free in the tlab is too large to discard.
+  if (tlab.free() > tlab.refill_waste_limit()) {
+    tlab.record_slow_allocation(_word_size);
+    return NULL;
+  }
+
+  // Discard tlab and allocate a new one.
+  // To minimize fragmentation, the last TLAB may be smaller than the rest.
+  size_t new_tlab_size = tlab.compute_size(_word_size);
+
+  tlab.retire_before_allocation();
+
+  if (new_tlab_size == 0) {
+    return NULL;
+  }
+
+  // Allocate a new TLAB requesting new_tlab_size. Any size
+  // between minimal and new_tlab_size is accepted.
+  size_t min_tlab_size = ThreadLocalAllocBuffer::compute_min_size(_word_size);
+  mem = Universe::heap()->allocate_new_tlab(min_tlab_size, new_tlab_size, &allocation._allocated_tlab_size);
+  if (mem == NULL) {
+    assert(allocation._allocated_tlab_size == 0,
+           "Allocation failed, but actual size was updated. min: " SIZE_FORMAT
+           ", desired: " SIZE_FORMAT ", actual: " SIZE_FORMAT,
+           min_tlab_size, new_tlab_size, allocation._allocated_tlab_size);
+    return NULL;
+  }
+  assert(allocation._allocated_tlab_size != 0, "Allocation succeeded but actual size not updated. mem at: "
+         PTR_FORMAT " min: " SIZE_FORMAT ", desired: " SIZE_FORMAT,
+         p2i(mem), min_tlab_size, new_tlab_size);
+
+  if (ZeroTLAB) {
+    // ..and clear it.
+    Copy::zero_to_words(mem, allocation._allocated_tlab_size);
+  } else {
+    // ...and zap just allocated object.
+#ifdef ASSERT
+    // Skip mangling the space corresponding to the object header to
+    // ensure that the returned space is not considered parsable by
+    // any concurrent GC thread.
+    size_t hdr_size = oopDesc::header_size();
+    Copy::fill_to_words(mem + hdr_size, allocation._allocated_tlab_size - hdr_size, badHeapWordVal);
+#endif // ASSERT
+  }
+
+  tlab.fill(mem, mem + _word_size, allocation._allocated_tlab_size);
+  return mem;
 }
 ```
 
 
-### markWord
+#### outside tlab
+
+implement by different collectors
+
+```cpp
+
+HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
+  allocation._allocated_outside_tlab = true;
+  HeapWord* mem = Universe::heap()->mem_allocate(_word_size, &allocation._overhead_limit_exceeded);
+  if (mem == NULL) {
+    return mem;
+  }
+
+  NOT_PRODUCT(Universe::heap()->check_for_non_bad_heap_word_value(mem, _word_size));
+  size_t size_in_bytes = _word_size * HeapWordSize;
+  _thread->incr_allocated_bytes(size_in_bytes);
+
+  return mem;
+}
+```
+
+### initialize
+
+```cpp
+// share/gc/shared/memAllocator.cpp
+oop ObjAllocator::initialize(HeapWord* mem) const {
+  mem_clear(mem);
+  return finish(mem);
+}
+
+oop MemAllocator::finish(HeapWord* mem) const {
+  // May be bootstrapping
+  oopDesc::set_mark(mem, markWord::prototype()); // no_hash_in_place | no_lock_in_place
+  
+  // Need a release store to ensure array/class length, mark word, and
+  // object zeroing are visible before setting the klass non-NULL, for
+  // concurrent collectors.
+  oopDesc::release_set_klass(mem, _klass);
+  return cast_to_oop(mem);
+}
+```
+
+
+## markWord
+
 The markOop describes the header of an object.
 
 Note that the mark is not a real oop but just a word.
@@ -303,7 +394,7 @@ if UseCompressedOops in 64-bit VM
 access object use direct-pointer or handle
 
 
-#### Example
+### Example
 
 add dependency
 
@@ -369,7 +460,7 @@ Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 
 
 
-### metadata
+## metadata
 
 
 

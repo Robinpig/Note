@@ -347,6 +347,8 @@ use Predicate interface
 
 
 
-## Reference
+## References
 
 1. [底层原理之旅—带你看透Lambda表达式的本质](https://juejin.cn/post/6966839856421044237)
+2. [JSR 335: Lambda Expressions for the JavaTM Programming Language](https://jcp.org/en/jsr/detail?id=335)
+3. [Project Lambda](https://openjdk.java.net/projects/lambda/)

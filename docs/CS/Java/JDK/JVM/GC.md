@@ -146,15 +146,23 @@ False Sharing
 
 ## Algorithms
 
-### Mark-Copy
+- Safety
+- Throughput
+- Completeness and promptness
+- Pause time
+- Space overhead
+- Optimisations for specific languages
+- Scalability and portability
 
-### Mark-Sweep
+### Copying
+
+### Mark-sweep
 
 
-### Mark-Compact
+### Mark-compact
 
 
-### 
+### References Counting
 
 
 
@@ -204,7 +212,15 @@ CARD_TABLE [this address >> 9] = DIRTY;
 - 堆大小动态调整          
 
 
-## Garbage Collector
+## Collectors
+
+### Comparing garbage collectors
+- Throughput
+- Pause time
+- Space
+- Implementation
+- Adaptive systems
+
 From [JVM](https://book.douban.com/subject/34907497/):
 ![Our Collectors](../images/our-collectors.png)
 
@@ -355,6 +371,13 @@ Does the system scale as expected when additional resources are added?
 - Degradation
 What happens when the system is partially failed? `Chaos Monkey`
   
+
+
+### Tuning
+
+It is generally best to stick to the defaults as much as possible to avoid surprises, and only specify non-default behavior when there is a clear benefit. 
+This also reduces dependencies on a specific JVM offering or version, making ongoing maintenance simpler and less risky.
+
 
 
 ## References
