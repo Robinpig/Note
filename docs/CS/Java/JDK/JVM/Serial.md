@@ -298,7 +298,6 @@ Invoke [Full collect](/docs/CS/Java/JDK/JVM/Serial.md?id=Full-collect)
 ## Full collect
 
 ```cpp
-
 void GenMarkSweep::invoke_at_safepoint(ReferenceProcessor* rp, bool clear_all_softrefs) {
   assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
 
@@ -487,4 +486,167 @@ inline void MarkSweep::mark_object(oop obj) {
     preserve_mark(obj, mark);
   }
 }
+```
+
+
+### mark_sweep_phase1
+
+```cpp
+
+void GenMarkSweep::mark_sweep_phase1(bool clear_all_softrefs) {
+  // Recursively traverse all live objects and mark them
+  GCTraceTime(Info, gc, phases) tm("Phase 1: Mark live objects", _gc_timer);
+
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+
+  // Need new claim bits before marking starts.
+  ClassLoaderDataGraph::clear_claimed_marks();
+
+  {
+    StrongRootsScope srs(0);
+
+    gch->full_process_roots(false, // not the adjust phase
+                            GenCollectedHeap::SO_None,
+                            ClassUnloading, // only strong roots if ClassUnloading
+                                            // is enabled
+                            &follow_root_closure,
+                            &follow_cld_closure);
+  }
+
+  // Process reference objects found during marking
+  {
+    GCTraceTime(Debug, gc, phases) tm_m("Reference Processing", gc_timer());
+
+    ReferenceProcessorPhaseTimes pt(_gc_timer, ref_processor()->max_num_queues());
+    SerialGCRefProcProxyTask task(is_alive, keep_alive, follow_stack_closure);
+    const ReferenceProcessorStats& stats = ref_processor()->process_discovered_references(task, pt);
+    pt.print_all_references();
+    gc_tracer()->report_gc_reference_stats(stats);
+  }
+
+  // This is the point where the entire marking should have completed.
+  assert(_marking_stack.is_empty(), "Marking should have completed");
+
+  {
+    GCTraceTime(Debug, gc, phases) tm_m("Weak Processing", gc_timer());
+    WeakProcessor::weak_oops_do(&is_alive, &do_nothing_cl);
+  }
+
+  {
+    GCTraceTime(Debug, gc, phases) tm_m("Class Unloading", gc_timer());
+
+    // Unload classes and purge the SystemDictionary.
+    bool purged_class = SystemDictionary::do_unloading(gc_timer());
+
+    // Unload nmethods.
+    CodeCache::do_unloading(&is_alive, purged_class);
+
+    // Prune dead klasses from subklass/sibling/implementor lists.
+    Klass::clean_weak_klass_links(purged_class);
+
+    // Clean JVMCI metadata handles.
+    JVMCI_ONLY(JVMCI::do_unloading(purged_class));
+  }
+
+  gc_tracer()->report_object_count_after_gc(&is_alive);
+}
+```
+
+### mark_sweep_phase2
+```cpp
+
+void GenMarkSweep::mark_sweep_phase2() {
+  // Now all live objects are marked, compute the new object addresses.
+
+  // It is not required that we traverse spaces in the same order in
+  // phase2, phase3 and phase4, but the ValidateMarkSweep live oops
+  // tracking expects us to do so. See comment under phase4.
+
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+
+  GCTraceTime(Info, gc, phases) tm("Phase 2: Compute new object addresses", _gc_timer);
+
+  gch->prepare_for_compaction();
+}
+```
+
+
+### mark_sweep_phase3
+
+
+```cpp
+
+void GenMarkSweep::mark_sweep_phase3() {
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+
+  // Adjust the pointers to reflect the new locations
+  GCTraceTime(Info, gc, phases) tm("Phase 3: Adjust pointers", gc_timer());
+
+  // Need new claim bits for the pointer adjustment tracing.
+  ClassLoaderDataGraph::clear_claimed_marks();
+
+  {
+    StrongRootsScope srs(0);
+
+    gch->full_process_roots(true,  // this is the adjust phase
+                            GenCollectedHeap::SO_AllCodeCache,
+                            false, // all roots
+                            &adjust_pointer_closure,
+                            &adjust_cld_closure);
+  }
+
+  gch->gen_process_weak_roots(&adjust_pointer_closure);
+
+  adjust_marks();
+  GenAdjustPointersClosure blk;
+  gch->generation_iterate(&blk, true);
+}
+```
+
+#### GenAdjustPointersClosure
+
+```cpp
+class GenAdjustPointersClosure: public GenCollectedHeap::GenClosure {
+public:
+  void do_generation(Generation* gen) {
+    gen->adjust_pointers();
+  }
+};
+```
+
+### mark_sweep_phase4
+
+```cpp
+
+void GenMarkSweep::mark_sweep_phase4() {
+  // All pointers are now adjusted, move objects accordingly
+
+  // It is imperative that we traverse perm_gen first in phase4. All
+  // classes must be allocated earlier than their instances, and traversing
+  // perm_gen first makes sure that all Klass*s have moved to their new
+  // location before any instance does a dispatch through it's klass!
+
+  // The ValidateMarkSweep live oops tracking expects us to traverse spaces
+  // in the same order in phase2, phase3 and phase4. We don't quite do that
+  // here (perm_gen first rather than last), so we tell the validate code
+  // to use a higher index (saved from phase2) when verifying perm_gen.
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+
+  GCTraceTime(Info, gc, phases) tm("Phase 4: Move objects", _gc_timer);
+
+  GenCompactClosure blk;
+  gch->generation_iterate(&blk, true);
+}
+```
+
+
+#### GenCompactClosure
+```cpp
+
+class GenCompactClosure: public GenCollectedHeap::GenClosure {
+public:
+  void do_generation(Generation* gen) {
+    gen->compact();
+  }
+};
 ```

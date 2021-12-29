@@ -2,6 +2,7 @@
 
 
 All Thread subclasses must be either JavaThread or NonJavaThread.
+
 ![](../images/Thread.svg)
 
 ```
