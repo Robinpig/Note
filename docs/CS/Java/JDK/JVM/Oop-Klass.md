@@ -1,3 +1,5 @@
+
+
 ## Introduction
 
 One reason for the oop/klass dichotomy in the implementation is that we don't want a C++ vtbl pointer in every object. Thus, normal oops don't have any virtual functions. Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type. (See oop.inline.hpp for some of the forwarding code.)
@@ -41,6 +43,13 @@ typedef class   arrayOopDesc*                    arrayOop;
 typedef class     objArrayOopDesc*            objArrayOop;
 typedef class     typeArrayOopDesc*            typeArrayOop;
 ```
+| Type         | Java | Typedef |
+| ------------ | ---- | ------- |
+| instanceOop  |      |         |
+| arrayOop     |      |         |
+| objArrayOop  |      |         |
+| typeArrayOop |      |         |
+
 ![](../images/oop.svg)
 
 
@@ -490,6 +499,17 @@ class   ArrayKlass;
 class     ObjArrayKlass;
 class     TypeArrayKlass;
 ```
+
+
+
+| Type                     | Java Level                |      |
+| ------------------------ | ------------------------- | ---- |
+|                          |                           |      |
+| InstanceMirrorKlass      | `java.lang.CLass`         |      |
+| InstanceRefKlass         | `java.lang.ref.Reference` |      |
+| InstanceClassLoaderKlass | `java.lang.ClassLoader`   |      |
+
+
 
 ![](../images/Klass.svg)
 

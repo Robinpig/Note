@@ -11,10 +11,25 @@
 - [JDK Tools and Utilities](/docs/CS/Java/JDK/Basic/Tools.md)
 
 
+Like the Java programming language, the Java Virtual Machine operates on two kinds of types: [primitive types](/docs/CS/Java/JDK/Basic/PrimitiveType.md) and reference types.
+
+
 
 ### Reference Types and Values
 
 There are four kinds of *reference types*: class types, interface types, type variables, and array types.
+
+
+An array type consists of a `component type` with a single dimension.
+
+The element type of an array type is necessarily either a primitive type, or a class type, or an interface type.
+
+A reference value may also be the special null reference, a reference to no object, 
+which will be denoted here by null. 
+The null reference initially has no run-time type, but may be cast to any type. 
+The default value of a reference type is null.
+
+**This specification does not mandate a concrete value encoding null.**
 
 ```
 ReferenceType:

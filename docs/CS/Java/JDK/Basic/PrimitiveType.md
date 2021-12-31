@@ -2,9 +2,29 @@
 
 ## Introduction
 
-That is, instead of creating the variable by using **new**, an “automatic” variable is created that is *not a reference*. The variable holds the value, and it’s **placed on the stack**, so it’s much more efficient. 
+That is, instead of creating the variable by using **new**, an “automatic” variable is created that is *not a reference*. 
+The variable holds the value, and it’s **placed on the stack**, so it’s much more efficient. 
 
 **Prefer primitive types to boxed primitives**.
+
+- numeric types
+  - integral types
+  - floating-point types
+- boolean type
+- returnAddress type
+
+#### The returnAddress Type and Values
+
+The values of the returnAddress type are pointers to the opcodes of Java Virtual Machine instructions. 
+Of the primitive types, only the returnAddress type is not directly associated with a Java programming language type.
+
+#### The boolean Type
+Expressions in the Java programming language that operate on boolean values are compiled to use values of the Java Virtual Machine int data type.
+
+The Java Virtual Machine encodes boolean array components using 1 to represent true and 0 to represent false. 
+Where Java programming language boolean values are mapped by compilers to values of Java Virtual Machine type int, 
+the compilers must use the same encoding.
+
 ### Size
 
 Java determines the size of each primitive type. These sizes don’t change from one machine architecture to another as they do in most languages.
