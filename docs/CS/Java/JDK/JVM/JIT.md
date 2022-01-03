@@ -1,4 +1,10 @@
 ## Overview
+
+OpenJDK is a three tiered compilation environment. 
+Methods that are only executed a few times are interpreted. 
+Once a method hits a certain threshold of executions it is compiled using a text book style compiler called C1. 
+Only when the method has hit an even higher threshold of executions will it be compiled using C2, the optimizing compiler.
+
 The JVM interprets and executes bytecode at runtime. In addition, it makes use of the just-in-time (JIT) compilation to boost performance.
 
 In earlier versions of Java, we had to manually choose between the two types of JIT compilers available in the Hotspot JVM. One is optimized for faster application start-up, while the other achieves better overall performance. Java 7 introduced tiered compilation in order to achieve the best of both worlds.

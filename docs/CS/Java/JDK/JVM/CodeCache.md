@@ -48,7 +48,7 @@ Layout : continuous in the CodeCache
 ```
 
 
-### init
+## init
 init when [start vm](/docs/CS/Java/JDK/JVM/start.md?id=init_globals)
 
 ```cpp
@@ -136,6 +136,183 @@ generate_icache_flush implemented by different arch `ICacheStubGenerator::genera
 }
 ```
 
+### initialize_heaps
+
+```cpp
+
+void CodeCache::initialize_heaps() {
+  bool non_nmethod_set      = FLAG_IS_CMDLINE(NonNMethodCodeHeapSize);
+  bool profiled_set         = FLAG_IS_CMDLINE(ProfiledCodeHeapSize);
+  bool non_profiled_set     = FLAG_IS_CMDLINE(NonProfiledCodeHeapSize);
+  size_t min_size           = os::vm_page_size();
+  size_t cache_size         = ReservedCodeCacheSize;
+  size_t non_nmethod_size   = NonNMethodCodeHeapSize;
+  size_t profiled_size      = ProfiledCodeHeapSize;
+  size_t non_profiled_size  = NonProfiledCodeHeapSize;
+  // Check if total size set via command line flags exceeds the reserved size
+  check_heap_sizes((non_nmethod_set  ? non_nmethod_size  : min_size),
+                   (profiled_set     ? profiled_size     : min_size),
+                   (non_profiled_set ? non_profiled_size : min_size),
+                   cache_size,
+                   non_nmethod_set && profiled_set && non_profiled_set);
+
+  // Determine size of compiler buffers
+  size_t code_buffers_size = 0;
+#ifdef COMPILER1
+  // C1 temporary code buffers (see Compiler::init_buffer_blob())
+  const int c1_count = CompilationPolicy::c1_count();
+  code_buffers_size += c1_count * Compiler::code_buffer_size();
+#endif
+#ifdef COMPILER2
+  // C2 scratch buffers (see Compile::init_scratch_buffer_blob())
+  const int c2_count = CompilationPolicy::c2_count();
+  // Initial size of constant table (this may be increased if a compiled method needs more space)
+  code_buffers_size += c2_count * C2Compiler::initial_code_buffer_size();
+#endif
+
+  // Increase default non_nmethod_size to account for compiler buffers
+  if (!non_nmethod_set) {
+    non_nmethod_size += code_buffers_size;
+  }
+  // Calculate default CodeHeap sizes if not set by user
+  if (!non_nmethod_set && !profiled_set && !non_profiled_set) {
+    // Check if we have enough space for the non-nmethod code heap
+    if (cache_size > non_nmethod_size) {
+      // Use the default value for non_nmethod_size and one half of the
+      // remaining size for non-profiled and one half for profiled methods
+      size_t remaining_size = cache_size - non_nmethod_size;
+      profiled_size = remaining_size / 2;
+      non_profiled_size = remaining_size - profiled_size;
+    } else {
+      // Use all space for the non-nmethod heap and set other heaps to minimal size
+      non_nmethod_size = cache_size - 2 * min_size;
+      profiled_size = min_size;
+      non_profiled_size = min_size;
+    }
+  } else if (!non_nmethod_set || !profiled_set || !non_profiled_set) {
+    // The user explicitly set some code heap sizes. Increase or decrease the (default)
+    // sizes of the other code heaps accordingly. First adapt non-profiled and profiled
+    // code heap sizes and then only change non-nmethod code heap size if still necessary.
+    intx diff_size = cache_size - (non_nmethod_size + profiled_size + non_profiled_size);
+    if (non_profiled_set) {
+      if (!profiled_set) {
+        // Adapt size of profiled code heap
+        if (diff_size < 0 && ((intx)profiled_size + diff_size) <= 0) {
+          // Not enough space available, set to minimum size
+          diff_size += profiled_size - min_size;
+          profiled_size = min_size;
+        } else {
+          profiled_size += diff_size;
+          diff_size = 0;
+        }
+      }
+    } else if (profiled_set) {
+      // Adapt size of non-profiled code heap
+      if (diff_size < 0 && ((intx)non_profiled_size + diff_size) <= 0) {
+        // Not enough space available, set to minimum size
+        diff_size += non_profiled_size - min_size;
+        non_profiled_size = min_size;
+      } else {
+        non_profiled_size += diff_size;
+        diff_size = 0;
+      }
+    } else if (non_nmethod_set) {
+      // Distribute remaining size between profiled and non-profiled code heaps
+      diff_size = cache_size - non_nmethod_size;
+      profiled_size = diff_size / 2;
+      non_profiled_size = diff_size - profiled_size;
+      diff_size = 0;
+    }
+    if (diff_size != 0) {
+      // Use non-nmethod code heap for remaining space requirements
+      assert(!non_nmethod_set && ((intx)non_nmethod_size + diff_size) > 0, "sanity");
+      non_nmethod_size += diff_size;
+    }
+  }
+
+  // We do not need the profiled CodeHeap, use all space for the non-profiled CodeHeap
+  if (!heap_available(CodeBlobType::MethodProfiled)) {
+    non_profiled_size += profiled_size;
+    profiled_size = 0;
+  }
+  // We do not need the non-profiled CodeHeap, use all space for the non-nmethod CodeHeap
+  if (!heap_available(CodeBlobType::MethodNonProfiled)) {
+    non_nmethod_size += non_profiled_size;
+    non_profiled_size = 0;
+  }
+  // Make sure we have enough space for VM internal code
+  uint min_code_cache_size = CodeCacheMinimumUseSpace DEBUG_ONLY(* 3);
+  if (non_nmethod_size < min_code_cache_size) {
+    vm_exit_during_initialization(err_msg(
+        "Not enough space in non-nmethod code heap to run VM: " SIZE_FORMAT "K < " SIZE_FORMAT "K",
+        non_nmethod_size/K, min_code_cache_size/K));
+  }
+
+  // Verify sizes and update flag values
+  assert(non_profiled_size + profiled_size + non_nmethod_size == cache_size, "Invalid code heap sizes");
+  FLAG_SET_ERGO(NonNMethodCodeHeapSize, non_nmethod_size);
+  FLAG_SET_ERGO(ProfiledCodeHeapSize, profiled_size);
+  FLAG_SET_ERGO(NonProfiledCodeHeapSize, non_profiled_size);
+
+  // If large page support is enabled, align code heaps according to large
+  // page size to make sure that code cache is covered by large pages.
+  const size_t alignment = MAX2(page_size(false, 8), (size_t) os::vm_allocation_granularity());
+  non_nmethod_size = align_up(non_nmethod_size, alignment);
+  profiled_size    = align_down(profiled_size, alignment);
+
+  // Reserve one continuous chunk of memory for CodeHeaps and split it into
+  // parts for the individual heaps. The memory layout looks like this:
+  // ---------- high -----------
+  //    Non-profiled nmethods
+  //      Profiled nmethods
+  //         Non-nmethods
+  // ---------- low ------------
+  ReservedCodeSpace rs = reserve_heap_memory(cache_size);
+  ReservedSpace non_method_space    = rs.first_part(non_nmethod_size);
+  ReservedSpace rest                = rs.last_part(non_nmethod_size);
+  ReservedSpace profiled_space      = rest.first_part(profiled_size);
+  ReservedSpace non_profiled_space  = rest.last_part(profiled_size);
+
+  // Non-nmethods (stubs, adapters, ...)
+  add_heap(non_method_space, "CodeHeap 'non-nmethods'", CodeBlobType::NonNMethod);
+  // Tier 2 and tier 3 (profiled) methods
+  add_heap(profiled_space, "CodeHeap 'profiled nmethods'", CodeBlobType::MethodProfiled);
+  // Tier 1 and tier 4 (non-profiled) methods and native methods
+  add_heap(non_profiled_space, "CodeHeap 'non-profiled nmethods'", CodeBlobType::MethodNonProfiled);
+}
+```
+
+
+```cpp
+
+// For init.cpp
+void icache_init() {
+  ICache::initialize();
+}
+
+
+// share/runtime/icache.cpp
+void AbstractICache::initialize() {
+  // Making this stub must be FIRST use of assembler
+  ResourceMark rm;
+
+  BufferBlob* b = BufferBlob::create("flush_icache_stub", ICache::stub_size);
+  if (b == NULL) {
+    vm_exit_out_of_memory(ICache::stub_size, OOM_MALLOC_ERROR, "CodeCache: no space for flush_icache_stub");
+  }
+  CodeBuffer c(b);
+
+  ICacheStubGenerator g(&c);
+  g.generate_icache_flush(&_flush_icache_stub);
+
+  // The first use of flush_icache_stub must apply it to itself.
+  // The StubCodeMark destructor in generate_icache_flush will
+  // call Assembler::flush, which in turn will call invalidate_range,
+  // which will in turn call the flush stub.  Thus we don't need an
+  // explicit call to invalidate_range here.  This assumption is
+  // checked in invalidate_range.
+}
+```
 
 
 ## Links
