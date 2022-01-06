@@ -249,7 +249,24 @@ public AbstractStringBuilder delete(int start, int end) {
 
 
 
-## String Pool
+## StringTable
+
+
+
+HashTable size:
+1. JDK1.8 60013
+2. JDK15 65536
+
+
+
+```
+-XX:+PrintStringTableStatistics
+-XX:StringTableSize=N
+```
+
+```shell
+jcmd <pid> VM.stringtable
+```
 
 
 
@@ -292,7 +309,11 @@ oop StringTable::intern(Handle string_or_null_h, const jchar* name, int len, TRA
   return StringTable::the_table()->do_intern(string_or_null_h, name, len,
                                              hash, CHECK_NULL);
 }
+```
 
+
+#### do_intern
+```cpp
 oop StringTable::do_intern(Handle string_or_null_h, const jchar* name,
                            int len, uintx hash, TRAPS) {
   HandleMark hm(THREAD);  // cleanup strings created
@@ -303,10 +324,11 @@ oop StringTable::do_intern(Handle string_or_null_h, const jchar* name,
   } else {
     string_h = java_lang_String::create_from_unicode(name, len, CHECK_NULL);
   }
-
-  // Deduplicate the string before it is interned. Note that we should never
-  // deduplicate a string after it has been interned. Doing so will counteract
-  // compiler optimizations done on e.g. interned string literals.
+```
+**Deduplicate the string before it is interned.** 
+Note that we should never deduplicate a string after it has been interned. 
+Doing so will counteract compiler optimizations done on e.g. interned string literals.
+```cpp
   Universe::heap()->deduplicate_string(string_h());
 
   assert(java_lang_String::equals(string_h(), name, len),
@@ -334,82 +356,52 @@ oop StringTable::do_intern(Handle string_or_null_h, const jchar* name,
 
 
 
-HashTable 
-
-1. JDK1.8 60013
-2. JDK15 65536
-
-
-
-```
--XX:+PrintStringTableStatistics
--XX:StringTableSize=N
-```
-
-```shell
-jcmd <pid> VM.stringtable
-```
-
-
-
 ## String Deduplication
 
 [JEP 192: String Deduplication in G1](http://openjdk.java.net/jeps/192)
 
-call `G1StringDedup::enqueue_from_evacuation()` when `G1ParScanThreadState::copy_to_survivor_space()`
-call `G1StringDedup::enqueue_from_mark()` when `G1FullGCMarker::mark_object()`
+
+### is_candidate
+
+
+`G1ParScanThreadState::copy_to_survivor_space()` -> `G1StringDedup::is_candidate_from_evacuation()`
+
+Candidate selection policy for young/mixed GC.
+- If to is young then age should be the new (survivor's) age.
+- if to is old then age should be the age of the copied from object.
 
 ```cpp
-// g1StringDedup.cpp
-void G1StringDedup::enqueue_from_evacuation(bool from_young, bool to_young, uint worker_id, oop java_string) {
-  assert(is_enabled(), "String deduplication not enabled");
-  if (is_candidate_from_evacuation(from_young, to_young, java_string)) {
-    G1StringDedupQueue::push(worker_id, java_string);
+  // G1StringDedup
+  static bool is_candidate_from_evacuation(const Klass* klass,
+                                           G1HeapRegionAttr from,
+                                           G1HeapRegionAttr to,
+                                           uint age) {
+    return StringDedup::is_enabled_string(klass) &&
+           from.is_young() &&
+           (to.is_young() ?
+            StringDedup::is_threshold_age(age) :
+            StringDedup::is_below_threshold_age(age));
   }
-}
-
-bool G1StringDedup::is_candidate_from_evacuation(bool from_young, bool to_young, oop obj) {
-  if (from_young && java_lang_String::is_instance_inlined(obj)) {
-    if (to_young && obj->age() == StringDeduplicationAgeThreshold) {
-      // Candidate found. String is being evacuated from young to young and just
-      // reached the deduplication age threshold.
-      return true;
-    }
-    if (!to_young && obj->age() < StringDeduplicationAgeThreshold) {
-      // Candidate found. String is being evacuated from young to old but has not
-      // reached the deduplication age threshold, i.e. has not previously been a
-      // candidate during its life in the young generation.
-      return true;
-    }
-  }
-
-  // Not a candidate
-  return false;
-}
+```
 
 
-void G1StringDedup::enqueue_from_mark(oop java_string, uint worker_id) {
-  assert(is_enabled(), "String deduplication not enabled");
-  if (is_candidate_from_mark(java_string)) {
-    G1StringDedupQueue::push(worker_id, java_string);
-  }
-}
 
-bool G1StringDedup::is_candidate_from_mark(oop obj) {
-  if (java_lang_String::is_instance_inlined(obj)) {
-    bool from_young = G1CollectedHeap::heap()->heap_region_containing(obj)->is_young();
-    if (from_young && obj->age() < StringDeduplicationAgeThreshold) {
-      // Candidate found. String is being evacuated from young to old but has not
-      // reached the deduplication age threshold, i.e. has not previously been a
-      // candidate during its life in the young generation.
-      return true;
-    }
-  }
+`G1FullGCMarker::mark_object()` -> `G1StringDedup::is_candidate_from_mark()`
 
-  // Not a candidate
-  return false;
+Candidate if string is being evacuated from young to old but has not reached the deduplication age threshold, 
+i.e. has not previously been a candidate during its life in the young generation.
+
+```cpp
+// G1StringDedup
+static bool G1StringDedup::is_candidate_from_mark(oop java_string) {
+  return G1CollectedHeap::heap()->heap_region_containing(java_string)->is_young() &&
+         StringDedup::is_below_threshold_age(java_string->age());
 }
 ```
+
+
+
+### Example
 
 ```java
  /**
@@ -438,4 +430,8 @@ public class Main {
 ```
 
 String#intern() cache instance of String
+
 Deduplication remove cache of char/byte array in String instance
+
+
+## References

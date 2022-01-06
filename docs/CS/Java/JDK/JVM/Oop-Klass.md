@@ -1,3 +1,5 @@
+
+
 ## Introduction
 
 One reason for the oop/klass dichotomy in the implementation is that we don't want a C++ vtbl pointer in every object. Thus, normal oops don't have any virtual functions. Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type. (See oop.inline.hpp for some of the forwarding code.)
@@ -41,6 +43,13 @@ typedef class   arrayOopDesc*                    arrayOop;
 typedef class     objArrayOopDesc*            objArrayOop;
 typedef class     typeArrayOopDesc*            typeArrayOop;
 ```
+| Type         | Java | Typedef |
+| ------------ | ---- | ------- |
+| instanceOop  |      |         |
+| arrayOop     |      |         |
+| objArrayOop  |      |         |
+| typeArrayOop |      |         |
+
 ![](../images/oop.svg)
 
 
@@ -126,7 +135,10 @@ HeapWord* MemAllocator::allocate_inside_tlab(Allocation& allocation) const {
   // Try refilling the TLAB and allocating the object in it.
   return allocate_inside_tlab_slow(allocation);
 }
+```
+##### slow
 
+```cpp
 HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const {
   HeapWord* mem = NULL;
   ThreadLocalAllocBuffer& tlab = _thread->tlab();
@@ -144,8 +156,7 @@ HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const 
     }
   }
 
-  // Retain tlab and allocate object in shared space if
-  // the amount free in the tlab is too large to discard.
+  // Retain tlab and allocate object in shared space if the amount free in the tlab is too large to discard.
   if (tlab.free() > tlab.refill_waste_limit()) {
     tlab.record_slow_allocation(_word_size);
     return NULL;
@@ -155,14 +166,17 @@ HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const 
   // To minimize fragmentation, the last TLAB may be smaller than the rest.
   size_t new_tlab_size = tlab.compute_size(_word_size);
 
+```
+fill with dummy object(GC friendly)
+```cpp
   tlab.retire_before_allocation();
 
   if (new_tlab_size == 0) {
     return NULL;
   }
-
-  // Allocate a new TLAB requesting new_tlab_size. Any size
-  // between minimal and new_tlab_size is accepted.
+```
+Allocate a new TLAB requesting new_tlab_size. Any size between minimal and new_tlab_size is accepted.
+```
   size_t min_tlab_size = ThreadLocalAllocBuffer::compute_min_size(_word_size);
   mem = Universe::heap()->allocate_new_tlab(min_tlab_size, new_tlab_size, &allocation._allocated_tlab_size);
   if (mem == NULL) {
@@ -485,6 +499,17 @@ class   ArrayKlass;
 class     ObjArrayKlass;
 class     TypeArrayKlass;
 ```
+
+
+
+| Type                     | Java Level                |      |
+| ------------------------ | ------------------------- | ---- |
+|                          |                           |      |
+| InstanceMirrorKlass      | `java.lang.CLass`         |      |
+| InstanceRefKlass         | `java.lang.ref.Reference` |      |
+| InstanceClassLoaderKlass | `java.lang.ClassLoader`   |      |
+
+
 
 ![](../images/Klass.svg)
 

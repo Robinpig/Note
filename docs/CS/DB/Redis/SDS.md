@@ -15,7 +15,7 @@ cache (shared sessions)
 
 | Type  | len  | alloc | flag                             | buf  |
 | ----- | ---- | ----- | -------------------------------- | ---- |
-| hdr5  | /    | /     | 3 lsb of type,  5 msb of  length |      |
+| hdr5(Unused)  | /    | /     | 3 lsb of type,  5 msb of  length |      |
 | hdr8  | 1    | 1     | 3 lsb of type, 5 unused bits     |      |
 | hdr16 | 2    | 2     | 3 lsb of type, 5 unused bits     |      |
 | hdr32 | 4    | 4     | 3 lsb of type, 5 unused bits     |      |
@@ -717,6 +717,8 @@ void sdsclear(sds s) {
 - use sdsclear rather than sdsfree
 - encoding int value in ptr
 - encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
+
+
 
 ## References
 

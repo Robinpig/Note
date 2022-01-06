@@ -195,6 +195,8 @@ public static ByteBuffer getTemporaryDirectBuffer(int size) {
 
 ### Channel
 
+A socket will have a channel if, and only if, the channel itself was created via the `SocketChannel.open` or `ServerSocketChannel.accept` methods.
+
 ### Selector
 
  

@@ -1,4 +1,9 @@
 ## Introduction
+The Java Virtual Machine dynamically loads, links and initializes classes and interfaces.
+- Loading is the process of finding the binary representation of a class or interface type with a particular name and creating a class or interface from that binary representation. 
+- Linking is the process of taking a class or interface and combining it into the run-time state of the Java Virtual Machine so that it can be executed. 
+- Initialization of a class or interface consists of executing the class or interface initialization method `<clinit>`.
+
 
 A class in the system is identified by the classloader used to load it as well as the fully qualified class name (which includes the package name).
 
@@ -213,7 +218,10 @@ call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and 
 
 ## Class Lifetime
 
+
 - Loading completely before it is linked
+  - parse stream
+    - create Constant Pool
   - create InstanceKlass
   - create mirror class
 - Linking
@@ -307,6 +315,7 @@ static native Class<?> defineClass2(ClassLoader loader, String name, java.nio.By
 ```
 
 ### load Class
+call create_from_stream  
 
 #### loadClass
 
@@ -368,7 +377,8 @@ jni_DefineClass -----+----- JVM_DefineClass
 
 
 ### create_from_stream
-
+1. parse stream
+2. create instance klass
 
 ```cpp
 // klassFactory.cpp
@@ -418,7 +428,9 @@ parse_stream
 void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                                    TRAPS) {
   // verify
-
+```
+create Constant Pool
+```
   _cp = ConstantPool::allocate(_loader_data, cp_size, CHECK);
   ConstantPool* const cp = _cp;
   parse_constant_pool(stream, cp, _orig_cp_size, CHECK);

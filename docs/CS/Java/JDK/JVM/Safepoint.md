@@ -568,6 +568,91 @@ Polling page
 Thread local handkerchief 
 
 
+## Suspend
+
+```cpp
+SuspendibleThreadSetJoiner(bool active = true) : _active(active) {
+    if (_active) {
+      SuspendibleThreadSet::join();
+    }
+  }
+
+  ~SuspendibleThreadSetJoiner() {
+    if (_active) {
+      SuspendibleThreadSet::leave();
+    }
+  }
+
+
+SuspendibleThreadSetLeaver(bool active = true) : _active(active) {
+    if (_active) {
+      SuspendibleThreadSet::leave();
+    }
+  }
+
+  ~SuspendibleThreadSetLeaver() {
+    if (_active) {
+      SuspendibleThreadSet::join();
+    }
+  }
+  
+  
+```
+
+
+```cpp
+
+void SuspendibleThreadSet::join() {
+  assert(!Thread::current()->is_suspendible_thread(), "Thread already joined");
+  MonitorLocker ml(STS_lock, Mutex::_no_safepoint_check_flag);
+  while (suspend_all()) {
+    ml.wait();
+  }
+  _nthreads++;
+  DEBUG_ONLY(Thread::current()->set_suspendible_thread();)
+}
+
+void SuspendibleThreadSet::leave() {
+  assert(Thread::current()->is_suspendible_thread(), "Thread not joined");
+  MonitorLocker ml(STS_lock, Mutex::_no_safepoint_check_flag);
+  assert(_nthreads > 0, "Invalid");
+  DEBUG_ONLY(Thread::current()->clear_suspendible_thread();)
+  _nthreads--;
+  if (suspend_all() && is_synchronized()) {
+    // This leave completes a request, so inform the requestor.
+    _synchronize_wakeup->signal();
+  }
+}
+```
+
+### at_safepoint
+
+
+
+```cpp
+
+JRT_ENTRY(void, InterpreterRuntime::at_safepoint(JavaThread* current))
+  // We used to need an explict preserve_arguments here for invoke bytecodes. However,
+  // stack traversal automatically takes care of preserving arguments for invoke, so
+  // this is no longer needed.
+
+  // JRT_END does an implicit safepoint check, hence we are guaranteed to block
+  // if this is called during a safepoint
+
+  if (JvmtiExport::should_post_single_step()) {
+    // This function is called by the interpreter when single stepping. Such single
+    // stepping could unwind a frame. Then, it is important that we process any frames
+    // that we might return into.
+    StackWatermarkSet::before_unwind(current);
+
+    // We are called during regular safepoints and when the VM is
+    // single stepping. If any thread is marked for single stepping,
+    // then we may have JVMTI work to do.
+    LastFrameAccessor last_frame(current);
+    JvmtiExport::at_single_stepping_point(current, last_frame.method(), last_frame.bcp());
+  }
+JRT_END
+```
 
 ## Links
 

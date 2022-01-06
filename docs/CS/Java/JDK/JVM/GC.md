@@ -2,6 +2,26 @@
 
 Garbage Collection 
 
+Almost all modern programming languages make use of dynamic memory allocation.
+This allows objects to be allocated and deallocated even if their total size was not known at the time that the program was compiled, 
+and if their lifetime may exceed that of the subroutine activation1 that allocated them. 
+A dynamically allocated object is stored in a heap, 
+rather than on the `stack` (in the `activation record` or `stack frame` of the procedure that allocated it) 
+or `statically` (whereby the name of an object is bound to a storage location known at compile or link time). 
+
+Heap allocation is particularly important because it allows the programmer:
+- to choose dynamically the size of new objects (thus avoiding program failure through exceeding hard-coded limits on arrays);
+- to define and use recursive data structures such as lists, trees and maps;
+- to return newly created objects to the parent procedure (allowing, for example, factory methods);
+- to return a function as the result of another function (for example, closures or suspensions in functional languages).
+
+Heap allocated objects are accessed through `references`. 
+Typically, a reference is a pointer to the object (that is, the address in memory of the object). 
+
+However, a reference may alternatively refer to an object only indirectly, for instance through a handle which in turn points to the object. 
+Handles offer the advantage of allowing an object to be relocated (updating its handle) without having to change every reference to that object/handle throughout the program.
+
+
 ## When an instance is dead？ 
 ### Reference Counting
 
@@ -63,8 +83,16 @@ gcCause.cpp
 
 ## Generational Garbage Collection
 
+Generation see https://dl.acm.org/doi/10.1145/800020.80826
 
-Generation see https://dl.acm.org/doi/10.1145/800020.808261
+Generational garbage collectors need to keep track of references from older to younger generations so that younger generations can be garbage-collected without inspecting every object in the older generation(s). The set of locations potentially containing pointers to newer objects is often called the `remembered set`. 
+
+At every store, the system must ensure that the updated location is added to the `remembered set` if the store creates a reference from an older to a newer object. This mechanism is usually referred to as a `write barrier` or `store check`.
+
+1. Card Marking
+2. Two-Instruction
+
+
 
 1. Young Generation
     1. Eden
@@ -369,7 +397,7 @@ What performance anomalies are discovered when the system is run for an extended
 - Capacity planning test
 Does the system scale as expected when additional resources are added?
 - Degradation
-What happens when the system is partially failed? `Chaos Monkey`
+  What happens when the system is partially failed? `Chaos Monkey`
   
 
 

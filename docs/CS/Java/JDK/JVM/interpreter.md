@@ -1292,7 +1292,7 @@ register finalizer if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Objec
 
   if (_desc->bytecode() != Bytecodes::_return_register_finalizer) {
 ```
-check if need goto [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
+check [InterpreterRuntime::at_safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md?id=at_safepoint) if need goto [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 ```cpp
     Label no_safepoint;
     NOT_PRODUCT(__ block_comment("Thread-local Safepoint poll"));

@@ -68,7 +68,7 @@ Create Reference Object
 
 find ref object when GC
 
-if need to collect, add to DiscoveredList `referenceProcessor.cpp`中`process_discovered_references`
+if need to collect, add to DiscoveredList `referenceProcessor::process_discovered_references`
 
 move elements in DiscoveredList to PendingList when  `enqueue_discovered_ref_helper`  in `referenceProcessor.cpp`
 
@@ -854,6 +854,182 @@ public class Cleaner
 ```
 
 
+## ReferenceProcessor
+
+### discover_reference
+We mention two of several possible choices here:
+0: if the reference object is not in the "originating generation"
+   (or part of the heap being collected, indicated by our "span")
+   we don't treat it specially (i.e. we scan it as we would
+   a normal oop, treating its references as strong references).
+   This means that references can't be discovered unless their
+   referent is also in the same span. This is the simplest,
+   most "local" and most conservative approach, albeit one
+   that may cause weak references to be enqueued least promptly.
+   We call this choice the "ReferenceBasedDiscovery" policy.
+1: the reference object may be in any generation (span), but if
+   the referent is in the generation (span) being currently collected
+   then we can discover the reference object, provided
+   the object has not already been discovered by
+   a different concurrently running discoverer (as may be the
+   case, for instance, if the reference object is in G1 old gen and
+   the referent in G1 young gen), and provided the processing
+   of this reference object by the current collector will
+   appear atomically to every other discoverer in the system.
+   (Thus, for instance, a concurrent discoverer may not
+   discover references in other generations even if the
+   referent is in its own generation). This policy may,
+   in certain cases, enqueue references somewhat sooner than
+   might Policy #0 above, but at marginally increased cost
+   and complexity in processing these references.
+   We call this choice the "ReferentBasedDiscovery" policy.
+```cpp
+
+bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
+  // Make sure we are discovering refs (rather than processing discovered refs).
+  if (!_discovering_refs || !RegisterReferences) {
+    return false;
+  }
+
+  if ((rt == REF_FINAL) && (java_lang_ref_Reference::next(obj) != NULL)) {
+    // Don't rediscover non-active FinalReferences.
+    return false;
+  }
+
+  if (RefDiscoveryPolicy == ReferenceBasedDiscovery &&
+      !is_subject_to_discovery(obj)) {
+    // Reference is not in the originating generation;
+    // don't treat it specially (i.e. we want to scan it as a normal
+    // object with strong references).
+    return false;
+  }
+
+  // We only discover references whose referents are not (yet)
+  // known to be strongly reachable.
+  if (is_alive_non_header() != NULL) {
+    verify_referent(obj);
+    oop referent = java_lang_ref_Reference::unknown_referent_no_keepalive(obj);
+    if (is_alive_non_header()->do_object_b(referent)) {
+      return false;  // referent is reachable
+    }
+  }
+  if (rt == REF_SOFT) {
+    // For soft refs we can decide now if these are not
+    // current candidates for clearing, in which case we
+    // can mark through them now, rather than delaying that
+    // to the reference-processing phase. Since all current
+    // time-stamp policies advance the soft-ref clock only
+    // at a full collection cycle, this is always currently
+    // accurate.
+    if (!_current_soft_ref_policy->should_clear_reference(obj, _soft_ref_timestamp_clock)) {
+      return false;
+    }
+  }
+
+  ResourceMark rm;      // Needed for tracing.
+
+  HeapWord* const discovered_addr = java_lang_ref_Reference::discovered_addr_raw(obj);
+  const oop  discovered = java_lang_ref_Reference::discovered(obj);
+  assert(oopDesc::is_oop_or_null(discovered), "Expected an oop or NULL for discovered field at " PTR_FORMAT, p2i(discovered));
+  if (discovered != NULL) {
+    // The reference has already been discovered...
+    log_develop_trace(gc, ref)("Already discovered reference (" INTPTR_FORMAT ": %s)",
+                               p2i(obj), obj->klass()->internal_name());
+    if (RefDiscoveryPolicy == ReferentBasedDiscovery) {
+      // assumes that an object is not processed twice;
+      // if it's been already discovered it must be on another
+      // generation's discovered list; so we won't discover it.
+      return false;
+    } else {
+      assert(RefDiscoveryPolicy == ReferenceBasedDiscovery,
+             "Unrecognized policy");
+      // Check assumption that an object is not potentially
+      // discovered twice except by concurrent collectors that potentially
+      // trace the same Reference object twice.
+      assert(UseG1GC, "Only possible with a concurrent marking collector");
+      return true;
+    }
+  }
+
+  if (RefDiscoveryPolicy == ReferentBasedDiscovery) {
+    verify_referent(obj);
+    // Discover if and only if EITHER:
+    // .. reference is in our span, OR
+    // .. we are a stw discoverer and referent is in our span
+    if (is_subject_to_discovery(obj) ||
+        (discovery_is_stw() &&
+         is_subject_to_discovery(java_lang_ref_Reference::unknown_referent_no_keepalive(obj)))) {
+    } else {
+      return false;
+    }
+  } else {
+    assert(RefDiscoveryPolicy == ReferenceBasedDiscovery &&
+           is_subject_to_discovery(obj), "code inconsistency");
+  }
+
+  // Get the right type of discovered queue head.
+  DiscoveredList* list = get_discovered_list(rt);
+  if (list == NULL) {
+    return false;   // nothing special needs to be done
+  }
+
+  add_to_discovered_list(*list, obj, discovered_addr);
+
+  assert(oopDesc::is_oop(obj), "Discovered a bad reference");
+  verify_referent(obj);
+  return true;
+}
+```
+
+
+### process_discovered_references
+
+```cpp
+
+ReferenceProcessorStats ReferenceProcessor::process_discovered_references(RefProcProxyTask& proxy_task,
+                                                                          ReferenceProcessorPhaseTimes& phase_times) {
+
+  double start_time = os::elapsedTime();
+
+  // Stop treating discovered references specially.
+  disable_discovery();
+
+  phase_times.set_ref_discovered(REF_SOFT, total_count(_discoveredSoftRefs));
+  phase_times.set_ref_discovered(REF_WEAK, total_count(_discoveredWeakRefs));
+  phase_times.set_ref_discovered(REF_FINAL, total_count(_discoveredFinalRefs));
+  phase_times.set_ref_discovered(REF_PHANTOM, total_count(_discoveredPhantomRefs));
+
+  update_soft_ref_master_clock();
+
+  phase_times.set_processing_is_mt(processing_is_mt());
+
+  {
+    RefProcTotalPhaseTimesTracker tt(SoftWeakFinalRefsPhase, &phase_times);
+    process_soft_weak_final_refs(proxy_task, phase_times);
+  }
+
+  {
+    RefProcTotalPhaseTimesTracker tt(KeepAliveFinalRefsPhase, &phase_times);
+    process_final_keep_alive(proxy_task, phase_times);
+  }
+
+  {
+    RefProcTotalPhaseTimesTracker tt(PhantomRefsPhase, &phase_times);
+    process_phantom_refs(proxy_task, phase_times);
+  }
+
+  phase_times.set_total_time_ms((os::elapsedTime() - start_time) * 1000);
+
+  // Elements on discovered lists were pushed to the pending list.
+  verify_no_references_recorded();
+
+  ReferenceProcessorStats stats(phase_times.ref_discovered(REF_SOFT),
+                                phase_times.ref_discovered(REF_WEAK),
+                                phase_times.ref_discovered(REF_FINAL),
+                                phase_times.ref_discovered(REF_PHANTOM));
+  return stats;
+}
+```
 
 ## Summary
 
