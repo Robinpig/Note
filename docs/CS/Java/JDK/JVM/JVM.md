@@ -83,71 +83,17 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 
 
 ## GC
+- [GC](/docs/CS/Java/JDK/JVM/GC.md)
 - [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 
 
-### Collectors
-
-```cpp
-// share/gc/shared/gcConfiguration.cpp
-GCName GCConfiguration::young_collector() const {
-  if (UseG1GC) {
-    return G1New;
-  }
-
-  if (UseParallelGC) {
-    return ParallelScavenge;
-  }
-
-  if (UseConcMarkSweepGC) {
-    return ParNew;
-  }
-
-  if (UseZGC || UseShenandoahGC) {
-    return NA;
-  }
-
-  return DefNew;
-}
-
-GCName GCConfiguration::old_collector() const {
-  if (UseG1GC) {
-    return G1Old;
-  }
-
-  if (UseConcMarkSweepGC) {
-    return ConcurrentMarkSweep;
-  }
-
-  if (UseParallelOldGC) {
-    return ParallelOld;
-  }
-
-  if (UseZGC) {
-    return Z;
-  }
-
-  if (UseShenandoahGC) {
-    return Shenandoah;
-  }
-
-  return SerialOld;
-}
-```
-
-- [CMS](/docs/CS/Java/JDK/JVM/CMS.md)
-- [GC](/docs/CS/Java/JDK/JVM/GC.md)
-- [G1](/docs/CS/Java/JDK/JVM/G1.md)
-- [Shenandoah](/docs/CS/Java/JDK/JVM/Shenandoah.md)
-- [ZGC](/docs/CS/Java/JDK/JVM/ZGC.md)
 
 
-
-### Execution Engine
+## Execution Engine
 - [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 - [interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)
 
-### Native Method Interface
+## Native Method Interface
 
 
 
@@ -1902,7 +1848,7 @@ CollectedHeap* G1Arguments::create_heap() {
 
 
 
-## Reference
+## References
 1. [Java T point](https://www.javatpoint.com/jvm-java-virtual-machine)
 2. [The Java® Virtual Machine Specification Java SE 17 Edition](https://docs.oracle.com/javase/specs/jvms/se17/html/)
 3. [深入理解Java虚拟机（第3版）- 周志明](https://book.douban.com/subject/34907497/)
