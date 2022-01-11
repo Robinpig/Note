@@ -61,3 +61,8 @@ AVL Tree
 
 ## Graph Algorithms
 
+
+## References
+1. Introduction to Algorithms Third Edition
+2. Introduction to The Design and Analysis of Algorithms Third Edition
+3. Algorithms Fourth Edition

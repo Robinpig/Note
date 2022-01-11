@@ -13,6 +13,18 @@ There are several real-life examples of greedy algorithms.
 The most obvious is the coin-changing problem.
 Traffic problems provide an example where making locally optimal choices does not always work. 
 
+The **0-1 knapsack problem** is the following. 
+A thief robbing a store finds n items. The ith item is  worth $v_i$ dollars and weighs $w_i$ pounds, where $$v_i$$ and $w_{i}$ ds $w_i$ are integers. 
+The thief wants to take as valuable a load as possible, but he can carry at most W pounds in his knapsack, for some integer W . 
+Which items should he take?
+(We call this the 0-1 knapsack problem because for each item, the thief must either take it or leave it behind; 
+he cannot take a fractional amount of an item or take an item more than once.)
+
+In the **fractional knapsack problem**, the setup is the same, but the thief can take fractions of items, rather than having to make a binary (0-1) choice for each item.
+You can think of an item in the 0-1 knapsack problem as being like a gold ingot and an item in the fractional knapsack problem as more like gold dust.
+
+We can solve the fractional knapsack problem by a greedy strategy, but we cannot solve the 0-1 problem by such a strategy.
+
 
 
 ## Simple Scheduling Problem
@@ -29,6 +41,8 @@ $$
 $$
 C = (N+1)\sum_{k=1}^{N}{t_{ik}}-\sum_{k=1}^{N}{k*t_{ik}}
 $$
+
+
 
 
 This result indicates the reason the operating system scheduler generally gives precedence to shorter jobs.

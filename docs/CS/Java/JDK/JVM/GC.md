@@ -111,72 +111,6 @@ For more typical heap sizes, the garbage collection overhead increased to 17% on
 
 
 
-### Collector
-
-Following Dijkstra *et al*, a garbage-collected program is divided into two semiindependent parts.
-- The mutator executes application code, which allocates new objects and mutates the object graph by changing reference fields so that they refer to different destination objects. 
-  These reference fields may be contained in heap objects as well as other places known as roots, such as static variables, thread stacks, and so on. 
-  As a result of such reference updates, any object can end up disconnected from the roots, that is, unreachable by following any sequence of edges from the roots.
-- The collector executes garbage collection code, which discovers unreachable objects and reclaims their storage.
-
-A program may have more than one mutator thread, but the threads together can usually
-be thought of as a single actor over the heap. Equally, there may be one or more collector
-threads.
-
-```cpp
-// share/gc/shared/gcConfiguration.cpp
-GCName GCConfiguration::young_collector() const {
-  if (UseG1GC) {
-    return G1New;
-  }
-
-  if (UseParallelGC) {
-    return ParallelScavenge;
-  }
-
-  if (UseConcMarkSweepGC) {
-    return ParNew;
-  }
-
-  if (UseZGC || UseShenandoahGC) {
-    return NA;
-  }
-
-  return DefNew;
-}
-
-GCName GCConfiguration::old_collector() const {
-  if (UseG1GC) {
-    return G1Old;
-  }
-
-  if (UseConcMarkSweepGC) {
-    return ConcurrentMarkSweep;
-  }
-
-  if (UseParallelOldGC) {
-    return ParallelOld;
-  }
-
-  if (UseZGC) {
-    return Z;
-  }
-
-  if (UseShenandoahGC) {
-    return Shenandoah;
-  }
-
-  return SerialOld;
-}
-```
-
-- [CMS](/docs/CS/Java/JDK/JVM/CMS.md)
-- [GC](/docs/CS/Java/JDK/JVM/GC.md)
-- [G1](/docs/CS/Java/JDK/JVM/G1.md)
-- [Shenandoah](/docs/CS/Java/JDK/JVM/Shenandoah.md)
-- [ZGC](/docs/CS/Java/JDK/JVM/ZGC.md)
-
-
 ## Algorithms
 All garbage collection schemes are based on one of four fundamental approaches: marksweep collection, copying collection, mark-compact collection or reference counting. 
 Different collectors may combine these approaches in different ways, for example, by collecting one region of the heap with one method and another part of the heap with a second method.
@@ -647,6 +581,16 @@ CARD_TABLE [this address >> 9] = DIRTY;
 
 
 ## Collectors
+
+Following Dijkstra *et al*, a garbage-collected program is divided into two semiindependent parts.
+- The mutator executes application code, which allocates new objects and mutates the object graph by changing reference fields so that they refer to different destination objects.
+  These reference fields may be contained in heap objects as well as other places known as roots, such as static variables, thread stacks, and so on.
+  As a result of such reference updates, any object can end up disconnected from the roots, that is, unreachable by following any sequence of edges from the roots.
+- The collector executes garbage collection code, which discovers unreachable objects and reclaims their storage.
+
+A program may have more than one mutator thread, but the threads together can usually
+be thought of as a single actor over the heap. Equally, there may be one or more collector
+threads.
 
 - [CMS](/docs/CS/Java/JDK/JVM/CMS.md)
 - [G1](/docs/CS/Java/JDK/JVM/G1.md)

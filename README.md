@@ -16,6 +16,10 @@
 ### Page Replacement Algorithms
 - [LRU](/docs/CS/Algorithms/LRU.md)
 
+### Advanced Design and Analysis Techniques
+- [Dynamic Programming](/docs/CS/Algorithms/DP.md)
+
+
 ## Operating System
 
 ### Linux
