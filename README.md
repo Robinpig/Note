@@ -18,6 +18,7 @@
 
 ### Advanced Design and Analysis Techniques
 - [Dynamic Programming](/docs/CS/Algorithms/DP.md)
+- [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
 
 
 ## Operating System

@@ -14,7 +14,7 @@ The most obvious is the coin-changing problem.
 Traffic problems provide an example where making locally optimal choices does not always work. 
 
 The **0-1 knapsack problem** is the following. 
-A thief robbing a store finds n items. The ith item is  worth $v_i$ dollars and weighs $w_i$ pounds, where $$v_i$$ and $w_{i}$ ds $w_i$ are integers. 
+A thief robbing a store finds n items. The $i$th item is worth $\nu_i$ dollars and weighs $\omega_i$ pounds, where $$\nu_i$$ and $\omega_i$ are integers. 
 The thief wants to take as valuable a load as possible, but he can carry at most W pounds in his knapsack, for some integer W . 
 Which items should he take?
 (We call this the 0-1 knapsack problem because for each item, the thief must either take it or leave it behind; 
