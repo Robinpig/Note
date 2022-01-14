@@ -2,8 +2,11 @@
 
 
 
-A synchronization aid that allows **a set of threads** to all wait for each other to reach a common barrier point. CyclicBarriers are useful in programs involving a fixed sized party of threads that must occasionally wait for each other. The barrier is called cyclic because it can be re-used after the waiting threads are released.
-A CyclicBarrier supports an optional Runnable command that is run once per barrier point, after the last thread in the party arrives, but before any threads are released. This barrier action is useful for updating shared-state before any of the parties continue.
+A synchronization aid that allows **a set of threads** to all wait for each other to reach a common barrier point. 
+CyclicBarriers are useful in programs involving a fixed sized party of threads that must occasionally wait for each other. 
+The barrier is called cyclic because it can be re-used after the waiting threads are released.
+A CyclicBarrier supports an optional Runnable command that is run once per barrier point, after the last thread in the party arrives, 
+but before any threads are released. This barrier action is useful for updating shared-state before any of the parties continue.
 Sample usage: Here is an example of using a barrier in a parallel decomposition design:
 
 ```java
@@ -61,9 +64,14 @@ If the barrier action does not rely on the parties being suspended when it is ex
 ```
 
 
-The CyclicBarrier uses an all-or-none breakage model for failed synchronization attempts: If a thread leaves a barrier point prematurely because of interruption, failure, or timeout, all other threads waiting at that barrier point will also leave abnormally via *BrokenBarrierException* (or *InterruptedException* if they too were interrupted at about the same time).
+The CyclicBarrier uses an all-or-none breakage model for failed synchronization attempts: 
+If a thread leaves a barrier point prematurely because of interruption, failure, or timeout, 
+all other threads waiting at that barrier point will also leave abnormally via *BrokenBarrierException* (or *InterruptedException* 
+if they too were interrupted at about the same time).
 
-**Memory consistency effects**: Actions in a thread prior to calling await() happen-before actions that are part of the barrier action, which in turn happen-before actions following a successful return from the corresponding await() in other threads.
+**Memory consistency effects**: 
+Actions in a thread prior to calling await() happen-before actions that are part of the barrier action, 
+which in turn happen-before actions following a successful return from the corresponding await() in other threads.
 
 ```java
 public CyclicBarrier(int parties, Runnable barrierAction) {
