@@ -2,7 +2,8 @@
 
 
 
-A synchronization point at which threads can pair and swap elements within pairs. Each thread presents some object on entry to the exchange method, matches with a partner thread, and receives its partner's object on return. An Exchanger may be viewed as a bidirectional form of a **SynchronousQueue**. Exchangers may be useful in applications such as genetic algorithms and pipeline designs.
+A synchronization point at which threads can pair and swap elements within pairs.
+Each thread presents some object on entry to the exchange method, matches with a partner thread, and receives its partner's object on return. An Exchanger may be viewed as a bidirectional form of a **SynchronousQueue**. Exchangers may be useful in applications such as genetic algorithms and pipeline designs.
 Sample Usage: Here are the highlights of a class that uses an Exchanger to swap buffers between threads so that the thread filling the buffer gets a freshly emptied one when it needs it, handing off the filled one to the thread emptying the buffer.
 
 
