@@ -142,6 +142,13 @@ Avoid holding locks during lengthy computations or operations at risk of not com
 
 #### Visibility
 
+Nonatomic 64-bit Operations
+
+Locking and Visibility
+
+Volatile Variables
+
+
 #### Publication and Escape
 
 
@@ -165,6 +172,19 @@ Blocking queues can act as synchronizers; other types of synchronizers include s
 ##### Latches
 
 A latch is a synchronizer that can delay the progress of threads until it reaches its terminal state.
+A latch acts as a gate: until the latch reaches the terminal state the gate is closed and no thread can pass, and in the terminal state the gate opens, allowing all threads to pass. 
+Once the latch reaches the terminal state, it cannot change state again, so it remains open forever.
+
+
+Latches can be used to ensure that certain activities do not proceed until other one-time activities complete, such as:
+- Ensuring that a computation does not proceed until resources it needs have been initialized. 
+  A simple binary (two-state) latch could be used to indicate “Resource R has been initialized”, and any activity that requires R would wait first on this latch.
+- Ensuring that a service does not start until other services on which it depends have started. 
+  Each service would have an associated binary latch; starting service S would involve first waiting on the latches for other services on which S depends, 
+  and then releasing the S latch after startup completes so any services that depend on S can then proceed.
+- Waiting until all the parties involved in an activity, for instance the players in a multi-player game, are ready to proceed. 
+  In this case, the latch reaches the terminal state after all the players are ready.
+
 
 [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md?id=Introduction) is a flexible latch implementation.
 It allows one or more threads to wait for a set of events to occur. 
@@ -252,6 +272,39 @@ int N_CPUS = Runtime.getRuntime().availableProcessors();
 
 
 ### Task Execution
+Most concurrent applications are organized around the execution of *tasks*: abstract, discrete units of work.
+Dividing the work of an application into tasks simplifies program organization, facilitates error recovery by providing natural transaction boundaries, 
+and promotes concurrency by providing a natural structure for parallelizing work.
+
+Most server applications offer a natural choice of task boundary: individual client requests.
+
+1. Executing Tasks Sequentially
+2. Explicitly Creating Threads for Tasks
+
+Disadvantages of Unbounded Thread Creation
+1. Thread lifecycle overhead
+2. Resource consumption
+3. Stability
+
+#### The Executor Framework
+
+##### Execution Policies
+
+##### Thread Pools
+
+The class library provides a flexible thread pool implementation along with some useful predefined configurations. 
+You can create a thread pool by calling one of the static factory methods in [Executors](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md).
+
+##### Executor Lifecycle
+We've seen how to create an Executor but not how to shut one down. An Executor implementation is likely to create threads for processing tasks.
+But the JVM can't exit until all the (nondaemon) threads have terminated, so failing to shut down an Executor could prevent the JVM from exiting.
+
+
+##### Delayed and Periodic Tasks
+The Timer facility manages the execution of deferred (“run this task in 100 ms”) and periodic (“run this task every 10 ms”) tasks. 
+However, Timer has some drawbacks, and [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ScheduledThreadPoolExecutor.md) should be thought of as its replacement.
+You can construct a ScheduledThreadPoolExecutor through its constructor or through the newScheduledThreadPool factory.
+
 
 ## Liveness Hazards
 
@@ -296,6 +349,9 @@ Context switches are not free; thread scheduling requires manipulating shared da
 #### Blocking
 
 ### Reducing Lock Contention
+
+
+## Testing
 
 
 ### Memory Model

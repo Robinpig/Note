@@ -376,9 +376,12 @@ cc代表的是寄存器,memory代表是内存;这边同时用了”cc”和”me
 
 
 
+You can use volatile variables only when all the following criteria are met:
+- Writes to the variable do not depend on its current value, or you can ensure that only a single thread ever updates the value;
+- The variable does not participate in invariants with other state variables; and
+- Locking is not required for any other reason while the variable is being accessed.
 
-
-## Reference
+## References
 
 1. [The "Double-Checked Locking is Broken" Declaration](https://www.cs.umd.edu/~pugh/java/memoryModel/DoubleCheckedLocking.html)
 
