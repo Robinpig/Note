@@ -70,7 +70,7 @@ All these factors introduce additional performance costs.
 ## Fundamentals
 
 ### Thread Safety
-Writing thread-safe code is, at its core, about managing access to state, and in particular to *shared*, *mutable state*.
+Writing thread-safe code is, at its core, about managing access to state, and in particular to *shared*, *mutable state*.(See sharing objects)
 
 If multiple threads access the same mutable state variable without appropriate synchronization, your program is broken. There are three ways to fix it:
 - Don't share the state variable across threads;
@@ -78,10 +78,6 @@ If multiple threads access the same mutable state variable without appropriate s
 - Use synchronization whenever accessing the state variable.
 
 **Stateless objects are always thread-safe.**
-> An object is immutable if:
-> - Its state cannot be modified after construction;
-> - All its fields are final; and
-> - It is properly constructed (the this reference does not escape during construction).
 
 A class is **thread-safe** if it behaves correctly when accessed from multiple threads, regardless of the scheduling or interleaving of the execution of those threads by the runtime environment, 
 and with no additional synchronization or other coordination on the part of the calling code.
@@ -152,11 +148,18 @@ Volatile Variables
 #### Publication and Escape
 
 
-#### Instance Confinement
+#### Thread Confinement
 - Ad-hoc Thread Confinement
 - Stack Confinement
 - ThreadLocal
 
+#### Immutability
+
+
+> An object is immutable if:
+> - Its state cannot be modified after construction;
+> - All its fields are final; and
+> - It is properly constructed (the this reference does not escape during construction).
 
 ### Building Blocks
 
@@ -250,6 +253,7 @@ When two threads exchange objects via an Exchanger, the exchange constitutes a s
 
 
 Given these definitions:
+
 $$
 \begin{aligned}
 &N_{cpu} = number\; of\; CPUs 
@@ -259,6 +263,7 @@ $$
 $$
 
 The optimal pool size for keeping the processors at the desired utilization is:
+
 $$
 N_{threads} = N_{cpu}*U_{cpu}*(1+\frac{W}C)
 $$
@@ -335,9 +340,11 @@ From a performance monitoring perspective, this means we are looking to keep the
 > Avoid premature optimization. First make it right, then make it fast ‐ if it is not already fast enough.
 ### Amdahl's Law
 Amdahl's law describes how much a program can theoretically be sped up by additional computing resources, based on the proportion of parallelizable and serial components. If F is the fraction of the calculation that must be executed serially, then Amdahl's law says that on a machine with N processors, we can achieve a speedup of at most:
+
 $$
 Speedup \leq \frac{1}{F+\frac{1-F}N}
 $$
+
 As N approaches infinity, the maximum speedup converges to 1/F.
 
 ### Costs Introduced by Threads
@@ -404,7 +411,6 @@ Context switches are not free; thread scheduling requires manipulating shared da
 2. [Concurrency JSR-166 Interest Site](http://gee.cs.oswego.edu/dl/concurrency-interest/index.html)
 3. [The java.util.concurrent Synchronizer Framework](http://gee.cs.oswego.edu/dl/papers/aqs.pdf)
 4. [Concurrent Programming in Java](http://gee.cs.oswego.edu/dl/cpj/index.html)
-
 
 
 

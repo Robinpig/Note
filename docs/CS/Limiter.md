@@ -17,7 +17,7 @@ Method
 - leaky bucket algorithm
   - as a meter 类似令牌桶 存储累积量 允许一定的突发
   - as a queue 限制速率 不支持突发流量
-- 令牌桶 存储累积量
+- token bucket 存储累积量
 
 
 

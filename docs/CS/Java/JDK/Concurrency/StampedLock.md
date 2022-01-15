@@ -633,6 +633,6 @@ public class StampedLockTest {
 
 
 
-## Reference
+## References
 
 1. [多线程小冷门 StampedLock - 敖丙](https://juejin.cn/post/6944872312843960356)

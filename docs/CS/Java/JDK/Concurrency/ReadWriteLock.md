@@ -436,13 +436,13 @@ protected final boolean tryRelease(int releases) {
 
 |      | ReadLock                | WriteLock                                                    |
 | ---- | ----------------------- | ------------------------------------------------------------ |
-| lock | ReadLock allow ReadLock | WriteLock block both ReadLock/WriteLock(unless W -> R of self) |
-|      |                         |                                                              |
-|      |                         |                                                              |
+| Lock | ReadLock allow ReadLock | WriteLock block both ReadLock/WriteLock(unless W -> R of self) |
+| Condition |         not supported      |   supported    |
+|  Up/Down Grade    |         not support upgrade                |        support downgrade |
 
 
 
-## Reference
+## References
 
 
 
