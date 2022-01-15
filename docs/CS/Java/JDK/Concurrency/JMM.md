@@ -235,9 +235,14 @@ snooping
 - Transitivity. If A happens‐before B, and B happens‐before C, then A happens‐before C.
 
 ### Piggybacking on Synchronization
-The implementation of the protected AbstractQueuedSynchronizer methods in FutureTask illustrates piggybacking. AQS maintains an integer of synchronizer state that FutureTask uses to store the task state: running, completed, or cancelled. But FutureTask also maintains additional variables, such as the result of the computation. When one thread calls set to save the result and another thread calls get to retrieve it, the two had better be ordered by happens‐before. This could be done by making the reference to the result volatile, but it is possible to exploit existing synchronization to achieve the same result at lower cost.
+The implementation of the protected AbstractQueuedSynchronizer methods in FutureTask illustrates piggybacking. 
+AQS maintains an integer of synchronizer state that FutureTask uses to store the task state: running, completed, or cancelled. 
+But FutureTask also maintains additional variables, such as the result of the computation. 
+When one thread calls set to save the result and another thread calls get to retrieve it, the two had better be ordered by happens‐before. 
+This could be done by making the reference to the result volatile, but it is possible to exploit existing synchronization to achieve the same result at lower cost.
 
-FutureTask is carefully crafted to ensure that a successful call to tryReleaseShared always happens‐before a subsequent call to TRyAcquireShared; try-ReleaseShared always writes to a volatile variable that is read by TRyAcquire-Shared. Listing 16.2 shows the innerSet and innerGet methods that are called when the result is saved or retrieved; since innerSet writes result before calling releaseShared (which calls tryReleaseShared) and innerGet reads result after calling acquireShared (which calls TRyAcquireShared), the program order rule combines with the volatile variable rule to ensure that the write of result in innerGet happens‐before the read of result in innerGet.
+FutureTask is carefully crafted to ensure that a successful call to tryReleaseShared always happens‐before a subsequent call to TRyAcquireShared; 
+ry-ReleaseShared always writes to a volatile variable that is read by TRyAcquire-Shared. 
 
 We call this technique "piggybacking" because it uses an existing happens‐before ordering that was created for some other reason to ensure the visibility of object X, rather than creating a happens‐before ordering specifically for publishing X.
 

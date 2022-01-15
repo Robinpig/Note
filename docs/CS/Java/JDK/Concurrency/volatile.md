@@ -1,6 +1,8 @@
 ## Introduction
 
 
+> JSR133
+> In the original specification, accesses to volatile and non-volatile variables could be freely ordered.
 
 注意：当且仅当满足以下所有条件时，才应该用volatile变量
 

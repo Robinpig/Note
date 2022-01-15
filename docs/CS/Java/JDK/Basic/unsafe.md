@@ -21,17 +21,40 @@ Fence like `volatile`
 
 see [JEP 171: Fence Intrinsics](https://openjdk.java.net/jeps/171)
 
+Ensures that loads before the fence will not be reordered with loads and stores after the fence; a "LoadLoad plus LoadStore barrier". 
+Corresponds to C11 atomic_thread_fence(memory_order_acquire) (an "acquire fence"). 
+A pure LoadLoad fence is not provided, since the addition of LoadStore is almost always desired, 
+and most current hardware instructions that provide a LoadLoad barrier also provide a LoadStore barrier for free.
+
 ```java
-    //Ensures lack of reordering of loads before the fence with loads or stores after the fence.
     public native void loadFence();
 
-    //Ensures lack of reordering of stores before the fence with loads or stores after the fence.
-    public native void storeFence();
+```
 
-    //Ensures lack of reordering of loads or stores before the fence with loads or stores after the fence.
+Ensures that loads and stores before the fence will not be reordered with stores after the fence; a "StoreStore plus LoadStore barrier". 
+Corresponds to C11 atomic_thread_fence(memory_order_release) (a "release fence").
+A pure StoreStore fence is not provided, since the addition of LoadStore is almost always desired, 
+and most current hardware instructions that provide a StoreStore barrier also provide a LoadStore barrier for free.
+
+```java
+    public native void storeFence();
+```
+
+Ensures that loads and stores before the fence will not be reordered with loads and stores after the fence.
+Implies the effects of both loadFence() and storeFence(), and in addition, the effect of a StoreLoad barrier.
+Corresponds to C11 atomic_thread_fence(memory_order_seq_cst).
+
+```java
     public native void fullFence();
 ```
 used in StampedLock
+
+|          | loadFence                        | storeFence                         | fullFence                          |
+| -------- | -------------------------------- | ---------------------------------- | ---------------------------------- |
+| Barriers | LoadLoad + LoadStore + LoadStore | StoreStore + LoadStore + LoadStore | loadFence + storeFence + StoreLoad |
+
+
+
 
 ## Parker
 

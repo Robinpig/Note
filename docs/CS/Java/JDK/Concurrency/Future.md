@@ -288,6 +288,7 @@ In addition to serving as a standalone class, this class provides protected func
 
 
 
+see [Piggybacking on Synchronization - JMM](/docs/CS/Java/JDK/Concurrency/JMM.md?id=Piggybacking-on-Synchronization)
 ```java
 public class FutureTask<V> implements RunnableFuture<V> {
 
@@ -308,7 +309,11 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
 ### state
 
-**Revision notes**: This differs from previous versions of this class that relied on AbstractQueuedSynchronizer, mainly to avoid surprising users about retaining interrupt status during cancellation races. Sync control in the current design relies on a "state" field updated via CAS to track completion, along with a simple Treiber stack to hold waiting threads.
+**Revision notes**:
+This differs from previous versions of this class that relied on AbstractQueuedSynchronizer, mainly to avoid surprising users about retaining interrupt status during cancellation races.
+Sync control in the current design relies on a "state" field updated via CAS to track completion, along with a simple Treiber stack to hold waiting threads.
+
+
 
 The run state of this task, initially NEW. 
 

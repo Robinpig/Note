@@ -1,6 +1,6 @@
 ## Introduction
 
-Threads are an inescapable feature of the Java language, and they can simplify the development of complex systems by turning complicated asynchronous code into simpler straight-line code. 
+[Threads](/docs/CS/Java/JDK/Concurrency/Thread.md) are an inescapable feature of the Java language, and they can simplify the development of complex systems by turning complicated asynchronous code into simpler straight-line code. 
 In addition, threads are the easiest way to tap the computing power of multiprocessor systems.
 And, as processor counts increase, exploiting concurrency effectively will only become more important.
 
