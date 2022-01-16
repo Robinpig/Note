@@ -27,6 +27,24 @@ public interface ReadWriteLock {
 ```
 
 
+The interaction between the read and write locks allows for a number of possible implementations. Some of the implementation options for a ReadWriteLock are”
+
+- **Release preference**. 
+  When a writer releases the write lock and both readers and writers are queued up, who should be given preference—readers, writers, or whoever asked first?
+- **Reader barging**. 
+  If the lock is held by readers but there are waiting writers, should newly arriving readers be granted immediate access, or should they wait behind the writers? 
+  Allowing readers to barge ahead of writers enhances concurrency but runs the risk of starving writers.
+- **Reentrancy**. 
+  Are the read and write locks reentrant?
+- **Downgrading**. 
+  If a thread holds the write lock, can it acquire the read lock without releasing the write lock? 
+  This would let a writer “downgrade” to a read lock without letting other writers modify the guarded resource in the meantime.
+- **Upgrading**. 
+  Can a read lock be upgraded to a write lock in preference to other waiting readers or writers? 
+  Most read-write lock implementations do not support upgrading, because without an explicit upgrade operation it is deadlock-prone. 
+  (If two readers simultaneously attempt to upgrade to a write lock, neither will release the read lock.)”
+
+
 
 ## ReentrantReadWriteLock
 
@@ -434,12 +452,20 @@ protected final boolean tryRelease(int releases) {
 
 ## Summary
 
+
 |      | ReadLock                | WriteLock                                                    |
 | ---- | ----------------------- | ------------------------------------------------------------ |
 | Lock | ReadLock allow ReadLock | WriteLock block both ReadLock/WriteLock(unless W -> R of self) |
 | Condition |         not supported      |   supported    |
 |  Up/Down Grade    |         not support upgrade                |        support downgrade |
 
+
+
+Read-write locks are a performance optimization designed to allow greater concurrency in certain situations.
+In practice, read-write locks can improve performance for frequently accessed read-mostly data structures on multiprocessor systems;
+under other conditions they perform slightly worse than exclusive locks due to their greater complexity.
+Whether they are an improvement in any given situation is best determined via profiling; because ReadWriteLock uses Lock for the read and write portions of the lock,
+it is relatively easy to swap out a readwrite lock for an exclusive one if profiling determines that a read-write lock is not a win.
 
 
 ## References

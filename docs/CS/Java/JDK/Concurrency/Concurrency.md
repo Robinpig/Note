@@ -50,8 +50,10 @@ While safety means “nothing bad ever happens”, liveness concerns the complem
 A liveness failure occurs when an activity gets into a state such that it is permanently unable to make forward progress. 
 One form of liveness failure that can occur in sequential programs is an inadvertent infinite loop, where the code that follows the loop never gets executed. 
 The use of threads introduces additional liveness risks. 
+
 For example, if thread A is waiting for a resource that thread B holds exclusively, and B never releases it, A will wait forever. 
-We will describe various forms of liveness failures and how to avoid them, including deadlock, starvation, and livelock.
+
+We will describe various forms of [liveness](/docs/CS/Java/JDK/Concurrency/Liveness.md) failures and how to avoid them, including deadlock, starvation, and livelock.
 
 
 #### Performance Hazards
@@ -167,6 +169,16 @@ Volatile Variables
 
 #### Concurrent Collections
 
+1. fail-fast for Collections in `java.util`, such as `HashMap`, `ArrayList`
+2. fail-safe for Collections in `java.util.concurrent`, such as `ConcurrentHashMap`, `CopyOnWriteArrayList`
+
+- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList)
+- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap)
+- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap)
+- [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
+
+
+
 #### Synchronizers
 A synchronizer is any object that coordinates the control flow of threads based on its state. 
 Blocking queues can act as synchronizers; other types of synchronizers include semaphores, barriers, and latches.
@@ -274,7 +286,7 @@ You can determine the number of CPUs using Runtime:
 int N_CPUS = Runtime.getRuntime().availableProcessors();
 ```
 
-
+## Concurrent Applications
 
 ### Task Execution
 Most concurrent applications are organized around the execution of *tasks*: abstract, discrete units of work.
@@ -291,45 +303,25 @@ Disadvantages of Unbounded Thread Creation
 2. Resource consumption
 3. Stability
 
-#### The Executor Framework
+### The Executor Framework
 
-##### Execution Policies
+#### Execution Policies
 
-##### Thread Pools
+#### Thread Pools
 
 The class library provides a flexible thread pool implementation along with some useful predefined configurations. 
 You can create a thread pool by calling one of the static factory methods in [Executors](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md).
 
-##### Executor Lifecycle
+#### Cancellation and Shutdown
 We've seen how to create an Executor but not how to shut one down. An Executor implementation is likely to create threads for processing tasks.
 But the JVM can't exit until all the (nondaemon) threads have terminated, so failing to shut down an Executor could prevent the JVM from exiting.
 
 
-##### Delayed and Periodic Tasks
+#### Delayed and Periodic Tasks
 The Timer facility manages the execution of deferred (“run this task in 100 ms”) and periodic (“run this task every 10 ms”) tasks. 
 However, Timer has some drawbacks, and [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ScheduledThreadPoolExecutor.md) should be thought of as its replacement.
 You can construct a ScheduledThreadPoolExecutor through its constructor or through the newScheduledThreadPool factory.
 
-
-## Liveness Hazards
-
-A liveness failure occurs when an activity gets into a state such that it is permanently unable to make forward progress.
-
-Liveness failures are a serious problem because there is no way to recover from them short of aborting the application.
-The most common form of liveness failure is lock‐ordering deadlock. Avoiding lock ordering deadlock starts at design
-time: ensure that when threads acquire multiple locks, they do so in a consistent order. The best way to do this is by
-using open calls throughout your program.
-
-### Deadlock
-A program will be free of lock‐ordering deadlocks if all threads acquire the locks they need in a fixed global order.
-
-Open Calls
-
-### Starvation
-
-Poor Responsiveness
-
-### Livelock
 
 ## Performance
 Improving performance means doing more work with fewer resources. The meaning of "resources" can vary; for a given activity, some specific resource is usually in shortest supply, whether it is CPU cycles, memory, network bandwidth, I/O bandwidth, database requests, disk space, or any number of other resources. When the performance of an activity is limited by availability of a particular resource, we say it is bound by that resource: CPU‐bound, database‐bound, etc.
@@ -353,6 +345,7 @@ As N approaches infinity, the maximum speedup converges to 1/F.
 Context switches are not free; thread scheduling requires manipulating shared data structures in the OS and JVM. The OS and JVMuse the same CPUs your program does; more CPU time spent in JVM and OS code means less is available for your program. But OS and JVM activity is not the only cost of context switches. When a new thread is switched in, the data it needs is unlikely to be in the local processor cache, so a context switch causes a flurry of cache misses, and thus threads run a little more slowly when they are first scheduled.
 
 #### Memory Synchronization
+
 #### Blocking
 
 ### Reducing Lock Contention
@@ -361,50 +354,73 @@ Context switches are not free; thread scheduling requires manipulating shared da
 ## Testing
 
 
+## Advanced Topics
+
+
 ### Memory Model
 
 - [JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
 - [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=CAS)
-- [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
-- [synchronized Block](/docs/CS/Java/JDK/Concurrency/synchronized.md)
-
-
-## Thread Fundamentals
-- [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
-- [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
-- [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
 
 
 
-## Concurrent Collections
+### Explicit Locks
+Before Java 5.0, the only mechanisms for coordinating access to shared data were [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) and [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md).
 
-1. fail-fast for Collections in `java.util`, such as `HashMap`, `ArrayList`
-2. fail-safe for Collections in `java.util.concurrent`, such as `ConcurrentHashMap`, `CopyOnWriteArrayList`
-
-- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList)
-- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap)
-- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap)
-- [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
+Java 5.0 adds another option: ***ReentrantLock***. 
+ReentrantLock is not a replacement for intrinsic locking, but rather an alternative with advanced features for when intrinsic locking proves too limited.
 
 
-
-## Locks
 
 ![locks](../images/juc-locks.png)
 
-- [Lock and Conditions](/docs/CS/Java/JDK/Concurrency/Lock.md)
-- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
-- [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
-- [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
-- [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
+The [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md) interface defines a number of abstract locking operations. 
+Unlike intrinsic locking, Lock offers a choice of unconditional, polled, timed, and interruptible lock acquisition, 
+and all lock and unlock operations are explicit. 
+Lock implementations must provide the same memory-visibility semantics as intrinsic locks, 
+but can differ in their locking semantics, scheduling algorithms, ordering guarantees, and performance characteristics.
+
+
+[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) implements Lock, providing the same mutual exclusion and memory-visibility guarantees as synchronized.
 
 
 
-## Executor
+#### Read-write Locks
+In many cases, data structures are “read-mostly”—they are mutable and are sometimes modified, but most accesses involve only reading.
+In these cases, it would be nice to relax the locking requirements to allow multiple readers to access the data structure at once.
+As long as each thread is guaranteed an up-to-date view of the data and no other thread modifies the data while the readers are viewing it, there will be no problems.
+This is what [read-write locks](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md) allow: a resource can be accessed by multiple readers or a single writer at a time, but not both.
 
-- [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
-- [ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)
-- [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
+
+
+[StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
+
+
+### Atomic Variables and Nonblocking Synchronization
+
+Much of the recent research on concurrent algorithms has focused on *nonblocking algorithms*, 
+which use low-level atomic machine instructions such as `compare-and-swap` instead of locks to ensure data integrity under concurrent access. 
+Nonblocking algorithms are used extensively in operating systems and JVMs for thread and process scheduling, garbage collection, 
+and to implement locks and other concurrent data structures.
+
+Nonblocking algorithms are considerably more complicated to design and implement than lock-based alternatives, but they can offer significant scalability and liveness advantages. 
+They coordinate at a finer level of granularity and can greatly reduce scheduling overhead because they don't block when multiple threads contend for the same data. 
+Further, they are immune to deadlock and other liveness problems. 
+In lock-based algorithms, other threads cannot make progress if a thread goes to sleep or spins while holding a lock, whereas nonblocking algorithms are impervious to individual thread failures.
+
+
+Atomic variables can also be used as “better volatile variables” even if you are not developing nonblocking algorithms. 
+Atomic variables offer the same memory semantics as volatile variables, but with additional support for atomic updates—making them ideal for counters, 
+sequence generators, and statistics gathering while offering better scalability than lock-based alternatives.
+
+Locking has a few other disadvantages. When a thread is waiting for a lock, it cannot do anything else. 
+If a thread holding a lock is delayed (due to a page fault, scheduling delay, or the like), then no thread that needs that lock can make progress. 
+This can be a serious problem if the blocked thread is a high-priority thread but the thread holding the lock is a lower-priority thread—a performance hazard known as priority inversion. 
+Even though the higher-priority thread should have precedence, it must wait until the lock is released, and this effectively downgrades its priority to that of the lower-priority thread. 
+If a thread holding a lock is permanently blocked (due to an infinite loop, deadlock, livelock, or other liveness failure), any threads waiting for that lock can never make progress.
+
+
+
 
 ## References
 1. [Java Concurrency in Practice](https://jcip.net/)
