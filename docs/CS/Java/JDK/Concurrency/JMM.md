@@ -1,17 +1,50 @@
 ## Introduction
 
-A memory model specifies how threads and objects interact
 
+A *memory model* describes, given a program and an execution trace of that program, whether the execution trace is a legal execution of the program.
+The Java programming language memory model works by examining each read in an execution trace and checking that the write observed by that read is valid according to certain rules.
+
+The memory model describes possible behaviors of a program.
+An implementation is free to produce any code it likes, as long as all resulting executions of a program produce a result that can be predicted by the memory model.
+
+This provides a great deal of freedom for the implementor to perform a myriad of code transformations, including the reordering of actions and removal of unnecessary synchronization.
+
+
+A memory model specifies how threads and objects interact
 - **Atomicity**
   Locking to obtain mutual exclusion for field updates
 - **Visibility**
-  Ensuring that changes made in one thread are seen in
-  other threads
+  Ensuring that changes made in one thread are seen in other threads
 - **Ordering**
   Ensuring that you aren’t surprised by the order in which statements are executed
 
 
 ## Cache Coherence
+
+
+
+### Memory Consistency Properties
+
+Defines the happens-before relation on memory operations such as reads and writes of shared variables.
+The results of a write by one thread are guaranteed to be visible to a read by another thread only if the write operation happens-before the read operation.
+The synchronized and volatile constructs, as well as the Thread.start() and Thread.join() methods, can form happens-before relationships.
+In particular: Each action in a thread happens-before every action in that thread that comes later in the program's order.
+An unlock (synchronized block or method exit) of a monitor happens-before every subsequent lock (synchronized block or method entry) of that same monitor.
+And because the happens-before relation is transitive, all actions of a thread prior to unlocking happen-before all actions subsequent to any thread locking that monitor.
+A write to a volatile field happens-before every subsequent read of that same field.
+Writes and reads of volatile fields have similar memory consistency effects as entering and exiting monitors, but do not entail mutual exclusion locking.
+A call to start on a thread happens-before any action in the started thread.
+
+All actions in a thread happen-before any other thread successfully returns from a join on that thread.
+The methods of all classes in java.util.concurrent and its subpackages extend these guarantees to higher-level synchronization.
+In particular:
+Actions in a thread prior to placing an object into any concurrent collection happen-before actions subsequent to the access or removal of that element from the collection in another thread.
+Actions in a thread prior to the submission of a Runnable to an Executor happen-before its execution begins. Similarly for Callables submitted to an ExecutorService.
+Actions taken by the asynchronous computation represented by a Future happen-before actions subsequent to the retrieval of the result via Future.get() in another thread.
+Actions prior to "releasing" synchronizer methods such as Lock.unlock, S
+emaphore.release, and CountDownLatch.countDown happen-before actions subsequent to a successful "acquiring" method such as Lock.lock, Semaphore.acquire, Condition.await, and CountDownLatch.await on the same synchronizer object in another thread.
+For each pair of threads that successfully exchange objects via an Exchanger, actions prior to the exchange() in each thread happen-before those subsequent to the corresponding exchange() in another thread.
+Actions prior to calling CyclicBarrier.await and Phaser.awaitAdvance (as well as its variants) happen-before actions performed by the barrier action, and actions performed by the barrier action happen-before actions subsequent to a successful return from the corresponding await in other threads.
 
 
 ### MESI
@@ -196,16 +229,11 @@ In a *happens-before consistent* set of actions, each read sees a write that it 
 
 Before presenting the Java memory model in full, we will present a simpler memory model, called the happens-before memory model. 
 
-This model involves several properties/requirements: 
-
-- There is a total order over all synchronization actions, known as the synchronization order. This order is consistent with program order and with mutual exclusion of locks. 
-
+This model involves several properties/requirements:
+- There is a total order over all synchronization actions, known as the synchronization order. This order is consistent with program order and with mutual exclusion of locks.
 - Synchronization actions induce synchronizes-with edges between matched actions, as described in Section 5.
-
 - The transitive closure of the synchronizes-with edges and program order gives a partial order known as the happens-before order, as described in Section 5.
-
-- The values that can be seen by a non-volatile read are determined by a rule known as happensbefore consistency. 
-
+- The values that can be seen by a non-volatile read are determined by a rule known as happensbefore consistency.
 - The value seen by a volatile read are determined by a rule known as synchronization order consistency. 
 
   

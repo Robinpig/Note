@@ -153,7 +153,7 @@ Volatile Variables
 #### Thread Confinement
 - Ad-hoc Thread Confinement
 - Stack Confinement
-- ThreadLocal
+- [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 
 #### Immutability
 
@@ -165,17 +165,50 @@ Volatile Variables
 
 ### Building Blocks
 
+
+
+
 #### Synchronized Collections
+
+
+#### Queues
+
+The ConcurrentLinkedQueue class supplies an efficient scalable thread-safe non-blocking FIFO queue.
+The ConcurrentLinkedDeque class is similar, but additionally supports the java.util.Deque interface.
+Five implementations in java.util.concurrent support the extended [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue) interface, that defines blocking versions of put and take:
+LinkedBlockingQueue, ArrayBlockingQueue, SynchronousQueue, PriorityBlockingQueue, and DelayQueue.
+The different classes cover the most common usage contexts for producer-consumer, messaging, parallel tasking, and related concurrent designs.
+
+Extended interface TransferQueue, and implementation LinkedTransferQueue introduce a synchronous transfer method (along with related features) in which a producer may optionally block awaiting its consumer.
+The BlockingDeque interface extends BlockingQueue to support both FIFO and LIFO (stack-based) operations. Class LinkedBlockingDeque provides an implementation.
+
 
 #### Concurrent Collections
 
-1. fail-fast for Collections in `java.util`, such as `HashMap`, `ArrayList`
-2. fail-safe for Collections in `java.util.concurrent`, such as `ConcurrentHashMap`, `CopyOnWriteArrayList`
 
-- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList)
-- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap)
-- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap)
-- [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue)
+Besides Queues, this package supplies Collection implementations designed for use in multithreaded contexts:
+- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap),
+- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap), 
+- ConcurrentSkipListSet, 
+- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList), 
+- and CopyOnWriteArraySet.
+
+When many threads are expected to access a given collection, a ConcurrentHashMap is normally preferable to a synchronized HashMap,
+and a ConcurrentSkipListMap is normally preferable to a synchronized TreeMap.
+A CopyOnWriteArrayList is preferable to a synchronized ArrayList when the expected number of reads and traversals greatly outnumber the number of updates to a list.
+The "Concurrent" prefix used with some classes in this package is a shorthand indicating several differences from similar "synchronized" classes.
+For example java.util.Hashtable and Collections.synchronizedMap(new HashMap()) are synchronized. But ConcurrentHashMap is "concurrent".
+
+A concurrent collection is thread-safe, but not governed by a single exclusion lock.
+In the particular case of ConcurrentHashMap, it safely permits any number of concurrent reads as well as a tunable number of concurrent writes.
+
+"Synchronized" classes can be useful when you need to prevent all access to a collection via a single lock, at the expense of poorer scalability.
+In other cases in which multiple threads are expected to access a common collection, "concurrent" versions are normally preferable.
+And unsynchronized collections are preferable when either collections are unshared, or are accessible only when holding other locks.
+Most concurrent Collection implementations (including most Queues) also differ from the usual java.util conventions in that their Iterators and Spliterators provide weakly consistent rather than fast-fail traversal:
+they may proceed concurrently with other operations
+they will never throw ConcurrentModificationException
+they are guaranteed to traverse elements as they existed upon construction exactly once, and may (but are not guaranteed to) reflect any modifications subsequent to construction.
 
 
 

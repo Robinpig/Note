@@ -1,5 +1,24 @@
 ## Introduction
 
+
+Executor is a simple standardized interface for defining custom thread-like subsystems, including thread pools, asynchronous I/O, and lightweight task frameworks. 
+Depending on which concrete Executor class is being used, tasks may execute in a newly created thread, an existing task-execution thread, or the thread calling execute, and may execute sequentially or concurrently. 
+
+ExecutorService provides a more complete asynchronous task execution framework. An ExecutorService manages queuing and scheduling of tasks, and allows controlled shutdown. 
+The ScheduledExecutorService subinterface and associated interfaces add support for delayed and periodic task execution. 
+ExecutorServices provide methods arranging asynchronous execution of any function expressed as Callable, the result-bearing analog of Runnable. 
+A Future returns the results of a function, allows determination of whether execution has completed, and provides a means to cancel execution. 
+A RunnableFuture is a Future that possesses a run method that upon execution, sets its results.
+
+### Implementation
+Classes ThreadPoolExecutor and ScheduledThreadPoolExecutor provide tunable, flexible thread pools. 
+The Executors class provides factory methods for the most common kinds and configurations of Executors, as well as a few utility methods for using them. 
+Other utilities based on Executors include the concrete class FutureTask providing a common extensible implementation of Futures, and ExecutorCompletionService, 
+that assists in coordinating the processing of groups of asynchronous tasks.
+Class ForkJoinPool provides an Executor primarily designed for processing instances of ForkJoinTask and its subclasses. 
+These classes employ a work-stealing scheduler that attains high throughput for tasks conforming to restrictions that often hold in computation-intensive parallel processing.
+
+
 ### Disadvantages of Unbounded Thread Creation
 - Thread lifecycle overhead
   Thread creation and teardown are not free. The actual overhead varies across platforms, but

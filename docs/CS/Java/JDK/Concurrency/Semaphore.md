@@ -2,7 +2,10 @@
 
 
 
-_A counting semaphore. Conceptually, a semaphore maintains a set of permits. Each acquire blocks if necessary until a permit is available, and then takes it. Each release adds a permit, potentially releasing a blocking acquirer. However, no actual permit objects are used; the Semaphore just keeps a count of the number available and acts accordingly._
+A counting semaphore. Conceptually, a semaphore maintains a set of permits. 
+Each acquire blocks if necessary until a permit is available, and then takes it. Each release adds a permit, potentially releasing a blocking acquirer. 
+However, no actual permit objects are used; the Semaphore just keeps a count of the number available and acts accordingly.
+Semaphore is a classic concurrency tool.
 **Semaphores are often used to restrict the number of threads than can access some (physical or logical) resource.** 
 
 Before obtaining an item each thread must acquire a permit from the semaphore, guaranteeing that an item is available for use. When the thread has finished with the item it is returned back to the pool and a permit is returned to the semaphore, allowing another thread to acquire that item. Note that no synchronization lock is held when acquire is called as that would prevent an item from being returned to the pool. **The semaphore encapsulates the synchronization needed to restrict access to the pool, separately from any synchronization needed to maintain the consistency of the pool itself**.
