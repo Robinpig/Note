@@ -1,22 +1,29 @@
 ## Introduction
 
-### @Transactional
+
+
+
+### Transactional
 
 Describes a transaction attribute on an individual method or on a class.
 
-When this annotation is declared at the class level, it applies as a default to all methods of the declaring class and its subclasses. Note that it does not apply to ancestor classes up the class hierarchy; inherited methods need to be locally redeclared in order to participate in a subclass-level annotation. For details on method visibility constraints, consult the Transaction Management  section of the reference manual.
+When this annotation is declared at the class level, it applies as a default to all methods of the declaring class and its subclasses. 
+Note that it does not apply to ancestor classes up the class hierarchy; inherited methods need to be locally redeclared in order to participate in a subclass-level annotation. 
+For details on method visibility constraints, consult the Transaction Management  section of the reference manual.
 
-This annotation type is generally directly comparable to Spring's org.springframework.transaction.interceptor.RuleBasedTransactionAttribute class, and in fact AnnotationTransactionAttributeSource will directly convert the data to the latter class, so that Spring's transaction support code does not have to know about annotations. 
+This annotation type is generally directly comparable to Spring's org.springframework.transaction.interceptor.RuleBasedTransactionAttribute class, 
+and in fact AnnotationTransactionAttributeSource will directly convert the data to the latter class, so that Spring's transaction support code does not have to know about annotations. 
 
 **If no custom rollback rules apply, the transaction will roll back on RuntimeException and Error but not on checked exceptions.**
 
-For specific information about the semantics of this annotation's attributes, consult the TransactionDefinition and org.springframework.transaction.interceptor.TransactionAttribute javadocs.
+For specific information about the semantics of this annotation's attributes, consult the TransactionDefinition and `org.springframework.transaction.interceptor.TransactionAttribute` javadocs.
 
-This annotation commonly works with thread-bound transactions managed by a org.springframework.transaction.PlatformTransactionManager, exposing a transaction to all data access operations within the current execution thread. 
+This annotation commonly works with thread-bound transactions managed by a `org.springframework.transaction.PlatformTransactionManager`, exposing a transaction to all data access operations within the current execution thread. 
 
 **Note: This does NOT propagate to newly started threads within the method.**
 
-Alternatively, this annotation may demarcate a reactive transaction managed by a org.springframework.transaction.ReactiveTransactionManager which uses the Reactor context instead of thread-local variables. As a consequence, all participating data access operations need to execute within the same Reactor context in the same reactive pipeline.
+Alternatively, this annotation may demarcate a reactive transaction managed by a org.springframework.transaction.ReactiveTransactionManager which uses the Reactor context instead of thread-local variables. 
+As a consequence, all participating data access operations need to execute within the same Reactor context in the same reactive pipeline.
 
 
 - **only support public method**
@@ -85,11 +92,6 @@ import org.springframework.lang.Nullable;
  * at the resource level. In the latter case, the flag will only apply to managed
  * resources within the application, such as a Hibernate {@code Session}.
  *
- * @author Juergen Hoeller
- * @since 08.05.2003
- * @see PlatformTransactionManager#getTransaction(TransactionDefinition)
- * @see org.springframework.transaction.support.DefaultTransactionDefinition
- * @see org.springframework.transaction.interceptor.TransactionAttribute
  */
 public interface TransactionDefinition {
 
@@ -154,6 +156,9 @@ public interface TransactionDefinition {
 }
 ```
 
+### TransactionManager
+
+Implementation by MyBatis, Hibernate, JTA.
 
 ```java
 public interface PlatformTransactionManager extends TransactionManager {
@@ -167,7 +172,8 @@ public interface PlatformTransactionManager extends TransactionManager {
 ```
 
 AOP Alliance MethodInterceptor for declarative transaction management using the common Spring transaction infrastructure (PlatformTransactionManager/ org.springframework.transaction.ReactiveTransactionManager).
-Derives from the TransactionAspectSupport class which contains the integration with Spring's underlying transaction API. TransactionInterceptor simply calls the relevant superclass methods such as invokeWithinTransaction in the correct order.
+Derives from the TransactionAspectSupport class which contains the integration with Spring's underlying transaction API. 
+TransactionInterceptor simply calls the relevant superclass methods such as invokeWithinTransaction in the correct order.
 TransactionInterceptors are thread-safe.
 ```java
 public class TransactionInterceptor extends TransactionAspectSupport implements MethodInterceptor, Serializable {
@@ -215,6 +221,10 @@ TransactionSynchronizationManager
 
 AbstractRoutingDataSource
 
+
+## Links
+- [Transaction](/docs/CS/Transaction.md)
+- [Transaction - MySQL](/docs/CS/DB/MySQL/Transaction.md)
 
 
 ## References

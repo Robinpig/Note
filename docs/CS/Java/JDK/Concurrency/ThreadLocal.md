@@ -1,8 +1,11 @@
 ## Introduction
 
-*This class provides thread-local variables. These variables differ from their normal counterparts in that each thread that accesses one (via its get or set method) has its own, independently initialized copy of the variable. **ThreadLocal instances are typically private static fields in classes that wish to associate state with a thread (e.g., a user ID or Transaction ID)**.*
+This class provides thread-local variables. 
+These variables differ from their normal counterparts in that each thread that accesses one (via its get or set method) has its own, independently initialized copy of the variable. 
+**ThreadLocal instances are typically private static fields in classes that wish to associate state with a [thread](/docs/CS/Java/JDK/Concurrency/Thread.md) (e.g., a user ID or Transaction ID)**.
 
-*Each thread holds an implicit reference to its copy of a thread-local variable as long as the thread is alive and the ThreadLocal instance is accessible; **after a thread goes away, all of its copies of thread-local instances are subject to garbage collection (unless other references to these copies exist**).*
+Each thread holds an implicit reference to its copy of a thread-local variable as long as the thread is alive and the ThreadLocal instance is accessible; 
+**after a thread goes away, all of its copies of thread-local instances are subject to garbage collection (unless other references to these copies exist**).
 
 
 
@@ -524,3 +527,8 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
 1. session/token for use
 3. TraceId for trace request
 
+## Links
+
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+- [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
