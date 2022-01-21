@@ -35,11 +35,6 @@ public static void main(String[] args) throws LifecycleException {
 
 Create a new ProtocolHandler for the given protocol.
 
-- org.apache.coyote.http11.Http11NioProtocol
-- org.apache.coyote.http11.Http11Nio2Protocol
-- org.apache.coyote.ajp.AjpNioProtocol
-- org.apache.coyote.ajp.AjpNio2Protocol
-
 ```java
 // Connector
 // Defaults to using HTTP/1.1 NIO implementation.
@@ -52,7 +47,16 @@ public Connector(String protocol) {
   p = ProtocolHandler.create(protocol);
  	...
 }
+```
+#### ProtocolHandler
 
+Combine IO and protocol
+- org.apache.coyote.http11.Http11NioProtocol
+- org.apache.coyote.http11.Http11Nio2Protocol
+- org.apache.coyote.ajp.AjpNioProtocol
+- org.apache.coyote.ajp.AjpNio2Protocol
+
+```java
 // ProtocolHandler
 public static ProtocolHandler create(String protocol)
         throws ClassNotFoundException, InstantiationException, IllegalAccessException,
@@ -83,7 +87,7 @@ public Http11NioProtocol() {
 
 
 ### Endpoint 
-
+for network IO
 
 
 ```java
@@ -1046,6 +1050,12 @@ Process the request from this socket, call `AbstractProtocol.process()` -> [Proc
 
 ### Processor
 
+for protocols
+
+
+Adapters for transform request/response
+
+
 AbstractProcessorLight is a light-weight abstract processor implementation that is intended as a basis
 for all Processor implementations from the light-weight upgrade processors to the HTTP/AJP processors.
 
@@ -1444,9 +1454,10 @@ Call the first [Valve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke) of 
     }
 }
 ```
+### Pipeline-Valve
+#### invoke
 
-### invoke
-
+Below StandardWrapperValve does:
 1. Create the [filter chain](/docs/CS/Java/Tomcat/Connector.md?id=createFilterChain) for this request
 2. Invoke the servlet we are managing in [doFilter](/docs/CS/Java/Tomcat/Connector.md?id=doFilter), respecting the rules regarding servlet lifecycle and SingleThreadModel support.
 ```java

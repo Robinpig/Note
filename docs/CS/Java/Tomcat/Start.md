@@ -1,14 +1,61 @@
 ## Introduction
 
 
-
+### Lifecycle
 ![Lifecycle](./images/Lifecycle.png)
+
+Common interface for component life cycle methods. 
+Catalina components may implement this interface (as well as the appropriate interface(s) for the functionality they support) in order to *provide a consistent mechanism to start and stop the component*.
+
+The valid state transitions for components that support Lifecycle are:
+```
+            start()
+  -----------------------------
+  |                           |
+  | init()                    |
+ NEW -»-- INITIALIZING        |
+ | |           |              |     ------------------«-----------------------
+ | |           |auto          |     |                                        |
+ | |          \|/    start() \|/   \|/     auto          auto         stop() |
+ | |      INITIALIZED --»-- STARTING_PREP --»- STARTING --»- STARTED --»---  |
+ | |         |                                                            |  |
+ | |destroy()|                                                            |  |
+ | --»-----«--    ------------------------«--------------------------------  ^
+ |     |          |                                                          |
+ |     |         \|/          auto                 auto              start() |
+ |     |     STOPPING_PREP ----»---- STOPPING ------»----- STOPPED -----»-----
+ |    \|/                               ^                     |  ^
+ |     |               stop()           |                     |  |
+ |     |       --------------------------                     |  |
+ |     |       |                                              |  |
+ |     |       |    destroy()                       destroy() |  |
+ |     |    FAILED ----»------ DESTROYING ---«-----------------  |
+ |     |                        ^     |                          |
+ |     |     destroy()          |     |auto                      |
+ |     --------»-----------------    \|/                         |
+ |                                 DESTROYED                     |
+ |                                                               |
+ |                            stop()                             |
+ ----»-----------------------------»------------------------------
+
+```
+Any state can transition to FAILED.
+- Calling start() while a component is in states STARTING_PREP, STARTING or STARTED has no effect.
+- Calling start() while a component is in state NEW will cause init() to be called immediately after the start() method is entered.
+- Calling stop() while a component is in states STOPPING_PREP, STOPPING or STOPPED has no effect.
+- Calling stop() while a component is in state NEW transitions the component to STOPPED. 
+  This is typically encountered when a component fails to start and does not start all its sub-components. 
+  When the component is stopped, it will try to stop all sub-components - even those it didn't start.
 
 ## Bootstrap
 
+Start entrance:
+```shell
 startup.sh -> catalina.sh start ->java -jar org.apache.catalina.startup.Bootstrap.main()
+```
 
-invoke `org.apache.catalina.startup.Catalina` by Reflection
+1. [init](/docs/CS/Java/Tomcat/Start.md?id=init)
+2. invoke [org.apache.catalina.startup.Catalina#load()](/docs/CS/Java/Tomcat/Start.md?id=load) and [org.apache.catalina.startup.Catalina#start](/docs/CS/Java/Tomcat/Start.md?id=start) by Reflection
 
 ```java
 //Bootstrap.java
@@ -33,50 +80,23 @@ public static void main(String[] args) {
 
     try {
         String command = "start";
-        if (args.length > 0) {
-            command = args[args.length - 1];
-        }
-
-        if (command.equals("startd")) {
-            args[args.length - 1] = "start";
-            daemon.load(args);
-            daemon.start();
-        } else if (command.equals("stopd")) {
-            args[args.length - 1] = "stop";
-            daemon.stop();
-        } else if (command.equals("start")) {
+       if (command.equals("start")) {
             daemon.setAwait(true);
             daemon.load(args);
             daemon.start();
             if (null == daemon.getServer()) {
                 System.exit(1);
             }
-        } else if (command.equals("stop")) {
-            daemon.stopServer(args);
-        } else if (command.equals("configtest")) {
-            daemon.load(args);
-            if (null == daemon.getServer()) {
-                System.exit(1);
-            }
-
-            System.exit(0);
-        } else {
-            log.warn("Bootstrap: command \"" + command + "\" does not exist.");
-        }
+        } 
+       // ...
     } catch (Throwable var7) {
-        Throwable t = var7;
-        if (var7 instanceof InvocationTargetException && var7.getCause() != null) {
-            t = var7.getCause();
-        }
-
-        handleThrowable(t);
-        t.printStackTrace();
-        System.exit(1);
+        // ...
     }
 
 }
 ```
 
+### init
 Initialize daemon.
 
 [initClassLoaders](/docs/CS/Java/Tomcat/ClassLoader.md?id=initClassLoaders)
@@ -110,11 +130,7 @@ public void init() throws Exception {
 ```
 
 
-
-
-## Catalina
-
-#### load()
+### load
 
 ```java
 //org.apache.catalina.startup.Catalina.java
@@ -175,12 +191,12 @@ public void load() {
 
 
 
-#### start()
+### start
 
 1. start Server
 2. start Service
 3. start [Connector](/docs/CS/Java/Tomcat/Connector.md)
-4. use [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
+4. register [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
 ```java
 //org.apache.catalina.startup.Catalina.java
 public void start() {
@@ -231,7 +247,11 @@ public void start() {
 
 ## LifecycleBase
 
-Prepare the component for starting. This method should perform any initialization required post object creation. The following LifecycleEvents will be fired in the following order:
+Template method pattern
+
+
+Prepare the component for starting. This method should perform any initialization required post object creation. 
+The following LifecycleEvents will be fired in the following order:
 
 1. INIT_EVENT: On the successful completion of component initialization.
 
@@ -382,7 +402,7 @@ public final synchronized void stop() throws LifecycleException {
 
 ### initInternal
 
-#### StanardServer#initInternal()
+#### StandardServer#initInternal()
 
 ```java
 //StanardServer
