@@ -1,6 +1,22 @@
 ## Introduction
 
 
+```
+        AppClassLoader
+            |
+           \|/
+      CommonClassLoader
+            |
+            +---------------------------+
+           \|/                         \|/
+      SharedClassLoader          CatalinaClassLoader
+            |
+           \|/
+      WebAppClassLoader
+
+```
+
+WebAppClassLoader for each app
 
 
 #### initClassLoaders
@@ -351,3 +367,4 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
 ...
 }
 ```
+

@@ -86,7 +86,7 @@ public Http11NioProtocol() {
 
 
 
-### Endpoint 
+## Endpoint 
 for network IO
 
 
@@ -109,7 +109,121 @@ public class Http11NioProtocol extends AbstractHttp11JsseProtocol<NioChannel> {
 ```
 
 
-#### NioEndPoint
+### LimitLatch
+
+LimitLatch like [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md) extends [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+
+
+```java
+public abstract class AbstractEndpoint<S,U> {
+    public void setMaxConnections(int maxCon) {
+        this.maxConnections = maxCon;
+        LimitLatch latch = this.connectionLimitLatch;
+        if (latch != null) {
+            // Update the latch that enforces this
+            if (maxCon == -1) {
+                releaseConnectionLatch();
+            } else {
+                latch.setLimit(maxCon);
+            }
+        } else if (maxCon > 0) {
+            initializeConnectionLatch();
+        }
+    }
+}
+```
+
+
+```java
+protected LimitLatch initializeConnectionLatch() {
+        if (maxConnections==-1) {
+            return null;
+        }
+        if (connectionLimitLatch==null) {
+            connectionLimitLatch = new LimitLatch(getMaxConnections());
+        }
+        return connectionLimitLatch;
+    }
+    
+```
+
+Shared latch that allows the latch to be acquired a limited number of times after which all subsequent requests to acquire the latch will be placed in a FIFO queue until one of the shares is returned.
+
+```java
+public class LimitLatch {
+
+    public LimitLatch(long limit) {
+        this.limit = limit;
+        this.count = new AtomicLong(0);
+        this.sync = new Sync();
+    }
+}
+```
+Sync extends AQS
+
+
+countUpOrAwait
+```java
+protected void countUpOrAwaitConnection() throws InterruptedException {
+    if (maxConnections==-1) {
+        return;
+    }
+    LimitLatch latch = connectionLimitLatch;
+    if (latch!=null) {
+        latch.countUpOrAwait();
+    }
+}
+
+public void countUpOrAwait() throws InterruptedException {
+    sync.acquireSharedInterruptibly(1);
+}
+
+
+@Override
+protected int tryAcquireShared(int ignored) {
+    long newCount = count.incrementAndGet();
+    if (!released && newCount > limit) {
+        // Limit exceeded
+        count.decrementAndGet();
+        return -1;
+    } else {
+        return 1;
+    }
+}
+```
+
+
+#### countDown
+
+
+```java
+protected long countDownConnection() {
+        if (maxConnections==-1) {
+            return -1;
+        }
+        LimitLatch latch = connectionLimitLatch;
+        if (latch!=null) {
+            return latch.countDown();
+        } else {
+            return -1;
+        }
+    }
+
+
+public long countDown() {
+    sync.releaseShared(0);
+    return getCount();
+}
+
+@Override
+protected boolean tryReleaseShared(int arg) {
+    count.decrementAndGet();
+    return true;
+}
+```
+
+
+### NioEndPoint
 NIO tailored thread pool, providing the following services:
 
 1. Socket acceptor thread, default 1
@@ -408,7 +522,7 @@ protected void startAcceptorThread() {
 
 
 
-### Acceptor
+## Acceptor
 
 call in Endpoint
 
@@ -506,7 +620,7 @@ public class Acceptor<U> implements Runnable {
 ```
 
 
-#### setSocketOptions
+### setSocketOptions
 Process the specified connection.
 
 call [register](/docs/CS/Java/Tomcat/Connector.md?id=register)
@@ -567,7 +681,7 @@ protected boolean setSocketOptions(SocketChannel socket) {
 ```
 
 
-#### register
+### register
 Registers a newly created socket with the poller.
 
 events is a SynchronizedQueue
@@ -690,7 +804,7 @@ public class SynchronizedQueue<T> {
 
 
 ## Poller
-call in Endpoint
+call in NioEndpoint
 ```java
 public class Poller implements Runnable {
 
