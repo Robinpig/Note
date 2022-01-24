@@ -1,6 +1,16 @@
 ## Introduction
 
 
+```shell
+cat /proc/version
+```
+
+
+
+
+
+
+
 ## Directory
 
 | Directory |        |      |

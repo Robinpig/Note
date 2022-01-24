@@ -223,9 +223,9 @@ public ChannelFuture disconnect(final ChannelPromise promise) {
 
 
 
-### inbound
+## inbound
 
-from head
+from head -> tail
 
 
 
@@ -385,8 +385,57 @@ private void readIfIsAutoRead() {
 }
 ```
 
+Make sure use same EventLoop
+```java
+abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, ResourceLeakHint {
+    static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
+        final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
+        EventExecutor executor = next.executor();
+        if (executor.inEventLoop()) {
+            next.invokeChannelRead(m);
+        } else {
+            executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    next.invokeChannelRead(m);
+                }
+            });
+        }
+    }
+}
+```
 
 
+```java
+// HeadContext
+public void channelRead(ChannelHandlerContext ctx, Object msg) {
+    ctx.fireChannelRead(msg);
+}
+```
+
+
+```java
+abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, ResourceLeakHint {
+    public ChannelHandlerContext fireChannelRead(final Object msg) {
+        invokeChannelRead(findContextInbound(MASK_CHANNEL_READ), msg);
+        return this;
+    }
+
+    private AbstractChannelHandlerContext findContextInbound(int mask) {
+        AbstractChannelHandlerContext ctx = this;
+        EventExecutor currentExecutor = executor();
+        do {
+            ctx = ctx.next;
+        } while (skipContext(ctx, currentExecutor, mask, MASK_ONLY_INBOUND));
+        return ctx;
+    }
+}
+```
+
+
+## outbound
+
+tail -> head
 ### TailContext
 
 
@@ -404,7 +453,8 @@ final class TailContext extends AbstractChannelHandlerContext implements Channel
 
 
 
-Called once a message hit the end of the ChannelPipeline without been handled by the user in ChannelInboundHandler.channelRead(ChannelHandlerContext, Object). This method is responsible to call **ReferenceCountUtil.release(Object)** on the given msg at some point.
+Called once a message hit the end of the ChannelPipeline without been handled by the user in ChannelInboundHandler.channelRead(ChannelHandlerContext, Object). 
+This method is responsible to call **ReferenceCountUtil.release(Object)** on the given msg at some point.
 
 ```java
  @Override
@@ -429,6 +479,159 @@ protected void onUnhandledInboundMessage(Object msg) {
 }
 ```
 
+
+#### addMessage
+Add given message to this ChannelOutboundBuffer. The given ChannelPromise will be notified once the message was written.
+
+```java
+public final class ChannelOutboundBuffer {
+    public void addMessage(Object msg, int size, ChannelPromise promise) {
+        Entry entry = Entry.newInstance(msg, size, total(msg), promise);
+        if (tailEntry == null) {
+            flushedEntry = null;
+        } else {
+            Entry tail = tailEntry;
+            tail.next = entry;
+        }
+        tailEntry = entry;
+        if (unflushedEntry == null) {
+            unflushedEntry = entry;
+        }
+
+        // increment pending bytes after adding message to the unflushed arrays.
+        // See https://github.com/netty/netty/issues/1619
+        incrementPendingOutboundBytes(entry.pendingSize, false);
+    }
+}
+```
+#### addFlush
+Add a flush to this ChannelOutboundBuffer. This means all previous added messages are marked as flushed and so you will be able to handle them.
+
+
+```java
+public final class ChannelOutboundBuffer {
+    public void addFlush() {
+        // There is no need to process all entries if there was already a flush before and no new messages
+        // where added in the meantime.
+        //
+        // See https://github.com/netty/netty/issues/2577
+        Entry entry = unflushedEntry;
+        if (entry != null) {
+            if (flushedEntry == null) {
+                // there is no flushedEntry yet, so start with the entry
+                flushedEntry = entry;
+            }
+            do {
+                flushed++;
+                if (!entry.promise.setUncancellable()) {
+                    // Was cancelled so make sure we free up memory and notify about the freed bytes
+                    int pending = entry.cancel();
+                    decrementPendingOutboundBytes(pending, false, true);
+                }
+                entry = entry.next;
+            } while (entry != null);
+
+            // All flushed so reset unflushedEntry
+            unflushedEntry = null;
+        }
+    }
+}
+```
+
+#### doWrite
+
+
+```java
+public class NioSocketChannel extends AbstractNioByteChannel implements io.netty.channel.socket.SocketChannel {
+    protected void doWrite(ChannelOutboundBuffer in) throws Exception {
+        SocketChannel ch = javaChannel();
+        /*
+         * Returns the maximum loop count for a write operation until WritableByteChannel.write(ByteBuffer) returns a non-zero value. 
+         * It is similar to what a spin lock is used for in concurrency programming. 
+         * It improves memory utilization and write throughput depending on the platform that JVM runs on. 
+         * The default value is 16.
+         */
+        int writeSpinCount = config().getWriteSpinCount();
+        do {
+            if (in.isEmpty()) {
+                // All written so clear OP_WRITE
+                clearOpWrite();
+                // Directly return here so incompleteWrite(...) is not called.
+                return;
+            }
+
+            // Ensure the pending writes are made of ByteBufs only.
+            int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
+            ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
+            int nioBufferCnt = in.nioBufferCount();
+
+            // Always use nioBuffers() to workaround data-corruption.
+            // See https://github.com/netty/netty/issues/2761
+            switch (nioBufferCnt) {
+                case 0:
+                    // We have something else beside ByteBuffers to write so fallback to normal writes.
+                    writeSpinCount -= doWrite0(in);
+                    break;
+                case 1: {
+                    // Only one ByteBuf so use non-gathering write
+                    // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
+                    // to check if the total size of all the buffers is non-zero.
+                    ByteBuffer buffer = nioBuffers[0];
+                    int attemptedBytes = buffer.remaining();
+                    final int localWrittenBytes = ch.write(buffer);
+                    if (localWrittenBytes <= 0) {
+                        incompleteWrite(true);
+                        return;
+                    }
+                    adjustMaxBytesPerGatheringWrite(attemptedBytes, localWrittenBytes, maxBytesPerGatheringWrite);
+                    in.removeBytes(localWrittenBytes);
+                    --writeSpinCount;
+                    break;
+                }
+                default: {
+                    // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
+                    // to check if the total size of all the buffers is non-zero.
+                    // We limit the max amount to int above so cast is safe
+                    long attemptedBytes = in.nioBufferSize();
+                    final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
+                    if (localWrittenBytes <= 0) {
+                        incompleteWrite(true);
+                        return;
+                    }
+                    // Casting to int is safe because we limit the total amount of data in the nioBuffers to int above.
+                    adjustMaxBytesPerGatheringWrite((int) attemptedBytes, (int) localWrittenBytes,
+                            maxBytesPerGatheringWrite);
+                    in.removeBytes(localWrittenBytes);
+                    --writeSpinCount;
+                    break;
+                }
+            }
+        } while (writeSpinCount > 0);
+
+        incompleteWrite(writeSpinCount < 0);
+    }
+
+}
+```
+
+flush
+
+```java
+protected abstract class AbstractUnsafe implements Unsafe {
+    @Override
+    public final void flush() {
+        assertEventLoop();
+
+        ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+        if (outboundBuffer == null) {
+            return;
+        }
+
+        outboundBuffer.addFlush();
+        flush0();
+    }
+}
+```
 
 
 ## ChannelHandler

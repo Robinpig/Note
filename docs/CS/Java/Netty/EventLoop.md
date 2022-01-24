@@ -1301,84 +1301,122 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 
 
 #### read
-call NioByteUnsafe#read( )
 
 get [ByteBufAllocator]()
 
 
 
+Multiple fireChannelRead and 1 fireChannelReadComplete
 ```java
-
-public final void read() {
-    ChannelConfig config = AbstractNioByteChannel.this.config();
-    if (AbstractNioByteChannel.this.shouldBreakReadReady(config)) {
-        AbstractNioByteChannel.this.clearReadPending();
-    } else {
-        ChannelPipeline pipeline = AbstractNioByteChannel.this.pipeline();
-        ByteBufAllocator allocator = config.getAllocator();
-        Handle allocHandle = this.recvBufAllocHandle();
+// AbstractNioByteChannel.NioByteUnsafe#read
+protected class NioByteUnsafe extends AbstractNioUnsafe {
+    public final void read() {
+        final ChannelConfig config = config();
+        if (shouldBreakReadReady(config)) {
+            clearReadPending();
+            return;
+        }
+        final ChannelPipeline pipeline = pipeline();
+        final ByteBufAllocator allocator = config.getAllocator();
+        final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
         allocHandle.reset(config);
+
         ByteBuf byteBuf = null;
         boolean close = false;
-
         try {
             do {
                 byteBuf = allocHandle.allocate(allocator);
-                allocHandle.lastBytesRead(AbstractNioByteChannel.this.doReadBytes(byteBuf));
+                allocHandle.lastBytesRead(doReadBytes(byteBuf));
                 if (allocHandle.lastBytesRead() <= 0) {
+                    // nothing was read. release the buffer.
                     byteBuf.release();
                     byteBuf = null;
                     close = allocHandle.lastBytesRead() < 0;
                     if (close) {
-                        AbstractNioByteChannel.this.readPending = false;
+                        // There is nothing left to read as we received an EOF.
+                        readPending = false;
                     }
                     break;
                 }
 
                 allocHandle.incMessagesRead(1);
-                AbstractNioByteChannel.this.readPending = false;
+                readPending = false;
+                // fireChannelRead()
                 pipeline.fireChannelRead(byteBuf);
                 byteBuf = null;
-            } while(allocHandle.continueReading()); // default read once
+            } while (allocHandle.continueReading());
 
             allocHandle.readComplete();
             pipeline.fireChannelReadComplete();
+
             if (close) {
-                this.closeOnRead(pipeline);
+                closeOnRead(pipeline);
             }
-        } catch (Throwable var11) {
-            this.handleReadException(pipeline, byteBuf, var11, close, allocHandle);
+        } catch (Throwable t) {
+            handleReadException(pipeline, byteBuf, t, close, allocHandle);
         } finally {
-            if (!AbstractNioByteChannel.this.readPending && !config.isAutoRead()) {
-                this.removeReadOp();
+            // Check if there is a readPending which was not processed yet.
+            // This could be for two reasons:
+            // * The user called Channel.read() or ChannelHandlerContext.read() in channelRead(...) method
+            // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
+            //
+            // See https://github.com/netty/netty/issues/2254
+            if (!readPending && !config.isAutoRead()) {
+                removeReadOp();
             }
-
-        }
-
-    }
-}
-
-//Read messages into the given array and return the amount which was read.
-@Override
-protected int doReadMessages(List<Object> buf) throws Exception {
-    SocketChannel ch = SocketUtils.accept(javaChannel());
-
-    try {
-        if (ch != null) {
-            buf.add(new NioSocketChannel(this, ch));
-            return 1;
-        }
-    } catch (Throwable t) {
-        try {
-            ch.close();
-        } catch (Throwable t2) {
         }
     }
 
-    return 0;
 }
 ```
 
+max 16
+
+```java
+public abstract class MaxMessageHandle implements ExtendedHandle {
+    @Override
+    public boolean continueReading() {
+        return continueReading(defaultMaybeMoreSupplier);
+    }
+
+    @Override
+    public boolean continueReading(UncheckedBooleanSupplier maybeMoreDataSupplier) {
+        return config.isAutoRead() &&
+                (!respectMaybeMoreData || maybeMoreDataSupplier.get()) &&
+                totalMessages < maxMessagePerRead &&
+                totalBytesRead > 0;
+    }
+}
+```
+
+#### RecvByteBufAllocator
+Allocates a new receive buffer whose capacity is probably large enough to read all inbound data and small enough not to waste its space.
+
+The RecvByteBufAllocator that automatically increases and decreases the predicted buffer size on feed back.
+- It gradually increases the expected number of readable bytes if the previous read fully filled the allocated buffer. 
+- It gradually decreases the expected number of readable bytes if the read operation was not able to fill a certain amount of the allocated buffer two times consecutively. 
+- Otherwise, it keeps returning the same prediction.
+
+```java
+// AdaptiveRecvByteBufAllocator
+private final class HandleImpl extends MaxMessageHandle {
+    private void record(int actualReadBytes) {
+        if (actualReadBytes <= SIZE_TABLE[max(0, index - INDEX_DECREMENT)]) {
+            if (decreaseNow) {
+                index = max(index - INDEX_DECREMENT, minIndex);
+                nextReceiveBufferSize = SIZE_TABLE[index];
+                decreaseNow = false;
+            } else {
+                decreaseNow = true;
+            }
+        } else if (actualReadBytes >= nextReceiveBufferSize) {
+            index = min(index + INDEX_INCREMENT, maxIndex);
+            nextReceiveBufferSize = SIZE_TABLE[index];
+            decreaseNow = false;
+        }
+    }
+}
+```
 
 
 #### write
