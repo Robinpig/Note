@@ -26,18 +26,6 @@ digraph g{
 
 
 
-```plantuml
-@startuml
-WorkEventLoopGroup -> Selector: selector.select()
-Selector --> WorkEventLoopGroup: OP_READ
-WorkEventLoopGroup -> NioByteUnsafe: NioUnsafe.read()
-NioByteUnsafe -> NioSocketChannel: NioUnsafe.read()
-NioSocketChannel --> NioByteUnsafe: -1(EOF)
-NioByteUnsafe --> NioByteUnsafe: closeOnRead()
-@enduml
-```
-
-
 
 ```sequence
 participant User
