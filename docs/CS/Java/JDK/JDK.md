@@ -1,6 +1,7 @@
 ## Introduction
 
-> Java is a blue collar language. It’s not PhD thesis material but a language for a job.
+> [!NOTE]
+> Java is a blue collar language. It’s not PhD thesis material but a language for a job. 
 > 
 > -- by James Gosling
 

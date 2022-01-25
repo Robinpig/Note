@@ -467,7 +467,9 @@ public class TreeMaker implements JCTree.Factory {
 
 
 ### process
-[JSR 269 Maintenance Review](https://jcp.org/aboutJava/communityprocess/maintenance/jsr269/JSR269-MR.html)
+> [!Note]
+>
+> [JSR 269 Maintenance Review](https://jcp.org/aboutJava/communityprocess/maintenance/jsr269/JSR269-MR.html)
 
 Processor
 

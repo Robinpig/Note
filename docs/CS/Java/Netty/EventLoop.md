@@ -1,12 +1,8 @@
 ## Introduction
 
-
-
 ### EventLoop Hierarchy
 
 ![EventLoopGroup](./images/EventLoop.png)
-
-
 
 ### EventExecutorGroup
 
@@ -15,7 +11,7 @@ Besides this, it is also responsible for **handling their life-cycle** and **all
 
 ```java
 public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<EventExecutor> {
-    
+  
     //Returns one of the EventExecutors managed by this EventExecutorGroup.
     EventExecutor next();
 
@@ -25,20 +21,19 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
 }
 ```
 
-
-
 #### shutdownGracefully
 
-Signals this executor that the caller wants the executor to be shut down. Once this method is called, 
-isShuttingDown() starts to return true, and the executor prepares to shut itself down. Unlike shutdown(), 
-graceful shutdown ensures that no tasks are submitted for 'the quiet period' (usually a couple seconds) before it shuts itself down. 
+Signals this executor that the caller wants the executor to be shut down.
+
+Once this method is called, isShuttingDown() starts to return true, and the executor prepares to shut itself down.
+Unlike shutdown(), graceful shutdown ensures that no tasks are submitted for 'the quiet period' (usually a couple seconds) before it shuts itself down.
 If a task is submitted during the quiet period, it is guaranteed to be accepted and the quiet period will start over.
 
 ```java
- 		Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit);
+    Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit);
 
-		//Returns true if and only if all EventExecutors managed by this EventExecutorGroup 
-  	//are being shut down gracefully or was shut down.
+    //Returns true if and only if all EventExecutors managed by this EventExecutorGroup 
+    //are being shut down gracefully or was shut down.
     boolean isShuttingDown();
 
     //Shortcut method for shutdownGracefully(long, long, TimeUnit) with 
@@ -57,8 +52,6 @@ If a task is submitted during the quiet period, it is guaranteed to be accepted 
     @Deprecated
     List<Runnable> shutdownNow();
 ```
-
-
 
 ```java
 // SingleThreadEventExecutor
@@ -119,8 +112,6 @@ public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit uni
     return terminationFuture();
 }
 ```
-
-
 
 ### EventExecutor
 
@@ -183,8 +174,6 @@ public interface EventExecutor extends EventExecutorGroup {
 }
 ```
 
-
-
 ### EventLoopGroup
 
 Special EventExecutorGroup which allows registering Channels that get processed for later selection during the event loop.
@@ -209,8 +198,6 @@ public interface EventLoopGroup extends EventExecutorGroup {
 }
 ```
 
-
-
 ### register
 
 ```java
@@ -233,8 +220,6 @@ public ChannelFuture register(final ChannelPromise promise) {
     return promise;
 }
 ```
-
-
 
 #### doRegister( )
 
@@ -263,13 +248,7 @@ protected void doRegister() throws Exception {
 }
 ```
 
-
-
-
-
 ## Create NioEventLoopGroup
-
-
 
 ```java
 public NioEventLoopGroup(int nThreads) {
@@ -301,8 +280,6 @@ public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFa
             rejectedExecutionHandler, taskQueueFactory);
 }
 ```
-
-
 
 #### SelectorProvider#provider()
 
@@ -338,8 +315,6 @@ public static SelectorProvider create() {
     }
 ```
 
-
-
 #### DefaultSelectStrategyFactory
 
 ```java
@@ -354,8 +329,6 @@ public final class DefaultSelectStrategyFactory implements SelectStrategyFactory
     }
 }
 ```
-
-
 
 #### RejectedExecutionHandlers#reject()
 
@@ -376,10 +349,7 @@ public final class RejectedExecutionHandlers {
 }
 ```
 
-
-
 #### MultithreadEventExecutorGroup
-
 
 ```java
 private final EventExecutor[] children;
@@ -460,10 +430,6 @@ protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
 }
 ```
 
-
-
-
-
 #### ThreadPerTaskExecutor
 
 ```java
@@ -477,8 +443,6 @@ public final class ThreadPerTaskExecutor implements Executor {
     }
 }
 ```
-
-
 
 #### DefaultThreadFactory
 
@@ -503,7 +467,7 @@ public class DefaultThreadFactory implements ThreadFactory {
 
     public static String toPoolName(Class<?> poolType) {
        //ignore checking parameters
-      
+    
         String poolName = StringUtil.simpleClassName(poolType);
         switch (poolName.length()) {
             case 0:
@@ -565,8 +529,6 @@ create [FastThreadLocalThread](/docs/CS/Java/Netty/FastThreadLocal.md)
     }
 ```
 
-
-
 #### NioEventLoopGroup#newChild()
 
 just create NioEventLoop, not start Thread
@@ -581,9 +543,8 @@ protected EventLoop newChild(Executor executor, Object... args) throws Exception
 }
 ```
 
-
-
 #### EventExecutorChooserFactory#newChooser()
+
 default use **PowerOfTwoEventExecutorChooser**
 
 ```java
@@ -639,8 +600,6 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 }
 ```
 
-
-
 #### NioEventLoopGroup#setIoRatio
 
 Sets the percentage of the desired amount of time spent for I/O in the child event loops. The default value is 50, which means the event loop will try to **spend the same amount of time for I/O as for non-I/O tasks**.
@@ -655,10 +614,6 @@ public void setIoRatio(int ioRatio) {
     }
 }
 ```
-
-
-
-
 
 ## Create NioEventLoop
 
@@ -676,8 +631,6 @@ NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selec
     selectStrategy = strategy;
 }
 ```
-
-
 
 #### NioEventLoop#newTaskQueue()
 
@@ -698,8 +651,6 @@ private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
             : PlatformDependent.<Runnable>newMpscQueue(maxPendingTasks);
 }
 ```
-
-
 
 Fields
 
@@ -758,8 +709,6 @@ private volatile int ioRatio = 50;
 private int cancelledKeys;
 private boolean needsToSelectAgain;
 ```
-
-
 
 #### openSelector
 
@@ -862,8 +811,6 @@ private SelectorTuple openSelector() {
 }
 ```
 
-
-
 SelectedSelectionKeySet actually use SelectionKey[] keys
 
 ```java
@@ -879,9 +826,8 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 }
 ```
 
-
-
 ## execute
+
 startThread when execute first task
 
 ```java
@@ -919,8 +865,6 @@ private void execute(Runnable task, boolean immediate) {
     }
 }
 ```
-
-
 
 ### startThread
 
@@ -1000,8 +944,6 @@ private void doStartThread() {
     });
 }
 ```
-
-
 
 ### run
 
@@ -1089,7 +1031,10 @@ protected void run() {
         } catch (Throwable t) {
             handleLoopException(t);
         }
-        // Always handle shutdown even if the loop processing threw an exception.
+```
+Always handle shutdown even if the loop processing threw an exception.
+And [closeAll](/docs/CS/Java/Netty/EventLoop.md?id=closeAll) before shut down
+```java
         try {
             if (isShuttingDown()) {
                 closeAll();
@@ -1104,8 +1049,6 @@ protected void run() {
 }
 ```
 
-
-
 SelectedSelectionKeySet
 
 ```java
@@ -1119,8 +1062,6 @@ final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
     }
 }
 ```
-
-
 
 ### select( )
 
@@ -1193,11 +1134,7 @@ private void select(boolean oldWakenUp) throws IOException {
 }
 ```
 
-
-
 #### processSelectedKey
-
-
 
 call [Channel#finishConnect()](/docs/CS/Java/Netty/Channel.md?id=finishConnect)
 
@@ -1243,8 +1180,6 @@ In a serial loop, so it's not for upload file
 1. OP_CONNECT
 2. OP_WRITE
 3. read
-
-
 
 ```java
 private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
@@ -1302,15 +1237,12 @@ private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
 }
 ```
 
-
-
 #### read
 
 get [ByteBufAllocator]()
 
-
-
 Multiple fireChannelRead and 1 fireChannelReadComplete
+
 ```java
 // AbstractNioByteChannel.NioByteUnsafe#read
 protected class NioByteUnsafe extends AbstractNioUnsafe {
@@ -1394,11 +1326,13 @@ public abstract class MaxMessageHandle implements ExtendedHandle {
 ```
 
 #### RecvByteBufAllocator
+
 Allocates a new receive buffer whose capacity is probably large enough to read all inbound data and small enough not to waste its space.
 
 The RecvByteBufAllocator that automatically increases and decreases the predicted buffer size on feed back.
-- It gradually increases the expected number of readable bytes if the previous read fully filled the allocated buffer. 
-- It gradually decreases the expected number of readable bytes if the read operation was not able to fill a certain amount of the allocated buffer two times consecutively. 
+
+- It gradually increases the expected number of readable bytes if the previous read fully filled the allocated buffer.
+- It gradually decreases the expected number of readable bytes if the read operation was not able to fill a certain amount of the allocated buffer two times consecutively.
 - Otherwise, it keeps returning the same prediction.
 
 ```java
@@ -1422,18 +1356,9 @@ private final class HandleImpl extends MaxMessageHandle {
 }
 ```
 
-
 #### write
 
-
-
-
-
-
-
-
-
-### runAllTasks( ) 
+### runAllTasks( )
 
 ```java
 // Poll all tasks from the task queue and run them via {@link Runnable#run()} method.
@@ -1457,9 +1382,7 @@ protected boolean runAllTasks() {
 }
 ```
 
-
-
-### closeAll( )
+### closeAll
 
 ```java
 private void closeAll() {
@@ -1484,11 +1407,7 @@ private void closeAll() {
 }
 ```
 
-unsafe.close( ) in [Channel](/docs/CS/Java/Netty/Channel.md )  
-
-
-
-
+unsafe.close( ) in [Channel](/docs/CS/Java/Netty/Channel.md )
 
 ## Fix epoll 100% CPU bug
 
@@ -1501,8 +1420,6 @@ public void rebuildSelectors() {
     }
 }
 ```
-
-
 
 ### selectRebuildSelector( )
 
@@ -1522,10 +1439,6 @@ private Selector selectRebuildSelector(int selectCnt) throws IOException {
     return selector;
 }
 ```
-
-
-
-
 
 ### rebuildSelector0
 
@@ -1585,6 +1498,3 @@ private void rebuildSelector0() {
     }
 }
 ```
-
-
-

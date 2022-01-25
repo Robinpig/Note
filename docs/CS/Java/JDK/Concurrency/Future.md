@@ -6,14 +6,14 @@
 
 ![Future](../images/Future.png)
 
-*We could create a **Thread** object with a **Runnable** target, also use **FutureTask** to get **Future**.*
+We could create a **Thread** object with a **Runnable** target, also use **FutureTask** to get **Future**.
 
 ### Runnable
 
-*The Runnable interface should be implemented by any class whose instances are intended to be **executed by a thread**. The class must define a method of no arguments **called run**.*
-*This interface is designed to provide a common protocol for objects that wish to execute code while they are active. **Runnable is implemented by class Thread.***
+The Runnable interface should be implemented by any class whose instances are intended to be **executed by a thread**. The class must define a method of no arguments **called run**.
+This interface is designed to provide a common protocol for objects that wish to execute code while they are active. **Runnable is implemented by class Thread.**
 
-*A class that implements Runnable can run without subclassing Thread by instantiating a Thread instance and passing itself in as the target.his is important because classes should not be subclassed unless the programmer intends on modifying or enhancing the fundamental behavior of the class.*
+A class that implements Runnable can run without subclassing Thread by instantiating a Thread instance and passing itself in as the target.his is important because classes should not be subclassed unless the programmer intends on modifying or enhancing the fundamental behavior of the class.
 
 ```java
 @FunctionalInterface
@@ -27,7 +27,7 @@ public interface Runnable {
 
 ### Callable
 
-*A task that **returns a result and may throw an exception**. Implementors define a single method with no arguments **called call**.*
+A task that **returns a result and may throw an exception**. Implementors define a single method with no arguments **called call**.
 
 **Runnable does not return a result and cannot throw a checked exception.**
 
@@ -323,11 +323,17 @@ During completion, state may take on transient values of COMPLETING (while outco
 
 Possible state transitions: 
 
+```dot
+digraph g{
 NEW -> COMPLETING -> NORMAL 
+COMPLETING -> EXCEPTIONAL 
+NEW -> CANCELLED 
+NEW -> INTERRUPTING -> INTERRUPTED
+}
+```
 
-NEW -> COMPLETING -> EXCEPTIONAL 
 
-NEW -> CANCELLED NEW -> INTERRUPTING -> INTERRUPTED
+
 
 ```java
 private volatile int state;

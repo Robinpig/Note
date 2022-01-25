@@ -11,10 +11,10 @@
 - [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
 
 
-## [Writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
+## Writing a Discard Server
+From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
-> [!WARNING]
-> An alert of type 'attention' using global style 'callout'.
+
 
 ```plantuml
 @startuml
@@ -98,6 +98,8 @@ public class DiscardServer {
 7. [ServerBootstrap#bind()](/docs/CS/Java/Netty/Bootstrap.md?id=serverbootstrapbind-)
 8. [ChannelFuture](/docs/CS/Java/Netty/Future.md)
 
+
+### close
 
 
 ## Under Hood

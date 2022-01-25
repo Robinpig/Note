@@ -244,7 +244,7 @@ If the counter is nonzero on entry, await blocks until the counter reaches zero,
 
 
 
-FutureTask also acts like a latch. (FutureTask implements Future, which describes an abstract result-bearing computation).
+[FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md) also acts like a latch. (FutureTask implements Future, which describes an abstract result-bearing computation).
 FutureTask is used by the Executor framework to represent asynchronous tasks, and can also be used to represent any potentially lengthy computation that can be started before the results are needed.
 
 

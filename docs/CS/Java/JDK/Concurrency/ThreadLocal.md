@@ -68,11 +68,11 @@ ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
 
 **ThreadLocalMap**
 
-*Create ThreadLocalMap at **first set/get in ThreadLocal**.*
+Create ThreadLocalMap at **first set/get in ThreadLocal**.
 
-*ThreadLocalMap is a customized hash map suitable only for maintaining thread local values. No operations are exported outside of the ThreadLocal class. **The class is package private to allow declaration of fields in class Thread.** To help **deal with very large and long-lived usages, the hash table entries use WeakReferences for keys**.* 
+ThreadLocalMap is a customized hash map suitable only for maintaining thread local values. No operations are exported outside of the ThreadLocal class. **The class is package private to allow declaration of fields in class Thread.** To help **deal with very large and long-lived usages, the hash table entries use WeakReferences for keys**. 
 
-*However, since **reference queues are not used, stale entries are guaranteed to be removed only when the table starts running out of space**.*
+However, since **reference queues are not used, stale entries are guaranteed to be removed only when the table starts running out of space**.
 
 ```Java
 static class ThreadLocalMap {
@@ -102,7 +102,7 @@ static class ThreadLocalMap {
 
 **Entry**
 
-*The entries in this hash map **extend WeakReference**, using its **main ref field as the key (which is always a ThreadLocal object)**. Note that **null keys (i.e. entry.get() == null) mean that the key is no longer referenced, so the entry can be expunged from table**. Such entries are referred to as "**stale entries**" in the code that follows.*
+The entries in this hash map **extend WeakReference**, using its **main ref field as the key (which is always a ThreadLocal object)**. Note that **null keys (i.e. entry.get() == null) mean that the key is no longer referenced, so the entry can be expunged from table**. Such entries are referred to as "**stale entries**" in the code that follows.
 
 ```java
 static class Entry extends WeakReference<ThreadLocal<?>> {
@@ -118,11 +118,11 @@ static class Entry extends WeakReference<ThreadLocal<?>> {
 
 ### hash
 
-*ThreadLocals rely on **per-thread linear-probe hash maps** attached to each thread (**Thread.threadLocals and inheritableThreadLocals**). The ThreadLocal objects act as keys, searched via threadLocalHashCode. This is a custom hash code (**useful only within ThreadLocalMaps**) that **eliminates collisions in the common case where consecutively constructed ThreadLocals are used by the same threads**, while remaining well-behaved in less common cases.*
+ThreadLocals rely on **per-thread linear-probe hash maps** attached to each thread (**Thread.threadLocals and inheritableThreadLocals**). The ThreadLocal objects act as keys, searched via threadLocalHashCode. This is a custom hash code (**useful only within ThreadLocalMaps**) that **eliminates collisions in the common case where consecutively constructed ThreadLocals are used by the same threads**, while remaining well-behaved in less common cases.
 
 **HASH_INCREMENT = 0x61c88647**
 
-*The difference between successively generated hash codes - turns implicit sequential thread-local IDs into **near-optimally spread multiplicative hash values** for **power-of-two-sized tables**.*
+The difference between successively generated hash codes - turns implicit sequential thread-local IDs into **near-optimally spread multiplicative hash values** for **power-of-two-sized tables**.
 
 ` 0x61c88647 = (long) ((1L << 31) * (Math.sqrt(5) - 1))`
 
@@ -141,7 +141,7 @@ private static int nextHashCode() {
 
 ### Set in ThreadLocalMap
 
-*We don't use a fast path as with get() because it is at  least as common to use set() to create new entries as it is to replace existing ones, in which case, a fast path would fail more often than not.*
+We don't use a fast path as with get() because it is at  least as common to use set() to create new entries as it is to replace existing ones, in which case, a fast path would fail more often than not.
 
 ```java
 private void set(ThreadLocal<?> key, Object value) {
@@ -177,7 +177,7 @@ private void set(ThreadLocal<?> key, Object value) {
 
 ### replaceStaleEntry
 
-*Replace a stale entry encountered during a set operation with an entry for the specified key. The value passed in the value parameter is stored in the entry, whether or not an entry already exists for the specified key. As a side effect, this method expunges all stale entries in the "run" containing the stale entry. (**A run is a sequence of entries between two null slots**.)*
+Replace a stale entry encountered during a set operation with an entry for the specified key. The value passed in the value parameter is stored in the entry, whether or not an entry already exists for the specified key. As a side effect, this method expunges all stale entries in the "run" containing the stale entry. (**A run is a sequence of entries between two null slots**.)
 
 1. Back up to find prior stale entry util the null entry
 2. From staleSlot to check the key of  entry util the null entry
@@ -253,9 +253,9 @@ private void replaceStaleEntry(ThreadLocal<?> key, Object value,
 
 **Heuristically scan some cells looking for stale entries.**
 
-*This is invoked when either a new element is **added**, or another stale one has been **expunged**.*
+This is invoked when either a new element is **added**, or another stale one has been **expunged**.
 
-*It **performs a logarithmic number of scans**, as a balance between no scanning (fast but retains garbage) and a number of scans proportional to number of elements, that would find all garbage but **would cause some insertions to take O(n) time**.*
+It **performs a logarithmic number of scans**, as a balance between no scanning (fast but retains garbage) and a number of scans proportional to number of elements, that would find all garbage but **would cause some insertions to take O(n) time**.
 
 ```java
 private boolean cleanSomeSlots(int i, int n) {
@@ -281,8 +281,8 @@ private boolean cleanSomeSlots(int i, int n) {
 
 ### expungeStaleEntry
 
-1. *Expunge a stale entry by **rehashing any possibly colliding entries lying between staleSlot and the next null slot**.*
-2. *This also **expunges any other stale entries encountered before the trailing null**.*
+1. Expunge a stale entry by **rehashing any possibly colliding entries lying between staleSlot and the next null slot**.
+2. This also **expunges any other stale entries encountered before the trailing null**.
 
 **See Knuth, Section 6.4 -- todo**
 
@@ -391,7 +391,7 @@ private void resize() {
 
 ### Get in ThreadLocal
 
-*Returns the value in the current thread's copy of this thread-local variable. If the variable has no value for the current thread, it is first initialized to the value returned by an invocation of the initialValue method.*
+Returns the value in the current thread's copy of this thread-local variable. If the variable has no value for the current thread, it is first initialized to the value returned by an invocation of the initialValue method.
 
 ```java
 public T get() {
@@ -465,9 +465,9 @@ private Entry getEntryAfterMiss(ThreadLocal<?> key, int i, Entry e) {
 
 ### remove in ThreadLocal
 
-*Removes the current thread's value for this thread-local variable.*
+Removes the current thread's value for this thread-local variable.
 
-*If this thread-local variable is subsequently read by the current thread, its value will be reinitialized by invoking its initialValue method, unless its value is set by the current thread in the interim. **This may result in multiple invocations of the initialValue method in the current thread**.*
+If this thread-local variable is subsequently read by the current thread, its value will be reinitialized by invoking its initialValue method, unless its value is set by the current thread in the interim. **This may result in multiple invocations of the initialValue method in the current thread**.
 
 **Invoke remove method if no longer used.** 
 
