@@ -13,50 +13,26 @@
 
 ## [Writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
-```dot
-digraph g{
-    App[label="Application"]
-    OS[label="Operating System"]
-    App->OS->App
-    OS->CPU->OS
-    OS->Memory->OS
-    OS->Devices->OS
-}
+> [!WARNING]
+> An alert of type 'attention' using global style 'callout'.
+
+```plantuml
+@startuml
+actor user as user
+
+user -> user: send messages
+WorkEventLoopGroup -> Selector: selector.select()
+Selector --> WorkEventLoopGroup: OP_READ
+WorkEventLoopGroup -> NioByteUnsafe: NioUnsafe.read()
+NioByteUnsafe -> NioSocketChannel: NioUnsafe.read()
+NioSocketChannel --> NioByteUnsafe: -1(EOF)
+NioByteUnsafe --> NioByteUnsafe: closeOnRead()
+participant ChannelPipeline
+
+@enduml
 ```
 
 
-
-
-```sequence
-participant User
-User -->> User: send messages
-participant WorkEventLoopGroup as we
-participant Selector as se
-we ->> se: selector.select()
-se ->> we: OP_READ
-participant NioByteUnsafe as ue
-we ->> ue: NioUnsafe.read()
-participant NioSocketChannel as so
-ue ->> so: NioUnsafe.read()
-so ->> ue: -1(EOF)
-ue -->> ue: closeOnRead()
-participant ChannelPipeline as pipe
-
-```
-
-
-
-
-
-```flow
-st=>start: User login
-op=>operation: Operation
-cond=>condition: Successful Yes or No?
-e=>end: Into admin
-st->op->cond
-cond(yes)->e
-cond(no)->op
-```
 
 
 ```java

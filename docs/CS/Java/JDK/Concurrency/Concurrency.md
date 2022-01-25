@@ -127,6 +127,7 @@ There are advantages to using a private lock object instead of an object's intri
 
 ##### Reentrancy
 Reentrancy means that locks are acquired on a per-thread rather than per-invocation basis.
+> [!ATTENTION]
 > Code that would Deadlock if Locks were Not Reentrant.
 
 ##### Guarding State with Locks
@@ -158,6 +159,7 @@ Volatile Variables
 #### Immutability
 
 
+> [!TIP]
 > An object is immutable if:
 > - Its state cannot be modified after construction;
 > - All its fields are final; and
@@ -275,6 +277,7 @@ When two threads exchange objects via an Exchanger, the exchange constitutes a s
 
 
 ### Summary of Fundamentals
+> [!NOTE]
 > We've covered a lot of material so far! The following "concurrency cheat sheet" summarizes the main concepts and rules:
 > - It's the mutable state, stupid. 
 >   All concurrency issues boil down to coordinating access to mutable state. The less mutable state, the easier it is to
@@ -299,19 +302,19 @@ When two threads exchange objects via an Exchanger, the exchange constitutes a s
 
 Given these definitions:
 
-$$
+```tex
 \begin{aligned}
 &N_{cpu} = number\; of\; CPUs 
 \\&U_{cpu}= target\; CPU\; utilization,\; 0\leq U_{cpu}\leq 1
 \\&\frac{W}C= ratio\; of\; wait\; time\; to\; compute\; time
 \end{aligned}
-$$
+```
 
 The optimal pool size for keeping the processors at the desired utilization is:
 
-$$
+```tex
 N_{threads} = N_{cpu}*U_{cpu}*(1+\frac{W}C)
-$$
+```
 
 You can determine the number of CPUs using Runtime:
 
@@ -362,13 +365,14 @@ Improving performance means doing more work with fewer resources. The meaning of
 In using concurrency to achieve better performance, we are trying to do two things: utilize the processing resources we have more effectively, and enable our program to exploit additional processing resources if they become available.
 From a performance monitoring perspective, this means we are looking to keep the CPUs as busy as possible.
 
+> [!TIP]
 > Avoid premature optimization. First make it right, then make it fast ‐ if it is not already fast enough.
 ### Amdahl's Law
 Amdahl's law describes how much a program can theoretically be sped up by additional computing resources, based on the proportion of parallelizable and serial components. If F is the fraction of the calculation that must be executed serially, then Amdahl's law says that on a machine with N processors, we can achieve a speedup of at most:
 
-$$
+```tex
 Speedup \leq \frac{1}{F+\frac{1-F}N}
-$$
+```
 
 As N approaches infinity, the maximum speedup converges to 1/F.
 

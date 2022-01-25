@@ -10,7 +10,8 @@
 
 ### EventExecutorGroup
 
-The EventExecutorGroup is responsible for **providing the EventExecutor's to use via its `next()` method**. Besides this, it is also responsible for **handling their life-cycle** and **allows shutting them down in a global fashion**.
+The EventExecutorGroup is responsible for **providing the EventExecutor's to use via its `next()` method**. 
+Besides this, it is also responsible for **handling their life-cycle** and **allows shutting them down in a global fashion**.
 
 ```java
 public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<EventExecutor> {
@@ -28,7 +29,10 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
 
 #### shutdownGracefully
 
-Signals this executor that the caller wants the executor to be shut down. Once this method is called, isShuttingDown() starts to return true, and the executor prepares to shut itself down. Unlike shutdown(), graceful shutdown ensures that no tasks are submitted for 'the quiet period' (usually a couple seconds) before it shuts itself down. If a task is submitted during the quiet period, it is guaranteed to be accepted and the quiet period will start over.
+Signals this executor that the caller wants the executor to be shut down. Once this method is called, 
+isShuttingDown() starts to return true, and the executor prepares to shut itself down. Unlike shutdown(), 
+graceful shutdown ensures that no tasks are submitted for 'the quiet period' (usually a couple seconds) before it shuts itself down. 
+If a task is submitted during the quiet period, it is guaranteed to be accepted and the quiet period will start over.
 
 ```java
  		Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit);
