@@ -26,6 +26,8 @@
 <body>
 <div id="app"></div>
 <script>
+ // mermaid.initialize({ startOnLoad: true });
+
   window.$docsify = {
     disqus: 'shortname',
     name: 'Note',
@@ -34,6 +36,11 @@
     markdown: {
       renderer: {
         code: function(code, lang) {
+
+          if (lang === "sequence") {
+            lang ="sequence-diagram"
+          }
+
           if (lang === "dot") {
             return (
                     '<div class="viz">'+ Viz(code, "SVG")+'</div>'
@@ -158,6 +165,19 @@
 
 
 <script src="https://unpkg.com/docsify-copy-code"></script>
+
+
+<!--see https://github.com/imyelo/docsify-sequence-diagram-->
+<script src="//unpkg.com/raphael"></script>
+<script src="//unpkg.com/underscore"></script>
+<script src="//unpkg.com/docsify-sequence-diagram/dist/docsify-sequence-diagram.min.js"></script>
+
+<!-- see https://github.com/Leward/mermaid-docsify not support with puml,sequence-diagram, dot and tex-->
+<!--<script src="//unpkg.com/mermaid/dist/mermaid.js"></script>-->
+<!--<script src="//unpkg.com/docsify-mermaid@latest/dist/docsify-mermaid.js">-->
+
+
+<script src="//unpkg.com/docsify/lib/plugins/zoom-image.js"></script>
 
 </body>
 </html>
