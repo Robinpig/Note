@@ -6,20 +6,7 @@
 
 ## Algorithms
 
-
-### Data Structures
-- [hash](/docs/CS/Algorithms/hash.md)
-- [Trie](/docs/CS/Algorithms/Trie.md)
-- [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
-- [Red-Black Tree](/docs/CS/Algorithms/Red-Black%20Tree.md)
-
-### Page Replacement Algorithms
-- [LRU](/docs/CS/Algorithms/LRU.md)
-
-### Advanced Design and Analysis Techniques
-- [Dynamic Programming](/docs/CS/Algorithms/DP.md)
-- [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
-
+We describe [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures), methods of organizing large amounts of data, and [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis), the estimation of the running time of algorithms.
 
 ## Operating System
 

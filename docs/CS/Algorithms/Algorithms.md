@@ -1,4 +1,24 @@
-# Algorithms
+## Introduction
+
+This book describes data structures, methods of organizing large amounts of data, and algorithm analysis, the estimation of the running time of algorithms.
+
+
+Complexity
+
+## Data Structures
+- [hash](/docs/CS/Algorithms/hash.md)
+- [Trie](/docs/CS/Algorithms/Trie.md)
+- [Linked List](/docs/CS/Algorithms/linked-list.md)
+- [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
+- [Red-Black Tree](/docs/CS/Algorithms/Red-Black%20Tree.md)
+
+### Page Replacement Algorithms
+- [LRU](/docs/CS/Algorithms/LRU.md)
+
+### Advanced Design and Analysis Techniques
+- [Dynamic Programming](/docs/CS/Algorithms/DP.md)
+- [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
+
 
 
 

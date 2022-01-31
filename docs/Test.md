@@ -172,6 +172,30 @@ participant ChannelPipeline as pipe
 
 
 
+```sequence
+participant User
+User -->> User: send messages
+participant WorkEventLoopGroup as we
+participant Selector as se
+we ->> se: selector.select()
+se ->> we: OP_READ
+participant NioByteUnsafe as ue
+we ->> ue: NioUnsafe.read()
+participant NioSocketChannel as so
+participant ChannelPipeline as pipe
+ue ->> so: NioUnsafe.read()
+so ->> ue: -1(EOF)
+ue ->> pipe:pipeline.fire ChannelRead()
+ue -->> ue: closeOnRead()
+
+```
+
+
+
+
+
+
+
 ```flow
 st=>start: User login
 op=>operation: Operation

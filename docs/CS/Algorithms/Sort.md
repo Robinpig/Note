@@ -1,3 +1,21 @@
+## Introduction
+
+
+
+| Sort   | Avg Time | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
+| ------ | -------- | --------- | ---- | ---- | ---- | --- |
+| Bubble |          |           |      |      |      |     |
+| Select |          |           |      |      |      ||
+| Insert |          |           |      |      |      ||
+| Shell  |          |           |      |      |      ||
+| Heap   |          |           |      |      |      ||
+| Merge  |          |           |      |      |      ||
+| Quick  | nlogn    | logn      | nlogn | logn | n^2 |n|
+| Radix  |          |           |      |      |      ||
+| Bucket |          |           |      |      |      ||
+
+
+
 ## Bubble Sort
 
 
@@ -26,6 +44,12 @@ Thus, merge sort and heapsort are asymptotically optimal, and no comparison sort
 We examine three sorting algorithms—counting sort, radix sort, and bucket sort—that run in linear time. 
 Of course, these algorithms use operations other than comparisons to determine the sorted order. 
 Consequently, the *O(nlgn)* lower bound does not apply to them.
+
+## Quick Sort
+
+```cpp
+int Pa
+```
 
 ## Counting Sort
 
