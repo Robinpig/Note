@@ -2,6 +2,10 @@
 
 
 
+
+Suppose you have a group of n numbers and would like to determine the kth largest. This is known as the _selection problem_.
+
+
 | Sort   | Avg Time | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
 | ------ | -------- | --------- | ---- | ---- | ---- | --- |
 | Bubble |          |           |      |      |      |     |

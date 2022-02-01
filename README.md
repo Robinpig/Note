@@ -16,8 +16,8 @@ We describe [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structur
 
 ## Network
 
-- [WebSocket](/docs/CS/CN/WebSocket.md)
-- [TCP](/docs/CS/CN/TCP.md)
+A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources located on or provided by network nodes.
+
 
 ## DataBase
 

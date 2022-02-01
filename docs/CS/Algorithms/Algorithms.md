@@ -1,19 +1,32 @@
 ## Introduction
 
-This book describes data structures, methods of organizing large amounts of data, and algorithm analysis, the estimation of the running time of algorithms.
 
-
-Complexity
 
 ## Data Structures
 - [hash](/docs/CS/Algorithms/hash.md)
 - [Trie](/docs/CS/Algorithms/Trie.md)
 - [Linked List](/docs/CS/Algorithms/linked-list.md)
 - [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
-- [Red-Black Tree](/docs/CS/Algorithms/Red-Black%20Tree.md)
+- [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)
 
 ### Page Replacement Algorithms
 - [LRU](/docs/CS/Algorithms/LRU.md)
+
+## Algorithm Analysis
+
+In computer science, the analysis of algorithms is the process of finding the computational complexity of algorithms – the amount of time, storage, or other resources needed to execute them.
+Usually, this involves determining a function that relates the length of an algorithm's input to the number of steps it takes (its time complexity) or the number of storage locations it uses (its space complexity).
+An algorithm is said to be efficient when this function's values are small, or grow slowly compared to a growth in the size of the input. 
+Different inputs of the same length may cause the algorithm to have different behavior, so best, worst and average case descriptions might all be of practical interest. 
+When not otherwise specified, the function describing the performance of an algorithm is usually an upper bound, determined from the worst case inputs to the algorithm.
+
+In theoretical analysis of algorithms it is common to estimate their complexity in the asymptotic sense, i.e., to estimate the complexity function for arbitrarily large input. 
+Big O notation, Big-omega notation and Big-theta notation are used to this end.
+
+Exact (not asymptotic) measures of efficiency can sometimes be computed but they usually require certain assumptions concerning the particular implementation of the algorithm, called model of computation. 
+A model of computation may be defined in terms of an abstract computer, e.g., Turing machine, and/or by postulating that certain operations are executed in unit time.
+
+
 
 ### Advanced Design and Analysis Techniques
 - [Dynamic Programming](/docs/CS/Algorithms/DP.md)
