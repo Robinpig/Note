@@ -67,6 +67,8 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 
 ## Sorting and Order Statistics
 
+- [Sort](/docs/CS/Algorithms/Sort.md)
+
 ### Heapsort
 
 ### Quicksort
