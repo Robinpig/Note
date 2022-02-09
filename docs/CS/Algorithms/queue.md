@@ -22,3 +22,8 @@ Both of these parameters are given as probability distribution functions.
 
 
 
+
+## Links
+- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [list](/docs/CS/Algorithms/list.md)
+- [stack](/docs/CS/Algorithms/stack.md)

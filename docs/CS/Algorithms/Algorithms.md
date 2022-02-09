@@ -10,18 +10,32 @@ This can be viewed as an extension of modular design.
 
 - [hash](/docs/CS/Algorithms/hash.md)
 
-## The List ADT
+### Lists, Stacks, and Queues
 
 array
 - [Linked List](/docs/CS/Algorithms/linked-list.md)
 
-ADT
-  
-- [List](/docs/CS/Algorithms/list.md)
-- [stack](/docs/CS/Algorithms/stack.md)
-- [queue](/docs/CS/Algorithms/queue.md)
+One of the basic rules concerning programming is that no routine should ever exceed a page. 
+This is accomplished by breaking the program down into modules. Each module is a logical unit and does a specific job. 
+Its size is kept small by calling other modules. Modularity has several advantages. 
+- First, it is much easier to debug small routines than large routines. 
+- Second, it is easier for several people to work on a modular program simultaneously. 
+- Third, a well-written modular program places certain dependencies in only one routine, making changes easier. 
 
+For instance, if output needs to be written in a certain format, it is certainly important to have one routine to do this. 
+If printing statements are scattered throughout the program, it will take considerably longer to make modifications. 
+The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
+
+An abstract data type (ADT) is a set of operations. 
+Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented. 
+This can be viewed as an extension of modular design.
+
+
+[Lists](/docs/CS/Algorithms/list.md), [stacks](/docs/CS/Algorithms/stack.md), and [queues](/docs/CS/Algorithms/queue.md) are perhaps the three fundamental data structures in all of computer science.
+  
 ### Tree
+
+[Trees](/docs/CS/Algorithms/tree.md) in general are very useful abstractions in computer science.
 - [Trie](/docs/CS/Algorithms/Trie.md)
 - [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
 - [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)

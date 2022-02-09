@@ -40,3 +40,8 @@ Tail recursion can be mechanically eliminated by changing the recursive call to 
 Although nonrecursive programs are certainly generally faster than recursive programs, the speed advantage rarely justifies the lack of clarity that results from removing the recursion.
 
 
+
+## Links
+- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [list](/docs/CS/Algorithms/list.md)
+- [queue](/docs/CS/Algorithms/queue.md)

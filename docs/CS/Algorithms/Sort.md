@@ -132,3 +132,9 @@ Radix sort is sometimes known as *card sort*.
 
 
 ## Bucket Sort
+
+
+## Links
+
+- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
