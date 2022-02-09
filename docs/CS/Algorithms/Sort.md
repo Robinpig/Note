@@ -128,4 +128,7 @@ int Pa
 
 ## Radix Sort
 
+Radix sort is sometimes known as *card sort*.
+
+
 ## Bucket Sort
