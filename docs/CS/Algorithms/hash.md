@@ -35,10 +35,9 @@ Perfect hashing allows for constant time lookups in all cases. This is in contra
 
 A critical statistic for a hash table is the `load factor`, defined as
 
-$$
+```tex
 loadfactor(\alpha)=\frac{n}{k}
-
-$$
+```
 
 where
 
@@ -159,6 +158,9 @@ A hash table is useful for any graph theory problem where the nodes have real na
 A third common use of hash tables is in programs that play games. As the program searches through different lines of play, it keeps track of positions it has seen by computing a hash function based on the position (and storing its move for that position). If the same position reoccurs, usually by a simple transposition of moves, the program can avoid expensive recomputation. This general feature of all game-playing programs is known as the transposition table.
 
 Yet another use of hashing is in online spelling checkers. If misspelling detection (as opposed to correction) is important, an entire dictionary can be prehashed and words can be checked in constant time. Hash tables are well suited for this, because it is not important to alphabetize words; printing out misspellings in the order they occurred in the document is certainly acceptable.
+
+## Links
+- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 
 ## References
 

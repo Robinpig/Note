@@ -8,7 +8,6 @@ Abstract data types are mathematical abstractions; nowhere in an ADT's definitio
 This can be viewed as an extension of modular design.
 
 
-- [hash](/docs/CS/Algorithms/hash.md)
 
 ### Lists, Stacks, and Queues
 
@@ -39,6 +38,10 @@ This can be viewed as an extension of modular design.
 - [Trie](/docs/CS/Algorithms/Trie.md)
 - [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
 - [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)
+
+
+A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts an input of arbitrary length into an encrypted output of a fixed length.
+
 
 ### Page Replacement Algorithms
 - [LRU](/docs/CS/Algorithms/LRU.md)
