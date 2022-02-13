@@ -33,14 +33,8 @@ Virtually all scheduling problems are either NP-complete (or of similar difficul
 
 We are given jobs *j*1, *j*2, . . . , *jn*, all with known running times *t*1, *t*2, . . . , *tn*, respectively. We have a single processor. What is the best way to schedule these jobs in order to minimize the average completion time?
 
-Let the jobs in the schedule be *ji*1, *ji*2, . . . , *jin*. The first job finishes in time *ti*1. The second job finishes after *ti*1 + *ti*2, and the third job finishes after *ti*1 + *ti*2 + *ti*3. From this, we see that the total cost, C, of the schedule is
-$$
-C = \sum_{k=1}^{N}{(N - k + 1)t_{ik}}
-$$
-
-$$
-C = (N+1)\sum_{k=1}^{N}{t_{ik}}-\sum_{k=1}^{N}{k*t_{ik}}
-$$
+Let the jobs in the schedule be *ji*1, *ji*2, . . . , *jin*. The first job finishes in time *ti*1. The second job finishes after *ti*1 + *ti*2, and the third job finishes after *ti*1 + *ti*2 + *ti*3. 
+From this, we see that the total cost, C, of the schedule is $C = \sum_{k=1}^{N}{(N - k + 1)t_{ik}}$, $C = (N+1)\sum_{k=1}^{N}{t_{ik}}-\sum_{k=1}^{N}{k*t_{ik}}$.
 
 
 

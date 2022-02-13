@@ -55,7 +55,6 @@ and the number of compares is at least equal to the number of inversions and at 
 
 Shellsort is sometimes referred to as diminishing increment sort.
 
-
 ## Bubble Sort
 
 ```java
@@ -80,7 +79,6 @@ Of course, these algorithms use operations other than comparisons to determine t
 Consequently, the *O(nlgn)* lower bound does not apply to them.
 
 ## Heapsort
-
 
 ## Mergesort
 
@@ -119,11 +117,9 @@ No compare-based sorting algorithm can guarantee to sort N items with fewer than
 
 ## Quicksort
 
-
 > [!NOTE]
 >
 > A common solution is not to use quicksort recursively for small files, but instead use a sorting algorithm that is efficient for small files, such as insertion sort.
-
 
 ```cpp
 int Pa
@@ -133,13 +129,7 @@ int Pa
 
 A safe course is merely to choose the pivot randomly.
 
-
 Median-of-Three Partitioning
-
-
-
-
-
 
 ## Counting Sort
 
@@ -149,7 +139,6 @@ Radix sort is sometimes known as *card sort*.
 
 ## Bucket Sort
 
-
 ## External Sort
 
 Sorts that cannot be performed in main memory and must be done on disk or tape are also quite important. This type of sorting, known as external sorting.
@@ -157,9 +146,6 @@ Sorts that cannot be performed in main memory and must be done on disk or tape a
 Merging is the central idea of external sorts.
 
 ### Multiway Merge
-
-
-
 
 ## Links
 

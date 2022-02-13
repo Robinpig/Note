@@ -35,6 +35,7 @@ This can be viewed as an extension of modular design.
 ### Tree
 
 [Trees](/docs/CS/Algorithms/tree.md) in general are very useful abstractions in computer science.
+
 - [Trie](/docs/CS/Algorithms/Trie.md)
 - [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
 - [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)
@@ -72,64 +73,21 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 - [Dynamic Programming](/docs/CS/Algorithms/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
 
+Amortized Analysis
 
-
-
+Randomized
 
 ## Sorting and Order Statistics
 
 - [Sort](/docs/CS/Algorithms/Sort.md)
 
-### Heapsort
-
-### Quicksort
-
-### Sorting in Linear Time
-
-### Medians and Order Statistics
-
-Divide-and-Conquer
-
-## Data Structures
 
 
-### Binary Search Trees
-
-### Red-Black Trees
-
-AVL Tree
-
-## Advanced Design and Analysis Techniques
-
-### Dynamic Programming
-
-### Greedy Algorithms
-
-### Amortized Analysis
 
 
 ## Advanced Data Structures
 
-### B-Trees
 
-### Fibonacci Heaps
-
-
-## Graph Algorithms
-
-
-## Advanced Design and Analysis Techniques
-
-### Dynamic Programming
-
-### Greedy Algorithms
-
-### Amortized Analysis
-
-
-## Advanced Data Structures
-
-### B-Trees
 
 ### Fibonacci Heaps
 
