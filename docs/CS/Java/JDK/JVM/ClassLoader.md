@@ -29,7 +29,7 @@ itself. The virtual machine's built-in class loader, called the "bootstrap class
 but may serve as the parent of a ClassLoader instance.
 
 
-### Parallel
+#### Parallel
 
 Class loaders that support concurrent loading of classes are known as parallel capable class loaders and are required to
 register themselves at their class initialization time by invoking the ClassLoader.registerAsParallelCapable method.
@@ -165,7 +165,7 @@ class NetworkClassLoader extends ClassLoader {
 
     private byte[] loadClassData(String name) {
         // load the class data from the connection
-                . . .
+        //...
     }
 }
 ```
@@ -179,8 +179,8 @@ exception.
 ```java
 // ClassLoader
 protected ClassLoader(){
-        this(checkCreateClassLoader(),getSystemClassLoader());
-        }
+    this(checkCreateClassLoader(),getSystemClassLoader());
+}
 ```
 
 ```shell
@@ -223,11 +223,14 @@ call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and 
   - parse stream
     - create Constant Pool
   - create InstanceKlass
-  - create mirror class
+    - Initialize itable offset tables
+    - fill_oop_maps
+    - create mirror class
 - Linking
   - Verification
   - Rewriting after verification but before the first method of the class is executed
   - link method entry points(interpreted and compiler) after class is rewritten
+  - Initialize_vtable and initialize_itable after methods have been rewritten
   - Preparation may occur at any time following creation but must be completed prior to initialization
   - Resolution
 - Initialization
@@ -315,9 +318,13 @@ static native Class<?> defineClass2(ClassLoader loader, String name, java.nio.By
 ```
 
 ### load Class
-call create_from_stream  
+> [!TIP]
+> 
+> Both [loadClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=loadClass) and [defineClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=defineClass) call [create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
 
 #### loadClass
+
+
 
 ```c
 SystemDictionary::resolve_or_fail
@@ -333,8 +340,8 @@ SystemDictionary::resolve_instance_class_or_null
 -> KlassFactory::create_from_stream
 ```
 
+>  call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
 
-call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
 ```cpp
 //classLoader.cpp
 // Called by the boot classloader to load classes
@@ -359,7 +366,7 @@ JVM_ENTRY(jclass, JVM_DefineClassWithSource(JNIEnv *env, const char *name, jobje
 JVM_END
 ```
 
-call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream) too
+> call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream) too
 ```
 jni_DefineClass -----+----- JVM_DefineClass
                      |
@@ -377,8 +384,8 @@ jni_DefineClass -----+----- JVM_DefineClass
 
 
 ### create_from_stream
-1. parse stream
-2. create instance klass
+1. [parse_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream)
+2. [create_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_instance_klass)
 
 ```cpp
 // klassFactory.cpp
@@ -395,16 +402,10 @@ InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
                                         &cached_class_file, CHECK_NULL);
   }
   
-```
-[parse_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream)
-```cpp
   ClassFileParser parser(stream, name, loader_data, &cl_info,
                          ClassFileParser::BROADCAST, // publicity level
                          CHECK_NULL);
-	
-```
-[create_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_instance_klass)
-```cpp
+
   InstanceKlass* result = parser.create_instance_klass(old_stream != stream, *cl_inst_info, CHECK_NULL);
 
   return result;
@@ -825,7 +826,6 @@ Because linking involves the allocation of new data structures, it may fail with
 4. set_init_state
 
 ```cpp
-
 // InstanceKlass.cpp
 bool InstanceKlass::link_class_impl(TRAPS) {
   if (DumpSharedSpaces && is_in_error_state()) {
@@ -1423,10 +1423,11 @@ void Method::clear_code(bool acquire_lock /* = true */) {
 
 ### Preparation
 Preparation involves creating the static fields for a class or interface and initializing such fields to their **default values**. 
-**This does not require the execution of any Java Virtual Machine code; 
-explicit initializers for static fields are executed as part of initialization, not preparation.**
-
-**Preparation may occur at any time following creation but must be completed prior to initialization.**
+> [!NOTE]
+> This does not require the execution of any Java Virtual Machine code; 
+> explicit initializers for static fields are executed as part of initialization, not preparation.
+> 
+> Preparation may occur at any time following creation but must be completed prior to initialization.
 
 ### Resolution
 
@@ -1476,43 +1477,33 @@ Because the Java Virtual Machine is multithreaded, initialization of a class or 
 For each class or interface C, there is a unique initialization lock `LC`. The mapping from C to `LC` is left to the discretion of the Java Virtual Machine implementation. For example, `LC` could be the `Class` object for C, or the monitor associated with that `Class` object. The procedure for initializing C is then as follows:
 
 1. Synchronize on the initialization lock, `LC`, for C. This involves waiting until the current thread can acquire `LC`.
-
 2. If the `Class` object for C indicates that initialization is in progress for C by some other thread, then release `LC` and block the current thread until informed that the in-progress initialization has completed, at which time repeat this procedure.
-
    Thread interrupt status is unaffected by execution of the initialization procedure.
-
 3. If the `Class` object for C indicates that initialization is in progress for C by the current thread, then this must be a recursive request for initialization. Release `LC` and complete normally.
-
 4. If the `Class` object for C indicates that C has already been initialized, then no further action is required. Release `LC` and complete normally.
-
 5. If the `Class` object for C is in an erroneous state, then initialization is not possible. Release `LC` and throw a `NoClassDefFoundError`.
-
 6. Otherwise, record the fact that initialization of the `Class` object for C is in progress by the current thread, and release `LC`.
-
    Then, initialize each `final` `static` field of C with the constant value in its `ConstantValue` attribute, in the order the fields appear in the `ClassFile` structure.
-
 7. Next, if C is a class rather than an interface, then let SC be its superclass and let SI1, ..., SIn be all superinterfaces of C (whether direct or indirect) that declare at least one non-`abstract`, non-`static` method. The order of superinterfaces is given by a recursive enumeration over the superinterface hierarchy of each interface directly implemented by C. For each interface I directly implemented by C (in the order of the `interfaces` array of C), the enumeration recurs on I's superinterfaces (in the order of the `interfaces` array of I) before returning I.
-
    For each S in the list [ SC, SI1, ..., SIn ], if S has not yet been initialized, then recursively perform this entire procedure for S. If necessary, verify and prepare S first.
-
    If the initialization of S completes abruptly because of a thrown exception, then acquire `LC`, label the `Class` object for C as erroneous, notify all waiting threads, release `LC`, and complete abruptly, throwing the same exception that resulted from initializing SC.
-
 8. Next, determine whether assertions are enabled for C by querying its defining loader.
-
 9. Next, **execute the class or interface initialization method of C**.
-
 10. If the execution of the class or interface initialization method completes normally, then acquire `LC`, label the `Class` object for C as fully initialized, notify all waiting threads, release `LC`, and complete this procedure normally.
-
-11. Otherwise, the class or interface initialization method must have completed abruptly by throwing some exception E. If the class of E is not `Error` or one of its subclasses, then create a new instance of the class `ExceptionInInitializerError` with E as the argument, and use this object in place of E in the following step. If a new instance of `ExceptionInInitializerError` cannot be created because an `OutOfMemoryError` occurs, then use an `OutOfMemoryError` object in place of E in the following step.
-
+11. Otherwise, the class or interface initialization method must have completed abruptly by throwing some exception E. 
+    If the class of E is not `Error` or one of its subclasses, then create a new instance of the class `ExceptionInInitializerError` with E as the argument, and use this object in place of E in the following step. 
+    If a new instance of `ExceptionInInitializerError` cannot be created because an `OutOfMemoryError` occurs, then use an `OutOfMemoryError` object in place of E in the following step.
 12. Acquire `LC`, label the `Class` object for C as erroneous, notify all waiting threads, release `LC`, and complete this procedure abruptly with reason E or its replacement as determined in the previous step.
 
 A Java Virtual Machine implementation may optimize this procedure by eliding the lock acquisition in step 1 (and release in step 4/5) when it can determine that the initialization of the class has already completed, provided that, in terms of the Java memory model, all *happens-before* orderings (JLS §17.4.5) that would exist if the lock were acquired, still exist when the optimization is performed.
 
 
 
+> [!NOTE]
+> 
+> Note: implementation moved to static method to expose the this pointer.
 
-**Note: implementation moved to static method to expose the this pointer.**
+
 ```cpp
 void InstanceKlass::initialize(TRAPS) {
   if (this->should_be_initialized()) {
@@ -1630,7 +1621,7 @@ interfaces.
   // Look for aot compiled methods for this klass, including class initializer.
   AOTLoader::load_for_klass(this, THREAD);
 ```
-Step 8 call_class_initializer
+Step 8 [call_class_initializer](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=call_class_initializer)
 ```cpp
   {
     assert(THREAD->is_Java_thread(), "non-JavaThread in initialize_impl");
@@ -1688,7 +1679,7 @@ Step 10 and 11
 
 
 ### call_class_initializer
-call `clinit` method if exist
+> call `clinit` method if exist
 
 ```cpp
 
@@ -1729,7 +1720,11 @@ Method* InstanceKlass::class_initializer() const {
 
 
 
-### redefine Class
+## redefine Class
+
+`java.lang.instrument.Instrumentation`
+
+
 
 ```cpp
 /*
@@ -1741,7 +1736,7 @@ redefineClasses(JNIEnv * jnienv, JPLISAgent * agent, jobjectArray classDefinitio
 ```
 
 
-redefine_single_class
+redefine_single_class by [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
 
 
 Install the redefinition of a class:

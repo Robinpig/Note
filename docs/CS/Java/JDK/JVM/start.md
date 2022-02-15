@@ -17,9 +17,15 @@ regression test jtreg
 based on JDK12
 
 ## Entry
-start main()
+
+> [!TIP]
+> 
+> Both  [main](/docs/CS/Java/JDK/JVM/start.md?id=main) and [launcher](/docs/CS/Java/JDK/JVM/start.md?id=launcher) call [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+
 ### main
-call JLI_Launch
+
+> main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain)
+
 ```c
 // main.c
 JNIEXPORT int
@@ -28,13 +34,8 @@ main(int argc, char **argv)
     ...
     return JLI_Launch(margc, ...);
 }
-```
 
-#### JLI_Launch
-Entry point.
 
-call JVMInit
-```c
 // java.c
 JNIEXPORT int JNICALL
 JLI_Launch(int argc, char ** argv, ...)
@@ -42,22 +43,16 @@ JLI_Launch(int argc, char ** argv, ...)
     ...
     return JVMInit(&ifn, threadStackSize, argc, argv, mode, what, ret);
 }
-```
 
-#### JVMInit
 
-call ContinueInNewThread
-```c
 // java_md_macosx.m
 // MacOSX we may continue in the same thread
 int JVMInit(InvocationFunctions* ifn, jlong threadStackSize, ...) {
    ...
    return ContinueInNewThread(ifn, threadStackSize, argc, argv, mode, what, ret);
 }
-```
-#### ContinueInNewThread
-call JavaMain
-```c
+
+
 // java.c
 int
 ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize, ...)
@@ -109,7 +104,9 @@ Invoke main method
 
 ### launcher
 
-call JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+> launcher -> JNI_CreateJavaVM -> [createVM](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+
+
 ```cpp
 // launcher.c
 void *JNU_FindCreateJavaVM(char *vmlibpath) {

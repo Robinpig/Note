@@ -62,6 +62,8 @@ hotspot
 - [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 - [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
+[JavaCalls](/docs/CS/Java/JDK/JVM/CardTable.md) and JNI
+
 
 ### Class
 
@@ -92,6 +94,8 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 ## Execution Engine
 - [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 - [interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)
+
+
 
 ## Native Method Interface
 
