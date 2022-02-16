@@ -321,7 +321,7 @@ intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
   hash = mark->hash();
   if (hash == 0) {
 ```
-get_next_hash and merge into header
+[get_next_hash](/docs/CS/Java/JDK/Basic/Object.md?id=get_next_hash) and merge into [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
 ```cpp
     hash = get_next_hash(Self, obj);
     temp = mark->copy_set_hash(hash); // merge hash code into header

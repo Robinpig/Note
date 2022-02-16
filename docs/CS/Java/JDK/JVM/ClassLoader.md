@@ -430,7 +430,7 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                                    TRAPS) {
   // verify
 ```
-create Constant Pool
+allocate [Constant Pool](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Constant-Pool)
 ```
   _cp = ConstantPool::allocate(_loader_data, cp_size, CHECK);
   ConstantPool* const cp = _cp;
@@ -2031,6 +2031,7 @@ ClassLoaderDataGraph::classes_do
 
 ## Links
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 
 ## References
 
