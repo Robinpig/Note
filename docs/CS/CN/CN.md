@@ -12,12 +12,23 @@ and wireless radio-frequency methods that may be arranged in a variety of networ
 - [WebSocket](/docs/CS/CN/WebSocket.md)
 - [TCP](/docs/CS/CN/TCP.md)
 
+## Computer Networks and the Internet
 
-## Layer
 
-Application Layer
+
+
+
+## Application Layer
 
 HTTP、FTP、SMTP、DNS
+
+## Transport Layer
+
+A transport-layer protocol provides for logical communication between application processes running on different hosts. 
+By logical communication, we mean that from an application’s perspective, it is as if the hosts running the processes were directly connected; in reality, the hosts may be on opposite sides of the planet, connected via numerous routers and a wide range of link types. 
+Application processes use the logical communication provided by the transport layer to send messages to each other, free from the worry of the details of the physical infrastructure used to carry these messages.
+
+
 
 
 
