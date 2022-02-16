@@ -130,7 +130,7 @@ _number_of_stubs = 0;
 
 ## TemplateInterpreter
 
-TemplateInterpreterGenerator generate machine code
+TemplateInterpreterGenerator generate machine code(store in [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md))
 
 ```cpp
 // share/interpreter/templateInterpreter.hpp

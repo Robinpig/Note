@@ -227,6 +227,8 @@ class VM_Operation: public CHeapObj<mtInternal> {
 
 ## VMThread
 
+Created when [create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm) and wait for VMOperations.
+
 ### VMThread::run
 ```cpp
 
@@ -239,7 +241,7 @@ void VMThread::run() {
     Notify_lock->notify();
   }
 ```
-Notify_lock is destroyed by [Threads::create_vm()](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+Notify_lock is destroyed by [Threads::create_vm()](/docs/CS/Java/JDK/JVM/start.md?id=create_vm).
 ```cpp
   int prio = (VMThreadPriority == -1)
     ? os::java_to_os_priority[NearMaxPriority]
@@ -595,6 +597,19 @@ This is creating a JVMCICompiler singleton.
 
 ## MonitorDeflationThread
 ### MonitorDeflationThread::initialize
+
+## CompilerThread
+
+CompileBroker::compilation_init_phase1()
+
+`-XX:+UseDynamicNumberOfCompilerThreads`
+
+`-XX:+TraceCompilerThreads`
+
+`-XX:+MethodFlushing` create CodeCacheSweeperThread clear CodeCache
+
+
+## WatchedThread
 
 
 ## Links

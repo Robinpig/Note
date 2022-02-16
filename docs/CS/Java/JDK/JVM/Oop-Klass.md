@@ -957,6 +957,7 @@ The cache is created and initialized before a class is actively used (i.e., init
 
 ## Links
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
-
+- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
+- [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
 
 ## References

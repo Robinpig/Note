@@ -295,7 +295,7 @@ Attach the main thread to this os thread
     return JNI_ENOMEM;
   }
 ```
-Enable guard page *after* os::create_main_thread(), otherwise it would crash Linux VM, see notes in os_linux.cpp. 
+Enable guard page *after* os::create_main_thread(), otherwise it would crash Linux VM, see notes in `os_linux.cpp`. (Allows throw SOF and still running)
 
 see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.net/jeps/270)
 ```cpp
@@ -329,17 +329,15 @@ see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.n
 ```
 Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
 ```cpp
-  { TraceTime timer("Start VMThread", TRACETIME_LOG(Info, startuptime));
-
+  { 
     VMThread::create();
     Thread* vmthread = VMThread::vm_thread();
 
     if (!os::create_thread(vmthread, os::vm_thread)) {
-      vm_exit_during_initialization("Cannot create VM thread. "
-                                    "Out of system resources.");
+      vm_exit_during_initialization("Cannot create VM thread. Out of system resources.");
     }
 ```
-Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag
+Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag.
 ```cpp
     {
       MutexLocker ml(Notify_lock);

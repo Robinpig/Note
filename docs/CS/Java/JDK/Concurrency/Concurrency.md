@@ -458,6 +458,9 @@ If a thread holding a lock is permanently blocked (due to an infinite loop, dead
 
 
 
+## Links
+- [JDK](/docs/CS/Java/JDK/JDK.md)
+
 
 ## References
 1. [Java Concurrency in Practice](https://jcip.net/)
