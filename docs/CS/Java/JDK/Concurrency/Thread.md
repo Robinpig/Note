@@ -735,7 +735,7 @@ public final synchronized void join(long millis) throws InterruptedException {
 
 #### ObjectSynchronizer::wait
 
-must get monitor by [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate)
+must get monitor by [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate)
 
 ```cpp
 // NOTE: must use heavy weight monitor to handle wait()

@@ -69,9 +69,29 @@ When threads share data, they must use synchronization mechanisms that can inhib
 flush or invalidate memory caches, and create synchronization traffic on the shared memory bus. 
 All these factors introduce additional performance costs.
 
+### Digraph
+
+
+[Parker](/docs/CS/Java/JDK/Concurrency/Parker.md)
+```dot
+strict digraph {
+    rankdir = "BT"
+    Parker [shape="polygon" ]
+    s [shape="polygon" label="sychronized" ]
+    PE [shape="polygon", label="ParkEvent" ]
+    LS [shape="polygon", label="LockSupport" ]
+    Parker -> LS
+    PE -> s
+}
+```
+
 ## Fundamentals
 
 ### Thread Safety
+
+A class is **thread-safe** if it behaves correctly when accessed from multiple threads, regardless of the scheduling or interleaving of the execution of those threads by the runtime environment,
+and with no additional synchronization or other coordination on the part of the calling code.
+
 Writing thread-safe code is, at its core, about managing access to state, and in particular to *shared*, *mutable state*.(See sharing objects)
 
 If multiple threads access the same mutable state variable without appropriate synchronization, your program is broken. There are three ways to fix it:
@@ -79,10 +99,10 @@ If multiple threads access the same mutable state variable without appropriate s
 - Make the state variable immutable; or
 - Use synchronization whenever accessing the state variable.
 
-**Stateless objects are always thread-safe.**
+> [!TIP]
+> 
+> Stateless objects are always thread-safe.
 
-A class is **thread-safe** if it behaves correctly when accessed from multiple threads, regardless of the scheduling or interleaving of the execution of those threads by the runtime environment, 
-and with no additional synchronization or other coordination on the part of the calling code.
 
 #### Atomicity
 

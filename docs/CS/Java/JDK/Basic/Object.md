@@ -197,7 +197,7 @@ As much as is reasonably practical, the hashCode method defined by class Object 
 public native int hashCode();
 ```
 
-call `Object::hashCode()` will use [ObjectSynchronizer::inflate()](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate)
+call `Object::hashCode()` will use [ObjectSynchronizer::inflate()](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate)
 
 **return 0 if object is NULL**
 
@@ -312,7 +312,7 @@ intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
     // correctly.
   }
 ```
-[Inflate the monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate) to set hash code
+[Inflate the monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) to set hash code
 ```cpp
   monitor = ObjectSynchronizer::inflate(Self, obj, inflate_cause_hash_code);
   // Load displaced header and check it has hash code

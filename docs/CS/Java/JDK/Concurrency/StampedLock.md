@@ -632,6 +632,9 @@ public class StampedLockTest {
 |           |                                         |                           |
 
 
+## Links
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 
 ## References
 

@@ -18,6 +18,9 @@ The Java monitor pattern is inspired by Hoare's work on monitors (Hoare, 1974), 
 
 
 The bytecode instructions for entering and exiting a synchronized block are even called `monitorenter` and `monitorexit`, and Java's built‐in (intrinsic) locks are sometimes called monitor locks or monitors.
+> [!NOTE]
+> 
+> monitorenter & exit are symmetric routines; which is reflected in the assembly code structure as well
 
 ### using synchronized 
 
@@ -46,6 +49,120 @@ ACC_SYNCHRONIZED
 
 ### monitorenter
 
+
+
+In TemplateInterpreter
+
+Synchronization Stack layout:
+- expressions    <--- rsp               = expression stack top
+- expressions   
+- monitor entry  <--- monitor block top = expression stack bot
+- monitor entry 
+- frame data     <--- monitor block bot
+- saved rbp      <--- rbp
+
+```cpp
+void TemplateTable::monitorenter() {
+  transition(atos, vtos);
+
+  // check for NULL object
+  __ null_check(rax);
+
+  const Address monitor_block_top(
+        rbp, frame::interpreter_frame_monitor_block_top_offset * wordSize);
+  const Address monitor_block_bot(
+        rbp, frame::interpreter_frame_initial_sp_offset * wordSize);
+  const int entry_size = frame::interpreter_frame_monitor_size() * wordSize;
+
+  Label allocated;
+
+  Register rtop = LP64_ONLY(c_rarg3) NOT_LP64(rcx);
+  Register rbot = LP64_ONLY(c_rarg2) NOT_LP64(rbx);
+  Register rmon = LP64_ONLY(c_rarg1) NOT_LP64(rdx);
+
+  // initialize entry pointer
+  __ xorl(rmon, rmon); // points to free slot or NULL
+
+  // find a free slot in the monitor block (result in rmon)
+  {
+    Label entry, loop, exit;
+    __ movptr(rtop, monitor_block_top); // points to current entry,
+                                        // starting with top-most entry
+    __ lea(rbot, monitor_block_bot);    // points to word before bottom
+                                        // of monitor block
+    __ jmpb(entry);
+
+    __ bind(loop);
+    // check if current entry is used
+    __ cmpptr(Address(rtop, BasicObjectLock::obj_offset_in_bytes()), (int32_t) NULL_WORD);
+    // if not used then remember entry in rmon
+    __ cmovptr(Assembler::equal, rmon, rtop);   // cmov => cmovptr
+    // check if current entry is for same object
+    __ cmpptr(rax, Address(rtop, BasicObjectLock::obj_offset_in_bytes()));
+    // if same object then stop searching
+    __ jccb(Assembler::equal, exit);
+    // otherwise advance to next entry
+    __ addptr(rtop, entry_size);
+    __ bind(entry);
+    // check if bottom reached
+    __ cmpptr(rtop, rbot);
+    // if not at bottom then check this entry
+    __ jcc(Assembler::notEqual, loop);
+    __ bind(exit);
+  }
+
+  __ testptr(rmon, rmon); // check if a slot has been found
+  __ jcc(Assembler::notZero, allocated); // if found, continue with that one
+
+  // allocate one if there's no free slot
+  {
+    Label entry, loop;
+    // 1. compute new pointers          // rsp: old expression stack top
+    __ movptr(rmon, monitor_block_bot); // rmon: old expression stack bottom
+    __ subptr(rsp, entry_size);         // move expression stack top
+    __ subptr(rmon, entry_size);        // move expression stack bottom
+    __ mov(rtop, rsp);                  // set start value for copy loop
+    __ movptr(monitor_block_bot, rmon); // set new monitor block bottom
+    __ jmp(entry);
+    // 2. move expression stack contents
+    __ bind(loop);
+    __ movptr(rbot, Address(rtop, entry_size)); // load expression stack
+                                                // word from old location
+    __ movptr(Address(rtop, 0), rbot);          // and store it at new location
+    __ addptr(rtop, wordSize);                  // advance to next word
+    __ bind(entry);
+    __ cmpptr(rtop, rmon);                      // check if bottom reached
+    __ jcc(Assembler::notEqual, loop);          // if not at bottom then
+                                                // copy next word
+  }
+
+  // call run-time routine
+  // rmon: points to monitor entry
+  __ bind(allocated);
+
+  // Increment bcp to point to the next bytecode, so exception
+  // handling for async. exceptions work correctly.
+  // The object has already been poped from the stack, so the
+  // expression stack looks correct.
+  __ increment(rbcp);
+
+```
+store object, call [lock object](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_object)
+```cpp
+  __ movptr(Address(rmon, BasicObjectLock::obj_offset_in_bytes()), rax);
+  __ lock_object(rmon);
+
+  // check to make sure this monitor doesn't cause stack overflow after locking
+  __ save_bcp();  // in case of exception
+  __ generate_stack_overflow_check(0);
+
+  // The bcp has already been incremented. Just need to dispatch to
+  // next instruction.
+  __ dispatch_next(vtos);
+}
+```
+
+in bytecodeInterpreter
 ```cpp
 // bytecodeInterpreter.cpp
 CASE(_monitorenter): {
@@ -540,7 +657,7 @@ enum HeuristicsResult {
 #### ObjectSynchronizer::slow_enter
 1. is_neutral, cas set mark
 2. has_locker, set_displaced_header
-3. [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate) then [ObjectMonitor::enter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=ObjectMonitorenter)
+3. [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) then [ObjectMonitor::enter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=ObjectMonitorenter)
 
 ```cpp
 // synchronizer.cpp
@@ -649,6 +766,113 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 
 ### Heavyweight Lock
 
+#### ObjectMonitor
+The ObjectMonitor class implements the heavyweight version of a JavaMonitor.
+The lightweight BasicLock/stack lock version has been inflated into an ObjectMonitor.
+This inflation is typically due to contention or use of [Object.wait()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait).
+
+
+```cpp
+
+class ObjectMonitor : public CHeapObj<mtInternal> {
+  friend class ObjectSynchronizer;
+  friend class ObjectWaiter;
+
+
+  // The sync code expects the header field to be at offset zero (0).
+  // Enforced by the assert() in header_addr().
+  volatile markWord _header;        // displaced object header word - mark
+  WeakHandle _object;               // backward object pointer
+  // Separate _header and _owner on different cache lines since both can
+  // have busy multi-threaded access. _header and _object are set at initial
+  // inflation. The _object does not change, so it is a good choice to share
+  // its cache line with _header.
+  DEFINE_PAD_MINUS_SIZE(0, OM_CACHE_LINE_SIZE, sizeof(volatile markWord) +
+                        sizeof(WeakHandle));
+  // Used by async deflation as a marker in the _owner field:
+  #define DEFLATER_MARKER reinterpret_cast<void*>(-1)
+  void* volatile _owner;            // pointer to owning thread OR BasicLock
+  volatile uint64_t _previous_owner_tid;  // thread id of the previous owner of the monitor
+  // Separate _owner and _next_om on different cache lines since
+  // both can have busy multi-threaded access. _previous_owner_tid is only
+  // changed by ObjectMonitor::exit() so it is a good choice to share the
+  // cache line with _owner.
+  DEFINE_PAD_MINUS_SIZE(1, OM_CACHE_LINE_SIZE, sizeof(void* volatile) +
+                        sizeof(volatile uint64_t));
+  ObjectMonitor* _next_om;          // Next ObjectMonitor* linkage
+  volatile intx _recursions;        // recursion count, 0 for first entry
+  ObjectWaiter* volatile _EntryList;  // Threads blocked on entry or reentry.
+                                      // The list is actually composed of WaitNodes,
+                                      // acting as proxies for Threads.
+
+  ObjectWaiter* volatile _cxq;      // LL of recently-arrived threads blocked on entry.
+  JavaThread* volatile _succ;       // Heir presumptive thread - used for futile wakeup throttling
+  JavaThread* volatile _Responsible;
+
+  volatile int _Spinner;            // for exit->spinner handoff optimization
+  volatile int _SpinDuration;
+
+  int _contentions;                 // Number of active contentions in enter(). It is used by is_busy()
+                                    // along with other fields to determine if an ObjectMonitor can be
+                                    // deflated. It is also used by the async deflation protocol. See
+                                    // ObjectMonitor::deflate_monitor().
+ protected:
+  ObjectWaiter* volatile _WaitSet;  // LL of threads wait()ing on the monitor
+  volatile int  _waiters;           // number of waiting threads
+ private:
+  volatile int _WaitSetLock;        // protects Wait Queue - simple spinlock
+}
+```
+
+ObjectMonitor Layout Overview/Highlights/Restrictions:
+
+- The _header field must be at offset 0 because the displaced header
+  from markWord is stored there. We do not want markWord.hpp to include
+  ObjectMonitor.hpp to avoid exposing ObjectMonitor everywhere. This
+  means that ObjectMonitor cannot inherit from any other class nor can
+  it use any virtual member functions. This restriction is critical to
+  the proper functioning of the VM.
+- The _header and _owner fields should be separated by enough space
+  to avoid false sharing due to parallel access by different threads.
+  This is an advisory recommendation.
+- The general layout of the fields in ObjectMonitor is:
+    _header
+    <lightly_used_fields>
+    <optional padding>
+    _owner
+    <remaining_fields>
+- The VM assumes write ordering and machine word alignment with
+  respect to the _owner field and the <remaining_fields> that can
+  be read in parallel by other threads.
+- Generally fields that are accessed closely together in time should
+  be placed proximally in space to promote data cache locality. That
+  is, temporal locality should condition spatial locality.
+- We have to balance avoiding false sharing with excessive invalidation
+  from coherence traffic. As such, we try to cluster fields that tend
+  to be _written_ at approximately the same time onto the same data
+  cache line.
+- We also have to balance the natural tension between minimizing
+  single threaded capacity misses with excessive multi-threaded
+  coherency misses. There is no single optimal layout for both
+  single-threaded and multi-threaded environments.
+
+- See TEST_VM(ObjectMonitor, sanity) gtest for how critical restrictions are enforced.
+- Adjacent ObjectMonitors should be separated by enough space to avoid
+  false sharing. This is handled by the ObjectMonitor allocation code
+  in synchronizer.cpp. Also see TEST_VM(SynchronizerTest, sanity) gtest.
+
+
+Futures notes:
+  - Separating _owner from the <remaining_fields> by enough space to avoid false sharing might be profitable. 
+    The CAS in monitorenter will invalidate the line underlying _owner. 
+    We want to avoid an L1 data cache miss on that same line for monitorexit. 
+    Putting these <remaining_fields>:
+    _recursions, _EntryList, _cxq, and _succ, all of which may be fetched in the inflated unlock path, on a different cache line would make them immune to CAS-based invalidation from the _owner field.
+
+  - The _recursions field should be of type int, or int32_t but not intptr_t. There's no reason to use a 64-bit type for this field in a 64-bit JVM.
+
+
+
 ContentionList LIFO Lock-Free
 only Owner thread can get elements from tail
 insert into head by CAS
@@ -664,7 +888,7 @@ spin lock before insert into EntryList
 
 
 
-#### ObjectSynchronizer::inflate
+#### inflate
 
 1. in loop
 2. Get Mark Word
@@ -876,35 +1100,6 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread * Self,
 ```
 
 
-
-
-#### objectMonitor
-
-```cpp
-// objectMonitor.hpp
-ObjectMonitor() {
-    _header       = NULL; //markOop对象头
-    _count        = 0;    
-    _waiters      = 0,   //等待线程数
-    _recursions   = 0;   //重入次数
-    _object       = NULL;  
-    _owner        = NULL;  //获得ObjectMonitor对象的线程
-    _WaitSet      = NULL;  //处于wait状态的线程，会被加入到waitSet
-    _WaitSetLock  = 0 ; 
-    _Responsible  = NULL ;
-    _succ         = NULL ;
-    _cxq          = NULL ;
-    FreeNext      = NULL ;
-    _EntryList    = NULL ; //处于等待锁BLOCKED状态的线程
-    _SpinFreq     = 0 ;   
-    _SpinClock    = 0 ;
-    OwnerIsThread = 0 ; 
-    _previous_owner_tid = 0; //监视器前一个拥有线程的ID
-}
-```
-
-
-
 #### ObjectMonitor::enter
 
 1. CAS set  _owner = cur Thread success, return
@@ -1077,7 +1272,7 @@ void ObjectMonitor::enter(TRAPS) {
 1. tryLock
 2. trySpin
 3. wrap to node add push "Self" onto **the front of the _cxq(ContentionList)**
-4. tryLock and trySpin in a loop with ParkEvent
+4. tryLock and trySpin in a loop with [ParkEvent](/docs/CS/Java/JDK/Concurrency/Parker.md?id=ParkEvent)
    1. if tryLock and trySpin fail, park self
    2. unpark in exit by other Thread
 5. Unlink Self from the cxq or EntryList.
@@ -1518,6 +1713,9 @@ int ObjectMonitor::TryLock (Thread * Self) {
 3. 释放当前锁，并根据QMode的模式判断，是否将_cxq中挂起的线程唤醒。还是其他操作
 
 
+Chose onDeck from EntryList
+
+Drain _cxq into EntryList - bulk transfer. -- by owner
 
 ```cpp
 void ObjectMonitor::exit(bool not_suspended, TRAPS) {
@@ -1643,8 +1841,9 @@ void ObjectMonitor::exit(bool not_suspended, TRAPS) {
     // re-run the exit protocol from the top.
     w = _cxq;
     if (w == NULL) continue;
-
-    // Drain _cxq into EntryList - bulk transfer.
+```
+Drain _cxq into EntryList - bulk transfer.
+```cpp
     // First, detach _cxq.
     // The following loop is tantamount to: w = swap(&cxq, NULL)
     for (;;) {
@@ -1786,6 +1985,9 @@ void os::PlatformEvent::unpark() {
 
 ## Summary
 
+Using ParkEvent(A wrapper of mutex).
+
+
 | Lock           | Bias Lock    | Light lock   | Heavy Lock                            |
 | -------------- | ------------ | ------------ | ------------------------------------- |
 | Race condition | Mark Word    | Mark Word    | ObjectMonitor                         |
@@ -1793,6 +1995,9 @@ void os::PlatformEvent::unpark() {
 |                |              |              |                                       |
 
 
+
+## Links
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 
 ## References
 
