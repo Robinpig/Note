@@ -62,7 +62,22 @@ hotspot
 - [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 - [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
+
+
 [JavaCalls](/docs/CS/Java/JDK/JVM/Stub.md?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
+
+```dot
+strict digraph {
+    rankdir=LR
+    java [shape="polygon" label="Java Method"]
+    VM [shape="polygon" label="VM"]
+    java -> VM [label="JNI"]
+    VM -> java [label="\n\nJavaCalls" labelfloat=false]
+}
+```
+
+
+              
 
 
 ### Class

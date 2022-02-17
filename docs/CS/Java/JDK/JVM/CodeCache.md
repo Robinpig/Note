@@ -18,10 +18,10 @@ struct CodeBlobType {
 };
 ```
 
-
-```
+## CodeBlob
 CodeBlob - superclass for all entries in the CodeCache.
 
+```
 Subtypes are:
  CompiledMethod       : Compiled Java methods (include method that calls to native code)
   nmethod             : JIT Compiled Java methods
@@ -65,7 +65,11 @@ void CodeCache::initialize() {
   CodeCacheExpansionSize = align_up(CodeCacheExpansionSize, os::vm_page_size());
 ```
 
-see [JEP 197: Segmented Code Cache](https://openjdk.java.net/jeps/197)
+Enables segmentation of the code cache, without which the code cache consists of one large segment.
+With `-XX:+SegmentedCodeCache`, separate segments will be used for non\-method, profiled method, and non\-profiled method code.
+The segments are not resized at runtime.
+The advantages are better control of the memory footprint, reduced code fragmentation, and better CPU iTLB (instruction translation lookaside buffer) and instruction cache behavior due to improved locality.
+(see [JEP 197: Segmented Code Cache](https://openjdk.java.net/jeps/197))
 
 ```cpp
   if (SegmentedCodeCache) {
