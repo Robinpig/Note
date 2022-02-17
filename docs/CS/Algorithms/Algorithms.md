@@ -40,6 +40,11 @@ This can be viewed as an extension of modular design.
 
 A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts an input of arbitrary length into an encrypted output of a fixed length.
 
+> [!NOTE]
+>
+> **Definition**.
+> A symbol table is a data structure for key-value pairs that supports two operations: insert (put) a new pair into the table and search for (get) the value associated with a given key.
+
 ### Heap
 
 [heaps](/docs/CS/Algorithms/heap.md)
@@ -51,6 +56,14 @@ A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts a
 ### Page Replacement Algorithms
 
 - [LRU](/docs/CS/Algorithms/LRU.md)
+
+### Pattern Matching
+
+- BF
+- MP
+- [KMP](/docs/CS/Algorithms/KMP.md)
+- BM
+- BMH
 
 ## Algorithm Analysis
 
@@ -89,6 +102,10 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 - [Sort](/docs/CS/Algorithms/Sort.md)
 
 ## Links
+- [CS](/docs/CS/CS.md)
+- [Computer Organization](/docs/CS/CO/CO.md)
+- [Operating Systems](/docs/CS/OS/OS.md)
+- [Computer Network](/docs/CS/CN/CN.md)
 
 ## References
 

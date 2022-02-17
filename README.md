@@ -3,6 +3,10 @@
 
 - [Transaction](/docs/CS/Transaction.md)
 
+## Computer Organization
+
+[Computer Organization](/docs/CS/CO/CO.md)
+
 
 ## Algorithms
 
