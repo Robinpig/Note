@@ -881,7 +881,6 @@ this is one example of a lost wakeup. A useful diagnostic option is to force all
 When the "minimum wait" is set to a small non-zero timeout value and the program does not hang whereas it did absent "minimum wait", that suggests a lost wakeup bug.*
 
 
-
 dequeue from the WaitSet to the EntryList or _cxq
 
 ```cpp
@@ -933,15 +932,13 @@ void ObjectMonitor::INotify(Thread * Self) {
         }
       }
     }
+```
+_WaitSetLock protects the wait queue, not the EntryList.  
+We could move the add-to-EntryList operation, above, outside the critical section protected by _WaitSetLock.  In practice that's not useful.  
+With the exception of  wait() timeouts and interrupts the monitor owner is the only thread that grabs _WaitSetLock.  
+There's almost no contention on _WaitSetLock so it's not profitable to reduce the length of the critical section.
 
-    // _WaitSetLock protects the wait queue, not the EntryList.  We could
-    // move the add-to-EntryList operation, above, outside the critical section
-    // protected by _WaitSetLock.  In practice that's not useful.  With the
-    // exception of  wait() timeouts and interrupts the monitor owner
-    // is the only thread that grabs _WaitSetLock.  There's almost no contention
-    // on _WaitSetLock so it's not profitable to reduce the length of the
-    // critical section.
-
+```cpp
     iterator->wait_reenter_begin(this);
   }
   Thread::SpinRelease(&_WaitSetLock);

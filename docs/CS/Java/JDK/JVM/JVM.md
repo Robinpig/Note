@@ -110,6 +110,9 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 
 
 ## Execution Engine
+
+BytecodeInterpreter is deprecated
+
 - [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 - [interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)
 

@@ -20,9 +20,8 @@ The Java monitor pattern is inspired by Hoare's work on monitors (Hoare, 1974), 
 The bytecode instructions for entering and exiting a synchronized block are even called `monitorenter` and `monitorexit`, and Java's built‐in (intrinsic) locks are sometimes called monitor locks or monitors.
 > [!NOTE]
 > 
-> monitorenter & exit are symmetric routines; which is reflected in the assembly code structure as well
+> [monitorenter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=monitorenter) & [exit](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=monitorexit) are symmetric routines; which is reflected in the assembly code structure as well.
 
-### using synchronized 
 
 use javap -c   *.class
 
@@ -37,7 +36,7 @@ ACC_SYNCHRONIZED
 
 
 ### MarkWord
-[Oop](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=oop) has a filed MarkWord.
+[MarkWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord) in [Oop](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=oop) header.
 
 
 ## Process
@@ -454,6 +453,13 @@ class BasicObjectLock { // Lock Record
 
 #### ObjectSynchronizer::fast_enter
 
+**ObjectSynchronizer::fast_enter():**
+
+1. check `if(UseBiasedLocking) `
+    1. `if is_at_safepoint())`, invoke `BiasedLocking::revoke_at_safepoint()`
+    2. Else invoke `BiasedLocking::revoke_and_rebias()` success, return
+2. Others, `ObjectSynchronizer::slow_enter()`
+
 ```cpp
 //synchronizer.cpp
 void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_rebias, TRAPS) {
@@ -473,13 +479,6 @@ void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_re
   slow_enter(obj, lock, THREAD);
 }
 ```
-
-**ObjectSynchronizer::fast_enter():** 
-
-1. *check `if(UseBiasedLocking) `*
-   1. *`if is_at_safepoint())`, invoke `BiasedLocking::revoke_at_safepoint()`*
-   2. *Else invoke `BiasedLocking::revoke_and_rebias()` success, return*
-2. *Others, `ObjectSynchronizer::slow_enter()`*
 
 
 
@@ -610,7 +609,7 @@ BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attem
 
 #### revoke bias
 
-***BiasedLocking::revoke_at_safepoint must only be called while at safepoint.***, so don't need CAS
+BiasedLocking::revoke_at_safepoint must only be called while at safepoint, so don't need CAS.
 
 update_heuristics:
 
@@ -771,6 +770,11 @@ The ObjectMonitor class implements the heavyweight version of a JavaMonitor.
 The lightweight BasicLock/stack lock version has been inflated into an ObjectMonitor.
 This inflation is typically due to contention or use of [Object.wait()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait).
 
+
+Only onDeck, owner and threads not in cxq can get Lock.
+Owner move other thread to onDeck from EntryList, and move cxq into EntryList.
+
+WaitSet -> cxq
 
 ```cpp
 
@@ -1103,9 +1107,9 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread * Self,
 #### ObjectMonitor::enter
 
 1. CAS set  _owner = cur Thread success, return
-2. if recursion,  _recursions++
-3. If _owner = Lock Record(Light Lock)，set _recursions = 1， _owner = Self
-4. Else **TrySpin** -- Adaptive Spinning Support
+2. If recursion,  _recursions++
+3. if Self is_lock_owned，set _recursions = 1， _owner = Self
+4. Else trySpin -- Adaptive Spinning Support
 5. EnterI in loop
 
 ```cpp
@@ -1344,30 +1348,31 @@ void ObjectMonitor::enter(TRAPS) {
          return;
        }
      }
-   
-     // Check for cxq|EntryList edge transition to non-null.  This indicates
-     // the onset of contention.  While contention persists exiting threads
-     // will use a ST:MEMBAR:LD 1-1 exit protocol.  When contention abates exit
-     // operations revert to the faster 1-0 mode.  This enter operation may interleave
-     // (race) a concurrent 1-0 exit operation, resulting in stranding, so we
-     // arrange for one of the contending thread to use a timed park() operations
-     // to detect and recover from the race.  (Stranding is form of progress failure
-     // where the monitor is unlocked but all the contending threads remain parked).
-     // That is, at least one of the contended threads will periodically poll _owner.
-     // One of the contending threads will become the designated "Responsible" thread.
-     // The Responsible thread uses a timed park instead of a normal indefinite park
-     // operation -- it periodically wakes and checks for and recovers from potential
-     // strandings admitted by 1-0 exit operations.   We need at most one Responsible
-     // thread per-monitor at any given moment.  Only threads on cxq|EntryList may
-     // be responsible for a monitor.
-     //
-     // Currently, one of the contended threads takes on the added role of "Responsible".
-     // A viable alternative would be to use a dedicated "stranding checker" thread
-     // that periodically iterated over all the threads (or active monitors) and unparked
-     // successors where there was risk of stranding.  This would help eliminate the
-     // timer scalability issues we see on some platforms as we'd only have one thread
-     // -- the checker -- parked on a timer.
-   
+```    
+Check for cxq|EntryList edge transition to non-null.  This indicates
+the onset of contention.  While contention persists exiting threads
+will use a ST:MEMBAR:LD 1-1 exit protocol.  When contention abates exit
+operations revert to the faster 1-0 mode.  This enter operation may interleave
+(race) a concurrent 1-0 exit operation, resulting in stranding, so we
+arrange for one of the contending thread to use a timed park() operations
+to detect and recover from the race.  (Stranding is form of progress failure
+where the monitor is unlocked but all the contending threads remain parked).
+That is, at least one of the contended threads will periodically poll _owner.
+One of the contending threads will become the designated "Responsible" thread.
+The Responsible thread uses a timed park instead of a normal indefinite park
+operation -- it periodically wakes and checks for and recovers from potential
+strandings admitted by 1-0 exit operations.   We need at most one Responsible
+thread per-monitor at any given moment.  Only threads on cxq|EntryList may
+be responsible for a monitor.
+
+Currently, one of the contended threads takes on the added role of "Responsible".
+A viable alternative would be to use a dedicated "stranding checker" thread
+that periodically iterated over all the threads (or active monitors) and unparked
+successors where there was risk of stranding.  This would help eliminate the
+timer scalability issues we see on some platforms as we'd only have one thread
+-- the checker -- parked on a timer.
+
+```cpp   
      if (nxt == NULL && _EntryList == NULL) {
        // Try to assume the role of responsible thread for the monitor.
        // CONSIDER:  ST vs CAS vs { if (Responsible==null) Responsible=Self }
@@ -1435,15 +1440,15 @@ void ObjectMonitor::enter(TRAPS) {
        // Invariant: after clearing _succ a thread *must* retry _owner before parking.
        OrderAccess::fence();
      }
+```
    
-     // Egress :
-     // Self has acquired the lock -- Unlink Self from the cxq or EntryList.
-     // Normally we'll find Self on the EntryList .
-     // From the perspective of the lock owner (this thread), the
-     // EntryList is stable and cxq is prepend-only.
-     // The head of cxq is volatile but the interior is stable.
-     // In addition, Self.TState is stable.
-   
+Egress :
+Self has acquired the lock -- Unlink Self from the cxq or EntryList.
+Normally we'll find Self on the EntryList .
+From the perspective of the lock owner (this thread), the EntryList is stable and cxq is prepend-only.
+The head of cxq is volatile but the interior is stable.
+In addition, Self.TState is stable.
+```cpp
      assert(_owner == Self, "invariant");
      assert(object() != NULL, "invariant");
      // I'd like to write:
@@ -1457,53 +1462,51 @@ void ObjectMonitor::enter(TRAPS) {
      if (_Responsible == Self) {
        _Responsible = NULL;
        OrderAccess::fence(); // Dekker pivot-point
-   
-       // We may leave threads on cxq|EntryList without a designated
-       // "Responsible" thread.  This is benign.  When this thread subsequently
-       // exits the monitor it can "see" such preexisting "old" threads --
-       // threads that arrived on the cxq|EntryList before the fence, above --
-       // by LDing cxq|EntryList.  Newly arrived threads -- that is, threads
-       // that arrive on cxq after the ST:MEMBAR, above -- will set Responsible
-       // non-null and elect a new "Responsible" timer thread.
-       //
-       // This thread executes:
-       //    ST Responsible=null; MEMBAR    (in enter epilogue - here)
-       //    LD cxq|EntryList               (in subsequent exit)
-       //
-       // Entering threads in the slow/contended path execute:
-       //    ST cxq=nonnull; MEMBAR; LD Responsible (in enter prolog)
-       //    The (ST cxq; MEMBAR) is accomplished with CAS().
-       //
-       // The MEMBAR, above, prevents the LD of cxq|EntryList in the subsequent
-       // exit operation from floating above the ST Responsible=null.
      }
-   
-     // We've acquired ownership with CAS().
-     // CAS is serializing -- it has MEMBAR/FENCE-equivalent semantics.
-     // But since the CAS() this thread may have also stored into _succ,
-     // EntryList, cxq or Responsible.  These meta-data updates must be
-     // visible __before this thread subsequently drops the lock.
-     // Consider what could occur if we didn't enforce this constraint --
-     // STs to monitor meta-data and user-data could reorder with (become
-     // visible after) the ST in exit that drops ownership of the lock.
-     // Some other thread could then acquire the lock, but observe inconsistent
-     // or old monitor meta-data and heap data.  That violates the JMM.
-     // To that end, the 1-0 exit() operation must have at least STST|LDST
-     // "release" barrier semantics.  Specifically, there must be at least a
-     // STST|LDST barrier in exit() before the ST of null into _owner that drops
-     // the lock.   The barrier ensures that changes to monitor meta-data and data
-     // protected by the lock will be visible before we release the lock, and
-     // therefore before some other thread (CPU) has a chance to acquire the lock.
-     // See also: http://gee.cs.oswego.edu/dl/jmm/cookbook.html.
-     //
-     // Critically, any prior STs to _succ or EntryList must be visible before
-     // the ST of null into _owner in the *subsequent* (following) corresponding
-     // monitorexit.  Recall too, that in 1-0 mode monitorexit does not necessarily
-     // execute a serializing instruction.
-   
+```
+
+We may leave threads on cxq|EntryList without a designated"Responsible" thread.  This is benign.  
+When this thread subsequently exits the monitor it can "see" such preexisting "old" threads -- threads that arrived on the cxq|EntryList before the fence, above -- by LDing cxq|EntryList.  
+Newly arrived threads -- that is, threads that arrive on cxq after the ST:MEMBAR, above -- will set Responsible non-null and elect a new "Responsible" timer thread.
+
+This thread executes:
+ST Responsible=null; MEMBAR    (in enter epilogue - here)
+LD cxq|EntryList               (in subsequent exit)
+
+Entering threads in the slow/contended path execute:
+ST cxq=nonnull; MEMBAR; LD Responsible (in enter prolog)
+The (ST cxq; MEMBAR) is accomplished with CAS().
+
+The MEMBAR, above, prevents the LD of cxq|EntryList in the subsequent
+exit operation from floating above the ST Responsible=null.
+
+We've acquired ownership with CAS().
+CAS is serializing -- it has MEMBAR/FENCE-equivalent semantics.
+But since the CAS() this thread may have also stored into _succ,
+EntryList, cxq or Responsible.  These meta-data updates must be
+visible __before this thread subsequently drops the lock.
+Consider what could occur if we didn't enforce this constraint --
+STs to monitor meta-data and user-data could reorder with (become
+visible after) the ST in exit that drops ownership of the lock.
+Some other thread could then acquire the lock, but observe inconsistent
+or old monitor meta-data and heap data.  That violates the JMM.
+To that end, the 1-0 exit() operation must have at least STST|LDST
+"release" barrier semantics.  Specifically, there must be at least a
+STST|LDST barrier in exit() before the ST of null into _owner that drops
+the lock.   The barrier ensures that changes to monitor meta-data and data
+protected by the lock will be visible before we release the lock, and
+therefore before some other thread (CPU) has a chance to acquire the lock.
+See also: http://gee.cs.oswego.edu/dl/jmm/cookbook.html.
+
+Critically, any prior STs to _succ or EntryList must be visible before
+the ST of null into _owner in the *subsequent* (following) corresponding
+monitorexit.  Recall too, that in 1-0 mode monitorexit does not necessarily
+execute a serializing instruction.
+```cpp
      return;
    }
 ```
+
 
 
 
@@ -1708,8 +1711,10 @@ int ObjectMonitor::TryLock (Thread * Self) {
 #### ObjectMonitor::exit
 
 
-1. if _owner != Self  & is_lock_owned(Light Lcok),那么将_owner指向当前线程
-2. 如果当前锁对象中的_owner指向当前线程，则判断当前线程重入锁的次数，如果不为0，继续执行ObjectMonitor::exit()，直到重入锁次数为0为止
+1. if _owner != Self  & is_lock_owned(Light Lcok), set _owner = Self
+2. if _recursions != 0, _recursions-- then return
+4. Or else drop the lock and check if we need to wake a successor
+5. If other threads are acquiring lock, return
 3. 释放当前锁，并根据QMode的模式判断，是否将_cxq中挂起的线程唤醒。还是其他操作
 
 
@@ -1726,7 +1731,6 @@ void ObjectMonitor::exit(bool not_suspended, TRAPS) {
       // We don't need to hold _mutex for this transition.
       // Non-null to Non-null is safe as long as all readers can
       // tolerate either flavor.
-      assert(_recursions == 0, "invariant");
       _owner = THREAD;
       _recursions = 0;
     } else {
@@ -1753,92 +1757,88 @@ void ObjectMonitor::exit(bool not_suspended, TRAPS) {
   // a MEMBAR or other serializing instruction before fetching EntryList|cxq.
   _Responsible = NULL;
 
-#if INCLUDE_JFR
-  // get the owner's thread id for the MonitorEnter event
-  // if it is enabled and the thread isn't suspended
-  if (not_suspended && EventJavaMonitorEnter::is_enabled()) {
-    _previous_owner_tid = JFR_THREAD_ID(Self);
-  }
-#endif
-
   for (;;) {
-    assert(THREAD == _owner, "invariant");
-
     // release semantics: prior loads and stores from within the critical section
     // must not float (reorder) past the following store that drops the lock.
     // On SPARC that requires MEMBAR #loadstore|#storestore.
     // But of course in TSO #loadstore|#storestore is not required.
     OrderAccess::release_store(&_owner, (void*)NULL);   // drop the lock
-    OrderAccess::storeload();                        // See if we need to wake a successor
+    OrderAccess::storeload();                       
+    
+    // Check if we need to wake a successor
     if ((intptr_t(_EntryList)|intptr_t(_cxq)) == 0 || _succ != NULL) {
       return;
     }
-    // Other threads are blocked trying to acquire the lock.
+```
+Other threads are blocked trying to acquire the lock.
 
-    // Normally the exiting thread is responsible for ensuring succession,
-    // but if other successors are ready or other entering threads are spinning
-    // then this thread can simply store NULL into _owner and exit without
-    // waking a successor.  The existence of spinners or ready successors
-    // guarantees proper succession (liveness).  Responsibility passes to the
-    // ready or running successors.  The exiting thread delegates the duty.
-    // More precisely, if a successor already exists this thread is absolved
-    // of the responsibility of waking (unparking) one.
-    //
-    // The _succ variable is critical to reducing futile wakeup frequency.
-    // _succ identifies the "heir presumptive" thread that has been made
-    // ready (unparked) but that has not yet run.  We need only one such
-    // successor thread to guarantee progress.
-    // See http://www.usenix.org/events/jvm01/full_papers/dice/dice.pdf
-    // section 3.3 "Futile Wakeup Throttling" for details.
-    //
-    // Note that spinners in Enter() also set _succ non-null.
-    // In the current implementation spinners opportunistically set
-    // _succ so that exiting threads might avoid waking a successor.
-    // Another less appealing alternative would be for the exiting thread
-    // to drop the lock and then spin briefly to see if a spinner managed
-    // to acquire the lock.  If so, the exiting thread could exit
-    // immediately without waking a successor, otherwise the exiting
-    // thread would need to dequeue and wake a successor.
-    // (Note that we'd need to make the post-drop spin short, but no
-    // shorter than the worst-case round-trip cache-line migration time.
-    // The dropped lock needs to become visible to the spinner, and then
-    // the acquisition of the lock by the spinner must become visible to
-    // the exiting thread).
 
-    // It appears that an heir-presumptive (successor) must be made ready.
-    // Only the current lock owner can manipulate the EntryList or
-    // drain _cxq, so we need to reacquire the lock.  If we fail
-    // to reacquire the lock the responsibility for ensuring succession
-    // falls to the new owner.
-    //
+Normally the exiting thread is responsible for ensuring succession,
+but if other successors are ready or other entering threads are spinning
+then this thread can simply store NULL into _owner and exit without
+waking a successor.  The existence of spinners or ready successors
+guarantees proper succession (liveness).  Responsibility passes to the
+ready or running successors.  The exiting thread delegates the duty.
+More precisely, if a successor already exists this thread is absolved
+of the responsibility of waking (unparking) one.
+
+The _succ variable is critical to reducing futile wakeup frequency.
+_succ identifies the "heir presumptive" thread that has been made
+ready (unparked) but that has not yet run.  We need only one such
+successor thread to guarantee progress.
+See http://www.usenix.org/events/jvm01/full_papers/dice/dice.pdf
+section 3.3 "Futile Wakeup Throttling" for details.
+
+Note that spinners in Enter() also set _succ non-null.
+In the current implementation spinners opportunistically set
+_succ so that exiting threads might avoid waking a successor.
+Another less appealing alternative would be for the exiting thread
+to drop the lock and then spin briefly to see if a spinner managed
+to acquire the lock.  If so, the exiting thread could exit
+immediately without waking a successor, otherwise the exiting
+thread would need to dequeue and wake a successor.
+(Note that we'd need to make the post-drop spin short, but no
+shorter than the worst-case round-trip cache-line migration time.
+The dropped lock needs to become visible to the spinner, and then
+the acquisition of the lock by the spinner must become visible to
+the exiting thread).
+
+It appears that an heir-presumptive (successor) must be made ready.
+Only the current lock owner can manipulate the EntryList or
+drain _cxq, so we need to reacquire the lock.  If we fail
+to reacquire the lock the responsibility for ensuring succession
+falls to the new owner.
+
+```cpp
     if (!Atomic::replace_if_null(THREAD, &_owner)) {
       return;
     }
 
-    guarantee(_owner == THREAD, "invariant");
+```
+I'd like to write: guarantee (w->_thread != Self).
+But in practice an exiting thread may find itself on the EntryList.
+Let's say thread T1 calls O.wait().  Wait() enqueues T1 on O's waitset and
+then calls exit().  Exit release the lock by setting O._owner to NULL.
+Let's say T1 then stalls.  T2 acquires O and calls O.notify().  The
+notify() operation moves T1 from O's waitset to O's EntryList. T2 then
+release the lock "O".  T2 resumes immediately after the ST of null into
+_owner, above.  T2 notices that the EntryList is populated, so it
+reacquires the lock and then finds itself on the EntryList.
+Given all that, we have to tolerate the circumstance where "w" is
+associated with Self.
 
+
+```cpp
     ObjectWaiter * w = NULL;
-
     w = _EntryList;
     if (w != NULL) {
-      // I'd like to write: guarantee (w->_thread != Self).
-      // But in practice an exiting thread may find itself on the EntryList.
-      // Let's say thread T1 calls O.wait().  Wait() enqueues T1 on O's waitset and
-      // then calls exit().  Exit release the lock by setting O._owner to NULL.
-      // Let's say T1 then stalls.  T2 acquires O and calls O.notify().  The
-      // notify() operation moves T1 from O's waitset to O's EntryList. T2 then
-      // release the lock "O".  T2 resumes immediately after the ST of null into
-      // _owner, above.  T2 notices that the EntryList is populated, so it
-      // reacquires the lock and then finds itself on the EntryList.
-      // Given all that, we have to tolerate the circumstance where "w" is
-      // associated with Self.
       assert(w->TState == ObjectWaiter::TS_ENTER, "invariant");
       ExitEpilog(Self, w);
       return;
     }
-
-    // If we find that both _cxq and EntryList are null then just
-    // re-run the exit protocol from the top.
+```
+If we find that both _cxq and EntryList are null then just re-run the exit protocol from the top.
+```cpp
     w = _cxq;
     if (w == NULL) continue;
 ```
@@ -1874,13 +1874,13 @@ Drain _cxq into EntryList - bulk transfer.
       p->_prev = q;
       q = p;
     }
+```
+ In 1-0 mode we need: ST EntryList; MEMBAR #storestore; ST _owner = NULL
+ The MEMBAR is satisfied by the release_store() operation in ExitEpilog().
 
-    // In 1-0 mode we need: ST EntryList; MEMBAR #storestore; ST _owner = NULL
-    // The MEMBAR is satisfied by the release_store() operation in ExitEpilog().
-
-    // See if we can abdicate to a spinner instead of waking a thread.
-    // A primary goal of the implementation is to reduce the
-    // context-switch rate.
+ See if we can abdicate to a spinner instead of waking a thread.
+ A primary goal of the implementation is to reduce the context-switch rate.
+```cpp
     if (_succ != NULL) continue;
 
     w = _EntryList;
@@ -1895,91 +1895,34 @@ Drain _cxq into EntryList - bulk transfer.
 
 
 
-#### ObjectMonitor::ExitEpilog 
+#### ObjectMonitor::ExitEpilog
 
-根据不同的策略(由QMode指定)，从cxq或EntryList中获取头节点，通过ObjectMonitor::ExitEpilog方法唤醒该节点封装的线程，唤醒操作最终由unpark完成
-
-```cpp
-void ObjectMonitor::ExitEpilog (Thread * Self, ObjectWaiter * Wakee) {
-{
-   assert (_owner == Self, "invariant") ;
-
-   // Exit protocol:
-   // 1. ST _succ = wakee
-   // 2. membar #loadstore|#storestore;
-   // 2. ST _owner = NULL
-   // 3. unpark(wakee)
-
-   _succ = Knob_SuccEnabled ? Wakee->_thread : NULL ;
-   ParkEvent * Trigger = Wakee->_event ;
-
-   // Hygiene -- once we've set _owner = NULL we can't safely dereference Wakee again.
-   // The thread associated with Wakee may have grabbed the lock and "Wakee" may be
-   // out-of-scope (non-extant).
-   Wakee  = NULL ;
-
-   // Drop the lock
-   OrderAccess::release_store_ptr (&_owner, NULL) ;
-   OrderAccess::fence() ;                               // ST _owner vs LD in unpark()
-
-   if (SafepointSynchronize::do_call_back()) {
-      TEVENT (unpark before SAFEPOINT) ;
-   }
-
-   DTRACE_MONITOR_PROBE(contended__exit, this, object(), Self);
-   Trigger->unpark() ; //unpark唤醒线程
-
-   // Maintain stats and report events to JVMTI
-   if (ObjectMonitor::_sync_Parks != NULL) {
-      ObjectMonitor::_sync_Parks->inc() ;
-   }
-}
-```
-## PlatformEvent
-
-### unpark
+Exit protocol:
+1. ST _succ = wakee
+2. membar #loadstore|#storestore;
+2. ST _owner = NULL
+3. unpark(wakee)
 
 ```cpp
+void ObjectMonitor::ExitEpilog(JavaThread* current, ObjectWaiter* Wakee) {
+  _succ = Wakee->_thread;
+  ParkEvent * Trigger = Wakee->_event;
 
-void os::PlatformEvent::unpark() {
-  // Transitions for _event:
-  //    0 => 1 : just return
-  //    1 => 1 : just return
-  //   -1 => either 0 or 1; must signal target thread
-  //         That is, we can safely transition _event from -1 to either
-  //         0 or 1.
-  // See also: "Semaphores in Plan 9" by Mullender & Cox
-  //
-  // Note: Forcing a transition from "-1" to "1" on an unpark() means
-  // that it will take two back-to-back park() calls for the owning
-  // thread to block. This has the benefit of forcing a spurious return
-  // from the first park() call after an unpark() call which will help
-  // shake out uses of park() and unpark() without checking state conditions
-  // properly. This spurious return doesn't manifest itself in any user code
-  // but only in the correctly written condition checking loops of ObjectMonitor,
-  // Mutex/Monitor, and JavaThread::sleep
+  // Hygiene -- once we've set _owner = NULL we can't safely dereference Wakee again.
+  // The thread associated with Wakee may have grabbed the lock and "Wakee" may be
+  // out-of-scope (non-extant).
+  Wakee  = NULL;
 
-  if (Atomic::xchg(&_event, 1) >= 0) return;
+  // Drop the lock.
+  // Uses a fence to separate release_store(owner) from the LD in unpark().
+  release_clear_owner(current);
+  OrderAccess::fence();
 
-  int status = pthread_mutex_lock(_mutex);
-  assert_status(status == 0, status, "mutex_lock");
-  int anyWaiters = _nParked;
-  assert(anyWaiters == 0 || anyWaiters == 1, "invariant");
-  status = pthread_mutex_unlock(_mutex);
-  assert_status(status == 0, status, "mutex_unlock");
+  DTRACE_MONITOR_PROBE(contended__exit, this, object(), current);
+  Trigger->unpark();
 
-  // Note that we signal() *after* dropping the lock for "immortal" Events.
-  // This is safe and avoids a common class of futile wakeups.  In rare
-  // circumstances this can cause a thread to return prematurely from
-  // cond_{timed}wait() but the spurious wakeup is benign and the victim
-  // will simply re-test the condition and re-park itself.
-  // This provides particular benefit if the underlying platform does not
-  // provide wait morphing.
-
-  if (anyWaiters != 0) {
-    status = pthread_cond_signal(_cond);
-    assert_status(status == 0, status, "cond_signal");
-  }
+  // Maintain stats and report events to JVMTI
+  OM_PERFDATA_OP(Parks, inc());
 }
 ```
 
