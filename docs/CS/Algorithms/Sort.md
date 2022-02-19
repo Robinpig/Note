@@ -147,6 +147,12 @@ Merging is the central idea of external sorts.
 
 ### Multiway Merge
 
+
+
+## Others
+
+The Pancake Flipping problem is NP-hard.(see [Pancake Flipping is Hard](https://arxiv.org/pdf/1111.0434v1.pdf))
+
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)

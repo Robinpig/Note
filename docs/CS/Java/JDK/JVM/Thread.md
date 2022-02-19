@@ -499,6 +499,11 @@ This is creating a JVMCICompiler singleton.
 
 ## CompilerThread
 
+The main loop run by a CompilerThread. 
+
+`CompileBroker::compiler_thread_loop()` -> invoke_compiler_on_method -> compile_method([c1](/docs/CS/Java/JDK/JVM/JIT.md?id=c1) or [c2](/docs/CS/Java/JDK/JVM/JIT.md?id=c2))
+
+
 CompileBroker::compilation_init_phase1()
 
 `-XX:+UseDynamicNumberOfCompilerThreads`
