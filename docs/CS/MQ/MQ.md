@@ -2,7 +2,11 @@
 
 
 
-In computer science, message queues and mailboxes are software-engineering components typically used for inter-process communication (IPC), or for inter-thread communication within the same process. They use a queue for messaging – the passing of control or of content. Group communication systems provide similar kinds of functionality.
+In computer science, message queues and mailboxes are software-engineering components typically used for inter-process communication (IPC), or for inter-thread communication within the same process. 
+They use a queue for messaging – the passing of control or of content. Group communication systems provide similar kinds of functionality.
+
+
+Half Message
 
 
 
@@ -316,6 +320,11 @@ kafka选举原理：就是利用zk临时节点，断开即删除，
 - 消费模式
 - 消费关系处理
 - 可以参考Pulsar，存储和计算分离的设计
+
+## Links
+- [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
+- [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
 
 
 
