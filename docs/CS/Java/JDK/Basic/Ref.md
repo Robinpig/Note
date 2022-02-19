@@ -1040,8 +1040,10 @@ ReferenceProcessorStats ReferenceProcessor::process_discovered_references(RefPro
 |      |                 |                    |                        |       |
 
 
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
-## Reference
+## References
 
 1. [Java引用类型原理剖析](https://github.com/farmerjohngit/myblog/issues/10)
 

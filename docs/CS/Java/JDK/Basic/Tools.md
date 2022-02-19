@@ -103,6 +103,9 @@ jol
 
 
 
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+
 ## References
 
 1. [JVM源码分析之Jstat工具原理完全解读](https://lovestblog.cn/blog/2016/07/20/jstat/)

@@ -147,6 +147,10 @@ state in native is RUNNABLE
 
 
 
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+
+
 ## References
 
 1. [Java Programming Tutorial Java Native Interface (JNI)](https://www3.ntu.edu.sg/home/ehchua/programming/java/JavaNativeInterface.html)

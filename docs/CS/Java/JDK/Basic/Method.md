@@ -270,4 +270,5 @@ JEP350 DynamicCDS
 
 
 ## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

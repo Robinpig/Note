@@ -287,3 +287,7 @@ public @interface SPI {
 }
 ```
 
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)

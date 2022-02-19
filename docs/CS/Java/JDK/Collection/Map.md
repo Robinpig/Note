@@ -1998,3 +1998,8 @@ public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction
     return val;
 }
 ```
+
+
+
+## Links
+- [Collection](/docs/CS/Java/JDK/Collection/Collection.md)

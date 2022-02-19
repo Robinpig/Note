@@ -2,8 +2,6 @@
 
 ![Bootstrap](./images/Bootstrap.png)
 
-
-
 ## Create
 
 ### group
@@ -24,8 +22,6 @@ public B group(EventLoopGroup group) {
 
 ```
 
-
-
 ```java
 /**
  * Set the {@link EventLoopGroup} for the parent (acceptor) and the child (client). These
@@ -43,13 +39,9 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
 }
 ```
 
-
-
-
-
 ## bind
 
-1. [initAndRegister channel]()
+1. [initAndRegister channel](/docs/CS/Java/Netty/Bootstrap.md?id=initAndRegister)
 2. then doBind0
 
 ```java
@@ -100,8 +92,6 @@ private ChannelFuture doBind(final SocketAddress localAddress) {
 }
 ```
 
-
-
 ### initAndRegister
 
 1. new and init chcnnel
@@ -147,8 +137,6 @@ final ChannelFuture initAndRegister() {
 }
 ```
 
-
-
 #### new Channel
 
 The Class which is used to create Channel instances from. You either use this or channelFactory(io.netty.channel.ChannelFactory) if your Channel implementation has no no-args constructor.
@@ -171,8 +159,6 @@ public T newChannel() {
     }
 }
 ```
-
-
 
 **new NioServerSocketChannel**
 
@@ -205,8 +191,6 @@ ServerSocketChannelImpl(SelectorProvider sp) throws IOException {
     this.state = ST_INUSE;
 }
 ```
-
-
 
 #### init Channel
 
@@ -250,10 +234,6 @@ void init(Channel channel) {
 }
 ```
 
-
-
-
-
 ```java
 // Bootstrap
 @Override
@@ -268,8 +248,6 @@ ChannelFuture init(Channel channel) {
     return promise.setSuccess();
 }
 ```
-
-
 
 ### ServerBootstrapAcceptor
 
@@ -342,9 +320,7 @@ public void channelRead(ChannelHandlerContext ctx, Object msg) {
 }
 ```
 
-
-
-add ChildHandler 
+add ChildHandler
 
 Set childOption
 
@@ -370,9 +346,7 @@ private void initChild(final Channel child) {
 }
 ```
 
-
-
-### register 
+### register
 
 [AbstractChannel$AbstractUnsafe#register()](/docs/CS/Java/Netty/Channel.md?id=register) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Java/Netty/Eventloop.md?id=nioeventloopexecute).
 
@@ -380,10 +354,6 @@ private void initChild(final Channel child) {
 
 1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/ChannelHandler.md?id=channelpipelinefirechannelactive-)
 2. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/Channel.md?id=abstractchannelbeginread-)
-
-
-
-
 
 ### doBind0
 
@@ -407,8 +377,6 @@ private static void doBind0(
     });
 }
 ```
-
-
 
 ##### Channel#bind()
 
@@ -439,9 +407,7 @@ public ChannelFuture bind(final SocketAddress localAddress, final ChannelPromise
 }
 ```
 
-
-
-call [AbstractChannel$AbstractUnsafe#bind()]()
+call `AbstractChannel$AbstractUnsafe#bind()`
 
 ```java
 //AbstractChannel$AbstractUnsafe#bind()
@@ -496,10 +462,6 @@ private void doBind0(SocketAddress localAddress) throws Exception {
     }
 }
 ```
-
-
-
-
 
 ## connect
 
@@ -595,8 +557,6 @@ private ChannelFuture doResolveAndConnect0(final Channel channel, SocketAddress 
 }
 ```
 
-
-
 #### NioSocketChannel#doConnect()
 
 finally invoke `sun.nio.ch.SocketChannelImpl#connect()`
@@ -624,11 +584,7 @@ protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddr
 }
 ```
 
-
-
-## AbstractBootstrap#option()
-
-
+## Options
 
 Allow to specify a ChannelOption which is used for the Channel instances once they got created. Use a value of null to remove a previous set ChannelOption.
 
@@ -646,4 +602,6 @@ public <T> B option(ChannelOption<T> option, T value) {
 }
 ```
 
+## Links
 
+- [Netty](/docs/CS/Java/Netty/Netty.md)

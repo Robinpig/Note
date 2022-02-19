@@ -390,3 +390,7 @@ Stack vs ArrayDeque
 |             |              |                        |                      |              |        |
 |             |              |                        |                      |              |        |
 
+
+
+## Links
+- [Collection](/docs/CS/Java/JDK/Collection/Collection.md)

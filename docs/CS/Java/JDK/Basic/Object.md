@@ -447,3 +447,8 @@ Implement Serializable with great caution:
 
 
 Write readObject methods defensively. For instance control, prefer [enum](/docs/CS/Java/JDK/Basic/enum.md?id=Serialization) types to.
+
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
