@@ -1,19 +1,5 @@
 ## Introduction
 
-### projects
-
-- Amber
-- Coin
-- Graal
-- jigsaw
-- Kulla
-- Loom
-- Panama
-- Shenandoah
-- Sumatra
-- Tsan
-- Valhalla
-- ZGC
 
 ### Directories
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)

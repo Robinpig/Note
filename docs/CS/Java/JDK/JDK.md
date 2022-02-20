@@ -21,6 +21,29 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 [JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
 
 
+## Projects
+
+- Amber
+- Coin
+- Graal
+- jigsaw
+- Kulla
+- Loom
+- Panama
+- Shenandoah
+- Sumatra
+- Tsan
+- Valhalla
+- ZGC
+
+### Loom
+
+[Project Loom](/docs/CS/Java/JDK/Loom.md) is to intended to explore, incubate and deliver Java VM features and APIs built on top of them for the purpose of supporting easy-to-use, high-throughput lightweight concurrency and new programming models on the Java platform. This is accomplished by the addition of the following constructs:
+
+Virtual threads
+Delimited continuations
+Tail-call elimination
+
 ## Performance
 
 The truth is that performance analysis is a weird blend of hard empiricism and squishy human psychology. 
