@@ -1,6 +1,6 @@
 ## Introduction
 
-One of the primary reasons to use threads is to improve performance.[1] Using threads can improve resource utilization by letting applications more easily exploit available processing capacity, and can improve responsiveness by letting applications begin processing new tasks immediately while existing tasks are still running.
+One of the primary reasons to use threads is to improve performance. Using threads can improve resource utilization by letting applications more easily exploit available processing capacity, and can improve responsiveness by letting applications begin processing new tasks immediately while existing tasks are still running.
 
 ## Create
 

@@ -38,11 +38,7 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 
 ### Loom
 
-[Project Loom](/docs/CS/Java/JDK/Loom.md) is to intended to explore, incubate and deliver Java VM features and APIs built on top of them for the purpose of supporting easy-to-use, high-throughput lightweight concurrency and new programming models on the Java platform. This is accomplished by the addition of the following constructs:
-
-Virtual threads
-Delimited continuations
-Tail-call elimination
+[Project Loom](/docs/CS/Java/JDK/Loom.md)'s mission is to make it easier to write, debug, profile and maintain concurrent applications meeting today's requirements.
 
 ## Performance
 
