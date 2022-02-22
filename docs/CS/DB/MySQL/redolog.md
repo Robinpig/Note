@@ -13,12 +13,8 @@ By default, the redo log is physically represented on disk by two 5MB files name
 ```mysql
 mysql> show variables like 'innodb_log_file_size';
 innodb_log_file_size	50331648  -- 48M
-```
 
 
-
-
-```mysql
 mysql> show variables like 'innodb_log_files_in_group';
 innodb_log_files_in_group	2
 ```
@@ -50,3 +46,6 @@ The LSN became an **8-byte unsigned integer** in MySQL 5.6.3 when the redo log f
 
 Configure the `innodb_log_write_ahead_size` configuration option to avoid “`read-on-write`”. This option defines the write-ahead block size for the redo log.
 Valid values for innodb_log_write_ahead_size are multiples of the InnoDB log file block size (2n). The minimum value is the InnoDB log file block size (512). 
+
+## Archiving
+
