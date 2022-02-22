@@ -26,6 +26,20 @@ Fibers are, then, what we call Java's planned user-mode threads.
 
 As mentioned above, work-stealing schedulers like `ForkJoinPools` are particularly well-suited to scheduling threads that tend to block often and communicate over IO or with other threads. Fibers, however, will have pluggable schedulers, and users will be able to write their own ones (the SPI for a scheduler can be as simple as that of `Executor`). Based on prior experience, it is expected that `ForkJoinPool` in asynchronous mode can serve as an excellent default fiber scheduler for most uses, but we may want to explore one or two simpler designs, as well, such as a pinned-scheduler, that always schedules a given fiber to a specific kernel thread (which is assumed to be pinned to a processor).
 
+
+## Demo
+
+```java
+
+public class ThreadDemo {
+
+    public static void main(String[] args) throws InterruptedException {
+        Thread thread = Thread.ofVirtual().start(() -> System.out.println("Hello"));
+        thread.join();
+    }
+}
+```
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)

@@ -168,7 +168,7 @@ Support for 32KB and 64KB `InnoDB` page sizes was added in MySQL 5.7.6. For a 32
 
 
 ## Change Buffer
-**The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=Clustered_and_Secondary_Indexes) pages when those pages are not in the `buffer pool`**. The buffered changes, which may result from INSERT, UPDATE, or DELETE operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
+**The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes) pages when those pages are not in the `buffer pool`**. The buffered changes, which may result from INSERT, UPDATE, or DELETE operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
 
 The change buffer only supports `secondary indexes`. Clustered indexes, full-text indexes, and spatial indexes are not supported. Full-text indexes have their own caching mechanism.
 
@@ -280,3 +280,7 @@ The `innodb_flush_log_at_timeout` variable controls log flushing frequency.
 mysql> show variables like 'innodb_flush_log_at_timeout';
 innodb_flush_log_at_timeout	1
 ```
+
+## Links
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [Redo Log](/docs/CS/DB/MySQL/redolog.md)

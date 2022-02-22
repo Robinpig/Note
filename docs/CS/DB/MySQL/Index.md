@@ -134,6 +134,10 @@ MySQL uses indexes for these operations:
 
 
 
+## Links
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [InnoDB In-Memory Structures](/docs/CS/DB/MySQL/memory.md)
+
 
 
 
