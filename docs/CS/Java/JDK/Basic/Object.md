@@ -197,7 +197,7 @@ As much as is reasonably practical, the hashCode method defined by class Object 
 public native int hashCode();
 ```
 
-call `Object::hashCode()` will use [ObjectSynchronizer::inflate()](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate)
+call `Object::hashCode()` will use [ObjectSynchronizer::inflate()](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate)
 
 **return 0 if object is NULL**
 
@@ -312,7 +312,7 @@ intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
     // correctly.
   }
 ```
-[Inflate the monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectsynchronizerinflate) to set hash code
+[Inflate the monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) to set hash code
 ```cpp
   monitor = ObjectSynchronizer::inflate(Self, obj, inflate_cause_hash_code);
   // Load displaced header and check it has hash code
@@ -321,7 +321,7 @@ intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
   hash = mark->hash();
   if (hash == 0) {
 ```
-get_next_hash and merge into header
+[get_next_hash](/docs/CS/Java/JDK/Basic/Object.md?id=get_next_hash) and merge into [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
 ```cpp
     hash = get_next_hash(Self, obj);
     temp = mark->copy_set_hash(hash); // merge hash code into header
@@ -447,3 +447,8 @@ Implement Serializable with great caution:
 
 
 Write readObject methods defensively. For instance control, prefer [enum](/docs/CS/Java/JDK/Basic/enum.md?id=Serialization) types to.
+
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)

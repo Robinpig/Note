@@ -19,6 +19,8 @@ A memory model specifies how threads and objects interact
   Ensuring that you aren’t surprised by the order in which statements are executed
 
 
+The Java Memory Model (JMM) is a relaxed memory model which acts as a contract between Java programmers, compiler writers and JVM implementors.
+
 ## Cache Coherence
 
 
@@ -287,10 +289,16 @@ Other happens‐before orderings guaranteed by the class library include:
 ### Memory Barries
 
 
+## Links
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [JSR 133: JavaTM Memory Model and Thread Specification Revision](https://jcp.org/en/jsr/detail?id=133)
+- [JEP 188: Java Memory Model Update](http://openjdk.java.net/jeps/188)
+- [Java Memory Model Examples: Good, Bad and Ugly](https://groups.inf.ed.ac.uk/request/jmmexamples.pdf)
 
 
 
-## Reference
+
+## References
 
 1. [为什么需要内存屏障 - zhihu](https://zhuanlan.zhihu.com/p/55767485)
 2. [Java 并发基础之内存模型](https://www.javadoop.com/post/java-memory-model)

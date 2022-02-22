@@ -9,3 +9,8 @@
 
 - Refer to objects by their interfaces  
 - Prefer interfaces to reflection  
+
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)

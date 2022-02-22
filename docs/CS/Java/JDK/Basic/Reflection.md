@@ -256,6 +256,10 @@ public class ProxyGenerator {
 }
 ```
 
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+
 ## References
 
 1. [JVM源码分析之不保证顺序的Class.getMethods](http://lovestblog.cn/blog/2016/11/02/class-getmethods/)

@@ -321,3 +321,8 @@ static boolean tryHandlePending(boolean waitForNotify) {
 }
 ```
 
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+

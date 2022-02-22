@@ -1,19 +1,5 @@
 ## Introduction
 
-### projects
-
-- Amber
-- Coin
-- Graal
-- jigsaw
-- Kulla
-- Loom
-- Panama
-- Shenandoah
-- Sumatra
-- Tsan
-- Valhalla
-- ZGC
 
 ### Directories
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
@@ -52,7 +38,7 @@ hotspot
 
 ## The class File Format
 
-- [Class File and compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
 - [Javac](/docs/CS/Java/JDK/JVM/Javac.md)
 
 
@@ -61,6 +47,23 @@ hotspot
 
 - [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 - [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
+
+
+
+[JavaCalls](/docs/CS/Java/JDK/JVM/Stub.md?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
+
+```dot
+strict digraph {
+    rankdir=LR
+    java [shape="polygon" label="Java Method"]
+    VM [shape="polygon" label="VM"]
+    java -> VM [label="JNI"]
+    VM -> java [label="\n\nJavaCalls" labelfloat=false]
+}
+```
+
+
+              
 
 
 ### Class
@@ -73,6 +76,9 @@ The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK
 Some of these data areas are created on Java Virtual Machine start-up and are destroyed only when the Java Virtual Machine exits. 
 
 Other data areas are per thread. Per-thread data areas are created when a thread is created and destroyed when the thread exits.
+
+[CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)
+
 
 ###  Representation of Objects
 The Java Virtual Machine does not mandate any particular internal structure for objects.
@@ -90,8 +96,13 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 
 
 ## Execution Engine
+
+BytecodeInterpreter is deprecated
+
 - [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 - [interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)
+
+
 
 ## Native Method Interface
 
@@ -1846,7 +1857,8 @@ CollectedHeap* G1Arguments::create_heap() {
 }
 ```
 
-
+## Links
+- [JDK](/docs/CS/Java/JDK/JDK.md)
 
 ## References
 1. [Java T point](https://www.javatpoint.com/jvm-java-virtual-machine)

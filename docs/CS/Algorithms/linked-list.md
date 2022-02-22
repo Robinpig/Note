@@ -1,5 +1,16 @@
 ## Introduction
 
+An array implementation allows print_list and find to be carried out in linear time, which is as good as can be expected, and the find_kth operation takes constant time.
+
+However, insertion and deletion are expensive.
+
+In order to avoid the linear cost of insertion and deletion, we need to ensure that the list is not stored contiguously, 
+since otherwise entire parts of the list will need to be moved.
+
+The linked list consists of a series of structures, which are not necessarily adjacent in memory. 
+Each structure contains the element and a pointer to a structure containing its successor. We call this the next pointer. 
+The last cell's next pointer points to ; this value is defined by C and cannot be confused with another pointer. 
+ANSI C specifies that is zero.
 
 ## Doubly Linked Lists
 Sometimes it is convenient to traverse lists backwards. The standard implementation does not help here, but the solution is simple. 

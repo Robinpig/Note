@@ -31,7 +31,7 @@ for example
 
 java -jar spring-application.jar  using Java Launcher   - -   JNI - - > libjvm.so
 
-### register
+## register
 
 
 ```cpp
@@ -51,7 +51,7 @@ Java_java_lang_Class_registerNatives(JNIEnv *env, jclass cls)
 ```
 
 
-#### set_native_function
+### set_native_function
 ```cpp
 
 void Method::set_native_function(address function, bool post_event_flag) {
@@ -85,7 +85,9 @@ void Method::set_native_function(address function, bool post_event_flag) {
 }
 ```
 
-#### prepare_native_call
+## Call
+
+### prepare_native_call
 ```cpp
 
 JRT_ENTRY(void, InterpreterRuntime::prepare_native_call(JavaThread* current, Method* method))
@@ -104,9 +106,9 @@ JRT_ENTRY(void, InterpreterRuntime::prepare_native_call(JavaThread* current, Met
 JRT_END
 ```
 
-#### lookup
+### lookup
 if !has_native_function:
-1. lookup -> os::dll_lookup(`dlsym` in Linux)
+1. lookup -> `os::dll_lookup`(`dlsym` in Linux)
 2. set_native_function
 ```cpp
 
@@ -127,8 +129,6 @@ address NativeLookup::lookup(const methodHandle& method, TRAPS) {
 }
 ```
 
-## Java call native
-
 
 
 ## Thread
@@ -145,6 +145,10 @@ state in native is RUNNABLE
 
 ## JNI and GC
 
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
 
 ## References

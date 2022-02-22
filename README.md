@@ -3,6 +3,10 @@
 
 - [Transaction](/docs/CS/Transaction.md)
 
+## Computer Organization
+
+[Computer Organization](/docs/CS/CO/CO.md)
+
 
 ## Algorithms
 
@@ -29,6 +33,8 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 
 
 ## MQ
+
+[MQ](/docs/CS/MQ/MQ.md)
 
 ### Kafka
 [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.

@@ -239,4 +239,6 @@ use **BigDecimal(String)**  create object param must be notBlank
 
 
 
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 

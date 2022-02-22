@@ -239,7 +239,7 @@ Consider using the "-J-Xss<size>" command line option to increase the memory all
 
 
 ### Frames
-A frame is used to store data and partial results, as well as to perform dynamic linking, return values for methods, and dispatch exceptions.
+A frame is used to store data and partial results, as well as to perform dynamic linking, return values for methods, and dispatch exceptions.(See [Frame](/docs/CS/Java/JDK/JVM/frame.md))
 
 A new frame is created each time a method is invoked. A frame is destroyed when its method invocation completes, whether that completion is normal or abrupt (it throws an uncaught exception). 
 Frames are allocated from the Java Virtual Machine stack of the thread creating the frame. 

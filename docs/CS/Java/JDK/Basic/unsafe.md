@@ -483,8 +483,10 @@ Method Handle like Function Pointer in C/C++
 
 
 
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
 
-## Reference
+## References
 
 1. [Java魔法类：Unsafe应用解析 - 美团技术团队](https://tech.meituan.com/2019/02/14/talk-about-java-magic-class-unsafe.html)

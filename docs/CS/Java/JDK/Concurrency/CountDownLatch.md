@@ -202,3 +202,9 @@ class Driver2 { // ...
 2. Use sharedLock
 3. only block threads which call `await` method when state not zero
 4. Decrement state -> 0 and can not reset
+
+
+
+## Links
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)

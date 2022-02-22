@@ -240,3 +240,8 @@ public class DictionaryDemo {
 1. Load all implemetions
 2. Less extensions
 3. exception not quite evidently
+
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
