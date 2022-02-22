@@ -65,6 +65,10 @@ Consider the following guidelines for optimizing redo logging:
 >
 > ***Do not disable redo logging on a production system.***
 
+
+## Links
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+
 ## References
 
 1. [Optimizing InnoDB Redo Logging](https://dev.mysql.com/doc/refman/8.0/en/optimizing-innodb-logging.html)
