@@ -53,12 +53,13 @@ The following diagram shows in-memory and on-disk structures that comprise the `
 
 ### InnoDB On-Disk Structures
 
-- [15.6.1 Tables](https://dev.mysql.com/doc/refman/8.0/en/innodb-tables.html)
-- [15.6.2 Indexes](https://dev.mysql.com/doc/refman/8.0/en/innodb-indexes.html)
-- [15.6.3 Tablespaces](https://dev.mysql.com/doc/refman/8.0/en/innodb-tablespace.html)
-- [15.6.4 Doublewrite Buffer](https://dev.mysql.com/doc/refman/8.0/en/innodb-doublewrite-buffer.html)
-- [15.6.5 Redo Log](https://dev.mysql.com/doc/refman/8.0/en/innodb-redo-log.html)
-- [15.6.6 Undo Logs](https://dev.mysql.com/doc/refman/8.0/en/innodb-undo-logs.html)
+
+- [Tables](https://dev.mysql.com/doc/refman/8.0/en/innodb-tables.html)
+- [Tablespaces](/docs/CS/DB/MySQL/tablespace.md)
+- [Indexes](/docs/CS/DB/MySQL/Index.md)
+- [Redo Log](/docs/CS/DB/MySQL/redolog.md)
+- [Undo Log](/docs/CS/DB/MySQL/undolog.md)
+- [Doublewrite Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
 
 
 ## Links

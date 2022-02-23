@@ -1,14 +1,6 @@
 ## Introduction
 
-[Tablespaces](/docs/CS/DB/MySQL/tablespace.md)
 
-[Index](/docs/CS/DB/MySQL/Index.md)
-
-- [Redo Log](/docs/CS/DB/MySQL/redolog.md)
-- [Undo Log](/docs/CS/DB/MySQL/undolog.md)
-
-
-## Doublewrite Buffer
 
 The doublewrite buffer is a storage area where `InnoDB` writes pages flushed from the buffer pool before writing the pages to their proper positions in the `InnoDB` data files. 
 If there is an operating system, storage subsystem, or unexpected `mysqld` process exit in the middle of a page write, `InnoDB` can find a good copy of the page from the doublewrite buffer during crash recovery.
@@ -28,3 +20,6 @@ The following variables are provided for doublewrite buffer configuration:
 - The `innodb_doublewrite_files` variable defines the number of doublewrite files. 
   By default, two doublewrite files are created for each buffer pool instance: A flush list doublewrite file and an LRU list doublewrite file.
 
+## Links
+
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
