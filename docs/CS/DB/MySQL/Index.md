@@ -73,7 +73,10 @@ If the primary key is long, the secondary indexes use more space, so **it is adv
 
 ### The Physical Structure of an InnoDB Index
 
-With the exception of spatial indexes, `InnoDB` indexes are `B-tree` data structures. Spatial indexes use `R-trees`, which are specialized data structures for indexing multi-dimensional data. Index records are stored in the leaf pages of their B-tree or R-tree data structure. The default size of an index page is 16KB. The page size is determined by the `innodb_page_size` setting when when the MySQL instance is initialized.
+With the exception of spatial indexes, `InnoDB` indexes are `B-tree` data structures. 
+Spatial indexes use `R-trees`, which are specialized data structures for indexing multi-dimensional data. 
+Index records are stored in the leaf pages of their B-tree or R-tree data structure. 
+The default size of an index page is 16KB. The page size is determined by the `innodb_page_size` setting when when the MySQL instance is initialized.
 
 When new records are inserted into an `InnoDB` clustered index, `InnoDB` tries to leave 1/16 of the page free for future insertions and updates of the index records. If index records are inserted in a sequential order (ascending or descending), the resulting index pages are about 15/16 full. If records are inserted in a random order, the pages are from 1/2 to 15/16 full.
 
