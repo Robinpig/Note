@@ -22,4 +22,4 @@ The following variables are provided for doublewrite buffer configuration:
 
 ## Links
 
-- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md?id=innodb-on-disk-structures)

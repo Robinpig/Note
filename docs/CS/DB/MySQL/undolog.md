@@ -48,12 +48,21 @@ An undo log assigned to a transaction remains attached to the transaction for it
 
 ## Undo Tablespaces
 
-As of MySQL 5.6, rollback segments can reside in undo tablespaces. In MySQL 5.6 and MySQL 5.7, the number of undo tablespaces is controlled by the `innodb_undo_tablespaces` configuration option. In MySQL 8.0, two default undo tablespaces are created when the MySQL instance is initialized, and additional undo tablespaces can be created using `CREATE UNDO TABLESPACE` syntax.
 
-Two default undo tablespaces are created when the MySQL instance is initialized. Default undo tablespaces are created at initialization time to provide a location for rollback segments that must exist before SQL statements can be accepted. A minimum of two undo tablespaces is required to support automated truncation of undo tablespaces.
+Undo tablespaces contain undo logs, which are collections of records containing information about how to undo the latest change by a transaction to a clustered index record.
+
+Two default undo tablespaces are created when the MySQL instance is initialized.
+Default undo tablespaces are created at initialization time to provide a location for rollback segments that must exist before SQL statements can be accepted.
+
+A MySQL instance supports up to 127 undo tablespaces including the two default undo tablespaces created when the MySQL instance is initialized.
+
+As of MySQL 5.6, rollback segments can reside in undo tablespaces. 
+In MySQL 5.6 and MySQL 5.7, the number of undo tablespaces is controlled by the `innodb_undo_tablespaces` configuration option. In MySQL 8.0, two default undo tablespaces are created when the MySQL instance is initialized, and additional undo tablespaces can be created using `CREATE UNDO TABLESPACE` syntax.
 
 Prior to MySQL 8.0.23, the initial size of an undo tablespace depends on the `innodb_page_size` value.
 As of MySQL 8.0.23, the initial undo tablespace size is normally 16MiB.
+
+
 
 
 ### Init Undo Tablespaces
@@ -205,7 +214,7 @@ ulint trx_purge(){
 
 ## Links
 
-- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md?id=innodb-on-disk-structures)
 
 ## References
 1. [InnoDB 事务分析-Undo Log](https://www.leviathan.vip/2019/02/14/InnoDB%E7%9A%84%E4%BA%8B%E5%8A%A1%E5%88%86%E6%9E%90-Undo-Log/)

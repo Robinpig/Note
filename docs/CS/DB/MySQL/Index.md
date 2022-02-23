@@ -138,7 +138,7 @@ MySQL uses indexes for these operations:
 
 
 ## Links
-- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md?id=innodb-on-disk-structures)
 
 
 

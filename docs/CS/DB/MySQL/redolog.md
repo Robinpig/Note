@@ -67,7 +67,7 @@ Consider the following guidelines for optimizing redo logging:
 
 
 ## Links
-- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md?id=innodb-on-disk-structures)
 
 ## References
 
