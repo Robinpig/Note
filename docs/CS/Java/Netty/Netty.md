@@ -149,3 +149,9 @@ SubPage
 
 ## Links
 - [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
+
+
+## References
+
+1. [Netty](https://netty.io/)
+2. [Thread model](https://netty.io/wiki/thread-model.html)

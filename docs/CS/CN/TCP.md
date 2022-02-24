@@ -816,11 +816,13 @@ RFC2883
 
 首次HTTP请求最快2RTT(第三次握手携带HTTP请求)，若fastopen开启，则生成cookie在下次请求时携带 无需三次握手，只需一次RTT就可以完成HTTP	-- [TCP Fast Open](http://conferences.sigcomm.org/co-next/2011/papers/1569470463.pdf)
 
+
 ```shell
 #linux
 cat /proc/sys/net/ipv4/tcp_fastopen	#1
 ```
 
+[Netty TPO](/docs/CS/Java/Netty/TPO.md)
 
 
 窗口控制

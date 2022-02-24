@@ -1498,3 +1498,14 @@ private void rebuildSelector0() {
     }
 }
 ```
+
+
+
+## Thread Affinity
+
+Create an [AffinityThreadFactory](https://github.com/OpenHFT/Java-Thread-Affinity) with a particular strategy and pass it to the EventLoopGroup which would contain latency-sensitive threads.
+
+
+## Links
+
+- [Netty](/docs/CS/Java/Netty/Netty.md)

@@ -1601,11 +1601,14 @@ public void sleep(long timeout) throws InterruptedException {
 }
 ```
 
+## Thread Affinity
 
+
+See [OpenHFT Java Thread Affinity library](https://github.com/OpenHFT/Java-Thread-Affinity)
 
 ## Fiber
 
-see Loom
+See [Loom](/docs/CS/Java/JDK/Loom.md).
 
 Preemptive Threads-Scheduling
 

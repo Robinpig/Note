@@ -258,3 +258,6 @@ public long rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8, rp9;
 | Special val | - | a strong reference set of all fastThreadLocals in InternalThreadLocalMap |
 
 
+## Links
+
+- [Netty](/docs/CS/Java/Netty/Netty.md)
