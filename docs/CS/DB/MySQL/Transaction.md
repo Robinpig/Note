@@ -849,6 +849,10 @@ XA : isolation level must be `SERIALIZABLE`
 
 
 
+## Links
+
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [Transaction](/docs/CS/Transaction.md)
 
 
 ## References

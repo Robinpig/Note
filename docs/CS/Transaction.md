@@ -164,6 +164,12 @@ and consistency are essential.
 ## Two-phased Commit
 A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
 
+
+
+## Links
+
+- [MySQL Transaction](/docs/CS/DB/MySQL/Transaction.md)
+
 ## References
 1. [ACID vs. BASE and SQL vs. NoSQL](https://marcobrambillapolimi.files.wordpress.com/2019/01/01-nosql-overview.pdf)
 2. [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf)
