@@ -80,3 +80,7 @@ Therefore it is always a good idea to use this set whenever we want to work with
 ### EnumMap
 
 *EnumMap* is a specialized *Map* implementation meant to be used with enum constants as keys. It is an efficient and compact implementation compared to its counterpart *HashMap* and is internally represented as an array:
+
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)

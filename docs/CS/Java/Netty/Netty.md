@@ -16,22 +16,44 @@ From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#wr
 
 
 
-```plantuml
-@startuml
-actor user as user
 
-user -> user: send messages
-WorkEventLoopGroup -> Selector: selector.select()
-Selector --> WorkEventLoopGroup: OP_READ
-WorkEventLoopGroup -> NioByteUnsafe: NioUnsafe.read()
-NioByteUnsafe -> NioSocketChannel: NioUnsafe.read()
-NioSocketChannel --> NioByteUnsafe: -1(EOF)
-NioByteUnsafe --> NioByteUnsafe: closeOnRead()
-participant ChannelPipeline
+```sequence
+participant User
+User -->> User: send messages
+participant WorkEventLoopGroup as we
+participant Selector as se
+we ->> se: selector.select()
+se ->> we: OP_READ
+participant NioByteUnsafe as ue
+we ->> ue: NioUnsafe.read()
+participant NioSocketChannel as so
+ue ->> so: NioUnsafe.read()
+so ->> ue: -1(EOF)
+ue -->> ue: closeOnRead()
+participant ChannelPipeline as pipe
 
-@enduml
 ```
 
+Start sequence
+
+```sequence
+participant User
+User -->> User: send messages
+participant WorkEventLoopGroup as we
+participant Selector as se
+we ->> we: create threads and open Selectors
+we ->> we: initAndRegister
+we ->> we: doBind0
+se ->> we: OP_READ
+participant NioByteUnsafe as ue
+we ->> ue: NioUnsafe.read()
+participant NioSocketChannel as so
+ue ->> so: NioUnsafe.read()
+so ->> ue: -1(EOF)
+ue -->> ue: closeOnRead()
+participant ChannelPipeline as pipe
+
+```
 
 
 
@@ -95,7 +117,7 @@ public class DiscardServer {
 4. Set [ChannelHandler](/docs/CS/Java/Netty/ChannelHandler.md)
 5. Option
 6. ChildOption
-7. [ServerBootstrap#bind()](/docs/CS/Java/Netty/Bootstrap.md?id=serverbootstrapbind-)
+7. [ServerBootstrap#bind()](/docs/CS/Java/Netty/Bootstrap.md?id=bind)
 8. [ChannelFuture](/docs/CS/Java/Netty/Future.md)
 
 
@@ -124,3 +146,12 @@ SubPage
 
 [Future and Promise](/docs/CS/Java/Netty/Future.md)
 
+
+## Links
+- [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
+
+
+## References
+
+1. [Netty](https://netty.io/)
+2. [Thread model](https://netty.io/wiki/thread-model.html)

@@ -1,4 +1,10 @@
+## Introduction
 
+- _i2i_entry
+- _aot_code
+- _from_compiled_entry
+- _from_interpreter_entry
+- _code compiled code
 
 
 ## Method Handle
@@ -64,6 +70,11 @@ void Method::clear_code() {
 ```
 
 ### Adapter
+
+Calling Convention
+
+- i2c
+- c2i
 
 #### gen_i2c_adapter
 
@@ -259,4 +270,5 @@ JEP350 DynamicCDS
 
 
 ## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

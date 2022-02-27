@@ -347,6 +347,9 @@ use Predicate interface
 
 
 
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+
 ## References
 
 1. [底层原理之旅—带你看透Lambda表达式的本质](https://juejin.cn/post/6966839856421044237)

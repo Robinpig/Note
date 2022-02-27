@@ -3,23 +3,14 @@
 
 - [Transaction](/docs/CS/Transaction.md)
 
+## Computer Organization
+
+[Computer Organization](/docs/CS/CO/CO.md)
+
 
 ## Algorithms
 
-
-### Data Structures
-- [hash](/docs/CS/Algorithms/hash.md)
-- [Trie](/docs/CS/Algorithms/Trie.md)
-- [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
-- [Red-Black Tree](/docs/CS/Algorithms/Red-Black%20Tree.md)
-
-### Page Replacement Algorithms
-- [LRU](/docs/CS/Algorithms/LRU.md)
-
-### Advanced Design and Analysis Techniques
-- [Dynamic Programming](/docs/CS/Algorithms/DP.md)
-- [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
-
+We describe [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures), methods of organizing large amounts of data, and [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis), the estimation of the running time of algorithms.
 
 ## Operating System
 
@@ -29,8 +20,8 @@
 
 ## Network
 
-- [WebSocket](/docs/CS/CN/WebSocket.md)
-- [TCP](/docs/CS/CN/TCP.md)
+A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources located on or provided by network nodes.
+
 
 ## DataBase
 
@@ -42,6 +33,8 @@
 
 
 ## MQ
+
+[MQ](/docs/CS/MQ/MQ.md)
 
 ### Kafka
 [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
@@ -108,6 +101,12 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 ### ZooKeeper
 [Apache ZooKeeper](/docs/CS/Java/Zookeeper/Zookeeper.md) is an effort to develop and maintain an open-source server which enables highly reliable distributed coordination.
 
+
+### BigData
+
+[GFS](/docs/CS/Java/BigData/GFS.md)
+
+
 ## Go
 
 ## Rust
@@ -115,7 +114,6 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 ## Scala
 
 ## Python
-
 
 
 

@@ -1,7 +1,14 @@
 ## Introduction
 
 
+A word of caution: The JVM uses 2 very similar constructs:
+1. ParkEvent are used for Java-level "monitor" synchronization.
+2. Parkers are used by JSR166-JUC park-unpark.
 
+> [!NOTE]
+> 
+> In the future we'll want to think about eliminating Parker and using ParkEvent instead.**  
+> There's considerable duplication between the two services.
 
 ## Parker
 Per-thread blocking support for JSR166. 
@@ -12,8 +19,6 @@ Parkers are inherently part of their associated JavaThread and are only accessed
 Class Parker is declared in shared code and extends the platform-specific os::PlatformParker class, which contains the actual implementation mechanics (condvars/events etc). 
 The implementation for park() and unpark()are also in the platform-specific os_<os>.cpp files.
 
-**In the future we'll want to think about eliminating Parker and using ParkEvent instead.**  
-There's considerable duplication between the two services.
 
 
 
@@ -34,7 +39,6 @@ class Parker : public os::PlatformParker {
 
 ### PlatformParker
 
-JSR166 support
 
 PlatformParker provides the platform dependent base class for the Parker class. 
 It basically provides the internal data structures: - mutex and convars which are then used directly by the Parker methods defined in the OS specific implementation files.
@@ -42,6 +46,7 @@ It basically provides the internal data structures: - mutex and convars which ar
 There is significant overlap between the funcionality supported in the combination of Parker+PlatformParker and PlatformEvent (above). 
 If Parker were more like ObjectMonitor we could use PlatformEvent in both (with some API updates of course). 
 But Parker methods use fastpaths that break that level of encapsulation - so combining the two remains a future project.
+
 ```cpp
 // os/posix/os_posix.hpp
 class PlatformParker {
@@ -67,11 +72,9 @@ class PlatformParker {
 #### Parker::park
 
 
-// Parker::park decrements count if > 0, else does a condvar wait.  Unpark
-// sets count to 1 and signals condvar.  Only one thread ever waits
-// on the condvar. Contention seen when trying to park implies that someone
-// is unparking you, so don't wait. And spurious returns are fine, so there
-// is no need to track notifications.
+Parker::park decrements count if > 0, else does a condvar wait.  Unpark sets count to 1 and signals condvar.  
+Only one thread ever waits on the condvar. Contention seen when trying to park implies that someone is unparking you, so don't wait. 
+And spurious returns are fine, so there is no need to track notifications.
 
 ```cpp
 void Parker::park(bool isAbsolute, jlong time) {
@@ -189,8 +192,9 @@ void Parker::unpark() {
 
 ParkEvents are type-stable and immortal.
 
-Lifecycle: Once a ParkEvent is associated with a thread that ParkEvent remains associated with the thread for the thread's entire lifetime - the relationship is stable. 
-A thread will be associated at most one ParkEvent. 
+Lifecycle: 
+Once a ParkEvent is associated with a thread that ParkEvent remains associated with the thread for the thread's entire lifetime - the relationship is stable. 
+**A thread will be associated at most one ParkEvent.** 
 When the thread expires, the ParkEvent moves to the EventFreeList.
 New threads attempt to allocate from the EventFreeList before creating a new Event.
 Type-stability frees us from worrying about stale Event or Thread references in the objectMonitor subsystem.
@@ -198,11 +202,9 @@ Type-stability frees us from worrying about stale Event or Thread references in 
 A key aspect of this design is that the callers of park, unpark, etc must tolerate stale references and spurious wakeups).
 
 Only the "associated" thread can block (park) on the ParkEvent, although any other thread can `unpark` a reachable `parkevent`.
-Park() is allowed to return spuriously.
+**Park() is allowed to return spuriously.**
 In fact park-unpark a really just an optimization to avoid unbounded spinning and surrender the CPU to be a polite system citizen.
 A degenerate albeit "impolite" park-unpark implementation could simply return.
-
-See http://blogs.sun.com/dave for more details.
 
 Eventually I'd like to eliminate Events and ObjectWaiters, both of which serve as thread proxies, and simply make the THREAD structure type-stable and persistent.
 Currently, we unpark events associated with threads, but ideally we'd just unpark threads.
@@ -213,11 +215,6 @@ PlatformEvent provides park(), unpark(), etc., and is abstract -- that is, a Pla
 Equivalently we could have defined a platform-independent base-class that exported Allocate(), Release(), etc.  
 The platform-specific class would extend that base-class, adding park(), unpark(), etc.
 
-A word of caution: The JVM uses 2 very similar constructs:
-1. ParkEvent are used for Java-level "monitor" synchronization.
-2. Parkers are used by JSR166-JUC park-unpark.
-
-We'll want to eventually merge these redundant facilities and use ParkEvent.
 
 ```cpp
 // share/runtime/park.hpp
@@ -273,9 +270,6 @@ class ParkEvent : public os::PlatformEvent {
 Shared pthread_mutex/cond based PlatformEvent implementation.
 Not currently usable by Solaris.
 
-
-PlatformEvent
-
 Assumption:
    Only one parker can exist on an event, which is why we allocate them per-thread. Multiple unparkers can coexist.
 
@@ -288,10 +282,7 @@ _event serves as a restricted-range semaphore.
    Having three states allows for some detection of bad usage - see
    comments on unpark().
 
-This is the platform-specific implementation underpinning
-the ParkEvent class, which itself underpins Java-level monitor
-operations. See park.hpp for details.
-These event objects are type-stable and immortal - we never delete them.
+This is the platform-specific implementation underpinning the ParkEvent class, which itself underpins [Java-level monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md) operations. See `park.hpp` for details.
 Events are associated with a thread for the lifetime of the thread.
 ```cpp
 
@@ -423,6 +414,12 @@ void os::PlatformEvent::unpark() {
   }
 }
 ```
+
+
+## Links
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 
 
 

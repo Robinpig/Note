@@ -1,4 +1,5 @@
-# Red-Black Tree
+## Introduction
+
 
 
 
@@ -23,6 +24,6 @@ allows one node has two elements.
 最长路径的长度正好为最短路径长度的2倍
 
 
-## Reference
+## References
 
 1. [红黑树(一)之 原理和算法详细介绍 - 如果天空不死 - 博客园](http://www.cnblogs.com/skywang12345/p/3245399.html)

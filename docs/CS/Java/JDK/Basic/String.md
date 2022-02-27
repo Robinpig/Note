@@ -434,4 +434,8 @@ String#intern() cache instance of String
 Deduplication remove cache of char/byte array in String instance
 
 
+
+## Links
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+
 ## References

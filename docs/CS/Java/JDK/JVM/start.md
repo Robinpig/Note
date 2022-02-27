@@ -17,9 +17,15 @@ regression test jtreg
 based on JDK12
 
 ## Entry
-start main()
+
+> [!TIP]
+> 
+> Both  [main](/docs/CS/Java/JDK/JVM/start.md?id=main) and [launcher](/docs/CS/Java/JDK/JVM/start.md?id=launcher) call [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+
 ### main
-call JLI_Launch
+
+> main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain)
+
 ```c
 // main.c
 JNIEXPORT int
@@ -28,13 +34,8 @@ main(int argc, char **argv)
     ...
     return JLI_Launch(margc, ...);
 }
-```
 
-#### JLI_Launch
-Entry point.
 
-call JVMInit
-```c
 // java.c
 JNIEXPORT int JNICALL
 JLI_Launch(int argc, char ** argv, ...)
@@ -42,22 +43,16 @@ JLI_Launch(int argc, char ** argv, ...)
     ...
     return JVMInit(&ifn, threadStackSize, argc, argv, mode, what, ret);
 }
-```
 
-#### JVMInit
 
-call ContinueInNewThread
-```c
 // java_md_macosx.m
 // MacOSX we may continue in the same thread
 int JVMInit(InvocationFunctions* ifn, jlong threadStackSize, ...) {
    ...
    return ContinueInNewThread(ifn, threadStackSize, argc, argv, mode, what, ret);
 }
-```
-#### ContinueInNewThread
-call JavaMain
-```c
+
+
 // java.c
 int
 ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize, ...)
@@ -109,7 +104,9 @@ Invoke main method
 
 ### launcher
 
-call JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+> launcher -> JNI_CreateJavaVM -> [createVM](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+
+
 ```cpp
 // launcher.c
 void *JNU_FindCreateJavaVM(char *vmlibpath) {
@@ -298,7 +295,7 @@ Attach the main thread to this os thread
     return JNI_ENOMEM;
   }
 ```
-Enable guard page *after* os::create_main_thread(), otherwise it would crash Linux VM, see notes in os_linux.cpp. 
+Enable guard page *after* os::create_main_thread(), otherwise it would crash Linux VM, see notes in `os_linux.cpp`. (Allows throw SOF and still running)
 
 see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.net/jeps/270)
 ```cpp
@@ -332,17 +329,15 @@ see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.n
 ```
 Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
 ```cpp
-  { TraceTime timer("Start VMThread", TRACETIME_LOG(Info, startuptime));
-
+  { 
     VMThread::create();
     Thread* vmthread = VMThread::vm_thread();
 
     if (!os::create_thread(vmthread, os::vm_thread)) {
-      vm_exit_during_initialization("Cannot create VM thread. "
-                                    "Out of system resources.");
+      vm_exit_during_initialization("Cannot create VM thread. Out of system resources.");
     }
 ```
-Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag
+Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag.
 ```cpp
     {
       MutexLocker ml(Notify_lock);

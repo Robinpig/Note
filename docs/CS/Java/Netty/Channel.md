@@ -618,3 +618,9 @@ ChannelOption.TCP_NODELAY
 IP_TOS IP参数，设置IP头部的Type-of-Service字段，用于描述IP包的优先级和QoS选项。
 
 ALLOW_HALF_CLOSURE Netty参数，一个连接的远端关闭时本地端是否关闭，默认值为False。值为False时，连接自动关闭；为True时，触发ChannelInboundHandler的userEventTriggered()方法，事件为ChannelInputShutdownEvent。
+
+
+
+## Links
+
+- [Netty](/docs/CS/Java/Netty/Netty.md)

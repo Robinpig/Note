@@ -22,7 +22,7 @@ The **atomicity** aspect of the ACID model mainly involves `InnoDB` transactions
 
 The **consistency** aspect of the ACID model mainly involves internal `InnoDB` processing to protect data from crashes. Related MySQL features include:
 
-- The `InnoDB` [doublewrite buffer](/docs/CS/DB/MySQL/disk.md?id=Doublewrite_Buffer).
+- The `InnoDB` [doublewrite buffer](/docs/CS/DB/MySQL/Double-Buffer.md?id=Doublewrite_Buffer).
 - `InnoDB` crash recovery.
 
 ### Isolation
@@ -849,6 +849,10 @@ XA : isolation level must be `SERIALIZABLE`
 
 
 
+## Links
+
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [Transaction](/docs/CS/Transaction.md)
 
 
 ## References

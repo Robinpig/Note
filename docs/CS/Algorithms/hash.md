@@ -1,37 +1,62 @@
 ## Introduction
 
-A hash is a mathematical function that converts an input of arbitrary length into an encrypted output of a fixed length. Thus regardless of the original amount of data or file size involved, its unique hash will always be the same size. Moreover, hashes cannot be used to "reverse-engineer" the input from the hashed output, since hash functions are "one-way" (like a meat grinder; you can't put the ground beef back into a steak). Still, if you use such a function on the same data, its hash will be identical, so you can validate that the data is the same (i.e., unaltered) if you already know its hash.
+A hash is a mathematical function that converts an input of arbitrary length into an encrypted output of a fixed length.
+Thus regardless of the original amount of data or file size involved, its unique hash will always be the same size.
+Moreover, hashes cannot be used to "reverse-engineer" the input from the hashed output, since hash functions are "one-way" (like a meat grinder; you can't put the ground beef back into a steak).
+Still, if you use such a function on the same data, its hash will be identical, so you can validate that the data is the same (i.e., unaltered) if you already know its hash.
 
+we discuss the hash table ADT, which supports only a subset of the operations allowed by binary search trees.
 
+The implementation of hash tables is frequently called hashing.
+Hashing is a technique used for performing insertions, deletions and finds in constant average time.
+Tree operations that require any ordering information among the elements are not supported efficiently.
+Thus, operations such as find_min, find_max, and the printing of the entire table in sorted order in linear time are not supported.
 
-### Perfect hash function
-If all keys are known ahead of time, a [perfect hash function](https://en.wikipedia.org/wiki/Perfect_hash_function) can be used to create a perfect hash table that has no collisions.[9] If minimal perfect hashing is used, every location in the hash table can be used as well.[10]
+## General Idea
+
+The ideal hash table data structure is merely an array of some fixed size, containing the keys.
+Typically, a key is a string with an associated value (for instance, salary information). We will refer to the table size as *H_SIZE*, with the understanding that this is part of a hash data structure and not merely some variable floating around globally.
+The common convention is to have the table run from 0 to *H_SIZE-1*.
+
+Each key is mapped into some number in the range 0 to *H_SIZE* - *1* and placed in the appropriate cell. The mapping is called a  *hash function* , which ideally should be simple to compute and should ensure that any two distinct keys get different cells.
+
+Since there are a finite number of cells and a virtually inexhaustible supply of keys, this is clearly impossible, and thus we seek a hash function that distributes the keys evenly among the cells.
+
+This is the basic idea of hashing. The only remaining problems deal with choosing a function, deciding what to do when two keys hash to the same value (this is known as a  *collision* ), and deciding on the table size.
+
+## Hash Function
+
+If all keys are known ahead of time, a [perfect hash function](https://en.wikipedia.org/wiki/Perfect_hash_function) can be used to create a perfect hash table that has no collisions.
+If minimal perfect hashing is used, every location in the hash table can be used as well.
 
 Perfect hashing allows for constant time lookups in all cases. This is in contrast to most chaining and open addressing methods, where the time for lookup is low on average, but may be very large, O(n), for instance when all the keys hash to a few values.
-
-
 
 ### Key statistics
 
 A critical statistic for a hash table is the `load factor`, defined as
 
-$$
+```tex
 loadfactor(\alpha)=\frac{n}{k}
-$$
-
+```
 
 where
 
--  n is the number of entries occupied in the hash table.
--  k is the number of buckets.
+- n is the number of entries occupied in the hash table.
+- k is the number of buckets.
 
-The [performance](https://en.wikipedia.org/wiki/Computer_performance) of the hash table worsens in relation to the load factor ({\displaystyle \alpha } i.e. as {\displaystyle \alpha} approaches 1. Hence, it's essential to resize—or "rehash"—the hash table when the load factor exceeds an ideal value. It's also efficient to resize the hash table if the size is smaller—which is usually done when load factor drops below {\displaystyle \alpha _{max}/4}. Generally, a load factor of 0.6 and 0.75 is an acceptable figure.
+The [performance](https://en.wikipedia.org/wiki/Computer_performance) of the hash table worsens in relation to the load factor ({\displaystyle \alpha } i.e. as {\displaystyle \alpha} approaches 1.
+Hence, it's essential to resize—or "rehash"—the hash table when the load factor exceeds an ideal value. It's also efficient to resize the hash table if the size is smaller—which is usually done when load factor drops below {\displaystyle \alpha _{max}/4}. Generally, a load factor of 0.6 and 0.75 is an acceptable figure.
 
 ## Collision resolution
 
 ### The cause of the hash conflict
-Hashing is a solution to improve efficiency by recompressing data. However, because the hash value generated by the hash function is limited and the data may be more, there are still different data corresponding to the same value after processing by the hash function. This is where you have a hash conflict.
+
+Hashing is a solution to improve efficiency by recompressing data.
+However, because the hash value generated by the hash function is limited and the data may be more, there are still different data corresponding to the same value after processing by the hash function.
+This is where you have a hash conflict.
+
 ### The influencing factors of hash conflict
+
 Load factor (load factor = total number of data/hash table length), hash function, method of handling conflicts
 
 ### Four ways to resolve hash conflicts
@@ -41,40 +66,104 @@ Load factor (load factor = total number of data/hash table length), hash functio
 - rehash
 - overflow table
 
-### Separate Chaining
+### Open Hashing (Separate Chaining)
+
+Separate Chaining
+
+*open hashing,* or  *separate chaining* , is to keep a list of all elements that hash to the same value.
+
+To perform an  *insert* , we traverse down the appropriate list to check whether the element is already in place (if duplicates are expected, an extra field is usually kept, and this field would be incremented in the event of a match).
+If the element turns out to be new, it is inserted either at the front of the list or at the end of the list, whichever is easiest. This is an issue most easily addressed while the code is being written.
+
+> [!NOTE]
+>
+> Sometimes new elements are inserted at the front of the list, since it is convenient and also because frequently it happens that recently inserted elements are the most likely to be accessed in the near future.
+
+Any scheme could be used besides linked lists to resolve the collisions-a binary search tree or even another hash table would work, but we expect that if the table is large and the hash function is good, all the lists should be short, so it is not worthwhile to try anything complicated.
+
+We define the load factor,\delta , of a hash table to be the ratio of the number of elements in the hash table to the table size. In the example above,  = 1.0. The average length of a list is .
+The effort required to perform a search is the constant time required to evaluate the hash function plus the time to traverse the list.
+
+In an unsuccessful search, the number of links to traverse is  (excluding the final NULL link) on average.
+A successful search requires that about 1 + (/2) links be traversed, since there is a guarantee that one link must be traversed (since the search is successful), and we also expect to go halfway down a list to find our match.
+This analysis shows that the table size is not really important, but the load factor is. The general rule for open hashing is to make the table size about as large as the number of elements expected (in other words, let   1).
+It is also a good idea, as mentioned before, to keep the table size prime to ensure a good distribution.
+
+Open hashing has the disadvantage of requiring pointers. This tends to slow the algorithm down a bit because of the time required to allocate new cells, and also essentially requires the implementation of a second data structure.
 
 - [HashMap in Java](/docs/CS/Java/JDK/Collection/Map.md?id=hash)
 - [Redis hash](/docs/CS/DB/Redis/hash.md)
 
+### Closed Hashing (Open Addressing)
 
+Like separate chaining, open addressing is a method for handling collisions. In Open Addressing, all elements are stored in the hash table itself. So at any point, the size of the table must be greater than or equal to the total number of keys (Note that we can increase table size by copying old data if needed).
 
-### Open Addressing
-
-Like separate chaining, open addressing is a method for handling collisions. In Open Addressing, all elements are stored in the hash table itself. So at any point, the size of the table must be greater than or equal to the total number of keys (Note that we can increase table size by copying old data if needed). 
-
-- Insert(k): Keep probing until an empty slot is found. Once an empty slot is found, insert k. 
-- Search(k): Keep probing until slot’s key doesn’t become equal to k or an empty slot is reached. 
-- Delete(k): ***Delete operation is interesting***. If we simply delete a key, then the search may fail. So slots of deleted keys are marked specially as “deleted”. 
-  The insert can insert an item in a deleted slot, but the search doesn’t stop at a deleted slot. 
-
-
-
-
-
+- Insert(k): Keep probing until an empty slot is found. Once an empty slot is found, insert k.
+- Search(k): Keep probing until slot’s key doesn’t become equal to k or an empty slot is reached.
+- Delete(k): ***Delete operation is interesting***. If we simply delete a key, then the search may fail. So slots of deleted keys are marked specially as “deleted”.
+  The insert can insert an item in a deleted slot, but the search doesn’t stop at a deleted slot.
 - [ThreadLocalMap in Java](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md?id=hash)
 - HashMap in Python
 - [map - Golang](/docs/CS/Go/Basic/map.md)
 
-## Dynamic resizing
+Closed hashing, also known as open addressing, is an alternative to resolving collisions with linked lists. In a closed hashing system, if a collision occurs, alternate cells are tried until an empty cell is found.
+
+Because all the data goes inside the table, a bigger table is needed for closed hashing than for open hashing. Generally, the load factor should be below  = 0.5 for closed hashing.
+
+**Standard deletion cannot be performed in a closed hash table, because the cell might have caused a collision to go past it.** Thus, closed hash tables require lazy deletion, although in this case there really is no laziness implied.
+
+#### Linear Probing
+
+For linear probing it is a bad idea to let the hash table get nearly full, because performance degrades.
+
+#### Quadratic Probing
+
+For quadratic probing, the situation is even more drastic: There is no guarantee of finding an empty cell once the table gets more than half full, or even before the table gets half full if the table size is not prime.
+This is because at most half of the table can be used as alternate locations to resolve collisions.
+
+#### Double Hashing
+
+## Rehashing
+
+*Rehashing* is obviously a very expensive operation -- the running time is O(n), since there are n elements to rehash and the table size is roughly 2n, but it is actually not all that bad, because it happens very infrequently.
+
+Rehashing can be implemented in several ways with quadratic probing.
+
+- One alternative is to rehash as soon as the table is half full.
+- The other extreme is to rehash only when an insertion fails.
+- A third, middle of the road, strategy is to rehash when the table reaches a certain load factor.
+
+Since performance does degrade as the load factor increases, the third strategy, implemented with a good cutoff, could be best.
+
+Rehashing frees the programmer from worrying about the table size and is important because hash tables cannot be made arbitrarily large in complex programs.
 
 ### Incremental resizing
 
-
 - [Redis rehash](/docs/CS/DB/Redis/hash.md?id=rehash)
 
+## Summary
+
+Hash tables can be used to implement the *insert* and *find* operations in constant average time. It is especially important to pay attention to details such as load factor when using hash tables, since otherwise the time bounds are not valid. It is also important to choose the hash function carefully when the key is not a short string or integer.
+
+For open hashing, the load factor should be close to 1, although performance does not significantly degrade unless the load factor becomes very large. For closed hashing, the load factor should not exceed 0.5, unless this is completely unavoidable. If linear probing is used, performance degenerates rapidly as the load factor approaches 1. Rehashing can be implemented to allow the table to grow (and shrink), thus maintaining a reasonable load factor. This is important if space is tight and it is not possible just to declare a huge hash table.
+
+Binary search trees can also be used to implement *insert* and *find* operations. Although the resulting average time bounds are  *O* (log  *n* ), binary search trees also support routines that require order and are thus more powerful. Using a hash table, it is not possible to find the minimum element. It is not possible to search efficiently for a string unless the exact string is known. A binary search tree could quickly find all items in a certain range; this is not supported by hash tables. Furthermore, the  *O* (log  *n* ) bound is not necessarily that much more than *O* (1), especially since no multiplications or divisions are required by search trees.
+
+On the other hand, the worst case for hashing generally results from an implementation error, whereas sorted input can make binary trees perform poorly. Balanced search trees are quite expensive to implement, so if no ordering information is required and there is any suspicion that the input might be sorted, then hashing is the data structure of choice.
+
+Hashing applications are abundant. Compilers use hash tables to keep track of declared variables in source code. The data structure is known as a *symbol* table. Hash tables are the ideal application for this problem because only *inserts* and *finds *are performed. Identifiers are typically short, so the hash function can be computed quickly.
+
+A hash table is useful for any graph theory problem where the nodes have real names instead of numbers. Here, as the input is read, vertices are assigned integers from 1 onwards by order of appearance. Again, the input is likely to have large groups of alphabetized entries. For example, the vertices could be computers. Then if one particular installation lists its computers as *ibm1, ibm2, ibm3,* . . . , there could be a dramatic effect on efficiency if a search tree is used.
+
+A third common use of hash tables is in programs that play games. As the program searches through different lines of play, it keeps track of positions it has seen by computing a hash function based on the position (and storing its move for that position). If the same position reoccurs, usually by a simple transposition of moves, the program can avoid expensive recomputation. This general feature of all game-playing programs is known as the transposition table.
+
+Yet another use of hashing is in online spelling checkers. If misspelling detection (as opposed to correction) is important, an entire dictionary can be prehashed and words can be checked in constant time. Hash tables are well suited for this, because it is not important to alphabetize words; printing out misspellings in the order they occurred in the document is certainly acceptable.
+
+## Links
+- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 
 ## References
+
 1. [Hash table - WiKi](https://en.wikipedia.org/wiki/Hash_table)
 2. [Hashing | Set 3 (Open Addressing)](https://www.geeksforgeeks.org/hashing-set-3-open-addressing/)
 3. [Hashing | Set 2 (Separate Chaining)](https://www.geeksforgeeks.org/hashing-set-2-separate-chaining/)
-

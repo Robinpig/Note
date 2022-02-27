@@ -967,3 +967,7 @@ private transient volatile int allocationSpinLock;
 | PriorityBlockingQueue | unbounded          | lock     | heap       |
 | DealyQueue            | unbounded          | lock     | heap       |
 
+
+
+## Links
+- [Collection](/docs/CS/Java/JDK/Collection/Collection.md)

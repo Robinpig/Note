@@ -543,3 +543,7 @@ public void andNot(BitSet set) {
     checkInvariants();
 }
 ```
+
+
+## Links
+- [Collection](/docs/CS/Java/JDK/Collection/Collection.md)

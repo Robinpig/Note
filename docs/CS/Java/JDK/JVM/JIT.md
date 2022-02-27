@@ -26,6 +26,7 @@ Historically, we used C2 for long-running server-side applications. Prior to Jav
 We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
 
 ### On-stack Replacement
+
 On-stack replacement (OSR) is a programming language implementation technique that allows a running program to switch to a different version of code.
 
 
@@ -221,6 +222,227 @@ void ciEnv::register_method(...) {
                               const VMRegPair *regs);
 ```
 
+## c1
+
+### compile_java_method
+[CompilerThread](/docs/CS/Java/JDK/JVM/Thread.md?id=CompilerThread) -> Compilation::compile_method -> Compilation::compile_java_method
+
+1. build hir
+2. build lir
+3. generate emit_code
+```cpp
+int Compilation::compile_java_method() {
+  if (BailoutOnExceptionHandlers) {
+    if (method()->has_exception_handlers()) {
+      bailout("linear scan can't handle exception handlers");
+    }
+  }
+
+  CHECK_BAILOUT_(no_frame_size);
+
+  if (is_profiling() && !method()->ensure_method_data()) {
+    BAILOUT_("mdo allocation failed", no_frame_size);
+  }
+
+  {
+    PhaseTraceTime timeit(_t_buildIR);
+    build_hir();
+  }
+  if (BailoutAfterHIR) {
+    BAILOUT_("Bailing out because of -XX:+BailoutAfterHIR", no_frame_size);
+  }
+
+
+  {
+    PhaseTraceTime timeit(_t_emit_lir);
+
+    _frame_map = new FrameMap(method(), hir()->number_of_locks(), MAX2(4, hir()->max_stack()));
+    emit_lir();
+  }
+  CHECK_BAILOUT_(no_frame_size);
+
+  // Dump compilation data to replay it.
+  if (_directive->DumpReplayOption) {
+    env()->dump_replay_data(env()->compile_id());
+  }
+
+  {
+    PhaseTraceTime timeit(_t_codeemit);
+    return emit_code_body();
+  }
+}
+```
+
+Or see Timer
+```cpp
+typedef enum {
+  _t_compile,
+    _t_setup,
+    _t_buildIR,
+      _t_hir_parse,
+      _t_gvn,
+      _t_optimize_blocks,
+      _t_optimize_null_checks,
+      _t_rangeCheckElimination,
+    _t_emit_lir,
+      _t_linearScan,
+      _t_lirGeneration,
+    _t_codeemit,
+    _t_codeinstall,
+  max_phase_timers
+} TimerName;
+```
+
+## c2
+
+[CompilerThread](/docs/CS/Java/JDK/JVM/Thread.md?id=CompilerThread) -> `C2Compiler::compile_method`
+
+### compile_method
+
+```cpp
+
+void C2Compiler::compile_method(ciEnv* env, ciMethod* target, int entry_bci, bool install_code, DirectiveSet* directive) {
+  assert(is_initialized(), "Compiler thread must be initialized");
+
+  bool subsume_loads = SubsumeLoads;
+  bool do_escape_analysis = DoEscapeAnalysis;
+  bool do_iterative_escape_analysis = DoEscapeAnalysis;
+  bool eliminate_boxing = EliminateAutoBox;
+  bool do_locks_coarsening = EliminateLocks;
+
+  while (!env->failing()) {
+    // Attempt to compile while subsuming loads into machine instructions.
+    Options options(subsume_loads, do_escape_analysis, do_iterative_escape_analysis, eliminate_boxing, do_locks_coarsening, install_code);
+    Compile C(env, target, entry_bci, options, directive);
+
+    // Check result and retry if appropriate.
+    if (C.failure_reason() != NULL) {
+      if (C.failure_reason_is(retry_class_loading_during_parsing())) {
+        env->report_failure(C.failure_reason());
+        continue;  // retry
+      }
+      if (C.failure_reason_is(retry_no_subsuming_loads())) {
+        assert(subsume_loads, "must make progress");
+        subsume_loads = false;
+        env->report_failure(C.failure_reason());
+        continue;  // retry
+      }
+      if (C.failure_reason_is(retry_no_escape_analysis())) {
+        assert(do_escape_analysis, "must make progress");
+        do_escape_analysis = false;
+        env->report_failure(C.failure_reason());
+        continue;  // retry
+      }
+      if (C.failure_reason_is(retry_no_iterative_escape_analysis())) {
+        assert(do_iterative_escape_analysis, "must make progress");
+        do_iterative_escape_analysis = false;
+        env->report_failure(C.failure_reason());
+        continue;  // retry
+      }
+      if (C.failure_reason_is(retry_no_locks_coarsening())) {
+        assert(do_locks_coarsening, "must make progress");
+        do_locks_coarsening = false;
+        env->report_failure(C.failure_reason());
+        continue;  // retry
+      }
+      if (C.has_boxed_value()) {
+        // Recompile without boxing elimination regardless failure reason.
+        assert(eliminate_boxing, "must make progress");
+        eliminate_boxing = false;
+        env->report_failure(C.failure_reason());
+        continue;  // retry
+      }
+      // Pass any other failure reason up to the ciEnv.
+      // Note that serious, irreversible failures are already logged
+      // on the ciEnv via env->record_method_not_compilable().
+      env->record_failure(C.failure_reason());
+    }
+    if (StressRecompilation) {
+      if (subsume_loads) {
+        subsume_loads = false;
+        continue;  // retry
+      }
+      if (do_escape_analysis) {
+        do_escape_analysis = false;
+        continue;  // retry
+      }
+      if (do_locks_coarsening) {
+        do_locks_coarsening = false;
+        continue;  // retry
+      }
+    }
+    // print inlining for last compilation only
+    C.dump_print_inlining();
+
+    // No retry; just break the loop.
+    break;
+  }
+}
+```
+
+Or see PhaseTraceId
+```cpp
+
+  enum PhaseTraceId {
+    _t_parser,
+    _t_optimizer,
+      _t_escapeAnalysis,
+        _t_connectionGraph,
+        _t_macroEliminate,
+      _t_iterGVN,
+      _t_incrInline,
+        _t_incrInline_ideal,
+        _t_incrInline_igvn,
+        _t_incrInline_pru,
+        _t_incrInline_inline,
+      _t_vector,
+        _t_vector_elimination,
+          _t_vector_igvn,
+          _t_vector_pru,
+      _t_renumberLive,
+      _t_idealLoop,
+      _t_idealLoopVerify,
+      _t_ccp,
+      _t_iterGVN2,
+      _t_macroExpand,
+      _t_barrierExpand,
+      _t_graphReshaping,
+    _t_matcher,
+      _t_postselect_cleanup,
+    _t_scheduler,
+    _t_registerAllocation,
+      _t_ctorChaitin,
+      _t_buildIFGvirtual,
+      _t_buildIFGphysical,
+      _t_computeLive,
+      _t_regAllocSplit,
+      _t_postAllocCopyRemoval,
+      _t_mergeMultidefs,
+      _t_fixupSpills,
+      _t_chaitinCompact,
+      _t_chaitinCoalesce1,
+      _t_chaitinCoalesce2,
+      _t_chaitinCoalesce3,
+      _t_chaitinCacheLRG,
+      _t_chaitinSimplify,
+      _t_chaitinSelect,
+    _t_blockOrdering,
+    _t_peephole,
+    _t_postalloc_expand,
+    _t_output,
+      _t_instrSched,
+      _t_shortenBranches,
+      _t_buildOopMaps,
+      _t_fillBuffer,
+      _t_registerMethod,
+    _t_temporaryTimer1,
+    _t_temporaryTimer2,
+    max_phase_timers
+   };
+```
+
+Compile::Compile -> Compile::Optimize
+
 ## Optimization
 
 ### Inline Method
@@ -243,6 +465,8 @@ void ciEnv::register_method(...) {
           "Array size (number of elements) limit for scalar replacement")   \
           range(0, max_jint)                                                \
 ```
+
+Compile::Optimize -> ConnectionGraph::do_analysis
 
 #### Stack Allocations
 support escape method, not support escape thread
@@ -269,8 +493,15 @@ not support escape method
 ### Dereflection
 
 
+## Tools
+
+1. c1visualizer
+2. idealgraphvisualizer
+3. JITWatch
 
 
+## Links
+- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 
 
 ## References

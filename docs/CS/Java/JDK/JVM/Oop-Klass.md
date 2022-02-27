@@ -2,31 +2,36 @@
 
 ## Introduction
 
-One reason for the oop/klass dichotomy in the implementation is that we don't want a C++ vtbl pointer in every object. Thus, normal oops don't have any virtual functions. Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type. (See oop.inline.hpp for some of the forwarding code.)
+One reason for the oop/klass dichotomy in the implementation is that we don't want a C++ vtbl pointer in every object.
+Thus, normal oops don't have any virtual functions. 
+Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type. (See `oop.inline.hpp` for some of the forwarding code.)
 
-
-
-metadata hierarchy
-```cpp
-// The metadata hierarchy is separate from the oop hierarchy
-
-//      class MetaspaceObj
-class   ConstMethod;
-class   ConstantPoolCache;
-class   MethodData;
-//      class Metadata
-class   Method;
-class   ConstantPool;
-//      class CHeapObj
-class   CompiledICHolder;
-```
 
 ## oop
+oopDesc is the top baseclass for objects classes. The Desc classes describe the format of Java objects so the fields can be accessed from C++.
+oopDesc is abstract, and no virtual functions allowed.
 
-### OBJECT hierarchy
+
+### Object Hierarchy
 
 This hierarchy is a representation hierarchy, i.e. 
 if A is a superclass of B, A's representation is a prefix of B's representation.
+
+
+
+```dot
+strict digraph {
+    oopDesc [shape="polygon" ]
+    arrayOopDesc [shape="polygon" ]
+    oopDesc -> arrayOopDesc 
+    instanceOopDesc [shape="polygon" ]
+    oopDesc -> instanceOopDesc
+    objArrayOopDesc [shape="polygon" ]
+    typeArrayOopDesc [shape="polygon" ]
+    arrayOopDesc -> objArrayOopDesc
+    arrayOopDesc -> typeArrayOopDesc
+}
+```
 
 
 ```cpp
@@ -43,14 +48,31 @@ typedef class   arrayOopDesc*                    arrayOop;
 typedef class     objArrayOopDesc*            objArrayOop;
 typedef class     typeArrayOopDesc*            typeArrayOop;
 ```
-| Type         | Java | Typedef |
-| ------------ | ---- | ------- |
-| instanceOop  |      |         |
-| arrayOop     |      |         |
-| objArrayOop  |      |         |
-| typeArrayOop |      |         |
+| Type         | Java |
+| ------------ | ---- |
+| instanceOop  |  Obj    |
+| objArrayOop  |  Obj[]  |
+| typeArrayOop |  []     |
 
-![](../images/oop.svg)
+
+### struct
+
+The layout of Oops is:
+
+- [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
+- [Klass*](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=klass)    // 32 bits if compressed but declared 64 in LP64.
+- length    // shares klass memory or allocated after declared fields if array Oop.
+
+```cpp
+class oopDesc {
+ private:
+  volatile markWord _mark;
+  union _metadata {
+    Klass*      _klass;
+    narrowKlass _compressed_klass;
+  } _metadata;
+}
+```
 
 
 ## allocate_instance
@@ -72,6 +94,7 @@ instanceOop InstanceKlass::allocate_instance(TRAPS) {
 }
 ```
 
+[Allocate](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Allocate) and [Initialize](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Initialize) Oop.
 
 ```cpp
 // collectedHeap.cpp
@@ -87,9 +110,6 @@ oop MemAllocator::allocate() const {
     Allocation allocation(*this, &obj);
     HeapWord* mem = mem_allocate(allocation);
     if (mem != NULL) {
-```
-clear_mem & set markOop
-```cpp
       obj = initialize(mem); // 
     }
   }
@@ -232,7 +252,7 @@ HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
 ```
 
 ### initialize
-
+clear_mem & set [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
 ```cpp
 // share/gc/shared/memAllocator.cpp
 oop ObjAllocator::initialize(HeapWord* mem) const {
@@ -253,12 +273,13 @@ oop MemAllocator::finish(HeapWord* mem) const {
 ```
 
 
-## markWord
+## MarkWord
 
 The markOop describes the header of an object.
-
-Note that the mark is not a real oop but just a word.
-It is placed in the oop hierarchy for historical reasons.
+> [!NOTE]
+> 
+> Note that the mark is not a real oop but just a word.
+> It is placed in the oop hierarchy for historical reasons.
 
 Bit-format of an object header (most significant first, big endian layout below):
 ```
@@ -286,7 +307,7 @@ unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS fr
   31 bits, see os::random().  Also, 64-bit vm's require
   a hash value no bigger than 32 bits because they will not
   properly generate a mask larger than that: see library_call.cpp
-  and c1_CodePatterns_sparc.cpp.
+  and c1_CodePatterns_sparc.cpp.(see [HashCode](/docs/CS/Java/JDK/Basic/Object.md?id=hashCode))
 
 - the biased lock pattern is used to bias a lock toward a given
   thread. When this pattern is set in the low three bits, the lock
@@ -312,17 +333,17 @@ unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS fr
   a very large value (currently 128 bytes (32bVM) or 256 bytes (64bVM))
   to make room for the age bits & the epoch bits (used in support of
   biased locking), and for the CMS "freeness" bit in the 64bVM (+COOPs).
-
+```
   [JavaThread* | epoch | age | 1 | 01]       lock is biased toward given thread
   [0           | epoch | age | 1 | 01]       lock is anonymously biased
-
+```
 - the two lock bits are used to describe three states: locked/unlocked and monitor.
-
+```
   [ptr             | 00]  locked             ptr points to real header on stack
   [header      | 0 | 01]  unlocked           regular object header
   [ptr             | 10]  monitor            inflated lock (header is wapped out)
-  [ptr             | 11]  marked             used by markSweep to mark an object
-                                             not valid at any other time
+  [ptr             | 11]  marked             used by markSweep to mark an object not valid at any other time
+```
 
 We assume that stack/thread pointers have the lowest two bits cleared.
 
@@ -410,14 +431,14 @@ access object use direct-pointer or handle
 
 ### Example
 
-add dependency
+add JOL dependency.
 
 ```groovy
 // https://mvnrepository.com/artifact/org.openjdk.jol/jol-core
 compile group: 'org.openjdk.jol', name: 'jol-core', version: '0.13'
 ```
 
-
+Print VM details.
 ```java
 System.out.println(VM.current().details());
 ```
@@ -435,7 +456,7 @@ System.out.println(VM.current().details());
 ```
 
 
-
+Print object layout.
 ```java
 Object o = new Object();
 System.out.println(ClassLayout.parseInstance(o).toPrintable());
@@ -446,7 +467,7 @@ System.out.println(ClassLayout.parseInstance(array).toPrintable());
 
 
 
-output
+Output:
 
 ```shell
 java.lang.Object object internals:
@@ -474,9 +495,23 @@ Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 
 
 
-## metadata
+## Metadata
 
 
+### Metadata hierarchy
+```cpp
+// The metadata hierarchy is separate from the oop hierarchy
+
+//      class MetaspaceObj
+class   ConstMethod;
+class   ConstantPoolCache;
+class   MethodData;
+//      class Metadata
+class   Method;
+class   ConstantPool;
+//      class CHeapObj
+class   CompiledICHolder;
+```
 
 - Klass
 - Method
@@ -484,11 +519,15 @@ Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 - MethodCounters
 - ConstantPool
 
-## klass
+## Klass
 
-### klass hierarchy
+### Klass hierarchy
 
-he klass hierarchy is separate from the oop hierarchy.
+The klass hierarchy is separate from the oop hierarchy.
+
+
+![](../images/Klass.svg)
+
 ```cpp
 class Klass;
 class   InstanceKlass;
@@ -511,10 +550,8 @@ class     TypeArrayKlass;
 
 
 
-![](../images/Klass.svg)
 
-
-#### follow_object
+### follow_object
 
 ```cpp
 // share/gc/serial/markSweep.cpp
@@ -615,6 +652,7 @@ array
 update_inherited_vtable
 
 #### initialize_vtable
+
 called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
 
 Revised lookup semantics   introduced 1.3 (Kestrel beta)
@@ -743,6 +781,7 @@ OR return true if a new vtable entry is required.
 Only called for InstanceKlass's, i.e. not for arrays
 If that changed, could not use _klass as handle for klass
 
+
 #### initialize_itable
 called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
 
@@ -853,8 +892,72 @@ void ClassLoaderData::classes_do(KlassClosure* klass_closure) {
 }
 ```
 
+## Constant Pool
+
+A ConstantPool is an **array** containing class constants as described in the class file.
+
+Most of the constant pool entries are written during [class parsing](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream), which is safe.  
+For klass types, the constant pool entry is modified when the entry is resolved.  
+If a klass constant pool entry is read without a lock, only the resolved state guarantees that the entry in the constant pool is a klass object and not a Symbol*.
+
+
+```cpp
+
+class ConstantPool : public Metadata {
+ private:
+  // If you add a new field that points to any metaspace object, you
+  // must add this field to ConstantPool::metaspace_pointers_do().
+  Array<u1>*           _tags;        // the tag array describing the constant pool's contents
+  ConstantPoolCache*   _cache;       // the cache holding interpreter runtime information
+  InstanceKlass*       _pool_holder; // the corresponding class
+  Array<u2>*           _operands;    // for variable-sized (InvokeDynamic) nodes, usually empty
+
+  // Consider using an array of compressed klass pointers to
+  // save space on 64-bit platforms.
+  Array<Klass*>*       _resolved_klasses;
+
+  u2              _major_version;        // major version number of class file
+  u2              _minor_version;        // minor version number of class file
+
+  // Constant pool index to the utf8 entry of the Generic signature,
+  // or 0 if none.
+  u2              _generic_signature_index;
+  // Constant pool index to the utf8 entry for the name of source file
+  // containing this klass, 0 if not specified.
+  u2              _source_file_name_index;
+
+  enum {
+    _has_preresolution    = 1,       // Flags
+    _on_stack             = 2,
+    _is_shared            = 4,
+    _has_dynamic_constant = 8
+  };
+}  
+```
+
+allocate
+```cpp
+// constantPool.cpp
+ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, TRAPS) {
+  Array<u1>* tags = MetadataFactory::new_array<u1>(loader_data, length, 0, CHECK_NULL);
+  int size = ConstantPool::size(length);
+  return new (loader_data, size, MetaspaceObj::ConstantPoolType, THREAD) ConstantPool(tags);
+}
+```
+
+### Cache
+
+A constant pool cache is a runtime data structure set aside to a constant pool. 
+The cache holds interpreter runtime information for all field access and invoke bytecodes. 
+The cache is created and initialized before a class is actively used (i.e., initialized), the individual cache entries are filled at resolution (i.e., "link") time (see also: rewriter.*).
+
+
+`ConstantPool::resolved_references_or_null()`
+
+
 ## Links
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
-
+- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
+- [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
 
 ## References

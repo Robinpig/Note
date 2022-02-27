@@ -2,7 +2,7 @@
 
 **Only VM thread may execute a safepoint.**
 
-**Safepoint actually a page of memory.**
+**Safepoint is actually a page of memory.**
 
 ## Example
 ### Preemptive Suspension
@@ -95,7 +95,7 @@ _synchronized     = 2                    // All Java threads are running in nati
 };
 ```
 
-#### default_initialize
+### default_initialize
 
 ```cpp
 
@@ -121,8 +121,8 @@ void SafepointMechanism::default_initialize() {
     os::commit_memory_or_exit(polling_page, allocation_size, false, "Unable to commit Safepoint polling page");
     MemTracker::record_virtual_memory_type((address)polling_page, mtSafepoint);
 ```
-bad page: MEM_PROT_NONE
-good page: MEM_PROT_READ
+- bad page: MEM_PROT_NONE
+- good page: MEM_PROT_READ
 ```
     char* bad_page  = polling_page;
     char* good_page = polling_page + page_size;
@@ -413,13 +413,12 @@ bool InlineCacheBuffer::is_empty() {
 
 
 
-#### begin
+### begin
 
+Roll all threads forward to a safepoint and suspend them all.
 
-
-Roll all threads forward to a safepoint and suspend them all
 ```cpp
-
+// 
 void SafepointSynchronize::begin() {
   EventSafepointBegin begin_event;
   SafepointTracing::begin(VMThread::vm_op_type());
@@ -458,7 +457,7 @@ void SafepointSynchronize::begin() {
   // Arms the safepoint, _current_jni_active_count and _waiting_to_block must be set before.
   arm_safepoint();
 ```
-Will spin until all threads are safe.
+Will spin until all threads are safe.(See [synchronize_threads](/docs/CS/Java/JDK/JVM/Safepoint.md?id=synchronize_threads))
 ```cpp
   int iterations = synchronize_threads(safepoint_limit_time, nof_threads, &initial_running);
   assert(_waiting_to_block == 0, "No thread should be running");
@@ -519,7 +518,80 @@ Will spin until all threads are safe.
 ```
 
 
-#### end
+#### synchronize_threads
+```cpp
+
+int SafepointSynchronize::synchronize_threads(jlong safepoint_limit_time, int nof_threads, int* initial_running)
+{
+  JavaThreadIteratorWithHandle jtiwh;
+
+  // Iterate through all threads until it has been determined how to stop them all at a safepoint.
+  int still_running = nof_threads;
+  ThreadSafepointState *tss_head = NULL;
+  ThreadSafepointState **p_prev = &tss_head;
+  for (; JavaThread *cur = jtiwh.next(); ) {
+    ThreadSafepointState *cur_tss = cur->safepoint_state();
+    assert(cur_tss->get_next() == NULL, "Must be NULL");
+    if (thread_not_running(cur_tss)) {
+      --still_running;
+    } else {
+      *p_prev = cur_tss;
+      p_prev = cur_tss->next_ptr();
+    }
+  }
+  *p_prev = NULL;
+
+  DEBUG_ONLY(assert_list_is_valid(tss_head, still_running);)
+
+  *initial_running = still_running;
+
+  // If there is no thread still running, we are already done.
+  if (still_running <= 0) {
+    assert(tss_head == NULL, "Must be empty");
+    return 1;
+  }
+
+  int iterations = 1; // The first iteration is above.
+  int64_t start_time = os::javaTimeNanos();
+
+  do {
+    // Check if this has taken too long:
+    if (SafepointTimeout && safepoint_limit_time < os::javaTimeNanos()) {
+      print_safepoint_timeout();
+    }
+
+    p_prev = &tss_head;
+    ThreadSafepointState *cur_tss = tss_head;
+    while (cur_tss != NULL) {
+      assert(cur_tss->is_running(), "Illegal initial state");
+      if (thread_not_running(cur_tss)) {
+        --still_running;
+        *p_prev = NULL;
+        ThreadSafepointState *tmp = cur_tss;
+        cur_tss = cur_tss->get_next();
+        tmp->set_next(NULL);
+      } else {
+        *p_prev = cur_tss;
+        p_prev = cur_tss->next_ptr();
+        cur_tss = cur_tss->get_next();
+      }
+    }
+
+    DEBUG_ONLY(assert_list_is_valid(tss_head, still_running);)
+
+    if (still_running > 0) {
+      back_off(start_time);
+    }
+
+    iterations++;
+  } while (still_running > 0);
+
+  return iterations;
+}
+```
+
+
+### end
 
 Wake up all threads, so they are ready to resume execution after the safepoint operation has been carried out
 

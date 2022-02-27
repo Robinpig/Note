@@ -488,13 +488,15 @@ We now discuss these: alignment, size constraints, boundary tags, heap parsabili
 
 Examples of such Garbage Collection roots are:
 
-- Classes loaded by system class loader (not custom class loaders)
-- Live threads
+- Classes loaded by system class loader (not custom class loaders) `ClassLoaderDataGraph::roots_cld_do`
+- Live threads `Threads::possibly_parallel_oops_do`
 - Local variables and parameters of the currently executing methods
 - Local variables and parameters of JNI methods
-- Global JNI reference
+- Global JNI reference `JNIHandles::oops_do`
 - Objects used as a monitor for synchronization
 - Objects held from garbage collection by JVM for its purposes
+- CodeCache `CodeCache::blobs_do`
+
 
 See [G1 Roots](/docs/CS/Java/JDK/JVM/G1.md?id=roots)
 
@@ -809,6 +811,9 @@ Does the system scale as expected when additional resources are added?
 It is generally best to stick to the defaults as much as possible to avoid surprises, and only specify non-default behavior when there is a clear benefit. 
 This also reduces dependencies on a specific JVM offering or version, making ongoing maintenance simpler and less risky.
 
+
+## Links
+- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 
 
 ## References

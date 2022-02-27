@@ -1,18 +1,17 @@
-
-
 ## Buffer Pool
+
 The buffer pool is an area in main memory where InnoDB caches table and index data as it is accessed. The buffer pool permits frequently used data to be accessed directly from memory, which speeds up processing. On dedicated servers, up to 80% of physical memory is often assigned to the buffer pool.
 
 For efficiency of high-volume read operations, the buffer pool is divided into pages that can potentially hold multiple rows. For efficiency of cache management, the buffer pool is implemented as a linked list of pages; data that is rarely used is aged out of the cache using a variation of the least recently used (LRU) algorithm.
 
 Knowing how to take advantage of the buffer pool to keep frequently accessed data in memory is an important aspect of MySQL tuning.
 
-
 ```mysql
 mysql> SELECT * FROM information_schema.INNODB_BUFFER_POOL_STATS;
 ```
 
 ### Buffer Pool LRU Algorithm
+
 The buffer pool is managed as a list using a variation of the LRU algorithm. When room is needed to add a new page to the buffer pool, the least recently used page is evicted and a new page is added to the middle of the list. This midpoint insertion strategy treats the list as two sublists:
 
 - At the head, a sublist of new (“young”) pages that were accessed recently
@@ -32,15 +31,11 @@ By default, the algorithm operates as follows:
 - Accessing a page in the old sublist makes it “young”, moving it to the head of the new sublist. If the page was read because it was required by a user-initiated operation, the first access occurs immediately and the page is made young. If the page was read due to a read-ahead operation, the first access does not occur immediately and might not occur at all before the page is evicted.
 - As the database operates, pages in the buffer pool that are not accessed “age” by moving toward the tail of the list. Pages in both the new and old sublists age as other pages are made new. Pages in the old sublist also age as pages are inserted at the midpoint. Eventually, a page that remains unused reaches the tail of the old sublist and is evicted.
 
-By default, pages read by queries are immediately moved into the new sublist, meaning they stay in the buffer pool longer. A table scan, performed for a **mysqldump** operation or a `SELECT` statement with no `WHERE` clause, for example, can bring a large amount of data into the buffer pool and evict an equivalent amount of older data, even if the new data is never used again. Similarly, pages that are loaded by the read-ahead background thread and accessed only once are moved to the head of the new list. These situations can push frequently used pages to the old sublist where they become subject to eviction. 
-
-
+By default, pages read by queries are immediately moved into the new sublist, meaning they stay in the buffer pool longer. A table scan, performed for a **mysqldump** operation or a `SELECT` statement with no `WHERE` clause, for example, can bring a large amount of data into the buffer pool and evict an equivalent amount of older data, even if the new data is never used again. Similarly, pages that are loaded by the read-ahead background thread and accessed only once are moved to the head of the new list. These situations can push frequently used pages to the old sublist where they become subject to eviction.
 
 You can control the insertion point in the LRU list and choose whether `InnoDB` applies the same optimization to blocks brought into the buffer pool by table or index scans. The configuration parameter `innodb_old_blocks_pct` controls the percentage of “old” blocks in the LRU list. The default value of `innodb_old_blocks_pct` is `37`, corresponding to the original fixed ratio of 3/8. The value range is `5` (new pages in the buffer pool age out very quickly) to `95` (only 5% of the buffer pool is reserved for hot pages, making the algorithm close to the familiar LRU strategy).
 
 The optimization that keeps the buffer pool from being churned by read-ahead can avoid similar problems due to table or index scans. In these scans, a data page is typically accessed a few times in quick succession and is never touched again. The configuration parameter `innodb_old_blocks_time` specifies the time window (in milliseconds) after the first access to a page during which it can be accessed without being moved to the front (most-recently used end) of the LRU list. The default value of `innodb_old_blocks_time` is `1000`. Increasing this value makes more and more blocks likely to age out faster from the buffer pool.
-
-
 
 LRU list
 
@@ -48,10 +43,11 @@ LRU list
 mysql> SELECT TABLE_NAME,PAGE_NUMBER,PAGE_TYPE,INDEX_NAME,SPACE FROM information_schema.INNODB_BUFFER_PAGE_LRU WHERE SPACE = 1;
 ```
 
-Free List
+### Free List
 
+### Flush List
 
-Flush List
+Checkpoint
 
 dirty pages
 
@@ -99,7 +95,6 @@ class buf_page_t
 };
 ```
 
-
 ### checkpoint
 
 - Fuzzy Checkpoint
@@ -109,22 +104,21 @@ class buf_page_t
   - Dirty Page too much
 - Sharp Checkpoint
 
-
 Page Cleaner Thread
 
-Flush_lru_list 
+Flush_lru_list
+
 ```
 innodb_lru_scan_depth	1024
 ```
 
-
-
-
 Dirty Page too much
+
 ```
 innodb_max_dirty_pages_pct	75.000000
 innodb_max_dirty_pages_pct_lwm	0.000000
 ```
+
 adaptive flushing
 
 ```
@@ -132,16 +126,13 @@ innodb_adaptive_flushing	ON
 innodb_adaptive_flushing_lwm	10.000000
 ```
 
-
 ### Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
-
-
 
 A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages. The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extend). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
 
 **Linear** read-ahead is a technique that predicts what pages might be needed soon based on pages in the buffer pool being accessed sequentially. You control when `InnoDB` performs a read-ahead operation by adjusting the number of sequential page accesses required to trigger an asynchronous read request, using the configuration parameter `innodb_read_ahead_threshold`. Before this parameter was added, `InnoDB` would only calculate whether to issue an asynchronous prefetch request for the entire next extent when it read the last page of the current extent.
 
-The configuration parameter `innodb_read_ahead_threshold` controls how sensitive `InnoDB` is in detecting patterns of sequential page access. If the number of pages read sequentially from an extent is greater than or equal to `innodb_read_ahead_threshold`, `InnoDB` initiates an asynchronous read-ahead operation of the entire following extent. `innodb_read_ahead_threshold` can be set to any value from 0-64. The default value is 56. The higher the value, the more strict the access pattern check. For example, if you set the value to 48, `InnoDB` triggers a linear read-ahead request only when 48 pages in the current extent have been accessed sequentially. If the value is 8, `InnoDB` triggers an asynchronous read-ahead even if as few as 8 pages in the extent are accessed sequentially. 
+The configuration parameter `innodb_read_ahead_threshold` controls how sensitive `InnoDB` is in detecting patterns of sequential page access. If the number of pages read sequentially from an extent is greater than or equal to `innodb_read_ahead_threshold`, `InnoDB` initiates an asynchronous read-ahead operation of the entire following extent. `innodb_read_ahead_threshold` can be set to any value from 0-64. The default value is 56. The higher the value, the more strict the access pattern check. For example, if you set the value to 48, `InnoDB` triggers a linear read-ahead request only when 48 pages in the current extent have been accessed sequentially. If the value is 8, `InnoDB` triggers an asynchronous read-ahead even if as few as 8 pages in the extent are accessed sequentially.
 
 **Random** read-ahead is a technique that predicts when pages might be needed soon based on pages already in the buffer pool, regardless of the order in which those pages were read. If 13 consecutive pages from the same extent are found in the buffer pool, `InnoDB` asynchronously issues a request to prefetch the remaining pages of the extent. To enable this feature, set the configuration variable `innodb_random_read_ahead` to `ON`.
 
@@ -153,10 +144,6 @@ The `SHOW ENGINE INNODB STATUS` command displays statistics to help you evaluate
 
 This information can be useful when fine-tuning the `innodb_random_read_ahead` setting.
 
-
-
-
-
 #### extent
 
 A group of **pages** within a **tablespace**. For the default **page size** of 16KB, an extent contains 64 pages. In MySQL 5.6, the page size for an `InnoDB` instance can be 4KB, 8KB, or 16KB, controlled by the `innodb_page_size` configuration option. For 4KB, 8KB, and 16KB pages sizes, the extent size is always 1MB (or 1048576 bytes).
@@ -165,18 +152,15 @@ Support for 32KB and 64KB `InnoDB` page sizes was added in MySQL 5.7.6. For a 32
 
 `InnoDB` features such as **segments**, **read-ahead** requests and the **doublewrite buffer** use I/O operations that read, write, allocate, or free data one extent at a time.
 
-
-
 ## Change Buffer
-**The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=Clustered_and_Secondary_Indexes) pages when those pages are not in the `buffer pool`**. The buffered changes, which may result from INSERT, UPDATE, or DELETE operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
+
+**The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes) pages when those pages are not in the `buffer pool`**. The buffered changes, which may result from INSERT, UPDATE, or DELETE operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
 
 The change buffer only supports `secondary indexes`. Clustered indexes, full-text indexes, and spatial indexes are not supported. Full-text indexes have their own caching mechanism.
 
 **Change Buffer**
 
 ![Content is described in the surrounding text.](https://dev.mysql.com/doc/refman/8.0/en/images/innodb-change-buffer.png)
-
-
 
 Unlike [clustered indexes](/docs/CS/DB/MySQL/Index.md?id=Clustered_and_Secondary_Indexes), secondary indexes are usually nonunique, and inserts into secondary indexes happen in a relatively random order. Similarly, deletes and updates may affect secondary index pages that are not adjacently located in an index tree. Merging cached changes at a later time, when affected pages are read into the buffer pool by other operations, avoids substantial random access I/O that would be required to read secondary index pages into the buffer pool from disk.
 
@@ -190,9 +174,10 @@ The type of data cached in the change buffer is governed by the `innodb_change_b
 
 Change buffering is not supported for a secondary index if the index contains a descending index column or if the primary key includes a descending index column.
 
-
 ### insert buffer
+
 for secondary non_unique index
+
 ```
 // using SHOW ENGINE INNODB STATUS;
 Ibuf: size 1, free list len 0, seg size 2, 0 merges
@@ -210,7 +195,6 @@ uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
 
 ```
 
-
 How much space does InnoDB use for the change buffer?
 
 Prior to the introduction of the innodb_change_buffer_max_size configuration option in MySQL 5.6, the maximum size of the on-disk change buffer in the system tablespace was 1/3 of the InnoDB buffer pool size.
@@ -221,22 +205,22 @@ InnoDB does not buffer an operation if it would cause the on-disk change buffer 
 
 Change buffer pages are not required to persist in the buffer pool and may be evicted by LRU operations.
 
-
 How do I determine the current size of the change buffer?
 
 The current size of the change buffer is reported by SHOW ENGINE INNODB STATUS \G, under the INSERT BUFFER AND ADAPTIVE HASH INDEX heading. For example:
+
 ```
 -------------------------------------
 INSERT BUFFER AND ADAPTIVE HASH INDEX
 -------------------------------------
 Ibuf: size 1, free list len 0, seg size 2, 0 merges
 ```
+
 Relevant data points include:
 
 size: The number of pages used within the change buffer. Change buffer size is equal to seg size - (1 + free list len). The 1 + value represents the change buffer header page.
 
 seg size: The size of the change buffer, in pages.
-
 
 When does change buffer merging occur?
 
@@ -245,7 +229,6 @@ When does change buffer merging occur?
 - A change buffer merge is performed during crash recovery. Changes are applied from the change buffer (in the system tablespace) to leaf pages of secondary indexes as index pages are read into the buffer pool.
 - The change buffer is fully durable and can survive a system crash. Upon restart, change buffer merge operations resume as part of normal operations.
 - A full merge of the change buffer can be forced as part of a slow server shutdown using --innodb-fast-shutdown=0.
-
 
 When is the change buffer flushed?
 
@@ -261,12 +244,10 @@ A large log buffer enables large transactions to run without the need to write [
 
 Log buffer size is defined by the `innodb_log_buffer_size` variable. The default size is **16MB**. The contents of the log buffer are periodically flushed to disk.
 
-
 ```mysql
 mysql> show variables like 'innodb_log_buffer_size';
 innodb_log_buffer_size	16777216 -- 16M
 ```
-
 
 The `innodb_flush_log_at_trx_commit` variable controls how the contents of the log buffer are written and flushed to disk.
 
@@ -274,9 +255,105 @@ The `innodb_flush_log_at_trx_commit` variable controls how the contents of the l
 mysql> show variables like 'innodb_flush_log_at_trx_commit';
 innodb_flush_log_at_trx_commit	1
 ```
+
 The `innodb_flush_log_at_timeout` variable controls log flushing frequency.
 
 ```mysql
 mysql> show variables like 'innodb_flush_log_at_timeout';
 innodb_flush_log_at_timeout	1
 ```
+
+## Page
+
+- Compact
+- Redundant
+- Dynamic default
+- Compressed
+
+Structure
+
+- File Header 38Byte
+- Page Header 56Byte
+- Infimum + superemum 26Byte
+- User Records
+- Free Records
+- Page Directory
+- File Tailer 8Byte
+
+
+| col1         | col2 | col3 |
+| -------------- | ------ | ------ |
+| record_type  | 1bit |      |
+| next_record  |      |      |
+| delete_mask  | 1bit | 0/1  |
+| min_rec_mask |      |      |
+| n_owned      |      |      |
+| heap_no      |      |      |
+| next_record  |      |      |
+| next_record  |      |      |
+| next_record  |      |      |
+| next_record  |      |      |
+| next_record  |      |      |
+
+next_record a single linked list from infimum to superemum
+
+
+#### Page Directory
+
+start 2 slots, number in `n_owned`, slot number is the biggest one of all records
+
+1. min slot always 1 record
+2. max slot 1~8 records
+3. inner slot 4~8 records
+
+spilt 2slots(4 and 5) when overlimit 8, add a bigger slot
+
+Find Record:
+
+1. 通过二分法确定该记录所在的槽，并找到该槽中主键值最小的那条记录。
+2. Iterate records in slot by `next_record`
+
+
+#### Page Header
+
+slots numner
+
+offset
+
+
+#### File Header
+
+- checksum
+- page offset
+- page lsn
+- page prev
+- page next
+- page type
+- flush lsn(only for system tablespace)
+- belong tablespace
+
+
+#### File Trailer
+
+- checksum
+- LSN
+
+
+spilt page will new two pages first, then the old page will be directory page
+
+
+
+### Tablespace
+
+
+
+const > ref > ref_or_null > range > index > all
+
+
+
+
+
+## Links
+
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [Redo Log](/docs/CS/DB/MySQL/redolog.md)
