@@ -1,4 +1,6 @@
-# HTTP
+## Introduction
+
+
 
 `HyperText Transfer Protocol`
 
@@ -9,10 +11,9 @@ https://www.w3.org/Protocols/
 Stateless
 
 security
-
-HTTPS
-
-TLS
+> [!NOTE]
+>
+> see [HTTPS](/docs/CS/CN/HTTPS.md)
 
 
 
@@ -210,7 +211,7 @@ Connection: keep-Alive
 
 服务器推送
 
-多路复用 并发请求 无队头阻塞问题 SPDY
+多路复用 并发请求 无队头阻塞问题 **SPDY**
 
 标头
 
@@ -238,6 +239,10 @@ issues:
 多路复用同一个TCP连接，TCP连接不了解上层多少HTTP请求， 当存在丢包时， 其他HTTP请求必须阻塞等待
 
 ### HTTP 3.0
+
+QUIC
+
+
 
 使用UDP代替TCP ，防止出现队头阻塞或者重传阻塞
 
@@ -383,3 +388,8 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 
 (Cross-Origin Resource Sharing)CORS跨域
 
+
+
+## Links
+
+- [DNS](/docs/CS/CN/DNS.md)

@@ -4,6 +4,10 @@
 
 [科来-网络通信协议图-2020](http://www.colasoft.com.cn/download/network-protocol-map-2020.pdf)
 
+OSI 7 -- TCP/IP 4
+
+1, 5 ,6 
+
 ## Layer
 
 Application Layer
