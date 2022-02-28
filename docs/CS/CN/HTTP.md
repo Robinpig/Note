@@ -1,8 +1,6 @@
 ## Introduction
 
-
-
-`HyperText Transfer Protocol`
+The Hypertext Transfer Protocol (HTTP) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
 
 https://www.w3.org/Protocols/
 
@@ -68,11 +66,48 @@ method URI HTTP version
 GET / HTTP/1.1
 ```
 
+### Request
+
+A request message from a client to a server includes, within the
+first line of that message, the method to be applied to the resource,
+the identifier of the resource, and the protocol version in use.
+```
+        Request       = Request-Line              
+                        *(( general-header        
+                         | request-header         
+                         | entity-header ) CRLF)  
+                        CRLF
+                        [ message-body ]          
+```
+
+#### Request-Line
+
+> [!NOTE]
+>
+> Request-Line   = Method SP Request-URI SP HTTP-Version CRLF
 
 
-response
 
-status row
+
+### Response
+
+After receiving and interpreting a request message, a server responds
+with an HTTP response message.
+```
+       Response      = Status-Line               
+                       *(( general-header        
+                        | response-header        
+                        | entity-header ) CRLF)  
+                       CRLF
+                       [ message-body ]          
+```
+
+#### Status-Line
+
+> [!NOTE]
+> 
+> Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF
+
 
 ```http
 HTTP/1.1 304 Not Modified
@@ -86,7 +121,7 @@ RFC 2616 -
 
 RFC 4229 - 
 
-### Method
+### Method Definitions
 
 - GET
 - POST
