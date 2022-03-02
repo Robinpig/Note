@@ -22,7 +22,7 @@ Netty supports a zero-copy approach where by a ChannelBuffer "points" to the req
 ### Universal Asynchronous I/O API
 
 Traditional I/O APIs in Java provide different types and methods for different transport types.
-Netty has a universal asynchronous I/O interface called a [Chanel](/docs/CS/Java/Netty/Channel.md), which abstracts away all operations required for point-to-point communication.
+Netty has a universal asynchronous I/O interface called a [Channel](/docs/CS/Java/Netty/Channel.md), which abstracts away all operations required for point-to-point communication.
 That is, once you wrote your application on one Netty transport, your application can run on other Netty transports.
 
 ### Event Model based on the Interceptor Chain Pattern
@@ -51,8 +51,9 @@ participant NioEventLoopGroup as we
 participant NioEventLoop as bl
 User ->> we: create NioEventLoopGroup
 we ->> bl: create multiple NioEventLoops \n and bind Selector for each of them
-User ->> sb: create ServerBootstrap & bind
-sb ->> cf: create and init NioServerSocketChannel
+User ->> sb: ServerBootstrap.bind()
+sb ->> cf: initAndRegister NioServerSocketChannel
+participant ChannelPipeline as cp
 sb ->> we: request NioEventLoop
 sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
 bl -->> bl: register OP_ACCEPT
