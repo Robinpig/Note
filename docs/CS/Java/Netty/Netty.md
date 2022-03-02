@@ -5,7 +5,6 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 
 
 - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
-- [Chanel](/docs/CS/Java/Netty/Channel.md)
 - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
 - [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
 - [Future](/docs/CS/Java/Netty/Future.md)
@@ -17,15 +16,13 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 ### Combining and Slicing ChannelBuffers
 When transfering data between communication layers, data often needs to be combined or sliced.
 For example, if a payload is split over multiple packages, it often needs to be be combined for decoding.
-
 Traditionally, data from the multiple packages are combined by copying them into a new byte buffer.
-
 Netty supports a zero-copy approach where by a ChannelBuffer "points" to the required buffers hence eliminating the need to perform a copy.
 
 ### Universal Asynchronous I/O API
 
 Traditional I/O APIs in Java provide different types and methods for different transport types.
-Netty has a universal asynchronous I/O interface called a Channel, which abstracts away all operations required for point-to-point communication.
+Netty has a universal asynchronous I/O interface called a [Chanel](/docs/CS/Java/Netty/Channel.md), which abstracts away all operations required for point-to-point communication.
 That is, once you wrote your application on one Netty transport, your application can run on other Netty transports.
 
 ### Event Model based on the Interceptor Chain Pattern
@@ -47,7 +44,9 @@ From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#wr
 title: bind sequence
 participant User
 participant ServerBootstrap as sb
+
 participant ChannelFactory as cf
+participant ChannelPipeline as cp
 participant NioEventLoopGroup as we
 participant NioEventLoop as bl
 User ->> we: create NioEventLoopGroup
@@ -69,8 +68,8 @@ participant WorkerNioEventLoopGroup as wg
 participant NioEventLoop as bl
 User ->> we: create NioEventLoopGroup
 we ->> bl: create multiple NioEventLoops \n and bind Selector for each of them
-User ->> sb: create ServerBootstrap & bind
-sb ->> cf: create and init NioServerSocketChannel
+User ->> sb: ServerBootstrap.bind()
+sb ->> cf: initAndRegister NioServerSocketChannel
 sb ->> we: request NioEventLoop
 sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
 bl -->> bl: register OP_ACCEPT
