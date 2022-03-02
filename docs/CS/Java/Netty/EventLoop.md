@@ -1332,7 +1332,7 @@ Allocates a new receive buffer whose capacity is probably large enough to read a
 The RecvByteBufAllocator that automatically increases and decreases the predicted buffer size on feed back.
 
 - It gradually increases the expected number of readable bytes if the previous read fully filled the allocated buffer.
-- It gradually decreases the expected number of readable bytes if the read operation was not able to fill a certain amount of the allocated buffer two times consecutively.
+- It gradually decreases the expected number of readable bytes if the read operation was not able to fill a certain amount of the allocated buffer **two times consecutively**.
 - Otherwise, it keeps returning the same prediction.
 
 ```java

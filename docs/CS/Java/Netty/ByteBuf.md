@@ -1,5 +1,14 @@
 ## Introduction
 
+Netty uses its own buffer API instead of NIO ByteBuffer to represent a sequence of bytes.
+This approach has significant advantages over using ByteBuffer. Netty's new buffer type, ChannelBuffer has been designed from the ground up to address the problems of ByteBuffer and to meet the daily needs of network application developers. To list a few cool features:
+
+- You can define your own buffer type if necessary.
+- Transparent zero copy is achieved by a built-in composite buffer type.
+- A dynamic buffer type is provided out-of-the-box, whose capacity is expanded on demand, just like StringBuffer.
+- There's no need to call flip() anymore.
+- It is often faster than ByteBuffer.
+
 
 
 ###  ByteBuf Hierarchy

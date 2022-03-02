@@ -1,6 +1,7 @@
 ## Introduction
 
-[Netty](https://netty.io) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
+[Netty](https://netty.io) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. 
+It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
 
 
 - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
@@ -11,10 +12,69 @@
 - [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
 
 
+## Architecture
+
+### Combining and Slicing ChannelBuffers
+When transfering data between communication layers, data often needs to be combined or sliced.
+For example, if a payload is split over multiple packages, it often needs to be be combined for decoding.
+
+Traditionally, data from the multiple packages are combined by copying them into a new byte buffer.
+
+Netty supports a zero-copy approach where by a ChannelBuffer "points" to the required buffers hence eliminating the need to perform a copy.
+
+### Universal Asynchronous I/O API
+
+Traditional I/O APIs in Java provide different types and methods for different transport types.
+Netty has a universal asynchronous I/O interface called a Channel, which abstracts away all operations required for point-to-point communication.
+That is, once you wrote your application on one Netty transport, your application can run on other Netty transports.
+
+### Event Model based on the Interceptor Chain Pattern
+
+A well-defined and extensible event model is a must for an event-driven application.
+Netty has a well-defined event model focused on I/O.
+It also allows you to implement your own event type without breaking the existing code because each event type is distinguished from another by a strict type hierarchy.
+This is another differentiator against other frameworks.
+
+
+
 ## Writing a Discard Server
 From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
 
+
+
+```sequence
+title: bind sequence
+participant User
+participant ServerBootstrap as sb
+participant ChannelFactory as cf
+participant NioEventLoopGroup as we
+participant NioEventLoop as bl
+User ->> we: create NioEventLoopGroup
+we ->> bl: create multiple NioEventLoops \n and bind Selector for each of them
+User ->> sb: create ServerBootstrap & bind
+sb ->> cf: create and init NioServerSocketChannel
+sb ->> we: request NioEventLoop
+sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
+bl -->> bl: register OP_ACCEPT
+```
+Connect
+```sequence
+title: registe sequence
+participant User
+participant ServerBootstrap as sb
+participant ChannelFactory as cf
+participant BossNioEventLoopGroup as we
+participant WorkerNioEventLoopGroup as wg
+participant NioEventLoop as bl
+User ->> we: create NioEventLoopGroup
+we ->> bl: create multiple NioEventLoops \n and bind Selector for each of them
+User ->> sb: create ServerBootstrap & bind
+sb ->> cf: create and init NioServerSocketChannel
+sb ->> we: request NioEventLoop
+sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
+bl -->> bl: register OP_ACCEPT
+```
 
 
 ```sequence
@@ -70,11 +130,11 @@ public class DiscardServer {
     }
     
     public void run() throws Exception {
-        EventLoopGroup bossGroup = new NioEventLoopGroup(); // (1)
+        EventLoopGroup Group = new NioEventLoopGroup(); // (1)
         EventLoopGroup workerGroup = new NioEventLoopGroup();
         try {
             ServerBootstrap b = new ServerBootstrap(); // (2)
-            b.group(bossGroup, workerGroup)
+            b.group(Group, workerGroup)
              .channel(NioServerSocketChannel.class) // (3)
              .childHandler(new ChannelInitializer<SocketChannel>() { // (4)
                  @Override
@@ -94,7 +154,7 @@ public class DiscardServer {
             f.channel().closeFuture().sync(); // (8)
         } finally {
             workerGroup.shutdownGracefully();
-            bossGroup.shutdownGracefully();
+            Group.shutdownGracefully();
         }
     }
     
