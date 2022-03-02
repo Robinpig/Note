@@ -1,6 +1,6 @@
-# HTTP
+## Introduction
 
-`HyperText Transfer Protocol`
+The Hypertext Transfer Protocol (HTTP) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
 
 https://www.w3.org/Protocols/
 
@@ -9,10 +9,9 @@ https://www.w3.org/Protocols/
 Stateless
 
 security
-
-HTTPS
-
-TLS
+> [!NOTE]
+>
+> see [HTTPS](/docs/CS/CN/HTTPS.md)
 
 
 
@@ -67,11 +66,48 @@ method URI HTTP version
 GET / HTTP/1.1
 ```
 
+### Request
+
+A request message from a client to a server includes, within the
+first line of that message, the method to be applied to the resource,
+the identifier of the resource, and the protocol version in use.
+```
+        Request       = Request-Line              
+                        *(( general-header        
+                         | request-header         
+                         | entity-header ) CRLF)  
+                        CRLF
+                        [ message-body ]          
+```
+
+#### Request-Line
+
+> [!NOTE]
+>
+> Request-Line   = Method SP Request-URI SP HTTP-Version CRLF
 
 
-response
 
-status row
+
+### Response
+
+After receiving and interpreting a request message, a server responds
+with an HTTP response message.
+```
+       Response      = Status-Line               
+                       *(( general-header        
+                        | response-header        
+                        | entity-header ) CRLF)  
+                       CRLF
+                       [ message-body ]          
+```
+
+#### Status-Line
+
+> [!NOTE]
+> 
+> Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF
+
 
 ```http
 HTTP/1.1 304 Not Modified
@@ -85,7 +121,7 @@ RFC 2616 -
 
 RFC 4229 - 
 
-### Method
+### Method Definitions
 
 - GET
 - POST
@@ -210,7 +246,7 @@ Connection: keep-Alive
 
 服务器推送
 
-多路复用 并发请求 无队头阻塞问题 SPDY
+多路复用 并发请求 无队头阻塞问题 **SPDY**
 
 标头
 
@@ -238,6 +274,10 @@ issues:
 多路复用同一个TCP连接，TCP连接不了解上层多少HTTP请求， 当存在丢包时， 其他HTTP请求必须阻塞等待
 
 ### HTTP 3.0
+
+QUIC
+
+
 
 使用UDP代替TCP ，防止出现队头阻塞或者重传阻塞
 
@@ -383,3 +423,8 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 
 (Cross-Origin Resource Sharing)CORS跨域
 
+
+
+## Links
+
+- [DNS](/docs/CS/CN/DNS.md)

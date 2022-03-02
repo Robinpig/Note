@@ -382,3 +382,9 @@ Notes:
 - same server id
 
 ## [Optimization](/docs/CS/DB/MySQL/Optimization.md)
+
+
+
+## Links
+
+- [DataBases](/docs/CS/DB/DB.md)
