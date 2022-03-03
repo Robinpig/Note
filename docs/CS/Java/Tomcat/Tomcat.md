@@ -68,6 +68,80 @@ ContextConfig
 Parse web.xml
 
 
+```dot
+
+strict digraph {
+rankdir=LR
+  A;
+  Acceptor -> Poller ;
+  A -> Processor;
+  Poller -> Executor;
+  Processor;
+  Executor -> Adapter;
+  
+  
+  Adapter -> Servlet_1 [label="Pipeline-Valve FilterChain"];
+  Adapter -> Servlet_2;
+  Adapter -> Servlet_3;
+  
+  
+    subgraph cluster_Connector {
+    
+label="Connector"
+    subgraph cluster_ProtocolHandler {
+label="ProtocolHandler"
+
+     subgraph cluster_Endpoint {
+label="Endpoint"
+    
+        Poller;
+        Acceptor;
+        Executor;
+        
+  {rank="same"; Acceptor;Poller;Executor;}
+LimitLatch;
+}
+        Processor;
+
+        }
+
+        Adapter;
+
+
+    }
+
+    subgraph cluster_Container {
+label="Container"
+
+    subgraph cluster_Server {
+label="Server"
+
+
+
+    subgraph cluster_Service {
+label="Serice"
+
+
+ subgraph cluster_Host {
+label="Host"
+
+ subgraph cluster_Wrapper {
+label="Wrapper"
+
+Servlet_1;
+Servlet_2;
+Servlet_3;
+
+}
+
+}
+}
+}
+    }
+
+}
+
+```
 
 ### Connector
 

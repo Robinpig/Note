@@ -716,7 +716,7 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> 
 
 ### SynchronizedQueue
 
-SynchronizedQueueThis is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ConcurrentLinkedQueue)
+This is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ConcurrentLinkedQueue)
 when the requirement is to create an unbounded queue with no requirement to shrink the queue.
 The aim is to provide the bare minimum of required functionality as quickly as possible with minimum garbage.
 
@@ -1066,8 +1066,7 @@ execute SocketProcessor in workers
 ```
 
 #### SocketProcessor
-`SocketProcessor` is the equivalent of the Worker, but will simply use in an
-external Executor thread pool.
+`SocketProcessor` is the equivalent of the Worker, but will simply use in an external Executor thread pool.
 ```java
 protected class SocketProcessor extends SocketProcessorBase<NioChannel> {
 
