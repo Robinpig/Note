@@ -56,6 +56,12 @@ Once the reference is obtained we can drop the spinlock.
 static struct file_system_type *file_systems;
 ```
 
+### fd
+
+```shell
+ulimit -a
+```
+
 ### mount
 
 vfsmount

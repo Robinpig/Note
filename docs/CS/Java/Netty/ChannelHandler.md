@@ -874,6 +874,17 @@ public final void channelRegistered(ChannelHandlerContext ctx) throws Exception 
 }
 ```
 
+## Idle
+
+```java
+public class IdleStateHandler extends ChannelDuplexHandler {
+    public IdleStateHandler(
+            long readerIdleTime, long writerIdleTime, long allIdleTime,
+            TimeUnit unit) {
+        this(false, readerIdleTime, writerIdleTime, allIdleTime, unit);
+    }
+}
+```
 
 
 ## Links

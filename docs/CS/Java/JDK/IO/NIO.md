@@ -66,9 +66,10 @@ SelectorProvider sychronized 单例
 调用OS的接口创建FD
 
 
+See [Netty EventLoop - Selector](/docs/CS/Java/Netty/EventLoop.md?id=Selector).
+
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
 
 
 ## Reference

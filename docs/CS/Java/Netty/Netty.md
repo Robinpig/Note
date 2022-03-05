@@ -1,8 +1,7 @@
 ## Introduction
 
-[Netty](https://netty.io) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. 
+[Netty](https://netty.io) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients.
 It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
-
 
 - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
 - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
@@ -10,10 +9,10 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 - [Future](/docs/CS/Java/Netty/Future.md)
 - [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
 
-
 ## Architecture
 
 ### Combining and Slicing ChannelBuffers
+
 When transfering data between communication layers, data often needs to be combined or sliced.
 For example, if a payload is split over multiple packages, it often needs to be be combined for decoding.
 Traditionally, data from the multiple packages are combined by copying them into a new byte buffer.
@@ -32,13 +31,9 @@ Netty has a well-defined event model focused on I/O.
 It also allows you to implement your own event type without breaking the existing code because each event type is distinguished from another by a strict type hierarchy.
 This is another differentiator against other frameworks.
 
-
-
 ## Writing a Discard Server
+
 From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
-
-
-
 
 ```sequence
 title: bind sequence
@@ -46,19 +41,27 @@ participant User
 participant ServerBootstrap as sb
 
 participant ChannelFactory as cf
-participant ChannelPipeline as cp
-participant NioEventLoopGroup as we
-participant NioEventLoop as bl
-User ->> we: create NioEventLoopGroup
-we ->> bl: create multiple NioEventLoops \n and bind Selector for each of them
+participant EventLoopGroup as we
+participant EventLoop as bl
+User ->> we: create EventLoopGroup
+we ->> bl: create EventLoops \n and its own Selector
 User ->> sb: ServerBootstrap.bind()
-sb ->> cf: initAndRegister NioServerSocketChannel
-participant ChannelPipeline as cp
-sb ->> we: request NioEventLoop
-sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
-bl -->> bl: register OP_ACCEPT
+sb ->> cf: init ServerSocketChannel
+cf ->> cf: newChannel()
+cf -->> sb: ServerSocketChannel with \n NIO ServerSocketChannel(OP_ACCEPT)
+sb ->> we: register ServerSocketChannel
+we ->> bl: choose EventLoop
+bl ->> bl: register 0 and ServerSocketChannel into Selector
+bl ->> bl: fireChannelRegistered
+sb ->> we: doBind
+we ->> bl: doBind
+bl ->> bl: NIO ServerSocketChannel.doBind()
+bl ->> bl: fireChannelActive
+bl ->> bl: doBeginRead()
 ```
+
 Connect
+
 ```sequence
 title: registe sequence
 participant User
@@ -76,6 +79,27 @@ sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
 bl -->> bl: register OP_ACCEPT
 ```
 
+```sequence
+title: conn
+participant User
+participant BossEventLoop as bp
+bp -->> bp: selector.select()
+User -->> bp: send messages
+
+participant NioByteUnsafe as ue
+bp ->> ue: NioUnsafe.read()
+participant NioServerSocketChannel as ss
+ue ->> ss: create NioSocketChannel
+ss -->> ue: NioSocketChannel
+participant ServerBootstrapAcceptor as sa
+ue ->> sa: pipeline.fireChannelRead()
+sa -->> sa: init NioSocketChannel
+participant WorkEventLoop as we
+sa -->> we: regster NioSocketChannel into Selector
+we ->> we: register OP_WRITE | OP_READ
+we -->> we: pipeline.fireChannelActive()
+
+```
 
 ```sequence
 participant User
@@ -115,20 +139,41 @@ participant ChannelPipeline as pipe
 
 ```
 
+#### Shutdown
 
+```plantuml
+title: shutdown
+participant User
+participant EventLoopGroup as eg
+participant EventLoop as el
+el -> el: runAllTasks()
+activate el
+User -> eg: shutdownGracefully()
+eg -> el: shutdownGracefully()
+el -> el: cas set state \n ST_STARTED -> ST_SHUTTING_DOWN
+deactivate el
+el -> el: confirmShutdown()
+el -> el: closeAll()
+activate el
+participant Selector as se
+el -> se: cancel registed channels
+participant Channel as ch
+el -> ch: close NIO channels
+deactivate el
+```
 
 ```java
 /**
  * Discards any incoming data.
  */
 public class DiscardServer {
-    
+  
     private int port;
-    
+  
     public DiscardServer(int port) {
         this.port = port;
     }
-    
+  
     public void run() throws Exception {
         EventLoopGroup Group = new NioEventLoopGroup(); // (1)
         EventLoopGroup workerGroup = new NioEventLoopGroup();
@@ -144,10 +189,10 @@ public class DiscardServer {
              })
              .option(ChannelOption.SO_BACKLOG, 128)          // (5)
              .childOption(ChannelOption.SO_KEEPALIVE, true); // (6)
-    
+  
             // Bind and start to accept incoming connections.
             ChannelFuture f = b.bind(port).sync(); // (7)
-    
+  
             // Wait until the server socket is closed.
             // In this example, this does not happen, but you can do that to gracefully
             // shut down your server.
@@ -157,7 +202,7 @@ public class DiscardServer {
             Group.shutdownGracefully();
         }
     }
-    
+  
     public static void main(String[] args) throws Exception {
         int port = 8080;
         if (args.length > 0) {
@@ -169,8 +214,6 @@ public class DiscardServer {
 }
 ```
 
-
-
 1. [Create EventLoopGroup](/docs/CS/Java/Netty/EventLoop.md?id=create-nioeventloopgroup)
 2. [Create ServerBootstrap](/docs/CS/Java/Netty/Bootstrap.md?id=create-serverbootstrap)
 3. Set [Channel](/docs/CS/Java/Netty/Channel.md)
@@ -180,9 +223,7 @@ public class DiscardServer {
 7. [ServerBootstrap#bind()](/docs/CS/Java/Netty/Bootstrap.md?id=bind)
 8. [ChannelFuture](/docs/CS/Java/Netty/Future.md)
 
-
 ### close
-
 
 ## Under Hood
 
@@ -194,22 +235,33 @@ Direct Memory
 Composite Buf
 File transfer
 
-
-
 ## recycler
+
 count
 
 Chunk
 Page
 SubPage
 
+## Log
+
+- The default factory is *Slf4JLoggerFactory*.
+- If SLF4J is not available, *Log4JLoggerFactory* is used.
+- If Log4J is not available, *JdkLoggerFactory* is used.
+-
+
+You can change it to your preferred logging framework before other Netty classes are loaded: `InternalLoggerFactory.setDefaultFactory(Log4JLoggerFactory.INSTANCE)`;
+
+> [!NOTE]
+>
+> The new default factory is effective only for the classes which were loaded after the default factory is changed.
+> Therefore, setDefaultFactory(InternalLoggerFactory) should be called as early as possible and shouldn't be called more than once.
 
 [Future and Promise](/docs/CS/Java/Netty/Future.md)
 
-
 ## Links
-- [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
 
+- [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
 
 ## References
 

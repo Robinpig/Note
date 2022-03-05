@@ -336,6 +336,102 @@ public CompositeByteBuf discardReadComponents() {
 ## PooledByteBuf
 
 
+## OutBuf
+
+> Assuming a 64-bit JVM:
+>  - 16 bytes object header
+>  - 6 reference fields
+>  - 2 long fields
+>  - 2 int fields
+>  - 1 boolean field
+>  - padding
+
+```java
+public final class ChannelOutboundBuffer {
+    private volatile long totalPendingSize;
+}
+```
+
+addMessage
+
+The addMessage method in ChannelOutboundBuffer should add the message to the "unflushed" buffer before calling incrementPendingOutboundBytes since 
+incrementPendingOutboundBytes may call fireChannelWritabilityChanged which could trigger a user handler to write a second message 
+and could thus save the messages in the "unflushed" buffer in the wrong order.
+
+```java
+public final class ChannelOutboundBuffer {
+    public void addMessage(Object msg, int size, ChannelPromise promise) {
+        Entry entry = Entry.newInstance(msg, size, total(msg), promise);
+        if (tailEntry == null) {
+            flushedEntry = null;
+        } else {
+            Entry tail = tailEntry;
+            tail.next = entry;
+        }
+        tailEntry = entry;
+        if (unflushedEntry == null) {
+            unflushedEntry = entry;
+        }
+
+        // increment pending bytes after adding message to the unflushed arrays.
+        incrementPendingOutboundBytes(entry.pendingSize, false);
+    }
+}
+```
+
+Check HighWaterMark
+```java
+private void incrementPendingOutboundBytes(long size, boolean invokeLater) {
+        if (size == 0) {
+            return;
+        }
+
+        long newWriteBufferSize = TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, size);
+        if (newWriteBufferSize > channel.config().getWriteBufferHighWaterMark()) {
+            setUnwritable(invokeLater);
+        }
+    }
+```
+
+remove
+```java
+public boolean remove() {
+        Entry e = flushedEntry;
+        if (e == null) {
+            clearNioBuffers();
+            return false;
+        }
+        Object msg = e.msg;
+
+        ChannelPromise promise = e.promise;
+        int size = e.pendingSize;
+
+        removeEntry(e);
+
+        if (!e.cancelled) {
+            // only release message, notify and decrement if it was not canceled before.
+            ReferenceCountUtil.safeRelease(msg);
+            safeSuccess(promise);
+            decrementPendingOutboundBytes(size, false, true);
+        }
+
+        // recycle the entry
+        e.recycle();
+
+        return true;
+    }
+// Check LowWaterMark
+private void decrementPendingOutboundBytes(long size, boolean invokeLater, boolean notifyWritability) {
+        if (size == 0) {
+            return;
+        }
+
+        long newWriteBufferSize = TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, -size);
+        if (notifyWritability && newWriteBufferSize < channel.config().getWriteBufferLowWaterMark()) {
+            setWritable(invokeLater);
+        }
+    }
+```
 
 ## PoolArea
 

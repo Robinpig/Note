@@ -176,6 +176,8 @@ public interface EventExecutor extends EventExecutorGroup {
 
 ### EventLoopGroup
 
+
+
 Special EventExecutorGroup which allows registering Channels that get processed for later selection during the event loop.
 
 ```java
@@ -617,6 +619,32 @@ public void setIoRatio(int ioRatio) {
 
 ## Create NioEventLoop
 
+
+
+```dot
+
+strict digraph  {
+    client;
+
+    subgraph cluster_NioEventLoop {
+        label="NioEventLoop"
+        rankdir = BT
+        Selector;
+        Selector -> Selector [label="select()"]
+        
+        Thread;
+        Thread -> task_1 [label="runAllTasks()"]
+        
+        subgraph cluster_taskQueue {
+        label="taskQueue"
+        task_1;
+        task_2;
+        
+        }
+    }
+}
+```
+
 ```java
 NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
              SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
@@ -710,7 +738,25 @@ private int cancelledKeys;
 private boolean needsToSelectAgain;
 ```
 
-#### openSelector
+## Selector
+
+See [Selector](/docs/CS/Java/JDK/IO/NIO.md?id=Selectors)
+
+### openSelector
+
+
+```java
+final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
+    SelectionKey[] keys;
+    int size;
+
+    SelectedSelectionKeySet() {
+        keys = new SelectionKey[1024];
+    }
+}
+```
+
+Default replace *selectedKeys* and *publicSelectedKeys*(`Set<SelectionKey>`)  with *SelectedSelectionKeySet*(`SelectionKey[]`) into Selector.
 
 ```java
 // NioEventLoop
@@ -726,30 +772,7 @@ private SelectorTuple openSelector() {
     if (DISABLE_KEY_SET_OPTIMIZATION) {
         return new SelectorTuple(unwrappedSelector);
     }
-
-    Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
-        @Override
-        public Object run() {
-            try {
-                return Class.forName(
-                        "sun.nio.ch.SelectorImpl",
-                        false,
-                        PlatformDependent.getSystemClassLoader());
-            } catch (Throwable cause) {
-                return cause;
-            }
-        }
-    });
-
-    if (!(maybeSelectorImplClass instanceof Class) ||
-        // ensure the current selector implementation is what we can instrument.
-        !((Class<?>) maybeSelectorImplClass).isAssignableFrom(unwrappedSelector.getClass())) {
-        if (maybeSelectorImplClass instanceof Throwable) {
-            Throwable t = (Throwable) maybeSelectorImplClass;
-            logger.trace("failed to instrument a special java.util.Set into: {}", unwrappedSelector, t);
-        }
-        return new SelectorTuple(unwrappedSelector);
-    }
+    // ...
 
     final Class<?> selectorImplClass = (Class<?>) maybeSelectorImplClass;
     final SelectedSelectionKeySet selectedKeySet = new SelectedSelectionKeySet();
@@ -760,71 +783,28 @@ private SelectorTuple openSelector() {
             try {
                 Field selectedKeysField = selectorImplClass.getDeclaredField("selectedKeys");
                 Field publicSelectedKeysField = selectorImplClass.getDeclaredField("publicSelectedKeys");
-
-                if (PlatformDependent.javaVersion() >= 9 && PlatformDependent.hasUnsafe()) {
-                    // Let us try to use sun.misc.Unsafe to replace the SelectionKeySet.
-                    // This allows us to also do this in Java9+ without any extra flags.
-                    long selectedKeysFieldOffset = PlatformDependent.objectFieldOffset(selectedKeysField);
-                    long publicSelectedKeysFieldOffset =
-                            PlatformDependent.objectFieldOffset(publicSelectedKeysField);
-
-                    if (selectedKeysFieldOffset != -1 && publicSelectedKeysFieldOffset != -1) {
-                        PlatformDependent.putObject(
-                                unwrappedSelector, selectedKeysFieldOffset, selectedKeySet);
-                        PlatformDependent.putObject(
-                                unwrappedSelector, publicSelectedKeysFieldOffset, selectedKeySet);
-                        return null;
-                    }
-                    // We could not retrieve the offset, lets try reflection as last-resort.
-                }
-
-                Throwable cause = ReflectionUtil.trySetAccessible(selectedKeysField, true);
-                if (cause != null) {
-                    return cause;
-                }
-                cause = ReflectionUtil.trySetAccessible(publicSelectedKeysField, true);
-                if (cause != null) {
-                    return cause;
-                }
-
+                // ...
                 selectedKeysField.set(unwrappedSelector, selectedKeySet);
                 publicSelectedKeysField.set(unwrappedSelector, selectedKeySet);
                 return null;
-            } catch (NoSuchFieldException e) {
-                return e;
-            } catch (IllegalAccessException e) {
+            } catch (NoSuchFieldException | IllegalAccessException e) {
                 return e;
             }
         }
     });
-
     if (maybeException instanceof Exception) {
-        selectedKeys = null;
-        Exception e = (Exception) maybeException;
-        logger.trace("failed to instrument a special java.util.Set into: {}", unwrappedSelector, e);
+        // ...
         return new SelectorTuple(unwrappedSelector);
     }
+    
     selectedKeys = selectedKeySet;
-    logger.trace("instrumented a special java.util.Set into: {}", unwrappedSelector);
     return new SelectorTuple(unwrappedSelector,
                              new SelectedSelectionKeySetSelector(unwrappedSelector, selectedKeySet));
 }
 ```
 
-SelectedSelectionKeySet actually use SelectionKey[] keys
 
-```java
-final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 
-    SelectionKey[] keys;
-    int size;
-
-    SelectedSelectionKeySet() {
-        keys = new SelectionKey[1024];
-    }
-  ...
-}
-```
 
 ## execute
 
@@ -1408,6 +1388,177 @@ private void closeAll() {
 ```
 
 unsafe.close( ) in [Channel](/docs/CS/Java/Netty/Channel.md )
+
+### Implementation
+
+> [!NOTE]
+> 
+> See [epoll_ctl](/docs/CS/OS/Linux/epoll.md?id=epoll_ctl)
+
+```java
+class EpollEventLoop extends SingleThreadEventLoop {
+
+    @Override
+    protected void doRegister() throws Exception {
+        // Just in case the previous EventLoop was shutdown abruptly, or an event is still pending on the old EventLoop
+        // make sure the epollInReadyRunnablePending variable is reset so we will be able to execute the Runnable on the
+        // new EventLoop.
+        epollInReadyRunnablePending = false;
+        ((EpollEventLoop) eventLoop()).add(this);
+    }
+    
+    void add(AbstractEpollChannel ch) throws IOException {
+        assert inEventLoop();
+        int fd = ch.socket.intValue();
+        Native.epollCtlAdd(epollFd.intValue(), fd, ch.flags);
+        AbstractEpollChannel old = channels.put(fd, ch);
+
+        // We either expect to have no Channel in the map with the same FD or that the FD of the old Channel is already
+        // closed.
+        assert old == null || !old.isOpen();
+    }
+}
+```
+
+
+
+> [!NOTE]
+>
+> See [epoll_wait](/docs/CS/OS/Linux/epoll.md?id=epoll_wait)
+
+```java
+class EpollEventLoop extends SingleThreadEventLoop {
+
+    @Override
+    protected void run() {
+        long prevDeadlineNanos = NONE;
+        for (; ; ) {
+            try {
+                int strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
+                switch (strategy) {
+                    // ...
+                    case SelectStrategy.SELECT:
+                        if (pendingWakeup) {
+                            // We are going to be immediately woken so no need to reset wakenUp
+                            // or check for timerfd adjustment.
+                            strategy = epollWaitTimeboxed();
+                            if (strategy != 0) {
+                                break;
+                            }
+                            // We timed out so assume that we missed the write event due to an
+                            // abnormally failed syscall (the write itself or a prior epoll_wait)
+                            logger.warn("Missed eventfd write (not seen after > 1 second)");
+                            pendingWakeup = false;
+                            if (hasTasks()) {
+                                break;
+                            }
+                            // fall-through
+                        }
+
+                        long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
+                        if (curDeadlineNanos == -1L) {
+                            curDeadlineNanos = NONE; // nothing on the calendar
+                        }
+                        nextWakeupNanos.set(curDeadlineNanos);
+                        try {
+                            if (!hasTasks()) {
+                                if (curDeadlineNanos == prevDeadlineNanos) {
+                                    // No timer activity needed
+                                    strategy = epollWaitNoTimerChange();
+                                } else {
+                                    // Timerfd needs to be re-armed or disarmed
+                                    prevDeadlineNanos = curDeadlineNanos;
+                                    strategy = epollWait(curDeadlineNanos);
+                                }
+                            }
+                        } finally {
+                            // Try get() first to avoid much more expensive CAS in the case we
+                            // were woken via the wakeup() method (submitted task)
+                            if (nextWakeupNanos.get() == AWAKE || nextWakeupNanos.getAndSet(AWAKE) == AWAKE) {
+                                pendingWakeup = true;
+                            }
+                        }
+                        // fallthrough
+                    default:
+                }
+
+                final int ioRatio = this.ioRatio;
+                if (ioRatio == 100) {
+                    try {
+                        if (strategy > 0 && processReady(events, strategy)) {
+                            prevDeadlineNanos = NONE;
+                        }
+                    } finally {
+                        // Ensure we always run tasks.
+                        runAllTasks();
+                    }
+                } else if (strategy > 0) {
+                    final long ioStartTime = System.nanoTime();
+                    try {
+                        if (processReady(events, strategy)) {
+                            prevDeadlineNanos = NONE;
+                        }
+                    } finally {
+                        // Ensure we always run tasks.
+                        final long ioTime = System.nanoTime() - ioStartTime;
+                        runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
+                    }
+                } else {
+                    runAllTasks(0); // This will run the minimum number of tasks
+                }
+                if (allowGrowing && strategy == events.length()) {
+                    //increase the size of the array as we needed the whole space for the events
+                    events.increase();
+                }
+            } catch (Error e) {
+                throw e;
+            } catch (Throwable t) {
+                handleLoopException(t);
+            } finally {
+                // Always handle shutdown even if the loop processing threw an exception.
+                try {
+                    if (isShuttingDown()) {
+                        closeAll();
+                        if (confirmShutdown()) {
+                            break;
+                        }
+                    }
+                } catch (Error e) {
+                    throw e;
+                } catch (Throwable t) {
+                    handleLoopException(t);
+                }
+            }
+        }
+    }
+}
+```
+
+### Kqueue
+
+```java
+final class KQueueEventLoop extends SingleThreadEventLoop {
+
+    @Override
+    protected void doRegister() throws Exception {
+        // Just in case the previous EventLoop was shutdown abruptly, or an event is still pending on the old EventLoop
+        // make sure the readReadyRunnablePending variable is reset so we will be able to execute the Runnable on the
+        // new EventLoop.
+        readReadyRunnablePending = false;
+
+        ((KQueueEventLoop) eventLoop()).add(this);
+
+        // Add the write event first so we get notified of connection refused on the client side!
+        if (writeFilterEnabled) {
+            evSet0(Native.EVFILT_WRITE, Native.EV_ADD_CLEAR_ENABLE);
+        }
+        if (readFilterEnabled) {
+            evSet0(Native.EVFILT_READ, Native.EV_ADD_CLEAR_ENABLE);
+        }
+        evSet0(Native.EVFILT_SOCK, Native.EV_ADD, Native.NOTE_RDHUP);
+    }
+}
+```
 
 ## Fix epoll 100% CPU bug
 
