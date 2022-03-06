@@ -748,8 +748,6 @@ See [Selector](/docs/CS/Java/JDK/IO/NIO.md?id=Selectors)
 ```java
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
     SelectionKey[] keys;
-    int size;
-
     SelectedSelectionKeySet() {
         keys = new SelectionKey[1024];
     }
@@ -802,6 +800,67 @@ private SelectorTuple openSelector() {
                              new SelectedSelectionKeySetSelector(unwrappedSelector, selectedKeySet));
 }
 ```
+
+### rebuildSelector
+Replaces the current Selector of this event loop with newly created Selectors to work around the infamous epoll 100% CPU bug.
+
+1. Open a new Selector.
+2. Register all channels to the new Selector.
+3. Close the old selector as everything else is registered to the new one.
+
+```java
+private void rebuildSelector0() {
+    final Selector oldSelector = selector;
+    final SelectorTuple newSelectorTuple;
+
+    if (oldSelector == null) {
+        return;
+    }
+
+    try {
+        newSelectorTuple = openSelector();
+    } catch (Exception e) {
+        return;
+    }
+
+    int nChannels = 0;
+    for (SelectionKey key: oldSelector.keys()) {
+        Object a = key.attachment();
+        try {
+            if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null) {
+                continue;
+            }
+
+            int interestOps = key.interestOps();
+            key.cancel();
+            SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
+            if (a instanceof AbstractNioChannel) {
+                // Update SelectionKey
+                ((AbstractNioChannel) a).selectionKey = newKey;
+            }
+            nChannels ++;
+        } catch (Exception e) {
+            if (a instanceof AbstractNioChannel) {
+                AbstractNioChannel ch = (AbstractNioChannel) a;
+                ch.unsafe().close(ch.unsafe().voidPromise());
+            } else {
+                NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
+                invokeChannelUnregistered(task, key, e);
+            }
+        }
+    }
+
+    selector = newSelectorTuple.selector;
+    unwrappedSelector = newSelectorTuple.unwrappedSelector;
+
+    try {
+        // time to close the old selector as everything else is registered to the new one
+        oldSelector.close();
+    } catch (Throwable t) {
+    }
+}
+```
+
 
 
 
@@ -927,103 +986,123 @@ private void doStartThread() {
 
 ### run
 
-call [processSelectedKeys](/docs/CS/Java/Netty/EventLoop.md?id=processSelectedKey)
+1. [select](/docs/CS/Java/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Java/Netty/EventLoop.md?id=rebuildSelector) if IOException occurs
+2. [processSelectedKeys](/docs/CS/Java/Netty/EventLoop.md?id=processSelectedKey)
+3. Ensure we always [run tasks](/docs/CS/Java/Netty/EventLoop.md?id=runAllTasks).
 
-```java
-// NioEventLoop
-@Override
-protected void run() {
-    for (;;) {
-        try {
-            try {
-                switch (selectStrategy.calculateStrategy(selectNowSupplier, hasTasks())) {
-                case SelectStrategy.CONTINUE:
-                    continue;
+'wakenUp.compareAndSet(false, true)' is always evaluated before calling 'selector.wakeup()' to reduce the wake-up overhead. (Selector.wakeup() is an expensive operation.)
+However, there is a race condition in this approach.
+The race condition is triggered when 'wakenUp' is set to true too early.
+'wakenUp' is set to true too early if:
+1) Selector is waken up between 'wakenUp.set(false)' and 'selector.select(...)'. (BAD)
+2) Selector is waken up between 'selector.select(...)' and 'if (wakenUp.get()) { ... }'. (OK)
 
-                case SelectStrategy.BUSY_WAIT:
-                    // fall-through to SELECT since the busy-wait is not supported with NIO
+In the first case, 'wakenUp' is set to true and the
+following 'selector.select(...)' will wake up immediately.
+Until 'wakenUp' is set to false again in the next round,
+'wakenUp.compareAndSet(false, true)' will fail, and therefore
+any attempt to wake up the Selector will fail, too, causing
+the following 'selector.select(...)' call to block
+unnecessarily.
+To fix this problem, we wake up the selector again if wakenUp
+is true immediately after selector.select(...).
+It is inefficient in that it wakes up the selector for both
+the first case (BAD - wake-up required) and the second case
+(OK - no wake-up required).
 
-                case SelectStrategy.SELECT:
-                    select(wakenUp.getAndSet(false));
-
-                    // 'wakenUp.compareAndSet(false, true)' is always evaluated
-                    // before calling 'selector.wakeup()' to reduce the wake-up
-                    // overhead. (Selector.wakeup() is an expensive operation.)
-                    //
-                    // However, there is a race condition in this approach.
-                    // The race condition is triggered when 'wakenUp' is set to
-                    // true too early.
-                    //
-                    // 'wakenUp' is set to true too early if:
-                    // 1) Selector is waken up between 'wakenUp.set(false)' and
-                    //    'selector.select(...)'. (BAD)
-                    // 2) Selector is waken up between 'selector.select(...)' and
-                    //    'if (wakenUp.get()) { ... }'. (OK)
-                    //
-                    // In the first case, 'wakenUp' is set to true and the
-                    // following 'selector.select(...)' will wake up immediately.
-                    // Until 'wakenUp' is set to false again in the next round,
-                    // 'wakenUp.compareAndSet(false, true)' will fail, and therefore
-                    // any attempt to wake up the Selector will fail, too, causing
-                    // the following 'selector.select(...)' call to block
-                    // unnecessarily.
-                    //
-                    // To fix this problem, we wake up the selector again if wakenUp
-                    // is true immediately after selector.select(...).
-                    // It is inefficient in that it wakes up the selector for both
-                    // the first case (BAD - wake-up required) and the second case
-                    // (OK - no wake-up required).
-
-                    if (wakenUp.get()) {
-                        selector.wakeup();
-                    }
-                    // fall through
-                default:
-                }
-            } catch (IOException e) {
-                // If we receive an IOException here its because the Selector is messed up. Let's rebuild
-                // the selector and retry. https://github.com/netty/netty/issues/8566
-                rebuildSelector0();
-                handleLoopException(e);
-                continue;
-            }
-
-            cancelledKeys = 0;
-            needsToSelectAgain = false;
-            final int ioRatio = this.ioRatio;
-            if (ioRatio == 100) {
-                try {
-                    processSelectedKeys();
-                } finally {
-                    // Ensure we always run tasks.
-                    runAllTasks();
-                }
-            } else {
-                final long ioStartTime = System.nanoTime();
-                try {
-                    processSelectedKeys();
-                } finally {
-                    // Ensure we always run tasks.
-                    final long ioTime = System.nanoTime() - ioStartTime;
-                    runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
-                }
-            }
-        } catch (Throwable t) {
-            handleLoopException(t);
-        }
-```
 Always handle shutdown even if the loop processing threw an exception.
 And [closeAll](/docs/CS/Java/Netty/EventLoop.md?id=closeAll) before shut down
+
 ```java
-        try {
-            if (isShuttingDown()) {
-                closeAll();
-                if (confirmShutdown()) {
-                    return;
+public final class NioEventLoop extends SingleThreadEventLoop {
+    @Override
+    protected void run() {
+        int selectCnt = 0;
+        for (;;) {
+            try {
+                int strategy;
+                try {
+                    strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
+                    switch (strategy) {
+                        case SelectStrategy.CONTINUE:
+                            continue;
+
+                        case SelectStrategy.BUSY_WAIT:
+                            // fall-through to SELECT since the busy-wait is not supported with NIO
+
+                        case SelectStrategy.SELECT:
+                            long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
+                            if (curDeadlineNanos == -1L) {
+                                curDeadlineNanos = NONE; // nothing on the calendar
+                            }
+                            nextWakeupNanos.set(curDeadlineNanos);
+                            try {
+                                if (!hasTasks()) {
+                                    strategy = select(curDeadlineNanos);
+                                }
+                            } finally {
+                                // This update is just to help block unnecessary selector wakeups
+                                // so use of lazySet is ok (no race condition)
+                                nextWakeupNanos.lazySet(AWAKE);
+                            }
+                            // fall through
+                        default:
+                    }
+                } catch (IOException e) {
+                    rebuildSelector0();
+                    selectCnt = 0;
+                    handleLoopException(e);
+                    continue;
+                }
+
+                selectCnt++;
+                cancelledKeys = 0;
+                needsToSelectAgain = false;
+                final int ioRatio = this.ioRatio;
+                boolean ranTasks;
+                if (ioRatio == 100) {
+                    try {
+                        if (strategy > 0) {
+                            processSelectedKeys();
+                        }
+                    } finally {
+                        ranTasks = runAllTasks();
+                    }
+                } else if (strategy > 0) {
+                    final long ioStartTime = System.nanoTime();
+                    try {
+                        processSelectedKeys();
+                    } finally {
+                        final long ioTime = System.nanoTime() - ioStartTime;
+                        ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
+                    }
+                } else {
+                    ranTasks = runAllTasks(0); // This will run the minimum number of tasks
+                }
+
+                if (ranTasks || strategy > 0) {
+                    if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS && logger.isDebugEnabled()) {
+                        logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
+                                selectCnt - 1, selector);
+                    }
+                    selectCnt = 0;
+                } else if (unexpectedSelectorWakeup(selectCnt)) { // Unexpected wakeup (unusual case)
+                    selectCnt = 0;
+                }
+            } catch (Throwable t) {
+                handleLoopException(t);
+            } finally {
+                try {
+                    if (isShuttingDown()) {
+                        closeAll();
+                        if (confirmShutdown()) {
+                            return;
+                        }
+                    }
+                } catch (Throwable t) {
+                    handleLoopException(t);
                 }
             }
-        } catch (Throwable t) {
-            handleLoopException(t);
         }
     }
 }
@@ -1033,17 +1112,20 @@ SelectedSelectionKeySet
 
 ```java
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
-
     SelectionKey[] keys;
-    int size;
-
     SelectedSelectionKeySet() {
         keys = new SelectionKey[1024];
     }
 }
 ```
 
-### select( )
+### select
+- if hasTasks then selectNow, or else select
+
+
+SELECT if the next step should be blocking select 
+CONTINUE if the next step should be to not select but rather jump back to the IO loop and try again. 
+Any value >= 0 is treated as an indicator that work needs to be done.
 
 ```java
 private void select(boolean oldWakenUp) throws IOException {
@@ -1114,7 +1196,7 @@ private void select(boolean oldWakenUp) throws IOException {
 }
 ```
 
-#### processSelectedKey
+### processSelectedKey
 
 call [Channel#finishConnect()](/docs/CS/Java/Netty/Channel.md?id=finishConnect)
 
@@ -1336,30 +1418,63 @@ private final class HandleImpl extends MaxMessageHandle {
 }
 ```
 
-#### write
 
-### runAllTasks( )
+### runAllTasks
+Poll all tasks from the task queue and run them via `Runnable#run()` method.
+This method stops running the tasks in the task queue and returns if it ran longer than timeoutNanos.
+
+Check timeout every 64 tasks because nanoTime() is relatively expensive.
+```java
+    protected boolean runAllTasks(long timeoutNanos) {
+        fetchFromScheduledTaskQueue();
+        Runnable task = pollTask();
+        if (task == null) {
+            afterRunningAllTasks();
+            return false;
+        }
+
+        final long deadline = timeoutNanos > 0 ? ScheduledFutureTask.nanoTime() + timeoutNanos : 0;
+        long runTasks = 0;
+        long lastExecutionTime;
+        for (; ; ) {
+            safeExecute(task);
+
+            runTasks++;
+            
+            if ((runTasks & 0x3F) == 0) {
+                lastExecutionTime = ScheduledFutureTask.nanoTime();
+                if (lastExecutionTime >= deadline) {
+                    break;
+                }
+            }
+
+            task = pollTask();
+            if (task == null) {
+                lastExecutionTime = ScheduledFutureTask.nanoTime();
+                break;
+            }
+        }
+
+        afterRunningAllTasks();
+        this.lastExecutionTime = lastExecutionTime;
+        return true;
+    }
+```
 
 ```java
-// Poll all tasks from the task queue and run them via {@link Runnable#run()} method.
-protected boolean runAllTasks() {
-    assert inEventLoop();
-    boolean fetchedAll;
-    boolean ranAtLeastOne = false;
-
-    do {
-        fetchedAll = fetchFromScheduledTaskQueue();
-        if (runAllTasksFrom(taskQueue)) {
-            ranAtLeastOne = true;
+protected final boolean runAllTasksFrom(Queue<Runnable> taskQueue) {
+        Runnable task = pollTaskFrom(taskQueue);
+        if (task == null) {
+            return false;
         }
-    } while (!fetchedAll); // keep on processing until we fetched all scheduled tasks.
-
-    if (ranAtLeastOne) {
-        lastExecutionTime = ScheduledFutureTask.nanoTime();
+        for (;;) {
+            safeExecute(task);
+            task = pollTaskFrom(taskQueue);
+            if (task == null) {
+                return true;
+            }
+        }
     }
-    afterRunningAllTasks();
-    return ranAtLeastOne;
-}
 ```
 
 ### closeAll
@@ -1389,8 +1504,9 @@ private void closeAll() {
 
 unsafe.close( ) in [Channel](/docs/CS/Java/Netty/Channel.md )
 
-### Implementation
+## Implementation
 
+### Epoll
 > [!NOTE]
 > 
 > See [epoll_ctl](/docs/CS/OS/Linux/epoll.md?id=epoll_ctl)
@@ -1559,98 +1675,6 @@ final class KQueueEventLoop extends SingleThreadEventLoop {
     }
 }
 ```
-
-## Fix epoll 100% CPU bug
-
-Replaces the current Selectors of the child event loops with newly created Selectors to work around the infamous epoll 100% CPU bug.
-
-```java
-public void rebuildSelectors() {
-    for (EventExecutor e: this) {
-        ((NioEventLoop) e).rebuildSelector();
-    }
-}
-```
-
-### selectRebuildSelector( )
-
-```java
-private Selector selectRebuildSelector(int selectCnt) throws IOException {
-    // The selector returned prematurely many times in a row.
-    // Rebuild the selector to work around the problem.
-    logger.warn(
-            "Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
-            selectCnt, selector);
-
-    rebuildSelector();
-    Selector selector = this.selector;
-
-    // Select again to populate selectedKeys.
-    selector.selectNow();
-    return selector;
-}
-```
-
-### rebuildSelector0
-
-```java
-private void rebuildSelector0() {
-    final Selector oldSelector = selector;
-    final SelectorTuple newSelectorTuple;
-
-    if (oldSelector == null) {
-        return;
-    }
-
-    try {
-        newSelectorTuple = openSelector();
-    } catch (Exception e) {
-        logger.warn("Failed to create a new Selector.", e);
-        return;
-    }
-
-    // Register all channels to the new Selector.
-    int nChannels = 0;
-    for (SelectionKey key: oldSelector.keys()) {
-        Object a = key.attachment();
-        try {
-            if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null) {
-                continue;
-            }
-
-            int interestOps = key.interestOps();
-            key.cancel();
-            SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
-            if (a instanceof AbstractNioChannel) {
-                // Update SelectionKey
-                ((AbstractNioChannel) a).selectionKey = newKey;
-            }
-            nChannels ++;
-        } catch (Exception e) {
-            logger.warn("Failed to re-register a Channel to the new Selector.", e);
-            if (a instanceof AbstractNioChannel) {
-                AbstractNioChannel ch = (AbstractNioChannel) a;
-                ch.unsafe().close(ch.unsafe().voidPromise());
-            } else {
-                @SuppressWarnings("unchecked")
-                NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
-                invokeChannelUnregistered(task, key, e);
-            }
-        }
-    }
-
-    selector = newSelectorTuple.selector;
-    unwrappedSelector = newSelectorTuple.unwrappedSelector;
-
-    try {
-        // time to close the old selector as everything else is registered to the new one
-        oldSelector.close();
-    } catch (Throwable t) {
-    }
-}
-```
-
-
 
 ## Thread Affinity
 
