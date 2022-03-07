@@ -28,3 +28,8 @@ ProtoBuf
 - Separate symbol
 - Explicit Length
 - Mixed Separate symbol and Explicit length
+
+
+读取时的strip
+
+大小端差异

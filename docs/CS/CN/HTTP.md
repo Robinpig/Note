@@ -11,13 +11,14 @@ such as name servers and distributed object management systems, through extensio
 >
 > See [HTTPS](/docs/CS/CN/HTTPS.md)
 
-性能不算高
+
 
 1. 明文传输，不检查内容是否被窃听
-2. 不校验通信方是否是伪装
+2. Stateless
 3. 不确定报文是否正常，未被篡改
+4. 性能不算高
 
-## 报文
+## HTTP Message
 
 - Header
 
@@ -165,6 +166,8 @@ However, each connection consumes server resources.  Furthermore, using multiple
 Note that a server might reject traffic that it deems abusive or characteristic of a denial-of-service attack, such as an excessive number of open connections from a single client.
 
 
+## Request Methods
+
 ### Method Definitions
 
 - GET
@@ -247,17 +250,17 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 
 ## Version
 
-### HTTP/1.0
+### 1.0
 
-[RFC 1945 - Hypertext Transfer Protocol -- HTTP/1.0](https://www.rfc-editor.org/info/rfc1945)
+
 
 todo PUT DELETE not security
 
-### HTTP/1.1
+### 1.1
 
-[RFC 2616 - Hypertext Transfer Protocol -- HTTP/1.1](https://www.rfc-editor.org/info/rfc2616)
 
-### connection keepalive
+
+#### connection keepalive
 
 复用TCP连接,持久使用
 
@@ -265,17 +268,17 @@ todo PUT DELETE not security
 Connection: keep-Alive
 ```
 
-### pipelining
+#### pipelining
 
 并行发送, 不必等上一个请求返回可发送第二个请求
 
 Head-of-line blocking 串行化顺序等待
 
-### HTTP 2.0
+### 2
 
-[RFC 7540 - Hypertext Transfer Protocol Version 2 (HTTP/2)](https://www.rfc-editor.org/info/rfc7540)
 
-头部压缩 HPACK algorithm
+
+Zip Header HPACK algorithm
 
 二进制格式
 
@@ -306,7 +309,7 @@ issues:
 
 多路复用同一个TCP连接，TCP连接不了解上层多少HTTP请求， 当存在丢包时， 其他HTTP请求必须阻塞等待
 
-### HTTP 3.0
+### 3
 
 QUIC
 
@@ -325,6 +328,15 @@ URL(Uniform Resource Locator)
 [RFC 2396 - ]
 
 [RFC 3986 - ]
+
+Proxy
+
+Cache
+
+
+## State Management Mechanism
+
+> See [RFC 6265 - HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/inline-errata/rfc6265.html)
 
 ## Authority
 
@@ -437,6 +449,20 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 
 (Cross-Origin Resource Sharing)CORS跨域
 
+
+## Performance
+
+[WebPageTest](https://www.webpagetest.org)
+
 ## Links
 
+- [Computer Network](/docs/CS/CN/CN.md)
 - [DNS](/docs/CS/CN/DNS.md)
+- [WebSocket](/docs/CS/CN/WebSocket.md)
+
+
+## References
+
+1. [RFC 1945 - Hypertext Transfer Protocol -- HTTP/1.0](https://www.rfc-editor.org/info/rfc1945)
+2. [RFC 2616 - Hypertext Transfer Protocol -- HTTP/1.1](https://www.rfc-editor.org/info/rfc2616)
+3. [RFC 7540 - Hypertext Transfer Protocol Version 2 (HTTP/2)](https://www.rfc-editor.org/info/rfc7540)
