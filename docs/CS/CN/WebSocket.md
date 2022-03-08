@@ -16,3 +16,7 @@
 
 - [Computer Network](/docs/CS/CN/CN.md)
 - [HTTP](/docs/CS/CN/HTTP.md)
+
+## References
+
+1. [RFC 6455 - The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)

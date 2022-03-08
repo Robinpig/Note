@@ -92,3 +92,7 @@ cat /etc/hosts
 
 - [Computer Network](/docs/CS/CN/CN.md)
 - [HTTP](/docs/CS/CN/HTTP.md)
+
+## References
+
+1. [RFC 8484 - DNS Queries over HTTPS (DoH)](https://datatracker.ietf.org/doc/html/rfc8484)

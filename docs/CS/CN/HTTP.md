@@ -11,8 +11,6 @@ such as name servers and distributed object management systems, through extensio
 >
 > See [HTTPS](/docs/CS/CN/HTTPS.md)
 
-
-
 1. 明文传输，不检查内容是否被窃听
 2. Stateless
 3. 不确定报文是否正常，未被篡改
@@ -60,12 +58,12 @@ first line of that message, the method to be applied to the resource,
 the identifier of the resource, and the protocol version in use.
 
 ```
-        Request       = Request-Line            
-                        *(( general-header      
-                         | request-header       
+        Request       = Request-Line          
+                        *(( general-header    
+                         | request-header     
                          | entity-header ) CRLF)  
                         CRLF
-                        [ message-body ]        
+                        [ message-body ]      
 ```
 
 #### Request-Line
@@ -80,12 +78,12 @@ After receiving and interpreting a request message, a server responds
 with an HTTP response message.
 
 ```
-       Response      = Status-Line             
-                       *(( general-header      
-                        | response-header      
+       Response      = Status-Line           
+                       *(( general-header    
+                        | response-header    
                         | entity-header ) CRLF)  
                        CRLF
-                       [ message-body ]        
+                       [ message-body ]      
 ```
 
 #### Status-Line
@@ -101,6 +99,7 @@ HTTP/1.1 304 Not Modified
 ### HTTP Header
 
 Zip
+
 - gzip (See Nginx `gzip on`)
 - br for html
 
@@ -114,7 +113,6 @@ RFC 4229 -
 
 Accept-Ranges: bytes
 ange: bytes=0-31
-
 
 Content-Range
 
@@ -130,28 +128,24 @@ multipart/byteranges
 
 #### Pipelining
 
-A client that supports persistent connections MAY "pipeline" its requests (i.e., send multiple requests without waiting for each response).  
-A server MAY process a sequence of pipelined requests in parallel if they all have safe methods (Section 4.2.1 of [RFC7231]),
+A client that supports persistent connections MAY "pipeline" its requests (i.e., send multiple requests without waiting for each response).A server MAY process a sequence of pipelined requests in parallel if they all have safe methods (Section 4.2.1 of [RFC7231]),
 **but it MUST send the corresponding responses in the same order that the requests were received**.
+
 > Pipelining solves HOL blocking for requests, but not for responses.
 
-A client that pipelines requests SHOULD retry unanswered requests if the connection closes before it receives all of the corresponding responses.  
-When retrying pipelined requests after a failed connection (a connection not explicitly closed by the server in its last complete response), a client MUST NOT pipeline immediately after connection establishment, 
+A client that pipelines requests SHOULD retry unanswered requests if the connection closes before it receives all of the corresponding responses.
+When retrying pipelined requests after a failed connection (a connection not explicitly closed by the server in its last complete response), a client MUST NOT pipeline immediately after connection establishment,
 since the first remaining request in the prior pipeline might have caused an error response that can be lost again if multiple requests are sent on a prematurely closed connection (see the TCP reset problem described in Section 6.6).
 
-Idempotent methods (Section 4.2.2 of [RFC7231]) are significant to pipelining because they can be automatically retried after a connection failure.  
+Idempotent methods (Section 4.2.2 of [RFC7231]) are significant to pipelining because they can be automatically retried after a connection failure.
 A user agent SHOULD NOT pipeline requests after a non-idempotent method, until the final response status code for that method has been received, unless the user agent has a means to detect and recover from partial failure conditions involving the pipelined sequence.
 
-An intermediary that receives pipelined requests MAY pipeline those requests when forwarding them inbound, since it can rely on the outbound user agent(s) to determine what requests can be safely pipelined.  
-If the inbound connection fails before receiving a response, the pipelining intermediary MAY attempt to retry a sequence of requests that have yet to receive a response if the requests all have idempotent methods; 
+An intermediary that receives pipelined requests MAY pipeline those requests when forwarding them inbound, since it can rely on the outbound user agent(s) to determine what requests can be safely pipelined.If the inbound connection fails before receiving a response, the pipelining intermediary MAY attempt to retry a sequence of requests that have yet to receive a response if the requests all have idempotent methods;
 otherwise, the pipelining intermediary SHOULD forward any received responses and then close the corresponding outbound connection(s) so that the outbound user agent(s) can recover accordingly.
-
-
 
 - Firstly, some files that can be processed/rendered incrementally do profit from multiplexing. This is for example the case for progressive images.
 - Secondly, as also discussed above, it can be useful if one of the files is much smaller than the others, as it will be downloaded earlier while not delaying the others by too much.
 - Thirdly, **multiplexing allows changing the order of responses and interrupting a low priority response for a higher priority one.**
-
 
 #### Concurrency
 
@@ -160,11 +154,10 @@ A client ought to limit the number of simultaneous open connections that it main
 Previous revisions of HTTP gave a specific number of connections as a ceiling, but this was found to be impractical for many applications.
 As a result, this specification does not mandate a particular maximum number of connections but, instead, encourages clients to be conservative when opening multiple connections.
 
-Multiple connections are typically used to avoid the "head-of-line blocking" problem, wherein a request that takes significant server-side processing and/or has a large payload blocks subsequent requests on the same connection.  
+Multiple connections are typically used to avoid the "head-of-line blocking" problem, wherein a request that takes significant server-side processing and/or has a large payload blocks subsequent requests on the same connection.
 However, each connection consumes server resources.  Furthermore, using multiple connections can cause undesirable side effects in congested networks.
 
 Note that a server might reject traffic that it deems abusive or characteristic of a denial-of-service attack, such as an excessive number of open connections from a single client.
-
 
 ## Request Methods
 
@@ -252,13 +245,9 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 
 ### 1.0
 
-
-
 todo PUT DELETE not security
 
 ### 1.1
-
-
 
 #### connection keepalive
 
@@ -275,8 +264,6 @@ Connection: keep-Alive
 Head-of-line blocking 串行化顺序等待
 
 ### 2
-
-
 
 Zip Header HPACK algorithm
 
@@ -333,12 +320,11 @@ Proxy
 
 Cache
 
-
 ## State Management Mechanism
 
 > See [RFC 6265 - HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/inline-errata/rfc6265.html)
 
-## Authority
+
 
 HTTP is stateless.
 
@@ -449,7 +435,6 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 
 (Cross-Origin Resource Sharing)CORS跨域
 
-
 ## Performance
 
 [WebPageTest](https://www.webpagetest.org)
@@ -460,9 +445,13 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 - [DNS](/docs/CS/CN/DNS.md)
 - [WebSocket](/docs/CS/CN/WebSocket.md)
 
-
 ## References
 
 1. [RFC 1945 - Hypertext Transfer Protocol -- HTTP/1.0](https://www.rfc-editor.org/info/rfc1945)
-2. [RFC 2616 - Hypertext Transfer Protocol -- HTTP/1.1](https://www.rfc-editor.org/info/rfc2616)
-3. [RFC 7540 - Hypertext Transfer Protocol Version 2 (HTTP/2)](https://www.rfc-editor.org/info/rfc7540)
+2. [RFC 2045 - Multipurpose Internet Mail Extensions(MIME) Part One:Format of Internet Message Bodies](https://www.rfc-editor.org/info/rfc2045)
+3. [RFC 2324 - Hyper Text Coffee Pot Control Protocol (HTCPCP/1.0)](https://www.rfc-editor.org/info/rfc2324)
+4. [RFC 2616 - Hypertext Transfer Protocol -- HTTP/1.1](https://www.rfc-editor.org/info/rfc2616)
+5. [RFC 4122 - A Universally Unique IDentifier (UUID) URN Namespace](https://www.rfc-editor.org/info/rfc4122)
+6. [RFC 4648 - The Base16, Base32, and Base64 Data Encodings](https://www.rfc-editor.org/info/rfc4648)
+7. [RFC 7540 - Hypertext Transfer Protocol Version 2 (HTTP/2)](https://www.rfc-editor.org/info/rfc7540)
+8. [RFC 7168 - The Hyper Text Coffee Pot Control Protocol for Tea Efflux Appliances (HTCPCP-TEA)](https://datatracker.ietf.org/doc/html/rfc7168)
