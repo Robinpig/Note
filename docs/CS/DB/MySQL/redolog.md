@@ -55,6 +55,9 @@ checkpoint_lsn
 > An InnoDB optimization that performs some low-level I/O operations (log write) once for a set of `commit` operations, rather than flushing and syncing separately for each commit.
 
 
+innodb_flush_log_at_trx_commit
+
+
 
 ## Configuration
 
