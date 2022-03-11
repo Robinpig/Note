@@ -222,6 +222,12 @@ TransactionSynchronizationManager
 AbstractRoutingDataSource
 
 
+### Rollback Rules
+
+Pattern-based use `contains()`
+
+
+
 ## Links
 - [Transaction](/docs/CS/Transaction.md)
 - [Transaction - MySQL](/docs/CS/DB/MySQL/Transaction.md)

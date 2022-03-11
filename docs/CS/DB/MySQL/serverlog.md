@@ -69,3 +69,8 @@ slow_query_log_file	demo-slow.log
 
 mysql> SELECT * FROM mysql.slow_log;
 ```
+
+```mysql
+set long_query_time=0;
+
+```
