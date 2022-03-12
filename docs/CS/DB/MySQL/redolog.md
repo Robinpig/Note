@@ -57,6 +57,12 @@ checkpoint_lsn
 
 innodb_flush_log_at_trx_commit
 
+- 0  fsync everytime
+- 1 
+- 2 
+
+
+prepare -->  write binlog  --> commit
 
 
 ## Configuration
