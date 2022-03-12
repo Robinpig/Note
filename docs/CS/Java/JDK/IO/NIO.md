@@ -66,6 +66,42 @@ SelectorProvider sychronized 单例
 调用OS的接口创建FD
 
 
+### SelectorProvider
+
+```java
+//java.nio.channels.spi.SelectorProvider#provider()
+public static SelectorProvider provider() {
+        synchronized (lock) {
+            if (provider != null)
+                return provider;
+            return AccessController.doPrivileged(
+                new PrivilegedAction<SelectorProvider>() {
+                    public SelectorProvider run() {
+                            if (loadProviderFromProperty())
+                                return provider;
+                            if (loadProviderAsService())
+                                return provider;
+                            provider = sun.nio.ch.DefaultSelectorProvider.create();
+                            return provider;
+                        }
+                    });
+        }
+    }
+
+//sun.nio.ch.DefaultSelectorProvider.create()
+public static SelectorProvider create() {
+        String osname = AccessController
+            .doPrivileged(new GetPropertyAction("os.name"));
+        if (osname.equals("SunOS"))
+            return createProvider("sun.nio.ch.DevPollSelectorProvider");
+        if (osname.equals("Linux"))
+            return createProvider("sun.nio.ch.EPollSelectorProvider");
+        return new sun.nio.ch.PollSelectorProvider();
+    }
+```
+
+
+
 See [Netty EventLoop - Selector](/docs/CS/Java/Netty/EventLoop.md?id=Selector).
 
 ## Links

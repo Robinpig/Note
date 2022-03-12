@@ -33,39 +33,49 @@ This is another differentiator against other frameworks.
 
 ## Writing a Discard Server
 
+
+
 From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
-```sequence
+```plantuml
 title: bind sequence
-participant User
+actor User
 participant ServerBootstrap as sb
-
 participant ChannelFactory as cf
 participant EventLoopGroup as we
 participant EventLoop as bl
 User ->> we: create EventLoopGroup
 we ->> bl: create EventLoops \n and its own Selector
-User ->> sb: ServerBootstrap.bind()
-sb ->> cf: init ServerSocketChannel
-cf ->> cf: newChannel()
-cf -->> sb: ServerSocketChannel with \n NIO ServerSocketChannel(OP_ACCEPT)
-sb ->> we: register ServerSocketChannel
-we ->> bl: choose EventLoop
+note right: EventLoop for IO tasks
+User ->> sb: bind()
+sb ->> cf: new ServerSocketChannel
+cf -->> sb: ServerSocketChannel with OP_ACCEPT
+sb ->> we: register()
+we ->> bl: register()
+bl --> bl: startThread()
+activate bl
 bl ->> bl: register 0 and ServerSocketChannel into Selector
 bl ->> bl: fireChannelRegistered
-sb ->> we: doBind
-we ->> bl: doBind
-bl ->> bl: NIO ServerSocketChannel.doBind()
-bl ->> bl: fireChannelActive
-bl ->> bl: doBeginRead()
+sb ->> we: doBind()
+we ->> bl: doBind()
+participant Channel as cc
+bl ->> cc: Channel.bind()
+participant AbstractUnsafe as au
+cc ->> au: bind()
+au -->> cc: doBind()
+note left: javaChannel().bind()
+au ->> cc: fireChannelActive
+au ->> cc: doBeginRead()
+note left: selectionKey.interestOps(OP_ACCEPT)
+deactivate bl
 ```
 
 Connect
 
-```sequence
-title: registe sequence
-participant User
-participant ServerBootstrap as sb
+```plantuml
+title: connect sequence
+actor User
+participant Bootstrap as sb
 participant ChannelFactory as cf
 participant BossNioEventLoopGroup as we
 participant WorkerNioEventLoopGroup as wg
@@ -79,9 +89,9 @@ sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
 bl -->> bl: register OP_ACCEPT
 ```
 
-```sequence
+```plantuml
 title: conn
-participant User
+actor User
 participant BossEventLoop as bp
 bp -->> bp: selector.select()
 User -->> bp: send messages
@@ -101,8 +111,8 @@ we -->> we: pipeline.fireChannelActive()
 
 ```
 
-```sequence
-participant User
+```plantuml
+actor User
 User -->> User: send messages
 participant WorkEventLoopGroup as we
 participant Selector as se
@@ -120,8 +130,8 @@ participant ChannelPipeline as pipe
 
 Start sequence
 
-```sequence
-participant User
+```plantuml
+actor User
 User -->> User: send messages
 participant WorkEventLoopGroup as we
 participant Selector as se
@@ -143,11 +153,11 @@ participant ChannelPipeline as pipe
 
 ```plantuml
 title: shutdown
-participant User
+actor User
 participant EventLoopGroup as eg
 participant EventLoop as el
-el -> el: runAllTasks()
 activate el
+el -> el: runAllTasks()
 User -> eg: shutdownGracefully()
 eg -> el: shutdownGracefully()
 el -> el: cas set state \n ST_STARTED -> ST_SHUTTING_DOWN
