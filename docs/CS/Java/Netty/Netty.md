@@ -37,6 +37,10 @@ This is another differentiator against other frameworks.
 
 From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
+### Sequence
+
+#### Bind
+
 ```plantuml
 title: bind sequence
 actor User
@@ -70,23 +74,32 @@ note left: selectionKey.interestOps(OP_ACCEPT)
 deactivate bl
 ```
 
-Connect
+#### Connect
 
 ```plantuml
 title: connect sequence
 actor User
-participant Bootstrap as sb
-participant ChannelFactory as cf
-participant BossNioEventLoopGroup as we
+participant Selector as sr
+participant NioUnsafe as us
+participant BossNioEventLoopGroup as bg
+participant NioServerSocketChannel as sc
+participant ServerBootstrapAceptor as sa
 participant WorkerNioEventLoopGroup as wg
-participant NioEventLoop as bl
-User ->> we: create NioEventLoopGroup
-we ->> bl: create multiple NioEventLoops \n and bind Selector for each of them
-User ->> sb: ServerBootstrap.bind()
-sb ->> cf: initAndRegister NioServerSocketChannel
-sb ->> we: request NioEventLoop
-sb ->> bl: register NioServerSocketChannel \n into Selector of NioEventLoop
-bl -->> bl: register OP_ACCEPT
+participant WorkerNioEventLoop as wl
+participant NioEventLoop as el
+sr ->> sr: selector.select()
+bg ->> us: NioUnsafe.read()
+us ->> sc: create NioSocketChannel
+note right: ServerSocketChannel.accept()
+sc -->> us: NioSocketChannel
+us ->> sa: pipeline.fireChannelRead()
+sa ->> sa: init NioSocketChannel
+us ->> wg: regster NioSocketChannel into Selector
+wg ->> el: register()
+activate el
+note right: register(selector, 0, Channel)
+el --> el: pipeline.fireChannelActive()
+note left: register OP_READ
 ```
 
 ```plantuml
@@ -111,24 +124,33 @@ we -->> we: pipeline.fireChannelActive()
 
 ```
 
+#### Read
+
 ```plantuml
+title: read sequence
 actor User
 User -->> User: send messages
-participant WorkEventLoopGroup as we
+participant WorkEventLoop as we
 participant Selector as se
-we ->> se: selector.select()
+activate we
+we ->> se: select
+note right: selector.select()
 se ->> we: OP_READ
 participant NioByteUnsafe as ue
 we ->> ue: NioUnsafe.read()
 participant NioSocketChannel as so
-ue ->> so: NioUnsafe.read()
+participant ChannelPipeline as pipe
+ue ->> so: read()
+note right: doReadMessages
+ue ->> pipe: fireChannelRead()
+ue -->> so: data
 so ->> ue: -1(EOF)
 ue -->> ue: closeOnRead()
-participant ChannelPipeline as pipe
 
 ```
 
 Start sequence
+#### Write
 
 ```plantuml
 actor User
@@ -140,12 +162,20 @@ we ->> we: initAndRegister
 we ->> we: doBind0
 se ->> we: OP_READ
 participant NioByteUnsafe as ue
-we ->> ue: NioUnsafe.read()
+participant HeadContext as hc
+we ->> ue: NioUnsafe.write()
 participant NioSocketChannel as so
+participant ChannelPipeline as pipe
+participant ChannelOutboundBuffer as ob
+ue ->> ob: outboundBuffer.addMessage()
+hc ->> ue: flush()
+activate ue
+ue ->> ob: outboundBuffer.addFlush()
+ue ->> so: doWrite
+note right: SocketChannel.write()
 ue ->> so: NioUnsafe.read()
 so ->> ue: -1(EOF)
 ue -->> ue: closeOnRead()
-participant ChannelPipeline as pipe
 
 ```
 
@@ -160,14 +190,12 @@ activate el
 el -> el: runAllTasks()
 User -> eg: shutdownGracefully()
 eg -> el: shutdownGracefully()
-el -> el: cas set state \n ST_STARTED -> ST_SHUTTING_DOWN
-deactivate el
+note right: cas set state \n ST_STARTED -> ST_SHUTTING_DOWN
 el -> el: confirmShutdown()
 el -> el: closeAll()
-activate el
+participant Channel as ch
 participant Selector as se
 el -> se: cancel registed channels
-participant Channel as ch
 el -> ch: close NIO channels
 deactivate el
 ```

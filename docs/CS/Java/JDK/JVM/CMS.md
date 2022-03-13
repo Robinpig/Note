@@ -6,7 +6,7 @@ Similar to the other available collectors, the CMS collector is generational; th
 
 Before CMS, Serial, Parallel all STW.
 
-CMS for Old GC, and Young GC still a pause by other collectors.
+CMS for Old GC, and Young GC still a pause by [other collectors(ParNew)](/docs/CS/Java/JDK/JVM/ParNew.md).
 
 - Initial Mark(STW)
 - Concurrent Mark
@@ -117,6 +117,11 @@ The initial mark pause is typically short relative to the minor collection pause
 ## Summary
 1. The Concurrent Mark Sweep (CMS) collector is a concurrent collector which prefer shorter garbage collection pauses.
 
+
+
+## Links
+
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
 
 ## References
 1. [Concurrent Mark Sweep (CMS) Collector](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/cms.html)
