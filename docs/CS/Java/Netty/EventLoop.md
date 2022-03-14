@@ -17,6 +17,58 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
 }
 ```
 
+Single-thread singleton EventExecutor. 
+It starts the thread automatically and stops it when there is no task pending in the task queue for 1 second. 
+Please note it is not scalable to schedule large number of tasks to this executor; use a dedicated executor.
+
+```java
+public abstract class MultithreadEventExecutorGroup extends AbstractEventExecutorGroup {
+    private final Promise<?> terminationFuture = new DefaultPromise(GlobalEventExecutor.INSTANCE);
+}
+
+public final class GlobalEventExecutor extends AbstractScheduledEventExecutor implements OrderedEventExecutor {
+    private GlobalEventExecutor() {
+        scheduledTaskQueue().add(quietPeriodTask);
+        threadFactory = ThreadExecutorMap.apply(new DefaultThreadFactory(
+                DefaultThreadFactory.toPoolName(getClass()), false, Thread.NORM_PRIORITY, null), this);
+    }
+}
+```
+
+
+```java
+public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
+
+    public DefaultPromise(EventExecutor executor) {
+        this.executor = checkNotNull(executor, "executor");
+    }
+    
+    private void notifyListeners() {
+        EventExecutor executor = executor();
+        if (executor.inEventLoop()) {
+            final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
+            final int stackDepth = threadLocals.futureListenerStackDepth();
+            if (stackDepth < MAX_LISTENER_STACK_DEPTH) {
+                threadLocals.setFutureListenerStackDepth(stackDepth + 1);
+                try {
+                    notifyListenersNow();
+                } finally {
+                    threadLocals.setFutureListenerStackDepth(stackDepth);
+                }
+                return;
+            }
+        }
+
+        safeExecute(executor, new Runnable() {
+            @Override
+            public void run() {
+                notifyListenersNow();
+            }
+        });
+    }
+}
+```
+
 #### shutdownGracefully
 
 Signals this executor that the caller wants the executor to be shut down.

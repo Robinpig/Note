@@ -45,24 +45,24 @@ From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#wr
 title: bind sequence
 actor User
 participant ServerBootstrap as sb
-participant ChannelFactory as cf
 participant EventLoopGroup as we
 participant EventLoop as bl
+participant Channel as cc
 User ->> we: create EventLoopGroup
 we ->> bl: create EventLoops \n and its own Selector
 note right: EventLoop for IO tasks
 User ->> sb: bind()
-sb ->> cf: new ServerSocketChannel
-cf -->> sb: ServerSocketChannel with OP_ACCEPT
+sb ->> cc: init ServerSocketChannel
+note right: init ChannelPipeline
+cc -->> sb: ServerSocketChannel with OP_ACCEPT
 sb ->> we: register()
+we --> sb: ChannelFuture
 we ->> bl: register()
 bl --> bl: startThread()
 activate bl
-bl ->> bl: register 0 and ServerSocketChannel into Selector
-bl ->> bl: fireChannelRegistered
-sb ->> we: doBind()
-we ->> bl: doBind()
-participant Channel as cc
+bl ->> cc: register(Selector, 0, ServerSocketChannel)
+cc ->> cc: fireChannelRegistered
+cc --> bl: Registration was complete and successful
 bl ->> cc: Channel.bind()
 participant AbstractUnsafe as au
 cc ->> au: bind()

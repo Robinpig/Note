@@ -135,8 +135,83 @@ public class ResourceLeakDetector<T> {
         reportLeak();
         return new DefaultResourceLeak(obj, refQueue, allLeaks);
     }
+
+
+    private void reportLeak() {
+        if (!needReport()) {
+            clearRefQueue();
+            return;
+        }
+
+        // Detect and report previous leaks.
+        for (;;) {
+            DefaultResourceLeak ref = (DefaultResourceLeak) refQueue.poll();
+            if (ref == null) {
+                break;
+            }
+
+            if (!ref.dispose()) {
+                continue;
+            }
+
+            String records = ref.toString();
+            if (reportedLeaks.add(records)) {
+                if (records.isEmpty()) {
+                    reportUntracedLeak(resourceType);
+                } else {
+                    reportTracedLeak(resourceType, records);
+                }
+            }
+        }
+    }
+    
+    
+    public abstract class Reference<T> {
+        boolean dispose() {
+            clear();
+            return allLeaks.remove(this);
+        }
+    }
 }
 ```
+
+
+```java
+
+class SimpleLeakAwareByteBuf extends WrappedByteBuf {
+    @Override
+    public boolean release(int decrement) {
+        if (super.release(decrement)) {
+            closeLeak();
+            return true;
+        }
+        return false;
+    }
+
+    private void closeLeak() {
+        // Close the ResourceLeakTracker with the tracked ByteBuf as argument. This must be the same that was used when
+        // calling DefaultResourceLeak.track(...).
+        boolean closed = leak.close(trackedByteBuf);
+        assert closed;
+    }
+}
+
+private static final class DefaultResourceLeak<T>
+        extends WeakReference<Object> implements ResourceLeakTracker<T>, ResourceLeak {
+    @Override
+    public boolean close() {
+        if (allLeaks.remove(this)) {
+            // Call clear so the reference is not even enqueued.
+            clear();
+            headUpdater.set(this, null);
+            return true;
+        }
+        return false;
+    }
+}
+```
+
+## Report Level
 Represents the level of resource leak detection.
 ```java
 public enum Level {
@@ -177,3 +252,5 @@ public enum Level {
     }
 }
 ```
+
+AdvancedLeakAwareByteBuf record stack

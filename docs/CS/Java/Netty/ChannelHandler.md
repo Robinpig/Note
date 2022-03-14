@@ -633,6 +633,76 @@ protected abstract class AbstractUnsafe implements Unsafe {
 }
 ```
 
+### flush
+
+ChannelDuplexHandler which consolidates Channel.flush() / ChannelHandlerContext.flush() operations 
+(which also includes Channel.writeAndFlush(Object) / Channel.writeAndFlush(Object, ChannelPromise) 
+and ChannelOutboundInvoker.writeAndFlush(Object) / ChannelOutboundInvoker.writeAndFlush(Object, ChannelPromise)).
+
+Flush operations are generally speaking expensive as these may trigger a syscall on the transport level. 
+Thus it is in most cases (where write latency can be traded with throughput) a good idea to try to minimize flush operations as much as possible.
+
+If a read loop is currently ongoing, flush(ChannelHandlerContext) will not be passed on to the next ChannelOutboundHandler in the ChannelPipeline, 
+as it will pick up any pending flushes when channelReadComplete(ChannelHandlerContext) is triggered. 
+If no read loop is ongoing, the behavior depends on the consolidateWhenNoReadInProgress constructor argument:
+- if false, flushes are passed on to the next handler directly;
+- if true, the invocation of the next handler is submitted as a separate task on the event loop. Under high throughput, 
+  this gives the opportunity to process other flushes before the task gets executed, thus batching multiple flushes into one.
+
+If explicitFlushAfterFlushes is reached the flush will be forwarded as well (whether while in a read loop, or while batching outside of a read loop).
+
+If the Channel becomes non-writable it will also try to execute any pending flush operations.
+
+> The FlushConsolidationHandler should be put as first ChannelHandler in the ChannelPipeline to have the best effect.
+
+```java
+public class FlushConsolidationHandler extends ChannelDuplexHandler {
+    private final int explicitFlushAfterFlushes;
+    private final boolean consolidateWhenNoReadInProgress;
+    private final Runnable flushTask;
+
+
+    @Override
+    public void flush(ChannelHandlerContext ctx) throws Exception {
+        if (readInProgress) {
+            // If there is still a read in progress we are sure we will see a channelReadComplete(...) call. Thus
+            // we only need to flush if we reach the explicitFlushAfterFlushes limit.
+            if (++flushPendingCount == explicitFlushAfterFlushes) {
+                flushNow(ctx);
+            }
+        } else if (consolidateWhenNoReadInProgress) {
+            // Flush immediately if we reach the threshold, otherwise schedule
+            if (++flushPendingCount == explicitFlushAfterFlushes) {
+                flushNow(ctx);
+            } else {
+                scheduleFlush(ctx);
+            }
+        } else {
+            // Always flush directly
+            flushNow(ctx);
+        }
+    }
+
+    private void scheduleFlush(final ChannelHandlerContext ctx) {
+        if (nextScheduledFlush == null) {
+            // Run as soon as possible, but still yield to give a chance for additional writes to enqueue.
+            nextScheduledFlush = ctx.channel().eventLoop().submit(flushTask);
+        }
+    }
+
+    @Override
+    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        // This may be the last event in the read loop, so flush now!
+        resetReadAndFlushIfNeeded(ctx);
+        ctx.fireChannelReadComplete();
+    }
+    
+    private void resetReadAndFlushIfNeeded(ChannelHandlerContext ctx) {
+        readInProgress = false;
+        flushIfNeeded(ctx);
+    }
+}
+```
 
 ## ChannelHandler
 
@@ -874,6 +944,8 @@ public final void channelRegistered(ChannelHandlerContext ctx) throws Exception 
 }
 ```
 
+## Traffic
+
 ## Idle
 
 ```java
@@ -886,6 +958,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 }
 ```
 
+## Filter
 
 ## Links
 
