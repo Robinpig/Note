@@ -184,6 +184,9 @@ strict digraph  {
 }
 ```
 
+1. just create NioEventLoop, not start Thread
+
+
 
 ```java
 public NioEventLoopGroup(int nThreads) {
@@ -297,7 +300,7 @@ protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
 }
 ```
 
-#### ThreadFactory
+### ThreadFactory
 
 create [FastThreadLocalThread](/docs/CS/Java/Netty/FastThreadLocal.md)
 
@@ -324,19 +327,6 @@ create [FastThreadLocalThread](/docs/CS/Java/Netty/FastThreadLocal.md)
     }
 ```
 
-#### new EventLoop
-
-just create NioEventLoop, not start Thread
-
-```java
-//NioEventLoopGroup#newChild()
-@Override
-protected EventLoop newChild(Executor executor, Object... args) throws Exception {
-    EventLoopTaskQueueFactory queueFactory = args.length == 4 ? (EventLoopTaskQueueFactory) args[3] : null;
-    return new NioEventLoop(this, executor, (SelectorProvider) args[0],
-        ((SelectStrategyFactory) args[1]).newSelectStrategy(), (RejectedExecutionHandler) args[2], queueFactory);
-}
-```
 
 
 
@@ -362,7 +352,7 @@ private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
 
 
 
-#### newChooser
+#### Chooser
 
 - if isPowerOfTwo default use **PowerOfTwoEventExecutorChooser**  idx.getAndIncrement() & executors.length - 1
 - or else GenericEventExecutorChooser Math.abs(idx.getAndIncrement() % executors.length)

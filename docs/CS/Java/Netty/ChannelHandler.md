@@ -944,6 +944,48 @@ public final void channelRegistered(ChannelHandlerContext ctx) throws Exception 
 }
 ```
 
+## Frame detection
+
+ChannelInboundHandlerAdapter which decodes bytes in a stream-like fashion from one ByteBuf to an other Message type. 
+
+Generally frame detection should be handled earlier in the pipeline by adding a `DelimiterBasedFrameDecoder`, `FixedLengthFrameDecoder`, `LengthFieldBasedFrameDecoder`, or `LineBasedFrameDecoder`.
+
+If a custom frame decoder is required, then one needs to be careful when implementing one with ByteToMessageDecoder. Ensure there are enough bytes in the buffer for a complete frame by checking ByteBuf.readableBytes(). 
+If there are not enough bytes for a complete frame, return without modifying the reader index to allow more bytes to arrive.
+
+To check for complete frames without modifying the reader index, use methods like ByteBuf.getInt(int). One MUST use the reader index when using methods like ByteBuf.getInt(int). 
+For example calling in.getInt(0) is assuming the frame starts at the beginning of the buffer, which is not always the case. Use in.getInt(in.readerIndex()) instead.
+
+
+> [!TIP]
+> Be aware that sub-classes of ByteToMessageDecoder MUST NOT annotated with <font color='red'>@Sharable</font>.
+> 
+> Some methods such as <font color='red'>ByteBuf.readBytes(int)</font> will cause a memory leak if the returned buffer is not released or added to the out List. 
+> Use derived buffers like <font color='blue'>ByteBuf.readSlice(int)</font> to avoid leaking memory.
+
+
+
+channelRead -> callDecode -> decodeRemovalReentryProtection -> decode
+
+
+### cumulate
+
+cumulate before callDecode
+
+```java
+ public interface Cumulator {
+        /**
+         * Cumulate the given {@link ByteBuf}s and return the {@link ByteBuf} that holds the cumulated bytes.
+         * The implementation is responsible to correctly handle the life-cycle of the given {@link ByteBuf}s and so
+         * call {@link ByteBuf#release()} if a {@link ByteBuf} is fully consumed.
+         */
+        ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in);
+}
+```
+
+- memcopy default
+- composite
+
 ## Traffic
 
 ## Idle

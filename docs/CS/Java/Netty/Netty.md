@@ -43,21 +43,24 @@ From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#wr
 
 ```plantuml
 title: bind sequence
-actor User
+participant MainThread as ma
 participant ServerBootstrap as sb
 participant EventLoopGroup as we
 participant EventLoop as bl
 participant Channel as cc
-User ->> we: create EventLoopGroup
+activate ma
+ma ->> we: create EventLoopGroup
 we ->> bl: create EventLoops \n and its own Selector
 note right: EventLoop for IO tasks
-User ->> sb: bind()
+ma ->> sb: bind()
 sb ->> cc: init ServerSocketChannel
 note right: init ChannelPipeline
 cc -->> sb: ServerSocketChannel with OP_ACCEPT
 sb ->> we: register()
-we --> sb: ChannelFuture
-we ->> bl: register()
+note right: not inEventLoop
+we ->> bl: execute
+sb --> ma: ChannelFuture
+deactivate ma
 bl --> bl: startThread()
 activate bl
 bl ->> cc: register(Selector, 0, ServerSocketChannel)
@@ -79,15 +82,17 @@ deactivate bl
 ```plantuml
 title: connect sequence
 actor User
+participant BossNioEventLoop as bg
 participant Selector as sr
 participant NioUnsafe as us
-participant BossNioEventLoopGroup as bg
 participant NioServerSocketChannel as sc
 participant ServerBootstrapAceptor as sa
 participant WorkerNioEventLoopGroup as wg
 participant WorkerNioEventLoop as wl
 participant NioEventLoop as el
-sr ->> sr: selector.select()
+activate bg
+bg ->> sr: selector.select()
+sr ->> bg: OP_ACCEPT
 bg ->> us: NioUnsafe.read()
 us ->> sc: create NioSocketChannel
 note right: ServerSocketChannel.accept()
