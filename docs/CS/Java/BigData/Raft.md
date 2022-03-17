@@ -15,3 +15,4 @@ Consensus typically arises in the context of replicated state machines, a genera
 ## References
 
 1. [The Raft Consensus Algorithm](https://raft.github.io/)
+2. [Raft - 论文导读与ETCD源码解读 - 硬核课堂](https://hardcore.feishu.cn/docs/doccnMRVFcMWn1zsEYBrbsDf8De)

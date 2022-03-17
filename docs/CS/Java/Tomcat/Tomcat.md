@@ -67,77 +67,113 @@ ContextConfig
 
 Parse web.xml
 
+A -> Processor;
+
+
+Acceptor -> Poller [label="register" constraint=false];
+Poller -> Executor [ label="processSocket" constraint=false];
+                      
+
+[label="FilterChain"]
 
 ```dot
 
-strict digraph {
-rankdir=LR
-  A;
-  Acceptor -> Poller ;
-  A -> Processor;
-  Poller -> Executor;
+strict digraph  {
+rankdir=LR;
+autosize=false;
+ size="30.0, 38.3";
+
+  User -> SocketWrapper;
+ 
   Processor;
-  Executor -> Adapter;
+  Acceptor -> Poller 
+Poller -> Executor 
   
+  Engine_Valve -> Host_Valve;
+  Host_Valve -> Context_Valve;
+  Context_Valve -> Wrapper_Valve_1;
+  Context_Valve -> Wrapper_Valve_2;
+  Context_Valve -> Wrapper_Valve_3;
   
-  Adapter -> Servlet_1 [label="Pipeline-Valve FilterChain"];
-  Adapter -> Servlet_2;
-  Adapter -> Servlet_3;
+   SocketWrapper -> Acceptor;
+   SocketWrapper -> User;
   
+    subgraph cluster_Server {
+        label="Server"
+ 
   
-    subgraph cluster_Connector {
+    subgraph cluster_Service {
+        label="Serice"
+        subgraph cluster_Connector {
+            label="Connector"
+            subgraph cluster_ProtocolHandler {
+                label="ProtocolHandler"
     
-label="Connector"
-    subgraph cluster_ProtocolHandler {
-label="ProtocolHandler"
-
-     subgraph cluster_Endpoint {
-label="Endpoint"
-    
-        Poller;
-        Acceptor;
-        Executor;
+                    subgraph cluster_Endpoint {
+                        label="Endpoint"
+                        forcelabels= true
         
-  {rank="same"; Acceptor;Poller;Executor;}
-LimitLatch;
-}
-        Processor;
-
+                        SocketWrapper;
+                        Poller;
+                        Acceptor;
+                        Executor [label=<Executor<BR/> <FONT POINT-SIZE="12">A Thread Pool</FONT>>] ;
+              {rank="same"; SocketWrapper;Acceptor;Poller;Executor;}
+                        LimitLatch;
+                    }
+                Processor;
+    
+                }
+            Adapter;
+            Executor -> Adapter;
+           
+            Adapter -> SocketWrapper;
+           
+            
         }
 
-        Adapter;
-
-
+        subgraph cluster_Engine {
+            label="Engine"
+            Engine_Valve [label="Valve"];
+             Adapter -> Engine_Valve;
+             subgraph cluster_Host {
+                label="Host"
+                Host_Valve [label="Valve"];
+                subgraph cluster_Context {
+                    label="Context"
+                    autosize=false;
+                    size="10.0, 18.3";
+ 
+                    Context_Valve [label="Valve"];
+            
+                    subgraph cluster_Wrapper_1 {
+                        label="Wrapper"
+                        Wrapper_Valve_1 [label="Valve"];
+                        Servlet_1[label="JspServlet"];
+                        
+                        Wrapper_Valve_1 -> Servlet_1 [headlabel="FilterChain" constraint=false];
+                    }
+                    subgraph cluster_Wrapper_2 {
+                        label="Wrapper"
+                        Wrapper_Valve_2 [label="Valve"];
+                        Servlet_2[label="DefaultServlet"];
+                        
+                        Wrapper_Valve_2 -> Servlet_2 [headlabel="FilterChain" constraint=false];
+                    }
+                    subgraph cluster_Wrapper_3 {
+                        label="Wrapper"
+                        Wrapper_Valve_3 [label="Valve"];
+                        Servlet_3[label="HttpServlet"];
+    
+                        Wrapper_Valve_3 -> Servlet_3 [headlabel="FilterChain" constraint=false];
+                    }
+                }
+            
+            }
+        }
     }
-
-    subgraph cluster_Container {
-label="Container"
-
-    subgraph cluster_Server {
-label="Server"
-
-
-
-    subgraph cluster_Service {
-label="Serice"
-
-
- subgraph cluster_Host {
-label="Host"
-
- subgraph cluster_Wrapper {
-label="Wrapper"
-
-Servlet_1;
-Servlet_2;
-Servlet_3;
-
 }
 
-}
-}
-}
-    }
+
 
 }
 
