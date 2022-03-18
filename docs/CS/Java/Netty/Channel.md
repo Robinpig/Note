@@ -589,7 +589,7 @@ private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
 }
 ```
 
-## 
+
 
 
 
@@ -624,7 +624,9 @@ private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
 
 
 
-
+> [!TIP]
+> 
+> Suggest use childOption(NioChannelOption) rather than  childOption(ChannelOption).
 
 **Deprecated.** *Use [`MaxMessagesRecvByteBufAllocator`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html) and [`MaxMessagesRecvByteBufAllocator.maxMessagesPerRead()`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html#maxMessagesPerRead--).*
 

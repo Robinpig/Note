@@ -335,8 +335,9 @@ public CompositeByteBuf discardReadComponents() {
 
 ## PooledByteBuf
 
+## Type
 
-## OutBuf
+### OutBuf
 
 > Assuming a 64-bit JVM:
 >  - 16 bytes object header
