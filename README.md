@@ -46,6 +46,8 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 
 ## C++
 
+[C++](/docs/CS/C++/C++.md) blends the C language with support for object-oriented programming and for generic programming.
+
 ## Java
 ### JDK
 The [Java Development Kit(JDK)](/docs/CS/Java/JDK/JDK.md) includes the Java Runtime Environment, the Java compiler and the Java APIs.
