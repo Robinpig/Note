@@ -31,30 +31,38 @@ Netty has a well-defined event model focused on I/O.
 It also allows you to implement your own event type without breaking the existing code because each event type is distinguished from another by a strict type hierarchy.
 This is another differentiator against other frameworks.
 
-## Writing a Discard Server
+## Sequence
+
+> [Example writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
 
+### Bind
 
-From [writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
-
-### Sequence
-
-#### Bind
+- BossEventLoop starts thread when register
+- first register(Selector, 0, ServerSocketChannel)
+- selectionKey.interestOps(OP_ACCEPT) when fireChannelActive() after bind
 
 ```plantuml
-title: bind sequence
+skinparam backgroundColor #DDDDDD
+
+title: Bind sequence
 participant MainThread as ma
 participant ServerBootstrap as sb
-participant EventLoopGroup as we
-participant EventLoop as bl
-participant Channel as cc
+participant BossEventLoopGroup as we
+participant BossEventLoop as bl
+participant ServerSocketChannel as cc
 activate ma
 ma ->> we: create EventLoopGroup
-we ->> bl: create EventLoops \n and its own Selector
+we ->> bl: create EventLoops
+bl -->> bl: openSelector
 note right: EventLoop for IO tasks
+we -->> ma: EventLoopGroup
 ma ->> sb: bind()
 sb ->> cc: init ServerSocketChannel
-note right: init ChannelPipeline
+note right
+init ChannelPipeline 
+with ServerBootstrapAceptor
+end note
 cc -->> sb: ServerSocketChannel with OP_ACCEPT
 sb ->> we: register()
 note right: not inEventLoop
@@ -64,6 +72,9 @@ deactivate ma
 bl --> bl: startThread()
 activate bl
 bl ->> cc: register(Selector, 0, ServerSocketChannel)
+cc ->> cc: invokeHandlerAddedIfNeeded
+cc ->> cc: notify the promise
+note right: call doBind task
 cc ->> cc: fireChannelRegistered
 cc --> bl: Registration was complete and successful
 bl ->> cc: Channel.bind()
@@ -71,120 +82,134 @@ participant AbstractUnsafe as au
 cc ->> au: bind()
 au -->> cc: doBind()
 note left: javaChannel().bind()
-au ->> cc: fireChannelActive
-au ->> cc: doBeginRead()
+cc ->> au: fireChannelActive
+au -->> cc: doBeginRead()
 note left: selectionKey.interestOps(OP_ACCEPT)
 deactivate bl
 ```
 
-#### Connect
+### Connect
+
+- BossEventLoop select() for OP_ACCEPT
+- WorkerEventLoop starts thread when register
+- first register(Selector, 0, SocketChannel)
+- selectionKey.interestOps(OP_READ) when fireChannelActive()
 
 ```plantuml
-title: connect sequence
-actor User
+skinparam backgroundColor #DDDDDD
+
+title: Connect sequence
 participant BossNioEventLoop as bg
-participant Selector as sr
-participant NioUnsafe as us
-participant NioServerSocketChannel as sc
+participant Channel.Unsafe as us
+participant ServerSocketChannel as sc
 participant ServerBootstrapAceptor as sa
-participant WorkerNioEventLoopGroup as wg
-participant WorkerNioEventLoop as wl
-participant NioEventLoop as el
+participant WorkerEventLoopGroup as wg
+participant WorkerEventLoop as el
+participant SocketChannel as sl
+participant ChannelPipeline as pipe
 activate bg
-bg ->> sr: selector.select()
-sr ->> bg: OP_ACCEPT
+bg ->> bg: Selector.select()
+note left: OP_ACCEPT event
 bg ->> us: NioUnsafe.read()
-us ->> sc: create NioSocketChannel
+us ->> sc: create SocketChannel
 note right: ServerSocketChannel.accept()
-sc -->> us: NioSocketChannel
+sc -->> us: SocketChannel
 us ->> sa: pipeline.fireChannelRead()
-sa ->> sa: init NioSocketChannel
-us ->> wg: regster NioSocketChannel into Selector
-wg ->> el: register()
+sa ->> sa: init SocketChannel
+us ->> wg: regster()
+wg ->> el: execute()
+el --> el: startThread()
 activate el
-note right: register(selector, 0, Channel)
-el --> el: pipeline.fireChannelActive()
-note left: register OP_READ
+el -> sl: register(selector, 0, Channel)
+sl ->> pipe: fireChannelRegistered()
+sl ->> pipe: fireChannelActive()
+note right: selectionKey.interestOps(OP_READ)
 ```
 
-```plantuml
-title: conn
-actor User
-participant BossEventLoop as bp
-bp -->> bp: selector.select()
-User -->> bp: send messages
 
-participant NioByteUnsafe as ue
-bp ->> ue: NioUnsafe.read()
-participant NioServerSocketChannel as ss
-ue ->> ss: create NioSocketChannel
-ss -->> ue: NioSocketChannel
-participant ServerBootstrapAcceptor as sa
-ue ->> sa: pipeline.fireChannelRead()
-sa -->> sa: init NioSocketChannel
-participant WorkEventLoop as we
-sa -->> we: regster NioSocketChannel into Selector
-we ->> we: register OP_WRITE | OP_READ
-we -->> we: pipeline.fireChannelActive()
+### Read
 
-```
-
-#### Read
+- ReadComplete contains multiple Reads(max 16)
+- AdaptiveRecvByteBufAllocator try 2 reduce size and expand quickly
+- default execute in WorkerEventLoop, also can define own ThreadPool when add Handlers
 
 ```plantuml
-title: read sequence
-actor User
-User -->> User: send messages
+skinparam backgroundColor #DDDDDD
+
+title: Read sequence
 participant WorkEventLoop as we
 participant Selector as se
 activate we
-we ->> se: select
-note right: selector.select()
-se ->> we: OP_READ
+we ->> we: Selector.select()
+note right: OP_READ event
 participant NioByteUnsafe as ue
 we ->> ue: NioUnsafe.read()
 participant NioSocketChannel as so
+participant Allocator as ac
+participant ByteBuf as bb
 participant ChannelPipeline as pipe
+participant ChannelInboundHandler as ch
 ue ->> so: read()
-note right: doReadMessages
-ue ->> pipe: fireChannelRead()
-ue -->> so: data
-so ->> ue: -1(EOF)
-ue -->> ue: closeOnRead()
+loop continueReading
+so ->> ac: allocate()
+ac -->> so: ByteBuf 
+so -->> bb: doReadBytes(ByteBuf) 
+note over bb #FFAAAA
+readBytes from javaChannel
+end note
+alt nothing left
+bb -->> bb: release()
+note over so #FFAAAA
+    close = true
+end note
+else readPending
+so ->> pipe: fireChannelRead()
+pipe ->> ch: fireChannelRead()
+note right
+    handle data
+    From Head to Tail
+end note
+end
+end
+so ->> ac: readComplete()
+so ->> pipe: fireChannelReadComplete()
+alt close == true
+so -->> so: closeOnRead()
+end
 
 ```
 
-Start sequence
-#### Write
+### Write
 
 ```plantuml
-actor User
-User -->> User: send messages
-participant WorkEventLoopGroup as we
+skinparam backgroundColor #DDDDDD
+
+participant WorkerEventLoop as we
 participant Selector as se
-we ->> we: create threads and open Selectors
-we ->> we: initAndRegister
-we ->> we: doBind0
-se ->> we: OP_READ
-participant NioByteUnsafe as ue
+participant ByteBuf as bb
+
+we ->> bb: write()
+participant Channel.Unsafe as ue
 participant HeadContext as hc
-we ->> ue: NioUnsafe.write()
-participant NioSocketChannel as so
+
+bb -->> ue: addMessage()
+participant SocketChannel as so
 participant ChannelPipeline as pipe
 participant ChannelOutboundBuffer as ob
-ue ->> ob: outboundBuffer.addMessage()
+ue ->> ob: addMessage()
 hc ->> ue: flush()
 activate ue
-ue ->> ob: outboundBuffer.addFlush()
-ue ->> so: doWrite
+so ->> ob: addFlush()
+ue ->> so: doWrite()
 note right: SocketChannel.write()
 ue ->> so: NioUnsafe.read()
+so ->> ue: OP_WRITE
 so ->> ue: -1(EOF)
 ue -->> ue: closeOnRead()
 
 ```
 
-#### Shutdown
+### Shutdown
 
 ```plantuml
 title: shutdown
@@ -205,58 +230,6 @@ el -> ch: close NIO channels
 deactivate el
 ```
 
-```java
-/**
- * Discards any incoming data.
- */
-public class DiscardServer {
-  
-    private int port;
-  
-    public DiscardServer(int port) {
-        this.port = port;
-    }
-  
-    public void run() throws Exception {
-        EventLoopGroup Group = new NioEventLoopGroup(); // (1)
-        EventLoopGroup workerGroup = new NioEventLoopGroup();
-        try {
-            ServerBootstrap b = new ServerBootstrap(); // (2)
-            b.group(Group, workerGroup)
-             .channel(NioServerSocketChannel.class) // (3)
-             .childHandler(new ChannelInitializer<SocketChannel>() { // (4)
-                 @Override
-                 public void initChannel(SocketChannel ch) throws Exception {
-                     ch.pipeline().addLast(new DiscardServerHandler());
-                 }
-             })
-             .option(ChannelOption.SO_BACKLOG, 128)          // (5)
-             .childOption(ChannelOption.SO_KEEPALIVE, true); // (6)
-  
-            // Bind and start to accept incoming connections.
-            ChannelFuture f = b.bind(port).sync(); // (7)
-  
-            // Wait until the server socket is closed.
-            // In this example, this does not happen, but you can do that to gracefully
-            // shut down your server.
-            f.channel().closeFuture().sync(); // (8)
-        } finally {
-            workerGroup.shutdownGracefully();
-            Group.shutdownGracefully();
-        }
-    }
-  
-    public static void main(String[] args) throws Exception {
-        int port = 8080;
-        if (args.length > 0) {
-            port = Integer.parseInt(args[0]);
-        }
-
-        new DiscardServer(port).run();
-    }
-}
-```
-
 1. [Create EventLoopGroup](/docs/CS/Java/Netty/EventLoop.md?id=create-nioeventloopgroup)
 2. [Create ServerBootstrap](/docs/CS/Java/Netty/Bootstrap.md?id=create-serverbootstrap)
 3. Set [Channel](/docs/CS/Java/Netty/Channel.md)
@@ -274,9 +247,9 @@ AllocateByteBuf
 
 ## Zero Copy
 
-Direct Memory
-Composite Buf
-File transfer
+- Direct Memory
+- Composite ByteBuf
+- FileChannel transfer
 
 ## recycler
 
@@ -305,6 +278,7 @@ You can change it to your preferred logging framework before other Netty classes
 ## Links
 
 - [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
+- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
 
 ## References
 
