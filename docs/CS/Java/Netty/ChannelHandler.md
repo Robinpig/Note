@@ -394,6 +394,10 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 }
 ```
 
+### SimpleChannelInboundHandler
+
+release automatically
+
 ## outbound
 
 tail -> head
@@ -927,6 +931,49 @@ MessageToMessageDecoder decodes from one message to an other message.
 
 ## Traffic
 
+- ChannelTrafficShapingHandler
+- GlobalTrafficShapingHandler
+- GlobalChannelTrafficShapingHandler
+
+set autoRead = false and schedule ReopenReadTimerTask
+
+```java
+public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler {
+  @Override
+  public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
+    long size = calculateSize(msg);
+    long now = TrafficCounter.milliSecondFromNano();
+    if (size > 0) {
+      // compute the number of ms to wait before reopening the channel
+      long wait = trafficCounter.readTimeToWait(size, readLimit, maxTime, now);
+      wait = checkWaitReadTime(ctx, wait, now);
+      if (wait >= MINIMAL_WAIT) { // At least 10ms seems a minimal
+        // time in order to try to limit the traffic
+        // Only AutoRead AND HandlerActive True means Context Active
+        Channel channel = ctx.channel();
+        ChannelConfig config = channel.config();
+
+        if (config.isAutoRead() && isHandlerActive(ctx)) {
+          config.setAutoRead(false);
+          channel.attr(READ_SUSPENDED).set(true);
+          // Create a Runnable to reactive the read if needed. If one was create before it will just be
+          // reused to limit object creation
+          Attribute<Runnable> attr = channel.attr(REOPEN_TASK);
+          Runnable reopenTask = attr.get();
+          if (reopenTask == null) {
+            reopenTask = new ReopenReadTimerTask(ctx);
+            attr.set(reopenTask);
+          }
+          ctx.executor().schedule(reopenTask, wait, TimeUnit.MILLISECONDS);
+        }
+      }
+    }
+    informReadOperation(ctx, now);
+    ctx.fireChannelRead(msg);
+  }
+}
+```
+
 ## Idle
 
 ### IdleStateHandler
@@ -997,6 +1044,23 @@ WriteTimeoutHandler Raises a WriteTimeoutException when a write operation cannot
 ### WriteTimeoutHandler
 
 ## Filter
+
+
+
+## Log
+
+- The default factory is *Slf4JLoggerFactory*.
+- If SLF4J is not available, *Log4JLoggerFactory* is used.
+- If Log4J is not available, *JdkLoggerFactory* is used.
+-
+
+You can change it to your preferred logging framework before other Netty classes are loaded: `InternalLoggerFactory.setDefaultFactory(Log4JLoggerFactory.INSTANCE)`;
+
+> [!NOTE]
+>
+> The new default factory is effective only for the classes which were loaded after the default factory is changed.
+> Therefore, setDefaultFactory(InternalLoggerFactory) should be called as early as possible and shouldn't be called more than once.
+
 
 ## Links
 

@@ -10,6 +10,12 @@ Use derived buffers like `ByteBuf.readSlice(int)` to avoid leaking memory.
 ## Recycler
 
 
+count
+
+Chunk
+Page
+SubPage
+
 
 
 
@@ -789,9 +795,62 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 }
 ```
 
+## Recv Allocator
+
+guess size of buf, actual allocate using Allocator
+
+
+
 ## Leak
 
+track when newBuffer()
+
+
+### Report Level
+Represents the level of resource leak detection.
+```java
+public enum Level {
+    DISABLED,
+    /**
+     * Enables simplistic sampling resource leak detection which reports there is a leak or not,
+     * at the cost of small overhead (default).
+     */
+    SIMPLE,
+    /**
+     * Enables advanced sampling resource leak detection which reports where the leaked object was accessed
+     * recently at the cost of high overhead.
+     */
+    ADVANCED,
+    /**
+     * Enables paranoid resource leak detection which reports where the leaked object was accessed recently,
+     * at the cost of the highest possible overhead (for testing purposes only).
+     */
+    PARANOID;
+
+    /**
+     * Returns level based on string value. Accepts also string that represents ordinal number of enum.
+     * SIMPLE level in case of no match.
+     */
+    static Level parseLevel(String levelStr) {
+        String trimmedLevelStr = levelStr.trim();
+        for (Level l : values()) {
+            if (trimmedLevelStr.equalsIgnoreCase(l.name()) || trimmedLevelStr.equals(String.valueOf(l.ordinal()))) {
+                return l;
+            }
+        }
+        return DEFAULT_LEVEL;
+    }
+}
+```
+
+AdvancedLeakAwareByteBuf record stack
+
+
+
 ### DefaultResourceLeak
+
+add into allLeaks when created and remove when reference count == 0
+
 ```java
   private static final class DefaultResourceLeak<T>
             extends WeakReference<Object> implements ResourceLeakTracker<T>, ResourceLeak {
@@ -932,48 +991,6 @@ private static final class DefaultResourceLeak<T>
     }
 }
 ```
-
-### Report Level
-Represents the level of resource leak detection.
-```java
-public enum Level {
-    DISABLED,
-    /**
-     * Enables simplistic sampling resource leak detection which reports there is a leak or not,
-     * at the cost of small overhead (default).
-     */
-    SIMPLE,
-    /**
-     * Enables advanced sampling resource leak detection which reports where the leaked object was accessed
-     * recently at the cost of high overhead.
-     */
-    ADVANCED,
-    /**
-     * Enables paranoid resource leak detection which reports where the leaked object was accessed recently,
-     * at the cost of the highest possible overhead (for testing purposes only).
-     */
-    PARANOID;
-
-    /**
-     * Returns level based on string value. Accepts also string that represents ordinal number of enum.
-     *
-     * @param levelStr - level string : DISABLED, SIMPLE, ADVANCED, PARANOID. Ignores case.
-     * @return corresponding level or SIMPLE level in case of no match.
-     */
-    static Level parseLevel(String levelStr) {
-        String trimmedLevelStr = levelStr.trim();
-        for (Level l : values()) {
-            if (trimmedLevelStr.equalsIgnoreCase(l.name()) || trimmedLevelStr.equals(String.valueOf(l.ordinal()))) {
-                return l;
-            }
-        }
-        return DEFAULT_LEVEL;
-    }
-}
-```
-
-AdvancedLeakAwareByteBuf record stack
-
 
 
 ## Links

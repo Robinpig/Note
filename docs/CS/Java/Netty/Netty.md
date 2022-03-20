@@ -81,7 +81,7 @@ bl ->> cc: Channel.bind()
 participant AbstractUnsafe as au
 cc ->> au: bind()
 au -->> cc: doBind()
-note left: javaChannel().bind()
+note left #AAAAAA: javaChannel().bind()
 cc ->> au: fireChannelActive
 au -->> cc: doBeginRead()
 note left: selectionKey.interestOps(OP_ACCEPT)
@@ -133,6 +133,10 @@ note right: selectionKey.interestOps(OP_READ)
 - AdaptiveRecvByteBufAllocator try 2 reduce size and expand quickly
 - default execute in WorkerEventLoop, also can define own ThreadPool when add Handlers
 
+> [!TIP]
+> 
+> Don't use EventLoopGroup to execute business because of its thread affinity.
+
 ```plantuml
 skinparam backgroundColor #DDDDDD
 
@@ -142,76 +146,116 @@ participant Selector as se
 activate we
 we ->> we: Selector.select()
 note right: OP_READ event
-participant NioByteUnsafe as ue
-we ->> ue: NioUnsafe.read()
+participant Channel.Unsafe as ue
+we ->> ue: read()
 participant NioSocketChannel as so
 participant Allocator as ac
 participant ByteBuf as bb
 participant ChannelPipeline as pipe
 participant ChannelInboundHandler as ch
-ue ->> so: read()
 loop continueReading
-so ->> ac: allocate()
-ac -->> so: ByteBuf 
-so -->> bb: doReadBytes(ByteBuf) 
-note over bb #FFAAAA
-readBytes from javaChannel
-end note
-alt nothing left
-bb -->> bb: release()
-note over so #FFAAAA
-    close = true
-end note
-else readPending
-so ->> pipe: fireChannelRead()
-pipe ->> ch: fireChannelRead()
-note right
-    handle data
-    From Head to Tail
-end note
-end
+    ue ->> ac: allocate()
+    ac -->> ue: ByteBuf 
+    ue ->> so: doReadBytes(ByteBuf) 
+        note over so, bb #AAAAAA
+            javaChannel.readBytes()
+        end note
+    break read EOF
+    bb -->> bb: release()
+        note over so #AAAAAA
+            close = true
+        end note
+    end
+    break IOException | OOM
+        so -->> so: closeOnRead()
+    end
+    alt readPending
+        so ->> pipe: fireChannelRead()
+        pipe ->> ch: fireChannelRead()
+            note right
+                handle data
+                From Head to Tail
+            end note
+    end
 end
 so ->> ac: readComplete()
 so ->> pipe: fireChannelReadComplete()
+participant ChannelOutboundBuffer as ob
 alt close == true
-so -->> so: closeOnRead()
+    so -->> so: closeOnRead()
+    so -->> pipe: deRegister()
+    so -->> so: doCLose()
+        note right 
+        close javaChannel
+        cancel SelectionKey
+        end note
+    so -->> pipe: deRegister()
+    so -->> ob: fail pending message \n ChannelOutboundBuffer = null
+    so -->> pipe: fireChannelInactive()
+    so -->> pipe: fireChannelUnRegister()
 end
 
 ```
 
 ### Write
 
+- check isActive & isWritable
+- OP_WRITE for could write
+- write/flush run in EventLoop
+
 ```plantuml
 skinparam backgroundColor #DDDDDD
 
-participant WorkerEventLoop as we
-participant Selector as se
+participant Handler as hl
+participant ChannelPipeline as pipe
 participant ByteBuf as bb
-
-we ->> bb: write()
-participant Channel.Unsafe as ue
 participant HeadContext as hc
+participant Channel.Unsafe as ue
+participant WorkerEventLoop as we
+activate we
+hl ->> pipe: write()
+pipe ->> hc: write()
+hc ->> ue: write()
 
 bb -->> ue: addMessage()
 participant SocketChannel as so
-participant ChannelPipeline as pipe
 participant ChannelOutboundBuffer as ob
-ue ->> ob: addMessage()
+alt ChannelOutboundBuffer == null
+    note over ue
+        release msg prevent resource-leak
+        safeSetFailure
+    end note
+else 
+    ue ->> ob: addMessage()
+    note over ob: Increment the pending bytes
+end
+hl ->> pipe: flush()
+pipe ->> hc: flush()
 hc ->> ue: flush()
-activate ue
-so ->> ob: addFlush()
+ue ->> ob: addFlush()
 ue ->> so: doWrite()
-note right: SocketChannel.write()
-ue ->> so: NioUnsafe.read()
-so ->> ue: OP_WRITE
-so ->> ue: -1(EOF)
-ue -->> ue: closeOnRead()
+loop writeSpinCount > 0
+    break msg done
+        so ->> so: clearOpWrite()
+    end
+    ue ->> so: writeInternal()
+    so -->> ue: doWriteBytes/doWriteFileRegion
+    note left #AAAAAA: javaChannel.write()
+end
 
+alt incompleteWrite
+    so ->> so: setOpWrite()
+else completely
+    so ->> so: clearOpWrite()
+    so -->> we: Schedule flush again later
+end
 ```
 
 ### Shutdown
 
 ```plantuml
+skinparam backgroundColor #DDDDDD
+
 title: shutdown
 actor User
 participant EventLoopGroup as eg
@@ -220,13 +264,24 @@ activate el
 el -> el: runAllTasks()
 User -> eg: shutdownGracefully()
 eg -> el: shutdownGracefully()
-note right: cas set state \n ST_STARTED -> ST_SHUTTING_DOWN
+loop shutdown
+
+    break isShuttingDown
+        note over el #AAAAAA: return
+    end
+    note over el: cas set state \n ST_STARTED -> ST_SHUTTING_DOWN
+end
 el -> el: confirmShutdown()
+note right: runAllTasks() || runShutdownHooks()
 el -> el: closeAll()
+activate el
 participant Channel as ch
 participant Selector as se
 el -> se: cancel registed channels
 el -> ch: close NIO channels
+el -> se: cleanup()
+se -> se: Selector.close()
+deactivate el
 deactivate el
 ```
 
@@ -251,27 +306,6 @@ AllocateByteBuf
 - Composite ByteBuf
 - FileChannel transfer
 
-## recycler
-
-count
-
-Chunk
-Page
-SubPage
-
-## Log
-
-- The default factory is *Slf4JLoggerFactory*.
-- If SLF4J is not available, *Log4JLoggerFactory* is used.
-- If Log4J is not available, *JdkLoggerFactory* is used.
--
-
-You can change it to your preferred logging framework before other Netty classes are loaded: `InternalLoggerFactory.setDefaultFactory(Log4JLoggerFactory.INSTANCE)`;
-
-> [!NOTE]
->
-> The new default factory is effective only for the classes which were loaded after the default factory is changed.
-> Therefore, setDefaultFactory(InternalLoggerFactory) should be called as early as possible and shouldn't be called more than once.
 
 [Future and Promise](/docs/CS/Java/Netty/Future.md)
 
@@ -279,6 +313,10 @@ You can change it to your preferred logging framework before other Netty classes
 
 - [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
 - [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+- [Flink](/docs/CS/Java/Flink)
+- [Rocket MQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
+- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Hadoop](/docs/CS/Java/Hadoop/Hadoop.md)
 
 ## References
 

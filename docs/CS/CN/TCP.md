@@ -268,7 +268,21 @@ ESTAB - rcv FIN -> CLOSE WAIT - close and snd FIN -> LAST-ACK -> rcv ACK-> CLOSE
 
 
 
+### Three Handshake
 
+
+- syn retry
+- syn + ack retry
+- syn queue
+- accept queue
+- fast open
+
+
+### Four way
+
+- fin retry
+- fin_wait2 wait time
+- time_wait limit
 
 
 
@@ -514,7 +528,7 @@ cat /proc/sys/net/ipv4/tcp_synack_retries #5
 
 ##### ack fail
 
-##### keepalive
+## keepalive
 **scenario**: client into ESTABLISH after send ack, server can not receive ack
 
 server continue send syn+ack, syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主动关闭了连接
@@ -865,14 +879,14 @@ Nagle和延迟确认都开启会互相等待到最大值，增加时延
 
 
 
-#### connection queue
+### connection queue
 
 1. syn queue/半连接队列
 2. accpet queue/全连接队列
 
 
 
-##### syn queue
+#### syn queue
 
 ```shell
 cat /proc/sys/net/ipv4/tcp_max_syn_backlog	#1024
@@ -913,7 +927,7 @@ netstat -s|grep "SYNs to LISTEN"
 2. enable tcp_syncookies
 3. reduce `tcp_synack_retries`to fast quit connection from SYN_RECV
 
-##### accept queue
+#### accept queue
 
 ```shell
 # -l show the listening socket
@@ -1112,7 +1126,6 @@ see [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datat
 
 ```shell
 net.ipv4.tcp_tw_recycle # 1 enable quick recycle TIME_WAIT sockets
-
 ```
 
 当双方都主动发FIN后接受到对方的FIN进入CLOSEING状态之后返回发送ack都进入TIME_WAIT后等待2MSL关闭
