@@ -916,7 +916,10 @@ private ExchangeClient initClient(URL url) {
 }
 ```
 
-## Proxy
+## ProxyFactory
+
+- javassist
+- Cglib
 
 ```java
 /**

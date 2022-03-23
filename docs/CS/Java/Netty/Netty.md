@@ -38,7 +38,8 @@ This is another differentiator against other frameworks.
 
 ### Bind
 
-- BossEventLoop starts thread when register
+- [Create EventLoopGroup](/docs/CS/Java/Netty/EventLoop.md?id=create-eventloopgroup)
+- BossEventLoop starts thread when register ServerSocketChannel
 - first register(Selector, 0, ServerSocketChannel)
 - selectionKey.interestOps(OP_ACCEPT) when fireChannelActive() after bind
 
