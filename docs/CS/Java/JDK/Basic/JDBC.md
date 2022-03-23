@@ -11,7 +11,7 @@ strict digraph {
     ca [shape="polygon" label="CallableStatement"]
     {rank="same"; st;pr;ca;}
     data [shape="polygon" label="Data types"]
-    re [shape="polygon" label="Result Set"]
+    re [shape="polygon" label="ResultSet"]
     re -> data [label="getXXX"]
     st -> pr [label="subClass"]
     pr -> ca [label="subClass"]
