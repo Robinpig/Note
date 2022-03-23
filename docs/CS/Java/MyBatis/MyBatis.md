@@ -82,6 +82,7 @@ strict digraph {
     
     re [shape="polygon" label="ResultSet"]
     map [shape="polygon" label="ResultMap"]
+    {rank="same"; conn;re;}
     
     st -> re [label="executeQuery"]
     rh -> re [label="handleResultSet"]
