@@ -1,23 +1,15 @@
 ## Introduction
 
-
-
-
-Some methods such as `ByteBuf.readBytes(int)` will cause a memory leak if the returned buffer is not released or added to the out List. 
+Some methods such as `ByteBuf.readBytes(int)` will cause a memory leak if the returned buffer is not released or added to the out List.
 Use derived buffers like `ByteBuf.readSlice(int)` to avoid leaking memory.
 
-
 ## Recycler
-
 
 count
 
 Chunk
 Page
 SubPage
-
-
-
 
 ```java
 // PooledDirectByteBuf
@@ -38,8 +30,6 @@ final class PooledDirectByteBuf extends PooledByteBuf<ByteBuffer> {
 }
 ```
 
-
-
 ### get
 
 ```java
@@ -50,8 +40,8 @@ static PooledDirectByteBuf newInstance(int maxCapacity) {
 }
 ```
 
-
 get from [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
+
 ```java
 // Recycler
 public final T get() {
@@ -69,6 +59,7 @@ public final T get() {
 
 
 ```
+
 Method must be called before reuse this PooledByteBufAllocator
 
 ```java
@@ -79,8 +70,6 @@ final void reuse(int maxCapacity) {
     discardMarks();
 }
 ```
-
-
 
 ```java
 // Recycler
@@ -102,7 +91,6 @@ private final FastThreadLocal<Stack<T>> threadLocal = new FastThreadLocal<Stack<
     }
 };
 ```
-
 
 ### recycle
 
@@ -132,7 +120,6 @@ public void recycle(Object object) {
     stack.push(this);
 }
 ```
-
 
 ### Stack
 
@@ -351,11 +338,7 @@ private static final class Stack<T> {
 }
 ```
 
-
-
 ### push
-
-
 
 ```java
 // Stack
@@ -459,20 +442,10 @@ void add(DefaultHandle<?> handle) {
 }
 ```
 
-
-
 we keep a queue of per-thread queues, which is appended to once only, each time a new thread other than the stack owner recycles: when we run out of items in our stack we iterate this collection to scavenge those that can be reused. this permits us to incur minimal thread synchronisation whilst still recycling all items.
-
-
 
 We store the Thread in a WeakReference as otherwise we may be the only ones that still hold a strong Reference to the Thread itself after it died because DefaultHandle will hold a reference to the Stack.
 The biggest issue is if we do not use a WeakReference the Thread may not be able to be collected at all if the user will store a reference to the DefaultHandle somewhere and never clear this reference (or not clear it in a timely manner).
-
-
-
-
-
-
 
 ```java
 // a queue that makes only moderate guarantees about visibility: items are seen in the correct order,
@@ -712,10 +685,6 @@ private static final class WeakOrderQueue extends WeakReference<Thread> {
 }
 ```
 
-
-
-
-
 ### Sample
 
 *A 线程申请，A 线程回收的场景。*
@@ -729,11 +698,7 @@ private static final class WeakOrderQueue extends WeakReference<Thread> {
 - 那么 B 线程会专门申请一个针对 A 线程回收的专属队列，在首次创建的时候会将该队列放入到 A 线程对象池的链表首节点（这里是唯一存在的资源竞争场景，需要加锁），并将被回收的对象放入到该专属队列中，宣告回收结束。
 - 在 A 线程的对象池数组耗尽之后，将会尝试把各个别的线程针对 A 线程的专属队列里的对象重新放入到对象池数组中，以便下次继续使用。
 
-
-
-
 ## Allocator
-
 
 ```java
 public class PooledByteBufAllocator extends AbstractByteBufAllocator implements ByteBufAllocatorMetricProvider {
@@ -799,17 +764,113 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
 guess size of buf, actual allocate using Allocator
 
-
-
 ## Type
-
-
-
 
 - PoolThreadCache
 - PoolArena
 - PoolChunk
 
+## PoolChunk
+
+Notation: The following terms are important:
+
+- page  - a page is the smallest unit of memory chunk that can be allocated
+- run   - a run is a collection of pages
+- chunk - a chunk is a collection of runs
+
+chunkSize = maxPages * pageSize
+
+To begin we allocate a byte array of size = chunkSize 
+Whenever a ByteBuf of given size needs to be created we search for the first position in the byte array 
+that has enough empty space to accommodate the requested size and return a (long) handle that encodes this offset information, 
+(this memory segment is then marked as reserved so it is always used by exactly one ByteBuf and no more)
+
+For simplicity all sizes are normalized according to PoolArena.size2SizeIdx(int) method. 
+This ensures that when we request for memory segments of size > pageSize the normalizedCapacity equals the next nearest size in SizeClasses.
+
+A chunk has the following layout:
+```
+    /-----------------\
+    | run             |
+    |                 |
+    |                 |
+    |-----------------|
+    | run             |
+    |                 |
+    |-----------------|
+    | unalloctated    |
+    | (freed)         |
+    |                 |
+    |-----------------|
+    | subpage         |
+    |-----------------|
+    | unallocated     |
+    | (freed)         |
+    | ...             |
+    | ...             |
+    | ...             |
+    |                 |
+    |                 |
+    |                 |
+    \-----------------/
+```
+
+handle:
+
+a handle is a long number, the bit layout of a run looks like:
+oooooooo ooooooos ssssssss ssssssue bbbbbbbb bbbbbbbb bbbbbbbb bbbbbbbb
+o: runOffset (page offset in the chunk), 15bit
+s: size (number of pages) of this run, 15bit
+u: isUsed?, 1bit
+e: isSubpage?, 1bit
+b: bitmapIdx of subpage, zero if it's not subpage, 32bit
+
+
+
+runsAvailMap:
+
+a map which manages all runs (used and not in used).
+For each run, the first runOffset and last runOffset are stored in runsAvailMap.
+key: runOffset
+value: handle
+
+runsAvail:
+
+an array of [PriorityQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=priorityqueue).
+Each queue manages same size of runs.
+Runs are sorted by offset, so that we always allocate runs with smaller offset.
+
+
+### Algorithm
+
+As we allocate runs, we update values stored in runsAvailMap and runsAvail so that the property is maintained.
+Initialization -
+In the beginning we store the initial run which is the whole chunk.
+The initial run:
+- runOffset = 0
+- size = chunkSize
+- isUsed = no
+- isSubpage = no
+- bitmapIdx = 0
+
+#### allocateRun
+
+1. find the first avail run using in runsAvails according to size
+2. if pages of run is larger than request pages then split it, and save the tailing run for later using
+
+
+#### allocateSubpage
+
+1. find a not full subpage according to size.
+   if it already exists just return, otherwise allocate a new PoolSubpage and call init() note that this subpage object is added to subpagesPool in the PoolArena when we init() it
+2. call subpage.allocate()
+
+#### free
+
+1. if it is a subpage, return the slab back into this subpage
+2. if the subpage is not used or it is a run, then start free this run
+3. merge continuous avail runs
+4. save the merged run
 
 
 ## Links
