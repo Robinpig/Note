@@ -21,14 +21,16 @@ see [Linux TCP](/docs/CS/OS/Linux/TCP.md)
 ### Purpose
 
 
-The primary purpose of the TCP is to provide reliable, securable logical circuit or connection service between pairs of processes.  To provide this service on top of a less reliable internet communication system requires facilities in the following areas:
+The primary purpose of the TCP is to provide reliable, securable logical circuit or connection service between pairs of processes.
+It provides reliable delivery of data or reliable notification of failure.
+To provide this service on top of a less reliable internet communication system requires facilities in the following areas:
 
-   - Basic Data Transfer
-   - Reliability
-   - Flow Control
-   - Multiplexing
-   - Connections
-   - Precedence and Security
+- Basic Data Transfer
+- Reliability
+- Flow Control
+- Multiplexing
+- Connections
+- Precedence and Security
 
 
 
@@ -156,48 +158,114 @@ Options may occupy space at the end of the TCP header and are a multiple of 8 bi
 
 
 
+## Connection Establishment and Termination
+
+![tcp_shakehand](./images/tcp_shake.png)
+
+
+### Three-Way Handshake
+
+The following scenario occurs when a TCP connection is established:
+
+1. The server must be prepared to accept an incoming connection. This is normally done by calling socket, bind, and listen and is called a passive open.
+2. The client issues an active open by calling connect. 
+   This causes the client TCP to send a ‘‘synchronize’’ (SYN) segment, which tells the server the client’s initial sequence number for the data that the client will send on the connection. 
+   Normally, there is no data sent with the SYN; it just contains an IP header, a TCP header, and possible TCP options (which we will talk about shortly).
+3. The server must acknowledge (ACK) the client’s SYN and the server must also send its own SYN containing the initial sequence number for the data that the server will send on the connection. 
+   The server sends its SYN and the ACK of the client’s SYN in a single segment.
+4. The client must acknowledge the server’s SYN.
+
+The minimum number of packets required for this exchange is three; hence, this is called TCP’s *three-way handshake*.
+
+Since a SYN occupies one byte of the sequence number space, the acknowledgment number in the ACK of each SYN is the initial sequence number plus one. 
+Similarly, the ACK of each FIN is the sequence number of the FIN plus one.
+
+check network and ack initial sequence number
+
+| 类型    | Name            | 描述         |
+| :------ | --------------- | ------------ |
+| SYN     | synchronize     | 初始建立连接 |
+| ACK     | acknowledgement | 确认SYN      |
+| SYN-ACK |                 |              |
+| FIN     |                 | 断开连接     |
+
+`Synchronize Sequence Numbers`
+
+`Acknowledge character`
+
+SYN -> SYN + ACK ->ACK
+
+ 第三次握手方可携带数据
+
+
+
+初始序列号ISN生成基于时钟 RFC1948
+
+
+- syn retry
+- syn + ack retry
+- syn queue
+- accept queue
+- fast open
+
+
+
+### Connection Termination
+
+While it takes three segments to establish a connection, it takes four to terminate a connection.
+1. One application calls close first, and we say that this end performs the active
+   close. This end’s TCP sends a FIN segment, which means it is finished sending
+   data.
+2. The other end that receives the FIN performs the passive close. The received FIN
+   is acknowledged by TCP. The receipt of the FIN is also passed to the application
+   as an end-of-file (after any data that may have already been queued for the
+   application to receive), since the receipt of the FIN means the application will
+   not receive any additional data on the connection.
+3. Sometime later, the application that received the end-of-file will close its
+   socket. This causes its TCP to send a FIN.
+4. The TCP on the system that receives this final FIN (the end that did the active
+   close) acknowledges the FIN.
+
+Since a FIN and an ACK are required in each direction, four segments are normally required. 
+We use the qualifier ‘‘normally’’ because in some scenarios, the FIN in Step 1 is sent with data. 
+Also, the segments in Steps 2 and 3 are both from the end performing the passive close and could be combined into one segment.
+
+Between Steps 2 and 3 it is possible for data to flow from the end doing the passive close to the end doing the active close. This is called a *half-close*.
+
+The sending of each FIN occurs when a socket is closed. 
+We indicated that the application calls close for this to happen, but realize that when a Unix process terminates, 
+either voluntarily (calling exit or having the main function return) or involuntarily (receiving a signal that terminates the process), 
+all open descriptors are closed, which will also cause a FIN to be sent on any TCP connection that is still open.
+
+> [!NOTE]
+> 
+> Either the client or the server—can perform the active close. Often the client performs the active close, but with some protocols (notably HTTP/1.0), the server performs the active close.
+
+
+
+- fin retry
+- fin_wait2 wait time
+- time_wait limit
+
+
+
 ###  Connection State
 
-  A connection progresses through a series of states during its
-  lifetime.  The states are:  LISTEN, SYN-SENT, SYN-RECEIVED,
-  ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, CLOSING, LAST-ACK,
-  TIME-WAIT, and the fictional state CLOSED.  CLOSED is fictional
-  because it represents the state when there is no TCB, and therefore,
-  no connection.  Briefly the meanings of the states are:
+A connection progresses through a series of states during its lifetime.  
+The states are:  LISTEN, SYN-SENT, SYN-RECEIVED, ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, CLOSING, LAST-ACK, TIME-WAIT, and the fictional state CLOSED.  
+CLOSED is fictional because it represents the state when there is no TCB, and therefore, no connection.  
+Briefly the meanings of the states are:
 
-- LISTEN - represents waiting for a connection request from any remote
-    TCP and port.
-- SYN-SENT - represents waiting for a matching connection request
-    after having sent a connection request.
-    
-- SYN-RECEIVED - represents waiting for a confirming connection
-    request acknowledgment after having both received and sent a
-    connection request.
-    
-- ESTABLISHED - represents an open connection, data received can be
-    delivered to the user.  The normal state for the data transfer phase
-    of the connection.
-    
-- FIN-WAIT-1 - represents waiting for a connection termination request
-    from the remote TCP, or an acknowledgment of the connection
-    termination request previously sent.
-    
-- FIN-WAIT-2 - represents waiting for a connection termination request
-    from the remote TCP.
-    
-- CLOSE-WAIT - represents waiting for a connection termination request
-    from the local user.
-    
-- CLOSING - represents waiting for a connection termination request
-    acknowledgment from the remote TCP.
-    
-- LAST-ACK - represents waiting for an acknowledgment of the
-    connection termination request previously sent to the remote TCP
-    (which includes an acknowledgment of its connection termination
-    request).
-- TIME-WAIT - represents waiting for enough time to pass to be sure
-      the remote TCP received the acknowledgment of its connection
-      termination request.
+- LISTEN - represents waiting for a connection request from any remote TCP and port.
+- SYN-SENT - represents waiting for a matching connection request after having sent a connection request.
+- SYN-RECEIVED - represents waiting for a confirming connection request acknowledgment after having both received and sent a connection request.
+- ESTABLISHED - represents an open connection, data received can be delivered to the user.  The normal state for the data transfer phase of the connection.
+- FIN-WAIT-1 - represents waiting for a connection termination request from the remote TCP, or an acknowledgment of the connection termination request previously sent.
+- FIN-WAIT-2 - represents waiting for a connection termination request from the remote TCP.
+- CLOSE-WAIT - represents waiting for a connection termination request from the local user.
+- CLOSING - represents waiting for a connection termination request acknowledgment from the remote TCP.
+- LAST-ACK - represents waiting for an acknowledgment of the connection termination request previously sent to the remote TCP(which includes an acknowledgment of its connection termination request).
+- TIME-WAIT - represents waiting for enough time to pass to be sure the remote TCP received the acknowledgment of its connection termination request.
 - CLOSED - represents no connection state at all.
 
 ```
@@ -265,58 +333,6 @@ ESTAB - snd FIN -> FIN-WAIT-1
 - 2MSL -> CLOSED
 
 ESTAB - rcv FIN -> CLOSE WAIT - close and snd FIN -> LAST-ACK -> rcv ACK-> CLOSED
-
-
-
-### Three Handshake
-
-
-- syn retry
-- syn + ack retry
-- syn queue
-- accept queue
-- fast open
-
-
-### Four way
-
-- fin retry
-- fin_wait2 wait time
-- time_wait limit
-
-
-
-## Connection
-
-![tcp_shakehand](./images/tcp_shake.png)
-
-### Establish Connection
-
-three-way handshaking
-
-check network and ack initial sequence number
-
-| 类型    | Name            | 描述         |
-| :------ | --------------- | ------------ |
-| SYN     | synchronize     | 初始建立连接 |
-| ACK     | acknowledgement | 确认SYN      |
-| SYN-ACK |                 |              |
-| FIN     |                 | 断开连接     |
-
-`Synchronize Sequence Numbers`
-
-`Acknowledge character`
-
-SYN -> SYN + ACK ->ACK
-
- 第三次握手方可携带数据
-
-
-
-初始序列号ISN生成基于时钟 RFC1948
-
-
-
 
 
 ### Window Scale

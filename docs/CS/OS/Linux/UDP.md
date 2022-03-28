@@ -1,8 +1,12 @@
 ## Introduction
 
+UDP is a simple transport-layer protocol. It is described in [RFC 768](). 
+The application writes a message to a UDP socket, which is then encapsulated in a UDP datagram, which is then further encapsulated as an IP datagram, which is then sent to its destination. 
+There is no guarantee that a UDP datagram will ever reach its final destination, that order will be preserved across the network, or that datagrams arrive only once.
 
 only need bind 
 
+> UDP can be full-duplex.
 
 
 sendto 

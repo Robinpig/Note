@@ -5,6 +5,9 @@
 
 see [TCP protocol](/docs/CS/CN/TCP.md)
 
+
+TCP sockets are an example of *stream sockets*.
+
 ## init
 call tcp_init by [inet_init](/docs/CS/OS/Linux/network.md?id=init-inet)
 ### tcp_init
