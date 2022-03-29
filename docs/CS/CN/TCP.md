@@ -317,7 +317,7 @@ Briefly the meanings of the states are:
                               +---------+                   +---------+
 ```
 
-TCP Connection State Diagram
+TCP State Transition Diagram
 
 
 Connect：
@@ -334,6 +334,25 @@ ESTAB - snd FIN -> FIN-WAIT-1
 
 ESTAB - rcv FIN -> CLOSE WAIT - close and snd FIN -> LAST-ACK -> rcv ACK-> CLOSED
 
+#### TIME_WAIT State
+
+The way in which a packet gets ‘‘lost’’ in a network is usually the result of routing anomalies.
+This original packet is called a lost duplicate or a wandering duplicate. TCP must handle these duplicates.
+
+There are two reasons for the TIME_WAIT state:
+1. To implement TCP’s full-duplex connection termination reliably
+2. To allow old duplicate segments to expire in the network
+
+The first reason can be explained by assuming that the final ACK is lost. The server will resend its final FIN, so the client must maintain state information, allowing it to resend the final ACK.
+If it did not maintain this information, it would respond with an RST (a different type of TCP segment), which would be interpreted by the server as an error.
+
+The connection is closed and then sometime later, we establish another connection between the same IP addresses and ports.
+This latter connection is called an incarnation of the previous connection since the IP addresses and ports are the same. 
+TCP must prevent old duplicates from a connection from reappearing at some later time and being misinterpreted as belonging to a new incarnation of the same connection.
+To do this, TCP will not initiate a new incarnation of a connection that is currently in the TIME_WAIT state.
+
+> There is an exception to this rule. 
+> Berkeley-derived implementations will initiate a new incarnation of a connection that is currently in the TIME_WAIT state if the arriving SYN has a sequence number that is ‘‘greater than’’ the ending sequence number from the previous incarnation.
 
 ### Window Scale
 
@@ -544,19 +563,26 @@ cat /proc/sys/net/ipv4/tcp_synack_retries #5
 
 ##### ack fail
 
-## keepalive
 **scenario**: client into ESTABLISH after send ack, server can not receive ack
 
 server continue send syn+ack, syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主动关闭了连接
 
-7875 = 7200 + 75 * 9
+## keepalive
+
+When the keep-alive option is set for a TCP socket and no data has been exchanged across the socket in either direction for two hours, TCP automatically sends a keep-alive probe to the peer. 
+This probe is a TCP segment to which the peer must respond. One of three scenarios results:
+1. The peer responds with the expected ACK. The application is not notified (since everything is okay). TCP will send another probe following another two hours of inactivity.
+2. The peer responds with an RST, which tells the local TCP that the peer host has crashed and rebooted. The socket’s pending error is set to ECONNRESET and the socket is closed.
+3. There is no response from the peer to the keep-alive probe. Berkeley-derived TCPs send 8 additional probes, 75 seconds apart, trying to elicit a response.
+   TCP will give up if there is no response within 11 minutes and 15 seconds after sending the first probe.
+
+
 ```shell
 cat /proc/sys/net/ipv4/tcp_keepalive_time	#7200
 cat /proc/sys/net/ipv4/tcp_keepalive_intvl	#75
 cat /proc/sys/net/ipv4/tcp_keepalive_probes	#9
 ```
 
-keepalive_time + ( keepalive_intvl * keepalive_probes ) = 7200 + ( 75 * 9 ) = 7875 seconds
 
 keepalive 不足
    1. TCP Keepalive是扩展选项，不一定所有的设备都支持；
@@ -1234,6 +1260,9 @@ Active Queue Management
 Explicit Congestion Notification in IP
 
 
+
+## Links
+- [Computer Network](/docs/CS/CN/CN.md)
 
 ## References
 

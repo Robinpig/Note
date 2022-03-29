@@ -142,31 +142,6 @@ public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit uni
 
 Special EventExecutorGroup which allows [registering Channels](/docs/CS/Java/Netty/Channel.md?id=register) that get processed for later selection during the event loop.
 
-
-```dot
-digraph {
-    node [shape=plaintext, fontcolor=red, fontsize=18];
-    "Pointers:" -> "Values:" -> "Indices:" [color=white];
-
-    node [shape=record, fontcolor=black, fontsize=14, width=4.75, fixedsize=true];
-    pointers [label="<f0> A | <f1> A+1 | <f2> A+2 | <f3> A+3 | <f4> A+4 | <f5> A+5", color=white];
-    values [label="<f0> A[0] | <f1> A[1] | <f2> A[2] | <f3> A[3] | <f4> A[4] | <f5> A[5]", color=white, fillcolor=black, style=filled];
-    indices [label="0 | 1 | 2 | 3| 4 | 5", color=white];
-
-    { rank=same; "Pointers:"; pointers }
-    { rank=same; "Values:"; values }
-    { rank=same; "Indices:"; indices }
-
-    edge [color=blue];
-    pointers:f0 -> values:f0;
-    pointers:f1 -> values:f1;
-    pointers:f2 -> values:f2;
-    pointers:f3 -> values:f3;
-    pointers:f4 -> values:f4;
-    pointers:f5 -> values:f5;
-}
-```
-
 ```dot
 digraph  {
     node [shape=plaintext, fontsize=18];

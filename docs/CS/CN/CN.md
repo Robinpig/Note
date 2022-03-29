@@ -52,17 +52,23 @@ Application processes use the logical communication provided by the transport la
 | Flow Control | yes                                                                             | no             |
 | Full-duplex  | yes                                                                             | can be         |
 
-SCTP provides *associations* between clients and servers.
+At any given time, multiple processes can be using any given transport: UDP, SCTP, or TCP. All three transport layers use 16-bit integer port numbers to differentiate between these processes.
 
-2960 3309 3286 
 
-SCTP is message-oriented.
+The socket pair for a TCP connection is the four-tuple that defines the two endpoints of the connection: the local IP address, local port, foreign IP address, and foreign port. 
+A socket pair uniquely identifies every TCP connection on a network.
+For SCTP, an association is identified by a set of local IP addresses, a local port, a set of foreign IP addresses, and a foreign port. 
+In its simplest form, where neither endpoint is multihomed, this results in the same four-tuple socket pair used with TCP. 
+However, when either of the endpoints of an association are multihomed, then multiple four-tuple sets(with different IP addresses but the same port numbers) may identify the same association.
 
-SCTP can provide multiple streams between connection endpoints, each with its own reliable sequenced delivery of messages. 
-A lost message in one of these streams does not block delivery of messages in any of the other streams. 
-This approach is in contrast to TCP, where a loss at any point in the single stream of bytes blocks delivery of all future data on the connection until the loss is repaired.
+The two values that identify each endpoint, an IP address and a port number, are often called a *socket*.
 
-SCTP also provides a multihoming feature, which allows a single SCTP endpoint to support multiple IP addresses.
+We can extend the concept of a socket pair to UDP, even though UDP is connectionless. 
+When we describe the socket functions (bind, connect, getpeername, etc.), we will note which functions specify which values in the socket pair. 
+For example, bind lets the application specify the local IP address and local port for TCP, UDP, and SCTP sockets.
+
+
+[I/O Multiplexing](/docs/CS/CN/MultiIO.md)
 
 ## Protocol
 
@@ -98,3 +104,4 @@ encapsulate
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
+- [Internet Assigned Numbers Authority](https://www.iana.org/)
