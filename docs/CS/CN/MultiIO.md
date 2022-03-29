@@ -49,6 +49,7 @@ Only the asynchronous I/O model matches the asynchronous I/O definition.
 ## select
 
 
+> See [Linux select](/docs/CS/OS/Linux/Calls.md?id=select)
 
 ## Links
 - [Computer Network](/docs/CS/CN/CN.md)

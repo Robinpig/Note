@@ -59,6 +59,7 @@ nslookup
 # +trace
 dig
 
+drill
 
 ```
 

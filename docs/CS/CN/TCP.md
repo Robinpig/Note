@@ -127,6 +127,7 @@ The following diagram illustrates the place of the TCP in the protocol  hierarch
 #### Options
 
 Options may occupy space at the end of the TCP header and are a multiple of 8 bits in length.  All options are included in the checksum.  An option may begin on any octet boundary.  There are two cases for the format of an option:
+
 **Case 1:**  A single octet of option-kind.
 
 ```
@@ -247,6 +248,14 @@ all open descriptors are closed, which will also cause a FIN to be sent on any T
 - fin_wait2 wait time
 - time_wait limit
 
+
+#### Half Close
+
+shutdown
+
+- SHUT_RD
+- SHUT_WR
+- SHUT_RDWR
 
 
 ###  Connection State
@@ -567,7 +576,58 @@ cat /proc/sys/net/ipv4/tcp_synack_retries #5
 
 server continue send syn+ack, syn+ack失败达到tcp_synack_retries后，处于SYN_RECV状态的接收方主动关闭了连接
 
-## keepalive
+
+### Options
+
+#### SO_REUSEADDR
+
+
+#### TCP_NODELAY
+
+If set, disable the Nagle algorithm. This means that segments are always sent as soon as possible, even if there is only a small amount of data. 
+When not set, data is buffered until there is a sufficient amount to send out, thereby avoiding the frequent sending of small packets, which results in poor utilization of the network.
+This option is overridden by TCP_CORK; however, setting this option forces an explicit flush of pending output, even if TCP_CORK is currently set.
+As currently implemented, there is a 200 millisecond ceiling on the time for which output is corked by *TCP_CORK*.
+
+
+[Nagle's algorithm](https://en.wikipedia.org/wiki/Nagle's_algorithm) is a means of improving the efficiency of TCP/IP networks by reducing the number of packets that need to be sent over the network.
+
+What Nagle's algorithm does is says: 
+- if there is unacked data sent, and if the write buffer in the kernel is smaller than the MTU, then wait a little to see if the application writes more data. 
+- If the write buffer reaches the MTU size then the data will be transmitted. If the in flight data is acked then the data will also be transmitted, even if it is smaller than the MTU.
+
+Where MSS is the maximum segment size, the largest segment that can be sent on this connection, and the window size is the currently acceptable window of unacknowledged data, this can be written in pseudocode as
+
+```
+if there is new data to send then
+    if the window size ≥ MSS and available data is ≥ MSS then
+        send complete MSS segment now
+    else
+        if there is unconfirmed data still in the pipe then
+            enqueue data in the buffer until an acknowledge is received
+        else
+            send data immediately
+        end if
+    end if
+end if
+```
+
+> [!NOTE]
+> 
+> The user-level solution is to avoid write–write–read sequences on sockets. Write–read–write–read is fine. Write–write–write is fine. But write–write–read is a killer. 
+> So, if you can, buffer up your little writes to TCP and send them all at once. Using the standard UNIX I/O package and flushing write before each read usually works.
+
+The TCP delayed ack feature is again an attempt to minimize the number of small packets sent. 
+The way it works is a TCP packet can ack multiple data packets at once. 
+Therefore a TCP stack implementing the delayed ack feature may wait up to some amount of time before acking packets in the hope that it will be able to ack more packets at once. 
+On Linux this can cause up to a 40 ms delay when acking packets. 
+Again, this is usually a good thing since it decreases the number of packets that have to be sent (which is usually the limiting factor in network performance).
+
+
+An application that is very latency sensitive, particularly if it doesn't transmit a lot of data, can safely use TCP_NODELAY.
+
+
+#### keepalive
 
 When the keep-alive option is set for a TCP socket and no data has been exchanged across the socket in either direction for two hours, TCP automatically sends a keep-alive probe to the peer. 
 This probe is a TCP segment to which the peer must respond. One of three scenarios results:
