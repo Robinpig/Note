@@ -50,9 +50,13 @@ URL转发
 * 显性 转发地址 修改地址栏
 * 隐性 转发地址 不修改地址栏
 
+
+## Resolve
+
+
 ```shell
 
-cat /etc/resolv.conf
+cat /etc/resolv.conf | grep nameserver
 
 nslookup
 
@@ -61,6 +65,11 @@ dig
 
 drill
 
+```
+
+```shell
+
+systemctl restart networking
 ```
 
 also cache DNS

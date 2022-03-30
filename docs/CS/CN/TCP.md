@@ -363,6 +363,16 @@ To do this, TCP will not initiate a new incarnation of a connection that is curr
 > There is an exception to this rule. 
 > Berkeley-derived implementations will initiate a new incarnation of a connection that is currently in the TIME_WAIT state if the arriving SYN has a sequence number that is ‘‘greater than’’ the ending sequence number from the previous incarnation.
 
+
+
+#### CLOSE_WAIT
+
+too much CLOSE_WAIT
+cause:
+1. forget invoke close/shutdown to send FIN
+2. backlog too large
+
+
 ### Window Scale
 
 see [RFC 1323 - TCP Extensions for High Performance](https://datatracker.ietf.org/doc/rfc1323/).
@@ -623,6 +633,14 @@ Therefore a TCP stack implementing the delayed ack feature may wait up to some a
 On Linux this can cause up to a 40 ms delay when acking packets. 
 Again, this is usually a good thing since it decreases the number of packets that have to be sent (which is usually the limiting factor in network performance).
 
+```shell
+cat /boot/config-4.18.0-193.el8.x86_64 |grep 'CONFIG_HZ='
+CONFIG_HZ=1000
+```
+40 ~ 200 ms
+
+TCP_QUICKACK
+
 
 An application that is very latency sensitive, particularly if it doesn't transmit a lot of data, can safely use TCP_NODELAY.
 
@@ -658,6 +676,7 @@ keepalive 不足
 
 2. 在试图发送数据包时失败，重传`tcp_retries2`次失败后关闭连接
    RCF1122
+
 ```shell
 # linux
 # This is how many retries it does before it tries to figure out if the gateway is down. 
@@ -944,42 +963,6 @@ cat /proc/sys/net/ipv4/tcp_fastopen	#1
 窗口控制
 
 window
-
-
-
-#### Nagle
-
-1. 没有已发送未确认的报文，立即发送
-2. 存在已发送未确认的报文时，等待确认报文或者数据到达MSS再发送
-
-第一次发送报文一般较小
-
-在socket里使用TCP_NODELAY关闭Nagle
-
-
-
-#### ack delay
-
-1. 有响应数据发送时，ack被携带
-2. 无响应数据发送时，等待固定时间发送ack
-3. 在固定时间内收到第二次数据报，立刻发送ack
-
-```shell
-cat /boot/config-4.18.0-193.el8.x86_64 |grep 'CONFIG_HZ='
-CONFIG_HZ=1000
-```
-
-最大延迟1000/5 = 200 ms
-
-最小延迟1000/25 = 40 ms
-
-在socket里使用TCP_QUICKACK关闭延时确认
-
-
-
-Nagle和延迟确认都开启会互相等待到最大值，增加时延
-
-
 
 ### connection queue
 
@@ -1301,11 +1284,6 @@ net.core.rmem_max = 8388608
 ss
 
 slabtop
-
-### too many CLOSE_WAIT
-cause:
-1. forget invoke close/shutdown to send FIN
-2. backlog too large
 
 
 

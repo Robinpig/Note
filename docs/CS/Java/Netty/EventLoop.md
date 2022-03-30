@@ -446,6 +446,16 @@ private SelectorTuple openSelector() {
 ```
 
 ### rebuildSelector
+
+
+>
+> From [Selector doesn't block on Selector.select(timeout)](https://bugs.java.com/bugdatabase/view_bug.do?bug_id=2147719)
+> 
+> This is an issue with poll (and epoll) on Linux. 
+> If a file descriptor for a connected socket is polled with a request event mask of 0, and if the connection is abruptly terminated (RST) then the poll wakes up with the POLLHUP (and maybe POLLERR) bit set in the returned event set. 
+> The implication of this behaviour is that Selector will wakeup and as the interest set for the SocketChannel is 0 it means there aren't any selected events and the select method returns 0.
+
+
 Replaces the current Selector of this event loop with newly created Selectors to work around the infamous epoll 100% CPU bug.
 
 1. Open a new Selector.
