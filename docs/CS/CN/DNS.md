@@ -1,9 +1,7 @@
 ## Introduction
 
-
-`Domain Name System`
-
-
+DNS is a distributed client/server networked database that is used by TCP/IP applications to map between host names and IP addresses (and vice versa), 
+to provide electronic mail routing information, service naming, and other capabilities.
 
 DNS解析流程
 
@@ -51,8 +49,12 @@ URL转发
 * 隐性 转发地址 不修改地址栏
 
 
-## Resolve
+## Caching
 
+```shell
+cat /etc/hosts
+
+```'
 
 ```shell
 
@@ -80,7 +82,12 @@ in JAVA
 please using singleton to avoid resolving DNS each time
 
 
+## Attacks on the DNS
 
+There have been two main forms of attacks against the DNS. 
+- The first form involves a DoS attack where the DNS is rendered inoperative because of overloading of important DNS servers, such as the root or TLD servers. 
+- The second form alters the contents of resource records or masquerades as an official DNS server but responds with bogus resource records, 
+  thereby causing hosts to contact the incorrect IP address when attempting to connect to another machine.
 
 
 DNS劫持
@@ -91,12 +98,7 @@ DNS调用次数 服务多了之后域名多需要解析更多域名
 
 自建DNS
 
-Cache
 
-```shell
-cat /etc/hosts
-
-```
 
 ## Links
 

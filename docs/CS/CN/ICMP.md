@@ -1,11 +1,35 @@
 ## Introduction
 
-
-[Internet Control Message Protocol](https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol)
-
-
+The [IP protocol](/docs/CS/CN/IP.md) alone provides no direct way for an end system to learn the fate of IP packets that fail to make it to their destinations. 
+In addition, IP provides no direct way of obtaining diagnostic information (e.g., which routers are used along a path or a method to estimate the round-trip time). 
+To address these deficiencies, a special protocol called the [Internet Control Message Protocol (ICMP)](https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol) 
+is used in conjunction with IP to provide diagnostics and control information related to the configuration of the IP protocol layer and the disposition of IP packets. 
+ICMP is often considered part of the IP layer itself, and it is required to be present with any IP implementation. 
+It uses the IP protocol for transport. So, precisely, it is neither a network nor a transport protocol but lies somewhere between the two.
 
 ![](https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/ICMP_header_-_General-en.svg/2560px-ICMP_header_-_General-en.svg.png)
+
+
+ICMP provides for the delivery of error and control messages that may require attention. 
+ICMP messages are usually acted on by the IP layer itself, by higher-layer transport protocols (e.g., TCP or UDP), and in some cases by user applications. 
+Note that ICMP does not provide reliability for IP. 
+Rather, it indicates certain classes of failures and configuration information. The most common cause of packet drops (buffer overrun at a router) does not elicit any ICMP information. 
+Other protocols, such as TCP, handle such situations.
+
+Because of the ability of ICMP to affect the operation of important system functions and obtain configuration information, hackers have used ICMP messages in a large number of attacks. 
+As a result of concerns about such attacks, network administrators often arrange to block ICMP messages with firewalls, especially at border routers. 
+If ICMP is blocked, however, a number of common diagnostic utilities (e.g., ping, traceroute) do not work properly [RFC4890].
+
+[RFC0792][RFC4443]
+
+## ICMP Messages
+
+ICMP messages are grouped into two major categories: 
+- those messages relating to problems with delivering IP datagrams (called *error messages*)
+- and those related to information gathering and configuration (called *query or informational messages*)
+
+
+
 
 
 
@@ -30,6 +54,20 @@ Echo reply  0
 yum install -y traceroute
 ```
 
+## Attacks Involving ICMP
+
+The types of attacks involving ICMP fall primarily into three categories: floods, bombs, and information disclosure. 
+In essence, floods cause a large amount of traffic to be generated, leading to an effective DoS attack on one or more computers. 
+The bomb class (sometimes called nuke class) refers to sending specially constructed messages that cause IP or ICMP processing to crash or hang. 
+Information disclosure attacks do not typically cause harm by themselves but can be used to inform the approaches used by other attack methods to avoid wasting time or avoid being detected. 
+ICMP attacks against TCP have been documented separately [RFC5927].
+
+
+
+
+## Links
+
+- [Computer Network](/docs/CS/CN/CN.md)
 
 
 ## Reference
