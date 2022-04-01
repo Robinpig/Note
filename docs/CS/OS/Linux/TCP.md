@@ -4106,6 +4106,170 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 ```
 
 
+
+## retry
+
+
+```c
+void tcp_retransmit_timer(struct sock *sk)
+{
+    ...
+  
+	if (retransmits_timed_out(sk, net->ipv4.sysctl_tcp_retries1 + 1, 0))
+		__sk_dst_reset(sk);
+}
+
+/* A write timeout has occurred. Process the after effects. */
+static int tcp_write_timeout(struct sock *sk)
+{
+	struct inet_connection_sock *icsk = inet_csk(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct net *net = sock_net(sk);
+	bool expired = false, do_reset;
+	int retry_until;
+
+	if ((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV)) {
+		if (icsk->icsk_retransmits)
+			__dst_negative_advice(sk);
+		retry_until = icsk->icsk_syn_retries ? : net->ipv4.sysctl_tcp_syn_retries;
+		expired = icsk->icsk_retransmits >= retry_until;
+	} else {
+		if (retransmits_timed_out(sk, net->ipv4.sysctl_tcp_retries1, 0)) {
+			/* Black hole detection */
+			tcp_mtu_probing(icsk, sk);
+
+			__dst_negative_advice(sk);
+		}
+		}
+```
+
+#### tcp_write_timeout
+
+- if in TCPF_SYN_SENT | TCPF_SYN_RECV,  see `tcp_syn_retries`
+- else , `tcp_retries1` tcp_mtu_probing, __dst_negative_advice
+- `tcp_retries2`
+- if SOCK_DEAD, see`tcp_orphan_retries`
+
+```c
+
+/* A write timeout has occurred. Process the after effects. */
+static int tcp_write_timeout(struct sock *sk)
+{
+	struct inet_connection_sock *icsk = inet_csk(sk);
+	struct tcp_sock *tp = tcp_sk(sk);
+	struct net *net = sock_net(sk);
+	bool expired = false, do_reset;
+	int retry_until;
+
+	if ((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV)) {
+		if (icsk->icsk_retransmits)
+			__dst_negative_advice(sk);
+		retry_until = icsk->icsk_syn_retries ? : net->ipv4.sysctl_tcp_syn_retries;
+		expired = icsk->icsk_retransmits >= retry_until;
+	} else {
+		if (retransmits_timed_out(sk, net->ipv4.sysctl_tcp_retries1, 0)) {
+			/* Black hole detection */
+			tcp_mtu_probing(icsk, sk);
+
+			__dst_negative_advice(sk);
+		}
+
+		retry_until = net->ipv4.sysctl_tcp_retries2;
+		if (sock_flag(sk, SOCK_DEAD)) {
+			const bool alive = icsk->icsk_rto < TCP_RTO_MAX;
+
+			retry_until = tcp_orphan_retries(sk, alive);
+			do_reset = alive ||
+				!retransmits_timed_out(sk, retry_until, 0);
+
+			if (tcp_out_of_resources(sk, do_reset))
+				return 1;
+		}
+	}
+	if (!expired)
+		expired = retransmits_timed_out(sk, retry_until,
+						icsk->icsk_user_timeout);
+	tcp_fastopen_active_detect_blackhole(sk, expired);
+
+	if (BPF_SOCK_OPS_TEST_FLAG(tp, BPF_SOCK_OPS_RTO_CB_FLAG))
+		tcp_call_bpf_3arg(sk, BPF_SOCK_OPS_RTO_CB,
+				  icsk->icsk_retransmits,
+				  icsk->icsk_rto, (int)expired);
+
+	if (expired) {
+		/* Has it gone just too far? */
+		tcp_write_err(sk);
+		return 1;
+	}
+
+	if (sk_rethink_txhash(sk)) {
+		tp->timeout_rehash++;
+		__NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPTIMEOUTREHASH);
+	}
+
+	return 0;
+}
+```
+
+##### retransmits_timed_out
+
+retransmits_timed_out() - returns true if this connection has timed out
+
+- sk:       The current socket
+- boundary: max number of retransmissions
+- timeout:  A custom timeout value. If set to 0 the default timeout is calculated and used. Using TCP_RTO_MIN and the number of unsuccessful retransmits.
+
+The default "timeout" value this function can calculate and use
+is equivalent to the timeout of a TCP Connection
+after "boundary" unsuccessful, exponentially backed-off
+retransmissions with an initial RTO of TCP_RTO_MIN.
+
+```c
+//
+static bool retransmits_timed_out(struct sock *sk,
+				  unsigned int boundary,
+				  unsigned int timeout)
+{
+	unsigned int start_ts;
+
+	if (!inet_csk(sk)->icsk_retransmits)
+		return false;
+
+	start_ts = tcp_sk(sk)->retrans_stamp;
+	if (likely(timeout == 0)) {
+		unsigned int rto_base = TCP_RTO_MIN;
+
+		if ((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV))
+			rto_base = tcp_timeout_init(sk);
+		timeout = tcp_model_timeout(sk, boundary, rto_base);
+	}
+
+	return (s32)(tcp_time_stamp(tcp_sk(sk)) - start_ts - timeout) >= 0;
+}
+
+
+static unsigned int tcp_model_timeout(struct sock *sk,
+				      unsigned int boundary,
+				      unsigned int rto_base)
+{
+	unsigned int linear_backoff_thresh, timeout;
+
+	linear_backoff_thresh = ilog2(TCP_RTO_MAX / rto_base);
+	if (boundary <= linear_backoff_thresh)
+		timeout = ((2 << boundary) - 1) * rto_base;
+	else
+		timeout = ((2 << linear_backoff_thresh) - 1) * rto_base +
+			(boundary - linear_backoff_thresh) * TCP_RTO_MAX;
+	return jiffies_to_msecs(timeout);
+}
+```
+
+
+`tcp_retries1` 失败后通知IP层进行MTU探测、刷新路由等流程而不是关闭连接
+
+同样受timeout限制
+
+
 ## Congestion Control
 Congestion control is essentially ”feedback-control”
 - If senders get acknowledgment of receipt of packets
