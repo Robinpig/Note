@@ -16,7 +16,7 @@ The Transmission Control Protocol (TCP) is intended for use as a highly reliable
                         +---------------------+
 ```
 
-see [Linux TCP](/docs/CS/OS/Linux/TCP.md)
+> See [Linux TCP](/docs/CS/OS/Linux/TCP.md)
 
 ### Purpose
 

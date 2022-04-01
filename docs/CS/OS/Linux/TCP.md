@@ -3,7 +3,7 @@
 
 
 
-see [TCP protocol](/docs/CS/CN/TCP.md)
+> See [TCP](/docs/CS/CN/TCP.md)
 
 
 TCP sockets are an example of *stream sockets*.
@@ -5572,7 +5572,9 @@ writev reduce send frequency
 SO_REUSEADDR vs. tw_reuse
 
 ## Links
-Return [Linux](/docs/CS/OS/Linux/Linux.md)
+
+- [Linux Network](/docs/CS/OS/Linux/Linux.md?id=Network)
+- [TCP](/docs/CS/CN/TCP.md)
 
 ## References
 1. [Analysis_TCP_in_Linux](https://github.com/fzyz999/Analysis_TCP_in_Linux)

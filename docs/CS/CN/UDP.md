@@ -7,8 +7,10 @@ Generally, each UDP output operation requested by an application produces exactl
 
 
 
+It is described in [RFC 768]().
 
 
+> UDP can be full-duplex.
 
 
 
@@ -39,3 +41,4 @@ This type of attack generally involves an attacker sending a small amount of tra
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
+- [Linux UDP](/docs/CS/OS/Linux/UDP.md)
