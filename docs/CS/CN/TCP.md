@@ -1275,8 +1275,123 @@ In essence, advertising a small window slows a TCP transfer, tying up resources 
 
 ## Congestion Control
 
+If a router receives more data per unit time than it can send out, it must store that data. If this situation persists, eventually the storage will run out and the router will be forced to drop some of the data.
+When a router is forced to discard data because it cannot handle the arriving traffic rate, is called *congestion*.
+The router is said to be congested when it is in this state, and even a single connection can drive one or more routers into congestion. 
+Left unaddressed, congestion can cause the performance of a network to be reduced so badly that it becomes unusable. 
+In the very worst cases, it is said to be in a state of congestion collapse. To either avoid or at least react effectively to mitigate this situation, each TCP implements congestion control procedures.
 
 
+
+### Detection of Congestion
+
+In TCP, an assumption is made that a lost packet is an indicator of congestion, and that some response (i.e., slowing down in some way) is required. 
+We shall see that TCP has been this way since the late 1980s. Other methods for detecting congestion, including measuring delay and network-supported Explicit Congestion Notification (ECN),
+allow TCP to learn about congestion even before it has become so bad as to cause dropped packets.
+
+
+
+> [!Note]
+> 
+> In today’s wired networks, packet loss is caused primarily by congestion in routers or switches. With wireless networks, transmission and reception errors become a significant cause of packet loss. 
+> Determining whether loss is due to congestion or transmission errors has been an active research topic since the mid-1990s when wireless networks started to attain widespread use.
+
+#### Slowing Down a TCP Sender
+
+One detail we need to address right away is just how to slow down a TCP sender. 
+We saw that the Window Size field in the TCP header is used to signal a sender to adjust its window based on the availability of buffer space at the receiver. 
+We can go a step further and arrange for the sender to slow down if either the receiver is too slow or the network is too slow. 
+This is accomplished by introducing a window control variable at the sender that is based on an estimate of the network’s capacity and ensuring that the sender’s window size never exceeds the minimum of the two. 
+In effect, a sending TCP then sends at a rate equal to what the receiver or the network can handle, whichever is less.
+
+The new value used to hold the estimate of the network’s available capacity is called the congestion window, written more compactly as simply cwnd. 
+The sender’s actual (usable) window W is then written as the minimum of the receiver’s advertised window awnd and the congestion window:
+```tex
+W = min(cwnd, awnd)
+```
+With this relationship, the TCP sender is not permitted to have more than W unacknowledged packets or bytes outstanding in the network. 
+The total amount of data a sender has introduced into the network for which it has not yet received an acknowledgment is sometimes called the flight size, which is always less than or equal to W. 
+In general, W can be maintained in either packet or byte units.
+
+When TCP does not make use of selective acknowledgment, the restriction on W means that the sender is not permitted to send a segment with a sequence number greater than the sum of the highest acknowledged sequence number and the value of W. 
+A SACK TCP sender treats W somewhat differently, using it as an overall limit to the flight size.
+
+### Congestion Control Algorithms
+
+We now turn to the main two algorithms of TCP: slow start and congestion avoidance. These algorithms, based on the principles of packet conservation and ACK clocking.
+These algorithms do not operate at the same time—TCP executes only one at any given time, but it may switch back and forth between the two.
+
+#### Slow Start
+
+The slow start algorithm is executed when a new TCP connection is created or when a loss has been detected due to a retransmission timeout (RTO). 
+It may also be invoked after a sending TCP has gone idle for some time. 
+The purpose of slow start is to help TCP find a value for cwnd before probing for more available bandwidth using congestion avoidance and to establish the ACK clock. 
+Typically, a TCP begins a new connection in slow start, eventually drops a packet, and then settles into steady-state operation using the [congestion avoidance algorithm](/docs/CS/CN/TCP.md?id=Congestion-Avoidance). 
+
+To quote from [RFC5681]:
+> Beginning transmission into a network with unknown conditions requires TCP to slowly probe the network to determine the available capacity, in order to avoid congesting the network with an inappropriately large burst of data. 
+> The slow start algorithm is used for this purpose at the beginning of a transfer, or after repairing loss detected by the retransmission timer.
+
+Slow start operates by incrementing cwnd by min(N, SMSS) for each good ACK received, where N is the number of previously unacknowledged bytes ACKed by the received “good ACK.” 
+A good ACK is one that returns a higher ACK number than has been seen so far.
+
+
+
+#### Congestion Avoidance
+
+Slow start, just described, is used when initiating data flow across a connection or after a loss event invoked by a timeout. It increases cwnd fairly rapidly and helps to establish a value for ssthresh. 
+Once this is achieved, there is always the possibility that more network capacity may become available for a connection. 
+If such capacity were to be immediately used with large traffic bursts, other TCP connections with packets sharing the same queues in routers would likely experience significant packet drops, 
+leading to overall instability in the network as many connections simultaneously experience packet drops and react with retransmissions.
+
+To address the problem of trying to find additional capacity that may become available, but to not do so too aggressively, TCP implements the congestion avoidance algorithm. 
+Once ssthresh is established and cwnd is at least at this level, a TCP runs the congestion avoidance algorithm, which seeks additional capacity by increasing cwnd by approximately one segment for each window’s worth of data that is moved from sender to receiver successfully. 
+This provides a much slower growth rate than slow start: approximately linear in terms of time, as opposed to slow start’s exponential growth.
+More precisely, cwnd is usually updated as follows for each received nonduplicate ACK:
+```tex
+cwndt+1 = cwndt + SMSS * SMSS/cwndt
+```
+
+We generally think of congestion avoidance growing the window linearly with respect to time, whereas slow start grows it exponentially with respect to time. 
+This function is also called additive increase because a particular value (about one packet in this case) is added to cwnd for each successfully received window’s worth of data.
+
+The assumption of the algorithm is that packet loss caused by bit errors is very small (much less than 1%), and therefore the loss of a packet signals congestion somewhere in the network between the source and destination. 
+If this assumption is false, which it sometimes is for wireless networks, TCP slows down even when no congestion is present. 
+In addition, many RTTs may be required for the value of cwnd to grow large, which is required for efficient use of networks with high capacity.
+
+### Congestion Control with SACK
+
+
+
+### Active Queue Management and ECN
+
+#### AQM
+
+Routers that apply scheduling and buffer management policies other than FIFO/drop tail are usually said to be active, and the corresponding methods they use to manage their queues are called active queue management (AQM) mechanisms. 
+The authors of [RFC2309] provide a discussion of the potential benefits of AQM.
+
+
+#### ECN
+
+For TCP, this is described in [RFC3168] and extended with additional security in an experimental specification [RFC3540]. 
+These RFCs describe Explicit Congestion Notification (ECN), which is a way for routers to mark packets (by ensuring both of the ECN bits in the IP header are set) to indicate the onset of congestion.
+
+The ECN mechanism operates partially at the IP layer and so is potentially applicable to transport protocols other than TCP, although most of the work on ECN has been with TCP, and it is what we discuss here. 
+When an ECN-capable router experiencing persistent congestion receives an IP packet, it looks in the IP header for an ECN-Capable Transport (ECT) indication (currently defined as either of the two ECN bits in the IP header being set). 
+If set, the transport protocol responsible for sending the packet understands ECN. At this point, the router sets a Congestion Experienced indication in the IP header (by setting both ECN bits to 1) and forwards the datagram. 
+Routers are discouraged from setting a CE indication when congestion does not appear to be persistent (e.g., upon a single recent packet drop due to queue overrun) because the transport protocol is supposed to react given even a single CE indication.
+
+The TCP receiver observing an incoming data packet with a CE set is obliged to return this indication to the sender (there is an experimental extension to add ECN to SYN + ACK segments as well [RFC5562]). 
+Because the receiver normally returns information to the sender by using (unreliable) ACK packets, there is a significant chance that the congestion indicator could be lost. 
+For this reason, TCP implements a small reliability-enhancing protocol for carrying the indication back to the sender. 
+Upon receiving an incoming packet with CE set, the TCP receiver sets the ECN-Echo bit field in each ACK packet it sends until receiving a CWR bit field set to 1 from the TCP sender in a subsequent data packet. 
+The CWR bit field being set indicates that the congestion window (i.e., sending rate) has been reduced.
+
+A sending TCP receiving an ECN-Echo indicator in an ACK reacts the same way it would when detecting a single packet drop by adjusting cwnd, and it also arranges to set the CWR bit field in a subsequent data packet. 
+The prescribed congestion response of the fast retransmit/recovery algorithms is invoked (of course, without the packet retransmission), causing the TCP to slow down prior to suffering packet drops. 
+Note that the TCP should not overreach; in particular, it should not react more than once for the same window of data. Doing so would overly penalize an ECN TCP relative to others.
+
+In Linux, ECN is enabled if the Boolean sysctl variable `net.ipv4.tcp_ecn` is nonzero. The default varies based on which Linux distribution is used, with off being most common.
 
 ## Examples
 
@@ -1310,15 +1425,6 @@ net.core.rmem_max = 8388608
 ss
 
 slabtop
-
-## Congestion Control
-
-Active Queue Management
-
-### ECN
-
-Explicit Congestion Notification in IP
-
 
 ## Timers
 
