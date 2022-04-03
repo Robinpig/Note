@@ -304,6 +304,10 @@ To do this, TCP will not initiate a new incarnation of a connection that is curr
 > There is an exception to this rule.
 > Berkeley-derived implementations will initiate a new incarnation of a connection that is currently in the TIME_WAIT state if the arriving SYN has a sequence number that is ‘‘greater than’’ the ending sequence number from the previous incarnation.
 
+The timer is set to 1 minute (Net/3 uses an MSL of 30 seconds) when the connection enters the TIME_WAIT state and when it expires, the TCP control block and Internet PCB are deleted, allowing that socket pair to be reused.
+
+
+
 orphan connection(use close) FIN_WAIT2 timeout tcp_fin_timeout s
 
 ```shell
@@ -346,7 +350,12 @@ The other end is still in the CLOSE_WAIT state and can remain there forever, unt
 Many implementations prevent this infinite wait in the FIN_WAIT_2 state as follows: 
 If the application that does the active close does a complete close, not a half-close indicating that it expects to receive data, a timer is set. 
 If the connection is idle when the timer expires, TCP moves the connection into the CLOSED state. 
-In Linux, the variable net.ipv4.tcp_fin_timeout can be adjusted to control the number of seconds to which the timer is set. Its default value is 60s.
+In Linux, the variable `net.ipv4.tcp_fin_timeout` can be adjusted to control the number of seconds to which the timer is set. Its default value is 60s.
+
+When a connection moves from the FIN_WAIT_1 state to the FIN_WAIT_2 state and the connection cannot receive any more data 
+(implying the process called close, instead of taking advantage of TCP’s half-close with shutdown), this timer is set to 10 minutes.
+When this timer expires it is reset to 75 seconds, and when it expires the second time the connection is dropped. 
+The “purpose of this timer is to avoid leaving a connection in the FIN_WAIT_2 state forever, if the other end never sends a FIN.
 
 ### Reset Segments
 
@@ -1309,6 +1318,28 @@ Active Queue Management
 ### ECN
 
 Explicit Congestion Notification in IP
+
+
+## Timers
+
+TCP maintains seven timers for each connection. They are briefly described here, in the approximate order of their occurrence during the lifetime of a connection.
+1. A [connection-establishment timer](/docs/CS/CN/TCP.md?id=timeout-of-connection-establishment) starts when a SYN is sent to establish a new connection. If a response is not received within 75 seconds, the connection establishment is aborted.
+2. A [retransmission timer](/docs/CS/CN/TCP.md?id=retransmission-timeout) is set when TCP sends data. If the data is not acknowledged by the other end when this timer expires, TCP retransmits the data.
+3. A [delayed ACK timer](/docs/CS/CN/TCP.md?id=delayed-acknowledgments) is set when TCP receives data that must be acknowledged, but need not be acknowledged immediately. 
+   Instead, TCP waits up to 200 ms before sending the ACK. If, during this 200-ms time period, TCP has data to send on this connection, the pending acknowledgment is sent along with the data (called piggybacking).
+4. A [persist timer](/docs/CS/CN/TCP.md?id=zero-windows-and-the-tcp-persist-timer) is set when the other end of a connection advertises a window of 0, stopping TCP from sending data. 
+5. A [keepalive timer](/docs/CS/CN/TCP.md) can be set by the process using the SO_KEEPALIVE socket option. 
+6. A [FIN_WAIT_2 timer](/docs/CS/CN/TCP.md?id=fin_wait_2).
+7. A [TIME_WAIT timer](/docs/CS/CN/TCP.md?id=time_wait), often called the 2MSL timer.
+
+TCP has two timer functions: one is called every 200 ms (the fast timer) and the other every 500 ms (the slow timer). 
+The delayed ACK timer is different from the other six: when the delayed ACK timer is set for a connection it means that a delayed ACK must be sent the next time the 200-ms timer expires (i.e., the elapsed time is between 0 and 200 ms). 
+The other six timers are decremented every 500 ms, and only when the counter reaches 0 does the corresponding action take place.
+
+
+
+
+
 
 ## Links
 
