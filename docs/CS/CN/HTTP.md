@@ -330,6 +330,12 @@ HTTP is stateless.
 
 To overcome the stateless nature of HTTP requests, we could use either a session or a token.
 
+### Cookies
+
+It is often desirable for a Web site to identify users, either because the server wishes to restrict user access or because it wants to serve content as a function of the user identity. 
+For these purposes, HTTP uses cookies. Cookies, defined in [RFC 6265], allow sites to keep track of users.
+Most major commercial Web sites use cookies today.
+
 ### Session
 
 In the session based authentication, the server will create a session for the user after the user logs in. The session id is then stored on a cookie on the user’s browser. While the user stays logged in, the cookie would be sent along with every subsequent request. The server can then compare the session id stored on the cookie against the session information stored in the memory to verify user’s identity and sends response with the corresponding state!
@@ -342,6 +348,7 @@ session依赖于容器
 3. 使用中间件统一存储
 
 多系统时可以考虑独立于其它业务系统
+
 
 Cookie 优点
 

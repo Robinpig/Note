@@ -1085,7 +1085,7 @@ The router is said to be congested when it is in this state, and even a single c
 Left unaddressed, congestion can cause the performance of a network to be reduced so badly that it becomes unusable. 
 In the very worst cases, it is said to be in a state of congestion collapse. To either avoid or at least react effectively to mitigate this situation, each TCP implements congestion control procedures.
 
-
+TCP congestion control is often referred to as an *additive-increase*, *multiplicative-decrease(AIMD)* form of congestion control.
 
 ### Detection of Congestion
 
@@ -1122,8 +1122,15 @@ A SACK TCP sender treats W somewhat differently, using it as an overall limit to
 
 ### Congestion Control Algorithms
 
+Note that if acknowledgments arrive at a relatively slow rate (e.g., if the end-end path has high delay or contains a low-bandwidth link), then the congestion window will be increased at a relatively slow rate. 
+On the other hand, if acknowledgments arrive at a high rate, then the congestion window will be increased more quickly.
+Because TCP uses acknowledgments to trigger (or clock) its increase in congestion window size, TCP is said to be self-clocking.
+
 We now turn to the main two algorithms of TCP: slow start and congestion avoidance. These algorithms, based on the principles of packet conservation and ACK clocking.
 These algorithms do not operate at the same time—TCP executes only one at any given time, but it may switch back and forth between the two.
+
+Fast recovery is recommended, but not required, for TCP senders.
+
 
 #### Slow Start
 
@@ -1162,6 +1169,16 @@ This function is also called additive increase because a particular value (about
 The assumption of the algorithm is that packet loss caused by bit errors is very small (much less than 1%), and therefore the loss of a packet signals congestion somewhere in the network between the source and destination. 
 If this assumption is false, which it sometimes is for wireless networks, TCP slows down even when no congestion is present. 
 In addition, many RTTs may be required for the value of cwnd to grow large, which is required for efficient use of networks with high capacity.
+
+
+### Fast Recovery
+
+In fast recovery, the value of cwnd is increased by 1 MSS for every duplicate ACK received for the missing segment that caused TCP to enter the fast-recovery state. 
+Eventually, when an ACK arrives for the missing segment, TCP enters the congestion-avoidance state after deflating cwnd. 
+If a timeout event occurs, fast recovery transitions to the slow-start state after performing the same actions as in slow start and congestion avoidance: 
+The value of cwnd is set to 1 MSS, and the value of ssthresh is set to half the value of cwnd when the loss event occurred.
+
+
 
 ### Congestion Control with SACK
 
