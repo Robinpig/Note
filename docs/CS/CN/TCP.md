@@ -617,48 +617,6 @@ server continue send syn+ack, syn+ack失败达到tcp_synack_retries后，处于S
 
 #### SO_REUSEADDR
 
-#### keepalive
-
-When the keep-alive option is set for a TCP socket and no data has been exchanged across the socket in either direction for two hours, TCP automatically sends a keep-alive probe to the peer.
-This probe is a TCP segment to which the peer must respond. One of three scenarios results:
-
-1. The peer responds with the expected ACK. The application is not notified (since everything is okay). TCP will send another probe following another two hours of inactivity.
-2. The peer responds with an RST, which tells the local TCP that the peer host has crashed and rebooted. The socket’s pending error is set to ECONNRESET and the socket is closed.
-3. There is no response from the peer to the keep-alive probe. Berkeley-derived TCPs send 8 additional probes, 75 seconds apart, trying to elicit a response.
-   TCP will give up if there is no response within 11 minutes and 15 seconds after sending the first probe.
-
-```shell
-cat /proc/sys/net/ipv4/tcp_keepalive_time	#7200
-cat /proc/sys/net/ipv4/tcp_keepalive_intvl	#75
-cat /proc/sys/net/ipv4/tcp_keepalive_probes	#9
-```
-
-keepalive 不足
-
-1. TCP Keepalive是扩展选项，不一定所有的设备都支持；
-2. TCP Keepalive报文可能被设备特意过滤或屏蔽，如运营商设备；
-3. TCP Keepalive无法检测应用层状态，如进程阻塞、死锁、TCP缓冲区满等情况；
-4. TCP Keepalive容易与TCP重传控制冲突，从而导致失效。
-
-对于TCP状态无法反应应用层状态问题，这里稍微介绍几个场景。第一个是TCP连接成功建立，不代表对端应用感知到了该连接，因为TCP三次握手是内核中完成的，虽然连接已建立完成，但对端可能根本没有Accept；
-因此，一些场景仅通过TCP连接能否建立成功来判断对端应用的健康状况是不准确的，这种方案仅能探测进程是否存活。另一个是，本地TCP写操作成功，但数据可能还在本地写缓冲区中、网络链路设备中、对端读缓冲区中，并不代表对端应用读取到了数据。
-
-2. 在试图发送数据包时失败，重传`tcp_retries2`次失败后关闭连接
-   RCF1122
-
-```shell
-# linux
-# This is how many retries it does before it tries to figure out if the gateway is down. 
-# Minimal RFC value is 3; it corresponds to ~3sec-8min depending on RTO.
-cat /proc/sys/net/ipv4/tcp_retries1	#3
-
-# This should take at least 90 minutes to time out.
-# RFC1122 says that the limit is 100 sec. 15 is ~13-30min depending on RTO.
-cat /proc/sys/net/ipv4/tcp_retries2	#15
-
-
-```
-
 ### Sack
 
 `sack (Selective Acknowledgment)`
@@ -1393,6 +1351,56 @@ Note that the TCP should not overreach; in particular, it should not react more 
 
 In Linux, ECN is enabled if the Boolean sysctl variable `net.ipv4.tcp_ecn` is nonzero. The default varies based on which Linux distribution is used, with off being most common.
 
+
+## Keepalive
+
+Under some circumstances, it is useful for a client or server to become aware of the termination or loss of connection with its peer. 
+In other circumstances, it is desirable to keep a minimal amount of data flowing over a connection, even if the applications do not have any to exchange. 
+TCP keepalive provides a capability useful for both cases. Keepalive is a method for TCP to probe its peer without affecting the content of the data stream. It is driven by a keepalive timer. 
+When the timer fires, a keepalive probe (keepalive for short) is sent, and the peer receiving the probe responds with an ACK.
+
+Either end of a TCP connection may request keepalives, which are turned off by default, for their respective direction of the connection. 
+A keepalive can be set for one side, both sides, or neither side. There are several configurable parameters that control the operation of keepalives. 
+If there is no activity on the connection for some period of time (called the keepalive time), the side(s) with keepalive enabled sends a keepalive probe to its peer(s). 
+If no response is received, the probe is repeated periodically with a period set by the keepalive interval until a number of probes equal to the number keepalive probes is reached. 
+If this happens, the peer’s system is determined to be unreachable and the connection is terminated.
+
+A keepalive probe is an empty (or 1-byte) segment with sequence number equal to one less than the largest ACK number seen from the peer so far. 
+Because this sequence number has already been ACKed by the receiving TCP, the arriving segment does no harm, but it elicits an ACK that is used to determine whether the connection is still operating. 
+Neither the probe nor its ACK contains any new data (it is “garbage” data), and neither is retransmitted by TCP if lost. 
+[RFC1122] dictates that because of this fact, the lack of response for a single keepalive probe should not be considered sufficient evidence that the connection has stopped operating. 
+This is the reason for the keepalive probes parameter setting mentioned previously. Note that some (mostly older) TCP implementations do not respond to keepalives lacking the “garbage” byte of data.
+
+Anytime it is operating, a TCP using keepalives may find its peer in one of four states:
+1. The peer host is still up and running and reachable. The peer’s TCP responds normally and the requestor knows that the other end is still up. 
+   The requestor’s TCP resets the keepalive timer for later (equal to the value of the keepalive time). 
+   If there is application traffic across the connection before the next timer expires, the timer is reset back to the value of keepalive time.
+2. The peer’s host has crashed and is either down or in the process of rebooting. 
+   In either case, its TCP is not responding. The requestor does not receive a response to its probe, and it times out after a time specified by the keepalive interval. 
+   The requestor sends a total of keepalive probes of these probes, keepalive interval time apart, and if it does not receive a response, the requestor considers the peer’s host as down and terminates the connection.
+3. The client’s host has crashed and rebooted. In this case, the server receives a response to its keepalive probe, but the response is a reset segment, causing the requestor to terminate the connection.
+4. The peer’s host is up and running but is unreachable from the requestor for some reason (e.g., the network cannot deliver traffic and may or may not inform the peers of this fact using ICMP). 
+   This is effectively the same as state 2, because TCP cannot distinguish between the two. All TCP can tell is that no replies are received to its probes.
+
+The requestor does not have to worry about the peer’s host being shut down gracefully and then rebooting (as opposed to crashing). 
+When the system is shut down by an operator, all application processes are terminated (i.e., the peer’s process), which causes the peer’s TCP to send a FIN on the connection. 
+Receiving the FIN would cause the requestor’s TCP to report an end-of-file to the requestor’s process, allowing the requestor to detect this scenario and exit.
+In the first state the requestor’s application has no idea that keepalive probes are taking place (except that it chose to enable keepalives in the first place). Everything is handled at the TCP layer. 
+It is transparent to the application until one of states 2, 3, or 4 is determined. In these three cases, an error is returned to the requestor’s application by its TCP. 
+(Normally the requestor has issued a read from the network, waiting for data from the peer. If the keepalive feature returns an error, it is returned to the requestor as the return value from the read.)
+In scenario 2 the error is something like “Connection timed out,” and in scenario 3 we expect “Connection reset by peer.
+The fourth scenario may look as if the connection timed out, or may cause another error to be returned, depending on whether an ICMP error related to the connection is received and how it is processed. 
+We look at all four scenarios in the next section.
+
+The values of the variables keepalive time, keepalive interval, and keepalive probes can usually be changed. 
+Some systems allow these changes on a per-connection basis, while others allow them to be set only system-wide (or both in some cases). 
+In Linux, these values are available as sysctl variables with the names `net.ipv4.tcp_keepalive_time`, `net.ipv4.tcp_keepalive_intvl`, and `net.ipv4.tcp_keepalive_probes`, respectively. 
+The defaults are 7200 (seconds, or 2 hours), 75 (seconds), and 9 (probes).
+
+
+
+
+
 ## Examples
 
 ### How to optimize TCP
@@ -1434,7 +1442,7 @@ TCP maintains seven timers for each connection. They are briefly described here,
 3. A [delayed ACK timer](/docs/CS/CN/TCP.md?id=delayed-acknowledgments) is set when TCP receives data that must be acknowledged, but need not be acknowledged immediately. 
    Instead, TCP waits up to 200 ms before sending the ACK. If, during this 200-ms time period, TCP has data to send on this connection, the pending acknowledgment is sent along with the data (called piggybacking).
 4. A [persist timer](/docs/CS/CN/TCP.md?id=zero-windows-and-the-tcp-persist-timer) is set when the other end of a connection advertises a window of 0, stopping TCP from sending data. 
-5. A [keepalive timer](/docs/CS/CN/TCP.md) can be set by the process using the SO_KEEPALIVE socket option. 
+5. A [keepalive timer](/docs/CS/CN/TCP.md?id=Keepalive) can be set by the process using the SO_KEEPALIVE socket option. 
 6. A [FIN_WAIT_2 timer](/docs/CS/CN/TCP.md?id=fin_wait_2).
 7. A [TIME_WAIT timer](/docs/CS/CN/TCP.md?id=time_wait), often called the 2MSL timer.
 
