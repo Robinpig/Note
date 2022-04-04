@@ -3,6 +3,16 @@
 DNS is a distributed client/server networked database that is used by TCP/IP applications to map between host names and IP addresses (and vice versa), 
 to provide electronic mail routing information, service naming, and other capabilities.
 
+The DNS is (1) a distributed database implemented in a hierarchy of DNS servers, and (2) an application-layer protocol that allows hosts to query the distributed database. 
+The DNS servers are often UNIX machines running the Berkeley Internet Name Domain (BIND) software [BIND 2016]. 
+The DNS protocol runs over UDP and uses port 53.
+
+
+DNS provides a few other important services in addition to translating hostnames to IP addresses:
+- Host aliasing
+- Mail server aliasing
+- Load distribution
+
 DNS解析流程
 
 1. 询问local DNS server，有缓存IP即自动返回
