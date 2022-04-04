@@ -675,6 +675,9 @@ When data segments or acknowledgments are lost, TCP initiates a retransmission o
 TCP has two separate mechanisms for accomplishing retransmission, one based on time and one based on the structure of the acknowledgments.
 The second approach is usually much more efficient than the first.
 
+Because TCP only acknowledges bytes up to the first missing byte in the stream, TCP is said to provide cumulative acknowledgments.
+
+
 ### Retransmission Timeout
 
 TCP sets a timer when it sends data, and if the data is not acknowledged when the timer expires, a timeout or timer-based retransmission of data occurs. 
@@ -727,18 +730,14 @@ Traditionally, dupthresh has been a constant (with value 3), but some nonstandar
 
 A TCP sender observing at least dupthresh duplicate ACKs retransmits one or more packets that appear to be missing without waiting for a retransmission timer to expire. 
 It may also send additional data that has not yet been sent. This is the essence of the fast retransmit algorithm. 
-Packet loss inferred by the presence of duplicate ACKs is assumed to be related to network congestion, and [congestion control]() procedures are invoked along with fast retransmit. 
+Packet loss inferred by the presence of duplicate ACKs is assumed to be related to network congestion, and [congestion control](/docs/CS/CN/TCP.md?id=Congestion-Control) procedures are invoked along with fast retransmit. 
 Without SACK, no more than one segment is typically retransmitted until an acceptable ACK is received. 
 With SACK, ACKs contain additional information allowing the sender to fill more than one hole in the receiver per RTT. 
 
 
 
 
-
-#### Retransmission with Selective Acknowledgments
-
-
-### Spurious Timeouts and Retransmissions
+### Spurious Timeouts
 
 Under a number of circumstances, TCP may initiate a retransmission even when no data has been lost. 
 Such undesirable retransmissions are called *spurious retransmissions* and are caused by *spurious timeouts* (timeouts firing too early) and other reasons such as packet reordering, packet duplication, or lost ACKs.
@@ -1087,6 +1086,8 @@ In the very worst cases, it is said to be in a state of congestion collapse. To 
 
 TCP congestion control is often referred to as an *additive-increase*, *multiplicative-decrease(AIMD)* form of congestion control.
 
+![TCP congestion control FSM](./images/TCP%20congestion%20control%20FSM.png)
+
 ### Detection of Congestion
 
 In TCP, an assumption is made that a lost packet is an indicator of congestion, and that some response (i.e., slowing down in some way) is required. 
@@ -1171,7 +1172,7 @@ If this assumption is false, which it sometimes is for wireless networks, TCP sl
 In addition, many RTTs may be required for the value of cwnd to grow large, which is required for efficient use of networks with high capacity.
 
 
-### Fast Recovery
+#### Fast Recovery
 
 In fast recovery, the value of cwnd is increased by 1 MSS for every duplicate ACK received for the missing segment that caused TCP to enter the fast-recovery state. 
 Eventually, when an ACK arrives for the missing segment, TCP enters the congestion-avoidance state after deflating cwnd. 
@@ -1179,8 +1180,36 @@ If a timeout event occurs, fast recovery transitions to the slow-start state aft
 The value of cwnd is set to 1 MSS, and the value of ssthresh is set to half the value of cwnd when the loss event occurred.
 
 
+#### CUBIC
 
-### Congestion Control with SACK
+In high-speed networks with large BDPs (e.g., WANs of 1Gb/s or more), conventional TCP may not perform well because its window increase algorithm (the congestion avoidance algorithm, in particular) takes a long time to grow the window large enough to saturate the network path.
+Said another way, TCP can fail to take advantage of fast networks even when no congestion is present. This issue arises primarily from the fixed additive increase behavior of congestion avoidance.
+
+CUBIC has been the default congestion control algorithm for Linux kernels since 2.6.18. Since kernel version 2.6.13, however, Linux supports pluggable congestion avoidance modules [P07], allowing the user to pick which algorithm to use. 
+The variable `net.ipv4.tcp_congestion_control` contains the current default congestion control algorithm (default: cubic). 
+The variable `net.ipv4.tcp_available_congestion_control` contains the congestion control algorithms loaded on the system (in general, additional ones can be loaded as kernel modules). 
+The variable `net.ipv4.tcp_allowed_congestion_control` contains those algorithms permitted for use by applications (either selected specifically or by default). 
+The default supports CUBIC and Reno.
+
+
+
+
+
+### TCP Friendliness
+
+When multiple connections share a common bottleneck, those sessions with a smaller RTT are able to grab the available bandwidth at that link more quickly as it becomes free 
+(that is, open their congestion windows faster) and thus will enjoy higher throughput than those connections with larger RTTs.
+
+While they do not always share bandwidth equally in such circumstances, they do at least react to the dynamics of other TCP connections as they come and go over time. 
+This is not guaranteed to be the case, however, when TCP competes for bandwidth with other (non-TCP) protocols, or when it competes with a TCP using some alternative set of controls on its congestion window.
+
+To provide a guideline for protocol designers to avoid unfairly competing with TCP flows when operating cooperatively on the Internet, 
+researchers have developed an equation-based rate control limit that provides a bound of the bandwidth used by a conventional TCP connection operating in a particular environment. 
+This method is called TCP Friendly Rate Control (TFRC) [RFC5348][FHPW00].
+It is designed to provide a sending rate limit based on a combination of connection parameters and with environmental factors such as RTT and packet drop rate. 
+It also gives a more stable bandwidth utilization profile than conventional TCP, so it is expected to be appropriate for streaming applications that use moderately large packets (e.g., video transfer).
+
+
 
 
 

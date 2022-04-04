@@ -1,9 +1,58 @@
 ## Introduction
 
+> HTTPS = [HTTP](/docs/CS/CN/HTTP.md) + TLS/SSL
 
-`HyperText Transfer Protocol Secure`
+TLS is a client/server protocol, designed to support security for a connection between two applications. 
+The Record protocol provides fragmentation, compression, integrity protection, and encryption for data objects exchanged between clients and servers, 
+and the handshake protocols establish identities, perform authentication, indicate alerts, and provide unique key material for the Record protocol to use on each connection. 
+The handshaking protocols comprise four specific protocols: the Handshake protocol, the Alert protocol, the Change Cipher Spec protocol, and the application data protocol. 
 
-HTTPS = HTTP + TLS/SSL
+The Change Cipher Spec protocol is used to change the current operating parameters. 
+This is accomplished by first using the Handshake protocol to set up a “pending” state, followed by an indication to switch from the current state to the pending state (which then becomes the current state). 
+Such switching is allowed only after the pending state has been readied. 
+TLS depends on five cryptographic operations: digital signing, stream cipher encryption, block cipher encryption, AEAD, and public key encryption. For integrity protection, the TLS record layer uses HMAC. 
+For key generation, TLS 1.2 uses a PRF based on HMAC with SHA-256. TLS also integrates an optional compression algorithm that is negotiated when a connection is first established.
+
+
+### Record Protocol
+
+The Record protocol uses an extensible set of record content type values to identify which message type (i.e., which of the higher-layer protocols) is being multiplexed. 
+At any given point in time, the Record protocol has an active current connection state and another set of state parameters called the pending connection state. 
+Each connection state is further divided into a read state and a write state. 
+Each of these states specifies a compression algorithm, encryption algorithm, and MAC algorithm to be used for communication, along with any necessary keys and parameters. 
+When a key is changed, the pending state is first set up using the Handshake protocol, and then a synchronization operation (usually accomplished using the Cipher Change protocol) sets the current state equal to the pending state. 
+When first initialized, all states are set up with NULL encryption, no compression, and no MAC processing.
+
+
+### Handshaking Protocols
+
+There are three subprotocols to TLS, which perform tasks roughly equivalent to those performed by IKE in IPsec. 
+More specifically, these other protocols are identified by numbers used for multiplexing and demultiplexing by the record layer and are called the Handshake protocol (22), 
+Alert protocol (21), and Cipher Change protocol (20). 
+The Cipher Change protocol is very simple. It consists of one message containing a single byte that has the value 
+1. The purpose of the message is to indicate to the peer a desire to change from the current to the pending state. Receiving such a message moves the read pending state to the current state and causes an indication to the record layer to transition to the pending write state as soon as possible. 
+   This message is used by both client and server.
+
+
+The Alert protocol is used to deliver status information from one end of a TLS connection to another. 
+This can include terminating conditions (either fatal errors or controlled shutdowns) or nonfatal error conditions. 
+As of the publication of [RFC5246], 24 alert messages were defined in standards. More than half of them are always fatal (e.g., bad MACs, missing or unknown messages, algorithm failures).
+
+The Handshake protocol sets up the relevant connection operating parameters. 
+It allows the TLS endpoints to achieve six major objectives: agree on algorithms and exchange random values used in forming symmetric encryption keys, 
+establish algorithm operating parameters, exchange certificates and perform mutual authentication, generate a session-specific secret, 
+provide security parameters to the record layer, and verify that all of these operations have executed properly. 
+
+
+
+### Renegotiation
+
+TLS supports the ability to renegotiate cryptographic connection parameters while maintaining the same connection. This can be initiated by either the server or the client. 
+If the server wishes to renegotiate the connection parameters, it generates a HelloRequest message, and the client responds with a new ClientHell message, which begins the renegotiation procedure. 
+The client is also able to generate such a ClientHello message spontaneously, without prompting from the server.
+
+
+
 
 The primary goal of TLS is to provide a secure channel between two communicating peers; the only requirement from the underlying transport is a reliable, in-order data stream.  
 Specifically, the secure channel should provide the following properties:
@@ -28,9 +77,15 @@ TLS consists of two primary components:
 -  A record protocol that uses the parameters established by the handshake protocol to protect traffic between the communicating peers.  
    The record protocol divides traffic up into a series of records, each of which is independently protected using the traffic keys.
 
+
+
+
+
 TLS is application protocol independent; higher-level protocols can layer on top of TLS transparently.  
 The TLS standard, however, does not specify how protocols add security with TLS; 
 how to initiate TLS handshaking and how to interpret the authentication certificates exchanged are left to the judgment of the designers and implementors of protocols that run on top of TLS.
+
+
 
 
 TLS supports three basic key exchange modes:

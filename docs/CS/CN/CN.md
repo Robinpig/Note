@@ -126,13 +126,13 @@ and passing the segments to the network layer is called multiplexing.
 
 #### Connectionless
 
-It is important to note that a UDP socket is fully identified by a two-tuple consisting of a destination IP address and a destination port number. 
+It is important to note that a [UDP](/docs/CS/CN/UDP.md) socket is fully identified by a two-tuple consisting of a destination IP address and a destination port number. 
 As a consequence, if two UDP segments have different source IP addresses and/or source port numbers, but have the same destination IP address and destination port number, 
 then the two segments will be directed to the same destination process via the same destination socket.
 
 #### Connection-Oriented
 
-The socket pair for a TCP connection is the four-tuple that defines the two endpoints of the connection: the local IP address, local port, foreign IP address, and foreign port.
+The socket pair for a [TCP](/docs/CS/CN/TCP.md) connection is the four-tuple that defines the two endpoints of the connection: the local IP address, local port, foreign IP address, and foreign port.
 A socket pair uniquely identifies every TCP connection on a network.
 For SCTP, an association is identified by a set of local IP addresses, a local port, a set of foreign IP addresses, and a foreign port.
 In its simplest form, where neither endpoint is multihomed, this results in the same four-tuple socket pair used with TCP.
@@ -145,6 +145,22 @@ When we describe the socket functions (bind, connect, getpeername, etc.), we wil
 For example, bind lets the application specify the local IP address and local port for TCP, UDP, and SCTP sockets.
 
 
+
+## Network Layer
+
+The primary role of the network layer is deceptively simple—to move packets from a sending host to a receiving host. To do so, two important network-layer functions can be identified:
+- Forwarding
+- Routing
+
+Forwarding refers to the router-local action of transferring a packet from an input link interface to the appropriate output link interface. 
+Forwarding takes place at very short timescales (typically a few nanoseconds), and thus is typically implemented in hardware. Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination. 
+
+Routing takes place on much longer timescales(typically seconds), and as we will see is often implemented in software.
+The network layer must determine the route or path taken by packets as they flow from a sender to a receiver. The algorithms that calculate these paths are referred to as routing algorithms.
+
+A key element in every network router is its *forwarding table*. 
+A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table. 
+The value stored in the forwarding table entry for those values indicates the outgoing link interface at that router to which that packet is to be forwarded.
 
 
 [I/O Multiplexing](/docs/CS/CN/MultiIO.md)
@@ -159,11 +175,9 @@ For example, bind lets the application specify the local IP address and local po
 
 [ARP: Address Resolution Protocol](/docs/CS/CN/ARP.md)
 
-[Transmission Control Protocol](/docs/CS/CN/TCP.md)
 
 encapsulate
 
-[User Datagram Protocol](/docs/CS/CN/UDP.md)
 
 File Transfer Protocol
 

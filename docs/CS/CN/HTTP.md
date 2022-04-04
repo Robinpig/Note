@@ -9,7 +9,7 @@ such as name servers and distributed object management systems, through extensio
 
 > [!NOTE]
 >
-> See [HTTPS](/docs/CS/CN/HTTPS.md)
+> See [HTTPS](/docs/CS/CN/TLS.md)
 
 1. 明文传输，不检查内容是否被窃听
 2. Stateless
