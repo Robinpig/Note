@@ -1,5 +1,3 @@
-
-
 ## Introduction
 
 操作一块数据要好过一系列单个字节
@@ -16,26 +14,91 @@ Byte read 8 bit for once
 
 Char read 1 char depends on encoding
 
+
 | from/to | byte         | char   |
-| ------- | ------------ | ------ |
+| --------- | -------------- | -------- |
 | Input   | InuputStream | Reader |
 | Output  | OutputStream | Writer |
-
-
 
 TelnetInputStream
 
 only ByteArray or Buffered support mark
 
-
-
 ```java
 void flush()
 ```
 
+## Socket
+
+This class represents a Socket Address with no protocol attachment. As an abstract class, it is meant to be subclassed with a specific, protocol dependent, implementation.
+It provides an immutable object used by sockets for binding, connecting, or as returned values.
+
+```java
+public abstract class SocketAddress implements java.io.Serializable {
+
+    @java.io.Serial
+    static final long serialVersionUID = 5215720748342549866L;
+
+}
+```
 
 
+package `java.net`
 
+This class represents an Internet Protocol (IP) address.
+An IP address is either a 32-bit or 128-bit unsigned number used by IP, a lower-level protocol on which protocols like UDP and TCP are built.
+The IP address architecture is defined by RFC 790: Assigned Numbers, RFC 1918: Address Allocation for Private Internets, RFC 2365: Administratively Scoped IP Multicast, and RFC 2373: IP Version 6 Addressing Architecture.
+
+An instance of an InetAddress consists of an IP address and possibly its corresponding host name (depending on whether it is constructed with a host name or whether it has already done reverse host name resolution).
+
+InetAddress
+
+
+### Address Types
+
+- unicast
+  An identifier for a single interface. A packet sent to a unicast address is delivered to the interface identified by that address.
+  - The Unspecified Address -- Also called anylocal or wildcard address. It must never be assigned to any node. It indicates the absence of an address. One example of its use is as the target of bind, which allows a server to accept a client connection on any interface, in case the server host has multiple interfaces.
+    The unspecified address must not be used as the destination address of an IP packet.
+  - The Loopback Addresses -- This is the address assigned to the loopback interface. Anything sent to this IP address loops around and becomes IP input on the local host. This address is often used when testing a client.
+- multicast
+  An identifier for a set of interfaces (typically belonging to different nodes). A packet sent to a multicast address is delivered to all interfaces identified by that address.
+
+IP address scope
+Link-local addresses are designed to be used for addressing on a single link for purposes such as auto-address configuration, neighbor discovery, or when no routers are present.
+Site-local addresses are designed to be used for addressing inside of a site without the need for a global prefix.
+Global addresses are unique across the internet.
+Textual representation of IP addresses
+The textual representation of an IP address is address family specific.
+For IPv4 address format, please refer to Inet4Address#format; For IPv6 address format, please refer to Inet6Address#format.
+There is a couple of System Properties affecting how IPv4 and IPv6 addresses are used.
+
+Host Name Resolution
+
+Host name-to-IP address resolution is accomplished through the use of a combination of local machine configuration information and network naming services such as the Domain Name System (DNS) and Network Information Service(NIS).
+The particular naming services(s) being used is by default the local machine configured one. For any host name, its corresponding IP address is returned.
+Reverse name resolution means that for any IP address, the host associated with the IP address is returned.
+The InetAddress class provides methods to resolve host names to their IP addresses and vice versa.
+
+InetAddress Caching
+
+The InetAddress class has a cache to store successful as well as unsuccessful host name resolutions.
+
+By default, when a security manager is installed, in order to protect against DNS spoofing attacks, the result of positive host name resolutions are cached forever.
+When a security manager is not installed, the default behavior is to cache entries for a finite (implementation dependent) period of time.
+The result of unsuccessful host name resolution is cached for a very short period of time (10 seconds) to improve performance.
+
+If the default behavior is not desired, then a Java security property can be set to a different Time-to-live (TTL) value for positive caching.
+Likewise, a system admin can configure a different negative caching TTL value when needed.
+
+Two Java security properties control the TTL values used for positive and negative host name resolution caching:
+
+- networkaddress.cache.ttl
+  Indicates the caching policy for successful name lookups from the name service. The value is specified as an integer to indicate the number of seconds to cache the successful lookup.
+  The default setting is to cache for an implementation specific period of time. A value of -1 indicates "cache forever".
+- networkaddress.cache.negative.ttl (default: 10)
+  Indicates the caching policy for un-successful name lookups from the name service. The value is specified as an integer to indicate the number of seconds to cache the failure for un-successful lookups.
+  A value of 0 indicates "never cache". A value of -1 indicates "cache forever".
 
 ## write
 
@@ -72,7 +135,7 @@ writeBytes(JNIEnv *env, jobject this, jbyteArray bytes,
 
     // 复制Java传入的byte数组数据到C空间的buffer中
     (*env)->GetByteArrayRegion(env, bytes, off, len, (jbyte *)buf);
- 	
+ 
      if (!(*env)->ExceptionOccurred(env)) {
         off = 0;
         while (len > 0) {
@@ -120,10 +183,6 @@ JNI_END
 ```
 
 可以看到，传统的BIO，在native层真正写文件前，会在堆外内存（c分配的内存）中对字节数组拷贝一份，之后真正IO时，使用的是堆外的数组。
-
-
-
-
 
 ### NIO
 
@@ -187,8 +246,6 @@ public static ByteBuffer getTemporaryDirectBuffer(int size) {
 }
 ```
 
-
-
 ## NIO
 
 ### Buffer
@@ -196,6 +253,7 @@ public static ByteBuffer getTemporaryDirectBuffer(int size) {
 A container for data of a specific primitive type.
 
 A buffer is a linear, finite sequence of elements of a specific primitive type. Aside from its content, the essential properties of a buffer are its capacity, limit, and position:
+
 - A buffer's capacity is the number of elements it contains. The capacity of a buffer is never negative and never changes.
 - A buffer's limit is the index of the first element that should not be read or written. A buffer's limit is never negative and is never greater than its capacity.
 - A buffer's position is the index of the next element to be read or written. A buffer's position is never negative and is never greater than its limit.
@@ -205,15 +263,13 @@ There is one subclass of this class for each non-boolean primitive type.
 #### Marking and resetting
 
 > The following invariant holds for the mark, position, limit, and capacity values:
-> 
+>
 > 0 <= mark <= position <= limit <= capacity
-
 
 #### Read-only buffers
 
-Every buffer is readable, but not every buffer is writable. The mutation methods of each buffer class are specified as optional operations that will throw a ReadOnlyBufferException when invoked upon a read-only buffer. 
+Every buffer is readable, but not every buffer is writable. The mutation methods of each buffer class are specified as optional operations that will throw a ReadOnlyBufferException when invoked upon a read-only buffer.
 A read-only buffer does not allow its content to be changed, but its mark, position, and limit values are mutable. Whether or not a buffer is read-only may be determined by invoking its isReadOnly method.
-
 
 #### Thread safety
 
@@ -235,50 +291,49 @@ A socket will have a channel if, and only if, the channel itself was created via
 
 A multiplexor of SelectableChannel objects.
 
-A selector may be created by invoking the open method of this class, which will use the system's default selector provider to create a new selector. 
+A selector may be created by invoking the open method of this class, which will use the system's default selector provider to create a new selector.
 A selector may also be created by invoking the openSelector method of a custom selector provider. A selector remains open until it is closed via its close method.
 
-
 A selectable channel's registration with a selector is represented by a SelectionKey object. A selector maintains three sets of selection keys:
+
 - The key set contains the keys representing the current channel registrations of this selector. This set is returned by the keys method.
-- The selected-key set is the set of keys such that each key's channel was detected to be ready for at least one of the operations identified in the key's interest set 
-  during a prior selection operation that adds keys or updates keys in the set. 
+- The selected-key set is the set of keys such that each key's channel was detected to be ready for at least one of the operations identified in the key's interest set
+  during a prior selection operation that adds keys or updates keys in the set.
   This set is returned by the selectedKeys method. The selected-key set is always a subset of the key set.
-- The cancelled-key set is the set of keys that have been cancelled but whose channels have not yet been deregistered. 
+- The cancelled-key set is the set of keys that have been cancelled but whose channels have not yet been deregistered.
   This set is not directly accessible. The cancelled-key set is always a subset of the key set.
 
 All three sets are empty in a newly-created selector.
 
-A key is added to a selector's key set as a side effect of registering a channel via the channel's register method. Cancelled keys are removed from the key set during selection operations. 
+A key is added to a selector's key set as a side effect of registering a channel via the channel's register method. Cancelled keys are removed from the key set during selection operations.
 The key set itself is not directly modifiable.
 
-A key is added to its selector's cancelled-key set when it is cancelled, whether by closing its channel or by invoking its cancel method. 
+A key is added to its selector's cancelled-key set when it is cancelled, whether by closing its channel or by invoking its cancel method.
 Cancelling a key will cause its channel to be deregistered during the next selection operation, at which time the key will be removed from all of the selector's key sets.
 
-Keys are added to the selected-key set by selection operations. A key may be removed directly from the selected-key set by invoking the set's remove method or by invoking the remove method of an iterator obtained from the set. 
+Keys are added to the selected-key set by selection operations. A key may be removed directly from the selected-key set by invoking the set's remove method or by invoking the remove method of an iterator obtained from the set.
 All keys may be removed from the selected-key set by invoking the set's clear method. Keys may not be added directly to the selected-key set.
-
 
 #### Selection
 
 A selection operation queries the underlying operating system for an update as to the readiness of each registered channel to perform any of the operations identified by its key's interest set. There are two forms of selection operation:
+
 - The select(), select(long), and selectNow() methods add the keys of channels ready to perform an operation to the selected-key set, or update the ready-operation set of keys already in the selected-key set.
 - The select(Consumer), select(Consumer, long), and selectNow(Consumer) methods perform an action on the key of each channel that is ready to perform an operation. These methods do not add to the selected-key set.
 
-
 #### Selection operations that add to the selected-key set
+
 During each selection operation, keys may be added to and removed from a selector's selected-key set and may be removed from its key and cancelled-key sets. Selection is performed by the select(), select(long), and selectNow() methods, and involves three steps:
 
 - Each key in the cancelled-key set is removed from each key set of which it is a member, and its channel is deregistered. This step leaves the cancelled-key set empty.
-- The underlying operating system is queried for an update as to the readiness of each remaining channel to perform any of the operations identified by its key's interest set as of the moment that the selection operation began. 
+- The underlying operating system is queried for an update as to the readiness of each remaining channel to perform any of the operations identified by its key's interest set as of the moment that the selection operation began.
   For a channel that is ready for at least one such operation, one of the following two actions is performed:
-  - If the channel's key is not already in the selected-key set then it is added to that set and its ready-operation set is modified to identify exactly those operations for which the channel is now reported to be ready. 
+  - If the channel's key is not already in the selected-key set then it is added to that set and its ready-operation set is modified to identify exactly those operations for which the channel is now reported to be ready.
     Any readiness information previously recorded in the ready set is discarded.
-  - Otherwise the channel's key is already in the selected-key set, so its ready-operation set is modified to identify any new operations for which the channel is reported to be ready. 
+  - Otherwise the channel's key is already in the selected-key set, so its ready-operation set is modified to identify any new operations for which the channel is reported to be ready.
     Any readiness information previously recorded in the ready set is preserved; in other words, the ready set returned by the underlying system is bitwise-disjoined into the key's current ready set.
 - If all of the keys in the key set at the start of this step have empty interest sets then neither the selected-key set nor any of the keys' ready-operation sets will be updated.
 - If any keys were added to the cancelled-key set while step (2) was in progress then they are processed as in step (1).
-
 
 Whether or not a selection operation blocks to wait for one or more channels to become ready, and if so for how long, is the only essential difference between the three selection methods.
 
@@ -288,43 +343,37 @@ During each selection operation, keys may be removed from the selector's key, se
 
 - Each key in the cancelled-key set is removed from each key set of which it is a member, and its channel is deregistered. This step leaves the cancelled-key set empty.
 - The underlying operating system is queried for an update as to the readiness of each remaining channel to perform any of the operations identified by its key's interest set as of the moment that the selection operation began.
-  For a channel that is ready for at least one such operation, the ready-operation set of the channel's key is set to identify exactly the operations for which the channel is ready and the action specified to the select method is invoked to consume the channel's key. 
+  For a channel that is ready for at least one such operation, the ready-operation set of the channel's key is set to identify exactly the operations for which the channel is ready and the action specified to the select method is invoked to consume the channel's key.
   Any readiness information previously recorded in the ready set is discarded prior to invoking the action.
-  Alternatively, where a channel is ready for more than one operation, the action may be invoked more than once with the channel's key and ready-operation set modified to a subset of the operations for which the channel is ready. 
+  Alternatively, where a channel is ready for more than one operation, the action may be invoked more than once with the channel's key and ready-operation set modified to a subset of the operations for which the channel is ready.
   Where the action is invoked more than once for the same key then its ready-operation set never contains operation bits that were contained in the set at previous calls to the action in the same selection operation.
 - If any keys were added to the cancelled-key set while step (2) was in progress then they are processed as in step (1).
-  
+
 #### Concurrency
+
 A Selector and its key set are safe for use by multiple concurrent threads. Its selected-key set and cancelled-key set, however, are not.
 
 The selection operations synchronize on the selector itself, on the selected-key set, in that order. They also synchronize on the cancelled-key set during steps (1) and (3) above.
 
 Changes made to the interest sets of a selector's keys while a selection operation is in progress have no effect upon that operation; they will be seen by the next selection operation.
 
-Keys may be cancelled and channels may be closed at any time. Hence the presence of a key in one or more of a selector's key sets does not imply that the key is valid or that its channel is open. 
+Keys may be cancelled and channels may be closed at any time. Hence the presence of a key in one or more of a selector's key sets does not imply that the key is valid or that its channel is open.
 Application code should be careful to synchronize and check these conditions as necessary if there is any possibility that another thread will cancel a key or close a channel.
 
 A thread blocked in a selection operation may be interrupted by some other thread in one of three ways:
+
 - By invoking the selector's wakeup method,
 - By invoking the selector's close method, or
 - By invoking the blocked thread's interrupt method, in which case its interrupt status will be set and the selector's wakeup method will be invoked.
 
 The close method synchronizes on the selector and its selected-key set in the same order as in a selection operation.
 
-A Selector's key set is safe for use by multiple concurrent threads. 
-Retrieval operations from the key set do not generally block and so may overlap with new registrations that add to the set, or with the cancellation steps of selection operations that remove keys from the set. 
+A Selector's key set is safe for use by multiple concurrent threads.
+Retrieval operations from the key set do not generally block and so may overlap with new registrations that add to the set, or with the cancellation steps of selection operations that remove keys from the set.
 Iterators and spliterators return elements reflecting the state of the set at some point at or since the creation of the iterator/spliterator. They do not throw ConcurrentModificationException.
 
-A selector's selected-key set is not, in general, safe for use by multiple concurrent threads. 
-If such a thread might modify the set directly then access should be controlled by synchronizing on the set itself. 
+A selector's selected-key set is not, in general, safe for use by multiple concurrent threads.
+If such a thread might modify the set directly then access should be controlled by synchronizing on the set itself.
 The iterators returned by the set's iterator methods are fail-fast: If the set is modified after the iterator is created, in any way except by invoking the iterator's own remove method, then a java.util.ConcurrentModificationException will be thrown.
-
-
-
-
-
-
-
-
 
 ## AIO
