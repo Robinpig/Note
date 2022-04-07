@@ -49,6 +49,43 @@ The new process will terminate, usually due to one of the following conditions:
 3. Fatal error (involuntary).
 4. Killed by another process (involuntary).
 
+
+### Process Hierarchies
+
+In UNIX, a process and all of its children and further descendants together form a process group. 
+When a user sends a signal from the keyboard, the signal is delivered to all members of the process group currently associated with the keyboard (usually all active processes that were created in the current window).
+Individually, each process can catch the signal, ignore the signal, or take the default action, which is to be killed by the signal.
+All the processes in the whole system belong to a single tree, with *init* at the root.
+Processes in UNIX cannot disinherit their children.
+
+Windows has no concept of a process hierarchy. All processes are equal.
+The only hint of a process hierarchy is that when a process is created, the parent is given a special token (called a handle) that it can use to control the child.
+However, it is free to pass this token to some other process, thus invalidating the hierarchy. 
+
+
+### Process States
+
+
+we see a state diagram showing the three states a process may be in:
+1. Running (actually using the CPU at that instant).
+2. Ready (runnable; temporarily stopped to let another process run).
+3. Blocked (unable to run until some external event happens).
+
+Logically, the first two states are similar. 
+In both cases the process is willing to run, only in the second one, there is temporarily no CPU available for it. 
+The third state is fundamentally different from the first two in that the process cannot run, even if the CPU is idle and has nothing else to do.
+
+![Process State](./img/Process%20State.png)
+
+Four transitions are possible among these three states, as shown.
+
+- Transition 1 occurs when the operating system discovers that a process cannot continue right now.
+- Transitions 2 and 3 are caused by the process scheduler, a part of the operating system, without the process even knowing about them.
+- Transition 4 occurs when the external event for which a process was waiting(such as the arrival of some input) happens. 
+  If no other process is running at that instant, transition 3 will be triggered and the process will start running. 
+  Otherwise it may have to wait in ready state for a little while until the CPU is available and its turn comes.
+
+
 ## Links
 
 - [Linux Process](/docs/CS/OS/Linux/process.md)
