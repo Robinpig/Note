@@ -141,9 +141,7 @@ The main reason for wishing to calculate a good estimate of the connection’s R
 ## Connection Establishment and Termination
 
 TCP is a unicast *connection-oriented* protocol. Before either end can send data to the other, a connection must be established between them.
-
 A TCP connection is defined to be a 4-tuple consisting of two IP addresses and two port numbers. More precisely, it is a pair of *endpoints* or *sockets* where each endpoint is identified by an (IP address, port number) pair.
-
 A connection typically goes through three phases: setup, data transfer (called established), and teardown (closing).
 
 ![tcp_shakehand](./images/tcp_shake.png)
@@ -249,7 +247,7 @@ With a simultaneous close the same number of segments are exchanged as in the no
 
 ### Connection State
 
-A connection progresses through a series of states during its lifetime.The states are:  LISTEN, SYN-SENT, SYN-RECEIVED, ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, CLOSING, LAST-ACK, TIME-WAIT, 
+A connection progresses through a series of states during its lifetime.The states are:  LISTEN, SYN-SENT, SYN-RECEIVED, ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, CLOSING, LAST-ACK, TIME-WAIT,
 and the fictional state CLOSED.CLOSED is fictional because it represents the state when there is no TCB, and therefore, no connection.Briefly the meanings of the states are:
 
 - LISTEN - represents waiting for a connection request from any remote TCP and port.
@@ -264,24 +262,32 @@ and the fictional state CLOSED.CLOSED is fictional because it represents the sta
 - TIME-WAIT - represents waiting for enough time to pass to be sure the remote TCP received the acknowledgment of its connection termination request.
 - CLOSED - represents no connection state at all.
 
-
-#### TCP State Transition Diagram
-
 ![TCP State Transition Diagram](./images/TCP%20state%20transition%20diagram.png)
 
-Connect：
-client： closed - snd SYN -> SYN-SENT - rcv SYN+ACK and snd ACK -> ESTAB
+#### CLOSE_WAIT
 
-sever： closed - listen -> Listen - rcv SYN - snd SYN+ACK -> SYN_RCV and rcv ACK -> ESTAB
+too much CLOSE_WAIT
+cause:
 
-disconnect：
-ESTAB - snd FIN -> FIN-WAIT-1
+1. forget invoke close/shutdown to send FIN
+2. backlog too large
 
-- rcv ACK -> FIN-WAIT-2 - rcv FIN and snd ACK -> TIME_WAIT
-- rcv FIN and snd ACK -> CLOSING -> rcv ACK -> TIME_WAIT
-- 2MSL -> CLOSED
+#### FIN_WAIT_2
 
-ESTAB - rcv FIN -> CLOSE WAIT - close and snd FIN -> LAST-ACK -> rcv ACK-> CLOSED
+Only when the application performs this close (and its FIN is received) does the active closing TCP move from the FIN_WAIT_2 to the TIME_WAIT state. 
+This means that one end of the connection can remain in this state forever. 
+The other end is still in the CLOSE_WAIT state and can remain there forever, until the application decides to issue its close.
+
+Many implementations prevent this infinite wait in the FIN_WAIT_2 state as follows: 
+If the application that does the active close does a complete close, not a half-close indicating that it expects to receive data, a timer is set. 
+If the connection is idle when the timer expires, TCP moves the connection into the CLOSED state. 
+In Linux, the variable `net.ipv4.tcp_fin_timeout` can be adjusted to control the number of seconds to which the timer is set. Its default value is 60s.
+
+When a connection moves from the FIN_WAIT_1 state to the FIN_WAIT_2 state and the connection cannot receive any more data 
+(implying the process called close, instead of taking advantage of TCP’s half-close with shutdown), this timer is set to 10 minutes.
+When this timer expires it is reset to 75 seconds, and when it expires the second time the connection is dropped. 
+The “purpose of this timer is to avoid leaving a connection in the FIN_WAIT_2 state forever, if the other end never sends a FIN.
+
 
 #### TIME_WAIT
 
@@ -333,29 +339,6 @@ experts.
 
 Default: 2
 
-#### CLOSE_WAIT
-
-too much CLOSE_WAIT
-cause:
-
-1. forget invoke close/shutdown to send FIN
-2. backlog too large
-
-#### FIN_WAIT_2
-
-Only when the application performs this close (and its FIN is received) does the active closing TCP move from the FIN_WAIT_2 to the TIME_WAIT state. 
-This means that one end of the connection can remain in this state forever. 
-The other end is still in the CLOSE_WAIT state and can remain there forever, until the application decides to issue its close.
-
-Many implementations prevent this infinite wait in the FIN_WAIT_2 state as follows: 
-If the application that does the active close does a complete close, not a half-close indicating that it expects to receive data, a timer is set. 
-If the connection is idle when the timer expires, TCP moves the connection into the CLOSED state. 
-In Linux, the variable `net.ipv4.tcp_fin_timeout` can be adjusted to control the number of seconds to which the timer is set. Its default value is 60s.
-
-When a connection moves from the FIN_WAIT_1 state to the FIN_WAIT_2 state and the connection cannot receive any more data 
-(implying the process called close, instead of taking advantage of TCP’s half-close with shutdown), this timer is set to 10 minutes.
-When this timer expires it is reset to 75 seconds, and when it expires the second time the connection is dropped. 
-The “purpose of this timer is to avoid leaving a connection in the FIN_WAIT_2 state forever, if the other end never sends a FIN.
 
 ### Reset Segments
 
