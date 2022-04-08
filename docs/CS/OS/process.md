@@ -399,7 +399,160 @@ This behavior may be achieved by placing a **barrier** at the end of each phase.
 RCU (Read-Copy-Update) decouples the removal and reclamation phases of the update.
 
 
+### IPC Problems
+
+#### The Dining Philosophers Problem
+
+DeadLock
+
+All the programs continue to run indefinitely but fail to make any progress, is called starvation.
+
+
+#### The Readers and Writers Problem
+
+
+
+
+
 ## Scheduling
+
+When a computer is multiprogrammed, it frequently has multiple processes or threads competing for the CPU at the same time. 
+This situation occurs whenever two or more of them are simultaneously in the ready state. 
+If only one CPU is available, a choice has to be made which process to run next. 
+The part of the operating system that makes the choice is called the **scheduler**, and the algorithm it uses is called the **scheduling algorithm**.
+
+Many of the same issues that apply to process scheduling also apply to thread scheduling, although some are different. 
+When the kernel manages threads, scheduling is usually done per thread, with little or no regard to which process the thread belongs.
+
+
+Nearly all processes alternate bursts of computing with (disk or network) I/O requests.
+I/O is when a process enters the blocked state waiting for an external device to complete its work.
+If an I/O-bound process wants to run, it should get a chance quickly so that it can issue its disk request and keep the disk busy.
+
+
+### When to Schedule
+
+A key issue related to scheduling is when to make scheduling decisions.
+It turns out that there are a variety of situations in which scheduling is needed. 
+- First, when a new process is created, a decision needs to be made whether to run the parent process or the child process.
+- Second, a scheduling decision must be made when a process exits.
+- Third, when a process blocks on I/O, on a semaphore, or for some other reason, another process has to be selected to run.
+- Fourth, when an I/O interrupt occurs, a scheduling decision may be made.
+- If a hardware clock provides periodic interrupts at 50 or 60 Hz or some other frequency, a scheduling decision can be made at each clock interrupt or at every kth clock interrupt.
+
+
+### Scheduling Algorithms
+
+What the scheduler should optimize for is not the same in all systems. Three environments worth distinguishing are:
+1. Batch.
+2. Interactive.
+3. Real time.
+
+Consequently, nonpreemptive algorithms, or preemptive algorithms with long time periods for each process, are often acceptable in batch systems.
+
+In an environment with interactive users, preemption is essential to keep one process from hogging the CPU and denying service to the others.
+
+In systems with real-time constraints, preemption is, oddly enough, sometimes not needed because the processes know that they may not run for long periods of time and usually do their work and block quickly.
+The difference with interactive systems is that real-time systems run only programs that are intended to further the application at hand. 
+Interactive systems are general purpose and may run arbitrary programs that are not cooperative and even possibly malicious.
+
+#### Scheduling Algorithm Goals
+
+All systems
+- Fairness - giving each process a fair share of the CPU
+- Policy enforcement - seeing that stated policy is carried out
+- Balance - keeping all parts of the system busy
+
+Batch systems
+- Throughput - maximize jobs per hour
+- Turnaround time - minimize time between submission and termination
+- CPU utilization - keep the CPU busy all the time
+
+Interactive systems
+- Response time - respond to requests quickly
+- Propor tionality - meet users’ expectations
+
+Real-time systems
+- Meeting deadlines - avoid losing data
+- Predictability - avoid quality degradation in multimedia systems
+
+### Scheduling in Batch Systems
+
+Probably the simplest of all scheduling algorithms ever devised is nonpreemptive first-come, first-served.
+
+Shortest job first is a nonpreemptive batch algorithm that assumes the run times are known in advance.
+
+A preemptive version of shortest job first is shortest remaining time next.
+
+### Scheduling in Interactive Systems
+
+One of the oldest, simplest, fairest, and most widely used algorithms is round robin. Each process is assigned a time interval, called its quantum, during which it is allowed to run. 
+If the process is still running at the end of the quantum, the CPU is preempted and given to another process. 
+If the process has blocked or finished before the quantum has elapsed, the CPU switching is done when the process blocks, of course. Round robin is easy to implement. 
+All the scheduler needs to do is maintain a list of runnable processes. 
+When the process uses up its quantum, it is put on the end of the list.
+
+Setting the quantum too short causes too many process switches and lowers the CPU efficiency, but setting it too long may cause poor response to short interactive requests. 
+A quantum around 20–50 msec is often a reasonable compromise.
+
+The basic idea of priority scheduling is straightforward: each process is assigned a priority, and the runnable process with the highest priority is allowed to run.
+
+Schedulers want accepting any input from user processes about scheduling decisions to make the best choice.
+The solution to this problem is to separate the *scheduling mechanism* from the *scheduling policy*.
+What this means is that the scheduling algorithm is parameterized in some way, but the parameters can be filled in by user processes. Let us consider the database example once again. 
+Suppose that the kernel uses a priority-scheduling algorithm but provides a system call by which a process can set (and change) the priorities of its children. 
+In this way, the parent can control how its children are scheduled, even though it itself does not do the scheduling. 
+Here the mechanism is in the kernel but policy is set by a user process. Policy-mechanism separation is a key idea.
+
+
+
+
+#### Multiple Queues
+
+Shortest Process Next
+
+Guaranteed Scheduling
+
+#### Lottery Scheduling
+
+The basic idea is to give processes lottery tickets for various system resources, such as CPU time. 
+Whenever a scheduling decision has to be made, a lottery ticket is chosen at random, and the process holding that ticket gets the resource. 
+When applied to CPU scheduling, the system might hold a lottery 50 times a second, with each winner getting 20 msec of CPU time as a prize.
+
+
+#### Fair-Share Scheduling
+
+
+### Scheduling in Real-Time Systems
+
+Real-time systems are generally categorized as hard real time, meaning there are absolute deadlines that must be met—or else!— and soft real time, meaning that missing an occasional deadline is undesirable, but nevertheless tolerable. 
+In both cases, real-time behavior is achieved by dividing the program into a number of processes, each of whose behavior is predictable and known in advance. 
+These processes are generally short lived and can run to completion in well under a second. 
+When an external event is detected, it is the job of the scheduler to schedule the processes in such a way that all deadlines are met.
+
+The events that a real-time system may have to respond to can be further categorized as periodic (meaning they occur at regular intervals) or aperiodic (meaning they occur unpredictably). 
+A system may have to respond to multiple periodicev ent streams. 
+Depending on how much time each event requires for processing, handling all of them may not even be possible.
+
+
+### Thread Scheduling
+
+Scheduling in such systems differs substantially depending on whether user-level threads or kernel-level threads (or both) are supported.
+
+Let us consider user-level threads first.
+Since the kernel is not aware of the existence of threads, it operates as it always does, picking a process.
+Since there are no clock interrupts to multiprogram threads, this thread may continue running as long as it wants to. If it uses up the process’ entire quantum, the kernel will select another process to run.
+
+A major difference between user-level threads and kernel-level threads is the performance. Doing a thread switch with user-level threads takes a handful of machine instructions. 
+With kernel-level threads it requires a full context switch, changing the memory map and invalidating the cache, which is several orders of magnitude slower. 
+On the other hand, with kernel-level threads, having a thread block on I/O does not suspend the entire process as it does with user-level threads.
+
+
+Another important factor is that user-level threads can employ an application-specific thread scheduler.
+In general, however, application-specific thread schedulers can tune an application better than the kernel can.
+
+
+
 
 
 ## Links
