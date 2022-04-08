@@ -1,14 +1,27 @@
-# Operation System
+## Introduction
 
-
-## About
-
-Operation System is a software above the hardware and  below applications.
 
 OS 
 
 - Kernel
 - Shell
+
+
+## Architecture
+
+- [Processes and Threads](/docs/CS/OS/process.md)
+- [Memory Management](/docs/CS/OS/memory.md)
+- [File Systems](/docs/CS/OS/file.md)
+- [Input/Output](/docs/CS/OS/IO.md)
+- [Security](/docs/CS/OS/Security.md)
+
+
+
+
+
+## Linux
+
+[Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
 
 
 ## Links

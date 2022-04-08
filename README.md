@@ -14,9 +14,7 @@ We describe [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structur
 
 ## Operating System
 
-### Linux
-
-[Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
+[Operating System](/docs/CS/OS/OS.md) is a software above the hardware and  below applications.
 
 ## Network
 
