@@ -108,7 +108,65 @@ Two Java security properties control the TTL values used for positive and negati
   Indicates the caching policy for un-successful name lookups from the name service. The value is specified as an integer to indicate the number of seconds to cache the failure for un-successful lookups.
   A value of 0 indicates "never cache". A value of -1 indicates "cache forever".
 
+
+
+```java
+public class ServerSocket implements java.io.Closeable {
+  public Socket accept() throws IOException {
+    if (isClosed())
+      throw new SocketException("Socket is closed");
+    if (!isBound())
+      throw new SocketException("Socket is not bound yet");
+    Socket s = new Socket((SocketImpl) null);
+    implAccept(s);
+    return s;
+  }
+}
+```
+
+```java
+public abstract class ServerSocketChannel extends AbstractSelectableChannel implements NetworkChannel {
+  
+  private final ReentrantLock acceptLock = new ReentrantLock();
+  
+  public SocketChannel accept() throws IOException {
+    int n = 0;
+    FileDescriptor newfd = new FileDescriptor();
+    InetSocketAddress[] isaa = new InetSocketAddress[1];
+
+    acceptLock.lock();
+    try {
+      boolean blocking = isBlocking();
+      try {
+        begin(blocking);
+        n = Net.accept(this.fd, newfd, isaa);
+        if (blocking) {
+          while (IOStatus.okayToRetry(n) && isOpen()) {
+            park(Net.POLLIN);
+            n = Net.accept(this.fd, newfd, isaa);
+          }
+        }
+      } finally {
+        end(blocking, n > 0);
+        assert IOStatus.check(n);
+      }
+    } finally {
+      acceptLock.unlock();
+    }
+
+    if (n > 0) {
+      return finishAccept(newfd, isaa[0]);
+    } else {
+      return null;
+    }
+  }
+}
+```
+
+
 ## write
+
+Write is blocking
 
 ### BIO
 
@@ -383,5 +441,47 @@ Iterators and spliterators return elements reflecting the state of the set at so
 A selector's selected-key set is not, in general, safe for use by multiple concurrent threads.
 If such a thread might modify the set directly then access should be controlled by synchronizing on the set itself.
 The iterators returned by the set's iterator methods are fail-fast: If the set is modified after the iterator is created, in any way except by invoking the iterator's own remove method, then a java.util.ConcurrentModificationException will be thrown.
+
+
+### select
+
+Selects a set of keys whose corresponding channels are ready for I/O operations.
+
+Both `select()` and `select(timeout)` methods perform a blocking selection operation.
+And return only after at least one channel is selected, this selector's wakeup method is invoked, or the current thread is interrupted, whichever comes first.
+The `select(timeout)` method  also returns after the given timeout period expires.
+This method does not offer real-time guarantees: It schedules the timeout as if by invoking the Object.wait(long) method.
+
+
+The `selectNow()` method performs a non-blocking selection operation.
+If no channels have become selectable since the previous selection operation then this method immediately returns zero.
+Invoking this method clears the effect of any previous invocations of the wakeup method.
+
+```java
+
+public abstract int select() throws IOException;
+
+public abstract int select(long timeout) throws IOException;
+
+public abstract int selectNow() throws IOException;
+```
+
+
+### wakeup
+
+Causes the first selection operation that has not yet returned to return immediately.
+
+If another thread is currently blocked in a selection operation then that invocation will return immediately. 
+If no selection operation is currently in progress then the next invocation of a selection operation will return immediately unless selectNow() or selectNow(Consumer) is invoked in the meantime. 
+In any case the value returned by that invocation may be non-zero. 
+Subsequent selection operations will block as usual unless this method is invoked again in the meantime.
+> [!TIP]
+> 
+> Invoking this method more than once between two successive selection operations has the same effect as invoking it just once.
+
+```java
+public abstract Selector wakeup();
+```
+
 
 ## AIO

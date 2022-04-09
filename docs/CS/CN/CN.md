@@ -74,7 +74,21 @@ Network applications are the raisons exist of a computer network.
 
 
 
-[HTTP](/docs/CS/CN/HTTP.md)、FTP、SMTP、DNS
+[Dynamic Host Configuration Protocol](/docs/CS/CN/DHCP.md)
+
+FTP、SMTP
+
+### HTTP
+
+The [Hypertext Transfer Protocol](/docs/CS/CN/HTTP.md) (HTTP) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
+
+
+### DNS
+
+[DNS](/docs/CS/CN/DNS.md) is a distributed client/server networked database that is used by TCP/IP applications to map between host names and IP addresses (and vice versa),
+to provide electronic mail routing information, service naming, and other capabilities.
+
+### Websocket
 
 [WebSocket](/docs/CS/CN/WebSocket.md)
 
@@ -113,7 +127,7 @@ even when the network layer cannot guarantee the confidentiality of transport-la
 | Flow Control | yes                                                                             | no             |
 | Full-duplex  | yes                                                                             | can be         |
 
-At any given time, multiple processes can be using any given transport: UDP, SCTP, or TCP. 
+At any given time, multiple processes can be using any given transport: [UDP](/docs/CS/CN/UDP.md), SCTP, or [TCP](/docs/CS/CN/TCP.md). 
 All three transport layers use 16-bit integer port numbers to differentiate between these processes.
 
 ### Multiplexing and Demultiplexing
@@ -162,32 +176,20 @@ A key element in every network router is its *forwarding table*.
 A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table. 
 The value stored in the forwarding table entry for those values indicates the outgoing link interface at that router to which that packet is to be forwarded.
 
-
-[I/O Multiplexing](/docs/CS/CN/MultiIO.md)
-
-## Protocol
+### IP
 
 [Internet Protocol(IP)](/docs/CS/CN/IP.md)
 
-[Dynamic Host Configuration Protocol](/docs/CS/CN/DHCP.md)
+[I/O Multiplexing](/docs/CS/CN/MultiIO.md)
+
 
 [Internet Control Message Protocol](/docs/CS/CN/ICMP.md)
+
+## Link Layer
 
 [ARP: Address Resolution Protocol](/docs/CS/CN/ARP.md)
 
 
-encapsulate
-
-
-File Transfer Protocol
-
-Domain Name System
-
-Simple Mail Transfer Protocol
-
-Serial Line Internet Protocol
-
-Point to Point Protocol
 
 ## Tools
 
