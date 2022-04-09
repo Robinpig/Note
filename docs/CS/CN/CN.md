@@ -138,6 +138,8 @@ This job of delivering the data in a transport-layer segment to the correct sock
 The job of gathering data chunks at the source host from different sockets, encapsulating each data chunk with header information (that will later be used in demultiplexing) to create segments, 
 and passing the segments to the network layer is called multiplexing.
 
+### Connection
+
 #### Connectionless
 
 It is important to note that a [UDP](/docs/CS/CN/UDP.md) socket is fully identified by a two-tuple consisting of a destination IP address and a destination port number. 

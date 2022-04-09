@@ -480,7 +480,10 @@ Real-time systems
 
 Probably the simplest of all scheduling algorithms ever devised is nonpreemptive first-come, first-served.
 
+#### Shortest job first
 Shortest job first is a nonpreemptive batch algorithm that assumes the run times are known in advance.
+
+#### Shortest remaining time next
 
 A preemptive version of shortest job first is shortest remaining time next.
 

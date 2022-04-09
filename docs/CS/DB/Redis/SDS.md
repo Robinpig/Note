@@ -715,8 +715,9 @@ void sdsclear(sds s) {
 - **packed** and always append '\0'
 - expand pow of 2 when len < 1M, or else expand 1M util 512M
 - use sdsclear rather than sdsfree
-- encoding int value in ptr
-- encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
+- Encoding
+  - encoding int value in ptr
+  - encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
 
 
 
