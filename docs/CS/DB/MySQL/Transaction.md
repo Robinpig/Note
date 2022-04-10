@@ -277,7 +277,8 @@ The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-inc
 
 ### Deadlocks
 
-A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs. Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
+A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs. 
+Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
 
 #### Minimize and Handle Deadlocks
 
