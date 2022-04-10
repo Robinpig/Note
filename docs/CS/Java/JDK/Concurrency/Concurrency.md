@@ -53,7 +53,7 @@ The use of threads introduces additional liveness risks.
 
 For example, if thread A is waiting for a resource that thread B holds exclusively, and B never releases it, A will wait forever. 
 
-We will describe various forms of [liveness](/docs/CS/Java/JDK/Concurrency/Liveness.md) failures and how to avoid them, including deadlock, starvation, and livelock.
+We will describe various forms of [liveness failures](/docs/CS/OS/Deadlocks.md) and how to avoid them, including deadlock, starvation, and livelock.
 
 
 #### Performance Hazards
