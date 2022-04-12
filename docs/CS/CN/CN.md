@@ -12,6 +12,11 @@ and wireless radio-frequency methods that may be arranged in a variety of networ
 
 > A protocol defines the format and the order of messages exchanged between two or more communicating entities, as well as the actions taken on the transmission and/or receipt of a message or other event
 
+PDU
+
+SDU
+
+
 ### The Network Edge
 
 Furthermore, an increasing number of non-traditional “things” are being attached to the Internet as end systems.
@@ -19,8 +24,38 @@ Furthermore, an increasing number of non-traditional “things” are being atta
 
 ### The Network Core
 
+the network core—the mesh of packet switches and links that interconnects the Internet’s end systems.
 
-### OSI Model
+
+Circuit Switching
+- low delay
+- ordering
+- no conflict
+
+
+Packet Switching
+- connectionless
+- high reliable
+- forward delay
+
+Group Switching
+- connectionless
+- forward delay
+
+
+
+### Performance
+
+Speed
+Bandwidth
+Throughput
+Delay
+RTT
+
+
+### Network Model
+
+#### OSI Model
 
 A common way to describe the layers in a network is to use the International Organization for Standardization (ISO) open systems interconnection (OSI) model for computer communications.
 
@@ -187,9 +222,26 @@ The value stored in the forwarding table entry for those values indicates the ou
 
 [Internet Control Message Protocol](/docs/CS/CN/ICMP.md)
 
-## Link Layer
+## Data Link Layer
 
 [ARP: Address Resolution Protocol](/docs/CS/CN/ARP.md)
+
+## Physical Layer
+
+serial
+parallel
+
+
+Byte
+synchronization
+async
+
+
+### Signal
+
+
+
+### Encoding
 
 
 
