@@ -5,7 +5,6 @@ The computers use common communication protocols over digital interconnections t
 These interconnections are made up of telecommunication network technologies, based on physically wired, optical,
 and wireless radio-frequency methods that may be arranged in a variety of network topologies.
 
-
 ## Computer Networks and the Internet
 
 ### Network Protocols
@@ -16,33 +15,30 @@ PDU
 
 SDU
 
-
 ### The Network Edge
 
 Furthermore, an increasing number of non-traditional “things” are being attached to the Internet as end systems.
-
 
 ### The Network Core
 
 the network core—the mesh of packet switches and links that interconnects the Internet’s end systems.
 
-
 Circuit Switching
+
 - low delay
 - ordering
 - no conflict
 
-
 Packet Switching
+
 - connectionless
 - high reliable
 - forward delay
 
 Group Switching
+
 - connectionless
 - forward delay
-
-
 
 ### Performance
 
@@ -51,7 +47,6 @@ Bandwidth
 Throughput
 Delay
 RTT
-
 
 ### Network Model
 
@@ -79,8 +74,6 @@ Why do sockets provide the interface from the upper three layers of the OSI mode
 
 Therefore, the interface between layers 4 and 5 is the natural place to build the API.
 
-
-
 ### Networks Under Attack
 
 #### Put Malware into Your Host Via the Internet
@@ -88,6 +81,7 @@ Therefore, the interface between layers 4 and 5 is the natural place to build th
 #### Attack Servers and Network Infrastructure
 
 Another broad class of security threats are known as denial-of-service (DoS) attacks.
+
 - Vulnerability attack.
 - Bandwidth flooding.
 - Connection flooding.
@@ -103,11 +97,17 @@ Indeed, the [Wireshark](/docs/CS/CN/Tools/WireShark.md) is a packet sniffer.
 
 The ability to inject packets into the Internet with a false source address is known as IP spoofing, and is but one of many ways in which one user can masquerade as another user.
 
+C/S
+
+P2P
+
+
+
 ## Application Layer
 
 Network applications are the raisons exist of a computer network.
 
-
+### DHCP
 
 [Dynamic Host Configuration Protocol](/docs/CS/CN/DHCP.md)
 
@@ -116,7 +116,6 @@ FTP、SMTP
 ### HTTP
 
 The [Hypertext Transfer Protocol](/docs/CS/CN/HTTP.md) (HTTP) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
-
 
 ### DNS
 
@@ -130,55 +129,55 @@ to provide electronic mail routing information, service naming, and other capabi
 ## Transport Layer
 
 A transport-layer protocol provides for logical communication between application processes running on different hosts.
-By logical communication, we mean that from an application’s perspective, it is as if the hosts running the processes were directly connected; 
+By logical communication, we mean that from an application’s perspective, it is as if the hosts running the processes were directly connected;
 in reality, the hosts may be on opposite sides of the planet, connected via numerous routers and a wide range of link types.
 Application processes use the logical communication provided by the transport layer to send messages to each other, free from the worry of the details of the physical infrastructure used to carry these messages.
 
-Transport-layer protocols are implemented in the end systems but not in network routers. 
-On the sending side, the transport layer converts the application-layer messages it receives from a sending application process into transport-layer packets, known as transport-layer segments in Internet terminology. 
-This is done by (possibly) breaking the application messages into smaller chunks and adding a transport-layer header to each chunk to create the transport-layer segment. 
-The transport layer then passes the segment to the network layer at the sending end system, where the segment is encapsulated within a network-layer packet (a datagram) and sent to the destination. 
-It’s important to note that network routers act only on the network-layer fields of the datagram; that is, they do not examine the fields of the transport-layer segment encapsulated with the datagram. 
-On the receiving side, the network layer extracts the transport-layer segment from the datagram and passes the segment up to the transport layer. 
+Transport-layer protocols are implemented in the end systems but not in network routers.
+On the sending side, the transport layer converts the application-layer messages it receives from a sending application process into transport-layer packets, known as transport-layer segments in Internet terminology.
+This is done by (possibly) breaking the application messages into smaller chunks and adding a transport-layer header to each chunk to create the transport-layer segment.
+The transport layer then passes the segment to the network layer at the sending end system, where the segment is encapsulated within a network-layer packet (a datagram) and sent to the destination.
+It’s important to note that network routers act only on the network-layer fields of the datagram; that is, they do not examine the fields of the transport-layer segment encapsulated with the datagram.
+On the receiving side, the network layer extracts the transport-layer segment from the datagram and passes the segment up to the transport layer.
 The transport layer then processes the received segment, making the data in the segment available to the receiving application.
 
-The services that a transport protocol can provide are often constrained by the service model of the underlying network-layer protocol. 
-If the network-layer protocol cannot provide delay or bandwidth guarantees for transport-layer segments sent between hosts, 
+The services that a transport protocol can provide are often constrained by the service model of the underlying network-layer protocol.
+If the network-layer protocol cannot provide delay or bandwidth guarantees for transport-layer segments sent between hosts,
 then the transport-layer protocol cannot provide delay or bandwidth guarantees for application messages sent between processes.
 
-Nevertheless, certain services can be offered by a transport protocol even when the underlying network protocol doesn’t offer the corresponding service at the network layer. 
-For example, a transport protocol can offer reliable data transfer service to an application even when the underlying network protocol is unreliable, that is, even when the network protocol loses, garbles, or duplicates packets. 
-As another example, a transport protocol can use encryption to guarantee that application messages are not read by intruders, 
+Nevertheless, certain services can be offered by a transport protocol even when the underlying network protocol doesn’t offer the corresponding service at the network layer.
+For example, a transport protocol can offer reliable data transfer service to an application even when the underlying network protocol is unreliable, that is, even when the network protocol loses, garbles, or duplicates packets.
+As another example, a transport protocol can use encryption to guarantee that application messages are not read by intruders,
 even when the network layer cannot guarantee the confidentiality of transport-layer segments.
 
 
+|                    | TCP                                                                             | UDP                          |
+| -------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
+| Connection         | connections                                                                     | connectionless               |
+| Reliability        | acknowledgments, sequence numbers, RTT estimation, timeouts, or retransmissions | no                           |
+| Flow Control       | yes                                                                             | no                           |
+| Congestion Control | yes                                                                             | no                           |
+| Full-duplex        | yes                                                                             | can be                       |
+|                    | one to one                                                                      | one to one / one to multiple |
 
-
-
-|              | TCP                                                                             | UDP            |
-| -------------- | --------------------------------------------------------------------------------- | ---------------- |
-| Connection   | connections                                                                     | connectionless |
-| Reliability  | acknowledgments, sequence numbers, RTT estimation, timeouts, or retransmissions | no             |
-| Flow Control | yes                                                                             | no             |
-| Full-duplex  | yes                                                                             | can be         |
-
-At any given time, multiple processes can be using any given transport: [UDP](/docs/CS/CN/UDP.md), SCTP, or [TCP](/docs/CS/CN/TCP.md). 
+At any given time, multiple processes can be using any given transport: [UDP](/docs/CS/CN/UDP.md), SCTP, or [TCP](/docs/CS/CN/TCP.md).
 All three transport layers use 16-bit integer port numbers to differentiate between these processes.
 
 ### Multiplexing and Demultiplexing
 
-Now let’s consider how a receiving host directs an incoming transport-layer segment to the appropriate socket. 
-Each transport-layer segment has a set of fields in the segment for this purpose. At the receiving end, the transport layer examines these fields to identify the receiving socket and then directs the segment to that socket. 
-This job of delivering the data in a transport-layer segment to the correct socket is called demultiplexing. 
-The job of gathering data chunks at the source host from different sockets, encapsulating each data chunk with header information (that will later be used in demultiplexing) to create segments, 
-and passing the segments to the network layer is called multiplexing.
+Now let’s consider how a receiving host directs an incoming transport-layer segment to the appropriate socket.
+Each transport-layer segment has a set of fields in the segment for this purpose.
+At the receiving end, the transport layer examines these fields to identify the receiving socket and then directs the segment to that socket.
+This job of delivering the data in a transport-layer segment to the correct socket is called *demultiplexing*.
+The job of gathering data chunks at the source host from different sockets, encapsulating each data chunk with header information (that will later be used in demultiplexing) to create segments,
+and passing the segments to the network layer is called *multiplexing*.
 
 ### Connection
 
 #### Connectionless
 
-It is important to note that a [UDP](/docs/CS/CN/UDP.md) socket is fully identified by a two-tuple consisting of a destination IP address and a destination port number. 
-As a consequence, if two UDP segments have different source IP addresses and/or source port numbers, but have the same destination IP address and destination port number, 
+It is important to note that a [UDP](/docs/CS/CN/UDP.md) socket is fully identified by a two-tuple consisting of a destination IP address and a destination port number.
+As a consequence, if two UDP segments have different source IP addresses and/or source port numbers, but have the same destination IP address and destination port number,
 then the two segments will be directed to the same destination process via the same destination socket.
 
 #### Connection-Oriented
@@ -195,22 +194,21 @@ We can extend the concept of a socket pair to UDP, even though UDP is connection
 When we describe the socket functions (bind, connect, getpeername, etc.), we will note which functions specify which values in the socket pair.
 For example, bind lets the application specify the local IP address and local port for TCP, UDP, and SCTP sockets.
 
-
-
 ## Network Layer
 
 The primary role of the network layer is deceptively simple—to move packets from a sending host to a receiving host. To do so, two important network-layer functions can be identified:
+
 - Forwarding
 - Routing
 
-Forwarding refers to the router-local action of transferring a packet from an input link interface to the appropriate output link interface. 
-Forwarding takes place at very short timescales (typically a few nanoseconds), and thus is typically implemented in hardware. Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination. 
+Forwarding refers to the router-local action of transferring a packet from an input link interface to the appropriate output link interface.
+Forwarding takes place at very short timescales (typically a few nanoseconds), and thus is typically implemented in hardware. Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination.
 
 Routing takes place on much longer timescales(typically seconds), and as we will see is often implemented in software.
 The network layer must determine the route or path taken by packets as they flow from a sender to a receiver. The algorithms that calculate these paths are referred to as routing algorithms.
 
-A key element in every network router is its *forwarding table*. 
-A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table. 
+A key element in every network router is its *forwarding table*.
+A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table.
 The value stored in the forwarding table entry for those values indicates the outgoing link interface at that router to which that packet is to be forwarded.
 
 ### IP
@@ -219,10 +217,17 @@ The value stored in the forwarding table entry for those values indicates the ou
 
 [I/O Multiplexing](/docs/CS/CN/MultiIO.md)
 
-
 [Internet Control Message Protocol](/docs/CS/CN/ICMP.md)
 
 ## Data Link Layer
+
+frames
+
+ESC
+
+### Check
+
+Cyclic Redundancy Check
 
 [ARP: Address Resolution Protocol](/docs/CS/CN/ARP.md)
 
@@ -231,19 +236,13 @@ The value stored in the forwarding table entry for those values indicates the ou
 serial
 parallel
 
-
 Byte
 synchronization
 async
 
-
 ### Signal
 
-
-
 ### Encoding
-
-
 
 ## Tools
 

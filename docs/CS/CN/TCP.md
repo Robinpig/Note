@@ -1067,7 +1067,9 @@ The router is said to be congested when it is in this state, and even a single c
 Left unaddressed, congestion can cause the performance of a network to be reduced so badly that it becomes unusable. 
 In the very worst cases, it is said to be in a state of congestion collapse. To either avoid or at least react effectively to mitigate this situation, each TCP implements congestion control procedures.
 
-TCP congestion control is often referred to as an *additive-increase*, *multiplicative-decrease(AIMD)* form of congestion control.
+> [!TIP]
+> 
+> TCP congestion control is often referred to as an ***additive-increase***, ***multiplicative-decrease(AIMD)*** form of congestion control.
 
 ![TCP congestion control FSM](./images/TCP%20congestion%20control%20FSM.png)
 
