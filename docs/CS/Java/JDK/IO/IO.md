@@ -125,67 +125,13 @@ JNI_END
 
 
 
-### NIO
 
 In `IOUtil.write()`
 
 1. `if (src instanceof DirectBuffer)`, `writeFromNativeBuffer`
 2. Else  copy to directBuffer from `getTemporaryDirectBuffer`
+then `writeFromNativeBuffer`
 
-```java
-static int write(FileDescriptor fd, ByteBuffer src, long position,
-                 NativeDispatcher nd)
-    throws IOException
-{
-    if (src instanceof DirectBuffer)
-        return writeFromNativeBuffer(fd, src, position, nd);
-
-    // Substitute a native buffer
-    int pos = src.position();
-    int lim = src.limit();
-    assert (pos <= lim);
-    int rem = (pos <= lim ? lim - pos : 0);
-  //not DirectBuffer will 
-    ByteBuffer bb = Util.getTemporaryDirectBuffer(rem);
-    try {
-        bb.put(src);
-        bb.flip();
-        // Do not update src until we see how many bytes were written
-        src.position(pos);
-
-        int n = writeFromNativeBuffer(fd, bb, position, nd);
-        if (n > 0) {
-            // now update src
-            src.position(pos + n);
-        }
-        return n;
-    } finally {
-        Util.offerFirstTemporaryDirectBuffer(bb);
-    }
-}
-
-public static ByteBuffer getTemporaryDirectBuffer(int size) {
-    if (isBufferTooLarge(size)) {
-        return ByteBuffer.allocateDirect(size);
-    }
-
-    BufferCache cache = bufferCache.get();
-    ByteBuffer buf = cache.get(size);
-    if (buf != null) {
-        return buf;
-    } else {
-        // No suitable buffer in the cache so we need to allocate a new
-        // one. To avoid the cache growing then we remove the first
-        // buffer from the cache and free it.
-        if (!cache.isEmpty()) {
-            buf = cache.removeFirst();
-            free(buf);
-        }
-      //Releases a temporary buffer by returning to the cache or freeing it.
-        return ByteBuffer.allocateDirect(size);
-    }
-}
-```
 
 
 
