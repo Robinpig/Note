@@ -1,8 +1,48 @@
-# DHCP
+## Introduction
 
 
-DHCP
-Dynamic Host Configuration Protocol
+*Dynamic Host Configuration Protocol*
+
+
+DHCP comprises two major parts: address management and delivery of configuration data. 
+Address management handles the dynamic allocation of IP addresses and provides address leases to clients. 
+Configuration data delivery includes the DHCP protocol’s message formats and state machines. 
+A DHCP server can be configured to provide three levels of address allocation: automatic allocation, dynamic allocation, and manual allocation. 
+The differences among the three have to do with whether the addresses assigned are based on the identity of the client and whether such addresses are subject to being revoked or changed. 
+The most commonly used method is dynamic allocation, whereby a client is given a revocable IP address from a pool (usually a predefined range) of addresses configured at the server. 
+In automatic allocation, the same method is used but the address is never revoked. 
+In manual allocation, the DHCP protocol is used to convey the address, but the address is fixed for the requesting client (i.e., it is not part of an allocatable pool maintained by the server). 
+In this last mode, DHCP acts like BOOTP. We shall focus on dynamic allocation, as it is the most interesting and common case.
+
+
+
+## Address Pools and Leases
+
+In dynamic allocation, a DHCP client requests the allocation of an IP address. 
+The server responds with one address selected from a pool of available addresses. 
+Typically, the pool is a contiguous range of IP addresses allocated specifically for DHCP’s use. 
+The address given to the client is allocated for only a specific amount of time, called the lease duration. 
+The client is permitted to use the IP address until the lease expires, although it may request extension of the lease as required. 
+In most situations, clients are able to renew leases they wish to extend.
+
+The lease duration is an important configuration parameter of a DHCP server. 
+Lease durations can range from a few minutes to days or more (“infinite” is possible but not recommended for anything but simple networks).
+Determining the best value to use for leases is a trade-off between the number of expected clients, the size of the address pool, and the desire for the stability of addresses. 
+Longer lease durations tend to deplete the available address pool faster but provide greater stability in addresses and somewhat reduced network overhead (because there are fewer requests to renew leases). 
+Shorter leases tend to keep the pool available for other clients, with a consequent potential decrease in stability and increase in network traffic load. 
+Common defaults include 12 to 24 hours, depending on the particular DHCP server being used.
+Clients begin trying to renew leases after half of the lease duration has passed.
+
+When making a DHCP request, a client is able to provide information to the server. 
+This information can include the name of the client, its requested lease duration, a copy of the address it is already using or last used, and other parameters. 
+When the server receives such a request, it can make use of whatever information the client has provided (including the requesting MAC address) 
+in addition to other exogenous information (e.g., the time of day, the interface on which the request was received) to determine what address and configuration information to provide in response. 
+**In providing a lease to a client, a server stores the lease information in persistent memory, typically in nonvolatile memory or on disk.** 
+If the DHCP server restarts and all goes well, leases are maintained intact.
+
+
+
+
 
 Subnet
 
@@ -38,3 +78,8 @@ DHCP DECLINE
 
 
 DHCP中继代理
+
+
+## Links
+
+- [Computer Network](/docs/CS/CN/CN.md)

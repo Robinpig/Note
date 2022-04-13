@@ -11,6 +11,8 @@ call  `Configuration::addInterceptor()` when:
 1. `org.mybatis.spring.SqlSessionFactoryBean::buildSqlSessionFactory()`
 2. `org.apache.ibatis.builder.xml.XMLConfigBuilder::parseConfiguration()`
 
+### InterceptorChain
+
 ```java
 // Configuration
 protected final InterceptorChain interceptorChain = new InterceptorChain();
@@ -365,3 +367,9 @@ public class PageInterceptor implements Interceptor {
    1. Pagehelper
    2. Shard
    3. Generate distributed unique key
+
+
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)

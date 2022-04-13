@@ -434,12 +434,9 @@ out:
 
 ip_autobind_reuse - BOOLEAN
 
-By default, bind() does not select the ports automatically even if
-the new socket and all sockets bound to the port have SO_REUSEADDR.
-ip_autobind_reuse allows bind() to reuse the port and this is useful
-when you use bind()+connect(), but may break some applications.
-The preferred solution is to use IP_BIND_ADDRESS_NO_PORT and this
-option should only be set by experts.
+By default, bind() does not select the ports automatically even if the new socket and all sockets bound to the port have SO_REUSEADDR.
+ip_autobind_reuse allows bind() to reuse the port and this is useful when you use bind()+connect(), but may break some applications.
+The preferred solution is to use IP_BIND_ADDRESS_NO_PORT and this option should only be set by experts.
 
 Default: 0
 
@@ -1379,7 +1376,24 @@ out_err:
 
 ## connect
 
-
+```
+connect()  // connect to 127.0.0.1:1234
+  -> syscall -> connect
+    -> soconnect(struct socket *so, struct mbuf *nam)
+      so->so_proto->pr_usrreq(so, PRU_CONNECT, NULL, nam, NULL) -> tcp_usrreq(so, PRU_CONNECT, ...)
+        if (inp->inp_lport == 0) in_pcbbind(inp, NULL)  // common unless bind() already
+        -> in_pcbconnect(inp, nam)
+          -> rtalloc
+        tp->t_template = tcp_template(tp)
+        soisconnecting(so)
+        tp->t_state = TCPS_SYN_SENT;
+        -> tcp_sendseqinit(tp)
+        -> tcp_output(tp)  // send SYN
+          -> in_cksum()
+          -> ip_output()
+            -> in_cksum()
+            -> ifp->if_output() -> looutput()
+```
 
 
 
@@ -2189,6 +2203,9 @@ struct pollfd {
 
 
 
+## Links
+
+- [I/O Multiplexing](/docs/CS/CN/MultiIO.md)
 
 ## References
 

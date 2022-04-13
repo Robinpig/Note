@@ -126,6 +126,11 @@ innodb_adaptive_flushing	ON
 innodb_adaptive_flushing_lwm	10.000000
 ```
 
+innodb_flush_neighbors default 0 only itself
+
+better for HHD
+worse for SSD
+
 ### Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
 
 A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages. The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extend). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
@@ -154,25 +159,29 @@ Support for 32KB and 64KB `InnoDB` page sizes was added in MySQL 5.7.6. For a 32
 
 ## Change Buffer
 
-**The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes) pages when those pages are not in the `buffer pool`**. The buffered changes, which may result from INSERT, UPDATE, or DELETE operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
+The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes) pages when those pages are not in the **buffer pool**.
+The buffered changes, which may result from `INSERT`, `UPDATE`, or `DELETE` operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
 
 The change buffer only supports `secondary indexes`. Clustered indexes, full-text indexes, and spatial indexes are not supported. Full-text indexes have their own caching mechanism.
-
-**Change Buffer**
+Change buffering is not supported for a secondary index if the index contains a descending index column or if the primary key includes a descending index column.
 
 ![Content is described in the surrounding text.](https://dev.mysql.com/doc/refman/8.0/en/images/innodb-change-buffer.png)
 
-Unlike [clustered indexes](/docs/CS/DB/MySQL/Index.md?id=Clustered_and_Secondary_Indexes), secondary indexes are usually nonunique, and inserts into secondary indexes happen in a relatively random order. Similarly, deletes and updates may affect secondary index pages that are not adjacently located in an index tree. Merging cached changes at a later time, when affected pages are read into the buffer pool by other operations, avoids substantial random access I/O that would be required to read secondary index pages into the buffer pool from disk.
+Unlike [clustered indexes](/docs/CS/DB/MySQL/Index.md?id=Clustered_and_Secondary_Indexes), secondary indexes are usually nonunique, and inserts into secondary indexes happen in a relatively random order.
+Similarly, deletes and updates may affect secondary index pages that are not adjacently located in an index tree.
+Merging cached changes at a later time, when affected pages are read into the buffer pool by other operations,
+avoids substantial random access I/O that would be required to read secondary index pages into the buffer pool from disk.
 
-Periodically, the purge operation that runs when the system is mostly idle, or during a slow shutdown, writes the updated index pages to disk. The purge operation can write disk blocks for a series of index values more efficiently than if each value were written to disk immediately.
+Periodically, the purge operation that runs when the system is mostly idle, or during a slow shutdown, writes the updated index pages to disk.
+The purge operation can write disk blocks for a series of index values more efficiently than if each value were written to disk immediately.
 
-Change buffer merging may take several hours when there are many affected rows and numerous secondary indexes to update. During this time, disk I/O is increased, which can cause a significant slowdown for disk-bound queries. Change buffer merging may also continue to occur after a transaction is committed, and even after a server shutdown and restart.
+Change buffer merging may take several hours when there are many affected rows and numerous secondary indexes to update.
+During this time, disk I/O is increased, which can cause a significant slowdown for disk-bound queries.
+Change buffer merging may also continue to occur after a transaction is committed, and even after a server shutdown and restart.
 
-In memory, the change buffer occupies part of the buffer pool. On disk, the change buffer is part of the system tablespace, where index changes are buffered when the database server is shut down.
-
+In memory, the change buffer occupies part of the buffer pool.
+On disk, the change buffer is part of the system tablespace, where index changes are buffered when the database server is shut down.
 The type of data cached in the change buffer is governed by the `innodb_change_buffering` variable.
-
-Change buffering is not supported for a secondary index if the index contains a descending index column or if the primary key includes a descending index column.
 
 ### insert buffer
 
@@ -195,7 +204,7 @@ uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
 
 ```
 
-How much space does InnoDB use for the change buffer?
+### How much space does InnoDB use for the change buffer?
 
 Prior to the introduction of the innodb_change_buffer_max_size configuration option in MySQL 5.6, the maximum size of the on-disk change buffer in the system tablespace was 1/3 of the InnoDB buffer pool size.
 
@@ -225,8 +234,10 @@ seg size: The size of the change buffer, in pages.
 When does change buffer merging occur?
 
 - When a page is read into the buffer pool, buffered changes are merged upon completion of the read, before the page is made available.
-- Change buffer merging is performed as a background task. The innodb_io_capacity parameter sets an upper limit on the I/O activity performed by InnoDB background tasks such as merging data from the change buffer.
-- A change buffer merge is performed during crash recovery. Changes are applied from the change buffer (in the system tablespace) to leaf pages of secondary indexes as index pages are read into the buffer pool.
+- Change buffer merging is performed as a background task. 
+  The `innodb_io_capacity` parameter sets an upper limit on the I/O activity performed by InnoDB background tasks such as merging data from the change buffer.
+- A change buffer merge is performed during crash recovery. 
+  Changes are applied from the change buffer (in the system tablespace) to leaf pages of secondary indexes as index pages are read into the buffer pool.
 - The change buffer is fully durable and can survive a system crash. Upon restart, change buffer merge operations resume as part of normal operations.
 - A full merge of the change buffer can be forced as part of a slow server shutdown using --innodb-fast-shutdown=0.
 
@@ -297,7 +308,6 @@ Structure
 
 next_record a single linked list from infimum to superemum
 
-
 #### Page Directory
 
 start 2 slots, number in `n_owned`, slot number is the biggest one of all records
@@ -313,13 +323,11 @@ Find Record:
 1. 通过二分法确定该记录所在的槽，并找到该槽中主键值最小的那条记录。
 2. Iterate records in slot by `next_record`
 
-
 #### Page Header
 
 slots numner
 
 offset
-
 
 #### File Header
 
@@ -332,26 +340,16 @@ offset
 - flush lsn(only for system tablespace)
 - belong tablespace
 
-
 #### File Trailer
 
 - checksum
 - LSN
 
-
 spilt page will new two pages first, then the old page will be directory page
-
-
 
 ### Tablespace
 
-
-
 const > ref > ref_or_null > range > index > all
-
-
-
-
 
 ## Links
 

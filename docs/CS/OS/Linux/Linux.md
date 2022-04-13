@@ -5,7 +5,8 @@
 
 - [Init](/docs/CS/OS/Linux/init.md)
 
-## process
+## Processes
+
 - [process](/docs/CS/OS/Linux/process.md)
 - [schedule](/docs/CS/OS/Linux/sche.md)
 - [thundering herd](/docs/CS/OS/Linux/thundering_herd.md)
@@ -32,3 +33,9 @@
 - [IP](/docs/CS/OS/Linux/IP.md)
 - [TCP](/docs/CS/OS/Linux/TCP.md)
 - [UDP](/docs/CS/OS/Linux/UDP.md)
+
+
+
+## Links
+
+- [Operating Systems](/docs/CS/OS/OS.md)

@@ -238,5 +238,9 @@ private void setValue(MetaObject metaParam, String property, Object value) {
 | processAfter  | call processGeneratedKeys only once(when order first) | assignKeys from ResultSet |
 | Executor      | two executors                                         | One executor              |
 
-all of them set value using [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
+All of them set value using [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
 
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)

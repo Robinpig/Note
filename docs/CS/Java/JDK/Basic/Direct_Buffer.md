@@ -133,7 +133,9 @@ DirectByteBuffer(int cap) {                   // package-private
 
 
 
-### Cleaner
+## Cleaner
+
+Direct buffers are indirectly freed by the Garbage Collector.
 
 When [ReferenceHandler](/docs/CS/Java/JDK/Basic/Ref.md?id=referencehandler) get the `PhantomReference`(`Cleaner`) of `DirectByteBuffer` instance, invoke` Cleaner.clean()` -> `unsafe.freeMemory()`
 

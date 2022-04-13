@@ -6,9 +6,22 @@ Redis provides data structures such as **strings, hashes, lists, sets, sorted se
 
 Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
-- [How fast is Redis?](https://redis.io/topics/benchmarks)
+
+
+## [How fast is Redis?](https://redis.io/topics/benchmarks)
+
+24bits
+
+- 8bits logistic counter log
+- 16bits last decrement time minutes
+
+
 - [db](/docs/CS/DB/Redis/redisDb.md)
 - [IO](/docs/CS/DB/Redis/ae.md)
+
+BigKey
+
+
 
 ## Install
 
@@ -201,14 +214,7 @@ LFU
 
 
 
-### How fast is Redis?
 
-
-
-24bits
-
-- 8bits logistic counter log
-- 16bits last decrement time minutes
 
 ## THP
 Transparent Huge Pages（THP）

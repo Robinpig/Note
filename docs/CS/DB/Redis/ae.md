@@ -62,7 +62,7 @@ typedef struct aeEventLoop
 
 ```
 
-### multi IO
+## Multiple IO
 
 Redis is mostly single threaded, however there are certain threaded operations such as UNLINK, slow I/O accesses and other things that are performed on side threads.
 
@@ -107,7 +107,7 @@ typedef struct aeFileEvent {
 
 
 
-### Summary
+### Summaries of Events
 
 
 

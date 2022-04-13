@@ -1,8 +1,9 @@
-# C++
+## Introduction
 
-静态类型，编译时执行类型检查。
 
-## 数据类型
+C++ blends the C language with support for object-oriented programming and for generic programming.
+
+## Type
 
 ### 基本的内置类型
 
@@ -54,9 +55,8 @@ enum 枚举名{
 
 默认 变量值为第一个，值为0。
 
-## 变量
 
-## 常量
+### Constant
 
  常量是固定值，在程序执行期间不会改变。这些固定的值，又叫做**字面量**。 
 
@@ -66,7 +66,7 @@ enum 枚举名{
 const type variable = value;
 ```
 
-## 修饰符类型
+### 修饰符类型
 
 C++ 允许在 **char、int 和 double** 数据类型前放置修饰符。修饰符用于改变基本类型的含义，所以它更能满足各种情境的需求。
 
@@ -83,7 +83,7 @@ C++ 允许在 **char、int 和 double** 数据类型前放置修饰符。修饰�
 
 C++ 允许使用速记符号来声明**无符号短整数**或**无符号长整数**。您可以不写 int，只写单词 **unsigned、short** 或 **unsigned、long**，int 是隐含的。例如，下面的两个语句都声明了无符号整型变量。
 
-## 类型限定符
+### 类型限定符
 
 类型限定符提供了变量的额外信息。
 
@@ -93,13 +93,17 @@ C++ 允许使用速记符号来声明**无符号短整数**或**无符号长整�
 | volatile | 修饰符 **volatile** 告诉编译器不需要优化volatile声明的变量，让程序可以直接从内存中读取变量。对于一般的变量编译器会对变量进行优化，将内存中的变量值放在寄存器中以加快读写效率。 |
 | restrict | 由 **restrict** 修饰的指针是唯一一种访问它所指向的对象的方式。只有 C99 增加了新的类型限定符 restrict。 |
 
-## 函数
 
-## 数字
 
-## 数组
+## Concurrency
 
-## 字符串
+[Concurrency](/docs/CS/C++/Concurrency.md)
 
-## 指针
 
+## Links
+
+- [C](/docs/CS/C/C.md)
+- [Java JDK](/docs/CS/Java/JDK/JDK.md)
+
+
+## References

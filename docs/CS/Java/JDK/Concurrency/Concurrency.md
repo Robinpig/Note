@@ -53,7 +53,7 @@ The use of threads introduces additional liveness risks.
 
 For example, if thread A is waiting for a resource that thread B holds exclusively, and B never releases it, A will wait forever. 
 
-We will describe various forms of [liveness](/docs/CS/Java/JDK/Concurrency/Liveness.md) failures and how to avoid them, including deadlock, starvation, and livelock.
+We will describe various forms of [liveness failures](/docs/CS/OS/Deadlocks.md) and how to avoid them, including deadlock, starvation, and livelock.
 
 
 #### Performance Hazards
@@ -110,6 +110,9 @@ If multiple threads access the same mutable state variable without appropriate s
 
 ##### Race Condition
 
+In concurrency, a race condition is anything where the outcome depends on the relative ordering of execution of operations on two or more threads; the threads race to perform their respective operations.
+
+data race to mean the specific type of race condition that arises because of concurrent modification to a single object.
 
 We refer collectively to `check-then-act` and `read-modify-write` sequences as compound actions: 
 sequences of operations that must be executed atomically in order to remain thread-safe.
@@ -480,7 +483,7 @@ If a thread holding a lock is permanently blocked (due to an infinite loop, dead
 
 ## Links
 - [JDK](/docs/CS/Java/JDK/JDK.md)
-
+- [C++ Concurrency](/docs/CS/C++/Concurrency.md)
 
 ## References
 1. [Java Concurrency in Practice](https://jcip.net/)

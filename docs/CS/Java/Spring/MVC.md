@@ -640,3 +640,23 @@ see [FilterChain.doFilter() in Tomcat](/docs/CS/Java/Tomcat/Connector.md?id=doFi
 ## Extension
 1. must declare @PathVariable @RequestParam or @RequestBody
 2. Nested Validation need to add `@Valid` at field
+
+
+
+Init DispatchServlet when startup
+
+```yml
+spring:
+  mvc:
+    servlet:
+      load-on-startup: 1
+```
+
+Other servlet
+
+```yml
+spring:
+  webservices:
+    servlet:
+      load-on-startup: 1
+```

@@ -6,35 +6,39 @@
 
 ![](./images/Timer.png)
 
-- A [`Timer`](https://netty.io/4.1/api/io/netty/util/Timer.html) optimized for approximated I/O timeout scheduling.
+A `Timer`optimized for approximated I/O timeout scheduling.
 
-  ### Tick Duration
+### Tick Duration
 
-  As described with 'approximated', this timer does not execute the scheduled [`TimerTask`](https://netty.io/4.1/api/io/netty/util/TimerTask.html) on time. [`HashedWheelTimer`](https://netty.io/4.1/api/io/netty/util/HashedWheelTimer.html), on every tick, will check if there are any [`TimerTask`](https://netty.io/4.1/api/io/netty/util/TimerTask.html)s behind the schedule and execute them.
+As described with 'approximated', this timer does not execute the scheduled `TimerTask` on time. 
+`HashedWheelTimer`, on every tick, will check if there are any `TimerTask`s behind the schedule and execute them.
 
-  You can increase or decrease the accuracy of the execution timing by specifying smaller or larger tick duration in the constructor. In most network applications, I/O timeout does not need to be accurate. Therefore, the default tick duration is 100 milliseconds and you will not need to try different configurations in most cases.
+You can increase or decrease the accuracy of the execution timing by specifying smaller or larger tick duration in the constructor. 
+In most network applications, I/O timeout does not need to be accurate. 
+Therefore, the default tick duration is 100 milliseconds and you will not need to try different configurations in most cases.
 
-  ### Ticks per Wheel (Wheel Size)
+### Ticks per Wheel (Wheel Size)
 
-  [`HashedWheelTimer`](https://netty.io/4.1/api/io/netty/util/HashedWheelTimer.html) maintains a data structure called 'wheel'. To put simply, a wheel is a hash table of [`TimerTask`](https://netty.io/4.1/api/io/netty/util/TimerTask.html)s whose hash function is 'dead line of the task'. The default number of ticks per wheel (i.e. the size of the wheel) is 512. You could specify a larger value if you are going to schedule a lot of timeouts.
+`HashedWheelTimer` maintains a data structure called 'wheel'. 
+To put simply, a wheel is a hash table of TimerTasks whose hash function is 'dead line of the task'. 
+The default number of ticks per wheel (i.e. the size of the wheel) is 512. You could specify a larger value if you are going to schedule a lot of timeouts.
 
-  ### Do not create many instances.
+### Do not create many instances.
 
-  [`HashedWheelTimer`](https://netty.io/4.1/api/io/netty/util/HashedWheelTimer.html) creates a new thread whenever it is instantiated and started. Therefore, you should make sure to create only one instance and share it across your application. One of the common mistakes, that makes your application unresponsive, is to create a new instance for every connection.
+`HashedWheelTimer` creates a new thread whenever it is instantiated and started. 
+Therefore, you should make sure to create only one instance and share it across your application. 
+One of the common mistakes, that makes your application unresponsive, is to create a new instance for every connection.
 
-  ### Implementation Details
+### Implementation Details
 
-  [`HashedWheelTimer`](https://netty.io/4.1/api/io/netty/util/HashedWheelTimer.html) is based on [George Varghese](https://cseweb.ucsd.edu/users/varghese/) and Tony Lauck's paper, ['Hashed and Hierarchical Timing Wheels: data structures to efficiently implement a timer facility'](https://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z). More comprehensive slides are located [here](https://www.cse.wustl.edu/~cdgill/courses/cs6874/TimingWheels.ppt).
+`HashedWheelTimer` is based on [George Varghese](https://cseweb.ucsd.edu/users/varghese/) and Tony Lauck's paper, ['Hashed and Hierarchical Timing Wheels: data structures to efficiently implement a timer facility'](https://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z). 
+More comprehensive slides are located [here](https://www.cse.wustl.edu/~cdgill/courses/cs6874/TimingWheels.ppt).
 
 
 
-### Timer
-
+## Timer
+Schedules TimerTasks for one-time future execution in a background thread.
 ```java
-/**
- * Schedules {@link TimerTask}s for one-time future execution in a background
- * thread.
- */
 public interface Timer {
 
     /**
@@ -118,48 +122,54 @@ public class HashedWheelTimer implements Timer {
 ...
 }
 ```
-### Contructor
 
+### Constructor
+Instance Count <= 64
 
+1. Normalize ticksPerWheel to power of two and initialize the wheel.
+2. Convert tickDuration to nanos.
+3. Prevent overflow.
+4. newThread
+5. if need leakDetector.track
+6. 
 ```java
-		// tickDuration 100; ticksPerWheel 512; leakDetection true; maxPendingTimeouts -1
-    // Creates a new timer.
-    public HashedWheelTimer(
-            ThreadFactory threadFactory,
-            long tickDuration, TimeUnit unit, int ticksPerWheel, boolean leakDetection,
-            long maxPendingTimeouts) {
+// tickDuration 100; ticksPerWheel 512; leakDetection true; maxPendingTimeouts -1
+public HashedWheelTimer(
+        ThreadFactory threadFactory,
+        long tickDuration, TimeUnit unit, int ticksPerWheel, boolean leakDetection,
+        long maxPendingTimeouts) {
 
-        // Normalize ticksPerWheel to power of two and initialize the wheel.
-        wheel = createWheel(ticksPerWheel);
-        mask = wheel.length - 1;
+    // Normalize ticksPerWheel to power of two and initialize the wheel.
+    wheel = createWheel(ticksPerWheel);
+    mask = wheel.length - 1;
 
-        // Convert tickDuration to nanos.
-        long duration = unit.toNanos(tickDuration);
+    // Convert tickDuration to nanos.
+    long duration = unit.toNanos(tickDuration);
 
-        // Prevent overflow.
-        if (duration >= Long.MAX_VALUE / wheel.length) {
-            throw new IllegalArgumentException(String.format(
-                    "tickDuration: %d (expected: 0 < tickDuration in nanos < %d",
-                    tickDuration, Long.MAX_VALUE / wheel.length));
-        }
-
-        if (duration < MILLISECOND_NANOS) {
-            this.tickDuration = MILLISECOND_NANOS;
-        } else {
-            this.tickDuration = duration;
-        }
-
-        workerThread = threadFactory.newThread(worker);
-
-        leak = leakDetection || !workerThread.isDaemon() ? leakDetector.track(this) : null;
-
-        this.maxPendingTimeouts = maxPendingTimeouts;
-
-        if (INSTANCE_COUNTER.incrementAndGet() > INSTANCE_COUNT_LIMIT &&
-            WARNED_TOO_MANY_INSTANCES.compareAndSet(false, true)) {
-            reportTooManyInstances();
-        }
+    // Prevent overflow.
+    if (duration >= Long.MAX_VALUE / wheel.length) {
+        throw new IllegalArgumentException(String.format(
+                "tickDuration: %d (expected: 0 < tickDuration in nanos < %d",
+                tickDuration, Long.MAX_VALUE / wheel.length));
     }
+
+    if (duration < MILLISECOND_NANOS) {
+        this.tickDuration = MILLISECOND_NANOS;
+    } else {
+        this.tickDuration = duration;
+    }
+
+    workerThread = threadFactory.newThread(worker);
+
+    leak = leakDetection || !workerThread.isDaemon() ? leakDetector.track(this) : null;
+
+    this.maxPendingTimeouts = maxPendingTimeouts;
+
+    if (INSTANCE_COUNTER.incrementAndGet() > INSTANCE_COUNT_LIMIT &&
+        WARNED_TOO_MANY_INSTANCES.compareAndSet(false, true)) {
+        reportTooManyInstances();
+    }
+}
 ```
 
 
@@ -168,6 +178,7 @@ public class HashedWheelTimer implements Timer {
 
 #### createWheel
 
+0 < ticksPerWheel <= 2^30 and pow of two
 ```java
 private static HashedWheelBucket[] createWheel(int ticksPerWheel) {
     if (ticksPerWheel <= 0) {
@@ -196,27 +207,19 @@ private static int normalizeTicksPerWheel(int ticksPerWheel) {
 }
 ```
 
+#### timeout
 
-
-#### start
-
-#### newtimeout
-
-timeouts is MpscQueue
+timeouts is a [MpscQueue](/docs/CS/Java/Netty/MpscLinkedQueue.md)
 
 ```java
-
 private final Queue<HashedWheelTimeout> timeouts = PlatformDependent.newMpscQueue();
 
-@Override
 public Timeout newTimeout(TimerTask task, long delay, TimeUnit unit) {
     long pendingTimeoutsCount = pendingTimeouts.incrementAndGet();
 
     if (maxPendingTimeouts > 0 && pendingTimeoutsCount > maxPendingTimeouts) {
         pendingTimeouts.decrementAndGet();
-        throw new RejectedExecutionException("Number of pending timeouts ("
-            + pendingTimeoutsCount + ") is greater than or equal to maximum allowed pending "
-            + "timeouts (" + maxPendingTimeouts + ")");
+        throw new RejectedExecutionException("");
     }
 
     start();
@@ -235,13 +238,9 @@ public Timeout newTimeout(TimerTask task, long delay, TimeUnit unit) {
 }
 ```
 
-
+Starts the background thread explicitly.  The background thread will start automatically on demand even if you did not call this method.
 
 ```java
-/**
- * Starts the background thread explicitly.  The background thread will
- * start automatically on demand even if you did not call this method.
- */
 public void start() {
     switch (WORKER_STATE_UPDATER.get(this)) {
         case WORKER_STATE_INIT:
@@ -292,19 +291,21 @@ private static void reportTooManyInstances() {
 
 
 
-#### Worker
-
-
-
 ## run
 
+1. Initialize the startTime.
+2. Notify the other threads waiting for the initialization at start().
+3. waitForNextTick
+4. processCancelledTasks
+5. transferTimeoutsToBuckets
+6. expireTimeouts
+
+
 ```java
-@Override
 public void run() {
     // Initialize the startTime.
     startTime = System.nanoTime();
     if (startTime == 0) {
-        // We use 0 as an indicator for the uninitialized value here, so make sure it's not 0 when initialized.
         startTime = 1;
     }
 
@@ -342,39 +343,38 @@ public void run() {
 ```
 
 
-
-### transferTimeoutsToBuckets
-
-transfer only max. **100000** timeouts per tick to prevent a thread to stale the workerThread when it just adds new timeouts in a loop.
+### waitForNextTick
+calculate goal nanoTime from startTime and current tick number, then wait until that goal has been reached.
 
 ```java
-private void transferTimeoutsToBuckets() {
-        for (int i = 0; i < 100000; i++) {
-            HashedWheelTimeout timeout = timeouts.poll();
-            if (timeout == null) {
-                // all processed
-                break;
+private long waitForNextTick() {
+    long deadline = tickDuration * (tick + 1);
+
+    for (;;) {
+        final long currentTime = System.nanoTime() - startTime;
+        long sleepTimeMs = (deadline - currentTime + 999999) / 1000000;
+
+        if (sleepTimeMs <= 0) {
+            if (currentTime == Long.MIN_VALUE) {
+                return Long.MAX_VALUE;
+            } else {
+                return currentTime;
             }
-            if (timeout.state() == HashedWheelTimeout.ST_CANCELLED) {
-                // Was cancelled in the meantime.
-                continue;
+        }
+
+        try {
+            Thread.sleep(sleepTimeMs);
+        } catch (InterruptedException ignored) {
+            if (WORKER_STATE_UPDATER.get(HashedWheelTimer.this) == WORKER_STATE_SHUTDOWN) {
+                return Long.MIN_VALUE;
             }
-
-            long calculated = timeout.deadline / tickDuration;
-            timeout.remainingRounds = (calculated - tick) / wheel.length;
-
-            final long ticks = Math.max(calculated, tick); // Ensure we don't schedule for past.
-            int stopIndex = (int) (ticks & mask);
-
-            HashedWheelBucket bucket = wheel[stopIndex];
-            bucket.addTimeout(timeout);
         }
     }
+}
 ```
 
 
-
-
+### processCancelledTasks
 
 ```java
 private void processCancelledTasks() {
@@ -393,50 +393,6 @@ private void processCancelledTasks() {
 ```
 
 tickDuration default 100
-
-### waitForNextTick
-
-```java
-/**
- * calculate goal nanoTime from startTime and current tick number,
- * then wait until that goal has been reached.
- * @return Long.MIN_VALUE if received a shutdown request,
- * current time otherwise (with Long.MIN_VALUE changed by +1)
- */
-private long waitForNextTick() {
-    long deadline = tickDuration * (tick + 1);
-
-    for (;;) {
-        final long currentTime = System.nanoTime() - startTime;
-        long sleepTimeMs = (deadline - currentTime + 999999) / 1000000;
-
-        if (sleepTimeMs <= 0) {
-            if (currentTime == Long.MIN_VALUE) {
-                return Long.MAX_VALUE;
-            } else {
-                return currentTime;
-            }
-        }
-
-        // Check if we run on windows, as if thats the case we will need
-        // to round the sleepTime as workaround for a bug that only affect
-        // the JVM if it runs on windows.
-        //
-        // See https://github.com/netty/netty/issues/356
-        if (PlatformDependent.isWindows()) {
-            sleepTimeMs = sleepTimeMs / 10 * 10;
-        }
-
-        try {
-            Thread.sleep(sleepTimeMs);
-        } catch (InterruptedException ignored) {
-            if (WORKER_STATE_UPDATER.get(HashedWheelTimer.this) == WORKER_STATE_SHUTDOWN) {
-                return Long.MIN_VALUE;
-            }
-        }
-    }
-}
-```
 
 
 
@@ -563,9 +519,7 @@ private static final class HashedWheelBucket {
     private HashedWheelTimeout head;
     private HashedWheelTimeout tail;
 
-    /**
-     * Add {@link HashedWheelTimeout} to this bucket.
-     */
+   
     public void addTimeout(HashedWheelTimeout timeout) {
         assert timeout.bucket == null;
         timeout.bucket = this;
@@ -674,6 +628,35 @@ private static final class HashedWheelBucket {
 ```
 
 
+### transferTimeoutsToBuckets
+
+transfer only max. **100000** timeouts per tick to prevent a thread to stale the workerThread when it just adds new timeouts in a loop.
+
+```java
+private void transferTimeoutsToBuckets() {
+        for (int i = 0; i < 100000; i++) {
+            HashedWheelTimeout timeout = timeouts.poll();
+            if (timeout == null) {
+                // all processed
+                break;
+            }
+            if (timeout.state() == HashedWheelTimeout.ST_CANCELLED) {
+                // Was cancelled in the meantime.
+                continue;
+            }
+
+            long calculated = timeout.deadline / tickDuration;
+            timeout.remainingRounds = (calculated - tick) / wheel.length;
+
+            final long ticks = Math.max(calculated, tick); // Ensure we don't schedule for past.
+            int stopIndex = (int) (ticks & mask);
+
+            HashedWheelBucket bucket = wheel[stopIndex];
+            bucket.addTimeout(timeout);
+        }
+    }
+```
+
 
 ### expireTimeouts
 
@@ -704,7 +687,7 @@ public void expireTimeouts(long deadline) {
 ```
 
 
-
+#### expire
 run Task
 
 ```java
@@ -712,20 +695,14 @@ public void expire() {
     if (!compareAndSetState(ST_INIT, ST_EXPIRED)) {
         return;
     }
-
     try {
         task.run(this);
     } catch (Throwable t) {
-        if (logger.isWarnEnabled()) {
-            logger.warn("An exception was thrown by " + TimerTask.class.getSimpleName() + '.', t);
-        }
     }
 }
 ```
 
-
-
-### remove
+#### remove
 
 ```java
 public HashedWheelTimeout remove(HashedWheelTimeout timeout) {
@@ -759,18 +736,12 @@ public HashedWheelTimeout remove(HashedWheelTimeout timeout) {
 }
 ```
 
-
-
-#### stop
+### stop
 
 ```java
-@Override
 public Set<Timeout> stop() {
     if (Thread.currentThread() == workerThread) {
-        throw new IllegalStateException(
-                HashedWheelTimer.class.getSimpleName() +
-                        ".stop() cannot be called from " +
-                        TimerTask.class.getSimpleName());
+        throw new IllegalStateException();
     }
 
     if (!WORKER_STATE_UPDATER.compareAndSet(this, WORKER_STATE_STARTED, WORKER_STATE_SHUTDOWN)) {
@@ -782,7 +753,6 @@ public Set<Timeout> stop() {
                 assert closed;
             }
         }
-
         return Collections.emptySet();
     }
 

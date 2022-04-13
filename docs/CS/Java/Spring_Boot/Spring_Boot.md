@@ -124,7 +124,25 @@ Use different parameters to run test.
 - @NullSource
 
 
+### WebMock
 
+```java
+@RunWith(SpringRunner.class)
+@WebMvcTest(HelloController.class)
+public class HelloTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    public void testHello() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/hello"))
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.content().string(containsString("Hello ")));
+    }
+
+}
+```
 
 
 #### Actuator

@@ -1,6 +1,7 @@
 ## Introduction
 
-`MyBatis provides logging information through the use of an internal log factory. The internal log factory will delegate logging information to one of the following log implementations:`
+MyBatis provides logging information through the use of an internal log factory. 
+The internal log factory will delegate logging information to one of the following log implementations:
 
 - SLF4J
 - Apache Commons Logging
@@ -8,7 +9,9 @@
 - Log4j
 - JDK logging
 
-`The logging solution chosen is based on runtime introspection by the internal MyBatis log factory. The MyBatis log factory will use the first logging implementation it finds (implementations are searched in the above order). If MyBatis finds none of the above implementations, then logging will be disabled.`
+The logging solution chosen is based on runtime introspection by the internal MyBatis log factory. 
+The MyBatis log factory will use the first logging implementation it finds (implementations are searched in the above order). 
+If MyBatis finds none of the above implementations, then logging will be disabled.
 
 ### [How to select a different logging implementation ](https://mybatis.org/mybatis-3/logging.html)
 
@@ -159,3 +162,8 @@ public Object invoke(Object proxy, Method method, Object[] params)
   }
 }
 ```
+
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)

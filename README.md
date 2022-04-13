@@ -14,9 +14,7 @@ We describe [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structur
 
 ## Operating System
 
-### Linux
-
-[Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
+[Operating System](/docs/CS/OS/OS.md) is a software above the hardware and  below applications.
 
 ## Network
 
@@ -45,6 +43,8 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 ## C
 
 ## C++
+
+[C++](/docs/CS/C++/C++.md) blends the C language with support for object-oriented programming and for generic programming.
 
 ## Java
 ### JDK

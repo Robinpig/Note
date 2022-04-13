@@ -1,6 +1,18 @@
 ## Introduction
 
+When the computer starts, the BIOS performs Power-On-Self-Test (POST) and initial device discovery and initialization, since the OS’ boot process may rely on access to disks, screens, keyboards, and so on. 
+Next, the first sector of the boot disk, the MBR (Master Boot Record), is read into a fixed memory location and executed. 
+This sector contains a small (512-byte) program that loads a standalone program called boot from the boot device, such as a SATA or SCSI disk. 
+The boot program first copies itself to a fixed high-memory address to free up low memory for the operating system.
 
+Once moved, boot reads the root directory of the boot device. 
+To do this, it must understand the file system and directory format, which is the case with some bootloaders such as GRUB (GRand Unified Bootloader). 
+Other popular bootloaders, such as Intel’s LILO, do not rely on any specific file system. 
+Instead, they need a block map and low-level addresses, which describe physical sectors, heads, and cylinders, to find the relevant sectors to be loaded.
+
+Then boot reads in the operating system kernel and jumps to it. At this point, it has finished its job and the kernel is running.
+
+The kernel start-up code is written in assembly language and is highly machine dependent.
 
 ## Init
 

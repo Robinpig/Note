@@ -476,6 +476,9 @@ Actual allocators often must take into account some additional considerations.
 We now discuss these: alignment, size constraints, boundary tags, heap parsability, locality, wilderness preservation and crossing maps.
 
 ## When an instance is dead？
+
+Link: [Java References](/docs/CS/Java/JDK/Basic/Ref.md)
+
 ### Reference Counting
 
 
@@ -511,8 +514,6 @@ CMS
 G1 Shenandoah
 
 
-### References
-Link: [References](/docs/CS/Java/JDK/Basic/Ref.md)
 
 
 
@@ -600,52 +601,21 @@ threads.
 - [ZGC](/docs/CS/Java/JDK/JVM/ZGC.md)
 
 
-```cpp
-// share/gc/shared/gcConfiguration.cpp
-GCName GCConfiguration::young_collector() const {
-  if (UseG1GC) {
-    return G1New;
-  }
 
-  if (UseParallelGC) {
-    return ParallelScavenge;
-  }
+young_collector
+- G1New;
+- ParallelScavenge;
+- ParNew; -- CMS
+- DefNew;
 
-  if (UseConcMarkSweepGC) {
-    return ParNew;
-  }
+old_collector
+- G1Old;
+- ConcurrentMarkSweep;
+- ParallelOld;
+- Z;
+- Shenandoah;
+- SerialOld;
 
-  if (UseZGC || UseShenandoahGC) {
-    return NA;
-  }
-
-  return DefNew;
-}
-
-GCName GCConfiguration::old_collector() const {
-  if (UseG1GC) {
-    return G1Old;
-  }
-
-  if (UseConcMarkSweepGC) {
-    return ConcurrentMarkSweep;
-  }
-
-  if (UseParallelOldGC) {
-    return ParallelOld;
-  }
-
-  if (UseZGC) {
-    return Z;
-  }
-
-  if (UseShenandoahGC) {
-    return Shenandoah;
-  }
-
-  return SerialOld;
-}
-```
 
 ### Comparing garbage collectors
 - Throughput
@@ -655,6 +625,7 @@ GCName GCConfiguration::old_collector() const {
 - Adaptive systems
 
 From [JVM](https://book.douban.com/subject/34907497/):
+
 ![Our Collectors](../images/our-collectors.png)
 
 And
@@ -741,7 +712,7 @@ Low-Latency Garbage Collector
 Low-Pause-Time garbage Collector
 
 
-### shenandoah
+### Shenandoah
 Shenandoah is a new GC that was released as part of JDK 12. 
 Shenandoah’s key advantage over G1 is that it does more of its garbage collection cycle work concurrently with the application threads. 
 G1 can evacuate its heap regions only when the application is paused, while Shenandoah can relocate objects concurrently with the application.

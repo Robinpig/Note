@@ -1,11 +1,7 @@
 ## Introduction
 
-
-
-
-As you can see in the client structure above, arguments in a command
-are described as `robj` structures. The following is the full `robj`
-structure, which defines a *Redis object*:
+As you can see in the client structure above, arguments in a command are described as `robj` structures. 
+The following is the full `robj` structure, which defines a *Redis object*:
 
 ```c
 typedef struct redisObject {
@@ -19,11 +15,14 @@ typedef struct redisObject {
 } robj;
 ```
 
-Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth. The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times. Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
+Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth. 
+The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times. 
+Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
 
 Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
 ## Data Types
+
 ![](./images/struct.png)
 
 object
@@ -97,8 +96,11 @@ The empty string is also a valid key.
 
 A few other rules about keys:
 
-- **Very long keys are not a good idea**. For instance a key of 1024 bytes is a bad idea not only memory-wise, but also because the lookup of the key in the dataset may require several costly key-comparisons. Even when the task at hand is to match the existence of a large value, hashing it (for example with SHA1) is a better idea, especially from the perspective of memory and bandwidth.
-- **Very short keys are often not a good idea**. There is little point in writing "u1000flw" as a key if you can instead write "`user:1000:followers`". The latter is more readable and the added space is minor compared to the space used by the key object itself and the value object. While short keys will obviously consume a bit less memory, your job is to find the right balance.
+- **Very long keys are not a good idea**. For instance a key of 1024 bytes is a bad idea not only memory-wise, but also because the lookup of the key in the dataset may require several costly key-comparisons. 
+  Even when the task at hand is to match the existence of a large value, hashing it (for example with SHA1) is a better idea, especially from the perspective of memory and bandwidth.
+- **Very short keys are often not a good idea**. There is little point in writing "u1000flw" as a key if you can instead write "`user:1000:followers`". 
+  The latter is more readable and the added space is minor compared to the space used by the key object itself and the value object. 
+  While short keys will obviously consume a bit less memory, your job is to find the right balance.
 - **Try to stick with a schema.** For instance "object-type:id" is a good idea, as in "user:1000". Dots or dashes are often used for multi-word fields, as in "`comment:1234:reply.to`" or "`comment:1234:reply-to`".
 - The maximum allowed key size is **512 MB**.
 
@@ -134,7 +136,8 @@ see [createSharedObjects](/docs/CS/DB/Redis/start.md?id=createSharedObjects)
 ### expiration keys
 
 ### sort
-Sometimes we may need to get a sorted copy of a Redis list or set in some order, or sort elements in a Redis sorted set by an order other than scores. Redis provides a convenient command called SORT for this purpose. 
+Sometimes we may need to get a sorted copy of a Redis list or set in some order, or sort elements in a Redis sorted set by an order other than scores. 
+Redis provides a convenient command called SORT for this purpose. 
 
 ### pipeline
 
@@ -149,7 +152,8 @@ It's important to note that **even when a command fails, all the other commands 
 
 #### Why Redis does not support roll backs?
 
-- Redis commands can fail only if called with a wrong syntax (and the problem is not detectable during the command queueing), or against keys holding the wrong data type: this means that in practical terms a failing command is the result of a **programming errors**, and a kind of error that is very likely to be detected during development, and not in production.
+- Redis commands can fail only if called with a wrong syntax (and the problem is not detectable during the command queueing), or against keys holding the wrong data type: 
+  this means that in practical terms a failing command is the result of a **programming errors**, and a kind of error that is very likely to be detected during development, and not in production.
 - Redis is internally simplified and faster because it does not need the ability to roll back.
 
 **In general the roll back does not save you from programming errors**.

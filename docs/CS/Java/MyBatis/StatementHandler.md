@@ -261,6 +261,10 @@ public class SimpleStatementHandler extends BaseStatementHandler {
 ```
 
 
+${} -> compiler SQL -> #{}
+
+Compiler SQL replace #{} to ? and use PrepareStatement to set parameters and with ''
+
 
 ### PreparedStatementHandler
 
@@ -418,3 +422,8 @@ public class CallableStatementHandler extends BaseStatementHandler {
 
 }
 ```
+
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)

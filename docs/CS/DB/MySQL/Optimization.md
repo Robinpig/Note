@@ -20,9 +20,9 @@ table_elimination=on,extended_keys=on,exists_to_in=on,orderby_uses_equalities=on
 
 #### Index Condition Pushdown Optimization
 
-**Index Condition Pushdown (ICP) is an optimization for the case where MySQL retrieves rows from a table using an index.** 
-
-Index Condition Pushdown is enabled by default. It can be controlled with the `optimizer_switch` system variable by setting the `index_condition_pushdown` flag:
+**Index Condition Pushdown (ICP) is an optimization for the case where MySQL retrieves rows from a table using an index.**
+Index Condition Pushdown is enabled by default. 
+It can be controlled with the `optimizer_switch` system variable by setting the `index_condition_pushdown` flag:
 
 ```sql
 SET optimizer_switch = 'index_condition_pushdown=off';
