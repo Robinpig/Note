@@ -185,7 +185,8 @@ A [Redis script](/docs/CS/DB/Redis/struct.md?id=lua-scripts) is transactional by
 ### Using the correct Redis APIs
 
 ## Links
-[Return to Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+
+- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
 
 ## References
 

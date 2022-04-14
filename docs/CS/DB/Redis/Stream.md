@@ -160,6 +160,11 @@ raxNode *raxNewNode(size_t children, int datafield) {
 }
 ```
 
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md)
+
 ## References
 1. [Rax, an ANSI C radix tree implementation](https://github.com/antirez/rax)
 

@@ -258,6 +258,8 @@ In `IOUtil.write()`
 then `writeFromNativeBuffer`
 
 
+> Links: [Comparing performance of Java I/O and NIO: streams vs channels](https://github.com/romromov/java-io-benchmark)
+
 ## NIO
 
 ### Buffer

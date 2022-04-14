@@ -423,6 +423,7 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
 
 
 ## zsetConvertToZiplistIfNeeded
+
 call by geo or ZUNION, ZINTER, ZDIFF, ZUNIONSTORE, ZINTERSTORE, ZDIFFSTORE
 ```c
 // t_zset.c
@@ -460,13 +461,10 @@ zset-max-ziplist-value 64
 
 
 ## ziplist
-The ziplist is a specially encoded dually linked list that is designed
-to be very memory efficient. It stores both strings and integer values,
-where **integers are encoded as actual integers instead of a series of
-characters**. It allows push and pop operations on either side of the list
-in O(1) time. However, because every operation requires a reallocation of
-the memory used by the ziplist, the actual complexity is related to the
-amount of memory used by the ziplist.
+
+The ziplist is a specially encoded dually linked list that is designed to be very memory efficient. It stores both strings and integer values, where **integers are encoded as actual integers instead of a series of characters**. 
+It allows push and pop operations on either side of the list in O(1) time. 
+However, because every operation requires a reallocation of the memory used by the ziplist, the actual complexity is related to the amount of memory used by the ziplist.
 
 ```c
 /**
@@ -970,6 +968,7 @@ typedef struct zskiplist {
 
 
 ### create
+
 create header node with ZSKIPLIST_MAXLEVEL(32) zskiplistLevel
 
 ```c
@@ -1081,31 +1080,13 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
 
 #### randomLevel
 
-p = ZSKIPLIST_P
-
-E = except level
-
-- 1 = 1 - p
-- 2 = p(1 - p)
-- 3 = p^2(1-p)
-- ...
-
-$$
-\begin{align}
-E &= 1 \times (1-p) + 2\times p(1-p)+... \hspace{1cm}\\
-&=(1-p)\sum_{i=1}^{+\infty}{ip^{i-1}} \\
-&= 1/(1-p)\\
-\end{align}
-$$
+Returns a random level for the new skiplist node we are going to create.
+The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL(both inclusive), with a powerlaw-alike distribution where higher levels are less likely to be returned.
 
 ```c
 #define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
 #define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^64 elements */
 
-/* Returns a random level for the new skiplist node we are going to create.
- * The return value of this function is between 1 and ZSKIPLIST_MAXLEVEL
- * (both inclusive), with a powerlaw-alike distribution where higher
- * levels are less likely to be returned. */
 int zslRandomLevel(void) {
     int level = 1;
     while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF))
@@ -1113,6 +1094,20 @@ int zslRandomLevel(void) {
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
 ```
+p = ZSKIPLIST_P, E = except level
+- E = 1 : 1 - p
+- E = 2 : p(1 - p)
+- E = 3 : p^2(1-p)
+- ...
+
+```tex
+E = 1 \times (1-p) + 2\times p(1-p)+... \hspace{1cm}
+\\=(1-p)\sum_{i=1}^{+\infty}{ip^{i-1}} 
+\\
+= 1/(1-p)
+```
+
+
 
 
 
@@ -1215,5 +1210,9 @@ void zslFree(zskiplist *zsl) {
 
 - zset compare with score and ele(sds)
 
-  
 
+
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md)

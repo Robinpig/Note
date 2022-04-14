@@ -564,3 +564,8 @@ reverse binary iteration
 
 - hash table init size 4
 - hash table minimal fill 10%
+
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md)
