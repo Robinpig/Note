@@ -7,13 +7,11 @@ The most important functions inside `db.c` which are used in many command implem
 * `emptyDb()` removes an entire single database or all the databases defined.
 
 
-
+Redis database representation. There are multiple databases identified by integers from 0 (the default database) up to the max configured database. 
+The database number is the 'id' field in the structure.
 
 ```java
 // server.h
-/* Redis database representation. There are multiple databases identified
- * by integers from 0 (the default database) up to the max configured
- * database. The database number is the 'id' field in the structure. */
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
     dict *expires;              /* Timeout of keys with a timeout set */
@@ -90,10 +88,12 @@ typedef struct redisObject {
 
 Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
-The `robj` structure defining Redis objects was already described. Inside `object.c` there are all the functions that operate with Redis objects at a basic level, like functions to allocate new objects, handle the reference counting and so forth. Notable functions inside this file:
+The `robj` structure defining Redis objects was already described. 
+Inside `object.c` there are all the functions that operate with Redis objects at a basic level, like functions to allocate new objects, handle the reference counting and so forth. Notable functions inside this file:
 
 - `incrRefCount()` and `decrRefCount()` are used in order to increment or decrement an object reference count. When it drops to 0 the object is finally freed.
-- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object. There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
+- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object. 
+  There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
 
 
 
@@ -260,13 +260,12 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
 ```
 
 ### updateLFU
-- ldt
-- counter
+Update LFU when an object is accessed.
+- Firstly, decrement the counter if the decrement time is reached.
+- Then logarithmically increment the counter, and update the access time.
+
 ```c
 // db.c
-/* Update LFU when an object is accessed.
- * Firstly, decrement the counter if the decrement time is reached.
- * Then logarithmically increment the counter, and update the access time. */
 void updateLFU(robj *val) {
     unsigned long counter = LFUDecrAndReturn(val);
     counter = LFULogIncr(counter);
@@ -289,18 +288,12 @@ uint8_t LFULogIncr(uint8_t counter) {
     return counter;
 }
 ```
+If the object decrement time is reached decrement the LFU counter but do not update LFU fields of the object, we update the access time and counter in an explicit way when the object is really accessed.
+And we will times halve the counter according to the times of elapsed time than server.lfu_decay_time.
+Return the object frequency counter.
 
+This function is used in order to scan the dataset for the best object to fit: as we check for the candidate, we incrementally decrement the counter of the scanned objects if needed.
 ```
-/* If the object decrement time is reached decrement the LFU counter but
- * do not update LFU fields of the object, we update the access time
- * and counter in an explicit way when the object is really accessed.
- * And we will times halve the counter according to the times of
- * elapsed time than server.lfu_decay_time.
- * Return the object frequency counter.
- *
- * This function is used in order to scan the dataset for the best object
- * to fit: as we check for the candidate, we incrementally decrement the
- * counter of the scanned objects if needed. */
 unsigned long LFUDecrAndReturn(robj *o) {
     unsigned long ldt = o->lru >> 8;
     unsigned long counter = o->lru & 255;
@@ -315,6 +308,7 @@ unsigned long LFUDecrAndReturn(robj *o) {
 
 
 ### dictFind
+
 call [rehash](/docs/CS/DB/Redis/hash.md?id=rehash) when dictIsRehashing
 
 ```c

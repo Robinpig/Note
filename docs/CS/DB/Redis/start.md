@@ -1,4 +1,4 @@
-
+## Introduction
 
 There are two special functions called periodically by the event loop:
 
@@ -3055,7 +3055,11 @@ int writeToClient(client *c, int handler_installed) {
 }
 ```
 
-## Reference
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+
+## References
 
 1. [Redis: under the hood](https://www.pauladamsmith.com/articles/redis-under-the-hood.html)
 

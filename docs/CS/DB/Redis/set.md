@@ -140,6 +140,8 @@ int setTypeAdd(robj *subject, sds value) {
 
 ## intset
 
+Array
+
 ```c
 // intset.h
 
@@ -153,7 +155,6 @@ typedef struct intset {
 
 ```c
 // intset.c
-/* Insert an integer in the intset */
 intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     uint8_t valenc = _intsetValueEncoding(value);
     uint32_t pos;
@@ -183,3 +184,8 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     return is;
 }
 ```
+
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md)

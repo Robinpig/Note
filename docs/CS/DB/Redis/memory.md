@@ -407,10 +407,6 @@ The counter *logarithm factor* changes how many hits are needed in order to satu
 +--------+------------+------------+------------+------------+------------+
 ```
 
-
-
-
-
 prefer `allkeys-lru` or `volatile-lru`
 
 

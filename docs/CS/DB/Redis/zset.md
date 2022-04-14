@@ -831,6 +831,7 @@ This effect may cascade throughout the ziplist when there are consecutive entrie
 Note that this effect can also happen in reverse, where the bytes required to encode the prevlen field can shrink. 
 This effect is deliberately ignored, because it can cause a "flapping" effect where a chain prevlen fields is first grown and then shrunk again after consecutive inserts. 
 Rather, the field is allowed to stay larger than necessary, because a large prevlen field implies the ziplist is holding large entries anyway.
+
 ```c
 // ziplist.c
 /* The pointer "p" points to the first entry that does NOT need to be
