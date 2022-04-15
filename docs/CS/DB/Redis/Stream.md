@@ -45,14 +45,13 @@ stream *streamNew(void) {
 
 ## Rax
 
-Trie Tree
+Representation of a radix tree as implemented in this file, that contains the strings "foo", "foobar" and "footer" after the insertion of each word. 
+When the node represents a key inside the radix tree, we write it between [], otherwise it is written between ().
+
+This is the vanilla representation:
+
 ```c
-/* Representation of a radix tree as implemented in this file, that contains
- * the strings "foo", "foobar" and "footer" after the insertion of each
- * word. When the node represents a key inside the radix tree, we write it
- * between [], otherwise it is written between ().
- *
- * This is the vanilla representation:
+/* 
  *
  *              (f) ""
  *                \
@@ -121,11 +120,11 @@ children, an additional value pointer is present (as you can see
 in the representation above as "value-ptr" field).
 
 ### raxNew
+
+Allocate a new rax and return its pointer. On out of memory the function returns NULL.
+
 ```c
 // rax.c
-
-/* Allocate a new rax and return its pointer. On out of memory the function
- * returns NULL. */
 rax *raxNew(void) {
     rax *rax = rax_malloc(sizeof(*rax));
     if (rax == NULL) return NULL;
@@ -141,8 +140,7 @@ rax *raxNew(void) {
 }
 ```
 Allocate a new non compressed node with the specified number of children.
-If datafiled is true, the allocation is made large enough to hold the
-associated data pointer.
+If datafiled is true, the allocation is made large enough to hold the associated data pointer.
 
 Returns the new node pointer. On out of memory NULL is returned.
 

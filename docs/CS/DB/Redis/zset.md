@@ -1,6 +1,7 @@
 ## Introduction
 
-Sorted sets are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
+Sorted sets are a data type which is similar to a mix between a Set and a Hash. 
+Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
 
 However while elements inside sets are not ordered, every element in a sorted set is associated with a floating point value, called *the score* (this is why the type is also similar to a hash, since every element is mapped to a value).
 
@@ -32,11 +33,13 @@ Let's start with a simple example, adding a few selected hackers names as sorted
 (integer) 1
 ```
 
-As you can see [ZADD](https://redis.io/commands/zadd) is similar to [SADD](https://redis.io/commands/sadd), but takes one additional argument (placed before the element to be added) which is the score. [ZADD](https://redis.io/commands/zadd) is also variadic, so you are free to specify multiple score-value pairs, even if this is not used in the example above.
+As you can see [ZADD](https://redis.io/commands/zadd) is similar to [SADD](https://redis.io/commands/sadd), but takes one additional argument (placed before the element to be added) which is the score. 
+[ZADD](https://redis.io/commands/zadd) is also variadic, so you are free to specify multiple score-value pairs, even if this is not used in the example above.
 
 With sorted sets it is trivial to return a list of hackers sorted by their birth year because actually *they are already sorted*.
 
-Implementation note: Sorted sets are implemented via a dual-ported data structure containing both a skip list and a hash table, so every time we add an element Redis performs an O(log(N)) operation. That's good, but when we ask for sorted elements Redis does not have to do any work at all, it's already all sorted:
+Implementation note: Sorted sets are implemented via a dual-ported data structure containing both a skip list and a hash table, so every time we add an element Redis performs an O(log(N)) operation. 
+That's good, but when we ask for sorted elements Redis does not have to do any work at all, it's already all sorted:
 
 ```
 > zrange hackers 0 -1

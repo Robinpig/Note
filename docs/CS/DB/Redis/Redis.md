@@ -17,7 +17,6 @@ Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and
 
 
 - [db](/docs/CS/DB/Redis/redisDb.md)
-- [IO](/docs/CS/DB/Redis/ae.md)
 
 BigKey
 
@@ -42,7 +41,16 @@ struct redisCommand redisCommandTable[] in server.c
 ## [Persistence](/docs/CS/DB/Redis/persist.md)
 ## [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
 
-### Event
+Server and Client
+
+
+## Event
+
+[IO Event](/docs/CS/DB/Redis/ae.md)
+
+
+Time_Event
+
 ServerCron:
 - evict key
 - RDB and AOF
@@ -51,8 +59,7 @@ ServerCron:
 - close dead connection
 - statistic memory and other server info
 
-Time_Event
-
+## Log
 
 ### Slowlog
 
