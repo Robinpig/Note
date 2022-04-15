@@ -660,3 +660,18 @@ spring:
     servlet:
       load-on-startup: 1
 ```
+
+### Converter
+
+Avoid response can not cast to String Exception when we transform response String to Object
+
+```java
+@Configuration
+public class WebConfiguration implements WebMvcConfigurer {
+
+    @Override
+    public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
+        converters.add(0, new MappingJackson2HttpMessageConverter());
+    }
+}
+```
