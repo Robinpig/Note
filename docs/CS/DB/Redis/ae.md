@@ -1,7 +1,6 @@
 ## Introduction
 
-This file defines all the I/O functions with clients, masters and replicas
-(which in Redis are just special clients):
+This file defines all the I/O functions with clients, masters and replicas(which in Redis are just special clients):
 
 * `createClient()` allocates and initializes a new client.
 * the `addReply*()` family of functions are used by command implementations in order to append data to the client structure, that will be transmitted to the client as a reply for a given command executed.
@@ -17,12 +16,10 @@ For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thre
 
 Redis implements its own event library. The event library is implemented in `ae.c`.
 
-`initServer` function defined in `redis.c` initializes the numerous fields of the `redisServer` structure variable. One such field is the Redis event loop `el`:
-
+`initServer` function defined in `redis.c` initializes the numerous fields of the [redisServer structure](/docs/CS/DB/Redis/server.md?id=server) variable. One such field is the Redis event loop `el`:
 ```c
 aeEventLoop *el
 ```
-
 `initServer` initializes `server.el` field by calling `aeCreateEventLoop` defined in `ae.c`. The definition of `aeEventLoop` is below:
 
 ```c
@@ -42,13 +39,13 @@ typedef struct aeEventLoop {
 } aeEventLoop;
 ```
 
-### Use the best first
+### Implementation of EventLoop
+
+Include the best multiplexing layer supported by this system.
+The following should be ordered by performances, descending.
 
 ```c
 // ae.c
-
-/* Include the best multiplexing layer supported by this system.
- * The following should be ordered by performances, descending. */
 #ifdef HAVE_EVPORT
 #include "ae_evport.c"
 #else
@@ -64,6 +61,113 @@ typedef struct aeEventLoop {
 #endif
 
 
+```
+
+
+
+### aeCreateEventLoop
+
+`aeCreateEventLoop` first `malloc`s `aeEventLoop` structure then calls `ae_epoll.c:aeApiCreate`.
+
+The definition of `aeEventLoop` is below:
+
+```c
+typedef struct aeEventLoop
+{
+    int maxfd;
+    long long timeEventNextId;
+    aeFileEvent events[AE_SETSIZE]; /* Registered events */
+    aeFiredEvent fired[AE_SETSIZE]; /* Fired events */
+    aeTimeEvent *timeEventHead;
+    int stop;
+    void *apidata; /* This is used for polling API specific data */
+    aeBeforeSleepProc *beforesleep;
+} aeEventLoop;
+```
+
+
+
+`aeApiCreate` `malloc`s `aeApiState` that has two fields - `epfd` that holds the `epoll` file descriptor returned by a call from [`epoll_create`](http://man.cx/epoll_create(2)) and `events` that is of type `struct epoll_event` define by the Linux `epoll` library. The use of the `events` field will be described later.
+
+Next is `ae.c:aeCreateTimeEvent`. But before that `initServer` call `anet.c:anetTcpServer` that creates and returns a *listening descriptor*. The descriptor listens on *port 6379* by default. The returned *listening descriptor* is stored in `server.fd` field.
+
+```c
+aeEventLoop *aeCreateEventLoop(int setsize) {
+    aeEventLoop *eventLoop;
+    int i;
+
+    if ((eventLoop = zmalloc(sizeof(*eventLoop))) == NULL) goto err;
+    eventLoop->events = zmalloc(sizeof(aeFileEvent)*setsize);
+    eventLoop->fired = zmalloc(sizeof(aeFiredEvent)*setsize);
+    if (eventLoop->events == NULL || eventLoop->fired == NULL) goto err;
+    eventLoop->setsize = setsize;
+    eventLoop->lastTime = time(NULL);
+    eventLoop->timeEventHead = NULL;
+    eventLoop->timeEventNextId = 0;
+    eventLoop->stop = 0;
+    eventLoop->maxfd = -1;
+    eventLoop->beforesleep = NULL;
+    eventLoop->aftersleep = NULL;
+    eventLoop->flags = 0;
+    if (aeApiCreate(eventLoop) == -1) goto err;
+    /* Events with mask == AE_NONE are not set. So let's initialize the
+     * vector with it. */
+    for (i = 0; i < setsize; i++)
+        eventLoop->events[i].mask = AE_NONE;
+    return eventLoop;
+
+err:
+    if (eventLoop) {
+        zfree(eventLoop->events);
+        zfree(eventLoop->fired);
+        zfree(eventLoop);
+    }
+    return NULL;
+}
+```
+
+```c
+// ae.h
+/* State of an event based program */
+typedef struct aeEventLoop {
+    int maxfd;   /* highest file descriptor currently registered */
+    int setsize; /* max number of file descriptors tracked */
+    long long timeEventNextId;
+    time_t lastTime;     /* Used to detect system clock skew */
+    aeFileEvent *events; /* Registered events */
+    aeFiredEvent *fired; /* Fired events */
+    aeTimeEvent *timeEventHead;
+    int stop;
+    void *apidata; /* This is used for polling API specific data */
+    aeBeforeSleepProc *beforesleep;
+    aeBeforeSleepProc *aftersleep;
+    int flags;
+} aeEventLoop;
+```
+
+
+
+#### aeApiCreate
+
+```c
+static int aeApiCreate(aeEventLoop *eventLoop) {
+    aeApiState *state = zmalloc(sizeof(aeApiState));
+
+    if (!state) return -1;
+    state->events = zmalloc(sizeof(struct kevent)*eventLoop->setsize);
+    if (!state->events) {
+        zfree(state);
+        return -1;
+    }
+    state->kqfd = kqueue();
+    if (state->kqfd == -1) {
+        zfree(state->events);
+        zfree(state);
+        return -1;
+    }
+    eventLoop->apidata = state;
+    return 0;
+}
 ```
 
 
@@ -86,7 +190,7 @@ The `tvp` structure variable along with the event loop variable is passed to `ae
 `aeApiPoll` returns the number of such file events ready for operation.
 Now to put things in context, if any client has requested for a connection then `aeApiPoll` would have noticed it and populated the `eventLoop->fired` table with an entry of the descriptor being the *listening descriptor* and mask being `AE_READABLE`.
 
-Now, `aeProcessEvents` calls the `redis.c:acceptHandler` registered as the callback. `acceptHandler` executes [accept](http://man.cx/accept) on the *listening descriptor* returning a *connected descriptor* with the client.
+Now, `aeProcessEvents` calls the `redis.c:acceptHandler` registered as the callback. `acceptHandler` executes `accept` on the *listening descriptor* returning a *connected descriptor* with the client.
 `redis.c:createClient` adds a file event on the *connected descriptor* through a call to `ae.c:aeCreateFileEvent` like below:
 
 ```c
@@ -368,9 +472,10 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
      * so it's a good idea to call it before serving the unblocked clients
      * later in this function. */
     if (server.cluster_enabled) clusterBeforeSleep();
-
-    /* Run a fast expire cycle (the called function will return
-     * ASAP if a fast cycle is not needed). */
+```
+Run a fast expire cycle (the called function will return
+ASAP if a fast cycle is not needed).
+```c
     if (server.active_expire_enabled && server.masterhost == NULL)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
