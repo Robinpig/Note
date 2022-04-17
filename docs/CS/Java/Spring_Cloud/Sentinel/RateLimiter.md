@@ -88,14 +88,19 @@ public class RateLimiterController implements TrafficShapingController {
 
 The principle idea comes from Guava. However, the calculation of Guava is rate-based, which means that we need to translate rate to QPS.
 
-Requests arriving at the pulse may drag down long idle systems even though it has a much larger handling capability in stable period. It usually happens in scenarios that require extra time for initialization, e.g. DB establishes a connection, connects to a remote service, and so on. That’s why we need “warm up”.
+Requests arriving at the pulse may drag down long idle systems even though it has a much larger handling capability in stable period. 
+It usually happens in scenarios that require extra time for initialization, e.g. DB establishes a connection, connects to a remote service, and so on. That’s why we need “warm up”.
 
 Sentinel's "warm-up" implementation is based on the Guava's algorithm.
-However, Guava’s implementation focuses on adjusting the request interval, which is similar to leaky bucket. Sentinel pays more attention to controlling the count of incoming requests per second without calculating its interval, which resembles token bucket algorithm.
+However, Guava’s implementation focuses on adjusting the request interval, which is similar to leaky bucket. 
+Sentinel pays more attention to controlling the count of incoming requests per second without calculating its interval, which resembles token bucket algorithm.
 
-The remaining tokens in the bucket is used to measure the system utility. Suppose a system can handle b requests per second. Every second b tokens will be added into the bucket until the bucket is full. And when system processes a request, it takes a token from the bucket. The more tokens left in the bucket, the lower the utilization of the system; when the token in the token bucket is above a certain threshold, we call it in a "saturation" state.
+The remaining tokens in the bucket is used to measure the system utility. Suppose a system can handle b requests per second. 
+Every second b tokens will be added into the bucket until the bucket is full. And when system processes a request, it takes a token from the bucket. 
+The more tokens left in the bucket, the lower the utilization of the system; when the token in the token bucket is above a certain threshold, we call it in a "saturation" state.
 
- Base on Guava’s theory, there is a linear equation we can write this in the form y = m * x + b where y (a.k.a y(x)), or qps(q)), is our expected QPS given a saturated period (e.g. 3 minutes in), m is the rate of change from our cold (minimum) rate to our stable (maximum) rate, x (or q) is the occupied token.
+Base on Guava’s theory, there is a linear equation we can write this in the form y = m * x + b where y (a.k.a y(x)), or qps(q)), is our expected QPS given a saturated period (e.g. 3 minutes in), 
+m is the rate of change from our cold (minimum) rate to our stable (maximum) rate, x (or q) is the occupied token.
 
 
 
@@ -292,3 +297,7 @@ public class WarmUpRateLimiterController extends WarmUpController {
 }
 ```
 
+
+## Links
+
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)

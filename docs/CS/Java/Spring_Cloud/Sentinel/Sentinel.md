@@ -19,9 +19,9 @@
 
 ```xml
 <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
-            <version>x.y.z.RELEASE</version>
+    <groupId>com.alibaba.cloud</groupId>
+    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+    <version>x.y.z.RELEASE</version>
 </dependency>
 ```
 
@@ -33,9 +33,14 @@ spring.cloud.sentinel.transport.dashboard = localhost:8080
 
 3. Test using JMeter
 
-- [How Sentinel works](/docs/CS/Java/Spring_Cloud_Alibaba/Sentinel/work.md)
-- [CircuitBreaker](/docs/CS/Java/Spring_Cloud_Alibaba/Sentinel/CircuitBreaker.md)
+- [How Sentinel works](/docs/CS/Java/Spring_Cloud/Sentinel)
+- [CircuitBreaker](/docs/CS/Java/Spring_Cloud/Sentinel/CircuitBreaker.md)
 
+
+
+## Links
+
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
 
 
 ## References

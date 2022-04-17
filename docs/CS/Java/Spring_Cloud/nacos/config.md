@@ -42,7 +42,7 @@ public interface ConfigService {
 }
 ```
 
-execute by executorService run [LongPollingRunnable](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/config.md?id=LongPollingRunnable)
+execute by executorService run [LongPollingRunnable](/docs/CS/Java/Spring_Cloud/nacosmd?id=LongPollingRunnable)
 
 ```java
 public class NacosConfigService implements ConfigService {

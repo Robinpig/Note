@@ -68,10 +68,6 @@ Spring’s focus on speed, simplicity, and productivity has made it the world's 
 
 [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md) provides tools for developers to quickly build some of the common patterns in distributed systems (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 
-### Spring Cloud Alibaba
-
-[Spring Cloud Alibaba](/docs/CS/Java/Spring_Cloud_Alibaba/Spring_Cloud_Alibaba.md) provides a one-stop solution for distributed application development. It contains all the components required to develop distributed applications, making it easy for you to develop your applications using Spring Cloud.
-
 ### Netty
 [Netty](/docs/CS/Java/Netty/Netty.md) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
 

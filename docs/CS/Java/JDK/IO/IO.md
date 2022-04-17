@@ -301,6 +301,26 @@ Channels are, in general, intended to be safe for multithreaded access as descri
 
 A socket will have a channel if, and only if, the channel itself was created via the `SocketChannel.open` or `ServerSocketChannel.accept` methods.
 
+
+#### Connect
+
+Connects this channel's socket.
+
+If this channel is in non-blocking mode then an invocation of this method initiates a non-blocking connection operation. 
+- If the connection is established immediately, as can happen with a local connection, then this method returns true. 
+- Otherwise this method returns false and the connection operation must later be completed by invoking the finishConnect method.
+
+If this channel is in blocking mode then an invocation of this method will block until the connection is established or an I/O error occurs.
+
+This method performs exactly the same security checks as the Socket class. 
+That is, if a security manager has been installed then this method verifies that its checkConnect method permits connecting to the address and port number of the given remote endpoint.
+
+This method may be invoked at any time. 
+If a read or write operation upon this channel is invoked while an invocation of this method is in progress then that operation will first block until this invocation is complete. 
+If a connection attempt is initiated but fails, that is, if an invocation of this method throws a checked exception, then the channel will be closed.
+
+
+
 ### Selector
 
 A multiplexor of SelectableChannel objects.
