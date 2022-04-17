@@ -110,6 +110,21 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 
 - [Sort](/docs/CS/Algorithms/Sort.md)
 
+
+
+
+### Consensus Algorithm
+
+Paxos
+
+Raft
+
+
+### Compression Algorithms
+
+
+
+
 ## Links
 - [CS](/docs/CS/CS.md)
 - [Computer Organization](/docs/CS/CO/CO.md)

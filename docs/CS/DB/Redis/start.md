@@ -84,9 +84,9 @@ int main(int argc, char **argv) {
     server.exec_argv[argc] = NULL;
     for (j = 0; j < argc; j++) server.exec_argv[j] = zstrdup(argv[j]);
 
-    /* We need to init sentinel right now as parsing the configuration file
-     * in sentinel mode will have the effect of populating the sentinel
-     * data structures with master nodes to monitor. */
+```
+We need to init sentinel right now as parsing the configuration file in sentinel mode will have the effect of populating the sentinel data structures with master nodes to monitor.
+```c
     if (server.sentinel_mode) {
         initSentinelConfig();
         initSentinel();
@@ -473,7 +473,7 @@ void loadServerConfig(char *filename, char *options) {
 
 1. setupSignalHandlers
 2. createSharedObjects
-3. aeCreateEventLoop
+3. [aeCreateEventLoop](/docs/CS/DB/Redis/ae.md?id=aeCreateEventLoop)
 4. open TCP listening socket and Unix domain socket
 5. Create the Redis databases and initialize other internal state
 6. aeCreateTimeEvent
@@ -843,113 +843,6 @@ void createSharedObjects(void) {
      * string in string comparisons for the ZRANGEBYLEX command. */
     shared.minstring = sdsnew("minstring");
     shared.maxstring = sdsnew("maxstring");
-}
-```
-
-
-
-#### aeCreateEventLoop
-
-`aeCreateEventLoop` first `malloc`s `aeEventLoop` structure then calls `ae_epoll.c:aeApiCreate`.
-
-The definition of `aeEventLoop` is below:
-
-```c
-typedef struct aeEventLoop
-{
-    int maxfd;
-    long long timeEventNextId;
-    aeFileEvent events[AE_SETSIZE]; /* Registered events */
-    aeFiredEvent fired[AE_SETSIZE]; /* Fired events */
-    aeTimeEvent *timeEventHead;
-    int stop;
-    void *apidata; /* This is used for polling API specific data */
-    aeBeforeSleepProc *beforesleep;
-} aeEventLoop;
-```
-
-
-
-`aeApiCreate` `malloc`s `aeApiState` that has two fields - `epfd` that holds the `epoll` file descriptor returned by a call from [`epoll_create`](http://man.cx/epoll_create(2)) and `events` that is of type `struct epoll_event` define by the Linux `epoll` library. The use of the `events` field will be described later.
-
-Next is `ae.c:aeCreateTimeEvent`. But before that `initServer` call `anet.c:anetTcpServer` that creates and returns a *listening descriptor*. The descriptor listens on *port 6379* by default. The returned *listening descriptor* is stored in `server.fd` field.
-
-```c
-aeEventLoop *aeCreateEventLoop(int setsize) {
-    aeEventLoop *eventLoop;
-    int i;
-
-    if ((eventLoop = zmalloc(sizeof(*eventLoop))) == NULL) goto err;
-    eventLoop->events = zmalloc(sizeof(aeFileEvent)*setsize);
-    eventLoop->fired = zmalloc(sizeof(aeFiredEvent)*setsize);
-    if (eventLoop->events == NULL || eventLoop->fired == NULL) goto err;
-    eventLoop->setsize = setsize;
-    eventLoop->lastTime = time(NULL);
-    eventLoop->timeEventHead = NULL;
-    eventLoop->timeEventNextId = 0;
-    eventLoop->stop = 0;
-    eventLoop->maxfd = -1;
-    eventLoop->beforesleep = NULL;
-    eventLoop->aftersleep = NULL;
-    eventLoop->flags = 0;
-    if (aeApiCreate(eventLoop) == -1) goto err;
-    /* Events with mask == AE_NONE are not set. So let's initialize the
-     * vector with it. */
-    for (i = 0; i < setsize; i++)
-        eventLoop->events[i].mask = AE_NONE;
-    return eventLoop;
-
-err:
-    if (eventLoop) {
-        zfree(eventLoop->events);
-        zfree(eventLoop->fired);
-        zfree(eventLoop);
-    }
-    return NULL;
-}
-```
-
-```c
-// ae.h
-/* State of an event based program */
-typedef struct aeEventLoop {
-    int maxfd;   /* highest file descriptor currently registered */
-    int setsize; /* max number of file descriptors tracked */
-    long long timeEventNextId;
-    time_t lastTime;     /* Used to detect system clock skew */
-    aeFileEvent *events; /* Registered events */
-    aeFiredEvent *fired; /* Fired events */
-    aeTimeEvent *timeEventHead;
-    int stop;
-    void *apidata; /* This is used for polling API specific data */
-    aeBeforeSleepProc *beforesleep;
-    aeBeforeSleepProc *aftersleep;
-    int flags;
-} aeEventLoop;
-```
-
-
-
-##### aeApiCreate
-
-```c
-static int aeApiCreate(aeEventLoop *eventLoop) {
-    aeApiState *state = zmalloc(sizeof(aeApiState));
-
-    if (!state) return -1;
-    state->events = zmalloc(sizeof(struct kevent)*eventLoop->setsize);
-    if (!state->events) {
-        zfree(state);
-        return -1;
-    }
-    state->kqfd = kqueue();
-    if (state->kqfd == -1) {
-        zfree(state->events);
-        zfree(state);
-        return -1;
-    }
-    eventLoop->apidata = state;
-    return 0;
 }
 ```
 
@@ -1612,7 +1505,7 @@ void aeMain(aeEventLoop *eventLoop) {
 
 ## Do
 
-
+### execute
 
 #### readQueryFromClient
 
