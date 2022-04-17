@@ -166,9 +166,7 @@ Since a SYN occupies one byte of the sequence number space, the acknowledgment n
 Similarly, the ACK of each FIN is the sequence number of the FIN plus one.
 
 
-第三次握手方可携带数据
-
-初始序列号ISN生成基于时钟 RFC1948
+ISN based on the timestamp, see RFC1948
 
 - syn queue
 - accept queue
@@ -193,24 +191,19 @@ if RTO very large, the actual reties will < setting retries
 #define TCP_RTO_MAX	((unsigned)(120*HZ))
 #define TCP_RTO_MIN	((unsigned)(HZ/5))
 ```
-y
+
 
 ### Connection Termination
 
 While it takes three segments to establish a connection, it takes four to terminate a connection.
 
-1. One application calls close first, and we say that this end performs the active
-   close. This end’s TCP sends a FIN segment, which means it is finished sending
-   data.
-2. The other end that receives the FIN performs the passive close. The received FIN
-   is acknowledged by TCP. The receipt of the FIN is also passed to the application
-   as an end-of-file (after any data that may have already been queued for the
-   application to receive), since the receipt of the FIN means the application will
-   not receive any additional data on the connection.
-3. Sometime later, the application that received the end-of-file will close its
-   socket. This causes its TCP to send a FIN.
-4. The TCP on the system that receives this final FIN (the end that did the active
-   close) acknowledges the FIN.
+1. One application calls close first, and we say that this end performs the active close. 
+   This end’s TCP sends a FIN segment, which means it is finished sending data.
+2. The other end that receives the FIN performs the passive close. The received FIN is acknowledged by TCP. 
+   The receipt of the FIN is also passed to the application as an end-of-file (after any data that may have already been queued for the application to receive), 
+   since the receipt of the FIN means the application will not receive any additional data on the connection.
+3. Sometime later, the application that received the end-of-file will close its socket. This causes its TCP to send a FIN.
+4. The TCP on the system that receives this final FIN (the end that did the active close) acknowledges the FIN.
 
 Since a FIN and an ACK are required in each direction, four segments are normally required.
 We use the qualifier ‘‘normally’’ because in some scenarios, the FIN in Step 1 is sent with data.

@@ -128,7 +128,7 @@ why
 
 
 
-### Producer
+## Producer
 
 A Kafka client that publishes records to the Kafka cluster.
 The producer is thread safe and sharing a single producer instance across threads will generally be faster than having multiple instances.
@@ -158,6 +158,26 @@ The acks config controls the criteria under which requests are considered comple
 If the request fails, the producer can automatically retry. The retries setting defaults to Integer.MAX_VALUE, and it's recommended to use delivery.timeout.ms to control retry behavior, instead of retries.
 
 The producer maintains buffers of unsent records for each partition. These buffers are of a size specified by the batch.size config. Making this larger can result in more batching, but requires more memory (since we will generally have one of these buffers for each active partition).
+
+> [!NOTE]
+>
+> new Sender and start ioThread in the constructor of Producer. And create connections with all of cluster brokers.
+
+
+
+TODO: 
+1. Connection with brokers
+2. Connection close
+    - Kafka will close idle timeout connection if clients set `connections.max.idle.ms!=-1`.
+    - Otherwise, clients don't explicit close() and will keep CLOSE_WAIT until it send again.
+ 
+
+## Interceptor
+
+### ProducerInterceptor
+
+### ConsumerInterceptor
+
 
 
 ### Record
