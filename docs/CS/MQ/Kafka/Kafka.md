@@ -171,6 +171,59 @@ TODO:
     - Kafka will close idle timeout connection if clients set `connections.max.idle.ms!=-1`.
     - Otherwise, clients don't explicit close() and will keep CLOSE_WAIT until it send again.
  
+### Idempotence
+
+single partition, single session
+
+
+
+### Transaction
+
+all partitions, all sessions
+
+```java
+producer.initTransactions();
+try {
+            producer.beginTransaction();
+            producer.send(record1);
+            producer.send(record2);
+            producer.commitTransaction();
+} catch (KafkaException e) {
+            producer.abortTransaction();
+}
+```
+
+kafka.consumer.isolation-level: read_committed
+
+## Consumer
+
+### Consumer Group
+
+Best Practice: Consumer Number == Partition Number
+
+
+## Rebalance
+
+1. Partitions
+2. Topics
+3. Consumers
+
+All consumers stop and wait until rebalanced finished.
+
+
+### Consumer Offset
+
+K,V
+
+K: Topic, Partition, GroupId
+
+
+offsets.topic.num.partitions
+
+
+Compact commmitted ack
+
+
 
 ## Interceptor
 
