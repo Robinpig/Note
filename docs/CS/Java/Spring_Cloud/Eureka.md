@@ -224,6 +224,46 @@ public class DiscoveryClient implements EurekaClient {
 }
 ```
 
+#### TimedSupervisorTask
+
+increment currentDelay * 2 if timeout, otherwise set default 30s
+
+```java
+public class TimedSupervisorTask extends TimerTask {
+    @Override
+    public void run() {
+        Future<?> future = null;
+        try {
+            future = executor.submit(task);
+            threadPoolLevelGauge.set((long) executor.getActiveCount());
+            future.get(timeoutMillis, TimeUnit.MILLISECONDS);  // block until done or timeout
+            delay.set(timeoutMillis);
+            threadPoolLevelGauge.set((long) executor.getActiveCount());
+            successCounter.increment();
+        } catch (TimeoutException e) {
+            timeoutCounter.increment();
+
+            long currentDelay = delay.get();
+            long newDelay = Math.min(maxDelay, currentDelay * 2);
+            delay.compareAndSet(currentDelay, newDelay);
+
+        } catch (RejectedExecutionException e) {
+            rejectedCounter.increment();
+        } catch (Throwable e) {
+            throwableCounter.increment();
+        } finally {
+            if (future != null) {
+                future.cancel(true);
+            }
+
+            if (!scheduler.isShutdown()) {
+                scheduler.schedule(this, delay.get(), TimeUnit.MILLISECONDS);
+            }
+        }
+    }
+}
+```
+
 ### DiscoveryClient
 
 Define a simple interface over the current DiscoveryClient implementation.
