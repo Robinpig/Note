@@ -855,6 +855,149 @@ Producer compress、Broker storage(also decompress to verify records)、Consumer
 >
 > Broker keep the same compression type and same message version(v1 <-> v1, v2 <-> v2) as producers to avoid performance risk.
 
+
+
+## NetworkServer
+
+### Reactor
+
+```java
+public class NioEchoServer extends Thread {
+    private final ServerSocketChannel serverSocketChannel;
+    private final List<SocketChannel> newChannels;
+    private final List<SocketChannel> socketChannels;
+    private final AcceptorThread acceptorThread;
+    private final Selector selector;
+    private volatile TransferableChannel outputChannel;
+    private final CredentialCache credentialCache;
+    private final Metrics metrics;
+    private volatile int numSent = 0;
+    private volatile boolean closeKafkaChannels;
+    private final DelegationTokenCache tokenCache;
+    private final Time time;
+
+    public NioEchoServer(ListenerName listenerName, SecurityProtocol securityProtocol, AbstractConfig config,
+                         String serverHost, ChannelBuilder channelBuilder, CredentialCache credentialCache,
+                         int failedAuthenticationDelayMs, Time time, DelegationTokenCache tokenCache) throws Exception {
+        super("echoserver");
+        setDaemon(true);
+        serverSocketChannel = ServerSocketChannel.open();
+        serverSocketChannel.configureBlocking(false);
+        serverSocketChannel.socket().bind(new InetSocketAddress(serverHost, 0));
+        this.port = serverSocketChannel.socket().getLocalPort();
+        this.socketChannels = Collections.synchronizedList(new ArrayList<SocketChannel>());
+        this.newChannels = Collections.synchronizedList(new ArrayList<SocketChannel>());
+        this.credentialCache = credentialCache;
+        this.tokenCache = tokenCache;
+        if (securityProtocol == SecurityProtocol.SASL_PLAINTEXT || securityProtocol == SecurityProtocol.SASL_SSL) {
+            for (String mechanism : ScramMechanism.mechanismNames()) {
+                if (credentialCache.cache(mechanism, ScramCredential.class) == null)
+                    credentialCache.createCache(mechanism, ScramCredential.class);
+            }
+        }
+        LogContext logContext = new LogContext();
+        if (channelBuilder == null)
+            channelBuilder = ChannelBuilders.serverChannelBuilder(listenerName, false,
+                    securityProtocol, config, credentialCache, tokenCache, time, logContext,
+                    () -> ApiVersionsResponse.defaultApiVersionsResponse(ApiMessageType.ListenerType.ZK_BROKER));
+        this.metrics = new Metrics();
+        this.selector = new Selector(10000, failedAuthenticationDelayMs, metrics, time,
+                "MetricGroup", channelBuilder, logContext);
+        acceptorThread = new AcceptorThread();
+        this.time = time;
+    }
+}
+```
+
+#### Acceptor
+
+```java
+private class AcceptorThread extends Thread {
+    public AcceptorThread() {
+        setName("acceptor");
+    }
+
+    @Override
+    public void run() {
+        java.nio.channels.Selector acceptSelector = null;
+
+        try {
+            acceptSelector = java.nio.channels.Selector.open();
+            serverSocketChannel.register(acceptSelector, SelectionKey.OP_ACCEPT);
+            while (serverSocketChannel.isOpen()) {
+                if (acceptSelector.select(1000) > 0) {
+                    Iterator<SelectionKey> it = acceptSelector.selectedKeys().iterator();
+                    while (it.hasNext()) {
+                        SelectionKey key = it.next();
+                        if (key.isAcceptable()) {
+                            SocketChannel socketChannel = ((ServerSocketChannel) key.channel()).accept();
+                            socketChannel.configureBlocking(false);
+                            newChannels.add(socketChannel);
+                            selector.wakeup();
+                        }
+                        it.remove();
+                    }
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn(e.getMessage(), e);
+        } finally {
+            Utils.closeQuietly(acceptSelector, "acceptSelector");
+        }
+    }
+}
+```
+
+
+
+```java
+public class NioEchoServer extends Thread {
+    @Override
+    public void run() {
+        try {
+            acceptorThread.start();
+            while (serverSocketChannel.isOpen()) {
+                selector.poll(100);
+                synchronized (newChannels) {
+                    for (SocketChannel socketChannel : newChannels) {
+                        String id = id(socketChannel);
+                        selector.register(id, socketChannel);
+                        socketChannels.add(socketChannel);
+                    }
+                    newChannels.clear();
+                }
+                if (closeKafkaChannels) {
+                    for (KafkaChannel channel : selector.channels())
+                        selector.close(channel.id());
+                }
+
+                Collection<NetworkReceive> completedReceives = selector.completedReceives();
+                for (NetworkReceive rcv : completedReceives) {
+                    KafkaChannel channel = channel(rcv.source());
+                    if (!maybeBeginServerReauthentication(channel, rcv, time)) {
+                        String channelId = channel.id();
+                        selector.mute(channelId);
+                        NetworkSend send = new NetworkSend(rcv.source(), ByteBufferSend.sizePrefixed(rcv.payload()));
+                        if (outputChannel == null)
+                            selector.send(send);
+                        else {
+                            send.writeTo(outputChannel);
+                            selector.unmute(channelId);
+                        }
+                    }
+                }
+                for (NetworkSend send : selector.completedSends()) {
+                    selector.unmute(send.destinationId());
+                    numSent += 1;
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn(e.getMessage(), e);
+        }
+    }
+}
+```
+
 ## Links
 
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)

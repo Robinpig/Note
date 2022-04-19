@@ -108,10 +108,20 @@ paritition内部有序, 同一个key只会散列到同一个parition, 可以设�
 
 
 
-## Zookeeper
+## Controller
+
+QuorumController implements the main logic of the KRaft (Kafka Raft Metadata) mode controller. 
+The node which is the leader of the metadata log becomes the active controller. 
+All other nodes remain in standby mode. Standby controllers cannot create new metadata log entries. 
+They just replay the metadata log entries that the current active controller has created. 
+The QuorumController is **single-threaded**. A single event handler thread performs most operations. 
+This avoids the need for complex locking. 
+The controller exposes an *asynchronous, futures-based API* to the world. 
+This reflects the fact that the controller may have several operations in progress at any given point. 
+The future associated with each operation will not be completed until the results of the operation have been made durable to the metadata log.
 
 
-controller
+
 
 
 1. Register Brokers
@@ -197,9 +207,71 @@ kafka.consumer.isolation-level: read_committed
 
 ## Consumer
 
+**The Kafka consumer is NOT thread-safe.** All network I/O happens in the thread of the application making the call. 
+It is the responsibility of the user to ensure that multi-threaded access is properly synchronized. 
+Un-synchronized access will result in ConcurrentModificationException.
+
+1. One Consumer Per Thread
+2. Decouple Consumption and Processing
+
+
+Create Connections
+
+- FindCoordinator
+- connect Coordinator
+- consume records
+
+
 ### Consumer Group
 
+The consumer group state.
+
+```java
+public enum ConsumerGroupState {
+   UNKNOWN("Unknown"),
+   PREPARING_REBALANCE("PreparingRebalance"),
+   COMPLETING_REBALANCE("CompletingRebalance"),
+   STABLE("Stable"),
+   DEAD("Dead"),
+   EMPTY("Empty");
+}
+```
+
 Best Practice: Consumer Number == Partition Number
+
+```java
+
+ try{
+      while (true) {
+         ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(1));
+         process(records); // 处理消息
+         commitAysnc(); // 使用异步提交规避阻塞
+      }
+   } catch(Exception e){
+      handle(e); // 处理异常
+   } finally{
+      try {
+         consumer.commitSync(); // 最后一次提交使用同步阻塞式提交
+      } finally {
+         consumer.close();
+      }
+   }
+
+```
+
+Standalone consumer must use different groupId
+
+
+#### Latency
+
+High latency will cause records not in page cache and can not use Zero Copy
+```shell
+bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group <group name>
+```
+
+##### JMX
+
+
 
 
 ## Rebalance
@@ -210,6 +282,17 @@ Best Practice: Consumer Number == Partition Number
 
 All consumers stop and wait until rebalanced finished.
 
+Coordinator
+
+partitionId=Math.abs(groupId.hashCode() % offsetsTopicPartitionCount)
+
+- session.timeout.ms = 6s。
+- heartbeat.interval.ms = 2s
+  max.poll.interval.ms
+Full GC STW
+  
+
+Choose a leader of consumers and let leader selects strategy.
 
 ### Consumer Offset
 
