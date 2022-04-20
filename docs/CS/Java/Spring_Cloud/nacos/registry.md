@@ -44,6 +44,35 @@ public class NacosServiceRegistry implements ServiceRegistry<Registration> {
 }
 ```
 
+### NamingService
+
+Get NamingService by Constructor.newInstance(properties);
+
+1. HostReactor schedule updateTask every 10s
+2. BeatReactor schedule BeatTask
+```java
+public class NacosNamingService implements NamingService {
+    public NacosNamingService(Properties properties) throws NacosException {
+        init(properties);
+    }
+
+    private void init(Properties properties) throws NacosException {
+        ValidatorUtils.checkInitParam(properties);
+        this.namespace = InitUtils.initNamespaceForNaming(properties);
+        InitUtils.initSerialization();
+        initServerAddr(properties);
+        InitUtils.initWebRootContext(properties);
+        initCacheDir();
+        initLogName(properties);
+
+        this.serverProxy = new NamingProxy(this.namespace, this.endpoint, this.serverList, properties);
+        this.beatReactor = new BeatReactor(this.serverProxy, initClientBeatThreadCount(properties));
+        this.hostReactor = new HostReactor(this.serverProxy, beatReactor, this.cacheDir, isLoadCacheAtStart(properties),
+                isPushEmptyProtect(properties), initPollingThreadCount(properties));
+    }
+}
+```
+
 
 ### registerInstance
 
