@@ -1,18 +1,15 @@
+## Introduction
+
+
 
 
 ## Config
 
+Enables Dubbo components as Spring Beans, equals `DubboComponentScan` and `EnableDubboConfig` combination.
+
+**Note**: `EnableDubbo` must base on Spring Framework 4.2 and above
+
 ```java
-/**
- * Enables Dubbo components as Spring Beans, equals
- * {@link DubboComponentScan} and {@link EnableDubboConfig} combination.
- * <p>
- * Note : {@link EnableDubbo} must base on Spring Framework 4.2 and above
- *
- * @see DubboComponentScan
- * @see EnableDubboConfig
- * @since 2.5.8
- */
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
@@ -20,75 +17,25 @@
 @EnableDubboConfig
 @DubboComponentScan
 public @interface EnableDubbo {
-
-    /**
-     * Base packages to scan for annotated @Service classes.
-     * <p>
-     * Use {@link #scanBasePackageClasses()} for a type-safe alternative to String-based
-     * package names.
-     *
-     * @return the base packages to scan
-     * @see DubboComponentScan#basePackages()
-     */
+    
     @AliasFor(annotation = DubboComponentScan.class, attribute = "basePackages")
     String[] scanBasePackages() default {};
 
-    /**
-     * Type-safe alternative to {@link #scanBasePackages()} for specifying the packages to
-     * scan for annotated @Service classes. The package of each class specified will be
-     * scanned.
-     *
-     * @return classes from the base packages to scan
-     * @see DubboComponentScan#basePackageClasses
-     */
     @AliasFor(annotation = DubboComponentScan.class, attribute = "basePackageClasses")
     Class<?>[] scanBasePackageClasses() default {};
 
-
-    /**
-     * It indicates whether {@link AbstractConfig} binding to multiple Spring Beans.
-     *
-     * @return the default value is <code>true</code>
-     * @see EnableDubboConfig#multiple()
-     */
     @AliasFor(annotation = EnableDubboConfig.class, attribute = "multiple")
     boolean multipleConfig() default true;
 
 }
 ```
 
+### Registrar
+
+registerBeanDefinitions
 
 
 ```java
-/**
- * As a convenient and multiple {@link EnableConfigurationBeanBinding}
- * in default behavior , is equal to single bean bindings with below convention prefixes of properties:
- * <ul>
- * <li>{@link ApplicationConfig} binding to property : "dubbo.application"</li>
- * <li>{@link ModuleConfig} binding to property :  "dubbo.module"</li>
- * <li>{@link RegistryConfig} binding to property :  "dubbo.registry"</li>
- * <li>{@link ProtocolConfig} binding to property :  "dubbo.protocol"</li>
- * <li>{@link MonitorConfig} binding to property :  "dubbo.monitor"</li>
- * <li>{@link ProviderConfig} binding to property :  "dubbo.provider"</li>
- * <li>{@link ConsumerConfig} binding to property :  "dubbo.consumer"</li>
- * </ul>
- * <p>
- * In contrast, on multiple bean bindings that requires to set {@link #multiple()} to be <code>true</code> :
- * <ul>
- * <li>{@link ApplicationConfig} binding to property : "dubbo.applications"</li>
- * <li>{@link ModuleConfig} binding to property :  "dubbo.modules"</li>
- * <li>{@link RegistryConfig} binding to property :  "dubbo.registries"</li>
- * <li>{@link ProtocolConfig} binding to property :  "dubbo.protocols"</li>
- * <li>{@link MonitorConfig} binding to property :  "dubbo.monitors"</li>
- * <li>{@link ProviderConfig} binding to property :  "dubbo.providers"</li>
- * <li>{@link ConsumerConfig} binding to property :  "dubbo.consumers"</li>
- * </ul>
- *
- * @see EnableConfigurationBeanBinding
- * @see DubboConfigConfiguration
- * @see DubboConfigConfigurationRegistrar
- * @since 2.5.8
- */
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
@@ -96,30 +43,10 @@ public @interface EnableDubbo {
 @Import(DubboConfigConfigurationRegistrar.class)
 public @interface EnableDubboConfig {
 
-    /**
-     * It indicates whether binding to multiple Spring Beans.
-     *
-     * @return the default value is <code>true</code>
-     * @revised 2.5.9
-     */
     boolean multiple() default true;
 
 }
-```
 
-
-
-
-
-```java
-/**
- * Dubbo {@link AbstractConfig Config} {@link ImportBeanDefinitionRegistrar register}, which order can be configured
- *
- * @see EnableDubboConfig
- * @see DubboConfigConfiguration
- * @see Ordered
- * @since 2.5.8
- */
 public class DubboConfigConfigurationRegistrar implements ImportBeanDefinitionRegistrar, ApplicationContextAware {
 
     private ConfigurableApplicationContext applicationContext;
@@ -142,14 +69,6 @@ public class DubboConfigConfigurationRegistrar implements ImportBeanDefinitionRe
         // Since 2.7.6
         registerCommonBeans(registry);
     }
-
-    @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        if (!(applicationContext instanceof ConfigurableApplicationContext)) {
-            throw new IllegalArgumentException("The argument of ApplicationContext must be ConfigurableApplicationContext");
-        }
-        this.applicationContext = (ConfigurableApplicationContext) applicationContext;
-    }
 }
 ```
 
@@ -169,32 +88,26 @@ public class ServiceClassPostProcessor implements BeanDefinitionRegistryPostProc
             // @since 2.7.3 Add the compatibility for legacy Dubbo's @Service , the issue : https://github.com/apache/dubbo/issues/4330
             com.alibaba.dubbo.config.annotation.Service.class
     );
-          
-          
-          @Override
-          public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
 
-            // @since 2.7.5
-            registerInfrastructureBean(registry, DubboBootstrapApplicationListener.BEAN_NAME, DubboBootstrapApplicationListener.class);
 
-            Set<String> resolvedPackagesToScan = resolvePackagesToScan(packagesToScan);
+    @Override
+    public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
 
-            if (!CollectionUtils.isEmpty(resolvedPackagesToScan)) {
-              registerServiceBeans(resolvedPackagesToScan, registry);
-            } else {} }
-          ...
+        // @since 2.7.5
+        registerInfrastructureBean(registry, DubboBootstrapApplicationListener.BEAN_NAME, DubboBootstrapApplicationListener.class);
+
+        Set<String> resolvedPackagesToScan = resolvePackagesToScan(packagesToScan);
+
+        if (!CollectionUtils.isEmpty(resolvedPackagesToScan)) {
+            registerServiceBeans(resolvedPackagesToScan, registry);
         }
+    }
+}
 ```
 
 #### registerServiceBeans
 
 ```java
-/**
- * Registers Beans whose classes was annotated {@link Service}
- *
- * @param packagesToScan The base packages to scan
- * @param registry       {@link BeanDefinitionRegistry}
- */
 private void registerServiceBeans(Set<String> packagesToScan, BeanDefinitionRegistry registry) {
 
     DubboClassPathBeanDefinitionScanner scanner =
@@ -223,18 +136,6 @@ private void registerServiceBeans(Set<String> packagesToScan, BeanDefinitionRegi
 	}
 }
 
-/**
- * It'd better to use BeanNameGenerator instance that should reference
- * {@link ConfigurationClassPostProcessor#componentScanBeanNameGenerator},
- * thus it maybe a potential problem on bean name generation.
- *
- * @param registry {@link BeanDefinitionRegistry}
- * @return {@link BeanNameGenerator} instance
- * @see SingletonBeanRegistry
- * @see AnnotationConfigUtils#CONFIGURATION_BEAN_NAME_GENERATOR
- * @see ConfigurationClassPostProcessor#processConfigBeanDefinitions
- * @since 2.5.8
- */
 private BeanNameGenerator resolveBeanNameGenerator(BeanDefinitionRegistry registry) {
     BeanNameGenerator beanNameGenerator = null;
 
@@ -250,81 +151,6 @@ private BeanNameGenerator resolveBeanNameGenerator(BeanDefinitionRegistry regist
 }
 ```
 
-### ReferenceAnnotationBeanPostProcessor
-
-org.springframework.beans.factory.config.BeanPostProcessor implementation that Consumer service Reference annotated fields
-
-```java
-public class ReferenceAnnotationBeanPostProcessor extends AbstractAnnotationBeanPostProcessor implements
-        ApplicationContextAware, ApplicationListener {
-    /**
-     * The bean name of {@link ReferenceAnnotationBeanPostProcessor}
-     */
-    public static final String BEAN_NAME = "referenceAnnotationBeanPostProcessor";
-
-    /**
-     * Cache size
-     */
-    private static final int CACHE_SIZE = Integer.getInteger(BEAN_NAME + ".cache.size", 32);
-
-    private final ConcurrentMap<String, ReferenceBean<?>> referenceBeanCache =
-            new ConcurrentHashMap<>(CACHE_SIZE);
-
-    private final ConcurrentMap<InjectionMetadata.InjectedElement, ReferenceBean<?>> injectedFieldReferenceBeanCache =
-            new ConcurrentHashMap<>(CACHE_SIZE);
-
-    private final ConcurrentMap<InjectionMetadata.InjectedElement, ReferenceBean<?>> injectedMethodReferenceBeanCache =
-            new ConcurrentHashMap<>(CACHE_SIZE);
-
-    private ApplicationContext applicationContext;
-
-    private static Map<String, TreeSet<String>> referencedBeanNameIdx = new HashMap<>();
-
-    /**
-     * {@link com.alibaba.dubbo.config.annotation.Reference @com.alibaba.dubbo.config.annotation.Reference} has been supported since 2.7.3
-     * <p>
-     * {@link DubboReference @DubboReference} has been supported since 2.7.7
-     */
-    public ReferenceAnnotationBeanPostProcessor() {
-        super(DubboReference.class, Reference.class, com.alibaba.dubbo.config.annotation.Reference.class);
-    }
- ... 
-}
-```
-
-
-
-#### doGetInjectedBean
-
-```java
-@Override
-protected Object doGetInjectedBean(AnnotationAttributes attributes, Object bean, String beanName, Class<?> injectedType,
-                                   InjectionMetadata.InjectedElement injectedElement) throws Exception {
-    /**
-     * The name of bean that annotated Dubbo's {@link Service @Service} in local Spring {@link ApplicationContext}
-     */
-    String referencedBeanName = buildReferencedBeanName(attributes, injectedType);
-
-    /**
-     * The name of bean that is declared by {@link Reference @Reference} annotation injection
-     */
-    String referenceBeanName = getReferenceBeanName(attributes, injectedType);
-
-    referencedBeanNameIdx.computeIfAbsent(referencedBeanName, k -> new TreeSet<String>()).add(referenceBeanName);
-
-    ReferenceBean referenceBean = buildReferenceBeanIfAbsent(referenceBeanName, attributes, injectedType);
-
-    boolean localServiceBean = isLocalServiceBean(referencedBeanName, referenceBean, attributes);
-
-    prepareReferenceBean(referencedBeanName, referenceBean, localServiceBean);
-
-    registerReferenceBean(referencedBeanName, referenceBean, localServiceBean, referenceBeanName);
-
-    cacheInjectedReferenceBean(referenceBean, injectedElement);
-
-    return getBeanFactory().applyBeanPostProcessorsAfterInitialization(referenceBean.get(), referenceBeanName);
-}
-```
 
 
 
@@ -333,13 +159,33 @@ protected Object doGetInjectedBean(AnnotationAttributes attributes, Object bean,
 ### doExport
 
 
+Invoked after publish ContextRefreshedEvent in [Spring finishRefresh](/docs/CS/Java/Spring/IoC.md?id=finishRefresh)
+
+```java
+public class DubboBootstrapApplicationListener extends OnceApplicationContextEventListener implements Ordered {
+
+    @Override
+    public void onApplicationContextEvent(ApplicationContextEvent event) {
+        if (DubboBootstrapStartStopListenerSpringAdapter.applicationContext == null) {
+            DubboBootstrapStartStopListenerSpringAdapter.applicationContext = event.getApplicationContext();
+        }
+        if (event instanceof ContextRefreshedEvent) {
+            onContextRefreshedEvent((ContextRefreshedEvent) event);
+        } else if (event instanceof ContextClosedEvent) {
+            onContextClosedEvent((ContextClosedEvent) event);
+        }
+    }
+
+    private void onContextRefreshedEvent(ContextRefreshedEvent event) {
+        dubboBootstrap.start();
+    }
+}
+```
+
 
 ```java
 // ServiceConfig#doExport()
 protected synchronized void doExport() {
-    if (unexported) {
-        throw new IllegalStateException("The service " + interfaceClass.getName() + " has already unexported!");
-    }
     if (exported) {
         return;
     }
@@ -1027,3 +873,8 @@ public class DubboBootstrapApplicationListener implements ApplicationListener, A
     }
 }
 ```
+
+
+## Links
+
+- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)

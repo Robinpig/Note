@@ -1927,7 +1927,7 @@ AbstractPropertyAccessor
 ApplicationContext refresh ⽅法⾥⾯的操作不只是 IoC，是⾼级容器的所有功能（包括 IoC），
 IoC 的功能在低级容器⾥就可以实现
 
- ApplicationContext继承接口图
+ApplicationContext继承接口图
  由上图可知ApplicationContext在BeanFactory 简单IoC容器的基础上 增加了许多面向框架的特性 同时对应用环境作了许多适配
 
 > - **支持不同的信息源** 我们看到ApplicationContext扩展了MessageSource接口 这些信息源的扩展功能可以支持国际化的实现 为开发多语言版本的应用提供服务
@@ -1939,66 +1939,65 @@ IoC 的功能在低级容器⾥就可以实现
 
 ```java
 // AbstractApplicationContext#refresh()
-@Override
-	public void refresh() throws BeansException, IllegalStateException {
-		synchronized (this.startupShutdownMonitor) {
-			// Prepare this context for refreshing.
-			prepareRefresh();
+public void refresh() throws BeansException, IllegalStateException {
+    synchronized (this.startupShutdownMonitor) {
+        // Prepare this context for refreshing.
+        prepareRefresh();
 
-			// Tell the subclass to refresh the internal bean factory.
-			ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+        // Tell the subclass to refresh the internal bean factory.
+        ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
 
-			// Prepare the bean factory for use in this context.
-			prepareBeanFactory(beanFactory);
+        // Prepare the bean factory for use in this context.
+        prepareBeanFactory(beanFactory);
 
-			try {
-				// Allows post-processing of the bean factory in context subclasses.
-				postProcessBeanFactory(beanFactory);
+        try {
+            // Allows post-processing of the bean factory in context subclasses.
+            postProcessBeanFactory(beanFactory);
 
-				// Invoke factory processors registered as beans in the context.
-				invokeBeanFactoryPostProcessors(beanFactory);
+            // Invoke factory processors registered as beans in the context.
+            invokeBeanFactoryPostProcessors(beanFactory);
 
-				// Register bean processors that intercept bean creation.
-				registerBeanPostProcessors(beanFactory);
+            // Register bean processors that intercept bean creation.
+            registerBeanPostProcessors(beanFactory);
 
-				// Initialize message source for this context.
-				initMessageSource();
+            // Initialize message source for this context.
+            initMessageSource();
 
-				// Initialize event multicaster for this context.
-				initApplicationEventMulticaster();
+            // Initialize event multicaster for this context.
+            initApplicationEventMulticaster();
 
-				// Initialize other special beans in specific context subclasses.
-				onRefresh();
+            // Initialize other special beans in specific context subclasses.
+            onRefresh();
 
-				// Check for listener beans and register them.
-				registerListeners();
+            // Check for listener beans and register them.
+            registerListeners();
 
-				// Instantiate all remaining (non-lazy-init) singletons.
-				finishBeanFactoryInitialization(beanFactory);
+            // Instantiate all remaining (non-lazy-init) singletons.
+            finishBeanFactoryInitialization(beanFactory);
 
-				// Last step: publish corresponding event.
-				finishRefresh();
-			}
+            // Last step: publish corresponding event.
+            finishRefresh();
+        }
 
-			catch (BeansException ex) {
+        catch (BeansException ex) {
 
-				// Destroy already created singletons to avoid dangling resources.
-				destroyBeans();
+            // Destroy already created singletons to avoid dangling resources.
+            destroyBeans();
 
-				// Reset 'active' flag.
-				cancelRefresh(ex);
+            // Reset 'active' flag.
+            cancelRefresh(ex);
 
-				// Propagate exception to caller.
-				throw ex;
-			}
+            // Propagate exception to caller.
+            throw ex;
+        }
 
-			finally {
-				// Reset common introspection caches in Spring's core, since we
-				// might not ever need metadata for singleton beans anymore...
-				resetCommonCaches();
-			}
-		}
-	}
+        finally {
+            // Reset common introspection caches in Spring's core, since we
+            // might not ever need metadata for singleton beans anymore...
+            resetCommonCaches();
+        }
+    }
+}
 ```
 
 ### prepareRefresh
@@ -2521,7 +2520,75 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 }
 ```
 
+### finishRefresh
 
+Finish the refresh of this context, invoking the LifecycleProcessor's `onRefresh()` method and publishing the `ContextRefreshedEvent`.
+
+```java
+protected void finishRefresh() {
+		// Clear context-level resource caches (such as ASM metadata from scanning).
+		clearResourceCaches();
+
+		// Initialize lifecycle processor for this context.
+		initLifecycleProcessor();
+
+		// Propagate refresh to lifecycle processor first.
+		getLifecycleProcessor().onRefresh();
+
+		// Publish the final event.
+		publishEvent(new ContextRefreshedEvent(this));
+
+		// Participate in LiveBeansView MBean, if active.
+		LiveBeansView.registerApplicationContext(this);
+	}
+```
+
+
+#### publishEvent
+
+
+Multicasts all events to all registered listeners, leaving it up to the listeners to ignore events that they are not interested in. 
+Listeners will usually perform corresponding instanceof checks on the passed-in event object.
+
+**By default, all listeners are invoked in the calling thread.** 
+This allows the danger of a rogue listener blocking the entire application, but adds minimal overhead. 
+Specify an alternative task executor to have listeners executed in different threads, for example from a thread pool.
+
+```java
+public class SimpleApplicationEventMulticaster extends AbstractApplicationEventMulticaster {
+    public void multicastEvent(final ApplicationEvent event, @Nullable ResolvableType eventType) {
+        ResolvableType type = (eventType != null ? eventType : resolveDefaultEventType(event));
+        Executor executor = getTaskExecutor();
+        for (ApplicationListener<?> listener : getApplicationListeners(event, type)) {
+            if (executor != null) {
+                executor.execute(() -> invokeListener(listener, event));
+            } else {
+                invokeListener(listener, event);
+            }
+        }
+    }
+
+    private void doInvokeListener(ApplicationListener listener, ApplicationEvent event) {
+        try {
+            listener.onApplicationEvent(event);
+        }
+        catch (ClassCastException ex) {
+            String msg = ex.getMessage();
+            if (msg == null || matchesClassCastMessage(msg, event.getClass())) {
+                // Possibly a lambda-defined listener which we could not resolve the generic event type for
+                // -> let's suppress the exception and just log a debug message.
+                Log logger = LogFactory.getLog(getClass());
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Non-matching event type for listener: " + listener, ex);
+                }
+            }
+            else {
+                throw ex;
+            }
+        }
+    }
+}
+```
 
 ## Close
 

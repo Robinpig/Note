@@ -1,12 +1,30 @@
-
-
-
-## [Java SPI](/docs/CS/Java/JDK/Basic/SPI.md)
-
 ## Introduction
 
-![Dubbo-SPI](./images/Dubbo-SPI.png)
+> [!TIP]
+>
+> [Java SPI](/docs/CS/Java/JDK/Basic/SPI.md)
 
+Changes on extension configuration file Use Protocol as an example, its configuration file `'META-INF/dubbo/com.xxx.Protocol'` is changed from:
+
+- com.foo.XxxProtocol
+- com.foo.YyyProtocol
+
+to key-value pair
+
+- xxx=com.foo.XxxProtocol
+- yyy=com.foo.YyyProtocol
+
+The reason for this change is:
+If there's third party library referenced by static field or by method in extension implementation, its class will fail to initialize if the third party library doesn't exist.
+In this case, dubbo cannot figure out extension's id therefore cannot be able to map the exception information with the extension, if the previous format is used.
+
+**For example**:
+Fails to load Extension("mina").
+When user configure to use mina, dubbo will complain the extension cannot be loaded, instead of reporting which extract extension implementation fails and the extract reason.
+
+### Packages
+
+![Dubbo-SPI](./images/Dubbo-SPI.png)
 
 ```java
 @Documented
@@ -22,38 +40,19 @@ public @interface SPI {
 }
 ```
 
-`SPI` marker for extension interface
+### Example
 
-Such as Protocol
+`SPI` marker for extension interface
 
 ```java
 //Protocol. (API/SPI, Singleton, ThreadSafe)
 @SPI("dubbo")
 public interface Protocol {
-...
   
   	@Adaptive
     <T> Exporter<T> export(Invoker<T> invoker) throws RpcException;
 }
 ```
-
-
-
-Changes on extension configuration file Use Protocol as an example, its configuration file `'META-INF/dubbo/com.xxx.Protocol'` is changed from: 
-       com.foo.XxxProtocol
-       com.foo.YyyProtocol
-
-to key-value pair 
-       xxx=com.foo.XxxProtocol
-       yyy=com.foo.YyyProtocol
-
- The reason for this change is:
-If there's third party library referenced by static field or by method in extension implementation, its class will fail to initialize if the third party library doesn't exist. In this case, dubbo cannot figure out extension's id therefore cannot be able to map the exception information with the extension, if the previous format is used.
-
-For example:
-Fails to load Extension("mina"). When user configure to use mina, dubbo will complain the extension cannot be loaded, instead of reporting which extract extension implementation fails and the extract reason.
-
-
 
 ## ExtensionLoader
 
@@ -64,8 +63,6 @@ auto wrap extension in wrapper
 default extension is an adaptive instance
 See Also:
 [Service Provider in Java 5](https://docs.oracle.com/javase/1.5.0/docs/guide/jar/jar.html#Service%20Provider) , SPI, Adaptive, Activate
-
-
 
 ```java
 public class ExtensionLoader<T> {
@@ -125,15 +122,13 @@ public class ExtensionLoader<T> {
 }
 ```
 
-
-
 ### getExtensionLoader
 
 ```java
 @SuppressWarnings("unchecked")
 public static <T> ExtensionLoader<T> getExtensionLoader(Class<T> type) {
   	// assert type nonNull & isInterface & with @SPI
-    
+  
     ExtensionLoader<T> loader = (ExtensionLoader<T>) EXTENSION_LOADERS.get(type);
     if (loader == null) {// if no cache, new ExtensionLoader & put in cache
         EXTENSION_LOADERS.putIfAbsent(type, new ExtensionLoader<T>(type));
@@ -153,11 +148,7 @@ private ExtensionLoader(Class<?> type) {
 2. getAdaptiveExtension
 3. getActivateExtension
 
-
-
-
 ### getAdaptiveExtension
-
 
 1. if cachedAdaptiveInstance, return
 2. Else `getAdaptiveExtensionClass`
@@ -165,8 +156,6 @@ private ExtensionLoader(Class<?> type) {
       1. invoke `loadExtensionClasses`
    2. Or cachedAdaptiveClass == null, `createAdaptiveExtensionClass`
 3. `injectExtension`
-
-
 
 Use DCL get instance from `cachedAdaptiveInstance`
 
@@ -199,8 +188,6 @@ public T getAdaptiveExtension() {
 }
 ```
 
-
-
 #### createAdaptiveExtension
 
 ```java
@@ -223,8 +210,6 @@ private Class<?> getAdaptiveExtensionClass() {
 
 ```
 
-
-
 #### createAdaptiveExtensionClass
 
 **create Dynamic Class** by [AdaptiveClassCodeGenerator](/docs/CS/Java/Dubbo/SPi.md?id=AdaptiveClassCodeGenerator)
@@ -239,10 +224,6 @@ private Class<?> createAdaptiveExtensionClass() {
 }
 ```
 
-
-
-
-
 #### injectExtension
 
 objectFactory set by ExtensionLoader's constructor
@@ -256,17 +237,13 @@ public interface ExtensionFactory {
 }
 ```
 
-Implementions:
+Implementations:
 
 1. AdaptiveExtensionFactory
-
 2. SpiExtensionFactory
-
 3. SpringExtensionFactory
 
-   
-
-use `setter` to inject
+use `setter` to inject like IoC
 
 ```java
 private T injectExtension(T instance) {
@@ -307,8 +284,6 @@ private void initExtension(T instance) {
     }
 }
 ```
-
-
 
 #### getExtensionClasses
 
@@ -372,8 +347,6 @@ private void cacheDefaultExtensionName() {
 }
 ```
 
-
-
 ##### loadDirectory
 
 ```java
@@ -412,8 +385,6 @@ private void loadDirectory(Map<String, Class<?>> extensionClasses, String dir, S
     }
 }
 ```
-
-
 
 ##### loadResource
 
@@ -466,11 +437,9 @@ private boolean isExcluded(String className, String... excludedPackages) {
 }
 ```
 
-
-
 ### loadClass
 
-cache Class 
+cache Class
 
 ```java
 private void loadClass(Map<String, Class<?>> extensionClasses, java.net.URL resourceURL, Class<?> clazz, String name,
@@ -482,7 +451,7 @@ private void loadClass(Map<String, Class<?>> extensionClasses, java.net.URL reso
     }
     if (clazz.isAnnotationPresent(Adaptive.class)) {
         cacheAdaptiveClass(clazz, overridden);
-      
+    
     } else if (isWrapperClass(clazz)) {/** 	test if clazz is a wrapper class
 																						which has Constructor with given 
 																						class type as its only argument*/													cacheWrapperClass(clazz);
@@ -517,8 +486,6 @@ private void cacheName(Class<?> clazz, String name) {
 }
 ```
 
-
-
 #### cacheAdaptiveClass
 
 ```java
@@ -552,8 +519,6 @@ private void cacheWrapperClass(Class<?> clazz) {
 }
 ```
 
-
-
 #### cacheActivateClass
 
 ```java
@@ -577,7 +542,6 @@ private void cacheActivateClass(Class<?> clazz, String name) {
 }
 ```
 
-
 #### saveInExtensionClass
 
 ```java
@@ -598,8 +562,6 @@ private void saveInExtensionClass(Map<String, Class<?>> extensionClasses, Class<
     }
 }
 ```
-
-
 
 ### getExtension
 
@@ -632,8 +594,6 @@ public T getExtension(String name, boolean wrap) {
 }
 ```
 
-
-
 ```java
 /**
  * get the original type.
@@ -646,8 +606,6 @@ public T getOriginalInstance(String name) {
     return (T) EXTENSION_INSTANCES.get(clazz);
 }
 ```
-
-
 
 #### getDefaultExtension
 
@@ -667,13 +625,12 @@ public T getDefaultExtension() {
 }
 ```
 
-
-
-
-
 #### createExtension
 
-call injectExension
+
+Wrap extensions like AOP
+
+invoke [injectExension](/docs/CS/Java/Dubbo/SPI.md?id=injectExension)
 
 ```java
 @SuppressWarnings("unchecked")
@@ -717,8 +674,6 @@ private T createExtension(String name, boolean wrap) {
 }
 ```
 
-
-
 ```java
 private static ClassLoader findClassLoader() {
     return ClassUtils.getClassLoader(ExtensionLoader.class);
@@ -733,8 +688,6 @@ public String getExtensionName(Class<?> extensionClass) {
     return cachedNames.get(extensionClass);
 }
 ```
-
-
 
 ### getActivateExtension
 
@@ -813,10 +766,6 @@ public List<T> getActivateExtension(URL url, String[] values, String group) {
 }
 ```
 
-
-
-
-
 ### AdaptiveClassCodeGenerator
 
 ```java
@@ -847,8 +796,6 @@ public String generate() {
 }
 ```
 
-
-
 ## Compiler
 
 ![Compiler](./images/Compiler.png)
@@ -871,10 +818,6 @@ public interface Compiler {
 
 }
 ```
-
-
-
-
 
 ```java
 /**
@@ -905,8 +848,6 @@ public class AdaptiveCompiler implements Compiler {
 
 }
 ```
-
-
 
 ### JavassistCompiler
 
@@ -975,8 +916,6 @@ public class JavassistCompiler extends AbstractCompiler {
 }
 ```
 
-
-
 ### JDKCompiler
 
 ```java
@@ -1005,13 +944,14 @@ public class JdkCompiler extends AbstractCompiler {
 ## Summary
 
 
-
 |              | JDK SPI                   | Dubbo SPI       |
-| ------------ | ------------------------- | --------------- |
+| -------------- | --------------------------- | ----------------- |
 | load         | must load all SubClasses  | -               |
 | Source       | only one source           | -               |
 | Fail Message | fail message may override | -               |
 | Extension    | -                         | support IoC AOP |
 
- 
 
+## Links
+
+- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
