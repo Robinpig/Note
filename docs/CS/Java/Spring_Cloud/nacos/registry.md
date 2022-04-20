@@ -416,8 +416,6 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
                 return NamingResponseCode.RESOURCE_NOT_FOUND;
             }
             
-            Loggers.SRV_LOG.warn("[CLIENT-BEAT] The instance has been removed for health mechanism, "
-                    + "perform data compensation operations, beat: {}, serviceName: {}", clientBeat, serviceName);
             instance = parseInstance(builder.setBeatInfo(clientBeat).setServiceName(serviceName).build());
             serviceManager.registerInstance(namespaceId, serviceName, instance);
         }
@@ -436,8 +434,6 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
         return NamingResponseCode.OK;
     }
 ```
-
-namingLoadCacheAtStart
 
 
 

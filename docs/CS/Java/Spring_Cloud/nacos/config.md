@@ -2,6 +2,7 @@
 
 
 ### Example
+
 ```java
 public static void main(String[] args) throws NacosException, InterruptedException {
         Properties properties = new Properties();
@@ -27,22 +28,64 @@ public static void main(String[] args) throws NacosException, InterruptedExcepti
     }
 ```
 
-### ConfigService
+## Config Refresh
+
+### PropertySourceLocator
+1. init [ConfigService](/docs/CS/Java/Spring_Cloud/nacos/config.md?id=ConfigService)
+2. merge configurations
+
 ```java
-public interface ConfigService {
-    /**
-     * Add a listener to the configuration, after the server modified the
-     * configuration, the client will use the incoming listener callback.
-     * Recommended asynchronous processing, the application can implement the
-     * getExecutor method in the ManagerListener, provide a thread pool of
-     * execution. If provided, use the main thread callback, May block other
-     * configurations or be blocked by other configurations.
-     */
-    void addListener(String dataId, String group, Listener listener) throws NacosException;
+@Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(name = "spring.cloud.nacos.config.enabled", matchIfMissing = true)
+public class NacosConfigBootstrapConfiguration {
+    //...
+    
+    @Bean
+    public NacosPropertySourceLocator nacosPropertySourceLocator(
+            NacosConfigManager nacosConfigManager) {
+        return new NacosPropertySourceLocator(nacosConfigManager);
+    }
+}
+
+public class NacosPropertySourceLocator implements PropertySourceLocator {
+    @Override
+    public PropertySource<?> locate(Environment env) {
+        nacosConfigProperties.setEnvironment(env);
+        ConfigService configService = nacosConfigManager.getConfigService();
+
+        if (null == configService) {
+            log.warn("no instance of config service found, can't load config from nacos");
+            return null;
+        }
+        long timeout = nacosConfigProperties.getTimeout();
+        nacosPropertySourceBuilder = new NacosPropertySourceBuilder(configService,
+                timeout);
+        String name = nacosConfigProperties.getName();
+
+        String dataIdPrefix = nacosConfigProperties.getPrefix();
+        if (StringUtils.isEmpty(dataIdPrefix)) {
+            dataIdPrefix = name;
+        }
+
+        if (StringUtils.isEmpty(dataIdPrefix)) {
+            dataIdPrefix = env.getProperty("spring.application.name");
+        }
+
+        CompositePropertySource composite = new CompositePropertySource(
+                NACOS_PROPERTY_SOURCE_NAME);
+
+        loadSharedConfiguration(composite);
+        loadExtConfiguration(composite);
+        loadApplicationConfiguration(composite, dataIdPrefix, nacosConfigProperties, env);
+        return composite;
+    }
 }
 ```
 
-execute by executorService run [LongPollingRunnable](/docs/CS/Java/Spring_Cloud/nacosmd?id=LongPollingRunnable)
+
+### ConfigService
+
+execute by executorService run [LongPollingRunnable](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md?id=LongPollingRunnable)
 
 ```java
 public class NacosConfigService implements ConfigService {
@@ -54,7 +97,8 @@ public class NacosConfigService implements ConfigService {
         worker.addTenantListeners(dataId, group, Arrays.asList(listener));
     }
 
-    public ClientWorker(final HttpAgent agent, final ConfigFilterChainManager configFilterChainManager, final Properties properties) {
+    public ClientWorker(final HttpAgent agent, final ConfigFilterChainManager configFilterChainManager,
+                        final Properties properties) {
         this.agent = agent;
         this.configFilterChainManager = configFilterChainManager;
 
@@ -62,7 +106,7 @@ public class NacosConfigService implements ConfigService {
 
         init(properties);
 
-        executor = Executors.newScheduledThreadPool(1, new ThreadFactory() {
+        this.executor = Executors.newScheduledThreadPool(1, new ThreadFactory() {
             @Override
             public Thread newThread(Runnable r) {
                 Thread t = new Thread(r);
@@ -72,17 +116,18 @@ public class NacosConfigService implements ConfigService {
             }
         });
 
-        executorService = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors(), new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("com.alibaba.nacos.client.Worker.longPolling." + agent.getName());
-                t.setDaemon(true);
-                return t;
-            }
-        });
+        this.executorService = Executors
+                .newScheduledThreadPool(Runtime.getRuntime().availableProcessors(), new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread t = new Thread(r);
+                        t.setName("com.alibaba.nacos.client.Worker.longPolling." + agent.getName());
+                        t.setDaemon(true);
+                        return t;
+                    }
+                });
 
-        executor.scheduleWithFixedDelay(new Runnable() {
+        this.executor.scheduleWithFixedDelay(new Runnable() {
             @Override
             public void run() {
                 try {
@@ -93,15 +138,15 @@ public class NacosConfigService implements ConfigService {
             }
         }, 1L, 10L, TimeUnit.MILLISECONDS);
     }
-
+    
     public void checkConfigInfo() {
-        // 分任务
-        int listenerSize = cacheMap.get().size();
-        // 向上取整为批数
+        // Dispatch tasks.
+        int listenerSize = cacheMap.size();
+        // Round up the longingTaskCount.
         int longingTaskCount = (int) Math.ceil(listenerSize / ParamUtil.getPerTaskConfigSize());
         if (longingTaskCount > currentLongingTaskCount) {
             for (int i = (int) currentLongingTaskCount; i < longingTaskCount; i++) {
-                // 要判断任务是否在执行 这块需要好好想想。 任务列表现在是无序的。变化过程可能有问题
+                // The task list is no order.So it maybe has issues when changing.
                 executorService.execute(new LongPollingRunnable(i));
             }
             currentLongingTaskCount = longingTaskCount;
@@ -109,8 +154,10 @@ public class NacosConfigService implements ConfigService {
     }
 }
 ```
-### LongPollingRunnable
-longPoll getServerConfig
+#### LongPollingRunnable
+
+1. check failover config
+2. longPoll check server config
 ```java
 class LongPollingRunnable implements Runnable {
         private int taskId;
@@ -119,134 +166,138 @@ class LongPollingRunnable implements Runnable {
             this.taskId = taskId;
         }
 
-        @Override
-        public void run() {
+    @Override
+    public void run() {
 
-            List<CacheData> cacheDatas = new ArrayList<CacheData>();
-            List<String> inInitializingCacheList = new ArrayList<String>();
-            try {
-                // check failover config
-                for (CacheData cacheData : cacheMap.get().values()) {
-                    if (cacheData.getTaskId() == taskId) {
-                        cacheDatas.add(cacheData);
-                        try {
-                            checkLocalConfig(cacheData);
-                            if (cacheData.isUseLocalConfigInfo()) {
-                                cacheData.checkListenerMd5();
-                            }
-                        } catch (Exception e) {
-                            LOGGER.error("get local config info error", e);
-                        }
-                    }
-                }
-
-                // check server config
-                List<String> changedGroupKeys = checkUpdateDataIds(cacheDatas, inInitializingCacheList);
-
-                for (String groupKey : changedGroupKeys) {
-                    String[] key = GroupKey.parseKey(groupKey);
-                    String dataId = key[0];
-                    String group = key[1];
-                    String tenant = null;
-                    if (key.length == 3) {
-                        tenant = key[2];
-                    }
-                    try {
-                        String content = getServerConfig(dataId, group, tenant, 3000L);
-                        CacheData cache = cacheMap.get().get(GroupKey.getKeyTenant(dataId, group, tenant));
-                        cache.setContent(content);
-                        LOGGER.info("[{}] [data-received] dataId={}, group={}, tenant={}, md5={}, content={}",
-                            agent.getName(), dataId, group, tenant, cache.getMd5(),
-                            ContentUtils.truncateContent(content));
-                    } catch (NacosException ioe) {
-                        String message = String.format(
-                            "[%s] [get-update] get changed config exception. dataId=%s, group=%s, tenant=%s",
-                            agent.getName(), dataId, group, tenant);
-                        LOGGER.error(message, ioe);
-                    }
-                }
-                for (CacheData cacheData : cacheDatas) {
-                    if (!cacheData.isInitializing() || inInitializingCacheList
-                        .contains(GroupKey.getKeyTenant(cacheData.dataId, cacheData.group, cacheData.tenant))) {
-                        cacheData.checkListenerMd5();
-                        cacheData.setInitializing(false);
-                    }
-                }
-                inInitializingCacheList.clear();
-
-                executorService.execute(this);
-
-            } catch (Throwable e) {
-
-                // If the rotation training task is abnormal, the next execution time of the task will be punished
-                LOGGER.error("longPolling error : ", e);
-                executorService.schedule(this, taskPenaltyTime, TimeUnit.MILLISECONDS);
-            }
-        }
-    }
-```
-
-get config from  Nacos Server
-#### getServerConfig
-```java
-    public static final String CONFIG_CONTROLLER_PATH = BASE_PATH + "/configs";
-
-    public String getServerConfig(String dataId, String group, String tenant, long readTimeout)
-        throws NacosException {
-        if (StringUtils.isBlank(group)) {
-            group = Constants.DEFAULT_GROUP;
-        }
-
-        HttpResult result = null;
+        List<CacheData> cacheDatas = new ArrayList<CacheData>();
+        List<String> inInitializingCacheList = new ArrayList<String>();
         try {
-            List<String> params = null;
-            if (StringUtils.isBlank(tenant)) {
-                params = Arrays.asList("dataId", dataId, "group", group);
-            } else {
-                params = Arrays.asList("dataId", dataId, "group", group, "tenant", tenant);
+            // check failover config
+            for (CacheData cacheData : cacheMap.values()) {
+                if (cacheData.getTaskId() == taskId) {
+                    cacheDatas.add(cacheData);
+                    try {
+                        checkLocalConfig(cacheData);
+                        if (cacheData.isUseLocalConfigInfo()) {
+                            cacheData.checkListenerMd5();
+                        }
+                    } catch (Exception e) {
+                        LOGGER.error("get local config info error", e);
+                    }
+                }
             }
-            result = agent.httpGet(Constants.CONFIG_CONTROLLER_PATH, null, params, agent.getEncode(), readTimeout);
-        } catch (IOException e) {
-            String message = String.format(
-                "[%s] [sub-server] get server config exception, dataId=%s, group=%s, tenant=%s", agent.getName(),
-                dataId, group, tenant);
-            LOGGER.error(message, e);
-            throw new NacosException(NacosException.SERVER_ERROR, e);
-        }
 
-        switch (result.code) {
-            case HttpURLConnection.HTTP_OK:
-                LocalConfigInfoProcessor.saveSnapshot(agent.getName(), dataId, group, tenant, result.content);
-                return result.content;
-            case HttpURLConnection.HTTP_NOT_FOUND:
-                LocalConfigInfoProcessor.saveSnapshot(agent.getName(), dataId, group, tenant, null);
-                return null;
-            case HttpURLConnection.HTTP_CONFLICT: {
-                LOGGER.error(
-                    "[{}] [sub-server-error] get server config being modified concurrently, dataId={}, group={}, "
-                        + "tenant={}", agent.getName(), dataId, group, tenant);
-                throw new NacosException(NacosException.CONFLICT,
-                    "data being modified, dataId=" + dataId + ",group=" + group + ",tenant=" + tenant);
+            // check server config
+            List<String> changedGroupKeys = checkUpdateDataIds(cacheDatas, inInitializingCacheList);
+
+            for (String groupKey : changedGroupKeys) {
+                String[] key = GroupKey.parseKey(groupKey);
+                String dataId = key[0];
+                String group = key[1];
+                String tenant = null;
+                if (key.length == 3) {
+                    tenant = key[2];
+                }
+                try {
+                    ConfigResponse response = getServerConfig(dataId, group, tenant, 3000L);
+                    CacheData cache = cacheMap.get(GroupKey.getKeyTenant(dataId, group, tenant));
+                    cache.setContent(response.getContent());
+                    cache.setEncryptedDataKey(response.getEncryptedDataKey());
+                    if (null != response.getConfigType()) {
+                        cache.setType(response.getConfigType());
+                    }
+                } catch (NacosException ioe) {
+                    // log
+                }
             }
-            case HttpURLConnection.HTTP_FORBIDDEN: {
-                LOGGER.error("[{}] [sub-server-error] no right, dataId={}, group={}, tenant={}", agent.getName(), dataId,
-                    group, tenant);
-                throw new NacosException(result.code, result.content);
+            for (CacheData cacheData : cacheDatas) {
+                if (!cacheData.isInitializing() || inInitializingCacheList
+                        .contains(GroupKey.getKeyTenant(cacheData.dataId, cacheData.group, cacheData.tenant))) {
+                    cacheData.checkListenerMd5();
+                    cacheData.setInitializing(false);
+                }
             }
-            default: {
-                LOGGER.error("[{}] [sub-server-error]  dataId={}, group={}, tenant={}, code={}", agent.getName(), dataId,
-                    group, tenant, result.code);
-                throw new NacosException(result.code,
-                    "http error, code=" + result.code + ",dataId=" + dataId + ",group=" + group + ",tenant=" + tenant);
+            inInitializingCacheList.clear();
+
+            executorService.execute(this);
+
+        } catch (Throwable e) {
+            // If the rotation training task is abnormal, the next execution time of the task will be punished
+            executorService.schedule(this, taskPenaltyTime, TimeUnit.MILLISECONDS);
+        }
+    }
+}
+```
+
+
+### Refresh Listener
+
+Register listeners for Publish RefreshEvent to [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
+
+```java
+public class NacosContextRefresher
+        implements ApplicationListener<ApplicationReadyEvent>, ApplicationContextAware {
+    @Override
+    public void onApplicationEvent(ApplicationReadyEvent event) {
+        // many Spring context
+        if (this.ready.compareAndSet(false, true)) {
+            this.registerNacosListenersForApplications();
+        }
+    }
+
+
+    private void registerNacosListenersForApplications() {
+        if (isRefreshEnabled()) {
+            for (NacosPropertySource propertySource : NacosPropertySourceRepository.getAll()) {
+                if (!propertySource.isRefreshable()) {
+                    continue;
+                }
+                String dataId = propertySource.getDataId();
+                registerNacosListener(propertySource.getGroup(), dataId);
             }
         }
     }
+
+    private void registerNacosListener(final String groupKey, final String dataKey) {
+        String key = NacosPropertySourceRepository.getMapKey(dataKey, groupKey);
+        Listener listener = listenerMap.computeIfAbsent(key,
+                lst -> new AbstractSharedListener() {
+                    @Override
+                    public void innerReceive(String dataId, String group,
+                                             String configInfo) {
+                        refreshCountIncrement();
+                        nacosRefreshHistory.addRefreshRecord(dataId, group, configInfo);
+                        // todo feature: support single refresh for listening
+                        applicationContext.publishEvent(new RefreshEvent(this, null, "Refresh Nacos config"));
+                    }
+                });
+        try {
+            configService.addListener(dataKey, groupKey, listener);
+        }
+        catch (NacosException e) {
+            log.warn(String.format(
+                    "register fail for nacos listener ,dataId=[%s],group=[%s]", dataKey,
+                    groupKey), e);
+        }
+    }
+}
 ```
+
+
+## Server Config
+
 
 
 ## Summary
+
 1. use ScheduledThreadPool.scheduleWithFixedDelay and longPoll
-2.
+
+
+
+## Links
+
+- [Nacos](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md)
+
 
 ## References
 1. [Listen for configurations](https://nacos.io/en-us/docs/open-api.html)

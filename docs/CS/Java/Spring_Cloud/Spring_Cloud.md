@@ -5,6 +5,12 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 
 ## Service Registry
 
+
+- Registry
+- HeartBeat
+- UpdateTask
+
+
 Represents an instance of a service in a discovery system.
 ```java
 public interface ServiceInstance {
@@ -34,6 +40,9 @@ public interface ServiceInstance {
 }
 ```
 
+
+
+### ServiceRegistry
 
 A marker interface used by a ServiceRegistry.
 
@@ -74,8 +83,6 @@ public interface ServiceRegistry<R extends Registration> {
 }
 ```
 
-
-#### AutoServiceRegistration
 ```java
 public interface AutoServiceRegistration {
 
@@ -136,6 +143,10 @@ public abstract class AbstractAutoServiceRegistration<R extends Registration>
 }
 ```
 
+## Config Refresh
+
+
+use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
 
 ## Spring Cloud Netflix
