@@ -126,7 +126,7 @@ Raft
 
 
 ## Links
-- [CS](/docs/CS/CS.md)
+
 - [Computer Organization](/docs/CS/CO/CO.md)
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Computer Network](/docs/CS/CN/CN.md)

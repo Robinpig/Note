@@ -250,7 +250,6 @@ async
 
 ## Links
 
-- [CS](/docs/CS/CS.md)
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Organization](/docs/CS/CO/CO.md)

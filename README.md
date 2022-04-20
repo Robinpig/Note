@@ -1,7 +1,10 @@
 
-## CS
 
-- [Transaction](/docs/CS/Transaction.md)
+> [!NOTE]
+> 
+> 不闻不若闻之，闻之不若见之，见之不若知之，知之不若行之。学至于行之而 止矣。
+
+ [Transaction](/docs/CS/Transaction.md)
 
 ## Computer Organization
 

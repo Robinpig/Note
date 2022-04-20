@@ -5,7 +5,7 @@ We will go into considerable detail about processes and their first cousins, thr
 
 ## Processes
 
-The most central concept in any operating system is the process: an abstraction of a running program.
+The most central concept in any operating system is the process: **an abstraction of a running program**.
 A process is just an instance of an executing program, including the current values of the program counter, registers, and variables.
 Conceptually, each process has its own virtual CPU.
 In reality, of course, the real CPU switches back and forth from process to process.

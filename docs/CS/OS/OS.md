@@ -73,7 +73,14 @@ As long as there is no need for per-core concurrency, they are probably a good c
 
 
 ## Links
-- [CS](/docs/CS/CS.md)
+
 - [Computer Organization](/docs/CS/CO/CO.md)
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Network](/docs/CS/CN/CN.md)
+
+
+## References
+
+1. [Operating Systems: Three Easy Pieces](https://pages.cs.wisc.edu/~remzi/OSTEP/)
+2. [Operating Systems Concepts]()
+3. [Modern Operating Systems](https://media.pearsoncmg.com/bc/abp/cs-resources/products/product.html#product,isbn=013359162X)
