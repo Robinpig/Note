@@ -3,7 +3,7 @@
 Spring Cloud provides tools for developers to quickly build some of the common patterns in distributed systems 
 (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 
-## Discovered
+## Service Registry
 
 Represents an instance of a service in a discovery system.
 ```java
@@ -82,6 +82,61 @@ public interface AutoServiceRegistration {
 }
 ```
 
+### AbstractAutoServiceRegistration
+
+Implementations:
+- [Nacos](/docs/CS/Java/Spring_Cloud/nacos/registry.md)
+
+```java
+public abstract class AbstractAutoServiceRegistration<R extends Registration>
+        implements AutoServiceRegistration, ApplicationContextAware,
+        ApplicationListener<WebServerInitializedEvent> {
+    
+    private final ServiceRegistry<R> serviceRegistry;
+
+    private boolean autoStartup = true;
+
+    private AtomicBoolean running = new AtomicBoolean(false);
+    
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onApplicationEvent(WebServerInitializedEvent event) {
+        bind(event);
+    }
+
+    @Deprecated
+    public void bind(WebServerInitializedEvent event) {
+        ApplicationContext context = event.getApplicationContext();
+        if (context instanceof ConfigurableWebServerApplicationContext) {
+            if ("management".equals(((ConfigurableWebServerApplicationContext) context)
+                    .getServerNamespace())) {
+                return;
+            }
+        }
+        this.port.compareAndSet(0, event.getWebServer().getPort());
+        this.start();
+    }
+
+    public void start() {
+        // only initialize if nonSecurePort is greater than 0 and it isn't already running
+        // because of containerPortInitializer below
+        if (!this.running.get()) {
+            this.context.publishEvent(
+                    new InstancePreRegisteredEvent(this, getRegistration()));
+            register();
+            if (shouldRegisterManagement()) {
+                registerManagement();
+            }
+            this.context.publishEvent(
+                    new InstanceRegisteredEvent<>(this, getConfiguration()));
+            this.running.compareAndSet(false, true);
+        }
+
+    }
+}
+```
+
+
 
 ## Spring Cloud Netflix
 
@@ -159,3 +214,7 @@ Alibaba Cloud SchedulerX
 Alibaba Cloud SMS
 
 
+## Links
+
+- [Spring Framework](/docs/CS/Java/Spring/Spring.md)
+- [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
