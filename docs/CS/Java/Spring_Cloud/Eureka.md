@@ -93,7 +93,7 @@ public class EurekaAutoServiceRegistration implements AutoServiceRegistration,
 #### registry
 
 1. init DiscoveryClient
-2. notify StatusChangeListener
+2. notify [StatusChangeListener](/docs/CS/Java/Spring_Cloud/Eureka.md?id=Status-Change)
 
 > [!NOTE]
 >
@@ -162,6 +162,9 @@ public class ApplicationInfoManager {
 3. cacheRefresh 1 thread
 4. fetchRegistry
 5. initScheduledTasks
+    - schedule CacheRefreshThread to refreshRegistry
+    - shceule heatBeatTask
+    - registerStatusChangeListener
 
 ```java
 package com.netflix.discovery;

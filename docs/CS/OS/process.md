@@ -3,6 +3,13 @@
 Processes are one of the oldest and most important abstractions that operating systems provide.
 We will go into considerable detail about processes and their first cousins, threads.
 
+
+> [!TIP]
+> Separate Policy and Mechanism
+>
+> Separating the two allows one easily to change policies without having to rethink the mechanism and is thus a form of modularity, a general software design principle.
+
+
 ## Processes
 
 The most central concept in any operating system is the process: **an abstraction of a running program**.
@@ -13,10 +20,8 @@ This rapid switching back and forth is called *multiprogramming*.
 
 When multiprogramming is used, the CPU utilization can be improved.
 
-A better model is to look at CPU usage from a probabilistic viewpoint. Suppose that a process spends a fraction p of its time waiting for I/O to complete. With
-n processes in memory at once, the probability that all n processes are waiting for
-I/O (in which case the CPU will be idle) is pn. The CPU utilization is then given
-by the formula
+A better model is to look at CPU usage from a probabilistic viewpoint. Suppose that a process spends a fraction p of its time waiting for I/O to complete. 
+With n processes in memory at once, the probability that all n processes are waiting for I/O (in which case the CPU will be idle) is pn. The CPU utilization is then given by the formula
 
 ```tex
 CPU utilization = 1 − p^n
@@ -99,7 +104,20 @@ Four transitions are possible among these three states, as shown.
   If no other process is running at that instant, transition 3 will be triggered and the process will start running. 
   Otherwise it may have to wait in ready state for a little while until the CPU is available and its turn comes.
 
-### Implementation of Processes
+
+Sometimes a system will have an **initial** state that the process is in when it is being created.
+Also, a process could be placed in a **final** state where it has exited but has not yet been cleaned up (in UNIX-based systems, this is called the **zombie** state). 
+This final state can be useful as it allows other processes(usually the parent that created the process) to examine the return code of the process and see if the just-finished process executed successfully
+(usually, programs return zero in UNIX-based systems when they have accomplished a task successfully, and non-zero otherwise). 
+When finished, the parent will make one final call (`wait()`) to wait for the completion of the child, and to also indicate to the OS that it can clean up any relevant data structures that referred to the now-extinct process.
+
+### Process Control Block
+
+To understand what constitutes a process, we thus have to understand its machine state: what a program can read or update when it is running.
+At any given time, what parts of the machine are important to the execution of this program?
+
+One obvious component of machine state that comprises a process is its memory.
+Also part of the process’s machine state are registers;
 
 To implement the process model, the operating system maintains a table (an array of structures), called the *process table*, with one entry per process. (Some authors call these entries *process control blocks*.)
 This entry contains important information about the process’ state, including its program counter, stack pointer, memory allocation, the status of its open files, its accounting and scheduling information, 

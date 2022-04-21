@@ -10,7 +10,7 @@ Key features of Nacos:
 
 ### Service Discovery And Service Health Check
 
-Nacos supports both DNS-based and RPC-based (Dubbo/gRPC) service discovery. 
+Nacos supports both DNS-based and RPC-based (Dubbo/gRPC) [service discovery](/docs/CS/Java/Spring_Cloud/nacos/registry.md). 
 After a service provider registers a service with native, OpenAPI, or a dedicated agent, a consumer can discover the service with either DNS or HTTP.
 
 Nacos provides real-time health check to prevent services from sending requests to unhealthy hosts or service instances. 
@@ -20,7 +20,7 @@ Nacos also provide a unity service health dashboard to help you manage the avail
 
 ### Dynamic configuration management
 
-Dynamic configuration service allows you to manage the configuration of all applications and services in a centralized, externalized and dynamic manner across all environments.
+[Dynamic configuration](/docs/CS/Java/Spring_Cloud/nacos/config.md) service allows you to manage the configuration of all applications and services in a centralized, externalized and dynamic manner across all environments.
 
 Dynamic configuration eliminates the need to redeploy applications and services when configurations are updated.
 
