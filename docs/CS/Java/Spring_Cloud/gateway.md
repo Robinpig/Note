@@ -17,13 +17,13 @@
 
 ## AutoConfiguration
 
-GatewayAutoConfiguration
+Injected Beans will be used in [handle](/docs/CS/Java/Spring_Cloud/gateway.md?id=handle):
+
+- [RoutePredicateHandlerMapping](/docs/CS/Java/Spring_Cloud/gateway.md?id=predicate)
+- [FilteringWebHandler](/docs/CS/Java/Spring_Cloud/gateway.md?id=filter)
 
 ```java
-
-@Configuration(
-    proxyBeanMethods = false
-)
+@Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(
     name = {"spring.cloud.gateway.enabled"},
     matchIfMissing = true
@@ -33,7 +33,17 @@ GatewayAutoConfiguration
 @AutoConfigureAfter({GatewayLoadBalancerClientAutoConfiguration.class, GatewayClassPathWarningAutoConfiguration.class})
 @ConditionalOnClass({DispatcherHandler.class})
 public class GatewayAutoConfiguration {
-    public GatewayAutoConfiguration() {
+    @Bean
+    public FilteringWebHandler filteringWebHandler(List<GlobalFilter> globalFilters) {
+        return new FilteringWebHandler(globalFilters);
+    }
+
+    @Bean
+    public RoutePredicateHandlerMapping routePredicateHandlerMapping(
+            FilteringWebHandler webHandler, RouteLocator routeLocator,
+            GlobalCorsProperties globalCorsProperties, Environment environment) {
+        return new RoutePredicateHandlerMapping(webHandler, routeLocator,
+                globalCorsProperties, environment);
     }
 }
 ```
