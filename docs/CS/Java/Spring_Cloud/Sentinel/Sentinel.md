@@ -1,5 +1,7 @@
 ## Introduction
 
+Sentinel is a powerful flow control component that takes "flow" as the breakthrough point and covers multiple fields including flow control, 
+concurrency limiting, circuit breaking, and adaptive system protection to guarantee the reliability of microservices.
 
 
 - core

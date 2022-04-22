@@ -147,6 +147,7 @@ public abstract class AbstractAutoServiceRegistration<R extends Registration>
 ## Config Refresh
 
 
+
 use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
 ## Load Balance
@@ -155,9 +156,25 @@ use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
 ## Circuit Breaker
 
+[Spring Cloud Circuit breaker](https://spring.io/projects/spring-cloud-circuitbreaker) provides an abstraction across different circuit breaker implementations.
+It provides a consistent API to use in your applications allowing you the developer to choose the circuit breaker implementation that best fits your needs for your app.
+
+Implementations:
+
+- [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
+- [Resilience4J]()
+- [Sentinel](/docs/CS/Java/Spring_Cloud/Sentinel/Sentinel.md)
+- [Spring Retry]()
+
 > [!NOTE]
 > 
 > Load Balancer retries timeout must less than circuit breaker timeout.
+
+The CircuitBreakerFactory.create API will create an instance of a class called CircuitBreaker. The run method takes a Supplier and a Function. 
+The Supplier is the code that you are going to wrap in a circuit breaker. 
+The Function is the fallback that will be executed if the circuit breaker is tripped. 
+The function will be passed the Throwable that caused the fallback to be triggered.
+
 
 ```java
 public interface CircuitBreaker {
@@ -172,12 +189,8 @@ public interface CircuitBreaker {
 
 }
 ```
-
-[Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
-
-
-[Sentinel](/docs/CS/Java/Spring_Cloud/Sentinel/Sentinel.md) is a powerful flow control component that takes "flow" as the breakthrough point and covers multiple fields including flow control, concurrency limiting, circuit breaking, and adaptive system protection to guarantee the reliability of microservices
-
+The ReactiveCircuitBreakerFactory.create API will create an instance of a class called ReactiveCircuitBreaker. 
+The run method takes with a Mono or Flux and wraps it in a circuit breaker. 
 
 ## Gateway
 
@@ -186,6 +199,17 @@ public interface CircuitBreaker {
 ## Stream
 
 ## Sleuth
+
+[Spring Cloud Sleuth](https://spring.io/projects/spring-cloud-sleuth) provides Spring Boot auto-configuration for distributed tracing.
+
+Sleuth configures everything you need to get started. This includes where trace data (spans) are reported to, how many traces to keep (sampling), if remote fields (baggage) are sent, and which libraries are traced.
+
+Specifically, Spring Cloud Sleuth
+
+- Adds trace and span ids to the Slf4J MDC, so you can extract all the logs from a given trace or span in a log aggregator.
+- Instruments common ingress and egress points from Spring applications (servlet filter, rest template, scheduled actions, message channels, feign client).
+- If `spring-cloud-sleuth-zipkin` is available then the app will generate and report Zipkin-compatible traces via HTTP. By default it sends them to a Zipkin collector service on localhost (port 9411). 
+  Configure the location of the service using `spring.zipkin.baseUrl`.
 
 - [Zipkin](/docs/CS/Java/Spring_Cloud/zipkin.md)
 

@@ -17,6 +17,17 @@ public class CommandActions {
     }
 }
 ```
+
+
+```java
+abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObservable<R> {
+  protected final HystrixCircuitBreaker circuitBreaker;
+  protected final HystrixThreadPool threadPool;
+  protected final HystrixThreadPoolKey threadPoolKey;
+  
+}
+```
+
 ### HystrixCommand
 
 Used to wrap code that will execute potentially risky functionality (typically meaning a service call over the network) with fault and latency tolerance, statistics and performance metrics capture, circuit breaker and bulkhead functionality. 
@@ -132,6 +143,7 @@ public class CommandExecutor {
 }
 ```
 
+All of them call [toObservable](/docs/CS/Java/Spring_Cloud/Hystrix.md?id=execute) finally.
 ```java
 public ResponseType execute() {
         try {
@@ -159,7 +171,142 @@ public Future<ResponseType> queue() {
         }
 ```
 
-## Circuit Breaker
+## execute
+
+```java
+abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObservable<R> {
+  
+  public Observable<R> toObservable() {
+    final Func0<Observable<R>> applyHystrixSemantics = new Func0<Observable<R>>() {
+      @Override
+      public Observable<R> call() {
+        if (commandState.get().equals(CommandState.UNSUBSCRIBED)) {
+          return Observable.never();
+        }
+        return applyHystrixSemantics(_cmd);
+      }
+    };
+  }
+
+  private Observable<R> applyHystrixSemantics(final AbstractCommand<R> _cmd) {
+    // mark that we're starting execution on the ExecutionHook
+    // if this hook throws an exception, then a fast-fail occurs with no fallback.  No state is left inconsistent
+    executionHook.onStart(_cmd);
+
+    /* determine if we're allowed to execute */
+    if (circuitBreaker.allowRequest()) {
+      final TryableSemaphore executionSemaphore = getExecutionSemaphore();
+      final AtomicBoolean semaphoreHasBeenReleased = new AtomicBoolean(false);
+      final Action0 singleSemaphoreRelease = new Action0() {
+        @Override
+        public void call() {
+          if (semaphoreHasBeenReleased.compareAndSet(false, true)) {
+            executionSemaphore.release();
+          }
+        }
+      };
+
+      final Action1<Throwable> markExceptionThrown = new Action1<Throwable>() {
+        @Override
+        public void call(Throwable t) {
+          eventNotifier.markEvent(HystrixEventType.EXCEPTION_THROWN, commandKey);
+        }
+      };
+
+      if (executionSemaphore.tryAcquire()) {
+        try {
+          /* used to track userThreadExecutionTime */
+          executionResult = executionResult.setInvocationStartTime(System.currentTimeMillis());
+          return executeCommandAndObserve(_cmd)
+                  .doOnError(markExceptionThrown)
+                  .doOnTerminate(singleSemaphoreRelease)
+                  .doOnUnsubscribe(singleSemaphoreRelease);
+        } catch (RuntimeException e) {
+          return Observable.error(e);
+        }
+      } else {
+        return handleSemaphoreRejectionViaFallback();
+      }
+    } else {
+      return handleShortCircuitViaFallback();
+    }
+  }
+}
+```
+
+### getExecution
+
+
+Bulkhead Pattern
+```properties
+execution.isolation.strategy=Semaphore
+```
+
+
+Default TryableSemaphoreNoOp using threads in Hystrix, or else in calling thread.
+
+#### HystrixThreadPool
+
+```java
+public abstract class HystrixThreadPoolProperties {
+
+  /* defaults */
+  static int default_coreSize = 10;            // core size of thread pool
+  static int default_maximumSize = 10;         // maximum size of thread pool
+  static int default_keepAliveTimeMinutes = 1; // minutes to keep a thread alive
+  static int default_maxQueueSize = -1;        // size of queue (this can't be dynamically changed so we use 'queueSizeRejectionThreshold' to artificially limit and reject)
+  // -1 turns it off and makes us use SynchronousQueue
+  static boolean default_allow_maximum_size_to_diverge_from_core_size = false; //should the maximumSize config value get read and used in configuring the threadPool
+  //turning this on should be a conscious decision by the user, so we default it to false
+
+  static int default_queueSizeRejectionThreshold = 5; // number of items in queue
+  static int default_threadPoolRollingNumberStatisticalWindow = 10000; // milliseconds for rolling number
+  static int default_threadPoolRollingNumberStatisticalWindowBuckets = 10; // number of buckets in rolling number (10 1-second buckets)
+}
+```
+
+
+#### Semaphore
+
+Semaphore that only supports tryAcquire and never blocks and that supports a dynamic permit count.
+
+Using [AtomicInteger](/docs/CS/Java/JDK/Concurrency/Atomic.md) increment/decrement instead of [java.util.concurrent.Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md) since we don't need blocking and need a custom implementation to get the dynamic permit count and
+since AtomicInteger achieves the same behavior and performance without the more complex implementation of the actual Semaphore class using [AbstractQueueSynchronizer](/docs/CS/Java/JDK/Concurrency/AQS.md).
+
+```java
+static class TryableSemaphoreActual implements TryableSemaphore {
+  protected final HystrixProperty<Integer> numberOfPermits;
+  private final AtomicInteger count = new AtomicInteger(0);
+
+  public TryableSemaphoreActual(HystrixProperty<Integer> numberOfPermits) {
+    this.numberOfPermits = numberOfPermits;
+  }
+
+  @Override
+  public boolean tryAcquire() {
+    int currentCount = count.incrementAndGet();
+    if (currentCount > numberOfPermits.get()) {
+      count.decrementAndGet();
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  @Override
+  public void release() {
+    count.decrementAndGet();
+  }
+
+  @Override
+  public int getNumberOfPermitsUsed() {
+    return count.get();
+  }
+}
+```
+
+
+### Circuit Breaker
 
 Circuit-breaker logic that is hooked into HystrixCommand execution and will stop allowing executions if failures have gone past the defined threshold.
 It will then allow single retries after a defined sleepWindow until the execution succeeds at which point it will again close the circuit and allow executions again.
@@ -176,7 +323,7 @@ public interface HystrixCircuitBreaker {
 ```
 
 
-### allowRequest
+#### allowRequest
 
 
 ```java
@@ -247,7 +394,7 @@ static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
 ```
 
 
-### markSuccess
+#### markSuccess
 
 ```java
 static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
@@ -265,82 +412,114 @@ static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
 }
 ```
 
-## isolation
-
-Bulkhead Pattern
-
-execution.isolation.strategy
-
-
-Command
-
-Based on RxJava
-
-每个 Command 创建时都要指定 `commandKey` 和 `groupKey`（用于区分资源）以及对应的隔离策略（线程池隔离 or 信号量隔离）。线程池隔离模式下需要配置线程池对应的参数（线程池名称、容量、排队超时等），然后 Command 就会在指定的线程池按照指定的容错策略执行；信号量隔离模式下需要配置最大并发数，执行 Command 时 Hystrix 就会限制其并发调用
-
-若是线程池模式则 Scheduler 底层的线程池为配置的线程池，若是信号量模式则简单包装成当前线程执行的 Scheduler。
-
-线程池隔离的好处是隔离度比较高，可以针对某个资源的线程池去进行处理而不影响其它资源，但是代价就是线程上下文切换的 overhead 比较大，特别是对低延时的调用有比较大的影响
-
-Hystrix 的信号量隔离限制对某个资源调用的并发数。这样的隔离非常轻量级，仅限制对某个资源调用的并发数，而不是显式地去创建线程池，所以 overhead 比较小，但是效果不错。但缺点是无法对慢调用自动进行降级，只能等待客户端自己超时，因此仍然可能会出现级联阻塞的情况。
-
-Sentinel 可以通过并发线程数模式的流量控制来提供信号量隔离的功能。并且结合基于响应时间的熔断降级模式，可以在不稳定资源的平均响应时间比较高的时候自动降级，防止过多的慢调用占满并发数，影响整个系统。
-
-熔断器模式 `Circuit Breaker Pattern`
-
-Sentinel 与 Hystrix 都支持基于失败比率（异常比率）的熔断降级，在调用达到一定量级并且失败比率达到设定的阈值时自动进行熔断，此时所有对该资源的调用都会被 block，直到过了指定的时间窗口后才启发性地恢复。上面提到过，Sentinel 还支持基于平均响应时间的熔断降级，可以在服务响应时间持续飙高的时候自动熔断，拒绝掉更多的请求，直到一段时间后才恢复。这样可以防止调用非常慢造成级联阻塞的情况
 
 
 
-Hystrix 和 Sentinel 的实时指标数据统计实现都是基于滑动窗口的。Hystrix 1.5 之前的版本是通过环形数组实现的滑动窗口，通过锁配合 CAS 的操作对每个桶的统计信息进行更新。Hystrix 1.5 开始对实时指标统计的实现进行了重构，将指标统计数据结构抽象成了响应式流（reactive stream）的形式，方便消费者去利用指标信息。同时底层改造成了基于 RxJava 的事件驱动模式，在服务调用成功/失败/超时的时候发布相应的事件，通过一系列的变换和聚合最终得到实时的指标统计数据流，可以被熔断器或 Dashboard 消费。
+### executeCommand
 
-Sentinel 目前抽象出了 Metric 指标统计接口，底层可以有不同的实现，目前默认的实现是基于 LeapArray 的滑动窗口，后续根据需要可能会引入 reactive stream 等实现。
+```java
+abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObservable<R> {
+  private Observable<R> executeCommandWithSpecifiedIsolation(final AbstractCommand<R> _cmd) {
+    if (properties.executionIsolationStrategy().get() == ExecutionIsolationStrategy.THREAD) {
+      // mark that we are executing in a thread (even if we end up being rejected we still were a THREAD execution and not SEMAPHORE)
+      return Observable.defer(new Func0<Observable<R>>() {
+        @Override
+        public Observable<R> call() {
+          executionResult = executionResult.setExecutionOccurred();
+          if (!commandState.compareAndSet(CommandState.OBSERVABLE_CHAIN_CREATED, CommandState.USER_CODE_EXECUTED)) {
+            return Observable.error(new IllegalStateException("execution attempted while in state : " + commandState.get().name()));
+          }
 
+          metrics.markCommandStart(commandKey, threadPoolKey, ExecutionIsolationStrategy.THREAD);
 
+          if (isCommandTimedOut.get() == TimedOutStatus.TIMED_OUT) {
+            // the command timed out in the wrapping thread so we will return immediately
+            // and not increment any of the counters below or other such logic
+            return Observable.error(new RuntimeException("timed out before executing run()"));
+          }
+          if (threadState.compareAndSet(ThreadState.NOT_USING_THREAD, ThreadState.STARTED)) {
+            //we have not been unsubscribed, so should proceed
+            HystrixCounters.incrementGlobalConcurrentThreads();
+            threadPool.markThreadExecution();
+            // store the command that is being run
+            endCurrentThreadExecutingCommand = Hystrix.startCurrentThreadExecutingCommand(getCommandKey());
+            executionResult = executionResult.setExecutedInThread();
+            /**
+             * If any of these hooks throw an exception, then it appears as if the actual execution threw an error
+             */
+            try {
+              executionHook.onThreadStart(_cmd);
+              executionHook.onRunStart(_cmd);
+              executionHook.onExecutionStart(_cmd);
+              return getUserExecutionObservable(_cmd);
+            } catch (Throwable ex) {
+              return Observable.error(ex);
+            }
+          } else {
+            //command has already been unsubscribed, so return immediately
+            return Observable.error(new RuntimeException("unsubscribed before executing run()"));
+          }
+        }
+      }).doOnTerminate(new Action0() {
+        @Override
+        public void call() {
+          if (threadState.compareAndSet(ThreadState.STARTED, ThreadState.TERMINAL)) {
+            handleThreadEnd(_cmd);
+          }
+          if (threadState.compareAndSet(ThreadState.NOT_USING_THREAD, ThreadState.TERMINAL)) {
+            //if it was never started and received terminal, then no need to clean up (I don't think this is possible)
+          }
+          //if it was unsubscribed, then other cleanup handled it
+        }
+      }).doOnUnsubscribe(new Action0() {
+        @Override
+        public void call() {
+          if (threadState.compareAndSet(ThreadState.STARTED, ThreadState.UNSUBSCRIBED)) {
+            handleThreadEnd(_cmd);
+          }
+          if (threadState.compareAndSet(ThreadState.NOT_USING_THREAD, ThreadState.UNSUBSCRIBED)) {
+            //if it was never started and was cancelled, then no need to clean up
+          }
+          //if it was terminal, then other cleanup handled it
+        }
+      }).subscribeOn(threadPool.getScheduler(new Func0<Boolean>() {
+        @Override
+        public Boolean call() {
+          return properties.executionIsolationThreadInterruptOnTimeout().get() && _cmd.isCommandTimedOut.get() == TimedOutStatus.TIMED_OUT;
+        }
+      }));
+    } else {
+      return Observable.defer(new Func0<Observable<R>>() {
+        @Override
+        public Observable<R> call() {
+          executionResult = executionResult.setExecutionOccurred();
+          if (!commandState.compareAndSet(CommandState.OBSERVABLE_CHAIN_CREATED, CommandState.USER_CODE_EXECUTED)) {
+            return Observable.error(new IllegalStateException("execution attempted while in state : " + commandState.get().name()));
+          }
 
-## [Sentinel 特性](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=sentinel-特性)
+          metrics.markCommandStart(commandKey, threadPoolKey, ExecutionIsolationStrategy.SEMAPHORE);
+          // semaphore isolated
+          // store the command that is being run
+          endCurrentThreadExecutingCommand = Hystrix.startCurrentThreadExecutingCommand(getCommandKey());
+          try {
+            executionHook.onRunStart(_cmd);
+            executionHook.onExecutionStart(_cmd);
+            return getUserExecutionObservable(_cmd);  //the getUserExecutionObservable method already wraps sync exceptions, so this shouldn't throw
+          } catch (Throwable ex) {
+            //If the above hooks throw, then use that as the result of the run method
+            return Observable.error(ex);
+          }
+        }
+      });
+    }
+  }
+}
+```
 
-除了之前提到的两者的共同特性之外，Sentinel 还提供以下的特色功能：
-
-### [1. 轻量级、高性能](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_1-轻量级、高性能)
-
-Sentinel 作为一个功能完备的高可用流量管控组件，其核心 sentinel-core 没有任何多余依赖，打包后只有不到 200KB，非常轻量级。开发者可以放心地引入 sentinel-core 而不需担心依赖问题。同时，Sentinel 提供了多种扩展点，用户可以很方便地根据需求去进行扩展，并且无缝地切合到 Sentinel 中。
-
-引入 Sentinel 带来的性能损耗非常小。只有在业务单机量级超过 25W QPS 的时候才会有一些显著的影响（5% - 10% 左右），单机 QPS 不太大的时候损耗几乎可以忽略不计。
-
-### [2. 流量控制](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_2-流量控制)
-
-Sentinel 可以针对不同的调用关系，以不同的运行指标（如 QPS、并发调用数、系统负载等）为基准，对资源调用进行流量控制，将随机的请求调整成合适的形状。
-
-Sentinel 支持多样化的流量整形策略，在 QPS 过高的时候可以自动将流量调整成合适的形状。常用的有：
-
-- **直接拒绝模式**：即超出的请求直接拒绝。
-- **慢启动预热模式**：当流量激增的时候，控制流量通过的速率，让通过的流量缓慢增加，在一定时间内逐渐增加到阈值上限，给冷系统一个预热的时间，避免冷系统被压垮。 ![Slow-Start-Preheating-Mode](https://doocs.github.io/advanced-java/docs/high-availability/images/Slow-Start-Preheating-Mode.jpg)
-- **匀速器模式**：利用 Leaky Bucket 算法实现的匀速模式，严格控制了请求通过的时间间隔，同时堆积的请求将会排队，超过超时时长的请求直接被拒绝。Sentinel 还支持基于调用关系的限流，包括基于调用方限流、基于调用链入口限流、关联流量限流等，依托于 Sentinel 强大的调用链路统计信息，可以提供精准的不同维度的限流。 ![Homogenizer-mode](https://doocs.github.io/advanced-java/docs/high-availability/images/Homogenizer-mode.jpg)
-
-目前 Sentinel 对异步调用链路的支持还不是很好，后续版本会着重改善支持异步调用。
-
-### [3. 系统负载保护](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_3-系统负载保护)
-
-Sentinel 对系统的维度提供保护，负载保护算法借鉴了 TCP BBR 的思想。当系统负载较高的时候，如果仍持续让请求进入，可能会导致系统崩溃，无法响应。在集群环境下，网络负载均衡会把本应这台机器承载的流量转发到其它的机器上去。如果这个时候其它的机器也处在一个边缘状态的时候，这个增加的流量就会导致这台机器也崩溃，最后导致整个集群不可用。针对这个情况，Sentinel 提供了对应的保护机制，让系统的入口流量和系统的负载达到一个平衡，保证系统在能力范围之内处理最多的请求。
-
-![BRP](https://doocs.github.io/advanced-java/docs/high-availability/images/BRP.jpg)
-
-### [4. 实时监控和控制面板](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_4-实时监控和控制面板)
-
-Sentinel 提供 HTTP API 用于获取实时的监控信息，如调用链路统计信息、簇点信息、规则信息等。如果用户正在使用 Spring Boot/Spring Cloud 并使用了 Sentinel Spring Cloud Starter，还可以方便地通过其暴露的 Actuator Endpoint 来获取运行时的一些信息，如动态规则等。未来 Sentinel 还会支持标准化的指标监控 API，可以方便地整合各种监控系统和可视化系统，如 Prometheus、Grafana 等。
-
-Sentinel 控制台（Dashboard）提供了机器发现、配置规则、查看实时监控、查看调用链路信息等功能，使得用户可以非常方便地去查看监控和进行配置。
-
-![Sentinel-Dashboard](https://doocs.github.io/advanced-java/docs/high-availability/images/Sentinel-Dashboard.jpg)
-
-### [5. 生态](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_5-生态)
-
-Sentinel 目前已经针对 Servlet、Dubbo、Spring Boot/Spring Cloud、gRPC 等进行了适配，用户只需引入相应依赖并进行简单配置即可非常方便地享受 Sentinel 的高可用流量防护能力。未来 Sentinel 还会对更多常用框架进行适配，并且会为 Service Mesh 提供集群流量防护的能力。
 
 ## Summary
 
-| #              | Sentinel                                       | Hystrix                       |
+|               | Sentinel                                       | Hystrix                       |
 | -------------- | ---------------------------------------------- | ----------------------------- |
 | 隔离策略       | 信号量隔离                                     | 线程池隔离/信号量隔离         |
 | 熔断降级策略   | 基于响应时间或失败比率                         | 基于失败比率                  |
