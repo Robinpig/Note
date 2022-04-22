@@ -2,9 +2,8 @@
 
 
 ### Lifecycle
-![Lifecycle](./images/Lifecycle.png)
 
-Common interface for component life cycle methods. 
+Common interface for component life cycle methods.
 Catalina components may implement this interface (as well as the appropriate interface(s) for the functionality they support) in order to *provide a consistent mechanism to start and stop the component*.
 
 The valid state transitions for components that support Lifecycle are:
@@ -39,13 +38,15 @@ The valid state transitions for components that support Lifecycle are:
  ----»-----------------------------»------------------------------
 
 ```
+
 Any state can transition to FAILED.
 - Calling start() while a component is in states STARTING_PREP, STARTING or STARTED has no effect.
 - Calling start() while a component is in state NEW will cause init() to be called immediately after the start() method is entered.
 - Calling stop() while a component is in states STOPPING_PREP, STOPPING or STOPPED has no effect.
-- Calling stop() while a component is in state NEW transitions the component to STOPPED. 
-  This is typically encountered when a component fails to start and does not start all its sub-components. 
+- Calling stop() while a component is in state NEW transitions the component to STOPPED.
+  This is typically encountered when a component fails to start and does not start all its sub-components.
   When the component is stopped, it will try to stop all sub-components - even those it didn't start.
+
 
 ## Bootstrap
 
@@ -54,7 +55,7 @@ Start entrance:
 startup.sh -> catalina.sh start ->java -jar org.apache.catalina.startup.Bootstrap.main()
 ```
 
-1. [init](/docs/CS/Java/Tomcat/Start.md?id=init)
+1. [invoke Catalina](/docs/CS/Java/Tomcat/Start.md?id=invoke-Catalina)
 2. invoke [org.apache.catalina.startup.Catalina#load()](/docs/CS/Java/Tomcat/Start.md?id=load) and [org.apache.catalina.startup.Catalina#start](/docs/CS/Java/Tomcat/Start.md?id=start) by Reflection
 
 ```java
@@ -96,7 +97,8 @@ public static void main(String[] args) {
 }
 ```
 
-### init
+### invoke Catalina
+
 Initialize daemon.
 
 [initClassLoaders](/docs/CS/Java/Tomcat/ClassLoader.md?id=initClassLoaders)
@@ -121,8 +123,7 @@ public void init() throws Exception {
     paramTypes[0] = Class.forName("java.lang.ClassLoader");
     Object paramValues[] = new Object[1];
     paramValues[0] = sharedLoader;
-    Method method =
-        startupInstance.getClass().getMethod(methodName, paramTypes);
+    Method method = startupInstance.getClass().getMethod(methodName, paramTypes);
     method.invoke(startupInstance, paramValues);
 
     catalinaDaemon = startupInstance;
@@ -183,74 +184,17 @@ public void load() {
     }
 
     long t2 = System.nanoTime();
-    if(log.isInfoEnabled()) {
-        log.info(sm.getString("catalina.init", Long.valueOf((t2 - t1) / 1000000)));
-    }
 }
 ```
 
 
+#### initInternal
 
-### start
-
-1. start Server
-2. start Service
-3. start [Connector](/docs/CS/Java/Tomcat/Connector.md)
-4. register [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
-```java
-//org.apache.catalina.startup.Catalina.java
-public void start() {
-    if (this.getServer() == null) {
-        this.load();
-    }
-
-    if (this.getServer() == null) {
-        log.fatal(sm.getString("catalina.noServer"));
-    } else {
-        long t1 = System.nanoTime();
-
-        try {
-            this.getServer().start();
-        } catch (LifecycleException var6) {
-            try {
-                this.getServer().destroy();
-            } catch (LifecycleException var5) {
-            }
-
-            return;
-        }
-
-        if (this.generateCode) {
-            this.generateLoader();
-        }
-
-        if (this.useShutdownHook) {
-            if (this.shutdownHook == null) {
-                this.shutdownHook = new Catalina.CatalinaShutdownHook();
-            }
-
-            Runtime.getRuntime().addShutdownHook(this.shutdownHook);
-            LogManager logManager = LogManager.getLogManager();
-            if (logManager instanceof ClassLoaderLogManager) {
-                ((ClassLoaderLogManager)logManager).setUseShutdownHook(false);
-            }
-        }
-
-        if (this.await) {
-            this.await();
-            this.stop();
-        }
-
-    }
-}
-```
-
-## LifecycleBase
 
 Template method pattern
 
 
-Prepare the component for starting. This method should perform any initialization required post object creation. 
+Prepare the component for starting. This method should perform any initialization required post object creation.
 The following LifecycleEvents will be fired in the following order:
 
 1. INIT_EVENT: On the successful completion of component initialization.
@@ -272,137 +216,6 @@ public final synchronized void init() throws LifecycleException {
     }
 }
 ```
-
-
-
-Prepare for the beginning of active use of the public methods other than property getters/setters and life cycle methods of this component. This method should be called before any of the public methods other than property getters/setters and life cycle methods of this component are utilized. The following LifecycleEvents will be fired in the following order:
-
-1. BEFORE_START_EVENT: At the beginning of the method. It is as this point the state transitions to LifecycleState.STARTING_PREP.
-2. START_EVENT: During the method once it is safe to call start() for any child components. It is at this point that the state transitions to LifecycleState.STARTING and that the public methods other than property getters/setters and life cycle methods may be used.
-3. AFTER_START_EVENT: At the end of the method, immediately before it returns. It is at this point that the state transitions to LifecycleState.STARTED.
-
-```java
-// LifecycleBase
-@Override
-public final synchronized void start() throws LifecycleException {
-
-    if (LifecycleState.STARTING_PREP.equals(state) || LifecycleState.STARTING.equals(state) ||
-            LifecycleState.STARTED.equals(state)) {
-
-        if (log.isDebugEnabled()) {
-            Exception e = new LifecycleException();
-            log.debug(sm.getString("lifecycleBase.alreadyStarted", toString()), e);
-        } else if (log.isInfoEnabled()) {
-            log.info(sm.getString("lifecycleBase.alreadyStarted", toString()));
-        }
-
-        return;
-    }
-
-    if (state.equals(LifecycleState.NEW)) {
-        init();
-    } else if (state.equals(LifecycleState.FAILED)) {
-        stop();
-    } else if (!state.equals(LifecycleState.INITIALIZED) &&
-            !state.equals(LifecycleState.STOPPED)) {
-        invalidTransition(Lifecycle.BEFORE_START_EVENT);
-    }
-
-    try {
-        setStateInternal(LifecycleState.STARTING_PREP, null, false);
-        startInternal();
-        if (state.equals(LifecycleState.FAILED)) {
-            // This is a 'controlled' failure. The component put itself into the
-            // FAILED state so call stop() to complete the clean-up.
-            stop();
-        } else if (!state.equals(LifecycleState.STARTING)) {
-            // Shouldn't be necessary but acts as a check that sub-classes are
-            // doing what they are supposed to.
-            invalidTransition(Lifecycle.AFTER_START_EVENT);
-        } else {
-            setStateInternal(LifecycleState.STARTED, null, false);
-        }
-    } catch (Throwable t) {
-        // This is an 'uncontrolled' failure so put the component into the
-        // FAILED state and throw an exception.
-        handleSubClassException(t, "lifecycleBase.startFail", toString());
-    }
-}
-```
-
-
-
-
-
-Gracefully terminate the active use of the public methods other than property getters/setters and life cycle methods of this component. Once the STOP_EVENT is fired, the public methods other than property getters/setters and life cycle methods should not be used. The following LifecycleEvents will be fired in the following order:
-BEFORE_STOP_EVENT: At the beginning of the method. It is at this point that the state transitions to LifecycleState.STOPPING_PREP.
-STOP_EVENT: During the method once it is safe to call stop() for any child components. It is at this point that the state transitions to LifecycleState.STOPPING and that the public methods other than property getters/setters and life cycle methods may no longer be used.
-AFTER_STOP_EVENT: At the end of the method, immediately before it returns. It is at this point that the state transitions to LifecycleState.STOPPED.
-Note that if transitioning from LifecycleState.FAILED then the three events above will be fired but the component will transition directly from LifecycleState.FAILED to LifecycleState.STOPPING, bypassing LifecycleState.STOPPING_PREP
-
-```java
-// // LifecycleBase
-@Override
-public final synchronized void stop() throws LifecycleException {
-
-    if (LifecycleState.STOPPING_PREP.equals(state) || LifecycleState.STOPPING.equals(state) ||
-            LifecycleState.STOPPED.equals(state)) {
-
-        if (log.isDebugEnabled()) {
-            Exception e = new LifecycleException();
-            log.debug(sm.getString("lifecycleBase.alreadyStopped", toString()), e);
-        } else if (log.isInfoEnabled()) {
-            log.info(sm.getString("lifecycleBase.alreadyStopped", toString()));
-        }
-
-        return;
-    }
-
-    if (state.equals(LifecycleState.NEW)) {
-        state = LifecycleState.STOPPED;
-        return;
-    }
-
-    if (!state.equals(LifecycleState.STARTED) && !state.equals(LifecycleState.FAILED)) {
-        invalidTransition(Lifecycle.BEFORE_STOP_EVENT);
-    }
-
-    try {
-        if (state.equals(LifecycleState.FAILED)) {
-            // Don't transition to STOPPING_PREP as that would briefly mark the
-            // component as available but do ensure the BEFORE_STOP_EVENT is
-            // fired
-            fireLifecycleEvent(BEFORE_STOP_EVENT, null);
-        } else {
-            setStateInternal(LifecycleState.STOPPING_PREP, null, false);
-        }
-
-        stopInternal();
-
-        // Shouldn't be necessary but acts as a check that sub-classes are
-        // doing what they are supposed to.
-        if (!state.equals(LifecycleState.STOPPING) && !state.equals(LifecycleState.FAILED)) {
-            invalidTransition(Lifecycle.AFTER_STOP_EVENT);
-        }
-
-        setStateInternal(LifecycleState.STOPPED, null, false);
-    } catch (Throwable t) {
-        handleSubClassException(t, "lifecycleBase.stopFail", toString());
-    } finally {
-        if (this instanceof Lifecycle.SingleUse) {
-            // Complete stop process first
-            setStateInternal(LifecycleState.STOPPED, null, false);
-            destroy();
-        }
-    }
-}
-```
-
-
-
-### initInternal
-
-#### StandardServer#initInternal()
 
 ```java
 //StanardServer
@@ -452,70 +265,202 @@ protected void initInternal() throws LifecycleException {
 
 
 
+### start
+
+Start Flow:
+1. start Server
+2. start Service
+3. start [Connector](/docs/CS/Java/Tomcat/Connector.md)
+4. register [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
+
 ```java
-public void addService(Service service) {
-    service.setServer(this);
-    synchronized(this.servicesLock) {
-        Service[] results = new Service[this.services.length + 1];
-        System.arraycopy(this.services, 0, results, 0, this.services.length);
-        results[this.services.length] = service;
-        this.services = results;
-        if (this.getState().isAvailable()) {
+//org.apache.catalina.startup.Catalina.java
+public void start() {
+    if (this.getServer() == null) {
+        this.load();
+    }
+
+    if (this.getServer() == null) {
+        log.fatal(sm.getString("catalina.noServer"));
+    } else {
+        long t1 = System.nanoTime();
+
+        try {
+            this.getServer().start();
+        } catch (LifecycleException var6) {
             try {
-                service.start();
-            } catch (LifecycleException var6) {
+                this.getServer().destroy();
+            } catch (LifecycleException var5) {
+            }
+            return;
+        }
+
+        if (this.generateCode) {
+            this.generateLoader();
+        }
+
+        if (this.useShutdownHook) {
+            if (this.shutdownHook == null) {
+                this.shutdownHook = new Catalina.CatalinaShutdownHook();
+            }
+
+            Runtime.getRuntime().addShutdownHook(this.shutdownHook);
+            LogManager logManager = LogManager.getLogManager();
+            if (logManager instanceof ClassLoaderLogManager) {
+                ((ClassLoaderLogManager)logManager).setUseShutdownHook(false);
             }
         }
 
-        this.support.firePropertyChange("service", (Object)null, service);
+        if (this.await) {
+            this.await();
+            this.stop();
+        }
+
     }
 }
 ```
 
-#### StandardService#startInternal()
+#### startInternal
+
+Prepare for the beginning of active use of the public methods other than property getters/setters and life cycle methods of this component. This method should be called before any of the public methods other than property getters/setters and life cycle methods of this component are utilized. The following LifecycleEvents will be fired in the following order:
+
+1. BEFORE_START_EVENT: At the beginning of the method. It is as this point the state transitions to LifecycleState.STARTING_PREP.
+2. START_EVENT: During the method once it is safe to call start() for any child components. It is at this point that the state transitions to LifecycleState.STARTING and that the public methods other than property getters/setters and life cycle methods may be used.
+3. AFTER_START_EVENT: At the end of the method, immediately before it returns. It is at this point that the state transitions to LifecycleState.STARTED.
 
 ```java
-//StandardService
-protected void startInternal() throws LifecycleException {
-    if (log.isInfoEnabled()) {
-        log.info(sm.getString("standardService.start.name", new Object[]{this.name}));
+// LifecycleBase
+@Override
+public final synchronized void start() throws LifecycleException {
+
+    if (LifecycleState.STARTING_PREP.equals(state) || LifecycleState.STARTING.equals(state) ||
+            LifecycleState.STARTED.equals(state)) {
+        return;
     }
+
+    if (state.equals(LifecycleState.NEW)) {
+        init();
+    } else if (state.equals(LifecycleState.FAILED)) {
+        stop();
+    } else if (!state.equals(LifecycleState.INITIALIZED) &&
+            !state.equals(LifecycleState.STOPPED)) {
+        invalidTransition(Lifecycle.BEFORE_START_EVENT);
+    }
+
+    try {
+        setStateInternal(LifecycleState.STARTING_PREP, null, false);
+        startInternal();
+        if (state.equals(LifecycleState.FAILED)) {
+            // This is a 'controlled' failure. The component put itself into the
+            // FAILED state so call stop() to complete the clean-up.
+            stop();
+        } else if (!state.equals(LifecycleState.STARTING)) {
+            // Shouldn't be necessary but acts as a check that sub-classes are
+            // doing what they are supposed to.
+            invalidTransition(Lifecycle.AFTER_START_EVENT);
+        } else {
+            setStateInternal(LifecycleState.STARTED, null, false);
+        }
+    } catch (Throwable t) {
+        // This is an 'uncontrolled' failure so put the component into the
+        // FAILED state and throw an exception.
+        handleSubClassException(t, "lifecycleBase.startFail", toString());
+    }
+}
+```
+
+
+
+##### StandardService
+
+```java
+public class StandardService extends LifecycleMBeanBase implements Service {
+  protected void startInternal() throws LifecycleException {
 
     this.setState(LifecycleState.STARTING);
-    if (this.engine != null) {
-        synchronized(this.engine) {
-            this.engine.start();
-        }
+    synchronized (this.engine) {
+      this.engine.start();
     }
 
-    synchronized(this.executors) {
-        Iterator var2 = this.executors.iterator();
-
-        while(true) {
-            if (!var2.hasNext()) {
-                break;
-            }
-
-            Executor executor = (Executor)var2.next();
-            executor.start();
-        }
+    synchronized (this.executors) {
+      executors.start();
     }
 
     this.mapperListener.start();
-    synchronized(this.connectorsLock) {
-        Connector[] var10 = this.connectors;
-        int var11 = var10.length;
+    synchronized (this.connectorsLock) {
+      connectors.start();
+    }
+  }
+}
+```
 
-        for(int var4 = 0; var4 < var11; ++var4) {
-            Connector connector = var10[var4];
-            if (connector.getState() != LifecycleState.FAILED) {
-                connector.start();
-            }
+
+#### stopInternal
+
+Gracefully terminate the active use of the public methods other than property getters/setters and life cycle methods of this component.
+
+- Once the STOP_EVENT is fired, the public methods other than property getters/setters and life cycle methods should not be used. The following LifecycleEvents will be fired in the following order:
+- BEFORE_STOP_EVENT: At the beginning of the method. It is at this point that the state transitions to LifecycleState.STOPPING_PREP.
+- STOP_EVENT: During the method once it is safe to call stop() for any child components. It is at this point that the state transitions to LifecycleState.STOPPING and that the public methods other than property getters/setters and life cycle methods may no longer be used.
+- AFTER_STOP_EVENT: At the end of the method, immediately before it returns. It is at this point that the state transitions to LifecycleState.STOPPED.
+
+Note that if transitioning from LifecycleState.FAILED then the three events above will be fired but the component will transition directly from LifecycleState.FAILED to LifecycleState.STOPPING, bypassing LifecycleState.STOPPING_PREP
+
+```java
+// // LifecycleBase
+@Override
+public final synchronized void stop() throws LifecycleException {
+
+    if (LifecycleState.STOPPING_PREP.equals(state) || LifecycleState.STOPPING.equals(state) ||
+            LifecycleState.STOPPED.equals(state)) {
+        return;
+    }
+
+    if (state.equals(LifecycleState.NEW)) {
+        state = LifecycleState.STOPPED;
+        return;
+    }
+
+    if (!state.equals(LifecycleState.STARTED) && !state.equals(LifecycleState.FAILED)) {
+        invalidTransition(Lifecycle.BEFORE_STOP_EVENT);
+    }
+
+    try {
+        if (state.equals(LifecycleState.FAILED)) {
+            // Don't transition to STOPPING_PREP as that would briefly mark the
+            // component as available but do ensure the BEFORE_STOP_EVENT is
+            // fired
+            fireLifecycleEvent(BEFORE_STOP_EVENT, null);
+        } else {
+            setStateInternal(LifecycleState.STOPPING_PREP, null, false);
         }
 
+        stopInternal();
+
+        // Shouldn't be necessary but acts as a check that sub-classes are
+        // doing what they are supposed to.
+        if (!state.equals(LifecycleState.STOPPING) && !state.equals(LifecycleState.FAILED)) {
+            invalidTransition(Lifecycle.AFTER_STOP_EVENT);
+        }
+
+        setStateInternal(LifecycleState.STOPPED, null, false);
+    } catch (Throwable t) {
+        handleSubClassException(t, "lifecycleBase.stopFail", toString());
+    } finally {
+        if (this instanceof Lifecycle.SingleUse) {
+            // Complete stop process first
+            setStateInternal(LifecycleState.STOPPED, null, false);
+            destroy();
+        }
     }
 }
 ```
+
+
+
+## Links
+
+- [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
 
 ## References
 1. [Tomcat 高并发之道原理拆解与性能调优 - 码哥字节](https://mp.weixin.qq.com/s?__biz=MzkzMDI1NjcyOQ==&mid=2247487712&idx=1&sn=a77efe0871bf0c5d1dc9d0a3ae138d5e&source=41#wechat_redirect)

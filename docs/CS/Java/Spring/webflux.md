@@ -92,80 +92,105 @@ public interface WebHandler {
 ### DispatcherHandler
 
 Central dispatcher for HTTP request handlers/controllers. Dispatches to registered handlers for processing a request, providing convenient mapping facilities.
+
 DispatcherHandler discovers the delegate components it needs from Spring configuration. It detects the following in the application context:
-HandlerMapping -- map requests to handler objects
-HandlerAdapter -- for using any handler interface
-HandlerResultHandler -- process handler return values
+
+- HandlerMapping -- map requests to handler objects
+  - RoutePredicateHandlerMapping
+    - [Spring Cloud Gateway](/docs/CS/Java/Spring_Cloud/gateway.md)
+- HandlerAdapter -- for using any handler interface
+- HandlerResultHandler -- process handler return values
+
 DispatcherHandler is also designed to be a Spring bean itself and implements ApplicationContextAware for access to the context it runs in. If DispatcherHandler is declared as a bean with the name "webHandler", it is discovered by WebHttpHandlerBuilder.applicationContext(ApplicationContext) which puts together a processing chain together with WebFilter, WebExceptionHandler and others.
-A DispatcherHandler bean declaration is included in @EnableWebFlux configuration.
+
+A DispatcherHandler bean declaration is included in `@EnableWebFlux` configuration.
 
 
 
 ```java
 public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, ApplicationContextAware {
 
-   @Nullable
-   private List<HandlerMapping> handlerMappings;
+    @Nullable
+    private List<HandlerMapping> handlerMappings;
 
-   @Nullable
-   private List<HandlerAdapter> handlerAdapters;
+    @Nullable
+    private List<HandlerAdapter> handlerAdapters;
 
-   @Nullable
-   private List<HandlerResultHandler> resultHandlers;
-  
-  ...
+    @Nullable
+    private List<HandlerResultHandler> resultHandlers;
+
+
+    @Override
+    public Mono<Void> handle(ServerWebExchange exchange) {
+        if (this.handlerMappings == null) {
+            return createNotFoundError();
+        }
+        if (CorsUtils.isPreFlightRequest(exchange.getRequest())) {
+            return handlePreFlight(exchange);
+        }
+        return Flux.fromIterable(this.handlerMappings)
+                .concatMap(mapping -> mapping.getHandler(exchange))
+                .next()
+                .switchIfEmpty(createNotFoundError())
+                .flatMap(handler -> invokeHandler(exchange, handler))
+                .flatMap(result -> handleResult(exchange, result));
+    }
+
+    @Override
+    public Mono<Object> getHandler(ServerWebExchange exchange) {
+        return getHandlerInternal(exchange).map(handler -> {
+            ServerHttpRequest request = exchange.getRequest();
+            if (hasCorsConfigurationSource(handler) || CorsUtils.isPreFlightRequest(request)) {
+                CorsConfiguration config = (this.corsConfigurationSource != null ? this.corsConfigurationSource.getCorsConfiguration(exchange) : null);
+                CorsConfiguration handlerConfig = getCorsConfiguration(handler, exchange);
+                config = (config != null ? config.combine(handlerConfig) : handlerConfig);
+                if (!this.corsProcessor.process(config, exchange) || CorsUtils.isPreFlightRequest(request)) {
+                    return REQUEST_HANDLED_HANDLER;
+                }
+            }
+            return handler;
+        });
+    }
 }
 ```
 
 
 
+
+#### initStrategies
 ```java
-// DispatcherHandler
-@Override
-public Mono<Void> handle(ServerWebExchange exchange) {
-   if (this.handlerMappings == null) {
-      return createNotFoundError();
-   }
-   if (CorsUtils.isPreFlightRequest(exchange.getRequest())) {
-      return handlePreFlight(exchange);
-   }
-   return Flux.fromIterable(this.handlerMappings)
-         .concatMap(mapping -> mapping.getHandler(exchange))
-         .next()
-         .switchIfEmpty(createNotFoundError())
-         .flatMap(handler -> invokeHandler(exchange, handler))
-         .flatMap(result -> handleResult(exchange, result));
+public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, ApplicationContextAware {
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) {
+        initStrategies(applicationContext);
+    }
+
+
+    protected void initStrategies(ApplicationContext context) {
+        Map<String, HandlerMapping> mappingBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+                context, HandlerMapping.class, true, false);
+
+        ArrayList<HandlerMapping> mappings = new ArrayList<>(mappingBeans.values());
+        AnnotationAwareOrderComparator.sort(mappings);
+        this.handlerMappings = Collections.unmodifiableList(mappings);
+
+        Map<String, HandlerAdapter> adapterBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+                context, HandlerAdapter.class, true, false);
+
+        this.handlerAdapters = new ArrayList<>(adapterBeans.values());
+        AnnotationAwareOrderComparator.sort(this.handlerAdapters);
+
+        Map<String, HandlerResultHandler> beans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
+                context, HandlerResultHandler.class, true, false);
+
+        this.resultHandlers = new ArrayList<>(beans.values());
+        AnnotationAwareOrderComparator.sort(this.resultHandlers);
+    }
 }
 ```
 
 
 
-```java
-// DispatcherHandler
-@Override
-public void setApplicationContext(ApplicationContext applicationContext) {
-   initStrategies(applicationContext);
-}
+## Links
 
-
-protected void initStrategies(ApplicationContext context) {
-   Map<String, HandlerMapping> mappingBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
-         context, HandlerMapping.class, true, false);
-
-   ArrayList<HandlerMapping> mappings = new ArrayList<>(mappingBeans.values());
-   AnnotationAwareOrderComparator.sort(mappings);
-   this.handlerMappings = Collections.unmodifiableList(mappings);
-
-   Map<String, HandlerAdapter> adapterBeans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
-         context, HandlerAdapter.class, true, false);
-
-   this.handlerAdapters = new ArrayList<>(adapterBeans.values());
-   AnnotationAwareOrderComparator.sort(this.handlerAdapters);
-
-   Map<String, HandlerResultHandler> beans = BeanFactoryUtils.beansOfTypeIncludingAncestors(
-         context, HandlerResultHandler.class, true, false);
-
-   this.resultHandlers = new ArrayList<>(beans.values());
-   AnnotationAwareOrderComparator.sort(this.resultHandlers);
-}
-```
+- [Spring](/docs/CS/Java/Spring/Spring.md)

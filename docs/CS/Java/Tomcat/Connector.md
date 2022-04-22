@@ -1,9 +1,5 @@
 ## Introduction
 
-
-
-
-
 ## Example
 
 
@@ -87,7 +83,15 @@ public Http11NioProtocol() {
 
 
 ## Endpoint 
-for network IO
+
+NioEndpoint
+
+- LimitLatch maxConnection = 10000
+- Acceptor accept new Channel to Poller
+- Poller use Selector, get Ready Channel from Channel array，wrap a SocketProcessor to Executor
+- Executor call SocketProcessor.run()
+
+
 
 
 ```java
@@ -332,12 +336,6 @@ protected void initInternal() throws LifecycleException {
 
 
 
-
-
-
-
-
-
 NOTE: There is no maintenance of state or checking for valid transitions within this class. It is expected that the connector will maintain state and prevent invalid state transitions.
 
 ```java
@@ -428,10 +426,6 @@ protected void initServerSocket() throws Exception {
   this.serverSock.configureBlocking(true);
 }
 ```
-
-
-
-
 
 
 
@@ -1066,6 +1060,7 @@ execute SocketProcessor in workers
 ```
 
 #### SocketProcessor
+
 `SocketProcessor` is the equivalent of the Worker, but will simply use in an external Executor thread pool.
 ```java
 protected class SocketProcessor extends SocketProcessorBase<NioChannel> {
@@ -1163,14 +1158,10 @@ Process the request from this socket, call `AbstractProtocol.process()` -> [Proc
 
 ### Processor
 
-for protocols
-
-
 Adapters for transform request/response
 
 
-AbstractProcessorLight is a light-weight abstract processor implementation that is intended as a basis
-for all Processor implementations from the light-weight upgrade processors to the HTTP/AJP processors.
+AbstractProcessorLight is a light-weight abstract processor implementation that is intended as a basis for all Processor implementations from the light-weight upgrade processors to the HTTP/AJP processors.
 
 `AbstractProcessorLight.process()` 
 -> [Http11Processor.service()](/docs/CS/Java/Tomcat/Connector.md?id=Http11Processor)
@@ -1237,9 +1228,6 @@ public class Http11Processor extends AbstractProcessor {
                     }
                 }
             } catch (IOException e) {
-                if (log.isDebugEnabled()) {
-                    log.debug(sm.getString("http11processor.header.parse"), e);
-                }
                 setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
                 break;
             } catch (Throwable t) {
@@ -1309,9 +1297,6 @@ public class Http11Processor extends AbstractProcessor {
                     prepareRequest();
                 } catch (Throwable t) {
                     ExceptionUtils.handleThrowable(t);
-                    if (log.isDebugEnabled()) {
-                        log.debug(sm.getString("http11processor.request.prepare"), t);
-                    }
                     // 500 - Internal Server Error
                     response.setStatus(500);
                     setErrorState(ErrorState.CLOSE_CLEAN, t);

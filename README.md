@@ -87,7 +87,7 @@ Spring’s focus on speed, simplicity, and productivity has made it the world's 
 
 ### Tomcat
 
-[The Apache Tomcat® software](/docs/CS/Java/Tomcat/Tomcat.md) is an open source implementation of the [Jakarta Servlet](https://projects.eclipse.org/projects/ee4j.servlet), [Jakarta Server Pages](https://projects.eclipse.org/projects/ee4j.jsp), [Jakarta Expression Language](https://projects.eclipse.org/projects/ee4j.el), [Jakarta WebSocket](https://projects.eclipse.org/projects/ee4j.websocket), [Jakarta Annotations](https://projects.eclipse.org/projects/ee4j.ca) and [Jakarta Authentication](https://projects.eclipse.org/projects/ee4j.authentication) specifications. These specifications are part of the [Jakarta EE platform](https://projects.eclipse.org/projects/ee4j.jakartaee-platform).
+[The Apache Tomcat® software](/docs/CS/Java/Tomcat/Tomcat.md) is an open source implementation of the Jakarta Servlet, Jakarta Server Pages, Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications. These specifications are part of the Jakarta EE platform.
 
 ### ZooKeeper
 [Apache ZooKeeper](/docs/CS/Java/Zookeeper/Zookeeper.md) is an effort to develop and maintain an open-source server which enables highly reliable distributed coordination.
