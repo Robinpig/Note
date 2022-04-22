@@ -83,12 +83,6 @@ public interface ServiceRegistry<R extends Registration> {
 }
 ```
 
-```java
-public interface AutoServiceRegistration {
-
-}
-```
-
 ### AbstractAutoServiceRegistration
 
 Implementations:
@@ -145,8 +139,6 @@ public abstract class AbstractAutoServiceRegistration<R extends Registration>
 ```
 
 ## Config Refresh
-
-
 
 use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
