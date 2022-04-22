@@ -665,11 +665,21 @@ spring:
       load-on-startup: 1
 ```
 
+### Resolver
+
+```java
+public interface WebMvcConfigurer {
+    default void addArgumentResolvers(List<HandlerMethodArgumentResolver> resolvers) {
+    }
+}
+```
+
 ### Converter
 
 Avoid response can not cast to String Exception when we transform response String to Object
 
 ```java
+@EnableWebMvc
 @Configuration
 public class WebConfiguration implements WebMvcConfigurer {
 

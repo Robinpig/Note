@@ -1,6 +1,8 @@
 ## Introduction
 
-Nacos is an easy-to-use dynamic service discovery, configuration and service management platform for building cloud native applications
+Nacos is an easy-to-use dynamic service discovery, configuration and service management platform for building cloud native applications.
+
+**Nacos: Dynamic *Na*ming and *Co*nfiguration *S*ervice**
 
 
 Service is a first-class citizen in Nacos. Nacos supports discovering, configuring, and managing almost all types of services:

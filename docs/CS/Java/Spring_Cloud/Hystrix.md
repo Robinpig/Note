@@ -1,215 +1,268 @@
 ## Introduction
 
+Using RxJava.
 
-## HystrixCircuitBreaker
+
+## Command
+
+```java
+public class CommandActions {
+
+    private final CommandAction commandAction;
+    private final CommandAction fallbackAction;
+
+    public CommandActions(Builder builder) {
+        this.commandAction = builder.commandAction;
+        this.fallbackAction = builder.fallbackAction;
+    }
+}
+```
+### HystrixCommand
+
+Used to wrap code that will execute potentially risky functionality (typically meaning a service call over the network) with fault and latency tolerance, statistics and performance metrics capture, circuit breaker and bulkhead functionality. 
+This command is essentially a blocking command but provides an Observable facade if used with observe().
+
+```java
+public abstract class HystrixCommand<R> extends AbstractCommand<R> implements HystrixExecutable<R>, HystrixInvokableInfo<R>, HystrixObservable<R> {
+    
+}
+```
+
+#### Setter
+
+Fluent interface for arguments to the HystrixCommand constructor.
+The required arguments are set via the 'with' factory method and optional arguments via the 'and' chained methods.
+
+Example:
+```java
+Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("GroupName")).andCommandKey(HystrixCommandKey.Factory.asKey("CommandName"));
+```
+
+```java
+ final public static class Setter {
+
+  protected final HystrixCommandGroupKey groupKey;
+  protected HystrixCommandKey commandKey;
+  protected HystrixThreadPoolKey threadPoolKey;
+  protected HystrixCommandProperties.Setter commandPropertiesDefaults;
+  protected HystrixThreadPoolProperties.Setter threadPoolPropertiesDefaults;
+}
+```
+
+#### Aspect
+
+```java
+@Aspect
+public class HystrixCommandAspect {
+    @Pointcut("@annotation(com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand)")
+
+    public void hystrixCommandAnnotationPointcut() {
+    }
+
+    @Pointcut("@annotation(com.netflix.hystrix.contrib.javanica.annotation.HystrixCollapser)")
+    public void hystrixCollapserAnnotationPointcut() {
+    }
+
+    @Around("hystrixCommandAnnotationPointcut() || hystrixCollapserAnnotationPointcut()")
+    public Object methodsAnnotatedWithHystrixCommand(final ProceedingJoinPoint joinPoint) throws Throwable {
+        Method method = getMethodFromTarget(joinPoint);
+        if (method.isAnnotationPresent(HystrixCommand.class) && method.isAnnotationPresent(HystrixCollapser.class)) {
+            throw new IllegalStateException("method cannot be annotated with HystrixCommand and HystrixCollapser " +
+                    "annotations at the same time");
+        }
+        MetaHolderFactory metaHolderFactory = META_HOLDER_FACTORY_MAP.get(HystrixPointcutType.of(method));
+        MetaHolder metaHolder = metaHolderFactory.create(joinPoint);
+        HystrixInvokable invokable = HystrixCommandFactory.getInstance().create(metaHolder);
+        ExecutionType executionType = metaHolder.isCollapserAnnotationPresent() ?
+                metaHolder.getCollapserExecutionType() : metaHolder.getExecutionType();
+
+        Object result;
+        try {
+            if (!metaHolder.isObservable()) {
+                result = CommandExecutor.execute(invokable, executionType, metaHolder);
+            } else {
+                result = executeObservable(invokable, executionType, metaHolder);
+            }
+        } catch (HystrixBadRequestException e) {
+            throw e.getCause();
+        } catch (HystrixRuntimeException e) {
+            throw hystrixRuntimeExceptionToThrowable(metaHolder, e);
+        }
+        return result;
+    }
+}
+```
+### Executor
+
+Invokes necessary method of HystrixExecutable or HystrixObservable for specified execution type:
+
+- ExecutionType.SYNCHRONOUS -> HystrixExecutable.execute()
+- ExecutionType.ASYNCHRONOUS -> HystrixExecutable.queue()
+- ExecutionType.OBSERVABLE -> depends on specify observable execution mode: 
+    - ObservableExecutionMode.EAGER - HystrixObservable.observe(), 
+    - ObservableExecutionMode.LAZY - HystrixObservable.toObservable().
+    
+```java
+public class CommandExecutor {
+    
+    public static Object execute(HystrixInvokable invokable, ExecutionType executionType, MetaHolder metaHolder) throws RuntimeException {
+        Validate.notNull(invokable);
+        Validate.notNull(metaHolder);
+
+        switch (executionType) {
+            case SYNCHRONOUS: {
+                return castToExecutable(invokable, executionType).execute();
+            }
+            case ASYNCHRONOUS: {
+                HystrixExecutable executable = castToExecutable(invokable, executionType);
+                if (metaHolder.hasFallbackMethodCommand()
+                        && ExecutionType.ASYNCHRONOUS == metaHolder.getFallbackExecutionType()) {
+                    return new FutureDecorator(executable.queue());
+                }
+                return executable.queue();
+            }
+            case OBSERVABLE: {
+                HystrixObservable observable = castToObservable(invokable);
+                return ObservableExecutionMode.EAGER == metaHolder.getObservableExecutionMode() ? observable.observe() : observable.toObservable();
+            }
+            default:
+                throw new RuntimeException("unsupported execution type: " + executionType);
+        }
+    }
+}
+```
+
+```java
+public ResponseType execute() {
+        try {
+            return queue().get();
+        } catch (Throwable e) {
+            if (e instanceof HystrixRuntimeException) {
+                throw (HystrixRuntimeException) e;
+            }
+            // if we have an exception we know about we'll throw it directly without the threading wrapper exception
+            if (e.getCause() instanceof HystrixRuntimeException) {
+                throw (HystrixRuntimeException) e.getCause();
+            }
+            // we don't know what kind of exception this is so create a generic message and throw a new HystrixRuntimeException
+            String message = getClass().getSimpleName() + " HystrixCollapser failed while executing.";
+            logger.debug(message, e); // debug only since we're throwing the exception and someone higher will do something with it
+            //TODO should this be made a HystrixRuntimeException?
+            throw new RuntimeException(message, e);
+        }
+    }
+
+public Future<ResponseType> queue() {
+        return toObservable()
+        .toBlocking()
+        .toFuture();
+        }
+```
+
+## Circuit Breaker
+
 Circuit-breaker logic that is hooked into HystrixCommand execution and will stop allowing executions if failures have gone past the defined threshold.
 It will then allow single retries after a defined sleepWindow until the execution succeeds at which point it will again close the circuit and allow executions again.
 
 ```java
-// com.netflix.hystrix.HystrixCircuitBreaker
 public interface HystrixCircuitBreaker {
 
+  public boolean allowRequest();
+
+  public boolean isOpen();
+
+  /* package */void markSuccess();
 }
 ```
 
-
-
-```java
-// HystrixCircuitBreaker
-    /**
-     * @ExcludeFromJavadoc
-     * @ThreadSafe
-     */
-    public static class Factory {
-        // String is HystrixCommandKey.name() (we can't use HystrixCommandKey directly as we can't guarantee it implements hashcode/equals correctly)
-        private static ConcurrentHashMap<String, HystrixCircuitBreaker> circuitBreakersByCommand = new ConcurrentHashMap<String, HystrixCircuitBreaker>();
-
-        /**
-         * Get the {@link HystrixCircuitBreaker} instance for a given {@link HystrixCommandKey}.
-         * <p>
-         * This is thread-safe and ensures only 1 {@link HystrixCircuitBreaker} per {@link HystrixCommandKey}.
-         * 
-         * @param key
-         *            {@link HystrixCommandKey} of {@link HystrixCommand} instance requesting the {@link HystrixCircuitBreaker}
-         * @param group
-         *            Pass-thru to {@link HystrixCircuitBreaker}
-         * @param properties
-         *            Pass-thru to {@link HystrixCircuitBreaker}
-         * @param metrics
-         *            Pass-thru to {@link HystrixCircuitBreaker}
-         * @return {@link HystrixCircuitBreaker} for {@link HystrixCommandKey}
-         */
-        public static HystrixCircuitBreaker getInstance(HystrixCommandKey key, HystrixCommandGroupKey group, HystrixCommandProperties properties, HystrixCommandMetrics metrics) {
-            // this should find it for all but the first time
-            HystrixCircuitBreaker previouslyCached = circuitBreakersByCommand.get(key.name());
-            if (previouslyCached != null) {
-                return previouslyCached;
-            }
-
-            // if we get here this is the first time so we need to initialize
-
-            // Create and add to the map ... use putIfAbsent to atomically handle the possible race-condition of
-            // 2 threads hitting this point at the same time and let ConcurrentHashMap provide us our thread-safety
-            // If 2 threads hit here only one will get added and the other will get a non-null response instead.
-            HystrixCircuitBreaker cbForCommand = circuitBreakersByCommand.putIfAbsent(key.name(), new HystrixCircuitBreakerImpl(key, group, properties, metrics));
-            if (cbForCommand == null) {
-                // this means the putIfAbsent step just created a new one so let's retrieve and return it
-                return circuitBreakersByCommand.get(key.name());
-            } else {
-                // this means a race occurred and while attempting to 'put' another one got there before
-                // and we instead retrieved it and will now return it
-                return cbForCommand;
-            }
-        }
-
-        /**
-         * Get the {@link HystrixCircuitBreaker} instance for a given {@link HystrixCommandKey} or null if none exists.
-         * 
-         * @param key
-         *            {@link HystrixCommandKey} of {@link HystrixCommand} instance requesting the {@link HystrixCircuitBreaker}
-         * @return {@link HystrixCircuitBreaker} for {@link HystrixCommandKey}
-         */
-        public static HystrixCircuitBreaker getInstance(HystrixCommandKey key) {
-            return circuitBreakersByCommand.get(key.name());
-        }
-
-        /**
-         * Clears all circuit breakers. If new requests come in instances will be recreated.
-         */
-        /* package */static void reset() {
-            circuitBreakersByCommand.clear();
-        }
-    }
-```
-
-
-```java
-// HystrixCircuitBreaker
-    /**
-     * Every {@link HystrixCommand} requests asks this if it is allowed to proceed or not.
-     * <p>
-     * This takes into account the half-open logic which allows some requests through when determining if it should be closed again.
-     * 
-     * @return boolean whether a request should be permitted
-     */
-    public boolean allowRequest();
-
-    /**
-     * Whether the circuit is currently open (tripped).
-     * 
-     * @return boolean state of circuit breaker
-     */
-    public boolean isOpen();
-
-    /**
-     * Invoked on successful executions from {@link HystrixCommand} as part of feedback mechanism when in a half-open state.
-     */
-    /* package */void markSuccess();
-
-```
 
 ### allowRequest
 
+
 ```java
-// HystrixCircuitBreakerImpl implements HystrixCircuitBreaker
-@Override
-public boolean allowRequest() {
+static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
+  @Override
+  public boolean allowRequest() {
     if (properties.circuitBreakerForceOpen().get()) {
-        // properties have asked us to force the circuit open so we will allow NO requests
-        return false;
+      // properties have asked us to force the circuit open so we will allow NO requests
+      return false;
     }
     if (properties.circuitBreakerForceClosed().get()) {
-        // we still want to allow isOpen() to perform it's calculations so we simulate normal behavior
-        isOpen();
-        // properties have asked us to ignore errors so we will ignore the results of isOpen and just allow all traffic through
-        return true;
+      // we still want to allow isOpen() to perform it's calculations so we simulate normal behavior
+      isOpen();
+      // properties have asked us to ignore errors so we will ignore the results of isOpen and just allow all traffic through
+      return true;
     }
     return !isOpen() || allowSingleTest();
-}
+  }
 
-public boolean allowSingleTest() {
+  public boolean allowSingleTest() {
     long timeCircuitOpenedOrWasLastTested = circuitOpenedOrLastTestedTime.get();
     // 1) if the circuit is open
     // 2) and it's been longer than 'sleepWindow' since we opened the circuit
     if (circuitOpen.get() && System.currentTimeMillis() > timeCircuitOpenedOrWasLastTested + properties.circuitBreakerSleepWindowInMilliseconds().get()) {
-        // We push the 'circuitOpenedTime' ahead by 'sleepWindow' since we have allowed one request to try.
-        // If it succeeds the circuit will be closed, otherwise another singleTest will be allowed at the end of the 'sleepWindow'.
-        if (circuitOpenedOrLastTestedTime.compareAndSet(timeCircuitOpenedOrWasLastTested, System.currentTimeMillis())) {
-            // if this returns true that means we set the time so we'll return true to allow the singleTest
-            // if it returned false it means another thread raced us and allowed the singleTest before we did
-            return true;
-        }
+      // We push the 'circuitOpenedTime' ahead by 'sleepWindow' since we have allowed one request to try.
+      // If it succeeds the circuit will be closed, otherwise another singleTest will be allowed at the end of the 'sleepWindow'.
+      if (circuitOpenedOrLastTestedTime.compareAndSet(timeCircuitOpenedOrWasLastTested, System.currentTimeMillis())) {
+        // if this returns true that means we set the time so we'll return true to allow the singleTest
+        // if it returned false it means another thread raced us and allowed the singleTest before we did
+        return true;
+      }
     }
     return false;
-}
+  }
 
-public void markSuccess() {
-        if (this.circuitOpen.get()) {
-        this.metrics.resetCounter();
-        this.circuitOpen.set(false);
-        }
-
-        }
-```
-
-
-spring-cloud-commons
-
-```java
-// org.springframework.cloud.client.circuitbreaker.EnableCircuitBreaker
-@Target({ElementType.TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Inherited
-@Import({EnableCircuitBreakerImportSelector.class})
-public @interface EnableCircuitBreaker {
-}
-
-
-@Order(2147483547)
-public class EnableCircuitBreakerImportSelector extends SpringFactoryImportSelector<EnableCircuitBreaker> {
-    public EnableCircuitBreakerImportSelector() {
+  public boolean isOpen() {
+    if (circuitOpen.get()) {
+      // if we're open we immediately return true and don't bother attempting to 'close' ourself as that is left to allowSingleTest and a subsequent successful test to close
+      return true;
     }
 
-    protected boolean isEnabled() {
-        return (Boolean)this.getEnvironment().getProperty("spring.cloud.circuit.breaker.enabled", Boolean.class, Boolean.TRUE);
+    // we're closed, so let's see if errors have made us so we should trip the circuit open
+    HealthCounts health = metrics.getHealthCounts();
+
+    // check if we are past the statisticalWindowVolumeThreshold
+    if (health.getTotalRequests() < properties.circuitBreakerRequestVolumeThreshold().get()) {
+      // we are not past the minimum volume threshold for the statisticalWindow so we'll return false immediately and not calculate anything
+      return false;
     }
-}
-```
 
-```java
-// com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand
-@Target({ElementType.METHOD})
-@Retention(RetentionPolicy.RUNTIME)
-@Inherited
-@Documented
-public @interface HystrixCommand {
-    String groupKey() default "";
-
-    String commandKey() default "";
-
-    String threadPoolKey() default "";
-
-    String fallbackMethod() default "";
-
-    HystrixProperty[] commandProperties() default {};
-
-    HystrixProperty[] threadPoolProperties() default {};
-
-    Class<? extends Throwable>[] ignoreExceptions() default {};
-
-    ObservableExecutionMode observableExecutionMode() default ObservableExecutionMode.EAGER;
-
-    HystrixException[] raiseHystrixExceptions() default {};
-
-    String defaultFallback() default "";
+    if (health.getErrorPercentage() < properties.circuitBreakerErrorThresholdPercentage().get()) {
+      return false;
+    } else {
+      // our failure rate is too high, trip the circuit
+      if (circuitOpen.compareAndSet(false, true)) {
+        // if the previousValue was false then we want to set the currentTime
+        circuitOpenedOrLastTestedTime.set(System.currentTimeMillis());
+        return true;
+      } else {
+        // How could previousValue be true? If another thread was going through this code at the same time a race-condition could have
+        // caused another thread to set it to true already even though we were in the process of doing the same
+        // In this case, we know the circuit is open, so let the other thread set the currentTime and report back that the circuit is open
+        return true;
+      }
+    }
+  }
 }
 ```
 
 
+### markSuccess
+
 ```java
-// com.netflix.hystrix.HystrixCommand
-public abstract class HystrixCommand<R> extends AbstractCommand<R> implements HystrixExecutable<R>, HystrixInvokableInfo<R>, HystrixObservable<R> {}
+static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
+  
+  public void markSuccess() {
+    if (circuitOpen.get()) {
+      if (circuitOpen.compareAndSet(true, false)) {
+        //win the thread race to reset metrics
+        //Unsubscribe from the current stream to reset the health counts stream.  This only affects the health counts view,
+        //and all other metric consumers are unaffected by the reset
+        metrics.resetStream();
+      }
+    }
+  }
+}
 ```
 
 ## isolation
@@ -301,5 +354,7 @@ Sentinel 目前已经针对 Servlet、Dubbo、Spring Boot/Spring Cloud、gRPC �
 | 控制台         | 开箱即用，可配置规则、查看秒级监控、机器发现等 | 不完善                        |
 | 常见框架的适配 | Servlet、Spring Cloud、Dubbo、gRPC             | Servlet、Spring Cloud Netflix |
 
-## References
-1. []()
+
+## Links
+
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=circuit-breaker)

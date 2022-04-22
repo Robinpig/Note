@@ -157,13 +157,13 @@ public class ApplicationInfoManager {
 
 ### init
 
-1. schedule 2 therads
+1. schedule 2 threads
 2. heartbeat 1 thread
 3. cacheRefresh 1 thread
 4. fetchRegistry
 5. initScheduledTasks
     - schedule CacheRefreshThread to refreshRegistry
-    - shceule heatBeatTask
+    - schedule heatBeatTask
     - registerStatusChangeListener
 
 ```java
@@ -375,6 +375,137 @@ public class DiscoveryClient implements EurekaClient {
 }  
 ```
 
+
+## Self Traffic
+
+EvictionTask
+
+## Beat
+
+InstanceResource.renewLease()
+
+renew
+
+## Cache
+
+```java
+public class ResponseCacheImpl implements ResponseCache {
+    private final ConcurrentMap<Key, ResponseCacheImpl.Value> readOnlyCacheMap = new ConcurrentHashMap();
+    private final LoadingCache<Key, ResponseCacheImpl.Value> readWriteCacheMap;
+
+   private TimerTask getCacheUpdateTask() {
+      return new TimerTask() {
+         @Override
+         public void run() {
+            for (Key key : readOnlyCacheMap.keySet()) {
+               try {
+                  CurrentRequestVersion.set(key.getVersion());
+                  Value cacheValue = readWriteCacheMap.get(key);
+                  Value currentCacheValue = readOnlyCacheMap.get(key);
+                  if (cacheValue != currentCacheValue) {
+                     readOnlyCacheMap.put(key, cacheValue);
+                  }
+               } catch (Throwable th) {
+                  logger.error("Error while updating the client cache from response cache for key {}", key.toStringCompact(), th);
+               } finally {
+                  CurrentRequestVersion.remove();
+               }
+            }
+         }
+      };
+   }
+}
+```
+
+## Cluster Sync
+
+Registers the information about the InstanceInfo and replicates this information to all peer eureka nodes. 
+If this is replication event from other replica nodes then it is not replicated.
+
+```java
+@Singleton
+public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
+   @Override
+   public void register(final InstanceInfo info, final boolean isReplication) {
+      int leaseDuration = Lease.DEFAULT_DURATION_IN_SECS;
+      if (info.getLeaseInfo() != null && info.getLeaseInfo().getDurationInSecs() > 0) {
+         leaseDuration = info.getLeaseInfo().getDurationInSecs();
+      }
+      super.register(info, leaseDuration, isReplication);
+      replicateToPeers(Action.Register, info.getAppName(), info.getId(), info, null, isReplication);
+   }
+
+   
+}
+```
+### Replica
+
+Replicates all instance changes to peer eureka nodes except for replication traffic to this node.
+```java
+@Singleton
+public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
+
+   private void replicateToPeers(Action action, String appName, String id,
+                                 InstanceInfo info /* optional */,
+                                 InstanceStatus newStatus /* optional */, boolean isReplication) {
+      Stopwatch tracer = action.getTimer().start();
+      try {
+         if (isReplication) {
+            numberOfReplicationsLastMin.increment();
+         }
+         // If it is a replication already, do not replicate again as this will create a poison replication
+         if (peerEurekaNodes == Collections.EMPTY_LIST || isReplication) {
+            return;
+         }
+
+         for (final PeerEurekaNode node : peerEurekaNodes.getPeerEurekaNodes()) {
+            // If the url represents this host, do not replicate to yourself.
+            if (peerEurekaNodes.isThisMyUrl(node.getServiceUrl())) {
+               continue;
+            }
+            replicateInstanceActionsToPeers(action, appName, id, info, newStatus, node);
+         }
+      } finally {
+         tracer.stop();
+      }
+   }
+   
+   private void replicateInstanceActionsToPeers(Action action, String appName,
+                                                String id, InstanceInfo info, InstanceStatus newStatus,
+                                                PeerEurekaNode node) {
+      try {
+         InstanceInfo infoFromRegistry;
+         CurrentRequestVersion.set(Version.V2);
+         switch (action) {
+            case Cancel:
+               node.cancel(appName, id);
+               break;
+            case Heartbeat:
+               InstanceStatus overriddenStatus = overriddenInstanceStatusMap.get(id);
+               infoFromRegistry = getInstanceByAppAndId(appName, id, false);
+               node.heartbeat(appName, id, infoFromRegistry, overriddenStatus, false);
+               break;
+            case Register:
+               node.register(info);
+               break;
+            case StatusUpdate:
+               infoFromRegistry = getInstanceByAppAndId(appName, id, false);
+               node.statusUpdate(appName, id, newStatus, infoFromRegistry);
+               break;
+            case DeleteStatusOverride:
+               infoFromRegistry = getInstanceByAppAndId(appName, id, false);
+               node.deleteStatusOverride(appName, id, infoFromRegistry);
+               break;
+         }
+      } catch (Throwable t) {
+         logger.error("Cannot replicate information to {} for action {}", node.getServiceUrl(), action.name(), t);
+      } finally {
+         CurrentRequestVersion.remove();
+      }
+   }
+}
+```
+
 ## EndpointUtils
 
 Get the list of all eureka service urls from properties file for the eureka client to talk to.
@@ -437,51 +568,39 @@ public PeerAwareInstanceRegistryImpl(EurekaServerConfig serverConfig, EurekaClie
 
 *recentCanceledQueue and recentRegisteredQueue are use a capacity **1000 CircularQueue***
 
+CircularQueue delegate a **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ArrayBlockingQueue)** and override offer method.
+
 ```java
-protected AbstractInstanceRegistry(EurekaServerConfig serverConfig, EurekaClientConfig clientConfig, ServerCodecs serverCodecs) {
-    this.overriddenInstanceStatusMap = CacheBuilder.newBuilder().initialCapacity(500).expireAfterAccess(1L, TimeUnit.HOURS).build().asMap();
-    this.recentlyChangedQueue = new ConcurrentLinkedQueue();
-    this.readWriteLock = new ReentrantReadWriteLock();
-    this.read = this.readWriteLock.readLock();
-    this.write = this.readWriteLock.writeLock();
-    this.lock = new Object();
-    this.deltaRetentionTimer = new Timer("Eureka-DeltaRetentionTimer", true);
-    this.evictionTimer = new Timer("Eureka-EvictionTimer", true);
-    this.evictionTaskRef = new AtomicReference();
-    this.allKnownRemoteRegions = EMPTY_STR_ARRAY;
-    this.serverConfig = serverConfig;
-    this.clientConfig = clientConfig;
-    this.serverCodecs = serverCodecs;
-    this.recentCanceledQueue = new AbstractInstanceRegistry.CircularQueue(1000);
-    this.recentRegisteredQueue = new AbstractInstanceRegistry.CircularQueue(1000);
-    this.renewsLastMin = new MeasuredRate(60000L);
-    this.deltaRetentionTimer.schedule(this.getDeltaRetentionTask(), serverConfig.getDeltaRetentionTimerIntervalInMs(), serverConfig.getDeltaRetentionTimerIntervalInMs());
+public abstract class AbstractInstanceRegistry implements InstanceRegistry {
+   // CircularQueues here for debugging/statistics purposes only
+   private final CircularQueue<Pair<Long, String>> recentRegisteredQueue;
+   private final CircularQueue<Pair<Long, String>> recentCanceledQueue;
+   private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue = new ConcurrentLinkedQueue<RecentlyChangedItem>();
+
+   protected AbstractInstanceRegistry(EurekaServerConfig serverConfig, EurekaClientConfig clientConfig, ServerCodecs serverCodecs) {
+      this.overriddenInstanceStatusMap = CacheBuilder.newBuilder().initialCapacity(500).expireAfterAccess(1L, TimeUnit.HOURS).build().asMap();
+      this.recentlyChangedQueue = new ConcurrentLinkedQueue();
+      this.readWriteLock = new ReentrantReadWriteLock();
+      this.read = this.readWriteLock.readLock();
+      this.write = this.readWriteLock.writeLock();
+      this.lock = new Object();
+      this.deltaRetentionTimer = new Timer("Eureka-DeltaRetentionTimer", true);
+      this.evictionTimer = new Timer("Eureka-EvictionTimer", true);
+      this.evictionTaskRef = new AtomicReference();
+      this.allKnownRemoteRegions = EMPTY_STR_ARRAY;
+      this.serverConfig = serverConfig;
+      this.clientConfig = clientConfig;
+      this.serverCodecs = serverCodecs;
+      this.recentCanceledQueue = new AbstractInstanceRegistry.CircularQueue(1000);
+      this.recentRegisteredQueue = new AbstractInstanceRegistry.CircularQueue(1000);
+      this.renewsLastMin = new MeasuredRate(60000L);
+      this.deltaRetentionTimer.schedule(this.getDeltaRetentionTask(), serverConfig.getDeltaRetentionTimerIntervalInMs(), serverConfig.getDeltaRetentionTimerIntervalInMs());
+   }
 }
 ```
 
-### CircularQueue
 
-Delegate a **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ArrayBlockingQueue)** and override offer method.
 
-```java
-static class CircularQueue<E> extends AbstractQueue<E> {
-    private final ArrayBlockingQueue<E> delegate;
-    private final int capacity;
+## Links
 
-    public CircularQueue(int capacity) {
-        this.capacity = capacity;
-        this.delegate = new ArrayBlockingQueue(capacity);
-    }
-
-    // discard first node
-    public boolean offer(E e) {
-        while(!this.delegate.offer(e)) {
-            this.delegate.poll();
-        }
-        return true;
-    }
-...
-}
-```
-
-### RateLimitingFilter
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=service-registry)

@@ -1,42 +1,15 @@
 ## Introduction
 
-操作一块数据要好过一系列单个字节
-
-ByteArrayInputStream和ByteArrayOutputStream类时，微妙的问题更多。首先，这些类基本上就是大的内存缓冲区。在很多情况下，用缓冲管理器流包装它们，意味着数据会被复制两次：一次是缓冲在过滤器流中，一次是缓冲在ByteArrayInputStream中（输出流的情况相反）
-
-对于压缩和编解码时应予以缓冲流
-
-- 字符流的速度比字节流快
-- 本身是有缓存(ByteArrayOutputStream)的加上Buffer多复制一次会降低性能
-- 慎用压缩功能 可能更慢
-
-Byte read 8 bit for once
-
-Char read 1 char depends on encoding
 
 
-| from/to | byte         | char   |
-| --------- | -------------- | -------- |
-| Input   | InuputStream | Reader |
-| Output  | OutputStream | Writer |
+## Network
 
-TelnetInputStream
+The java.net package supports two protocols,
 
-only ByteArray or Buffered support mark
+- TCP: Transmission Control Protocol provides reliable communication between the sender and receiver. TCP is used along with the Internet Protocol referred as TCP/IP.
+- UDP: User Datagram Protocol provides a connection-less protocol service by allowing packet of data to be transferred along two or more nodes
 
-```java
-void flush()
-```
-
-
-Iterative server serves client one by one.
-
-concurrent servers
-
-
-
-## Socket and Stream
-
+### Socket
 
 This class represents a Socket Address with no protocol attachment. As an abstract class, it is meant to be subclassed with a specific, protocol dependent, implementation.
 It provides an immutable object used by sockets for binding, connecting, or as returned values.
@@ -50,9 +23,6 @@ public abstract class SocketAddress implements java.io.Serializable {
 }
 ```
 
-
-package `java.net`
-
 This class represents an Internet Protocol (IP) address.
 An IP address is either a 32-bit or 128-bit unsigned number used by IP, a lower-level protocol on which protocols like UDP and TCP are built.
 The IP address architecture is defined by RFC 790: Assigned Numbers, RFC 1918: Address Allocation for Private Internets, RFC 2365: Administratively Scoped IP Multicast, and RFC 2373: IP Version 6 Addressing Architecture.
@@ -60,6 +30,23 @@ The IP address architecture is defined by RFC 790: Assigned Numbers, RFC 1918: A
 An instance of an InetAddress consists of an IP address and possibly its corresponding host name (depending on whether it is constructed with a host name or whether it has already done reverse host name resolution).
 
 InetAddress
+
+
+### ServerSocket
+
+```java
+public class ServerSocket implements java.io.Closeable {
+  public Socket accept() throws IOException {
+    if (isClosed())
+      throw new SocketException("Socket is closed");
+    if (!isBound())
+      throw new SocketException("Socket is not bound yet");
+    Socket s = new Socket((SocketImpl) null);
+    implAccept(s);
+    return s;
+  }
+}
+```
 
 
 ### Address Types
@@ -72,7 +59,8 @@ InetAddress
 - multicast
   An identifier for a set of interfaces (typically belonging to different nodes). A packet sent to a multicast address is delivered to all interfaces identified by that address.
 
-IP address scope
+#### IP address scope
+
 Link-local addresses are designed to be used for addressing on a single link for purposes such as auto-address configuration, neighbor discovery, or when no routers are present.
 Site-local addresses are designed to be used for addressing inside of a site without the need for a global prefix.
 Global addresses are unique across the internet.
@@ -88,7 +76,7 @@ The particular naming services(s) being used is by default the local machine con
 Reverse name resolution means that for any IP address, the host associated with the IP address is returned.
 The InetAddress class provides methods to resolve host names to their IP addresses and vice versa.
 
-InetAddress Caching
+#### InetAddress Caching
 
 The InetAddress class has a cache to store successful as well as unsuccessful host name resolutions.
 
@@ -110,146 +98,35 @@ Two Java security properties control the TTL values used for positive and negati
 
 
 
-```java
-public class ServerSocket implements java.io.Closeable {
-  public Socket accept() throws IOException {
-    if (isClosed())
-      throw new SocketException("Socket is closed");
-    if (!isBound())
-      throw new SocketException("Socket is not bound yet");
-    Socket s = new Socket((SocketImpl) null);
-    implAccept(s);
-    return s;
-  }
-}
-```
 
-```java
-public abstract class ServerSocketChannel extends AbstractSelectableChannel implements NetworkChannel {
-  
-  private final ReentrantLock acceptLock = new ReentrantLock();
-  
-  public SocketChannel accept() throws IOException {
-    int n = 0;
-    FileDescriptor newfd = new FileDescriptor();
-    InetSocketAddress[] isaa = new InetSocketAddress[1];
-
-    acceptLock.lock();
-    try {
-      boolean blocking = isBlocking();
-      try {
-        begin(blocking);
-        n = Net.accept(this.fd, newfd, isaa);
-        if (blocking) {
-          while (IOStatus.okayToRetry(n) && isOpen()) {
-            park(Net.POLLIN);
-            n = Net.accept(this.fd, newfd, isaa);
-          }
-        }
-      } finally {
-        end(blocking, n > 0);
-        assert IOStatus.check(n);
-      }
-    } finally {
-      acceptLock.unlock();
-    }
-
-    if (n > 0) {
-      return finishAccept(newfd, isaa[0]);
-    } else {
-      return null;
-    }
-  }
-}
-```
+## BIO
 
 
-## write
+Java I/O (Input and Output) is used to process the input and produce the output.
+Java uses the concept of a stream to make I/O operation fast.
+The `java.io` package contains all the classes required for input and output operations.
 
-Write is blocking
+### Stream
 
-### BIO
+A stream is a sequence of data. In Java, a stream is composed of bytes. It's called a stream because it is like a stream of water that continues to flow.
+Java application uses an stream to read/write data to a destination; it may be a file, an array, peripheral device or socket.
 
-BIO的文件写`FileOutputStream#write`最终会调用到native层的`io_util.c#writeBytes`方法
+In Java, 3 streams are created for us automatically. All these streams are attached with the console.
+1. System.out: standard output stream
+2. System.in: standard input stream
+3. System.err: standard error stream
 
-```cpp
-void
-writeBytes(JNIEnv *env, jobject this, jbyteArray bytes,
-           jint off, jint len, jboolean append, jfieldID fid)
-{
-    jint n;
-    char stackBuf[BUF_SIZE];
-    char *buf = NULL;
-    FD fd;
+#### BufferedStream
 
- 	...
+Java BufferedOutputStream/BufferedInputStream class is used to read information from stream. It internally uses buffer mechanism to make the performance fast.
 
-    // 如果写入长度为0，直接返回0
-    if (len == 0) {
-        return;
-    } else if (len > BUF_SIZE) {
-        // 如果写入长度大于BUF_SIZE（8192），无法使用栈空间buffer
-        // 需要调用malloc在堆空间申请buffer
-        buf = malloc(len);
-        if (buf == NULL) {
-            JNU_ThrowOutOfMemoryError(env, NULL);
-            return;
-        }
-    } else {
-        buf = stackBuf;
-    }
 
-    // 复制Java传入的byte数组数据到C空间的buffer中
-    (*env)->GetByteArrayRegion(env, bytes, off, len, (jbyte *)buf);
- 
-     if (!(*env)->ExceptionOccurred(env)) {
-        off = 0;
-        while (len > 0) {
-            fd = GET_FD(this, fid);
-            if (fd == -1) {
-                JNU_ThrowIOException(env, "Stream Closed");
-                break;
-            }
-            //写入到文件，这里传递的数组是我们新创建的buf
-            if (append == JNI_TRUE) {
-                n = (jint)IO_Append(fd, buf+off, len);
-            } else {
-                n = (jint)IO_Write(fd, buf+off, len);
-            }
-            if (n == JVM_IO_ERR) {
-                JNU_ThrowIOExceptionWithLastError(env, "Write error");
-                break;
-            } else if (n == JVM_IO_INTR) {
-                JNU_ThrowByName(env, "java/io/InterruptedIOException", NULL);
-                break;
-            }
-            off += n;
-            len -= n;
-        }
-    }
-}
-```
+Iterative server serves client one by one.
 
-`GetByteArrayRegion`其实就是对数组进行了一份拷贝，该函数的实现在jni.cpp宏定义中，找了很久才找到
+concurrent servers
 
-```cpp
-//jni.cpp
-JNI_ENTRY(void, \
-jni_Get##Result##ArrayRegion(JNIEnv *env, ElementType##Array array, jsize start, \
-             jsize len, ElementType *buf)) \
- ...
-      int sc = TypeArrayKlass::cast(src->klass())->log2_element_size(); \
-      //内存拷贝
-      memcpy((u_char*) buf, \
-             (u_char*) src->Tag##_at_addr(start), \
-             len << sc);                          \
-...
-  } \
-JNI_END
-```
 
-可以看到，传统的BIO，在native层真正写文件前，会在堆外内存（c分配的内存）中对字节数组拷贝一份，之后真正IO时，使用的是堆外的数组。
-
+### write
 
 In `IOUtil.write()`
 
@@ -300,6 +177,47 @@ Whether or not a channel is open may be tested by invoking its isOpen method.
 Channels are, in general, intended to be safe for multithreaded access as described in the specifications of the interfaces and classes that extend and implement this interface.
 
 A socket will have a channel if, and only if, the channel itself was created via the `SocketChannel.open` or `ServerSocketChannel.accept` methods.
+
+#### ServerSocketChannel
+
+```java
+public abstract class ServerSocketChannel extends AbstractSelectableChannel implements NetworkChannel {
+  
+  private final ReentrantLock acceptLock = new ReentrantLock();
+  
+  public SocketChannel accept() throws IOException {
+    int n = 0;
+    FileDescriptor newfd = new FileDescriptor();
+    InetSocketAddress[] isaa = new InetSocketAddress[1];
+
+    acceptLock.lock();
+    try {
+      boolean blocking = isBlocking();
+      try {
+        begin(blocking);
+        n = Net.accept(this.fd, newfd, isaa);
+        if (blocking) {
+          while (IOStatus.okayToRetry(n) && isOpen()) {
+            park(Net.POLLIN);
+            n = Net.accept(this.fd, newfd, isaa);
+          }
+        }
+      } finally {
+        end(blocking, n > 0);
+        assert IOStatus.check(n);
+      }
+    } finally {
+      acceptLock.unlock();
+    }
+
+    if (n > 0) {
+      return finishAccept(newfd, isaa[0]);
+    } else {
+      return null;
+    }
+  }
+}
+```
 
 
 #### Connect
@@ -411,7 +329,7 @@ If such a thread might modify the set directly then access should be controlled 
 The iterators returned by the set's iterator methods are fail-fast: If the set is modified after the iterator is created, in any way except by invoking the iterator's own remove method, then a java.util.ConcurrentModificationException will be thrown.
 
 
-### select
+#### select
 
 Selects a set of keys whose corresponding channels are ready for I/O operations.
 
@@ -435,7 +353,7 @@ public abstract int selectNow() throws IOException;
 ```
 
 
-### wakeup
+#### wakeup
 
 Causes the first selection operation that has not yet returned to return immediately.
 

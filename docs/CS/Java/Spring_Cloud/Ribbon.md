@@ -1,66 +1,10 @@
+## Introduction
 
-## LoadBalancerClient
-```java
-// org.springframework.cloud.client.loadbalancer.LoadBalancerClient
-public interface LoadBalancerClient extends ServiceInstanceChooser {
 
-    /**
-     * Executes request using a ServiceInstance from the LoadBalancer for the specified
-     * service.
-     * @param serviceId The service ID to look up the LoadBalancer.
-     * @param request Allows implementations to execute pre and post actions, such as
-     * incrementing metrics.
-     * @param <T> type of the response
-     * @throws IOException in case of IO issues.
-     * @return The result of the LoadBalancerRequest callback on the selected
-     * ServiceInstance.
-     */
-    <T> T execute(String serviceId, LoadBalancerRequest<T> request) throws IOException;
 
-    /**
-     * Executes request using a ServiceInstance from the LoadBalancer for the specified
-     * service.
-     * @param serviceId The service ID to look up the LoadBalancer.
-     * @param serviceInstance The service to execute the request to.
-     * @param request Allows implementations to execute pre and post actions, such as
-     * incrementing metrics.
-     * @param <T> type of the response
-     * @throws IOException in case of IO issues.
-     * @return The result of the LoadBalancerRequest callback on the selected
-     * ServiceInstance.
-     */
-    <T> T execute(String serviceId, ServiceInstance serviceInstance,
-                  LoadBalancerRequest<T> request) throws IOException;
-
-    /**
-     * Creates a proper URI with a real host and port for systems to utilize. Some systems
-     * use a URI with the logical service name as the host, such as
-     * http://myservice/path/to/service. This will replace the service name with the
-     * host:port from the ServiceInstance.
-     * @param instance service instance to reconstruct the URI
-     * @param original A URI with the host as a logical service name.
-     * @return A reconstructed URI.
-     */
-    URI reconstructURI(ServiceInstance instance, URI original);
-
-}
-
-// org.springframework.cloud.client.loadbalancer.ServiceInstanceChooser
-// Implemented by classes which use a load balancer to choose a server to send a request to.
-public interface ServiceInstanceChooser {
-
-    /**
-     * Chooses a ServiceInstance from the LoadBalancer for the specified service.
-     * @param serviceId The service ID to look up the LoadBalancer.
-     * @return A ServiceInstance that matches the serviceId.
-     */
-    ServiceInstance choose(String serviceId);
-
-}
-```
+### AutoConfiguration
 
 Auto-configuration for blocking client-side load balancing.
-
 
 loadBalancerInterceptor
 RestTemplateCustomizer set interceptors to RestTemplate
@@ -95,52 +39,61 @@ public class LoadBalancerAutoConfiguration {
             restTemplate.setInterceptors(list);
         };
     }    
-...
 }
 ```
 
 
 ### RibbonLoadBalancerClient
 
-#### execute
 1. [ILoadBalancer#chooseServer()](/docs/CS/Java/Spring_Cloud/Ribbon.md?id=chooseserver)
 2. LoadBalancerRequest#apply() -> AsyncLoadBalancerInterceptor#intercept()
-```java
-    // RibbonLoadBalancerClient
-    @Override
-	public <T> T execute(String serviceId, ServiceInstance serviceInstance,
-			LoadBalancerRequest<T> request) throws IOException {
-		Server server = null;
-		if (serviceInstance instanceof RibbonServer) {
-			server = ((RibbonServer) serviceInstance).getServer();
-		}
-		if (server == null) {
-			throw new IllegalStateException("No instances available for " + serviceId);
-		}
-
-		RibbonLoadBalancerContext context = this.clientFactory
-				.getLoadBalancerContext(serviceId);
-		RibbonStatsRecorder statsRecorder = new RibbonStatsRecorder(context, server);
-
-		try {
-			T returnVal = request.apply(serviceInstance);
-			statsRecorder.recordStats(returnVal);
-			return returnVal;
-		}
-		// catch IOException and rethrow so RestTemplate behaves correctly
-		catch (IOException ex) {
-			statsRecorder.recordStats(ex);
-			throw ex;
-		}
-		catch (Exception ex) {
-			statsRecorder.recordStats(ex);
-			ReflectionUtils.rethrowRuntimeException(ex);
-		}
-		return null;
-	}
-```
 
 ```java
+// org.springframework.cloud.client.loadbalancer.LoadBalancerClient
+public interface LoadBalancerClient extends ServiceInstanceChooser {
+
+    <T> T execute(String serviceId, LoadBalancerRequest<T> request) throws IOException;
+
+    <T> T execute(String serviceId, ServiceInstance serviceInstance,
+                  LoadBalancerRequest<T> request) throws IOException;
+
+    URI reconstructURI(ServiceInstance instance, URI original);
+}
+
+
+// RibbonLoadBalancerClient
+@Override
+public <T> T execute(String serviceId, ServiceInstance serviceInstance,
+        LoadBalancerRequest<T> request) throws IOException {
+    Server server = null;
+    if (serviceInstance instanceof RibbonServer) {
+        server = ((RibbonServer) serviceInstance).getServer();
+    }
+    if (server == null) {
+        throw new IllegalStateException("No instances available for " + serviceId);
+    }
+
+    RibbonLoadBalancerContext context = this.clientFactory
+            .getLoadBalancerContext(serviceId);
+    RibbonStatsRecorder statsRecorder = new RibbonStatsRecorder(context, server);
+
+    try {
+        T returnVal = request.apply(serviceInstance);
+        statsRecorder.recordStats(returnVal);
+        return returnVal;
+    }
+    // catch IOException and rethrow so RestTemplate behaves correctly
+    catch (IOException ex) {
+        statsRecorder.recordStats(ex);
+        throw ex;
+    }
+    catch (Exception ex) {
+        statsRecorder.recordStats(ex);
+        ReflectionUtils.rethrowRuntimeException(ex);
+    }
+    return null;
+}
+
 protected Server getServer(ILoadBalancer loadBalancer, Object hint) {
 		if (loadBalancer == null) {
 			return null;
@@ -151,29 +104,98 @@ protected Server getServer(ILoadBalancer loadBalancer, Object hint) {
 ```
 
 
-AsyncLoadBalancerInterceptor#intercept() wrap request to `ServiceRequestWrapper` then executeAsync by `org.springframework.http.client.AsyncClientHttpRequestExecution`
-```java
-// org.springframework.cloud.client.loadbalancer.AsyncLoadBalancerInterceptor
-    public ListenableFuture<ClientHttpResponse> intercept(final HttpRequest request, final byte[] body, final AsyncClientHttpRequestExecution execution) throws IOException {
-        URI originalUri = request.getURI();
-        String serviceName = originalUri.getHost();
-        return (ListenableFuture)this.loadBalancer.execute(serviceName, new LoadBalancerRequest<ListenableFuture<ClientHttpResponse>>() {
-            public ListenableFuture<ClientHttpResponse> apply(final ServiceInstance instance) throws Exception {
-                HttpRequest serviceRequest = new ServiceRequestWrapper(request, instance, AsyncLoadBalancerInterceptor.this.loadBalancer);
-                return execution.executeAsync(serviceRequest, body);
-            }
-        });
-    }
+### chooseServer
 
+```java
+public class ZoneAwareLoadBalancer<T extends Server> extends DynamicServerListLoadBalancer<T> {
+    @Override
+    public Server chooseServer(Object key) {
+        if (!ENABLED.get() || getLoadBalancerStats().getAvailableZones().size() <= 1) {
+            return super.chooseServer(key);
+        }
+        Server server = null;
+        try {
+            LoadBalancerStats lbStats = getLoadBalancerStats();
+            Map<String, ZoneSnapshot> zoneSnapshot = ZoneAvoidanceRule.createSnapshot(lbStats);
+            if (triggeringLoad == null) {
+                triggeringLoad = DynamicPropertyFactory.getInstance().getDoubleProperty(
+                        "ZoneAwareNIWSDiscoveryLoadBalancer." + this.getName() + ".triggeringLoadPerServerThreshold", 0.2d);
+            }
+
+            if (triggeringBlackoutPercentage == null) {
+                triggeringBlackoutPercentage = DynamicPropertyFactory.getInstance().getDoubleProperty(
+                        "ZoneAwareNIWSDiscoveryLoadBalancer." + this.getName() + ".avoidZoneWithBlackoutPercetage", 0.99999d);
+            }
+            Set<String> availableZones = ZoneAvoidanceRule.getAvailableZones(zoneSnapshot, triggeringLoad.get(), triggeringBlackoutPercentage.get());
+            if (availableZones != null && availableZones.size() < zoneSnapshot.keySet().size()) {
+                String zone = ZoneAvoidanceRule.randomChooseZone(zoneSnapshot, availableZones);
+                if (zone != null) {
+                    BaseLoadBalancer zoneLoadBalancer = getLoadBalancer(zone);
+                    server = zoneLoadBalancer.chooseServer(key);
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error choosing server using zone aware logic for load balancer={}", name, e);
+        }
+        if (server != null) {
+            return server;
+        } else {
+            return super.chooseServer(key);
+        }
+    }
+}
+
+public class BaseLoadBalancer extends AbstractLoadBalancer implements PrimeConnectionListener, IClientConfigAware {
+    // BaseLoadBalancer
+    private final static IRule DEFAULT_RULE = new RoundRobinRule();
+
+    // Get the alive server dedicated to key
+    public Server chooseServer(Object key) {
+        if (counter == null) {
+            counter = createCounter();
+        }
+        counter.increment();
+        if (rule == null) {
+            return null;
+        } else {
+            try {
+                return rule.choose(key);
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+}
 ```
 
-## ILoadBalancer
+
+### intercept
+
+AsyncLoadBalancerInterceptor#intercept() wrap request to `ServiceRequestWrapper` then executeAsync by `org.springframework.http.client.AsyncClientHttpRequestExecution`
+
+Use [LoadBalancer](/docs/CS/Java/Spring_Cloud/Ribbon.md?id=LoadBalancer) to execute.
+
+```java
+// org.springframework.cloud.client.loadbalancer.AsyncLoadBalancerInterceptor
+public ListenableFuture<ClientHttpResponse> intercept(final HttpRequest request, final byte[] body, final AsyncClientHttpRequestExecution execution) throws IOException {
+    URI originalUri = request.getURI();
+    String serviceName = originalUri.getHost();
+    return (ListenableFuture)this.loadBalancer.execute(serviceName, new LoadBalancerRequest<ListenableFuture<ClientHttpResponse>>() {
+        public ListenableFuture<ClientHttpResponse> apply(final ServiceInstance instance) throws Exception {
+            HttpRequest serviceRequest = new ServiceRequestWrapper(request, instance, AsyncLoadBalancerInterceptor.this.loadBalancer);
+            return execution.executeAsync(serviceRequest, body);
+        }
+    });
+}
+```
+
+## LoadBalancer
 
 ![ILoadBalancer](./images/ILoadBalancer.png)
 
 
 
-Default use `ZoneAwareLoadBalancer` which can avoid a zone as a whole when choosing server.
+Default use [ZoneAwareLoadBalancer](/docs/CS/Java/Spring_Cloud/Ribbon.md?id=chooseServer) which can avoid a zone as a whole when choosing server.
 ```java
 // org.springframework.cloud.netflix.ribbon
 @Configuration(proxyBeanMethods = false)
@@ -199,73 +221,125 @@ public class RibbonClientConfiguration {
 }
 ```
 
-#### chooseServer
-default `RoundRobinRule`
-```java
-// ZoneAwareLoadBalancer
-@Override
-public Server chooseServer(Object key) {
-    if (!ENABLED.get() || getLoadBalancerStats().getAvailableZones().size() <= 1) {
-    logger.debug("Zone aware logic disabled or there is only one zone");
-    return super.chooseServer(key);
-    }
-    Server server = null;
-    try {
-    LoadBalancerStats lbStats = getLoadBalancerStats();
-    Map<String, ZoneSnapshot> zoneSnapshot = ZoneAvoidanceRule.createSnapshot(lbStats);
-    logger.debug("Zone snapshots: {}", zoneSnapshot);
-    if (triggeringLoad == null) {
-    triggeringLoad = DynamicPropertyFactory.getInstance().getDoubleProperty(
-    "ZoneAwareNIWSDiscoveryLoadBalancer." + this.getName() + ".triggeringLoadPerServerThreshold", 0.2d);
-    }
 
-    if (triggeringBlackoutPercentage == null) {
-    triggeringBlackoutPercentage = DynamicPropertyFactory.getInstance().getDoubleProperty(
-    "ZoneAwareNIWSDiscoveryLoadBalancer." + this.getName() + ".avoidZoneWithBlackoutPercetage", 0.99999d);
-    }
-    Set<String> availableZones = ZoneAvoidanceRule.getAvailableZones(zoneSnapshot, triggeringLoad.get(), triggeringBlackoutPercentage.get());
-    logger.debug("Available zones: {}", availableZones);
-    if (availableZones != null &&  availableZones.size() < zoneSnapshot.keySet().size()) {
-    String zone = ZoneAvoidanceRule.randomChooseZone(zoneSnapshot, availableZones);
-    logger.debug("Zone chosen: {}", zone);
-    if (zone != null) {
-    BaseLoadBalancer zoneLoadBalancer = getLoadBalancer(zone);
-    server = zoneLoadBalancer.chooseServer(key);
-    }
-    }
-    } catch (Exception e) {
-    logger.error("Error choosing server using zone aware logic for load balancer={}", name, e);
-    }
-    if (server != null) {
-    return server;
-    } else {
-    logger.debug("Zone avoidance logic is not invoked.");
-    return super.chooseServer(key);
-    }
-    }
-   
-    // BaseLoadBalancer
-    private final static IRule DEFAULT_RULE = new RoundRobinRule();
-    // Get the alive server dedicated to key
-    public Server chooseServer(Object key) {
-        if (counter == null) {
-            counter = createCounter();
-        }
-        counter.increment();
-        if (rule == null) {
-            return null;
-        } else {
-            try {
-                return rule.choose(key);
-            } catch (Exception e) {
-                logger.warn("LoadBalancer [{}]:  Error choosing server for key {}", name, key, e);
-                return null;
-            }
-        }
-    }
-```
+
+
+
+default `RoundRobinRule`
 
 ## IRule
 ![IRule](./images/IRule.png)
 
 
+## ServerListUpdater
+
+scheduleWithFixedDelay 30s get serversList from Registry Center([Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md), [Nacos](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md), etc. ) and check timestamps.
+
+```java
+public class PollingServerListUpdater implements ServerListUpdater {
+    private final static DynamicIntProperty poolSizeProp = new DynamicIntProperty(CORE_THREAD, 2);
+    private static Thread _shutdownThread;
+    static ScheduledThreadPoolExecutor _serverListRefreshExecutor = null;
+
+    public PollingServerListUpdater() {
+        this(1000, 30 * 1000);
+    }
+    
+    static {
+        int coreSize = poolSizeProp.get();
+        ThreadFactory factory = (new ThreadFactoryBuilder())
+                .setNameFormat("PollingServerListUpdater-%d")
+                .setDaemon(true)
+                .build();
+        _serverListRefreshExecutor = new ScheduledThreadPoolExecutor(coreSize, factory);
+        poolSizeProp.addCallback(new Runnable() {
+            @Override
+            public void run() {
+                _serverListRefreshExecutor.setCorePoolSize(poolSizeProp.get());
+            }
+
+        });
+        _shutdownThread = new Thread(new Runnable() {
+            public void run() {
+                shutdownExecutorPool();
+            }
+        });
+        Runtime.getRuntime().addShutdownHook(_shutdownThread);
+    }
+    
+    @Override
+    public synchronized void start(final UpdateAction updateAction) {
+        if (isActive.compareAndSet(false, true)) {
+            final Runnable wrapperRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (!isActive.get()) {
+                        if (scheduledFuture != null) {
+                            scheduledFuture.cancel(true);
+                        }
+                        return;
+                    }
+                    try {
+                        updateAction.doUpdate();
+                        lastUpdated = System.currentTimeMillis();
+                    } catch (Exception e) {
+                        logger.warn("Failed one update cycle", e);
+                    }
+                }
+            };
+
+            scheduledFuture = getRefreshExecutor().scheduleWithFixedDelay(
+                    wrapperRunnable,
+                    initialDelayMs,
+                    refreshIntervalMs,
+                    TimeUnit.MILLISECONDS
+            );
+        }
+    }
+}
+```
+
+### updateServersList
+
+```java
+public class DynamicServerListLoadBalancer<T extends Server> extends BaseLoadBalancer {
+    protected final ServerListUpdater.UpdateAction updateAction = new ServerListUpdater.UpdateAction() {
+        @Override
+        public void doUpdate() {
+            updateListOfServers();
+        }
+    };
+
+    @VisibleForTesting
+    public void updateListOfServers() {
+        List<T> servers = new ArrayList<T>();
+        if (serverListImpl != null) {
+            servers = serverListImpl.getUpdatedListOfServers();
+            if (filter != null) {
+                servers = filter.getFilteredListOfServers(servers);
+            }
+        }
+        updateAllServerList(servers);
+    }
+
+    protected void updateAllServerList(List<T> ls) {
+        // other threads might be doing this - in which case, we pass
+        if (serverListUpdateInProgress.compareAndSet(false, true)) {
+            try {
+                for (T s : ls) {
+                    s.setAlive(true); // set so that clients can start using these servers right away instead of having to wait out the ping cycle.
+                }
+                setServersList(ls);
+                super.forceQuickPing();
+            } finally {
+                serverListUpdateInProgress.set(false);
+            }
+        }
+    }
+}
+```
+
+
+## Links
+
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=load-balance)

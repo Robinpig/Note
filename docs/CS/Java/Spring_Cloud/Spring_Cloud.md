@@ -93,6 +93,7 @@ public interface AutoServiceRegistration {
 
 Implementations:
 - [Nacos](/docs/CS/Java/Spring_Cloud/nacos/registry.md)
+- [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
 
 ```java
 public abstract class AbstractAutoServiceRegistration<R extends Registration>
@@ -148,53 +149,51 @@ public abstract class AbstractAutoServiceRegistration<R extends Registration>
 
 use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
+## Load Balance
 
-## Spring Cloud Netflix
+[Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
 
-### Eureka
+## Circuit Breaker
 
-- [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
-  
-### Load Balance
+> [!NOTE]
+> 
+> Load Balancer retries timeout must less than circuit breaker timeout.
 
-- [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
-- [Feign](/docs/CS/Java/Spring_Cloud/Feign.md)
-- [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
-- [Zipkin](/docs/CS/Java/Spring_Cloud/zipkin.md)
-- [Gateway](/docs/CS/Java/Spring_Cloud/gateway.md)
+```java
+public interface CircuitBreaker {
 
+	default <T> T run(Supplier<T> toRun) {
+		return run(toRun, throwable -> {
+			throw new NoFallbackAvailableException("No fallback available.", throwable);
+		});
+	};
 
-## Spring Cloud Alibaba
+	<T> T run(Supplier<T> toRun, Function<Throwable, T> fallback);
 
-Spring Cloud Alibaba provides a one-stop solution for distributed application development.
-It contains all the components required to develop distributed applications, making it easy for you to develop your applications using Spring Cloud.
+}
+```
 
-### Nacos
+[Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
 
-[Nacos](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md) is an easy-to-use dynamic service discovery, configuration and service management platform for building cloud native applications.
-
-**Nacos: Dynamic *Na*ming and *Co*nfiguration *S*ervice**
-
-
-### Sentinel
 
 [Sentinel](/docs/CS/Java/Spring_Cloud/Sentinel/Sentinel.md) is a powerful flow control component that takes "flow" as the breakthrough point and covers multiple fields including flow control, concurrency limiting, circuit breaking, and adaptive system protection to guarantee the reliability of microservices
 
 
-### RocketMQ
+## Gateway
+
+- [Gateway](/docs/CS/Java/Spring_Cloud/gateway.md)
+
+## Stream
+
+## Sleuth
+
+- [Zipkin](/docs/CS/Java/Spring_Cloud/zipkin.md)
+
+## RPC
+
+- [Feign](/docs/CS/Java/Spring_Cloud/Feign.md)
 
 
-
-### Seata
-
-
-
-
-Alibaba Cloud OSS
-
-Alibaba Cloud SchedulerX
-
-Alibaba Cloud SMS
 
 
 ## Links
