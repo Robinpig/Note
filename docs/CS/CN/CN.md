@@ -248,7 +248,7 @@ async
 
 [WireShark](/docs/CS/CN/Tools/WireShark.md)
 
-[Nginx](/docs/CS/CN/Nginx.md)
+[nginx](/docs/CS/CN/nginx/nginx.md)
 
 [Caddy](/docs/CS/CN/Caddy.md)
 
