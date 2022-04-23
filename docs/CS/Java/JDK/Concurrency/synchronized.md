@@ -2,8 +2,8 @@
 
 Java provides a built-in locking mechanism for enforcing atomicity: the **synchronized block**.
 A synchronized block has two parts: a reference to an object that will serve as the lock, and a block of code to be guarded by that lock.
-A synchronized method is a shorthand for a synchronized block that spans an entire method body, and whose lock is the object on which the method is being invoked.
-(Static synchronized methods use the Class object for the lock.)
+A synchronized method is a shorthand for a synchronized block that spans an entire method body, and whose lock is the object on which the method is being invoked
+(Static synchronized methods use the Class object for the lock).
 
 Every Java object can implicitly act as a lock for purposes of synchronization; these built-in locks are called intrinsic locks or monitor locks.
 The lock is automatically acquired by the executing thread before entering a synchronized block and automatically released when control exits the synchronized block,
@@ -766,13 +766,14 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 ### Heavyweight Lock
 
 #### ObjectMonitor
+
 The ObjectMonitor class implements the heavyweight version of a JavaMonitor.
 The lightweight BasicLock/stack lock version has been inflated into an ObjectMonitor.
 This inflation is typically due to contention or use of [Object.wait()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait).
 
 
 Only onDeck, owner and threads not in cxq can get Lock.
-Owner move other thread to onDeck from EntryList, and move cxq into EntryList.
+Owner move other threads to onDeck from EntryList, and move cxq into EntryList.
 
 WaitSet -> cxq
 

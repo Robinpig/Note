@@ -1,6 +1,6 @@
-# Nginx
+## Introduction
 
-
+[nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by Igor Sysoev.
 
 ## [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
 
@@ -10,7 +10,7 @@ NGINX反向代理后 服务端通过HttpServletRequest  request.getRemoteAddr �
 
 Fix : 
 
-1. NGINX 将信息配置在header上往服务端传输
+1. NGINX 将信息配置在header上往服务端传输s
 
 Nginx.conf 添加配置
 
@@ -27,7 +27,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 
 2. 配置服务器
 
-![image-20210419091833417](/Users/robin/Library/Application Support/typora-user-images/image-20210419091833417.png)
+
 
 
 
@@ -275,4 +275,6 @@ Nginx -t
 四层负载均衡
 
 
+## Links
 
+- [Computer Network](/docs/CS/CN/CN.md)
