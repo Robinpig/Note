@@ -1175,29 +1175,61 @@ void __noreturn do_exit(long code)
 
 Processes are created in Linux in an especially simple manner. The fork system call creates an exact copy of the original process. 
 The forking process is called the *parent process*. The new process is called the *child process*. The parent and child each have their own, private memory images. 
-If the parent subsequently changes any of its variables, the changes are not visible to the child, and vice versa. 
+If the parent subsequently changes any of its variables, the changes are not visible to the child, and vice versa.
 
 The fork system call returns a 0 to the child and a nonzero value, the child’s **PID** (*Process Identifier*), to the parent. Both processes normally check the return value and act accordingly.
+The child doesn’t start running at main() like you might expect; rather, it just comes into life as if it had called fork() itself.
+
+```c
+void main(int argc, char *argv[])
+{
+    pid = fork( ); /* if the fork succeeds, pid > 0 in the parent */
+    if (pid < 0) {
+        handle error( ); /* fork failed (e.g., memory or some table is full) */
+    } else if (pid > 0) {
+        /* parent code goes here. /*/
+    } else {
+        /* child code goes here. /*/
+    }
+}
+```
+
+When the child process is created, there are now two active processes in the system.
+The CPU scheduler determines which process runs at a given moment in time; because the scheduler is complex, we cannot usually make strong assumptions about what it will choose to do, and hence which process will run first. 
+This nondeterminism, as it turns out, leads to some interesting problems, particularly in multi-threaded programs.
 
 
 
 Linux systems give the child its own page tables, but have them point to the parent’s pages, only marked read only.
 Whenever either process (the child or the parent) tries to write on a page, it gets a protection fault.
 The kernel sees this and then allocates a new copy of the page to the faulting process and marks it read/write.
-In this way, only pages that are actually written have to be copied. 
+In this way, only pages that are actually written have to be copied.
 This mechanism is called *copy on write*.
 It has the additional benefit of not requiring two copies of the program in memory, thus saving RAM.
 
-```c
-pid = fork( ); /* if the fork succeeds, pid > 0 in the parent */
-if (pid < 0) {
-    handle error( ); /* fork failed (e.g., memory or some table is full) */
-} else if (pid > 0) {
-    /* parent code goes here. /*/
-} else {
-    /* child code goes here. /*/
-}
-```
+
+The `wait()` system call allows a parent to wait for its child to complete execution.
+
+The `exec()` family of system calls allows a child to break free from its similarity to its parent and execute an entirely new program.
+A successful call to `exec()` never returns.
+
+The separation of fork() and exec() is essential in building a UNIX shell, because it lets the shell run code after the call to fork() but before the call to exec(); 
+this code can alter the environment of the about-to-be-run program, and thus enables a variety of interesting features to be readily built.
+
+> [!TIP]
+> 
+> GETTING IT RIGHT (LAMPSON’S LAW)
+> 
+> As Lampson states in his well-regarded “Hints for Computer Systems Design”, “Get it right. 
+> Neither abstraction nor simplicity is a substitute for getting it right.” Sometimes, you just have to do the right thing, and when you do, it is way better than the alternatives. 
+> 
+> There are lots of ways to design APIs for process creation; however, the combination of fork() and exec() are simple and immensely powerful.
+
+The shell is just a user program. 
+It shows you a prompt and then waits for you to type something into it. You then type a command (i.e., the name of an executable program, plus any arguments) into it; 
+in most cases, the shell then figures out where in the file system the executable resides, calls fork() to create a new child process to run the command, 
+calls some variant of exec() to run the command, and then waits for the command to complete by calling wait(). 
+When the child completes, the shell returns from wait() and prints out a prompt again, ready for your next command.
 
 > [!NOTE]
 > 
