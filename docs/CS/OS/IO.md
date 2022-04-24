@@ -1,5 +1,11 @@
 ## Introduction
 
+The role of the operating system in computer I/O is to manage and control I/O operations and I/O devices.
+
+The device drivers present a uniform deviceaccess interface to the I/O subsystem, much as system calls provide a standard interface between the application and the operating system.
+
+
+
 ## Principles of I/O Hardware
 
 ### I/O Devices
@@ -39,6 +45,7 @@ Buffering involves considerable copying and often has a major impact on I/O perf
 There are three fundamentally different ways that I/O can be performed.
 
 #### Programmed I/O
+
 The simplest form of I/O is to have the CPU do all the work. This method is called *programmed I/O*.
 
 The essential aspect of programmed I/O, is that after outputting a character, the CPU continuously polls the device to see if it is ready to accept another one. 

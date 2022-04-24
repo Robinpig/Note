@@ -2,6 +2,12 @@
 
 
 
+unbuffered I/O
+
+open read write lseek close
+
+Most file I/O on a UNIX system can be performed using only five functions: open, read, write, lseek, and close.
+These functions are often referred to as unbuffered I/O.
 
 
 ## BIO
