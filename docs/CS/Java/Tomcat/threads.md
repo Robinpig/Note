@@ -2,6 +2,7 @@
 
 
 ## StandardThreadExecutor
+
 ```java
 // StandardThreadExecutor
 
@@ -21,12 +22,6 @@ protected int maxQueueSize = Integer.MAX_VALUE;
 
 ```java
 // StandardThreadExecutor
-
-
-/**
- * Start the component and implement the requirements
- * of {@link org.apache.catalina.util.LifecycleBase#startInternal()}.
- */
 @Override
 protected void startInternal() throws LifecycleException {
 
@@ -50,24 +45,25 @@ protected void startInternal() throws LifecycleException {
 Same as a java.util.concurrent.ThreadPoolExecutor but implements a much more efficient getSubmittedCount() method, to be used to properly handle the work queue. 
 If a RejectedExecutionHandler is not specified a default one will be configured and that one will always throw a RejectedExecutionException
 
+### getSubmittedCount
+
+The number of tasks submitted but not yet finished. 
+This includes tasks in the queue and tasks that have been handed to a worker thread but the latter did not start executing the task yet. 
+This number is always greater or equal to getActiveCount().
+
 ```java
-// org.apache.tomcat.util.threads.ThreadPoolExecutor
-    /**
-     * The number of tasks submitted but not yet finished. This includes tasks
-     * in the queue and tasks that have been handed to a worker thread but the
-     * latter did not start executing the task yet.
-     * This number is always greater or equal to {@link #getActiveCount()}.
-     */
+    // org.apache.tomcat.util.threads.ThreadPoolExecutor
     private final AtomicInteger submittedCount = new AtomicInteger(0);
 ```
 
 createExecutor by Endpoint
 
 ### execute
+
 Executes the given command at some time in the future. 
 The command may execute in a new thread, in a pooled thread, or in the calling thread, at the discretion of the Executor implementation. 
-If no threads are available, it will be added to the work queue. 
-**If the work queue is full, the system will wait for the specified time and it throw a RejectedExecutionException if the queue is still full after that.**
+- If no threads are available, it will be added to the work queue. 
+- **If the work queue is full, the system will wait for the specified time and it throw a RejectedExecutionException if the queue is still full after that.**
 
 ```java
 public class ThreadPoolExecutor extends java.util.concurrent.ThreadPoolExecutor {
@@ -99,8 +95,11 @@ public class ThreadPoolExecutor extends java.util.concurrent.ThreadPoolExecutor 
 
 ### TaskQueue
 
-As task queue specifically designed to run with a thread pool executor. The task queue is optimised to properly utilize threads within a thread pool executor. 
+As task queue specifically designed to run with a thread pool executor. 
+The task queue is optimised to properly utilize threads within a thread pool executor. 
 If you use a normal queue, the executor will spawn threads when there are idle threads and you wont be able to force items onto the queue itself.
+
+**If we have less threads than maximum force creation of a new thread.**
 
 ```java
 public class TaskQueue extends LinkedBlockingQueue<Runnable> {
@@ -125,5 +124,26 @@ public class TaskQueue extends LinkedBlockingQueue<Runnable> {
         //if we reached here, we need to add it to the queue
         return super.offer(o);
     }
+
+    @Override
+    public int remainingCapacity() {
+        if (forcedRemainingCapacity != null) {
+            // ThreadPoolExecutor.setCorePoolSize checks that
+            // remainingCapacity==0 to allow to interrupt idle threads
+            // I don't see why, but this hack allows to conform to this
+            // "requirement"
+            return forcedRemainingCapacity.intValue();
+        }
+        return super.remainingCapacity();
+    }
+
+    public boolean force(Runnable o, long timeout, TimeUnit unit) throws InterruptedException {
+        if (parent == null || parent.isShutdown()) throw new RejectedExecutionException(sm.getString("taskQueue.notRunning"));
+        return super.offer(o,timeout,unit); //forces the item onto the queue, to be used if the task is rejected
+    }
 }
 ```
+
+## Links
+
+- [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)

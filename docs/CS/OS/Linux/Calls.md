@@ -147,8 +147,6 @@ SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
 #endif                      /* __ARCH_WANT_SYS_SOCKETCALL */
 ```
 
-
-
 ```c
 // include/uapi/linux/net.h
 #define SYS_SOCKET     1             /* sys_socket(2)              */
@@ -174,6 +172,7 @@ SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
 ```
 
 ## socket
+
 see [sys_socket](/docs/CS/OS/Linux/socket.md?id=create)
 
 ## bind
@@ -185,8 +184,10 @@ We move the socket address to kernel space before we call
 the protocol layer (having also checked the address is ok).
 
 ### sys_bind
-1. move_addr_to_kernel
-2. inet_bind
+
+1. sockfd_lookup_light
+2. move_addr_to_kernel
+3. inet_bind
 
 ```c
 SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
@@ -218,14 +219,15 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 }
 
 ```
+
 ### move addr
 
 Support routines.
 Move socket addresses back and forth across the kernel/user
 divide and look after the messy bits.
 
-
 move_addr_to_kernel	-	copy a socket address into kernel space
+
 - uaddr: Address in user space
 - kaddr: Address in kernel space
 - ulen: Length in user space
@@ -233,6 +235,7 @@ move_addr_to_kernel	-	copy a socket address into kernel space
 The address is copied into kernel space. If the provided address is
 too long an error code of -EINVAL is returned. If the copy gives
 invalid addresses -EFAULT is returned. On a success 0 is returned.
+
 ```c
 
 int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr_storage *kaddr)
@@ -246,7 +249,9 @@ int move_addr_to_kernel(void __user *uaddr, int ulen, struct sockaddr_storage *k
 	return audit_sockaddr(ulen, kaddr);
 }
 ```
+
 move_addr_to_user	-	copy an address to user space
+
 - kaddr: kernel space address
 - klen: length of address in kernel
 - uaddr: user space address
@@ -299,7 +304,6 @@ const struct proto_ops inet_stream_ops = {
 }
 ```
 
-
 ```c
 // net/ipv4/af_inet.c
 int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
@@ -326,7 +330,6 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	return __inet_bind(sk, uaddr, addr_len, flags);
 }
 ```
-
 
 ```c
 
@@ -429,7 +432,6 @@ out:
 }
 ```
 
-
 ### reuse
 
 ip_autobind_reuse - BOOLEAN
@@ -440,15 +442,33 @@ The preferred solution is to use IP_BIND_ADDRESS_NO_PORT and this option should 
 
 Default: 0
 
-
 ## Listen
+
+> -- [listen(2) — Linux manual page](https://man7.org/linux/man-pages/man2/listen.2.html)
+>
+> The behavior of the backlog argument on TCP sockets changed with
+> Linux 2.2.
+> Now it specifies the queue length for completely
+> established sockets waiting to be accepted, instead of the number
+> of incomplete connection requests.
+> The maximum length of the
+> queue for incomplete sockets can be set using
+> /proc/sys/net/ipv4/tcp_max_syn_backlog.
+> When syncookies are
+> enabled there is no logical maximum length and this setting is
+> ignored.  See tcp(7) for more information.
+>
+> If the backlog argument is greater than the value in
+> /proc/sys/net/core/somaxconn, then it is silently capped to that
+> value.
+> Since Linux 5.4, the default in this file is 4096; in
+> earlier kernels, the default value is 128.  In kernels before
+> 2.4.25, this limit was a hard coded value, SOMAXCONN, with the
+> value 128.
 
 **listen for socket connections and limit the queue of incoming connections**
 
-Perform a listen. Basically, we allow the protocol to do anything
-necessary for a listen, and if that works, we mark the socket as
-ready for listening.
-
+Perform a listen. Basically, we allow the protocol to do anything necessary for a listen, and if that works, we mark the socket as ready for listening.
 
 1. sockfd_lookup_light
 2. set backlog
@@ -470,6 +490,7 @@ int __sys_listen(int fd, int backlog)
        sock = sockfd_lookup_light(fd, &err, &fput_needed);
        if (sock) {
 ```
+
 get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(backlog, net.core.somaxconn)`
 
 ```c
@@ -486,9 +507,11 @@ get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(
        return err;
 }
 ```
+We call the protocol - specifi c listen function finally. 
+This is `sock->ops->listen()`. For the *PF_INET* protocol family, `sock->ops` is set to `inet_stream_ops`. 
+So, we are calling `listen()` function from `inet_stream_ops`, *[inet_listen()](/docs/CS/OS/Linux/Calls.md?id=inet_listen)*.
 
-call [inet_listen](/docs/CS/OS/Linux/Calls.md?id=inet_listen)
-
+call [inet_listen]
 
 ```c
 // net/ipv4/af_inet.c
@@ -511,27 +534,6 @@ Move a socket into listening state.
 
 sk_max_ack_backlog = backlog
 
->-- [listen(2) — Linux manual page](https://man7.org/linux/man-pages/man2/listen.2.html)
->
->  The behavior of the backlog argument on TCP sockets changed with
->  Linux 2.2.  
-> Now it specifies the queue length for completely
->  established sockets waiting to be accepted, instead of the number
->  of incomplete connection requests.  
-> The maximum length of the
->  queue for incomplete sockets can be set using
->  /proc/sys/net/ipv4/tcp_max_syn_backlog.  
-> When syncookies are
->  enabled there is no logical maximum length and this setting is
->  ignored.  See tcp(7) for more information.
->
->  If the backlog argument is greater than the value in
->  /proc/sys/net/core/somaxconn, then it is silently capped to that
->  value.  
-> Since Linux 5.4, the default in this file is 4096; in
->  earlier kernels, the default value is 128.  In kernels before
->  2.4.25, this limit was a hard coded value, SOMAXCONN, with the
->  value 128.
 
 ```c
 // af_inet.c
@@ -547,11 +549,14 @@ int inet_listen(struct socket *sock, int backlog)
 ```
 
 must unconnected to any socket and type must be `SOCK_STREAM`
+
 ```c
        if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
               goto out;
 ```
+
 old_state must be `TCPF_CLOSE` or `TCPF_LISTEN`
+
 ```c
        old_state = sk->sk_state;
        if (!((1 << old_state) & (TCPF_CLOSE | TCPF_LISTEN)))
@@ -578,7 +583,9 @@ old_state must be `TCPF_CLOSE` or `TCPF_LISTEN`
                      tcp_fastopen_init_key_once(sock_net(sk));
               }
 ```
+
 call inet_csk_listen_start
+
 ```c
               err = inet_csk_listen_start(sk, backlog);
               if (err)
@@ -593,12 +600,9 @@ out:
 }
 ```
 
-
-
-
 #### inet_csk_listen_start
-inet_connection_sock see [socket](/docs/CS/OS/Linux/socket.md?id=inet_connection_sock)
 
+inet_connection_sock see [socket](/docs/CS/OS/Linux/socket.md?id=inet_connection_sock)
 
 ```c
 // net/ipv4/iinet_connection_sock.c
@@ -610,9 +614,11 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
 ```
 
 call `reqsk_queue_alloc`
+
 ```c
        reqsk_queue_alloc(&icsk->icsk_accept_queue);
 ```
+
 ```c
        sk->sk_ack_backlog = 0;
        inet_csk_delack_init(sk);
@@ -745,8 +751,6 @@ struct inet_hashinfo {
 };
 ```
 
-
-
 ```c
 // net/ipv4/inet_hashtables.c
 bool inet_ehash_nolisten(struct sock *sk, struct sock *osk, bool *found_dup_sk)
@@ -765,8 +769,6 @@ bool inet_ehash_nolisten(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 }
 ```
 
-
-
 ### accept queue
 
 ```c
@@ -781,8 +783,11 @@ static inline void sk_acceptq_added(struct sock *sk)
 	WRITE_ONCE(sk->sk_ack_backlog, sk->sk_ack_backlog + 1);
 }
 ```
+
 #### inet_csk_reqsk_queue_add
+
 call `sk_acceptq_added`
+
 ```c
 //
 struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
@@ -811,7 +816,9 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 ```
 
 #### reqsk_queue_remove
+
 remove head established connection from reqsk_queue and backlog - 1
+
 ```c
 // 
 static inline struct request_sock *reqsk_queue_remove(struct request_sock_queue *queue,
@@ -833,6 +840,7 @@ static inline struct request_sock *reqsk_queue_remove(struct request_sock_queue 
 ```
 
 #### reqsk_queue_alloc
+
 Maximum number of SYN_RECV sockets in queue per LISTEN socket.
 One SYN_RECV socket costs about 80bytes on a 32bit machine.
 
@@ -848,6 +856,7 @@ This value is adjusted to 128 for low memory machines,
 and it will increase in proportion to the memory of machine.
 
 Note : Dont forget somaxconn that may limit backlog too.
+
 ```c
 // request_sock.c
 void reqsk_queue_alloc(struct request_sock_queue *queue)
@@ -863,10 +872,10 @@ void reqsk_queue_alloc(struct request_sock_queue *queue)
 }
 ```
 
-
-
 #### request_sock_queue
+
 struct request_sock_queue -  queue of request_socks
+
 ```c
 // request_sock.h 
 struct request_sock_queue {
@@ -880,7 +889,7 @@ struct request_sock_queue {
        /** FIFO established children    */
        struct request_sock    *rskq_accept_head;
        struct request_sock    *rskq_accept_tail;
-       
+     
        struct fastopen_queue  fastopenq;  /* Check max_qlen != 0 to determine
                                         * if TFO is enabled.
                                         */
@@ -888,6 +897,7 @@ struct request_sock_queue {
 ```
 
 ### SYN queue
+
 SYN queue - logic queue
 see [qlen and max_syn_backlog](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
 
@@ -899,6 +909,7 @@ const struct inet_connection_sock_af_ops ipv4_specific = {
     ...
 };
 ```
+
 ```c
 
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
@@ -917,7 +928,9 @@ drop:
 ```
 
 #### tcp_v4_syn_recv_sock
+
 The three way handshake has completed - we got a valid synack - now create the new socket.
+
 ```c
 //
 struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
@@ -1041,8 +1054,8 @@ put_and_exit:
 }
 ```
 
-
 ## accept
+
 accept, accept4 - accept a connection on a socket
 
 ```c
@@ -1099,12 +1112,11 @@ int __sys_accept4_file(struct file *file, unsigned file_flags,
 
 ### do_accept
 
-
 1. get listen sock from file
 2. [sock_alloc]()
 3. copy type and ops from listen socket
-3. [alloc_file]() for newsock
-3. call `inet_accept`
+4. [alloc_file]() for newsock
+5. call `inet_accept`
 
 ```c
 
@@ -1130,13 +1142,11 @@ struct file *do_accept(struct file *file, unsigned file_flags,
 	err = sock->ops->accept(sock, newsock, sock->file->f_flags | file_flags,
 					false);
 	...
-    
+  
 	/* File flags are not inherited via accept() unlike another OSes. */
 	return newfile;
 }
 ```
-
-
 
 #### sock_alloc_file
 
@@ -1151,7 +1161,7 @@ struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 	file = alloc_file_pseudo(SOCK_INODE(sock), sock_mnt, dname,
 				O_RDWR | (flags & O_NONBLOCK),
 				&socket_file_ops);
-	
+
 
 	sock->file = file;
 	file->private_data = sock;
@@ -1185,8 +1195,6 @@ static struct file *alloc_file(const struct path *path, int flags,
 	return file;
 }
 ```
-
-
 
 #### file_operations
 
@@ -1224,8 +1232,6 @@ It should never happen - if we allow dup2() do it, _really_ bad things will foll
 
 This consumes the "file" refcount, so callers should treat it as if they had called fput(file).
 
-
-
 ```c
 void fd_install(unsigned int fd, struct file *file)
 {
@@ -1233,13 +1239,11 @@ void fd_install(unsigned int fd, struct file *file)
 	struct fdtable *fdt;
 
   ...
-	fdt = files_fdtable(files);	
+	fdt = files_fdtable(files);
 	rcu_assign_pointer(fdt->fd[fd], file);
-	
+
 }
 ```
-
-
 
 ### inet_accept
 
@@ -1276,6 +1280,7 @@ do_err:
 ```
 
 call `inet_csk_accept`
+
 ```c
 // net/ipv4/tcp_ipv4.c
 struct proto tcp_prot = {
@@ -1286,8 +1291,10 @@ struct proto tcp_prot = {
 ```
 
 #### inet_csk_accept
+
 This will accept the next outstanding connection.
 call [reqsk_queue_remove](/docs/CS/OS/Linux/Calls.md?id=reqsk_queue_remove)
+
 ```c
 // 
 struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
@@ -1300,13 +1307,17 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 
 	lock_sock(sk);
 ```
+
 We need to make sure that this socket is listening, and that it has something pending.
+
 ```c
 	error = -EINVAL;
 	if (sk->sk_state != TCP_LISTEN)
 		goto out_err;
 ```
+
 Try to find already established connection, if isEmpty wait or return(`O_NONBLOCK`)
+
 ```c
 	if (reqsk_queue_empty(queue)) {
 		long timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
@@ -1321,7 +1332,9 @@ Try to find already established connection, if isEmpty wait or return(`O_NONBLOC
 			goto out_err;
 	}
 ```
-remove from 
+
+remove from
+
 ```c
 	req = reqsk_queue_remove(queue, sk);
 	newsk = req->sk;
@@ -1395,10 +1408,8 @@ connect()  // connect to 127.0.0.1:1234
             -> ifp->if_output() -> looutput()
 ```
 
-
-
-
 ## send
+
 ```c
 /**
  *    send 	---+--- 	sendto
@@ -1428,7 +1439,9 @@ SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
 	return __sys_sendto(fd, buff, len, flags, NULL, 0);
 }
 ```
+
 Send a datagram to a given address. We move the address into kernel space and check the user space data area is readable before invoking the protocol.
+
 ```c
 // net/socket.c
 int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
@@ -1463,7 +1476,9 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
 		flags |= MSG_DONTWAIT;
 	msg.msg_flags = flags;
 ```
+
 call sock_sendmsg
+
 ```c
 	err = sock_sendmsg(sock, &msg);
 
@@ -1474,8 +1489,8 @@ out:
 }
 ```
 
-
 sock_sendmsg -> inet_sendmsg
+
 ```c
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
@@ -1489,9 +1504,8 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 }
 ```
 
-
 > inet_sendmsg -> [udp_sendmsg](/docs/CS/OS/Linux/UDP.md?id=udp_sendmsg)
-> 
+>
 > inet_sendmsg -> [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_sendmsg)
 
 ## recv
@@ -1508,13 +1522,10 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
  */
 ```
 
-
-
-
 ## mmap
 
-
 ### do_mmap
+
 ```c
 // mm/mmap.c
 /*
@@ -1702,7 +1713,6 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 
 ## sendfile
 
-
 ```c
 // fs/read_write.c
 
@@ -1833,10 +1843,10 @@ SYSCALL_DEFINE4(sendfile, int, out_fd, int, in_fd, off_t __user *, offset, size_
 }
 ```
 
-
 ### do_splice_direct
 
 splices data directly between two files
+
 - in:		file to splice from
 - ppos:	input file offset
 - out:	file to splice to
@@ -1848,6 +1858,7 @@ Description:
 
 For use by do_sendfile(). splice can easily emulate sendfile, but doing it in the application would incur an extra system call(splice in + splice out, as compared to just sendfile()). So this helper
 can splice directly through a process-private pipe.
+
 ```c
 // fs/splice.c
 long do_splice_direct(struct file *in, loff_t *ppos, struct file *out,
@@ -1882,7 +1893,9 @@ long do_splice_direct(struct file *in, loff_t *ppos, struct file *out,
 ```
 
 ### splice_direct_to_actor
+
 splices data directly between two non-pipes
+
 - in:		file to splice from
 - sd:		actor information on where to splice to
 - actor:	handles the data splicing
@@ -2035,8 +2048,6 @@ int select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeval *t
 }
 ```
 
-
-
 sys_select
 
 ```c
@@ -2069,8 +2080,6 @@ int sys_select(int nfds, fd_set *rfds, fd_set *wfds, fd_set *efds, struct timeva
 #endif
 }
 ```
-
-
 
 do_sys_poll
 
@@ -2150,12 +2159,10 @@ Efault:
 }
 ```
 
-
-
 ## poll
 
-
 pollfd
+
 ```c
 // include/upai/asm-generic/poll.h
 struct pollfd {
@@ -2199,9 +2206,6 @@ struct pollfd {
 
 #define POLL_BUSY_LOOP	(__force __poll_t)0x8000
 ```
-
-
-
 
 ## Links
 

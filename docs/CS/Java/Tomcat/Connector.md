@@ -1,8 +1,27 @@
 ## Introduction
 
-## Example
+## start
 
 
+Here are the difference between different embed Tomcat version.
+
+See [Tomcat start](/docs/CS/Java/Tomcat/Start.md). And we will use 10.0.8.
+```java
+// 10.0.8 need to setConnector manually
+public void start() throws LifecycleException {
+    this.getServer();
+    this.server.start();
+}
+
+// 8.5.32 auto create Connector
+public void start() throws LifecycleException {
+    this.getServer();
+    this.getConnector();
+    this.server.start();
+}
+```
+
+Dependency:
 
 ```xml
 <dependency>
@@ -12,6 +31,7 @@
 </dependency>
 ```
 
+Main:
 ```java
 public static void main(String[] args) throws LifecycleException {
     Tomcat tomcat = new Tomcat();
@@ -25,9 +45,7 @@ public static void main(String[] args) throws LifecycleException {
 
 
 
-### Create Connector
-
-
+### Create
 
 Create a new ProtocolHandler for the given protocol.
 
@@ -39,11 +57,10 @@ public Connector() {
 }
 
 public Connector(String protocol) {
-	...
   p = ProtocolHandler.create(protocol);
- 	...
 }
 ```
+
 #### ProtocolHandler
 
 Combine IO and protocol
@@ -82,44 +99,177 @@ public Http11NioProtocol() {
 
 
 
-## Endpoint 
+### initInternal
 
-NioEndpoint
+Connector.initInternal() -> AbstractProtocol.init() -> AbstractEndpoint.init()
 
-- LimitLatch maxConnection = 10000
-- Acceptor accept new Channel to Poller
-- Poller use Selector, get Ready Channel from Channel array，wrap a SocketProcessor to Executor
-- Executor call SocketProcessor.run()
+```java
+public class Connector extends LifecycleMBeanBase {
+    @Override
+    protected void initInternal() throws LifecycleException {
+        super.initInternal();
+        
+        try {
+            protocolHandler.init(); // default AbstractHttp11Protocol
+        } catch (Exception e) {
+            throw new LifecycleException();
+        }
+    }
+}
+```
 
+### startInternal
 
+Connector.initInternal() ->  AbstractProtocol.start() -> AbstractEndpoint.bindWithCleanup()
+
+```java
+public class Connector extends LifecycleMBeanBase {
+    @Override
+    protected void startInternal() throws LifecycleException {
+        setState(LifecycleState.STARTING);
+
+        try {
+            protocolHandler.start();
+        } catch (Exception e) {
+            throw new LifecycleException();
+        }
+    }
+}
+```
+
+#### bindWithCleanup
 
 
 ```java
-// HTTP/1.1 protocol implementation using NIO2. 
-public class Http11Nio2Protocol extends AbstractHttp11JsseProtocol<Nio2Channel> {    
-
-	public Http11Nio2Protocol() {        super(new Nio2Endpoint());    }  
-  ...
-}
-
-/** * Abstract the protocol implementation, including threading, etc. 
-* Processor is single threaded and specific to stream-based protocols, 
-* will not fit Jk protocols like JNI. 
-*/
-public class Http11NioProtocol extends AbstractHttp11JsseProtocol<NioChannel> {    
-	public Http11NioProtocol() {        super(new NioEndpoint());    }
-	...
+private void bindWithCleanup() throws Exception {
+  try {
+    bind();
+  } catch (Throwable t) {
+    // Ensure open sockets etc. are cleaned up if something goes
+    // wrong during bind
+    ExceptionUtils.handleThrowable(t);
+    unbind();
+    throw t;
+  }
 }
 ```
 
 
-### LimitLatch
+#### NioEndPoint
+
+NIO tailored thread pool, providing the following services:
+
+1. Socket acceptor thread, default 1, accept new Channel then turn to Poller
+2. Socket poller thread, default 1, use Selector, get Ready Channel from Channel array，wrap a SocketProcessor to Executor
+3. Worker threads pool call SocketProcessor.run(), default 10
+4. LimitLatch maxConnection = 10000
+
+
+
+Start the NIO endpoint, creating acceptor, poller threads and [executor](/docs/CS/Java/Tomcat/threads.md?id=ThreadPoolExecutor).
+
+
+```java
+public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {
+    @Override
+    public void startInternal() throws Exception {
+
+        if (!running) {
+            running = true;
+            paused = false;
+
+            if (socketProperties.getProcessorCache() != 0) {
+                processorCache = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
+                        socketProperties.getProcessorCache());
+            }
+            if (socketProperties.getEventCache() != 0) {
+                eventCache = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
+                        socketProperties.getEventCache());
+            }
+            if (socketProperties.getBufferPool() != 0) {
+                nioChannels = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
+                        socketProperties.getBufferPool());
+            }
+
+            // Create worker collection
+            if (getExecutor() == null) {
+                createExecutor();
+            }
+
+            initializeConnectionLatch();
+
+            // Start poller thread
+            poller = new Poller();
+            Thread pollerThread = new Thread(poller, getName() + "-ClientPoller");
+            pollerThread.setPriority(threadPriority);
+            pollerThread.setDaemon(true);
+            pollerThread.start();
+
+            startAcceptorThread();
+        }
+    }
+
+    protected void startAcceptorThread() {
+        acceptor = new Acceptor<>(this); // set endpoint
+        String threadName = getName() + "-Acceptor";
+        acceptor.setThreadName(threadName);
+        Thread t = new Thread(acceptor, threadName);
+        t.setPriority(getAcceptorThreadPriority());
+        t.setDaemon(getDaemon());
+        t.start();
+    }
+}
+```
+
+
+##### bind
+
+```java
+public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {
+    public void bind() throws Exception {
+        this.initServerSocket();
+        this.setStopLatch(new CountDownLatch(1));
+        this.initialiseSsl();
+        this.selectorPool.open(this.getName());
+    }
+
+    protected void initServerSocket() throws Exception {
+        if (!this.getUseInheritedChannel()) {
+            this.serverSock = ServerSocketChannel.open();
+            this.socketProperties.setProperties(this.serverSock.socket());
+            InetSocketAddress addr = new InetSocketAddress(this.getAddress(), this.getPortWithOffset());
+            this.serverSock.socket().bind(addr, this.getAcceptCount());
+        } else {
+            Channel ic = System.inheritedChannel();
+            if (ic instanceof ServerSocketChannel) {
+                this.serverSock = (ServerSocketChannel) ic;
+            }
+
+            if (this.serverSock == null) {
+                throw new IllegalArgumentException(sm.getString("endpoint.init.bind.inherited"));
+            }
+        }
+
+        this.serverSock.configureBlocking(true);
+    }
+}
+```
+
+
+
+
+
+
+
+
+#### LimitLatch
 
 LimitLatch like [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md) extends [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 
 
 ```java
 public abstract class AbstractEndpoint<S,U> {
+    
     public void setMaxConnections(int maxCon) {
         this.maxConnections = maxCon;
         LimitLatch latch = this.connectionLimitLatch;
@@ -134,21 +284,17 @@ public abstract class AbstractEndpoint<S,U> {
             initializeConnectionLatch();
         }
     }
-}
-```
-
-
-```java
-protected LimitLatch initializeConnectionLatch() {
-        if (maxConnections==-1) {
+    
+    protected LimitLatch initializeConnectionLatch() {
+        if (maxConnections == -1) {
             return null;
         }
-        if (connectionLimitLatch==null) {
+        if (connectionLimitLatch == null) {
             connectionLimitLatch = new LimitLatch(getMaxConnections());
         }
         return connectionLimitLatch;
     }
-    
+}
 ```
 
 Shared latch that allows the latch to be acquired a limited number of times after which all subsequent requests to acquire the latch will be placed in a FIFO queue until one of the shares is returned.
@@ -197,9 +343,7 @@ protected int tryAcquireShared(int ignored) {
 ```
 
 
-#### countDown
-
-
+##### countDownConnection
 ```java
 protected long countDownConnection() {
         if (maxConnections==-1) {
@@ -227,294 +371,6 @@ protected boolean tryReleaseShared(int arg) {
 ```
 
 
-### NioEndPoint
-NIO tailored thread pool, providing the following services:
-
-1. Socket acceptor thread, default 1
-2. Socket poller thread, default 1
-3. Worker threads pool, default 10
-
-
-When switching to Java 5, there's an opportunity to use the virtual machine's thread pool.
-
-```java
-public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {}
-```
-
-
-
-
-
-
-
-Here are the difference between different version
-
-```java
-// 10.0.8 need to setConnector manually
-public void start() throws LifecycleException {
-    this.getServer();
-    this.server.start();
-}
-
-// 8.5.32 auto create Connector
-public void start() throws LifecycleException {
-    this.getServer();
-    this.getConnector();
-    this.server.start();
-}
-```
-
-
-
-```java
-
-
-public Server getServer() {
-  if (this.server != null) {
-    return this.server;
-  } else {
-    System.setProperty("catalina.useNaming", "false");
-    this.server = new StandardServer();
-    this.initBaseDir();
-    ConfigFileLoader.setSource(new CatalinaBaseConfigurationSource(new File(this.basedir), (String)null));
-    this.server.setPort(-1);
-    Service service = new StandardService();
-    service.setName("Tomcat");
-    this.server.addService(service);
-    return this.server;
-  }
-}
-```
-
-
-
-call init order
-
-1. StandardServer 
-2. NamingRespurcesImpl 
-3. StandardService 
-4. MapperListener
-5. Connector
-
-```java
-// LifecycleBase
-@Override
-public final synchronized void init() throws LifecycleException {
-    if (!state.equals(LifecycleState.NEW)) {
-        invalidTransition(Lifecycle.BEFORE_INIT_EVENT);
-    }
-
-    try {
-        setStateInternal(LifecycleState.INITIALIZING, null, false);
-        initInternal();
-        setStateInternal(LifecycleState.INITIALIZED, null, false);
-    } catch (Throwable t) {
-        handleSubClassException(t, "lifecycleBase.initFail", toString());
-    }
-}
-```
-
-
-
-call `AbstractProtocol#init()`
-
-```java
-// Connector
-@Override
-protected void initInternal() throws LifecycleException {
-
-    super.initInternal();
-		...
-    try {
-        protocolHandler.init(); // default AbstractHttp11Protocol
-    } catch (Exception e) {
-        throw new LifecycleException(
-                sm.getString("coyoteConnector.protocolHandlerInitializationFailed"), e);
-    }
-}
-```
-
-
-
-NOTE: There is no maintenance of state or checking for valid transitions within this class. It is expected that the connector will maintain state and prevent invalid state transitions.
-
-```java
-// AbstractProtocol
-@Override
-public void init() throws Exception {
-    
-  if (oname == null) {
-        // Component not pre-registered so register it
-        oname = createObjectName();
-        if (oname != null) {
-            Registry.getRegistry(null, null).registerComponent(this, oname, null);
-        }
-    }
-
-    if (this.domain != null) {
-        rgOname = new ObjectName(domain + ":type=GlobalRequestProcessor,name=" + getName());
-        Registry.getRegistry(null, null).registerComponent(
-                getHandler().getGlobal(), rgOname, null);
-    }
-
-    String endpointName = getName();
-    endpoint.setName(endpointName.substring(1, endpointName.length()-1));
-    endpoint.setDomain(domain);
-
-    endpoint.init();
-}
-
-// AbstractEndpoint
-public final void init() throws Exception {
-  if (bindOnInit) {
-    bindWithCleanup();
-    bindState = BindState.BOUND_ON_INIT;
-  }
-  if (this.domain != null) {
-    // Register endpoint (as ThreadPool - historical name)
-    oname = new ObjectName(domain + ":type=ThreadPool,name=\"" + getName() + "\"");
-    Registry.getRegistry(null, null).registerComponent(this, oname, null);
-
-    ObjectName socketPropertiesOname = new ObjectName(domain +
-                                                      ":type=ThreadPool,name=\"" + getName() + "\",subType=SocketProperties");
-    socketProperties.setObjectName(socketPropertiesOname);
-    Registry.getRegistry(null, null).registerComponent(socketProperties, socketPropertiesOname, null);
-
-    for (SSLHostConfig sslHostConfig : findSslHostConfigs()) {
-      registerJmx(sslHostConfig);
-    }
-  }
-}
-
-private void bindWithCleanup() throws Exception {
-  try {
-    bind();
-  } catch (Throwable t) {
-    // Ensure open sockets etc. are cleaned up if something goes
-    // wrong during bind
-    ExceptionUtils.handleThrowable(t);
-    unbind();
-    throw t;
-  }
-}
-
-// NioEndpoint
-public void bind() throws Exception {
-  this.initServerSocket();
-  this.setStopLatch(new CountDownLatch(1));
-  this.initialiseSsl();
-  this.selectorPool.open(this.getName());
-}
-
-protected void initServerSocket() throws Exception {
-  if (!this.getUseInheritedChannel()) {
-    this.serverSock = ServerSocketChannel.open();
-    this.socketProperties.setProperties(this.serverSock.socket());
-    InetSocketAddress addr = new InetSocketAddress(this.getAddress(), this.getPortWithOffset());
-    this.serverSock.socket().bind(addr, this.getAcceptCount());
-  } else {
-    Channel ic = System.inheritedChannel();
-    if (ic instanceof ServerSocketChannel) {
-      this.serverSock = (ServerSocketChannel)ic;
-    }
-
-    if (this.serverSock == null) {
-      throw new IllegalArgumentException(sm.getString("endpoint.init.bind.inherited"));
-    }
-  }
-
-  this.serverSock.configureBlocking(true);
-}
-```
-
-
-
-
-
-Start the NIO endpoint, creating acceptor, poller threads and [executor](/docs/CS/Java/Tomcat/threads.md?id=ThreadPoolExecutor).
-
-```java
-// AbstractProtocol
-@Override
-public void start() throws Exception {
-    endpoint.start();
-    monitorFuture = getUtilityExecutor().scheduleWithFixedDelay(
-            new Runnable() {
-                @Override
-                public void run() {
-                    if (!isPaused()) {
-                        startAsyncTimeout();
-                    }
-                }
-            }, 0, 60, TimeUnit.SECONDS);
-}
-```
-
-
-
-```java
-// AbstractEndpoint
-public final void start() throws Exception {
-    if (bindState == BindState.UNBOUND) {
-        bindWithCleanup();
-        bindState = BindState.BOUND_ON_START;
-    }
-    startInternal();
-}
-
-// NioEndpoint
-// Start the NIO endpoint, creating acceptor, poller threads.
-@Override
-public void startInternal() throws Exception {
-
-  if (!running) {
-    running = true;
-    paused = false;
-
-    if (socketProperties.getProcessorCache() != 0) {
-      processorCache = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
-                                               socketProperties.getProcessorCache());
-    }
-    if (socketProperties.getEventCache() != 0) {
-      eventCache = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
-                                           socketProperties.getEventCache());
-    }
-    if (socketProperties.getBufferPool() != 0) {
-      nioChannels = new SynchronizedStack<>(SynchronizedStack.DEFAULT_SIZE,
-                                            socketProperties.getBufferPool());
-    }
-
-    // Create worker collection
-    if (getExecutor() == null) {
-      createExecutor();
-    }
-
-    initializeConnectionLatch();
-
-    // Start poller thread
-    poller = new Poller();
-    Thread pollerThread = new Thread(poller, getName() + "-ClientPoller");
-    pollerThread.setPriority(threadPriority);
-    pollerThread.setDaemon(true);
-    pollerThread.start();
-
-    startAcceptorThread();
-  }
-}
-
-protected void startAcceptorThread() {
-  acceptor = new Acceptor<>(this); // set endpoint
-  String threadName = getName() + "-Acceptor";
-  acceptor.setThreadName(threadName);
-  Thread t = new Thread(acceptor, threadName);
-  t.setPriority(getAcceptorThreadPriority());
-  t.setDaemon(getDaemon());
-  t.start();
-}
-
-```
-
-
 
 ## Acceptor
 
@@ -523,8 +379,11 @@ call in Endpoint
 - if we have reached max connections, wait
 - Accept the next incoming connection from the server socket
 - [setSocketOptions()](/docs/CS/Java/Tomcat/Connector.md?id=setSocketOptions) will hand the socket off to an appropriate processor if successful
+
+
 ```java
 package org.apache.tomcat.util.net;
+
 public class Acceptor<U> implements Runnable {
     @Override
     public void run() {
@@ -817,7 +676,6 @@ public class Poller implements Runnable {
     public Poller() throws IOException {
         this.selector = Selector.open();
     }
-...
 }
 ```
 ### run
@@ -1895,46 +1753,16 @@ public final class ApplicationFilterChain implements FilterChain {
         filter.doFilter(request, response, this);
 ```
 
-We fell off the end of the chain -- call the servlet instance ignore try block
+We fell off the end of the chain -- call the [servlet.service()](/docs/CS/Java/Tomcat/Servlet.md?id=service) instance ignore try block
 ```java
         servlet.service(request, response);
     }
 }
 ```
 
-### service
+## Links
 
-see `doPost` override by [org.springframework.web.servlet.FrameworkServlet](/docs/CS/Java/Spring/MVC.md?id=dispatch)
-```java
-public abstract class HttpServlet extends GenericServlet {
-    public void service(ServletRequest req, ServletResponse res)
-            throws ServletException, IOException {
-
-        HttpServletRequest request;
-        HttpServletResponse response;
-
-        try {
-            request = (HttpServletRequest) req;
-            response = (HttpServletResponse) res;
-        } catch (ClassCastException e) {
-            throw new ServletException(lStrings.getString("http.non_http"));
-        }
-        service(request, response);
-    }
-
-    protected void service(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
-
-        String method = req.getMethod();
-        // ...
-        
-        if (method.equals(METHOD_POST)) {
-            doPost(req, resp);
-        } 
-    }
-}
-```
-
+- [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
 
 
 ## References

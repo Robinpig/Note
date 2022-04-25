@@ -739,6 +739,10 @@ out_mput:
 
 ## softirq
 
+Signals are software interrupts.
+
+The simplest interface to the signal features of the UNIX System is the signal function.
+
 
 
 ```c

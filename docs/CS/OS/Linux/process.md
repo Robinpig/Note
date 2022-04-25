@@ -1211,6 +1211,7 @@ It has the additional benefit of not requiring two copies of the program in memo
 The `wait()` system call allows a parent to wait for its child to complete execution.
 
 The `exec()` family of system calls allows a child to break free from its similarity to its parent and execute an entirely new program.
+The exec merely replaces the current process — its text, data, heap, and stack segments — with a brand-new program from disk.
 A successful call to `exec()` never returns.
 
 The separation of fork() and exec() is essential in building a UNIX shell, because it lets the shell run code after the call to fork() but before the call to exec(); 
@@ -2282,6 +2283,79 @@ sort <f | head
 ```
 
 Processes can also communicate in another way besides pipes: software interrupts.
+
+### Message Passing
+
+Pipes and FIFOs
+
+Pipes are the original form of Unix IPC.
+FIFOs, sometimes called **named pipes**. 
+Both pipes and FIFOs are accessed using the normal read and w r i t e functions.
+
+#### Pipes
+Pipes are provided with all flavors of Unix. A pipe is created by the pipe function and provides a one-way (unidirectional)flow of data.
+Pipes have no names, and their biggest disadvantage is that they can be used only between processesthat have a parent process in common. 
+Two unrelated processes cannot create a pipe between them and use it for IPC (ignoring descriptor passing).
+
+```c
+#include <unistd.h>
+int pipe (int fd121);
+```
+
+Although a pipe is created by one process, it is rarely used within a single process.
+Pipes are typically used to communicate between two different processes (a parent and child) in the following way. 
+First, a process (which will be the parent)creates a pipe and then forks to create a copy of itself.
+Next, the parent process closes the read end of one pipe, and the child process closes the write end of that same pipe. This provides a one-wayflow of data between the two proecesses.
+
+All the pipes shown so far have been half-duplexor unidirectional, providing a oneway flow of data only. When a two-way flow of data is desired, we must create two pipes and use one foreach direction.
+
+##### Full-Duplex Pipes
+Some systems provide full-duplex pipes: SVR4's pipe function and the socketpair function provided by many kernels.
+
+#### FIFOs
+
+FIFO stands for first in,first out, and a Unix FIFO is similar to a pipe. It is a one-way(half-duplex)flow of data. 
+But unlike pipes, a FIFO has a pathname associated with it, allowing unrelated processes to access a single FIFO. FIFOs are also called named pipes.
+
+```c
+#include <sys/types.h>
+#include <sys/stat.h>
+
+int mkf if o (const char *pathname, mode-t mode);
+```
+
+Posix Message Queues
+
+System V Message Queues
+
+### Synchronization
+
+Mutexes and Condition Variables
+Read-Write Locks
+Record Locking
+Posix Semaphores
+System V Semaphores
+
+### Shared Memory
+
+Shared Memory Introduction
+
+#### Posix Shared Memory
+
+mmap
+
+#### System V Shared Memory
+
+shmget
+
+
+### Remote Procedure Calls
+
+
+
+
+
+
 
 
 ## Scheduling
