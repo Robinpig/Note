@@ -1,6 +1,5 @@
 ## Introduction
 
-
 ```c
 // include/linux/netdevice.h
 struct packet_type {
@@ -139,6 +138,7 @@ Protocol and Address families
 
 
 ### sockaddr_in
+
 Structure describing an Internet (IP) socket address.
 ```c
 // include/uapi/linux/in.h
