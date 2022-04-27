@@ -434,6 +434,29 @@ All the programs continue to run indefinitely but fail to make any progress, is 
 
 ## Scheduling
 
+Workload Assumptions
+
+
+### Scheduling Metrics
+
+Beyond making workload assumptions, we also need one more thing to enable us to compare different scheduling policies: a scheduling metric.
+
+The turnaround time of a job is defined as the time at which the job completes minus the time at which the job arrived in the system. 
+More formally, the turnaround time Tturnaround is:
+```tex
+T_{turnaround} = T_{completion} − T_{arrival}
+````
+Because we have assumed that all jobs arrive at the same time, for now Tarrival = 0 and hence Tturnaround = Tcompletion. 
+This fact will change as we relax the aforementioned assumptions.
+
+Another metric of interest is fairness.
+
+Performance and fairness are often at odds in scheduling; a scheduler, for example, may optimize performance but at the cost of preventing a few jobs from running, thus decreasing fairness.
+
+
+
+
+
 When a computer is multiprogrammed, it frequently has multiple processes or threads competing for the CPU at the same time. 
 This situation occurs whenever two or more of them are simultaneously in the ready state. 
 If only one CPU is available, a choice has to be made which process to run next. 
@@ -474,6 +497,64 @@ In systems with real-time constraints, preemption is, oddly enough, sometimes no
 The difference with interactive systems is that real-time systems run only programs that are intended to further the application at hand. 
 Interactive systems are general purpose and may run arbitrary programs that are not cooperative and even possibly malicious.
 
+
+
+The most basic algorithm we can implement is known as First In, First Out (FIFO) scheduling or sometimes First Come, First Served (FCFS).
+FIFO has a number of positive properties: it is clearly simple and thus easy to implement.
+
+This problem is generally referred to as the **convoy effect**, where a number of relatively-short potential consumers of a resource get queued behind a heavyweight resource consumer.
+
+##### SJF
+
+This new scheduling discipline is known as Shortest Job First (SJF), and the name should be easy to remember because it describes the policy quite completely: it runs the shortest job first, then the next shortest, and so on.
+SJF performs much better with regards to average turnaround time.
+
+
+Shortest Job First represents a general scheduling principle that can be applied to any system where the perceived turnaround time per customer(or, in our case, a job) matters.
+Think of any line you have waited in: if the establishment in question cares about customer satisfaction, it is likely they have taken SJF into account. 
+For example, grocery stores commonly have a “ten-items-or-less” line to ensure that shoppers with only a few things to purchase don’t get stuck behind the family preparing for some upcoming nuclear winter.
+
+
+SJF is a non-preemptive scheduler.
+
+##### STCF
+
+Fortunately, there is a scheduler which does exactly that: add preemption to SJF, known as the Shortest Time-to-Completion First (STCF) or Preemptive Shortest Job First (PSJF) scheduler.
+
+
+
+
+
+Now users would sit at a terminal and demand interactive performance from the system as well. And thus, a new metric was born: **response time**.
+
+We define response time as the time from when the job arrives in a system to the first time it is scheduled3. 
+More formally:
+
+```tex
+T_{response} = T_{firstrun} − T_{arrival}
+```
+
+STCF and related disciplines are not particularly good for response time.
+While great for turnaround time, this approach is quite bad for response time and interactivity.
+
+
+
+RR
+
+The basic idea is simple: instead of running jobs to completion, RR runs a job for a time slice (sometimes called a scheduling quantum) and then switches to the next job in the run queue.
+
+RR is sometimes called time-slicing. Note that the length of a time slice must be a multiple of the timer-interrupt period.
+
+As you can see, the length of the time slice is critical for RR. The shorter it is, the better the performance of RR under the response-time metric.
+However, making the time slice too short is problematic: suddenly the cost of context switching will dominate overall performance. 
+Thus, deciding on the length of the time slice presents a trade-off to a system designer, making it long enough to amortize the cost of switching without making it so long that the system is no longer responsive.
+
+> [!TIP]
+> AMORTIZATION CAN REDUCE COSTS
+> 
+> The general technique of amortization is commonly used in systems when there is a fixed cost to some operation. 
+> By incurring that cost less often (i.e., by performing the operation fewer times), the total cost to the system is reduced.
+
 #### Scheduling Algorithm Goals
 
 All systems
@@ -507,7 +588,8 @@ A preemptive version of shortest job first is shortest remaining time next.
 
 ### Scheduling in Interactive Systems
 
-One of the oldest, simplest, fairest, and most widely used algorithms is round robin. Each process is assigned a time interval, called its quantum, during which it is allowed to run. 
+One of the oldest, simplest, fairest, and most widely used algorithms is round robin. 
+Each process is assigned a time interval, called its quantum, during which it is allowed to run. 
 If the process is still running at the end of the quantum, the CPU is preempted and given to another process. 
 If the process has blocked or finished before the quantum has elapsed, the CPU switching is done when the process blocks, of course. Round robin is easy to implement. 
 All the scheduler needs to do is maintain a list of runnable processes. 
