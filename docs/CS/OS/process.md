@@ -555,6 +555,87 @@ Thus, deciding on the length of the time slice presents a trade-off to a system 
 > The general technique of amortization is commonly used in systems when there is a fixed cost to some operation. 
 > By incurring that cost less often (i.e., by performing the operation fewer times), the total cost to the system is reduced.
 
+Note that the cost of context switching does not arise solely from the OS actions of saving and restoring a few registers. 
+When programs run, they build up a great deal of state in CPU caches, TLBs, branch predictors, and other on-chip hardware. 
+Switching to another job causes this state to be flushed and new state relevant to the currently-running job to be brought in, which may exact a noticeable performance cost.
+
+More generally, any policy (such as RR) that is fair, i.e., that evenly divides the CPU among active processes on a small time scale, will perform poorly on metrics such as turnaround time. 
+Indeed, this is an inherent trade-off: if you are willing to be unfair, you can run shorter jobs to completion, but at the cost of response time; if you instead value fairness, response time is lowered, but at the cost of turnaround time. 
+This type of trade-off is common in systems.
+
+TIP: OVERLAP ENABLES HIGHER UTILIZATION
+When possible, overlap operations to maximize the utilization of systems.
+Overlap is useful in many different domains, including when performing disk I/O or sending messages to remote machines; 
+in either case, starting the operation and then switching to other work is a good idea, and improves the overall utilization and efficiency of the system.
+
+#### MLFQ
+
+TIP: LEARN FROM HISTORY
+The multi-level feedback queue is an excellent example of a system that
+learns from the past to predict the future. Such approaches are common in operating systems (and many other places in Computer Science,
+including hardware branch predictors and caching algorithms). Such
+approaches work when jobs have phases of behavior and are thus predictable; of course, one must be careful with such techniques, as they can
+easily be wrong and drive a system to make worse decisions than they
+would have with no knowledge at all.
+
+
+In our treatment, the MLFQ has a number of distinct queues, each assigned a different priority level. At any given time, a job that is ready to run is on a single queue. 
+MLFQ uses priorities to decide which job should run at a given time: a job with higher priority (i.e., a job on a higher queue) is chosen to run.
+
+Of course, more than one job may be on a given queue, and thus have the same priority. In this case, we will just use round-robin scheduling among those jobs.
+
+Thus, we arrive at the first two basic rules for MLFQ:
+- Rule 1: If Priority(A) > Priority(B), A runs (B doesn’t).
+- Rule 2: If Priority(A) = Priority(B), A & B run in RR.
+
+
+##### How To Change Priority
+
+The key to MLFQ scheduling therefore lies in how the scheduler sets priorities. 
+Rather than giving a fixed priority to each job, MLFQ varies the priority of a job based on its *observed behavior*.
+If, for example, a job repeatedly relinquishes the CPU while waiting for input from the keyboard, MLFQ will keep its priority high, as this is how an interactive process might behave. 
+If, instead, a job uses the CPU intensively for long periods of time, MLFQ will reduce its priority. 
+In this way, MLFQ will try to learn about processes as they run, and thus use the history of the job to predict its future behavior.
+
+Here is our first attempt at a priorityadjustment algorithm:
+- Rule 3: When a job enters the system, it is placed at the highest priority (the topmost queue).
+- Rule 4a: If a job uses up an entire time slice while running, its priority is reduced (i.e., it moves down one queue).
+- Rule 4b: If a job gives up the CPU before the time slice is up, it stays at the same priority level.
+
+First, there is the problem of starvation: if there are “too many” interactive jobs in the system, they will combine to consume all CPU time, and thus long-running jobs will never receive any CPU time (they starve).
+
+Second, a smart user could rewrite their program to game the scheduler. 
+Gaming the scheduler generally refers to the idea of doing something sneaky to trick the scheduler into giving you more than your fair share of the resource.
+
+The simple idea here is to periodically boost the priority of all the jobs in system. 
+There are many ways to achieve this, but let’s just do something simple: throw them all in the topmost queue; hence, a new rule:
+- Rule 5: After some time period S, move all the jobs in the system to the topmost queue.
+
+Our new rule solves two problems at once. First, processes are guaranteed not to starve: by sitting in the top queue, a job will share the CPU with other high-priority jobs in a round-robin fashion, and thus eventually receive service. 
+Second, if a CPU-bound job has become interactive, the scheduler treats it properly once it has received the priority boost.
+
+
+We now have one more problem to solve: how to prevent gaming of our scheduler?
+We thus rewrite Rules 4a and 4b to the following single rule:
+- Rule 4: Once a job uses up its time allotment at a given level (regardless of how many times it has given up the CPU), its priority is reduced (i.e., it moves down one queue).
+
+> [!TIP]
+> TIP: AVOID VOO-DOO CONSTANTS (OUSTERHOUT’S LAW)
+> 
+> Avoiding voo-doo constants is a good idea whenever possible. Unfortunately, as in the example above, it is often difficult. One could try to
+make the system learn a good value, but that too is not straightforward.
+The frequent result: a configuration file filled with default parameter values that a seasoned administrator can tweak when something isn’t quite
+working correctly. As you can imagine, these are often left unmodified,
+and thus we are left to hope that the defaults work well in the field. This
+tip brought to you by our old OS professor, John Ousterhout, and hence
+we call it Ousterhout’s Law.
+
+
+MQMS
+
+
+
+
 #### Scheduling Algorithm Goals
 
 All systems

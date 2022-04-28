@@ -2398,6 +2398,17 @@ Tasks which are not runnable and are waiting on various I/O operations or other 
 The head of the waitqueue includes a pointer to a linked list of tasks and a spinlock. 
 The spinlock is necessary so as to ensure that the waitqueue can be concurrently manipulated through both the main kernel code and interrupt handlers or other asynchronous invocations.
 
+
+Both O(1) and CFS use multiple queues, whereas BFS uses a single queue, showing that both approaches can be successful. 
+Of course, there are many other details which separate these schedulers. 
+- For example, the O(1) scheduler is a priority-based scheduler (similar to the MLFQ discussed before), 
+  changing a process’s priority over time and then scheduling those with highest priority in order to meet various scheduling objectives; interactivity is a particular focus. 
+- CFS, in contrast, is a deterministic proportional-share approach (more like Stride scheduling, as discussed earlier). 
+- BFS, the only single-queue approach among the three, is also proportional-share, but based on a more complicated scheme known as Earliest Eligible Virtual Deadline First(EEVDF).
+
+The single-queue approach (SQMS) is rather straightforward to build and balances load well but inherently has difficulty with scaling to many processors and cache affinity. 
+The multiple-queue approach (MQMS) scales better and handles cache affinity well, but has trouble with load imbalance and is more complicated.
+
 #### O(1)
 
 Historically, a popular Linux scheduler was the Linux O(1) scheduler. 
