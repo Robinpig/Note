@@ -2469,9 +2469,197 @@ Given the levels of load in current systems, this continues to be acceptable.
 
 
 
+In generally, the proportion of processor time that any process receives is determined only by the relative difference in niceness between it and the other runnable processes.
+The nice values, instead of yielding additive increases to timeslices, yield geometric differences.The absolute timeslice allotted any nice value is not an absolute number, but a given proportion of the processor. 
+CFS is called a fair scheduler because it gives each process a fair share—a proportion—of the processor’s time.
+As mentioned, note that CFS isn’t perfectly fair, because it only approximates perfect multitasking, but it can place a lower bound on latency of n for n runnable processes on the unfairness.
+
+
+```c
+// sched.h
+struct sched_entity {
+	/* For load-balancing: */
+	struct load_weight		load;
+	struct rb_node			run_node;
+	struct list_head		group_node;
+	unsigned int			on_rq;
+
+	u64				exec_start;
+	u64				sum_exec_runtime;
+	u64				vruntime;
+	u64				prev_sum_exec_runtime;
+
+	u64				nr_migrations;
+
+	struct sched_statistics		statistics;
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	int				depth;
+	struct sched_entity		*parent;
+	/* rq on which this entity is (to be) queued: */
+	struct cfs_rq			*cfs_rq;
+	/* rq "owned" by this entity/group: */
+	struct cfs_rq			*my_q;
+	/* cached value of my_q->h_nr_running */
+	unsigned long			runnable_weight;
+#endif
+
+#ifdef CONFIG_SMP
+	/*
+	 * Per entity load average tracking.
+	 *
+	 * Put into separate cache line so it does not
+	 * collide with read-mostly values above.
+	 */
+	struct sched_avg		avg;
+#endif
+};
+```
+Update the current task's runtime statistics.
+
+```c
+// sched/fair.c
+static void update_curr(struct cfs_rq *cfs_rq)
+{
+	struct sched_entity *curr = cfs_rq->curr;
+	u64 now = rq_clock_task(rq_of(cfs_rq));
+	u64 delta_exec;
+
+	if (unlikely(!curr))
+		return;
+
+	delta_exec = now - curr->exec_start;
+	if (unlikely((s64)delta_exec <= 0))
+		return;
+
+	curr->exec_start = now;
+
+	schedstat_set(curr->statistics.exec_max,
+		      max(delta_exec, curr->statistics.exec_max));
+
+	curr->sum_exec_runtime += delta_exec;
+	schedstat_add(cfs_rq->exec_clock, delta_exec);
+
+	curr->vruntime += calc_delta_fair(delta_exec, curr);
+	update_min_vruntime(cfs_rq);
+
+	if (entity_is_task(curr)) {
+		struct task_struct *curtask = task_of(curr);
+
+		trace_sched_stat_runtime(curtask, delta_exec, curr->vruntime);
+		cgroup_account_cputime(curtask, delta_exec);
+		account_group_exec_runtime(curtask, delta_exec);
+	}
+
+	account_cfs_rq_runtime(cfs_rq, delta_exec);
+}
+```
+
+Pick the next process, keeping these things in mind, in this order:
+1. keep things fair between processes/task groups
+2. pick the "next" process, since someone really wants that to run
+3. pick the "last" process, for cache locality
+4. do not run the "skip" process, if something else is available
 
 
 
+```c
+static void
+enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
+{
+	bool renorm = !(flags & ENQUEUE_WAKEUP) || (flags & ENQUEUE_MIGRATED);
+	bool curr = cfs_rq->curr == se;
+
+	/*
+	 * If we're the current task, we must renormalise before calling
+	 * update_curr().
+	 */
+	if (renorm && curr)
+		se->vruntime += cfs_rq->min_vruntime;
+
+	update_curr(cfs_rq);
+
+	/*
+	 * Otherwise, renormalise after, such that we're placed at the current
+	 * moment in time, instead of some random moment in the past. Being
+	 * placed in the past could significantly boost this task to the
+	 * fairness detriment of existing tasks.
+	 */
+	if (renorm && !curr)
+		se->vruntime += cfs_rq->min_vruntime;
+
+	/*
+	 * When enqueuing a sched_entity, we must:
+	 *   - Update loads to have both entity and cfs_rq synced with now.
+	 *   - Add its load to cfs_rq->runnable_avg
+	 *   - For group_entity, update its weight to reflect the new share of
+	 *     its group cfs_rq
+	 *   - Add its new weight to cfs_rq->load.weight
+	 */
+	update_load_avg(cfs_rq, se, UPDATE_TG | DO_ATTACH);
+	se_update_runnable(se);
+	update_cfs_group(se);
+	account_entity_enqueue(cfs_rq, se);
+
+	if (flags & ENQUEUE_WAKEUP)
+		place_entity(cfs_rq, se, 0);
+
+	check_schedstat_required();
+	update_stats_enqueue(cfs_rq, se, flags);
+	check_spread(cfs_rq, se);
+	if (!curr)
+		__enqueue_entity(cfs_rq, se);
+	se->on_rq = 1;
+
+	/*
+	 * When bandwidth control is enabled, cfs might have been removed
+	 * because of a parent been throttled but cfs->nr_running > 1. Try to
+	 * add it unconditionally.
+	 */
+	if (cfs_rq->nr_running == 1 || cfs_bandwidth_used())
+		list_add_leaf_cfs_rq(cfs_rq);
+
+	if (cfs_rq->nr_running == 1)
+		check_enqueue_throttle(cfs_rq);
+}
+
+
+static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
+{
+	rb_add_cached(&se->run_node, &cfs_rq->tasks_timeline, __entity_less);
+}
+
+```
+
+rb_add_cached() - insert node into the leftmost cached tree
+
+leftmost if never turn to right.
+
+```c
+static __always_inline struct rb_node *
+rb_add_cached(struct rb_node *node, struct rb_root_cached *tree,
+	      bool (*less)(struct rb_node *, const struct rb_node *))
+{
+	struct rb_node **link = &tree->rb_root.rb_node;
+	struct rb_node *parent = NULL;
+	bool leftmost = true;
+
+	while (*link) {
+		parent = *link;
+		if (less(node, parent)) {
+			link = &parent->rb_left;
+		} else {
+			link = &parent->rb_right;
+			leftmost = false;
+		}
+	}
+
+	rb_link_node(node, parent, link);
+	rb_insert_color_cached(node, tree, leftmost);
+
+	return leftmost ? node : NULL;
+}
+```
 
 
 ## Links

@@ -79,6 +79,7 @@ extern const struct sched_class idle_sched_class;
 
 
 ### run queue
+
 This is the main, per-CPU runqueue data structure.
 
 Locking rule: those places that want to lock multiple runqueues
@@ -295,6 +296,42 @@ task structs
 ## schedule
 
 ```c
+static void __sched notrace preempt_schedule_common(void)
+{
+	do {
+		/*
+		 * Because the function tracer can trace preempt_count_sub()
+		 * and it also uses preempt_enable/disable_notrace(), if
+		 * NEED_RESCHED is set, the preempt_enable_notrace() called
+		 * by the function tracer will call this function again and
+		 * cause infinite recursion.
+		 *
+		 * Preemption must be disabled here before the function
+		 * tracer can trace. Break up preempt_disable() into two
+		 * calls. One to disable preemption without fear of being
+		 * traced. The other to still record the preemption latency,
+		 * which can also be traced by the function tracer.
+		 */
+		preempt_disable_notrace();
+		preempt_latency_start(1);
+		__schedule(true);
+		preempt_latency_stop(1);
+		preempt_enable_no_resched_notrace();
+
+		/*
+		 * Check again in case we missed a preemption opportunity
+		 * between schedule and now.
+		 */
+	} while (need_resched());
+}
+
+static __always_inline bool need_resched(void)
+{
+	return unlikely(tif_need_resched());
+}
+```
+
+```c
 // kernel/sched/core.c
 asmlinkage __visible void __sched schedule(void)
 {
@@ -339,6 +376,8 @@ called on the nearest possible occasion:
     - return from interrupt-handler to user-space
 
 WARNING: must be called with preemption disabled!
+
+
 ```c
 // kernel/sched/core.c
 static void __sched notrace __schedule(bool preempt)
@@ -464,8 +503,11 @@ pick next task
 		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
 		trace_sched_switch(preempt, prev, next);
+```
+Context Switch
 
-		/* Also unlocks the rq: */
+Also unlocks the rq:
+```c
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
@@ -479,17 +521,13 @@ pick next task
 ```
 
 ### pick_next_task
-Pick up the highest-prio task:
-```c
-// kernel/sched/core.c
-static struct task_struct *
-pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
-{
-	return __pick_next_task(rq, prev, rf);
-}
 
+Pick up the highest-prio task:
+
+```c
+// sched/core.c
 static inline struct task_struct *
-__pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
+pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	const struct sched_class *class;
 	struct task_struct *p;
@@ -507,7 +545,7 @@ __pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		if (unlikely(p == RETRY_TASK))
 			goto restart;
 
-		/* Assume the next prioritized class is idle_sched_class */
+		/* Assumes fair_sched_class->next == idle_sched_class */
 		if (!p) {
 			put_prev_task(rq, prev);
 			p = pick_next_task_idle(rq);
@@ -525,7 +563,8 @@ restart:
 			return p;
 	}
 
-	BUG(); /* The idle class should always have a runnable task. */
+	/* The idle class should always have a runnable task: */
+	BUG();
 }
 ```
 
@@ -698,7 +737,9 @@ static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool fir
 ```
 
 ### context switch
+
 context_switch - switch to the new MM and the new thread's register state.
+
 ```c
 // kernel/sched/core.c
 static __always_inline struct rq *
