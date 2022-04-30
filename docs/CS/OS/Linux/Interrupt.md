@@ -1,21 +1,22 @@
 ## Introduction
 
+## irq
+
 
 Bit masks for desc->core_internal_state__do_not_mess_with_it
+
+- IRQS_AUTODETECT		- autodetection in progress
+- IRQS_SPURIOUS_DISABLED	- was disabled due to spurious interrupt
+- detection
+- IRQS_POLL_INPROGRESS		- polling in progress
+- IRQS_ONESHOT			- irq is not unmasked in primary handler
+- IRQS_REPLAY			- irq is replayed
+- IRQS_WAITING			- irq is waiting
+- IRQS_PENDING			- irq is pending and replayed later
+- IRQS_SUSPENDED		- irq is suspended
+- IRQS_NMI			- irq line is used to deliver NMIs
 ```c
 // kernal/irq/internals.h
-/*
- * IRQS_AUTODETECT		- autodetection in progress
- * IRQS_SPURIOUS_DISABLED	- was disabled due to spurious interrupt
- *				  detection
- * IRQS_POLL_INPROGRESS		- polling in progress
- * IRQS_ONESHOT			- irq is not unmasked in primary handler
- * IRQS_REPLAY			- irq is replayed
- * IRQS_WAITING			- irq is waiting
- * IRQS_PENDING			- irq is pending and replayed later
- * IRQS_SUSPENDED		- irq is suspended
- * IRQS_NMI			- irq line is used to deliver NMIs
- */
 enum {
 	IRQS_AUTODETECT		= 0x00000001,
 	IRQS_SPURIOUS_DISABLED	= 0x00000002,
@@ -744,15 +745,10 @@ Signals are software interrupts.
 The simplest interface to the signal features of the UNIX System is the signal function.
 
 
+PLEASE, avoid to allocate new softirqs, if you need not _really_ high frequency threaded job scheduling. 
+For almost all the purposes tasklets are more than enough. F.e. all serial device BHs et al. should be converted to tasklets, not to softirqs.
 
 ```c
-
-/* PLEASE, avoid to allocate new softirqs, if you need not _really_ high
-   frequency threaded job scheduling. For almost all the purposes
-   tasklets are more than enough. F.e. all serial device BHs et
-   al. should be converted to tasklets, not to softirqs.
- */
-
 enum
 {
 	HI_SOFTIRQ=0,
@@ -1019,7 +1015,10 @@ static int ksoftirqd_should_run(unsigned int cpu)
 
 ### tasklet
 
+Because tasklets are implemented on top of softirqs, they are softirqs.
+
 #### tasklet_action
+
 ```c
 
 static __latent_entropy void tasklet_action(struct softirq_action *a)
@@ -1075,6 +1074,7 @@ call raise_softirq
 
 
 #### tasklet_schedule
+
 ```c
 
 void __tasklet_schedule(struct tasklet_struct *t)

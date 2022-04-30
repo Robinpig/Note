@@ -1345,6 +1345,7 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 
 
 ### kernel_clone
+
 Ok, this is the main fork-routine.
 It copies the process, and if successful kick-starts
 it and waits for it to finish using the VM if required.
@@ -2252,6 +2253,148 @@ In this way, nothing has to be loaded in advance, so programs can start quickly 
 Finally, the arguments and environment strings are copied to the new stack, the signals are reset, and the registers are initialized to all zeros. 
 At this point, the new command can start running.
 
+
+## exit
+
+do_exit
+
+```c
+void __noreturn do_exit(long code)
+{
+```
+
+Send signals to all our closest relatives so that they know to properly mourn us..
+
+```c
+static void exit_notify(struct task_struct *tsk, int group_dead)
+{
+	bool autoreap;
+	struct task_struct *p, *n;
+	LIST_HEAD(dead);
+
+	write_lock_irq(&tasklist_lock);
+	forget_original_parent(tsk, &dead);
+
+	if (group_dead)
+		kill_orphaned_pgrp(tsk->group_leader, NULL);
+
+	tsk->exit_state = EXIT_ZOMBIE;
+	if (unlikely(tsk->ptrace)) {
+		int sig = thread_group_leader(tsk) &&
+				thread_group_empty(tsk) &&
+				!ptrace_reparented(tsk) ?
+			tsk->exit_signal : SIGCHLD;
+		autoreap = do_notify_parent(tsk, sig);
+	} else if (thread_group_leader(tsk)) {
+		autoreap = thread_group_empty(tsk) &&
+			do_notify_parent(tsk, tsk->exit_signal);
+	} else {
+		autoreap = true;
+	}
+
+	if (autoreap) {
+		tsk->exit_state = EXIT_DEAD;
+		list_add(&tsk->ptrace_entry, &dead);
+	}
+
+	/* mt-exec, de_thread() is waiting for group leader */
+	if (unlikely(tsk->signal->notify_count < 0))
+		wake_up_process(tsk->signal->group_exit_task);
+	write_unlock_irq(&tasklist_lock);
+
+	list_for_each_entry_safe(p, n, &dead, ptrace_entry) {
+		list_del_init(&p->ptrace_entry);
+		release_task(p);
+	}
+}
+```
+#### forget_original_parent
+
+This does two things:
+
+1.  Make init inherit all the child processes 
+2.  Check to see if any process groups have become orphaned as a result of our exiting, and if they have any stopped jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
+
+```c
+
+static void forget_original_parent(struct task_struct *father,
+					struct list_head *dead)
+{
+	struct task_struct *p, *t, *reaper;
+
+	if (unlikely(!list_empty(&father->ptraced)))
+		exit_ptrace(father, dead);
+
+	/* Can drop and reacquire tasklist_lock */
+	reaper = find_child_reaper(father, dead);
+	if (list_empty(&father->children))
+		return;
+
+	reaper = find_new_reaper(father, reaper);
+	list_for_each_entry(p, &father->children, sibling) {
+		for_each_thread(p, t) {
+			RCU_INIT_POINTER(t->real_parent, reaper);
+			BUG_ON((!t->ptrace) != (rcu_access_pointer(t->parent) == father));
+			if (likely(!t->ptrace))
+				t->parent = t->real_parent;
+			if (t->pdeath_signal)
+				group_send_sig_info(t->pdeath_signal,
+						    SEND_SIG_NOINFO, t,
+						    PIDTYPE_TGID);
+		}
+		/*
+		 * If this is a threaded reparent there is no need to
+		 * notify anyone anything has happened.
+		 */
+		if (!same_thread_group(reaper, father))
+			reparent_leader(father, p, dead);
+	}
+	list_splice_tail_init(&father->children, &reaper->children);
+}
+```
+#### find_new_reaper
+
+When we die, we re-parent all our children, and try to:
+1. give them to another thread in our thread group, if such a member exists
+2. give it to the first ancestor process which prctl'd itself as a child_subreaper for its children (like a service manager)
+3. give it to the init process (PID 1) in our pid namespace find_new_reaper
+
+```c
+static struct task_struct *find_new_reaper(struct task_struct *father,
+					   struct task_struct *child_reaper)
+{
+	struct task_struct *thread, *reaper;
+
+	thread = find_alive_thread(father);
+	if (thread)
+		return thread;
+
+	if (father->signal->has_child_subreaper) {
+		unsigned int ns_level = task_pid(father)->level;
+		/*
+		 * Find the first ->is_child_subreaper ancestor in our pid_ns.
+		 * We can't check reaper != child_reaper to ensure we do not
+		 * cross the namespaces, the exiting parent could be injected
+		 * by setns() + fork().
+		 * We check pid->level, this is slightly more efficient than
+		 * task_active_pid_ns(reaper) != task_active_pid_ns(father).
+		 */
+		for (reaper = father->real_parent;
+		     task_pid(reaper)->level == ns_level;
+		     reaper = reaper->real_parent) {
+			if (reaper == &init_task)
+				break;
+			if (!reaper->signal->is_child_subreaper)
+				continue;
+			thread = find_alive_thread(reaper);
+			if (thread)
+				return thread;
+		}
+	}
+
+	return child_reaper;
+}
+```
 
 ## Threads
 

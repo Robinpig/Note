@@ -16,73 +16,50 @@ The kernel start-up code is written in assembly language and is highly machine d
 
 ## Init
 
+```c
+// arch/x86/inculde/asm/setup.h
 
+#ifdef __i386__
+
+asmlinkage void __init i386_start_kernel(void);
+
+#else
+asmlinkage void __init x86_64_start_kernel(char *real_mode);
+```
+i386_start_kernel
 ```c
 
-/*
- * The following fragment of code is executed with the MMU enabled.
- *
- *   x0 = __PHYS_OFFSET
- */
-SYM_FUNC_START_LOCAL(__primary_switched)
-	adr_l	x4, init_task
-	init_cpu_task x4, x5, x6
+asmlinkage __visible void __init i386_start_kernel(void)
+{
+	/* Make sure IDT is set up before any exception happens */
+	idt_setup_early_handler();
 
-	adr_l	x8, vectors			// load VBAR_EL1 with virtual
-	msr	vbar_el1, x8			// vector table address
-	isb
+	cr4_init_shadow();
 
-	stp	x29, x30, [sp, #-16]!
-	mov	x29, sp
+	sanitize_boot_params(&boot_params);
 
-	str_l	x21, __fdt_pointer, x5		// Save FDT pointer
+	x86_early_init_platform_quirks();
 
-	ldr_l	x4, kimage_vaddr		// Save the offset between
-	sub	x4, x4, x0			// the kernel virtual and
-	str_l	x4, kimage_voffset, x5		// physical mappings
+	/* Call the subarch specific early setup function */
+	switch (boot_params.hdr.hardware_subarch) {
+	case X86_SUBARCH_INTEL_MID:
+		x86_intel_mid_early_setup();
+		break;
+	case X86_SUBARCH_CE4100:
+		x86_ce4100_early_setup();
+		break;
+	default:
+		i386_default_early_setup();
+		break;
+	}
 
-	// Clear BSS
-	adr_l	x0, __bss_start
-	mov	x1, xzr
-	adr_l	x2, __bss_stop
-	sub	x2, x2, x0
-	bl	__pi_memset
-	dsb	ishst				// Make zero page visible to PTW
-
-#if defined(CONFIG_KASAN_GENERIC) || defined(CONFIG_KASAN_SW_TAGS)
-	bl	kasan_early_init
-#endif
-	mov	x0, x21				// pass FDT address in x0
-	bl	early_fdt_map			// Try mapping the FDT early
-	bl	init_feature_override		// Parse cpu feature overrides
-#ifdef CONFIG_RANDOMIZE_BASE
-	tst	x23, ~(MIN_KIMG_ALIGN - 1)	// already running randomized?
-	b.ne	0f
-	bl	kaslr_early_init		// parse FDT for KASLR options
-	cbz	x0, 0f				// KASLR disabled? just proceed
-	orr	x23, x23, x0			// record KASLR offset
-	ldp	x29, x30, [sp], #16		// we must enable KASLR, return
-	ret					// to __primary_switch()
-0:
-#endif
-	bl	switch_to_vhe			// Prefer VHE if possible
-	ldp	x29, x30, [sp], #16
-	bl	start_kernel
-	ASM_BUG()
-SYM_FUNC_END(__primary_switched)
-
-	.pushsection ".rodata", "a"
-SYM_DATA_START(kimage_vaddr)
-	.quad		_text
-SYM_DATA_END(kimage_vaddr)
-EXPORT_SYMBOL(kimage_vaddr)
-	.popsection
+	start_kernel();
+}
 ```
-
 
 The code scanning for EFI embedded-firmware runs near the end of start_kernel(), just before calling rest_init(). For normal drivers and subsystems using subsys_initcall() to register themselves this does not matter. This means that code running earlier cannot use EFI embedded-firmware.
 
-### start_kernel
+## start_kernel
 
 
 
@@ -105,8 +82,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        early_boot_irqs_disabled = true;
 
        /*
-        * Interrupts are still disabled. Do necessary setups, then
-        * enable them.
+        * Interrupts are still disabled. Do necessary setups, then enable them.
         */
        boot_cpu_init();
        page_address_init();
@@ -145,6 +121,9 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        setup_log_buf(0);
        vfs_caches_init_early();
        sort_main_extable();
+```       
+
+```c       
        trap_init();
 ```
 
@@ -155,12 +134,10 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
 
        /* trace_printk can be enabled here */
        early_trace_init();
+```
+Set up the scheduler prior starting any interrupts (such as the timer interrupt). Full topology setup happens at smp_init() time - but meanwhile we still have a functioning scheduler.
 
-       /*
-        * Set up the scheduler prior starting any interrupts (such as the
-        * timer interrupt). Full topology setup happens at smp_init()
-        * time - but meanwhile we still have a functioning scheduler.
-        */
+```c
        sched_init();
        /*
         * Disable preemption - early bootup scheduling is extremely
@@ -177,12 +154,9 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
         * workqueue to take non-housekeeping into account.
         */
        housekeeping_init();
-
-       /*
-        * Allow workqueue creation and work item queueing/cancelling
-        * early.  Work item execution depends on kthreads and starts after
-        * workqueue_init().
-        */
+```
+Allow workqueue creation and work item queueing/cancelling early.  Work item execution depends on kthreads and starts after workqueue_init().
+```c
        workqueue_init_early();
 
        rcu_init();
@@ -196,11 +170,28 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        context_tracking_init();
        /* init some links before init_ISA_irqs() */
        early_irq_init();
+```
+```c
        init_IRQ();
+```
+
+```c       
        tick_init();
+```
+
+```c       
        rcu_init_nohz();
+```
+
+```c
        init_timers();
+```
+
+```c
        hrtimers_init();
+```
+[init softirq](/docs/CS/OS/Linux/Interrupt.md?id=init)
+```c
        softirq_init();
        timekeeping_init();
        kfence_init();
@@ -226,7 +217,9 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
 
        early_boot_irqs_disabled = false;
        local_irq_enable();
+```
 
+```c
        kmem_cache_init_late();
 
        /*
@@ -256,7 +249,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
         */
        mem_encrypt_init();
 
-#ifdef CONFIG_BLK_DEV_INITRD
+    #ifdef CONFIG_BLK_DEV_INITRD
        if (initrd_start && !initrd_below_start_ok &&
            page_to_pfn(virt_to_page((void *)initrd_start)) < min_low_pfn) {
               pr_crit("initrd overwritten (0x%08lx < 0x%08lx) - disabling it.\n",
@@ -264,7 +257,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
                   min_low_pfn);
               initrd_start = 0;
        }
-#endif
+    #endif
        setup_per_cpu_pageset();
        numa_policy_init();
        acpi_early_init();
@@ -274,10 +267,10 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        calibrate_delay();
        pid_idr_init();
        anon_vma_init();
-#ifdef CONFIG_X86
+    #ifdef CONFIG_X86
        if (efi_enabled(EFI_RUNTIME_SERVICES))
               efi_enter_virtual_mode();
-#endif
+    #endif
        thread_stack_cache_init();
        cred_init();
        fork_init();
@@ -324,7 +317,7 @@ call rest_init -> [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 
 ### kernel_init
 
-kernel_thread to run `kernel_init`
+create [kernel_thread](/docs/CS/OS/Linux/process.md?id=kernel_clone) to run `kernel_init`
 
 ```c
 noinline void __ref rest_init(void)
@@ -338,14 +331,9 @@ We need to spawn init first so that it obtains pid 1, however the init task will
 ```c
        pid = kernel_thread(kernel_init, NULL, CLONE_FS);
 ```
-
+Pin init on the boot CPU. Task migration is not properly working until sched_init_smp() has been run. It will set the allowed CPUs for init to the non isolated CPUs.
 
 ```c       
-       /*
-        * Pin init on the boot CPU. Task migration is not properly working
-        * until sched_init_smp() has been run. It will set the allowed
-        * CPUs for init to the non isolated CPUs.
-        */
        rcu_read_lock();
        tsk = find_task_by_pid_ns(pid, &init_pid_ns);
        set_cpus_allowed_ptr(tsk, cpumask_of(smp_processor_id()));
@@ -399,8 +387,7 @@ static int __ref kernel_init(void *unused)
 	mark_readonly();
 
 	/*
-	 * Kernel mappings are now finalized - update the userspace page-table
-	 * to finalize PTI.
+	 * Kernel mappings are now finalized - update the userspace page-table to finalize PTI.
 	 */
 	pti_finalize();
 
@@ -463,4 +450,5 @@ kernel_init -> kernel_init_freeable -> do_basic_setup -> do_initcalls -> do_init
 
 
 ## Links
-Return [Linux](/docs/CS/OS/Linux/Linux.md)
+
+- [Linux](/docs/CS/OS/Linux/Linux.md)
