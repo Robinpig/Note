@@ -521,6 +521,26 @@ struct request_sock {
 
 #### socket buffer
 
+List of sk_buff elements:
+
+![List of sk_buff elements](./images/sk_buff.png)
+
+
+##### sk_buff_head
+
+```c
+struct sk_buff_head {
+	/* These two members must be first. */
+	struct sk_buff	*next;
+	struct sk_buff	*prev;
+
+	__u32		qlen;
+	spinlock_t	lock;
+};
+```
+
+##### sk_buff
+
 struct sk_buff - socket buffer
 
 ```c
@@ -567,9 +587,268 @@ union {
 				data_len;
 	__u16			mac_len,
 				hdr_len;
+  
+   #ifdef CONFIG_NET_SCHED
+	__u16			tc_index;	/* traffic control index */
+   #endif
+  
   // ...
 }
 ```
+
+
+Thus, one of the first things done by each protocol, as the buffer passes down through layers, is to call skb_reserve to reserve space for the protocol’s header.
+We will see an example of how the kernel makes sure enough space is reserved at the head of the buffer to allow each layer to add its own header while the buffer traverses the layers.
+
+When the buffer passes up through the network layers, each header from the old layer is no longer of interest. 
+The L2 header, for instance, is used only by the device drivers that handle the L2 protocol, so it is of no interest to L3. 
+Instead of removing the L2 header from the buffer, the pointer to the beginning of the payload is moved ahead to the beginning of the L3 header, which requires fewer CPU cycles.
+
+##### alloc_skb
+
+
+Allocate a new skbuff. We do this ourselves so we can fill in a few 'private' fields and also do memory statistics to find all the leaks.
+
+
+
+
+__alloc_skb	-	allocate a network buffer
+@size: size to allocate
+@gfp_mask: allocation mask
+@flags: If SKB_ALLOC_FCLONE is set, allocate from fclone cache
+	instead of head cache and allocate a cloned (child) skb.
+	If SKB_ALLOC_RX is set, __GFP_MEMALLOC will be used for
+	allocations in case the data is required for writeback
+@node: numa node to allocate memory on
+
+Allocate a new &sk_buff. The returned buffer has no headroom and a tail room of at least size bytes. The object has a reference count of one. The return is the buffer. On a failure the return is %NULL.
+
+Buffers may only be allocated from interrupts using a @gfp_mask of %GFP_ATOMIC.
+
+```c
+struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
+			    int flags, int node)
+{
+	struct kmem_cache *cache;
+	struct sk_buff *skb;
+	u8 *data;
+	bool pfmemalloc;
+
+	cache = (flags & SKB_ALLOC_FCLONE)
+		? skbuff_fclone_cache : skbuff_head_cache;
+
+	if (sk_memalloc_socks() && (flags & SKB_ALLOC_RX))
+		gfp_mask |= __GFP_MEMALLOC;
+
+	/* Get the HEAD */
+	if ((flags & (SKB_ALLOC_FCLONE | SKB_ALLOC_NAPI)) == SKB_ALLOC_NAPI &&
+	    likely(node == NUMA_NO_NODE || node == numa_mem_id()))
+		skb = napi_skb_cache_get();
+	else
+		skb = kmem_cache_alloc_node(cache, gfp_mask & ~GFP_DMA, node);
+	if (unlikely(!skb))
+		return NULL;
+	prefetchw(skb);
+
+	/* We do our best to align skb_shared_info on a separate cache
+	 * line. It usually works because kmalloc(X > SMP_CACHE_BYTES) gives
+	 * aligned memory blocks, unless SLUB/SLAB debug is enabled.
+	 * Both skb->head and skb_shared_info are cache line aligned.
+	 */
+	size = SKB_DATA_ALIGN(size);
+	size += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	data = kmalloc_reserve(size, gfp_mask, node, &pfmemalloc);
+	if (unlikely(!data))
+		goto nodata;
+	/* kmalloc(size) might give us more room than requested.
+	 * Put skb_shared_info exactly at the end of allocated zone,
+	 * to allow max possible filling before reallocation.
+	 */
+	size = SKB_WITH_OVERHEAD(ksize(data));
+	prefetchw(data + size);
+
+	/*
+	 * Only clear those fields we need to clear, not those that we will
+	 * actually initialise below. Hence, don't put any more fields after
+	 * the tail pointer in struct sk_buff!
+	 */
+	memset(skb, 0, offsetof(struct sk_buff, tail));
+	__build_skb_around(skb, data, 0);
+	skb->pfmemalloc = pfmemalloc;
+
+	if (flags & SKB_ALLOC_FCLONE) {
+		struct sk_buff_fclones *fclones;
+
+		fclones = container_of(skb, struct sk_buff_fclones, skb1);
+
+		skb->fclone = SKB_FCLONE_ORIG;
+		refcount_set(&fclones->fclone_ref, 1);
+
+		fclones->skb2.fclone = SKB_FCLONE_CLONE;
+	}
+
+	return skb;
+
+nodata:
+	kmem_cache_free(cache, skb);
+	return NULL;
+}
+```
+
+
+
+
+
+netdev_alloc_skb - allocate an skbuff for rx on a specific device
+
+- dev: network device to receive on
+- len: length to allocate
+- gfp_mask: get_free_pages mask, passed to alloc_skb
+
+Allocate a new &sk_buff and assign it a usage count of one. The buffer has NET_SKB_PAD headroom built in. 
+Users should allocate the headroom they think they need without accounting for the built in space. The built in space is used for optimisations.
+
+
+```c
+struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
+				   gfp_t gfp_mask)
+{
+	struct page_frag_cache *nc;
+	struct sk_buff *skb;
+	bool pfmemalloc;
+	void *data;
+
+	len += NET_SKB_PAD;
+
+	/* If requested length is either too small or too big,
+	 * we use kmalloc() for skb->head allocation.
+	 */
+	if (len <= SKB_WITH_OVERHEAD(1024) ||
+	    len > SKB_WITH_OVERHEAD(PAGE_SIZE) ||
+	    (gfp_mask & (__GFP_DIRECT_RECLAIM | GFP_DMA))) {
+		skb = __alloc_skb(len, gfp_mask, SKB_ALLOC_RX, NUMA_NO_NODE);
+		if (!skb)
+			goto skb_fail;
+		goto skb_success;
+	}
+
+	len += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	len = SKB_DATA_ALIGN(len);
+
+	if (sk_memalloc_socks())
+		gfp_mask |= __GFP_MEMALLOC;
+
+	if (in_irq() || irqs_disabled()) {
+		nc = this_cpu_ptr(&netdev_alloc_cache);
+		data = page_frag_alloc(nc, len, gfp_mask);
+		pfmemalloc = nc->pfmemalloc;
+	} else {
+		local_bh_disable();
+		nc = this_cpu_ptr(&napi_alloc_cache.page);
+		data = page_frag_alloc(nc, len, gfp_mask);
+		pfmemalloc = nc->pfmemalloc;
+		local_bh_enable();
+	}
+
+	if (unlikely(!data))
+		return NULL;
+
+	skb = __build_skb(data, len);
+	if (unlikely(!skb)) {
+		skb_free_frag(data);
+		return NULL;
+	}
+
+	if (pfmemalloc)
+		skb->pfmemalloc = 1;
+	skb->head_frag = 1;
+
+skb_success:
+	skb_reserve(skb, NET_SKB_PAD);
+	skb->dev = dev;
+
+skb_fail:
+	return skb;
+}
+```
+
+#### skb_reserve
+
+skb_reserve - adjust headroom
+
+Increase the headroom of an empty &sk_buff by reducing the tail room. This is only allowed for an empty buffer.
+
+
+Buffer that is filled in while traversing the stack from the TCP layer down to the link layer:
+
+![](./images/sk_buff_down.png)
+
+When TCP is asked to transmit some data, it allocates a buffer following certain criteria (TCP Maximum Segment Size (mss), support for scatter gather I/O, etc.).
+TCP reserves (with skb_reserve) enough space at the head of the buffer to hold all the headers of all layers (TCP, IP, link layer). 
+The parameter MAX_TCP_HEADER is the sum of all headers of all levels and is calculated taking into account the worst-case scenarios: 
+because the TCPlayer does not know what type of interface will be used for the transmission, it reserves the biggest possible header for each layer. 
+It even accounts for the possibility of multiple IPheaders (because you can have multiple IPheaders when the kernel is compiled with support for IP over IP).
+
+While the buffer travels down the network stack, each protocol moves skb->data down, copies in its header, and updates skb->len.
+
+Note that the skb_reserve function does not really move anything into or within the data buffer; it simply updates the two pointers.
+
+```c
+static inline void skb_reserve(struct sk_buff *skb, int len)
+{
+	skb->data += len;
+	skb->tail += len;
+}
+```
+
+`skb_push` adds one block of data to the beginning of the buffer, and skb_put adds one to the end. 
+Like skb_reserve, these functions don’t really add any data to the buffer; they simply move the pointers to its head or tail. 
+The new data is supposed to be copied explicitly by other functions. 
+`skb_pull` removes a block of data from the head of the buffer by moving the head pointer forward.
+
+##### Cloning and copying buffers
+
+When the same buffer needs to be processed independently by different consumers, and they may need to change the content of the sk_buff descriptor (the h and nh pointers to the protocol headers), 
+the kernel does not need to make a complete copy of both the sk_buff structure and the associated data buffers. 
+Instead, to be more efficient, the kernel can clone the original, which consists of making a copy of the sk_buff structure only and playing with the reference counts to avoid releasing the shared data block prematurely. 
+Buffer cloning is done with the skb_clone function.
+
+You should not add any new code to this function.  Add it to __copy_skb_header above instead.
+
+```c
+static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
+{
+ #define C(x) n->x = skb->x
+
+	n->next = n->prev = NULL;
+	n->sk = NULL;
+	__copy_skb_header(n, skb);
+
+	C(len);
+	C(data_len);
+	C(mac_len);
+	n->hdr_len = skb->nohdr ? skb_headroom(skb) : skb->hdr_len;
+	n->cloned = 1;
+	n->nohdr = 0;
+	n->peeked = 0;
+	C(pfmemalloc);
+	n->destructor = NULL;
+	C(tail);
+	C(end);
+	C(head);
+	C(head_frag);
+	C(data);
+	C(truesize);
+	refcount_set(&n->users, 1);
+
+	atomic_inc(&(skb_shinfo(skb)->dataref));
+	skb->cloned = 1;
+
+	return n;
+  #undef C
+}
+```
+
 
 #### msghdr
 

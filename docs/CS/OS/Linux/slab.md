@@ -747,3 +747,32 @@ no_context:
 }
 ```
 
+
+### kfree
+
+kfree - free previously allocated memory
+
+```c
+void kfree(const void *objp)
+{
+	struct kmem_cache *c;
+	unsigned long flags;
+
+	trace_kfree(_RET_IP_, objp);
+
+	if (unlikely(ZERO_OR_NULL_PTR(objp)))
+		return;
+	local_irq_save(flags);
+	kfree_debugcheck(objp);
+	c = virt_to_cache(objp);
+	if (!c) {
+		local_irq_restore(flags);
+		return;
+	}
+	debug_check_no_locks_freed(objp, c->object_size);
+
+	debug_check_no_obj_freed(objp, c->object_size);
+	__cache_free(c, (void *)objp, _RET_IP_);
+	local_irq_restore(flags);
+}
+```
