@@ -62,3 +62,9 @@ static inline void __raw_spin_unlock(raw_spinlock_t *lock)
 
 
 > The configure option CONFIG_DEBUG_SPINLOCK enables a handful of debugging checks in the spin lock code. 
+
+## RCU
+
+Read Copy Update
+
+

@@ -1,4 +1,19 @@
 
+## init_timers
+
+```c
+// kernel/time/timer.c
+void __init init_timers(void)
+{
+	init_timer_cpus();
+	posix_cputimers_init_work();
+	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
+}
+```
+
+open [softirq](/docs/CS/OS/Linux/Interrupt.md?id=softirq)
+
+## jiffies
 
 The following defines establish the engineering parameters of the PLL model.
 The HZ variable establishes the timer interrupt frequency, 100 Hz for the SunOS kernel, 256 Hz for the Ultrix kernel and 1024 Hz for the OSF/1 kernel.

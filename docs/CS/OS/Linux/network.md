@@ -11,11 +11,6 @@ protocol: kernel & net
 ## init
 
 
-
-## init softirq
-based on [softirq](/docs/CS/OS/Linux/Interrupt.md?id=spawn_ksoftirqd)
-
-
 ### init net dev
 
 initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
@@ -25,16 +20,10 @@ initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 subsys_initcall(net_dev_init);
 ```
 
+Initialize the DEV module. At boot time this walks the device list and unhooks any devices that fail to initialise (normally hardware not present) and leaves us with a valid list of present and active devices.
 
+This is called single threaded during boot, so no need to take the rtnl semaphore.
 
-Initialize the DEV module. At boot time this walks the device list and
-unhooks any devices that fail to initialise (normally hardware not
-present) and leaves us with a valid list of present and active devices.
-
-This is called single threaded during boot, so no need
-to take the rtnl semaphore.
-
-registe [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action)
 ```c
 // net/core/dev.c
 static int __init net_dev_init(void)
@@ -102,8 +91,9 @@ static int __init net_dev_init(void)
 	if (register_pernet_device(&default_device_ops))
 		goto out;
 ```
-
-registe func [net_rx_action]() in [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+- [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action) for receive
+- [net_tx_action](/docs/CS/OS/Linux/network.md?id=net_tx_action) for send
 ```c
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
 	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
@@ -537,6 +527,7 @@ napi_gro_receive -> napi_skb_finish -> gro_normal_one
 
 
 #### netif_receive_skb
+
 call deliver_skb
 ```c
 

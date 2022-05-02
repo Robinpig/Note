@@ -41,11 +41,13 @@ static int __init sock_init(void)
   
 	/* Initialize the network sysctl infrastructure. */
 	err = net_sysctl_init();
+```
 
-	/* Initialize skbuff SLAB cache */
+Initialize skbuff SLAB cache
+```c
 	skb_init();
 
-	/* nitialize the protocols module. */
+	/* Initialize the protocols module. */
 	init_inodecache();
 
 	err = register_filesystem(&sock_fs_type);

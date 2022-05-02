@@ -1,5 +1,45 @@
 ## Introduction
 
+## init_IRQ
+
+```c
+// arch/x86/kernel/irqinit.c
+void __init init_IRQ(void)
+{
+	int i;
+
+	/*
+	 * On cpu 0, Assign ISA_IRQ_VECTOR(irq) to IRQ 0..15.
+	 * If these IRQ's are handled by legacy interrupt-controllers like PIC,
+	 * then this configuration will likely be static after the boot. If
+	 * these IRQs are handled by more modern controllers like IO-APIC,
+	 * then this vector space can be freed and re-used dynamically as the
+	 * irq's migrate etc.
+	 */
+	for (i = 0; i < nr_legacy_irqs(); i++)
+		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
+
+	BUG_ON(irq_init_percpu_irqstack(smp_processor_id()));
+
+	x86_init.irqs.intr_init();
+}
+
+void __init native_init_IRQ(void)
+{
+	/* Execute any quirks before the call gates are initialised: */
+	x86_init.irqs.pre_vector_init();
+
+	idt_setup_apic_and_irq_gates();
+	lapic_assign_system_vectors();
+
+	if (!acpi_ioapic && !of_ioapic && nr_legacy_irqs()) {
+		/* IRQ2 is cascade interrupt to second interrupt controller */
+		if (request_irq(2, no_action, IRQF_NO_THREAD, "cascade", NULL))
+			pr_err("%s: request_irq() failed\n", "cascade");
+	}
+}
+```
+
 ## irq
 
 
@@ -199,6 +239,39 @@ const void *free_irq(unsigned int irq, void *dev_id)
 ```
 
 ### handle
+
+
+
+common_interrupt() handles all normal device IRQ's (the special SMP cross-CPU interrupts have their own entry points).
+
+```c
+DEFINE_IDTENTRY_IRQ(common_interrupt)
+{
+	struct pt_regs *old_regs = set_irq_regs(regs);
+	struct irq_desc *desc;
+
+	/* entry code tells RCU that we're not quiescent.  Check it. */
+	RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
+
+	desc = __this_cpu_read(vector_irq[vector]);
+	if (likely(!IS_ERR_OR_NULL(desc))) {
+		handle_irq(desc, regs);
+	} else {
+		ack_APIC_irq();
+
+		if (desc == VECTOR_UNUSED) {
+			pr_emerg_ratelimited("%s: %d.%u No irq handler for vector\n",
+					     __func__, smp_processor_id(),
+					     vector);
+		} else {
+			__this_cpu_write(vector_irq[vector], VECTOR_UNUSED);
+		}
+	}
+
+	set_irq_regs(old_regs);
+}
+```
+
 ```c
 // kernel/irq/handle.c
 irqreturn_t handle_irq_event(struct irq_desc *desc)
@@ -218,65 +291,8 @@ irqreturn_t handle_irq_event(struct irq_desc *desc)
 ```
 
 
-
-```c
-// arch/x86/entry/common.c 
-/*
- * Invoke a 32-bit syscall.  Called with IRQs on in CONTEXT_KERNEL.
- */
-static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs, int nr)
-{
-	/*
-	 * Convert negative numbers to very high and thus out of range
-	 * numbers for comparisons.
-	 */
-	unsigned int unr = nr;
-
-	if (likely(unr < IA32_NR_syscalls)) {
-		unr = array_index_nospec(unr, IA32_NR_syscalls);
-		regs->ax = ia32_sys_call_table[unr](regs);
-	} else if (nr != -1) {
-		regs->ax = __ia32_sys_ni_syscall(regs);
-	}
-}
-
-// arch/x86/entry/sycall_32.c
-__visible const sys_call_ptr_t ia32_sys_call_table[] = {
-#include <asm/syscalls_32.h>
-};
-```
-
-
-
-```c
-// arch/x86/entry/common.c 
-/*
- * Invoke a 32-bit syscall.  Called with IRQs on in CONTEXT_KERNEL.
- */
-static __always_inline void do_syscall_32_irqs_on(struct pt_regs *regs, int nr)
-{
-	/*
-	 * Convert negative numbers to very high and thus out of range
-	 * numbers for comparisons.
-	 */
-	unsigned int unr = nr;
-
-	if (likely(unr < IA32_NR_syscalls)) {
-		unr = array_index_nospec(unr, IA32_NR_syscalls);
-		regs->ax = ia32_sys_call_table[unr](regs);
-	} else if (nr != -1) {
-		regs->ax = __ia32_sys_ni_syscall(regs);
-	}
-}
-
-// arch/x86/entry/sycall_32.c
-__visible const sys_call_ptr_t ia32_sys_call_table[] = {
-#include <asm/syscalls_32.h>
-};
-```
-
-
 #### handle_irq_event_percpu
+
 ```c
 // kernel/irq/handle.c
 irqreturn_t handle_irq_event_percpu(struct irq_desc *desc)
@@ -765,7 +781,7 @@ enum
 	NR_SOFTIRQS
 };
 ```
-### init
+### init_softirq
 
 
 
@@ -1017,6 +1033,37 @@ static int ksoftirqd_should_run(unsigned int cpu)
 
 Because tasklets are implemented on top of softirqs, they are softirqs.
 
+Tasklets --- multithreaded analogue of BHs.
+
+This API is deprecated. Please consider using threaded IRQs instead:
+https://lore.kernel.org/lkml/20200716081538.2sivhkj4hcyrusem@linutronix.de
+
+Main feature differing them of generic softirqs: tasklet is running only on one CPU simultaneously.
+
+Main feature differing them of BHs: different tasklets may be run simultaneously on different CPUs.
+
+Properties:
+
+- If tasklet_schedule() is called, then tasklet is guaranteed to be executed on some cpu at least once after this.
+- If the tasklet is already scheduled, but its execution is still not started, it will be executed only once.
+- If this tasklet is already running on another CPU (or schedule is called from tasklet itself), it is rescheduled for later.
+- Tasklet is strictly serialized wrt itself, but not wrt another tasklets. If client needs some intertask synchronization, he makes it with spinlocks.
+
+```c
+struct tasklet_struct
+{
+	struct tasklet_struct *next;
+	unsigned long state;
+	atomic_t count;
+	bool use_callback;
+	union {
+		void (*func)(unsigned long data);
+		void (*callback)(struct tasklet_struct *t);
+	};
+	unsigned long data;
+};
+```
+
 #### tasklet_action
 
 ```c
@@ -1082,6 +1129,23 @@ void __tasklet_schedule(struct tasklet_struct *t)
 	__tasklet_schedule_common(t, &tasklet_vec,
 				  TASKLET_SOFTIRQ);
 }
+
+
+static void __tasklet_schedule_common(struct tasklet_struct *t,
+				      struct tasklet_head __percpu *headp,
+				      unsigned int softirq_nr)
+{
+	struct tasklet_head *head;
+	unsigned long flags;
+
+	local_irq_save(flags);
+	head = this_cpu_ptr(headp);
+	t->next = NULL;
+	*head->tail = t;
+	head->tail = &(t->next);
+	raise_softirq_irqoff(softirq_nr);
+	local_irq_restore(flags);
+}
 ```
 
 ## syscall
@@ -1091,3 +1155,7 @@ void __tasklet_schedule(struct tasklet_struct *t)
 #define IA32_SYSCALL_VECTOR		0x80
 
 ```
+
+## Links
+
+- [Linux](/docs/CS/OS/Linux/Linux.md)

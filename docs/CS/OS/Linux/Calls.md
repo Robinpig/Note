@@ -786,6 +786,8 @@ static inline void sk_acceptq_added(struct sock *sk)
 
 #### inet_csk_reqsk_queue_add
 
+Called by [TCP connect request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
+
 call `sk_acceptq_added`
 
 ```c
@@ -816,6 +818,7 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 ```
 
 #### reqsk_queue_remove
+Called when [accept](/docs/CS/OS/Linux/Calls.md?id=inet_csk_accept)
 
 remove head established connection from reqsk_queue and backlog - 1
 

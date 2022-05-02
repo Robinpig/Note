@@ -126,7 +126,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
 ```c       
        trap_init();
 ```
-
+[Init memory](/docs/CS/OS/Linux/memory.md?id=init)
 ```c
        mm_init();
 
@@ -171,6 +171,7 @@ Allow workqueue creation and work item queueing/cancelling early.  Work item exe
        /* init some links before init_ISA_irqs() */
        early_irq_init();
 ```
+[Init IRQ](/docs/CS/OS/Linux/Interrupt.md?id=init_IRQ)
 ```c
        init_IRQ();
 ```
@@ -182,7 +183,7 @@ Allow workqueue creation and work item queueing/cancelling early.  Work item exe
 ```c       
        rcu_init_nohz();
 ```
-
+[Init timers](/docs/CS/OS/Linux/timer.md?id=init_timers)
 ```c
        init_timers();
 ```
@@ -190,7 +191,7 @@ Allow workqueue creation and work item queueing/cancelling early.  Work item exe
 ```c
        hrtimers_init();
 ```
-[init softirq](/docs/CS/OS/Linux/Interrupt.md?id=init)
+[init softirq](/docs/CS/OS/Linux/Interrupt.md?id=init_softirq)
 ```c
        softirq_init();
        timekeeping_init();
