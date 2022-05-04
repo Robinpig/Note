@@ -101,6 +101,55 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 
 BytecodeInterpreter is deprecated
 
+
+Early VM’s were interpreter−only. Later VM’s were interpreter plus template generated code, and finally interpreter plus optimized code.
+
+These optimizations include class−hierarchy aware inlining, fast−path/slow−path idioms, global value−numbering, optimistic constant propagation, optimal instruction selection, graph−coloring register allocation, and peephole optimization.
+
+Several of the most significant features are: a single native stack per running thread for interpreting and executing compiled or native code,
+accurate garbage collection using card−marks, exception handling, efficient synchronization using a meta−lock, class−hierarchy analysis, compilation events,
+on−stack replacement of interpreter frames with compiled−code frames, deoptimization from compiled code back to the interpreter, a compiler interface that supports compilations in parallel with garbage collection,
+and runtime support routines which may be generated at system startup.
+
+
+The runtime generates the interpreter at startup using macro assembler templates for each bytecode and an interpreter dispatch loop.
+This provides assembly level instrumentation that collects counts at method entry and backward branches, type−profiles at call sites, and never−null object pointers for instanceof or checkcast bytecodes.
+Additional instrumentation has been implemented, e.g., branch frequencies, but is not turned on by default.
+
+
+The runtime environment uses adaptive optimization to focus compilation efforts on performance critical methods.
+These methods are identified using method−entry and backward−branch counters with additional heuristics that investigate the caller of a triggering method.
+When the combined method−entry and backward−branch counters for a method exceed the CompileThreshold, the runtime system determines which method to make the root of a compilation by examining the call stack.
+If the caller frequently invokes the callee, the recompilation policy may decide to start compiling at the caller.
+This upwards traversal may continue multiple times relying upon the compiler to inline the path to the triggering method.
+Compiled code for the standard entry point is registered with the method object (methodOop) in a reserved field.
+At method invocation, the interpreter transfers control to compiled code when this field is not null.
+A different transition, on stack replacement, occurs when a method’s combined counter exceeds the OnStackReplaceThreshold at a backward branch.
+The method is compiled with an entry point at the target of the backwards branch.
+The resulting code is registered with the methodOop, which contains a linked list of target bytecode index and compiled−code pairs.
+The runtime transfers execution from the interpreted frame to an on−stack−replacement frame and compiled code.
+The methodOop is used to cache other information as well, including the possibility that the compiler has refused to generate code for a method.
+**A non−compilable method will always be run within the interpreter.** This is used to support porting and debugging.
+
+The server compiler proceeds through the following traditional phases: parser, machine−independent optimization, instruction selection, global code motion and scheduling, register allocation, peephole optimization, and code generation.
+
+
+In HotSpot, we compile methods that have crossed a threshold.
+In most cases any necessary class initialization or class loading has already been done by the interpreter which handles all initialization semantics.
+We investigated having the generated code handle class initialization properly and discovered that it is too rare.
+Instead the compiler generates an uncommon trap, a trampoline back to interpreted mode, when it compiles a reference to an uninitialized class.
+The compiled code is then deoptimized and it is flagged as being unusable.
+Threads entering the method are interpreted until its recompilation is finished. As a side effect, field offsets are always known so short−form addressing modes can be used without backpatching.
+
+### Deoptimization
+
+If class loading invalidates inlining or other optimization decisions, the dependent methods are deoptimized.
+Threads currently executing in the method are rolled forward to a safepoint, at which point the native frame is converted into an interpreter frame.
+The invalidating class load is not visible to the executing thread until it has been brought to a safepoint.
+Execution of the method continues in the interpreter.
+
+
+
 - [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 - [interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)
 

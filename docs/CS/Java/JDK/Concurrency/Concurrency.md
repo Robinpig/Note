@@ -110,7 +110,10 @@ If multiple threads access the same mutable state variable without appropriate s
 
 ##### Race Condition
 
-In concurrency, a race condition is anything where the outcome depends on the relative ordering of execution of operations on two or more threads; the threads race to perform their respective operations.
+A *critical section* is a piece of code that accesses a shared resource, usually a variable or data structure.
+
+A *race condition* is that the results depend on the timing execution of the code.
+Multiple threads of execution enter the critical section at roughly the same time; the threads race to perform their respective operations(attempt to update the shared data structure).
 
 data race to mean the specific type of race condition that arises because of concurrent modification to a single object.
 
