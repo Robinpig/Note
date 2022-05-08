@@ -34,14 +34,23 @@ S = \sum_{i+(n-1)}{n*i}=\sum_{1+\sum_i{n-1}}{n}cycles
 ```
 In the limit, when i=1 the value of S is 1, and when i=,the speedup is n.
 
-Data Hazard 
+### Data Hazard 
+
+Data dependency arises when the outcome of the current operation is dependent on the result of a previous instruction that has not yet been executed to completion.
+Data hazards arise because of the need to preserve the order of the execution of instructions.
 
 Control Hazard
 
 Structure Hazard
 
 
+### Branches
 
+#### The Delayed Branch
+
+#### Branch Prediction
+
+#### Dynamic Branch Prediction
 
 
 
