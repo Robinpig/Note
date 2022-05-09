@@ -118,6 +118,13 @@ Instead of having a single lock for the entire structure, it uses a lock per has
 
 ## Condition Variables
 
+A **condition variable** is an explicit queue that threads can put themselves on when some state of execution(i.e., some condition) is not as desired (by **waiting** on the condition); 
+some other thread, when it changes said state, can then wake one (or more) of those waiting threads and thus allow them to continue (by **signaling** on the condition).
+
+> [!TIP]
+> 
+> Always hold the lock when calling signal or wait.
+
 
 
 ## References

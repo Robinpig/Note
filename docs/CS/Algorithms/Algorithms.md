@@ -68,11 +68,8 @@ PDF文档下载方式
 
 ### Pattern Matching
 
-- BF
-- MP
-- [KMP](/docs/CS/Algorithms/KMP.md)
-- BM
-- BMH
+[Substring Search](/docs/CS/Algorithms/KMP.md)
+
 
 ## Algorithm Analysis
 
