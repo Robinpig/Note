@@ -123,7 +123,74 @@ some other thread, when it changes said state, can then wake one (or more) of th
 
 > [!TIP]
 > 
-> Always hold the lock when calling signal or wait.
+> Always hold the lock when calling `signal` or `wait`.
+> 
+> Remember with condition variables is to always use while loops.
+
+
+A covering condition covers all the cases where a thread needs to wake up (conservatively).
+In general, if you find that your program only works when you change your signals to broadcasts (but you don’t think it should need to), you probably have a bug; fix it!
+
+## Semaphores
+
+A semaphore is an object with an integer value that we can manipulate with two routines; in the POSIX standard, these routines are `sem_wait()` and `sem_post()`.
+
+Because the initial value of the semaphore determines its behavior, before calling any other routine to interact with the semaphore, we must first initialize it to some value.
+
+### Binary Semaphores (Locks)
+
+We simply surround the critical section of interest with a sem wait()/sem post() pair.
+The initial value should be 1.
+
+```c
+sem_t m;
+sem_init(&m, 0, X); // initialize semaphore to X; what should X be?
+
+sem_wait(&m);
+// critical section here
+sem_post(&m);
+```
+
+### Reader-Writer Locks
+
+
+### Implement Semaphores
+
+Implementing Zemaphores With Locks And CVs:
+
+```c
+
+typedef struct __Zem_t {
+  int value;
+  pthread_cond_t cond;
+  pthread_mutex_t lock;
+} Zem_t;
+
+// only one thread can call this
+void Zem_init(Zem_t *s, int value) {
+  s->value = value;
+  Cond_init(&s->cond);
+  Mutex_init(&s->lock);
+}
+
+void Zem_wait(Zem_t *s) {
+  Mutex_lock(&s->lock);
+  while (s->value <= 0)
+  Cond_wait(&s->cond, &s->lock);
+  s->value--;
+  Mutex_unlock(&s->lock);
+}
+
+void Zem_post(Zem_t *s) {
+  Mutex_lock(&s->lock);
+  s->value++;
+  Cond_signal(&s->cond);
+  Mutex_unlock(&s->lock);
+}
+```
+
+We use just one lock and one condition variable, plus a state variable to track the value of the semaphore.
+Curiously, building condition variables out of semaphores is a much trickier proposition.
 
 
 

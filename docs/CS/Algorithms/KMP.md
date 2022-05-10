@@ -9,7 +9,7 @@ Brute-force substring search requires ~NM character compares to search for a pat
 
 
 
-
+## MP
 
 
 
@@ -81,6 +81,7 @@ public class KMPSearch {
 
 ## BM
 
+## BMH
 
 ## RK
 
