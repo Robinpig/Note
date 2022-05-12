@@ -11,6 +11,8 @@ Database access libraries like [Hibernate](https://docs.jboss.org/hibernate/orm/
 
 The **pessimistic lock**, instead, will rely on an external system that will hold the lock for our microservices.
 
+Locks are problematic by their very nature; perhaps we should seek to avoid using them unless we truly must.
+
 ## Evaluation Lcoks
 
 
@@ -27,7 +29,7 @@ The **pessimistic lock**, instead, will rely on an external system that will hol
 Dekker 
 
 
-##
+
 
 The simplest bit of hardware support to understand is known as a test-and-set (or atomic exchange1) instruction.
 Each architecture that supports test-and-set calls it by a different name. 
@@ -191,74 +193,6 @@ void Zem_post(Zem_t *s) {
 
 We use just one lock and one condition variable, plus a state variable to track the value of the semaphore.
 Curiously, building condition variables out of semaphores is a much trickier proposition.
-
-## Common Concurrency Problems
-
-
-### Deadlock
-
-One reason is that in large code bases, complex dependencies arise between components.
-
-Another reason is due to the nature of encapsulation.
-
-#### Prevention 
-
-Circular Wait
-
-Of course, in more complex systems, more than two locks will exist, and thus total lock ordering may be difficult to achieve (and perhaps is unnecessary anyhow). 
-Thus, a partial ordering can be a useful way to structure lock acquisition so as to avoid deadlock.
-
-As you can imagine, both total and partial ordering require careful design of locking strategies and must be constructed with great care. 
-Further, ordering is just a convention, and a sloppy programmer can easily ignore the locking protocol and potentially cause deadlock. 
-Finally, lock ordering requires a deep understanding of the code base, and how various routines are called; just one mistake could result Deadlocks.
-
-
-Hold-and-wait
-
-
-The hold-and-wait requirement for deadlock can be avoided by acquiring all locks at once, atomically.
-
-Note that the solution is problematic for a number of reasons. 
-As before, encapsulation works against us: when calling a routine, this approach requires us to know exactly which locks must be held and to acquire them ahead of time. 
-This technique also is likely to decrease concurrency as all locks must be acquired early on (at once) instead of when they are truly needed.
-
-No Preemption
-
-
-```c
-trylock
-```
-
-One new problem does arise, however: livelock.
-
-There are solutions to the livelock problem, too: for example, one could add a random delay before looping back and trying the entire thing over again, thus decreasing the odds of repeated interference among competing threads.
-
-
-Mutual Exclusion
-
-The idea behind these lock-free (and related wait-free) approaches here is simple: using powerful hardware instructions, you can build data structures in a manner that does not require explicit locking.
-
-In this manner, no lock is acquired, and no deadlock can arise (though livelock is still a possibility).
-
-#### Deadlock Avoidance
-
-Further, such approaches can limit concurrency, as we saw in the second example above. Thus, avoidance of deadlock via scheduling is not a widely-used general-purpose solution.
-
-#### Detect and Recover
-
-Many database systems employ deadlock detection and recovery techniques. A deadlock detector runs periodically, building a resource graph and checking it for cycles. 
-In the event of a cycle (deadlock), the system needs to be restarted. If more intricate repair of data structures is first required, a human being may be involved to ease the process.
-
-
-### Atomicity-Violation
-
-The formal definition of an atomicity violation is this: “The desired serializability among multiple memory accesses is violated (i.e. a code region is intended to be atomic, but the atomicity is not enforced during execution)”.
-
-### Order-Violation
-
-The formal definition of an order violation is this: “The desired order between two (groups of) memory accesses is flipped (i.e., A should always be executed before B, but the order is not enforced during execution)”.
-
-The fix to this type of bug is generally to enforce ordering. As we discussed in detail previously, using condition variables is an easy and robust way to add this style of synchronization into modern code bases.
 
 
 ## References
