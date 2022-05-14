@@ -12,6 +12,47 @@ The device drivers present a uniform deviceaccess interface to the I/O subsystem
 
 I/O devices can be roughly divided into two categories: *block devices* and *character devices*.
 
+> [!TIP]
+> 
+> Interrupts not always better than PIO
+> 
+> Although interrupts allow for overlap of computation and I/O, they only really make sense for slow devices. 
+> Otherwise, the cost of interrupt handling and context switching may outweigh the benefits interrupts provide. 
+> There are also cases where a flood of interrupts may overload a system and lead it to livelock; in such cases, polling provides more control to the OS in its scheduling and thus is again useful.
+
+Note that using interrupts is not always the best solution. 
+
+For example, imagine a device that performs its tasks very quickly: the first poll usually finds the device to be done with task. 
+Using an interrupt in this case will actually slow down the system: switching to another process, handling the interrupt, and switching back to the issuing process is expensive. 
+Thus, if a device is fast, it may be best to poll; if it is slow, interrupts, which allow overlap, are best. 
+If the speed of the device is not known, or sometimes fast and sometimes slow, it may be best to use a hybrid that polls for a little while and then, if the device is not yet finished, uses interrupts. 
+This two-phased approach may achieve the best of both worlds.
+
+Another reason not to use interrupts arises in networks. 
+When a huge stream of incoming packets each generate an interrupt, it is possible for the OS to livelock, that is, find itself only processing interrupts and never allowing a user-level process to run and actually service the requests. For example, imagine a web server that experiences a load burst because it became the top-ranked entry on hacker news. 
+In this case, it is better to occasionally use polling to better control what is happening in the system and allow the web server to service some requests before going back to the device to check for more packet arrivals.
+
+Another interrupt-based optimization is coalescing. In such a setup, a device which needs to raise an interrupt first waits for a bit before delivering the interrupt to the CPU. 
+While waiting, other requests may soon complete, and thus multiple interrupts can be coalesced into a single interrupt delivery, thus lowering the overhead of interrupt processing. 
+Of course, waiting too long will increase the latency of a request, a common trade-off in systems.
+
+
+
+How to communicate with devices?
+
+Over time, two primary methods of device communication have developed. 
+
+- The first, oldest method (used by IBM mainframes for many years) is to have explicit I/O instructions.
+- The second method to interact with devices is known as memorymapped I/O.
+
+
+
+
+
+
+
+
+
 ### Device Controllers
 
 ### Memory-Mapped I/O
@@ -19,7 +60,7 @@ I/O devices can be roughly divided into two categories: *block devices* and *cha
 
 ### DMA
 
-
+A DMA engine is essentially a very specific device within a system that can orchestrate transfers between devices and main memory without much CPU intervention.
 
 
 

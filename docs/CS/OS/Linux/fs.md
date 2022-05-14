@@ -1,6 +1,13 @@
 ## Introduction
 
 
+### The Way To Think
+
+The first is the data structures of the file system.
+
+The second aspect of a file system is its access methods. 
+How does it map the calls made by a process, such as open(), read(), write(), etc., onto its structures?
+
 #### file_system_type
 
 ```c
@@ -58,7 +65,10 @@ static struct file_system_type *file_systems;
 
 ### inode
 
+The inode is the generic name that is used in many file systems to describe the structure that holds the metadata for a given file, such as its length, permissions, and the location of its constituent blocks.
+
 Keep mostly read-only and often accessed (especially for the RCU path lookup and 'stat' data) fields at the beginning of the 'struct inode'
+
 ```c
 struct inode {
 	umode_t			i_mode;
@@ -547,6 +557,12 @@ struct fs_context {
 };
 ```
 
+## link
+
+There is one other type of link that is really useful, and it is called a symbolic link or sometimes a soft link.
+
+Quite unlike hard links, removing the original file named file causes the soft link to point to a pathname that no longer exists.
+
 
 ## files_struct
 
@@ -574,6 +590,18 @@ struct files_struct {
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
 };
 ```
+
+## FFS
+
+
+## LFS
+
+Log-structured File Systems
+
+
+Writing To Disk Sequentially
+
+
 
 
 
