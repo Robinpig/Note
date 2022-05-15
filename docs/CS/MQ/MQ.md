@@ -59,6 +59,9 @@ Long waiting
 ## issues
 
 
+- At most one
+- At least one
+- exactly one
 
 
 
@@ -91,13 +94,16 @@ RabbitMQ
 
 Kafka
 
-- broker 
-
+- broker
+  - unclean.leader.election.enable = false
   - set topic repliaction factor > 1 : at least 2 partitions
   - set broker min.insync.replicas > 1 : at least 1 follower
+  - replication.factor = min.insync.replicas + 1
+- producer    
   - set producer acks = all : must write to all replicas then ack
   - set producer retries = MAX : retry util success
-
+- consumer
+  - enable.auto.commit: false
 
 
 

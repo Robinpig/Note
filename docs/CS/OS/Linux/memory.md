@@ -19,6 +19,9 @@ static void __init mm_init(void)
 	kfence_alloc_pool();
 	report_meminit();
 	stack_depot_init();
+```
+mem init
+```
 	mem_init();
 	mem_init_print_info();
 	/* page_owner must be initialized after buddy is ready */
@@ -35,8 +38,160 @@ static void __init mm_init(void)
 }
 ```
 
+setup_arch -> paging_init
+
+```c
+// arch/x86/mm/init_64.c
+void __init paging_init(void)
+{
+	sparse_init();
+
+	/*
+	 * clear the default setting with node 0
+	 * note: don't use nodes_clear here, that is really clearing when
+	 *	 numa support is not compiled in, and later node_set_state
+	 *	 will not set it back.
+	 */
+	node_clear_state(0, N_MEMORY);
+	node_clear_state(0, N_NORMAL_MEMORY);
+
+	zone_sizes_init();
+}
+```
 
 
+On NUMA machines, each NUMA node would have a pg_data_t to describe it's memory layout. On UMA machines there is a single pglist_data which describes the whole memory.
+
+Memory statistics and page replacement data structures are maintained on a per-zone basis.
+
+```c
+typedef struct pglist_data {
+	/*
+	 * node_zones contains just the zones for THIS node. Not all of the
+	 * zones may be populated, but it is the full list. It is referenced by
+	 * this node's node_zonelists as well as other node's node_zonelists.
+	 */
+	struct zone node_zones[MAX_NR_ZONES];
+
+	/*
+	 * node_zonelists contains references to all zones in all nodes.
+	 * Generally the first zones will be references to this node's
+	 * node_zones.
+	 */
+	struct zonelist node_zonelists[MAX_ZONELISTS];
+
+    int nr_zones; /* number of populated zones in this node */
+    
+    unsigned long node_start_pfn;
+	unsigned long node_present_pages; /* total number of physical pages */
+	unsigned long node_spanned_pages; /* total size of physical page
+					     range, including holes */
+	int node_id;
+	wait_queue_head_t kswapd_wait;
+	wait_queue_head_t pfmemalloc_wait;
+	struct task_struct *kswapd;	/* Protected by
+					   mem_hotplug_begin/end() */
+	int kswapd_order;
+	enum zone_type kswapd_highest_zoneidx;
+
+	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
+	
+	/* Fields commonly accessed by the page reclaim scanner */
+
+	/*
+	 * NOTE: THIS IS UNUSED IF MEMCG IS ENABLED.
+	 *
+	 * Use mem_cgroup_lruvec() to look up lruvecs.
+	 */
+	struct lruvec		__lruvec;
+
+	unsigned long		flags;
+
+	ZONE_PADDING(_pad2_)
+
+	/* Per-node vmstats */
+	struct per_cpu_nodestat __percpu *per_cpu_nodestats;
+	atomic_long_t		vm_stat[NR_VM_NODE_STAT_ITEMS];
+} pg_data_t;
+```
+
+
+#### alloc_pages
+
+```c
+static inline struct page *alloc_pages(gfp_t gfp_mask, unsigned int order)
+{
+	return alloc_pages_node(numa_node_id(), gfp_mask, order);
+}
+```
+This is the 'heart' of the zoned buddy allocator.
+
+```c
+struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,
+							nodemask_t *nodemask)
+{
+	struct page *page;
+	unsigned int alloc_flags = ALLOC_WMARK_LOW;
+	gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
+	struct alloc_context ac = { };
+
+	/*
+	 * There are several places where we assume that the order value is sane
+	 * so bail out early if the request is out of bound.
+	 */
+	if (unlikely(order >= MAX_ORDER)) {
+		WARN_ON_ONCE(!(gfp & __GFP_NOWARN));
+		return NULL;
+	}
+
+	gfp &= gfp_allowed_mask;
+	/*
+	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS
+	 * resp. GFP_NOIO which has to be inherited for all allocation requests
+	 * from a particular context which has been marked by
+	 * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
+	 * movable zones are not used during allocation.
+	 */
+	gfp = current_gfp_context(gfp);
+	alloc_gfp = gfp;
+	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
+			&alloc_gfp, &alloc_flags))
+		return NULL;
+
+	/*
+	 * Forbid the first pass from falling back to types that fragment
+	 * memory until all local zones are considered.
+	 */
+	alloc_flags |= alloc_flags_nofragment(ac.preferred_zoneref->zone, gfp);
+
+	/* First allocation attempt */
+	page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &ac);
+	if (likely(page))
+		goto out;
+
+	alloc_gfp = gfp;
+	ac.spread_dirty_pages = false;
+
+	/*
+	 * Restore the original nodemask if it was potentially replaced with
+	 * &cpuset_current_mems_allowed to optimize the fast-path attempt.
+	 */
+	ac.nodemask = nodemask;
+
+	page = __alloc_pages_slowpath(alloc_gfp, order, &ac);
+
+out:
+	if (memcg_kmem_enabled() && (gfp & __GFP_ACCOUNT) && page &&
+	    unlikely(__memcg_kmem_charge_page(page, gfp, order) != 0)) {
+		__free_pages(page, order);
+		page = NULL;
+	}
+
+	trace_mm_page_alloc(page, order, alloc_gfp, ac.migratetype);
+
+	return page;
+}
+```
 
 #### free_pages
 
@@ -114,42 +269,29 @@ slab_def.h
 mm/slab.h
 
 ### page
-Each physical page in the system has a struct page associated with
-it to keep track of whatever it is we are using the page for at the
-moment. Note that we have no way to track which tasks are using
-a page, though if it is a pagecache page, rmap structures can tell us
-who is mapping it.
 
-If you allocate the page using alloc_pages(), you can use some of the
-space in struct page for your own purposes.  The five words in the main
-union are available, except for bit 0 of the first word which must be
-kept clear.  Many users use this word to store a pointer to an object
-which is guaranteed to be aligned.  If you use the same storage as
-page->mapping, you must restore it to NULL before freeing the page.
+The kernel treats physical pages as the basic unit of memory management.
 
-If your page will not be mapped to userspace, you can also use the four
-bytes in the mapcount union, but you must call page_mapcount_reset()
-before freeing it.
+Each physical page in the system has a struct page associated with it to keep track of whatever it is we are using the page for at the moment. 
+Note that we have no way to track which tasks are using a page, though if it is a pagecache page, rmap structures can tell us who is mapping it.
 
-If you want to use the refcount field, it must be used in such a way
-that other CPUs temporarily incrementing and then decrementing the
-refcount does not cause problems.  On receiving the page from
-alloc_pages(), the refcount will be positive.
+If you allocate the page using alloc_pages(), you can use some of the space in struct page for your own purposes.  The five words in the main union are available, except for bit 0 of the first word which must be kept clear.  
+Many users use this word to store a pointer to an object which is guaranteed to be aligned.  If you use the same storage as page->mapping, you must restore it to NULL before freeing the page.
 
-If you allocate pages of order > 0, you can use some of the fields
-in each subpage, but you may need to restore some of their values
-afterwards.
+If your page will not be mapped to userspace, you can also use the four bytes in the mapcount union, but you must call page_mapcount_reset() before freeing it.
 
-SLUB uses cmpxchg_double() to atomically update its freelist and
-counters.  That requires that freelist & counters be adjacent and
-double-word aligned.  We align all struct pages to double-word
-boundaries, and ensure that 'freelist' is aligned within the
-struct.
+If you want to use the refcount field, it must be used in such a way that other CPUs temporarily incrementing and then decrementing the refcount does not cause problems.  
+On receiving the page from alloc_pages(), the refcount will be positive.
+
+If you allocate pages of order > 0, you can use some of the fields in each subpage, but you may need to restore some of their values afterwards.
+
+SLUB uses cmpxchg_double() to atomically update its freelist and counters.  That requires that freelist & counters be adjacent and double-word aligned.
+We align all struct pages to double-word boundaries, and ensure that 'freelist' is aligned within the struct.
 
 
 ```c
 
-// include/linux/mm_types.h
+// linux/mm_types.h
 #ifdef CONFIG_HAVE_ALIGNED_STRUCT_PAGE
 #define _struct_page_alignment	__aligned(2 * sizeof(unsigned long))
 #else
@@ -318,8 +460,11 @@ struct page {
 
 ### zone
 
+Because of hardware limitations, the kernel cannot treat all pages as identical. Some pages, because of their physical address in memory, cannot be used for certain tasks. 
+Because of this limitation, the kernel divides pages into different *zones*.
+
 ```c
-// include/linux/mmzone.h
+// linux/mmzone.h
 
 #define ASYNC_AND_SYNC 2
 
@@ -489,7 +634,7 @@ struct zone {
 ### kmalloc
 
 ```c
-// include/linux/slab.h
+// linux/slab.h
 /**
  * kmalloc - allocate memory
  * @size: how many bytes of memory are required.
@@ -567,18 +712,13 @@ static __always_inline void *kmalloc(size_t size, gfp_t flags)
 }
 ```
 
-
+End of slob allocator proper. Begin kmem_cache_alloc and kmalloc frontend.
 ```c
 
 void *__kmalloc(size_t size, gfp_t gfp)
 {
 	return __do_kmalloc_node(size, gfp, NUMA_NO_NODE, _RET_IP_);
 }
-
-
-/*
- * End of slob allocator proper. Begin kmem_cache_alloc and kmalloc frontend.
- */
 
 static __always_inline void *
 __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
@@ -627,4 +767,207 @@ __do_kmalloc_node(size_t size, gfp_t gfp, int node, unsigned long caller)
 	kmemleak_alloc(ret, size, 1, gfp);
 	return ret;
 }
+```
+### mm_struct
+
+```c
+struct mm_struct {
+	struct {
+		struct vm_area_struct *mmap;		/* list of VMAs */
+		struct rb_root mm_rb;
+		u64 vmacache_seqnum;                   /* per-thread vmacache */
+#ifdef CONFIG_MMU
+		unsigned long (*get_unmapped_area) (struct file *filp,
+				unsigned long addr, unsigned long len,
+				unsigned long pgoff, unsigned long flags);
+#endif
+		unsigned long mmap_base;	/* base of mmap area */
+		unsigned long mmap_legacy_base;	/* base of mmap area in bottom-up allocations */
+#ifdef CONFIG_HAVE_ARCH_COMPAT_MMAP_BASES
+		/* Base adresses for compatible mmap() */
+		unsigned long mmap_compat_base;
+		unsigned long mmap_compat_legacy_base;
+#endif
+		unsigned long task_size;	/* size of task vm space */
+		unsigned long highest_vm_end;	/* highest vma end address */
+		pgd_t * pgd;
+
+#ifdef CONFIG_MEMBARRIER
+		/**
+		 * @membarrier_state: Flags controlling membarrier behavior.
+		 *
+		 * This field is close to @pgd to hopefully fit in the same
+		 * cache-line, which needs to be touched by switch_mm().
+		 */
+		atomic_t membarrier_state;
+#endif
+
+		/**
+		 * @mm_users: The number of users including userspace.
+		 *
+		 * Use mmget()/mmget_not_zero()/mmput() to modify. When this
+		 * drops to 0 (i.e. when the task exits and there are no other
+		 * temporary reference holders), we also release a reference on
+		 * @mm_count (which may then free the &struct mm_struct if
+		 * @mm_count also drops to 0).
+		 */
+		atomic_t mm_users;
+
+		/**
+		 * @mm_count: The number of references to &struct mm_struct
+		 * (@mm_users count as 1).
+		 *
+		 * Use mmgrab()/mmdrop() to modify. When this drops to 0, the
+		 * &struct mm_struct is freed.
+		 */
+		atomic_t mm_count;
+
+		/**
+		 * @has_pinned: Whether this mm has pinned any pages.  This can
+		 * be either replaced in the future by @pinned_vm when it
+		 * becomes stable, or grow into a counter on its own. We're
+		 * aggresive on this bit now - even if the pinned pages were
+		 * unpinned later on, we'll still keep this bit set for the
+		 * lifecycle of this mm just for simplicity.
+		 */
+		atomic_t has_pinned;
+
+#ifdef CONFIG_MMU
+		atomic_long_t pgtables_bytes;	/* PTE page table pages */
+#endif
+		int map_count;			/* number of VMAs */
+
+		spinlock_t page_table_lock; /* Protects page tables and some
+					     * counters
+					     */
+		/*
+		 * With some kernel config, the current mmap_lock's offset
+		 * inside 'mm_struct' is at 0x120, which is very optimal, as
+		 * its two hot fields 'count' and 'owner' sit in 2 different
+		 * cachelines,  and when mmap_lock is highly contended, both
+		 * of the 2 fields will be accessed frequently, current layout
+		 * will help to reduce cache bouncing.
+		 *
+		 * So please be careful with adding new fields before
+		 * mmap_lock, which can easily push the 2 fields into one
+		 * cacheline.
+		 */
+		struct rw_semaphore mmap_lock;
+
+		struct list_head mmlist; /* List of maybe swapped mm's.	These
+					  * are globally strung together off
+					  * init_mm.mmlist, and are protected
+					  * by mmlist_lock
+					  */
+
+
+		unsigned long hiwater_rss; /* High-watermark of RSS usage */
+		unsigned long hiwater_vm;  /* High-water virtual memory usage */
+
+		unsigned long total_vm;	   /* Total pages mapped */
+		unsigned long locked_vm;   /* Pages that have PG_mlocked set */
+		atomic64_t    pinned_vm;   /* Refcount permanently increased */
+		unsigned long data_vm;	   /* VM_WRITE & ~VM_SHARED & ~VM_STACK */
+		unsigned long exec_vm;	   /* VM_EXEC & ~VM_WRITE & ~VM_STACK */
+		unsigned long stack_vm;	   /* VM_STACK */
+		unsigned long def_flags;
+
+		/**
+		 * @write_protect_seq: Locked when any thread is write
+		 * protecting pages mapped by this mm to enforce a later COW,
+		 * for instance during page table copying for fork().
+		 */
+		seqcount_t write_protect_seq;
+
+		spinlock_t arg_lock; /* protect the below fields */
+
+		unsigned long start_code, end_code, start_data, end_data;
+		unsigned long start_brk, brk, start_stack;
+		unsigned long arg_start, arg_end, env_start, env_end;
+
+		unsigned long saved_auxv[AT_VECTOR_SIZE]; /* for /proc/PID/auxv */
+
+		/*
+		 * Special counters, in some configurations protected by the
+		 * page_table_lock, in other configurations by being atomic.
+		 */
+		struct mm_rss_stat rss_stat;
+
+		struct linux_binfmt *binfmt;
+
+		/* Architecture-specific MM context */
+		mm_context_t context;
+
+		unsigned long flags; /* Must use atomic bitops to access */
+
+		struct core_state *core_state; /* coredumping support */
+
+#ifdef CONFIG_AIO
+		spinlock_t			ioctx_lock;
+		struct kioctx_table __rcu	*ioctx_table;
+#endif
+#ifdef CONFIG_MEMCG
+		/*
+		 * "owner" points to a task that is regarded as the canonical
+		 * user/owner of this mm. All of the following must be true in
+		 * order for it to be changed:
+		 *
+		 * current == mm->owner
+		 * current->mm != mm
+		 * new_owner->mm == mm
+		 * new_owner->alloc_lock is held
+		 */
+		struct task_struct __rcu *owner;
+#endif
+		struct user_namespace *user_ns;
+
+		/* store ref to file /proc/<pid>/exe symlink points to */
+		struct file __rcu *exe_file;
+#ifdef CONFIG_MMU_NOTIFIER
+		struct mmu_notifier_subscriptions *notifier_subscriptions;
+#endif
+#if defined(CONFIG_TRANSPARENT_HUGEPAGE) && !USE_SPLIT_PMD_PTLOCKS
+		pgtable_t pmd_huge_pte; /* protected by page_table_lock */
+#endif
+#ifdef CONFIG_NUMA_BALANCING
+		/*
+		 * numa_next_scan is the next time that the PTEs will be marked
+		 * pte_numa. NUMA hinting faults will gather statistics and
+		 * migrate pages to new nodes if necessary.
+		 */
+		unsigned long numa_next_scan;
+
+		/* Restart point for scanning and setting pte_numa */
+		unsigned long numa_scan_offset;
+
+		/* numa_scan_seq prevents two threads setting pte_numa */
+		int numa_scan_seq;
+#endif
+		/*
+		 * An operation with batched TLB flushing is going on. Anything
+		 * that can move process memory needs to flush the TLB when
+		 * moving a PROT_NONE or PROT_NUMA mapped page.
+		 */
+		atomic_t tlb_flush_pending;
+#ifdef CONFIG_ARCH_WANT_BATCHED_UNMAP_TLB_FLUSH
+		/* See flush_tlb_batched_pending() */
+		bool tlb_flush_batched;
+#endif
+		struct uprobes_state uprobes_state;
+#ifdef CONFIG_HUGETLB_PAGE
+		atomic_long_t hugetlb_usage;
+#endif
+		struct work_struct async_put_work;
+
+#ifdef CONFIG_IOMMU_SUPPORT
+		u32 pasid;
+#endif
+	} __randomize_layout;
+
+	/*
+	 * The mm_cpumask needs to be at the end of mm_struct, because it
+	 * is dynamically sized based on nr_cpu_ids.
+	 */
+	unsigned long cpu_bitmap[];
+};
 ```

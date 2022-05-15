@@ -144,6 +144,7 @@ bool Threads::destroy_vm() {
 Last thread running calls `java.lang.Shutdown.shutdown()`
 
 ## Shutdown Hooks
+
 *In an orderly shutdown, the JVM first starts all registered shutdown hooks.* Shutdown hooks are unstarted threads that are registered with `Runtime.addShutdownHook`. The JVM makes no guarantees on the order in which shutdown hooks are started. If any application threads (daemon or nondaemon) are still running at shutdown time, they continue to run concurrently with the shutdown process. When all shutdown hooks have completed, the JVM may choose to run finalizers if runFinalizersOnExit is true, and then halts. The JVM makes no attempt to stop or interrupt any application threads that are still running at shutdown time; they are abruptly terminated when the JVM eventually halts. If the shutdown hooks or finalizers don't complete, then the orderly shutdown process "hangs" and the JVM must be shut down abruptly. 
 
 *In an abrupt shutdown, the JVM is not required to do anything other than halt the JVM; shutdown hooks will not run.*
@@ -156,5 +157,6 @@ Because shutdown hooks all run concurrently, closing the log file could cause tr
 
 
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Start JVM](/docs/CS/Java/JDK/JVM/start.md)

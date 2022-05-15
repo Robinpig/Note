@@ -21,13 +21,21 @@ mysql> SELECT * FROM mysql.general_log;
 ## Binary Log
 
 
-A `binary log`(`binlog`) is a file containing a record of all statements or row changes that attempt to change table data. The contents of the binary log can be replayed to bring replicas up to date in a replication scenario, or to bring a database up to date after restoring table data from a backup. The binary logging feature can be turned on and off, although Oracle recommends always enabling it if you use replication or perform backups.
+A `binary log`(`binlog`) is a file containing *a record of all statements or row changes* that attempt to change table data. 
+The contents of the binary log can be replayed to bring replicas up to date in a replication scenario, or to bring a database up to date after restoring table data from a backup. 
 
-You can examine the contents of the binary log, or replay it during replication or recovery, by using the `mysqlbinlog` command. 
-
+You can examine the contents of the binary log, or replay it during replication or recovery, by using the `mysqlbinlog` command.
 For the MySQL Enterprise Backup product, the file name of the binary log and the current position within the file are important details. To record this information for the source when taking a backup in a replication context, you can specify the --slave-info option.
 
-Prior to MySQL 5.0, a similar capability was available, known as the update log. In MySQL 5.0 and higher, the binary log replaces the update log.
+
+binlog cache for each threads but only one binlog file 
+
+write into page cache
+
+fsync to disk
+
+binlog_group_commit_sync_delay
+binlog_group_commit_sync_no_delay_count
 
 
 ### Configurations
@@ -35,7 +43,9 @@ This system variable sets the binary logging format, and can be any one of `STAT
 
 Binary logging is enabled by default (the `log_bin` system variable is set to ON).
 
-**By default, the binary log is synchronized to disk at each write (`sync_binlog=1`)**. If `sync_binlog` was not enabled, and the operating system or machine (not only the MySQL server) crashed, there is a chance that the last statements of the binary log could be lost. To prevent this, enable the `sync_binlog` system variable to synchronize the binary log to disk after every *`N`* commit groups. The safest value for `sync_binlog` is 1 (the default), but this is also the slowest.
+**By default, the binary log is synchronized to disk at each write (`sync_binlog=1`)**. 
+If `sync_binlog` was not enabled, and the operating system or machine (not only the MySQL server) crashed, there is a chance that the last statements of the binary log could be lost. 
+To prevent this, enable the `sync_binlog` system variable to synchronize the binary log to disk after every *`N`* commit groups. The safest value for `sync_binlog` is 1 (the default), but this is also the slowest.
 
 
 In earlier MySQL releases, there was a chance of inconsistency between the table content and binary log content if a crash occurred, even with `sync_binlog` set to 1. For example, if you are using `InnoDB` tables and the MySQL server processes a `COMMIT` statement, it writes many prepared transactions to the binary log in sequence, synchronizes the binary log, and then commits the transaction into `InnoDB`. If the server unexpectedly exited between those two operations, the transaction would be rolled back by `InnoDB` at restart but still exist in the binary log. Such an issue was resolved in previous releases by enabling `InnoDB` support for two-phase commit in XA transactions. In 8.0.0 and higher, the `InnoDB` support for two-phase commit in XA transactions is always enabled.
@@ -68,4 +78,9 @@ slow_query_log_file	demo-slow.log
 ```mysql
 
 mysql> SELECT * FROM mysql.slow_log;
+```
+
+```mysql
+set long_query_time=0;
+
 ```

@@ -1,16 +1,19 @@
 ## Introduction
 
 
+MetaObject
+
+MetaClass
+
+DefaultObjectFactory
+
+
 
 ### Reflector Hierarchy
 
-<img src="./images/Reflector.png" style="zoom:150%;" />
-
-
+![Reflector](./images/Reflector.png)
 
 ## Factory
-
-
 
 ```java
 /**
@@ -419,8 +422,6 @@ public class Reflector {
 }
 ```
 
-
-
 ### ReflectorFactory
 
 use [ConcurrentMap](/docs/CS/Java/JDK/Collection/Map?id=ConcurrentMap) cache all Reflectors
@@ -467,8 +468,6 @@ public class DefaultReflectorFactory implements ReflectorFactory {
 }
 ```
 
-
-
 ### ObjectFactory
 
 ```java
@@ -512,8 +511,7 @@ public class DefaultObjectFactory implements ObjectFactory, Serializable {
   public <T> T create(Class<T> type) {
     return create(type, null, null);
   }
-
-  @SuppressWarnings("unchecked")
+  
   @Override
   public <T> T create(Class<T> type, List<Class<?>> constructorArgTypes, List<Object> constructorArgs) {
     Class<?> classToCreate = resolveInterface(type);
@@ -580,10 +578,6 @@ public class DefaultObjectFactory implements ObjectFactory, Serializable {
 
 }
 ```
-
-
-
-
 
 ## TypeHandler
 
@@ -705,10 +699,6 @@ public abstract class BaseTypeHandler<T> extends TypeReference<T> implements Typ
 }
 ```
 
-
-
-
-
 ```java
 public final class TypeHandlerRegistry {
 
@@ -730,10 +720,7 @@ public final class TypeHandlerRegistry {
 }
 ```
 
-
-
 ### constructor
-
 
 ```java
 /**
@@ -744,37 +731,37 @@ public final class TypeHandlerRegistry {
       */
 
     public TypeHandlerRegistry(Configuration configuration) {
-    
+  
     this.unknownTypeHandler = new UnknownTypeHandler(configuration);
-    
+  
     register(Boolean.class, new BooleanTypeHandler());
     register(boolean.class, new BooleanTypeHandler());
     register(JdbcType.BOOLEAN, new BooleanTypeHandler());
     register(JdbcType.BIT, new BooleanTypeHandler());
-    
+  
     register(Byte.class, new ByteTypeHandler());
     register(byte.class, new ByteTypeHandler());
     register(JdbcType.TINYINT, new ByteTypeHandler());
-    
+  
     register(Short.class, new ShortTypeHandler());
     register(short.class, new ShortTypeHandler());
     register(JdbcType.SMALLINT, new ShortTypeHandler());
-    
+  
     register(Integer.class, new IntegerTypeHandler());
     register(int.class, new IntegerTypeHandler());
     register(JdbcType.INTEGER, new IntegerTypeHandler());
-    
+  
     register(Long.class, new LongTypeHandler());
     register(long.class, new LongTypeHandler());
-    
+  
     register(Float.class, new FloatTypeHandler());
     register(float.class, new FloatTypeHandler());
     register(JdbcType.FLOAT, new FloatTypeHandler());
-    
+  
     register(Double.class, new DoubleTypeHandler());
     register(double.class, new DoubleTypeHandler());
     register(JdbcType.DOUBLE, new DoubleTypeHandler());
-    
+  
     register(Reader.class, new ClobReaderTypeHandler());
     register(String.class, new StringTypeHandler());
     register(String.class, JdbcType.CHAR, new StringTypeHandler());
@@ -791,18 +778,18 @@ public final class TypeHandlerRegistry {
     register(JdbcType.NVARCHAR, new NStringTypeHandler());
     register(JdbcType.NCHAR, new NStringTypeHandler());
     register(JdbcType.NCLOB, new NClobTypeHandler());
-    
+  
     register(Object.class, JdbcType.ARRAY, new ArrayTypeHandler());
     register(JdbcType.ARRAY, new ArrayTypeHandler());
-    
+  
     register(BigInteger.class, new BigIntegerTypeHandler());
     register(JdbcType.BIGINT, new LongTypeHandler());
-    
+  
     register(BigDecimal.class, new BigDecimalTypeHandler());
     register(JdbcType.REAL, new BigDecimalTypeHandler());
     register(JdbcType.DECIMAL, new BigDecimalTypeHandler());
     register(JdbcType.NUMERIC, new BigDecimalTypeHandler());
-    
+  
     register(InputStream.class, new BlobInputStreamTypeHandler());
     register(Byte[].class, new ByteObjectArrayTypeHandler());
     register(Byte[].class, JdbcType.BLOB, new BlobByteObjectArrayTypeHandler());
@@ -812,24 +799,24 @@ public final class TypeHandlerRegistry {
     register(byte[].class, JdbcType.LONGVARBINARY, new BlobTypeHandler());
     register(JdbcType.LONGVARBINARY, new BlobTypeHandler());
     register(JdbcType.BLOB, new BlobTypeHandler());
-    
+  
     register(Object.class, unknownTypeHandler);
     register(Object.class, JdbcType.OTHER, unknownTypeHandler);
     register(JdbcType.OTHER, unknownTypeHandler);
-    
+  
     register(Date.class, new DateTypeHandler());
     register(Date.class, JdbcType.DATE, new DateOnlyTypeHandler());
     register(Date.class, JdbcType.TIME, new TimeOnlyTypeHandler());
     register(JdbcType.TIMESTAMP, new DateTypeHandler());
     register(JdbcType.DATE, new DateOnlyTypeHandler());
     register(JdbcType.TIME, new TimeOnlyTypeHandler());
-    
+  
     register(java.sql.Date.class, new SqlDateTypeHandler());
     register(java.sql.Time.class, new SqlTimeTypeHandler());
     register(java.sql.Timestamp.class, new SqlTimestampTypeHandler());
-    
+  
     register(String.class, JdbcType.SQLXML, new SqlxmlTypeHandler());
-    
+  
     register(Instant.class, new InstantTypeHandler());
     register(LocalDateTime.class, new LocalDateTimeTypeHandler());
     register(LocalDate.class, new LocalDateTypeHandler());
@@ -841,13 +828,12 @@ public final class TypeHandlerRegistry {
     register(Year.class, new YearTypeHandler());
     register(YearMonth.class, new YearMonthTypeHandler());
     register(JapaneseDate.class, new JapaneseDateTypeHandler());
-    
+  
     // issue #273
     register(Character.class, new CharacterTypeHandler());
     register(char.class, new CharacterTypeHandler());
   }
 ```
-
 
 ### register
 
@@ -981,8 +967,6 @@ public final class TypeHandlerRegistry {
     }
   }
 ```
-
-
 
 ### getTypeHandler
 
@@ -1166,11 +1150,7 @@ public final class TypeHandlerRegistry {
   }
 ```
 
-
-
 ### TypeParameterResolver
-
-
 
 ```java
 // TypeParameterResolver
@@ -1187,9 +1167,11 @@ private static Type resolveType(Type type, Type srcType, Class<?> declaringClass
 }
 ```
 
-
-
-
-
 ## ObjectWrapper
 
+
+
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)

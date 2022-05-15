@@ -28,13 +28,16 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 - Graal
 - jigsaw
 - Kulla
-- Loom
 - Panama
 - Shenandoah
 - Sumatra
 - Tsan
-- Valhalla
 - ZGC
+
+### Valhalla
+
+[Project Valhalla](/docs/CS/Java/JDK/Valhalla.md) plans to augment the Java object model with value objects and user-defined primitives, combining the abstractions of object-oriented programming with the performance characteristics of simple primitives.
+These features will be complemented with changes to Java’s generics to preserve performance gains through generic APIs.
 
 ### Loom
 

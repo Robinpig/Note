@@ -141,6 +141,9 @@ HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
 
 #### inside tlab
 
+
+Try refilling the TLAB and allocating the object in it.
+
 ```cpp
 
 HeapWord* MemAllocator::allocate_inside_tlab(Allocation& allocation) const {
@@ -156,6 +159,11 @@ HeapWord* MemAllocator::allocate_inside_tlab(Allocation& allocation) const {
   return allocate_inside_tlab_slow(allocation);
 }
 ```
+
+#### EMA
+
+
+
 ##### slow
 
 ```cpp

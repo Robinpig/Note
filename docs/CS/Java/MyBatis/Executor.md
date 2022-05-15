@@ -101,9 +101,14 @@ public abstract class BaseExecutor implements Executor {
 
 
 
-### Cache Management
+### Local Cache
 
-clearLocalCache
+clearLocalCache localCache and  localOutputParameterCache will clear when:
+- update or close : SESSION
+- query
+    - queryStack == 0 && ms.isFlushCacheRequired()
+    - configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT
+
 
 ```java
 public void clearLocalCache() {
@@ -114,28 +119,6 @@ public void clearLocalCache() {
 }
 ```
 
-localCache and  localOutputParameterCache will clear when 
-
-- update or close
-- query
-  - queryStack == 0 && ms.isFlushCacheRequired()
-  - configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT 
-
-
-
-#### update
-
-```java
-@Override
-public int update(MappedStatement ms, Object parameter) throws SQLException {
-  ErrorContext.instance().resource(ms.getResource()).activity("executing an update").object(ms.getId());
-  if (closed) {
-    throw new ExecutorException("Executor was closed.");
-  }
-  clearLocalCache();
-  return doUpdate(ms, parameter);
-}
-```
 
 
 
@@ -181,7 +164,7 @@ public int update(MappedStatement ms, Object parameter) throws SQLException {
 
 
 
-#### createCacheKey
+#### CacheKey
 
 ```java
 @Override
@@ -469,6 +452,45 @@ public class CachingExecutor implements Executor {
 
   private final Executor delegate;
   private final TransactionalCacheManager tcm = new TransactionalCacheManager();
-...
+
+  
+    @Override
+    public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler) throws SQLException {
+        BoundSql boundSql = ms.getBoundSql(parameterObject);
+        CacheKey key = createCacheKey(ms, parameterObject, rowBounds, boundSql);
+        return query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+    }
+
+    @Override
+    public <E> List<E> query(MappedStatement ms, Object parameterObject, RowBounds rowBounds, ResultHandler resultHandler, CacheKey key, BoundSql boundSql)
+            throws SQLException {
+        Cache cache = ms.getCache();
+        if (cache != null) {
+            flushCacheIfRequired(ms);
+            if (ms.isUseCache() && resultHandler == null) {
+                ensureNoOutParams(ms, boundSql);
+                @SuppressWarnings("unchecked")
+                List<E> list = (List<E>) tcm.getObject(cache, key);
+                if (list == null) {
+                    list = delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+                    tcm.putObject(cache, key, list); // issue #578 and #116
+                }
+                return list;
+            }
+        }
+        return delegate.query(ms, parameterObject, rowBounds, resultHandler, key, boundSql);
+    }
+    
+    private void flushCacheIfRequired(MappedStatement ms) {
+        Cache cache = ms.getCache();
+        if (cache != null && ms.isFlushCacheRequired()) {
+            tcm.clear(cache);
+        }
+    }
 }
 ```
+
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)

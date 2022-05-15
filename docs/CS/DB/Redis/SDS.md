@@ -21,7 +21,7 @@ cache (shared sessions)
 | hdr32 | 4    | 4     | 3 lsb of type, 5 unused bits     |      |
 | hdr64 | 8    | 8     | 3 lsb of type, 5 unused bits     |      |
 
-`__attribute__ ((__packed__))` to save memory
+`__attribute__ ((__packed__))` to save memory and find flags by buf[-1] directly
 
 ```c
 typedef char *sds;
@@ -585,12 +585,12 @@ sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen) {
 
 
 ### sdscatlen
+
+Append the specified binary-safe string pointed by 't' of 'len' bytes to the end of the specified sds string 's'.
+
+After the call, the passed sds string is no longer valid and all the references must be substituted with the new pointer returned by the call.
+
 ```c
-/* Append the specified binary-safe string pointed by 't' of 'len' bytes to the
- * end of the specified sds string 's'.
- *
- * After the call, the passed sds string is no longer valid and all the
- * references must be substituted with the new pointer returned by the call. */
 sds sdscatlen(sds s, const void *t, size_t len) {
     size_t curlen = sdslen(s);
 
@@ -607,26 +607,23 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
 
 ### sdsMakeRoomFor
+
 1. avail >= addlen, return
 2. expand pow of 2 when len < 1M, or else expand 1M util 512M
 3. calc new Type, if same Type return, or else allocate new memory and `memcpy`
+
+Enlarge the free space at the end of the sds string so that the caller is sure that after calling this function can overwrite up to addlen bytes after the end of the string, plus one more byte for nul term.
+
+If there's already sufficient free space, this function returns without any action, if there isn't sufficient free space, it'll allocate what's missing, and possibly more:
+- When greedy is 1, enlarge more than needed, to avoid need for future reallocs on incremental growth.
+- When greedy is 0, enlarge just enough so that there's free space for 'addlen'.
+
+Note: this does not change the *length* of the sds string as returned by sdslen(), but only the free buffer space we have.
 
 ```c
 // sds.h
 #define SDS_MAX_PREALLOC (1024*1024) // 1MB
 
-/* Enlarge the free space at the end of the sds string so that the caller
- * is sure that after calling this function can overwrite up to addlen
- * bytes after the end of the string, plus one more byte for nul term.
- * If there's already sufficient free space, this function returns without any
- * action, if there isn't sufficient free space, it'll allocate what's missing,
- * and possibly more:
- * When greedy is 1, enlarge more than needed, to avoid need for future reallocs
- * on incremental growth.
- * When greedy is 0, enlarge just enough so that there's free space for 'addlen'.
- *
- * Note: this does not change the *length* of the sds string as returned
- * by sdslen(), but only the free buffer space we have. */
 sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
     void *sh, *newsh;
     size_t avail = sdsavail(s);
@@ -685,10 +682,10 @@ sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
 
 ## free
 
-use `sdsclear` rather than `sdsfree`
+use `sdsclear` instead of `sdsfree`
 
+Free an sds string. No operation is performed if 's' is NULL.
 ```c
-/* Free an sds string. No operation is performed if 's' is NULL. */
 #define s_free zfree
 
 void sdsfree(sds s) {
@@ -697,13 +694,11 @@ void sdsfree(sds s) {
 }
 ```
 
+Modify an sds string in-place to make it empty (zero length).
 
+However all the existing buffer is not discarded but set as free space so that next append operations will not require allocations up to the number of bytes previously available.
 
 ```c
-/* Modify an sds string in-place to make it empty (zero length).
- * However all the existing buffer is not discarded but set as free space
- * so that next append operations will not require allocations up to the
- * number of bytes previously available. */
 void sdsclear(sds s) {
     sdssetlen(s, 0);
     s[0] = '\0';
@@ -715,9 +710,14 @@ void sdsclear(sds s) {
 - **packed** and always append '\0'
 - expand pow of 2 when len < 1M, or else expand 1M util 512M
 - use sdsclear rather than sdsfree
-- encoding int value in ptr
-- encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
+- Encoding
+  - encoding int value in ptr
+  - encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
 
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md)
 
 
 ## References

@@ -510,11 +510,22 @@ private void processBeanDefinitions(Set<BeanDefinitionHolder> beanDefinitions) {
 
 ### MapperScannerConfigurer
 
-BeanDefinitionRegistryPostProcessor that searches recursively starting from a base package for interfaces and registers them as MapperFactoryBean. Note that only interfaces with at least one method will be registered; concrete classes will be ignored.
-This class was a {code BeanFactoryPostProcessor} until 1.0.1 version. It changed to BeanDefinitionRegistryPostProcessor in 1.0.2. See https://jira.springsource.org/browse/SPR-8269 for the details.
+BeanDefinitionRegistryPostProcessor that searches recursively starting from a base package for interfaces and registers them as MapperFactoryBean. 
+Note that only interfaces with at least one method will be registered; concrete classes will be ignored.
+
+This class was a BeanFactoryPostProcessor until 1.0.1 version. It changed to BeanDefinitionRegistryPostProcessor in 1.0.2. 
+See https://jira.springsource.org/browse/SPR-8269 for the details.
+
 The basePackage property can contain more than one package name, separated by either commas or semicolons.
-This class supports filtering the mappers created by either specifying a marker interface or an annotation. The annotationClass property specifies an annotation to search for. The markerInterface property specifies a parent interface to search for. If both properties are specified, mappers are added for interfaces that match either criteria. By default, these two properties are null, so all interfaces in the given basePackage are added as mappers.
-This configurer enables autowire for all the beans that it creates so that they are automatically autowired with the proper SqlSessionFactory or SqlSessionTemplate. If there is more than one SqlSessionFactory in the application, however, autowiring cannot be used. In this case you must explicitly specify either an SqlSessionFactory or an SqlSessionTemplate to use via the bean name properties. Bean names are used rather than actual objects because Spring does not initialize property placeholders until after this class is processed.
+This class supports filtering the mappers created by either specifying a marker interface or an annotation. 
+The annotationClass property specifies an annotation to search for. 
+The markerInterface property specifies a parent interface to search for. 
+If both properties are specified, mappers are added for interfaces that match either criteria. 
+By default, these two properties are null, so all interfaces in the given basePackage are added as mappers.
+This configurer enables autowire for all the beans that it creates so that they are automatically autowired with the proper SqlSessionFactory or SqlSessionTemplate. 
+If there is more than one SqlSessionFactory in the application, however, autowiring cannot be used. 
+In this case you must explicitly specify either an SqlSessionFactory or an SqlSessionTemplate to use via the bean name properties. 
+Bean names are used rather than actual objects because Spring does not initialize property placeholders until after this class is processed.
 
 
 
@@ -544,4 +555,9 @@ public class MapperScannerConfigurer implements BeanDefinitionRegistryPostProces
   }
 }
 ```
+
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
 

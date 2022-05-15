@@ -41,7 +41,7 @@ checkpoint_lsn
 - page number
 - data
 
-#### Group Commit for Redo Log Flushing
+### Group Commit for Redo Log Flushing
 
 `InnoDB`, like any other ACID-compliant database engine, flushes the `redo log` of a transaction before it is committed.
 
@@ -54,6 +54,15 @@ checkpoint_lsn
 >
 > An InnoDB optimization that performs some low-level I/O operations (log write) once for a set of `commit` operations, rather than flushing and syncing separately for each commit.
 
+
+innodb_flush_log_at_trx_commit
+
+- 0  fsync everytime
+- 1 
+- 2 
+
+
+prepare -->  write binlog  --> commit
 
 
 ## Configuration

@@ -1088,7 +1088,7 @@ final Instance instance = createInstance(url);
         }
 ```
 
-invoke [com.alibaba.nacos.client.naming.net.NamingProxy::registerService()](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/registry.md?id=registerService)
+invoke [com.alibaba.nacos.client.naming.net.NamingProxy::registerService()](/docs/CS/Java/Spring_Cloud/nacos/registry.md?id=registerService)
 ```java
 // org.apache.dubbo.registry.nacos.NacosNamingServiceWrapper
 

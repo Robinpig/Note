@@ -99,6 +99,91 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
 ```
 
 
+register in AbstractChannel
+
+
+```java
+//AbstractNioChannel#doRegister()
+protected void doRegister() throws Exception {
+    boolean selected = false;
+    for (;;) {
+        try {
+            selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
+            return;
+        } catch (CancelledKeyException e) {
+            if (!selected) {
+                // Force the Selector to select now as the "canceled" SelectionKey may still be
+                // cached and not removed because no Select.select(..) operation was called yet.
+                eventLoop().selectNow();
+                selected = true;
+            } else {
+                // We forced a select operation on the selector before but the SelectionKey is still cached
+                // for whatever reason. JDK bug ?
+                throw e;
+            }
+        }
+    }
+}
+```
+
+### SocketChannel
+
+read
+
+
+
+```java
+    protected int doReadBytes(ByteBuf byteBuf) throws Exception {
+        final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+        allocHandle.attemptedBytesRead(byteBuf.writableBytes());
+        return byteBuf.writeBytes(javaChannel(), allocHandle.attemptedBytesRead());
+    }
+```
+write
+
+```java
+
+    protected int doWriteBytes(ByteBuf buf) throws Exception {
+        final int expectedWrittenBytes = buf.readableBytes();
+        return buf.readBytes(javaChannel(), expectedWrittenBytes);
+    }
+
+    protected long doWriteFileRegion(FileRegion region) throws Exception {
+        final long position = region.transferred();
+        return region.transferTo(javaChannel(), position);
+    }
+```
+
+### ServerChannel
+
+accept Socket and return new SocketChannel
+
+Unsupported Write
+```java
+    @Override
+    protected int doReadMessages(List<Object> buf) throws Exception {
+        SocketChannel ch = SocketUtils.accept(javaChannel());
+
+        try {
+            if (ch != null) {
+                buf.add(new NioSocketChannel(this, ch));
+                return 1;
+            }
+        } catch (Throwable t) {
+            logger.warn("Failed to create a new channel from an accepted socket.", t);
+
+            try {
+                ch.close();
+            } catch (Throwable t2) {
+                logger.warn("Failed to close a socket.", t2);
+            }
+        }
+
+        return 0;
+    }
+
+```
+
 
 
 
@@ -504,7 +589,7 @@ private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
 }
 ```
 
-## 
+
 
 
 
@@ -539,7 +624,9 @@ private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
 
 
 
-
+> [!TIP]
+> 
+> Suggest use childOption(NioChannelOption) rather than  childOption(ChannelOption).
 
 **Deprecated.** *Use [`MaxMessagesRecvByteBufAllocator`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html) and [`MaxMessagesRecvByteBufAllocator.maxMessagesPerRead()`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html#maxMessagesPerRead--).*
 
@@ -620,6 +707,8 @@ IP_TOS IP参数，设置IP头部的Type-of-Service字段，用于描述IP包的�
 ALLOW_HALF_CLOSURE Netty参数，一个连接的远端关闭时本地端是否关闭，默认值为False。值为False时，连接自动关闭；为True时，触发ChannelInboundHandler的userEventTriggered()方法，事件为ChannelInputShutdownEvent。
 
 
+
+Write only support ByteBuf or FileRegion
 
 ## Links
 

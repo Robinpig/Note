@@ -5,7 +5,6 @@
 
 
 - [start](/docs/CS/Java/Dubbo/Start.md)
-- [SPI](/docs/CS/Java/Dubbo/SPI.md)
 - [Registry](/docs/CS/Java/Dubbo/registry.md)
 - [Remoting](/docs/CS/Java/Dubbo/remoting.md)
 - [cluster](/docs/CS/Java/Dubbo/cluster.md)
@@ -71,6 +70,8 @@ Protocol Invoker Exporter(wrapper Invoker)
 ## Transport
 AbstractServer.doOpen()->create a Netty or Mina Server.
 
+use NioEventLoop
+ 
 Request Event connected by NettyServer -> AllChannelHandler -> Executor Service 
 -> Dubbo Protocol invoke() -> received
 
@@ -90,6 +91,9 @@ AllDispstcher
 ThreadPool Model
 
 GenericFilter
+
+MultiHandler
+
 
 ### registry
 

@@ -1,4 +1,5 @@
 ## Introduction
+
 [Spring Boot](https://spring.io/projects/spring-boot) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
 - [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
@@ -124,16 +125,32 @@ Use different parameters to run test.
 - @NullSource
 
 
+### WebMock
+
+```java
+@RunWith(SpringRunner.class)
+@WebMvcTest(HelloController.class)
+public class HelloTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @Test
+    public void testHello() throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get("/hello"))
+                .andExpect(MockMvcResultMatchers.status().isOk())
+                .andExpect(MockMvcResultMatchers.content().string(containsString("Hello ")));
+    }
+
+}
+```
 
 
-
-#### Actuator
+## Actuator
 
 Admin
 
 
-
-Starter
 
 
 
@@ -152,7 +169,12 @@ public class GlobalExceptionHandler {
 }
 ```
 
+## Starter
 
 
 
+## Links
+
+- [Spring Framework](/docs/CS/Java/Spring/Spring.md)
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
 

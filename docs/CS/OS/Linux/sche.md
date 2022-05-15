@@ -1,5 +1,29 @@
 
 
+
+```dot
+strict digraph {
+
+    cpu [shape="polygon" label="cpuN"]
+    rq [shape="polygon" label="rq"]
+    cpu -> rq
+    {rank="same"; rq;cpu;}
+    cfs [shape="polygon" label="cfs_rq"]
+    rq -> cfs
+    rb [shape="polygon" label="rb_root"]
+    cfs -> rb
+    entity [shape="polygon" label="sched_entity"]
+    rb -> entity
+    class [shape="polygon" label="sched_class"]
+    {rank="same"; rb;entity;class;}
+    struct [shape="polygon" label="task_struct"]
+    fair [shape="polygon" label="fair_sched_class"]
+    struct -> entity 
+    struct -> class 
+    class -> fair 
+}
+```
+
 ### sched_class
 
 ```c
@@ -79,6 +103,7 @@ extern const struct sched_class idle_sched_class;
 
 
 ### run queue
+
 This is the main, per-CPU runqueue data structure.
 
 Locking rule: those places that want to lock multiple runqueues
@@ -295,6 +320,37 @@ task structs
 ## schedule
 
 ```c
+static void __sched notrace preempt_schedule_common(void)
+{
+	do {
+```
+
+Because the function tracer can trace preempt_count_sub() and it also uses preempt_enable/disable_notrace(), if NEED_RESCHED is set, the preempt_enable_notrace() called by the function tracer will call this function again and cause infinite recursion.
+
+Preemption must be disabled here before the function tracer can trace. Break up preempt_disable() into two calls. One to disable preemption without fear of being traced. 
+The other to still record the preemption latency, which can also be traced by the function tracer.
+
+```
+		preempt_disable_notrace();
+		preempt_latency_start(1);
+		__schedule(true);
+		preempt_latency_stop(1);
+		preempt_enable_no_resched_notrace();
+
+		/*
+		 * Check again in case we missed a preemption opportunity
+		 * between schedule and now.
+		 */
+	} while (need_resched());
+}
+
+static __always_inline bool need_resched(void)
+{
+	return unlikely(tif_need_resched());
+}
+```
+
+```c
 // kernel/sched/core.c
 asmlinkage __visible void __sched schedule(void)
 {
@@ -339,6 +395,8 @@ called on the nearest possible occasion:
     - return from interrupt-handler to user-space
 
 WARNING: must be called with preemption disabled!
+
+
 ```c
 // kernel/sched/core.c
 static void __sched notrace __schedule(bool preempt)
@@ -358,7 +416,9 @@ static void __sched notrace __schedule(bool preempt)
 
 	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
 		hrtick_clear(rq);
-
+```
+note context switch
+```c
 	local_irq_disable();
 	rcu_note_context_switch(preempt);
 
@@ -379,8 +439,9 @@ static void __sched notrace __schedule(bool preempt)
 	 */
 	rq_lock(rq, &rf);
 	smp_mb__after_spinlock();
-
-	/* Promote REQ to ACT */
+```
+Promote REQ to ACT
+```c
 	rq->clock_update_flags <<= 1;
 	update_rq_clock(rq);
 
@@ -459,13 +520,18 @@ pick next task
 		 *   is a RELEASE barrier),
 		 */
 		++*switch_count;
-
+```
+prev queued
+```c
 		migrate_disable_switch(rq, prev);
 		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
 		trace_sched_switch(preempt, prev, next);
+```
+Context Switch
 
-		/* Also unlocks the rq: */
+Also unlocks the rq:
+```c
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
@@ -479,17 +545,13 @@ pick next task
 ```
 
 ### pick_next_task
-Pick up the highest-prio task:
-```c
-// kernel/sched/core.c
-static struct task_struct *
-pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
-{
-	return __pick_next_task(rq, prev, rf);
-}
 
+Pick up the highest-prio task:
+
+```c
+// sched/core.c
 static inline struct task_struct *
-__pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
+pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	const struct sched_class *class;
 	struct task_struct *p;
@@ -507,7 +569,7 @@ __pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		if (unlikely(p == RETRY_TASK))
 			goto restart;
 
-		/* Assume the next prioritized class is idle_sched_class */
+		/* Assumes fair_sched_class->next == idle_sched_class */
 		if (!p) {
 			put_prev_task(rq, prev);
 			p = pick_next_task_idle(rq);
@@ -525,7 +587,8 @@ restart:
 			return p;
 	}
 
-	BUG(); /* The idle class should always have a runnable task. */
+	/* The idle class should always have a runnable task: */
+	BUG();
 }
 ```
 
@@ -698,7 +761,9 @@ static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool fir
 ```
 
 ### context switch
+
 context_switch - switch to the new MM and the new thread's register state.
+
 ```c
 // kernel/sched/core.c
 static __always_inline struct rq *
@@ -751,8 +816,9 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
 	prepare_lock_switch(rq, next, rf);
-
-	/* Here we just switch the register state and the stack. */
+```
+Here we just switch the register state and the stack.
+```
 	switch_to(prev, next, prev);
 	barrier();
 
@@ -762,12 +828,16 @@ context_switch(struct rq *rq, struct task_struct *prev,
 
 
 
-#### affinity
+## affinity
+
+
+### set affinity
 
 ```c
 
 long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 {
+	cpumask_var_t cpus_allowed, new_mask;
 	struct task_struct *p;
 	int retval;
 
@@ -787,22 +857,71 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 		retval = -EINVAL;
 		goto out_put_task;
 	}
-
+	if (!alloc_cpumask_var(&cpus_allowed, GFP_KERNEL)) {
+		retval = -ENOMEM;
+		goto out_put_task;
+	}
+	if (!alloc_cpumask_var(&new_mask, GFP_KERNEL)) {
+		retval = -ENOMEM;
+		goto out_free_cpus_allowed;
+	}
+	retval = -EPERM;
 	if (!check_same_owner(p)) {
 		rcu_read_lock();
 		if (!ns_capable(__task_cred(p)->user_ns, CAP_SYS_NICE)) {
 			rcu_read_unlock();
-			retval = -EPERM;
-			goto out_put_task;
+			goto out_free_new_mask;
 		}
 		rcu_read_unlock();
 	}
 
 	retval = security_task_setscheduler(p);
 	if (retval)
-		goto out_put_task;
+		goto out_free_new_mask;
 
-	retval = __sched_setaffinity(p, in_mask);
+```
+set cpus_allowed
+
+```c
+	cpuset_cpus_allowed(p, cpus_allowed);
+	cpumask_and(new_mask, in_mask, cpus_allowed);
+
+	/*
+	 * Since bandwidth control happens on root_domain basis,
+	 * if admission test is enabled, we only admit -deadline
+	 * tasks allowed to run on all the CPUs in the task's
+	 * root_domain.
+	 */
+#ifdef CONFIG_SMP
+	if (task_has_dl_policy(p) && dl_bandwidth_enabled()) {
+		rcu_read_lock();
+		if (!cpumask_subset(task_rq(p)->rd->span, new_mask)) {
+			retval = -EBUSY;
+			rcu_read_unlock();
+			goto out_free_new_mask;
+		}
+		rcu_read_unlock();
+	}
+#endif
+again:
+	retval = __set_cpus_allowed_ptr(p, new_mask, SCA_CHECK);
+
+	if (!retval) {
+		cpuset_cpus_allowed(p, cpus_allowed);
+		if (!cpumask_subset(new_mask, cpus_allowed)) {
+			/*
+			 * We must have raced with a concurrent cpuset
+			 * update. Just reset the cpus_allowed to the
+			 * cpuset's cpus_allowed
+			 */
+			cpumask_copy(new_mask, cpus_allowed);
+			goto again;
+		}
+	}
+out_free_new_mask:
+	free_cpumask_var(new_mask);
+out_free_cpus_allowed:
+	free_cpumask_var(cpus_allowed);
 out_put_task:
 	put_task_struct(p);
 	return retval;

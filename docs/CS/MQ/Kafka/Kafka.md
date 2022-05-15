@@ -6,28 +6,21 @@
 
 
 
-### event streaming
+### Event Streaming
 
-> Event streaming is the digital equivalent of the human body's central nervous system. It is the technological foundation for the 'always-on' world where businesses are increasingly software-defined and automated, and where the user of software is more software.
->
-> Technically speaking, event streaming is the practice of capturing data in real-time from event sources like databases, sensors, mobile devices, cloud services, and software applications in the form of streams of events; storing these event streams durably for later retrieval; manipulating, processing, and reacting to the event streams in real-time as well as retrospectively; and routing the event streams to different destination technologies as needed. Event streaming thus ensures a continuous flow and interpretation of data so that the right information is at the right place, at the right time.
+Event streaming is the digital equivalent of the human body's central nervous system. 
+It is the technological foundation for the 'always-on' world where businesses are increasingly software-defined and automated, and where the user of software is more software.
 
-### Apache Kafka® is an event streaming platform. What does that mean?
+Technically speaking, event streaming is the practice of capturing data in real-time from event sources like databases, sensors, mobile devices, cloud services, 
+and software applications in the form of streams of events; storing these event streams durably for later retrieval; manipulating, processing, and reacting to the event streams in real-time as well as retrospectively; 
+and routing the event streams to different destination technologies as needed. 
+Event streaming thus ensures a continuous flow and interpretation of data so that the right information is at the right place, at the right time.
+
 Kafka combines three key capabilities so you can implement your use cases for event streaming end-to-end with a single battle-tested solution:
 
-To publish (write) and subscribe to (read) streams of events, including continuous import/export of your data from other systems.
-To store streams of events durably and reliably for as long as you want.
-To process streams of events as they occur or retrospectively.
-And all this functionality is provided in a distributed, highly scalable, elastic, fault-tolerant, and secure manner. Kafka can be deployed on bare-metal hardware, virtual machines, and containers, and on-premises as well as in the cloud. You can choose between self-managing your Kafka environments and using fully managed services offered by a variety of vendors.
-
-### How does Kafka work in a nutshell?
-Kafka is a distributed system consisting of servers and clients that communicate via a high-performance TCP network protocol. It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
-
-**Servers**: Kafka is run as a cluster of one or more servers that can span multiple datacenters or cloud regions. Some of these servers form the storage layer, called the brokers. Other servers run Kafka Connect to continuously import and export data as event streams to integrate Kafka with your existing systems such as relational databases as well as other Kafka clusters. To let you implement mission-critical use cases, a Kafka cluster is highly scalable and fault-tolerant: if any of its servers fails, the other servers will take over their work to ensure continuous operations without any data loss.
-
-**Clients**: They allow you to write distributed applications and microservices that read, write, and process streams of events in parallel, at scale, and in a fault-tolerant manner even in the case of network problems or machine failures. Kafka ships with some such clients included, which are augmented by dozens of clients provided by the Kafka community: clients are available for Java and Scala including the higher-level Kafka Streams library, for Go, Python, C/C++, and many other programming languages as well as REST APIs.
-
-
+- To publish (write) and subscribe to (read) streams of events, including continuous import/export of your data from other systems.
+- To store streams of events durably and reliably for as long as you want.
+- To process streams of events as they occur or retrospectively.
 
 ### quick start
 [Install](https://kafka.apache.org/quickstart)
@@ -115,10 +108,20 @@ paritition内部有序, 同一个key只会散列到同一个parition, 可以设�
 
 
 
-## Zookeeper
+## Controller
+
+QuorumController implements the main logic of the KRaft (Kafka Raft Metadata) mode controller. 
+The node which is the leader of the metadata log becomes the active controller. 
+All other nodes remain in standby mode. Standby controllers cannot create new metadata log entries. 
+They just replay the metadata log entries that the current active controller has created. 
+The QuorumController is **single-threaded**. A single event handler thread performs most operations. 
+This avoids the need for complex locking. 
+The controller exposes an *asynchronous, futures-based API* to the world. 
+This reflects the fact that the controller may have several operations in progress at any given point. 
+The future associated with each operation will not be completed until the results of the operation have been made durable to the metadata log.
 
 
-controller
+
 
 
 1. Register Brokers
@@ -134,6 +137,201 @@ why
 2. Zookeeper CP 影响性能
 
 
+
+## Producer
+
+A Kafka client that publishes records to the Kafka cluster.
+The producer is thread safe and sharing a single producer instance across threads will generally be faster than having multiple instances.
+
+Here is a simple example of using the producer to send records with strings containing sequential numbers as the key/value pairs.
+
+```java
+ Properties props = new Properties();
+ props.put("bootstrap.servers", "localhost:9092");
+ props.put("linger.ms", 1);
+ props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+ props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+
+ Producer<String, String> producer = new KafkaProducer<>(props);
+ for (int i = 0; i < 100; i++)
+     producer.send(new ProducerRecord<String, String>("my-topic", Integer.toString(i), Integer.toString(i)));
+
+ producer.close();
+```
+
+The producer consists of a pool of buffer space that holds records that haven't yet been transmitted to the server as well as a background I/O thread that is responsible for turning these records into requests and transmitting them to the cluster. Failure to close the producer after use will leak these resources.
+
+The send() method is asynchronous. When called, it adds the record to a buffer of pending record sends and immediately returns. This allows the producer to batch together individual records for efficiency.
+
+The acks config controls the criteria under which requests are considered complete. The default setting "all" will result in blocking on the full commit of the record, the slowest but most durable setting.
+
+If the request fails, the producer can automatically retry. The retries setting defaults to Integer.MAX_VALUE, and it's recommended to use delivery.timeout.ms to control retry behavior, instead of retries.
+
+The producer maintains buffers of unsent records for each partition. These buffers are of a size specified by the batch.size config. Making this larger can result in more batching, but requires more memory (since we will generally have one of these buffers for each active partition).
+
+> [!NOTE]
+>
+> new Sender and start ioThread in the constructor of Producer. And create connections with all of cluster brokers.
+
+
+
+TODO: 
+1. Connection with brokers
+2. Connection close
+    - Kafka will close idle timeout connection if clients set `connections.max.idle.ms!=-1`.
+    - Otherwise, clients don't explicit close() and will keep CLOSE_WAIT until it send again.
+ 
+### Idempotence
+
+single partition, single session
+
+
+
+### Transaction
+
+all partitions, all sessions
+
+```java
+producer.initTransactions();
+try {
+            producer.beginTransaction();
+            producer.send(record1);
+            producer.send(record2);
+            producer.commitTransaction();
+} catch (KafkaException e) {
+            producer.abortTransaction();
+}
+```
+
+kafka.consumer.isolation-level: read_committed
+
+## Consumer
+
+**The Kafka consumer is NOT thread-safe.** All network I/O happens in the thread of the application making the call. 
+It is the responsibility of the user to ensure that multi-threaded access is properly synchronized. 
+Un-synchronized access will result in ConcurrentModificationException.
+
+1. One Consumer Per Thread
+2. Decouple Consumption and Processing
+
+
+Create Connections
+
+- FindCoordinator
+- connect Coordinator
+- consume records
+
+
+### Consumer Group
+
+The consumer group state.
+
+```java
+public enum ConsumerGroupState {
+   UNKNOWN("Unknown"),
+   PREPARING_REBALANCE("PreparingRebalance"),
+   COMPLETING_REBALANCE("CompletingRebalance"),
+   STABLE("Stable"),
+   DEAD("Dead"),
+   EMPTY("Empty");
+}
+```
+
+Best Practice: Consumer Number == Partition Number
+
+```java
+
+ try{
+      while (true) {
+         ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(1));
+         process(records); // 处理消息
+         commitAysnc(); // 使用异步提交规避阻塞
+      }
+   } catch(Exception e){
+      handle(e); // 处理异常
+   } finally{
+      try {
+         consumer.commitSync(); // 最后一次提交使用同步阻塞式提交
+      } finally {
+         consumer.close();
+      }
+   }
+
+```
+
+Standalone consumer must use different groupId
+
+
+#### Latency
+
+High latency will cause records not in page cache and can not use Zero Copy
+```shell
+bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --group <group name>
+```
+
+##### JMX
+
+
+
+
+## Rebalance
+
+1. Partitions
+2. Topics
+3. Consumers
+
+All consumers stop and wait until rebalanced finished.
+
+Coordinator
+
+partitionId=Math.abs(groupId.hashCode() % offsetsTopicPartitionCount)
+
+- session.timeout.ms = 6s。
+- heartbeat.interval.ms = 2s
+  max.poll.interval.ms
+Full GC STW
+  
+
+Choose a leader of consumers and let leader selects strategy.
+
+### Consumer Offset
+
+K,V
+
+K: Topic, Partition, GroupId
+
+
+offsets.topic.num.partitions
+
+
+Compact commmitted ack
+
+
+
+## Interceptor
+
+### ProducerInterceptor
+
+### ConsumerInterceptor
+
+
+
+### Record
+
+
+RecordAccumulator
+
+This class acts as a queue that accumulates records into MemoryRecords instances to be sent to the server.
+The accumulator uses a bounded amount of memory and append calls will block when that memory is exhausted, unless this behavior is explicitly disabled.
+
+
+## Configuration
+
+
+## Performance
+
+- disk
+- bandwidth
 
 ## References
 

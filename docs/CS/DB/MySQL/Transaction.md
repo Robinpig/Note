@@ -1,12 +1,16 @@
 ## Introduction
 
-To implement a large-scale, busy, or highly reliable database application, to port substantial code from a different database system, or to tune MySQL performance, it is important to understand `InnoDB` locking and the `InnoDB` transaction model.
+To implement a large-scale, busy, or highly reliable database application, to port substantial code from a different database system, 
+or to tune MySQL performance, it is important to understand `InnoDB` locking and the `InnoDB` transaction model.
 
 
 
 ## InnoDB and the ACID Model
 
-The `InnoDB` transaction model aims combine the best properties of a multi-versioning database with traditional two-phase locking. `InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read) by default, in the style of Oracle. The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed. Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
+The `InnoDB` transaction model aims combine the best properties of a multi-versioning database with traditional two-phase locking. 
+`InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read) by default, in the style of Oracle. 
+The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed. 
+Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
 
 The following sections discuss how MySQL features, in particular the `InnoDB` storage engine, interact with the categories of the ACID model:
 
@@ -27,7 +31,8 @@ The **consistency** aspect of the ACID model mainly involves internal `InnoDB` p
 
 ### Isolation
 
-The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions, in particular the isolation level that applies to each transaction. Related MySQL features include:
+The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions, in particular the isolation level that applies to each transaction. 
+Related MySQL features include:
 
 - The [`autocommit` setting.
 - Transaction isolation levels and the `SET TRANSACTION` statement.
@@ -35,7 +40,9 @@ The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions
 
 ### Durability
 
-The **durability** aspect of the ACID model involves MySQL software features interacting with your particular hardware configuration. Because of the many possibilities depending on the capabilities of your CPU, network, and storage devices, this aspect is the most complicated to provide concrete guidelines for. (And those guidelines might take the form of “buy new hardware”.) Related MySQL features include:
+The **durability** aspect of the ACID model involves MySQL software features interacting with your particular hardware configuration. 
+Because of the many possibilities depending on the capabilities of your CPU, network, and storage devices, this aspect is the most complicated to provide concrete guidelines for. 
+(And those guidelines might take the form of “buy new hardware”.) Related MySQL features include:
 
 - The `InnoDB` doublewrite buffer.
 - The `innodb_flush_log_at_trx_commit` variable.
@@ -53,7 +60,9 @@ The **durability** aspect of the ACID model involves MySQL software features int
 ### Transaction Isolation Levels
 
 #### READ UNCOMMITTED
-Transactions running at the `READ UNCOMMITTED` level **do not issue shared locks to prevent other transactions from modifying data read by the current transaction**. `READ UNCOMMITTED` transactions are also not blocked by exclusive locks that would prevent the current transaction from reading rows that have been modified but not committed by other transactions.  **This option has the same effect as setting NOLOCK on all tables in all SELECT statements in a transaction.** 
+Transactions running at the `READ UNCOMMITTED` level **do not issue shared locks to prevent other transactions from modifying data read by the current transaction**. 
+`READ UNCOMMITTED` transactions are also not blocked by exclusive locks that would prevent the current transaction from reading rows that have been modified but not committed by other transactions.  
+**This option has the same effect as setting NOLOCK on all tables in all SELECT statements in a transaction.** 
 
 #### READ COMMITTED
 
@@ -65,14 +74,21 @@ Only row-based binary logging is supported with the `READ COMMITTED` isolation l
 
 Using `READ COMMITTED` has additional effects:
 
-- For `UPDATE` or `DELETE` statements, `InnoDB` holds locks only for rows that it updates or deletes. Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition. This greatly reduces the probability of deadlocks, but they can still happen.
-- For `UPDATE` statements, if a row is already locked, `InnoDB` performs a “semi-consistent” read, returning the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`. If the row matches (must be updated), MySQL reads the row again and this time `InnoDB` either locks it or waits for a lock on it.
+- For `UPDATE` or `DELETE` statements, `InnoDB` holds locks only for rows that it updates or deletes. 
+  Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition. 
+  This greatly reduces the probability of deadlocks, but they can still happen.
+- For `UPDATE` statements, if a row is already locked, `InnoDB` performs a “semi-consistent” read, 
+  returning the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`. 
+  If the row matches (must be updated), MySQL reads the row again and this time `InnoDB` either locks it or waits for a lock on it.
 
 #### REPEATABLE READ
 
-This is the default isolation level for InnoDB. Consistent reads within the same transaction **read the snapshot established by the first read**(any SELECT or UPDATE/INSERT/DELETE). This means that if you issue several plain (nonlocking) SELECT statements within the same transaction, these SELECT statements are consistent also with respect to each other.
+This is the default isolation level for InnoDB. 
+Consistent reads within the same transaction **read the snapshot established by the first read**(any SELECT or UPDATE/INSERT/DELETE). 
+This means that if you issue several plain (nonlocking) SELECT statements within the same transaction, these SELECT statements are consistent also with respect to each other.
 
 For locking reads (SELECT with FOR UPDATE or LOCK IN SHARE MODE), UPDATE, and DELETE statements, locking depends on whether the statement uses a unique index with a unique search condition or a range-type search condition.
+
 - For a unique index with a unique search condition, InnoDB locks only the index record found, not the gap before it.
 - For other search conditions, InnoDB locks the index range scanned, using gap locks or next-key locks to block insertions by other sessions into the gaps covered by the range.
 
@@ -98,11 +114,15 @@ If transaction `T1` holds a shared (`S`) lock on row `r`, then requests from som
 - A request by `T2` for an `S` lock can be granted immediately. As a result, both `T1` and `T2` hold an `S` lock on `r`.
 - A request by `T2` for an `X` lock cannot be granted immediately.
 
-If a transaction `T1` holds an exclusive (`X`) lock on row `r`, a request from some distinct transaction `T2` for a lock of either type on `r` cannot be granted immediately. Instead, transaction `T2` has to wait for transaction `T1` to release its lock on row `r`.
+If a transaction `T1` holds an exclusive (`X`) lock on row `r`, a request from some distinct transaction `T2` for a lock of either type on `r` cannot be granted immediately. 
+Instead, transaction `T2` has to wait for transaction `T1` to release its lock on row `r`.
 
 #### Intention Locks
 
-`InnoDB` supports *multiple granularity locking* which permits coexistence of row locks and table locks. For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table. To make locking at multiple granularity levels practical, `InnoDB` uses intention locks. Intention locks are **table-level** locks that indicate which type of lock (shared or exclusive) a transaction requires later for a row in a table. There are two types of intention locks:
+`InnoDB` supports *multiple granularity locking* which permits coexistence of row locks and table locks. 
+For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table. To make locking at multiple granularity levels practical, `InnoDB` uses intention locks. 
+Intention locks are **table-level** locks that indicate which type of lock (shared or exclusive) a transaction requires later for a row in a table. 
+There are two types of intention locks:
 
 - An intention shared lock (`IS`) indicates that a transaction intends to set a *shared* lock on individual rows in a table.
 - An intention exclusive lock (`IX`) indicates that a transaction intends to set an exclusive lock on individual rows in a table.
@@ -127,43 +147,67 @@ Table-level lock type compatibility is summarized in the following matrix.
 
 #### Record Locks
 
-A record lock is a lock on an index record. For example, `SELECT c1 FROM t WHERE c1 = 10 FOR UPDATE;` prevents any other transaction from inserting, updating, or deleting rows where the value of `t.c1` is `10`.
+A record lock is a lock on an index record. 
+For example, `SELECT c1 FROM t WHERE c1 = 10 FOR UPDATE;` prevents any other transaction from inserting, updating, or deleting rows where the value of `t.c1` is `10`.
 
-**Record locks always lock index records**, even if a table is defined with no indexes. For such cases, `InnoDB` creates a hidden clustered index and uses this index for record locking.
+**Record locks always lock index records**, even if a table is defined with no indexes. 
+For such cases, `InnoDB` creates a hidden clustered index and uses this index for record locking.
 
 #### Gap Locks
 
-**A gap lock is a lock on a gap between index records, or a lock on the gap before the first or after the last index record**. For example, `SELECT c1 FROM t WHERE c1 BETWEEN 10 and 20 FOR UPDATE;` prevents other transactions from inserting a value of `15` into column `t.c1`, whether or not there was already any such value in the column, because the gaps between all existing values in the range are locked.
+**A gap lock is a lock on a gap between index records, or a lock on the gap before the first or after the last index record.**
+For example, `SELECT c1 FROM t WHERE c1 BETWEEN 10 and 20 FOR UPDATE;` prevents other transactions from inserting a value of `15` into column `t.c1`, 
+whether or not there was already any such value in the column, because the gaps between all existing values in the range are locked.
 
 **A gap might span a single index value, multiple index values, or even be empty.**
 
 Gap locks are part of the tradeoff between performance and concurrency, and are used in some transaction isolation levels and not others.
 
-Gap locking is not needed for statements that lock rows using a unique index to search for a unique row. (This does not include the case that the search condition includes only some columns of a multiple-column unique index; in that case, gap locking does occur.)
+*Gap locking is not needed for statements that lock rows using a unique index to search for a unique row.* 
+(This does not include the case that the search condition includes only some columns of a multiple-column unique index; in that case, gap locking does occur.)
 
 If `id` is not indexed or has a nonunique index, the statement does lock the preceding gap.
 
-It is also worth noting here that conflicting locks can be held on a gap by different transactions. For example, transaction A can hold a shared gap lock (gap S-lock) on a gap while transaction B holds an exclusive gap lock (gap X-lock) on the same gap. The reason conflicting gap locks are allowed is that if a record is purged from an index, the gap locks held on the record by different transactions must be merged.
+It is also worth noting here that conflicting locks can be held on a gap by different transactions. 
+For example, transaction A can hold a shared gap lock (gap S-lock) on a gap while transaction B holds an exclusive gap lock (gap X-lock) on the same gap. 
+The reason conflicting gap locks are allowed is that if a record is purged from an index, the gap locks held on the record by different transactions must be merged.
 
-Gap locks in `InnoDB` are “purely inhibitive”, which means that their only purpose is to prevent other transactions from inserting to the gap. Gap locks can co-exist. A gap lock taken by one transaction does not prevent another transaction from taking a gap lock on the same gap. There is no difference between shared and exclusive gap locks. They do not conflict with each other, and they perform the same function.
+Gap locks in `InnoDB` are “purely inhibitive”, which means that their only purpose is to prevent other transactions from inserting to the gap. 
+Gap locks can co-exist. A gap lock taken by one transaction does not prevent another transaction from taking a gap lock on the same gap. 
+**There is no difference between shared and exclusive gap locks. They do not conflict with each other, and they perform the same function.**
 
-Gap locking can be disabled explicitly. This occurs if you change the transaction isolation level to `READ COMMITTED`. In this case, gap locking is disabled for searches and index scans and is used only for foreign-key constraint checking and duplicate-key checking.
+Gap locking can be disabled explicitly. This occurs if you change the transaction isolation level to `READ COMMITTED`. 
+In this case, gap locking is disabled for searches and index scans and is used only for foreign-key constraint checking and duplicate-key checking.
 
-There are also other effects of using the `READ COMMITTED` isolation level. Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition. For `UPDATE` statements, `InnoDB` does a “semi-consistent” read, such that it returns the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`.
+There are also other effects of using the `READ COMMITTED` isolation level. 
+*Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition. For `UPDATE` statements, `InnoDB` does a “semi-consistent” read, 
+such that it returns the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`.*
 
 #### Next-Key Locks
 
 **A next-key lock is a combination of a record lock on the index record and a gap lock on the gap before the index record.**
 
-`InnoDB` performs row-level locking in such a way that when it searches or scans a table index, it sets shared or exclusive locks on the index records it encounters. Thus, **the row-level locks are actually index-record locks**. A next-key lock on an index record also affects the “gap” before that index record. That is, a next-key lock is an index-record lock plus a gap lock on the gap preceding the index record. If one session has a shared or exclusive lock on record `R` in an index, another session cannot insert a new index record in the gap immediately before `R` in the index order.
+`InnoDB` performs row-level locking in such a way that when it searches or scans a table index, it sets shared or exclusive locks on the index records it encounters. 
+Thus, **the row-level locks are actually index-record locks**. 
+*A next-key lock on an index record also affects the “gap” before that index record.* 
+That is, a next-key lock is an index-record lock plus a gap lock on the gap preceding the index record. 
+If one session has a shared or exclusive lock on record `R` in an index, another session cannot insert a new index record in the gap immediately before `R` in the index order.
 
-For the last interval, the next-key lock locks the gap above the largest value in the index and the “supremum” pseudo-record having a value higher than any value actually in the index. The supremum is not a real index record, so, in effect, this next-key lock locks only the gap following the largest index value.
+For the last interval, the next-key lock locks the gap above the largest value in the index and the “supremum” pseudo-record having a value higher than any value actually in the index. 
+The supremum is not a real index record, so, in effect, this next-key lock locks only the gap following the largest index value.
 
-By default, `InnoDB` operates in `REPEATABLE READ` transaction isolation level. In this case, **`InnoDB` uses next-key locks for searches and index scans, which prevents `phantom rows`**.
+> [!NOTE]
+> 
+> By default, `InnoDB` operates in `REPEATABLE READ` transaction isolation level. 
+> In this case, **`InnoDB` uses next-key locks for searches and index scans, which prevents `phantom rows`**.
 
 #### Insert Intention Locks
 
-**An insert intention lock is a type of gap lock set by `INSERT` operations prior to row insertion**. This lock signals the intent to insert in such a way that multiple transactions inserting into the same index gap need not wait for each other if they are not inserting at the same position within the gap. Suppose that there are index records with values of 4 and 7. Separate transactions that attempt to insert values of 5 and 6, respectively, each lock the gap between 4 and 7 with insert intention locks prior to obtaining the exclusive lock on the inserted row, but do not block each other because the rows are nonconflicting.
+**An insert intention lock is a type of gap lock set by `INSERT` operations prior to row insertion**. 
+This lock signals the intent to insert in such a way that multiple transactions inserting into the same index gap need not wait for each other if they are not inserting at the same position within the gap. 
+Suppose that there are index records with values of 4 and 7. 
+Separate transactions that attempt to insert values of 5 and 6, respectively, each lock the gap between 4 and 7 with insert intention locks prior to obtaining the exclusive lock on the inserted row, 
+but do not block each other because the rows are nonconflicting.
 
 #### AUTO-INC Locks
 
@@ -172,7 +216,7 @@ An `AUTO-INC` lock is a special table-level lock taken by transactions inserting
 The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking. It allows you to choose how to trade off between predictable sequences of auto-increment values and maximum concurrency for insert operations.
 
 
-#### Source Code
+### Source Code
 ```cpp
 
 /** Lock modes and types */
@@ -233,7 +277,8 @@ The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-inc
 
 ### Deadlocks
 
-A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs. Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
+A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs. 
+Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
 
 #### Minimize and Handle Deadlocks
 
@@ -252,7 +297,9 @@ You can cope with deadlocks and reduce the likelihood of their occurrence with t
 
 - If you use *locking reads* (`SELECT ... FOR UPDATE` or `SELECT ... FOR SHARE`), try using a lower isolation level such as `READ COMMITTED`.
 
-- When modifying multiple tables within a transaction, or different sets of rows in the same table, do those operations in a consistent order each time. Then transactions form well-defined queues and do not deadlock. For example, organize database operations into functions within your application, or call stored routines, rather than coding multiple similar sequences of `INSERT`, `UPDATE`, and `DELETE` statements in different places.
+- When modifying multiple tables within a transaction, or different sets of rows in the same table, do those operations in a consistent order each time. 
+  Then transactions form well-defined queues and do not deadlock. 
+  For example, organize database operations into functions within your application, or call stored routines, rather than coding multiple similar sequences of `INSERT`, `UPDATE`, and `DELETE` statements in different places.
 
 - Add well-chosen indexes to your tables so that your queries scan fewer index records and set fewer locks. Use `EXPLAIN SELECT` to determine which indexes the MySQL server regards as the most appropriate for your queries.
 
@@ -268,7 +315,8 @@ You can cope with deadlocks and reduce the likelihood of their occurrence with t
 
 #### Deadlock Detection
 
-A mechanism that automatically detects when a **deadlock** occurs, and automatically **rolls back** one of the **transactions** involved (the **victim**). Deadlock detection can be disabled using the `innodb_deadlock_detect` configuration option.
+A mechanism that automatically detects when a **deadlock** occurs, and automatically **rolls back** one of the **transactions** involved (the **victim**). 
+Deadlock detection can be disabled using the `innodb_deadlock_detect` configuration option.
 
 
 #### examples

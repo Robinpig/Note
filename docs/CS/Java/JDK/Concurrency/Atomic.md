@@ -221,6 +221,9 @@ final void longAccumulate(long x, LongBinaryOperator fn,
 }
 ```
 
+> [!NOTE]
+>
+> See [Netty Memory](/docs/CS/Java/Netty/memory.md)
 
 
 ### LongAccumulator

@@ -1,293 +1,525 @@
 ## Introduction
 
+Using RxJava.
 
-## HystrixCircuitBreaker
+
+## Command
+
+```java
+public class CommandActions {
+
+    private final CommandAction commandAction;
+    private final CommandAction fallbackAction;
+
+    public CommandActions(Builder builder) {
+        this.commandAction = builder.commandAction;
+        this.fallbackAction = builder.fallbackAction;
+    }
+}
+```
+
+
+```java
+abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObservable<R> {
+  protected final HystrixCircuitBreaker circuitBreaker;
+  protected final HystrixThreadPool threadPool;
+  protected final HystrixThreadPoolKey threadPoolKey;
+  
+}
+```
+
+### HystrixCommand
+
+Used to wrap code that will execute potentially risky functionality (typically meaning a service call over the network) with fault and latency tolerance, statistics and performance metrics capture, circuit breaker and bulkhead functionality. 
+This command is essentially a blocking command but provides an Observable facade if used with observe().
+
+```java
+public abstract class HystrixCommand<R> extends AbstractCommand<R> implements HystrixExecutable<R>, HystrixInvokableInfo<R>, HystrixObservable<R> {
+    
+}
+```
+
+#### Setter
+
+Fluent interface for arguments to the HystrixCommand constructor.
+The required arguments are set via the 'with' factory method and optional arguments via the 'and' chained methods.
+
+Example:
+```java
+Setter.withGroupKey(HystrixCommandGroupKey.Factory.asKey("GroupName")).andCommandKey(HystrixCommandKey.Factory.asKey("CommandName"));
+```
+
+```java
+ final public static class Setter {
+
+  protected final HystrixCommandGroupKey groupKey;
+  protected HystrixCommandKey commandKey;
+  protected HystrixThreadPoolKey threadPoolKey;
+  protected HystrixCommandProperties.Setter commandPropertiesDefaults;
+  protected HystrixThreadPoolProperties.Setter threadPoolPropertiesDefaults;
+}
+```
+
+#### Aspect
+
+```java
+@Aspect
+public class HystrixCommandAspect {
+    @Pointcut("@annotation(com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand)")
+
+    public void hystrixCommandAnnotationPointcut() {
+    }
+
+    @Pointcut("@annotation(com.netflix.hystrix.contrib.javanica.annotation.HystrixCollapser)")
+    public void hystrixCollapserAnnotationPointcut() {
+    }
+
+    @Around("hystrixCommandAnnotationPointcut() || hystrixCollapserAnnotationPointcut()")
+    public Object methodsAnnotatedWithHystrixCommand(final ProceedingJoinPoint joinPoint) throws Throwable {
+        Method method = getMethodFromTarget(joinPoint);
+        if (method.isAnnotationPresent(HystrixCommand.class) && method.isAnnotationPresent(HystrixCollapser.class)) {
+            throw new IllegalStateException("method cannot be annotated with HystrixCommand and HystrixCollapser " +
+                    "annotations at the same time");
+        }
+        MetaHolderFactory metaHolderFactory = META_HOLDER_FACTORY_MAP.get(HystrixPointcutType.of(method));
+        MetaHolder metaHolder = metaHolderFactory.create(joinPoint);
+        HystrixInvokable invokable = HystrixCommandFactory.getInstance().create(metaHolder);
+        ExecutionType executionType = metaHolder.isCollapserAnnotationPresent() ?
+                metaHolder.getCollapserExecutionType() : metaHolder.getExecutionType();
+
+        Object result;
+        try {
+            if (!metaHolder.isObservable()) {
+                result = CommandExecutor.execute(invokable, executionType, metaHolder);
+            } else {
+                result = executeObservable(invokable, executionType, metaHolder);
+            }
+        } catch (HystrixBadRequestException e) {
+            throw e.getCause();
+        } catch (HystrixRuntimeException e) {
+            throw hystrixRuntimeExceptionToThrowable(metaHolder, e);
+        }
+        return result;
+    }
+}
+```
+### Executor
+
+Invokes necessary method of HystrixExecutable or HystrixObservable for specified execution type:
+
+- ExecutionType.SYNCHRONOUS -> HystrixExecutable.execute()
+- ExecutionType.ASYNCHRONOUS -> HystrixExecutable.queue()
+- ExecutionType.OBSERVABLE -> depends on specify observable execution mode: 
+    - ObservableExecutionMode.EAGER - HystrixObservable.observe(), 
+    - ObservableExecutionMode.LAZY - HystrixObservable.toObservable().
+    
+```java
+public class CommandExecutor {
+    
+    public static Object execute(HystrixInvokable invokable, ExecutionType executionType, MetaHolder metaHolder) throws RuntimeException {
+        Validate.notNull(invokable);
+        Validate.notNull(metaHolder);
+
+        switch (executionType) {
+            case SYNCHRONOUS: {
+                return castToExecutable(invokable, executionType).execute();
+            }
+            case ASYNCHRONOUS: {
+                HystrixExecutable executable = castToExecutable(invokable, executionType);
+                if (metaHolder.hasFallbackMethodCommand()
+                        && ExecutionType.ASYNCHRONOUS == metaHolder.getFallbackExecutionType()) {
+                    return new FutureDecorator(executable.queue());
+                }
+                return executable.queue();
+            }
+            case OBSERVABLE: {
+                HystrixObservable observable = castToObservable(invokable);
+                return ObservableExecutionMode.EAGER == metaHolder.getObservableExecutionMode() ? observable.observe() : observable.toObservable();
+            }
+            default:
+                throw new RuntimeException("unsupported execution type: " + executionType);
+        }
+    }
+}
+```
+
+All of them call [toObservable](/docs/CS/Java/Spring_Cloud/Hystrix.md?id=execute) finally.
+```java
+public ResponseType execute() {
+        try {
+            return queue().get();
+        } catch (Throwable e) {
+            if (e instanceof HystrixRuntimeException) {
+                throw (HystrixRuntimeException) e;
+            }
+            // if we have an exception we know about we'll throw it directly without the threading wrapper exception
+            if (e.getCause() instanceof HystrixRuntimeException) {
+                throw (HystrixRuntimeException) e.getCause();
+            }
+            // we don't know what kind of exception this is so create a generic message and throw a new HystrixRuntimeException
+            String message = getClass().getSimpleName() + " HystrixCollapser failed while executing.";
+            logger.debug(message, e); // debug only since we're throwing the exception and someone higher will do something with it
+            //TODO should this be made a HystrixRuntimeException?
+            throw new RuntimeException(message, e);
+        }
+    }
+
+public Future<ResponseType> queue() {
+        return toObservable()
+        .toBlocking()
+        .toFuture();
+        }
+```
+
+## execute
+
+```java
+abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObservable<R> {
+  
+  public Observable<R> toObservable() {
+    final Func0<Observable<R>> applyHystrixSemantics = new Func0<Observable<R>>() {
+      @Override
+      public Observable<R> call() {
+        if (commandState.get().equals(CommandState.UNSUBSCRIBED)) {
+          return Observable.never();
+        }
+        return applyHystrixSemantics(_cmd);
+      }
+    };
+  }
+
+  private Observable<R> applyHystrixSemantics(final AbstractCommand<R> _cmd) {
+    // mark that we're starting execution on the ExecutionHook
+    // if this hook throws an exception, then a fast-fail occurs with no fallback.  No state is left inconsistent
+    executionHook.onStart(_cmd);
+
+    /* determine if we're allowed to execute */
+    if (circuitBreaker.allowRequest()) {
+      final TryableSemaphore executionSemaphore = getExecutionSemaphore();
+      final AtomicBoolean semaphoreHasBeenReleased = new AtomicBoolean(false);
+      final Action0 singleSemaphoreRelease = new Action0() {
+        @Override
+        public void call() {
+          if (semaphoreHasBeenReleased.compareAndSet(false, true)) {
+            executionSemaphore.release();
+          }
+        }
+      };
+
+      final Action1<Throwable> markExceptionThrown = new Action1<Throwable>() {
+        @Override
+        public void call(Throwable t) {
+          eventNotifier.markEvent(HystrixEventType.EXCEPTION_THROWN, commandKey);
+        }
+      };
+
+      if (executionSemaphore.tryAcquire()) {
+        try {
+          /* used to track userThreadExecutionTime */
+          executionResult = executionResult.setInvocationStartTime(System.currentTimeMillis());
+          return executeCommandAndObserve(_cmd)
+                  .doOnError(markExceptionThrown)
+                  .doOnTerminate(singleSemaphoreRelease)
+                  .doOnUnsubscribe(singleSemaphoreRelease);
+        } catch (RuntimeException e) {
+          return Observable.error(e);
+        }
+      } else {
+        return handleSemaphoreRejectionViaFallback();
+      }
+    } else {
+      return handleShortCircuitViaFallback();
+    }
+  }
+}
+```
+
+### getExecution
+
+
+Bulkhead Pattern
+```properties
+execution.isolation.strategy=Semaphore
+```
+
+
+Default TryableSemaphoreNoOp using threads in Hystrix, or else in calling thread.
+
+#### HystrixThreadPool
+
+```java
+public abstract class HystrixThreadPoolProperties {
+
+  /* defaults */
+  static int default_coreSize = 10;            // core size of thread pool
+  static int default_maximumSize = 10;         // maximum size of thread pool
+  static int default_keepAliveTimeMinutes = 1; // minutes to keep a thread alive
+  static int default_maxQueueSize = -1;        // size of queue (this can't be dynamically changed so we use 'queueSizeRejectionThreshold' to artificially limit and reject)
+  // -1 turns it off and makes us use SynchronousQueue
+  static boolean default_allow_maximum_size_to_diverge_from_core_size = false; //should the maximumSize config value get read and used in configuring the threadPool
+  //turning this on should be a conscious decision by the user, so we default it to false
+
+  static int default_queueSizeRejectionThreshold = 5; // number of items in queue
+  static int default_threadPoolRollingNumberStatisticalWindow = 10000; // milliseconds for rolling number
+  static int default_threadPoolRollingNumberStatisticalWindowBuckets = 10; // number of buckets in rolling number (10 1-second buckets)
+}
+```
+
+
+#### Semaphore
+
+Semaphore that only supports tryAcquire and never blocks and that supports a dynamic permit count.
+
+Using [AtomicInteger](/docs/CS/Java/JDK/Concurrency/Atomic.md) increment/decrement instead of [java.util.concurrent.Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md) since we don't need blocking and need a custom implementation to get the dynamic permit count and
+since AtomicInteger achieves the same behavior and performance without the more complex implementation of the actual Semaphore class using [AbstractQueueSynchronizer](/docs/CS/Java/JDK/Concurrency/AQS.md).
+
+```java
+static class TryableSemaphoreActual implements TryableSemaphore {
+  protected final HystrixProperty<Integer> numberOfPermits;
+  private final AtomicInteger count = new AtomicInteger(0);
+
+  public TryableSemaphoreActual(HystrixProperty<Integer> numberOfPermits) {
+    this.numberOfPermits = numberOfPermits;
+  }
+
+  @Override
+  public boolean tryAcquire() {
+    int currentCount = count.incrementAndGet();
+    if (currentCount > numberOfPermits.get()) {
+      count.decrementAndGet();
+      return false;
+    } else {
+      return true;
+    }
+  }
+
+  @Override
+  public void release() {
+    count.decrementAndGet();
+  }
+
+  @Override
+  public int getNumberOfPermitsUsed() {
+    return count.get();
+  }
+}
+```
+
+
+### Circuit Breaker
+
 Circuit-breaker logic that is hooked into HystrixCommand execution and will stop allowing executions if failures have gone past the defined threshold.
 It will then allow single retries after a defined sleepWindow until the execution succeeds at which point it will again close the circuit and allow executions again.
 
 ```java
-// com.netflix.hystrix.HystrixCircuitBreaker
 public interface HystrixCircuitBreaker {
 
+  public boolean allowRequest();
+
+  public boolean isOpen();
+
+  /* package */void markSuccess();
 }
 ```
 
 
-
-```java
-// HystrixCircuitBreaker
-    /**
-     * @ExcludeFromJavadoc
-     * @ThreadSafe
-     */
-    public static class Factory {
-        // String is HystrixCommandKey.name() (we can't use HystrixCommandKey directly as we can't guarantee it implements hashcode/equals correctly)
-        private static ConcurrentHashMap<String, HystrixCircuitBreaker> circuitBreakersByCommand = new ConcurrentHashMap<String, HystrixCircuitBreaker>();
-
-        /**
-         * Get the {@link HystrixCircuitBreaker} instance for a given {@link HystrixCommandKey}.
-         * <p>
-         * This is thread-safe and ensures only 1 {@link HystrixCircuitBreaker} per {@link HystrixCommandKey}.
-         * 
-         * @param key
-         *            {@link HystrixCommandKey} of {@link HystrixCommand} instance requesting the {@link HystrixCircuitBreaker}
-         * @param group
-         *            Pass-thru to {@link HystrixCircuitBreaker}
-         * @param properties
-         *            Pass-thru to {@link HystrixCircuitBreaker}
-         * @param metrics
-         *            Pass-thru to {@link HystrixCircuitBreaker}
-         * @return {@link HystrixCircuitBreaker} for {@link HystrixCommandKey}
-         */
-        public static HystrixCircuitBreaker getInstance(HystrixCommandKey key, HystrixCommandGroupKey group, HystrixCommandProperties properties, HystrixCommandMetrics metrics) {
-            // this should find it for all but the first time
-            HystrixCircuitBreaker previouslyCached = circuitBreakersByCommand.get(key.name());
-            if (previouslyCached != null) {
-                return previouslyCached;
-            }
-
-            // if we get here this is the first time so we need to initialize
-
-            // Create and add to the map ... use putIfAbsent to atomically handle the possible race-condition of
-            // 2 threads hitting this point at the same time and let ConcurrentHashMap provide us our thread-safety
-            // If 2 threads hit here only one will get added and the other will get a non-null response instead.
-            HystrixCircuitBreaker cbForCommand = circuitBreakersByCommand.putIfAbsent(key.name(), new HystrixCircuitBreakerImpl(key, group, properties, metrics));
-            if (cbForCommand == null) {
-                // this means the putIfAbsent step just created a new one so let's retrieve and return it
-                return circuitBreakersByCommand.get(key.name());
-            } else {
-                // this means a race occurred and while attempting to 'put' another one got there before
-                // and we instead retrieved it and will now return it
-                return cbForCommand;
-            }
-        }
-
-        /**
-         * Get the {@link HystrixCircuitBreaker} instance for a given {@link HystrixCommandKey} or null if none exists.
-         * 
-         * @param key
-         *            {@link HystrixCommandKey} of {@link HystrixCommand} instance requesting the {@link HystrixCircuitBreaker}
-         * @return {@link HystrixCircuitBreaker} for {@link HystrixCommandKey}
-         */
-        public static HystrixCircuitBreaker getInstance(HystrixCommandKey key) {
-            return circuitBreakersByCommand.get(key.name());
-        }
-
-        /**
-         * Clears all circuit breakers. If new requests come in instances will be recreated.
-         */
-        /* package */static void reset() {
-            circuitBreakersByCommand.clear();
-        }
-    }
-```
+#### allowRequest
 
 
 ```java
-// HystrixCircuitBreaker
-    /**
-     * Every {@link HystrixCommand} requests asks this if it is allowed to proceed or not.
-     * <p>
-     * This takes into account the half-open logic which allows some requests through when determining if it should be closed again.
-     * 
-     * @return boolean whether a request should be permitted
-     */
-    public boolean allowRequest();
-
-    /**
-     * Whether the circuit is currently open (tripped).
-     * 
-     * @return boolean state of circuit breaker
-     */
-    public boolean isOpen();
-
-    /**
-     * Invoked on successful executions from {@link HystrixCommand} as part of feedback mechanism when in a half-open state.
-     */
-    /* package */void markSuccess();
-
-```
-
-### allowRequest
-
-```java
-// HystrixCircuitBreakerImpl implements HystrixCircuitBreaker
-@Override
-public boolean allowRequest() {
+static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
+  @Override
+  public boolean allowRequest() {
     if (properties.circuitBreakerForceOpen().get()) {
-        // properties have asked us to force the circuit open so we will allow NO requests
-        return false;
+      // properties have asked us to force the circuit open so we will allow NO requests
+      return false;
     }
     if (properties.circuitBreakerForceClosed().get()) {
-        // we still want to allow isOpen() to perform it's calculations so we simulate normal behavior
-        isOpen();
-        // properties have asked us to ignore errors so we will ignore the results of isOpen and just allow all traffic through
-        return true;
+      // we still want to allow isOpen() to perform it's calculations so we simulate normal behavior
+      isOpen();
+      // properties have asked us to ignore errors so we will ignore the results of isOpen and just allow all traffic through
+      return true;
     }
     return !isOpen() || allowSingleTest();
-}
+  }
 
-public boolean allowSingleTest() {
+  public boolean allowSingleTest() {
     long timeCircuitOpenedOrWasLastTested = circuitOpenedOrLastTestedTime.get();
     // 1) if the circuit is open
     // 2) and it's been longer than 'sleepWindow' since we opened the circuit
     if (circuitOpen.get() && System.currentTimeMillis() > timeCircuitOpenedOrWasLastTested + properties.circuitBreakerSleepWindowInMilliseconds().get()) {
-        // We push the 'circuitOpenedTime' ahead by 'sleepWindow' since we have allowed one request to try.
-        // If it succeeds the circuit will be closed, otherwise another singleTest will be allowed at the end of the 'sleepWindow'.
-        if (circuitOpenedOrLastTestedTime.compareAndSet(timeCircuitOpenedOrWasLastTested, System.currentTimeMillis())) {
-            // if this returns true that means we set the time so we'll return true to allow the singleTest
-            // if it returned false it means another thread raced us and allowed the singleTest before we did
-            return true;
-        }
+      // We push the 'circuitOpenedTime' ahead by 'sleepWindow' since we have allowed one request to try.
+      // If it succeeds the circuit will be closed, otherwise another singleTest will be allowed at the end of the 'sleepWindow'.
+      if (circuitOpenedOrLastTestedTime.compareAndSet(timeCircuitOpenedOrWasLastTested, System.currentTimeMillis())) {
+        // if this returns true that means we set the time so we'll return true to allow the singleTest
+        // if it returned false it means another thread raced us and allowed the singleTest before we did
+        return true;
+      }
     }
     return false;
-}
+  }
 
-public void markSuccess() {
-        if (this.circuitOpen.get()) {
-        this.metrics.resetCounter();
-        this.circuitOpen.set(false);
-        }
-
-        }
-```
-
-
-spring-cloud-commons
-
-```java
-// org.springframework.cloud.client.circuitbreaker.EnableCircuitBreaker
-@Target({ElementType.TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Inherited
-@Import({EnableCircuitBreakerImportSelector.class})
-public @interface EnableCircuitBreaker {
-}
-
-
-@Order(2147483547)
-public class EnableCircuitBreakerImportSelector extends SpringFactoryImportSelector<EnableCircuitBreaker> {
-    public EnableCircuitBreakerImportSelector() {
+  public boolean isOpen() {
+    if (circuitOpen.get()) {
+      // if we're open we immediately return true and don't bother attempting to 'close' ourself as that is left to allowSingleTest and a subsequent successful test to close
+      return true;
     }
 
-    protected boolean isEnabled() {
-        return (Boolean)this.getEnvironment().getProperty("spring.cloud.circuit.breaker.enabled", Boolean.class, Boolean.TRUE);
+    // we're closed, so let's see if errors have made us so we should trip the circuit open
+    HealthCounts health = metrics.getHealthCounts();
+
+    // check if we are past the statisticalWindowVolumeThreshold
+    if (health.getTotalRequests() < properties.circuitBreakerRequestVolumeThreshold().get()) {
+      // we are not past the minimum volume threshold for the statisticalWindow so we'll return false immediately and not calculate anything
+      return false;
     }
-}
-```
 
-```java
-// com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand
-@Target({ElementType.METHOD})
-@Retention(RetentionPolicy.RUNTIME)
-@Inherited
-@Documented
-public @interface HystrixCommand {
-    String groupKey() default "";
-
-    String commandKey() default "";
-
-    String threadPoolKey() default "";
-
-    String fallbackMethod() default "";
-
-    HystrixProperty[] commandProperties() default {};
-
-    HystrixProperty[] threadPoolProperties() default {};
-
-    Class<? extends Throwable>[] ignoreExceptions() default {};
-
-    ObservableExecutionMode observableExecutionMode() default ObservableExecutionMode.EAGER;
-
-    HystrixException[] raiseHystrixExceptions() default {};
-
-    String defaultFallback() default "";
+    if (health.getErrorPercentage() < properties.circuitBreakerErrorThresholdPercentage().get()) {
+      return false;
+    } else {
+      // our failure rate is too high, trip the circuit
+      if (circuitOpen.compareAndSet(false, true)) {
+        // if the previousValue was false then we want to set the currentTime
+        circuitOpenedOrLastTestedTime.set(System.currentTimeMillis());
+        return true;
+      } else {
+        // How could previousValue be true? If another thread was going through this code at the same time a race-condition could have
+        // caused another thread to set it to true already even though we were in the process of doing the same
+        // In this case, we know the circuit is open, so let the other thread set the currentTime and report back that the circuit is open
+        return true;
+      }
+    }
+  }
 }
 ```
 
 
+#### markSuccess
+
 ```java
-// com.netflix.hystrix.HystrixCommand
-public abstract class HystrixCommand<R> extends AbstractCommand<R> implements HystrixExecutable<R>, HystrixInvokableInfo<R>, HystrixObservable<R> {}
+static class HystrixCircuitBreakerImpl implements HystrixCircuitBreaker {
+  
+  public void markSuccess() {
+    if (circuitOpen.get()) {
+      if (circuitOpen.compareAndSet(true, false)) {
+        //win the thread race to reset metrics
+        //Unsubscribe from the current stream to reset the health counts stream.  This only affects the health counts view,
+        //and all other metric consumers are unaffected by the reset
+        metrics.resetStream();
+      }
+    }
+  }
+}
 ```
 
-## isolation
-
-Bulkhead Pattern
-
-execution.isolation.strategy
-
-
-Command
-
-Based on RxJava
-
-每个 Command 创建时都要指定 `commandKey` 和 `groupKey`（用于区分资源）以及对应的隔离策略（线程池隔离 or 信号量隔离）。线程池隔离模式下需要配置线程池对应的参数（线程池名称、容量、排队超时等），然后 Command 就会在指定的线程池按照指定的容错策略执行；信号量隔离模式下需要配置最大并发数，执行 Command 时 Hystrix 就会限制其并发调用
-
-若是线程池模式则 Scheduler 底层的线程池为配置的线程池，若是信号量模式则简单包装成当前线程执行的 Scheduler。
-
-线程池隔离的好处是隔离度比较高，可以针对某个资源的线程池去进行处理而不影响其它资源，但是代价就是线程上下文切换的 overhead 比较大，特别是对低延时的调用有比较大的影响
-
-Hystrix 的信号量隔离限制对某个资源调用的并发数。这样的隔离非常轻量级，仅限制对某个资源调用的并发数，而不是显式地去创建线程池，所以 overhead 比较小，但是效果不错。但缺点是无法对慢调用自动进行降级，只能等待客户端自己超时，因此仍然可能会出现级联阻塞的情况。
-
-Sentinel 可以通过并发线程数模式的流量控制来提供信号量隔离的功能。并且结合基于响应时间的熔断降级模式，可以在不稳定资源的平均响应时间比较高的时候自动降级，防止过多的慢调用占满并发数，影响整个系统。
-
-熔断器模式 `Circuit Breaker Pattern`
-
-Sentinel 与 Hystrix 都支持基于失败比率（异常比率）的熔断降级，在调用达到一定量级并且失败比率达到设定的阈值时自动进行熔断，此时所有对该资源的调用都会被 block，直到过了指定的时间窗口后才启发性地恢复。上面提到过，Sentinel 还支持基于平均响应时间的熔断降级，可以在服务响应时间持续飙高的时候自动熔断，拒绝掉更多的请求，直到一段时间后才恢复。这样可以防止调用非常慢造成级联阻塞的情况
 
 
 
-Hystrix 和 Sentinel 的实时指标数据统计实现都是基于滑动窗口的。Hystrix 1.5 之前的版本是通过环形数组实现的滑动窗口，通过锁配合 CAS 的操作对每个桶的统计信息进行更新。Hystrix 1.5 开始对实时指标统计的实现进行了重构，将指标统计数据结构抽象成了响应式流（reactive stream）的形式，方便消费者去利用指标信息。同时底层改造成了基于 RxJava 的事件驱动模式，在服务调用成功/失败/超时的时候发布相应的事件，通过一系列的变换和聚合最终得到实时的指标统计数据流，可以被熔断器或 Dashboard 消费。
+### executeCommand
 
-Sentinel 目前抽象出了 Metric 指标统计接口，底层可以有不同的实现，目前默认的实现是基于 LeapArray 的滑动窗口，后续根据需要可能会引入 reactive stream 等实现。
+```java
+abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObservable<R> {
+  private Observable<R> executeCommandWithSpecifiedIsolation(final AbstractCommand<R> _cmd) {
+    if (properties.executionIsolationStrategy().get() == ExecutionIsolationStrategy.THREAD) {
+      // mark that we are executing in a thread (even if we end up being rejected we still were a THREAD execution and not SEMAPHORE)
+      return Observable.defer(new Func0<Observable<R>>() {
+        @Override
+        public Observable<R> call() {
+          executionResult = executionResult.setExecutionOccurred();
+          if (!commandState.compareAndSet(CommandState.OBSERVABLE_CHAIN_CREATED, CommandState.USER_CODE_EXECUTED)) {
+            return Observable.error(new IllegalStateException("execution attempted while in state : " + commandState.get().name()));
+          }
 
+          metrics.markCommandStart(commandKey, threadPoolKey, ExecutionIsolationStrategy.THREAD);
 
+          if (isCommandTimedOut.get() == TimedOutStatus.TIMED_OUT) {
+            // the command timed out in the wrapping thread so we will return immediately
+            // and not increment any of the counters below or other such logic
+            return Observable.error(new RuntimeException("timed out before executing run()"));
+          }
+          if (threadState.compareAndSet(ThreadState.NOT_USING_THREAD, ThreadState.STARTED)) {
+            //we have not been unsubscribed, so should proceed
+            HystrixCounters.incrementGlobalConcurrentThreads();
+            threadPool.markThreadExecution();
+            // store the command that is being run
+            endCurrentThreadExecutingCommand = Hystrix.startCurrentThreadExecutingCommand(getCommandKey());
+            executionResult = executionResult.setExecutedInThread();
+            /**
+             * If any of these hooks throw an exception, then it appears as if the actual execution threw an error
+             */
+            try {
+              executionHook.onThreadStart(_cmd);
+              executionHook.onRunStart(_cmd);
+              executionHook.onExecutionStart(_cmd);
+              return getUserExecutionObservable(_cmd);
+            } catch (Throwable ex) {
+              return Observable.error(ex);
+            }
+          } else {
+            //command has already been unsubscribed, so return immediately
+            return Observable.error(new RuntimeException("unsubscribed before executing run()"));
+          }
+        }
+      }).doOnTerminate(new Action0() {
+        @Override
+        public void call() {
+          if (threadState.compareAndSet(ThreadState.STARTED, ThreadState.TERMINAL)) {
+            handleThreadEnd(_cmd);
+          }
+          if (threadState.compareAndSet(ThreadState.NOT_USING_THREAD, ThreadState.TERMINAL)) {
+            //if it was never started and received terminal, then no need to clean up (I don't think this is possible)
+          }
+          //if it was unsubscribed, then other cleanup handled it
+        }
+      }).doOnUnsubscribe(new Action0() {
+        @Override
+        public void call() {
+          if (threadState.compareAndSet(ThreadState.STARTED, ThreadState.UNSUBSCRIBED)) {
+            handleThreadEnd(_cmd);
+          }
+          if (threadState.compareAndSet(ThreadState.NOT_USING_THREAD, ThreadState.UNSUBSCRIBED)) {
+            //if it was never started and was cancelled, then no need to clean up
+          }
+          //if it was terminal, then other cleanup handled it
+        }
+      }).subscribeOn(threadPool.getScheduler(new Func0<Boolean>() {
+        @Override
+        public Boolean call() {
+          return properties.executionIsolationThreadInterruptOnTimeout().get() && _cmd.isCommandTimedOut.get() == TimedOutStatus.TIMED_OUT;
+        }
+      }));
+    } else {
+      return Observable.defer(new Func0<Observable<R>>() {
+        @Override
+        public Observable<R> call() {
+          executionResult = executionResult.setExecutionOccurred();
+          if (!commandState.compareAndSet(CommandState.OBSERVABLE_CHAIN_CREATED, CommandState.USER_CODE_EXECUTED)) {
+            return Observable.error(new IllegalStateException("execution attempted while in state : " + commandState.get().name()));
+          }
 
-## [Sentinel 特性](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=sentinel-特性)
+          metrics.markCommandStart(commandKey, threadPoolKey, ExecutionIsolationStrategy.SEMAPHORE);
+          // semaphore isolated
+          // store the command that is being run
+          endCurrentThreadExecutingCommand = Hystrix.startCurrentThreadExecutingCommand(getCommandKey());
+          try {
+            executionHook.onRunStart(_cmd);
+            executionHook.onExecutionStart(_cmd);
+            return getUserExecutionObservable(_cmd);  //the getUserExecutionObservable method already wraps sync exceptions, so this shouldn't throw
+          } catch (Throwable ex) {
+            //If the above hooks throw, then use that as the result of the run method
+            return Observable.error(ex);
+          }
+        }
+      });
+    }
+  }
+}
+```
 
-除了之前提到的两者的共同特性之外，Sentinel 还提供以下的特色功能：
-
-### [1. 轻量级、高性能](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_1-轻量级、高性能)
-
-Sentinel 作为一个功能完备的高可用流量管控组件，其核心 sentinel-core 没有任何多余依赖，打包后只有不到 200KB，非常轻量级。开发者可以放心地引入 sentinel-core 而不需担心依赖问题。同时，Sentinel 提供了多种扩展点，用户可以很方便地根据需求去进行扩展，并且无缝地切合到 Sentinel 中。
-
-引入 Sentinel 带来的性能损耗非常小。只有在业务单机量级超过 25W QPS 的时候才会有一些显著的影响（5% - 10% 左右），单机 QPS 不太大的时候损耗几乎可以忽略不计。
-
-### [2. 流量控制](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_2-流量控制)
-
-Sentinel 可以针对不同的调用关系，以不同的运行指标（如 QPS、并发调用数、系统负载等）为基准，对资源调用进行流量控制，将随机的请求调整成合适的形状。
-
-Sentinel 支持多样化的流量整形策略，在 QPS 过高的时候可以自动将流量调整成合适的形状。常用的有：
-
-- **直接拒绝模式**：即超出的请求直接拒绝。
-- **慢启动预热模式**：当流量激增的时候，控制流量通过的速率，让通过的流量缓慢增加，在一定时间内逐渐增加到阈值上限，给冷系统一个预热的时间，避免冷系统被压垮。 ![Slow-Start-Preheating-Mode](https://doocs.github.io/advanced-java/docs/high-availability/images/Slow-Start-Preheating-Mode.jpg)
-- **匀速器模式**：利用 Leaky Bucket 算法实现的匀速模式，严格控制了请求通过的时间间隔，同时堆积的请求将会排队，超过超时时长的请求直接被拒绝。Sentinel 还支持基于调用关系的限流，包括基于调用方限流、基于调用链入口限流、关联流量限流等，依托于 Sentinel 强大的调用链路统计信息，可以提供精准的不同维度的限流。 ![Homogenizer-mode](https://doocs.github.io/advanced-java/docs/high-availability/images/Homogenizer-mode.jpg)
-
-目前 Sentinel 对异步调用链路的支持还不是很好，后续版本会着重改善支持异步调用。
-
-### [3. 系统负载保护](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_3-系统负载保护)
-
-Sentinel 对系统的维度提供保护，负载保护算法借鉴了 TCP BBR 的思想。当系统负载较高的时候，如果仍持续让请求进入，可能会导致系统崩溃，无法响应。在集群环境下，网络负载均衡会把本应这台机器承载的流量转发到其它的机器上去。如果这个时候其它的机器也处在一个边缘状态的时候，这个增加的流量就会导致这台机器也崩溃，最后导致整个集群不可用。针对这个情况，Sentinel 提供了对应的保护机制，让系统的入口流量和系统的负载达到一个平衡，保证系统在能力范围之内处理最多的请求。
-
-![BRP](https://doocs.github.io/advanced-java/docs/high-availability/images/BRP.jpg)
-
-### [4. 实时监控和控制面板](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_4-实时监控和控制面板)
-
-Sentinel 提供 HTTP API 用于获取实时的监控信息，如调用链路统计信息、簇点信息、规则信息等。如果用户正在使用 Spring Boot/Spring Cloud 并使用了 Sentinel Spring Cloud Starter，还可以方便地通过其暴露的 Actuator Endpoint 来获取运行时的一些信息，如动态规则等。未来 Sentinel 还会支持标准化的指标监控 API，可以方便地整合各种监控系统和可视化系统，如 Prometheus、Grafana 等。
-
-Sentinel 控制台（Dashboard）提供了机器发现、配置规则、查看实时监控、查看调用链路信息等功能，使得用户可以非常方便地去查看监控和进行配置。
-
-![Sentinel-Dashboard](https://doocs.github.io/advanced-java/docs/high-availability/images/Sentinel-Dashboard.jpg)
-
-### [5. 生态](https://doocs.github.io/advanced-java/#/./docs/high-availability/sentinel-vs-hystrix?id=_5-生态)
-
-Sentinel 目前已经针对 Servlet、Dubbo、Spring Boot/Spring Cloud、gRPC 等进行了适配，用户只需引入相应依赖并进行简单配置即可非常方便地享受 Sentinel 的高可用流量防护能力。未来 Sentinel 还会对更多常用框架进行适配，并且会为 Service Mesh 提供集群流量防护的能力。
 
 ## Summary
 
-| #              | Sentinel                                       | Hystrix                       |
+|               | Sentinel                                       | Hystrix                       |
 | -------------- | ---------------------------------------------- | ----------------------------- |
 | 隔离策略       | 信号量隔离                                     | 线程池隔离/信号量隔离         |
 | 熔断降级策略   | 基于响应时间或失败比率                         | 基于失败比率                  |
@@ -301,5 +533,7 @@ Sentinel 目前已经针对 Servlet、Dubbo、Spring Boot/Spring Cloud、gRPC �
 | 控制台         | 开箱即用，可配置规则、查看秒级监控、机器发现等 | 不完善                        |
 | 常见框架的适配 | Servlet、Spring Cloud、Dubbo、gRPC             | Servlet、Spring Cloud Netflix |
 
-## References
-1. []()
+
+## Links
+
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=circuit-breaker)

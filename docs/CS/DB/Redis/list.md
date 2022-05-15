@@ -241,3 +241,9 @@ int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
     return (orig_tail != quicklist->tail);
 }
 ```
+
+
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md)

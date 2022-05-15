@@ -1065,6 +1065,10 @@ Using `AopContext.currentProxy()`(get a [ThreadLocal which default contains null
 set `spring.objenesis.ignore = true`  to invoke the constructor of the class, but we suggest getting bean by method or `@Autowired`
 
 
+## Links
+
+- [Spring](/docs/CS/Java/Spring/Spring.md)
+
 
 ## References
 1. [Spring AOP APIs](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#aop-api)

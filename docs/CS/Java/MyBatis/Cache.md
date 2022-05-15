@@ -235,6 +235,8 @@ public class LruCache implements Cache {
 
 enable 2nd level cache in [CachingExecutor](/docs/CS/Java/MyBatis/Executor.md)
 
+### TransactionalCacheManager
+
 ```java
 public class TransactionalCacheManager {
 
@@ -272,7 +274,7 @@ public class TransactionalCacheManager {
 ```
 
 
-
+### TransactionalCache
 The 2nd level cache transactional buffer.
 This class holds all cache entries that are to be added to the 2nd level cache during a Session. Entries are sent to the cache when commit is called or discarded if the Session is rolled back. Blocking cache support has been added. Therefore any get() that returns a cache miss will be followed by a put() so any lock associated with the key can be released.
 
@@ -370,14 +372,17 @@ public class TransactionalCache implements Cache {
       try {
         delegate.removeObject(entry);
       } catch (Exception e) {
-        log.warn("Unexpected exception while notifiying a rollback to the cache adapter. "
-            + "Consider upgrading your cache adapter to the latest version. Cause: " + e);
-      }
     }
   }
 
 }
 ```
 
+
+## Links
+
+- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+
 ## References
+
 1. [Cache - MyBatis](https://mybatis.org/mybatis-3/zh/sqlmap-xml.html#cache)

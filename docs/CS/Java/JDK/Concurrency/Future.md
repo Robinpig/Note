@@ -2,7 +2,7 @@
 
 
 
-### Future Hierarchy
+### Future Hierarchies
 
 ![Future](../images/Future.png)
 
@@ -1071,8 +1071,7 @@ public static <U> CompletableFuture<U> supplyAsync(Supplier<U> supplier) {
   return asyncSupplyStage(ASYNC_POOL, supplier);
 }
 
-public static <U> CompletableFuture<U> supplyAsync(Supplier<U> supplier,
-                                                   Executor executor) {
+public static <U> CompletableFuture<U> supplyAsync(Supplier<U> supplier, Executor executor) {
   return asyncSupplyStage(screenExecutor(executor), supplier);
 }
 
@@ -1080,8 +1079,7 @@ public static CompletableFuture<Void> runAsync(Runnable runnable) {
   return asyncRunStage(ASYNC_POOL, runnable);
 }
 
-public static CompletableFuture<Void> runAsync(Runnable runnable,
-                                               Executor executor) {
+public static CompletableFuture<Void> runAsync(Runnable runnable, Executor executor) {
   return asyncRunStage(screenExecutor(executor), runnable);
 }
 ```

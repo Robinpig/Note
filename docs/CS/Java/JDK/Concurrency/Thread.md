@@ -682,14 +682,16 @@ When an object is first created, its wait set is empty. Elementary actions that 
 Wait sets are manipulated solely through the methods `Object``.``wait`, `Object``.``notify`, and `Object``.``notifyAll`.
 
 ### wait
-**The current thread must own this object's monitor.** use `CHECK_OWNER`.
+**The current thread must own [this object's monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=ObjectMonitor).** use `CHECK_OWNER`.
 
-**Note**: use `wait` in a while loop avoid **spurious wakeups**.
+> [!NOTE]
+> 
+> Use `wait` in a while loop avoid **spurious wakeups**.
 
 Causes the current thread to wait until:
 - either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object
 - or a specified amount of time has elapsed.
-- or if any thread interrupted the current thread. **The <i>interrupted status</i> of the current thread is cleared when this exception is thrown.**
+- or if any thread interrupted the current thread. **The interrupted status of the current thread is cleared when this exception is thrown.**
 
 Each thread must determine an order over the events that could cause it to be removed from a wait set. 
 That order does not have to be consistent with other orderings, but the thread must behave as though those events occurred in that order.

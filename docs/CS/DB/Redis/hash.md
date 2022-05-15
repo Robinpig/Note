@@ -1,17 +1,13 @@
 ## Introduction
 
-
-
 [redisDb](/docs/CS/DB/Redis/redisDb.md) also a hashtable
 
-times33
-
-hash(i) = hash(i - 1) * 33 + str[3]
-
+redis command table
 
 ### dicht
-This is our hash table structure. Every dictionary has **two of this** as we
-implement **incremental rehashing**, for the old to the new table.
+
+This is our hash table structure. Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
+
 ```c
 typedef struct dictht {
     dictEntry **table;
@@ -22,7 +18,10 @@ typedef struct dictht {
 ```
 
 
-**dictEntry:**
+dictEntry:
+
+
+
 ```c
 typedef struct dictEntry {
     void *key; // always string
@@ -64,9 +63,13 @@ typedef struct dict {
 ### siphash
 
 
+Hash Function: times33
+
+hash(i) = hash(i - 1) * 33 + str[i]
+
+
 ```c
 // dict.c
-
 uint64_t dictGenHashFunction(const void *key, int len) {
     return siphash(key,len,dict_hash_function_seed);
 }
@@ -280,9 +283,10 @@ void hashTypeConvertListpack(robj *o, int enc) {
 
 ## create
 
+Create a new hash table
+
 ```c
 // dict.c
-/* Create a new hash table */
 dict *dictCreate(dictType *type)
 {
     dict *d = zmalloc(sizeof(*d));
@@ -291,15 +295,9 @@ dict *dictCreate(dictType *type)
     return d;
 }
 
-
-/* This is the initial size of every hash table */
 #define DICT_HT_INITIAL_SIZE     4
-
-
-/* Hash table parameters */
 #define HASHTABLE_MIN_FILL        10      /* Minimal hash table fill 10% */
 
-/* Initialize the hash table */
 int _dictInit(dict *d, dictType *type)
 {
     _dictReset(d, 0);
@@ -315,29 +313,25 @@ int _dictInit(dict *d, dictType *type)
 
 ## expand
 
+Using dictEnableResize() / dictDisableResize() we make possible to enable/disable resizing of the hash table as needed. 
+This is very important for Redis, as we use copy-on-write and don't want to move too much memory around when there is a child performing saving operations.
+
+Note that even when dict_can_resize is set to 0, not all resizes are prevented: a hash table is still allowed to grow if the ratio between the number of elements and the buckets > dict_force_resize_ratio.
 
 ```c
-
-/* Using dictEnableResize() / dictDisableResize() we make possible to
- * enable/disable resizing of the hash table as needed. This is very important
- * for Redis, as we use copy-on-write and don't want to move too much memory
- * around when there is a child performing saving operations.
- *
- * Note that even when dict_can_resize is set to 0, not all resizes are
- * prevented: a hash table is still allowed to grow if the ratio between
- * the number of elements and the buckets > dict_force_resize_ratio. */
 static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
 ```
+
+
 ### expandIfNeeded
+
 Expand the hash table if needed(check loadFactor & if has active childProcess):
 
 1. If the hash table is empty expand it to the initial size.
-2. If we reached the 1:1 ratio, and we are allowed to resize the hash
-   table (avoid `hasActiveChildProcess`) 
-3. or we should avoid it but the ratio between
-   elements/buckets is over the "safe" threshold, we resize doubling
-   the number of buckets.
+2. If we reached the 1:1 ratio, and we are allowed to resize the hash table (avoid `hasActiveChildProcess`) 
+3. or we should avoid it but the ratio between elements/buckets is over the "safe" threshold, we resize doubling the number of buckets.
+   
 ```c
 // dict.c
 static int dict_can_resize = 1;
@@ -535,14 +529,16 @@ int dictRehash(dict *d, int n) {
 }
 ```
 
-## iteator
+## iterator
+
+If safe is set to 1 this is a safe iterator, that means, you can call dictAdd, dictFind, and other functions against the dictionary even while iterating. 
+Otherwise it is a non safe iterator, and only dictNext() should be called while iterating.
+
+- normal iterator: only iterate
+- safe iterator: rehash iterate elements, stop rehashStep
+
 ```c
 //dict.h
-
-/* If safe is set to 1 this is a safe iterator, that means, you can call
- * dictAdd, dictFind, and other functions against the dictionary even while
- * iterating. Otherwise it is a non safe iterator, and only dictNext()
- * should be called while iterating. */
 typedef struct dictIterator {
     dict *d;
     long index;
@@ -552,11 +548,8 @@ typedef struct dictIterator {
     long long fingerprint;
 } dictIterator;
 ```
-- normal iterator: only iterate
-- safe iterator: delete when iterate
 
-stop rehash when using safe iterator
-
+### scan
 
 reverse binary iteration
 
@@ -564,3 +557,8 @@ reverse binary iteration
 
 - hash table init size 4
 - hash table minimal fill 10%
+
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md)

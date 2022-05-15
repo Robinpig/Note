@@ -1,7 +1,10 @@
 
-## CS
 
-- [Transaction](/docs/CS/Transaction.md)
+> [!NOTE]
+> 
+> 不闻不若闻之，闻之不若见之，见之不若知之，知之不若行之。学至于行之而 止矣。
+
+ [Transaction](/docs/CS/Transaction.md)
 
 ## Computer Organization
 
@@ -14,14 +17,11 @@ We describe [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structur
 
 ## Operating System
 
-### Linux
-
-[Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
+[Operating System](/docs/CS/OS/OS.md) is a software above the hardware and  below applications.
 
 ## Network
 
 A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources located on or provided by network nodes.
-
 
 ## DataBase
 
@@ -37,6 +37,7 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 [MQ](/docs/CS/MQ/MQ.md)
 
 ### Kafka
+
 [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
 
 ### RocketMQ
@@ -46,39 +47,29 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 
 ## C++
 
+[C++](/docs/CS/C++/C++.md) blends the C language with support for object-oriented programming and for generic programming.
+
 ## Java
 ### JDK
+
 The [Java Development Kit(JDK)](/docs/CS/Java/JDK/JDK.md) includes the Java Runtime Environment, the Java compiler and the Java APIs.
 
-
 ### Quartz
+
 [Quartz](/docs/CS/Java/Quartz/Quartz.md) can be used to create simple or complex schedules for executing tens, hundreds, or even tens-of-thousands of jobs.
 
-
 ### Spring Framework
-The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform.
- makes programming Java quicker, easier, and safer for everybody. Spring’s focus on speed, simplicity, and productivity has made it the world's most popular Java framework.
 
+The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody. 
+Spring’s focus on speed, simplicity, and productivity has made it the world's most popular Java framework.
 
 ### Spring Boot
+
 [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
-
 ### Spring Cloud
-Spring Cloud provides tools for developers to quickly build some of the common patterns in distributed systems (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
-- [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
-- [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
 
-### Spring Cloud Alibaba
-[Spring Cloud Alibaba](/docs/CS/Java/Spring_Cloud_Alibaba/Spring_Cloud_Alibaba.md) provides a one-stop solution for distributed application development. It contains all the components required to develop distributed applications, making it easy for you to develop your applications using Spring Cloud.
-
-#### Nacos
-[Nacos](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/Nacos.md) is an easy-to-use dynamic service discovery, configuration and service management platform for building cloud native applications.
-
-- [registry](/docs/CS/Java/Spring_Cloud_Alibaba/nacos/registry.md)
-
-#### Sentinel
-[Sentinel](/docs/CS/Java/Spring_Cloud_Alibaba/Sentinel/Sentinel.md) is a powerful flow control component that takes "flow" as the breakthrough point and covers multiple fields including flow control, concurrency limiting, circuit breaking, and adaptive system protection to guarantee the reliability of microservices
+[Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md) provides tools for developers to quickly build some of the common patterns in distributed systems (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 
 ### Netty
 [Netty](/docs/CS/Java/Netty/Netty.md) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
@@ -96,7 +87,7 @@ Spring Cloud provides tools for developers to quickly build some of the common p
 
 ### Tomcat
 
-[The Apache Tomcat® software](/docs/CS/Java/Tomcat/Tomcat.md) is an open source implementation of the [Jakarta Servlet](https://projects.eclipse.org/projects/ee4j.servlet), [Jakarta Server Pages](https://projects.eclipse.org/projects/ee4j.jsp), [Jakarta Expression Language](https://projects.eclipse.org/projects/ee4j.el), [Jakarta WebSocket](https://projects.eclipse.org/projects/ee4j.websocket), [Jakarta Annotations](https://projects.eclipse.org/projects/ee4j.ca) and [Jakarta Authentication](https://projects.eclipse.org/projects/ee4j.authentication) specifications. These specifications are part of the [Jakarta EE platform](https://projects.eclipse.org/projects/ee4j.jakartaee-platform).
+[The Apache Tomcat® software](/docs/CS/Java/Tomcat/Tomcat.md) is an open source implementation of the Jakarta Servlet, Jakarta Server Pages, Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications. These specifications are part of the Jakarta EE platform.
 
 ### ZooKeeper
 [Apache ZooKeeper](/docs/CS/Java/Zookeeper/Zookeeper.md) is an effort to develop and maintain an open-source server which enables highly reliable distributed coordination.

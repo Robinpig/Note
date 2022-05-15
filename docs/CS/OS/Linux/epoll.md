@@ -1211,8 +1211,8 @@ out_unlock:
 
 
 Level-triggered and edge-triggered
-The epoll event distribution interface is able to behave both as edge-triggered (ET) and as level-triggered (LT).  The differ‐
-ence between the two mechanisms can be described as follows.  Suppose that this scenario happens:
+The epoll event distribution interface is able to behave both as edge-triggered (ET) and as level-triggered (LT).  The difference between the two mechanisms can be described as follows.  
+Suppose that this scenario happens:
 1. The file descriptor that represents the read side of a pipe (rfd) is registered on the epoll instance.
 2. A pipe writer writes 2 kB of data on the write side of the pipe.
 3. A call to epoll_wait(2) is done that will return rfd as a ready file descriptor.
@@ -1248,12 +1248,11 @@ This  specifies  a limit on the total number of file descriptors that a user can
 
 
 ## Example for suggested usage
-While the usage of epoll when employed as a level-triggered interface does have the same semantics as poll(2), the  edge-trig‐
-gered  usage  requires  more clarification to avoid stalls in the application event loop.  In this example, listener is a non‐
-blocking socket on which listen(2) has been called.  The function do_use_fd() uses the new ready file descriptor until  EAGAIN
-is  returned  by  either read(2) or write(2).  An event-driven state machine application should, after having received EAGAIN,
-record its current state so that at the next call to do_use_fd() it will continue to read(2) or write(2) from where it stopped
-before.
+
+While the usage of epoll when employed as a level-triggered interface does have the same semantics as poll(2), the  edge-triggered  usage  requires  more clarification to avoid stalls in the application event loop.  
+In this example, listener is a non‐ blocking socket on which listen(2) has been called.  
+The function do_use_fd() uses the new ready file descriptor until  EAGAIN is  returned  by  either read(2) or write(2).  
+An event-driven state machine application should, after having received EAGAIN, record its current state so that at the next call to do_use_fd() it will continue to read(2) or write(2) from where it stopped before.
 
 ```c
 #define MAX_EVENTS 10
@@ -1306,9 +1305,8 @@ before.
            }
 ```
 
-When  used as an edge-triggered interface, for performance reasons, it is possible to add the file descriptor inside the epoll
-interface (EPOLL_CTL_ADD) once by specifying (EPOLLIN|EPOLLOUT).  This allows you  to  avoid  continuously  switching  between
-EPOLLIN and EPOLLOUT calling epoll_ctl(2) with EPOLL_CTL_MOD.
+When  used as an edge-triggered interface, for performance reasons, it is possible to add the file descriptor inside the epoll interface (EPOLL_CTL_ADD) once by specifying (EPOLLIN|EPOLLOUT).  
+This allows you  to  avoid  continuously  switching  between EPOLLIN and EPOLLOUT calling epoll_ctl(2) with EPOLL_CTL_MOD.
 
 Questions and answers
 Q0  What is the key used to distinguish the file descriptors registered in an epoll set?

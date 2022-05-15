@@ -1,5 +1,11 @@
 ## Introduction
 
+On-stack replacement (OSR) is essential technology for adaptive optimization, allowing changes to code actively executing in a managed runtime.
+
+OSR embodiments have to ensure that, whenever control is transferred from a currently running function version to another one, execution can transparently continue without altering the intended program semantics. 
+In the adaptive optimization practice, optimizing OSR transitions typically happen at places where state realignment is simple, i.e., at a method or loop entry. 
+The placement of deoptimizing OSR points is determined by the runtime: it can emit them for all instructions that might deoptimize, or group them and resume execution from the last instruction in the deoptimized code that causes outside-visible effects.
+
 ## AbstractInterpreter
 
 

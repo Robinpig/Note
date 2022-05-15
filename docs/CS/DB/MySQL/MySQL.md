@@ -332,12 +332,15 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
 ### [File](/docs/CS/DB/MySQL/file.md)
 
 
+
+redo log prepare -> binlog write -> redo log commit
+
 ## Server
 
 
 
 
-- 连接器 身份认证 权限管理 连接不断 即使修改了权限 此连接不受影响
+- Connector 身份认证 权限管理 连接不断 即使修改了权限 此连接不受影响
 - 查询缓存 8.0后移除 缓存select语句及结果集 因在频繁更新情况下经常失效
 - 分析器 无命中缓存进入 词法分析 提出关键字段 语法分析 检验语句是否正确
 - 优化器 内部实现 执行计划 选择索引 
@@ -345,6 +348,9 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
 - 日志模块 binlog公有 redolog只InnoDB有
 
 
+wait_timeout 8h
+
+mysql_reset_connection
 
 ## Character Sets, Collations, Unicode
 
@@ -382,3 +388,9 @@ Notes:
 - same server id
 
 ## [Optimization](/docs/CS/DB/MySQL/Optimization.md)
+
+
+
+## Links
+
+- [DataBases](/docs/CS/DB/DB.md)
