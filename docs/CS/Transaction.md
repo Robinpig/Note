@@ -133,11 +133,21 @@ Innodb in distribution-transaction is SERIALIZABLE.
 
 
 ## CAP Theorem (Brewer’s Theorem)
+
 It is impossible for a distributed computer system to simultaneously provide all three of the following guarantees:
 - **Consistency**: all nodes see the same data at the same time
 - **Availability**: Node failures do not prevent other survivors from continuing to operate (a guarantee that every request receives a response about whether it succeeded or failed)
 - **Partition tolerance**: the system continues to operate despite arbitrary partitioning due to network failures (e.g., message loss)
+
 A distributed system can satisfy any two of these guarantees at the same time but not all three.
+
+RPO
+
+Recovery Point Objective
+
+RTO
+
+Recovery Time Objective
 
 ## BASE
 (Basically Available, Soft-State, Eventually Consistent)
@@ -163,6 +173,20 @@ and consistency are essential.
 
 ## Two-phased Commit
 A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
+
+TiDB
+
+
+## TCC
+
+not used normally
+
+## Saga
+
+proxy
+
+MySQL
+
 
 
 

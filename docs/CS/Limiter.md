@@ -13,7 +13,7 @@ Method
 - Semaphore only for counts
 - 计数器
   - 固定窗口 瞬时峰值隐患
-  - 滑动窗口 窗口粒度越小消耗资源高
+  - solid window 窗口粒度越小消耗资源高
 - leaky bucket algorithm
   - as a meter 类似令牌桶 存储累积量 允许一定的突发
   - as a queue 限制速率 不支持突发流量

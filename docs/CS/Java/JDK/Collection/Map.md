@@ -760,15 +760,11 @@ public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
 
 **All arguments to all task methods must be non-null.**
 
+Value of `sizeCtl` different in constructors. See [JDK-8202422](https://bugs.openjdk.java.net/browse/JDK-8202422?focusedCommentId=14182353&page=com.atlassian.jira.plugin.system.issuetabpanels%3Acomment-tabpanel#comment-14182353)
 ```java
 public ConcurrentHashMap(int initialCapacity) {
-    if (initialCapacity < 0)
-        throw new IllegalArgumentException();
-    int cap = ((initialCapacity >= (MAXIMUM_CAPACITY >>> 1)) ?
-               MAXIMUM_CAPACITY :
-               tableSizeFor(initialCapacity + (initialCapacity >>> 1) + 1));
-    this.sizeCtl = cap;
-}
+        this(initialCapacity, LOAD_FACTOR, 1);
+        }
 ```
 
 
