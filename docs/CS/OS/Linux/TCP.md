@@ -227,7 +227,8 @@ struct proto tcp_prot = {
 
 ## Send
 
-see [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send)
+see [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) and call tcp_sendmsg
+
 ### tcp_sendmsg
 called by inet_sendmsg
 
@@ -1215,6 +1216,7 @@ u32 __tcp_select_window(struct sock *sk)
 
 ### call tcp_v4_rcv
 `ip_rcv` -> ip_rcv_finish -> dst_input -> ip_local_deliver -> [tcp_v4_rcv](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_rcv)
+                                       -> ip_forward -> ip_forward_finish -> [ip_output](/docs/CS/OS/Linux/IP.md?id=ip_output)
 
 ### call tcp_recvmsg
 
