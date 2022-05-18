@@ -73,16 +73,44 @@ PDF文档下载方式
 
 ## Algorithm Analysis
 
-In computer science, the analysis of algorithms is the process of finding the computational complexity of algorithms – the amount of time, storage, or other resources needed to execute them.
-Usually, this involves determining a function that relates the length of an algorithm's input to the number of steps it takes (its time complexity) or the number of storage locations it uses (its space complexity).
-An algorithm is said to be efficient when this function's values are small, or grow slowly compared to a growth in the size of the input.
-Different inputs of the same length may cause the algorithm to have different behavior, so best, worst and average case descriptions might all be of practical interest.
-When not otherwise specified, the function describing the performance of an algorithm is usually an upper bound, determined from the worst case inputs to the algorithm.
+An *algorithm* is a finite set of instructions that, if followed, accomplishes a particular task.
+In addition, all algorithms must satisfy the following criteria:
+1. **Input**. There are zero or more quantities that are externally supplied.
+2. **Output**. At least one quantity is produced.
+3. **Definiteness**. Each instruction is clear and unambiguous.
+4. **Finiteness**. If we trace out the instructions of an algorithm, then for all cases, the algorithm terminates after a finite number of steps.
+5. **Effectiveness**. Every instruction must be basic enough to be carried out, in principle, by a person using only pencil and paper. It is not enough that each operation be definite as in 3; it also must be feasible.
+
+### Complexity
+
+Algorithms can be evaluated by a variety of criteria. 
+Most often we shall be interested in the rate of growth of the time or space required to solve larger and larger instances of a problem. 
+We would like to associate with a problem an integer. called the size of the problem, which is a measure of the quantity of input data.
+
+The time needed by an algorithm expressed as a function of the size of a problem is called the *time complexity* of the algorithm. 
+The limiting behavior of the compiexity as size increases is called the *asymptotic time complexity*. 
+Analogous definitions can be made for *space complexity* and *asymptotic space complexity*.
+
+The asymptotic complexity of an algorithm is an important measure of the goodness of an algorithm, one that promises to become even more important with future increases in computing speed.
+
+Despite our concentration on order-of-magnitude performance, we should realize that an algorithm with a rapid growth rate might have a smaller constant of proportionality than one with a lower growth rate. 
+In that case. the rapidly growing algorithm might be superior for small problems. possibly even for all problems of a size that would interest us.
+
+If for a given size the complexity is taken as the maximum complexity over all inputs of that size, then the complexity is called the *worst-case complexity*. 
+If the complexity is taken as the "average" complexity over all inputs of given size. then the complexity is called the *expected complexity*. 
+The expected complexity of an algorithm is usually more difficult to ascertain than the worst-case complexity. 
+One must make some assumption about the distribution of inputs, and realistic assumptions are often not mathematically tractable. 
+We shall emphasize the worst case, since it is more tractable and has a universal applicability. 
+However. it should be borne in mind that the algorithm with the best worst-case complexity does not necessarily have the best expected complexity.
+
 
 In theoretical analysis of algorithms it is common to estimate their complexity in the asymptotic sense, i.e., to estimate the complexity function for arbitrarily large input.
 Big O notation, Big-omega notation and Big-theta notation are used to this end.
 
-### Model
+
+An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
+
+### Computation Model
 
 Exact (not asymptotic) measures of efficiency can sometimes be computed but they usually require certain assumptions concerning the particular implementation of the algorithm, called model of computation.
 A model of computation may be defined in terms of an abstract computer, e.g., Turing machine, and/or by postulating that certain operations are executed in unit time.

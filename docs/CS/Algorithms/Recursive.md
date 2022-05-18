@@ -1,7 +1,7 @@
 ## Introduction
 
-A function that is defined in terms of itself is called *recursive*.
-
+A procedure that calls itself, directly or indirectly, is said to be *recursive*.
+The use of recursion often permits more lucid and concise descriptions of algorithms than would be possible without recursion.
 
 
 
