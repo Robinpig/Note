@@ -784,6 +784,7 @@ This also reduces dependencies on a specific JVM offering or version, making ong
 
 
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 
 
@@ -794,3 +795,4 @@ This also reduces dependencies on a specific JVM offering or version, making ong
 4. [Our Collectors](https://blogs.oracle.com/jonthecollector/our-collectors)
 5. [Garbage Collection in Java – What is GC and How it Works in the JVM](https://www.freecodecamp.org/news/garbage-collection-in-java-what-is-gc-and-how-it-works-in-the-jvm/)
 6. [HotSpot Virtual Machine Garbage Collection Tuning Guide - JDK11](https://docs.oracle.com/en/java/javase/11/gctuning/index.html)
+7. [HotSpot Storage Management](https://openjdk.java.net/groups/hotspot/docs/StorageManagement.html)
