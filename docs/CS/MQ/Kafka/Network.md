@@ -261,7 +261,8 @@ Queue the given request for sending in the subsequent poll(long) calls
         }
     }
 ```
-#### Sender
+
+### Sender
 
 The main run loop for the sender thread
 ```java
@@ -273,6 +274,7 @@ public class Sender implements Runnable {
             try {
                 runOnce();
             } catch (Exception e) {
+                log.error("Uncaught error in kafka producer I/O thread: ", e);
             }
         }
 
@@ -310,7 +312,14 @@ public class Sender implements Runnable {
         } catch (Exception e) {
         }
     }
+}
+```
 
+1. Transaction Management
+2. sendProducerData
+3. KafkaClient.poll()
+```java
+public class Sender implements Runnable {
     void runOnce() {
         if (transactionManager != null) {
             try {
@@ -334,7 +343,6 @@ public class Sender implements Runnable {
                 }
             } catch (AuthenticationException e) {
                 // This is already logged as error, but propagated here to perform any clean ups.
-                log.trace("Authentication exception while processing transactional request", e);
                 transactionManager.authenticationFailed(e);
             }
         }
@@ -346,11 +354,11 @@ public class Sender implements Runnable {
 }
 ```
 
-
-### poll
+#### poll
 
 Do actual reads and writes to sockets.
 
+call [Selector.poll()](/docs/CS/MQ/Kafka/Network.md?id=Selector)
 ```java
 public class NetworkClient implements KafkaClient {
     @Override
