@@ -140,8 +140,9 @@ why
 
 ## Producer
 
+
 A Kafka client that publishes records to the Kafka cluster.
-The producer is thread safe and sharing a single producer instance across threads will generally be faster than having multiple instances.
+The producer is **thread safe** and sharing a single producer instance across threads will generally be faster than having multiple instances.
 
 Here is a simple example of using the producer to send records with strings containing sequential numbers as the key/value pairs.
 
@@ -159,15 +160,93 @@ Here is a simple example of using the producer to send records with strings cont
  producer.close();
 ```
 
-The producer consists of a pool of buffer space that holds records that haven't yet been transmitted to the server as well as a background I/O thread that is responsible for turning these records into requests and transmitting them to the cluster. Failure to close the producer after use will leak these resources.
+The producer consists of a pool of buffer space that holds records that haven't yet been transmitted to the server as well as a background I/O thread that is responsible for turning these records into requests and transmitting them to the cluster. 
+Failure to close the producer after use will leak these resources.
 
-The send() method is asynchronous. When called, it adds the record to a buffer of pending record sends and immediately returns. This allows the producer to batch together individual records for efficiency.
+### send
 
-The acks config controls the criteria under which requests are considered complete. The default setting "all" will result in blocking on the full commit of the record, the slowest but most durable setting.
+The `send()` method is asynchronous. 
+When called, it adds the record to a buffer of pending record sends and immediately returns. 
+This allows the producer to batch together individual records for efficiency.
+```java
+public class KafkaProducer<K, V> implements Producer<K, V> {
+    @Override
+    public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
+        // intercept the record, which can be potentially modified; this method does not throw exceptions
+        ProducerRecord<K, V> interceptedRecord = this.interceptors.onSend(record);
+        return doSend(interceptedRecord, callback);
+    }
+}
+```
 
-If the request fails, the producer can automatically retry. The retries setting defaults to Integer.MAX_VALUE, and it's recommended to use delivery.timeout.ms to control retry behavior, instead of retries.
+1. waitOnMetadata
+2. serializedKey and value
+3. get partition
+4. ensureValidRecordSize
+5. new interceptCallback
+6. append into buffer
+7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Network.md?id=Sender)(actually wakeup the Selector in KafkaClient).
+```java
+public class KafkaProducer<K, V> implements Producer<K, V> {
+    private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
+        TopicPartition tp = null;
+        try {
+            throwIfProducerClosed();
+            
+            // first make sure the metadata for the topic is available
+            ClusterAndWaitTime clusterAndWaitTime;
+            clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
+            long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
+            Cluster cluster = clusterAndWaitTime.cluster;
+            
+            byte[] serializedKey;
+            serializedKey = keySerializer.serialize(record.topic(), record.headers(), record.key());
+            byte[] serializedValue;
+            serializedValue = valueSerializer.serialize(record.topic(), record.headers(), record.value());
+         
+            int partition = partition(record, serializedKey, serializedValue, cluster);
+            tp = new TopicPartition(record.topic(), partition);
 
-The producer maintains buffers of unsent records for each partition. These buffers are of a size specified by the batch.size config. Making this larger can result in more batching, but requires more memory (since we will generally have one of these buffers for each active partition).
+            setReadOnly(record.headers());
+            Header[] headers = record.headers().toArray();
+
+            int serializedSize = AbstractRecords.estimateSizeInBytesUpperBound(apiVersions.maxUsableProduceMagic(),
+                    compressionType, serializedKey, serializedValue, headers);
+            ensureValidRecordSize(serializedSize);
+            long timestamp = record.timestamp() == null ? time.milliseconds() : record.timestamp();
+            // producer callback will make sure to call both 'callback' and interceptor callback
+            Callback interceptCallback = new InterceptorCallback<>(callback, this.interceptors, tp);
+
+            if (transactionManager != null && transactionManager.isTransactional())
+                transactionManager.maybeAddPartitionToTransaction(tp);
+
+            RecordAccumulator.RecordAppendResult result = accumulator.append(tp, timestamp, serializedKey,
+                    serializedValue, headers, interceptCallback, remainingWaitMs);
+            if (result.batchIsFull || result.newBatchCreated) {
+                this.sender.wakeup();
+            }
+            return result.future;
+            // handling exceptions and record the errors;
+            // for API exceptions return them in the future,
+            // for other exceptions throw directly
+        } catch (Exception e) {
+            // we notify interceptor about all exceptions, since onSend is called before anything else in this method
+            this.interceptors.onSendError(record, tp, e);
+            throw e;
+        }
+    }
+}
+```
+#### append
+
+The acks config controls the criteria under which requests are considered complete. 
+The default setting "all" will result in blocking on the full commit of the record, the slowest but most durable setting.
+
+If the request fails, the producer can automatically retry. 
+The retries setting defaults to Integer.MAX_VALUE, and it's recommended to use delivery.timeout.ms to control retry behavior, instead of retries.
+
+The producer maintains buffers of unsent records for each partition. These buffers are of a size specified by the batch.size config. 
+Making this larger can result in more batching, but requires more memory (since we will generally have one of these buffers for each active partition).
 
 > [!NOTE]
 >
