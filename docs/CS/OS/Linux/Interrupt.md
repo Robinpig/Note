@@ -1,6 +1,41 @@
 ## Introduction
 
-## init_IRQ
+## Hardware
+
+
+- task gate
+- interrupt gate
+- trap gate
+- call gate
+
+
+## init
+
+### trap_init
+
+```c
+// arch/x86/kernel/traps.c
+void __init trap_init(void)
+{
+	/* Init cpu_entry_area before IST entries are set up */
+	setup_cpu_entry_areas();
+
+	/* Init GHCB memory pages when running as an SEV-ES guest */
+	sev_es_init_vc_handling();
+
+	idt_setup_traps();
+
+	/*
+	 * Should be a barrier for any external CPU state:
+	 */
+	cpu_init();
+
+	idt_setup_ist_traps();
+}
+```
+
+
+### init_IRQ
 
 ```c
 // arch/x86/kernel/irqinit.c
@@ -23,7 +58,25 @@ void __init init_IRQ(void)
 
 	x86_init.irqs.intr_init();
 }
+```
 
+
+
+```c
+struct x86_init_ops x86_init __initdata = {
+.irqs = {
+		.pre_vector_init	= init_ISA_irqs,
+		.intr_init		= native_init_IRQ,
+		.intr_mode_select	= apic_intr_mode_select,
+		.intr_mode_init		= apic_intr_mode_init,
+		.create_pci_msi_domain	= native_create_pci_msi_domain,
+	},
+};
+```
+
+native_init_IRQ
+
+```c
 void __init native_init_IRQ(void)
 {
 	/* Execute any quirks before the call gates are initialised: */
@@ -37,6 +90,30 @@ void __init native_init_IRQ(void)
 		if (request_irq(2, no_action, IRQF_NO_THREAD, "cascade", NULL))
 			pr_err("%s: request_irq() failed\n", "cascade");
 	}
+}
+```
+
+init_ISA_irqs
+
+```c
+
+void __init init_ISA_irqs(void)
+{
+	struct irq_chip *chip = legacy_pic->chip;
+	int i;
+
+	/*
+	 * Try to set up the through-local-APIC virtual wire mode earlier.
+	 *
+	 * On some 32-bit UP machines, whose APIC has been disabled by BIOS
+	 * and then got re-enabled by "lapic", it hangs at boot time without this.
+	 */
+	init_bsp_APIC();
+
+	legacy_pic->init(0);
+
+	for (i = 0; i < nr_legacy_irqs(); i++)
+		irq_set_chip_and_handler(i, chip, handle_level_irq);
 }
 ```
 

@@ -19,9 +19,20 @@ Now we will study the details of the kernel data structures associated with TCP 
 The details of port allocation by the server when we call bind(). 
 This also details how the conflicts are resolved when the server generates a request for specific port allocation. 
 We will study the SYN queue design where the open connection request for the listening socket fi rst sits until the connection is completely established (three-way handshake is over). 
+
 We will also see how the open connection request is moved from the SYN queue to the accept queue when the TCP connection is established.
-Finally, we will see how the established connections are taken off the accept queue by making accept() call. Similarly, we will see how the client generates a connection request to the server (sends SYN segment to the listening server). 
+
+Finally, we will see how the established connections are taken off the accept queue by making accept() call. 
+Similarly, we will see how the client generates a connection request to the server (sends SYN segment to the listening server). 
+
 In this chapter we will not cover the IP and link layer details (which will be discussed in later chapters) but will surely cover everything that is associated with the client – server connection setup in the kernel.
+
+## Server Side Setup
+
+- socket() systemcall only creates space for the socket in the kernel
+- [bind()](/docs/CS/OS/Linux/Calls.md?id=bind) systemcall creates an identity for the socket and is the next step to create the server application
+- Listen
+- Accept
 
 
 ## Links

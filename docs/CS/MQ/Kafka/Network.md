@@ -314,10 +314,11 @@ public class Sender implements Runnable {
     }
 }
 ```
-
+runOnce():
 1. Transaction Management
 2. sendProducerData
 3. KafkaClient.poll()
+
 ```java
 public class Sender implements Runnable {
     void runOnce() {

@@ -1,6 +1,9 @@
 ## Introduction
 
 
+```shell
+usr/src/kernels/
+```
 
 
 - [Init](/docs/CS/OS/Linux/init.md)

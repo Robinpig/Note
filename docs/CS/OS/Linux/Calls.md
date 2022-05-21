@@ -177,11 +177,17 @@ see [sys_socket](/docs/CS/OS/Linux/socket.md?id=create)
 
 ## bind
 
-Bind a name to a socket. Nothing much to do here since it's
-the protocol's responsibility to handle the local address.
+Bind a name to a socket. 
+Nothing much to do here since it's the protocol's responsibility to handle the local address.
 
-We move the socket address to kernel space before we call
-the protocol layer (having also checked the address is ok).
+We move the socket address to kernel space before we call the protocol layer (having also checked the address is ok).
+
+### Data Structures Related to bind
+
+- tcp_hashinfo
+- tcp_bind_hashbucket
+- tcp_bind_bucket
+
 
 ### sys_bind
 
@@ -310,7 +316,6 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk = sock->sk;
 	u32 flags = BIND_WITH_LOCK;
-	int err;
 
 	/* If the socket has its own bind function then use it. (RAW) */
 	if (sk->sk_prot->bind) {
@@ -318,14 +323,6 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	}
 	if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
-
-	/* BPF prog is run before any checks are done so that if the prog
-	 * changes context in a wrong way it will be caught.
-	 */
-	err = BPF_CGROUP_RUN_PROG_INET_BIND_LOCK(sk, uaddr,
-						 BPF_CGROUP_INET4_BIND, &flags);
-	if (err)
-		return err;
 
 	return __inet_bind(sk, uaddr, addr_len, flags);
 }
@@ -401,6 +398,9 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet->bind_address_no_port ||
 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
+```
+
+```c
 		if (sk->sk_prot->get_port(sk, snum)) {
 			inet->inet_saddr = inet->inet_rcv_saddr = 0;
 			err = -EADDRINUSE;

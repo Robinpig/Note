@@ -179,6 +179,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
+doSend():
 1. waitOnMetadata
 2. serializedKey and value
 3. get partition
@@ -186,6 +187,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 5. new interceptCallback
 6. append into buffer
 7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Network.md?id=Sender)(actually wakeup the Selector in KafkaClient).
+
 ```java
 public class KafkaProducer<K, V> implements Producer<K, V> {
     private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
