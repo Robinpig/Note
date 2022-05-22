@@ -102,7 +102,7 @@ The tree on the right has a node with key 7 in the left subtree of a node with k
 
 Because the average depth of a binary search tree is $O(\log{n})$, we generally do not need to worry about running out of stack space.
 
-The average depth over all nodes in a tree is * O* (log  *n* ) on the assumption that all trees are equally likely.
+The average depth over all nodes in a tree is $O(\log{n})$, on the assumption that all trees are equally likely.
 
 The sum of the depths of all nodes in a tree is known as the  *internal path length* .
 
