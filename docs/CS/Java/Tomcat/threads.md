@@ -19,6 +19,7 @@ protected int maxIdleTime = 60000;
 protected int maxQueueSize = Integer.MAX_VALUE;
 ```
 
+[prestart All CoreThreads](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=prestartCoreThread)
 
 ```java
 // StandardThreadExecutor

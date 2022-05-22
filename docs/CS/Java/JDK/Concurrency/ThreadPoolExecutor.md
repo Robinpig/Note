@@ -269,31 +269,65 @@ Typically, a CompletionService relies on a separate Executor to actually execute
 
 An ExecutorService that executes each submitted task using one of possibly several pooled threads, normally  configured using Executors factory methods.
 
-A thread pool, as its name suggests, manages a homogeneous pool of worker threads. A thread pool is tightly bound to a work queue holding tasks waiting to be executed. Worker threads have a simple life: request the next task from the work queue, execute it, and go back to waiting for another task
+A thread pool, as its name suggests, manages a homogeneous pool of worker threads. A thread pool is tightly bound to a work queue holding tasks waiting to be executed. 
+Worker threads have a simple life: request the next task from the work queue, execute it, and go back to waiting for another task
 
-Thread pools address two different problems: 
-
+Thread pools address two different problems:
 1. they usually provide improved performance when executing large numbers of asynchronous tasks, due to reduced per-task invocation overhead
-2. and they provide a means of bounding and managing the resources, including threads, consumed when executing a collection of tasks. Each ThreadPoolExecutor also maintains some basic statistics, such as the number of completed tasks.
+2. and they provide a means of bounding and managing the resources, including threads, consumed when executing a collection of tasks. 
+   Each ThreadPoolExecutor also maintains some basic statistics, such as the number of completed tasks.
 
-To be useful across a wide range of contexts, this class provides many adjustable parameters and extensibility hooks. However, programmers are urged to use the more convenient Executors factory methods Executors.newCachedThreadPool (unbounded thread pool, with automatic thread reclamation), Executors.newFixedThreadPool (fixed size thread pool) and Executors.newSingleThreadExecutor (single background thread), that preconfigure settings for the most common usage scenarios. Otherwise, use the following guide when manually configuring and tuning this class:
-
-
-
-**Core and maximum pool sizes**
-A ThreadPoolExecutor will automatically adjust the pool size (see getPoolSize) according to the bounds set by corePoolSize (see getCorePoolSize) and maximumPoolSize (see getMaximumPoolSize). When a new task is submitted in method execute(Runnable), if fewer than corePoolSize threads are running, a new thread is created to handle the request, even if other worker threads are idle. Else if fewer than maximumPoolSize threads are running, a new thread will be created to handle the request only if the queue is full. By setting corePoolSize and maximumPoolSize the same, you create a fixed-size thread pool. By setting maximumPoolSize to an essentially unbounded value such as Integer.MAX_VALUE, you allow the pool to accommodate an arbitrary number of concurrent tasks. Most typically, core and maximum pool sizes are set only upon construction, but they may also be changed dynamically using setCorePoolSize and setMaximumPoolSize.
+To be useful across a wide range of contexts, this class provides many adjustable parameters and extensibility hooks. 
+However, programmers are urged to use the more convenient Executors factory methods Executors.newCachedThreadPool (unbounded thread pool, with automatic thread reclamation), Executors.newFixedThreadPool (fixed size thread pool) and Executors.newSingleThreadExecutor (single background thread), that preconfigure settings for the most common usage scenarios. 
+Otherwise, use the following guide when manually configuring and tuning this class:
 
 
 
-**On-demand construction**
-By default, even core threads are initially created and started only when new tasks arrive, but this can be overridden dynamically using method prestartCoreThread or prestartAllCoreThreads. You probably want to prestart threads if you construct the pool with a non-empty queue.
+### Core and maximum pool sizes
+
+A ThreadPoolExecutor will automatically adjust the pool size (see getPoolSize) according to the bounds set by corePoolSize (see getCorePoolSize) and maximumPoolSize (see getMaximumPoolSize). 
+When a new task is submitted in method execute(Runnable), if fewer than corePoolSize threads are running, a new thread is created to handle the request, even if other worker threads are idle. 
+Else if fewer than maximumPoolSize threads are running, a new thread will be created to handle the request only if the queue is full. 
+By setting corePoolSize and maximumPoolSize the same, you create a fixed-size thread pool. 
+By setting maximumPoolSize to an essentially unbounded value such as Integer.MAX_VALUE, you allow the pool to accommodate an arbitrary number of concurrent tasks. 
+Most typically, core and maximum pool sizes are set only upon construction, but they may also be changed dynamically using setCorePoolSize and setMaximumPoolSize.
 
 
+#### setCorePoolSize
 
-**Creating new threads**
-New threads are created using a `ThreadFactory`. If not otherwise specified, a `Executors.defaultThreadFactory` is used, that creates threads to all be in the **same ThreadGroup** and with the **same NORM_PRIORITY priority** and **non-daemon status**. 
+Sets the core number of threads. This overrides any value set in the constructor.
+- If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
+- If larger, new threads will, if needed, be started to execute any queued tasks.
 
-By supplying a different ThreadFactory, you can alter the thread's name, thread group, priority, daemon status, etc. If a ThreadFactory fails to create a thread when asked by returning null from newThread, the executor will continue, but might not be able to execute any tasks. Threads should possess the "modifyThread" RuntimePermission. If worker threads or other threads using the pool do not possess this permission, service may be degraded: configuration changes may not take effect in a timely manner, and a shutdown pool may remain in a state in which termination is possible but not completed.
+#### setMaximumPoolSize
+
+Sets the maximum allowed number of threads. This overrides any value set in the constructor.
+If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
+
+
+#### prestartCoreThread
+
+By default, **even core threads are initially created and started only when new tasks arrive**, but this can be overridden dynamically using method prestartCoreThread or prestartAllCoreThreads. 
+You probably want to prestart threads if you construct the pool with a non-empty queue.
+
+- [Tomcat](/docs/CS/Java/Tomcat/threads.md?id=StandardThreadExecutor)
+- [Dubbo]()
+
+#### allowsCoreThreadTimeOut
+
+Returns true if this pool allows core threads to time out and terminate if no tasks arrive within the keepAlive time, being replaced if needed when new tasks arrive. 
+- When true, the same keep-alive policy applying to non-core threads applies also to core threads. 
+- When false (the default), core threads are never terminated due to lack of incoming tasks.
+
+### ThreadFactory
+
+New threads are created using a `ThreadFactory`. 
+If not otherwise specified, a `Executors.defaultThreadFactory` is used, that creates threads to all be in the **same ThreadGroup** and with the **same NORM_PRIORITY priority** and **non-daemon status**. 
+
+By supplying a different ThreadFactory, you can alter the thread's name, thread group, priority, daemon status, etc. 
+If a ThreadFactory fails to create a thread when asked by returning null from newThread, the executor will continue, but might not be able to execute any tasks. 
+Threads should possess the "modifyThread" RuntimePermission. 
+If worker threads or other threads using the pool do not possess this permission, service may be degraded: configuration changes may not take effect in a timely manner, and a shutdown pool may remain in a state in which termination is possible but not completed.
 
 
 
@@ -329,12 +363,15 @@ private static class DefaultThreadFactory implements ThreadFactory {
 
 
 
-**Keep-alive times**
+### Keep-alive times
+
 If the pool currently has more than corePoolSize threads, excess threads will be terminated if they have been idle for more than the keepAliveTime (see getKeepAliveTime(TimeUnit)). 
 
 This provides a means of reducing resource consumption when the pool is not being actively used. If the pool becomes more active later, new threads will be constructed. 
 
-This parameter can also be changed dynamically using method `setKeepAliveTime(long, TimeUnit)`. Using a value of Long.MAX_VALUE TimeUnit.NANOSECONDS effectively disables idle threads from ever terminating prior to shut down. By default, the keep-alive policy applies only when there are more than corePoolSize threads, but method `allowCoreThreadTimeOut(boolean)` can be used to apply this time-out policy to core threads as well, so long as the keepAliveTime value is non-zero.
+This parameter can also be changed dynamically using method `setKeepAliveTime(long, TimeUnit)`. 
+Using a value of Long.MAX_VALUE TimeUnit.NANOSECONDS effectively disables idle threads from ever terminating prior to shut down. 
+By default, the keep-alive policy applies only when there are more than corePoolSize threads, but method `allowCoreThreadTimeOut(boolean)` can be used to apply this time-out policy to core threads as well, so long as the keepAliveTime value is non-zero.
 
 
 
@@ -664,7 +701,10 @@ private void addWorkerFailed(Worker w) {
 
 #### Worker 
 
-Class Worker mainly maintains interrupt control state for threads running tasks, along with other minor bookkeeping. This class opportunistically extends **AbstractQueuedSynchronizer** to simplify acquiring and releasing a lock surrounding each task execution. This protects against interrupts that are intended to wake up a worker thread waiting for a task from instead interrupting a task being run. We implement a simple non-reentrant mutual exclusion lock rather than use ReentrantLock because we do not want worker tasks to be able to reacquire the lock when they invoke pool control methods like setCorePoolSize. 
+Class Worker mainly maintains interrupt control state for threads running tasks, along with other minor bookkeeping. 
+This class opportunistically extends **AbstractQueuedSynchronizer** to simplify acquiring and releasing a lock surrounding each task execution. 
+This protects against interrupts that are intended to wake up a worker thread waiting for a task from instead interrupting a task being run. 
+We implement a simple non-reentrant mutual exclusion lock rather than use ReentrantLock because we do not want worker tasks to be able to reacquire the lock when they invoke pool control methods like setCorePoolSize. 
 
 *Additionally, to suppress interrupts until the thread actually starts running tasks, we **initialize lock state to a negative value**, and **clear it upon start (in runWorker)**.*
 
@@ -940,7 +980,8 @@ Method getQueue() allows access to the work queue for purposes of monitoring and
 
 ### Reclamation
 
-A pool that is no longer referenced in a program AND has no remaining threads may be reclaimed (garbage collected) without being explicitly shutdown. You can configure a pool to allow all unused threads to eventually die by setting appropriate keep-alive times, using a lower bound of zero core threads and/or setting allowCoreThreadTimeOut(boolean).
+A pool that is no longer referenced in a program AND has no remaining threads may be reclaimed (garbage collected) without being explicitly shutdown. 
+You can configure a pool to allow all unused threads to eventually die by setting appropriate keep-alive times, using a lower bound of zero core threads and/or setting allowCoreThreadTimeOut(boolean).
 
 Extension example. Most extensions of this class override one or more of the protected hook methods. For example, here is a subclass that adds a simple pause/resume feature:
 
@@ -1078,6 +1119,12 @@ void interruptIfStarted() {
 
 
 
+
+#### setWorkQueueSize
+
+[LinkedBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=LinkedBlockingQueue) can not change capacity.
+
+Or we can override a LinkedBlockingQueue to allow resizing thread safe.
 
 ## Executors
 
