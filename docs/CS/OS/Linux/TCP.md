@@ -122,55 +122,6 @@ void __init tcp_tasklet_init(void)
 ## Usages
 
 
-```dot
-digraph {
-   
-   socket -> bind;
-   socket -> connect;
-   bind -> listen;
-   listen -> accept;
-   read[shape=record, label="read/write"];
-   read2[shape=record, label="read/write"];
-    {rank="same"; read;read2;}
-    
-   connect -> read;
-   accept -> read2;
-   close;
-   read -> close;
-   read2 -> close;
-   
-
-}
-```
-
-see system calls:
-1. [socket](/docs/CS/OS/Linux/socket.md?id=create)
-2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
-3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
-5. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
-6. [send](/docs/CS/OS/Linux/TCP.md?id=send)
-7. [recv](/docs/CS/OS/Linux/TCP.md?id=recv)
-
-
-```c
-// Server
-socket(...,SOCK_STREAM,0);
-bind(...,&server_address, ...);
-listen(...);
-accept(..., &client_address, ...);
-recv(..., &clientaddr, ...);
-close(...);
-```
-
-
-
-```c
-// Client
-socket(...,SOCK_STREAM,0);
-connect();
-send(...,&server_address,...);
-```
-
 
 
 Interface for multiple protocols

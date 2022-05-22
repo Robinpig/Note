@@ -304,13 +304,9 @@ static void __register_prot_hook(struct sock *sk)
 
 #### packet_rcv
 
-This function makes lazy skb cloning in hope that most of packets
-are discarded by BPF.
-Note tricky part: we DO mangle shared skb! skb->data, skb->len
-and skb->cb are mangled. It works because (and until) packets
-falling here are owned by current CPU. Output packets are cloned
-by dev_queue_xmit_nit(), input packets are processed by net_bh
-sequentially, so that if we return skb to original state on exit,
+This function makes lazy skb cloning in hope that most of packets are discarded by BPF. 
+Note tricky part: we DO mangle shared skb! skb->data, skb->len and skb->cb are mangled. 
+It works because (and until) packets falling here are owned by current CPU. Output packets are cloned by dev_queue_xmit_nit(), input packets are processed by net_bh sequentially, so that if we return skb to original state on exit,
 we will not harm anyone.
 
 ```c

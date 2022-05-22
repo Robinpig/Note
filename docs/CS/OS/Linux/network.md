@@ -136,7 +136,7 @@ static int process_backlog(struct napi_struct *napi, int quota)
 			rcu_read_lock();
 ```
 
-call [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb)
+register [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) func.
 ```c
 			__netif_receive_skb(skb);
 			rcu_read_unlock();
@@ -768,6 +768,21 @@ ss -nlt
 
 [TCP RESET/RST Reasons](https://iponwire.com/tcp-reset-rst-reasons/)
 
+
+### GSO
+
+Generic Segmentation Offload
+
+
+TCP Segmentation Offload
+
+OS split segmentation to n * MSS, and let device to split MSS
+
+### I/O AT
+
+- Network Flow Affinity
+- Asynchronous Lower Copy with DMA
+- Optimize Packet 
 
 ## Links
 

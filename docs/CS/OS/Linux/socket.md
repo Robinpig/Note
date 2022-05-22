@@ -177,10 +177,11 @@ struct sockaddr_un {
 ```
 
 
-## sock
+## socket
 
 
-
+- sock
+- proto_ops
 
 
 ```c
@@ -197,9 +198,6 @@ struct socket {
 	struct socket_wq	wq;
 };
 ```
-
-
-
 
 
 
@@ -299,7 +297,7 @@ struct sock_common {
 };
 ```
 
-
+### sock
 
 struct sock - network layer representation of sockets
 
@@ -521,7 +519,7 @@ struct request_sock {
 
 
 
-#### socket buffer
+#### SKB
 
 List of sk_buff elements:
 
@@ -544,6 +542,13 @@ struct sk_buff_head {
 ##### sk_buff
 
 struct sk_buff - socket buffer
+
+- struct net_device
+- struct sock
+- head
+- tail
+- end
+
 
 ```c
 // include/linux/skbuff.h

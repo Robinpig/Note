@@ -27,6 +27,57 @@ Similarly, we will see how the client generates a connection request to the serv
 
 In this chapter we will not cover the IP and link layer details (which will be discussed in later chapters) but will surely cover everything that is associated with the client – server connection setup in the kernel.
 
+
+
+```dot
+digraph {
+   
+   socket -> bind;
+   socket -> connect;
+   bind -> listen;
+   listen -> accept;
+   read[shape=record, label="read/write"];
+   read2[shape=record, label="read/write"];
+    {rank="same"; read;read2;}
+    
+   connect -> read;
+   accept -> read2;
+   close;
+   read -> close;
+   read2 -> close;
+   
+
+}
+```
+
+see system calls:
+1. [socket](/docs/CS/OS/Linux/socket.md?id=create)
+2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
+3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
+5. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
+6. [send](/docs/CS/OS/Linux/TCP.md?id=send)
+7. [recv](/docs/CS/OS/Linux/TCP.md?id=recv)
+
+<!-- tabs:start -->
+#### **Server**
+```c
+socket(...,SOCK_STREAM,0);
+bind(...,&server_address, ...);
+listen(...);
+accept(..., &client_address, ...);
+recv(..., &clientaddr, ...);
+close(...);
+```
+
+#### **Client**
+
+```c
+socket(...,SOCK_STREAM,0);
+connect();
+send(...,&server_address,...);
+```
+<!-- tabs:end -->
+
 ## Server Side Setup
 
 - socket() systemcall only creates space for the socket in the kernel

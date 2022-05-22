@@ -541,6 +541,9 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 ```
 
 ### dev_queue_xmit
+
+Send by device
+
 ```c
 // net/core/dev.c
 
