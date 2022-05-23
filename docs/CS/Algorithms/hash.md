@@ -34,6 +34,7 @@ Perfect hashing allows for constant time lookups in all cases. This is in contra
 ### Key statistics
 
 A critical statistic for a hash table is the `load factor`, defined as
+
 $$
 loadfactor(\alpha)=\frac{n}{k}
 $$
