@@ -38,6 +38,9 @@ A critical statistic for a hash table is the `load factor`, defined as
 ```tex
 loadfactor(\alpha)=\frac{n}{k}
 ```
+$$
+loadfactor(\alpha)=\frac{n}{k}
+$$
 
 where
 

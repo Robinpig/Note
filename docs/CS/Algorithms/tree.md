@@ -110,9 +110,12 @@ If the input comes into a tree presorted, then a series of *inserts* will take q
 
 ## AVL Trees
 
-An AVL (Adelson-Velskii and Landis) tree is a binary search tree with a *balance* condition. The balance condition must be easy to maintain, and it ensures that the depth of the tree is  *O* (log  *n* ). The simplest idea is to require that the left and right subtrees have the same height.
+An AVL (Adelson-Velskii and Landis) tree is a binary search tree with a *balance* condition. 
+The balance condition must be easy to maintain, and it ensures that the depth of the tree is  $O(\log{n})$. 
+The simplest idea is to require that the left and right subtrees have the same height.
 
-An AVL tree is identical to a binary search tree, except that for every node in the tree, the height of the left and right subtrees can differ by at most 1. (The height of an empty tree is defined to be -1.)
+An AVL tree is identical to a binary search tree, except that for every node in the tree, the height of the left and right subtrees can differ by at most 1. 
+(The height of an empty tree is defined to be -1.)
 
 In below figure the tree on the left is an AVL tree, but the tree on the right is not.
 
@@ -124,25 +127,30 @@ In below figure the tree on the left is an AVL tree, but the tree on the right i
 
 ## Splay Trees
 
-We now describe a relatively simple data structure, known as a  *splay tree* , that guarantees that any *m* consecutive tree operations take at most  *O* (*m *log  *n* ) time.
+We now describe a relatively simple data structure, known as a  *splay tree* , that guarantees that any *m* consecutive tree operations take at most  $O(m\log{n})$ time.
 
-Although this guarantee does not preclude the possibility that any *single* operation might take  *O* ( *n* ) time,
-and thus the bound is not as strong as an  *O* (log  *n* ) worst-case bound per operation,
+Although this guarantee does not preclude the possibility that any *single* operation might take  $O(n)$ time,
+and thus the bound is not as strong as an  $O(\log{n})$ worst-case bound per operation,
 the net effect is the same: There are no bad input sequences.
-Generally, when a sequence of *m* operations has total worst-case running time of  *O* ( *m f* ( *n* )), we say that the *amortized* running time is  *O* ( *f* ( *n* )).
-Thus, a splay tree has  *O* (log  *n* ) amortized cost per operation. Over a long sequence of operations, some may take more, some less.
+Generally, when a sequence of *m* operations has total worst-case running time of  $O(mf(n))$, we say that the *amortized* running time is  *O* ( *f* ( *n* )).
+Thus, a splay tree has  $O(\log{n})$ amortized cost per operation. Over a long sequence of operations, some may take more, some less.
 
-Splay trees are based on the fact that the  *O* ( *n* ) worst-case time per operation for binary search trees is not bad, as long at it occurs relatively infrequently.
-Any one access, even if it takes  *O* ( *n* ), is still likely to be extremely fast.
+Splay trees are based on the fact that the  $O(n)$ worst-case time per operation for binary search trees is not bad, as long at it occurs relatively infrequently.
+Any one access, even if it takes  $O(n)$, is still likely to be extremely fast.
 The problem with binary search trees is that it is possible, and not uncommon, for a whole sequence of bad accesses to take place.
 The cumulative running time then becomes noticeable.
-A search tree data structure with  *O* ( *n* ) worst-case time, but a *guarantee* of at most  *O* (*m *log  *n* ) for any *m* consecutive operations, is certainly satisfactory, because there are no bad sequences.
+A search tree data structure with  $O(n)$ worst-case time, but a *guarantee* of at most  $O(m\log{n})$ for any *m* consecutive operations, is certainly satisfactory, because there are no bad sequences.
 
-If any particular operation is allowed to have an  *O* ( *n* ) worst-case time bound, and we still want an  *O* (log  *n* ) amortized time bound, then it is clear that **whenever a node is accessed, it must be moved**.
+If any particular operation is allowed to have an  $O(n)$ worst-case time bound, and we still want an  $O(\log{n})$ amortized time bound, then it is clear that **whenever a node is accessed, it must be moved**.
 Otherwise, once we find a deep node, we could keep performing *finds* on it.
-If the node does not change location, and each access costs  *O* ( *n* ), then a sequence of *m* accesses will cost  $O(M*N)$.
+If the node does not change location, and each access costs  $O(n)$, then a sequence of *m* accesses will cost $O(M*N)$.
 
-The basic idea of the splay tree is that after a node is accessed, it is pushed to the root by a series of AVL tree rotations. Notice that if a node is deep, there are many nodes on the path that are also relatively deep, and by restructuring we can make future accesses cheaper on all these nodes. Thus, if the node is unduly deep, then we want this restructuring to have the side effect of balancing the tree (to some extent). Besides giving a good time bound in theory, this method is likely to have practical utility, because in many applications when a node is accessed, it is likely to be accessed again in the near future. Studies have shown that this happens much more often than one would expect. Splay trees also do not require the maintenance of height or balance information, thus saving space and simplifying the code to some extent (especially when careful implementations are written).
+The basic idea of the splay tree is that after a node is accessed, it is pushed to the root by a series of AVL tree rotations. 
+Notice that if a node is deep, there are many nodes on the path that are also relatively deep, and by restructuring we can make future accesses cheaper on all these nodes. 
+Thus, if the node is unduly deep, then we want this restructuring to have the side effect of balancing the tree (to some extent). 
+Besides giving a good time bound in theory, this method is likely to have practical utility, because in many applications when a node is accessed, it is likely to be accessed again in the near future. 
+Studies have shown that this happens much more often than one would expect. 
+Splay trees also do not require the maintenance of height or balance information, thus saving space and simplifying the code to some extent (especially when careful implementations are written).
 
 ### Traversals
 
