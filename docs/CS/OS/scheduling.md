@@ -2,18 +2,19 @@
 
 Workload Assumptions
 
+[Process](/docs/CS/OS/process.md)
 
 ### Scheduling Metrics
 
 Beyond making workload assumptions, we also need one more thing to enable us to compare different scheduling policies: a scheduling metric.
 
 The **turnaround time** of a job is defined as the time at which the job completes minus the time at which the job arrived in the system.
-More formally, the turnaround time Tturnaround is:
+More formally, the turnaround time $T_{turnaround}$ is:
 ```tex
 T_{turnaround} = T_{completion} − T_{arrival}
 ```
 
-Because we have assumed that all jobs arrive at the same time, for now Tarrival = 0 and hence Tturnaround = Tcompletion.
+Because we have assumed that all jobs arrive at the same time, for now $T_{arrival}$ = 0 and hence $T_{turnaround}$ = $T_{completion}$.
 This fact will change as we relax the aforementioned assumptions.
 
 Another metric of interest is fairness.
@@ -74,6 +75,7 @@ Real-time systems
 Probably the simplest of all scheduling algorithms ever devised is nonpreemptive first-come, first-served.
 
 #### Shortest job first
+
 Shortest job first is a nonpreemptive batch algorithm that assumes the run times are known in advance.
 
 #### Shortest remaining time next
