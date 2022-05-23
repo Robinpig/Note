@@ -1171,6 +1171,29 @@ void __noreturn do_exit(long code)
 }
 ```
 
+## termination
+
+A parent process may wait for the termination of a child process by using the wait() system call. 
+The wait() system call is passed a parameter that allows the parent to obtain the exit status of the child. 
+This system call also returns the process identifier of the terminated child so that the parent can tell which of its children has terminated:
+```c
+pid t pid;
+int status;
+pid = wait(&status);
+```
+
+When a process terminates, its resources are deallocated by the operating system. 
+However, its entry in the process table must remain there until the parent calls wait(), because the process table contains the process’s exit status.
+A process that has terminated, but whose parent has not yet called wait(), is known as a **zombie** process. 
+All processes transition to this state when they terminate, but generally they exist as zombies only briefly. 
+Once the parent calls wait(), the process identifier of the zombie process and its entry in the process table are released.
+
+If a parent did not invoke wait() and instead terminated, thereby leaving its child processes as **orphans**.
+Traditional UNIX systems addressed this scenario by assigning the init process as the new parent to orphan processes.
+The init process periodically invokes wait(), thereby allowing the exit status of any orphaned process to be collected and releasing the orphan’s process identifier and process-table entry.
+
+
+
 ## fork
 
 Processes are created in Linux in an especially simple manner. The fork system call creates an exact copy of the original process. 
@@ -2906,5 +2929,6 @@ rb_add_cached(struct rb_node *node, struct rb_root_cached *tree,
 
 
 ## Links
+
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [OS Process](/docs/CS/OS/process.md)

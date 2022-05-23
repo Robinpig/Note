@@ -17,11 +17,11 @@ A process is just an instance of an executing program, including the current val
 Conceptually, each process has its own virtual CPU.
 In reality, of course, the real CPU switches back and forth from process to process.
 This rapid switching back and forth is called *multiprogramming*.
-
 When multiprogramming is used, the CPU utilization can be improved.
 
 A better model is to look at CPU usage from a probabilistic viewpoint. Suppose that a process spends a fraction p of its time waiting for I/O to complete. 
-With n processes in memory at once, the probability that all n processes are waiting for I/O (in which case the CPU will be idle) is pn. The CPU utilization is then given by the formula
+With n processes in memory at once, the probability that all n processes are waiting for I/O (in which case the CPU will be idle) is p^n. 
+The CPU utilization is then given by the formula
 
 ```tex
 CPU utilization = 1 − p^n
@@ -31,7 +31,7 @@ With the CPU switching back and forth among the processes, the rate at which a p
 Thus, processes must not be programmed with built-in assumptions about timing.
 
 A process is an activity of some kind. It has a program, input, output, and a state.
-A single processor may be shared among several processes, with some scheduling algorithm being accustomed to determine when to stop work on one process and service a different one.
+A single processor may be shared among several processes, with some [scheduling algorithm](/docs/CS/OS/scheduling.md) being accustomed to determine when to stop work on one process and service a different one.
 In contrast, a program is something that may be stored on disk, not doing anything.
 
 
@@ -150,6 +150,24 @@ Interrupt handling and scheduling are summarized below. It is worth noting that 
 
 A process may be interrupted thousands of times during its execution, but the key idea is that after each interrupt the interrupted process returns to precisely the same state it was in before the interrupt occurred.
 
+### Multiprocess
+
+> Google’s Chrome web browser was designed to address this issue by using a multiprocess architecture.
+
+Chrome identifies three different types of processes: browser, renderers, and plug-ins.
+
+- The browser process is responsible for managing the user interface as well as disk and network I/O. A new browser process is created when Chrome is started.
+  Only one browser process is created.
+- Renderer processes contain logic for rendering web pages.
+  Thus, they contain the logic for handling HTML, Javascript, images, and so forth.
+  As a general rule, a new renderer process is created for each website opened in a new tab, and so several renderer processes may be active at the same time.
+- A plug-in process is created for each type of plug-in (such as Flash or QuickTime) in use.
+  Plugin processes contain the code for the plug-in as well as additional code that enables the plug-in to communicate with associated renderer processes and the browser process.
+
+The advantage of the multiprocess approach is that websites run in isolation from one another.
+If one website crashes, only its renderer process is affected; all other processes remain unharmed.
+Furthermore, renderer processes run in a sandbox, which means that access to disk and network I/O is restricted, minimizing the effects of any security exploits.
+
 
 ## Threads
 
@@ -244,7 +262,6 @@ Next, consider signals. Some signals are logically thread specific, whereas othe
 
 Last problem introduced by threads is stack management.
 
-
 ## InterProcess Communication
 
 Processes frequently need to communicate with other processes.
@@ -259,6 +276,19 @@ It is also important to mention that two of these issues apply equally well to t
 The first one—passing information—is easy for threads since they share a common address space (threads in different address spaces that need to communicate fall under the heading of communicating processes). 
 However, the other two—keeping out of each other’s hair and proper sequencing—apply equally well to threads.
 The same problems exist and the same solutions apply.
+
+There are two fundamental models of interprocess communication: shared memory and message passing.
+
+In the shared-memory model, a region of memory that is shared by the cooperating processes is established. 
+Processes can then exchange information by reading and writing data to the shared region. 
+In the message-passing model, communication takes place by means of messages exchanged between the cooperating processes.
+
+Message passing is useful for exchanging smaller amounts of data, because no conflicts need be avoided.
+Message passing is also easier to implement in a distributed system than shared memory.
+
+Shared memory can be faster than message passing, since message-passing systems are typically implemented using system calls and thus require the more time-consuming task of kernel intervention.
+In shared-memory systems, system calls are required only to establish sharedmemory regions. 
+Once shared memory is established, all accesses are treated as routine memory accesses, and no assistance from the kernel is required.
 
 ### Race Conditions
 
