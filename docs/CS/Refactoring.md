@@ -1,3 +1,10 @@
-# Refactoring Improving the Design of Existing Code
+## Introduction
 
-## Chapter 1 Refactoring: A First Example  
+Refactoring is a systematic process of improving code without creating new functionality that can transform a mess into clean code and simple design.
+
+
+
+
+## References
+
+1. [Refactoring Guru](https://refactoring.guru/refactoring)

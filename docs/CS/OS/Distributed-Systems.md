@@ -4,7 +4,8 @@ A distributed system is one in which components located at networked computers c
 This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
 
 
-Resource sharing as a main motivation for constructing distributed systems. Resources may be managed by servers and accessed by clients or they may be encapsulated as objects and accessed by other client objects.
+Resources sharing as a main motivation for constructing distributed systems. 
+Resources may be managed by servers and accessed by clients or they may be encapsulated as objects and accessed by other client objects.
 
 The challenges arising from the construction of distributed systems are the heterogeneity of their components, openness (which allows components to be added or replaced), 
 security, scalability – the ability to work well when the load or the number of users increases – failure handling, concurrency of components, transparency and providing quality of service.

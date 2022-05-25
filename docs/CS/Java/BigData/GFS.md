@@ -7,7 +7,7 @@ It provides fault tolerance while running on inexpensive commodity hardware, and
 - Second, files are huge by traditional standards. Multi-GB files are common.
 - Third, most files are mutated by appending new data rather than overwriting existing data.
   Random writes within a file are practically non-existent.
-- Fourth, co-designing the applications and the file system API benefits the overall system by increasing our flexibility.
+- Fourth, code signing the applications and the file system API benefits the overall system by increasing our flexibility.
 
 ## Design Review
 
@@ -565,4 +565,4 @@ The most recent events are also kept in memory and available for continuous onli
 
 ## References
 
-1. [The Google File System](https://www.cs.otago.ac.nz/cosc440/readings/gfs.pdf)
+1. [The Google File System](https://pdos.csail.mit.edu/6.824/papers/gfs.pdf)
