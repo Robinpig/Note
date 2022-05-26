@@ -11,17 +11,21 @@ and wireless radio-frequency methods that may be arranged in a variety of networ
 
 > A protocol defines the format and the order of messages exchanged between two or more communicating entities, as well as the actions taken on the transmission and/or receipt of a message or other event
 
-PDU
+Protocol Data Unit(PDU)
+
+
 
 SDU
 
 ### The Network Edge
 
 Furthermore, an increasing number of non-traditional “things” are being attached to the Internet as end systems.
+End systems are also referred to as *hosts*.
+Hosts are sometimes further divided into two categories: *clients* and *servers*.
 
 ### The Network Core
 
-the network core—the mesh of packet switches and links that interconnects the Internet’s end systems.
+The network core — the mesh of packet switches and links that interconnects the Internet’s end systems.
 
 Circuit Switching
 
@@ -35,18 +39,53 @@ Packet Switching
 - high reliable
 - forward delay
 
-Group Switching
+### Group Switching
+
+
+
+A packet starts in a host (the source), passes through a series of routers, and ends its journey in another host (the destination). 
+As a packet travels from one node (host or router) to the subsequent node (host or router) along this path, the packet suffers from several types of delays at each node along the path. 
+The most important of these delays are the nodal processing delay, queuing delay, transmission delay, and propagation delay; together, these delays accumulate to give a total nodal delay.
+
+- The time required to examine the packet’s header and determine where to direct the packet is part of the processing delay.
+- At the queue, the packet experiences a queuing delay as it waits to be transmitted onto the link. 
+  The length of the queuing delay of a specific packet will depend on the number of earlier-arriving packets that are queued and waiting for transmission onto the link.
+- The transmission delay is the amount of time required for the router to push out the packet;
+  it is a function of the packet’s length and the transmission rate of the link, but has nothing to do with the distance between the two routers.
+- The propagation delay, on the other hand, is the time it takes a bit to propagate from one router to the next;
+  it is a function of the distance between the two routers, but has nothing to do with the packet’s length or the transmission rate of the link.
+
+If we let $d_{proc}$ , $d_{queue}$ , $d_{trans}$ , and $d_{prop}$ denote the processing, queuing, transmission, and propagation delays, then the total nodal delay is given by
+
+$$
+d_{nodal}=d_{proc}+d_{queue}+d_{trans}+d_{prop}
+$$
+
+The most complicated and interesting component of nodal delay is the queuing delay, $d_{queue}$ .
+
+> [!TIP]
+> 
+> Design your system so that the traffic intensity is no greater than 1.
+
+As the traffic intensity approaches 1, the average queuing delay increases rapidly. 
+A small percentage increase in the intensity will result in a much larger percentage-wise increase in delay.
+
+The fraction of lost packets increases as the traffic intensity increases. 
+Therefore, performance at a node is often measured not only in terms of delay, but also in terms of the probability of packet loss.
+
+
+
 
 - connectionless
 - forward delay
 
 ### Performance
 
-Speed
-Bandwidth
-Throughput
-Delay
-RTT
+- Speed
+- Bandwidth
+- Throughput
+- Delay
+- RTT
 
 ### Network Model
 
@@ -74,9 +113,13 @@ Why do sockets provide the interface from the upper three layers of the OSI mode
 
 Therefore, the interface between layers 4 and 5 is the natural place to build the API.
 
-### Networks Under Attack
+## Networks Under Attack
 
-#### Put Malware into Your Host Via the Internet
+### Malware
+
+Viruses
+
+Worms
 
 #### Attack Servers and Network Infrastructure
 
@@ -86,7 +129,7 @@ Another broad class of security threats are known as denial-of-service (DoS) att
 - Bandwidth flooding.
 - Connection flooding.
 
-#### Sniff Packets
+### Sniff Packets
 
 The basic tool for observing the messages exchanged between executing protocol entities is called a *packet sniffer*.
 Sniffed packets can then be analyzed offline for sensitive information.
@@ -97,15 +140,16 @@ Indeed, the [Wireshark](/docs/CS/CN/Tools/WireShark.md) is a packet sniffer.
 
 The ability to inject packets into the Internet with a false source address is known as IP spoofing, and is but one of many ways in which one user can masquerade as another user.
 
-C/S
 
-P2P
 
 
 
 ## Application Layer
 
 Network applications are the raisons exist of a computer network.
+
+An application-layer protocol is distributed over multiple end systems, with the application in one end system using the protocol to exchange packets of information with the application in another end system. 
+We’ll refer to this packet of information at the application layer as a **message**.
 
 ### DHCP
 
@@ -132,6 +176,7 @@ A transport-layer protocol provides for logical communication between applicatio
 By logical communication, we mean that from an application’s perspective, it is as if the hosts running the processes were directly connected;
 in reality, the hosts may be on opposite sides of the planet, connected via numerous routers and a wide range of link types.
 Application processes use the logical communication provided by the transport layer to send messages to each other, free from the worry of the details of the physical infrastructure used to carry these messages.
+We’ll refer to a transport-layer packet as a **segment**.
 
 Transport-layer protocols are implemented in the end systems but not in network routers.
 On the sending side, the transport layer converts the application-layer messages it receives from a sending application process into transport-layer packets, known as transport-layer segments in Internet terminology.
@@ -196,7 +241,8 @@ For example, bind lets the application specify the local IP address and local po
 
 ## Network Layer
 
-The primary role of the network layer is deceptively simple—to move packets from a sending host to a receiving host. To do so, two important network-layer functions can be identified:
+The Internet’s network layer is responsible for moving network-layer packets known as **datagrams** from one host to another.
+To do so, two important network-layer functions can be identified:
 
 - Forwarding
 - Routing
@@ -217,11 +263,13 @@ The value stored in the forwarding table entry for those values indicates the ou
 
 [I/O Multiplexing](/docs/CS/CN/MultiIO.md)
 
+### ICMP
+
 [Internet Control Message Protocol](/docs/CS/CN/ICMP.md)
 
 ## Data Link Layer
 
-frames
+We’ll refer to the link-layer packets as **frames**.
 
 ESC
 
