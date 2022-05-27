@@ -155,7 +155,7 @@ We’ll refer to this packet of information at the application layer as a **mess
 
 [Dynamic Host Configuration Protocol](/docs/CS/CN/DHCP.md)
 
-FTP、SMTP
+FTP、[SMTP](/docs/CS/CN/SMTP.md)
 
 ### HTTP
 

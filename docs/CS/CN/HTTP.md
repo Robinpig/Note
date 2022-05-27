@@ -336,6 +336,16 @@ It is often desirable for a Web site to identify users, either because the serve
 For these purposes, HTTP uses cookies. Cookies, defined in [RFC 6265], allow sites to keep track of users.
 Most major commercial Web sites use cookies today.
 
+Cookie technology has four components:
+
+1. a cookie header line in the HTTP response message
+2. a cookie header line in the HTTP request message
+3. a cookie file kept on theuser’s end system and managed by the user’s browser
+4. a back-end database at the Web site
+
+
+
+
 ### Session
 
 In the session based authentication, the server will create a session for the user after the user logs in. The session id is then stored on a cookie on the user’s browser. While the user stays logged in, the cookie would be sent along with every subsequent request. The server can then compare the session id stored on the cookie against the session information stored in the memory to verify user’s identity and sends response with the corresponding state!
