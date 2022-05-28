@@ -14,6 +14,8 @@ In automatic allocation, the same method is used but the address is never revoke
 In manual allocation, the DHCP protocol is used to convey the address, but the address is fixed for the requesting client (i.e., it is not part of an allocatable pool maintained by the server). 
 In this last mode, DHCP acts like BOOTP. We shall focus on dynamic allocation, as it is the most interesting and common case.
 
+Because of DHCP’s ability to automate the network-related aspects of connecting a host into a network, it is often referred to as a **plug-and-play** or **zeroconf** (zero-configuration) protocol.
+
 
 
 ## Address Pools and Leases
@@ -48,13 +50,20 @@ Subnet
 
 Lease
 
-DHCP DISCOVER
 
-DHCP OFFER
+For a newly arriving host, the DHCP protocol is a four-step process.
+The four steps are:
 
-DHCP REQUEST
+- DHCP server discovery.
+  The first task of a newly arriving host is to find a DHCP server with which to interact.
+- DHCP server offer(s).
+  A DHCP server receiving a DHCP discover message responds to the client with a DHCP offer message that is broadcast to all nodes on the subnet, again using the IP broadcast address of 255.255.255.255.
+- DHCP request. 
+  The newly arriving client will choose from among one or more server offers and respond to its selected offer with a DHCP request message, echoing back the configuration parameters. 
+- DHCP ACK. 
+  The server responds to the DHCP request message with a DHCP ACK message, confirming the requested parameters.
 
-DHCP ACK
+
 
 DHCP NAK
 
@@ -83,3 +92,7 @@ DHCP中继代理
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
+
+## References
+
+1. [RFC 2131 - Dynamic Host Configuration Protocol](https://www.rfc-editor.org/info/rfc2131)
