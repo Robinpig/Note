@@ -1165,11 +1165,12 @@ u32 __tcp_select_window(struct sock *sk)
 ## Recv
 
 
-### call tcp_v4_rcv
+from dev
+
 `ip_rcv` -> ip_rcv_finish -> dst_input -> ip_local_deliver -> [tcp_v4_rcv](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_rcv)
                                        -> ip_forward -> ip_forward_finish -> [ip_output](/docs/CS/OS/Linux/IP.md?id=ip_output)
 
-### call tcp_recvmsg
+from applications
 
 recv/recvfrom -> sys_recvfrom -> sock_recvmsg -> inet_recvmsg -> [tcp_recvmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_recvmsg)
 

@@ -120,7 +120,7 @@ FTP、[SMTP](/docs/CS/CN/SMTP.md)
 
 ### HTTP
 
-The [Hypertext Transfer Protocol](/docs/CS/CN/HTTP.md) (HTTP) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
+The [Hypertext Transfer Protocol (HTTP)](/docs/CS/CN/HTTP.md) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
 
 ### DNS
 
@@ -179,7 +179,7 @@ The job of gathering data chunks at the source host from different sockets, enca
 and passing the segments to the network layer is called *multiplexing*.
 
 How the transport layer could implement the demultiplexing service:
-Each socket in the host could be assigned a port number, and when a segment arrives at the host, the transport layer examines the destination port number in the segment and directs the segment to the corresponding socket.
+Each socket in the host could be assigned a **port number**, and when a segment arrives at the host, the transport layer examines the destination port number in the segment and directs the segment to the corresponding socket.
 The segment’s data then passes through the socket into the attached process.
 As we’ll see, this is basically how UDP does it.
 However, we’ll also see that multiplexing/demultiplexing in TCP is yet more subtle.
@@ -259,10 +259,10 @@ For example, bind lets the application specify the local IP address and local po
 There is a piece of the network layer in each and every host and router in the network.
 We’ll see that the network layer can be decomposed into two interacting parts, the **data-plane** and the **control-plane**.
 
-we’ll first cover the data plane functions of the network layer—the perrouter functions in the network layer that determine how a datagram (that is, a network-layer packet) arriving on one of a router’s input links is forwarded to one of that router’s output links. 
+We’ll first cover the data plane functions of the network layer—the perrouter functions in the network layer that determine how a datagram (that is, a network-layer packet) arriving on one of a router’s input links is forwarded to one of that router’s output links. 
 We’ll cover both traditional IP forwarding (where forwarding is based on a datagram’s destination address) and generalized forwarding (where forwarding and other functions may be performed using values in several different fields in the datagram’s header).
 
-e’ll cover the control plane functions of the network layer—the network-wide logic that controls how a datagram is routed among routers along an end-to-end path from the source host to the destination host. 
+We’ll cover the control plane functions of the network layer—the network-wide logic that controls how a datagram is routed among routers along an end-to-end path from the source host to the destination host. 
 We’ll cover routing algorithms, as well as routing protocols, such as OSPF and BGP, that are in widespread use in today’s Internet. 
 Traditionally, these control-plane routing protocols and data-plane forwarding functions have been implemented together, monolithically, within a router. 
 Software-defined networking (SDN) explicitly separates the data plane and control plane by implementing these control plane functions as a separate service, typically in a remote “controller.”
@@ -270,20 +270,16 @@ Software-defined networking (SDN) explicitly separates the data plane and contro
 The primary role of the network layer is deceptively simple—to move packets from a sending host to a receiving host.
 To do so, two important network-layer functions can be identified:
 
-- Forwarding.
+- **Forwarding.**
   Forwarding refers to the router-local action of transferring a packet from an input link interface to the appropriate output link interface.
   Forwarding takes place at very short timescales (typically a few nanoseconds), and thus is typically implemented in hardware.
   Forwarding is the key function performed by the data-plane functionality of the network layer
-- Routing. 
+- **Routing.** 
   Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination. 
   Routing takes place on much longer timescales(typically seconds), and as we will see is often implemented in software.
 
 
-Forwarding refers to the router-local action of transferring a packet from an input link interface to the appropriate output link interface.
-Forwarding takes place at very short timescales (typically a few nanoseconds), and thus is typically implemented in hardware. Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination.
 
-Routing takes place on much longer timescales(typically seconds), and as we will see is often implemented in software.
-The network layer must determine the route or path taken by packets as they flow from a sender to a receiver. The algorithms that calculate these paths are referred to as routing algorithms.
 
 A key element in every network router is its *forwarding table*.
 A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table.
@@ -291,7 +287,8 @@ The value stored in the forwarding table entry for those values indicates the ou
 
 ### Routing Algorithms
 
-We’ll study **routing algorithms**, whose goal is to determine good paths (equivalently, routes), from senders to receivers, through the network of routers.
+The network layer must determine the route or path taken by packets as they flow from a sender to a receiver.
+The algorithms that calculate these paths are referred to as **routing algorithms**.
 
 Broadly, one way in which we can classify routing algorithms is according to whether they are centralized or decentralized.
 
@@ -536,3 +533,7 @@ The ability to inject packets into the Internet with a false source address is k
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
 - [Internet Assigned Numbers Authority](https://www.iana.org/)
+
+## References
+
+1. [Computer Networking: A Top-Down Approach 8 edition](https://gaia.cs.umass.edu/kurose_ross/interactive/)

@@ -120,13 +120,21 @@ The reason for the NOP option is to allow the sender to pad fields to a multiple
 Remember that the TCP header’s length is always required to be a multiple of 32 bits because the TCP Header Length field uses that unit.
 The EOL option indicates the end of the list and that no further processing of the options list is to be performed.
 
-#### Maximum Segment Size (MSS) Option
+#### MSS Option
 
-#### Selective Acknowledgment (SACK) Options
+Maximum Segment Size
 
-#### Window Scale (WSCALE or WSOPT) Option
+#### SACK Options
 
-#### Timestamps Option and Protection against Wrapped Sequence Numbers (PAWS)
+Selective Acknowledgment
+
+#### Window Scale Option
+
+Window Scale(WSCALE or WSOPT)
+
+#### PAWS option
+
+Timestamps Option and Protection against Wrapped Sequence Numbers
 
 The Timestamps option (sometimes called the Timestamp option and written as TSOPT or TSopt) lets the sender place two 4-byte timestamp values in every segment.
 The receiver reflects these values in the acknowledgment, allowing the sender to calculate an estimate of the connection’s RTT for each ACK received.
@@ -263,15 +271,15 @@ Only when the application performs this close (and its FIN is received) does the
 This means that one end of the connection can remain in this state forever.
 The other end is still in the CLOSE_WAIT state and can remain there forever, until the application decides to issue its close.
 
+
 Many implementations prevent this infinite wait in the FIN_WAIT_2 state as follows:
-If the application that does the active close does a complete close, not a half-close indicating that it expects to receive data, a timer is set.
+If the application that does the active close does a complete close, not a half-close indicating that it expects to receive data, a **timer** is set.
 If the connection is idle when the timer expires, TCP moves the connection into the CLOSED state.
 In Linux, the variable `net.ipv4.tcp_fin_timeout` can be adjusted to control the number of seconds to which the timer is set. Its default value is 60s.
-
 When a connection moves from the FIN_WAIT_1 state to the FIN_WAIT_2 state and the connection cannot receive any more data
 (implying the process called close, instead of taking advantage of TCP’s half-close with shutdown), this timer is set to 10 minutes.
 When this timer expires it is reset to 75 seconds, and when it expires the second time the connection is dropped.
-The “purpose of this timer is to avoid leaving a connection in the FIN_WAIT_2 state forever, if the other end never sends a FIN.
+The purpose of this timer is to avoid leaving a connection in the FIN_WAIT_2 state forever, if the other end never sends a FIN.
 
 #### TIME_WAIT
 
@@ -308,21 +316,18 @@ cat /proc/sys/net/ipv4/tcp_fin_timeout	#60
 
 tcp_tw_reuse - INTEGER
 
-Enable reuse of TIME-WAIT sockets for new connections when it is
-safe from protocol viewpoint.
-
+Enable reuse of TIME-WAIT sockets for new connections when it is safe from protocol viewpoint.
+It should not be changed without advice/request of technical experts.
 - 0 - disable
 - 1 - global enable
-- 2 - enable for loopback traffic only
+- 2 - enable for loopback traffic only, default
 
-It should not be changed without advice/request of technical
-experts.
 
-Default: 2
+
 
 ### Reset Segments
 
-#### Connection Request to Nonexistent Port
+#### Nonexistent Port
 
 In the case of UDP, we saw that an ICMP Destination Unreachable (Port Unreachable) message is generated when a datagram arrives for a destination port that is not in use. TCP uses a reset segment instead.
 
@@ -342,11 +347,11 @@ This can happen anytime one of the peers crashes. As long as there is no attempt
 
 Another common cause of a half-open connection is when one host is powered off instead of shut down properly.
 
-#### TIME-WAIT Assassination (TWA)
+#### TWA
 
 As mentioned previously, the TIME_WAIT state is intended to allow any datagrams lingering from a closed connection to be discarded.
 During this period, the waiting TCP usually has little to do; it merely holds the state until the 2MSL timer expires.
-If, however, it receives certain segments from the connection during this period, or more specifically an RST segment, it can become desynchronized. This is called TIME-WAIT Assassination (TWA) [RFC1337].
+If, however, it receives certain segments from the connection during this period, or more specifically an RST segment, it can become desynchronized. This is called **TIME-WAIT Assassination (TWA)**.
 
 This is no problem for the server, but it causes the client to prematurely transition from TIME_WAIT to CLOSED.
 Most systems avoid this problem by simply not reacting to reset segments while in the TIME_WAIT state.
@@ -395,7 +400,8 @@ If the connection is immediately reopened after a TWA event, the new incarnation
 We discuss three possible fixes to TCP to avoid these hazards.
 
 - Ignore RST segments in TIME-WAIT state. If the 2 minute MSL is enforced, this fix avoids all three hazards.
-  This is the simplest fix.  One could also argue that it is formally the correct thing to do; since allowing time for old duplicate segments to die is one of TIME-WAIT state's functions, the state should not be truncated by a RST segment. [see Linux](/d)
+  This is the simplest fix.  One could also argue that it is formally the correct thing to do; since allowing time for old duplicate segments to die is one of TIME-WAIT state's functions, 
+  the state should not be truncated by a RST segment. [See Linux](/d)
 - Use PAWS to avoid the hazards.
 - Use 64-bit Sequence Numbers
 
@@ -520,7 +526,8 @@ netstat -s|grep overflowed
 
 ### Fast Open
 
-The key component of TFO is the Fast Open Cookie (cookie), a message authentication code (MAC) tag generated by the server.  The client requests a cookie in one regular TCP connection, then uses it for future TCP connections to exchange data during the 3WHS:
+The key component of TFO is the Fast Open Cookie (cookie), a message authentication code (MAC) tag generated by the server.  
+The client requests a cookie in one regular TCP connection, then uses it for future TCP connections to exchange data during the 3WHS:
 
 Requesting a Fast Open Cookie:
 
@@ -577,10 +584,7 @@ Performing TCP Fast Open in connection 2:
    Cookie          0, or 4 to 16 bytes (Length - 2)
 ```
 
-和HTTP的keepalive不相同，是为了尽可能热连接，减少RTT(Round Trip Time)
-
-首次HTTP请求最快2RTT(第三次握手携带HTTP请求)，若fastopen开启，则生成cookie在下次请求时携带 无需三次握手，只需一次RTT就可以完成HTTP
--- [TCP Fast Open](http://conferences.sigcomm.org/co-next/2011/papers/1569470463.pdf)
+[TCP Fast Open](http://conferences.sigcomm.org/co-next/2011/papers/1569470463.pdf)
 
 ```shell
 #linux
@@ -914,7 +918,6 @@ We call PAWS(`Protect Against Wrapped Sequence numbers`), to extend TCP reliabil
 The PAWS algorithm requires the following processing to be performed on all incoming segments for a synchronized connection:
 
 - If there is a Timestamps option in the arriving segment and SEG.TSval < TS.Recent and if TS.Recent is valid (see later discussion), then treat the arriving segment as not acceptable:
-
   - Send an acknowledgement in reply as specified in RFC-793 page 69 and drop the segment.
   - Note: it is necessary to send an ACK segment in order to retain TCP's mechanisms for detecting and recovering from half-open connections.  For example, see Figure 10 of RFC-793.
 - If the segment is outside the window, reject it (normal TCP processing)
@@ -1037,9 +1040,9 @@ In effect, a sending TCP then sends at a rate equal to what the receiver or the 
 The new value used to hold the estimate of the network’s available capacity is called the congestion window, written more compactly as simply cwnd.
 The sender’s actual (usable) window W is then written as the minimum of the receiver’s advertised window awnd and the congestion window:
 
-```tex
+$$
 W = min(cwnd, awnd)
-```
+$$
 
 With this relationship, the TCP sender is not permitted to have more than W unacknowledged packets or bytes outstanding in the network.
 The total amount of data a sender has introduced into the network for which it has not yet received an acknowledgment is sometimes called the flight size, which is always less than or equal to W.
@@ -1086,9 +1089,9 @@ Once ssthresh is established and cwnd is at least at this level, a TCP runs the 
 This provides a much slower growth rate than slow start: approximately linear in terms of time, as opposed to slow start’s exponential growth.
 More precisely, cwnd is usually updated as follows for each received nonduplicate ACK:
 
-```tex
+$$
 cwndt+1 = cwndt + SMSS * SMSS/cwndt
-```
+$$
 
 We generally think of congestion avoidance growing the window linearly with respect to time, whereas slow start grows it exponentially with respect to time.
 This function is also called additive increase because a particular value (about one packet in this case) is added to cwnd for each successfully received window’s worth of data.
@@ -1241,14 +1244,17 @@ slabtop
 
 TCP maintains seven timers for each connection. They are briefly described here, in the approximate order of their occurrence during the lifetime of a connection.
 
-1. A [connection-establishment timer](/docs/CS/CN/TCP.md?id=timeout-of-connection-establishment) starts when a SYN is sent to establish a new connection. If a response is not received within 75 seconds, the connection establishment is aborted.
+1. A [connection-establishment timer](/docs/CS/CN/TCP.md?id=timeout-of-connection-establishment) starts when a SYN is sent to establish a new connection. 
+   If a response is not received within 75 seconds, the connection establishment is aborted.
 2. A [retransmission timer](/docs/CS/CN/TCP.md?id=retransmission-timeout) is set when TCP sends data. If the data is not acknowledged by the other end when this timer expires, TCP retransmits the data.
 3. A [delayed ACK timer](/docs/CS/CN/TCP.md?id=delayed-acknowledgments) is set when TCP receives data that must be acknowledged, but need not be acknowledged immediately.
    Instead, TCP waits up to 200 ms before sending the ACK. If, during this 200-ms time period, TCP has data to send on this connection, the pending acknowledgment is sent along with the data (called piggybacking).
-4. A [persist timer](/docs/CS/CN/TCP.md?id=zero-windows-and-the-tcp-persist-timer) is set when the other end of a connection advertises a window of 0, stopping TCP from sending data.
+4. A [persist timer](/docs/CS/CN/TCP.md?id=zero-windows-and-the-tcp-persist-timer) is set when the other end of a connection advertises a window of 0, stopping TCP from sending data. 
+   Like the retransmission timer, the persist timer value is calculated dynamically, based on the round-trip time. The value of this is bounded by TCP to be between 5 and 60 seconds.
 5. A [keepalive timer](/docs/CS/CN/TCP.md?id=Keepalive) can be set by the process using the SO_KEEPALIVE socket option.
 6. A [FIN_WAIT_2 timer](/docs/CS/CN/TCP.md?id=fin_wait_2).
-7. A [TIME_WAIT timer](/docs/CS/CN/TCP.md?id=time_wait), often called the 2MSL timer.
+7. A [TIME_WAIT timer](/docs/CS/CN/TCP.md?id=time_wait), often called the 2MSL timer. 
+   The timer is set to 1 minute (Net/3 uses an MSL of 30 seconds) when the connection enters the TIME_WAIT state and when it expires, the TCP control block and Internet PCB are deleted, allowing that socket pair to be reused.
 
 TCP has two timer functions: one is called every 200 ms (the fast timer) and the other every 500 ms (the slow timer).
 The delayed ACK timer is different from the other six: when the delayed ACK timer is set for a connection it means that a delayed ACK must be sent the next time the 200-ms timer expires (i.e., the elapsed time is between 0 and 200 ms).
@@ -1268,6 +1274,6 @@ The other six timers are decremented every 500 ms, and only when the counter rea
 6. [RFC 2525 - Known TCP Implementation Problems](https://datatracker.ietf.org/doc/rfc2525/)
 7. [RFC 2581 - TCP Congestion Control](https://datatracker.ietf.org/doc/rfc2581/)
 8. [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP](https://datatracker.ietf.org/doc/rfc3168/)
-9. [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
-10. [RFC 6937 - Proportional Rate Reduction for TCP](https://datatracker.ietf.org/doc/html/rfc6937)
-11. [RFC 7413 - TCP Fast Open](https://datatracker.ietf.org/doc/html/rfc7413)
+9. [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/doc/rfc6191)
+10. [RFC 6937 - Proportional Rate Reduction for TCP](https://datatracker.ietf.org/doc/doc/rfc6937)
+11. [RFC 7413 - TCP Fast Open](https://datatracker.ietf.org/doc/rfc7413/)

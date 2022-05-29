@@ -195,7 +195,7 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 两次相同的POST请求会在服务器端创建两份资源，它们具有不同的URI。
 对同一URI进行多次PUT的副作用和一次PUT是相同的。
 
-### HTTP 状态码
+### HTTP Status Code
 
 服务器返回的 **响应报文** 中第一行为状态行，包含了状态码以及原因短语，用来告知客户端请求的结果。
 
@@ -210,17 +210,17 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 | 4XX    | Client Error（客户端错误状态码） | 服务器无法处理请求         |
 | 5XX    | Server Error（服务器错误状态码） | 服务器处理请求出错         |
 
-#### 1XX
+##### 1XX
 
 - **100 Continue** ：表明到目前为止都很正常，客户端可以继续发送请求或者忽略这个响应。
 
-#### 2XX
+##### 2XX
 
 - **200 OK**
 - **204 No Content** ：请求已经成功处理，但是返回的响应报文不包含实体的主体部分。一般在只需要从客户端往服务器发送信息，而不需要返回数据时使用。
 - **206 Partial Content** ：表示客户端进行了范围请求。响应报文包含由 Content-Range 指定范围的实体内容。
 
-#### 3XX
+##### 3XX
 
 - **301 Moved Permanently** ：永久性重定向
 - **302 Found** ：临时性重定向
@@ -229,14 +229,14 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 - **304 Not Modified** ：如果请求报文首部包含一些条件，例如：If-Match，If-ModifiedSince，If-None-Match，If-Range，If-Unmodified-Since，如果不满足条件，则服务器会返回 304 状态码。
 - **307 Temporary Redirect** ：临时重定向，与 302 的含义类似，但是 307 要求浏览器不会把重定向请求的 POST 方法改成 GET 方法。
 
-#### 4XX
+##### 4XX
 
 - **400 Bad Request** ：请求报文中存在语法错误。
 - **401 Unauthorized** ：该状态码表示发送的请求需要有认证信息（BASIC 认证、DIGEST 认证）。如果之前已进行过一次请求，则表示用户认证失败。
 - **403 Forbidden** ：请求被拒绝，服务器端没有必要给出拒绝的详细理由。
 - **404 Not Found**
 
-#### 5XX
+##### 5XX
 
 - **500 Internal Server Error** ：服务器正在执行请求时发生错误。
 - **503 Service Unavilable** ：服务器暂时处于超负载或正在进行停机维护，现在无法处理请求。
@@ -249,19 +249,17 @@ todo PUT DELETE not security
 
 ### 1.1
 
-#### connection keepalive
-
-复用TCP连接,持久使用
+#### Connection Keepalive
 
 ```http
 Connection: keep-Alive
 ```
 
-#### pipelining
+#### Pipelining
 
-并行发送, 不必等上一个请求返回可发送第二个请求
+Send multi-requests parallel
 
-Head-of-line blocking 串行化顺序等待
+Head-of-line blocking
 
 ### 2
 
@@ -273,7 +271,7 @@ Zip Header HPACK algorithm
 
 服务器推送
 
-多路复用 并发请求 无队头阻塞问题 **SPDY**
+多路复用 并发请求  **SPDY**
 
 标头
 
@@ -294,13 +292,14 @@ public
 
 issues:
 
-多路复用同一个TCP连接，TCP连接不了解上层多少HTTP请求， 当存在丢包时， 其他HTTP请求必须阻塞等待
+TCP Head-of-line blocking
 
 ### 3
 
-QUIC
+[QUIC](/docs/CS/CN/QUIC.md)
 
-使用UDP代替TCP ，防止出现队头阻塞或者重传阻塞
+HTTP over UDP
+
 
 升级到TLS1.3 头部压缩算法QPack
 
@@ -312,9 +311,6 @@ URI(Uniform Resource Identifier)
 
 URL(Uniform Resource Locator)
 
-[RFC 2396 - ]
-
-[RFC 3986 - ]
 
 Proxy
 
@@ -322,7 +318,7 @@ Cache
 
 ## State Management Mechanism
 
-> See [RFC 6265 - HTTP State Management Mechanism](https://www.rfc-editor.org/rfc/inline-errata/rfc6265.html)
+
 
 
 
@@ -472,3 +468,6 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 6. [RFC 4648 - The Base16, Base32, and Base64 Data Encodings](https://www.rfc-editor.org/info/rfc4648)
 7. [RFC 7540 - Hypertext Transfer Protocol Version 2 (HTTP/2)](https://www.rfc-editor.org/info/rfc7540)
 8. [RFC 7168 - The Hyper Text Coffee Pot Control Protocol for Tea Efflux Appliances (HTCPCP-TEA)](https://datatracker.ietf.org/doc/html/rfc7168)
+9. [RFC 6265 - HTTP State Management Mechanism](https://datatracker.ietf.org/doc/rfc6265/)
+10. [RFC 2396 - Uniform Resource Identifiers (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc2396/)
+11. [RFC 3986 - Uniform Resource Identifier (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc3986/)
