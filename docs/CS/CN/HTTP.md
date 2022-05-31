@@ -58,12 +58,12 @@ first line of that message, the method to be applied to the resource,
 the identifier of the resource, and the protocol version in use.
 
 ```
-        Request       = Request-Line          
-                        *(( general-header    
-                         | request-header     
+        Request       = Request-Line      
+                        *(( general-header  
+                         | request-header   
                          | entity-header ) CRLF)  
                         CRLF
-                        [ message-body ]      
+                        [ message-body ]  
 ```
 
 #### Request-Line
@@ -78,12 +78,12 @@ After receiving and interpreting a request message, a server responds
 with an HTTP response message.
 
 ```
-       Response      = Status-Line           
-                       *(( general-header    
-                        | response-header    
+       Response      = Status-Line       
+                       *(( general-header  
+                        | response-header  
                         | entity-header ) CRLF)  
                        CRLF
-                       [ message-body ]      
+                       [ message-body ]  
 ```
 
 #### Status-Line
@@ -128,8 +128,8 @@ multipart/byteranges
 
 #### Pipelining
 
-A client that supports persistent connections MAY "pipeline" its requests (i.e., send multiple requests without waiting for each response).A server MAY process a sequence of pipelined requests in parallel if they all have safe methods (Section 4.2.1 of [RFC7231]),
-**but it MUST send the corresponding responses in the same order that the requests were received**.
+A client that supports persistent connections MAY "pipeline" its requests (i.e., send multiple requests without waiting for each response).
+A server may process a sequence of pipelined requests in parallel if they all have safe methods (Section 4.2.1 of [RFC7231]), **but it MUST send the corresponding responses in the same order that the requests were received**.
 
 > Pipelining solves HOL blocking for requests, but not for responses.
 
@@ -154,7 +154,7 @@ A client ought to limit the number of simultaneous open connections that it main
 Previous revisions of HTTP gave a specific number of connections as a ceiling, but this was found to be impractical for many applications.
 As a result, this specification does not mandate a particular maximum number of connections but, instead, encourages clients to be conservative when opening multiple connections.
 
-Multiple connections are typically used to avoid the "head-of-line blocking" problem, wherein a request that takes significant server-side processing and/or has a large payload blocks subsequent requests on the same connection.
+Multiple connections are typically used to avoid the ["head-of-line blocking"](/docs/CS/CN/HOL.md?id=HTTP) problem, wherein a request that takes significant server-side processing and/or has a large payload blocks subsequent requests on the same connection.
 However, each connection consumes server resources.  Furthermore, using multiple connections can cause undesirable side effects in congested networks.
 
 Note that a server might reject traffic that it deems abusive or characteristic of a denial-of-service attack, such as an excessive number of open connections from a single client.
@@ -255,23 +255,36 @@ todo PUT DELETE not security
 Connection: keep-Alive
 ```
 
-#### Pipelining
-
-Send multi-requests parallel
-
-Head-of-line blocking
+[Pipelining](/docs/CS/CN/HTTP.md?id=pipelining)
 
 ### 2
 
-Zip Header HPACK algorithm
+HTTP/2 standard was based on SPDY with some improvements.
+
+HTTP/2 solved the head-of-the-line blocking problem by multiplexing the HTTP requests over a single open TCP connection.
+HTTP/2 solves this quite elegantly by prepending small control messages, called **frames**, before the resource chunks.
+By “framing” individual messages HTTP/2 is thus much more flexible than HTTP/1.1.
+It allows for many resources to be sent multiplexed on a single TCP connection by interleaving their chunks.
+
+An important consequence of HTTP/2’s approach is that we suddenly also need a way for the browser to communicate to the server how it would like the single connection’s bandwidth to be distributed across resources.
+Put differently: how resource chunks should be “scheduled” or interleaved.
+If we again visualize this with 1’s and 2’s, we see that for HTTP/1.1, the only option was 11112222 (let’s call that sequential).
+HTTP/2 however has a lot more freedom:
+
+- Fair multiplexing (for example two progressive JPEGs): 12121212
+- Weighted multiplexing (2 is twice as important as 1): 221221221
+- Reversed sequential scheduling (for example 2 is a key Server Pushed resource): 22221111
+- Partial scheduling (stream 1 is aborted and not sent in full): 112222
+
+Which of these is used is driven by the so-called “prioritization” system in HTTP/2 and the chosen approach can have a big impact on Web performance.
+
+HTTP/2 also allows compressing request headers in addition to the request body, which further reduces the amount of data transferred over the wire.
 
 二进制格式
 
 强化安全
 
 服务器推送
-
-多路复用 并发请求  **SPDY**
 
 标头
 
@@ -290,16 +303,11 @@ no-cache
 
 public
 
-issues:
-
-TCP Head-of-line blocking
-
 ### 3
 
 [QUIC](/docs/CS/CN/QUIC.md)
 
 HTTP over UDP
-
 
 升级到TLS1.3 头部压缩算法QPack
 
@@ -311,16 +319,11 @@ URI(Uniform Resource Identifier)
 
 URL(Uniform Resource Locator)
 
-
 Proxy
 
 Cache
 
 ## State Management Mechanism
-
-
-
-
 
 HTTP is stateless.
 
@@ -328,7 +331,7 @@ To overcome the stateless nature of HTTP requests, we could use either a session
 
 ### Cookies
 
-It is often desirable for a Web site to identify users, either because the server wishes to restrict user access or because it wants to serve content as a function of the user identity. 
+It is often desirable for a Web site to identify users, either because the server wishes to restrict user access or because it wants to serve content as a function of the user identity.
 For these purposes, HTTP uses cookies. Cookies, defined in [RFC 6265], allow sites to keep track of users.
 Most major commercial Web sites use cookies today.
 
@@ -338,9 +341,6 @@ Cookie technology has four components:
 2. a cookie header line in the HTTP request message
 3. a cookie file kept on theuser’s end system and managed by the user’s browser
 4. a back-end database at the Web site
-
-
-
 
 ### Session
 
@@ -354,7 +354,6 @@ session依赖于容器
 3. 使用中间件统一存储
 
 多系统时可以考虑独立于其它业务系统
-
 
 Cookie 优点
 
@@ -452,6 +451,8 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 
 [WebPageTest](https://www.webpagetest.org)
 
+[H2O](https://h2o.examp1e.net/)
+
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
@@ -471,3 +472,4 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 9. [RFC 6265 - HTTP State Management Mechanism](https://datatracker.ietf.org/doc/rfc6265/)
 10. [RFC 2396 - Uniform Resource Identifiers (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc2396/)
 11. [RFC 3986 - Uniform Resource Identifier (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc3986/)
+12. [Hypertext Transfer Protocol Version 3 (HTTP/3)](https://quicwg.org/base-drafts/draft-ietf-quic-http.html)

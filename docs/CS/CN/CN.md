@@ -157,7 +157,7 @@ As another example, a transport protocol can use encryption to guarantee that ap
 even when the network layer cannot guarantee the confidentiality of transport-layer segments.
 
 
-|                    | TCP                                                                             | UDP                          |
+|                    | [TCP](/docs/CS/CN/TCP.md)                                                       | [UDP](/docs/CS/CN/UDP.md)    |
 | -------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
 | Connection         | connections                                                                     | connectionless               |
 | Reliability        | acknowledgments, sequence numbers, RTT estimation, timeouts, or retransmissions | no                           |
@@ -219,8 +219,8 @@ In particular, when the window size and bandwidth-delay product are both large, 
 A single packet error can thus cause GBN to retransmit a large number of packets, many unnecessarily.
 As the probability of channel errors increases, the pipeline can become filled with these unnecessary retransmissions.
 
-
 **Summary of reliable data transfer mechanisms and their use**
+
 
 | Mechanism               | Use, Comments                                                                                                                                                                                                                                                                                     |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -230,7 +230,6 @@ As the probability of channel errors increases, the pipeline can become filled w
 | Acknowledgment          | Used by the receiver to tell the sender that a packet or set of packets has been received correctly.<br />Acknowledgments will typically carry the sequence number of the packet or packets being acknowledged. <br />Acknowledgments may be individual or cumulative, depending on the protocol. |
 | Negative acknowledgment | Used by the receiver to tell the sender that a packet has not been received correctly.<br />Negative acknowledgments will typically carry the sequence number of the packet that was not received correctly.                                                                                      |
 | Window, pipelining      | The sender may be restricted to sending only packets with sequence numbersthat fall within a given range.<br />By allowing multiple packets to be transmitted but not yet acknowledged, sender utilization can be increased over a stop-and-wait mode of operation.                               |
-
 
 ### Connection
 
@@ -259,12 +258,12 @@ For example, bind lets the application specify the local IP address and local po
 There is a piece of the network layer in each and every host and router in the network.
 We’ll see that the network layer can be decomposed into two interacting parts, the **data-plane** and the **control-plane**.
 
-We’ll first cover the data plane functions of the network layer—the perrouter functions in the network layer that determine how a datagram (that is, a network-layer packet) arriving on one of a router’s input links is forwarded to one of that router’s output links. 
+We’ll first cover the data plane functions of the network layer—the perrouter functions in the network layer that determine how a datagram (that is, a network-layer packet) arriving on one of a router’s input links is forwarded to one of that router’s output links.
 We’ll cover both traditional IP forwarding (where forwarding is based on a datagram’s destination address) and generalized forwarding (where forwarding and other functions may be performed using values in several different fields in the datagram’s header).
 
-We’ll cover the control plane functions of the network layer—the network-wide logic that controls how a datagram is routed among routers along an end-to-end path from the source host to the destination host. 
-We’ll cover routing algorithms, as well as routing protocols, such as OSPF and BGP, that are in widespread use in today’s Internet. 
-Traditionally, these control-plane routing protocols and data-plane forwarding functions have been implemented together, monolithically, within a router. 
+We’ll cover the control plane functions of the network layer—the network-wide logic that controls how a datagram is routed among routers along an end-to-end path from the source host to the destination host.
+We’ll cover routing algorithms, as well as routing protocols, such as OSPF and BGP, that are in widespread use in today’s Internet.
+Traditionally, these control-plane routing protocols and data-plane forwarding functions have been implemented together, monolithically, within a router.
 Software-defined networking (SDN) explicitly separates the data plane and control plane by implementing these control plane functions as a separate service, typically in a remote “controller.”
 
 The primary role of the network layer is deceptively simple—to move packets from a sending host to a receiving host.
@@ -274,12 +273,9 @@ To do so, two important network-layer functions can be identified:
   Forwarding refers to the router-local action of transferring a packet from an input link interface to the appropriate output link interface.
   Forwarding takes place at very short timescales (typically a few nanoseconds), and thus is typically implemented in hardware.
   Forwarding is the key function performed by the data-plane functionality of the network layer
-- **Routing.** 
-  Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination. 
+- **Routing.**
+  Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination.
   Routing takes place on much longer timescales(typically seconds), and as we will see is often implemented in software.
-
-
-
 
 A key element in every network router is its *forwarding table*.
 A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table.
@@ -300,25 +296,20 @@ A second broad way to classify routing algorithms is according to whether they a
 
 A third way to classify routing algorithms is according to whether they are load-sensitive or loadinsensitive.
 
-
 #### The Link-State (LS) Routing Algorithm
 
 Recall that in a link-state algorithm, the network topology and all link costs are known, that is, available as input to the LS algorithm.
 
 #### The Distance-Vector (DV) Routing Algorithm
 
-Whereas the LS algorithm is an algorithm using global information, the distance-vector (DV) algorithm is iterative, asynchronous, and distributed. 
-It is distributed in that each node receives some information from one or more of its directly attached neighbors, performs a calculation, and then distributes the results of its calculation back to its neighbors. 
-It is iterative in that this process continues on until no more information is exchanged between neighbors. (Interestingly, the algorithm is also self-terminating—there is no signal that the computation should stop; it just stops.) 
+Whereas the LS algorithm is an algorithm using global information, the distance-vector (DV) algorithm is iterative, asynchronous, and distributed.
+It is distributed in that each node receives some information from one or more of its directly attached neighbors, performs a calculation, and then distributes the results of its calculation back to its neighbors.
+It is iterative in that this process continues on until no more information is exchanged between neighbors. (Interestingly, the algorithm is also self-terminating—there is no signal that the computation should stop; it just stops.)
 The algorithm is asynchronous in that it does not require all of the nodes to operate in lockstep with each other.
-
 
 #### OSPF
 
 #### BGP
-
-
-
 
 ### IP
 
@@ -326,12 +317,7 @@ The algorithm is asynchronous in that it does not require all of the nodes to op
 
 [I/O Multiplexing](/docs/CS/CN/MultiIO.md)
 
-
-
-
 In essence, the NAT-enabled router is hiding the details of the home network from the outside world.
-
-
 
 ### ICMP
 
@@ -339,33 +325,30 @@ In essence, the NAT-enabled router is hiding the details of the home network fro
 
 ## Data Link Layer
 
-We’ll find it convenient in this chapter to refer to any device that runs a link-layer (i.e., layer 2) protocol as a **node**. 
-Nodes include hosts, routers, switches, and WiFi access points. 
+We’ll find it convenient in this chapter to refer to any device that runs a link-layer (i.e., layer 2) protocol as a **node**.
+Nodes include hosts, routers, switches, and WiFi access points.
 We will also refer to the communication channels that connect adjacent nodes along the communication path as **links**.
 Over a given link, a transmitting node encapsulates the datagram in a **link-layer frame** and transmits the frame into the link.
 
 Possible services that can be offered by a link-layer protocol include:
 
-- **Framing.** 
+- **Framing.**
   Almost all link-layer protocols encapsulate each network-layer datagram within a link-layer frame before transmission over the link.
-- **Link access.**  
+- **Link access.**
   A medium access control (MAC) protocol specifies the rules by which a frame is transmitted onto the link.
-- **Reliable delivery.**  
+- **Reliable delivery.**
   When a link-layer protocol provides reliable delivery service, it guarantees to move each network-layer datagram across the link without error.
-  A link-layer reliable delivery service is often used for links that are prone to high error rates, such as a wireless link, 
-  with the goal of correcting an error locally—on the link where the error occurs—rather than forcing an end-to-end retransmission of the data by a transport- or application-layer protocol. 
-  However, link-layer reliable delivery can be considered an unnecessary overhead for low bit-error links, including fiber, coax, and many twisted-pair copper links. 
+  A link-layer reliable delivery service is often used for links that are prone to high error rates, such as a wireless link,
+  with the goal of correcting an error locally—on the link where the error occurs—rather than forcing an end-to-end retransmission of the data by a transport- or application-layer protocol.
+  However, link-layer reliable delivery can be considered an unnecessary overhead for low bit-error links, including fiber, coax, and many twisted-pair copper links.
   For this reason, many wired link-layer protocols do not provide a reliable delivery service.
 - **Error detection and correction.**
   Such bit errors are introduced by signal attenuation and electromagnetic noise.
-  The Internet’s transport layer and network layer also provide a limited form of error detection—the Internet checksum. 
-  Error detection in the link layer is usually more sophisticated and is implemented in hardware. 
+  The Internet’s transport layer and network layer also provide a limited form of error detection—the Internet checksum.
+  Error detection in the link layer is usually more sophisticated and is implemented in hardware.
   Error correction is similar to error detection, except that a receiver not only detects when bit errors have occurred in the frame but also determines exactly where in the frame the errors have occurred (and then corrects these errors).
 
 For the most part, the link layer is implemented in a **network adapter**, also sometimes known as a **network interface card (NIC)**.
-
-
-
 
 ### Error-Detection and Correction
 
@@ -373,13 +356,13 @@ Generally, more sophisticated error-detection and-correction techniques (that is
 
 Let’s now examine three techniques for detecting errors in the transmitted data:
 
-- parity checks (to illustrate the basic ideas behind error detection and correction), 
-- checksumming methods (which are more typically used in the transport layer), and 
+- parity checks (to illustrate the basic ideas behind error detection and correction),
+- checksumming methods (which are more typically used in the transport layer), and
 - cyclic redundancy checks (which are more typically used in the link layer in an adapter).
 
 #### CRC
 
-An error-detection technique used widely in today’s computer networks is based on **cyclic redundancy check (CRC) codes**. 
+An error-detection technique used widely in today’s computer networks is based on **cyclic redundancy check (CRC) codes**.
 CRC codes are also known as **polynomial codes**, since it is possible to view the bit string to be sent as a polynomial whose coefficients are the 0 and 1 values in the bit string, with operations on the bit string interpreted as polynomial arithmetic.
 
 ### Multiple Access Links and Protocols
@@ -392,7 +375,7 @@ We can classify just about any multiple access protocol as belonging to one of t
 Ideally, a multiple access protocol for a broadcast channel of rate R bits per second should have the following desirable characteristics:
 
 1. When only one node has data to send, that node has a throughput of R bps.
-2. When M nodes have data to send, each of these nodes has a throughput of R/M bps. 
+2. When M nodes have data to send, each of these nodes has a throughput of R/M bps.
    This need not necessarily imply that each of the M nodes always has an instantaneous rate of R/M, but rather that each node should have an average transmission rate of R/M over some suitably defined interval of time.
 3. The protocol is decentralized; that is, there is no master node that represents a single point of failure for the network.
 4. The protocol is simple, so that it is inexpensive to implement.
@@ -400,15 +383,15 @@ Ideally, a multiple access protocol for a broadcast channel of rate R bits per s
 #### Channel Partitioning Protocols
 
 **Time-division multiplexing (TDM)** and **frequency-division multiplexing (FDM)** are two techniques that can be used to partition a broadcast channel’s bandwidth among all nodes sharing that channel.
-A third channel partitioning protocol is **code division multiple access (CDMA)**. 
+A third channel partitioning protocol is **code division multiple access (CDMA)**.
 While TDM and FDM assign time slots and frequencies, respectively, to the nodes, CDMA assigns a different code to each node.
 
 #### Random Access Protocols
 
-In a random access protocol, a transmitting node always transmits at the full rate of the channel, namely, *R* bps. 
-When there is a collision, each node involved in the collision repeatedly retransmits its frame (that is, packet) until its frame gets through without a collision. 
-But when a node experiences a collision, it doesn’t necessarily retransmit the frame right away. Instead it waits a random delay before retransmitting the frame. 
-**Each node involved in a collision chooses independent random delays.** 
+In a random access protocol, a transmitting node always transmits at the full rate of the channel, namely, *R* bps.
+When there is a collision, each node involved in the collision repeatedly retransmits its frame (that is, packet) until its frame gets through without a collision.
+But when a node experiences a collision, it doesn’t necessarily retransmit the frame right away. Instead it waits a random delay before retransmitting the frame.
+**Each node involved in a collision chooses independent random delays.**
 Because the random delays are independently chosen, it is possible that one of the nodes will pick a delay that is sufficiently less than the delays of the other colliding nodes and will therefore be able to sneak its frame into the channel without a collision.
 
 ALOHA
@@ -417,15 +400,14 @@ CSMA
 
 #### Taking-Turns Protocols
 
-The **polling protocol** eliminates the collisions and empty slots that plague random access protocols. 
-This allows polling to achieve a much higher efficiency. But it also has a few drawbacks. 
+The **polling protocol** eliminates the collisions and empty slots that plague random access protocols.
+This allows polling to achieve a much higher efficiency. But it also has a few drawbacks.
 
 - The first drawback is that the protocol introduces a polling delay—the amount of time required to notify a node that it can transmit.
 - The second drawback, which is potentially more serious, is that if the master node fails, the entire channel becomes inoperative.
 
-The second taking-turns protocol is the **token-passing protocol**. In this protocol there is no master node. 
+The second taking-turns protocol is the **token-passing protocol**. In this protocol there is no master node.
 A small, special-purpose frame known as a token is exchanged among the nodes in some fixed order.
-
 
 ### Link-Layer Addressing
 
@@ -444,7 +426,6 @@ async
 
 ### Encoding
 
-
 ## Wireless and Mobile Networks
 
 We can identify the following elements in a wireless network:
@@ -453,18 +434,19 @@ We can identify the following elements in a wireless network:
 - Wireless links.
 
 We can find a number of important differences between a wired link and a wireless link:
-- **Decreasing signal strength.** 
-  Electromagnetic radiation attenuates as it passes through matter (e.g., a radio signal passing through a wall). 
+
+- **Decreasing signal strength.**
+  Electromagnetic radiation attenuates as it passes through matter (e.g., a radio signal passing through a wall).
   Even in free space, the signal will disperse, resulting in decreased signal strength (sometimes referred to as path loss) as the distance between sender and receiver increases.
-- **Interference from other sources.** 
+- **Interference from other sources.**
   Radio sources transmitting in the same frequency band will interfere with each other.
   In addition to interference from transmitting sources, electromagnetic noise within the environment(e.g., a nearby motor, a microwave) can result in interference.
-- **Multipath propagation.** 
-  Multipath propagation occurs when portions of the electromagnetic wave reflect off objects and the ground, taking paths of different lengths between a sender and receiver. 
-  This results in the blurring of the received signal at the receiver. 
+- **Multipath propagation.**
+  Multipath propagation occurs when portions of the electromagnetic wave reflect off objects and the ground, taking paths of different lengths between a sender and receiver.
+  This results in the blurring of the received signal at the receiver.
   Moving objects between the sender and receiver can cause multipath propagation to change over time.
 
-The **signal-to-noise ratio(SNR)** is a relative measure of the strength of the received signal (i.e., the information being transmitted) and this noise. 
+The **signal-to-noise ratio(SNR)** is a relative measure of the strength of the received signal (i.e., the information being transmitted) and this noise.
 The SNR is typically measured in units of decibels (dB).
 
 The **bit error rate(BER)** —roughly speaking, the probability that a transmitted bit is received in error at the receiver.
@@ -475,22 +457,13 @@ Several physical-layer characteristics that are important in understanding highe
 - For a given SNR, a modulation technique with a higher bit transmission rate (whether in error or not) will have a higher BER.
 - Dynamic selection of the physical-layer modulation technique can be used to adapt the modulation technique to channel conditions.
 
-
-
 **Code division multiple access (CDMA)** belongs to the family of channel partitioning protocols. It is prevalent in wirelzess LAN and cellular technologies
-
 
 ### WiFi
 
 The **IEEE 802.11 wireless LAN**, also known as **WiFi**.
 
-
-
-
-
-
 ## Networks Under Attack
-
 
 ### Malware
 
@@ -516,8 +489,6 @@ Indeed, the [Wireshark](/docs/CS/CN/Tools/WireShark.md) is a packet sniffer.
 #### Masquerade as Someone You Trust
 
 The ability to inject packets into the Internet with a false source address is known as IP spoofing, and is but one of many ways in which one user can masquerade as another user.
-
-
 
 ## Tools
 
