@@ -231,6 +231,13 @@ As the probability of channel errors increases, the pipeline can become filled w
 | Negative acknowledgment | Used by the receiver to tell the sender that a packet has not been received correctly.<br />Negative acknowledgments will typically carry the sequence number of the packet that was not received correctly.                                                                                      |
 | Window, pipelining      | The sender may be restricted to sending only packets with sequence numbersthat fall within a given range.<br />By allowing multiple packets to be transmitted but not yet acknowledged, sender utilization can be increased over a stop-and-wait mode of operation.                               |
 
+[RFC 908 - Reliable Data Protocol](https://datatracker.ietf.org/doc/rfc908/)
+
+[RFC 1151 - Version 2 of the Reliable Data Protocol (RDP)](https://datatracker.ietf.org/doc/rfc1151/)
+
+
+
+
 ### Connection
 
 #### Connectionless

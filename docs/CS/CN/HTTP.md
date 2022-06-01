@@ -58,7 +58,7 @@ first line of that message, the method to be applied to the resource,
 the identifier of the resource, and the protocol version in use.
 
 ```
-        Request       = Request-Line      
+        Request       = Request-Line  
                         *(( general-header  
                          | request-header   
                          | entity-header ) CRLF)  
@@ -78,7 +78,7 @@ After receiving and interpreting a request message, a server responds
 with an HTTP response message.
 
 ```
-       Response      = Status-Line       
+       Response      = Status-Line   
                        *(( general-header  
                         | response-header  
                         | entity-header ) CRLF)  
@@ -129,23 +129,42 @@ multipart/byteranges
 #### Pipelining
 
 A client that supports persistent connections MAY "pipeline" its requests (i.e., send multiple requests without waiting for each response).
-A server may process a sequence of pipelined requests in parallel if they all have safe methods (Section 4.2.1 of [RFC7231]), **but it MUST send the corresponding responses in the same order that the requests were received**.
+A server may process a sequence of pipelined requests in parallel if they all have safe methods, **but it MUST send the corresponding responses in the same order that the requests were received**.
 
+> [!TIP]
+>
 > Pipelining solves HOL blocking for requests, but not for responses.
 
 A client that pipelines requests SHOULD retry unanswered requests if the connection closes before it receives all of the corresponding responses.
 When retrying pipelined requests after a failed connection (a connection not explicitly closed by the server in its last complete response), a client MUST NOT pipeline immediately after connection establishment,
-since the first remaining request in the prior pipeline might have caused an error response that can be lost again if multiple requests are sent on a prematurely closed connection (see the TCP reset problem described in Section 6.6).
+since the first remaining request in the prior pipeline might have caused an error response that can be lost again if multiple requests are sent on a prematurely closed connection (see the *TCP reset problem*).
 
-Idempotent methods (Section 4.2.2 of [RFC7231]) are significant to pipelining because they can be automatically retried after a connection failure.
+> [!NOTE]
+>
+> **TCP Reset Problem**
+>
+> If a server performs an immediate close of a TCP connection, there is a significant risk that the client will not be able to read the last HTTP response.
+> If the server receives additional data from the client on a fully closed connection, such as another request that was sent by the client before receiving the server's response,
+> the server's TCP stack will send a reset packet to the client; unfortunately, the reset packet might erase the client's unacknowledged input buffers before they can be read and interpreted by the client's HTTP parser.
+>
+> To avoid the TCP reset problem, servers typically close a connection in stages.
+>
+> - First, the server performs a half-close by closing only the write side of the read/write connection.
+>   The server then continues to read from the connection until it receives a corresponding close by the client, or until the server is reasonably certain that its own TCP stack has received the client's acknowledgement of the packet(s) containing the server's last response.
+> - Finally, the server fully closes the connection.
+
+Idempotent methods are significant to pipelining because they can be automatically retried after a connection failure.
 A user agent SHOULD NOT pipeline requests after a non-idempotent method, until the final response status code for that method has been received, unless the user agent has a means to detect and recover from partial failure conditions involving the pipelined sequence.
 
-An intermediary that receives pipelined requests MAY pipeline those requests when forwarding them inbound, since it can rely on the outbound user agent(s) to determine what requests can be safely pipelined.If the inbound connection fails before receiving a response, the pipelining intermediary MAY attempt to retry a sequence of requests that have yet to receive a response if the requests all have idempotent methods;
+An intermediary that receives pipelined requests MAY pipeline those requests when forwarding them inbound, since it can rely on the outbound user agent(s) to determine what requests can be safely pipelined.
+If the inbound connection fails before receiving a response, the pipelining intermediary MAY attempt to retry a sequence of requests that have yet to receive a response if the requests all have idempotent methods;
 otherwise, the pipelining intermediary SHOULD forward any received responses and then close the corresponding outbound connection(s) so that the outbound user agent(s) can recover accordingly.
 
 - Firstly, some files that can be processed/rendered incrementally do profit from multiplexing. This is for example the case for progressive images.
 - Secondly, as also discussed above, it can be useful if one of the files is much smaller than the others, as it will be downloaded earlier while not delaying the others by too much.
 - Thirdly, **multiplexing allows changing the order of responses and interrupting a low priority response for a higher priority one.**
+
+[Chromium Remove HTTP pipelining support.](https://codereview.chromium.org/275953002)
 
 #### Concurrency
 
@@ -261,6 +280,8 @@ Connection: keep-Alive
 
 HTTP/2 standard was based on SPDY with some improvements.
 
+#### HTTP Frames
+
 HTTP/2 solved the head-of-the-line blocking problem by multiplexing the HTTP requests over a single open TCP connection.
 HTTP/2 solves this quite elegantly by prepending small control messages, called **frames**, before the resource chunks.
 By “framing” individual messages HTTP/2 is thus much more flexible than HTTP/1.1.
@@ -280,28 +301,43 @@ Which of these is used is driven by the so-called “prioritization” system in
 
 HTTP/2 also allows compressing request headers in addition to the request body, which further reduces the amount of data transferred over the wire.
 
-二进制格式
+#### HTTP2 over TLS
 
-强化安全
+Next Protocol Negotiation (NPN) is the protocol used to negotiate SPDY with TLS servers. 
+As it wasn't a proper standard, it was taken through the IETF and the result was ALPN: Application Layer Protocol Negotiation. 
+ALPN is being promoted for use by http2, while SPDY clients and servers still use NPN.
 
-服务器推送
+The fact that NPN existed first and ALPN has taken a while to go through standardization has led to many early http2 clients and http2 servers implementing and using both these extensions when negotiating http2. 
+Also, NPN is what's used for SPDY and many servers offer both SPDY and http2, so supporting both NPN and ALPN on those servers makes perfect sense.
 
-标头
+ALPN differs from NPN primarily in who decides what protocol to speak. 
+With ALPN, the client gives the server a list of protocols in its order of preference and the server picks the one it wants, while with NPN the client makes the final choice.
 
-- Cache-Control
-- Connection
-- Pragma
-- Trailer
-- Transfer-Encoding
-- Upgrade
-- Via
-- Warning
+#### Binary Message
 
-Cache
+HTTP/2 also enables more efficient processing of messages through use of binary message framing.
 
-no-cache
+#### HPACK
 
-public
+[HPACK](https://www.rfc-editor.org/rfc/rfc7541.txt) was designed to make it difficult for a conforming implementation to leak information, to make encoding and decoding very fast/cheap, 
+to provide for receiver control over compression context size, to allow for proxy re-indexing (i.e., shared state between frontend and backend within a proxy), and for quick comparisons of Huffman-encoded strings.
+
+
+#### Reset
+
+One of the drawbacks with HTTP 1.1 is that when an HTTP message has been sent off with a Content-Length of a certain size, you can't easily just stop it. Sure, you can often (but not always) disconnect the TCP connection, but that comes at the cost of having to negotiate a new TCP handshake again.
+A better solution would be to just stop the message and start anew. This can be done with http2's RST_STREAM frame which will help prevent wasted bandwidth and the need to tear down connections.
+
+#### Server push
+
+This is the feature also known as “cache push”. The idea is that if the client asks for resource X, the server may know that the client will probably want resource Z as well, and sends it to the client without being asked. It helps the client by putting Z into its cache so that it will be there when it wants it.
+Server push is something a client must explicitly allow the server to do. Even then, the client can swiftly terminate a pushed stream at any time with RST_STREAM should it not want a particular resource.
+
+#### Flow Control
+
+Each individual http2 stream has its own advertised flow window that the other end is allowed to send data for. If you happen to know how SSH works, this is very similar in style and spirit.
+For every stream, both ends have to tell the peer that it has enough room to handle incoming data, and the other end is only allowed to send that much data until the window is extended. Only DATA frames are flow controlled.
+
 
 ### 3
 
@@ -465,11 +501,13 @@ JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）�
 2. [RFC 2045 - Multipurpose Internet Mail Extensions(MIME) Part One:Format of Internet Message Bodies](https://www.rfc-editor.org/info/rfc2045)
 3. [RFC 2324 - Hyper Text Coffee Pot Control Protocol (HTCPCP/1.0)](https://www.rfc-editor.org/info/rfc2324)
 4. [RFC 2616 - Hypertext Transfer Protocol -- HTTP/1.1](https://www.rfc-editor.org/info/rfc2616)
-5. [RFC 4122 - A Universally Unique IDentifier (UUID) URN Namespace](https://www.rfc-editor.org/info/rfc4122)
-6. [RFC 4648 - The Base16, Base32, and Base64 Data Encodings](https://www.rfc-editor.org/info/rfc4648)
-7. [RFC 7540 - Hypertext Transfer Protocol Version 2 (HTTP/2)](https://www.rfc-editor.org/info/rfc7540)
-8. [RFC 7168 - The Hyper Text Coffee Pot Control Protocol for Tea Efflux Appliances (HTCPCP-TEA)](https://datatracker.ietf.org/doc/html/rfc7168)
-9. [RFC 6265 - HTTP State Management Mechanism](https://datatracker.ietf.org/doc/rfc6265/)
-10. [RFC 2396 - Uniform Resource Identifiers (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc2396/)
-11. [RFC 3986 - Uniform Resource Identifier (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc3986/)
-12. [Hypertext Transfer Protocol Version 3 (HTTP/3)](https://quicwg.org/base-drafts/draft-ietf-quic-http.html)
+5. [RFC 2616 - Hypertext Transfer Protocol -- HTTP/1.1](https://www.rfc-editor.org/info/rfc7230)
+6. [RFC 4122 - A Universally Unique IDentifier (UUID) URN Namespace](https://www.rfc-editor.org/info/rfc4122)
+7. [RFC 4648 - The Base16, Base32, and Base64 Data Encodings](https://www.rfc-editor.org/info/rfc4648)
+8. [RFC 7230 - Hypertext Transfer Protocol (HTTP/1.1): Message Syntax and Routing](https://www.rfc-editor.org/info/rfc7230)
+9. [RFC 7540 - Hypertext Transfer Protocol Version 2 (HTTP/2)](https://www.rfc-editor.org/info/rfc7540)
+10. [RFC 7168 - The Hyper Text Coffee Pot Control Protocol for Tea Efflux Appliances (HTCPCP-TEA)](https://datatracker.ietf.org/doc/html/rfc7168)
+11. [RFC 6265 - HTTP State Management Mechanism](https://datatracker.ietf.org/doc/rfc6265/)
+12. [RFC 2396 - Uniform Resource Identifiers (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc2396/)
+13. [RFC 3986 - Uniform Resource Identifier (URI): Generic Syntax](https://datatracker.ietf.org/doc/rfc3986/)
+14. [Hypertext Transfer Protocol Version 3 (HTTP/3)](https://quicwg.org/base-drafts/draft-ietf-quic-http.html)
