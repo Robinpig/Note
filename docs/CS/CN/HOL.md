@@ -72,7 +72,7 @@ As there the goal was to eliminate HOL blocking in all its forms once and for al
 while QUIC integrates TLS, it will always encrypt data on a per-packet basis and it does not use TLS records directly. 
 As we’ve seen, this is less efficient and requires more CPU than using larger blocks, and is one of the main reasons why QUIC can still be slower than TCP in current implementations.
 
-
+> See [Optimizing TLS Record Size & Buffering Latency](https://www.igvita.com/2013/10/24/optimizing-tls-record-size-and-buffering-latency/)
 
 ## Links
 

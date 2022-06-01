@@ -5,6 +5,8 @@
 
 > QUIC retains ordering within a single resource stream.
 
+## Fast handshakes
+
 0-RTT
 
 QUIC encrypts and cryptographically authenticates both the transport data and the protocol itself, preventing middleboxes from inspecting or modifying the protocol header and future-proofing the protocol in the process.
@@ -13,11 +15,17 @@ Versioning also allows us to consider alternative versions that we can build, tu
 
 We anticipated two major sources of computational cost for QUIC:
 
-Acknowledgement processing: A large fraction of packets in a typical TCP connection carry only acknowledgements. TCP acknowledgements are processed within the kernel, both at the sender and the receiver. QUIC does these in user space, resulting in more data copies across the user-kernel boundary and more context switches. Additionally, TCP acknowledgements are in plaintext, while QUIC acknowledgements are encrypted, increasing the cost of sending and receiving acknowledgements in QUIC.
+Acknowledgement processing: A large fraction of packets in a typical TCP connection carry only acknowledgements. 
+TCP acknowledgements are processed within the kernel, both at the sender and the receiver. 
+QUIC does these in user space, resulting in more data copies across the user-kernel boundary and more context switches. 
+Additionally, TCP acknowledgements are in plaintext, while QUIC acknowledgements are encrypted, increasing the cost of sending and receiving acknowledgements in QUIC.
 
-Per-packet sender overhead: The kernel knows about TCP connections, and can remember and reuse state that is expected to remain unchanged for all packets sent in a connection. For instance, the kernel needs to typically only look up the route for the destination address or apply firewall rules once at the start of the connection. Since the kernel has no connection state for QUIC connections, these kernel operations are performed on every outgoing QUIC packet.
+Per-packet sender overhead: The kernel knows about TCP connections, and can remember and reuse state that is expected to remain unchanged for all packets sent in a connection. 
+For instance, the kernel needs to typically only look up the route for the destination address or apply firewall rules once at the start of the connection. 
+Since the kernel has no connection state for QUIC connections, these kernel operations are performed on every outgoing QUIC packet.
 
-Since QUIC runs in user space, these costs are higher with QUIC than with TCP. This is because every packet that is either sent or received by QUIC crosses the user-kernel boundary, which is known as a context switch.
+Since QUIC runs in user space, these costs are higher with QUIC than with TCP. 
+This is because every packet that is either sent or received by QUIC crosses the user-kernel boundary, which is known as a context switch.
 
 This experiment showed a clear path forward for improving quicly’s efficiency: reducing acknowledgement frequency, coalescing packets with GSO, and using as large a packet size as possible.
 
@@ -35,10 +43,10 @@ This design also allows connections to continue after changes in network topolog
 The use of a connection ID allows connections to survive changes to endpoint addresses (IP address and port), such as those caused by an endpoint migrating to a new network.  
 This section describes the process by which an endpoint migrates to a new address.
 
-
-The design of QUIC relies on endpoints retaining a stable address for the duration of the handshake.  
-An endpoint MUST NOT initiate connection migration before the handshake is confirmed, as defined in [QUIC-TLS](/docs/CS/CN/QUIC.md?id=TLS).
-
+The design of QUIC relies on endpoints retaining a stable address for the duration of the handshake.
+Some situations that do not allow connection migration:
+- An endpoint MUST NOT initiate connection migration before the handshake is confirmed, as defined in [QUIC-TLS](/docs/CS/CN/QUIC.md?id=TLS).
+- An endpoint MUST NOT initiate connection migration if the peer sent the disable_active_migration transport parameter.
 
 If the peer sent the `disable_active_migration` transport parameter, an endpoint also MUST NOT send packets (including probing packets) from a different local address to the address the peer used during the handshake, 
 unless the endpoint has acted on a `preferred_address` transport parameter from the peer.  
@@ -55,6 +63,32 @@ An endpoint capable of connection migration MAY wait for a new path to become av
 This document limits migration of connections to new client addresses, except as described in Section 9.6.  Clients are responsible for initiating all migrations.  
 Servers do not send non-probing packets (see Section 9.1) toward a client address until they see a non-probing packet from that address.  If a client receives packets from an unknown server address, the client MUST discard these packets.
 
+### Classification of Connection Migration
+
+#### ACM and PCM
+
+Active Connection Migration and Passive Connection Migration
+
+#### VCM and HCM
+
+Vertical Connection Migration and Horizontal Connection Migration
+
+#### CCM and SCM
+
+Client Connection Migration and Server Connection Migration
+
+#### SPCM and MPCM
+
+Single-path Connection Migration and Multi-path Connection Migration
+
+### Connection Migration Strategy
+
+- Failover Mode
+- Standby Mode
+- Aggregation Mode
+- Load Balance Mode
+
+Except for PCM, other connection migrations can be triggered by RTT, packet loss rate, timeout, ECN or application signals.
 
 ### Probing a New Path
 
@@ -85,83 +119,49 @@ The new path might not have the same [ECN capability]().
 
 ###  Responding to Connection Migration
 
-Receiving a packet from a new peer address containing a non-probing
-frame indicates that the peer has migrated to that address.
+Receiving a packet from a new peer address containing a non-probing frame indicates that the peer has migrated to that address.
 
-If the recipient permits the migration, it MUST send subsequent
-packets to the new peer address and MUST initiate path validation
-(Section 8.2) to verify the peer's ownership of the address if
-validation is not already underway.  If the recipient has no unused
-connection IDs from the peer, it will not be able to send anything on
-the new path until the peer provides one; see Section 9.5.
+If the recipient permits the migration, it MUST send subsequent packets to the new peer address and MUST initiate path validation(Section 8.2) to verify the peer's ownership of the address if validation is not already underway.  
+If the recipient has no unused connection IDs from the peer, it will not be able to send anything on the new path until the peer provides one; see Section 9.5.
 
-An endpoint only changes the address to which it sends packets in
-response to the highest-numbered non-probing packet.  This ensures
-that an endpoint does not send packets to an old peer address in the
-case that it receives reordered packets.
+An endpoint only changes the address to which it sends packets in response to the highest-numbered non-probing packet.  
+This ensures that an endpoint does not send packets to an old peer address in the case that it receives reordered packets.
 
-An endpoint MAY send data to an unvalidated peer address, but it MUST
-protect against potential attacks as described in Sections 9.3.1 and
-9.3.2.  An endpoint MAY skip validation of a peer address if that
-address has been seen recently.  In particular, if an endpoint
-returns to a previously validated path after detecting some form of
-spurious migration, skipping address validation and restoring loss
-detection and congestion state can reduce the performance impact of
-the attack.
+An endpoint MAY send data to an unvalidated peer address, but it MUST protect against potential attacks as described in Sections 9.3.1 and 9.3.2.  
+An endpoint MAY skip validation of a peer address if that address has been seen recently.  
+In particular, if an endpoint returns to a previously validated path after detecting some form of spurious migration, skipping address validation and restoring loss detection and congestion state can reduce the performance impact of the attack.
 
-After changing the address to which it sends non-probing packets, an
-endpoint can abandon any path validation for other addresses.
+After changing the address to which it sends non-probing packets, an endpoint can abandon any path validation for other addresses.
 
-Receiving a packet from a new peer address could be the result of a
-NAT rebinding at the peer.
+Receiving a packet from a new peer address could be the result of a NAT rebinding at the peer.
 
 After verifying a new client address, the server SHOULD send new address validation tokens (Section 8) to the client.
 
 ### Peer Address Spoofing
 
-It is possible that a peer is spoofing its source address to cause an
-endpoint to send excessive amounts of data to an unwilling host.  If
-the endpoint sends significantly more data than the spoofing peer,
-connection migration might be used to amplify the volume of data that
-an attacker can generate toward a victim.
+It is possible that a peer is spoofing its source address to cause an endpoint to send excessive amounts of data to an unwilling host.  
+If the endpoint sends significantly more data than the spoofing peer, connection migration might be used to amplify the volume of data that an attacker can generate toward a victim.
 
-As described in Section 9.3, an endpoint is required to validate a
-peer's new address to confirm the peer's possession of the new
-address.  Until a peer's address is deemed valid, an endpoint limits
-the amount of data it sends to that address; see Section 8.  In the
-absence of this limit, an endpoint risks being used for a denial-of-
-service attack against an unsuspecting victim.
+As described in Section 9.3, an endpoint is required to validate a peer's new address to confirm the peer's possession of the new address.  
+Until a peer's address is deemed valid, an endpoint limits the amount of data it sends to that address; see Section 8.  
+In the absence of this limit, an endpoint risks being used for a denial-of- service attack against an unsuspecting victim.
 
-If an endpoint skips validation of a peer address as described above,
-it does not need to limit its sending rate.
+If an endpoint skips validation of a peer address as described above, it does not need to limit its sending rate.
 
 
 ### On-Path Address Spoofing
 
-An on-path attacker could cause a spurious connection migration by
-copying and forwarding a packet with a spoofed address such that it
-arrives before the original packet.  The packet with the spoofed
-address will be seen to come from a migrating connection, and the
-original packet will be seen as a duplicate and dropped.  After a
-spurious migration, validation of the source address will fail
-because the entity at the source address does not have the necessary
-cryptographic keys to read or respond to the PATH_CHALLENGE frame
-that is sent to it even if it wanted to.
+An on-path attacker could cause a spurious connection migration by copying and forwarding a packet with a spoofed address such that it arrives before the original packet.  
+The packet with the spoofed address will be seen to come from a migrating connection, and the original packet will be seen as a duplicate and dropped.  
+After a spurious migration, validation of the source address will fail because the entity at the source address does not have the necessary cryptographic keys to read or respond to the PATH_CHALLENGE frame that is sent to it even if it wanted to.
 
-To protect the connection from failing due to such a spurious
-migration, an endpoint MUST revert to using the last validated peer
-address when validation of a new peer address fails.  Additionally,
-receipt of packets with higher packet numbers from the legitimate
-peer address will trigger another connection migration.  This will
-cause the validation of the address of the spurious migration to be
-abandoned, thus containing migrations initiated by the attacker
-injecting a single packet.
+To protect the connection from failing due to such a spurious migration, an endpoint MUST revert to using the last validated peer address when validation of a new peer address fails.  
+Additionally, receipt of packets with higher packet numbers from the legitimate peer address will trigger another connection migration.  
+This will cause the validation of the address of the spurious migration to be abandoned, thus containing migrations initiated by the attacker injecting a single packet.
 
-If an endpoint has no state about the last validated peer address, it
-MUST close the connection silently by discarding all connection
-state.  This results in new packets on the connection being handled
-generically.  For instance, an endpoint MAY send a Stateless Reset in
-response to any further incoming packets.
+If an endpoint has no state about the last validated peer address, it MUST close the connection silently by discarding all connection state.  
+This results in new packets on the connection being handled generically.  
+For instance, an endpoint MAY send a Stateless Reset in response to any further incoming packets.
 
 ### Off-Path Packet Forwarding
 
@@ -198,6 +198,11 @@ response to any further incoming packets.
    +--------------+                        +--------------+
    (After connection migration)
 ```
+
+
+The endpoint receives a packet containing the new peer address of the non-probing frame from the peer, indicating that the connection migration initiator has migrated to this address.
+
+After the connection is migrated, the endpoints need to reset the congestion control parameters.
 
 ## Loss Detection and Congestion Control
 

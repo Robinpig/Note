@@ -341,13 +341,7 @@ For every stream, both ends have to tell the peer that it has enough room to han
 
 ### 3
 
-[QUIC](/docs/CS/CN/QUIC.md)
-
-HTTP over UDP
-
-升级到TLS1.3 头部压缩算法QPack
-
-基于TCP+TLS1.2需要6次握手，QUIC压缩到3次
+HTTP over [QUIC](/docs/CS/CN/QUIC.md)
 
 ## URI
 

@@ -542,12 +542,9 @@ The client requests a cookie in one regular TCP connection, then uses it for fut
 
 Requesting a Fast Open Cookie:
 
-1. The client sends a SYN with a Fast Open option with an empty
-   cookie field to request a cookie.
-2. The server generates a cookie and sends it through the Fast Open
-   option of a SYN-ACK packet.
-3. The client caches the cookie for future TCP Fast Open connections
-   (see below).
+1. The client sends a SYN with a Fast Open option with an empty cookie field to request a cookie.
+2. The server generates a cookie and sends it through the Fast Open option of a SYN-ACK packet.
+3. The client caches the cookie for future TCP Fast Open connections(see below).
 
 Requesting Fast Open Cookie in connection 1:
 
