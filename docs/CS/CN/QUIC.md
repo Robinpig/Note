@@ -37,7 +37,7 @@ This experiment showed a clear path forward for improving quicly’s efficiency:
 
 QUIC connections are not strictly bound to a single network path.
 Connection migration uses connection identifiers to allow connections to transfer to a new network path.  
-Only clients are able to migrate in this version of QUIC.  
+Only clients are able to migrate in this version of QUIC now.  
 This design also allows connections to continue after changes in network topology or address mappings, such as might be caused by NAT rebinding.
 
 The use of a connection ID allows connections to survive changes to endpoint addresses (IP address and port), such as those caused by an endpoint migrating to a new network.  
@@ -89,6 +89,24 @@ Single-path Connection Migration and Multi-path Connection Migration
 - Load Balance Mode
 
 Except for PCM, other connection migrations can be triggered by RTT, packet loss rate, timeout, ECN or application signals.
+
+### Path Verification
+
+Path validation is used by both peers during connection migration to verify reachability after a change of address.  
+In path validation, endpoints test reachability between a specific local address and a specific peer address, where an address is the 2-tuple of IP address and port.
+
+Path validation tests that packets sent on a path to a peer are received by that peer.  
+Path validation is used to ensure that packets received from a migrating peer do not carry a spoofed source address.
+
+
+The endpoint sends a PATH_CHALLENGE frame containing a random number to initialize path verification. 
+Each endpoint validates its peer's address during connection establishment. Therefore, a migrating endpoint can send to its peer knowing that the peer is willing to receive at the peer's current address.
+
+Path verification MUST be performed for most connection migrations, unless the endpoints have verified the path, the reason is to verify the reachability and security of the path. 
+But in some special cases, the connection migration initiator should be allowed to send data packets directly without path confirmation from the peer. 
+The condition is to ensure that the packet received by connection migration responder does not carry a spoofed source address.
+
+Endpoints can use PATH_CHALLENGE frames (type=0x1a) to check reachability to the peer and for path validation during connection migration.
 
 ### Probing a New Path
 

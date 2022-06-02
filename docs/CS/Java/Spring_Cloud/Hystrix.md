@@ -1,5 +1,9 @@
 ## Introduction
 
+[Hystrix](https://github.com/Netflix/Hystrix/wiki/) is a library that helps you control the interactions between these distributed services by adding latency tolerance and fault tolerance logic. 
+Hystrix does this by isolating points of access between the services, stopping cascading failures across them, and providing fallback options, all of which improve your system’s overall resiliency.
+
+
 Using RxJava.
 
 
@@ -265,6 +269,50 @@ public abstract class HystrixThreadPoolProperties {
 }
 ```
 
+- If maxQueueSize > 0 and coreSize < maximumSize, the poolSize never incr to maximumSize and reject new tasks. The max = coreSize + maxQueueSize.
+- If maxQueueSize <= 0 and coreSize < maximumSize, the poolSize incr to maximumSize then reject new tasks. The max = maximumSize.
+
+
+
+
+```java
+ private class HystrixContextSchedulerWorker extends Worker {
+
+  private final Worker worker;
+
+  @Override
+  public Subscription schedule(Action0 action, long delayTime, TimeUnit unit) {
+    if (threadPool != null) {
+      if (!threadPool.isQueueSpaceAvailable()) {
+        throw new RejectedExecutionException("Rejected command because thread-pool queueSize is at rejection threshold.");
+      }
+    }
+    return worker.schedule(new HystrixContexSchedulerAction(concurrencyStrategy, action), delayTime, unit);
+  }
+}
+```
+
+Whether the threadpool queue has space available according to the queueSizeRejectionThreshold settings. 
+Note that the queueSize is an final instance variable on HystrixThreadPoolDefault, and not looked up dynamically. 
+The data structure is static, so this does not make sense as a dynamic lookup. 
+The queueSizeRejectionThreshold can be dynamic (up to queueSize), so that should still get checked on each invocation.
+
+If a SynchronousQueue implementation is used (maxQueueSize <= 0), it always returns 0 as the size so this would always return true.
+
+```java
+static class HystrixThreadPoolDefault implements HystrixThreadPool {
+  @Override
+  public boolean isQueueSpaceAvailable() {
+    if (queueSize <= 0) {
+      // we don't have a queue so we won't look for space but instead
+      // let the thread-pool reject or not
+      return true;
+    } else {
+      return threadPool.getQueue().size() < properties.queueSizeRejectionThreshold().get();
+    }
+  }
+}
+```
 
 #### Semaphore
 

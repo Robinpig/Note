@@ -304,6 +304,7 @@ Sets the core number of threads. This overrides any value set in the constructor
 Sets the maximum allowed number of threads. This overrides any value set in the constructor.
 If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
 
+- [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md?id=HystrixThreadPool)
 
 #### prestartCoreThread
 
@@ -572,13 +573,15 @@ public void execute(Runnable command) {
 }
 ```
 
- *Proceed in 3 steps:*
+Proceed in 3 steps:
 
-1. *If fewer than corePoolSize threads are running, try to start a new thread with the given command as its first task.  The call to **addWorker atomically checks runState and workerCount**, and so prevents false alarms that would add threads when it shouldn't, by returning false.*
-2. *If a task can be successfully queued, then we still **need to double-check whether we should have added a thread (because existing ones died since last checking) or that the pool shut down** since entry into this method. So we recheck state and if necessary roll back the enqueuing if stopped, or start a new thread if there are none.*
-3. *If we cannot queue task, then we try to add a new thread.  If it fails, we know we are shut down or saturated and so reject the task.*
+1. If fewer than corePoolSize threads are running, try to start a new thread with the given command as its first task.  
+   The call to **addWorker atomically checks runState and workerCount**, and so prevents false alarms that would add threads when it shouldn't, by returning false.
+2. If a task can be successfully queued, then we still **need to double-check whether we should have added a thread (because existing ones died since last checking) or that the pool shut down** since entry into this method. 
+   So we recheck state and if necessary roll back the enqueuing if stopped, or start a new thread if there are none.
+3. If we cannot queue task, then we try to add a new thread.  If it fails, we know we are shut down or saturated and so reject the task.
 
-**consider schedule threads in OS and GC cost**
+**Consider schedule threads in OS and GC cost**.
 
 priority of I/O threads higher than business threads
 
@@ -590,7 +593,7 @@ Checks if a new worker can be added with respect to current pool state and the g
 This method returns false:
 
 1. if the pool is stopped or eligible to shut down. 
-2. iif the thread factory fails to create a thread when asked. 
+2. if the thread factory fails to create a thread when asked. 
 
 If the thread creation fails, either due to the thread factory returning null, or due to an exception (typically OutOfMemoryError in Thread.start()), we roll back cleanly.
 

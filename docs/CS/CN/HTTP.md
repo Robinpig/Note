@@ -359,11 +359,28 @@ HTTP is stateless.
 
 To overcome the stateless nature of HTTP requests, we could use either a session or a token.
 
+
 ### Cookies
 
 It is often desirable for a Web site to identify users, either because the server wishes to restrict user access or because it wants to serve content as a function of the user identity.
-For these purposes, HTTP uses cookies. Cookies, defined in [RFC 6265], allow sites to keep track of users.
-Most major commercial Web sites use cookies today.
+For these purposes, HTTP uses cookies.
+[RFC 6265](https://datatracker.ietf.org/doc/rfc6265/) defines the HTTP Cookie and Set-Cookie header fields.
+These header fields can be used by HTTP servers to store state(called cookies) at HTTP user agents, letting the servers maintain a stateful session over the mostly stateless HTTP protocol.  
+Although cookies have many historical infelicities that degrade their security and privacy, the Cookie and Set-Cookie header fields are widely used on the Internet.
+
+
+To store state, the origin server includes a Set-Cookie header in an HTTP response.  
+In subsequent requests, the user agent returns a Cookie request header to the origin server.  
+The Cookie header contains cookies the user agent received in previous Set-Cookie headers.  
+The origin server is free to ignore the Cookie header or use its contents for an application-defined purpose.
+
+Origin servers MAY send a Set-Cookie response header with any response.  
+User agents MAY ignore Set-Cookie headers contained in responses with 100-level status codes but MUST process Set-Cookie headers contained in other responses (including responses with 400- and 500-level status codes).  
+An origin server can include multiple Set-Cookie header fields in a single response.  
+The presence of a Cookie or a Set-Cookie header field does not preclude HTTP caches from storing and reusing a response.
+
+Origin servers SHOULD NOT fold multiple Set-Cookie header fields into a single header field.  
+The usual mechanism for folding HTTP headers fields might change the semantics of the Set-Cookie header field because the %x2C (",") character is used by Set-Cookie in a way that conflicts with such folding.
 
 Cookie technology has four components:
 
@@ -372,110 +389,97 @@ Cookie technology has four components:
 3. a cookie file kept on theuser’s end system and managed by the user’s browser
 4. a back-end database at the Web site
 
-### Session
+#### Security
 
-In the session based authentication, the server will create a session for the user after the user logs in. The session id is then stored on a cookie on the user’s browser. While the user stays logged in, the cookie would be sent along with every subsequent request. The server can then compare the session id stored on the cookie against the session information stored in the memory to verify user’s identity and sends response with the corresponding state!
-session依赖于容器
+Cookies have a number of security pitfalls.  This section overviews a few of the more salient issues.
 
-解决方案
+In particular, cookies encourage developers to rely on ambient authority for authentication, often becoming vulnerable to attacks such as cross-site request forgery [CSRF].  
+Also, when storing session identifiers in cookies, developers often create session fixation vulnerabilities.
 
-1. 集群复制 影响性能
-2. 路由 固定用户固定容器 容错性不高
-3. 使用中间件统一存储
+Transport-layer encryption, such as that employed in HTTPS, is insufficient to prevent a network attacker from obtaining or altering a victim's cookies because the cookie protocol itself has various vulnerabilities (see "Weak Confidentiality" and "Weak Integrity", below).  
+In addition, by default, cookies do not provide confidentiality or integrity from network attackers, even when used in conjunction with HTTPS.
 
-多系统时可以考虑独立于其它业务系统
+Unless sent over a secure channel (such as TLS), the information in the Cookie and Set-Cookie headers is transmitted in the clear.
 
-Cookie 优点
+1.  All sensitive information conveyed in these headers is exposed to an eavesdropper.
+2.  A malicious intermediary could alter the headers as they travel in either direction, with unpredictable results.
+3.  A malicious client could alter the Cookie header before transmission, with unpredictable results.
 
-会话管理
 
-行为追踪 个性定制
+Instead of storing session information directly in a cookie (where it might be exposed to or replayed by an attacker), servers commonly store a nonce (or "session identifier") in a cookie.  
+When the server receives an HTTP request with a nonce, the server can look up state information associated with the cookie using the nonce as a key.
 
-cookie类型
+##### Weak Confidentiality and Weak Integrity
 
-会话 - 客户端可选择 是否删除 删除后无法识别
+- Cookies do not provide isolation by port.
+- Cookies do not provide isolation by scheme.
+- Cookies do not always provide isolation by path.
+- Cookies do not provide integrity guarantees for sibling domains (and their subdomains).
 
-永久 - 设置了过期条件 客户端进行持久化
+
+### Json Web Token
+
+JSON Web Token (JWT) is a compact claims representation format intended for space constrained environments such as HTTP Authorization headers and URI query parameters.  
+JWTs encode claims to be transmitted as a JSON object that is used as the payload of a JSON Web Signature (JWS) structure or as the plaintext of a JSON Web Encryption (JWE) structure, 
+enabling the claims to be digitally signed or integrity protected with a Message Authentication Code (MAC) and/or encrypted.  
+JWTs are always represented using the JWS Compact Serialization or the JWE Compact Serialization.
+
+Here are some scenarios where JSON Web Tokens are useful:
+
+- **Authorization**: This is the most common scenario for using JWT. 
+  Once the user is logged in, each subsequent request will include the JWT, allowing the user to access routes, services, and resources that are permitted with that token. 
+  Single Sign On is a feature that widely uses JWT nowadays, because of its small overhead and its ability to be easily used across different domains.
+- **Information Exchange**: JSON Web Tokens are a good way of securely transmitting information between parties. 
+  Because JWTs can be signed—for example, using public/private key pairs—you can be sure the senders are who they say they are. 
+  Additionally, as the signature is calculated using the header and the payload, you can also verify that the content hasn't been tampered with.
+
+#### Structure
+
+Header
+```
+{
+  "alg": "HS256",
+  "typ": "JWT"
+}
+```
+Payload
+```
+{
+  "sub": "1234567890",
+  "name": "John Doe",
+  "iat": 1516239022
+}
+```
+Signature
+
+See [JWT.IO](https://jwt.io/).
+
+
+
+In authentication, when the user successfully logs in using their credentials, a JSON Web Token will be returned. 
+Since tokens are credentials, great care must be taken to prevent security issues. In general, you should not keep tokens longer than required.
+
+You also should not store sensitive session data in browser storage due to lack of security.
+
+Whenever the user wants to access a protected route or resource, the user agent should send the JWT, typically in the Authorization header using the Bearer schema. 
+The content of the header should look like the following:
 
 ```http
-Set-Cookie: xxx
+Authorization: Bearer <token>
 ```
 
-```http
-Cookie: xxx
-```
+This can be, in certain cases, a stateless authorization mechanism. 
+The server's protected routes will check for a valid JWT in the Authorization header, and if it's present, the user will be allowed to access protected resources. 
+If the JWT contains the necessary data, the need to query the database for certain operations may be reduced, though this may not always be the case.
 
-Cookie跨域
+If the token is sent in the Authorization header, Cross-Origin Resource Sharing (CORS) won't be an issue as it doesn't use cookies.
 
-不同域名未使用相同Cookie
-
-### Token
-
-Many web applications use JSON Web Token (JWT) instead of sessions for authentication. In the token based application, the server creates JWT with a secret and sends the JWT to the client. **The client stores the JWT (usually in local storage) and includes JWT in the header with every request.** The server would then validate the JWT with every request from the client and sends response.
-
-基于Token的身份验证是无状态的，我们不将用户信息存在服务器或Session中。
-
-这种概念解决了在服务端存储信息时的许多问题。NoSession意味着你的程序可以根据需要去增减机器，而不用去担心用户是否登录。
-
-基于Token的身份验证的过程如下:
-
-- 用户通过用户名和密码发送请求。
-- 程序验证。
-- 程序返回一个签名的token 给客户端。
-- 客户端储存token,并且每次用于每次发送请求。
-- 服务端验证token并返回数据。
-
-每一次请求都需要 token。token 应该在HTTP的头部发送从而保证了Http请求无状态。我们同样通过设置服务器属性Access-Control-Allow-Origin:* ，让服务器能接受到来自所有域的请求。需要主要的是，在ACAO头部标明(designating)*时，不得带有像HTTP认证，客户端SSL证书和cookies的证书。
-
-#### Token验证的优势
-
-- Scalability
-- Multiple Device
-- 基于标准
-
-创建Token的时候，你可以设定一些选项。我们在后续的文章中会进行更加详尽的描述，但是标准的用法会在JSON Web Token体现。
-
-最近的程序和文档是供给JSON Web Token的。它支持众多的语言。这意味在未来的使用中你可以真正的转换你的认证机制。
-
-#### JWT
-
-*[`JSON Web Token(JWT)`](https://datatracker.ietf.org/doc/rfc7519/)  is a compact, URL-safe means of representing claims to be transferred between two parties.  The claims in a JWT are encoded as a JSON object that is used as the payload of a JSON Web Signature (JWS) structure or as the plaintext of a JSON Web Encryption (JWE) structure, enabling the claims to be digitally signed or integrity protected with a Message Authentication Code (MAC) and/or encrypted.*
-
-可以在服务端验证
-
-可以跨域认证
-
-ensure only the necessary information is included in JWT and sensitive information should be omitted to prevent XSS security attacks.
-
-用途：
-
-- 授权：这是使用JWT的最常见方案。一旦用户登录，每个后续请求将包括JWT，从而允许用户访问该令牌允许的路由，服务和资源。单一登录是当今广泛使用JWT的一项功能，因为它的开销很小并且可以在不同的域中轻松使用。
-- 信息交换：JSON Web令牌是在各方之间安全地传输信息的好方法。因为可以对JWT进行签名（例如，使用公钥/私钥对），所以您可以确定发件人是他们所说的人。另外，由于签名是使用标头和有效负载计算的，因此您还可以验证内容是否未被篡改。
-
-结构：
-JSON Web令牌以紧凑的形式由三部分组成，这些部分由点（.）分隔，分别是：
-
-- Header 标头
-  - 通常由两部分组成：令牌的类型（即JWT）和所使用的签名算法
-- Payload
-- Signature
-  - 通过payload和secret使用Header指定算法生成
-
-### Session vs Token
-
-- Session存储在服务端
-  - 不能跨域
-- Token
-  - 可让客户端存储
-  - 无状态、可扩展
-  - 支持移动设备
-  - 跨程序调用
-  - 安全
-  - much bigger comparing with the session id stored in cookie
+Do note that with signed tokens, all the information contained within the token is exposed to users or other parties, even though they are unable to change it. 
+This means you should not put secret information within the token.
 
 ## Security
 
-(Cross-Origin Resource Sharing)CORS跨域
+(Cross-Origin Resource Sharing)CORS
 
 ## Performance
 
