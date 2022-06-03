@@ -1,5 +1,19 @@
 ## Introduction
 
+Similar to the transaction support, the [caching abstraction](https://docs.spring.io/spring-framework/docs/current/reference/html/integration.html#cache) allows consistent use of various caching solutions with minimal impact on the code.
+As with other services in the Spring Framework, the caching service is an abstraction (not a cache implementation) and requires the use of actual storage to store the cache data — that is, 
+the abstraction frees you from having to write the caching logic but does not provide the actual data store. 
+This abstraction is materialized by the `org.springframework.cache.Cache` and `org.springframework.cache.CacheManager` interfaces.
+
+Spring provides a few implementations of that abstraction: [JDK java.util.concurrent.ConcurrentMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap) based caches, Ehcache 2.x, Gemfire cache, Caffeine, and JSR-107 compliant caches (such as Ehcache 3.x).
+
+To use the cache abstraction, you need to take care of two aspects:
+
+- Caching declaration: Identify the methods that need to be cached and their policy.
+- Cache configuration: The backing cache where the data is stored and from which it is read.
+
+
+
 ## Quick Start
 
 ### EnableCaching
@@ -21,9 +35,6 @@ public @interface EnableCaching {
 
 }
 ```
-
-
-
 
 
 
@@ -227,22 +238,6 @@ public class CacheInterceptor extends CacheAspectSupport implements MethodInterc
     }
 }
 ```
-
-
-Spring provides a few implementations of that abstraction: 
-
-- GENERIC
-- JCACHE
-- EHCACHE
-- HAZELCAST
-- INFINISPAN
-- COUCHBASE
-- REDIS
-- CAFFEINE
-- SIMPLE
-- NONE
-
-
 
 
 ### Cache
