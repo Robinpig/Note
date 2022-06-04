@@ -1,15 +1,5 @@
 ## Introduction
 
-- [IoC](/docs/CS/Java/Spring/IoC.md)
-- [AOP](/docs/CS/Java/Spring/AOP.md)
-- [MVC](/docs/CS/Java/Spring/MVC.md)
-- [Event](/docs/CS/Java/Spring/Event.md)
-- [webflux](/docs/CS/Java/Spring/webflux.md)
-
-[Spring Cache](/docs/CS/Java/Spring/Cache.md)
-
-[Spring Security](/docs/CS/Java/Spring/Security.md)
-
 ## Architecture
 Packages
 - IoC
@@ -33,7 +23,45 @@ Packages
     - websocket
     - webflux
 
+### Core
 
+- [The IoC Container](/docs/CS/Java/Spring/IoC.md)
+- [Resources]
+- [Validation, Data Binding, and Type Conversion]
+- [Spring Expression Language]
+- [Aspect Oriented Programming with Spring](/docs/CS/Java/Spring/AOP.md)
+- [Data Buffers and Codecs]
+- [Event](/docs/CS/Java/Spring/Event.md)
+
+### Web
+
+- [MVC](/docs/CS/Java/Spring/MVC.md)
+- [webflux](/docs/CS/Java/Spring/webflux.md)
+
+### Data Access
+
+### Integration
+
+ REST Endpoints
+
+The Spring Framework provides two choices for making calls to REST endpoints:
+- RestTemplate: The original Spring REST client with a synchronous, template method API.
+- WebClient: a non-blocking, reactive alternative that supports both synchronous and asynchronous as well as streaming scenarios.
+
+
+
+ [Task Execution and Scheduling](/docs/CS/Java/Spring/Task.md)
+
+ [Cache Abstraction](/docs/CS/Java/Spring/Cache.md)
+
+[Spring Security](/docs/CS/Java/Spring/Security.md)
+
+### Testing
+
+
+SpringProperties
+
+`SpringProperties.setProperty(String key, String value)`
 
 ## Links
 
