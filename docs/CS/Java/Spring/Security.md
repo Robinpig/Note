@@ -4,21 +4,111 @@
 It is the de-facto standard for securing Spring-based applications.
 Spring Security is a framework that focuses on providing both authentication and authorization to Java applications.
 
+## Architecture
+
+Spring Security’s Servlet support is based on Servlet Filters, so it is helpful to look at the role of Filters generally first.
+The client sends a request to the application, and the container creates a FilterChain which contains the Filters and Servlet that should process the HttpServletRequest based on the path of the request URI. 
+In a Spring MVC application the Servlet is an instance of DispatcherServlet. 
+At most one Servlet can handle a single HttpServletRequest and HttpServletResponse. 
+However, more than one Filter can be used to:
+- Prevent downstream Filters or the Servlet from being invoked. In this instance the Filter will typically write the HttpServletResponse.
+- Modify the HttpServletRequest or HttpServletResponse used by the downstream Filters and Servlet
+
+Since a Filter only impacts downstream Filters and the Servlet, the order each Filter is invoked is extremely important.
 
 
+### DelegatingFilterProxy
+
+Spring provides a Filter implementation named DelegatingFilterProxy that allows bridging between the Servlet container’s lifecycle and Spring’s ApplicationContext. 
+The Servlet container allows registering Filters using its own standards, but it is not aware of Spring defined Beans. 
+DelegatingFilterProxy can be registered via standard Servlet container mechanisms, but delegate all the work to a Spring Bean that implements Filter.
+
+Here is a picture of how DelegatingFilterProxy fits into the Filters and the FilterChain.
+
+![DelegatingFilterProxy](https://docs.spring.io/spring-security/reference/_images/servlet/architecture/delegatingfilterproxy.png)
+
+DelegatingFilterProxy looks up *Bean Filter0* from the ApplicationContext and then invokes *Bean Filter0*.
+
+Another benefit of DelegatingFilterProxy is that it allows **delaying looking Filter bean instances**. 
+This is important because the container needs to register the Filter instances before the container can startup. 
+However, Spring typically uses a ContextLoaderListener to load the Spring Beans which will not be done until after the Filter instances need to be registered.
 
 
+### FilterChainProxy
 
-## FilterChainProxy
+Spring Security’s Servlet support is contained within FilterChainProxy. 
+FilterChainProxy is a special Filter provided by Spring Security that allows delegating to many Filter instances through SecurityFilterChain. 
+Since FilterChainProxy is a Bean, it is typically wrapped in a DelegatingFilterProxy.
 
-extends GenericFilterBean
+![FilterChainProxy](https://docs.spring.io/spring-security/reference/_images/servlet/architecture/filterchainproxy.png)
 
-### Authentication
+SecurityFilterChain is used by FilterChainProxy to determine which Spring Security Filters should be invoked for this request.
+
+> [!TIP]
+> 
+> See [Security Filters](https://docs.spring.io/spring-security/reference/servlet/architecture.html#servlet-security-filters)
+
+
+FilterChainProxy provides a number of advantages to registering directly with the Servlet container or DelegatingFilterProxy. 
+- First, it provides a starting point for all of Spring Security’s Servlet support.
+- Second, since FilterChainProxy is central to Spring Security usage it can perform tasks that are not viewed as optional.
+- In addition, it provides more flexibility in determining when a SecurityFilterChain should be invoked.
+
+```dot
+strict digraph{
+    req [shape="polygon" label="Request"]
+    asyncFilter [shape="polygon" label="WebAsyncManagerIntegrationFilter"]
+    contextFilter [shape="polygon" label="SecurityContextPersistenceFilter"]
+    headerFilter [shape="polygon" label="HeaderWriterFilter"]
+    csrfFilter [shape="polygon" label="CsrfFilter"]
+    logoutFilter [shape="polygon" label="LogoutFilter"]
+    req->asyncFilter->contextFilter->headerFilter->csrfFilter->logoutFilter
+    
+    logoutHandler [shape="polygon" label="LogoutHandler"]
+    logoutSuccessHandler [shape="polygon" label="LogoutSuccessHandler"]
+    
+    logoutFilter->logoutHandler[label="logout"]
+    logoutHandler->logoutSuccessHandler
+    
+    loginFilter [shape="polygon" label="LoginPageGeneratingWebFilter"]
+    loginUserFilter [shape="polygon" label="UsernamePasswordAuthenticationFilter"]
+    authenticationManager [shape="polygon" label="AuthenticationManager"]
+    daoAuthenticationProvider [shape="polygon" label="DaoAuthenticationProvider"]
+    logoutFilter->loginFilter[label="login"]
+    loginFilter->loginUserFilter[label="login"]
+    loginUserFilter->authenticationManager[label="attemptAuthentication"]
+    authenticationManager->daoAuthenticationProvider[label="loadUserByUsername"]
+    
+    DefaultLogoutPageGeneratingFilter [shape="polygon" label="DefaultLogoutPageGeneratingFilter"]
+    loginFilter->DefaultLogoutPageGeneratingFilter
+    
+    RequestCacheAwareFilter [shape="polygon" label="RequestCacheAwareFilter"]
+    SecurityContextHolderAwareRequestFilter [shape="polygon" label="SecurityContextHolderAwareRequestFilter"]
+    anonymousAuthenticationFilter [shape="polygon" label="AnonymousAuthenticationFilter"]
+    sessionManagementFilter [shape="polygon" label="SessionManagementFilter"]
+    exceptionTranslationFilter [shape="polygon" label="ExceptionTranslationFilter"]
+    filterSecurityInterceptor [shape="polygon" label="FilterSecurityInterceptor"]
+    DefaultLogoutPageGeneratingFilter->RequestCacheAwareFilter->SecurityContextHolderAwareRequestFilter->anonymousAuthenticationFilter->sessionManagementFilter->exceptionTranslationFilter->filterSecurityInterceptor
+    
+    accessDeniedHandler [shape="polygon" label="AccessDeniedHandler"]
+    controller [shape="polygon" label="Controller"]
+    filterSecurityInterceptor -> accessDeniedHandler[label="denied"]
+    filterSecurityInterceptor -> controller[label="allowed"]
+}
+```
+
+## Authentication
+
+At the heart of Spring Security’s authentication model is the SecurityContextHolder. It contains the SecurityContext.
+
+![SecurityContextHolder](https://docs.spring.io/spring-security/reference/_images/servlet/authentication/architecture/securitycontextholder.png)
+
+### Authentication Filters
 
 #### SecurityContextPersistenceFilter
 
 SecurityContextPersistenceFilter MUST be executed BEFORE any authentication processing mechanisms.
-Authentication processing mechanisms (e.g. BASIC, CAS processing filters etc) expect the SecurityContextHolder to contain a valid SecurityContext by the time they execute.
+Authentication processing mechanisms (e.g. BASIC, CAS processing filters etc) expect the SecurityContextHolder(default to using [MODE_THREADLOCAL](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)) to contain a valid SecurityContext by the time they execute.
 
 SecurityContextPersistenceFilter populates the SecurityContextHolder with information obtained from the configured SecurityContextRepository prior to the request and stores it back in the repository once the request has completed and clearing the context holder.
 By default it uses an HttpSessionSecurityContextRepository. See this class for information HttpSession related configuration options.
@@ -29,7 +119,8 @@ This filter will only execute once per request, to resolve servlet container (sp
 
 AuthenticationProcessingFilter
 
-The filter requires that you set the authenticationManager property. An AuthenticationManager is required to process the authentication request tokens created by implementing classes.
+The filter requires that you set the authenticationManager property. 
+An AuthenticationManager is required to process the authentication request tokens created by implementing classes.
 This filter will intercept a request and attempt to perform authentication from that request if the request matches the setRequiresAuthenticationRequestMatcher(RequestMatcher).
 Authentication is performed by the `attemptAuthentication` method.
 
@@ -177,7 +268,77 @@ public class ProviderManager implements AuthenticationManager, MessageSourceAwar
 
 
 
-#### SecurityInterceptor
+
+### Username/Password
+
+
+UserDetailService
+
+```java
+public interface UserDetails extends Serializable {
+
+	Collection<? extends GrantedAuthority> getAuthorities();
+
+	String getPassword();
+
+	String getUsername();
+
+	boolean isAccountNonExpired();
+
+	boolean isAccountNonLocked();
+
+	boolean isCredentialsNonExpired();
+
+	boolean isEnabled();
+}
+```
+
+PasswordEncoder
+
+
+## Authorization
+
+Spring Security provides interceptors which control access to secure objects such as method invocations or web requests. 
+A pre-invocation decision on whether the invocation is allowed to proceed is made by the AccessDecisionManager.
+
+
+### AccessDecisionManager
+
+```java
+public interface AccessDecisionManager {
+
+	void decide(Authentication authentication, Object object,
+			Collection<ConfigAttribute> configAttributes) throws AccessDeniedException,
+			InsufficientAuthenticationException;
+
+	boolean supports(ConfigAttribute attribute);
+
+	boolean supports(Class<?> clazz);
+}
+```
+
+
+```java
+public abstract class AbstractAccessDecisionManager implements AccessDecisionManager, InitializingBean, MessageSourceAware {
+
+    private List<AccessDecisionVoter<?>> decisionVoters;
+
+    protected MessageSourceAccessor messages = SpringSecurityMessageSource.getAccessor();
+    
+    public boolean supports(ConfigAttribute attribute) {
+        for (AccessDecisionVoter voter : this.decisionVoters) {
+            if (voter.supports(attribute)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+```
+
+
+### SecurityInterceptor
 
 
 The AbstractSecurityInterceptor will ensure the proper startup configuration of the security interceptor.
@@ -201,25 +362,46 @@ It will also implement the proper handling of secure object invocations, namely:
        The AbstractSecurityInterceptor will take no further action when its afterInvocation(InterceptorStatusToken, Object) is called.
 5. Control again returns to the concrete subclass, along with the Object that should be returned to the caller. The subclass will then return that result or exception to the original caller.
 
+## OAuth
+
+Spring Security supports protecting endpoints using two forms of OAuth 2.0 Bearer Tokens:
+- JWT
+- Opaque Tokens
 
 
-### Authorization
+### Authorization Grants
+
+### Resource Server
+
+
+## Init
 
 ```java
-public abstract class AbstractAccessDecisionManager implements AccessDecisionManager, InitializingBean, MessageSourceAware {
-
-    private List<AccessDecisionVoter<?>> decisionVoters;
-
-    protected MessageSourceAccessor messages = SpringSecurityMessageSource.getAccessor();
-    
-    public boolean supports(ConfigAttribute attribute) {
-        for (AccessDecisionVoter voter : this.decisionVoters) {
-            if (voter.supports(attribute)) {
-                return true;
-            }
+public abstract class AbstractSecurityWebApplicationInitializer implements WebApplicationInitializer {
+    public final void onStartup(ServletContext servletContext) {
+        beforeSpringSecurityFilterChain(servletContext);
+        if (this.configurationClasses != null) {
+            AnnotationConfigWebApplicationContext rootAppContext = new AnnotationConfigWebApplicationContext();
+            rootAppContext.register(this.configurationClasses);
+            servletContext.addListener(new ContextLoaderListener(rootAppContext));
         }
-
-        return false;
+        if (enableHttpSessionEventPublisher()) {
+            servletContext.addListener("org.springframework.security.web.session.HttpSessionEventPublisher");
+        }
+        servletContext.setSessionTrackingModes(getSessionTrackingModes());
+        insertSpringSecurityFilterChain(servletContext);
+        afterSpringSecurityFilterChain(servletContext);
+    }
+    
+    private void insertSpringSecurityFilterChain(ServletContext servletContext) {
+        String filterName = DEFAULT_FILTER_NAME;
+        DelegatingFilterProxy springSecurityFilterChain = new DelegatingFilterProxy(
+                filterName);
+        String contextAttribute = getWebApplicationContextAttribute();
+        if (contextAttribute != null) {
+            springSecurityFilterChain.setContextAttribute(contextAttribute);
+        }
+        registerFilter(servletContext, true, filterName, springSecurityFilterChain);
     }
 }
 ```
@@ -228,3 +410,4 @@ public abstract class AbstractAccessDecisionManager implements AccessDecisionMan
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
+- [OAuth](/docs/CS/CN/OAuth.md)
