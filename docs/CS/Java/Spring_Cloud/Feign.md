@@ -1,13 +1,48 @@
 ## Introduction
 
+Feign is a Java to HTTP client binder inspired by Retrofit, JAXRS-2.0, and WebSocket. 
+Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of ReSTfulness.
+
+
+Features:
+
+- client
+  - [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
+  - OK Http
+  - java 11 Http2
+- Circuit Breaker
+- [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
+
+
+![](https://camo.githubusercontent.com/f1bd8b9bfe3c049484b0776b42668bb76a57872fe0f01402e5ef73d29b811e50/687474703a2f2f7777772e706c616e74756d6c2e636f6d2f706c616e74756d6c2f70726f78793f63616368653d6e6f267372633d68747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f4f70656e466569676e2f666569676e2f6d61737465722f7372632f646f63732f6f766572766965772d6d696e646d61702e69756d6c)
+
+
+
+```java
+@Configuration(proxyBeanMethods = false)
+public class FeignClientsConfiguration {
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnMissingClass("org.springframework.data.domain.Pageable")
+    public Encoder feignEncoder(ObjectProvider<AbstractFormWriter> formWriterProvider) {
+        return springEncoder(formWriterProvider);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Retryer feignRetryer() {
+        return Retryer.NEVER_RETRY;
+    }
+}
+```
+
 ## Prepare
 
 ### registerFeignClients
 
 Only allows interface.
 ```java
-class FeignClientsRegistrar
-        implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
+class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
     public void registerFeignClients(AnnotationMetadata metadata,
                                      BeanDefinitionRegistry registry) {
         ClassPathScanningCandidateComponentProvider scanner = getScanner();
@@ -82,8 +117,7 @@ public static final class Builder<T> {
 
 	}
 
-class FeignClientFactoryBean
-        implements FactoryBean<Object>, InitializingBean, ApplicationContextAware {
+class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, ApplicationContextAware {
     <T> T getTarget() {
         FeignContext context = applicationContext.getBean(FeignContext.class);
         Feign.Builder builder = feign(context);
@@ -352,6 +386,26 @@ Using RequestTemplate.
   }
 ```
 
+## Interceptor
+
+## Retry
+
+Feign, by default, will automatically retry IOExceptions, regardless of HTTP method, treating them as transient network related exceptions, and any RetryableException thrown from an ErrorDecoder. 
+To customize this behavior, register a custom Retryer instance via the builder.
+
+If the retry is determined to be unsuccessful, the last RetryException will be thrown. 
+To throw the original cause that led to the unsuccessful retry, build your Feign client with the exceptionPropagationPolicy() option.
+
+## Metrics
+
+By default, feign won't collect any metrics.
+But, it's possible to add metric collection capabilities to any feign client.
+
+
 ## Links
 
 - [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=RPC)
+
+## References
+
+1. [OpenFeign](https://github.com/OpenFeign/feign)

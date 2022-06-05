@@ -433,6 +433,17 @@ Here are some scenarios where JSON Web Tokens are useful:
   Because JWTs can be signed—for example, using public/private key pairs—you can be sure the senders are who they say they are. 
   Additionally, as the signature is calculated using the header and the payload, you can also verify that the content hasn't been tampered with.
 
+
+
+
+
+> [RFC 7519 - JSON Web Token (JWT)](https://datatracker.ietf.org/doc/rfc7519/)
+> [RFC 7797 - JSON Web Signature (JWS) Unencoded Payload Option](https://datatracker.ietf.org/doc/rfc7797/)
+> [RFC 8725 - JSON Web Token Best Current Practices](https://datatracker.ietf.org/doc/rfc8725/)
+
+
+
+
 #### Structure
 
 Header
