@@ -479,7 +479,7 @@ This means you should not put secret information within the token.
 
 ## Security
 
-(Cross-Origin Resource Sharing)CORS
+[HTTP Security](/docs/CS/CN/HTTP/Security.md)
 
 ## Performance
 
