@@ -1,5 +1,24 @@
 ## Introduction
 
+Spring Web MVC is the original web framework built on the Servlet API and has been included in the Spring Framework from the very beginning. 
+The formal name, “Spring Web MVC,” comes from the name of its source module (spring-webmvc), but it is more commonly known as “Spring MVC”.
+
+Parallel to Spring Web MVC, Spring Framework 5.0 introduced a reactive-stack web framework whose name, [“Spring WebFlux”](/docs/CS/Java/Spring/webflux.md) is also based on its source module (spring-webflux).
+
+Spring MVC, as many other web frameworks, is designed around the front controller pattern where a central Servlet, the [DispatcherServlet], provides a shared algorithm for request processing, while actual work is performed by configurable delegate components. 
+This model is flexible and supports diverse workflows.
+
+### Context Hierarchy
+
+DispatcherServlet expects a WebApplicationContext (an extension of a plain ApplicationContext) for its own configuration. WebApplicationContext has a link to the ServletContext and the Servlet with which it is associated. 
+It is also bound to the ServletContext such that applications can use static methods on RequestContextUtils to look up the WebApplicationContext if they need access to it.
+
+The root WebApplicationContext typically contains infrastructure beans, such as data repositories and business services that need to be shared across multiple Servlet instances. 
+Those beans are effectively inherited and can be overridden (that is, re-declared) in the Servlet-specific child WebApplicationContext, which typically contains beans local to the given Servlet. 
+
+The following image shows this relationship:
+
+![MVC Context](https://docs.spring.io/spring-framework/docs/current/reference/html/images/mvc-context-hierarchy.png)
 
 
 ## Init
@@ -695,3 +714,8 @@ public class WebConfiguration implements WebMvcConfigurer {
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
+
+
+## References
+
+1. [Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc)
