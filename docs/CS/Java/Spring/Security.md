@@ -410,4 +410,4 @@ public abstract class AbstractSecurityWebApplicationInitializer implements WebAp
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
-- [OAuth](/docs/CS/CN/OAuth.md)
+- [OAuth](/docs/CS/CN/HTTP/OAuth.md)

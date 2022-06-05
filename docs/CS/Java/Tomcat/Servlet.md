@@ -14,7 +14,7 @@ Directory structure of Most Web Applications
 
 Defines methods that all servlets must implement.
 
-A servlet is a small Java program that runs within a Web server. Servlets receive and respond to requests from Web clients, usually across [HTTP](/docs/CS/CN/HTTP.md), the HyperText Transfer Protocol.
+A servlet is a small Java program that runs within a Web server. Servlets receive and respond to requests from Web clients, usually across [HTTP](/docs/CS/CN/HTTP/HTTP.md), the HyperText Transfer Protocol.
 
 To implement this interface, you can write a generic servlet that extends `javax.servlet.GenericServlet` or an HTTP servlet that extends `javax.servlet.http.HttpServlet`.
 

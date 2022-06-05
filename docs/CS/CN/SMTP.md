@@ -6,7 +6,7 @@ It uses the reliable data transfer service of [TCP](/docs/CS/CN/TCP.md) to **tra
 
 ## Comparison with HTTP
 
-Let’s now briefly compare SMTP with [HTTP](/docs/CS/CN/HTTP.md).
+Let’s now briefly compare SMTP with [HTTP](/docs/CS/CN/HTTP/HTTP.md).
 
 
 Both protocols are used to transfer files from one host to another: 

@@ -33,7 +33,7 @@ The Bimodal Multicast algorithm, a randomized algorithm that uses a gossip proto
 
 One form of HOL blocking in HTTP/1.1 is when the number of allowed parallel requests in the browser is used up, and subsequent requests need to wait for the former ones to complete. 
 This is mainly because the protocol is purely textual in nature and doesn’t use delimiters between resource chunks.
-HTTP/1.1 introduced a feature called ["Pipelining"](/docs/CS/CN/HTTP.md?id=pipelining) which allowed a client sending several HTTP requests over the same TCP connection.
+HTTP/1.1 introduced a feature called ["Pipelining"](/docs/CS/CN/HTTP/HTTP.md?id=pipelining) which allowed a client sending several HTTP requests over the same TCP connection.
 However HTTP/1.1 still required the responses to arrive in order so it didn't really solved the HOL issue and as of today it is not widely adopted.
 
 As such, the goal for HTTP/2 was quite clear: **make it so that we can move back to a single TCP connection by solving the HOL blocking problem**.
@@ -77,8 +77,8 @@ As we’ve seen, this is less efficient and requires more CPU than using larger 
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
-- [HTTP](/docs/CS/CN/HTTP.md)
-- [QUIC](/docs/CS/CN/QUIC.md)
+- [HTTP](/docs/CS/CN/HTTP/HTTP.md)
+- [QUIC](/docs/CS/CN/HTTP/QUIC.md)
 
 ## References
 

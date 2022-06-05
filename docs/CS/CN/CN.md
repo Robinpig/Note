@@ -120,7 +120,7 @@ FTP、[SMTP](/docs/CS/CN/SMTP.md)
 
 ### HTTP
 
-The [Hypertext Transfer Protocol (HTTP)](/docs/CS/CN/HTTP.md) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
+The [Hypertext Transfer Protocol (HTTP)](/docs/CS/CN/HTTP/HTTP.md) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
 
 ### DNS
 

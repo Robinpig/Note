@@ -1,6 +1,6 @@
 ## Introduction
 
-> HTTPS = [HTTP](/docs/CS/CN/HTTP.md) + TLS/SSL
+> HTTPS = [HTTP](/docs/CS/CN/HTTP/HTTP.md) + TLS/SSL
 
 TLS is a client/server protocol, designed to support security for a connection between two applications. 
 The Record protocol provides fragmentation, compression, integrity protection, and encryption for data objects exchanged between clients and servers, 

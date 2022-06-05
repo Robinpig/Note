@@ -45,7 +45,7 @@ This section describes the process by which an endpoint migrates to a new addres
 
 The design of QUIC relies on endpoints retaining a stable address for the duration of the handshake.
 Some situations that do not allow connection migration:
-- An endpoint MUST NOT initiate connection migration before the handshake is confirmed, as defined in [QUIC-TLS](/docs/CS/CN/QUIC.md?id=TLS).
+- An endpoint MUST NOT initiate connection migration before the handshake is confirmed, as defined in [QUIC-TLS](/docs/CS/CN/HTTP/QUIC.mdIC.md?id=TLS).
 - An endpoint MUST NOT initiate connection migration if the peer sent the disable_active_migration transport parameter.
 
 If the peer sent the `disable_active_migration` transport parameter, an endpoint also MUST NOT send packets (including probing packets) from a different local address to the address the peer used during the handshake, 

@@ -173,7 +173,7 @@ A client ought to limit the number of simultaneous open connections that it main
 Previous revisions of HTTP gave a specific number of connections as a ceiling, but this was found to be impractical for many applications.
 As a result, this specification does not mandate a particular maximum number of connections but, instead, encourages clients to be conservative when opening multiple connections.
 
-Multiple connections are typically used to avoid the ["head-of-line blocking"](/docs/CS/CN/HOL.md?id=HTTP) problem, wherein a request that takes significant server-side processing and/or has a large payload blocks subsequent requests on the same connection.
+Multiple connections are typically used to avoid the ["head-of-line blocking"](/docs/CS/CN/HTTP/HOL.md?id=HTTP) problem, wherein a request that takes significant server-side processing and/or has a large payload blocks subsequent requests on the same connection.
 However, each connection consumes server resources.  Furthermore, using multiple connections can cause undesirable side effects in congested networks.
 
 Note that a server might reject traffic that it deems abusive or characteristic of a denial-of-service attack, such as an excessive number of open connections from a single client.
@@ -274,7 +274,7 @@ todo PUT DELETE not security
 Connection: keep-Alive
 ```
 
-[Pipelining](/docs/CS/CN/HTTP.md?id=pipelining)
+[Pipelining](/docs/CS/CN/HTTP/HTTP.mdTP.md?id=pipelining)
 
 ### 2
 
@@ -341,7 +341,7 @@ For every stream, both ends have to tell the peer that it has enough room to han
 
 ### 3
 
-HTTP over [QUIC](/docs/CS/CN/QUIC.md)
+HTTP over [QUIC](/docs/CS/CN/HTTP/QUIC.md)
 
 ## URI
 
