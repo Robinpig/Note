@@ -1,6 +1,16 @@
 ## Introduction
 
-The reactive-stack web framework, **Spring WebFlux**, has been added Spring 5.0. It is fully non-blocking, supports [reactive streams](http://www.reactive-streams.org/) back pressure, and runs on such servers as Netty, Undertow, and Servlet 3.1+ containers.
+The reactive-stack web framework, [Spring WebFlux](https://docs.spring.io/spring-framework/docs/current/reference/html/web-reactive.html), has been added Spring 5.0. 
+It is fully non-blocking, supports [reactive streams](http://www.reactive-streams.org/) back pressure, and runs on such servers as Netty, Undertow, and Servlet 3.1+ containers.
+
+
+### Concurrency Model
+
+Both Spring MVC and Spring WebFlux support annotated controllers, but there is a key difference in the concurrency model and the default assumptions for blocking and threads.
+- In Spring MVC (and servlet applications in general), it is assumed that applications can block the current thread, (for example, for remote calls). 
+  For this reason, servlet containers use a large thread pool to absorb potential blocking during request handling.
+- In Spring WebFlux (and non-blocking servers in general), it is assumed that applications do not block. 
+  Therefore, non-blocking servers use a small, fixed-size thread pool (event loop workers) to handle requests.
 
 
 
@@ -194,3 +204,4 @@ public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, A
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Netty](/docs/CS/Java/Netty/Netty.md)

@@ -38,8 +38,7 @@ Packages
 
 ### Web
 
-- [MVC](/docs/CS/Java/Spring/MVC.md)
-- [webflux](/docs/CS/Java/Spring/webflux.md)
+[Spring MVC](/docs/CS/Java/Spring/MVC.md) and [Spring WebFlux](/docs/CS/Java/Spring/webflux.md) web frameworks.
 
 ### Data Access
 

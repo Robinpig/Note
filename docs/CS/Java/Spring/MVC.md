@@ -655,11 +655,31 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 
 see [FilterChain.doFilter() in Tomcat](/docs/CS/Java/Tomcat/Connector.md?id=doFilter)
 
-[Spring Security](/docs/CS/Java/Spring/Security.md)
 
 
+Spring MVC provides fine-grained support for CORS configuration through annotations on controllers. 
+However, when used with [Spring Security](/docs/CS/Java/Spring/Security.md), we advise relying on the built-in CorsFilter that must be ordered ahead of Spring Security’s chain of filters.
+
+## Asynchronous Requests
+
+Spring MVC has an extensive integration with Servlet 3.0 asynchronous request processing:
+- DeferredResult and Callable return values in controller methods provide basic support for a single asynchronous return value.
+- Controllers can stream multiple values, including SSE and raw data.
+- Controllers can use reactive clients and return reactive types for response handling.
 
 
+The Servlet API was originally built for making a single pass through the Filter-Servlet chain. 
+Asynchronous request processing, added in Servlet 3.0, lets applications exit the Filter-Servlet chain but leave the response open for further processing. 
+The Spring MVC asynchronous support is built around that mechanism. When a controller returns a DeferredResult, the Filter-Servlet chain is exited, and the Servlet container thread is released.
+Later, when the DeferredResult is set, an ASYNC dispatch (to the same URL) is made, during which the controller is mapped again but, rather than invoking it, the DeferredResult value is used (as if the controller returned it) to resume processing.
+
+From a programming model perspective, both Spring MVC and Spring WebFlux support asynchronous and Reactive Types as return values in controller methods. 
+Spring MVC even supports streaming, including reactive back pressure. 
+However, **individual writes to the response remain blocking (and are performed on a separate thread)**, unlike WebFlux, which relies on non-blocking I/O and does not need an extra thread for each write.
+
+Another fundamental difference is that **Spring MVC does not support asynchronous or reactive types in controller method arguments (for example, @RequestBody, @RequestPart, and others)**, 
+nor does it have any explicit support for asynchronous and reactive types as model attributes. 
+Spring WebFlux does support all that.
 
 ## Extension
 1. must declare @PathVariable @RequestParam or @RequestBody
