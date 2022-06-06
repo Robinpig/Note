@@ -107,7 +107,7 @@ public void add(int index, E element) {
 
 ```java
 public class ArrayList<E> extends AbstractList<E>
-        implements List<E>, RandomAccess, Cloneable, java.io.Serializable {...}
+        implements List<E>, RandomAccess, Cloneable, java.io.Serializable {}
 ```
 
 
@@ -261,7 +261,42 @@ private void grow(int minCapacity) {
 }
 ```
 
+### remove
+```java
+    public boolean removeAll(Collection<?> c) {
+        return batchRemove(c, false, 0, size);
+    }
 
+    boolean batchRemove(Collection<?> c, boolean complement,
+                        final int from, final int end) {
+        Objects.requireNonNull(c);
+        final Object[] es = elementData;
+        int r;
+        // Optimize for initial run of survivors
+        for (r = from; ; r++) {
+            if (r == end)
+                return false;
+            if (c.contains(es[r]) != complement)
+                break;
+        }
+        int w = r++;
+        try {
+            for (Object e; r < end; r++)
+                if (c.contains(e = es[r]) == complement)
+                    es[w++] = e;
+        } catch (Throwable ex) {
+            // Preserve behavioral compatibility with AbstractCollection,
+            // even if c.contains() throws.
+            System.arraycopy(es, r, es, w, end - r);
+            w += end - r;
+            throw ex;
+        } finally {
+            modCount += end - w;
+            shiftTailOverGap(es, w, end);
+        }
+        return true;
+    }
+```
 
 ### copy
 
@@ -310,7 +345,7 @@ ArayList use Object[], LinkedList use linked-list
 
 
 
-### Remove
+### remove
 
 - 普通for循环正序删除（结果：会漏掉对后一个元素的判断）
 - 普通for循环倒序删除（结果：正确删除）
@@ -319,6 +354,41 @@ ArayList use Object[], LinkedList use linked-list
 - Iterator遍历，使用Iterator的remove删除元素（结果：正确删除）
 
 
+### ArrayList Extensions
+
+A customized implementation of java.util.ArrayList designed to operate in a multithreaded environment where the large majority of method calls are read-only, instead of structural changes. When operating in "fast" mode, read calls are non-synchronized and write calls perform the following steps:
+- Clone the existing collection
+- Perform the modification on the clone
+- Replace the existing collection with the (modified) clone
+
+NOTE: If you are creating and accessing an ArrayList only within a single thread, you should use java.util.ArrayList directly (with no synchronization), for maximum performance.
+
+NOTE: This class is not cross-platform. Using it may cause unexpected failures on some architectures. 
+It suffers from the same problems as the double-checked locking idiom. In particular, the instruction that clones the internal collection and the instruction that sets the internal reference to the clone can be executed or perceived out-of-order. 
+This means that any read operation might fail unexpectedly, as it may be reading the state of the internal collection before the internal collection is fully formed. 
+For more information on the double-checked locking idiom, see the Double-Checked Locking Idiom Is Broken Declaration .
+
+```java
+package org.apache.commons.collections;
+
+public class FastArrayList extends ArrayList {
+    public void add(int index, Object element) {
+
+        if (fast) {
+            synchronized (this) {
+                ArrayList temp = (ArrayList) list.clone();
+                temp.add(index, element);
+                list = temp;
+            }
+        } else {
+            synchronized (list) {
+                list.add(index, element);
+            }
+        }
+
+    }
+}
+```
 
 ## CopyOnWriteArrayList
 

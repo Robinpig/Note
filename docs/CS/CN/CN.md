@@ -288,6 +288,10 @@ A key element in every network router is its *forwarding table*.
 A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table.
 The value stored in the forwarding table entry for those values indicates the outgoing link interface at that router to which that packet is to be forwarded.
 
+### SDN
+
+
+
 ### Routing Algorithms
 
 The network layer must determine the route or path taken by packets as they flow from a sender to a receiver.

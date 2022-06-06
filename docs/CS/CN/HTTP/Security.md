@@ -12,7 +12,7 @@ This means that a web application using those APIs can only request resources fr
 The CORS mechanism supports secure cross-origin requests and data transfers between browsers and servers.
 Modern browsers use CORS in APIs such as XMLHttpRequest or Fetch to mitigate the risks of cross-origin HTTP requests.
 
-CORS is not a protection against cross-origin attacks such as cross-site request forgery (CSRF).
+CORS is not a protection against cross-origin attacks such as [cross-site request forgery (CSRF)](/docs/CS/CN/HTTP/Security.md?id=CSRF).
 
 ### Access Control Scenarios
 
