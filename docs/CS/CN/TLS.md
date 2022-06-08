@@ -222,6 +222,17 @@ Client                                               Server
 
 
 
+
+DES
+
+unsafe 
+
+AES
+
+
+
+
+
 ## References
 
 1. [RFC 2246 - The TLS Protocol Version 1.0](https://www.rfc-editor.org/rfc/rfc2246.html)
