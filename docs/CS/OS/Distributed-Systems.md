@@ -72,6 +72,8 @@ From a practical perspective, excluding failed processes helps to avoid unnecess
 
 [Group membership failure detection: a simple protocol and its probabilistic analysis](https://iopscience.iop.org/article/10.1088/0967-1846/6/3/301/pdf)
 
+[Unreliable failure detectors for reliable distributed systems](https://dl.acm.org/doi/pdf/10.1145/226643.226647)
+
 Failure-detection algorithms should exhibit several essential properties. 
 - First of all, every nonfaulty member should eventually notice the process failure, and the algorithm should be able to make progress and eventually reach its final result. 
   This property is called *completeness*.
