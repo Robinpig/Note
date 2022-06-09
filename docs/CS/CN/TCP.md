@@ -44,7 +44,7 @@ The procedures to establish connections utilize the synchronize (SYN)  control f
 The following diagram illustrates the place of the TCP in the protocol  hierarchy:
 
 ```
-    
+  
        +------+ +-----+ +-----+       +-----+  
        |Telnet| | FTP | |Voice|  ...  |     |  Application Level 
        +------+ +-----+ +-----+       +-----+  
@@ -56,7 +56,7 @@ The following diagram illustrates the place of the TCP in the protocol  hierarch
             +-------------------------------+  
             |    Internet Protocol & ICMP   |  Gateway Level   
             +-------------------------------+  
-                           |           
+                           |   
               +---------------------------+  
               |   Local Network Protocol  |    Network Level   
               +---------------------------+  
@@ -1010,7 +1010,9 @@ If a router receives more data per unit time than it can send out, it must store
 When a router is forced to discard data because it cannot handle the arriving traffic rate, is called *congestion*.
 The router is said to be congested when it is in this state, and even a single connection can drive one or more routers into congestion.
 Left unaddressed, congestion can cause the performance of a network to be reduced so badly that it becomes unusable.
-In the very worst cases, it is said to be in a state of congestion collapse. To either avoid or at least react effectively to mitigate this situation, each TCP implements congestion control procedures.
+In the very worst cases, it is said to be in a state of congestion collapse.
+To either avoid or at least react effectively to mitigate this situation, each TCP implements congestion control procedures.
+The challenge is to determine exactly when and how TCP should slow down, and when it can speed up again.
 
 > [!TIP]
 >
@@ -1020,16 +1022,17 @@ In the very worst cases, it is said to be in a state of congestion collapse. To 
 
 ### Detection of Congestion
 
-In TCP, an assumption is made that a lost packet is an indicator of congestion, and that some response (i.e., slowing down in some way) is required.
-We shall see that TCP has been this way since the late 1980s. Other methods for detecting congestion, including measuring delay and network-supported Explicit Congestion Notification (ECN),
-allow TCP to learn about congestion even before it has become so bad as to cause dropped packets.
+Methods for detecting congestion in TCP:
+
+- a lost packet is an indicator of congestion
+- measuring delay
+- network-supported Explicit Congestion Notification (ECN)
 
 > [!Note]
 >
-> In today’s wired networks, packet loss is caused primarily by congestion in routers or switches. With wireless networks, transmission and reception errors become a significant cause of packet loss.
+> In today’s wired networks, packet loss is caused primarily by congestion in routers or switches.
+> With wireless networks, transmission and reception errors become a significant cause of packet loss.
 > Determining whether loss is due to congestion or transmission errors has been an active research topic since the mid-1990s when wireless networks started to attain widespread use.
-
-#### Slowing Down a TCP Sender
 
 One detail we need to address right away is just how to slow down a TCP sender.
 We saw that the Window Size field in the TCP header is used to signal a sender to adjust its window based on the availability of buffer space at the receiver.
@@ -1037,7 +1040,7 @@ We can go a step further and arrange for the sender to slow down if either the r
 This is accomplished by introducing a window control variable at the sender that is based on an estimate of the network’s capacity and ensuring that the sender’s window size never exceeds the minimum of the two.
 In effect, a sending TCP then sends at a rate equal to what the receiver or the network can handle, whichever is less.
 
-The new value used to hold the estimate of the network’s available capacity is called the congestion window, written more compactly as simply cwnd.
+The new value used to hold the estimate of the network’s available capacity is called the *congestion window*, written more compactly as simply *cwnd*.
 The sender’s actual (usable) window W is then written as the minimum of the receiver’s advertised window awnd and the congestion window:
 
 $$
@@ -1049,17 +1052,30 @@ With this relationship, the TCP sender is not permitted to have more than W unac
 The total amount of data a sender has introduced into the network for which it has not yet received an acknowledgment is sometimes called the flight size, which is always less than or equal to W.
 In general, W can be maintained in either packet or byte units.
 
-When TCP does not make use of selective acknowledgment, the restriction on W means that the sender is not permitted to send a segment with a sequence number greater than the sum of the highest acknowledged sequence number and the value of W.
-A SACK TCP sender treats W somewhat differently, using it as an overall limit to the flight size.
+> [!NOTE]
+>
+> When TCP does not make use of selective acknowledgment, the restriction on W means that the sender is not permitted to send a segment with a sequence number greater than the sum of the highest acknowledged sequence number and the value of W.
+> A SACK TCP sender treats W somewhat differently, using it as an overall limit to the flight size.
+
+In addition, as we said before, we do not want W to be too big or too small—we want it to be set to about the **bandwidth-delay product (BDP)** of the network path, also called the *optimal window size*.
+
+This is the amount of data that can be stored in the network in transit to the receiver.
+It is equal to the product of the RTT and the capacity of the lowest capacity (“bottleneck”) link on the path from sender to receiver.
+Generally, the sending strategy is to keep the network busy by arranging to have an amount of data at least as large as the BDP in the network.
+Using an outstanding limit that substantially exceeds the BDP, however, is usually undesirable as it can lead to unwanted delays.
+On the Internet, determining the BDP for a connection can be challenging, given that routes, delay, and the level of statistical multiplexing (i.e., sharing of capacity) change as a function of time.
+
+Although handling congestion at the TCP sender is our primary area of interest, work has been done on handling the cases where congestion occurs on the reverse path, because of ACKs.
+In [RFC5690](https://datatracker.ietf.org/doc/rfc5690/) a method is introduced to inform a TCP receiver of the ACK ratio it should use (i.e., how many packets it should receive before sending an ACK).
 
 ### Congestion Control Algorithms
 
 Note that if acknowledgments arrive at a relatively slow rate (e.g., if the end-end path has high delay or contains a low-bandwidth link), then the congestion window will be increased at a relatively slow rate.
 On the other hand, if acknowledgments arrive at a high rate, then the congestion window will be increased more quickly.
-Because TCP uses acknowledgments to trigger (or clock) its increase in congestion window size, TCP is said to be self-clocking.
+Because TCP uses acknowledgments to trigger (or clock) its increase in congestion window size, TCP is said to be *self-clocking*.
 
 We now turn to the main two algorithms of TCP: slow start and congestion avoidance. These algorithms, based on the principles of packet conservation and ACK clocking.
-These algorithms do not operate at the same time—TCP executes only one at any given time, but it may switch back and forth between the two.
+**These algorithms do not operate at the same time—TCP executes only one at any given time, but it may switch back and forth between the two.**
 
 Fast recovery is recommended, but not required, for TCP senders.
 
@@ -1070,17 +1086,35 @@ It may also be invoked after a sending TCP has gone idle for some time.
 The purpose of slow start is to help TCP find a value for cwnd before probing for more available bandwidth using congestion avoidance and to establish the ACK clock.
 Typically, a TCP begins a new connection in slow start, eventually drops a packet, and then settles into steady-state operation using the [congestion avoidance algorithm](/docs/CS/CN/TCP.md?id=Congestion-Avoidance).
 
-To quote from [RFC5681]:
-
+> [!NOTE]
+> 
+> To quote from [RFC5681](https://datatracker.ietf.org/doc/rfc5681/):
+>
 > Beginning transmission into a network with unknown conditions requires TCP to slowly probe the network to determine the available capacity, in order to avoid congesting the network with an inappropriately large burst of data.
 > The slow start algorithm is used for this purpose at the beginning of a transfer, or after repairing loss detected by the retransmission timer.
+
+
+A TCP begins in slow start by sending a certain number of segments (after the SYN exchange), called the initial window (IW). 
+The value of IW was originally one SMSS, although with [RFC5681](https://datatracker.ietf.org/doc/rfc5681/) it is allowed to be larger. 
+The formula works as follows:
+- IW = 2*(SMSS) and not more than 2 segments (if SMSS > 2190 bytes)
+- IW = 3*(SMSS) and not more than 3 segments (if 2190 ≥ SMSS > 1095 bytes)
+- IW = 4*(SMSS) and not more than 4 segments (otherwise)
+
+In most cases SMSS is equal to the smaller of the receiver’s MSS and the path MTU (less header sizes).
 
 Slow start operates by incrementing cwnd by min(N, SMSS) for each good ACK received, where N is the number of previously unacknowledged bytes ACKed by the received “good ACK.”
 A good ACK is one that returns a higher ACK number than has been seen so far.
 
+In general, assuming no loss and an ACK for every packet, the value of W after k round-trip exchanges is W = $2^k$. 
+Rewriting, we can say that k = $log_2W$ RTTs are required to reach an operating window of W. 
+This growth seems quite “fast” (increasing as an exponential function) but is still “slower” than what TCP would do if it were allowed to send immediately a window of packets equal in size to the receiver’s advertised window. 
+(Recall that W is still never allowed to exceed awnd.)
+
 #### Congestion Avoidance
 
-Slow start, just described, is used when initiating data flow across a connection or after a loss event invoked by a timeout. It increases cwnd fairly rapidly and helps to establish a value for ssthresh.
+Slow start is used when initiating data flow across a connection or after a loss event invoked by a timeout. 
+It increases cwnd fairly rapidly and helps to establish a value for **slow start threshold (ssthresh)**.
 Once this is achieved, there is always the possibility that more network capacity may become available for a connection.
 If such capacity were to be immediately used with large traffic bursts, other TCP connections with packets sharing the same queues in routers would likely experience significant packet drops,
 leading to overall instability in the network as many connections simultaneously experience packet drops and react with retransmissions.
@@ -1102,6 +1136,14 @@ The assumption of the algorithm is that packet loss caused by bit errors is very
 If this assumption is false, which it sometimes is for wireless networks, TCP slows down even when no congestion is present.
 In addition, many RTTs may be required for the value of cwnd to grow large, which is required for efficient use of networks with high capacity.
 
+We mentioned ssthresh earlier. This threshold is a limit on the value of cwnd that determines which algorithm is in operation, slow start or congestion avoidance. 
+When cwnd < ssthresh, slow start is used, and when cwnd > ssthresh, congestion avoidance is used. When they are equal, either can be used. 
+The most important distinction between slow start and congestion avoidance, as we have seen, is how each modifies the value of cwnd when new ACKs arrive. 
+What makes TCP somewhat tricky and interesting is that the value of ssthresh is not fixed but instead varies over time. Its main purpose is to remember the last “best” estimate of the operating window when no loss was present. 
+Said another way, it holds the lower bound on TCP’s best estimate of the optimal window size.
+
+
+
 #### Fast Recovery
 
 In fast recovery, the value of cwnd is increased by 1 MSS for every duplicate ACK received for the missing segment that caused TCP to enter the fast-recovery state.
@@ -1114,11 +1156,58 @@ The value of cwnd is set to 1 MSS, and the value of ssthresh is set to half the 
 In high-speed networks with large BDPs (e.g., WANs of 1Gb/s or more), conventional TCP may not perform well because its window increase algorithm (the congestion avoidance algorithm, in particular) takes a long time to grow the window large enough to saturate the network path.
 Said another way, TCP can fail to take advantage of fast networks even when no congestion is present. This issue arises primarily from the fixed additive increase behavior of congestion avoidance.
 
-CUBIC has been the default congestion control algorithm for Linux kernels since 2.6.18. Since kernel version 2.6.13, however, Linux supports pluggable congestion avoidance modules [P07], allowing the user to pick which algorithm to use.
+$$
+W(t) = C(t-K)^3 + W_{max}
+
+$$
+
+CUBIC has been the default congestion control algorithm for Linux kernels since 2.6.18. 
+Since kernel version 2.6.13, however, Linux supports pluggable congestion avoidance modules [P07], allowing the user to pick which algorithm to use.
 The variable `net.ipv4.tcp_congestion_control` contains the current default congestion control algorithm (default: cubic).
 The variable `net.ipv4.tcp_available_congestion_control` contains the congestion control algorithms loaded on the system (in general, additional ones can be loaded as kernel modules).
 The variable `net.ipv4.tcp_allowed_congestion_control` contains those algorithms permitted for use by applications (either selected specifically or by default).
-The default supports CUBIC and Reno.
+
+```shell
+cat /proc/sys/net/ipv4/tcp_congestion_control
+#cubic
+
+cat /proc/sys/net/ipv4/tcp_available_congestion_control 
+#reno cubic
+
+cat /proc/sys/net/ipv4/tcp_allowed_congestion_control 
+#reno cubic
+```
+
+
+
+#### Vegas
+
+Vegas is fair relative to other Vegas TCPs sharing the same path because each pushes the network to hold only a minimal amount of data. 
+However, Vegas and standard TCP flows do not share paths equally. A standard TCP sender tends to fill queues in the network, whereas Vegas tends to keep them nearly empty. 
+Consequently, as the standard sender injects more packets, the Vegas sender sees increased delay and slows down. Ultimately, this leads to an unfair bias in favor of the standard TCP. 
+Vegas is supported by Linux but not enabled by default. For kernels prior to 2.6.13, the Boolean sysctl variable net.ipv4.tcp_vegas_cong_avoid determines whether it is used (default 0). 
+The variables net.ipv4.tcp_vegas_alpha (default 2) and net.ipv4.tcp_vegas_beta (default 6) correspond to the alpha and beta described previously but are expressed in half-packet units (i.e., 6 corresponds to 3 packets). 
+The variable net.ipv4.tcp_vegas_gamma (default 2) configures how many half-packets Vegas should attempt to keep outstanding during slow start. 
+For kernels after 2.6.13, Vegas must be loaded as a separate kernel module and enabled by setting net.ipv4.tcp_congestion_control to vegas.
+
+
+
+#### BBR
+
+Bottleneck link Bandwidth
+
+based on model
+
+
+packet loss != congestion
+
+
+large buffer allow delay longer
+
+
+BDP=RTT*BtlBW
+
+
 
 ### TCP Friendliness
 
@@ -1276,6 +1365,8 @@ The other six timers are decremented every 500 ms, and only when the counter rea
 6. [RFC 2525 - Known TCP Implementation Problems](https://datatracker.ietf.org/doc/rfc2525/)
 7. [RFC 2581 - TCP Congestion Control](https://datatracker.ietf.org/doc/rfc2581/)
 8. [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP](https://datatracker.ietf.org/doc/rfc3168/)
-9. [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/doc/rfc6191)
-10. [RFC 6937 - Proportional Rate Reduction for TCP](https://datatracker.ietf.org/doc/doc/rfc6937)
-11. [RFC 7413 - TCP Fast Open](https://datatracker.ietf.org/doc/rfc7413/)
+9. [RFC 5690 - Adding Acknowledgement Congestion Control to TCP](https://datatracker.ietf.org/doc/rfc5690/)
+10. [RFC 6077 - Open Research Issues in Internet Congestion Control](https://datatracker.ietf.org/doc/rfc6077/)
+11. [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/doc/rfc6191)
+12. [RFC 6937 - Proportional Rate Reduction for TCP](https://datatracker.ietf.org/doc/doc/rfc6937)
+13. [RFC 7413 - TCP Fast Open](https://datatracker.ietf.org/doc/rfc7413/)
