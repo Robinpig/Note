@@ -1190,7 +1190,7 @@ The variables net.ipv4.tcp_vegas_alpha (default 2) and net.ipv4.tcp_vegas_beta (
 The variable net.ipv4.tcp_vegas_gamma (default 2) configures how many half-packets Vegas should attempt to keep outstanding during slow start. 
 For kernels after 2.6.13, Vegas must be loaded as a separate kernel module and enabled by setting net.ipv4.tcp_congestion_control to vegas.
 
-
+[TCP Vegas: End to End Congestion Avoidance on a Global Internet](https://cseweb.ucsd.edu/~rbraud/jsac.pdf)
 
 #### BBR
 
