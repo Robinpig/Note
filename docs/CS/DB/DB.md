@@ -1,10 +1,58 @@
 ## Introduction
 
-
-
 Knowledge Base of Relational and NoSQL Database Management Systems in [DB-Engines](https://db-engines.com/en/ranking)
 
 ## Architecture
+
+Database management systems use a client/server model, where database system instances (nodes) take the role of servers, and application instances take the role of clients.
+
+Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language. 
+The transport subsystem is also responsible for communication with other nodes in the database cluster.
+
+![Architecture of a database management system](./img/DB.png)
+
+Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it. 
+Later, access control checks are performed, as they can be done fully only after the query is interpreted.
+
+“The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer). 
+The optimizer handles both relational operations required for query resolution, usually presented as a dependency tree, and optimizations, such as index ordering, cardinality estimation, and choosing access methods.
+
+“The query is usually presented in the form of an execution plan (or query plan): a sequence of operations that have to be carried out for its results to be considered complete.”
+
+“Since the same query can be satisfied using different execution plans that can vary in efficiency, the optimizer picks the best available plan.
+
+The execution plan is handled by the execution engine, which collects the results of the execution of local and remote operations. Remote execution can involve writing and reading data to and from other nodes in the cluster, and replication.
+
+Local queries (coming directly from clients or from other nodes) are executed by the storage engine. 
+The storage engine has several components with dedicated responsibilities:”
+
+“Transaction manager
+
+This manager schedules transactions and ensures they cannot leave the database in a logically inconsistent state.
+
+Lock manager
+
+This manager locks on the database objects for the running transactions, ensuring that concurrent operations do not violate physical data integrity.
+
+Access methods (storage structures)
+
+These manage access and organizing data on disk. Access methods include heap files and storage structures such as B-Trees (see “Ubiquitous B-Trees”) or LSM Trees (see “LSM Trees”).
+
+Buffer manager
+
+This manager caches data pages in memory (see “Buffer Management”).
+
+Recovery manager
+
+This manager maintains the operation log and restoring the system state in case of a failure (see “Recovery”).
+
+
+
+Together, transaction and lock managers are responsible for concurrency control (see “Concurrency Control”): 
+they guarantee logical and physical data integrity while ensuring that concurrent operations are executed as efficiently as possible.
+
+
+
 
 Storage data layer
 
@@ -18,12 +66,19 @@ Log Layer
 
 Authority Layer
 
-Tolerance  
+Tolerance
 
-concurrency 
+concurrency
 
 
+A version of the tree that would be better suited for disk implementation has to exhibit the following properties:
+- High fanout to improve locality of the neighboring keys.
+- Low height to reduce the number of seeks during traversal.
 
+> [!TIP]
+>
+> Fanout and height are inversely correlated: the higher the fanout, the lower the height. 
+> If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
 
 
 
@@ -40,7 +95,7 @@ If transactions are executed *serially*, i.e., sequentially with no overlap in t
 
 Most high-performance transactional systems need to run transactions concurrently to meet their performance requirements. Thus, without concurrency control such systems can neither provide correct results nor maintain their databases consistently.
 
-###  Concurrency control mechanisms
+### Concurrency control mechanisms
 
 #### Categories
 
@@ -79,8 +134,6 @@ The most common mechanism type in database systems since their early days in the
 
 OCC is generally used in environments with low [data contention](https://en.wikipedia.org/wiki/Block_contention). When conflicts are rare, transactions can complete without the expense of managing locks and without having transactions wait for other transactions' locks to clear, leading to higher throughput than other concurrency control methods. However, if contention for data resources is frequent, the cost of repeatedly restarting transactions hurts performance significantly, in which case other [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) methods may be better suited. However, locking-based ("pessimistic") methods also can deliver poor performance because locking can drastically limit effective concurrency even when deadlocks are avoided.
 
-
-
 #### Phases of optimistic concurrency control
 
 Optimistic concurrency control transactions involve these phases:
@@ -90,11 +143,8 @@ Optimistic concurrency control transactions involve these phases:
 - **Validate**: Check whether other transactions have modified data that this transaction has used (read or written). This includes transactions that completed after this transaction's start time, and optionally, transactions that are still active at validation time.
 - **Commit/Rollback**: If there is no conflict, make all changes take effect. If there is a conflict, resolve it, typically by aborting the transaction, although other resolution schemes are possible. Care must be taken to avoid a [time-of-check to time-of-use](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use) bug, particularly if this phase and the previous one are not performed as a single [atomic](https://en.wikipedia.org/wiki/Linearizability) operation.
 
-
-
-
-
 ### Two-phase locking
+
 In [databases](https://en.wikipedia.org/wiki/Database) and [transaction processing](https://en.wikipedia.org/wiki/Transaction_processing), **two-phase locking** (**2PL**) is a [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) method that guarantees [serializability](https://en.wikipedia.org/wiki/Serializability).[[1\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Bern1987-1)[[2\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Weikum2001-2) It is also the name of the resulting set of [database transaction](https://en.wikipedia.org/wiki/Database_transaction) [schedules](https://en.wikipedia.org/wiki/Schedule_(computer_science)) (histories). The protocol utilizes [locks](https://en.wikipedia.org/wiki/Lock_(computer_science)), applied by a transaction to data, which may block (interpreted as signals to stop) other transactions from accessing the same data during the transaction's life.
 
 By the 2PL protocol, locks are applied and removed in two phases:
