@@ -132,7 +132,7 @@ Innodb in distribution-transaction is SERIALIZABLE.
 
 
 
-## CAP Theorem (Brewer’s Theorem)
+## CAP Theorem
 
 It is impossible for a distributed computer system to simultaneously provide all three of the following guarantees:
 - **Consistency**: all nodes see the same data at the same time
@@ -140,6 +140,25 @@ It is impossible for a distributed computer system to simultaneously provide all
 - **Partition tolerance**: the system continues to operate despite arbitrary partitioning due to network failures (e.g., message loss)
 
 A distributed system can satisfy any two of these guarantees at the same time but not all three.
+We would like to achieve both consistency and availability while tolerating network partitions. 
+The network can get split into several parts where processes are not able to communicate with each other: some of the messages sent between partitioned nodes won’t reach their destinations.
+
+Availability requirement is impossible to satisfy in an asynchronous system, and we cannot implement a system that simultaneously guarantees both availability and consistency in the presence of network partitions [GILBERT02]. 
+We can build systems that guarantee strong consistency while providing best effort availability, or guarantee availability while providing best effort consistency [GILBERT12]. 
+Best effort here implies that if everything works, the system will not purposefully violate any guarantees, but guarantees are allowed to be weakened and violated in the case of network partitions.
+
+An example of a CP system is an implementation of a consensus algorithm, requiring a majority of nodes for progress: always consistent, but might be unavailable in the case of a network partition. 
+A database always accepting writes and serving reads as long as even a single replica is up is an example of an AP system, which may end up losing data or serving inconsistent results.
+
+PACELEC conjecture [ABADI12], an extension of CAP, states that in presence of network partitions there’s a choice between consistency and availability (PAC). 
+Else (E), even if the system is running normally, we still have to make a choice between latency and consistency.
+
+> [!TIP]
+> 
+> Consistency in CAP is defined quite differently from what [ACID](/docs/CS/Transaction.md?id=ACID) defines as consistency.
+> ACID consistency describes transaction consistency: transaction brings the database from one valid state to another, maintaining all the database invariants (such as uniqueness constraints and referential integrity). 
+> In CAP, it means that operations are atomic (operations succeed or fail in their entirety) and consistent (operations never leave the data in an inconsistent state).
+
 
 RPO
 
@@ -160,15 +179,10 @@ Recovery Time Objective
 
 
 ### ACID vs. BASE trade-off
-• No general answer to whether your application needs an ACID versus BASE
-consistency model.
-• Given BASE’s loose consistency, developers need to be more
-knowledgeable and rigorous about consistent data if they choose a BASE
-store for their application.
-• Planning around BASE limitations can sometimes be a major disadvantage
-when compared to the simplicity of ACID transactions.
-• A fully ACID database is the perfect fit for use cases where data reliability
-and consistency are essential.
+• No general answer to whether your application needs an ACID versus BASE consistency model.
+• Given BASE’s loose consistency, developers need to be more knowledgeable and rigorous about consistent data if they choose a BASE store for their application.
+• Planning around BASE limitations can sometimes be a major disadvantage when compared to the simplicity of ACID transactions.
+• A fully ACID database is the perfect fit for use cases where data reliability and consistency are essential.
 
 
 ## Two-phased Commit
