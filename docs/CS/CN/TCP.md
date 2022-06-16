@@ -1359,10 +1359,12 @@ In Linux, ECN is enabled if the Boolean sysctl variable `net.ipv4.tcp_ecn` is no
 
 Under some circumstances, it is useful for a client or server to become aware of the termination or loss of connection with its peer.
 In other circumstances, it is desirable to keep a minimal amount of data flowing over a connection, even if the applications do not have any to exchange.
-TCP keepalive provides a capability useful for both cases. Keepalive is a method for TCP to probe its peer without affecting the content of the data stream. It is driven by a keepalive timer.
+TCP keepalive provides a capability useful for both cases. 
+
+Keepalive is a method for TCP to probe its peer without affecting the content of the data stream. It is driven by a keepalive timer.
 When the timer fires, a keepalive probe (keepalive for short) is sent, and the peer receiving the probe responds with an ACK.
 
-Either end of a TCP connection may request keepalives, which are turned off by default, for their respective direction of the connection.
+Either end of a TCP connection may request keepalives, which are **turned off by default**, for their respective direction of the connection.
 A keepalive can be set for one side, both sides, or neither side. There are several configurable parameters that control the operation of keepalives.
 If there is no activity on the connection for some period of time (called the keepalive time), the side(s) with keepalive enabled sends a keepalive probe to its peer(s).
 If no response is received, the probe is repeated periodically with a period set by the keepalive interval until a number of probes equal to the number keepalive probes is reached.
