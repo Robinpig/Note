@@ -1,4 +1,10 @@
-# Docker
+## Introduction
+
+Containers and virtual machines have similar resource isolation and allocation benefits, but function differently because containers virtualize the operating system instead of hardware. 
+Containers are more portable and efficient.
+
+
+rootfs
 
 ### 1.1 Docker 由来
 
