@@ -2,11 +2,11 @@
 
 
 
-### Future Hierarchies
+### Future Hierarchy
 
 ![Future](../images/Future.png)
 
-We could create a **Thread** object with a **Runnable** target, also use **FutureTask** to get **Future**.
+We could create a [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md) object with a **Runnable** target, also use **FutureTask** to get **Future**.
 
 ### Runnable
 
@@ -1062,6 +1062,17 @@ private static final Executor ASYNC_POOL = USE_COMMON_POOL ?
     ForkJoinPool.commonPool() : new ThreadPerTaskExecutor();
 ```
 
+result stack
+
+```java
+public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
+    volatile Object result;       // Either the result or boxed AltResult
+    volatile Completion stack;    // Top of Treiber stack of dependent actions
+}
+```
+
+Completion
+
 
 
 ### task chain
@@ -1120,7 +1131,9 @@ public <U> CompletableFuture<U> handleAsync(
 }
 ```
 
+Exception most will be wrap into `CompletionException.getCause()`
 
+use  `ExceptionUtils.extractRealException(err)` to get real Exception
 
 ### collect Results
 
@@ -1235,6 +1248,13 @@ private static Object reportJoin(Object r) {
   return r;
 }
 ```
+
+## Links
+
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [ThreadPool](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
+- [RxJava](/docs/CS/Java/RxJava/RxJava.md)
+- [Reactor](/docs/CS/Java/reactor/Reactor.md)
 
 ## References
 1. [FutureTask.isDone returns true when task has not yet completed](https://bugs.openjdk.java.net/browse/JDK-8073704)

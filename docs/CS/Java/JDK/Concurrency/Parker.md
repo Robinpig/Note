@@ -7,7 +7,7 @@ A word of caution: The JVM uses 2 very similar constructs:
 
 > [!NOTE]
 > 
-> In the future we'll want to think about eliminating Parker and using ParkEvent instead.**  
+> In the future we'll want to think about eliminating Parker and using ParkEvent instead.
 > There's considerable duplication between the two services.
 
 ## Parker

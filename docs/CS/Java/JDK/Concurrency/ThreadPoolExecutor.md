@@ -1204,9 +1204,13 @@ public static ScheduledExecutorService newScheduledThreadPool(
 |            |                      |                       |
 |            |                      |                       |
 
+## Links
 
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+- [Future](/docs/CS/Java/JDK/Concurrency/Future.md)
 
-## Reference
+## References
 
 1. [深入理解Java线程池：ThreadPoolExecutor](http://www.ideabuffer.cn/2017/04/04/深入理解Java线程池：ThreadPoolExecutor/)
 2. [Java线程池实现原理及其在美团业务中的实践](https://tech.meituan.com/2020/04/02/java-pooling-pratice-in-meituan.html)
