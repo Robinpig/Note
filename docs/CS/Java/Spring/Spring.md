@@ -1,30 +1,32 @@
 ## Introduction
 
-The [Spring Framework](https://spring.io/projects/spring-framework) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody. 
+The [Spring Framework](https://spring.io/projects/spring-framework) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody.
 Spring’s focus on speed, simplicity, and productivity has made it the world's most popular Java framework.
 
 ## Architecture
+
 Packages
+
 - IoC
-    - core
-    - beans
-    - context
-    - expression
+  - core
+  - beans
+  - context
+  - expression
 - AOP
-    - aop
-    - aspects
-    - instrument
+  - aop
+  - aspects
+  - instrument
 - data
-    - jdbc
-    - tx
-    - orm
-    - oxm
-    - jms
+  - jdbc
+  - tx
+  - orm
+  - oxm
+  - jms
 - web
-    - web
-    - webmvc
-    - websocket
-    - webflux
+  - web
+  - webmvc
+  - websocket
+  - webflux
 
 ### Core
 
@@ -44,22 +46,20 @@ Packages
 
 ### Integration
 
- REST Endpoints
+REST Endpoints
 
 The Spring Framework provides two choices for making calls to REST endpoints:
+
 - RestTemplate: The original Spring REST client with a synchronous, template method API.
 - WebClient: a non-blocking, reactive alternative that supports both synchronous and asynchronous as well as streaming scenarios.
 
+[Task Execution and Scheduling](/docs/CS/Java/Spring/Task.md)
 
-
- [Task Execution and Scheduling](/docs/CS/Java/Spring/Task.md)
-
- [Cache Abstraction](/docs/CS/Java/Spring/Cache.md)
+[Cache Abstraction](/docs/CS/Java/Spring/Cache.md)
 
 [Spring Security](/docs/CS/Java/Spring/Security.md)
 
 ### Testing
-
 
 SpringProperties
 
