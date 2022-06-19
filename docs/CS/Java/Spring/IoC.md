@@ -353,6 +353,9 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
    /** Cache of early singleton objects: bean name to bean instance. */
    private final Map<String, Object> earlySingletonObjects = new HashMap<>(16);
 
+   /** Names of beans that are currently in creation. */
+   private final Set<String> singletonsCurrentlyInCreation = Collections.newSetFromMap(new ConcurrentHashMap<>(16));
+   
    @Nullable
    protected Object getSingleton(String beanName, boolean allowEarlyReference) {
       Object singletonObject = this.singletonObjects.get(beanName);
@@ -1816,7 +1819,90 @@ private void processKeyedProperty(PropertyTokenHolder tokens, PropertyValue pv) 
 }
 ```
 
+#### initializeBean
+
+Initialize the given bean instance, applying factory callbacks as well as init methods and bean post processors.
+
+1. invokeAwareMethods
+2. applyBeanPostProcessorsBeforeInitialization
+3. invokeInitMethods
+4. applyBeanPostProcessorsAfterInitialization
+
+```java
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
+   protected Object initializeBean(String beanName, Object bean, @Nullable RootBeanDefinition mbd) {
+      if (System.getSecurityManager() != null) {
+         AccessController.doPrivileged((PrivilegedAction<Object>) () -> {
+            invokeAwareMethods(beanName, bean);
+            return null;
+         }, getAccessControlContext());
+      } else {
+         invokeAwareMethods(beanName, bean);
+      }
+
+      Object wrappedBean = bean;
+      if (mbd == null || !mbd.isSynthetic()) {
+         wrappedBean = applyBeanPostProcessorsBeforeInitialization(wrappedBean, beanName);
+      }
+
+      try {
+         invokeInitMethods(beanName, wrappedBean, mbd);
+      } catch (Throwable ex) {
+         // throw
+      }
+      if (mbd == null || !mbd.isSynthetic()) {
+         wrappedBean = applyBeanPostProcessorsAfterInitialization(wrappedBean, beanName);
+      }
+
+      return wrappedBean;
+   }
+}
+```
+
+##### invokeInitMethods
+
+Give a bean a chance to react now all its properties are set, and a chance to know about its owning bean factory (this object). 
+This means checking whether the bean implements InitializingBean or defines a custom init method, and invoking the necessary callback(s) if it does.
+
+```java
+protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBeanDefinition mbd)
+			throws Throwable {
+
+		boolean isInitializingBean = (bean instanceof InitializingBean);
+		if (isInitializingBean && (mbd == null || !mbd.isExternallyManagedInitMethod("afterPropertiesSet"))) {
+			if (System.getSecurityManager() != null) {
+				try {
+					AccessController.doPrivileged((PrivilegedExceptionAction<Object>) () -> {
+						((InitializingBean) bean).afterPropertiesSet();
+						return null;
+					}, getAccessControlContext());
+				}
+				catch (PrivilegedActionException pae) {
+					throw pae.getException();
+				}
+			}
+			else {
+				((InitializingBean) bean).afterPropertiesSet();
+			}
+		}
+
+		// Reflection
+		if (mbd != null && bean.getClass() != NullBean.class) {
+			String initMethodName = mbd.getInitMethodName();
+			if (StringUtils.hasLength(initMethodName) &&
+					!(isInitializingBean && "afterPropertiesSet".equals(initMethodName)) &&
+					!mbd.isExternallyManagedInitMethod(initMethodName)) {
+				invokeCustomInitMethod(beanName, bean, mbd);
+			}
+		}
+	}
+```
+
+
+
 ## refresh
+
+
 
 ```java
 // AbstractApplicationContext#refresh()
@@ -1924,12 +2010,14 @@ protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
 		refreshBeanFactory();
 		return getBeanFactory();
 	}
+```
 
-/**
- * This implementation performs an actual refresh of this context's underlying
- * bean factory, shutting down the previous bean factory (if any) and
- * initializing a fresh bean factory for the next phase of the context's lifecycle.
- */
+Subclasses must implement this method to perform the actual configuration load. The method is invoked by refresh() before any other initialization work.
+
+A subclass will either create a new bean factory and hold a reference to it, or return a single BeanFactory instance that it holds. 
+In the latter case, it will usually throw an IllegalStateException if refreshing the context more than once.
+
+```java
 // AbstractRefreshableApplicationContext::refreshBeanFactory()
 @Override
 protected final void refreshBeanFactory() throws BeansException {
@@ -2327,6 +2415,149 @@ protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory b
 		}
 	}
 ```
+
+Implementations of BeanDefinitionRegistryPostProcessor:
+
+- ConfigurationClassPostProcessor
+- DubboAutoConfiguration
+- MyBatis MapperScannerConfigurer
+
+```java
+
+	public static void invokeBeanFactoryPostProcessors(
+			ConfigurableListableBeanFactory beanFactory, List<BeanFactoryPostProcessor> beanFactoryPostProcessors) {
+
+		// Invoke BeanDefinitionRegistryPostProcessors first, if any.
+		Set<String> processedBeans = new HashSet<>();
+
+		if (beanFactory instanceof BeanDefinitionRegistry) {
+			BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
+			List<BeanFactoryPostProcessor> regularPostProcessors = new ArrayList<>();
+			List<BeanDefinitionRegistryPostProcessor> registryProcessors = new ArrayList<>();
+
+			for (BeanFactoryPostProcessor postProcessor : beanFactoryPostProcessors) {
+				if (postProcessor instanceof BeanDefinitionRegistryPostProcessor) {
+					BeanDefinitionRegistryPostProcessor registryProcessor =
+							(BeanDefinitionRegistryPostProcessor) postProcessor;
+					registryProcessor.postProcessBeanDefinitionRegistry(registry);
+					registryProcessors.add(registryProcessor);
+				}
+				else {
+					regularPostProcessors.add(postProcessor);
+				}
+			}
+
+			// Do not initialize FactoryBeans here: We need to leave all regular beans
+			// uninitialized to let the bean factory post-processors apply to them!
+			// Separate between BeanDefinitionRegistryPostProcessors that implement
+			// PriorityOrdered, Ordered, and the rest.
+			List<BeanDefinitionRegistryPostProcessor> currentRegistryProcessors = new ArrayList<>();
+
+			// First, invoke the BeanDefinitionRegistryPostProcessors that implement PriorityOrdered.
+			String[] postProcessorNames =
+					beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+			for (String ppName : postProcessorNames) {
+				if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
+					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+					processedBeans.add(ppName);
+				}
+			}
+			sortPostProcessors(currentRegistryProcessors, beanFactory);
+			registryProcessors.addAll(currentRegistryProcessors);
+			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+			currentRegistryProcessors.clear();
+
+			// Next, invoke the BeanDefinitionRegistryPostProcessors that implement Ordered.
+			postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+			for (String ppName : postProcessorNames) {
+				if (!processedBeans.contains(ppName) && beanFactory.isTypeMatch(ppName, Ordered.class)) {
+					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+					processedBeans.add(ppName);
+				}
+			}
+			sortPostProcessors(currentRegistryProcessors, beanFactory);
+			registryProcessors.addAll(currentRegistryProcessors);
+			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+			currentRegistryProcessors.clear();
+
+			// Finally, invoke all other BeanDefinitionRegistryPostProcessors until no further ones appear.
+			boolean reiterate = true;
+			while (reiterate) {
+				reiterate = false;
+				postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+				for (String ppName : postProcessorNames) {
+					if (!processedBeans.contains(ppName)) {
+						currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+						processedBeans.add(ppName);
+						reiterate = true;
+					}
+				}
+				sortPostProcessors(currentRegistryProcessors, beanFactory);
+				registryProcessors.addAll(currentRegistryProcessors);
+				invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+				currentRegistryProcessors.clear();
+			}
+
+			// Now, invoke the postProcessBeanFactory callback of all processors handled so far.
+			invokeBeanFactoryPostProcessors(registryProcessors, beanFactory);
+			invokeBeanFactoryPostProcessors(regularPostProcessors, beanFactory);
+		}
+
+		else {
+			// Invoke factory processors registered with the context instance.
+			invokeBeanFactoryPostProcessors(beanFactoryPostProcessors, beanFactory);
+		}
+
+		// Do not initialize FactoryBeans here: We need to leave all regular beans
+		// uninitialized to let the bean factory post-processors apply to them!
+		String[] postProcessorNames =
+				beanFactory.getBeanNamesForType(BeanFactoryPostProcessor.class, true, false);
+
+		// Separate between BeanFactoryPostProcessors that implement PriorityOrdered,
+		// Ordered, and the rest.
+		List<BeanFactoryPostProcessor> priorityOrderedPostProcessors = new ArrayList<>();
+		List<String> orderedPostProcessorNames = new ArrayList<>();
+		List<String> nonOrderedPostProcessorNames = new ArrayList<>();
+		for (String ppName : postProcessorNames) {
+			if (processedBeans.contains(ppName)) {
+				// skip - already processed in first phase above
+			}
+			else if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
+				priorityOrderedPostProcessors.add(beanFactory.getBean(ppName, BeanFactoryPostProcessor.class));
+			}
+			else if (beanFactory.isTypeMatch(ppName, Ordered.class)) {
+				orderedPostProcessorNames.add(ppName);
+			}
+			else {
+				nonOrderedPostProcessorNames.add(ppName);
+			}
+		}
+
+		// First, invoke the BeanFactoryPostProcessors that implement PriorityOrdered.
+		sortPostProcessors(priorityOrderedPostProcessors, beanFactory);
+		invokeBeanFactoryPostProcessors(priorityOrderedPostProcessors, beanFactory);
+
+		// Next, invoke the BeanFactoryPostProcessors that implement Ordered.
+		List<BeanFactoryPostProcessor> orderedPostProcessors = new ArrayList<>(orderedPostProcessorNames.size());
+		for (String postProcessorName : orderedPostProcessorNames) {
+			orderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
+		}
+		sortPostProcessors(orderedPostProcessors, beanFactory);
+		invokeBeanFactoryPostProcessors(orderedPostProcessors, beanFactory);
+
+		// Finally, invoke all other BeanFactoryPostProcessors.
+		List<BeanFactoryPostProcessor> nonOrderedPostProcessors = new ArrayList<>(nonOrderedPostProcessorNames.size());
+		for (String postProcessorName : nonOrderedPostProcessorNames) {
+			nonOrderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
+		}
+		invokeBeanFactoryPostProcessors(nonOrderedPostProcessors, beanFactory);
+
+		// Clear cached merged bean definitions since the post-processors might have
+		// modified the original metadata, e.g. replacing placeholders in values...
+		beanFactory.clearMetadataCache();
+	}
+```
+
 
 ```java
 @FunctionalInterface
