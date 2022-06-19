@@ -156,7 +156,7 @@ public interface TransactionDefinition {
 }
 ```
 
-### TransactionManager
+## TransactionManager
 
 Implementation by MyBatis, Hibernate, JTA.
 
@@ -214,7 +214,57 @@ public class TransactionInterceptor extends TransactionAspectSupport implements 
 ```
 
 
-TransactionSynchronizationManager
+### TransactionSynchronizationManager
+
+Register a new transaction synchronization for the current thread. Typically called by resource management code.
+Note that synchronizations can implement the `org.springframework.core.Ordered` interface. They will be executed in an order according to their order value (if any).
+
+```java
+public abstract class TransactionSynchronizationManager {
+    public static void registerSynchronization(TransactionSynchronization synchronization)
+            throws IllegalStateException {
+
+        Assert.notNull(synchronization, "TransactionSynchronization must not be null");
+        Set<TransactionSynchronization> synchs = synchronizations.get();
+        if (synchs == null) {
+            throw new IllegalStateException("Transaction synchronization is not active");
+        }
+        synchs.add(synchronization);
+    }
+}
+```
+
+#### TransactionSynchronization
+
+```java
+
+public interface TransactionSynchronization extends Flushable {
+    int STATUS_COMMITTED = 0;
+    int STATUS_ROLLED_BACK = 1;
+    int STATUS_UNKNOWN = 2;
+
+    default void suspend() {
+    }
+
+    default void resume() {
+    }
+
+    default void flush() {
+    }
+
+    default void beforeCommit(boolean readOnly) {
+    }
+
+    default void beforeCompletion() {
+    }
+
+    default void afterCommit() {
+    }
+
+    default void afterCompletion(int status) {
+    }
+}
+```
 
 
 ## Multi-DataSource
