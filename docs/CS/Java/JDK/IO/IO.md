@@ -34,6 +34,13 @@ InetAddress
 
 ### ServerSocket
 
+
+Listens for a connection to be made to this socket and accepts it. 
+The method blocks until a connection is made.
+
+A new Socket s is created and, if there is a security manager, the security manager's checkAccept method is called with s.getInetAddress().getHostAddress() and s.getPort() as its arguments to ensure the operation is allowed. 
+This could result in a SecurityException.
+
 ```java
 public class ServerSocket implements java.io.Closeable {
   public Socket accept() throws IOException {
@@ -45,6 +52,49 @@ public class ServerSocket implements java.io.Closeable {
     implAccept(s);
     return s;
   }
+
+  protected final void implAccept(Socket s) throws IOException {
+    SocketImpl si = s.impl;
+
+    // Socket has no SocketImpl
+    if (si == null) {
+      si = implAccept();
+      s.setImpl(si);
+      s.postAccept();
+      return;
+    }
+
+    // Socket has a SOCKS or HTTP SocketImpl, need delegate
+    if (si instanceof DelegatingSocketImpl) {
+      si = ((DelegatingSocketImpl) si).delegate();
+      assert si instanceof PlatformSocketImpl;
+    }
+
+    // Accept connection with a platform or custom SocketImpl.
+    // For the platform SocketImpl case:
+    // - the connection is accepted with a new SocketImpl
+    // - the SO_TIMEOUT socket option is copied to the new SocketImpl
+    // - the Socket is connected to the new SocketImpl
+    // - the existing/old SocketImpl is closed
+    // For the custom SocketImpl case, the connection is accepted with the
+    // existing custom SocketImpl.
+    ensureCompatible(si);
+    if (impl instanceof PlatformSocketImpl) {
+      SocketImpl psi = platformImplAccept();
+      si.copyOptionsTo(psi);
+      s.setImpl(psi);
+      si.closeQuietly();
+    } else {
+      s.impl = null; // temporarily break connection to impl
+      try {
+        customImplAccept(si);
+      } finally {
+        s.impl = si;  // restore connection to impl
+      }
+    }
+    s.postAccept();
+  }
+  
 }
 ```
 
@@ -139,32 +189,6 @@ then `writeFromNativeBuffer`
 
 ## NIO
 
-### Buffer
-
-A container for data of a specific primitive type.
-
-A buffer is a linear, finite sequence of elements of a specific primitive type. Aside from its content, the essential properties of a buffer are its capacity, limit, and position:
-
-- A buffer's capacity is the number of elements it contains. The capacity of a buffer is never negative and never changes.
-- A buffer's limit is the index of the first element that should not be read or written. A buffer's limit is never negative and is never greater than its capacity.
-- A buffer's position is the index of the next element to be read or written. A buffer's position is never negative and is never greater than its limit.
-
-There is one subclass of this class for each non-boolean primitive type.
-
-#### Marking and resetting
-
-> The following invariant holds for the mark, position, limit, and capacity values:
->
-> 0 <= mark <= position <= limit <= capacity
-
-#### Read-only buffers
-
-Every buffer is readable, but not every buffer is writable. The mutation methods of each buffer class are specified as optional operations that will throw a ReadOnlyBufferException when invoked upon a read-only buffer.
-A read-only buffer does not allow its content to be changed, but its mark, position, and limit values are mutable. Whether or not a buffer is read-only may be determined by invoking its isReadOnly method.
-
-#### Thread safety
-
-**Buffers are not safe for use by multiple concurrent threads.** If a buffer is to be used by more than one thread then access to the buffer should be controlled by appropriate synchronization.
 
 ### Channel
 
@@ -224,18 +248,46 @@ public abstract class ServerSocketChannel extends AbstractSelectableChannel impl
 
 Connects this channel's socket.
 
-If this channel is in non-blocking mode then an invocation of this method initiates a non-blocking connection operation. 
-- If the connection is established immediately, as can happen with a local connection, then this method returns true. 
+If this channel is in non-blocking mode then an invocation of this method initiates a non-blocking connection operation.
+- If the connection is established immediately, as can happen with a local connection, then this method returns true.
 - Otherwise this method returns false and the connection operation must later be completed by invoking the finishConnect method.
 
 If this channel is in blocking mode then an invocation of this method will block until the connection is established or an I/O error occurs.
 
-This method performs exactly the same security checks as the Socket class. 
+This method performs exactly the same security checks as the Socket class.
 That is, if a security manager has been installed then this method verifies that its checkConnect method permits connecting to the address and port number of the given remote endpoint.
 
-This method may be invoked at any time. 
-If a read or write operation upon this channel is invoked while an invocation of this method is in progress then that operation will first block until this invocation is complete. 
+This method may be invoked at any time.
+If a read or write operation upon this channel is invoked while an invocation of this method is in progress then that operation will first block until this invocation is complete.
 If a connection attempt is initiated but fails, that is, if an invocation of this method throws a checked exception, then the channel will be closed.
+
+
+### Buffer
+
+A container for data of a specific primitive type.
+
+A buffer is a linear, finite sequence of elements of a specific primitive type. Aside from its content, the essential properties of a buffer are its capacity, limit, and position:
+
+- A buffer's capacity is the number of elements it contains. The capacity of a buffer is never negative and never changes.
+- A buffer's limit is the index of the first element that should not be read or written. A buffer's limit is never negative and is never greater than its capacity.
+- A buffer's position is the index of the next element to be read or written. A buffer's position is never negative and is never greater than its limit.
+
+There is one subclass of this class for each non-boolean primitive type.
+
+#### Marking and resetting
+
+> The following invariant holds for the mark, position, limit, and capacity values:
+>
+> 0 <= mark <= position <= limit <= capacity
+
+#### Read-only buffers
+
+Every buffer is readable, but not every buffer is writable. The mutation methods of each buffer class are specified as optional operations that will throw a ReadOnlyBufferException when invoked upon a read-only buffer.
+A read-only buffer does not allow its content to be changed, but its mark, position, and limit values are mutable. Whether or not a buffer is read-only may be determined by invoking its isReadOnly method.
+
+#### Thread safety
+
+**Buffers are not safe for use by multiple concurrent threads.** If a buffer is to be used by more than one thread then access to the buffer should be controlled by appropriate synchronization.
 
 
 
