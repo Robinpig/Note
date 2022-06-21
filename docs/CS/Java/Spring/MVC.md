@@ -640,11 +640,11 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 1. match HandlerMapping
 2. interceptor preHandler
 3. HandlerMethodArgumentResolver resolve params
-4. call method in *Controller
+4. call method in Controller
 5. HandlerMethodReturnValueHandler resolve returnValue
 6. modelAndView wrap returnValue
 7. interceptor postHandler
-8. HandlerExceptionResolver hande Exception
+8. HandlerExceptionResolver handle Exception
 9. View
 10. interceptor afterCompletion
 
@@ -726,6 +726,50 @@ public class WebConfiguration implements WebMvcConfigurer {
     @Override
     public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
         converters.add(0, new MappingJackson2HttpMessageConverter());
+    }
+}
+```
+
+#### MessageConverter
+
+Create the method argument value of the expected parameter type by reading from the given HttpInputMessage.
+
+```java
+public class RequestResponseBodyMethodProcessor extends AbstractMessageConverterMethodProcessor {
+    
+    @Override
+    public boolean supportsParameter(MethodParameter parameter) {
+        return parameter.hasParameterAnnotation(RequestBody.class);
+    }
+    
+    @Override
+    public boolean supportsReturnType(MethodParameter returnType) {
+        return (AnnotatedElementUtils.hasAnnotation(returnType.getContainingClass(), ResponseBody.class) ||
+                returnType.hasMethodAnnotation(ResponseBody.class));
+    }
+
+    @Override
+    public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+                                  NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+
+        parameter = parameter.nestedIfOptional();
+        Object arg = readWithMessageConverters(webRequest, parameter, parameter.getNestedGenericParameterType());
+        String name = Conventions.getVariableNameForParameter(parameter);
+
+        if (binderFactory != null) {
+            WebDataBinder binder = binderFactory.createBinder(webRequest, arg, name);
+            if (arg != null) {
+                validateIfApplicable(binder, parameter);
+                if (binder.getBindingResult().hasErrors() && isBindExceptionRequired(binder, parameter)) {
+                    throw new MethodArgumentNotValidException(parameter, binder.getBindingResult());
+                }
+            }
+            if (mavContainer != null) {
+                mavContainer.addAttribute(BindingResult.MODEL_KEY_PREFIX + name, binder.getBindingResult());
+            }
+        }
+
+        return adaptArgumentIfNecessary(arg, parameter);
     }
 }
 ```
