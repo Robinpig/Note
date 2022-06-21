@@ -118,6 +118,7 @@ The next four chapters focus on these four basic styles of collection.
 
 The goal of an ideal garbage collector is to reclaim the space used by every object that will no longer be used by the program. 
 Any automatic memory management system has three tasks:
+
 1. to allocate space for new objects;
 2. to identify live objects; and
 3. to reclaim the space occupied by dead objects. 
