@@ -1,29 +1,31 @@
 ## Introduction
-*The **String class represents character strings. All string literals in Java programs are implemented as instances of this class**.*
+
+The String class represents character strings. All string literals in Java programs are implemented as instances of this class.
 **Strings are constant; their values cannot be changed after they are created.**
 
 String is such a class ‐ but this relies on delicate reasoning about benign data races that requires a deep understanding of the Java Memory Model.
+String buffers support mutable strings. Because String objects are immutable they can be shared.
+Case mapping is based on the Unicode Standard version specified by the Character class.
 
-*String buffers support mutable strings. Because String objects are immutable they can be shared.* 
+The Java language provides special support for the string concatenation operator(+), and for conversion of other objects to strings.
+String concatenation is implemented through the `StringBuilder`(or `StringBuffer`) class and its append method.
+The implementation of the string concatenation operator is left to the discretion of a Java compiler, as long as the compiler ultimately conforms to The Java Language Specification.
+For example, the javac compiler may implement the operator with `StringBuffer`, `StringBuilder`, or `java.lang.invoke.StringConcatFactory` depending on the JDK version.
+The implementation of string conversion is typically through the method toString, defined by Object and inherited by all classes in Java.
 
-Case mapping is **based on the Unicode Standard version specified by the Character class**.
-The Java language provides special support for the string concatenation operator ( + ), and for conversion of other objects to strings. **String concatenation is implemented through the StringBuilder(or StringBuffer) class and its append method**.
-
-A String represents a string in the **UTF-16** format in which supplementary characters are represented by surrogate pairs (see the section Unicode Character Representations in the Character class for more information). Index values refer to char code units, so a supplementary character uses two positions in a String.
-
-
-The implementation of the string concatenation operator is left to the discretion of a Java compiler, as long as the compiler ultimately conforms to The Java Language Specification. For example, the javac compiler may implement the operator with `StringBuffer`, `StringBuilder`, or `java.lang.invoke.StringConcatFactory` depending on the JDK version. The implementation of string conversion is typically through the method toString, defined by Object and inherited by all classes in Java.
+A String represents a string in the **UTF-16** format in which supplementary characters are represented by surrogate pairs (see the section Unicode Character Representations in the Character class for more information).
+Index values refer to char code units, so a supplementary character uses two positions in a String.
 
 Avoid strings where other types are more appropriate:
+
 - Strings are poor substitutes for other value types.
 - Strings are poor substitutes for enum types.
 - Strings are poor substitutes for aggregate types.
 
-
 ## structure
 
-
 ### value
+
 ```java
 public final class String
     implements java.io.Serializable, Comparable<String>, CharSequence {
@@ -33,8 +35,8 @@ public final class String
 }
 ```
 
-
 `From JDK11, value change to byte[] and add byte coder.`
+
 ```java
     /** The value is used for character storage. */
     @Stable
@@ -48,51 +50,14 @@ public final class String
      */
     private final byte coder;
 ```
+
 This field(value) is trusted by the VM, and is a subject to constant folding if String instance is constant. Overwriting this field after construction will cause problems. Additionally, it is marked with Stable to trust the contents of the array. No other facility in JDK provides this functionality (yet). Stable is safe here, because value is never null.
 
 This field(coder) is trusted by the VM, and is a subject to constant folding if String instance is constant. Overwriting this field after construction will cause problems.
 
-
 #### compact
-```java
 
-    /**
-     * If String compaction is disabled, the bytes in {@code value} are
-     * always encoded in UTF16.
-     *
-     * For methods with several possible implementation paths, when String
-     * compaction is disabled, only one code path is taken.
-     *
-     * The instance field value is generally opaque to optimizing JIT
-     * compilers. Therefore, in performance-sensitive place, an explicit
-     * check of the static boolean {@code COMPACT_STRINGS} is done first
-     * before checking the {@code coder} field since the static boolean
-     * {@code COMPACT_STRINGS} would be constant folded away by an
-     * optimizing JIT compiler. The idioms for these cases are as follows.
-     *
-     * For code such as:
-     *
-     *    if (coder == LATIN1) { ... }
-     *
-     * can be written more optimally as
-     *
-     *    if (coder() == LATIN1) { ... }
-     *
-     * or:
-     *
-     *    if (COMPACT_STRINGS && coder == LATIN1) { ... }
-     *
-     * An optimizing JIT compiler can fold the above conditional as:
-     *
-     *    COMPACT_STRINGS == true  => if (coder == LATIN1) { ... }
-     *    COMPACT_STRINGS == false => if (false)           { ... }
-     *
-     * @implNote
-     * The actual value for this field is injected by JVM. The static
-     * initialization block is used to set the value here to communicate
-     * that this static final field is not statically foldable, and to
-     * avoid any possible circular dependency during vm initialization.
-     */
+```java
     static final boolean COMPACT_STRINGS;
 
     static {
@@ -103,6 +68,7 @@ This field(coder) is trusted by the VM, and is a subject to constant folding if 
 ### hash
 
 String lazily computes the hash code the first time hashCode is called and caches it in a non‐final field.
+
 ```java
 
     /** Cache the hash code for the string */
@@ -115,15 +81,17 @@ String lazily computes the hash code the first time hashCode is called and cache
     private boolean hashIsZero; // Default to false;
 ```
 
-
 We usually use long or int to replace String in order to reduce network transmission consumption.
 
 #### hashCode
-*Returns a hash code for this string. The hash code for a String object is computed as*
 
-       *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
+Returns a hash code for this string. The hash code for a String object is computed as:
 
-*using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)*
+$$
+   *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
+$$
+
+Using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)
 
 Why use 31?
 
@@ -131,19 +99,8 @@ Why use 31?
 2. Easy to calculate
 3. The hash is uniform, there is no risk of overflowing like 199
 
-
-
 ```java
-
 public int hashCode() {
-    // The hash or hashIsZero fields are subject to a benign data race,
-    // making it crucial to ensure that any observable result of the
-    // calculation in this method stays correct under any possible read of
-    // these fields. Necessary restrictions to allow this to be correct
-    // without explicit memory fences or similar concurrency primitives is
-    // that we can ever only write to one of these two fields for a given
-    // String instance, and that the computation is idempotent and derived
-    // from immutable state
     int h = hash;
     if (h == 0 && !hashIsZero) {
         h = isLatin1() ? StringLatin1.hashCode(value)
@@ -159,60 +116,35 @@ public int hashCode() {
 ```
 
 #### equals
+
 ```java
-    /**
-     * Compares this string to the specified object.  The result is {@code
-     * true} if and only if the argument is not {@code null} and is a {@code
-     * String} object that represents the same sequence of characters as this
-     * object.
-     *
-     * <p>For finer-grained String comparison, refer to
-     * {@link java.text.Collator}.
-     *
-     * @param  anObject
-     *         The object to compare this {@code String} against
-     *
-     * @return  {@code true} if the given object represents a {@code String}
-     *          equivalent to this string, {@code false} otherwise
-     *
-     * @see  #compareTo(String)
-     * @see  #equalsIgnoreCase(String)
-     */
-    public boolean equals(Object anObject) {
-        if (this == anObject) {
-            return true;
-        }
-        if (anObject instanceof String) {
-            String aString = (String)anObject;
-            if (!COMPACT_STRINGS || this.coder == aString.coder) {
-                return StringLatin1.equals(value, aString.value);
-            }
-        }
-        return false;
+public boolean equals(Object anObject) {
+    if (this == anObject) {
+        return true;
     }
+    if (anObject instanceof String) {
+        String aString = (String)anObject;
+        if (!COMPACT_STRINGS || this.coder == aString.coder) {
+            return StringLatin1.equals(value, aString.value);
+        }
+    }
+    return false;
+}
 ```
 
-
 ## memory
-
 
 byte[] = 8+8=16
 a String("") = 40 Bytes
 
 byte[]
 
-
-
 65534 when compile
 Integer.Max in runtime
 
-
-
 ## StringBuilder
 
-
-
-Reuse StringBuilder object if not know the length new stringBuilder 
+Reuse StringBuilder object if not know the length new stringBuilder
 
 ```java
 public void setLength(int newLength) {
@@ -227,9 +159,6 @@ public void setLength(int newLength) {
     count = newLength;
 }
 ```
-
-
-
 ```java
 public AbstractStringBuilder delete(int start, int end) {
     if (start < 0)
@@ -246,30 +175,20 @@ public AbstractStringBuilder delete(int start, int end) {
     return this;
 }
 ```
-
-
-
 ## StringTable
 
-
-
 HashTable size:
+
 1. JDK1.8 60013
 2. JDK15 65536
-
-
 
 ```
 -XX:+PrintStringTableStatistics
 -XX:StringTableSize=N
 ```
-
 ```shell
 jcmd <pid> VM.stringtable
 ```
-
-
-
 ### intern
 
 ```cpp
@@ -310,9 +229,8 @@ oop StringTable::intern(Handle string_or_null_h, const jchar* name, int len, TRA
                                              hash, CHECK_NULL);
 }
 ```
-
-
 #### do_intern
+
 ```cpp
 oop StringTable::do_intern(Handle string_or_null_h, const jchar* name,
                            int len, uintx hash, TRAPS) {
@@ -325,9 +243,10 @@ oop StringTable::do_intern(Handle string_or_null_h, const jchar* name,
     string_h = java_lang_String::create_from_unicode(name, len, CHECK_NULL);
   }
 ```
-**Deduplicate the string before it is interned.** 
-Note that we should never deduplicate a string after it has been interned. 
+**Deduplicate the string before it is interned.**
+Note that we should never deduplicate a string after it has been interned.
 Doing so will counteract compiler optimizations done on e.g. interned string literals.
+
 ```cpp
   Universe::heap()->deduplicate_string(string_h());
 
@@ -353,20 +272,16 @@ Doing so will counteract compiler optimizations done on e.g. interned string lit
   } while(true);
 }
 ```
-
-
-
 ## String Deduplication
 
 [JEP 192: String Deduplication in G1](http://openjdk.java.net/jeps/192)
 
-
 ### is_candidate
-
 
 `G1ParScanThreadState::copy_to_survivor_space()` -> `G1StringDedup::is_candidate_from_evacuation()`
 
 Candidate selection policy for young/mixed GC.
+
 - If to is young then age should be the new (survivor's) age.
 - if to is old then age should be the age of the copied from object.
 
@@ -383,12 +298,9 @@ Candidate selection policy for young/mixed GC.
             StringDedup::is_below_threshold_age(age));
   }
 ```
-
-
-
 `G1FullGCMarker::mark_object()` -> `G1StringDedup::is_candidate_from_mark()`
 
-Candidate if string is being evacuated from young to old but has not reached the deduplication age threshold, 
+Candidate if string is being evacuated from young to old but has not reached the deduplication age threshold,
 i.e. has not previously been a candidate during its life in the young generation.
 
 ```cpp
@@ -398,9 +310,6 @@ static bool G1StringDedup::is_candidate_from_mark(oop java_string) {
          StringDedup::is_below_threshold_age(java_string->age());
 }
 ```
-
-
-
 ### Example
 
 ```java
@@ -428,14 +337,12 @@ public class Main {
   }
 }
 ```
+String#intern() cache String instances
 
-String#intern() cache instance of String
-
-Deduplication remove cache of char/byte array in String instance
-
-
+Deduplication remove char/byte array from String instances cache
 
 ## Links
+
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
 ## References
