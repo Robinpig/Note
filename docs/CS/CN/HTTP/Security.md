@@ -18,26 +18,30 @@ CORS is not a protection against cross-origin attacks such as [cross-site reques
 
 #### Simple requests
 
-Some requests don't trigger a CORS preflight. 
+Some requests don't trigger a CORS preflight.
 Those are called simple requests, though the Fetch spec (which defines CORS) doesn't use that term.
 
 This operation performs a simple exchange between the client and the server, using CORS headers to handle the privileges:
 
 Req
+
 ```http
 GET /resources/public-data/ HTTP/1.1
 Origin: https://normal-website.com
 ```
+
 Resp
+
 ```http
 HTTP/1.1 200 OK
 Access-Control-Allow-Origin: https://normal-website.com
 ```
+
 This pattern of the Origin and Access-Control-Allow-Origin headers is the simplest use of the access control protocol.
 
 #### Preflighted requests
 
-Unlike simple requests, for "preflighted" requests the browser first sends an HTTP request using the OPTIONS method to the resource on the other origin, in order to determine if the actual request is safe to send. 
+Unlike simple requests, for "preflighted" requests the browser first sends an HTTP request using the OPTIONS method to the resource on the other origin, in order to determine if the actual request is safe to send.
 Such cross-origin requests are preflighted since they may have implications for user data.
 
 ```http
@@ -57,9 +61,6 @@ Once the preflight request is complete, the real request is sent.
 
 #### Requests with credentials
 
-
-
-
 ### CSRF
 
 **Cross-site request forgery (CSRF)** is a web security vulnerability that allows an attacker to induce users to perform actions that they do not intend to perform.
@@ -67,20 +68,21 @@ It allows an attacker to partly circumvent the same origin policy, which is desi
 
 For a CSRF attack to be possible, three key conditions must be in place:
 
-* **A relevant action.** There is an action within the application that the attacker has a reason to induce. This might be a privileged action (such as modifying permissions for other users) or any action on user-specific data (such as changing the user's own password).
-* **Cookie-based session handling.** Performing the action involves issuing one or more HTTP requests, and the application relies solely on session cookies to identify the user who has made the requests. There is no other mechanism in place for tracking sessions or validating user requests.
-* **No unpredictable request parameters.** The requests that perform the action do not contain any parameters whose values the attacker cannot determine or guess. For example, when causing a user to change their password, the function is not vulnerable if an attacker needs to know the value of the existing password.
-
-
+* **A relevant action.** There is an action within the application that the attacker has a reason to induce.
+  This might be a privileged action (such as modifying permissions for other users) or any action on user-specific data (such as changing the user's own password).
+* **Cookie-based session handling.** Performing the action involves issuing one or more HTTP requests, and the application relies solely on session cookies to identify the user who has made the requests.
+  There is no other mechanism in place for tracking sessions or validating user requests.
+* **No unpredictable request parameters.** The requests that perform the action do not contain any parameters whose values the attacker cannot determine or guess.
+  For example, when causing a user to change their password, the function is not vulnerable if an attacker needs to know the value of the existing password.
 
 #### Preventing CSRF attacks
 
-The most robust way to defend against CSRF attacks is to include a [CSRF token](https://portswigger.net/web-security/csrf/tokens) within relevant requests. The token should be:
+The most robust way to defend against CSRF attacks is to include a [CSRF token](https://portswigger.net/web-security/csrf/tokens) within relevant requests. 
+The token should be:
 
 * Unpredictable with high entropy, as for session tokens in general.
 * Tied to the user's session.
 * Strictly validated in every case before the relevant action is executed.
-
 
 ## Links
 

@@ -2,16 +2,11 @@
 
 Substring Search
 
-
-## BF 
+## BF
 
 Brute-force substring search requires ~NM character compares to search for a pattern of length M in a text of length N, in the worst case.
 
-
-
 ## MP
-
-
 
 ## KMP
 
@@ -85,4 +80,6 @@ public class KMPSearch {
 
 ## RK
 
+## Links
 
+- [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
