@@ -20,6 +20,53 @@ security, scalability – the ability to work well when the load or the number o
 7. Transport cost is zero
 8. The network is homogeneous
 
+Notes on Data Base Operating Systems
+
+The Two Generals Problem is provably unsolvable.
+
+[The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
+
+[A Critique of the CAP Theorem](https://www.cl.cam.ac.uk/research/dtg/www/files/publications/public/mk428/cap-critique.pdf)
+
+[CAP Twelve Years Later:How the “Rules” Have Changed](https://www.anantjain.dev/aeb39daf1c8c1360d401e8afe84a00b7/cap-annotated.pdf)
+
+[Consistency Tradeoffs in Modern Distributed Database System Design](https://www.cs.umd.edu/~abadi/papers/abadi-pacelc.pdf)
+
+The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
+
+### Consistency Model
+
+> link [Jepsen Consistency Models](https://jepsen.io/consistency)
+
+[Highly Available Transactions: Virtues and Limitations](http://www.vldb.org/pvldb/vol7/p181-bailis.pdf)
+
+[Consistency in Non-Transactional Distributed Storage Systems](https://arxiv.org/pdf/1512.00168.pdf)
+
+[Linearizability: A Correctness Condition for Concurrent Objects](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)
+
+Viotti and Vukolić rephrase this definition in terms of three set-theoretic constraints on histories:
+
+- SingleOrder (there exists some total order of operations)
+- RealTime (consistent with the real time bound)
+- RVal (obeying the single-threaded laws of the associated object’s datatype)
+
+[How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Progranms](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/How-to-Make-a-Multiprocessor-Computer-That-Correctly-Executes-Multiprocess-Programs.pdf)
+
+Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the real-time ordering of those operations: e.g.,
+if operation A completes before operation B begins, then B should logically take effect after A.
+
+Viotti and Vukolić decompose sequential consistency into three properties:
+
+- SingleOrder (there exists some total order of operations)
+- PRAM
+- RVal (the order must be consistent with the semantics of the datatype)
+
+[Causal memory: definitions, implementation, and programming](https://www.cs.tau.ac.il/~orilahav/seminar18/causal.pdf)
+
+Causal consistency captures the notion that causally-related operations should appear in the same order on all processes—though processes may disagree about the order of causally independent operations.
+
+If you need total availability, you’ll have to give up causal (and read-your-writes), but can still obtain writes follow reads, monotonic reads, and monotonic writes.
+
 NFS
 
 Network File System
@@ -282,3 +329,8 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 ## References
 
 1. [Distributed Systems Concepts and Design Fifth Edition](https://www.cdk5.net/wp/)
+2. [Mixu has a delightful book on distributed systems with incredible detail.](http://book.mixu.net/distsys/)
+3. [Jeff Hodges has some excellent, production-focused advice.](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
+4. [The Fallacies of Distributed Computing is a classic text on mistaken assumptions we make designing distributed systems.](http://www.rgoarchitects.com/Files/fallacies.pdf)
+5. [Christopher Meiklejohn has a list of key papers in distributed systems.](http://christophermeiklejohn.com/distributed/systems/2013/07/12/readings-in-distributed-systems.html)
+6. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
