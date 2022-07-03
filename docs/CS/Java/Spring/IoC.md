@@ -379,6 +379,9 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 
 #### circular references
 
+```properties
+spring.main.allow-circular-references=false
+```
 
 See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
 
