@@ -1,5 +1,7 @@
 ## Introduction
 
+[How to Build a Highly Available System Using Consensus](https://www.microsoft.com/en-us/research/uploads/prod/1996/10/Acrobat-58-Copy.pdf)
+
 A distributed system is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
 This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
 
