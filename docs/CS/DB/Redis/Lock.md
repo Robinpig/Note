@@ -1,8 +1,7 @@
-
-
-[Distributed locks with Redis](https://redis.io/topics/distlock)
+## Introduction
 
 ### Safety and Liveness guarantees
+
 We are going to model our design with just three properties that, from our point of view, are the minimum guarantees needed to use distributed locks in an effective way.
 
 - Safety property: Mutual exclusion. At any given moment, only one client can hold a lock.
@@ -39,8 +38,6 @@ The time we use as the key time to live, is called the “lock validity time”.
 
 So now we have a good way to acquire and release the lock. The system, reasoning about a non-distributed system composed of a single, always available, instance, is safe. Let’s extend the concept to a distributed system where we don’t have such guarantees.
 
-
-
 ### The Redlock algorithm
 
 In the distributed version of the algorithm we assume we have N Redis masters. Those nodes are totally independent, so we don’t use replication or any other implicit coordination system. We already described how to acquire and release the lock safely in a single instance. We take for granted that the algorithm will use this method to acquire and release the lock in a single instance. In our examples we set N=5, which is a reasonable value, so we need to run 5 Redis masters on different computers or virtual machines in order to ensure that they’ll fail in a mostly independent way.
@@ -53,8 +50,6 @@ In order to acquire the lock, the client performs the following operations:
 4. If the lock was acquired, its validity time is considered to be the initial validity time minus the time elapsed, as computed in step 3.
 5. If the client failed to acquire the lock for some reason (either it was not able to lock N/2+1 instances or the validity time is negative), it will try to unlock all the instances (even the instances it believed it was not able to lock).
 
-
-
 ### Is the algorithm asynchronous?
 
 The algorithm relies on the assumption that while there is no synchronized clock across the processes, still the local time in every process flows approximately at the same rate, with an error which is small compared to the auto-release time of the lock. This assumption closely resembles a real-world computer: every computer has a local clock and we can usually rely on different computers to have a clock drift which is small.
@@ -63,21 +58,15 @@ At this point we need to better specify our mutual exclusion rule: it is guarant
 
 For more information about similar systems requiring a bound *clock drift*, this paper is an interesting reference: [Leases: an efficient fault-tolerant mechanism for distributed file cache consistency](http://dl.acm.org/citation.cfm?id=74870).
 
-
-
 ### Retry on failure
 
 When a client is unable to acquire the lock, it should try again after a random delay in order to try to desynchronize multiple clients trying to acquire the lock for the same resource at the same time (this may result in a split brain condition where nobody wins). Also the faster a client tries to acquire the lock in the majority of Redis instances, the smaller the window for a split brain condition (and the need for a retry), so ideally the client should try to send the SET commands to the N instances at the same time using multiplexing.
 
 It is worth stressing how important it is for clients that fail to acquire the majority of locks, to release the (partially) acquired locks ASAP, so that there is no need to wait for key expiry in order for the lock to be acquired again (however if a network partition happens and the client is no longer able to communicate with the Redis instances, there is an availability penalty to pay as it waits for key expiration).
 
-
-
 ### Releasing the lock
 
 Releasing the lock is simple and involves just releasing the lock in all instances, whether or not the client believes it was able to successfully lock a given instance.
-
-
 
 ### Safety arguments
 
@@ -93,8 +82,6 @@ If a client locked the majority of instances using a time near, or greater, than
 
 Are you able to provide a formal proof of safety, point to existing algorithms that are similar, or find a bug? That would be greatly appreciated.
 
-
-
 ### Liveness arguments
 
 The system liveness is based on three main features:
@@ -106,8 +93,6 @@ The system liveness is based on three main features:
 However, we pay an availability penalty equal to [TTL](https://redis.io/commands/ttl) time on network partitions, so if there are continuous partitions, we can pay this penalty indefinitely. This happens every time a client acquires a lock and gets partitioned away before being able to remove the lock.
 
 Basically if there are infinite continuous network partitions, the system may become not available for an infinite amount of time.
-
-
 
 ### Performance, crash-recovery and fsync
 
@@ -125,8 +110,6 @@ To guarantee this we just need to make an instance, after a crash, unavailable f
 
 Using *delayed restarts* it is basically possible to achieve safety even without any kind of Redis persistence available, however note that this may translate into an availability penalty. For example if a majority of instances crash, the system will become globally unavailable for [TTL](https://redis.io/commands/ttl) (here globally means that no resource at all will be lockable during this time).
 
-
-
 ### Making the algorithm more reliable: Extending the lock
 
 If the work performed by clients is composed of small steps, it is possible to use smaller lock validity times by default, and extend the algorithm implementing a lock extension mechanism. Basically the client, if in the middle of the computation while the lock validity is approaching a low value, may extend the lock by sending a Lua script to all the instances that extends the TTL of the key if the key exists and its value is still the random value the client assigned when the lock was acquired.
@@ -142,3 +125,7 @@ Martin Kleppmann [analyzed Redlock here](http://martin.kleppmann.com/2016/02/08/
 [Note on fencing and distributed locks](https://fpj.systems/2016/02/10/note-on-fencing-and-distributed-locks/)
 
 [TIL: clock skew exists](http://jvns.ca/blog/2016/02/09/til-clock-skew-exists/)
+
+## References
+
+1. [Distributed locks with Redis](https://redis.io/topics/distlock)

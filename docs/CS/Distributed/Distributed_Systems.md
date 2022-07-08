@@ -11,6 +11,34 @@ Resources may be managed by servers and accessed by clients or they may be encap
 The challenges arising from the construction of distributed systems are the heterogeneity of their components, openness (which allows components to be added or replaced),
 security, scalability – the ability to work well when the load or the number of users increases – failure handling, concurrency of components, transparency and providing quality of service.
 
+To be truly reliable, a distributed system must have the following characteristics:
+
+- Fault-Tolerant: It can recover from component failures without performing incorrect actions.
+- Highly Available: It can restore operations, permitting it to resume providing services even when some components have failed.
+- Recoverable: Failed components can restart themselves and rejoin the system, after the cause of failure has been repaired.
+- Consistent: The system can coordinate actions by multiple components often in the presence of concurrency and failure. This underlies the ability of a distributed system to act like a non-distributed system.
+- Scalable: It can operate correctly even as some aspect of the system is scaled to a larger size. For example, we might increase the size of the network on which the system is running.
+  This increases the frequency of network outages and could degrade a "non-scalable" system.
+  Similarly, we might increase the number of users or servers, or overall load on the system. In a scalable system, this should not have a significant effect.
+- Predictable Performance: The ability to provide desired responsiveness in a timely manner.
+- Secure: The system authenticates access to data and services.
+
+The types of failures that can occur in a distributed system:
+
+- Halting failures: A component simply stops. There is no way to detect the failure except by timeout: it either stops sending "I'm alive" (heartbeat) messages or fails to respond to requests.
+  Your computer freezing is a halting failure.
+- Fail-stop: A halting failure with some kind of notification to other components. A network file server telling its clients it is about to go down is a fail-stop.
+- Omission failures: Failure to send/receive messages primarily due to lack of buffering space, which causes a message to be discarded with no notification to either the sender or receiver.
+  This can happen when routers become overloaded.
+- Network failures: A network link breaks.
+- Network partition failure: A network fragments into two or more disjoint subnetworks within which messages can be sent, but between which messages are lost. This can occur due to a network failure.
+- Timing failures: A temporal property of the system is violated.
+  For example, clocks on different computers which are used to coordinate processes are not synchronized; when a message is delayed longer than a threshold period, etc.
+- Byzantine failures: This captures several types of faulty behaviors including data corruption or loss, failures caused by malicious programs, etc.
+
+Our goal is to design a distributed system with the characteristics listed above (faulttolerant, highly available, recoverable, etc.), which means we must design for failure.
+
+Everyone, when they first build a distributed system, makes the following eight assumptions.
 [The 8 Fallacies of Distributed Computing](http://en.wikipedia.org/wiki/Fallacies_of_distributed_computing) are as follows:
 
 1. The network is reliable
@@ -26,11 +54,15 @@ Notes on Data Base Operating Systems
 
 The Two Generals Problem is provably unsolvable.
 
+
+You should know about safety and liveness properties:
+
+- safety properties say that nothing bad will ever happen. 
+  For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.
+- liveness properties say that something good will eventually happen. 
+  For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
+
 [The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
-
-[A Critique of the CAP Theorem](https://www.cl.cam.ac.uk/research/dtg/www/files/publications/public/mk428/cap-critique.pdf)
-
-[CAP Twelve Years Later:How the “Rules” Have Changed](https://www.anantjain.dev/aeb39daf1c8c1360d401e8afe84a00b7/cap-annotated.pdf)
 
 [Consistency Tradeoffs in Modern Distributed Database System Design](https://www.cs.umd.edu/~abadi/papers/abadi-pacelc.pdf)
 
@@ -73,16 +105,17 @@ NFS
 
 Network File System
 
-Two Generals’ Problem
+#### Two Generals’ Problem
 
 One of the most prominent descriptions of an agreement in a distributed system is a thought experiment widely known as the *Two Generals’ Problem*.
 This thought experiment shows that it is impossible to achieve an agreement between two parties if communication is asynchronous in the presence of link failures.
 
-FLP Impossibility
+#### FLP Impossibility
 
 Paper [Impossibility of Distributed Consensuswith One Faulty Process](https://dl.acm.org/doi/pdf/10.1145/3149.214121) assumes that processing is entirely asynchronous; there’s no shared notion of time between the processes.
 Algorithms in such systems cannot be based on timeouts, and there’s no way for a process to find out whether the other process has crashed or is simply running too slow.
-Given these assumptions, there exists no protocol that can guarantee consensus in a bounded time. No completely asynchronous consensus algorithm can tolerate the unannounced crash of even a single remote process.
+Given these assumptions, there exists no protocol that can guarantee consensus in a bounded time. 
+No completely asynchronous consensus algorithm can tolerate the unannounced crash of even a single remote process.
 
 If we do not consider an upper time bound for the process to complete the algorithm steps, process failures can’t be reliably detected, and there’s no deterministic algorithm to reach a consensus.
 It means that we cannot always reach consensus in an asynchronous system in bounded time.
@@ -332,6 +365,7 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [Byzantine Clock Synchronization](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Byzantine-Clock-Synchronization.pdf)
 
+[A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
 
 ## Links
 
@@ -340,8 +374,15 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 ## References
 
 1. [Distributed Systems Concepts and Design Fifth Edition](https://www.cdk5.net/wp/)
-2. [Mixu has a delightful book on distributed systems with incredible detail.](http://book.mixu.net/distsys/)
-3. [Jeff Hodges has some excellent, production-focused advice.](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
-4. [The Fallacies of Distributed Computing is a classic text on mistaken assumptions we make designing distributed systems.](http://www.rgoarchitects.com/Files/fallacies.pdf)
-5. [Christopher Meiklejohn has a list of key papers in distributed systems.](http://christophermeiklejohn.com/distributed/systems/2013/07/12/readings-in-distributed-systems.html)
-6. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
+2. [Introduction to Distributed Systems](https://pages.cs.wisc.edu/~zuyu/files/dist_systems.pdf)
+3. [Mixu has a delightful book on distributed systems with incredible detail.](http://book.mixu.net/distsys/)
+5. [The Fallacies of Distributed Computing is a classic text on mistaken assumptions we make designing distributed systems.](http://www.rgoarchitects.com/Files/fallacies.pdf)
+6. [Christopher Meiklejohn has a list of key papers in distributed systems.](http://christophermeiklejohn.com/distributed/systems/2013/07/12/readings-in-distributed-systems.html)
+7. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
+8. [Notes on Distributed Systems for Young Bloods](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
+
+
+[An Overview of Clock Synchronization](https://groups.csail.mit.edu/tds/papers/Lynch/lncs90-asilomar.pdf)
+
+[A Brief Tour of FLP Impossibility](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)
+[Impossibility of Distributed Consensus with One Faulty Process](https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf)
