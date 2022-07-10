@@ -1,6 +1,5 @@
 ## Introduction
 
-[How to Build a Highly Available System Using Consensus](https://www.microsoft.com/en-us/research/uploads/prod/1996/10/Acrobat-58-Copy.pdf)
 
 A distributed system is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
 This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
@@ -39,20 +38,25 @@ The types of failures that can occur in a distributed system:
 Our goal is to design a distributed system with the characteristics listed above (faulttolerant, highly available, recoverable, etc.), which means we must design for failure.
 
 Everyone, when they first build a distributed system, makes the following eight assumptions.
-[The 8 Fallacies of Distributed Computing](http://en.wikipedia.org/wiki/Fallacies_of_distributed_computing) are as follows:
 
-1. The network is reliable
-2. Latency is zero
-3. Bandwidth is infinite
-4. The network is secure
-5. Topology doesn't change
-6. There is one administrator
-7. Transport cost is zero
-8. The network is homogeneous
+> [!NOTE]
+> 
+> [The 8 Fallacies of Distributed Computing](http://en.wikipedia.org/wiki/Fallacies_of_distributed_computing) are as follows:
+> 
+> 1. The network is reliable
+> 2. Latency is zero
+> 3. Bandwidth is infinite
+> 4. The network is secure
+> 5. Topology doesn't change
+> 6. There is one administrator
+> 7. Transport cost is zero
+> 8. The network is homogeneous
 
-Notes on Data Base Operating Systems
 
-The Two Generals Problem is provably unsolvable.
+There is a tension between the second fallacy – latency is not 0 and the third fallacy – bandwidth is infinite. 
+You should transfer more data to minimize the number of network round trips. 
+You should transfer less data to minimize bandwidth usage. You need to balance these two forces and find the right amount of data to send over the wire.
+So transfer only the data that you might need.
 
 
 You should know about safety and liveness properties:
@@ -62,9 +66,29 @@ You should know about safety and liveness properties:
 - liveness properties say that something good will eventually happen. 
   For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
 
+
+### Two Generals’ Problem
+
+One of the most prominent descriptions of an agreement in a distributed system is a thought experiment widely known as the *Two Generals’ Problem*.
+This thought experiment shows that it is impossible to achieve an agreement between two parties if communication is asynchronous in the presence of link failures.
+
+
+The Two Generals Problem is provably unsolvable.
+
+
+
+## Byzantine Problem
+
+[Byzantine Problem](/docs/CS/Distributed/Byzantine.md)
+
+## CAP Theory
+
+[CAP Theory](/docs/CS/Distributed/CAP.md)
+
+## Consensus
+
 [The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
 
-[Consistency Tradeoffs in Modern Distributed Database System Design](https://www.cs.umd.edu/~abadi/papers/abadi-pacelc.pdf)
 
 The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
 
@@ -104,11 +128,6 @@ If you need total availability, you’ll have to give up causal (and read-your-w
 NFS
 
 Network File System
-
-#### Two Generals’ Problem
-
-One of the most prominent descriptions of an agreement in a distributed system is a thought experiment widely known as the *Two Generals’ Problem*.
-This thought experiment shows that it is impossible to achieve an agreement between two parties if communication is asynchronous in the presence of link failures.
 
 #### FLP Impossibility
 
@@ -366,6 +385,21 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 [Byzantine Clock Synchronization](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Byzantine-Clock-Synchronization.pdf)
 
 [A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
+
+
+## Atomic Broadcast
+
+[Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.3.4709&rep=rep1&type=pdf)
+
+[Epidemic Algorithms for Replicated Database Maintenance](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/parc/techReports/CSL-89-1_Epidemic_Algorithms_for_Replicated_Database_Maintenance.pdf)
+
+[Gossip Algorithms: Design, Analysis and Applications](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.85.6176&rep=rep1&type=pdf)
+
+[Lightweight Causal and Atomic Group Multicast](https://www.cs.cornell.edu/courses/cs614/2003sp/papers/BSS91.pdf)
+
+[Understanding the Limitations of Causally and Totally Ordered Communication](https://www.cs.rice.edu/~alc/comp520/papers/Cheriton_Skeen.pdf)
+
+[A Response to Cheriton and Skeen’s Criticism of Causal and Totally Ordered Communication](https://www.cs.princeton.edu/courses/archive/fall07/cos518/papers/catocs-limits-response.pdf)
 
 ## Links
 

@@ -1,5 +1,18 @@
 ## Introduction
 
+Consensus is a fundamental problem in fault-tolerant distributed systems.
+Consensus involves multiple servers agreeing on values. Once they reach a decision on a value, that decision is final.
+Typical consensus algorithms make progress when any majority of their servers is available; for example, a cluster of 5 servers can continue to operate even if 2 servers fail.
+If more servers fail, they stop making progress (but will never return an incorrect result).
+
+Consensus typically arises in the context of replicated state machines, a general approach to building fault-tolerant systems.
+Each server has a state machine and a log. The state machine is the component that we want to make fault-tolerant, such as a hash table.
+It will appear to clients that they are interacting with a single, reliable state machine, even if a minority of the servers in the cluster fail.
+Each state machine takes as input commands from its log. In our hash table example, the log would include commands like set x to 3.
+A consensus algorithm is used to agree on the commands in the servers' logs.
+The consensus algorithm must ensure that if any state machine applies set x to 3 as the nth command, no other state machine will ever apply a different nth command.
+As a result, each state machine processes the same series of commands and thus produces the same series of results and arrives at the same series of states.
+
 A fundamental problem in distributed computing and multi-agent systems is to achieve overall system reliability in the presence of a number of faulty processes.
 This often requires coordinating processes to reach consensus, or agree on some data value that is needed during computation.
 Example applications of consensus include agreeing on what transactions to commit to a database in which order, state machine replication, and atomic broadcasts.
@@ -115,9 +128,12 @@ and probabilistically earn the right to commit blocks and earn associated reward
 Motivated in part by the high energy cost of this approach, subsequent permissionless consensus protocols have proposed or adopted other alternative participation rules for Sybil attack protection,
 such as proof of stake, proof of space, and proof of authority.
 
-
-
 [Consensus in the Presence of Partial Synchrony](https://dl.acm.org/doi/pdf/10.1145/42282.42283)
 
 ## Links
 
+- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+
+## References
+
+1. [How to Build a Highly Available System Using Consensus](https://www.microsoft.com/en-us/research/uploads/prod/1996/10/Acrobat-58-Copy.pdf)

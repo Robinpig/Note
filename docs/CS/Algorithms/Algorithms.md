@@ -148,6 +148,10 @@ Raft
 ### Compression Algorithms
 
 
+###
+
+Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
+Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes O(N^2) time complexity where N is the number of people involved.
 
 
 ## Links

@@ -152,6 +152,15 @@ Rehashing frees the programmer from worrying about the table size and is importa
 
 - [Redis rehash](/docs/CS/DB/Redis/hash.md?id=rehash)
 
+## Consistency Hash
+
+[Consistent Hashing and Random Trees: Distributed Caching Protocols for Relieving Hot Spots on the World Wide Web](https://www.cs.princeton.edu/courses/archive/fall09/cos518/papers/chash.pdf)
+
+
+virtual node
+
+
+
 ## Summary
 
 Hash tables can be used to implement the *insert* and *find* operations in constant average time. 
