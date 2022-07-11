@@ -130,6 +130,55 @@ protected <T> RunnableFuture<T> newTaskFor(Callable<T> callable) {
 ```
 
 
+#### invokeAll
+
+Executes the given tasks, returning a list of Futures holding their status and results when all complete. 
+`Future.isDone` is true for each element of the returned list. 
+
+**Note that a completed task could have terminated either normally or by throwing an exception.** 
+The results of this method are undefined if the given collection is modified while this operation is in progress.
+
+
+If execute(f) normally, thread waiting at `Future.get()` until it returns or throws Exception.(DiscardPolicy-like is panic)
+
+```java
+public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
+        throws InterruptedException {
+        if (tasks == null)
+            throw new NullPointerException();
+        ArrayList<Future<T>> futures = new ArrayList<Future<T>>(tasks.size());
+        boolean done = false;
+        try {
+            for (Callable<T> t : tasks) {
+                RunnableFuture<T> f = newTaskFor(t);
+                futures.add(f);
+                execute(f);
+            }
+            for (int i = 0, size = futures.size(); i < size; i++) {
+                Future<T> f = futures.get(i);
+                if (!f.isDone()) {
+                    try {
+                        f.get();
+                    } catch (CancellationException ignore) {
+                    } catch (ExecutionException ignore) {
+                    }
+                }
+            }
+            done = true;
+            return futures;
+        } finally {
+            if (!done)
+                for (int i = 0, size = futures.size(); i < size; i++)
+                    futures.get(i).cancel(true);
+        }
+    }
+```
+
+
+- [ExecutorService::shutdownNow may block invokeAll indefinitely](https://bugs.openjdk.org/browse/JDK-8160037)
+- [DiscardPolicy may block invokeAll forever](https://bugs.openjdk.org/browse/JDK-8286463)
+
+
 
 #### ExecutorCompletionService
 
@@ -1059,9 +1108,14 @@ public void shutdown() {
 
 #### shutdownNow
 
-Attempts to **stop all actively executing tasks**, halts the processing of waiting tasks, and returns a list of the tasks that were awaiting execution. These tasks are drained (removed) from the task queue upon return from this method.
-This method does not wait for actively executing tasks to terminate. Use awaitTermination to do that.
-There are no guarantees beyond best-effort attempts to stop processing actively executing tasks. This implementation interrupts tasks via `Thread.interrupt`; **any task that fails to respond to interrupts may never terminate**.
+Attempts to **stop all actively executing tasks**, halts the processing of waiting tasks, and returns a list of the tasks that were awaiting execution. 
+These tasks are drained (removed) from the task queue upon return from this method.
+
+This method does not wait for actively executing tasks to terminate. 
+Use `awaitTermination` to do that.
+
+There are no guarantees beyond best-effort attempts to stop processing actively executing tasks. 
+This implementation interrupts tasks via `Thread.interrupt`; **any task that fails to respond to interrupts may never terminate**.
 
 ```java
 public List<Runnable> shutdownNow() {
@@ -1106,10 +1160,18 @@ void interruptIfStarted() {
 }
 ```
 
+Return list of tasks that never commenced execution.
+For example, thread waiting at `Future.get()` in [invokeAll](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=invokeAll) because of never commenced tasks.
 
-[ExecutorService::shutdownNow may block invokeAll indefinitely](https://bugs.openjdk.org/browse/JDK-8160037)
+So in fact users can in practice do
 
-[DiscardPolicy may block invokeAll forever](https://bugs.openjdk.org/browse/JDK-8286463)
+```java
+for (Runnable r : pool.shutdownNow()) {
+    if (r instanceof Future) 
+        ((Future)r).cancel(false);
+}
+```
+
 
 
 ### monitor
