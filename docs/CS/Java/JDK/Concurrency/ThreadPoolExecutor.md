@@ -138,6 +138,7 @@ Executes the given tasks, returning a list of Futures holding their status and r
 **Note that a completed task could have terminated either normally or by throwing an exception.** 
 The results of this method are undefined if the given collection is modified while this operation is in progress.
 
+> [DiscardPolicy may block invokeAll forever](https://bugs.openjdk.org/browse/JDK-8286463)
 
 If execute(f) normally, thread waiting at `Future.get()` until it returns or throws Exception.(DiscardPolicy-like is panic)
 
@@ -174,9 +175,6 @@ public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
     }
 ```
 
-
-- [ExecutorService::shutdownNow may block invokeAll indefinitely](https://bugs.openjdk.org/browse/JDK-8160037)
-- [DiscardPolicy may block invokeAll forever](https://bugs.openjdk.org/browse/JDK-8286463)
 
 
 
@@ -1160,10 +1158,13 @@ void interruptIfStarted() {
 }
 ```
 
-Return list of tasks that never commenced execution.
-For example, thread waiting at `Future.get()` in [invokeAll](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=invokeAll) because of never commenced tasks.
+> [ExecutorService::shutdownNow may block invokeAll indefinitely](https://bugs.openjdk.org/browse/JDK-8160037)
 
-So in fact users can in practice do
+shutdownNow returns a list of never-started tasks, while [invokeAll](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=invokeAll)  waits for all tasks to be completed, 
+so it seems natural for it to hang if the never-started task list is simply discarded. 
+It is possible for the caller of shutdownNow to cancel all returned tasks, releasing the caller of invokeAll.
+
+So in fact users can in practice do:
 
 ```java
 for (Runnable r : pool.shutdownNow()) {
