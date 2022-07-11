@@ -1107,9 +1107,9 @@ void interruptIfStarted() {
 ```
 
 
+[ExecutorService::shutdownNow may block invokeAll indefinitely](https://bugs.openjdk.org/browse/JDK-8160037)
 
-
-
+[DiscardPolicy may block invokeAll forever](https://bugs.openjdk.org/browse/JDK-8286463)
 
 
 ### monitor
