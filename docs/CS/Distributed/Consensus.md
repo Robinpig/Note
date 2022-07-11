@@ -102,7 +102,41 @@ While real world communications are often inherently asynchronous, it is more pr
 In synchronous systems, it is assumed that all communications proceed in rounds. In one round, a process may send all the messages it requires, while receiving all messages from other processes.
 In this manner, no message from one round may influence any messages sent within the same round.
 
-### The FLP impossibility result for asynchronous deterministic consensus
+
+
+## FLP Impossibility
+
+Paper [Impossibility of Distributed Consensuswith One Faulty Process](https://dl.acm.org/doi/pdf/10.1145/3149.214121) assumes that processing is entirely asynchronous; there’s no shared notion of time between the processes.
+Algorithms in such systems cannot be based on timeouts, and there’s no way for a process to find out whether the other process has crashed or is simply running too slow.
+Given these assumptions, there exists no protocol that can guarantee consensus in a bounded time.
+No completely asynchronous consensus algorithm can tolerate the unannounced crash of even a single remote process.
+
+If we do not consider an upper time bound for the process to complete the algorithm steps, process failures can’t be reliably detected, and there’s no deterministic algorithm to reach a consensus.
+It means that we cannot always reach consensus in an asynchronous system in bounded time.
+In practice, systems exhibit at least some degree of synchrony, and the solution to this problem requires a more refined model.
+
+It is not always possible to solve a consensus problem in an asynchronous model.
+Moreover, designing an efficient synchronous algorithm is not always achievable, and for some tasks the practical solutions are more likely to be time-dependent [Efficiency of Synchronous Versus Asynchronous Distributed Systems](https://dl.acm.org/doi/pdf/10.1145/2402.322387).
+
+- Failure Models
+- Crash Faults
+- Omission Faults
+
+This model assumes that the process skips some of the algorithm steps, or is not able to execute them, or this execution is not visible to other participants, or it cannot send or receive messages to and from other participants.
+
+Omission fault captures network partitions between the processes caused by faulty network links, switch failures, or network congestion.
+Network partitions can be represented as omissions of messages between individual processes or process groups.
+A crash can be simulated by completely omitting any messages to and from the process.
+
+Arbitrary Faults
+
+
+Avoid FLP:
+
+- Fault Masking
+- Failure Detectors
+- Non-Determinism
+
 
 In a fully asynchronous message-passing distributed system, in which at least one process may have a crash failure, it has been proven in the famous FLP impossibility result that a deterministic algorithm for achieving consensus is impossible.
 This impossibility result derives from worst-case scheduling scenarios, which are unlikely to occur in practice except in adversarial situations such as an intelligent denial-of-service attacker in the network.
@@ -114,7 +148,25 @@ For instance, the loss of a communication link may be modeled as a process which
 Randomized consensus algorithms can circumvent the FLP impossibility result by achieving both safety and liveness with overwhelming probability,
 even under worst-case scheduling scenarios such as an intelligent denial-of-service attacker in the network.
 
-### Permissioned versus permissionless consensus
+
+### Failure Detectors
+
+properties of failure detectors:
+
+- Completeness
+- Accuracy
+
+
+Eventually Weakly Failure Detector
+
+- Eventually Weakly Complete
+- Eventually Weakly Accurate
+
+
+
+
+
+## Permissioned versus permissionless consensus
 
 Consensus algorithms traditionally assume that the set of participating nodes is fixed and given at the outset:
 that is, that some prior (manual or automatic) configuration process has permissioned a particular known group of participants who can authenticate each other as members of the group.
@@ -129,6 +181,18 @@ Motivated in part by the high energy cost of this approach, subsequent permissio
 such as proof of stake, proof of space, and proof of authority.
 
 [Consensus in the Presence of Partial Synchrony](https://dl.acm.org/doi/pdf/10.1145/42282.42283)
+
+
+
+## Consensus Algorithms
+
+[Paxos](/docs/CS/Distributed/Paxos.md) is a family of distributed algorithms used to reach consensus.
+
+[Raft](/docs/CS/Distributed/Raft.md) is a consensus algorithm that is designed to be easy to understand.
+
+
+PBFT
+
 
 ## Links
 

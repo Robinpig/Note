@@ -138,21 +138,51 @@ Innodb in distribution-transaction is SERIALIZABLE.
 • Planning around BASE limitations can sometimes be a major disadvantage when compared to the simplicity of ACID transactions.
 • A fully ACID database is the perfect fit for use cases where data reliability and consistency are essential.
 
-## Two-phased Commit
+## Atomic Commit
+
+### Two-Phase Commit
 
 A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
 
 TiDB
 
-## TCC
+### Three-Phase Commit
+
+### TCC
 
 not used normally
 
-## Saga
+### Paxos
+
+### Quorum
+
+### Saga
 
 proxy
 
 MySQL
+
+## Concurrency Control
+
+[Serializable Snapshot Isolation in PostgreSQL](https://www.drkp.net/papers/ssi-vldb12.pdf)
+
+[Serializable, Lockless, Distributed: Isolation in CockroachDB](https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/)
+
+[Large-scale Incremental Processing Using Distributed Transactions and Notifications](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf)
+
+### Two-Phase Locking
+
+
+### Validation-Based Concurrency
+
+
+### MVCC
+
+- Multi-Version Two-Phase Locking
+- Multi-Version Optimistic Concurrency Control
+- Multi-Version Timestamp Ordering
+
+
 
 ## Links
 

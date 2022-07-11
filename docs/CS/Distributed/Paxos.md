@@ -1,9 +1,8 @@
 ## Introduction
 
-
-## Paxos Basic
-
 Paxos is a family of distributed algorithms used to reach consensus.
+
+## Basic Paxos
 
 Assume a collection of processes that can propose values.
 A consensus algorithm ensures that a single one among the proposed values is chosen.
@@ -74,6 +73,17 @@ request having a number greater than n.
 [Consensus on Transaction Commit](https://www.microsoft.com/en-us/research/uploads/prod/2004/01/twophase-revised.pdf)
 
 [Brewer’s conjecture and the feasibility of consistent, available, partition-tolerant web services](https://users.ece.cmu.edu/~adrian/731-sp04/readings/GL-cap.pdf)
+
+## Multi-Paxos
+
+- Disk Paxos
+- Cheap Paxos
+- Fast Paxos
+- EPaxos
+- Vertical Paxos
+- Flexible Paxos
+- CASPaxos
+- Mencius
 
 ## References
 
