@@ -158,3 +158,8 @@ When thinking about replication we need to make a decision on two different cate
   * Synchronous Replication
   * Asynchronous Replication
   * Combination of both synchronous & asynchronous replication
+
+
+## Shard
+
+[Shard](/docs/CS/DB/Shard.md)
