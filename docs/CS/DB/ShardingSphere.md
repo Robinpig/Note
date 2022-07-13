@@ -56,7 +56,10 @@ They are all governed by the mesh layer.
 
 ShardingSphereDataSourceFactory
 
-ShardingStrategyConfiguration
+ShardingStrategyConfiguration(shardingAlgorithmName, shardingColumns)
+- StandardShardingStrategyConfiguration
+- HintShardingStrategyConfiguration
+- ComplexShardingStrategyConfiguration
 ShardingRuleConfiguration
 TableRuleConfiguration
 KeyGeneratorConfiguration

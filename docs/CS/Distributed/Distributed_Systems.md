@@ -77,22 +77,7 @@ The Two Generals Problem is provably unsolvable.
 
 
 
-## Byzantine Problem
-
-[Byzantine Problem](/docs/CS/Distributed/Byzantine.md)
-
-## CAP Theory
-
-[CAP Theory](/docs/CS/Distributed/CAP.md)
-
-## Consensus
-
-[The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
-
-
-The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
-
-### Consistency Model
+## Consistency Model
 
 > link [Jepsen Consistency Models](https://jepsen.io/consistency)
 
@@ -128,6 +113,27 @@ If you need total availability, you’ll have to give up causal (and read-your-w
 NFS
 
 Network File System
+
+
+## Byzantine Problem
+
+[Byzantine Problem](/docs/CS/Distributed/Byzantine.md)
+
+## CAP Theory
+
+[CAP Theory](/docs/CS/Distributed/CAP.md)
+
+
+## Time
+
+[Time Clock](/docs/CS/Distributed/Time.md)
+
+## Consensus
+
+[The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
+
+
+The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
 
 ## Failure Detection
 
@@ -202,7 +208,9 @@ This approach does not require processes to be aware of all other processes in t
 
 ### Phi-Accural Failure Detector
 
-Instead of treating node failure as a binary problem, where the process can be only in two states: up or down, a phi-accrual (φ-accrual) failure detector [HAYASHIBARA04] has a continuous scale, capturing the probability of the monitored process’s crash. It works by maintaining a sliding window, collecting arrival times of the most recent heartbeats from the peer processes. This information is used to approximate arrival time of the next heartbeat, compare this approximation with the actual arrival time, and compute the suspicion level φ: how certain the failure detector is about the failure, given the current network conditions.
+Instead of treating node failure as a binary problem, where the process can be only in two states: up or down, a phi-accrual (φ-accrual) failure detector [HAYASHIBARA04] has a continuous scale, capturing the probability of the monitored process’s crash. 
+It works by maintaining a sliding window, collecting arrival times of the most recent heartbeats from the peer processes. 
+This information is used to approximate arrival time of the next heartbeat, compare this approximation with the actual arrival time, and compute the suspicion level φ: how certain the failure detector is about the failure, given the current network conditions.
 
 The algorithm works by collecting and sampling arrival times, creating a view that can be used to make a reliable judgment about node health.
 It uses these samples to compute the value of φ: if this value reaches a threshold, the node is marked as down.
