@@ -1,5 +1,13 @@
 ## Configurations
 
+```mysql
+create user 'robin'@'%' identified by '123456';
+
+grant all privileges on *.* to 'robin'@'%';
+
+flush privileges;
+```
+
 ### Forgot password
 
 1. Start db with skip-grant-tables
