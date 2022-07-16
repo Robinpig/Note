@@ -58,6 +58,124 @@ HikariPool --> HikariDataSource: Connection”
 ```
 
 
+```java
+public class HikariDataSource extends HikariConfig implements DataSource, Closeable {
+
+    private final AtomicBoolean isShutdown = new AtomicBoolean();
+
+    private final HikariPool fastPathPool;
+    private volatile HikariPool pool;
+
+    @Override
+    public Connection getConnection() throws SQLException
+    {
+        if (isClosed()) {
+            throw new SQLException("HikariDataSource " + this + " has been closed.");
+        }
+
+        if (fastPathPool != null) {
+            return fastPathPool.getConnection();
+        }
+
+        // See http://en.wikipedia.org/wiki/Double-checked_locking#Usage_in_Java
+        HikariPool result = pool;
+        if (result == null) {
+            synchronized (this) {
+                result = pool;
+                if (result == null) {
+                    validate();
+                    try {
+                        pool = result = new HikariPool(this);
+                        this.seal();
+                    }
+                    catch (PoolInitializationException pie) {
+                        if (pie.getCause() instanceof SQLException) {
+                            throw (SQLException) pie.getCause();
+                        }
+                        else {
+                            throw pie;
+                        }
+                    }
+                }
+            }
+        }
+
+        return result.getConnection();
+    }
+}
+```
+
+
+## ProxyConnection
+
+
+Closing statements can cause connection eviction, so this must run before the conditional below
+
+```java
+public abstract class ProxyConnection implements Connection {
+    @Override
+    public final void close() throws SQLException {
+        // Closing statements can cause connection eviction, so this must run before the conditional below
+        closeStatements();
+
+        if (delegate != ClosedConnection.CLOSED_CONNECTION) {
+            leakTask.cancel();
+
+            try {
+                if (isCommitStateDirty && !isAutoCommit) {
+                    delegate.rollback();
+                    lastAccess = currentTime();
+                    LOGGER.debug("{} - Executed rollback on connection {} due to dirty commit state on close().", poolEntry.getPoolName(), delegate);
+                }
+
+                if (dirtyBits != 0) {
+                    poolEntry.resetConnectionState(this, dirtyBits);
+                    lastAccess = currentTime();
+                }
+
+                delegate.clearWarnings();
+            } catch (SQLException e) {
+                // when connections are aborted, exceptions are often thrown that should not reach the application
+                if (!poolEntry.isMarkedEvicted()) {
+                    throw checkException(e);
+                }
+            } finally {
+                delegate = ClosedConnection.CLOSED_CONNECTION;
+                poolEntry.recycle(lastAccess);
+            }
+        }
+    }
+
+    private synchronized void closeStatements() {
+        final int size = openStatements.size();
+        if (size > 0) {
+            for (int i = 0; i < size && delegate != ClosedConnection.CLOSED_CONNECTION; i++) {
+                try (Statement ignored = openStatements.get(i)) {
+                    // automatic resource cleanup
+                } catch (SQLException e) {
+                    LOGGER.warn("{} - Connection {} marked as broken because of an exception closing open statements during Connection.close()",
+                            poolEntry.getPoolName(), delegate);
+                    leakTask.cancel();
+                    poolEntry.evict("(exception closing Statements during Connection.close())");
+                    delegate = ClosedConnection.CLOSED_CONNECTION;
+                }
+            }
+
+            openStatements.clear();
+        }
+    }
+}
+```
+
+
+## Connection
+
+Configure your HikariCP idleTimeout and maxLifeTime settings to be one minute less than the wait_timeout of MySQL.
+
 ## Links
 
 - [DataSource](/docs/CS/Java/DataSource/DataSource.md)
+
+## References
+
+1. [HikariCP FAQ](https://github.com/brettwooldridge/HikariCP/wiki/FAQ)
