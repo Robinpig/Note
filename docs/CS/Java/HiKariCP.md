@@ -33,3 +33,31 @@ The ConcurrentBag provides...
 ### Invocation
 
 `invokevirtual` -> `invokestatic`
+
+```java
+public final class ProxyFactory {
+    private ProxyFactory() {
+        // unconstructable
+    }
+
+    static ProxyConnection getProxyConnection(final PoolEntry poolEntry, final Connection connection, final FastList<Statement> openStatements, final ProxyLeakTask leakTask, final long now, final boolean isReadOnly, final boolean isAutoCommit) {
+        // Body is replaced (injected) by JavassistProxyFactory
+        throw new IllegalStateException("You need to run the CLI build and you need target/classes in your classpath to run.");
+    }
+}
+```
+
+```plantuml
+HikariDataSource -> HikariPool: getConnection
+HikariPool -> ConcurrentBag: borrow
+ConcurrentBag  --> HikariPool: PoolEntry
+
+HikariPool -> ProxyFactory : createProxyConnection
+ProxyFactory --> HikariPool: ProxyConnection
+HikariPool --> HikariDataSource: Connection”
+```
+
+
+## Links
+
+- [DataSource](/docs/CS/Java/DataSource/DataSource.md)
