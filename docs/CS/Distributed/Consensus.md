@@ -189,7 +189,7 @@ such as proof of stake, proof of space, and proof of authority.
 
 [Consensus Protocols: Two-Phase Commit](https://www.the-paper-trail.org/post/2008-11-27-consensus-protocols-two-phase-commit/)
 
-
+[Consensus Protocols: Three-phase Commit](https://www.the-paper-trail.org/post/2008-11-29-consensus-protocols-three-phase-commit/)
 
 
 

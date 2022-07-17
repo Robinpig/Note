@@ -19,6 +19,9 @@ In some sense, the NoSQL movement is about creating choices that focus on availa
 
 > The choice of availability over consistency is a business choice, not a technical one.    -- Coda Hale
 
+> [A plain english introduction to CAP Theorem](https://ksat.me/a-plain-english-introduction-to-cap-theorem)
+
+
 ## BASE
 
 ACID and BASE represent two design philosophies at opposite ends of the consistency-availability spectrum.

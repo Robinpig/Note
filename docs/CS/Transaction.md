@@ -67,6 +67,13 @@ last “forever”
 | REPEATABLE-READ  | :x:                | :x:                 | :white_check_mark: |
 | SERIALIZABLE     | :x:                | :x:                 | :x:                |
 
+[Serializable Isolation for Snapshot Databases](https://courses.cs.washington.edu/courses/cse444/08au/544M/READING-LIST/fekete-sigmod2008.pdf)
+
+[A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf)
+
+
+[An Empirical Evaluation of In-Memory Multi-Version Concurrency Control](https://db.cs.cmu.edu/papers/2017/p781-wu.pdf)
+
 ### Phenomena
 
 #### Dirty Read

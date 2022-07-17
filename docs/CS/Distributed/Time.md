@@ -1,10 +1,10 @@
 ## Introduction
 
-## Logic Clock
+## Logical Clocks
 
 [Time, Clocks, and the Ordering of Events in a Distributed System](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Time-Clocks-and-the-Ordering-of-Events-in-a-Distributed-System.pdf)
 
-## Vector Clock
+## Vector Clocks
 
 [Virtual Time and Global States of Distributed Systems](https://www.vs.inf.ethz.ch/publ/papers/VirtTimeGlobStates.pdf)
 
@@ -12,6 +12,8 @@
 
 [Why Vector Clocks Are Hard](https://riak.com/posts/technical/why-vector-clocks-are-hard/index.html)
 
+
+## Hybrid Logical Clocks
 
 ## Snapshot
 

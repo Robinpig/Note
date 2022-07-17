@@ -1,5 +1,7 @@
 ## Configurations
 
+### Create new User
+
 ```mysql
 create user 'robin'@'%' identified by '123456';
 

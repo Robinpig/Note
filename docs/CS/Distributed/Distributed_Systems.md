@@ -1,6 +1,5 @@
 ## Introduction
 
-
 A distributed system is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
 This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
 
@@ -40,9 +39,9 @@ Our goal is to design a distributed system with the characteristics listed above
 Everyone, when they first build a distributed system, makes the following eight assumptions.
 
 > [!NOTE]
-> 
+>
 > [The 8 Fallacies of Distributed Computing](http://en.wikipedia.org/wiki/Fallacies_of_distributed_computing) are as follows:
-> 
+>
 > 1. The network is reliable
 > 2. Latency is zero
 > 3. Bandwidth is infinite
@@ -52,38 +51,38 @@ Everyone, when they first build a distributed system, makes the following eight 
 > 7. Transport cost is zero
 > 8. The network is homogeneous
 
-
-There is a tension between the second fallacy – latency is not 0 and the third fallacy – bandwidth is infinite. 
-You should transfer more data to minimize the number of network round trips. 
+There is a tension between the second fallacy – latency is not 0 and the third fallacy – bandwidth is infinite.
+You should transfer more data to minimize the number of network round trips.
 You should transfer less data to minimize bandwidth usage. You need to balance these two forces and find the right amount of data to send over the wire.
 So transfer only the data that you might need.
 
-
 You should know about safety and liveness properties:
 
-- safety properties say that nothing bad will ever happen. 
+- safety properties say that nothing bad will ever happen.
   For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.
-- liveness properties say that something good will eventually happen. 
+- liveness properties say that something good will eventually happen.
   For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
-
 
 ### Two Generals’ Problem
 
 One of the most prominent descriptions of an agreement in a distributed system is a thought experiment widely known as the *Two Generals’ Problem*.
 This thought experiment shows that it is impossible to achieve an agreement between two parties if communication is asynchronous in the presence of link failures.
 
-
 The Two Generals Problem is provably unsolvable.
 
+## Computation Model
 
+### Consistency Model
 
-## Consistency Model
+A consistency model is a set of histories.
 
 > link [Jepsen Consistency Models](https://jepsen.io/consistency)
 
 [Highly Available Transactions: Virtues and Limitations](http://www.vldb.org/pvldb/vol7/p181-bailis.pdf)
 
 [Consistency in Non-Transactional Distributed Storage Systems](https://arxiv.org/pdf/1512.00168.pdf)
+
+#### Linearizability
 
 [Linearizability: A Correctness Condition for Concurrent Objects](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)
 
@@ -98,11 +97,15 @@ Viotti and Vukolić rephrase this definition in terms of three set-theoretic con
 Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the real-time ordering of those operations: e.g.,
 if operation A completes before operation B begins, then B should logically take effect after A.
 
+#### Sequential Consistency
+
 Viotti and Vukolić decompose sequential consistency into three properties:
 
 - SingleOrder (there exists some total order of operations)
 - PRAM
 - RVal (the order must be consistent with the semantics of the datatype)
+
+#### Causal consistency
 
 [Causal memory: definitions, implementation, and programming](https://www.cs.tau.ac.il/~orilahav/seminar18/causal.pdf)
 
@@ -114,6 +117,12 @@ NFS
 
 Network File System
 
+#### Eventual Consistency
+
+### Isolation Level
+
+
+
 
 ## Byzantine Problem
 
@@ -123,7 +132,6 @@ Network File System
 
 [CAP Theory](/docs/CS/Distributed/CAP.md)
 
-
 ## Time
 
 [Time Clock](/docs/CS/Distributed/Time.md)
@@ -132,10 +140,15 @@ Network File System
 
 [The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
 
-
 The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
 
-## Failure Detection
+## Failure
+
+### Failure Modes
+
+
+
+### Failure Detection
 
 Terms such as dead, failed, and crashed are usually used to describe a process that has stopped executing its steps completely.
 Terms such as unresponsive, faulty, and slow are used to describe suspected processes, which may actually be dead.
@@ -156,6 +169,8 @@ From a practical perspective, excluding failed processes helps to avoid unnecess
 [Group membership failure detection: a simple protocol and its probabilistic analysis](https://iopscience.iop.org/article/10.1088/0967-1846/6/3/301/pdf)
 
 [Unreliable failure detectors for reliable distributed systems](https://dl.acm.org/doi/pdf/10.1145/226643.226647)
+
+[Survey on Scalable Failure Detectors](http://www.scs.stanford.edu/14au-cs244b/labs/projects/song.pdf)
 
 Failure-detection algorithms should exhibit several essential properties.
 
@@ -208,8 +223,8 @@ This approach does not require processes to be aware of all other processes in t
 
 ### Phi-Accural Failure Detector
 
-Instead of treating node failure as a binary problem, where the process can be only in two states: up or down, a phi-accrual (φ-accrual) failure detector [HAYASHIBARA04] has a continuous scale, capturing the probability of the monitored process’s crash. 
-It works by maintaining a sliding window, collecting arrival times of the most recent heartbeats from the peer processes. 
+Instead of treating node failure as a binary problem, where the process can be only in two states: up or down, a phi-accrual (φ-accrual) failure detector [HAYASHIBARA04] has a continuous scale, capturing the probability of the monitored process’s crash.
+It works by maintaining a sliding window, collecting arrival times of the most recent heartbeats from the peer processes.
 This information is used to approximate arrival time of the next heartbeat, compare this approximation with the actual arrival time, and compute the suspicion level φ: how certain the failure detector is about the failure, given the current network conditions.
 
 The algorithm works by collecting and sampling arrival times, creating a view that can be used to make a reliable judgment about node health.
@@ -366,7 +381,6 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
 
-
 ## Atomic Broadcast
 
 [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.3.4709&rep=rep1&type=pdf)
@@ -381,6 +395,11 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [A Response to Cheriton and Skeen’s Criticism of Causal and Totally Ordered Communication](https://www.cs.princeton.edu/courses/archive/fall07/cos518/papers/catocs-limits-response.pdf)
 
+
+## frame
+
+[Large-scale cluster management at Google with Borg](https://pdos.csail.mit.edu/6.824/papers/borg.pdf)
+
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
@@ -390,11 +409,10 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 1. [Distributed Systems Concepts and Design Fifth Edition](https://www.cdk5.net/wp/)
 2. [Introduction to Distributed Systems](https://pages.cs.wisc.edu/~zuyu/files/dist_systems.pdf)
 3. [Mixu has a delightful book on distributed systems with incredible detail.](http://book.mixu.net/distsys/)
-5. [The Fallacies of Distributed Computing is a classic text on mistaken assumptions we make designing distributed systems.](http://www.rgoarchitects.com/Files/fallacies.pdf)
-6. [Christopher Meiklejohn has a list of key papers in distributed systems.](http://christophermeiklejohn.com/distributed/systems/2013/07/12/readings-in-distributed-systems.html)
-7. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
-8. [Notes on Distributed Systems for Young Bloods](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
-
+4. [The Fallacies of Distributed Computing is a classic text on mistaken assumptions we make designing distributed systems.](http://www.rgoarchitects.com/Files/fallacies.pdf)
+5. [Christopher Meiklejohn has a list of key papers in distributed systems.](http://christophermeiklejohn.com/distributed/systems/2013/07/12/readings-in-distributed-systems.html)
+6. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
+7. [Notes on Distributed Systems for Young Bloods](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
 
 [An Overview of Clock Synchronization](https://groups.csail.mit.edu/tds/papers/Lynch/lncs90-asilomar.pdf)
 
