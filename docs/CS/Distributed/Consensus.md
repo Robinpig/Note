@@ -186,6 +186,13 @@ such as proof of stake, proof of space, and proof of authority.
 
 ## Consensus Algorithms
 
+
+[Consensus Protocols: Two-Phase Commit](https://www.the-paper-trail.org/post/2008-11-27-consensus-protocols-two-phase-commit/)
+
+
+
+
+
 [Paxos](/docs/CS/Distributed/Paxos.md) is a family of distributed algorithms used to reach consensus.
 
 [Raft](/docs/CS/Distributed/Raft.md) is a consensus algorithm that is designed to be easy to understand.
