@@ -140,7 +140,9 @@ public interface Queue<E> extends Collection<E> {
 
 #### Comparison of Stack and Deque methods
 
-Deques can also be used as LIFO (Last-In-First-Out) stacks. This interface should be used in preference to the legacy `Stack` class. When a deque is used as a stack, elements are pushed and popped from the beginning of the deque. Stack methods are precisely equivalent to Deque methods as indicated in the table below:
+Deques can also be used as LIFO (Last-In-First-Out) stacks. This interface should be used in preference to the legacy `Stack` class. 
+When a deque is used as a stack, elements are pushed and popped from the beginning of the deque. 
+Stack methods are precisely equivalent to Deque methods as indicated in the table below:
 
 | Stack Method | Equivalent Deque Method |
 | --------------------- | ---------------- |
@@ -156,7 +158,8 @@ Deques can also be used as LIFO (Last-In-First-Out) stacks. This interface shoul
 
 
 
-Resizable-array implementation of the Deque interface. Array deques have no capacity restrictions; they grow as necessary to support usage. They are not thread-safe; in the absence of external synchronization, they do not support concurrent access by multiple threads. Null elements are prohibited. This class is likely to be faster than Stack when used as a stack, and faster than LinkedList when used as a queue.
+Resizable-array implementation of the Deque interface. Array deques have no capacity restrictions; they grow as necessary to support usage. 
+They are not thread-safe; in the absence of external synchronization, they do not support concurrent access by multiple threads. Null elements are prohibited. This class is likely to be faster than Stack when used as a stack, and faster than LinkedList when used as a queue.
 
 Most ArrayDeque operations run in amortized constant time. Exceptions include remove, removeFirstOccurrence, removeLastOccurrence, contains, iterator.remove(), and the bulk operations, all of which run in linear time.
 
