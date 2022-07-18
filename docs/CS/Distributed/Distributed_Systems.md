@@ -119,6 +119,9 @@ Network File System
 
 #### Eventual Consistency
 
+
+[Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
+
 ### Isolation Level
 
 

@@ -371,6 +371,10 @@ The accumulator uses a bounded amount of memory and append calls will block when
 - disk
 - bandwidth
 
+## Links
+
+- [MQ](/docs/CS/MQ/MQ.md)
+
 ## References
 
 1. [Kafka Documentation](https://kafka.apache.org/documentation/#design)
