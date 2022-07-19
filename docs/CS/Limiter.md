@@ -42,6 +42,9 @@ for (int i = 0; i < 100; i++) {
 
 
 
+### Leaky Bucket
+
+
 ### Token Bucket
 
 guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in `SmoothRateLimiter`.
