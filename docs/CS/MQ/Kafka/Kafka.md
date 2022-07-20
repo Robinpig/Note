@@ -111,6 +111,38 @@ why
 1. 强依赖 维护困难
 2. Zookeeper CP 影响性能
 
+[KIP-500: Replace ZooKeeper with a Self-Managed Metadata Quorum](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum)
+
+We would like to remove this dependency on ZooKeeper.
+This will enable us to manage metadata in a more scalable and robust way, enabling support for more partitions.
+It will also simplify the deployment and configuration of Kafka.
+
+#### Metadata as an Event Log
+
+We often talk about the benefits of managing state as a stream of events.
+A single number, the offset, describes a consumer's position in the stream.
+Multiple consumers can quickly catch up to the latest state simply by replaying all the events newer than their current offset.
+The log establishes a clear ordering between events, and ensures that the consumers always move along a single timeline.
+
+However, although our users enjoy these benefits, Kafka itself has been left out.  We treat changes to metadata as isolated changes with no relationship to each other.
+When the controller pushes out state change notifications (such as LeaderAndIsrRequest) to other brokers in the cluster, it is possible for brokers to get some of the changes, but not all.
+Although the controller retries several times, it eventually give up.  This can leave brokers in a divergent state.
+
+Worse still, although ZooKeeper is the store of record, the state in ZooKeeper often doesn't match the state that is held in memory in the controller.
+For example, when a partition leader changes its ISR in ZK, the controller will typically not learn about these changes for many seconds.
+There is no generic way for the controller to follow the ZooKeeper event log.
+Although the controller can set one-shot watches, the number of watches is limited for performance reasons.
+When a watch triggers, it doesn't tell the controller the current state-- only that the state has changed.
+By the time the controller re-reads the znode and sets up a new watch, the state may have changed from what it was when the watch originally fired.
+If there is no watch set, the controller may not learn about the change at all.  In some cases, restarting the controller is the only way to resolve the discrepancy.
+
+Rather than being stored in a separate system, metadata should be stored in Kafka itself.  This will avoid all the problems associated with discrepancies between the controller state and the Zookeeper state.
+Rather than pushing out notifications to brokers, brokers should simply consume metadata events from the event log.  This ensures that metadata changes will always arrive in the same order.
+Brokers will be able to store metadata locally in a file.  When they start up, they will only need to read what has changed from the controller, not the full state.
+This will let us support more partitions with less CPU consumption.
+
+Raft
+
 ## Producer
 
 A Kafka client that publishes records to the Kafka cluster.
@@ -168,18 +200,18 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         TopicPartition tp = null;
         try {
             throwIfProducerClosed();
-          
+      
             // first make sure the metadata for the topic is available
             ClusterAndWaitTime clusterAndWaitTime;
             clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
             long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
             Cluster cluster = clusterAndWaitTime.cluster;
-          
+      
             byte[] serializedKey;
             serializedKey = keySerializer.serialize(record.topic(), record.headers(), record.key());
             byte[] serializedValue;
             serializedValue = valueSerializer.serialize(record.topic(), record.headers(), record.value());
-       
+   
             int partition = partition(record, serializedKey, serializedValue, cluster);
             tp = new TopicPartition(record.topic(), partition);
 

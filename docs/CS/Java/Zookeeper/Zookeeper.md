@@ -107,6 +107,12 @@ ZooKeeper is very fast and very simple. Since its goal, though, is to be a basis
 - Reliability - Once an update has been applied, it will persist from that time forward until a client overwrites the update.
 - Timeliness - The clients view of the system is guaranteed to be up-to-date within a certain time bound.
 
+The consistency guarantees of ZooKeeper lie between sequential consistency and linearizability.
+Write operations in ZooKeeper are linearizable. In other words, each write will appear to take effect atomically at some point between when the client issues the request and receives the corresponding response.
+Read operations in ZooKeeper are not linearizable since they can return potentially stale data.
+This is because a read in ZooKeeper is not a quorum operation and a server will respond immediately to a client that is performing a read.
+ZooKeeper does this because it prioritizes performance over consistency for the read use case.
+
 ### Simple API
 
 One of the design goals of ZooKeeper is providing a very simple programming interface. As a result, it supports only these operations:
@@ -118,6 +124,8 @@ One of the design goals of ZooKeeper is providing a very simple programming inte
 - *set data* : writes data to a node
 - *get children* : retrieves a list of children of a node
 - *sync* : waits for data to be propagated
+
+## Implementation
 
 ![The components of the ZooKeeper service](./img/components.png)
 
@@ -187,6 +195,17 @@ Specifically we rely on the following property of TCP:
 - No message after close
   Once a FIFO channel is closed, no messages will be received from it.
 
+FLP proved that consensus cannot be achieved in asynchronous distributed systems if failures are possible.
+To ensure we achieve consensus in the presence of failures we use timeouts. However, we rely on times for liveness not for correctness.
+So, if timeouts stop working (clocks malfunction for example) the messaging system may hang, but it will not violate its guarantees.
+
+When describing the ZooKeeper messaging protocol we will talk of packets, proposals, and messages:
+
+- *Packet*a sequence of bytes sent through a FIFO channel
+- *Proposal*a unit of agreement. Proposals are agreed upon by exchanging packets with a quorum of ZooKeeper servers.
+  Most proposals contain messages, however the NEW_LEADER proposal is an example of a proposal that does not correspond to a message.
+- *Message*a sequence of bytes to be atomically broadcast to all ZooKeeper servers. A message put into a proposal and agreed upon before it is delivered.
+
 As stated above, ZooKeeper guarantees a total order of messages, and it also guarantees a total order of proposals.
 ZooKeeper exposes the total ordering using a ZooKeeper transaction id (zxid). All proposals will be stamped with a zxid when it is proposed and exactly reflects the total ordering.
 Proposals are sent to all ZooKeeper servers and committed when a quorum of them acknowledge the proposal. If a proposal contains a message, the message will be delivered when the proposal is committed.
@@ -201,7 +220,7 @@ Each time a new leader comes into power it will have its own epoch number.
 We have a simple algorithm to assign a unique zxid to a proposal: the leader simply increments the zxid to obtain a unique zxid for each proposal.
 Leadership activation will ensure that only one leader uses a given epoch, so our simple algorithm guarantees that every proposal will have a unique id.
 
-### Messaging
+## Messaging
 
 ZooKeeper messaging consists of two phases:
 
@@ -209,6 +228,21 @@ ZooKeeper messaging consists of two phases:
   In this phase a leader establishes the correct state of the system and gets ready to start making proposals.
 - *Active messaging*
   In this phase a leader accepts messages to propose and coordinates message delivery.
+
+All proposals have a unique zxid, so unlike other protocols, we never have to worry about two different values being proposed for the same zxid;
+followers (a leader is also a follower) see and record proposals in order; proposals are committed in order; there is only one active leader at a time since followers only follow a single leader at a time;
+a new leader has seen all committed proposals from the previous epoch since it has seen the highest zxid from a quorum of servers;
+any uncommitted proposals from a previous epoch seen by a new leader will be committed by that leader before it becomes active.
+
+
+Isn't this just Multi-Paxos? No, Multi-Paxos requires some way of assuring that there is only a single coordinator. 
+We do not count on such assurances. Instead we use the leader activation to recover from leadership change or old leaders believing they are still active.
+
+Isn't this just Paxos? 
+Your active messaging phase looks just like phase 2 of Paxos? Actually, to us active messaging looks just like 2 phase commit without the need to handle aborts. 
+Active messaging is different from both in the sense that it has cross proposal ordering requirements. If we do not maintain strict FIFO ordering of all packets, it all falls apart. 
+Also, our leader activation phase is different from both of them. In particular, our use of epochs allows us to skip blocks of uncommitted proposals and to not worry about duplicate proposals for a given zxid.
+
 
 #### Leader Activation
 
@@ -269,11 +303,32 @@ Specifically the following operating constraints are observed:
 
 ### Quorums
 
+Atomic broadcast and leader election use the notion of quorum to guarantee a consistent view of the system. 
+By default, ZooKeeper uses majority quorums, which means that every voting that happens in one of these protocols requires a majority to vote on. One example is acknowledging a leader proposal: 
+the leader can only commit once it receives an acknowledgement from a quorum of servers.
+
+If we extract the properties that we really need from our use of majorities, we have that we only need to guarantee that groups of processes used to validate an operation by voting (e.g., acknowledging a leader proposal) pairwise intersect in at least one server. 
+Using majorities guarantees such a property. However, there are other ways of constructing quorums different from majorities. 
+For example, we can assign weights to the votes of servers, and say that the votes of some servers are more important. 
+To obtain a quorum, we get enough votes so that the sum of weights of all votes is larger than half of the total sum of all weights.
+
+A different construction that uses weights and is useful in wide-area deployments (co-locations) is a hierarchical one. 
+With this construction, we split the servers into disjoint groups and assign weights to processes. 
+To form a quorum, we have to get a hold of enough servers from a majority of groups G, such that for each group g in G, the sum of votes from g is larger than half of the sum of weights in g. 
+Interestingly, this construction enables smaller quorums. If we have, for example, 9 servers, we split them into 3 groups, and assign a weight of 1 to each server, then we are able to form quorums of size 4. 
+Note that two subsets of processes composed each of a majority of servers from each of a majority of groups necessarily have a non-empty intersection. 
+It is reasonable to expect that a majority of co-locations will have a majority of servers available with high probability.
+
+With ZooKeeper, we provide a user with the ability of configuring servers to use majority quorums, weights, or a hierarchy of groups.
+
 ## ZAB
 
 [A simple totally ordered broadcast protocol](https://www.datadoghq.com/pdf/zab.totally-ordered-broadcast-protocol.2008.pdf)
 
-## Examples of primitives
+Zab is very similar to Paxos [15], with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
+This difference allows Zab to preserve primary order, which may be violated by Paxos.
+
+## Recipes
 
 - Configuration Management
 - Rendezvous
@@ -306,8 +361,6 @@ Zab may redeliver a message during recovery. Because
 we use idempotent transactions, multiple delivery is acceptable as long as they are delivered in order. In fact,
 ZooKeeper requires Zab to redeliver at least all messages
 that were delivered after the start of the last snapshot.
-
-## Recipes
 
 ### Barriers
 
