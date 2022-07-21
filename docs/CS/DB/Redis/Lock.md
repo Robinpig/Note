@@ -129,3 +129,4 @@ Martin Kleppmann [analyzed Redlock here](http://martin.kleppmann.com/2016/02/08/
 ## References
 
 1. [Distributed locks with Redis](https://redis.io/topics/distlock)
+2. [Distributed Lock Implementation With Redis](https://dzone.com/articles/distributed-lock-implementation-with-redis)

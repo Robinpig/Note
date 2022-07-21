@@ -59,12 +59,15 @@ As for optimistic lock, database access libraries like Hibernate usually provide
 - [有赞 Bond](https://tech.youzan.com/bond/)
 
 
-Implementing a pessimistic lock, we have a big issue; what happens if the lock owner doesn’t release it? The lock will be held forever and we could be in a **deadlock**. To prevent this issue, we will set an **expiration time** on the lock, so the lock will be **auto-released**.
+Implementing a pessimistic lock, we have a big issue; what happens if the lock owner doesn’t release it? The lock will be held forever and we could be in a **deadlock**. 
+To prevent this issue, we will set an **expiration time** on the lock, so the lock will be **auto-released**.
 
-But if the time expires before the task is finished by the first lock holder, another microservice can acquire the lock, and both lock holders can now release the lock, causing inconsistency. Remember, no timer assumption can be reliable in asynchronous networks.
+But if the time expires before the task is finished by the first lock holder, another microservice can acquire the lock, and both lock holders can now release the lock, causing inconsistency. 
+Remember, no timer assumption can be reliable in asynchronous networks.
 
 We need to use a **fencing token,** which is incremented each time a microservice acquires a lock. 
-This token must be passed to the lock manager when we release the lock, so if the first owner releases the lock before the second owner, the system will refuse the second lock release. Depending on the implementation, we can also decide to let win the second lock owner.
+This token must be passed to the lock manager when we release the lock, so if the first owner releases the lock before the second owner, the system will refuse the second lock release. 
+Depending on the implementation, we can also decide to let win the second lock owner.
 
 scenarios:
 
@@ -74,6 +77,18 @@ scenarios:
 - reentrant lock
 - lock TTL
 - hot key
+
+
+[How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+
+[Leases: an efficient fault-tolerant mechanism for distributed file cache consistency](https://dl.acm.org/doi/pdf/10.1145/74851.74870)
+
+[A simple distributed lock with memcached](https://bluxte.net/musings/2009/10/28/simple-distributed-lock-memcached/)
+[Distributed resource locking using memcached](https://source.coveo.com/2014/12/29/distributed-resource-locking/)
+
+[The Chubby lock service for loosely-coupled distributed systems]()
+
+[Redis and Zookeeper for distributed lock](https://www.fatalerrors.org/a/redis-and-zookeeper-for-distributed-lock.html)
 
 ## Lock-based Concurrent Data Structures
 

@@ -165,3 +165,4 @@ FLP: No deterministic 1-crash-robust consensus algorithm exists with asynchronou
 
 1. [A Critique of the CAP Theorem](https://www.cl.cam.ac.uk/research/dtg/www/files/publications/public/mk428/cap-critique.pdf)
 2. [CAP Twelve Years Later:How the “Rules” Have Changed](https://www.anantjain.dev/aeb39daf1c8c1360d401e8afe84a00b7/cap-annotated.pdf)
+3. [CAP Theorem: Revisited](https://robertgreiner.com/cap-theorem-revisited/)

@@ -384,11 +384,16 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
 
-## Atomic Broadcast
+## Messaging
+
+
+### Atomic Broadcast
 
 [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.3.4709&rep=rep1&type=pdf)
 
 [Epidemic Algorithms for Replicated Database Maintenance](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/parc/techReports/CSL-89-1_Epidemic_Algorithms_for_Replicated_Database_Maintenance.pdf)
+
+
 
 [Gossip Algorithms: Design, Analysis and Applications](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.85.6176&rep=rep1&type=pdf)
 
@@ -398,10 +403,69 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [A Response to Cheriton and Skeen’s Criticism of Causal and Totally Ordered Communication](https://www.cs.princeton.edu/courses/archive/fall07/cos518/papers/catocs-limits-response.pdf)
 
+## Chain Replication
+
+[Chain Replication for Supporting High Throughput and Availability](https://www.cs.cornell.edu/home/rvr/papers/OSDI04.pdf)
+
+[Object Storage on CRAQ: High-throughput chain replication for read-mostly workloads](https://www.usenix.org/legacy/event/usenix09/tech/full_papers/terrace/terrace.pdf)
+
+[Chain Replication in Theory and in Practice](http://diyhpl.us/~bryan/papers2/distributed/distributed-systems/chain-replication-in-theory-and-in-practice.2010.pdf)
 
 ## frame
 
+
+[Distributed Snapshots: Determining Global States of a Distributed System](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Determining-Global-States-of-a-Distributed-System.pdf)
+
 [Large-scale cluster management at Google with Borg](https://pdos.csail.mit.edu/6.824/papers/borg.pdf)
+
+
+[GFS]()
+
+[Dynamo]()
+
+[MapReduce]()
+
+[BigTable]()
+
+[Spanner]()
+
+
+[Spark]()
+
+[Chubby]()
+
+[F1](https://courses.cs.washington.edu/courses/cse550/21au/papers/CSE550.F1.pdf)
+
+[MillWheel: Fault-Tolerant Stream Processing at Internet Scale]()
+
+
+[Borg, Omega, and Kubernetes](https://dl.acm.org/doi/pdf/10.1145/2890784)
+
+[Dapper]()
+
+
+[Dryad]
+
+
+[Cassandra]
+
+[Ceph]
+
+[RAMCloud]
+
+[HyperDex]
+
+[HyperDex: A Distributed, Searchable Key-Value Store](https://www.cs.cornell.edu/people/egs/papers/hyperdex-sigcomm.pdf)
+
+[PNUTS: Yahoo!’s Hosted Data Serving Platform](https://people.mpi-sws.org/~druschel/courses/ds/papers/cooper-pnuts.pdf)
+
+[Azure Data Lake Store: A Hyperscale Distributed File Service for Big Data Analytics]
+
+[Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases]
+
+[Wormhole: Reliable Pub-Sub to Support Geo-replicated Internet Services](https://www.usenix.org/system/files/conference/nsdi15/nsdi15-paper-sharma.pdf)
+
+[All Aboard the Databus! LinkedIn's Scalable Consistent Change Data Capture Platform](https://engineering.linkedin.com/research/2012/all-aboard-the-databus-linkedlns-scalable-consistent-change-data-capture-platform)
 
 ## Links
 

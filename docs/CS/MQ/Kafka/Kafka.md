@@ -141,7 +141,32 @@ Rather than pushing out notifications to brokers, brokers should simply consume 
 Brokers will be able to store metadata locally in a file.  When they start up, they will only need to read what has changed from the controller, not the full state.
 This will let us support more partitions with less CPU consumption.
 
-Raft
+
+
+
+
+#### The Controller Quorum
+
+The controller nodes comprise a Raft quorum which manages the metadata log.  This log contains information about each change to the cluster metadata.  Everything that is currently stored in ZooKeeper, such as topics, partitions, ISRs, configurations, and so on, will be stored in this log.
+
+Using the Raft algorithm, the controller nodes will elect a leader from amongst themselves, without relying on any external system.  The leader of the metadata log is called the active controller.  The active controller handles all RPCs made from the brokers.  The follower controllers replicate the data which is written to the active controller, and serve as hot standbys if the active controller should fail.  Because the controllers will now all track the latest state, controller failover will not require a lengthy reloading period where we transfer all the state to the new controller.
+
+Just like ZooKeeper, Raft requires a majority of nodes to be running in order to continue running.  Therefore, a three-node controller cluster can survive one failure.  A five-node controller cluster can survive two failures, and so on.
+
+Periodically, the controllers will write out a snapshot of the metadata to disk.  While this is conceptually similar to compaction, the code path will be a bit different because we can simply read the state from memory rather than re-reading the log from disk.
+
+
+
+#### Broker Metadata Management
+
+Instead of the controller pushing out updates to the other brokers, those brokers will fetch updates from the active controller via the new MetadataFetch API.
+
+A MetadataFetch is similar to a fetch request.  Just like with a fetch request, the broker will track the offset of the last updates it fetched, and only request newer updates from the active controller.
+
+The broker will persist the metadata it fetched to disk.  This will allow the broker to start up very quickly, even if there are hundreds of thousands or even millions of partitions.  (Note that since this persistence is an optimization, we can leave it out of the first version, if it makes development easier.)
+
+Most of the time, the broker should only need to fetch the deltas, not the full state.  However, if the broker is too far behind the active controller, or if the broker has no cached metadata at all, the controller will send a full metadata image rather than a series of deltas.
+
 
 ## Producer
 
@@ -410,3 +435,4 @@ The accumulator uses a bounded amount of memory and append calls will block when
 ## References
 
 1. [Kafka Documentation](https://kafka.apache.org/documentation/#design)
+2. [Kafka: a Distributed Messaging System for Log Processing](http://notes.stephenholiday.com/Kafka.pdf)
