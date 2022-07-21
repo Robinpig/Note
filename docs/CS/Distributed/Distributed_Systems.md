@@ -467,6 +467,11 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [All Aboard the Databus! LinkedIn's Scalable Consistent Change Data Capture Platform](https://engineering.linkedin.com/research/2012/all-aboard-the-databus-linkedlns-scalable-consistent-change-data-capture-platform)
 
+
+[Cloud Design Patterns](https://docs.microsoft.com/en-us/azure/architecture/patterns/)
+
+[Concurrency Control in Distributed Database Systems ](https://people.eecs.berkeley.edu/~brewer/cs262/concurrency-distributed-databases.pdf)
+
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
