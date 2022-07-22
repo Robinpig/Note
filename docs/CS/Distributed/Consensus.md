@@ -18,6 +18,13 @@ This often requires coordinating processes to reach consensus, or agree on some 
 Example applications of consensus include agreeing on what transactions to commit to a database in which order, state machine replication, and atomic broadcasts.
 Real-world applications often requiring consensus include cloud computing, clock synchronization, PageRank, opinion formation, smart power grids, state estimation, control of UAVs (and multiple robots/agents in general), load balancing, blockchain, and others.
 
+For example, some possible uses of consensus are:
+
+- deciding whether or not to commit a transaction to a database
+- synchronising clocks by agreeing on the current time
+- agreeing to move to the next stage of a distributed algorithm (this is the famous replicated state machine approach)
+- electing a leader node to coordinate some higher-level protocol
+
 ## Problem description
 
 The consensus problem requires agreement among a number of processes (or agents) for a single data value.
@@ -37,14 +44,12 @@ A consensus protocol tolerating halting failures must satisfy the following prop
 
 - **Termination**
   Eventually, every correct process decides some value.
-- **Integrity**
-  If all the correct processes proposed the same value v, then any correct process must decide v.
+- **Validity**
+  The value that has been decided must have proposed by some process.
 - **Agreement**
   Every correct process must agree on the same value.
 
-Variations on the definition of integrity may be appropriate, according to the application.
-For example, a weaker type of integrity would be for the decision value to equal a value that some correct process proposed – not necessarily all of them.
-The Integrity condition is also known as validity in the literature.
+
 
 A protocol that can correctly guarantee consensus amongst n processes of which at most t fail is said to be t-resilient.
 
@@ -114,6 +119,13 @@ No completely asynchronous consensus algorithm can tolerate the unannounced cras
 If we do not consider an upper time bound for the process to complete the algorithm steps, process failures can’t be reliably detected, and there’s no deterministic algorithm to reach a consensus.
 It means that we cannot always reach consensus in an asynchronous system in bounded time.
 In practice, systems exhibit at least some degree of synchrony, and the solution to this problem requires a more refined model.
+
+The FLP result is based on the asynchronous model, which is actually a class of models which exhibit certain properties of timing. 
+The main characteristic of asynchronous models is that there is no upper bound on the amount of time processors may take to receive, process and respond to an incoming message. 
+Therefore it is impossible to tell if a processor has failed, or is simply taking a long time to do its processing. The asynchronous model is a weak one, but not completely physically unrealistic. 
+We have all encountered web servers that seem to take an arbitrarily long time to serve us a page. 
+Now that mobile ad-hoc networks are becoming more and more pervasive, we see that devices in those networks may power down during processing to save battery, only to reappear later and continue as though nothing had happened. 
+This introduces an arbitrary delay which fits the asynchronous model.
 
 It is not always possible to solve a consensus problem in an asynchronous model.
 Moreover, designing an efficient synchronous algorithm is not always achievable, and for some tasks the practical solutions are more likely to be time-dependent [Efficiency of Synchronous Versus Asynchronous Distributed Systems](https://dl.acm.org/doi/pdf/10.1145/2402.322387).
@@ -186,20 +198,78 @@ such as proof of stake, proof of space, and proof of authority.
 
 ## Consensus Algorithms
 
+### 2PC
 
-[Consensus Protocols: Two-Phase Commit](https://www.the-paper-trail.org/post/2008-11-27-consensus-protocols-two-phase-commit/)
+As its name suggests, 2PC operates in two distinct phases. 
+- The first proposal phase involves proposing a value to every participant in the system and gathering responses. 
+- The second commit-or-abort phase communicates the result of the vote to the participants and tells them either to go ahead and decide or abort the protocol.
 
-[Consensus Protocols: Three-phase Commit](https://www.the-paper-trail.org/post/2008-11-29-consensus-protocols-three-phase-commit/)
+The process that proposes values is called the coordinator, and does not have to be specially elected - any node can act as the coordinator if they want to and therefore initiate a round of 2PC.
 
+There is a fly in 2PC’s ointment. If nodes are allowed to fail - if even a single node can fail - then things get a good deal more complicated.
 
+2PC is still a very popular consensus protocol, because it has a low message complexity (although in the failure case, if every node decides to be the recovery node the complexity can go to $O(n^2)$. 
+A client that talks to the co-ordinator can have a reply in 3 message delays’ time. This low latency is very appealing for some applications.
+
+However, the fact the 2PC can block on co-ordinator failure is a significant problem that dramatically hurts availability. 
+If transactions can be rolled back at any time, then the protocol can recover as nodes time out, but if the protocol has to respect any commit decisions as permanent, the wrong failure can bring the whole thing to a juddering halt.
+
+The fundamental difficulty with 2PC is that, once the decision to commit has been made by the co-ordinator and communicated to some replicas, the replicas go right ahead and act upon the commit statement without checking to see if every other replica got the message. 
+Then, if a replica that committed crashes along with the co-ordinator, the system has no way of telling what the result of the transaction was (since only the co-ordinator and the replica that got the message know for sure). 
+Since the transaction might already have been committed at the crashed replica, the protocol cannot pessimistically abort - as the transaction might have had side-effects that are impossible to undo. 
+Similarly, the protocol cannot optimistically force the transaction to commit, as the original vote might have been to abort.
+
+[Notes on Data Base Operating Systems](http://jimgray.azurewebsites.net/papers/dbos.pdf)
+
+### 3PC
+
+This problem is - mostly - circumvented by the addition of an extra phase to 2PC, unsurprisingly giving us a three-phase commit protocol. 
+The idea is very simple. We break the second phase of 2PC - ‘commit’ - into two sub-phases. The first is the ‘prepare to commit’ phase. 
+The co-ordinator sends this message to all replicas when it has received unanimous ‘yes’ votes in the first phase. 
+On receipt of this messages, replicas get into a state where they are able to commit the transaction - by taking necessary locks and so forth - but crucially do not do any work that they cannot later undo. 
+They then reply to the co-ordinator telling it that the ‘prepare to commit’ message was received.
+
+The purpose of this phase is to communicate the result of the vote to every replica so that the state of the protocol can be recovered no matter which replica dies.
+
+The last phase of the protocol does almost exactly the same thing as the original ‘commit or abort’ phase in 2PC. 
+If the co-ordinator receives confirmation of the delivery of the ‘prepare to commit’ message from all replicas, it is then safe to go ahead with committing the transaction. 
+However, if delivery is not confirmed, the co-ordinator cannot guarantee that the protocol state will be recovered should it crash (if you are tolerating a fixed number ff of failures, the co-ordinator can go ahead once it has received f+1f+1 confirmations). 
+In this case, the co-ordinator will abort the transaction.
+
+If the co-ordinator should crash at any point, a recovery node can take over the transaction and query the state from any remaining replicas. 
+If a replica that has committed the transaction has crashed, we know that every other replica has received a ‘prepare to commit’ message (otherwise the co-ordinator wouldn’t have moved to the commit phase), 
+and therefore the recovery node will be able to determine that the transaction was able to be committed, and safely shepherd the protocol to its conclusion. 
+If any replica reports to the recovery node that it has not received ‘prepare to commit’, the recovery node will know that the transaction has not been committed at any replica, and will therefore be able either to pessimistically abort or re-run the protocol from the beginning.
+
+So does 3PC fix all our problems? Not quite, but it comes close. 
+In the case of a network partition, the wheels rather come off - imagine that all the replicas that received ‘prepare to commit’ are on one side of the partition, and those that did not are on the other. 
+Then both partitions will continue with recovery nodes that respectively commit or abort the transaction, and when the network merges the system will have an inconsistent state. 
+So 3PC has potentially unsafe runs, as does 2PC, but will always make progress and therefore satisfies its liveness properties. 
+The fact that 3PC will not block on single node failures makes it much more appealing for services where high availability is more important than low latencies.
+
+3PC in fact only works well in a synchronous network with crash-stop failures.
+
+[NonBlocking Commit Protocols](https://www.cs.cornell.edu/courses/cs614/2004sp/papers/Ske81.pdf)
+
+### Paxos
 
 [Paxos](/docs/CS/Distributed/Paxos.md) is a family of distributed algorithms used to reach consensus.
 
+
+
+### Raft
+
 [Raft](/docs/CS/Distributed/Raft.md) is a consensus algorithm that is designed to be easy to understand.
 
+### ZAB
 
-PBFT
+### PBFT
 
+Standard consensus algorithms won’t do as they themselves are not Byzantine fault tolerant.
+
+[Practical Byzantine Fault Tolerance and Proactive Recovery](https://www.microsoft.com/en-us/research/wp-content/uploads/2017/01/p398-castro-bft-tocs.pdf)
+
+[A Comparison of the Byzantine Agreement Problem and the Transaction Commit Problem](http://jimgray.azurewebsites.net/papers/tandemtr88.6_comparisonofbyzantineagreementandtwophasecommit.pdf)
 
 ## Links
 
@@ -208,3 +278,4 @@ PBFT
 ## References
 
 1. [How to Build a Highly Available System Using Consensus](https://www.microsoft.com/en-us/research/uploads/prod/1996/10/Acrobat-58-Copy.pdf)
+2. [Uniform consensus is harder than consensus](https://infoscience.epfl.ch/record/88273/files/CBS04.pdf?version=1)

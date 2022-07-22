@@ -166,3 +166,7 @@ When thinking about replication we need to make a decision on two different cate
 
 
 [Granularity of Locks and Degrees of Consistency in a Shared DataBase](http://jimgray.azurewebsites.net/papers/granularity%20of%20locks%20and%20degrees%20of%20consistency%20rj%201654.pdf)
+
+
+
+Atomic Commitment Protocl(ACP)
