@@ -1,5 +1,17 @@
 ## Introduction
 
+
+
+
+Redis uses a persistence model based on the `fork()` system call in order to create a process with the same (shared) memory content of the main Redis process. 
+This secondary process dumps the content of the memory on disk. 
+This is used by `rdb.c` to create the snapshots on disk and by `aof.c` in order to perform the AOF rewrite when the append only file gets too big.
+
+The implementation inside `aof.c` has additional functions in order to implement an API that allows commands to append new commands into the AOF file as clients execute them.
+
+The `call()` function defined inside `server.c` is responsible for calling the functions that in turn will write the commands into the AOF.
+
+
 Redis provides a different range of persistence options:
 
 - **RDB** (Redis Database): The RDB persistence performs point-in-time snapshots of your dataset at specified intervals.
@@ -11,8 +23,6 @@ The most important thing to understand is the different trade-offs between the R
 
 Redis uses a persistence model based on the `fork()`system call in order to create a thread with the same (shared) memory content of the main Redis thread. This secondary thread dumps the content of the memory on disk. This is used by `rdb.c` to create the snapshots on disk and by `aof.c` in order to perform the AOF rewrite when the append only file gets too big.
 
-
-
 ## RDB advantages
 
 - RDB is a very compact single-file point-in-time representation of your Redis data. RDB files are perfect for backups. For instance you may want to archive your RDB files every hour for the latest 24 hours, and to save an RDB snapshot every day for 30 days. This allows you to easily restore different versions of the data set in case of disasters.
@@ -21,14 +31,10 @@ Redis uses a persistence model based on the `fork()`system call in order to crea
 - RDB allows faster restarts with big datasets compared to AOF.
 - On replicas, RDB supports [partial resynchronizations after restarts and failovers](https://redis.io/topics/replication#partial-resynchronizations-after-restarts-and-failovers).
 
-
-
 ## RDB disadvantages
 
 - RDB is NOT good if you need to minimize the chance of data loss in case Redis stops working (for example after a power outage). You can configure different *save points* where an RDB is produced (for instance after at least five minutes and 100 writes against the data set, but you can have multiple save points). However you'll usually create an RDB snapshot every five minutes or more, so in case of Redis stopping working without a correct shutdown for any reason you should be prepared to lose the latest minutes of data.
 - RDB needs to fork() often in order to persist on disk using a child process. Fork() can be time consuming if the dataset is big, and may result in Redis to stop serving clients for some millisecond or even for one second if the dataset is very big and the CPU performance not great. AOF also needs to fork() but you can tune how often you want to rewrite your logs without any trade-off on durability.
-
-
 
 ## AOF advantages
 
@@ -37,17 +43,15 @@ Redis uses a persistence model based on the `fork()`system call in order to crea
 - Redis is able to automatically rewrite the AOF in background when it gets too big. The rewrite is completely safe as while Redis continues appending to the old file, a completely new one is produced with the minimal set of operations needed to create the current data set, and once this second file is ready Redis switches the two and starts appending to the new one.
 - AOF contains a log of all the operations one after the other in an easy to understand and parse format. You can even easily export an AOF file. For instance even if you've accidentally flushed everything using the [FLUSHALL](https://redis.io/commands/flushall) command, as long as no rewrite of the log was performed in the meantime, you can still save your data set just by stopping the server, removing the latest command, and restarting Redis again.
 
-
-
 ## AOF disadvantages
 
 - AOF files are usually bigger than the equivalent RDB files for the same dataset.
 - AOF can be slower than RDB depending on the exact fsync policy. In general with fsync set to *every second* performance is still very high, and with fsync disabled it should be exactly as fast as RDB even under high load. Still RDB is able to provide more guarantees about the maximum latency even in the case of an huge write load.
 - In the past we experienced rare bugs in specific commands (for instance there was one involving blocking commands like [BRPOPLPUSH](https://redis.io/commands/brpoplpush)) causing the AOF produced to not reproduce exactly the same dataset on reloading. These bugs are rare and we have tests in the test suite creating random complex datasets automatically and reloading them to check everything is fine. However, these kind of bugs are almost impossible with RDB persistence. To make this point more clear: the Redis AOF works by incrementally updating an existing state, like MySQL or MongoDB does, while the RDB snapshotting creates everything from scratch again and again, that is conceptually more robust. However - 1) It should be noted that every time the AOF is rewritten by Redis it is recreated from scratch starting from the actual data contained in the data set, making resistance to bugs stronger compared to an always appending AOF file (or one rewritten reading the old AOF instead of reading the data in memory). 2) We have never had a single report from users about an AOF corruption that was detected in the real world.
-- 
-
+-
 
 ## RDB
+
 By default Redis saves snapshots of the dataset on disk, in a binary file called `dump.rdb`. You can configure Redis to have it save the dataset every N seconds if there are at least M changes in the dataset, or you can manually call the [SAVE](https://redis.io/commands/save) or [BGSAVE](https://redis.io/commands/bgsave) commands.
 
 For example, this configuration will make Redis automatically dump the dataset to disk every 60 seconds if at least 1000 keys changed:
@@ -55,8 +59,6 @@ For example, this configuration will make Redis automatically dump the dataset t
 ```
 save 60 1000
 ```
-
-
 
 ### How it works
 
@@ -68,11 +70,8 @@ Whenever Redis needs to dump the dataset to disk, this is what happens:
 
 This method allows Redis to benefit from copy-on-write semantics.
 
-
-
 SAVE use sync，BGSAVE create child process by calling fork() of glib.
 file Name: dump.rdb
-
 
 ```c
 int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
@@ -80,25 +79,24 @@ int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
 }
 ```
 
-
 call `rdbSaveKeyValuePair`
 
 load RDB
 
 Function called at startup to load RDB or AOF file in memory.
+
 ```c
 void loadDataFromDisk(void) {
 }
 ```
 
 Load an RDB file from the rio stream 'rdb'. On success C_OK is returned, otherwise C_ERR is returned and 'errno' is set accordingly.
+
 ```c
 int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
 ```
 
 ## AOF
-
-
 
 You can turn on the AOF in your configuration file:
 
@@ -106,11 +104,7 @@ You can turn on the AOF in your configuration file:
 appendonly yes
 ```
 
-
-
 From now on, every time Redis receives a command that changes the dataset (e.g. [SET](https://redis.io/commands/set)) it will append it to the AOF. When you restart Redis it will re-play the AOF to rebuild the state like binlog in MySQL
-
-
 
 ### How durable is the append only file?
 
@@ -124,14 +118,13 @@ The suggested (and default) policy is to `fsync` every second. It is both very f
 
 bgrewriteaof
 
-
 ```c
 // server.h
 struct redisServer {
 
     size_t stat_rdb_cow_bytes;      /* Copy on write bytes during RDB saving. */
     size_t stat_aof_cow_bytes;      /* Copy on write bytes during AOF rewrite. */
-    
+  
     /* AOF persistence */
     int aof_enabled;                /* AOF configuration */
     int aof_state;                  /* AOF_(ON|OFF|WAIT_REWRITE) */
@@ -205,16 +198,14 @@ struct redisServer {
     int key_load_delay;             /* Delay in microseconds between keys while
                                      * loading aof or rdb. (for testings). negative
                                      * value means fractions of microsecons (on average). */
-}                                 
+}                               
 ```
 
-
-
 Replay the append log file. On success C_OK is returned. On non fatal error (the append only file is zero-length) C_ERR is returned. On fatal error an error message is logged and the program exists.
+
 ```c
 int loadAppendOnlyFile(char *filename) {
 ```
-
 
 write AOF
 
@@ -230,17 +221,13 @@ When this happens we remember that there is some aof buffer to be flushed ASAP, 
 
 However if force is set to 1 we'll write regardless of the background fsync.
 
-
 called by `serverCron` or `beforeSleep` or `prepareForShutdown`
+
 ```c
 #define AOF_WRITE_LOG_ERROR_RATE 30 /* Seconds between errors logging. */
 void flushAppendOnlyFile(int force)
 
 ```
-
-
-
-
 
 Max wait 2 seconds
 
@@ -271,7 +258,7 @@ if (server.aof_fsync == AOF_FSYNC_EVERYSEC && !force) {
 
 ### Log rewriting
 
-Whenever you issue a [BGREWRITEAOF](https://redis.io/commands/bgrewriteaof) Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory. 
+Whenever you issue a [BGREWRITEAOF](https://redis.io/commands/bgrewriteaof) Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory.
 
 call by:
 
@@ -293,12 +280,10 @@ Log rewriting uses the same copy-on-write trick already in use for snapshotting.
 - When the child is done rewriting the file, the parent gets a signal, and appends the in-memory buffer at the end of the file generated by the child.
 - Profit! Now Redis atomically renames the old file into the new one, and starts appending new data into the new file.
 
-
 ### How to optimize
+
 - avoid bigkey
 - disable huge page
-
-
 
 ## References
 

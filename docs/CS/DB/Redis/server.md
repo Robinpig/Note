@@ -1,10 +1,8 @@
 ## Introduction
 
-
 ## Server
 
-All the server configuration and in general all the shared state is
-defined in a global structure called `server`, of type `struct redisServer`.
+All the server configuration and in general all the shared state is defined in a global structure called `server`, of type `struct redisServer`.
 A few important fields in this structure are:
 
 * `server.db` is an array of Redis databases, where data is stored.
@@ -12,6 +10,7 @@ A few important fields in this structure are:
 * `server.clients` is a linked list of clients connected to the server.
 * `server.master` is a special client, the master, if the instance is a replica.
 
+There are tons of other fields. Most fields are commented directly inside the structure definition.
 
 ```c
 struct redisServer {
@@ -93,7 +92,9 @@ struct redisServer {
     time_t loading_start_time;
     off_t loading_process_events_interval_bytes;
 ```
+
 Fast pointers to often looked up command
+
 ```c
     struct redisCommand *delCommand, *multiCommand, *lpushCommand,
                         *lpopCommand, *rpopCommand, *zpopminCommand,
@@ -445,9 +446,32 @@ Fast pointers to often looked up command
 
 aeEventLoop see ae
 
-
 ## Client
 
+In the past it was called `redisClient`, now just `client`.
+
+The structure has many fields, here we'll just show the main ones:
+
+```c
+struct client {
+    int fd;
+    sds querybuf;
+    int argc;
+    robj **argv;
+    redisDb *db;
+    int flags;
+    list *reply;
+    // ... many other fields ...
+    char buf[PROTO_REPLY_CHUNK_BYTES];
+}
+```
+
+The client structure defines a  *connected client* :
+
+* The `fd` field is the client socket file descriptor.
+* `argc` and `argv` are populated with the command the client is executing, so that functions implementing a given Redis command can read the arguments.
+* `querybuf` accumulates the requests from the client, which are parsed by the Redis server according to the Redis protocol and executed by calling the implementations of the commands the client is executing.
+* `reply` and `buf` are dynamic and static buffers that accumulate the replies the server sends to the client. These buffers are incrementally written to the socket as soon as the file descriptor is writeable.
 
 
 * `createClient()` allocates and initializes a new client.
@@ -457,8 +481,6 @@ aeEventLoop see ae
 * `processInputBuffer()` is the entry point in order to parse the client query buffer according to the Redis protocol.
   Once commands are ready to be processed, it calls `processCommand()` which is defined inside `server.c` in order to actually execute the command.
 * `freeClient()` deallocates, disconnects and removes a client.
-
-
 
 ### Buffer
 
@@ -479,7 +501,7 @@ typedef struct client {
 
     list *reply;            /* List of reply objects to send to the client. */
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
-    
+  
     /* Response buffer */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
@@ -488,12 +510,13 @@ typedef struct client {
 
  #define PROTO_REPLY_CHUNK_BYTES (16*1024) /* 16k output buffer */
 ```
+
 The client structure defines a *connected client*:
+
 * `querybuf` accumulates the requests from the client, which are parsed by the Redis server according to the Redis protocol and executed by calling the implementations of the commands the client is executing.
 * `reply` and `buf` are dynamic and static buffers(16KB) that accumulate the replies the server sends to the client. These buffers are incrementally written to the socket as soon as the file descriptor is writeable.
 
 #### querybuf
-
 
 ```c
 // config.c
@@ -515,8 +538,6 @@ if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
     return;
 }
 ```
-
-
 
 #### reply dynamic buffer
 
@@ -540,23 +561,15 @@ typedef struct clientReplyBlock {
 
 ## Cache
 
-
-
-
-
 ## monitor
 
 ```
 info clients
 ```
 
-
-
 ```
 client list
 ```
-
-
 
 ## Links
 
