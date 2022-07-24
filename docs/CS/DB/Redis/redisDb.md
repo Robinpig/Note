@@ -101,6 +101,11 @@ Inside `object.c` there are all the functions that operate with Redis objects at
   There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
 
 
+24bits
+
+- 8bits logistic counter log
+- 16bits last decrement time minutes
+
 ### refCount
 
 decrRefCount

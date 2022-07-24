@@ -58,7 +58,6 @@ The following is the list of all the data structures supported by Redis, which w
 * HyperLogLogs: this is a probabilistic data structure which is used in order to estimate the cardinality of a set.
   Don't be scared, it is simpler than it seems... See later in the HyperLogLog section of this tutorial.
 * Streams: append-only collections of map-like entries that provide an abstract log data type.
-  They are covered in depth in the** **[Introduction to Redis Streams](https://redis.io/topics/streams-intro).
 
 ```dot
 strict digraph  {
@@ -330,6 +329,16 @@ However there is a set of algorithms that trade memory for precision: you end wi
 The magic of this algorithm is that you no longer need to use an amount of memory proportional to the number of items counted, and instead can use a constant amount of memory! 12k bytes in the worst case, or a lot less if your HyperLogLog (We'll just call them HLL from now) has seen very few elements.
 
 An example of use case for this data structure is counting unique queries performed by users in a search form every day.
+
+## Streams
+
+The Stream is a new data type introduced with Redis 5.0, which models a log data structure in a more abstract way. 
+However the essence of a log is still intact: like a log file, often implemented as a file open in append-only mode, Redis Streams are primarily an append-only data structure. 
+At least conceptually, because being an abstract data type represented in memory, Redis Streams implement powerful operations to overcome the limitations of a log file.
+
+Redis streams implement additional, non-mandatory features: a set of blocking operations allowing consumers to wait for new data added to a stream by producers, and in addition to that a concept called **Consumer Groups**(allow a group of clients to cooperate in consuming a different portion of the same stream of messages).
+
+
 
 ### tips
 

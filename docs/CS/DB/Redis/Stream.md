@@ -1,8 +1,68 @@
 ## Introduction
 
+The Stream is a new data type introduced with Redis 5.0, which models a log data structure in a more abstract way.
+However the essence of a log is still intact: like a log file, often implemented as a file open in append-only mode, Redis Streams are primarily an append-only data structure.
+At least conceptually, because being an abstract data type represented in memory, Redis Streams implement powerful operations to overcome the limitations of a log file.
+
+Redis streams implement additional, non-mandatory features: a set of blocking operations allowing consumers to wait for new data added to a stream by producers, and in addition to that a concept called **Consumer Groups**(allow a group of clients to cooperate in consuming a different portion of the same stream of messages).
+
+A consumer group is like a *pseudo consumer* that gets data from a stream, and actually serves multiple consumers, providing certain guarantees:
+
+1. Each message is served to a different consumer so that it is not possible that the same message will be delivered to multiple consumers.
+2. Consumers are identified, within a consumer group, by a name, which is a case-sensitive string that the clients implementing consumers must choose.
+   This means that even after a disconnect, the stream consumer group retains all the state, since the client will claim again to be the same consumer.
+   However, this also means that it is up to the client to provide a unique identifier.
+3. Each consumer group has the concept of the *first ID never consumed* so that, when a consumer asks for new messages, it can provide just messages that were not previously delivered.
+4. Consuming a message, however, requires an explicit acknowledgment using a specific command. Redis interprets the acknowledgment as: this message was correctly processed so it can be evicted from the consumer group.
+5. A consumer group tracks all the messages that are currently pending, that is, messages that were delivered to some consumer of the consumer group, but are yet to be acknowledged as processed.
+   Thanks to this feature, when accessing the message history of a stream, each consumer  *will only see messages that were delivered to it* .
+
+## Differences with Kafka (TM) partitions
+
+Consumer groups in Redis streams may resemble in some way Kafka (TM) partitioning-based consumer groups, however note that Redis streams are, in practical terms, very different.
+The partitions are only *logical* and the messages are just put into a single Redis key, so the way the different clients are served is based on who is ready to process new messages, and not from which partition clients are reading.
+For instance, if the consumer C3 at some point fails permanently, Redis will continue to serve C1 and C2 all the new messages arriving, as if now there are only two *logical* partitions.
+
+Similarly, if a given consumer is much faster at processing messages than the other consumers, this consumer will receive proportionally more messages in the same unit of time.
+This is possible since Redis tracks all the unacknowledged messages explicitly, and remembers who received which message and the ID of the first message never delivered to any consumer.
+
+However, this also means that in Redis if you really want to partition messages in the same stream into multiple Redis instances, you have to use multiple keys and some sharding system such as Redis Cluster or some other application-specific sharding system.
+A single Redis stream is not automatically partitioned to multiple instances.
+
+We could say that schematically the following is true:
+
+* If you use 1 stream -> 1 consumer, you are processing messages in order.
+* If you use N streams with N consumers, so that only a given consumer hits a subset of the N streams, you can scale the above model of 1 stream -> 1 consumer.
+* If you use 1 stream -> N consumers, you are load balancing to N consumers, however in that case, messages about the same logical item may be consumed out of order, because a given consumer may process message 3 faster than another consumer is processing message 4.
+
+So basically Kafka partitions are more similar to using N different Redis keys, while Redis consumer groups are a server-side load balancing system of messages from a given stream to N different consumers.
+
+## Persistence
+
+A Stream, like any other Redis data structure, is asynchronously replicated to replicas and persisted into AOF and RDB files.
+However what may not be so obvious is that also the consumer groups full state is propagated to AOF, RDB and replicas, so if a message is pending in the master, also the replica will have the same information.
+Similarly, after a restart, the AOF will restore the consumer groups' state.
+
+However note that Redis streams and consumer groups are persisted and replicated using the Redis default replication, so:
+
+* AOF must be used with a strong fsync policy if persistence of messages is important in your application.
+* By default the asynchronous replication will not guarantee that `XADD` commands or consumer groups state changes are replicated: after a failover something can be missing depending on the ability of replicas to receive the data from the master.
+* The `WAIT` command may be used in order to force the propagation of the changes to a set of replicas.
+  However note that while this makes it very unlikely that data is lost, the Redis failover process as operated by Sentinel or Redis Cluster performs only a *best effort* check to failover to the replica which is the most updated,
+  and under certain specific failure conditions may promote a replica that lacks some data.
+
+So when designing an application using Redis streams and consumer groups, make sure to understand the semantical properties your application should have during failures, and configure things accordingly, evaluating whether it is safe enough for your use case.
+
+## Zero length streams
+
+A difference between streams and other Redis data structures is that when the other data structures no longer have any elements, as a side effect of calling commands that remove elements, the key itself will be removed.
+So for instance, a sorted set will be completely removed when a call to `ZREM` will remove the last element in the sorted set.
+Streams, on the other hand, are allowed to stay at zero elements, both as a result of using a **MAXLEN** option with a count of zero (`XADD` and `XTRIM` commands), or because `XDEL` was called.
+
+The reason why such an asymmetry exists is because Streams may have associated consumer groups, and we do not want to lose the state that the consumer groups defined just because there are no longer any items in the stream.
+Currently the stream is not deleted even when it has no associated consumer groups.
 
 Radix Tree save id, and listpack save message.
-
 
 ```c
 typedef struct stream {
@@ -12,7 +72,6 @@ typedef struct stream {
     rax *cgroups;           /* Consumer groups dictionary: name -> streamCG */
 } stream;
 ```
-
 
 ### streamID
 
@@ -26,7 +85,6 @@ typedef struct streamID {
     uint64_t seq;       /* Sequence number. */
 } streamID;
 ```
-
 
 ```c
 // t-stream.c
@@ -42,10 +100,9 @@ stream *streamNew(void) {
 }
 ```
 
-
 ## Rax
 
-Representation of a radix tree as implemented in this file, that contains the strings "foo", "foobar" and "footer" after the insertion of each word. 
+Representation of a radix tree as implemented in this file, that contains the strings "foo", "foobar" and "footer" after the insertion of each word.
 When the node represents a key inside the radix tree, we write it between [], otherwise it is written between ().
 
 This is the vanilla representation:
@@ -68,7 +125,7 @@ This is the vanilla representation:
  *    "footer" []             [] "foobar"
  *
  */
- ```
+```
 
 Low level stream encoding: a `radix tree` of `listpacks`.
 
@@ -92,6 +149,7 @@ typedef struct raxNode {
     unsigned char data[];
 } raxNode;
 ```
+
 Data layout is as follows:
 
 If node is not compressed we have 'size' bytes, one for each children
@@ -139,6 +197,7 @@ rax *raxNew(void) {
     }
 }
 ```
+
 Allocate a new non compressed node with the specified number of children.
 If datafiled is true, the allocation is made large enough to hold the associated data pointer.
 
@@ -159,11 +218,10 @@ raxNode *raxNewNode(size_t children, int datafield) {
 }
 ```
 
-
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct.md)
 
 ## References
-1. [Rax, an ANSI C radix tree implementation](https://github.com/antirez/rax)
 
+1. [Rax, an ANSI C radix tree implementation](https://github.com/antirez/rax)

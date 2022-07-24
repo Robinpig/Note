@@ -12,31 +12,15 @@ Data structures implemented into Redis have a few special properties:
 
 Another good example is to think of Redis as a more complex version of memcached, where the operations are not just SETs and GETs, but operations that work with complex data types like Lists, Sets, ordered data structures, and so forth.
 
-## [How fast is Redis?](https://redis.io/topics/benchmarks)
+> Link: [How fast is Redis?](https://redis.io/topics/benchmarks)
 
-24bits
+The simplest way to understand how a program works is to understand the [data structures](/docs/CS/DB/Redis/struct.md) it uses.
 
-- 8bits logistic counter log
-- 16bits last decrement time minutes
 - [db](/docs/CS/DB/Redis/redisDb.md)
 
-BigKey
 
 Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
-## Install
-
-- Docker
-- make source
-- apt-get(Ubuntu) yum(RedHat) brew(Mac)
-
-## sys
-
-struct redisServer and struct client in server.h
-
-struct redisCommand redisCommandTable[] in server.c
-
-The simplest way to understand how a program works is to understand the [data structures](/docs/CS/DB/Redis/struct.md) it uses.
 
 ## Persistence
 
