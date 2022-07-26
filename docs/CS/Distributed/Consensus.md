@@ -200,6 +200,8 @@ such as proof of stake, proof of space, and proof of authority.
 
 ### 2PC
 
+Consensus is easy if there are no faults.
+
 As its name suggests, 2PC operates in two distinct phases. 
 - The first proposal phase involves proposing a value to every participant in the system and gathering responses. 
 - The second commit-or-abort phase communicates the result of the vote to the participants and tells them either to go ahead and decide or abort the protocol.

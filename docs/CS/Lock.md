@@ -50,6 +50,24 @@ Spinning to wait for a lock held on another processor doesn’t waste many cycle
 
 ## Distributed Lock
 
+Fault-tolerant consensus is expensive. 
+Exclusive access by a single process (also known as locking) is cheap, but it is not fault-tolerant—if a process fails while it is holding a lock, no one else can access the resource. 
+Adding a timeout to a lock makes a fault-tolerant lock or ‘lease’.
+Thus a process holds a lease on a state component or ‘resource’ until an expiration time; we say that the process is the ‘master’ for the resource while it holds the lease. No other process will touch the resource until the lease expires. 
+For this to work, of course, the processes must have synchronized clocks. 
+More precisely, if the maximum skew between the clocks of two processes is ε and process P’s lease expires at time t, then P knows that no other process will touch the resource before time t – ε on P’s clock.
+
+While it holds the lease the master can read and write the resource freely. 
+Writes must take bounded time, so that they can be guaranteed either to fail or to precede any operation that starts after the lease expires; 
+this can be a serious problem for a resource such as a SCSI disk, which has weak ordering guarantees and a long upper bound on the time a write can take.
+
+A process can keep control of a resource by renewing its lease before it expires. 
+It can also release its lease, perhaps on demand. 
+If you can’t talk to the process that holds the lease, however (perhaps because it has failed), you have to wait for the lease to expire before touching its resource. 
+So there is a tradeoff between the cost of renewing a lease and the time you have to wait for the lease to expire after a (possible) failure. 
+A short lease means a short wait during recovery but a higher cost to renew the lease. 
+A long lease means a long wait during recovery but a lower cost to renew.
+
 As for optimistic lock, database access libraries like Hibernate usually provide facilities, but in a distributed scenario, we would use more specific solutions that are used to implement more complex algorithms like:
 
 - [Redis](/docs/CS/DB/Redis/Lock.md) uses libraries that implement a lock algorithm like [ShedLock](https://github.com/lukas-krecan/ShedLock), and [Redisson](https://github.com/redisson/redisson/wiki/8.-Distributed-locks-and-synchronizers).

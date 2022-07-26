@@ -59,8 +59,10 @@ So transfer only the data that you might need.
 You should know about safety and liveness properties:
 
 - safety properties say that nothing bad will ever happen.
+  It is the generalization of partial correctness for sequential programs.
   For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.
 - liveness properties say that something good will eventually happen.
+  It is the generalization of termination.
   For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
 
 ### Two Generals’ Problem
@@ -374,13 +376,6 @@ If this node is unavailable, the process skips the unreachable node and attempts
 Nodes contact their siblings, following around the ring and collecting the live node set, adding themselves to the set before passing it over to the next node,
 similar to the failure-detection algorithm described in “Timeout-Free Failure Detector”, where nodes append their identifiers to the path before passing it to the next node.
 
-[The Implementation of Reliable Distributed Multiprocess Systems](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Implementation-of-Reliable-Distributed-Multiprocess-Systems.pdf)
-
-[Using Time Instead of Timeout for Fault-Tolerant Distributed Systems](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/using-time-Copy.pdf)
-
-[Synchronizing Clocks in the Presence of Faults](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/Synchronizing-Clocks-in-the-Presence-of-Faults.pdf)
-
-[Byzantine Clock Synchronization](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Byzantine-Clock-Synchronization.pdf)
 
 [A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
 
@@ -490,3 +485,5 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [A Brief Tour of FLP Impossibility](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)
 [Impossibility of Distributed Consensus with One Faulty Process](https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf)
+
+[Solution of a Problem in Concurrent Programming Control](https://dl.acm.org/doi/pdf/10.1145/365559.365617)
