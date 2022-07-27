@@ -99,6 +99,12 @@ Viotti and Vukolić rephrase this definition in terms of three set-theoretic con
 Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the real-time ordering of those operations: e.g.,
 if operation A completes before operation B begins, then B should logically take effect after A.
 
+
+[Testing for Linearizability](http://www.cs.ox.ac.uk/people/gavin.lowe/LinearizabiltyTesting/paper.pdf)
+
+
+[Faster linearizability checking via P-compositionality](https://arxiv.org/pdf/1504.00204.pdf)
+
 #### Sequential Consistency
 
 Viotti and Vukolić decompose sequential consistency into three properties:
@@ -382,6 +388,9 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 ## Messaging
 
 
+
+[RPC](/docs/CS/Distributed/RPC/RPC.md)
+
 ### Atomic Broadcast
 
 [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.3.4709&rep=rep1&type=pdf)
@@ -473,6 +482,9 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 ## References
 
+1. [Solution of a Problem in Concurrent Programming Control](https://dl.acm.org/doi/pdf/10.1145/365559.365617)
+2. [A New Solution of Dijkstra's Concurrent Programming Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/A-New-Solution-of-Dijkstras-Concurrent-Programming-Problem.pdf)   
+3. [Self-stabilizing Systems in Spite of Distributed Control](https://courses.csail.mit.edu/6.852/05/papers/p643-Dijkstra.pdf)
 1. [Distributed Systems Concepts and Design Fifth Edition](https://www.cdk5.net/wp/)
 2. [Introduction to Distributed Systems](https://pages.cs.wisc.edu/~zuyu/files/dist_systems.pdf)
 3. [Mixu has a delightful book on distributed systems with incredible detail.](http://book.mixu.net/distsys/)
@@ -481,9 +493,17 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 6. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
 7. [Notes on Distributed Systems for Young Bloods](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
 
-[An Overview of Clock Synchronization](https://groups.csail.mit.edu/tds/papers/Lynch/lncs90-asilomar.pdf)
+   [An Overview of Clock Synchronization](https://groups.csail.mit.edu/tds/papers/Lynch/lncs90-asilomar.pdf)
 
-[A Brief Tour of FLP Impossibility](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)
-[Impossibility of Distributed Consensus with One Faulty Process](https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf)
+   [A Brief Tour of FLP Impossibility](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)
+   [Impossibility of Distributed Consensus with One Faulty Process](https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf)
 
-[Solution of a Problem in Concurrent Programming Control](https://dl.acm.org/doi/pdf/10.1145/365559.365617)
+
+[Solved Problems, Unsolved Problems and Non-Problems in Concurrency](https://lamport.azurewebsites.net/pubs/solved-and-unsolved.pdf)
+
+[On Self-stabilizing Systems](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/On-Self-stabilizing-Systems.pdf)
+
+
+[Reaching Agreement in the Presence of Faults](https://lamport.azurewebsites.net/pubs/reaching.pdf)
+
+[The 5 Minute Rule for Trading Memory for Disc Accesses and the 5 Byte Rule for Trading Memory for CPU Time](https://dsf.berkeley.edu/cs286/papers/fiveminute-tr1986.pdf)
