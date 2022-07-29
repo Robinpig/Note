@@ -94,6 +94,7 @@ no-op log
 
 ## Links
 
+- [Consensus](/docs/CS/Distributed/Consensus.md)
 - [Paxos](/docs/CS/Distributed/Paxos.md)
 
 ## References

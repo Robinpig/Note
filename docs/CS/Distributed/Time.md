@@ -56,10 +56,6 @@ This can be prevented by the use of properly synchronized physical clocks.
 
 ## Hybrid Logical Clocks
 
-## Snapshot
-
-
-[Distributed Snapshots: Determining Global States of Distributed Systems](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Determining-Global-States-of-a-Distributed-System.pdf)
 
 ## Links
 

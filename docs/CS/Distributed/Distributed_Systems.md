@@ -56,7 +56,7 @@ You should transfer more data to minimize the number of network round trips.
 You should transfer less data to minimize bandwidth usage. You need to balance these two forces and find the right amount of data to send over the wire.
 So transfer only the data that you might need.
 
-You should know about safety and liveness properties:
+A distributed algorithm has two properties:
 
 - safety properties say that nothing bad will ever happen.
   It is the generalization of partial correctness for sequential programs.
@@ -99,9 +99,7 @@ Viotti and Vukolić rephrase this definition in terms of three set-theoretic con
 Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the real-time ordering of those operations: e.g.,
 if operation A completes before operation B begins, then B should logically take effect after A.
 
-
 [Testing for Linearizability](http://www.cs.ox.ac.uk/people/gavin.lowe/LinearizabiltyTesting/paper.pdf)
-
 
 [Faster linearizability checking via P-compositionality](https://arxiv.org/pdf/1504.00204.pdf)
 
@@ -127,13 +125,9 @@ Network File System
 
 #### Eventual Consistency
 
-
 [Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
 
 ### Isolation Level
-
-
-
 
 ## Byzantine Problem
 
@@ -149,6 +143,11 @@ Network File System
 
 ## Consensus
 
+[Consensus](/docs/CS/Distributed/Consensus.md) is a fundamental problem in fault-tolerant distributed systems.
+Consensus involves multiple servers agreeing on values. Once they reach a decision on a value, that decision is final.
+Typical consensus algorithms make progress when any majority of their servers is available; for example, a cluster of 5 servers can continue to operate even if 2 servers fail.
+If more servers fail, they stop making progress (but will never return an incorrect result).
+
 [The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
 
 The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
@@ -156,8 +155,6 @@ The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a part
 ## Failure
 
 ### Failure Modes
-
-
 
 ### Failure Detection
 
@@ -382,12 +379,7 @@ If this node is unavailable, the process skips the unreachable node and attempts
 Nodes contact their siblings, following around the ring and collecting the live node set, adding themselves to the set before passing it over to the next node,
 similar to the failure-detection algorithm described in “Timeout-Free Failure Detector”, where nodes append their identifiers to the path before passing it to the next node.
 
-
-[A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
-
 ## Messaging
-
-
 
 [RPC](/docs/CS/Distributed/RPC/RPC.md)
 
@@ -396,8 +388,6 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.3.4709&rep=rep1&type=pdf)
 
 [Epidemic Algorithms for Replicated Database Maintenance](http://bitsavers.informatik.uni-stuttgart.de/pdf/xerox/parc/techReports/CSL-89-1_Epidemic_Algorithms_for_Replicated_Database_Maintenance.pdf)
-
-
 
 [Gossip Algorithms: Design, Analysis and Applications](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.85.6176&rep=rep1&type=pdf)
 
@@ -417,11 +407,13 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 ## frame
 
+### snapshot
 
-[Distributed Snapshots: Determining Global States of a Distributed System](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Determining-Global-States-of-a-Distributed-System.pdf)
+A distributed system consists of a finite set of processes and a finite set of channels.
+
+[Distributed Snapshots - Determining Global States of a Distributed System](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Determining-Global-States-of-a-Distributed-System.pdf)
 
 [Large-scale cluster management at Google with Borg](https://pdos.csail.mit.edu/6.824/papers/borg.pdf)
-
 
 [GFS]()
 
@@ -433,7 +425,6 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [Spanner]()
 
-
 [Spark]()
 
 [Chubby]()
@@ -442,14 +433,11 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [MillWheel: Fault-Tolerant Stream Processing at Internet Scale]()
 
-
 [Borg, Omega, and Kubernetes](https://dl.acm.org/doi/pdf/10.1145/2890784)
 
 [Dapper]()
 
-
 [Dryad]
-
 
 [Cassandra]
 
@@ -471,10 +459,9 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [All Aboard the Databus! LinkedIn's Scalable Consistent Change Data Capture Platform](https://engineering.linkedin.com/research/2012/all-aboard-the-databus-linkedlns-scalable-consistent-change-data-capture-platform)
 
-
 [Cloud Design Patterns](https://docs.microsoft.com/en-us/azure/architecture/patterns/)
 
-[Concurrency Control in Distributed Database Systems ](https://people.eecs.berkeley.edu/~brewer/cs262/concurrency-distributed-databases.pdf)
+[Concurrency Control in Distributed Database Systems](https://people.eecs.berkeley.edu/~brewer/cs262/concurrency-distributed-databases.pdf)
 
 ## Links
 
@@ -483,27 +470,20 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 ## References
 
 1. [Solution of a Problem in Concurrent Programming Control](https://dl.acm.org/doi/pdf/10.1145/365559.365617)
-2. [A New Solution of Dijkstra's Concurrent Programming Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/A-New-Solution-of-Dijkstras-Concurrent-Programming-Problem.pdf)   
+2. [A New Solution of Dijkstra's Concurrent Programming Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/A-New-Solution-of-Dijkstras-Concurrent-Programming-Problem.pdf)
 3. [Self-stabilizing Systems in Spite of Distributed Control](https://courses.csail.mit.edu/6.852/05/papers/p643-Dijkstra.pdf)
-1. [Distributed Systems Concepts and Design Fifth Edition](https://www.cdk5.net/wp/)
-2. [Introduction to Distributed Systems](https://pages.cs.wisc.edu/~zuyu/files/dist_systems.pdf)
-3. [Mixu has a delightful book on distributed systems with incredible detail.](http://book.mixu.net/distsys/)
-4. [The Fallacies of Distributed Computing is a classic text on mistaken assumptions we make designing distributed systems.](http://www.rgoarchitects.com/Files/fallacies.pdf)
-5. [Christopher Meiklejohn has a list of key papers in distributed systems.](http://christophermeiklejohn.com/distributed/systems/2013/07/12/readings-in-distributed-systems.html)
-6. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
-7. [Notes on Distributed Systems for Young Bloods](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
-
-   [An Overview of Clock Synchronization](https://groups.csail.mit.edu/tds/papers/Lynch/lncs90-asilomar.pdf)
-
-   [A Brief Tour of FLP Impossibility](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)
-   [Impossibility of Distributed Consensus with One Faulty Process](https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf)
-
-
-[Solved Problems, Unsolved Problems and Non-Problems in Concurrency](https://lamport.azurewebsites.net/pubs/solved-and-unsolved.pdf)
-
-[On Self-stabilizing Systems](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/On-Self-stabilizing-Systems.pdf)
-
-
-[Reaching Agreement in the Presence of Faults](https://lamport.azurewebsites.net/pubs/reaching.pdf)
-
-[The 5 Minute Rule for Trading Memory for Disc Accesses and the 5 Byte Rule for Trading Memory for CPU Time](https://dsf.berkeley.edu/cs286/papers/fiveminute-tr1986.pdf)
+4. [why do cWhy Do Computers Stop and What Can be Done About It](https://pages.cs.wisc.edu/~remzi/Classes/739/Fall2018/Papers/gray85-easy.pdf)
+5. [Distributed Systems Concepts and Design Fifth Edition](https://www.cdk5.net/wp/)
+6. [Introduction to Distributed Systems](https://pages.cs.wisc.edu/~zuyu/files/dist_systems.pdf)
+7. [Mixu has a delightful book on distributed systems with incredible detail.](http://book.mixu.net/distsys/)
+8. [The Fallacies of Distributed Computing is a classic text on mistaken assumptions we make designing distributed systems.](http://www.rgoarchitects.com/Files/fallacies.pdf)
+9. [Christopher Meiklejohn has a list of key papers in distributed systems.](http://christophermeiklejohn.com/distributed/systems/2013/07/12/readings-in-distributed-systems.html)
+10. [Dan Creswell has a lovely reading list.](https://dancres.github.io/Pages/)
+11. [Notes on Distributed Systems for Young Bloods](https://www.somethingsimilar.com/2013/01/14/notes-on-distributed-systems-for-young-bloods/)
+12. [An Overview of Clock Synchronization](https://groups.csail.mit.edu/tds/papers/Lynch/lncs90-asilomar.pdf)
+13. [A Brief Tour of FLP Impossibility](https://www.the-paper-trail.org/post/2008-08-13-a-brief-tour-of-flp-impossibility/)
+14. [Solved Problems, Unsolved Problems and Non-Problems in Concurrency](https://lamport.azurewebsites.net/pubs/solved-and-unsolved.pdf)
+15. [On Self-stabilizing Systems](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/On-Self-stabilizing-Systems.pdf)
+16. [Reaching Agreement in the Presence of Faults](https://lamport.azurewebsites.net/pubs/reaching.pdf)
+17. [The 5 Minute Rule for Trading Memory for Disc Accesses and the 5 Byte Rule for Trading Memory for CPU Time](https://dsf.berkeley.edu/cs286/papers/fiveminute-tr1986.pdf)
+18. [A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)

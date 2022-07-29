@@ -99,6 +99,23 @@ This permits a simple implementation of an arbitrarily sophisticated reconfigura
 
 ## Multi-Paxos
 
+
+
+Algorithmic Challenges
+
+Dick corruption
+
+Master leases
+
+Epoch numbers
+
+Group membership
+
+Snapshots
+
+Database transactions
+
+
 - Disk Paxos
 - Cheap Paxos
 - Fast Paxos
@@ -107,6 +124,11 @@ This permits a simple implementation of an arbitrarily sophisticated reconfigura
 - Flexible Paxos
 - CASPaxos
 - Mencius
+
+
+## Links
+
+- [Consensus](/docs/CS/Distributed/Consensus.md)
 
 ## References
 
