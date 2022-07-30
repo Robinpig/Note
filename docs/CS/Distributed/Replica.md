@@ -17,6 +17,25 @@ eventually all replicas will end up with the same database content (provided tha
 - Multi Master
 - Leaderless
 
+
+```dot
+digraph {
+    ranksep=1;
+    nodesep=1;
+    Master;
+   slave1[label="Slave"];
+   slave2[label="Slave"];
+    
+    
+   Master -> slave1[label="sync"];
+   slave1 -> Master[label="ok" ]
+   Master -> slave2[label="sync" ];
+   slave2 -> Master[label="ok" ]
+}
+```
+
+
+
 Conflict
 
 Last Write Wins(LWW)

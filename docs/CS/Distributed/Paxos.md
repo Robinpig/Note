@@ -2,13 +2,13 @@
 
 Paxos is a family of distributed algorithms used to reach consensus.
 
-## Basic Paxos
+## Basic-Paxos
 
 Paxos defines three roles: *proposers*, *acceptors*, and *learners*.
 Paxos nodes can take multiple roles, even all of them.
 
 Assume that nodes can communicate with one another by sending messages.
-We use the customary asynchronous, non-Byzantine model, in which:
+We use the customary asynchronous, **non-Byzantine model**, in which:
 
 - Agents operate at arbitrary speed, may fail by stopping, and may restart.
   Since all agents may fail after a value is chosen and then restart, a solution is impossible unless some information can be remembered by an agent that has failed and restarted.
@@ -25,6 +25,8 @@ The safety requirements for consensus are:
 - Only a single value is chosen, and
 - A process never learns that a value has been chosen unless it actually has been.
 
+### Choosing a Value
+
 Single acceptor is unsatisfactory because the failure of the acceptor makes any further progress impossible.
 Instead of a single acceptor, let’s use multiple acceptor agents.
 A proposer sends a proposed value to a set of acceptors.
@@ -34,17 +36,19 @@ Paxos nodes must know how many acceptors a majority is.
 
 We see that the algorithm operates in the following two phases.
 
-Phase 1.
 
-- A proposer selects a proposal number n and sends a prepare request with number n to a majority of acceptors.
-- If an acceptor receives a prepare request with number n greater than that of any prepare request to which it has already responded,
-  then it responds to the request with a promise not to accept any more proposals numbered less than n and with the highest-numbered proposal (if any) that it has accepted.
+|             | proposer                                                                                                                                                                                                                                                                                                                                      | acceptor                                                                                                                                                                                                                                                                                                       |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Phase 1** | A proposer selects a proposal number n and sends a prepare request with number n to a majority of acceptors.                                                                                                                                                                                                                                  | If an acceptor receives a prepare request with number n greater than that of any prepare request to which it has already responded, then it responds to the request with a promise not to accept any more proposals numbered less than n and with the highest-numbered proposal (if any) that it has accepted. |
+| **Phase 2** | If the proposer receives a response to its prepare requests(numbered n) from a majority of acceptors, then it sends an accept request to each of those acceptors for a proposal numbered n with a value v, where v is the value of the highest-numbered proposal among the responses, or is any value if the responses reported no proposals. | If an acceptor receives an accept request for a proposal numbered n, it accepts the proposal unless it has already responded to a prepare request having a number greater than n.                                                                                                                              |
 
-Phase 2
+A proposer can make multiple proposals, so long as it follows the algorithm for each one.
+It can abandon a proposal in the middle of the protocol at any time. (Correctness is maintained, even though requests and/or responses for the proposal may arrive at their destinations long after the proposal was abandoned.)
+It is probably a good idea to abandon a proposal if some proposer has begun trying to issue a higher-numbered one.
+Therefore, if an acceptor ignores a prepare or accept request because it has already received a prepare request with a higher number, then it should probably inform the proposer, who should then abandon its proposal.
+This is a performance optimization that does not affect correctness.
 
-- If the proposer receives a response to its prepare requests(numbered n) from a majority of acceptors, then it sends an accept request to each of those acceptors for a proposal numbered n with a value v,
-  where v is the value of the highest-numbered proposal among the responses, or is any value if the responses reported no proposals.
-- If an acceptor receives an accept request for a proposal numbered n, it accepts the proposal unless it has already responded to a prepare request having a number greater than n.
+### Learning a Chosen Value
 
 To learn that a value has been chosen, a learner must find out that a proposal has been accepted by a majority of acceptors.
 
@@ -87,10 +91,6 @@ This permits a simple implementation of an arbitrarily sophisticated reconfigura
 
 [Revisiting the Paxos algorithm](http://citeseer.ist.psu.edu/viewdoc/download;jsessionid=C6EF80E450719CD5457C0E85CCDD0999?doi=10.1.1.44.5607&rep=rep1&type=pdf)
 
-[Fast Paxos](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2005-112.pdf)
-
-[Cheap Paxos](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/web-dsn-submission.pdf)
-
 [How to Build a Highly Available System Using Consensus](https://www.microsoft.com/en-us/research/uploads/prod/1996/10/Acrobat-58-Copy.pdf)
 
 [Consensus on Transaction Commit](https://www.microsoft.com/en-us/research/uploads/prod/2004/01/twophase-revised.pdf)
@@ -99,32 +99,63 @@ This permits a simple implementation of an arbitrarily sophisticated reconfigura
 
 ## Multi-Paxos
 
-
-
-Algorithmic Challenges
+### Algorithmic Challenges
 
 Dick corruption
 
 Master leases
 
-Epoch numbers
+#### Epoch numbers
 
-Group membership
+From the time when the master replica receives the request to the moment the request causes an update of the underlying database, the replica may have lost its master status. 
+It may even have lost master status and regained it again.
+We needed a mechanism to reliably detect master turnover and abort operations if necessary.
 
-Snapshots
+> We solved this problem by introducing a global epoch number with the following semantics.
+> Two requests for the epoch number at the master replica receive the same value iff that replica was master continuously for the time interval between the two requests.
+
+#### Group membership
+
+Practical systems must be able to handle changes in the set of replicas. 
+This is referred to as the group membership problem.
+
+#### Snapshots
+
+the repeated application of a con- sensus algorithm to create a replicated log will lead to an ever growing log. 
+This has two problems: it requires un- bounded amounts of disk space; and perhaps worse, it may result in unbounded recovery time since a recovering replica has to replay a potentially long log before it has fully caught up with other replicas.
+
+Since the log is typically a sequence of operations to be applied to some data structure, and thus implicitly (through replay) represents a persistent form of that data structure, 
+the problem is to find an alternative persistent representation for the data structure at hand. 
+An obvious mechanism is to persist – or snapshot – the data structure directly, at which point the log of operations lead- ing to the current state of the data structure is no longer needed. 
+For example, if the data structure is held in mem- ory, we take a snapshot by serializing it on disk. 
+If the data structure is kept on disk, a snapshot may just be an on-disk copy of it.
+
+The per- sistent state of a replica now comprises a log and a snapshot that have to be maintained consistently. 
+The log is fully under the framework’s control, while the snapshot format is application-specific. 
+Some aspects of the snapshot machin- ery are of particular interest:
+
+- The snapshot and log need to be mutually consistent. Each snapshot needs to have information about its contents relative to the fault-tolerant log.
+- Taking a snapshot takes time and in some situations we cannot afford to freeze a replica’s log while it is taking a snapshot.
+- Taking a snapshot may fail.
+- While in catch-up, a replica will attempt to obtain missing log records.
+- We needed a mechanism to locate recent snapshots.
 
 Database transactions
 
 
+Cascade 
+
+
 - Disk Paxos
 - Cheap Paxos
-- Fast Paxos
+
+## Fast Paxos
+
 - EPaxos
 - Vertical Paxos
 - Flexible Paxos
 - CASPaxos
 - Mencius
-
 
 ## Links
 
@@ -138,3 +169,5 @@ Database transactions
 4. [The Paxos Algorithm](https://www.youtube.com/watch?v=d7nAGI_NZPk&ab_channel=GoogleTechTalks)
 5. [Consensus Protocols: Paxos](https://www.the-paper-trail.org/post/2009-02-03-consensus-protocols-paxos/)
 6. [Viewstamped Replication: A New Primary Copy Method to Support Highly-Available Distributed Systems](https://pmg.csail.mit.edu/papers/vr.pdf)
+7. [Fast Paxos](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2005-112.pdf)
+8. [Cheap Paxos](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/web-dsn-submission.pdf)
