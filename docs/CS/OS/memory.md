@@ -5,6 +5,10 @@ The address space of a process contains all of the memory state of the running p
 
 memory hierarchy
 
+Static RAM cache
+DRAM main memory frame buffer
+
+
 The part of the operating system that manages (part of) the memory hierarchy is called the memory manager.
 Its job is to efficiently manage memory: keep track of which parts of memory are in use, allocate memory to processes when they need it, and deallocate it when they are done.
 
