@@ -70,3 +70,6 @@ Since the minimum window is >=4 packets, the lower bound isn't an issue. The upp
 - [Linux TCP](/docs/CS/OS/Linux/TCP.md)
 
 
+## References
+
+1. [BBR’ – An Implementation of Boleneck Bandwidth and Round-trip Time Congestion Control for ns-3](https://web.cs.wpi.edu/~claypool/papers/bbr-prime/claypool-final.pdf)

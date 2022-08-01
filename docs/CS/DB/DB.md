@@ -170,3 +170,7 @@ When thinking about replication we need to make a decision on two different cate
 
 
 Atomic Commitment Protocl(ACP)
+
+## References
+
+1. [NoSQL Database Systems - A Survey and Decision Guidance](https://www.baqend.com/files/nosql-survey.pdf)
