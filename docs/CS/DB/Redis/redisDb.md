@@ -1,13 +1,21 @@
 ## Introduction
 
+Certain Redis commands operate on specific data types; others are general.
+Examples of generic commands are `DEL` and `EXPIRE`. They operate on keys and not on their values specifically.
+All those generic commands are defined inside `db.c`.
+
+Moreover `db.c` implements an API in order to perform certain operations on the Redis dataset without directly accessing the internal data structures.
+
 The most important functions inside `db.c` which are used in many command implementations are the following:
+
 * [lookupKeyRead()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) and [lookupKeyWrite()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) are used in order to get a pointer to the value associated to a given key, or `NULL` if the key does not exist.
 * [dbAdd()](/docs/CS/DB/Redis/redisDb.md?id=add) and its higher level counterpart `setKey()` create a new key in a Redis database.
 * [dbDelete()](/docs/CS/DB/Redis/redisDb.md?id=delete) removes a key and its associated value.
 * `emptyDb()` removes an entire single database or all the databases defined.
 
+The rest of the file implements the generic commands exposed to the client.
 
-Redis database representation. There are multiple databases identified by integers from 0 (the default database) up to the max configured database. 
+Redis database representation. There are multiple databases identified by integers from 0 (the default database) up to the max configured database.
 The database number is the 'id' field in the structure.
 
 ```java
@@ -25,8 +33,6 @@ typedef struct redisDb {
 } redisDb;
 ```
 
-
-
 ```c
 // dict.h
 struct dict {
@@ -42,8 +48,8 @@ struct dict {
     char ht_size_exp[2]; /* exponent of size. (size = 1<<exp) */
 };
 ```
-[dicht in hash](/docs/CS/DB/Redis/hash.md?id=dicht)
 
+[dicht in hash](/docs/CS/DB/Redis/hash.md?id=dicht)
 
 ```c
 // dict.h
@@ -59,19 +65,15 @@ typedef struct dictEntry {
 } dictEntry;
 ```
 
-
-
 ## redisObject
 
+The following is the full `robj` structure, which defines a *Redis object*(16bytes):
 
-Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth. The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times. Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
-
-**Layout:** 16bytes
-- type : 4bits get type by `type keyName`
-- encoding : 4bits get encoding  by `object encoding keyName`
-- lru : 24bits
-- refcount : 4bytes
-- *ptr : 8bytes
+- `type` : 4bits get type by `type keyName`
+- `encoding` : 4bits get encoding  by `object encoding keyName`
+- `lru` : 24bits
+- `refcount` : 4bytes
+- `ptr` : 8bytes
 
 ```c
 // server.h
@@ -86,16 +88,23 @@ typedef struct redisObject {
 } robj;
 ```
 
+- Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth.
+- The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times.
+- Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
+
 Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
-The `robj` structure defining Redis objects was already described. 
 Inside `object.c` there are all the functions that operate with Redis objects at a basic level, like functions to allocate new objects, handle the reference counting and so forth. Notable functions inside this file:
 
 - `incrRefCount()` and `decrRefCount()` are used in order to increment or decrement an object reference count. When it drops to 0 the object is finally freed.
-- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object. 
+- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object.
   There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
 
 
+24bits
+
+- 8bits logistic counter log
+- 16bits last decrement time minutes
 
 ### refCount
 
@@ -123,7 +132,6 @@ void decrRefCount(robj *o) {
 }
 ```
 
-
 ### createObject
 
 ```c
@@ -146,9 +154,7 @@ robj *createObject(int type, void *ptr) {
 }
 ```
 
-
 ## get
-
 
 ### lookupKey
 
@@ -260,7 +266,9 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
 ```
 
 ### updateLFU
+
 Update LFU when an object is accessed.
+
 - Firstly, decrement the counter if the decrement time is reached.
 - Then logarithmically increment the counter, and update the access time.
 
@@ -288,11 +296,13 @@ uint8_t LFULogIncr(uint8_t counter) {
     return counter;
 }
 ```
+
 If the object decrement time is reached decrement the LFU counter but do not update LFU fields of the object, we update the access time and counter in an explicit way when the object is really accessed.
 And we will times halve the counter according to the times of elapsed time than server.lfu_decay_time.
 Return the object frequency counter.
 
 This function is used in order to scan the dataset for the best object to fit: as we check for the candidate, we incrementally decrement the counter of the scanned objects if needed.
+
 ```
 unsigned long LFUDecrAndReturn(robj *o) {
     unsigned long ldt = o->lru >> 8;
@@ -303,9 +313,6 @@ unsigned long LFUDecrAndReturn(robj *o) {
     return counter;
 }
 ```
-
-
-
 
 ### dictFind
 
@@ -335,11 +342,10 @@ dictEntry *dictFind(dict *d, const void *key)
 }
 ```
 
-
-
 ## set
 
 ### genericSetKey
+
 - if [lookup] is NULL, call [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
 - or else [overwrite](/docs/CS/DB/Redis/redisDb.md?id=overwrite)
 
@@ -368,11 +374,10 @@ void genericSetKey(client *c, redisDb *db, robj *key, robj *val, int keepttl, in
 }
 ```
 
-
-
 ### add
 
 call [dictAddRaw in hash](/docs/CS/DB/Redis/redisDb.md?id=dictAddRaw)
+
 ```c
 // db.c
 /* Add the key to the DB. It's up to the caller to increment the reference
@@ -400,7 +405,6 @@ int dictAdd(dict *d, void *key, void *val)
 }
 ```
 
-
 #### dictAddRaw
 
 **Insert the element in top**
@@ -408,6 +412,7 @@ int dictAdd(dict *d, void *key, void *val)
 add new object in ht[1] when rehashing
 
 [expand if needed](/docs/CS/DB/Redis/hash.md?id=expand)
+
 ```c
 /* Low level add or find:
  * This function adds the entry but instead of setting a value returns the
@@ -490,6 +495,7 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
 ```
 
 ### overwrite
+
 1. [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind)
 2. unlink+add
 
@@ -586,6 +592,7 @@ int dbAsyncDelete(redisDb *db, robj *key) {
     }
 }
 ```
+
 ### dictDelete
 
 ```c
@@ -638,11 +645,12 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
 }
 ```
 
-
 ## resize
+
 call by databaseCron
 
 [rehash](/docs/CS/DB/Redis/hash.md?id=rehash) or [expand](/docs/CS/DB/Redis/hash.md?id=expand) when filled less than 10%
+
 ```c
 // server.c
 /* If the percentage of used slots in the HT reaches HASHTABLE_MIN_FILL
@@ -687,5 +695,7 @@ int dictResize(dict *d)
 ```
 
 ## Summary
+
 Set:
+
 - Insert the element in top

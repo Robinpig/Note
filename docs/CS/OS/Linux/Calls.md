@@ -177,7 +177,7 @@ see [sys_socket](/docs/CS/OS/Linux/socket.md?id=create)
 
 ## bind
 
-Bind a name to a socket. 
+Bind a name to a socket.
 Nothing much to do here since it's the protocol's responsibility to handle the local address.
 
 We move the socket address to kernel space before we call the protocol layer (having also checked the address is ok).
@@ -187,7 +187,6 @@ We move the socket address to kernel space before we call the protocol layer (ha
 - tcp_hashinfo
 - tcp_bind_hashbucket
 - tcp_bind_bucket
-
 
 ### sys_bind
 
@@ -507,8 +506,9 @@ get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(
        return err;
 }
 ```
-We call the protocol - specifi c listen function finally. 
-This is `sock->ops->listen()`. For the *PF_INET* protocol family, `sock->ops` is set to `inet_stream_ops`. 
+
+We call the protocol - specifi c listen function finally.
+This is `sock->ops->listen()`. For the *PF_INET* protocol family, `sock->ops` is set to `inet_stream_ops`.
 So, we are calling `listen()` function from `inet_stream_ops`, *[inet_listen()](/docs/CS/OS/Linux/Calls.md?id=inet_listen)*.
 
 call [inet_listen]
@@ -533,7 +533,6 @@ const struct proto_ops inet_dgram_ops = {
 Move a socket into listening state.
 
 sk_max_ack_backlog = backlog
-
 
 ```c
 // af_inet.c
@@ -818,6 +817,7 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 ```
 
 #### reqsk_queue_remove
+
 Called when [accept](/docs/CS/OS/Linux/Calls.md?id=inet_csk_accept)
 
 remove head established connection from reqsk_queue and backlog - 1
@@ -892,7 +892,7 @@ struct request_sock_queue {
        /** FIFO established children    */
        struct request_sock    *rskq_accept_head;
        struct request_sock    *rskq_accept_tail;
-     
+   
        struct fastopen_queue  fastopenq;  /* Check max_qlen != 0 to determine
                                         * if TFO is enabled.
                                         */
@@ -1715,6 +1715,9 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 ```
 
 ## sendfile
+
+sendfile() copies data between one file descriptor and another.
+Because this copying is done within the kernel, sendfile() is more efficient than the combination of * **read** (2)* and  * **write** (2)* , which would require transferring data to and from user space.
 
 ```c
 // fs/read_write.c

@@ -1,6 +1,6 @@
 ## Introduction
 
-This file defines all the I/O functions with clients, masters and replicas(which in Redis are just special clients):
+This file(*networking.c*) defines all the I/O functions with clients, masters and replicas(which in Redis are just special clients):
 
 * `createClient()` allocates and initializes a new client.
 * the `addReply*()` family of functions are used by command implementations in order to append data to the client structure, that will be transmitted to the client as a reply for a given command executed.
@@ -9,7 +9,6 @@ This file defines all the I/O functions with clients, masters and replicas(which
 * `processInputBuffer()` is the entry point in order to parse the client query buffer according to the Redis protocol. Once commands are ready to be processed, it calls `processCommand()` which is defined inside `server.c` in order to actually execute the command.
 * `freeClient()` deallocates, disconnects and removes a client.
 
-
 ## EventLoop
 
 For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/) Redis uses its own event library.
@@ -17,9 +16,11 @@ For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thre
 Redis implements its own event library. The event library is implemented in `ae.c`.
 
 `initServer` function defined in `redis.c` initializes the numerous fields of the [redisServer structure](/docs/CS/DB/Redis/server.md?id=server) variable. One such field is the Redis event loop `el`:
+
 ```c
 aeEventLoop *el
 ```
+
 `initServer` initializes `server.el` field by calling `aeCreateEventLoop` defined in `ae.c`. The definition of `aeEventLoop` is below:
 
 ```c
@@ -63,8 +64,6 @@ The following should be ordered by performances, descending.
 
 ```
 
-
-
 ### aeCreateEventLoop
 
 `aeCreateEventLoop` first `malloc`s `aeEventLoop` structure then calls `ae_epoll.c:aeApiCreate`.
@@ -84,8 +83,6 @@ typedef struct aeEventLoop
     aeBeforeSleepProc *beforesleep;
 } aeEventLoop;
 ```
-
-
 
 `aeApiCreate` `malloc`s `aeApiState` that has two fields - `epfd` that holds the `epoll` file descriptor returned by a call from [`epoll_create`](http://man.cx/epoll_create(2)) and `events` that is of type `struct epoll_event` define by the Linux `epoll` library. The use of the `events` field will be described later.
 
@@ -145,8 +142,6 @@ typedef struct aeEventLoop {
 } aeEventLoop;
 ```
 
-
-
 #### aeApiCreate
 
 ```c
@@ -169,8 +164,6 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
     return 0;
 }
 ```
-
-
 
 ### processEvents
 
@@ -204,8 +197,6 @@ if (aeCreateFileEvent(server.el, c->fd, AE_READABLE,
 `c` is the `redisClient` structure variable and `c->fd` is the connected descriptor.
 
 Next the `ae.c:aeProcessEvent` calls `ae.c:processTimeEvents`
-
-
 
 Process every pending time event, then every pending file event (that may be registered by time event callbacks just processed).
 Without special flags the function sleeps until some file event fires, or when the next time event occurs (if any).
@@ -352,7 +343,6 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 }
 ```
 
-
 #### aeSearchNearestTimer
 
 Search the first timer to fire.
@@ -360,6 +350,7 @@ This operation is useful to know how many time the select can be put in sleep wi
 If there are no timers NULL is returned.
 Note that's O(N) since time events are unsorted.
 Possible optimizations (not needed by Redis so far, but...):
+
 1. Insert the event in order, so that the nearest is just the head.
    Much better but still insertion or deletion of timers is O(N).
 2. Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
@@ -380,7 +371,6 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
     return nearest;
 }
 ```
-
 
 #### aeApiPoll
 
@@ -419,10 +409,7 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
 }
 ```
 
-
-
 ### beforeSleep
-
 
 This function gets called every time Redis is entering the main loop of the event driven library, that is, before to sleep for ready file descriptors.
 
@@ -434,7 +421,6 @@ Note: This function is (currently) called from two functions:
 If it was called from processEventsWhileBlocked we don't want to perform all actions (For example, we don't want to expire keys), but we do need to perform some actions.
 
 The most important is freeClientsInAsyncFreeQueue but we also call some other low-risk functions.
-
 
 ```c
 void beforeSleep(struct aeEventLoop *eventLoop) {
@@ -473,8 +459,10 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
      * later in this function. */
     if (server.cluster_enabled) clusterBeforeSleep();
 ```
+
 Run a fast expire cycle (the called function will return
 ASAP if a fast cycle is not needed).
+
 ```c
     if (server.active_expire_enabled && server.masterhost == NULL)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
@@ -530,7 +518,6 @@ ASAP if a fast cycle is not needed).
 }
 ```
 
-
 ### afterSleep
 
 ```c
@@ -545,8 +532,6 @@ void afterSleep(struct aeEventLoop *eventLoop) {
     }
 }
 ```
-
-
 
 ### processTimeEvents
 
@@ -643,8 +628,6 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 }
 ```
 
-
-
 ## Multiple IO
 
 Redis is mostly single threaded, however there are certain threaded operations such as UNLINK, slow I/O accesses and other things that are performed on side threads.
@@ -656,6 +639,7 @@ By default threading is disabled, we suggest enabling it only in machines that h
 Using more than 8 threads is unlikely to help much. We also recommend using threaded I/O only if you actually have performance problems, with Redis instances being able to use a quite big percentage of CPU time, otherwise there is no point in using this feature.
 
 So for instance if you have a four cores boxes, try to use 2 or 3 I/O threads, if you have a 8 cores, try to use 6 threads. In order to enable I/O threads use the following configuration directive:
+
 ```
 io-threads 4
 ```
@@ -667,14 +651,11 @@ io-threads-do-reads no
 ```
 
 Usually threading reads doesn't help much.
+
 - **NOTE 1:** This configuration directive cannot be changed at runtime via CONFIG SET. Aso this feature currently does not work when SSL is enabled.
 - **NOTE 2:** If you want to test the Redis speedup using redis-benchmark, make sure you also run the benchmark itself in threaded mode, using the --threads option to match the number of Redis threads, otherwise you'll not be able to notice the improvements.
 
-
-
 ## Events
-
-
 
 ```c
 /* File event structure */
@@ -686,21 +667,14 @@ typedef struct aeFileEvent {
 } aeFileEvent;
 ```
 
-
-
-
-
 ### Summaries of Events
 
 
-
 | Event Type  | Socket Type | Callback Method     | For              |
-| ----------- | ----------- | ------------------- | ---------------- |
+| ------------- | ------------- | --------------------- | ------------------ |
 | AE_READABLE | Listen      | acceptTCPHandler    | connect          |
 | AE_READABLE | connected   | readQueryFromClient | read and execute |
 | AE_WRITABLE | connected   | sendReplyToClient   | Return data      |
-
-
 
 ## epoll
 
@@ -729,8 +703,6 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
 }
 ```
 
-
-
 aeApiAddEvent->`epoll_ctl`
 
 ```c
@@ -751,8 +723,6 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     return 0;
 }
 ```
-
-
 
 aeApiDelEvent -> `epoll_ctl`
 
@@ -775,8 +745,6 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
     }
 }
 ```
-
-
 
 aeApiPoll ->`epoll_wait`
 
@@ -816,8 +784,6 @@ typedef struct aeApiState {
 } aeApiState;
 ```
 
-
-
 ```c
 static int aeApiCreate(aeEventLoop *eventLoop) {
     aeApiState *state = zmalloc(sizeof(aeApiState));
@@ -839,8 +805,6 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
 }
 ```
 
-
-
 aeApiDelEvent -> kevent
 
 ```c
@@ -861,22 +825,17 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask) {
 
 ## select
 
-
-
-
 ## Summary
 
 
-
 |                   | epoll        | kqueue | select   | evport      |
-| ----------------- | ------------ | ------ | -------- | ----------- |
+| ------------------- | -------------- | -------- | ---------- | ------------- |
 | **aeApiCreate**   | epoll_create | kevent | FD_ZERO  | port_create |
 | **aeApiAddEvent** | epoll_ctl    | kevent | FD_SET   |             |
 | **aeApiDelEvent** | epoll_ctl    | kevent | FD_CLR   |             |
 | **aeApiPoll**     | epoll_wait   | kevent | FD_ISSET |             |
 |                   |              |        |          |             |
 |                   |              |        |          |             |
-
 
 ## Links
 
@@ -885,4 +844,3 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask) {
 ## References
 
 1. [Redis Event Library](https://redis.io/topics/internals-rediseventlib)
-

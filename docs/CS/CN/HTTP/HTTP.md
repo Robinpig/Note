@@ -401,14 +401,17 @@ Here are some scenarios where JSON Web Tokens are useful:
 #### Structure
 
 Header
-```
+
+```json
 {
   "alg": "HS256",
   "typ": "JWT"
 }
 ```
+
 Payload
-```
+
+```json
 {
   "sub": "1234567890",
   "name": "John Doe",

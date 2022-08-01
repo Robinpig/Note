@@ -1,5 +1,11 @@
 ## Introduction
+
+Selecting a non-default memory allocator when building Redis is done by setting the MALLOC environment variable.
+Redis is compiled and linked against libc malloc by default, with the exception of jemalloc being the default on Linux systems.
+This default was picked because jemalloc has proven to have fewer fragmentation problems than libc malloc.
+
 use `INFO memory`:
+
 ```
 - used_memory
   - process memory
@@ -19,11 +25,10 @@ mem_fragmentation_ratio usually 1.03
 if > 1, is fragmentation
 < 1, using swap
 
-fragmentation by 
+fragmentation by
 
 - usually using append setrange
 - delete lots of expire keys
-
 
 Redis is compiled and linked against libc malloc by default, with the exception of `jemalloc` being the default on Linux systems. This default was picked because `jemalloc` has proven to have **fewer fragmentation problems** than `libc` malloc.
 
@@ -31,9 +36,127 @@ small: << 8byte
 big : << 4KB
 huge : << 4MB
 
+
+## Eviction
+
+### Eviction Policies
+
+The exact behavior Redis follows when the `maxmemory` limit is reached is configured using the `maxmemory-policy` configuration directive.
+
+The following policies are available:
+
+* **noeviction** : New values aren’t saved when memory limit is reached. When a database uses replication, this applies to the primary database
+* **allkeys-lru** : Keeps most recently used keys; removes least recently used (LRU) keys
+* **allkeys-lfu** : Keeps frequently used keys; removes least frequently used (LFU) keys
+* **volatile-lru** : Removes least recently used keys with the `expire` field set to `true`.
+* **volatile-lfu** : Removes least frequently used keys with the `expire` field set to `true`.
+* **allkeys-random** : Randomly removes keys to make space for the new data added.
+* **volatile-random** : Randomly removes keys with `expire` field set to `true`.
+* **volatile-ttl** : Removes keys with `expire` field set to `true` and the shortest remaining time-to-live (TTL) value.
+
+The policies  **volatile-lru** ,  **volatile-lfu** ,  **volatile-random** , and **volatile-ttl** behave like **noeviction** if there are no keys to evict matching the prerequisites.
+
+In general as a rule of thumb:
+
+* Use the **allkeys-lru** policy when you expect a power-law distribution in the popularity of your requests. That is, you expect a subset of elements will be accessed far more often than the rest.  **This is a good pick if you are unsure** .
+* Use the **allkeys-random** if you have a cyclic access where all the keys are scanned continuously, or when you expect the distribution to be uniform.
+* Use the **volatile-ttl** if you want to be able to provide hints to Redis about what are good candidate for expiration by using different TTL values when you create your cache objects.
+
+The **volatile-lru** and **volatile-random** policies are mainly useful when you want to use a single instance for both caching and to have a set of persistent keys. However it is usually a better idea to run two Redis instances to solve such a problem.
+
+It is also worth noting that setting an `expire` value to a key costs memory, so using a policy like **allkeys-lru** is more memory efficient since there is no need for an `expire` configuration for the key to be evicted under memory pressure.
+
+To improve the quality of the LRU approximation we take a set of keys that are good candidate for eviction across performEvictions() calls.
+
+Entries inside the eviction pool are taken ordered by idle time, putting greater idle times to the right (ascending order).
+
+When an LFU policy is used instead, a reverse frequency indication is used instead of the idle time, so that we still evict by larger value (larger inverse frequency means to evict keys with the least frequent accesses).
+
+Empty entries have the key pointer set to NULL.
+
+```c
+#define EVPOOL_SIZE 16
+#define EVPOOL_CACHED_SDS_SIZE 255
+struct evictionPoolEntry {
+    unsigned long long idle;    /* Object idle time (inverse frequency for LFU) */
+    sds key;                    /* Key name. */
+    sds cached;                 /* Cached SDS object for key name. */
+    int dbid;                   /* Key DB number. */
+};
+```
+
+`performEvictions` called by `processCommand()` which is defined inside `server.c` in order to actually execute the command
+
+```c
+int performEvictions(void)
+```
+
+`evictionPoolPopulate` called by `performEvictions`
+
+### Memory Fragmentation
+
+Fragmentation is a natural process that happens with every allocator (but less so with `Jemalloc`, fortunately) and certain workloads. Normally a server restart is needed in order to lower the fragmentation, or at least to flush away all the data and create it again. However thanks to this feature implemented by Oran Agra for Redis 4.0 this process can happen at runtime in a "hot" way, while the server is running.
+
+```
+INFO memory
+used_memory_rss
+used_memory
+
+mem_fragmentation_ratio: x.xx
+```
+
+mem_fragmentation_ratio = used_memory_rss / used_memory
+
+usually ratio < 1.5
+
+#### active defragmentation
+
+Active (online) defragmentation allows a Redis server to compact the spaces left between small allocations and deallocations of data in memory, thus allowing to reclaim back memory.
+
+Basically when the fragmentation is over a certain level (see the configuration options below) Redis will start to create new copies of the values in contiguous memory regions by exploiting certain specific Jemalloc features (in order to understand if an allocation is causing fragmentation and to allocate it in a better place), and at the same time, will release the old copies of the data. This process, repeated incrementally for all the keys will cause the fragmentation to drop back to normal values.
+
+Important things to understand:
+
+1. This feature is disabled by default, and only works if you compiled Redis to use the copy of Jemalloc we ship with the source code of Redis. This is the default with Linux builds.
+2. You never need to enable this feature if you don't have fragmentation issues.
+3. Once you experience fragmentation, you can enable this feature when needed with the command "`CONFIG SET activedefrag yes`".
+
+The configuration parameters are able to fine tune the behavior of the defragmentation process. If you are not sure about what they mean it is a good idea to leave the defaults untouched.
+
+```
+Enabled active defragmentation
+activedefrag yes
+
+Minimum amount of fragmentation waste to start active defrag
+active-defrag-ignore-bytes 100mb
+
+Minimum percentage of fragmentation to start active defrag
+active-defrag-threshold-lower 10
+
+Maximum percentage of fragmentation at which we use maximum effort
+active-defrag-threshold-upper 100
+
+Minimal effort for defrag in CPU percentage, to be used when the lower
+threshold is reached
+active-defrag-cycle-min 1
+
+Maximal effort for defrag in CPU percentage, to be used when the upper
+threshold is reached
+active-defrag-cycle-max 25
+
+Maximum number of set/hash/zset/list fields that will be processed from
+the main dictionary scan
+active-defrag-max-scan-fields 1000
+
+Jemalloc background thread for purging will be enabled by default
+jemalloc-bg-thread yes
+```
+
+
 ## maxMemory
 
 evict policy:
+
 ```c
 //server.h
 
@@ -68,8 +191,6 @@ typedef struct redisObject {
 } robj;
 ```
 
-
-
 1000 ms
 
 ### performEvictions
@@ -84,6 +205,7 @@ nothing more is evictable.
 This should be called before execution of commands.  If EVICT_FAIL is returned, commands which will result in increased memory usage should be rejected.
 
 Returns:
+
 - EVICT_OK       - memory is OK or it's not possible to perform evictions now
 - EVICT_RUNNING  - memory is over the limit, but eviction is still processing
 - EVICT_FAIL     - memory is over the limit, and there's nothing to evict
@@ -288,7 +410,9 @@ cant_free:
     return result;
 }
 ```
+
 ### propagate
+
 ```c
 
 /* Propagate the specified command (in the context of the specified database id)
@@ -332,8 +456,26 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 }
 ```
 
-
 ### LRU
+
+Redis LRU algorithm is not an exact implementation. This means that Redis is not able to pick the *best candidate* for eviction, that is, the access that was accessed the furthest in the past. 
+Instead it will try to run an approximation of the LRU algorithm, by sampling a small number of keys, and evicting the one that is the best (with the oldest access time) among the sampled keys.
+
+However, since Redis 3.0 the algorithm was improved to also take a pool of good candidates for eviction. 
+This improved the performance of the algorithm, making it able to approximate more closely the behavior of a real LRU algorithm.
+
+
+The reason Redis does not use a true LRU implementation is because it costs more memory. However, the approximation is virtually equivalent for an application using Redis.
+
+In a theoretical LRU implementation we expect that, among the old keys, the first half will be expired. The Redis LRU algorithm will instead only *probabilistically* expire the older keys.
+
+
+Note that LRU is just a model to predict how likely a given key will be accessed in the future. Moreover, if your data access pattern closely resembles the power law, most of the accesses will be in the set of keys the LRU approximated algorithm can handle well.
+
+In simulations we found that using a power law access pattern, the difference between true LRU and Redis approximation were minimal or non-existent.
+
+However you can raise the sample size to 10 at the cost of some additional CPU usage to closely approximate true LRU, and check if this makes a difference in your cache misses rate.
+
 
 ```c
 void initServerConfig(void) {
@@ -369,7 +511,15 @@ struct evictionPoolEntry {
 
 ### LFU
 
-LFU is approximated like LRU: it uses a probabilistic counter, called a [Morris counter](https://en.wikipedia.org/wiki/Approximate_counting_algorithm) in order to estimate the object access frequency using just a few bits per object, combined with a decay period so that the counter is reduced over time: at some point we no longer want to consider keys as frequently accessed, even if they were in the past, so that the algorithm can adapt to a shift in the access pattern.
+This mode may work better (provide a better hits/misses ratio) in certain cases. In LFU mode, Redis will try to track the frequency of access of items, so the ones used rarely are evicted. This means the keys used often have a higher chance of remaining in memory.
+
+To configure the LFU mode, the following policies are available:
+
+* `volatile-lfu` Evict using approximated LFU among the keys with an expire set.
+* `allkeys-lfu` Evict any key using approximated LFU.
+
+LFU is approximated like LRU: it uses a probabilistic counter, called a [Morris counter](https://en.wikipedia.org/wiki/Approximate_counting_algorithm) in order to estimate the object access frequency using just a few bits per object,
+combined with a decay period so that the counter is reduced over time: at some point we no longer want to consider keys as frequently accessed, even if they were in the past, so that the algorithm can adapt to a shift in the access pattern.
 
 Those informations are sampled similarly to what happens for LRU (as explained in the previous section of this documentation) in order to select a candidate for eviction.
 
@@ -407,100 +557,6 @@ The counter *logarithm factor* changes how many hits are needed in order to satu
 +--------+------------+------------+------------+------------+------------+
 ```
 
-prefer `allkeys-lru` or `volatile-lru`
-
-
-## evict
-
-To improve the quality of the LRU approximation we take a set of keys that are good candidate for eviction across performEvictions() calls.
-
-Entries inside the eviction pool are taken ordered by idle time, putting greater idle times to the right (ascending order).
-
-When an LFU policy is used instead, a reverse frequency indication is used instead of the idle time, so that we still evict by larger value (larger inverse frequency means to evict keys with the least frequent accesses). 
-
-Empty entries have the key pointer set to NULL.
-```c
-#define EVPOOL_SIZE 16
-#define EVPOOL_CACHED_SDS_SIZE 255
-struct evictionPoolEntry {
-    unsigned long long idle;    /* Object idle time (inverse frequency for LFU) */
-    sds key;                    /* Key name. */
-    sds cached;                 /* Cached SDS object for key name. */
-    int dbid;                   /* Key DB number. */
-};
-```
-
-`performEvictions` called by `processCommand()` which is defined inside `server.c` in order to actually execute the command
-
-```c
-int performEvictions(void)
-```
-
-`evictionPoolPopulate` called by `performEvictions`
-
-
-
-### Memory Fragmentation
-Fragmentation is a natural process that happens with every allocator (but less so with `Jemalloc`, fortunately) and certain workloads. Normally a server restart is needed in order to lower the fragmentation, or at least to flush away all the data and create it again. However thanks to this feature implemented by Oran Agra for Redis 4.0 this process can happen at runtime in a "hot" way, while the server is running.
-
-```
-INFO memory
-used_memory_rss
-used_memory
-
-mem_fragmentation_ratio: x.xx
-```
-
-mem_fragmentation_ratio = used_memory_rss / used_memory
-
-usually ratio < 1.5
-
-#### active defragmentation
-
-Active (online) defragmentation allows a Redis server to compact the spaces left between small allocations and deallocations of data in memory, thus allowing to reclaim back memory.
-
-Basically when the fragmentation is over a certain level (see the configuration options below) Redis will start to create new copies of the values in contiguous memory regions by exploiting certain specific Jemalloc features (in order to understand if an allocation is causing fragmentation and to allocate it in a better place), and at the same time, will release the old copies of the data. This process, repeated incrementally for all the keys will cause the fragmentation to drop back to normal values.
-
-Important things to understand:
-
-1. This feature is disabled by default, and only works if you compiled Redis to use the copy of Jemalloc we ship with the source code of Redis. This is the default with Linux builds.
-
-2. You never need to enable this feature if you don't have fragmentation issues.
-
-3. Once you experience fragmentation, you can enable this feature when needed with the command "`CONFIG SET activedefrag yes`".
-
-The configuration parameters are able to fine tune the behavior of the defragmentation process. If you are not sure about what they mean it is a good idea to leave the defaults untouched.
-
-```
-Enabled active defragmentation
-activedefrag yes
-
-Minimum amount of fragmentation waste to start active defrag
-active-defrag-ignore-bytes 100mb
-
-Minimum percentage of fragmentation to start active defrag
-active-defrag-threshold-lower 10
-
-Maximum percentage of fragmentation at which we use maximum effort
-active-defrag-threshold-upper 100
-
-Minimal effort for defrag in CPU percentage, to be used when the lower
-threshold is reached
-active-defrag-cycle-min 1
-
-Maximal effort for defrag in CPU percentage, to be used when the upper
-threshold is reached
-active-defrag-cycle-max 25
-
-Maximum number of set/hash/zset/list fields that will be processed from
-the main dictionary scan
-active-defrag-max-scan-fields 1000
-
-Jemalloc background thread for purging will be enabled by default
-jemalloc-bg-thread yes
-```
-
-
 
 ## Optimization
 
@@ -508,6 +564,7 @@ Special encoding of small aggregate data types
 Since Redis 2.2 many data types are optimized to use less space up to a certain size. Hashes, Lists, Sets composed of just integers, and Sorted Sets, when smaller than a given number of elements, and up to a maximum element size, are encoded in a very memory efficient way that uses up to 10 times less memory (with 5 time less memory used being the average saving).
 
 This is completely transparent from the point of view of the user and API. Since this is a CPU / memory trade off it is possible to tune the maximum number of elements and maximum element size for special encoded types using the following redis.conf directives.
+
 ```
 hash-max-ziplist-entries 512
 hash-max-ziplist-value 64
@@ -523,7 +580,9 @@ Use hashes when possible
 Small hashes are encoded in a very small space, so you should try representing your data using hashes whenever possible. For instance if you have objects representing users in a web application, instead of using different keys for name, surname, email, password, use a single hash with all the required fields.
 
 **A few keys use a lot more memory than a single key containing a hash with a few fields**.
+
 ## References
+
 1. [Memory Optimization](https://redis.io/topics/memory-optimization)
 2. [Optimising session key storage in Redis](https://deliveroo.engineering/2016/10/07/optimising-session-key-storage.html)
 3. [Partitioning: how to split data among multiple Redis instances.](https://redis.io/topics/partitioning)

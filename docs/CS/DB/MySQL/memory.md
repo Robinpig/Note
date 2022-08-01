@@ -234,9 +234,9 @@ seg size: The size of the change buffer, in pages.
 When does change buffer merging occur?
 
 - When a page is read into the buffer pool, buffered changes are merged upon completion of the read, before the page is made available.
-- Change buffer merging is performed as a background task. 
+- Change buffer merging is performed as a background task.
   The `innodb_io_capacity` parameter sets an upper limit on the I/O activity performed by InnoDB background tasks such as merging data from the change buffer.
-- A change buffer merge is performed during crash recovery. 
+- A change buffer merge is performed during crash recovery.
   Changes are applied from the change buffer (in the system tablespace) to leaf pages of secondary indexes as index pages are read into the buffer pool.
 - The change buffer is fully durable and can survive a system crash. Upon restart, change buffer merge operations resume as part of normal operations.
 - A full merge of the change buffer can be forced as part of a slow server shutdown using --innodb-fast-shutdown=0.
@@ -350,6 +350,15 @@ spilt page will new two pages first, then the old page will be directory page
 ### Tablespace
 
 const > ref > ref_or_null > range > index > all
+
+## Shard
+
+Thread Memory：Thread level
+
+- Sharing: Server layer
+- InnoDB Buffer Pool: InnoDB layer
+
+Shard when single table szie > InnoDB Buffer Pool size(`innodb_buffer_pool_size`)
 
 ## Links
 

@@ -1,9 +1,8 @@
 ## Introduction
 
-
 ### Exponents
 
-```tex
+$$
 \begin{aligned}
 
 X^AX^B  &= X^{A+B} \\
@@ -13,28 +12,31 @@ X^N+X^N&=X{2N} \\
 2^N+2^N&=2^{N+1}
 
 \end{aligned}
-```
 
-
+$$
 
 ### Logarithms
+
 In computer science, all logarithms are to base 2 unless specified otherwise.
 
 DEFINITION: x^a = b if and only if $ \log_x{b} = a $
-```tex
+
+$$
 \begin{aligned}
 
 \log_A({B}) &=\frac{\log_C{A}}{\log_B{A}}; \space C>0 \\
 \log{AB} &=\log{A}+\log{B}
 
 \end{aligned}
-```
+
+$$
 
 ### Series
 
-```tex
+$$
 \sum_{i=0}^{N}2^i=2^{N+1}-1
-```
+
+$$
 
 ### Modular Arithmetic
 
@@ -45,26 +47,34 @@ The P Word
 代数基本定理：几次方程有几个根
 
 求一元二次方程
-```tex
+
+$$
 ax^2+bx+c=0 (a\neq 0)
-```
+
+$$
 
 两根
-```tex
+
+$$
 x_1+x_2=-{b\over a}
-```
+
+$$
+
 And
-```tex
+
+$$
 x_1x_2={c\over a}
-```
+
+$$
+
 so
-```tex
+
+$$
 x_{1,2}={-b \pm \sqrt{b^2-4ac} \over 2a }
-```
+
+$$
 
 高次方程下：
-
-
 
 ## 行列式
 
@@ -77,3 +87,10 @@ x_{1,2}={-b \pm \sqrt{b^2-4ac} \over 2a }
 ![image-20200302130934963](./images/determinant.png)
 
 ad-bc
+
+## Newton's method
+
+$$
+X_{k+1} = X_k - \frac{f(X_k)}{f'(X_k)}, k=1,2,...
+
+$$

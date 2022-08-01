@@ -1,11 +1,5 @@
 ## Introduction
 
-There are two special functions called periodically by the event loop:
-
-1. `serverCron()` is called periodically (according to `server.hz` frequency), and performs tasks that must be performed from time to time, like checking for timed out clients.
-2. `beforeSleep()` is called every time the event loop fired, Redis served a few requests, and is returning back into the event loop.
-
-
 Inside server.c you can find code that handles other vital things of the Redis server:
 
 * `call()` is used in order to call a given command in the context of a given client.
@@ -13,12 +7,9 @@ Inside server.c you can find code that handles other vital things of the Redis s
 * `performEvictions()` is called when a new write command should be performed but Redis is out of memory according to the `maxmemory` directive.
 * The global variable `redisCommandTable` defines all the Redis commands, specifying the name of the command, the function implementing the command, the number of arguments required, and other properties of each command.
 
-
-
 ## main
 
-
-This is the entry point of the Redis server, where the `main()` function is defined. The following are the most important steps in order to startup the Redis server.
+The following are the most important steps in order to startup the Redis server.
 
 * `initServerConfig()` setups the default values of the `server` structure.
 * `initServer()` allocates the data structures needed to operate, setup the listening socket, and so forth.
@@ -85,7 +76,9 @@ int main(int argc, char **argv) {
     for (j = 0; j < argc; j++) server.exec_argv[j] = zstrdup(argv[j]);
 
 ```
+
 We need to init sentinel right now as parsing the configuration file in sentinel mode will have the effect of populating the sentinel data structures with master nodes to monitor.
+
 ```c
     if (server.sentinel_mode) {
         initSentinelConfig();
@@ -245,13 +238,7 @@ We need to init sentinel right now as parsing the configuration file in sentinel
 }
 ```
 
-
-
-
-
 ### daemon
-
-
 
 ```c
 void daemonize(void) {
@@ -271,10 +258,6 @@ void daemonize(void) {
     }
 }
 ```
-
-
-
-
 
 ## initServerConfig
 
@@ -377,7 +360,9 @@ void initServerConfig(void) {
     R_NegInf = -1.0/R_Zero;
     R_Nan = R_Zero/R_Zero;
 ```
+
 initCommandTable
+
 ```c
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
@@ -420,11 +405,7 @@ initCommandTable
 
 Command table -- we initiialize it here as it is part of the initial configuration, since command names may be changed via redis.conf using the rename-command directive.
 
-
-
 ### loadServerConfig
-
-
 
 ```c
 // config.c
@@ -467,8 +448,6 @@ void loadServerConfig(char *filename, char *options) {
 }
 ```
 
-
-
 ## initServer
 
 1. setupSignalHandlers
@@ -480,8 +459,6 @@ void loadServerConfig(char *filename, char *options) {
 7. Create an event handler for accepting new connections in TCP and Unix domain sockets
 8. Open the AOF file if needed
 9. Set maxmemory = 3GB if 32 bit instances not set maxmemory
-
-
 
 ```c
 void initServer(void) {
@@ -694,8 +671,6 @@ void initServer(void) {
 }
 ```
 
-
-
 #### setupSignalHandlers
 
 ```c
@@ -726,6 +701,7 @@ void setupSignalHandlers(void) {
 #### createSharedObjects
 
 shared objects 0 ~ 10000
+
 ```c
 // server.c
 #define OBJ_SHARED_INTEGERS 10000
@@ -846,8 +822,6 @@ void createSharedObjects(void) {
 }
 ```
 
-
-
 #### aeCreateTimeEvent
 
 `aeCreateTimeEvent` accepts the following as parameters:
@@ -865,8 +839,6 @@ aeCreateTimeEvent(server.el /*eventLoop*/, 1 /*milliseconds*/, serverCron /*proc
 ```
 
 `redis.c:serverCron` performs many operations that helps keep Redis running properly.
-
-
 
 Create the timer callback, this is our way to process many background operations incrementally, like clients timeout, eviction of unaccessed expired keys and so forth.
 
@@ -894,9 +866,6 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     return id;
 }
 ```
-
-
-
 
 #### createEventHandler
 
@@ -961,8 +930,6 @@ void acceptUnixHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
 }
 ```
-
-
 
 ##### acceptCommonHandler
 
@@ -1041,8 +1008,6 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
     }
 }
 ```
-
- 
 
 ##### createClient
 
@@ -1147,8 +1112,6 @@ void linkClient(client *c) {
 }
 ```
 
-
-
 ##### aeCreateFileEvent
 
 The essence of `aeCreateFileEvent` function is to execute [`epoll_ctl`](http://man.cx/epoll_ctl) system call which adds a watch for `EPOLLIN` event on the *listening descriptor* create by `anetTcpServer` and associate it with the `epoll` descriptor created by a call to `aeCreateEventLoop`.
@@ -1187,8 +1150,6 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
 }
 ```
 
-
-
 ### InitServerLast
 
 ```c
@@ -1204,8 +1165,6 @@ void InitServerLast() {
     server.initial_memory_usage = zmalloc_used_memory();
 }
 ```
-
-
 
 #### bioInit
 
@@ -1229,8 +1188,6 @@ static pthread_cond_t bio_step_cond[BIO_NUM_OPS];
 static list *bio_jobs[BIO_NUM_OPS];
 static unsigned long long bio_pending[BIO_NUM_OPS];
 ```
-
-
 
 ```c
 /* Initialize the background system, spawning the thread. */
@@ -1269,10 +1226,6 @@ void bioInit(void) {
     }
 }
 ```
-
-
-
-
 
 ```c
 void *bioProcessBackgroundJobs(void *arg) {
@@ -1385,8 +1338,6 @@ bioCreateLazyFreeJob
 }
 ```
 
-
-
 #### Multiple I/O
 
 ```c
@@ -1423,8 +1374,6 @@ void initThreadedIO(void) {
     }
 }
 ```
-
-
 
 #### IOThreadMain
 
@@ -1481,9 +1430,15 @@ void *IOThreadMain(void *myid) {
 }
 ```
 
-
-
 ## aeMain
+
+
+There are two special functions called periodically by the event loop:
+
+1. `serverCron()` is called periodically (according to `server.hz` frequency), and performs tasks that must be performed from time to time, like checking for timed out clients.
+2. `beforeSleep()` is called every time the event loop fired, Redis served a few requests, and is returning back into the event loop.
+
+
 
 `ae.c:aeMain` called from `redis.c:main` does the job of processing the event loop that is initialized in the previous phase.
 
@@ -1500,8 +1455,6 @@ void aeMain(aeEventLoop *eventLoop) {
     }
 }
 ```
-
-
 
 ## Do
 
@@ -1586,11 +1539,9 @@ void readQueryFromClient(connection *conn) {
 }
 ```
 
-
-
 #### processInputBuffer
 
-This function is called every time, in the client structure 'c', 
+This function is called every time, in the client structure 'c',
 there is more query buffer to process, because we read more data from the socket or because a client was blocked and later reactivated, so there could be pending query buffer, already representing a full command, to process.
 
 ```c
@@ -1679,6 +1630,7 @@ void processInputBuffer(client *c) {
 ```
 
 This function calls processCommand(), but also performs a few sub tasks for the client that are useful in that context:
+
 1. It sets the current client to the client 'c'.
 2. calls commandProcessed() if the command was handled.
    The function returns C_ERR in case the client was freed as a side effect
@@ -1699,8 +1651,6 @@ int processCommandAndResetClient(client *c) {
     return deadclient ? C_ERR : C_OK;
 }
 ```
-
-
 
 #### execCommand
 
@@ -1809,8 +1759,6 @@ handle_monitor:
 }
 ```
 
-
-
 #### addReply
 
 ```c
@@ -1842,7 +1790,6 @@ void addReply(client *c, robj *obj) {
 
 #### prepareClientToWrite
 
-
 This function is called every time we are going to transmit new data to the client. The behavior is the following:
 
 If the client should receive new data (normal clients will) the function returns C_OK, and make sure to install the write handler in our event loop so that when the socket is writable new data gets written.
@@ -1855,8 +1802,6 @@ The function may return C_OK without actually installing the write event handler
 2. The client is a slave but not yet online, so we want to just accumulate writes in the buffer but not actually sending them yet.
 
 Typically gets called every time a reply is built, before adding more data to the clients output buffers. If the function returns C_ERR no data should be appended to the output buffers.
-
-
 
 ```c
 int prepareClientToWrite(client *c) {
@@ -1882,8 +1827,6 @@ int prepareClientToWrite(client *c) {
     return C_OK;
 }
 ```
-
-
 
 #### handleClientsWithPendingWrites
 
@@ -1933,8 +1876,6 @@ int handleClientsWithPendingWrites(void) {
 }
 ```
 
-
-
 #### sendReplyToClient
 
 ```c
@@ -1947,9 +1888,9 @@ void sendReplyToClient(connection *conn) {
 
 #### writeToClient
 
-Write data in output buffers to client. Return C_OK if the client is still valid after the call, C_ERR if it was freed because of some error.  
+Write data in output buffers to client. Return C_OK if the client is still valid after the call, C_ERR if it was freed because of some error.
 If handler_installed is set, it will attempt to clear the write event.
-This function is called by threads, but always with handler_installed set to 0. 
+This function is called by threads, but always with handler_installed set to 0.
 So when handler_installed is set to 0 the function must be thread safe.
 
 ```c
@@ -2060,4 +2001,3 @@ int writeToClient(client *c, int handler_installed) {
 ## References
 
 1. [Redis: under the hood](https://www.pauladamsmith.com/articles/redis-under-the-hood.html)
-

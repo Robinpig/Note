@@ -1,57 +1,45 @@
 ## Introduction
 
-[Redis](https://redis.io) is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker. 
+[Redis](https://redis.io) is often referred to as a data structures server.
+What this means is that Redis provides access to mutable data structures via a set of commands, which are sent using a server-client model with TCP sockets and a simple protocol.
+So different processes can query and modify the same data structures in a shared way.
 
-Redis provides data structures such as **strings, hashes, lists, sets, sorted sets** with **range queries, bitmaps, hyperloglogs, geospatial indexes, and streams**. 
+Data structures implemented into Redis have a few special properties:
+
+- Redis cares to store them on disk, even if they are always served and modified into the server memory. This means that Redis is fast, but that it is also non-volatile.
+- The implementation of data structures emphasizes memory efficiency, so data structures inside Redis will likely use less memory compared to the same data structure modelled using a high-level programming language.
+- Redis offers a number of features that are natural to find in a database, like replication, tunable levels of durability, clustering, and high availability.
+
+Another good example is to think of Redis as a more complex version of memcached, where the operations are not just SETs and GETs, but operations that work with complex data types like Lists, Sets, ordered data structures, and so forth.
+
+> Link: [How fast is Redis?](https://redis.io/topics/benchmarks)
+
+The simplest way to understand how a program works is to understand the [data structures](/docs/CS/DB/Redis/struct.md) it uses.
+
+- [db](/docs/CS/DB/Redis/redisDb.md)
+
 
 Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
 
+## Persistence
 
-## [How fast is Redis?](https://redis.io/topics/benchmarks)
+Redis uses a [persistence model](/docs/CS/DB/Redis/persist.md) based on the `fork()` system call in order to create a process with the same (shared) memory content of the main Redis process.
+This secondary process dumps the content of the memory on disk.
+This is used by `rdb.c` to create the snapshots on disk and by `aof.c` in order to perform the AOF rewrite when the append only file gets too big.
 
-24bits
-
-- 8bits logistic counter log
-- 16bits last decrement time minutes
-
-
-- [db](/docs/CS/DB/Redis/redisDb.md)
-
-BigKey
-
-
-
-## Install
-
-- Docker
-
-- make source
-- apt-get(Ubuntu) yum(RedHat) brew(Mac)
-
-## sys
-
-struct redisServer and struct client in server.h
-
-struct redisCommand redisCommandTable[] in server.c
-
-
-
-## [Struct](/docs/CS/DB/Redis/struct.md)
-## [Persistence](/docs/CS/DB/Redis/persist.md)
 ## [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
 
 Server and Client
-
 
 ## Event
 
 [IO Event](/docs/CS/DB/Redis/ae.md)
 
-
 Time_Event
 
 ServerCron:
+
 - evict key
 - RDB and AOF
 - master-slave sync
@@ -67,8 +55,8 @@ The Redis Slow Log is a system to log queries that exceeded a specified executio
 
 You can configure the slow log with two parameters: one tells Redis what is the execution time, in microseconds, to exceed in order for the command to get logged, and the other parameter is the length of the slow log. When a new command is logged the oldest one is removed from the queue of logged commands.
 
-
 slowlog len can set to 1000
+
 ```
 The following time is expressed in microseconds, so 1000000 is equivalent
 to one second. Note that a negative number disables the slow log, while
@@ -96,7 +84,7 @@ latency monitor
 
 ## Cluster
 
-### Singleton 
+### Singleton
 
 ### Master-Slave
 
@@ -105,6 +93,7 @@ disadvantage:
 load balance and recovery
 
 ### Redis Sentinel
+
 monitor
 
 - choose new master from slaves when master down
@@ -145,8 +134,6 @@ timeout
 
 network soft interrupt
 
-
-
 ## memory
 
 Used_memor_rss
@@ -154,11 +141,7 @@ Used_memor_rss
 - Used_memory
 - memory chip
 
-
-
 ## command
-
-
 
 ### info
 
@@ -168,11 +151,11 @@ Used_memor_rss
 - Memory
   - human  memory jemalloc apply
   - rss_human  memory in top command
-  - peak_human 
+  - peak_human
   - lua_human
 - Persistence
 - Stats
-  - ops_per_sec 
+  - ops_per_sec
   - sync_partial_err
 - Replication
   - backlog
@@ -182,11 +165,7 @@ Used_memor_rss
 - Cluster
 - Keyspace
 
-
-
 monitor get request cmds of current time
-
-
 
 maxmemory-policy
 
@@ -199,37 +178,29 @@ maxmemory-policy
 - volatile-lfu
 - allkeys-lfu
 
-
-
-
-
 LRU
 
-keys contain a 24bits of timestamp 
+keys contain a 24bits of timestamp
 
 random get keys and del the oldest one util the memory is enough
 
-
-
 unlink use a async thread to del big value
 
-flushdb and flushall can add params to be async 
-
-
+flushdb and flushall can add params to be async
 
 LFU
 
-
-
-
+## TLS
 
 ## THP
+
 Transparent Huge Pages（THP）
 copy-on-write期间复制内存页从4KB变成2MB
 fork子进程的速度变慢
 高并发下开启容易造成内存溢出，建议关闭
 
 ## Tools
+
 - redis-server
 - redis-sentinel
 - redis-cli
@@ -237,8 +208,8 @@ fork子进程的速度变慢
 - redis-check-aof
 - redis-benchmark
 
-
 ## References
+
 1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
 2. [Redis源码分析(一) - 硬核课堂](https://hardcore.feishu.cn/docs/doccnp9v7IljXiJ5FpNT1ipLhlR#)
 3. [Distributed locks with Redis](https://redis.io/topics/distlock)

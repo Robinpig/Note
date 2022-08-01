@@ -24,9 +24,6 @@ For instance, if output needs to be written in a certain format, it is certainly
 If printing statements are scattered throughout the program, it will take considerably longer to make modifications.
 The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
 
-An abstract data type (ADT) is a set of operations.
-Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.
-This can be viewed as an extension of modular design.
 
 [Lists](/docs/CS/Algorithms/list.md), [stacks](/docs/CS/Algorithms/stack.md), and [queues](/docs/CS/Algorithms/queue.md) are perhaps the three fundamental data structures in all of computer science.
 
@@ -148,6 +145,10 @@ Raft
 ### Compression Algorithms
 
 
+###
+
+Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
+Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes O(N^2) time complexity where N is the number of people involved.
 
 
 ## Links

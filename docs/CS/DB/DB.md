@@ -6,15 +6,15 @@ Knowledge Base of Relational and NoSQL Database Management Systems in [DB-Engine
 
 Database management systems use a client/server model, where database system instances (nodes) take the role of servers, and application instances take the role of clients.
 
-Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language. 
+Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language.
 The transport subsystem is also responsible for communication with other nodes in the database cluster.
 
 ![Architecture of a database management system](./img/DB.png)
 
-Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it. 
+Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it.
 Later, access control checks are performed, as they can be done fully only after the query is interpreted.
 
-“The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer). 
+“The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer).
 The optimizer handles both relational operations required for query resolution, usually presented as a dependency tree, and optimizations, such as index ordering, cardinality estimation, and choosing access methods.
 
 “The query is usually presented in the form of an execution plan (or query plan): a sequence of operations that have to be carried out for its results to be considered complete.”
@@ -23,7 +23,7 @@ The optimizer handles both relational operations required for query resolution, 
 
 The execution plan is handled by the execution engine, which collects the results of the execution of local and remote operations. Remote execution can involve writing and reading data to and from other nodes in the cluster, and replication.
 
-Local queries (coming directly from clients or from other nodes) are executed by the storage engine. 
+Local queries (coming directly from clients or from other nodes) are executed by the storage engine.
 The storage engine has several components with dedicated responsibilities:”
 
 “Transaction manager
@@ -46,13 +46,8 @@ Recovery manager
 
 This manager maintains the operation log and restoring the system state in case of a failure (see “Recovery”).
 
-
-
-Together, transaction and lock managers are responsible for concurrency control (see “Concurrency Control”): 
+Together, transaction and lock managers are responsible for concurrency control (see “Concurrency Control”):
 they guarantee logical and physical data integrity while ensuring that concurrent operations are executed as efficiently as possible.
-
-
-
 
 Storage data layer
 
@@ -70,18 +65,15 @@ Tolerance
 
 concurrency
 
-
 A version of the tree that would be better suited for disk implementation has to exhibit the following properties:
+
 - High fanout to improve locality of the neighboring keys.
 - Low height to reduce the number of seeks during traversal.
 
 > [!TIP]
 >
-> Fanout and height are inversely correlated: the higher the fanout, the lower the height. 
+> Fanout and height are inversely correlated: the higher the fanout, the lower the height.
 > If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
-
-
-
 
 ## Concurrency Control
 
@@ -153,3 +145,32 @@ By the 2PL protocol, locks are applied and removed in two phases:
 2. Shrinking phase: locks are released and no locks are acquired.
 
 Two types of locks are utilized by the basic protocol: *Shared* and *Exclusive* locks. Refinements of the basic protocol may utilize more lock types. Using locks that block processes, 2PL may be subject to [deadlocks](https://en.wikipedia.org/wiki/Deadlock) that result from the mutual blocking of two or more transactions.
+
+## Replication
+
+When thinking about replication we need to make a decision on two different categories of configurations:
+
+* Algorithm for performing replication
+  * Leader-Follower Replication
+  * Multi Leader Replication
+  * Leaderless Replication
+* Process in which replication is performed
+  * Synchronous Replication
+  * Asynchronous Replication
+  * Combination of both synchronous & asynchronous replication
+
+
+## Shard
+
+[Shard](/docs/CS/DB/Shard.md)
+
+
+[Granularity of Locks and Degrees of Consistency in a Shared DataBase](http://jimgray.azurewebsites.net/papers/granularity%20of%20locks%20and%20degrees%20of%20consistency%20rj%201654.pdf)
+
+
+
+Atomic Commitment Protocl(ACP)
+
+## References
+
+1. [NoSQL Database Systems - A Survey and Decision Guidance](https://www.baqend.com/files/nosql-survey.pdf)

@@ -1,22 +1,32 @@
-# Machine Learning
+## Introduction
 
 ## Classification
 
-## Clustering
-
 ## Regression
 
-## Dimensionality reduction
+## Clustering
 
+## Dimensionality Reduction
+
+PCA
+
+LDA
+
+## Reinforcement Learning
+
+Loss Function
+
+- 0-1
+- absolutely
+- Hinge
 
 ## KNN
 
 K-Nearest Neighbor 懒惰学习
 
 
-
 | 偏差           | 方差             |
-| -------------- | ---------------- |
+| ---------------- | ------------------ |
 | 数据和标准数据 | 数据之间的离散度 |
 
 ### 常用距离度量
@@ -25,48 +35,50 @@ K-Nearest Neighbor 懒惰学习
 
 $$
 d(p,q)=\sqrt{\sum_{i=1}^n\left(q_i-p_i\right)^2}
-$$ {Euclidean Distance}
 
- 																	
+$$
+
+{Euclidean Distance}
 
 *1.1 Euclidean Distance*
 
 #### Chebyshev Distance
 
 二维平面
+
 $$
 \max(|x1-x2|),|y1-y2|)
+
 $$
+
 n维平面
+
 $$
 d=\lim_{k\to\infty}(\sum_{i=1}^n|x_i-x_i|^{1/k})
+
 $$
 
 #### 3.Manhattan Distance
 
+$$
+d(p,q)=\sum_{i=1}^n \mid q_i-p_i \mid
 
+$$
 
 #### 4.Minkowski Distance
 
 $$
 d=\sqrt[p]{\sum_{k=1}^n|x_k-x_2k|^p}
+
 $$
-
-
 
 - p=1时，为Manhattan Distance
 - p=2时，为Euclidean Distance
 - p →∞ 时，为Chebyshev Distance
 
-
-
 #### 5.Mahalanobis Distance
 
-
-
 #### 6.Bhattacharyya Distance
-
-
 
 #### 7.Hamming Distance
 
@@ -75,8 +87,6 @@ $$
 #### 9.Jaccard Similarity Coefficient
 
 #### 10.Pearson Correlation Coefficient
-
-
 
 ### kNN算法的优缺点
 
@@ -95,8 +105,6 @@ $$
 - 最大的缺点是无法给出数据的内在含义。
 
 ## Decision Trees
-
-
 
 ## 4.SVM
 
@@ -124,4 +132,3 @@ Dynamic Model：
 - HMM
 - Kalman Filter
 - Particle Filter
-

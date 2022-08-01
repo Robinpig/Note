@@ -1,10 +1,8 @@
 ## Introduction
 
-
 ## Server
 
-All the server configuration and in general all the shared state is
-defined in a global structure called `server`, of type `struct redisServer`.
+All the server configuration and in general all the shared state is defined in a global structure called `server`, of type `struct redisServer`.
 A few important fields in this structure are:
 
 * `server.db` is an array of Redis databases, where data is stored.
@@ -12,6 +10,7 @@ A few important fields in this structure are:
 * `server.clients` is a linked list of clients connected to the server.
 * `server.master` is a special client, the master, if the instance is a replica.
 
+There are tons of other fields. Most fields are commented directly inside the structure definition.
 
 ```c
 struct redisServer {
@@ -93,7 +92,9 @@ struct redisServer {
     time_t loading_start_time;
     off_t loading_process_events_interval_bytes;
 ```
+
 Fast pointers to often looked up command
+
 ```c
     struct redisCommand *delCommand, *multiCommand, *lpushCommand,
                         *lpopCommand, *rpopCommand, *zpopminCommand,
@@ -445,11 +446,32 @@ Fast pointers to often looked up command
 
 aeEventLoop see ae
 
-
 ## Client
 
+In the past it was called `redisClient`, now just `client`.
 
+The structure has many fields, here we'll just show the main ones:
 
+```c
+struct client {
+    int fd;
+    sds querybuf;
+    int argc;
+    robj **argv;
+    redisDb *db;
+    int flags;
+    list *reply;
+    // ... many other fields ...
+    char buf[PROTO_REPLY_CHUNK_BYTES];
+}
+```
+
+The client structure defines a  *connected client* :
+
+* The `fd` field is the client socket file descriptor.
+* `argc` and `argv` are populated with the command the client is executing, so that functions implementing a given Redis command can read the arguments.
+* `querybuf` accumulates the requests from the client, which are parsed by the Redis server according to the Redis protocol and executed by calling the implementations of the commands the client is executing.
+* `reply` and `buf` are dynamic and static buffers that accumulate the replies the server sends to the client. These buffers are incrementally written to the socket as soon as the file descriptor is writeable.
 * `createClient()` allocates and initializes a new client.
 * the `addReply*()` family of functions are used by command implementations in order to append data to the client structure, that will be transmitted to the client as a reply for a given command executed.
 * `writeToClient()` transmits the data pending in the output buffers to the client and is called by the *writable event handler* `sendReplyToClient()`.
@@ -458,9 +480,30 @@ aeEventLoop see ae
   Once commands are ready to be processed, it calls `processCommand()` which is defined inside `server.c` in order to actually execute the command.
 * `freeClient()` deallocates, disconnects and removes a client.
 
-
-
 ### Buffer
+
+
+Usually the two key advantages of client-side caching are:
+
+1. Data is available with a very small latency.
+2. The database system receives less queries, allowing it to serve the same dataset with a smaller number of nodes.
+
+
+The Redis client-side caching support is called  *Tracking* , and has two modes:
+
+* In the default mode, the server remembers what keys a given client accessed, and sends invalidation messages when the same keys are modified. This costs memory in the server side, but sends invalidation messages only for the set of keys that the client might have in memory.
+* In the *broadcasting* mode, the server does not attempt to remember what keys a given client accessed, so this mode costs no memory at all in the server side. Instead clients subscribe to key prefixes such as `object:` or `user:`, and receive a notification message every time a key matching a subscribed prefix is touched.
+
+
+
+Clients may want to run internal statistics about the number of times a given cached key was actually served in a request, to understand in the future what is good to cache. In general:
+
+* We don't want to cache many keys that change continuously.
+* We don't want to cache many keys that are requested very rarely.
+* We want to cache keys that are requested often and change at a reasonable rate. For an example of key not changing at a reasonable rate, think of a global counter that is continuously [`INCR`](https://redis.io/commands/incr)emented.
+
+However simpler clients may just evict data using some random sampling just remembering the last time a given cached value was served, trying to evict keys that were not served recently.
+
 
 The structure `client`(in the past it was called `redisClient`) has many fields, here we'll just show the main ones:
 
@@ -479,7 +522,7 @@ typedef struct client {
 
     list *reply;            /* List of reply objects to send to the client. */
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
-    
+  
     /* Response buffer */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
@@ -488,12 +531,13 @@ typedef struct client {
 
  #define PROTO_REPLY_CHUNK_BYTES (16*1024) /* 16k output buffer */
 ```
+
 The client structure defines a *connected client*:
+
 * `querybuf` accumulates the requests from the client, which are parsed by the Redis server according to the Redis protocol and executed by calling the implementations of the commands the client is executing.
 * `reply` and `buf` are dynamic and static buffers(16KB) that accumulate the replies the server sends to the client. These buffers are incrementally written to the socket as soon as the file descriptor is writeable.
 
 #### querybuf
-
 
 ```c
 // config.c
@@ -515,8 +559,6 @@ if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
     return;
 }
 ```
-
-
 
 #### reply dynamic buffer
 
@@ -540,23 +582,15 @@ typedef struct clientReplyBlock {
 
 ## Cache
 
-
-
-
-
 ## monitor
 
 ```
 info clients
 ```
 
-
-
 ```
 client list
 ```
-
-
 
 ## Links
 
