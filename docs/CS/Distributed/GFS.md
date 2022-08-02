@@ -59,7 +59,7 @@ GFS client code linked into each application implements the file system API and 
 Clients interact with the master for metadata operations, but all data-bearing communication goes directly to the chunkservers.
 GFS client do not provide the POSIX API and therefore need not hookinto the Linux vnode layer.
 
-![GFS Architecture](./img/GFS-Architecture.png)
+![GFS Architecture](img/GFS-Architecture.png)
 
 ### Single Master
 
@@ -285,7 +285,7 @@ above but may be interleaved with and overwritten by concurrent operations from 
 file region may end up containing fragments from different
 clients, although the replicas will be identical because the individual operations are completed successfully in the same
 order on all replicas.
-![GFS Write Flow](./img/GFS-Write-Flow.png)
+![GFS Write Flow](img/GFS-Write-Flow.png)
 
 ### Data Flow
 
