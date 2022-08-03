@@ -94,6 +94,10 @@ It's need JDK15 to build Junit5,.
 
 ##### @SpringBootTest
 
+> [!TIP]
+> 
+> If you are using JUnit 4, do not forget to also add @RunWith(SpringRunner.class) to your test, otherwise the annotations will be ignored.
+
 @AutoConfigureMockMvc
 
 | Junit5                                      | Junit4                                  |
@@ -126,6 +130,49 @@ Use different parameters to run test.
 
 
 ### WebMock
+
+By default, @SpringBootTest does not start the server but instead sets up a mock environment for testing web endpoints.
+With Spring MVC, we can query our web endpoints using MockMvc or WebTestClient, as shown in the following example:
+
+```java
+import org.junit.jupiter.api.Test;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+class MyMockMvcTests {
+
+    @Test
+    void testWithMockMvc(@Autowired MockMvc mvc) throws Exception {
+        mvc.perform(get("/")).andExpect(status().isOk()).andExpect(content().string("Hello World"));
+    }
+
+    // If Spring WebFlux is on the classpath, you can drive MVC tests with a WebTestClient
+    @Test
+    void testWithWebTestClient(@Autowired WebTestClient webClient) {
+        webClient
+                .get().uri("/")
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class).isEqualTo("Hello World");
+    }
+
+}
+```
+
+> [!TIP]
+> 
+> If you want to focus only on the web layer and not start a complete ApplicationContext, consider using @WebMvcTest instead.
+
 
 ```java
 @RunWith(SpringRunner.class)
