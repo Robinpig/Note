@@ -446,6 +446,10 @@ Zookeeper uses slf4j as an abstraction layer for logging.
 
 **Note:** Starting with 3.5.3, the dynamic reconfiguration feature is disabled by default, and has to be explicitly turned on via [reconfigEnabled](https://zookeeper.apache.org/doc/r3.8.0/zookeeperAdmin.html#sc_advancedConfiguration) configuration option.
 
+## Links
+
+- [Chubby](/docs/CS/Distributed/Chubby.md)
+
 ## References
 
 1. [ZooKeeper: Wait-free coordination for Internet-scale systems](https://www.usenix.org/legacy/event/atc10/tech/full_papers/Hunt.pdf)

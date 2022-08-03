@@ -148,8 +148,6 @@ Consensus involves multiple servers agreeing on values. Once they reach a decisi
 Typical consensus algorithms make progress when any majority of their servers is available; for example, a cluster of 5 servers can continue to operate even if 2 servers fail.
 If more servers fail, they stop making progress (but will never return an incorrect result).
 
-[The Byzantine Generals Problem](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/The-Byzantine-Generals-Problem.pdf)
-
 The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
 
 ## Failure

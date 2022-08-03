@@ -153,6 +153,7 @@ Two familiar mechanisms, proxies and partitioning, that they expect will allow C
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
 - [Paxos](/docs/CS/Distributed/Paxos.md)
+- [Zookeeper](/docs/CS/Java/Zookeeper/Zookeeper.md)
 
 ## References
 

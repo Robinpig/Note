@@ -4,8 +4,11 @@ Paxos is a family of distributed algorithms used to reach consensus.
 
 ## Basic-Paxos
 
-Paxos defines three roles: *proposers*, *acceptors*, and *learners*.
-Paxos nodes can take multiple roles, even all of them.
+Paxos defines three roles: *proposers*, *acceptors*, and *learners*. Each node can take multiple roles, even all of them.
+
+- **Proposers** A proposer can propose a value.
+- **Acceptors** The acceptors cooperate in some way to choose a single proposed value.
+- **Learners** A learner can learn what value has been chosen.
 
 Assume that nodes can communicate with one another by sending messages.
 We use the customary asynchronous, **non-Byzantine model**, in which:
@@ -107,7 +110,7 @@ Master leases
 
 #### Epoch numbers
 
-From the time when the master replica receives the request to the moment the request causes an update of the underlying database, the replica may have lost its master status. 
+From the time when the master replica receives the request to the moment the request causes an update of the underlying database, the replica may have lost its master status.
 It may even have lost master status and regained it again.
 We needed a mechanism to reliably detect master turnover and abort operations if necessary.
 
@@ -116,22 +119,22 @@ We needed a mechanism to reliably detect master turnover and abort operations if
 
 #### Group membership
 
-Practical systems must be able to handle changes in the set of replicas. 
+Practical systems must be able to handle changes in the set of replicas.
 This is referred to as the group membership problem.
 
 #### Snapshots
 
-the repeated application of a con- sensus algorithm to create a replicated log will lead to an ever growing log. 
+the repeated application of a con- sensus algorithm to create a replicated log will lead to an ever growing log.
 This has two problems: it requires un- bounded amounts of disk space; and perhaps worse, it may result in unbounded recovery time since a recovering replica has to replay a potentially long log before it has fully caught up with other replicas.
 
-Since the log is typically a sequence of operations to be applied to some data structure, and thus implicitly (through replay) represents a persistent form of that data structure, 
-the problem is to find an alternative persistent representation for the data structure at hand. 
-An obvious mechanism is to persist – or snapshot – the data structure directly, at which point the log of operations lead- ing to the current state of the data structure is no longer needed. 
-For example, if the data structure is held in mem- ory, we take a snapshot by serializing it on disk. 
+Since the log is typically a sequence of operations to be applied to some data structure, and thus implicitly (through replay) represents a persistent form of that data structure,
+the problem is to find an alternative persistent representation for the data structure at hand.
+An obvious mechanism is to persist – or snapshot – the data structure directly, at which point the log of operations lead- ing to the current state of the data structure is no longer needed.
+For example, if the data structure is held in mem- ory, we take a snapshot by serializing it on disk.
 If the data structure is kept on disk, a snapshot may just be an on-disk copy of it.
 
-The per- sistent state of a replica now comprises a log and a snapshot that have to be maintained consistently. 
-The log is fully under the framework’s control, while the snapshot format is application-specific. 
+The persistent state of a replica now comprises a log and a snapshot that have to be maintained consistently.
+The log is fully under the framework’s control, while the snapshot format is application-specific.
 Some aspects of the snapshot machin- ery are of particular interest:
 
 - The snapshot and log need to be mutually consistent. Each snapshot needs to have information about its contents relative to the fault-tolerant log.
@@ -142,9 +145,7 @@ Some aspects of the snapshot machin- ery are of particular interest:
 
 Database transactions
 
-
-Cascade 
-
+Cascade
 
 - Disk Paxos
 - Cheap Paxos
