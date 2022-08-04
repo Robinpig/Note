@@ -1,22 +1,17 @@
 ## Introduction
 
-The Google File System, a scalable distributed file system for large distributed data-intensive applications.
+The Google File System is a scalable distributed file system for large distributed data-intensive applications.
 It provides fault tolerance while running on inexpensive commodity hardware, and it delivers high aggregate performance to a large number of clients.
 
-- First, component failures are the norm rather than the exception.
-- Second, files are huge by traditional standards. Multi-GB files are common.
-- Third, most files are mutated by appending new data rather than overwriting existing data.
-  Random writes within a file are practically non-existent.
-- Fourth, code signing the applications and the file system API benefits the overall system by increasing our flexibility.
+## Design
 
-## Design Review
+We alluded to some key observations earlier and now lay out our assumptions in more details.
 
-### Assumptions
-
-- The system is built from many inexpensive commodity components that often fail.
+- Component failures are the norm rather than the exception. The system is built from many inexpensive commodity components that often fail.
   It must constantly monitor itself and detect, tolerate, and recover promptly from component failures on a routine basis.
-- The system stores a modest number of large files. Small files must be supported, but we need not optimize for them.
-- The workloads primarily consist of two kinds of reads:large streaming reads and small random reads.
+- The system stores a modest number of large files. We expect a few million files, each typically 100 MB or larger in size. Multi-GB files are the common case and should be managed efficiently. Small files must be supported, but we need not optimize for them.
+- Most files are mutated by appending new data rather than overwriting existing data.
+  Random writes within a file are practically non-existent. The workloads primarily consist of two kinds of reads:large streaming reads and small random reads.
 - The workloads also have many large, sequential writes that append data to files.
   Typical operation sizes are similar to those for reads. Once written, files are seldom modified again.
   *Small writes at arbitrary positions in a file are supported but do not have to be efficient.*
@@ -27,7 +22,10 @@ It provides fault tolerance while running on inexpensive commodity hardware, and
 - High sustained bandwidth is more important than low latency.
   Most of our target applications place a premium on processing data in bulkat a high rate, while few have stringent response time requirements for an individual read or write.
 
+
 ### Interface
+
+Code signing the applications and the file system API benefits the overall system by increasing our flexibility.
 
 GFS provides a familiar file system interface, though it does not implement a standard API such as POSIX.
 Files are organized hierarchically in directories and identified by pathnames.
@@ -39,7 +37,7 @@ Record append allows multiple clients to append data to the same file concurrent
 It is useful for implementing multi-way merge results and producerconsumer queues that many clients can simultaneously append to without additional locking.
 We have found these types of files to be invaluable in building large distributed applications.
 
-### Architecture
+## Architecture
 
 A GFS cluster consists of a single *master* and multiple *chunkservers* and is accessed by multiple *clients*.
 Each of these is typically a commodity Linux machine running a user-level server process.
