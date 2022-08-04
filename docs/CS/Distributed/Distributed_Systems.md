@@ -413,19 +413,19 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [Large-scale cluster management at Google with Borg](https://pdos.csail.mit.edu/6.824/papers/borg.pdf)
 
-[GFS]()
+[GFS](/docs/CS/Distributed/GFS.md)
 
-[Dynamo]()
+[Dynamo](/docs/CS/Distributed/Dynamo.md)
 
-[MapReduce]()
+[MapReduce](/docs/CS/Distributed/MapReduce.md)
 
-[BigTable]()
+[BigTable](/docs/CS/Distributed/BigTable.md)
 
-[Spanner]()
+[Spanner](/docs/CS/Distributed/Spanner.md)
 
-[Spark]()
+[Spark](/docs/CS/Distributed/Spark.md)
 
-[Chubby]()
+[Chubby](/docs/CS/Distributed/Chubby.md)
 
 [F1](https://courses.cs.washington.edu/courses/cse550/21au/papers/CSE550.F1.pdf)
 

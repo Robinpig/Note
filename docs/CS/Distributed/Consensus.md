@@ -77,7 +77,7 @@ By definition, a learner is non-malicious, so the conditions apply only to non-m
 A malicious acceptor by definition has failed, so the N − F acceptors in the liveness condition do not include malicious ones.
 Note that M is the maximum number of failures under which safety is preserved, while F is the maximum number of failures under which liveness is ensured.
 These parameters are, in principle, independent. Hitherto, the only cases considered have been M = 0 (non-Byzantine) and M = F (Byzantine).
-If malicious failures are expected to be rare but not ignorable, we may assume 0 < M < F. 
+If malicious failures are expected to be rare but not ignorable, we may assume 0 < M < F.
 If safety is more important than liveness, we might assume F < M .
 
 The classic Fischer, Lynch, Paterson result(**FLP**) implies that no purely asynchronous algorithm can solve consensus.
@@ -230,7 +230,6 @@ and probabilistically earn the right to commit blocks and earn associated reward
 Motivated in part by the high energy cost of this approach, subsequent permissionless consensus protocols have proposed or adopted other alternative participation rules for Sybil attack protection,
 such as proof of stake, proof of space, and proof of authority.
 
-
 [On Optimal Probabilistic Asynchronous Byzantine Agreement]()
 
 ## Consensus Algorithms
@@ -322,3 +321,4 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 3. [Impossibility of Distributed Consensus with One Faulty Process](https://groups.csail.mit.edu/tds/papers/Lynch/jacm85.pdf)
 4. [Lower Bounds for Asynchronous Consensus](http://lamport.azurewebsites.net/pubs/lower-bound.pdf)
 5. [Lower Bounds for Asynchronous Consensus](http://lamport.azurewebsites.net/pubs/bertinoro.pdf)
+6. [Consensus on Transaction Commit](https://www.microsoft.com/en-us/research/uploads/prod/2004/01/twophase-revised.pdf)
