@@ -5,16 +5,21 @@ It provides fault tolerance while running on inexpensive commodity hardware, and
 
 ## Design
 
-We alluded to some key observations earlier and now lay out our assumptions in more details.
+### Assumptions
+
+We now lay out our assumptions in below details.
 
 - Component failures are the norm rather than the exception. The system is built from many inexpensive commodity components that often fail.
   It must constantly monitor itself and detect, tolerate, and recover promptly from component failures on a routine basis.
-- The system stores a modest number of large files. We expect a few million files, each typically 100 MB or larger in size. Multi-GB files are the common case and should be managed efficiently. Small files must be supported, but we need not optimize for them.
-- Most files are mutated by appending new data rather than overwriting existing data.
-  Random writes within a file are practically non-existent. The workloads primarily consist of two kinds of reads:large streaming reads and small random reads.
-- The workloads also have many large, sequential writes that append data to files.
-  Typical operation sizes are similar to those for reads. Once written, files are seldom modified again.
-  *Small writes at arbitrary positions in a file are supported but do not have to be efficient.*
+- The system stores a modest number of large files. 
+  We expect a few million files, each typically 100 MB or larger in size. 
+  Multi-GB files are the common case and should be managed efficiently. 
+  Small files must be supported, but we need not optimize for them.
+- Most files are mutated by appending new data rather than overwriting existing data. Random writes within a file are practically non-existent. 
+  The workloads have many large, sequential writes that append data to files. Once written, files are seldom modified again.
+- Once written, the files are only read, and often only sequentially. A variety of data share these characteristics.
+  The workloads primarily consist of two kinds of reads:large streaming reads and small random reads.
+  Small writes at arbitrary positions in a file are supported but do not have to be efficient.
 - The system must efficiently implement well-defined semantics for multiple clients that concurrently append to the same file.
   Our files are often used as producerconsumer queues or for many-way merging.
   Hundreds of producers, running one per machine, will concurrently append to a file. Atomicity with minimal synchronization overhead is essential.
@@ -25,8 +30,6 @@ We alluded to some key observations earlier and now lay out our assumptions in m
 
 ### Interface
 
-Code signing the applications and the file system API benefits the overall system by increasing our flexibility.
-
 GFS provides a familiar file system interface, though it does not implement a standard API such as POSIX.
 Files are organized hierarchically in directories and identified by pathnames.
 We support the usual operations to *create*, *delete*, *open*, *close*, *read*, and *write* files.
@@ -35,7 +38,6 @@ Moreover, GFS has *snapshot* and *record append* operations.
 Snapshot creates a copy of a file or a directory tree at low cost.
 Record append allows multiple clients to append data to the same file concurrently while guaranteeing the atomicity of each individual client’s append.
 It is useful for implementing multi-way merge results and producerconsumer queues that many clients can simultaneously append to without additional locking.
-We have found these types of files to be invaluable in building large distributed applications.
 
 ## Architecture
 
@@ -564,3 +566,5 @@ The most recent events are also kept in memory and available for continuous onli
 ## References
 
 1. [The Google File System](https://pdos.csail.mit.edu/6.824/papers/gfs.pdf)
+2. [Web Search for a Planet: The Google Cluster Architecture](http://www.carfield.com.hk/document/networking/google_cluster.pdf?)
+[The anatomy of a large-scale hypertextual Web search engine](https://snap.stanford.edu/class/cs224w-readings/Brin98Anatomy.pdf)
