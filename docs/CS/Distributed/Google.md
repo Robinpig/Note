@@ -41,7 +41,7 @@ Google clusters follow three key design principles:
 [MapReduce](/docs/CS/Distributed/MapReduce.md)
 [Chubby](/docs/CS/Distributed/Chubby.md)
 
-[BigTable](/docs/CS/Distributed/BigTable.md)
+[Bigtable](/docs/CS/Distributed/Bigtable.md)
 
 [Spanner](/docs/CS/Distributed/Spanner.md)
 
