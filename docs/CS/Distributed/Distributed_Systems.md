@@ -403,7 +403,7 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [Chain Replication in Theory and in Practice](http://diyhpl.us/~bryan/papers2/distributed/distributed-systems/chain-replication-in-theory-and-in-practice.2010.pdf)
 
-## frame
+
 
 ### snapshot
 
@@ -411,21 +411,16 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [Distributed Snapshots - Determining Global States of a Distributed System](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Determining-Global-States-of-a-Distributed-System.pdf)
 
-[Large-scale cluster management at Google with Borg](https://pdos.csail.mit.edu/6.824/papers/borg.pdf)
+## Frames
 
-[GFS](/docs/CS/Distributed/GFS.md)
+[Google Cluster](/docs/CS/Distributed/Google.md)
+
+
 
 [Dynamo](/docs/CS/Distributed/Dynamo.md)
 
-[MapReduce](/docs/CS/Distributed/MapReduce.md)
-
-[BigTable](/docs/CS/Distributed/BigTable.md)
-
-[Spanner](/docs/CS/Distributed/Spanner.md)
-
 [Spark](/docs/CS/Distributed/Spark.md)
 
-[Chubby](/docs/CS/Distributed/Chubby.md)
 
 [F1](https://courses.cs.washington.edu/courses/cse550/21au/papers/CSE550.F1.pdf)
 

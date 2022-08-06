@@ -84,13 +84,11 @@ Problems started to occur once the size of the underlying storage increased.
 Going from a few hundred terabytes up to petabytes, and then up to tens of petabytes.
 
 That really required a proportionate increase in the amount of metadata the master had to maintain.
-Also, operations such as scanning the metadata to look for recoveries all scaled linearly with the volume of data. 
+Also, operations such as scanning the metadata to look for recoveries all scaled linearly with the volume of data.
 So the amount of work required of the master grew substantially. The amount of storage needed to retain all that information grew as well.
 
 In addition, this proved to be a bottleneck for the clients, even though the clients issue few metadata operations themselves.
 When you have thousands of clients all talking to the master at the same time, given that the master is capable of doing only a few thousand operations a second, the average client isn’t able to command all that many operations per second.
-
-
 
 ### Chunk Size
 
@@ -168,6 +166,15 @@ GFS has a relaxed consistency model that supports our highly distributed applica
 They are handled exclusively by the master: namespace locking guarantees atomicity and correctness; the master’s operation log defines a global total order of these operations.
 The state of a file region after a data mutation depends on the type of mutation, whether it succeeds or fails, and whether there are concurrent mutations.
 
+- A file region is *consistent* if all clients will always see the same data, regardless of which replicas they read from.
+- A region is *defined* after a file data mutation if it is consistent and clients will see what the mutation writes in its entirety.
+
+When a mutation succeeds without interference from concurrent writers, the affected region is defined (and by implication consistent): all clients will always see what the mutation has written.
+Concurrent successful mutations leave the region undefined but consistent: all clients see the same data, but it may not reflect what any one mutation has written.
+Typically, it consists of mingled fragments from multiple mutations.
+A failed mutation makes the region inconsistent (hence also undefined): different clients may see different data at different times.
+
+
 <table>
     <thead>
         <tr>
@@ -193,30 +200,25 @@ The state of a file region after a data mutation depends on the type of mutation
     </tbody>
 </table>
 
-A file region is consistent if all clients will always see the same data, regardless of which replicas they read from.
-A region is defined after a file data mutation if it is consistent and clients will see what the mutation writes in its entirety.
-When a mutation succeeds without interference from concurrent writers, the affected region is defined (and by implication consistent): all clients will always see what the mutation has written.
-Concurrent successful mutations leave the region undefined but consistent: all clients see the same data, but it may not reflect what any one mutation has written.
-Typically, it consists of mingled fragments from multiple mutations.
-A failed mutation makes the region inconsistent (hence also undefined): different clients may see different data at different times.
-We describe below how our applications can distinguish defined regions from undefined regions.
-The applications do not need to further distinguish between different kinds of undefined regions.
-
 Data mutations may be writes or record appends.
-A write causes data to be written at an application-specified file offset.
-A record append causes data (the “record”) to be appended atomically at least once even in the presence of concurrent mutations, but at an offset of GFS’s choosing.
-(In contrast, a “regular” append is merely a write at an offset that the client believes to be the current end of file.)
-The offset is returned to the client and marks the beginning of a defined region that contains the record.
+
+- A write causes data to be written at an application-specified file offset.
+- A record append causes data (the “record”) to be appended atomically at least once even in the presence of concurrent mutations, but at an offset of GFS’s choosing.
+  (In contrast, a “regular” append is merely a write at an offset that the client believes to be the current end of file.)
+  The offset is returned to the client and marks the beginning of a defined region that contains the record.
+
 In addition, GFS may insert padding or record duplicates in between.
 They occupy regions considered to be inconsistent and are typically dwarfed by the amount of user data.
+
 After a sequence of successful mutations, the mutated file region is guaranteed to be defined and contain the data written by the last mutation.
-GFS achieves this by (a) applying mutations to a chunkin the same order on all its replicas, and (b) using chunkversion numbers to detect any replica that has become stale because it has missed mutations while its chunkserver was down.
+GFS achieves this by applying mutations to a chunkin the same order on all its replicas, and using chunkversion numbers to detect any replica that has become stale because it has missed mutations while its chunkserver was down.
 Stale replicas will never be involved in a mutation or given to clients asking the master for chunk locations. They are garbage collected at the earliest opportunity.
 
 Since clients cache chunk locations, they may read from a stale replica before that information is refreshed.
 This window is limited by the cache entry’s timeout and the next open of the file, which purges from the cache all chunk information for that file.
 Moreover, as most of our files are append-only, a stale replica usually returns a premature end of chunk rather than outdated data.
 When a reader retries and contacts the master, it will immediately get current chunk locations.
+
 Long after a successful mutation, component failures can of course still corrupt or destroy data.
 GFS identifies failed chunkservers by regular handshakes between master and all chunkservers and detects data corruption by checksumming.
 Once a problem surfaces, the data is restored from valid replicas as soon as possible.
@@ -565,11 +567,11 @@ The most recent events are also kept in memory and available for continuous onli
 
 ## Links
 
-- [BigData](/docs/CS/Java/BigData/BigData.md)
+- [Google](/docs/CS/Distributed/Google.md)
+- [HDFS](/docs/CS/Distributed/HDFS.md)
 
 ## References
 
 1. [The Google File System](https://pdos.csail.mit.edu/6.824/papers/gfs.pdf)
-2. [Web Search for a Planet: The Google Cluster Architecture](http://www.carfield.com.hk/document/networking/google_cluster.pdf?)
-3. [The anatomy of a large-scale hypertextual Web search engine](https://snap.stanford.edu/class/cs224w-readings/Brin98Anatomy.pdf)
-4. [GFS: Evolution on Fast-forward](https://web.eecs.umich.edu/~mosharaf/Readings/GFS-ACMQueue-2012.pdf)
+2. [The anatomy of a large-scale hypertextual Web search engine](https://snap.stanford.edu/class/cs224w-readings/Brin98Anatomy.pdf)
+3. [GFS: Evolution on Fast-forward](https://web.eecs.umich.edu/~mosharaf/Readings/GFS-ACMQueue-2012.pdf)

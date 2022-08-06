@@ -258,6 +258,7 @@ We have learned several things from this work.
 
 ## Links
 
+- [Google](/docs/CS/Distributed/Google.md)
 - [GFS](/docs/CS/Distributed/GFS.md)
 
 ## References
@@ -266,3 +267,4 @@ We have learned several things from this work.
 2. [MapReduce: A major step backwards](https://dsf.berkeley.edu/cs286/papers/backwards-vertica2008.pdf)
 3. [MapReduce: A Flexible Data Processing Tool](https://www.cs.princeton.edu/courses/archive/spr11/cos448/web/docs/week10_reading2.pdf)
 4. [MapReduce and Parallel DBMSs-Friends or Foes](https://webpages.charlotte.edu/sakella/courses/cloud/papers/StonebrakerACMJan2010.pdf)
+5. [A Comparision of Approaches to Large-Scale Data Analysis](https://sfu-db.github.io/dbsystems/Lectures/LargeScale.pdf)
