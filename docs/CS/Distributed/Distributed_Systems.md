@@ -426,7 +426,6 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [MillWheel: Fault-Tolerant Stream Processing at Internet Scale]()
 
-[Borg, Omega, and Kubernetes](https://dl.acm.org/doi/pdf/10.1145/2890784)
 
 [Dapper]()
 
@@ -438,7 +437,6 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [RAMCloud]
 
-[HyperDex]
 
 [HyperDex: A Distributed, Searchable Key-Value Store](https://www.cs.cornell.edu/people/egs/papers/hyperdex-sigcomm.pdf)
 
