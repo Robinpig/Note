@@ -40,14 +40,13 @@ A lookup can be performed with a single disk seek: we first find the appropriate
 Optionally, an SSTable can be completely mapped into memory, which allows us to perform lookups and scans without touching disk.
 
 
-Bigtable relies on a highly-available and persistent
-distributed lock service called [Chubby](/docs/CS/Distributed/Chubby.md).
+Bigtable relies on a highly-available and persistent distributed lock service called [Chubby](/docs/CS/Distributed/Chubby.md).
 Bigtable uses Chubby for a variety of tasks: to ensure that there is at most one active master at any time; to store the bootstrap location of Bigtable data; 
 to discover tablet servers and finalize tablet server deaths; to store Bigtable schema information (the column family information for each table); and to store access control lists. 
 **If Chubby becomes unavailable for an extended period of time, Bigtable becomes unavailable.**
 
 
-The Bigtable implementation has three major components: a library that is linked into every client, one master server, and many tablet servers. 
+**The Bigtable implementation has three major components: a library that is linked into every client, one master server, and many tablet servers.** 
 Tablet servers can be dynamically added (or removed) from a cluster to accomodate changes in workloads.
 
 The master is responsible for assigning tablets to tablet servers, detecting the addition and expiration of tablet servers, balancing tablet-server load, and garbage collection of files in GFS. 
