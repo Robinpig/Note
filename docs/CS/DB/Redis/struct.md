@@ -63,16 +63,23 @@ The following is the list of all the data structures supported by Redis, which w
 strict digraph  {
 autosize=false;
 
+rankdir=LR;
+
+  subgraph cluster_Type {
+        label="type"
+      
+        {rank="same";stream;list;set;hash;zset;string;}
+  }
+
+  subgraph cluster_Encoding {
+      label="encoding"
+      stream_encoding[label="stream"]
  
- type -> stream;
- type -> list;
- type -> set;
- type -> hash;
- type -> zset;
- type -> string;
- 
+    {rank="same";quicklist;intset;hashtable;ziplist;skiplist;int;emstr;raw;stream_encoding;}
+  }
+  
  list -> quicklist;
- 
+
  set -> intset;
  set -> hashtable;
  
@@ -86,23 +93,12 @@ autosize=false;
  string -> emstr;
  string -> raw;
  
- stream_encoding[label="stream"]
  stream -> stream_encoding;
- 
-  quicklist -> encoding;
-  intset -> encoding;
-  hashtable -> encoding;
-  ziplist -> encoding;
-  skiplist -> encoding;
-  int -> encoding;
-  emstr -> encoding;
-  raw -> encoding;
-  stream_encoding -> encoding;
+  
 
 }
 ```
 
-![](./images/struct.png)
 
 object
 
@@ -253,7 +249,7 @@ The `LTRIM` command is similar to `LRANGE`, but **instead of displaying the spec
 
 #### Blocking Queue
 
-Redis implements commands called `BRPOP` and `BLPOP`which are versions of `RPOP` and `LPOP` able to block if the list is empty: 
+Redis implements commands called `BRPOP` and `BLPOP`which are versions of `RPOP` and `LPOP` able to block if the list is empty:
 they'll return to the caller only when a new element is added to the list, or when a user-specified timeout is reached.
 
 Note that you can use 0 as timeout to wait for elements forever, and you can also specify multiple lists and not just one, in order to wait on multiple lists at the same time, and get notified when the first list receives an element.
@@ -311,34 +307,32 @@ Common use cases for bitmaps are:
 * Real time analytics of all kinds.
 * Storing space efficient but high performance boolean information associated with object IDs.
 
-For example imagine you want to know the longest streak of daily visits of your web site users. 
-You start counting days starting from zero, that is the day you made your web site public, and set a bit with `SETBIT` every time the user visits the web site. 
+For example imagine you want to know the longest streak of daily visits of your web site users.
+You start counting days starting from zero, that is the day you made your web site public, and set a bit with `SETBIT` every time the user visits the web site.
 As a bit index you simply take the current unix time, subtract the initial offset, and divide by the number of seconds in a day (normally, 3600*24).
 
-This way for each user you have a small string containing the visit information for each day. 
+This way for each user you have a small string containing the visit information for each day.
 With `BITCOUNT` it is possible to easily get the number of days a given user visited the web site, while with a few `BITPOS` calls, or simply fetching and analyzing the bitmap client-side, it is possible to easily compute the longest streak.
 
-Bitmaps are trivial to split into multiple keys, for example for the sake of sharding the data set and because in general it is better to avoid working with huge keys. 
+Bitmaps are trivial to split into multiple keys, for example for the sake of sharding the data set and because in general it is better to avoid working with huge keys.
 To split a bitmap across different keys instead of setting all the bits into a key, a trivial strategy is just to store M bits per key and obtain the key name with `bit-number/M` and the Nth bit to address inside the key with `bit-number MOD M`.
 
 ### HyperLogLogs
 
-A [HyperLogLog](/docs/CS/DB/Redis/HyperLogLog.md) is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set). 
-Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, because you need to remember the elements you have already seen in the past in order to avoid counting them multiple times. 
-However there is a set of algorithms that trade memory for precision: you end with an estimated measure with a standard error, which in the case of the Redis implementation is less than 1%. 
+A [HyperLogLog](/docs/CS/DB/Redis/HyperLogLog.md) is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set).
+Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, because you need to remember the elements you have already seen in the past in order to avoid counting them multiple times.
+However there is a set of algorithms that trade memory for precision: you end with an estimated measure with a standard error, which in the case of the Redis implementation is less than 1%.
 The magic of this algorithm is that you no longer need to use an amount of memory proportional to the number of items counted, and instead can use a constant amount of memory! 12k bytes in the worst case, or a lot less if your HyperLogLog (We'll just call them HLL from now) has seen very few elements.
 
 An example of use case for this data structure is counting unique queries performed by users in a search form every day.
 
 ## Streams
 
-The Stream is a new data type introduced with Redis 5.0, which models a log data structure in a more abstract way. 
-However the essence of a log is still intact: like a log file, often implemented as a file open in append-only mode, Redis Streams are primarily an append-only data structure. 
+The Stream is a new data type introduced with Redis 5.0, which models a log data structure in a more abstract way.
+However the essence of a log is still intact: like a log file, often implemented as a file open in append-only mode, Redis Streams are primarily an append-only data structure.
 At least conceptually, because being an abstract data type represented in memory, Redis Streams implement powerful operations to overcome the limitations of a log file.
 
 Redis streams implement additional, non-mandatory features: a set of blocking operations allowing consumers to wait for new data added to a stream by producers, and in addition to that a concept called **Consumer Groups**(allow a group of clients to cooperate in consuming a different portion of the same stream of messages).
-
-
 
 ### tips
 
