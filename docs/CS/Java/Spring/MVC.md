@@ -1,29 +1,26 @@
 ## Introduction
 
-[Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc) is the original web framework built on the Servlet API and has been included in the Spring Framework from the very beginning. 
+[Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc) is the original web framework built on the Servlet API and has been included in the Spring Framework from the very beginning.
 The formal name, “Spring Web MVC,” comes from the name of its source module (spring-webmvc), but it is more commonly known as “Spring MVC”.
 
 Parallel to Spring Web MVC, Spring Framework 5.0 introduced a reactive-stack web framework whose name, [“Spring WebFlux”](/docs/CS/Java/Spring/webflux.md) is also based on its source module (spring-webflux).
 
-Spring MVC, as many other web frameworks, is designed around the front controller pattern where a central Servlet, the [DispatcherServlet], provides a shared algorithm for request processing, while actual work is performed by configurable delegate components. 
+Spring MVC, as many other web frameworks, is designed around the front controller pattern where a central Servlet, the [DispatcherServlet], provides a shared algorithm for request processing, while actual work is performed by configurable delegate components.
 This model is flexible and supports diverse workflows.
 
 ### Context Hierarchy
 
-DispatcherServlet expects a WebApplicationContext (an extension of a plain ApplicationContext) for its own configuration. WebApplicationContext has a link to the ServletContext and the Servlet with which it is associated. 
+DispatcherServlet expects a WebApplicationContext (an extension of a plain ApplicationContext) for its own configuration. WebApplicationContext has a link to the ServletContext and the Servlet with which it is associated.
 It is also bound to the ServletContext such that applications can use static methods on RequestContextUtils to look up the WebApplicationContext if they need access to it.
 
-The root WebApplicationContext typically contains infrastructure beans, such as data repositories and business services that need to be shared across multiple Servlet instances. 
-Those beans are effectively inherited and can be overridden (that is, re-declared) in the Servlet-specific child WebApplicationContext, which typically contains beans local to the given Servlet. 
+The root WebApplicationContext typically contains infrastructure beans, such as data repositories and business services that need to be shared across multiple Servlet instances.
+Those beans are effectively inherited and can be overridden (that is, re-declared) in the Servlet-specific child WebApplicationContext, which typically contains beans local to the given Servlet.
 
 The following image shows this relationship:
 
 ![MVC Context](https://docs.spring.io/spring-framework/docs/current/reference/html/images/mvc-context-hierarchy.png)
 
-
 ## Init
-
-
 
 ### ContextLoaderListener
 
@@ -49,8 +46,6 @@ public class ContextLoaderListener extends ContextLoader implements ServletConte
 
 }
 ```
-
-
 
 ### initWebApplicationContext
 
@@ -101,8 +96,6 @@ public WebApplicationContext initWebApplicationContext(ServletContext servletCon
    }
 }
 ```
-
-
 
 #### createWebApplicationContext
 
@@ -182,17 +175,9 @@ protected void configureAndRefreshWebApplicationContext(ConfigurableWebApplicati
 }
 ```
 
-
-
-
-
-
-
 ![](./images/DispatcherServlet.png)
 
 org.springframework.web.servlet
-
-
 
 ```java
 /**
@@ -257,8 +242,6 @@ protected WebApplicationContext initWebApplicationContext() {
 }
 ```
 
-
-
 ### HttpServletBean
 
 Simple extension of HttpServlet which treats its config parameters (init-param entries within the servlet tag in web.xml) as bean properties.
@@ -266,8 +249,6 @@ A handy superclass for any type of servlet. Type conversion of config parameters
 This servlet leaves request handling to subclasses, inheriting the default behavior of HttpServlet (doGet, doPost, etc).
 This generic servlet base class has no dependency on the Spring org.springframework.context.ApplicationContext concept. Simple servlets usually don't load their own context but rather access service beans from the Spring root application context, accessible via the filter's ServletContext (see org.springframework.web.context.support.WebApplicationContextUtils).
 The FrameworkServlet class is a more specific servlet base class which loads its own application context. FrameworkServlet serves as direct base class of Spring's full-fledged DispatcherServlet.
-
-
 
 Map config parameters onto bean properties of this servlet, and invoke subclass initialization.
 
@@ -312,8 +293,6 @@ protected final void initServletBean() throws ServletException {
    }
 }
 ```
-
-
 
 Initialize and publish the WebApplicationContext for this servlet.
 Delegates to createWebApplicationContext for actual creation of the context. Can be overridden in subclasses.
@@ -373,8 +352,6 @@ protected WebApplicationContext initWebApplicationContext() {
 }
 ```
 
-
-
 Instantiate the WebApplicationContext for this servlet, either a default XmlWebApplicationContext or a custom context class, if set.
 This implementation expects custom contexts to implement the ConfigurableWebApplicationContext interface. Can be overridden in subclasses.
 Do not forget to register this servlet instance as application listener on the created context (for triggering its callback, and to call ConfigurableApplicationContext.refresh() before returning the context instance.
@@ -400,10 +377,6 @@ protected WebApplicationContext createWebApplicationContext(@Nullable Applicatio
    return wac;
 }
 ```
-
-
-
-
 
 ### onRefresh
 
@@ -432,15 +405,10 @@ protected void initStrategies(ApplicationContext context) {
 }
 ```
 
-
-
-
-
-
-
 ## dispatch
 
 All HTTP requests  call `processRequest`
+
 ```java
 public abstract class FrameworkServlet extends HttpServletBean implements ApplicationContextAware {
     @Override
@@ -451,7 +419,9 @@ public abstract class FrameworkServlet extends HttpServletBean implements Applic
     }
 }
 ```
+
 ### processRequest
+
 Process this request, publishing an event regardless of the outcome.
 The actual event handling is performed by the abstract doService template method.
 
@@ -635,8 +605,6 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 }
 ```
 
-
-
 1. match HandlerMapping
 2. interceptor preHandler
 3. HandlerMethodArgumentResolver resolve params
@@ -655,37 +623,34 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 
 see [FilterChain.doFilter() in Tomcat](/docs/CS/Java/Tomcat/Connector.md?id=doFilter)
 
-
-
-Spring MVC provides fine-grained support for CORS configuration through annotations on controllers. 
+Spring MVC provides fine-grained support for CORS configuration through annotations on controllers.
 However, when used with [Spring Security](/docs/CS/Java/Spring/Security.md), we advise relying on the built-in CorsFilter that must be ordered ahead of Spring Security’s chain of filters.
 
 ## Asynchronous Requests
 
 Spring MVC has an extensive integration with Servlet 3.0 asynchronous request processing:
+
 - DeferredResult and Callable return values in controller methods provide basic support for a single asynchronous return value.
 - Controllers can stream multiple values, including SSE and raw data.
 - Controllers can use reactive clients and return reactive types for response handling.
 
-
-The Servlet API was originally built for making a single pass through the Filter-Servlet chain. 
-Asynchronous request processing, added in Servlet 3.0, lets applications exit the Filter-Servlet chain but leave the response open for further processing. 
+The Servlet API was originally built for making a single pass through the Filter-Servlet chain.
+Asynchronous request processing, added in Servlet 3.0, lets applications exit the Filter-Servlet chain but leave the response open for further processing.
 The Spring MVC asynchronous support is built around that mechanism. When a controller returns a DeferredResult, the Filter-Servlet chain is exited, and the Servlet container thread is released.
 Later, when the DeferredResult is set, an ASYNC dispatch (to the same URL) is made, during which the controller is mapped again but, rather than invoking it, the DeferredResult value is used (as if the controller returned it) to resume processing.
 
-From a programming model perspective, both Spring MVC and Spring WebFlux support asynchronous and Reactive Types as return values in controller methods. 
-Spring MVC even supports streaming, including reactive back pressure. 
+From a programming model perspective, both Spring MVC and Spring WebFlux support asynchronous and Reactive Types as return values in controller methods.
+Spring MVC even supports streaming, including reactive back pressure.
 However, **individual writes to the response remain blocking (and are performed on a separate thread)**, unlike WebFlux, which relies on non-blocking I/O and does not need an extra thread for each write.
 
-Another fundamental difference is that **Spring MVC does not support asynchronous or reactive types in controller method arguments (for example, @RequestBody, @RequestPart, and others)**, 
-nor does it have any explicit support for asynchronous and reactive types as model attributes. 
+Another fundamental difference is that **Spring MVC does not support asynchronous or reactive types in controller method arguments (for example, @RequestBody, @RequestPart, and others)**,
+nor does it have any explicit support for asynchronous and reactive types as model attributes.
 Spring WebFlux does support all that.
 
 ## Extension
+
 1. must declare @PathVariable @RequestParam or @RequestBody
 2. Nested Validation need to add `@Valid` at field
-
-
 
 Init DispatchServlet when startup
 
@@ -736,12 +701,12 @@ Create the method argument value of the expected parameter type by reading from 
 
 ```java
 public class RequestResponseBodyMethodProcessor extends AbstractMessageConverterMethodProcessor {
-    
+  
     @Override
     public boolean supportsParameter(MethodParameter parameter) {
         return parameter.hasParameterAnnotation(RequestBody.class);
     }
-    
+  
     @Override
     public boolean supportsReturnType(MethodParameter returnType) {
         return (AnnotatedElementUtils.hasAnnotation(returnType.getContainingClass(), ResponseBody.class) ||
@@ -774,11 +739,27 @@ public class RequestResponseBodyMethodProcessor extends AbstractMessageConverter
 }
 ```
 
+### Request
+
+log http request
+
+```yaml
+logging:
+  level:
+    org.apache.coyote.http11.Http11InputBuffer: debug
+```
+
+test
+
+```yaml
+logging:
+  level:
+    org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor: debug
+```
 
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
-
 
 ## References
 
