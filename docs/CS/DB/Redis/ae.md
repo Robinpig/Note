@@ -106,40 +106,14 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     eventLoop->beforesleep = NULL;
     eventLoop->aftersleep = NULL;
     eventLoop->flags = 0;
+    
     if (aeApiCreate(eventLoop) == -1) goto err;
-    /* Events with mask == AE_NONE are not set. So let's initialize the
-     * vector with it. */
+    
+    /* Events with mask == AE_NONE are not set. So let's initialize the vector with it. */
     for (i = 0; i < setsize; i++)
         eventLoop->events[i].mask = AE_NONE;
     return eventLoop;
-
-err:
-    if (eventLoop) {
-        zfree(eventLoop->events);
-        zfree(eventLoop->fired);
-        zfree(eventLoop);
-    }
-    return NULL;
 }
-```
-
-```c
-// ae.h
-/* State of an event based program */
-typedef struct aeEventLoop {
-    int maxfd;   /* highest file descriptor currently registered */
-    int setsize; /* max number of file descriptors tracked */
-    long long timeEventNextId;
-    time_t lastTime;     /* Used to detect system clock skew */
-    aeFileEvent *events; /* Registered events */
-    aeFiredEvent *fired; /* Fired events */
-    aeTimeEvent *timeEventHead;
-    int stop;
-    void *apidata; /* This is used for polling API specific data */
-    aeBeforeSleepProc *beforesleep;
-    aeBeforeSleepProc *aftersleep;
-    int flags;
-} aeEventLoop;
 ```
 
 #### aeApiCreate
@@ -667,6 +641,31 @@ typedef struct aeFileEvent {
 } aeFileEvent;
 ```
 
+TimeEvent
+
+```c
+typedef struct aeTimeEvent {
+    long long id; /* time event identifier. */
+    monotime when;
+    aeTimeProc *timeProc;
+    aeEventFinalizerProc *finalizerProc;
+    void *clientData;
+    struct aeTimeEvent *prev;
+    struct aeTimeEvent *next;
+    int refcount; /* refcount to prevent timer events from being
+  		   * freed in recursive time event calls. */
+} aeTimeEvent;
+```
+
+/* A fired event */
+```c
+typedef struct aeFiredEvent {
+    int fd;
+    int mask;
+} aeFiredEvent;
+```
+
+
 ### Summaries of Events
 
 
@@ -747,6 +746,8 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
 ```
 
 aeApiPoll ->`epoll_wait`
+
+wrap event into `eventLoop.fired` if events 
 
 ```c
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {

@@ -52,3 +52,4 @@ Google clusters follow three key design principles:
 ## References
 
 1. [Web Search for a Planet: The Google Cluster Architecture](http://www.carfield.com.hk/document/networking/google_cluster.pdf?)
+2. [Google Cluster Architecture overview](https://web.njit.edu/~alexg/courses/cs345/OLD/F15/solutions/f5345f15.pdf)

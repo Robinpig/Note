@@ -1,10 +1,8 @@
 ## Introduction
 
-
 **expire will be delete after set value again** -- set is idempotent
 
 when create string, len=capacity, usually we don't append string.
-
 
 counter/limiter
 cache (shared sessions)
@@ -12,14 +10,13 @@ cache (shared sessions)
 ## Type
 
 
-
-| Type  | len  | alloc | flag                             | buf  |
-| ----- | ---- | ----- | -------------------------------- | ---- |
-| hdr5(Unused)  | /    | /     | 3 lsb of type,  5 msb of  length |      |
-| hdr8  | 1    | 1     | 3 lsb of type, 5 unused bits     |      |
-| hdr16 | 2    | 2     | 3 lsb of type, 5 unused bits     |      |
-| hdr32 | 4    | 4     | 3 lsb of type, 5 unused bits     |      |
-| hdr64 | 8    | 8     | 3 lsb of type, 5 unused bits     |      |
+| Type         | len | alloc | flag                             | buf |
+| -------------- | ----- | ------- | ---------------------------------- | ----- |
+| hdr5(Unused) | /   | /     | 3 lsb of type,  5 msb of  length |     |
+| hdr8         | 1   | 1     | 3 lsb of type, 5 unused bits     |     |
+| hdr16        | 2   | 2     | 3 lsb of type, 5 unused bits     |     |
+| hdr32        | 4   | 4     | 3 lsb of type, 5 unused bits     |     |
+| hdr64        | 8   | 8     | 3 lsb of type, 5 unused bits     |     |
 
 `__attribute__ ((__packed__))` to save memory and find flags by buf[-1] directly
 
@@ -38,24 +35,6 @@ struct __attribute__ ((__packed__)) sdshdr8 {
     unsigned char flags; /* 3 lsb of type, 5 unused bits */
     char buf[];
 };
-struct __attribute__ ((__packed__)) sdshdr16 {
-    uint16_t len; /* used */
-    uint16_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
-};
-struct __attribute__ ((__packed__)) sdshdr32 {
-    uint32_t len; /* used */
-    uint32_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
-};
-struct __attribute__ ((__packed__)) sdshdr64 {
-    uint64_t len; /* used */
-    uint64_t alloc; /* excluding the header and null terminator */
-    unsigned char flags; /* 3 lsb of type, 5 unused bits */
-    char buf[];
-};
 
 // 3lsb in flags
 #define SDS_TYPE_5  0
@@ -70,8 +49,6 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 #define SDS_HDR(T,s) ((struct sdshdr##T *)((s)-(sizeof(struct sdshdr##T))))
 #define SDS_TYPE_5_LEN(f) ((f)>>SDS_TYPE_BITS)
 ```
-
-
 
 get Length O(1)
 
@@ -95,27 +72,16 @@ static inline size_t sdslen(const sds s) {
 }
 ```
 
-
-
-
-
-
-
 ## setCommand
+
+Note that we can't flag set as fast, since it may perform an implicit DEL of a large key.
 
 ```c
 // server.c
-/* Note that we can't flag set as fast, since it may perform an
- * implicit DEL of a large key. */
 {"set",setCommand,-3,
  "write use-memory @string",
  0,NULL,1,1,1,0,0,0}
 ```
-
-Set request:
-![Image](https://mmbiz.qpic.cn/mmbiz_png/655VFpRwHAC2CwibLs5ibAm2IZadq8qbsQaAjaK2TTqFPTWibCsdKdXgiazJRJfCENRhpicERvhfyac4A2s7KarIENA/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
-
-
 
 1. tryObjectEncoding
 2. setGenericCommand
@@ -147,31 +113,20 @@ void psetexCommand(client *c) {
 
 ### createStringObject
 
-```c
-// object.c
-#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
-```
-
-len>44 raw, else embstr.
-
 debug object key
 
 1. 16bytes for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
 2. 3bytes for capacity +len +flags
 3. 1byte for NULL
 
-jemalloc apply 64byte(for cache line)
-
-so a SDS max **embstr** string len is 64-16-3-1= **44 byte**
+The OBJ_ENCODING_EMBSTR_SIZE_LIMIT of 44 is chosen so that the biggest string object we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc.
+So a SDS max embstr string len is 64-16-3-1= **44 byte**.
 
 ```c
 // object.c
-/* Create a string object with EMBSTR encoding if it is smaller than
- * OBJ_ENCODING_EMBSTR_SIZE_LIMIT, otherwise the RAW encoding is
- * used.
- *
- * The current limit of 44 is chosen so that the biggest string object
- * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
+
+#define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
+
 robj *createStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
         return createEmbeddedStringObject(ptr,len);
@@ -179,7 +134,6 @@ robj *createStringObject(const char *ptr, size_t len) {
         return createRawStringObject(ptr,len); // createObject & sdsnewlen
 }
 ```
-
 
 ### tryObjectEncoding
 
@@ -272,8 +226,6 @@ robj *tryObjectEncoding(robj *o) {
 }
 ```
 
-
-
 #### createEmbeddedStringObject
 
 zmalloc 1, better for cache
@@ -310,8 +262,6 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     return o;
 }
 ```
-
-
 
 #### createStringObjectFromLongLongWithOptions
 
@@ -356,12 +306,9 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int valueobj) {
 }
 ```
 
-
-
 #### sdsnewlen
 
 Don't use sdshdr5, turn to SDS_TYPE_8.
-
 
 ```c
 /* Create an sds string from a long long value. It is much faster than:
@@ -452,14 +399,10 @@ sds sdsnewlen(const void *init, size_t initlen) {
 }
 ```
 
-
-
-
-
 ### setGenericCommand
 
-
 The setGenericCommand() function implements the SET operation with differen options and variants. This function is called in order to implement the following commands: SET, SETEX, PSETEX, SETNX.
+
 - 'flags' changes the behavior of the command (NX or XX, see below).
 - 'expire' represents an expire to set in form of a Redis object as passed by the user. It is interpreted according to the specified 'unit'.
 - 'ok_reply' and 'abort_reply' is what the function will reply to the client if the operation is performed, or when it is not because of NX or XX flags.
@@ -557,13 +500,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
 }
 ```
 
-
-
-
-
 ## sdscatjoin
-
-
 
 ```c
 /* Like sdsjoin, but joins an array of SDS strings. */
@@ -580,9 +517,6 @@ sds sdsjoinsds(sds *argv, int argc, const char *sep, size_t seplen) {
     return join;
 }
 ```
-
-
-
 
 ### sdscatlen
 
@@ -603,9 +537,6 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 }
 ```
 
-
-
-
 ### sdsMakeRoomFor
 
 1. avail >= addlen, return
@@ -615,6 +546,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 Enlarge the free space at the end of the sds string so that the caller is sure that after calling this function can overwrite up to addlen bytes after the end of the string, plus one more byte for nul term.
 
 If there's already sufficient free space, this function returns without any action, if there isn't sufficient free space, it'll allocate what's missing, and possibly more:
+
 - When greedy is 1, enlarge more than needed, to avoid need for future reallocs on incremental growth.
 - When greedy is 0, enlarge just enough so that there's free space for 'addlen'.
 
@@ -678,13 +610,12 @@ sds _sdsMakeRoomFor(sds s, size_t addlen, int greedy) {
 }
 ```
 
-
-
 ## free
 
 use `sdsclear` instead of `sdsfree`
 
 Free an sds string. No operation is performed if 's' is NULL.
+
 ```c
 #define s_free zfree
 
@@ -706,6 +637,7 @@ void sdsclear(sds s) {
 ```
 
 ## Summary
+
 - O(1) getLen
 - **packed** and always append '\0'
 - expand pow of 2 when len < 1M, or else expand 1M util 512M
@@ -714,11 +646,9 @@ void sdsclear(sds s) {
   - encoding int value in ptr
   - encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
 
-
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct.md)
-
 
 ## References
 

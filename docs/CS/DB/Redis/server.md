@@ -560,6 +560,61 @@ if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
 }
 ```
 
+
+#### resize
+
+
+The client query buffer is an sds.c string that can end with a lot of free space not used, this function reclaims space if needed.
+
+The function always returns 0 as it never terminates the client.
+
+
+
+There are two conditions to resize the query buffer:
+
+1. Query buffer is > BIG_ARG and too big for latest peak.
+2. Query buffer is > BIG_ARG and client is idle.
+3. Only resize the query buffer if it is actually wasting at least a few kbytes(4KB).
+
+There are two conditions to resize the pending query buffer:
+
+1. Pending Query buffer is > LIMIT_PENDING_QUERYBUF.
+2. Used length is smaller than pending_querybuf_size/2
+
+```c
+int clientsCronResizeQueryBuffer(client *c) {
+    size_t querybuf_size = sdsAllocSize(c->querybuf);
+    time_t idletime = server.unixtime - c->lastinteraction;
+
+    if (querybuf_size > PROTO_MBULK_BIG_ARG &&
+         ((querybuf_size/(c->querybuf_peak+1)) > 2 ||
+          idletime > 2))
+    {
+        if (sdsavail(c->querybuf) > 1024*4) {
+            c->querybuf = sdsRemoveFreeSpace(c->querybuf);
+        }
+    }
+    /* Reset the peak again to capture the peak memory usage in the next cycle. */
+    c->querybuf_peak = 0;
+
+    /* Clients representing masters also use a "pending query buffer" that
+     * is the yet not applied part of the stream we are reading. Such buffer
+     * also needs resizing from time to time, otherwise after a very large
+     * transfer (a huge value or a big MIGRATE operation) it will keep using
+     * a lot of memory. */
+    if (c->flags & CLIENT_MASTER) {
+       
+        size_t pending_querybuf_size = sdsAllocSize(c->pending_querybuf);
+        if(pending_querybuf_size > LIMIT_PENDING_QUERYBUF &&
+           sdslen(c->pending_querybuf) < (pending_querybuf_size/2))
+        {
+            c->pending_querybuf = sdsRemoveFreeSpace(c->pending_querybuf);
+        }
+    }
+    return 0;
+}
+```
+
 #### reply dynamic buffer
 
 The client output buffer limits can be used to force disconnection of clients that are not reading data from the server fast enough for some reason (a common reason is that a Pub/Sub client can't consume messages as fast as the publisher can produce them).
@@ -578,6 +633,33 @@ typedef struct clientReplyBlock {
     size_t size, used;
     char buf[];
 } clientReplyBlock;
+```
+
+### freeClientAsync
+
+Schedule a client to free it at a safe time in the serverCron() function. 
+This function is useful when we need to terminate a client but we are in a context where calling freeClient() is not possible, because the client should be valid for the continuation of the flow of the program.
+
+```c
+// networking.c
+void freeClientAsync(client *c) {
+    /* We need to handle concurrent access to the server.clients_to_close list
+     * only in the freeClientAsync() function, since it's the only function that
+     * may access the list while Redis uses I/O threads. All the other accesses
+     * are in the context of the main thread while the other threads are
+     * idle. */
+    if (c->flags & CLIENT_CLOSE_ASAP || c->flags & CLIENT_LUA) return;
+    c->flags |= CLIENT_CLOSE_ASAP;
+    if (server.io_threads_num == 1) {
+        /* no need to bother with locking if there's just one thread (the main thread) */
+        listAddNodeTail(server.clients_to_close,c);
+        return;
+    }
+    static pthread_mutex_t async_free_queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&async_free_queue_mutex);
+    listAddNodeTail(server.clients_to_close,c);
+    pthread_mutex_unlock(&async_free_queue_mutex);
+}
 ```
 
 ## Cache

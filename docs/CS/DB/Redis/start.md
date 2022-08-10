@@ -1,12 +1,5 @@
 ## Introduction
 
-Inside server.c you can find code that handles other vital things of the Redis server:
-
-* `call()` is used in order to call a given command in the context of a given client.
-* `activeExpireCycle()` handles eviction of keys with a time to live set via the `EXPIRE` command.
-* `performEvictions()` is called when a new write command should be performed but Redis is out of memory according to the `maxmemory` directive.
-* The global variable `redisCommandTable` defines all the Redis commands, specifying the name of the command, the function implementing the command, the number of arguments required, and other properties of each command.
-
 ## main
 
 The following are the most important steps in order to startup the Redis server.
@@ -20,32 +13,6 @@ The following are the most important steps in order to startup the Redis server.
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
-
-#ifdef REDIS_TEST
-    if (argc == 3 && !strcasecmp(argv[1], "test")) {
-        if (!strcasecmp(argv[2], "ziplist")) {
-            return ziplistTest(argc, argv);
-        } else if (!strcasecmp(argv[2], "quicklist")) {
-            quicklistTest(argc, argv);
-        } else if (!strcasecmp(argv[2], "intset")) {
-            return intsetTest(argc, argv);
-        } else if (!strcasecmp(argv[2], "zipmap")) {
-            return zipmapTest(argc, argv);
-        } else if (!strcasecmp(argv[2], "sha1test")) {
-            return sha1Test(argc, argv);
-        } else if (!strcasecmp(argv[2], "util")) {
-            return utilTest(argc, argv);
-        } else if (!strcasecmp(argv[2], "endianconv")) {
-            return endianconvTest(argc, argv);
-        } else if (!strcasecmp(argv[2], "crc64")) {
-            return crc64Test(argc, argv);
-        } else if (!strcasecmp(argv[2], "zmalloc")) {
-            return zmalloc_test(argc, argv);
-        }
-
-        return -1; /* test not found */
-    }
-#endif
 
     /* We need to initialize our libraries, and the server configuration. */
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
@@ -147,13 +114,7 @@ We need to init sentinel right now as parsing the configuration file in sentinel
             }
             j++;
         }
-        if (server.sentinel_mode && configfile && *configfile == '-') {
-            serverLog(LL_WARNING,
-                "Sentinel config from STDIN not allowed.");
-            serverLog(LL_WARNING,
-                "Sentinel needs config file on disk to save state.  Exiting...");
-            exit(1);
-        }
+       
         resetServerSaveParams();
         loadServerConfig(configfile,options);
         sdsfree(options);
@@ -162,21 +123,6 @@ We need to init sentinel right now as parsing the configuration file in sentinel
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
-
-    serverLog(LL_WARNING, "oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo");
-    serverLog(LL_WARNING,
-        "Redis version=%s, bits=%d, commit=%s, modified=%d, pid=%d, just started",
-            REDIS_VERSION,
-            (sizeof(long) == 8) ? 64 : 32,
-            redisGitSHA1(),
-            strtol(redisGitDirty(),NULL,10) > 0,
-            (int)getpid());
-
-    if (argc == 1) {
-        serverLog(LL_WARNING, "Warning: no config file specified, using the default config. In order to specify a config file use %s /path/to/%s.conf", argv[0], server.sentinel_mode ? "sentinel" : "redis");
-    } else {
-        serverLog(LL_WARNING, "Configuration loaded");
-    }
 
     readOOMScoreAdj();
     initServer();
@@ -700,7 +646,7 @@ void setupSignalHandlers(void) {
 
 #### createSharedObjects
 
-shared objects 0 ~ 10000
+shared objects 0 ~ 9999
 
 ```c
 // server.c
@@ -869,8 +815,11 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
 
 #### createEventHandler
 
+
+
 ```c
 // networking.c
+#define MAX_ACCEPTS_PER_CALL 1000
 void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[NET_IP_STR_LEN];
@@ -942,10 +891,6 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
     UNUSED(ip);
 
     if (connGetState(conn) != CONN_STATE_ACCEPTING) {
-        serverLog(LL_VERBOSE,
-            "Accepted client connection in error state: %s (conn: %s)",
-            connGetLastError(conn),
-            connGetInfo(conn, conninfo, sizeof(conninfo)));
         connClose(conn);
         return;
     }
@@ -975,13 +920,12 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
         connClose(conn);
         return;
     }
+```
 
-    /* Create connection and client */
+Create connection and client
+
+```c
     if ((c = createClient(conn)) == NULL) {
-        serverLog(LL_WARNING,
-            "Error registering fd event for the new client: %s (conn: %s)",
-            connGetLastError(conn),
-            connGetInfo(conn, conninfo, sizeof(conninfo)));
         connClose(conn); /* May be already closed, just ignore errors */
         return;
     }
@@ -1012,16 +956,18 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
 ##### createClient
 
 1. Set conn NonBlock & TcpNoDelay
-2. set readQueryFromClient to Readhandler
+2. set [readQueryFromClient](/docs/CS/DB/Redis/start.md?id=readQueryFromClient) to ReadHandler
 
 ```c
 client *createClient(connection *conn) {
     client *c = zmalloc(sizeof(client));
+```
 
-    /* passing NULL as conn it is possible to create a non connected client.
-     * This is useful since all the commands needs to be executed
-     * in the context of a client. When commands are executed in other
-     * contexts (for instance a Lua script) we need a non connected client. */
+passing NULL as conn it is possible to create a non connected client.
+This is useful since all the commands needs to be executed in the context of a client. 
+When commands are executed in other contexts (for instance a Lua script) we need a non connected client.
+
+```c
     if (conn) {
         connNonBlock(conn);
         connEnableTcpNoDelay(conn);
