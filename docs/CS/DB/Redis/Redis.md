@@ -19,7 +19,7 @@ The simplest way to understand how a program works is to understand the [data st
 - [db](/docs/CS/DB/Redis/redisDb.md)
 
 
-Redis has **built-in replication, Lua scripting, LRU eviction, transactions, and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
+Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
 
 ## Persistence

@@ -8,6 +8,19 @@ This can be viewed as an extension of modular design.
 
 ### Lists, Stacks, and Queues
 
+[Lists](/docs/CS/Algorithms/list.md), [stacks](/docs/CS/Algorithms/stack.md), and [queues](/docs/CS/Algorithms/queue.md) are perhaps the three fundamental data structures in all of computer science.
+
+
+| Parameter                       | Linked List          | Array                                                   | Dynamic Array                                              |
+| --------------------------------- | ---------------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
+| Indexing                        | $O(n)$               | $O(1)$                                                  | $O(1)$                                                     |
+| Inserting/deletion at beginning | $O(1)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
+| Insertion at ending             | $O(n)$               | $O(1)$, if array is not full                            | $O(1)$, if array is not full<br />$O(n)$, if array is full |
+| Deletion at ending              | $O(n)$               | $O(1)$                                                  | $O(n)$                                                     |
+| Insertion in middle             | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
+| Deletion in middle              | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
+| Wasted space                    | $O(n)$(for pointers) | 0                                                       | $O(n)$                                                     |
+
 array
 
 - [Linked List](/docs/CS/Algorithms/linked-list.md)
@@ -23,9 +36,6 @@ Its size is kept small by calling other modules. Modularity has several advantag
 For instance, if output needs to be written in a certain format, it is certainly important to have one routine to do this.
 If printing statements are scattered throughout the program, it will take considerably longer to make modifications.
 The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
-
-
-[Lists](/docs/CS/Algorithms/list.md), [stacks](/docs/CS/Algorithms/stack.md), and [queues](/docs/CS/Algorithms/queue.md) are perhaps the three fundamental data structures in all of computer science.
 
 ### Tree
 
@@ -55,23 +65,23 @@ A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts a
 - [LRU](/docs/CS/Algorithms/LRU.md)
 
 
-| 算法规则 |	优缺点 |
-| --- | --- |
-| OPT |	优先淘汰最长时间内不会被访问的页面	缺页率最小，性能最好;但无法实现 |
-| FIFO |	优先淘汰最先进入内存的页面	实现简单;但性能很差，可能出现Belady异常 |
-| LRU |	优先淘汰最近最久没访问的页面	性能很好;但需要硬件支持，算法开销大 |
-| CLOCK (NRU) |	循环扫描各页面 第一轮淘汰访问位=0的，并将扫描过的页面访问位改为1。若第-轮没选中，则进行第二轮扫描。	实现简单，算法开销小;但未考虑页面是否被修改过。 |
-| 改进型CLOCK (改进型NRU) |	若用(访问位，修改位)的形式表述，则 第一轮:淘汰(0,0) 第二轮:淘汰(O,1)，并将扫描过的页面访问位都置为0 第三轮:淘汰(O, 0) 第四轮:淘汰(0, 1)	算法开销较小，性能也不错 PDF文档下载方式 |
+| 算法规则                | 优缺点                                                                                                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OPT                     | 优先淘汰最长时间内不会被访问的页面	缺页率最小，性能最好;但无法实现                                                                                                               |
+| FIFO                    | 优先淘汰最先进入内存的页面	实现简单;但性能很差，可能出现Belady异常                                                                                                               |
+| LRU                     | 优先淘汰最近最久没访问的页面	性能很好;但需要硬件支持，算法开销大                                                                                                                 |
+| CLOCK (NRU)             | 循环扫描各页面 第一轮淘汰访问位=0的，并将扫描过的页面访问位改为1。若第-轮没选中，则进行第二轮扫描。	实现简单，算法开销小;但未考虑页面是否被修改过。                              |
+| 改进型CLOCK (改进型NRU) | 若用(访问位，修改位)的形式表述，则 第一轮:淘汰(0,0) 第二轮:淘汰(O,1)，并将扫描过的页面访问位都置为0 第三轮:淘汰(O, 0) 第四轮:淘汰(0, 1)	算法开销较小，性能也不错 PDF文档下载方式 |
 
 ### Pattern Matching
 
 [Substring Search](/docs/CS/Algorithms/KMP.md)
 
-
 ## Algorithm Analysis
 
 An *algorithm* is a finite set of instructions that, if followed, accomplishes a particular task.
 In addition, all algorithms must satisfy the following criteria:
+
 1. **Input**. There are zero or more quantities that are externally supplied.
 2. **Output**. At least one quantity is produced.
 3. **Definiteness**. Each instruction is clear and unambiguous.
@@ -80,30 +90,28 @@ In addition, all algorithms must satisfy the following criteria:
 
 ### Complexity
 
-Algorithms can be evaluated by a variety of criteria. 
-Most often we shall be interested in the rate of growth of the time or space required to solve larger and larger instances of a problem. 
+Algorithms can be evaluated by a variety of criteria.
+Most often we shall be interested in the rate of growth of the time or space required to solve larger and larger instances of a problem.
 We would like to associate with a problem an integer. called the size of the problem, which is a measure of the quantity of input data.
 
-The time needed by an algorithm expressed as a function of the size of a problem is called the *time complexity* of the algorithm. 
-The limiting behavior of the compiexity as size increases is called the *asymptotic time complexity*. 
+The time needed by an algorithm expressed as a function of the size of a problem is called the *time complexity* of the algorithm.
+The limiting behavior of the compiexity as size increases is called the *asymptotic time complexity*.
 Analogous definitions can be made for *space complexity* and *asymptotic space complexity*.
 
 The asymptotic complexity of an algorithm is an important measure of the goodness of an algorithm, one that promises to become even more important with future increases in computing speed.
 
-Despite our concentration on order-of-magnitude performance, we should realize that an algorithm with a rapid growth rate might have a smaller constant of proportionality than one with a lower growth rate. 
+Despite our concentration on order-of-magnitude performance, we should realize that an algorithm with a rapid growth rate might have a smaller constant of proportionality than one with a lower growth rate.
 In that case. the rapidly growing algorithm might be superior for small problems. possibly even for all problems of a size that would interest us.
 
-If for a given size the complexity is taken as the maximum complexity over all inputs of that size, then the complexity is called the *worst-case complexity*. 
-If the complexity is taken as the "average" complexity over all inputs of given size. then the complexity is called the *expected complexity*. 
-The expected complexity of an algorithm is usually more difficult to ascertain than the worst-case complexity. 
-One must make some assumption about the distribution of inputs, and realistic assumptions are often not mathematically tractable. 
-We shall emphasize the worst case, since it is more tractable and has a universal applicability. 
+If for a given size the complexity is taken as the maximum complexity over all inputs of that size, then the complexity is called the *worst-case complexity*.
+If the complexity is taken as the "average" complexity over all inputs of given size. then the complexity is called the *expected complexity*.
+The expected complexity of an algorithm is usually more difficult to ascertain than the worst-case complexity.
+One must make some assumption about the distribution of inputs, and realistic assumptions are often not mathematically tractable.
+We shall emphasize the worst case, since it is more tractable and has a universal applicability.
 However. it should be borne in mind that the algorithm with the best worst-case complexity does not necessarily have the best expected complexity.
-
 
 In theoretical analysis of algorithms it is common to estimate their complexity in the asymptotic sense, i.e., to estimate the complexity function for arbitrarily large input.
 Big O notation, Big-omega notation and Big-theta notation are used to this end.
-
 
 An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
 
@@ -132,24 +140,18 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 
 - [Sort](/docs/CS/Algorithms/Sort.md)
 
-
-
-
 ### Consensus Algorithm
 
 Paxos
 
 Raft
 
-
 ### Compression Algorithms
 
-
-###
+### 
 
 Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
 Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes O(N^2) time complexity where N is the number of people involved.
-
 
 ## Links
 

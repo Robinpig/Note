@@ -5,7 +5,7 @@ Redis Cluster 16384 slots for master
 
 max 1000
 
-#### gossip 
+## gossip 
 Initially we don't know our "name", but we'll find it once we connect to the first node, using the getsockname() function. Then we'll use this address for all the next messages.
 
 
@@ -42,6 +42,7 @@ Redis-trib.rb add-nodeCopy to clipboardErrorCopied
 - ping：每个节点都会频繁给其它节点发送 ping，其中包含自己的状态还有自己维护的集群元数据，互相通过 ping 交换元数据。
 - pong：返回 ping 和 meeet，包含自己的状态和其它信息，也用于信息广播和更新。
 - fail：某个节点判断另一个节点 fail 之后，就发送 fail 给其它节点，通知其它节点说，某个节点宕机啦。
+
 
 #### [ping 消息深入](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=ping-消息深入)
 
@@ -85,7 +86,29 @@ Redis cluster 的高可用的原理，几乎跟哨兵是类似的。
 
 
 
-### 集群基础实现
+## master
+
+#### clusterSetMaster
+
+```c
+void clusterSetMaster(clusterNode *n) {
+    serverAssert(n != myself);
+    serverAssert(myself->numslots == 0);
+
+    if (nodeIsMaster(myself)) {
+        myself->flags &= ~(CLUSTER_NODE_MASTER|CLUSTER_NODE_MIGRATE_TO);
+        myself->flags |= CLUSTER_NODE_SLAVE;
+        clusterCloseAllSlots();
+    } else {
+        if (myself->slaveof)
+            clusterNodeRemoveSlave(myself->slaveof,myself);
+    }
+    myself->slaveof = n;
+    clusterNodeAddSlave(n,myself);
+    replicationSetMaster(n->ip, n->port);
+    resetManualFailover();
+}
+```
 
 一个集群由多个Redis节点组成，不同的节点通过`CLUSTER MEET`命令进行连接：
 

@@ -71,10 +71,49 @@ call `rdbSaveKeyValuePair`
 
 load RDB
 
+#### loadDataFromDisk
+
 Function called at startup to load RDB or AOF file in memory.
+
+- loadAppendOnlyFile
 
 ```c
 void loadDataFromDisk(void) {
+    long long start = ustime();
+    if (server.aof_state == AOF_ON) {
+        if (loadAppendOnlyFile(server.aof_filename) == C_OK)
+            serverLog(LL_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
+    } else {
+        rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
+        errno = 0; /* Prevent a stale value from affecting error checking */
+        if (rdbLoad(server.rdb_filename,&rsi,RDBFLAGS_NONE) == C_OK) {
+            serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",
+                (float)(ustime()-start)/1000000);
+
+            /* Restore the replication ID / offset from the RDB file. */
+            if ((server.masterhost ||
+                (server.cluster_enabled &&
+                nodeIsSlave(server.cluster->myself))) &&
+                rsi.repl_id_is_set &&
+                rsi.repl_offset != -1 &&
+                /* Note that older implementations may save a repl_stream_db
+                 * of -1 inside the RDB file in a wrong way, see more
+                 * information in function rdbPopulateSaveInfo. */
+                rsi.repl_stream_db != -1)
+            {
+                memcpy(server.replid,rsi.repl_id,sizeof(server.replid));
+                server.master_repl_offset = rsi.repl_offset;
+                /* If we are a slave, create a cached master from this
+                 * information, in order to allow partial resynchronizations
+                 * with masters. */
+                replicationCacheMasterUsingMyself();
+                selectDb(server.cached_master,rsi.repl_stream_db);
+            }
+        } else if (errno != ENOENT) {
+            serverLog(LL_WARNING,"Fatal error loading the DB: %s. Exiting.",strerror(errno));
+            exit(1);
+        }
+    }
 }
 ```
 
@@ -285,7 +324,7 @@ struct redisServer {
     int key_load_delay;             /* Delay in microseconds between keys while
                                      * loading aof or rdb. (for testings). negative
                                      * value means fractions of microsecons (on average). */
-}                         
+}                       
 ```
 
 Replay the append log file. On success C_OK is returned. On non fatal error (the append only file is zero-length) C_ERR is returned. On fatal error an error message is logged and the program exists.
@@ -296,6 +335,12 @@ int loadAppendOnlyFile(char *filename) {
 
 write AOF
 
+### flush
+
+#### flushAppendOnlyFile
+
+Max wait 2 seconds
+
 Write the append only file buffer on disk.
 
 Since we are required to write the AOF before replying to the client, and the only way the client socket can get a write is entering when the the event loop, we accumulate all the AOF writes in a memory buffer and write it on disk using this function just before entering the event loop again.
@@ -303,7 +348,6 @@ Since we are required to write the AOF before replying to the client, and the on
 About the 'force' argument:
 
 When the fsync policy is set to 'everysec' we may delay the flush if there is still an fsync() going on in the background thread, since for instance on Linux write(2) will be blocked by the background fsync anyway.
-
 When this happens we remember that there is some aof buffer to be flushed ASAP, and will try to do that in the serverCron() function.
 
 However if force is set to 1 we'll write regardless of the background fsync.
@@ -311,41 +355,208 @@ However if force is set to 1 we'll write regardless of the background fsync.
 called by `serverCron` or `beforeSleep` or `prepareForShutdown`
 
 ```c
+// aof
 #define AOF_WRITE_LOG_ERROR_RATE 30 /* Seconds between errors logging. */
-void flushAppendOnlyFile(int force)
+void flushAppendOnlyFile(int force) {
+    ssize_t nwritten;
+    int sync_in_progress = 0;
+    mstime_t latency;
 
-```
-
-#### flushAppendOnlyFile
-
-Max wait 2 seconds
-
-```c
-// aof.flushAppendOnlyFile
-if (server.aof_fsync == AOF_FSYNC_EVERYSEC && !force) {
-    /* With this append fsync policy we do background fsyncing.
-     * If the fsync is still in progress we can try to delay
-     * the write for a couple of seconds. */
-    if (sync_in_progress) {
-        if (server.aof_flush_postponed_start == 0) {
-            /* No previous write postponing, remember that we are
-             * postponing the flush and return. */
-            server.aof_flush_postponed_start = server.unixtime;
-            return;
-        } else if (server.unixtime - server.aof_flush_postponed_start < 2) {
-            /* We were already waiting for fsync to finish, but for less
-             * than two seconds this is still ok. Postpone again. */
+    if (sdslen(server.aof_buf) == 0) {
+        /* Check if we need to do fsync even the aof buffer is empty,
+         * because previously in AOF_FSYNC_EVERYSEC mode, fsync is
+         * called only when aof buffer is not empty, so if users
+         * stop write commands before fsync called in one second,
+         * the data in page cache cannot be flushed in time. */
+        if (server.aof_fsync == AOF_FSYNC_EVERYSEC &&
+            server.aof_fsync_offset != server.aof_current_size &&
+            server.unixtime > server.aof_last_fsync &&
+            !(sync_in_progress = aofFsyncInProgress())) {
+            goto try_fsync;
+        } else {
             return;
         }
-        /* Otherwise fall trough, and go write since we can't wait
-         * over two seconds. */
-        server.aof_delayed_fsync++;
-        serverLog(LL_NOTICE,"Asynchronous AOF fsync is taking too long (disk is busy?). Writing the AOF buffer without waiting for fsync to complete, this may slow down Redis.");
+    }
+
+    if (server.aof_fsync == AOF_FSYNC_EVERYSEC)
+        sync_in_progress = aofFsyncInProgress();
+
+    if (server.aof_fsync == AOF_FSYNC_EVERYSEC && !force) {
+        /* With this append fsync policy we do background fsyncing.
+         * If the fsync is still in progress we can try to delay
+         * the write for a couple of seconds. */
+        if (sync_in_progress) {
+            if (server.aof_flush_postponed_start == 0) {
+                /* No previous write postponing, remember that we are
+                 * postponing the flush and return. */
+                server.aof_flush_postponed_start = server.unixtime;
+                return;
+            } else if (server.unixtime - server.aof_flush_postponed_start < 2) {
+                /* We were already waiting for fsync to finish, but for less
+                 * than two seconds this is still ok. Postpone again. */
+                return;
+            }
+            /* Otherwise fall trough, and go write since we can't wait
+             * over two seconds. */
+            server.aof_delayed_fsync++;
+            serverLog(LL_NOTICE,"Asynchronous AOF fsync is taking too long (disk is busy?). Writing the AOF buffer without waiting for fsync to complete, this may slow down Redis.");
+        }
+    }
+    /* We want to perform a single write. This should be guaranteed atomic
+     * at least if the filesystem we are writing is a real physical one.
+     * While this will save us against the server being killed I don't think
+     * there is much to do about the whole server stopping for power problems
+     * or alike */
+
+    if (server.aof_flush_sleep && sdslen(server.aof_buf)) {
+        usleep(server.aof_flush_sleep);
+    }
+```
+
+write
+
+```c
+    latencyStartMonitor(latency);
+    nwritten = aofWrite(server.aof_fd,server.aof_buf,sdslen(server.aof_buf));
+    latencyEndMonitor(latency);
+    /* We want to capture different events for delayed writes:
+     * when the delay happens with a pending fsync, or with a saving child
+     * active, and when the above two conditions are missing.
+     * We also use an additional event name to save all samples which is
+     * useful for graphing / monitoring purposes. */
+    if (sync_in_progress) {
+        latencyAddSampleIfNeeded("aof-write-pending-fsync",latency);
+    } else if (hasActiveChildProcess()) {
+        latencyAddSampleIfNeeded("aof-write-active-child",latency);
+    } else {
+        latencyAddSampleIfNeeded("aof-write-alone",latency);
+    }
+    latencyAddSampleIfNeeded("aof-write",latency);
+
+    /* We performed the write so reset the postponed flush sentinel to zero. */
+    server.aof_flush_postponed_start = 0;
+
+    if (nwritten != (ssize_t)sdslen(server.aof_buf)) {
+        static time_t last_write_error_log = 0;
+        int can_log = 0;
+
+        /* Limit logging rate to 1 line per AOF_WRITE_LOG_ERROR_RATE seconds. */
+        if ((server.unixtime - last_write_error_log) > AOF_WRITE_LOG_ERROR_RATE) {
+            can_log = 1;
+            last_write_error_log = server.unixtime;
+        }
+
+        /* Log the AOF write error and record the error code. */
+        if (nwritten == -1) {
+            if (can_log) {
+                serverLog(LL_WARNING,"Error writing to the AOF file: %s",
+                    strerror(errno));
+                server.aof_last_write_errno = errno;
+            }
+        } else {
+            if (can_log) {
+                serverLog(LL_WARNING,"Short write while writing to "
+                                       "the AOF file: (nwritten=%lld, "
+                                       "expected=%lld)",
+                                       (long long)nwritten,
+                                       (long long)sdslen(server.aof_buf));
+            }
+
+            if (ftruncate(server.aof_fd, server.aof_current_size) == -1) {
+                if (can_log) {
+                    serverLog(LL_WARNING, "Could not remove short write "
+                             "from the append-only file.  Redis may refuse "
+                             "to load the AOF the next time it starts.  "
+                             "ftruncate: %s", strerror(errno));
+                }
+            } else {
+                /* If the ftruncate() succeeded we can set nwritten to
+                 * -1 since there is no longer partial data into the AOF. */
+                nwritten = -1;
+            }
+            server.aof_last_write_errno = ENOSPC;
+        }
+
+        /* Handle the AOF write error. */
+        if (server.aof_fsync == AOF_FSYNC_ALWAYS) {
+            /* We can't recover when the fsync policy is ALWAYS since the reply
+             * for the client is already in the output buffers (both writes and
+             * reads), and the changes to the db can't be rolled back. Since we
+             * have a contract with the user that on acknowledged or observed
+             * writes are is synced on disk, we must exit. */
+            serverLog(LL_WARNING,"Can't recover from AOF write error when the AOF fsync policy is 'always'. Exiting...");
+            exit(1);
+        } else {
+            /* Recover from failed write leaving data into the buffer. However
+             * set an error to stop accepting writes as long as the error
+             * condition is not cleared. */
+            server.aof_last_write_status = C_ERR;
+
+            /* Trim the sds buffer if there was a partial write, and there
+             * was no way to undo it with ftruncate(2). */
+            if (nwritten > 0) {
+                server.aof_current_size += nwritten;
+                sdsrange(server.aof_buf,nwritten,-1);
+            }
+            return; /* We'll try again on the next call... */
+        }
+    } else {
+        /* Successful write(2). If AOF was in error state, restore the
+         * OK state and log the event. */
+        if (server.aof_last_write_status == C_ERR) {
+            serverLog(LL_WARNING,
+                "AOF write error looks solved, Redis can write again.");
+            server.aof_last_write_status = C_OK;
+        }
+    }
+    server.aof_current_size += nwritten;
+```
+
+Re-use AOF buffer when it is small enough. The maximum comes from the arena size of 4k minus some overhead (but is otherwise arbitrary).
+
+```c
+    if ((sdslen(server.aof_buf)+sdsavail(server.aof_buf)) < 4000) {
+        sdsclear(server.aof_buf);
+    } else {
+        sdsfree(server.aof_buf);
+        server.aof_buf = sdsempty();
+    }
+
+try_fsync:
+    /* Don't fsync if no-appendfsync-on-rewrite is set to yes and there are
+     * children doing I/O in the background. */
+    if (server.aof_no_fsync_on_rewrite && hasActiveChildProcess())
+        return;
+
+    /* Perform the fsync if needed. */
+    if (server.aof_fsync == AOF_FSYNC_ALWAYS) {
+        /* redis_fsync is defined as fdatasync() for Linux in order to avoid
+         * flushing metadata. */
+        latencyStartMonitor(latency);
+        /* Let's try to get this data on the disk. To guarantee data safe when
+         * the AOF fsync policy is 'always', we should exit if failed to fsync
+         * AOF (see comment next to the exit(1) after write error above). */
+        if (redis_fsync(server.aof_fd) == -1) {
+            serverLog(LL_WARNING,"Can't persist AOF for fsync error when the "
+              "AOF fsync policy is 'always': %s. Exiting...", strerror(errno));
+            exit(1);
+        }
+        latencyEndMonitor(latency);
+        latencyAddSampleIfNeeded("aof-fsync-always",latency);
+        server.aof_fsync_offset = server.aof_current_size;
+        server.aof_last_fsync = server.unixtime;
+    } else if ((server.aof_fsync == AOF_FSYNC_EVERYSEC &&
+                server.unixtime > server.aof_last_fsync)) {
+        if (!sync_in_progress) {
+            aof_background_fsync(server.aof_fd);
+            server.aof_fsync_offset = server.aof_current_size;
+        }
+        server.aof_last_fsync = server.unixtime;
     }
 }
 ```
 
-### Rewriting
+### rewriting
 
 Whenever you issue a [BGREWRITEAOF](https://redis.io/commands/bgrewriteaof) Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory.
 
@@ -420,10 +631,16 @@ Log rewriting uses the same copy-on-write trick already in use for snapshotting.
 - When the child is done rewriting the file, the parent gets a signal, and appends the in-memory buffer at the end of the file generated by the child.
 - Profit! Now Redis atomically renames the old file into the new one, and starts appending new data into the new file.
 
+### load
+
 ### How to optimize
 
 - avoid bigkey
 - disable huge page
+
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md)
 
 ## References
 
