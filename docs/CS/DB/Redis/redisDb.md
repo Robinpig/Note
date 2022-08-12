@@ -22,7 +22,13 @@ The database number is the 'id' field in the structure.
 // server.h
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
-    dict *expires;              /* Timeout of keys with a timeout set */
+```
+
+Timeout of keys with a timeout set
+activeExpireCycle in [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep)
+
+```c
+    dict *expires;
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
     dict *ready_keys;           /* Blocked keys that received a PUSH */
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
@@ -99,7 +105,6 @@ Inside `object.c` there are all the functions that operate with Redis objects at
 - `incrRefCount()` and `decrRefCount()` are used in order to increment or decrement an object reference count. When it drops to 0 the object is finally freed.
 - [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object.
   There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
-
 
 24bits
 
@@ -532,31 +537,41 @@ void dbOverwrite(redisDb *db, robj *key, robj *val) {
 
 ## delete
 
+This is a wrapper whose behavior depends on the Redis lazy free configuration.
+Deletes the key synchronously or asynchronously.
+
 ```c
 // db.c
-/* This is a wrapper whose behavior depends on the Redis lazy free
- * configuration. Deletes the key synchronously or asynchronously. */
 int dbDelete(redisDb *db, robj *key) {
     return server.lazyfree_lazy_server_del ? dbAsyncDelete(db,key) :
                                              dbSyncDelete(db,key);
 }
 ```
 
+### Async Delete
+
+> unlinkCommand -> delGenericCommand -> dbAsyncDelete
+
+Delete a key, value, and associated expiration entry if any, from the DB.
+If there are enough allocations to free the value object may be put into a lazy free list instead of being freed synchronously.
+The lazy free list will be reclaimed in a different bio.c thread.
+
 ```c
 // db.c
-/* Delete a key, value, and associated expiration entry if any, from the DB.
- * If there are enough allocations to free the value object may be put into
- * a lazy free list instead of being freed synchronously. The lazy free list
- * will be reclaimed in a different bio.c thread. */
 #define LAZYFREE_THRESHOLD 64
 int dbAsyncDelete(redisDb *db, robj *key) {
-    /* Deleting an entry from the expires dict will not free the sds of
-     * the key, because it is shared with the main dictionary. */
-    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+```
 
-    /* If the value is composed of a few allocations, to free in a lazy way
-     * is actually just slower... So under a certain limit we just free
-     * the object synchronously. */
+[Deleting](/docs/CS/DB/Redis/redisDb.md?id=dictDelete) an entry from the expires dict will not free the sds of the key, because it is shared with the main dictionary.
+
+```c
+    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+```
+
+If the value is composed of a few allocations, to free in a lazy way is actually just slower.
+So under a certain limit we just free the object synchronously.
+
+```c
     dictEntry *de = dictUnlink(db->dict,key->ptr);
     if (de) {
         robj *val = dictGetVal(de);
@@ -565,15 +580,14 @@ int dbAsyncDelete(redisDb *db, robj *key) {
         moduleNotifyKeyUnlink(key,val);
 
         size_t free_effort = lazyfreeGetFreeEffort(key,val);
+```
 
-        /* If releasing the object is too much work, do it in the background
-         * by adding the object to the lazy free list.
-         * Note that if the object is shared, to reclaim it now it is not
-         * possible. This rarely happens, however sometimes the implementation
-         * of parts of the Redis core may call incrRefCount() to protect
-         * objects, and then call dbDelete(). In this case we'll fall
-         * through and reach the dictFreeUnlinkedEntry() call, that will be
-         * equivalent to just calling decrRefCount(). */
+If releasing the object is too much work, do it in the background by adding the object to the lazy free list.
+Note that if the object is shared, to reclaim it now it is not possible.
+This rarely happens, however sometimes the implementation of parts of the Redis core may call incrRefCount() to protect objects, and then call dbDelete().
+In this case we'll fall through and reach the dictFreeUnlinkedEntry() call, that will be equivalent to just calling decrRefCount().
+
+```c
         if (free_effort > LAZYFREE_THRESHOLD && val->refcount == 1) {
             atomicIncr(lazyfree_objects,1);
             bioCreateLazyFreeJob(lazyfreeFreeObject,1, val);
@@ -581,8 +595,11 @@ int dbAsyncDelete(redisDb *db, robj *key) {
         }
     }
 
-    /* Release the key-val pair, or just the key if we set the val
-     * field to NULL in order to lazy free it later. */
+```
+
+Release the key-val pair, or just the key if we set the val field to NULL in order to lazy free it later.
+
+```c
     if (de) {
         dictFreeUnlinkedEntry(db->dict,de);
         if (server.cluster_enabled) slotToKeyDel(key->ptr);
@@ -593,20 +610,18 @@ int dbAsyncDelete(redisDb *db, robj *key) {
 }
 ```
 
-### dictDelete
+#### dictDelete
+
+Remove an element, returning DICT_OK on success or DICT_ERR if the element was not found.
+
+Search and remove an element. This is an helper function for dictDelete() and dictUnlink(), please check the top comment of those functions.
 
 ```c
 // dict.c
-/* Remove an element, returning DICT_OK on success or DICT_ERR if the
- * element was not found. */
 int dictDelete(dict *ht, const void *key) {
     return dictGenericDelete(ht,key,0) ? DICT_OK : DICT_ERR;
 }
 
-
-/* Search and remove an element. This is an helper function for
- * dictDelete() and dictUnlink(), please check the top comment
- * of those functions. */
 static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
     uint64_t h, idx;
     dictEntry *he, *prevHe;

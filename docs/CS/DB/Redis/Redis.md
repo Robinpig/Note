@@ -24,9 +24,10 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 
 ## Persistence
 
-Redis uses a [persistence model](/docs/CS/DB/Redis/persist.md) based on the `fork()` system call in order to create a process with the same (shared) memory content of the main Redis process.
-This secondary process dumps the content of the memory on disk.
-This is used by `rdb.c` to create the snapshots on disk and by `aof.c` in order to perform the AOF rewrite when the append only file gets too big.
+[Persistence](/docs/CS/DB/Redis/persist.md) refers to the writing of data to durable storage, such as a solid-state disk (SSD).
+The most important thing to understand is the different trade-offs between the RDB and AOF persistence.
+
+
 
 ## [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
 

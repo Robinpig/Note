@@ -1114,37 +1114,25 @@ void InitServerLast() {
 
 #### bioInit
 
-```c
-// bio.c
-/* Background job opcodes */
-#define BIO_CLOSE_FILE    0 /* Deferred close(2) syscall. */
-#define BIO_AOF_FSYNC     1 /* Deferred AOF fsync. */
-#define BIO_LAZY_FREE     2 /* Deferred objects freeing. */
-#define BIO_NUM_OPS       3
+Background job opcodes
+
+Three Ops:
+
+- Deferred close(2) syscall.
+- Deferred AOF fsync.
+- Deferred objects freeing.
 
 
-/* Make sure we have enough stack to perform all the things we do in the
- * main thread. */
-#define REDIS_THREAD_STACK_SIZE (1024*1024*4)
-
-static pthread_t bio_threads[BIO_NUM_OPS];
-static pthread_mutex_t bio_mutex[BIO_NUM_OPS];
-static pthread_cond_t bio_newjob_cond[BIO_NUM_OPS];
-static pthread_cond_t bio_step_cond[BIO_NUM_OPS];
-static list *bio_jobs[BIO_NUM_OPS];
-static unsigned long long bio_pending[BIO_NUM_OPS];
-```
+Initialize the background system, spawning the thread.
 
 ```c
-/* Initialize the background system, spawning the thread. */
 void bioInit(void) {
     pthread_attr_t attr;
     pthread_t thread;
     size_t stacksize;
     int j;
 
-    /* Initialization of state vars and objects */
-    for (j = 0; j < BIO_NUM_OPS; j++) {
+    for (j = 0; j < BIO_NUM_OPS; j++) { // always 3
         pthread_mutex_init(&bio_mutex[j],NULL);
         pthread_cond_init(&bio_newjob_cond[j],NULL);
         pthread_cond_init(&bio_step_cond[j],NULL);
@@ -1158,20 +1146,23 @@ void bioInit(void) {
     if (!stacksize) stacksize = 1; /* The world is full of Solaris Fixes */
     while (stacksize < REDIS_THREAD_STACK_SIZE) stacksize *= 2;
     pthread_attr_setstacksize(&attr, stacksize);
+```
 
-    /* Ready to spawn our threads. We use the single argument the thread
-     * function accepts in order to pass the job ID the thread is
-     * responsible of. */
+Ready to spawn our threads. We use the single argument the thread function accepts in order to pass the job ID the thread is responsible of.
+
+```c
     for (j = 0; j < BIO_NUM_OPS; j++) {
         void *arg = (void*)(unsigned long) j;
         if (pthread_create(&thread,&attr,bioProcessBackgroundJobs,arg) != 0) {
-            serverLog(LL_WARNING,"Fatal: Can't initialize Background Jobs.");
             exit(1);
         }
         bio_threads[j] = thread;
     }
 }
 ```
+
+#### bioProcess 
+
 
 ```c
 void *bioProcessBackgroundJobs(void *arg) {
@@ -1181,8 +1172,6 @@ void *bioProcessBackgroundJobs(void *arg) {
 
     /* Check that the type is within the right interval. */
     if (type >= BIO_NUM_OPS) {
-        serverLog(LL_WARNING,
-            "Warning: bio thread started with wrong type %lu",type);
         return NULL;
     }
 
