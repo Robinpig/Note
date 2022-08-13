@@ -1,8 +1,6 @@
 ## Introduction
 
-
-
-Sentinels by default run **listening for connections to TCP port 26379**, so for Sentinels to work, port 26379 of your servers **must be open** to receive connections from the IP addresses of the other Sentinel instances. 
+Sentinels by default run **listening for connections to TCP port 26379**, so for Sentinels to work, port 26379 of your servers **must be open** to receive connections from the IP addresses of the other Sentinel instances.
 Otherwise Sentinels can't talk and can't agree about what to do, so failover will never be performed.
 
 In practical terms this means during failures **Sentinel never starts a failover if the majority of Sentinel processes are unable to talk** (aka no failover in the minority partition).
@@ -11,8 +9,6 @@ In practical terms this means during failures **Sentinel never starts a failover
 down-after-milliseconds
 ```
 
-
-
 1. If the replica priority is set to 0, the replica is never promoted to master.
 2. Replicas with a *lower* priority number are preferred by Sentinel.
 
@@ -20,23 +16,15 @@ down-after-milliseconds
 slave-priority
 ```
 
-
-
 max
 
 ```
 slave_repl_offset
 ```
 
-
-
 min id
 
-
-
 `__sentinel__:hello`
-
-
 
 ## Testing the failover
 
@@ -65,9 +53,110 @@ If you ask again what is the current master address for `mymaster`, eventually w
 
 So far so good... At this point you may jump to create your Sentinel deployment or can read more to understand all the Sentinel commands and internals.
 
+#### sentinelState
 
+```c
+struct sentinelState {
+    char myid[CONFIG_RUN_ID_SIZE+1]; /* This sentinel ID. */
+    uint64_t current_epoch;         /* Current epoch. */
+    dict *masters;      /* Dictionary of master sentinelRedisInstances.
+                           Key is the instance name, value is the
+                           sentinelRedisInstance structure pointer. */
+    int tilt;           /* Are we in TILT mode? */
+    int running_scripts;    /* Number of scripts in execution right now. */
+    mstime_t tilt_start_time;       /* When TITL started. */
+    mstime_t previous_time;         /* Last time we ran the time handler. */
+    list *scripts_queue;            /* Queue of user scripts to execute. */
+    char *announce_ip;  /* IP addr that is gossiped to other sentinels if
+                           not NULL. */
+    int announce_port;  /* Port that is gossiped to other sentinels if
+                           non zero. */
+    unsigned long simfailure_flags; /* Failures simulation. */
+    int deny_scripts_reconfig; /* Allow SENTINEL SET ... to change script
+                                  paths at runtime? */
+    char *sentinel_auth_pass;    /* Password to use for AUTH against other sentinel */
+    char *sentinel_auth_user;    /* Username for ACLs AUTH against other sentinel. */
+    int resolve_hostnames;       /* Support use of hostnames, assuming DNS is well configured. */
+    int announce_hostnames;      /* Announce hostnames instead of IPs when we have them. */
+} sentinel;
+```
 
-### sentinelTimer
+#### sentinelRedisInstance
+
+```c
+
+typedef struct sentinelRedisInstance {
+    int flags;      /* See SRI_... defines */
+    char *name;     /* Master name from the point of view of this sentinel. */
+    char *runid;    /* Run ID of this instance, or unique ID if is a Sentinel.*/
+    uint64_t config_epoch;  /* Configuration epoch. */
+    sentinelAddr *addr; /* Master host. */
+    instanceLink *link; /* Link to the instance, may be shared for Sentinels. */
+    mstime_t last_pub_time;   /* Last time we sent hello via Pub/Sub. */
+    mstime_t last_hello_time; /* Only used if SRI_SENTINEL is set. Last time
+                                 we received a hello from this Sentinel
+                                 via Pub/Sub. */
+    mstime_t last_master_down_reply_time; /* Time of last reply to
+                                             SENTINEL is-master-down command. */
+    mstime_t s_down_since_time; /* Subjectively down since time. */
+    mstime_t o_down_since_time; /* Objectively down since time. */
+    mstime_t down_after_period; /* Consider it down after that period. */
+    mstime_t info_refresh;  /* Time at which we received INFO output from it. */
+    dict *renamed_commands;     /* Commands renamed in this instance:
+                                   Sentinel will use the alternative commands
+                                   mapped on this table to send things like
+                                   SLAVEOF, CONFING, INFO, ... */
+
+    /* Role and the first time we observed it.
+     * This is useful in order to delay replacing what the instance reports
+     * with our own configuration. We need to always wait some time in order
+     * to give a chance to the leader to report the new configuration before
+     * we do silly things. */
+    int role_reported;
+    mstime_t role_reported_time;
+    mstime_t slave_conf_change_time; /* Last time slave master addr changed. */
+
+    /* Master specific. */
+    dict *sentinels;    /* Other sentinels monitoring the same master. */
+    dict *slaves;       /* Slaves for this master instance. */
+    unsigned int quorum;/* Number of sentinels that need to agree on failure. */
+    int parallel_syncs; /* How many slaves to reconfigure at same time. */
+    char *auth_pass;    /* Password to use for AUTH against master & replica. */
+    char *auth_user;    /* Username for ACLs AUTH against master & replica. */
+
+    /* Slave specific. */
+    mstime_t master_link_down_time; /* Slave replication link down time. */
+    int slave_priority; /* Slave priority according to its INFO output. */
+    int replica_announced; /* Replica announcing according to its INFO output. */
+    mstime_t slave_reconf_sent_time; /* Time at which we sent SLAVE OF <new> */
+    struct sentinelRedisInstance *master; /* Master instance if it's slave. */
+    char *slave_master_host;    /* Master host as reported by INFO */
+    int slave_master_port;      /* Master port as reported by INFO */
+    int slave_master_link_status; /* Master link status as reported by INFO */
+    unsigned long long slave_repl_offset; /* Slave replication offset. */
+    /* Failover */
+    char *leader;       /* If this is a master instance, this is the runid of
+                           the Sentinel that should perform the failover. If
+                           this is a Sentinel, this is the runid of the Sentinel
+                           that this Sentinel voted as leader. */
+    uint64_t leader_epoch; /* Epoch of the 'leader' field. */
+    uint64_t failover_epoch; /* Epoch of the currently started failover. */
+    int failover_state; /* See SENTINEL_FAILOVER_STATE_* defines. */
+    mstime_t failover_state_change_time;
+    mstime_t failover_start_time;   /* Last failover attempt start time. */
+    mstime_t failover_timeout;      /* Max time to refresh failover state. */
+    mstime_t failover_delay_logged; /* For what failover_start_time value we
+                                       logged the failover delay. */
+    struct sentinelRedisInstance *promoted_slave; /* Promoted slave instance. */
+    /* Scripts executed to notify admin or reconfigure clients: when they
+     * are set to NULL no script is executed. */
+    char *notification_script;
+    char *client_reconfig_script;
+    sds info; /* cached INFO output */
+} sentinelRedisInstance;
+```
+
+## Timer
 
 called by serverCron
 
@@ -89,20 +178,12 @@ void sentinelTimer(void) {
 }
 ```
 
-
-
-
-
 ```c
 /* Every kind of instance */
 sentinelCheckSubjectivelyDown(ri);
 
  sentinelCheckObjectivelyDown(ri);
 ```
-
-
-
-
 
 ```c
 /* Vote for the sentinel with 'req_runid' or return the old vote if already
@@ -138,164 +219,342 @@ char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char
 }
 ```
 
+### handleDict
 
+Perform scheduled operations for all the instances in the dictionary.
+Recursively call the function against dictionaries of slaves.
 
-sentinel，中文名是哨兵。哨兵是 Redis 集群架构中非常重要的一个组件，主要有以下功能：
+```c
+void sentinelHandleDictOfRedisInstances(dict *instances) {
+    dictIterator *di;
+    dictEntry *de;
+    sentinelRedisInstance *switch_to_promoted = NULL;
 
-- 集群监控：负责监控 Redis master 和 slave 进程是否正常工作。
-- 消息通知：如果某个 Redis 实例有故障，那么哨兵负责发送消息作为报警通知给管理员。
-- 故障转移：如果 master node 挂掉了，会自动转移到 slave node 上。
-- 配置中心：如果故障转移发生了，通知 client 客户端新的 master 地址。
+    /* There are a number of things we need to perform against every master. */
+    di = dictGetIterator(instances);
+    while((de = dictNext(di)) != NULL) {
+        sentinelRedisInstance *ri = dictGetVal(de);
 
-哨兵用于实现 Redis 集群的高可用，本身也是分布式的，作为一个哨兵集群去运行，互相协同工作。
-
-- 故障转移时，判断一个 master node 是否宕机了，需要大部分的哨兵都同意才行，涉及到了分布式选举的问题。
-- 即使部分哨兵节点挂掉了，哨兵集群还是能正常工作的，因为如果一个作为高可用机制重要组成部分的故障转移系统本身是单点的，那就很坑爹了。
-
-## [哨兵的核心知识](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=哨兵的核心知识)
-
-- 哨兵至少需要 3 个实例，来保证自己的健壮性。
-- 哨兵 + Redis 主从的部署架构，是**不保证数据零丢失**的，只能保证 Redis 集群的高可用性。
-- 对于哨兵 + Redis 主从这种复杂的部署架构，尽量在测试环境和生产环境，都进行充足的测试和演练。
-
-哨兵集群必须部署 2 个以上节点，如果哨兵集群仅仅部署了 2 个哨兵实例，quorum = 1。
-
-```
-+----+         +----+
-| M1 |---------| R1 |
-| S1 |         | S2 |
-+----+         +----+Copy to clipboardErrorCopied
-```
-
-配置 `quorum=1` ，如果 master 宕机， s1 和 s2 中只要有 1 个哨兵认为 master 宕机了，就可以进行切换，同时 s1 和 s2 会选举出一个哨兵来执行故障转移。但是同时这个时候，需要 majority，也就是大多数哨兵都是运行的。
-
-```
-2 个哨兵，majority=2
-3 个哨兵，majority=2
-4 个哨兵，majority=2
-5 个哨兵，majority=3
-...Copy to clipboardErrorCopied
+        sentinelHandleRedisInstance(ri);
+        if (ri->flags & SRI_MASTER) {
+            sentinelHandleDictOfRedisInstances(ri->slaves);
+            sentinelHandleDictOfRedisInstances(ri->sentinels);
+            if (ri->failover_state == SENTINEL_FAILOVER_STATE_UPDATE_CONFIG) {
+                switch_to_promoted = ri;
+            }
+        }
+    }
+    if (switch_to_promoted)
+        sentinelFailoverSwitchToPromotedSlave(switch_to_promoted);
+    dictReleaseIterator(di);
+}
 ```
 
-如果此时仅仅是 M1 进程宕机了，哨兵 s1 正常运行，那么故障转移是 OK 的。但是如果是整个 M1 和 S1 运行的机器宕机了，那么哨兵只有 1 个，此时就没有 majority 来允许执行故障转移，虽然另外一台机器上还有一个 R1，但是故障转移不会执行。
+## handle
 
-经典的 3 节点哨兵集群是这样的：
+This is the "main" our Sentinel, being sentinel completely non blocking in design. The function is called every second.
 
-```
-       +----+
-       | M1 |
-       | S1 |
-       +----+
-          |
-+----+    |    +----+
-| R2 |----+----| R3 |
-| S2 |         | S3 |
-+----+         +----+Copy to clipboardErrorCopied
-```
+Perform scheduled operations for the specified Redis instance.
 
-配置 `quorum=2` ，如果 M1 所在机器宕机了，那么三个哨兵还剩下 2 个，S2 和 S3 可以一致认为 master 宕机了，然后选举出一个来执行故障转移，同时 3 个哨兵的 majority 是 2，所以还剩下的 2 个哨兵运行着，就可以允许执行故障转移。
+```c
+void sentinelHandleRedisInstance(sentinelRedisInstance *ri) {
+    /* ========== MONITORING HALF ============ */
+    /* Every kind of instance */
+    sentinelReconnectInstance(ri);
+    sentinelSendPeriodicCommands(ri);
 
-## [Redis 哨兵主备切换的数据丢失问题](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=redis-哨兵主备切换的数据丢失问题)
+    /* ============== ACTING HALF ============= */
+    /* We don't proceed with the acting half if we are in TILT mode.
+     * TILT happens when we find something odd with the time, like a
+     * sudden change in the clock. */
+    if (sentinel.tilt) {
+        if (mstime()-sentinel.tilt_start_time < SENTINEL_TILT_PERIOD) return;
+        sentinel.tilt = 0;
+        sentinelEvent(LL_WARNING,"-tilt",NULL,"#tilt mode exited");
+    }
 
-### [导致数据丢失的两种情况](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=导致数据丢失的两种情况)
+    sentinelCheckSubjectivelyDown(ri);
 
-主备切换的过程，可能会导致数据丢失：
+    /* Masters and slaves */
+    if (ri->flags & (SRI_MASTER|SRI_SLAVE)) {
+        /* Nothing so far. */
+    }
 
-- 异步复制导致的数据丢失
-
-因为 master->slave 的复制是异步的，所以可能有部分数据还没复制到 slave，master 就宕机了，此时这部分数据就丢失了。
-
-![async-replication-data-lose-case](https://doocs.github.io/advanced-java/docs/high-concurrency/images/async-replication-data-lose-case.png)
-
-- 脑裂导致的数据丢失
-
-脑裂，也就是说，某个 master 所在机器突然**脱离了正常的网络**，跟其他 slave 机器不能连接，但是实际上 master 还运行着。此时哨兵可能就会**认为** master 宕机了，然后开启选举，将其他 slave 切换成了 master。这个时候，集群里就会有两个 master ，也就是所谓的**脑裂**。
-
-此时虽然某个 slave 被切换成了 master，但是可能 client 还没来得及切换到新的 master，还继续向旧 master 写数据。因此旧 master 再次恢复的时候，会被作为一个 slave 挂到新的 master 上去，自己的数据会清空，重新从新的 master 复制数据。而新的 master 并没有后来 client 写入的数据，因此，这部分数据也就丢失了。
-
-![Redis-cluster-split-brain](https://doocs.github.io/advanced-java/docs/high-concurrency/images/redis-cluster-split-brain.png)
-
-### [数据丢失问题的解决方案](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=数据丢失问题的解决方案)
-
-进行如下配置：
-
-```bash
-min-slaves-to-write 1
-min-slaves-max-lag 10Copy to clipboardErrorCopied
-```
-
-表示，要求至少有 1 个 slave，数据复制和同步的延迟不能超过 10 秒。
-
-如果说一旦所有的 slave，数据复制和同步的延迟都超过了 10 秒钟，那么这个时候，master 就不会再接收任何请求了。
-
-- 减少异步复制数据的丢失
-
-有了 `min-slaves-max-lag` 这个配置，就可以确保说，一旦 slave 复制数据和 ack 延时太长，就认为可能 master 宕机后损失的数据太多了，那么就拒绝写请求，这样可以把 master 宕机时由于部分数据未同步到 slave 导致的数据丢失降低的可控范围内。
-
-- 减少脑裂的数据丢失
-
-如果一个 master 出现了脑裂，跟其他 slave 丢了连接，那么上面两个配置可以确保说，如果不能继续给指定数量的 slave 发送数据，而且 slave 超过 10 秒没有给自己 ack 消息，那么就直接拒绝客户端的写请求。因此在脑裂场景下，最多就丢失 10 秒的数据。
-
-## [sdown 和 odown 转换机制](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=sdown-和-odown-转换机制)
-
-- sdown 是主观宕机，就一个哨兵如果自己觉得一个 master 宕机了，那么就是主观宕机
-- odown 是客观宕机，如果 quorum 数量的哨兵都觉得一个 master 宕机了，那么就是客观宕机
-
-sdown 达成的条件很简单，如果一个哨兵 ping 一个 master，超过了 `is-master-down-after-milliseconds` 指定的毫秒数之后，就主观认为 master 宕机了；如果一个哨兵在指定时间内，收到了 quorum 数量的其它哨兵也认为那个 master 是 sdown 的，那么就认为是 odown 了。
-
-## [哨兵集群的自动发现机制](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=哨兵集群的自动发现机制)
-
-哨兵互相之间的发现，是通过 Redis 的 `pub/sub` 系统实现的，每个哨兵都会往 `__sentinel__:hello` 这个 channel 里发送一个消息，这时候所有其他哨兵都可以消费到这个消息，并感知到其他的哨兵的存在。
-
-每隔两秒钟，每个哨兵都会往自己监控的某个 master+slaves 对应的 `__sentinel__:hello` channel 里**发送一个消息**，内容是自己的 host、ip 和 runid 还有对这个 master 的监控配置。
-
-每个哨兵也会去**监听**自己监控的每个 master+slaves 对应的 `__sentinel__:hello` channel，然后去感知到同样在监听这个 master+slaves 的其他哨兵的存在。
-
-每个哨兵还会跟其他哨兵交换对 `master` 的监控配置，互相进行监控配置的同步。
-
-## [slave 配置的自动纠正](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=slave-配置的自动纠正)
-
-哨兵会负责自动纠正 slave 的一些配置，比如 slave 如果要成为潜在的 master 候选人，哨兵会确保 slave 复制现有 master 的数据；如果 slave 连接到了一个错误的 master 上，比如故障转移之后，那么哨兵会确保它们连接到正确的 master 上。
-
-## [slave->master 选举算法](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=slave-gtmaster-选举算法)
-
-如果一个 master 被认为 odown 了，而且 majority 数量的哨兵都允许主备切换，那么某个哨兵就会执行主备切换操作，此时首先要选举一个 slave 来，会考虑 slave 的一些信息：
-
-- 跟 master 断开连接的时长
-- slave 优先级
-- 复制 offset
-- run id
-
-如果一个 slave 跟 master 断开连接的时间已经超过了 `down-after-milliseconds` 的 10 倍，外加 master 宕机的时长，那么 slave 就被认为不适合选举为 master。
+    /* Only masters */
+    if (ri->flags & SRI_MASTER) {
+        sentinelCheckObjectivelyDown(ri);
 
 ```
-(down-after-milliseconds * 10) + milliseconds_since_master_is_in_SDOWN_stateCopy to clipboardErrorCopied
+
+failover
+
+```c
+        if (sentinelStartFailoverIfNeeded(ri))
+            sentinelAskMasterStateToOtherSentinels(ri,SENTINEL_ASK_FORCED);
+        sentinelFailoverStateMachine(ri);
+        sentinelAskMasterStateToOtherSentinels(ri,SENTINEL_NO_FLAGS);
+    }
+}
 ```
 
-接下来会对 slave 进行排序：
+#### sentinelStartFailoverIfNeeded
 
-- 按照 slave 优先级进行排序，slave priority 越低，优先级就越高。
-- 如果 slave priority 相同，那么看 replica offset，哪个 slave 复制了越多的数据，offset 越靠后，优先级就越高。
-- 如果上面两个条件都相同，那么选择一个 run id 比较小的那个 slave。
+This function checks if there are the conditions to start the failover, that is:
 
-## [quorum 和 majority](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=quorum-和-majority)
+1. Master must be in ODOWN condition.
+2. No failover already in progress.
+3. No failover already attempted recently.
 
-每次一个哨兵要做主备切换，首先需要 quorum 数量的哨兵认为 odown，然后选举出一个哨兵来做切换，这个哨兵还需要得到 majority 哨兵的授权，才能正式执行切换。
+We still don't know if we'll win the election so it is possible that we start the failover but that we'll not be able to act.
 
-如果 quorum < majority，比如 5 个哨兵，majority 就是 3，quorum 设置为 2，那么就 3 个哨兵授权就可以执行切换。
+Return non-zero if a failover was started.
 
-但是如果 quorum >= majority，那么必须 quorum 数量的哨兵都授权，比如 5 个哨兵，quorum 是 5，那么必须 5 个哨兵都同意授权，才能执行切换。
+```c
+int sentinelStartFailoverIfNeeded(sentinelRedisInstance *master) {
+    /* We can't failover if the master is not in O_DOWN state. */
+    if (!(master->flags & SRI_O_DOWN)) return 0;
 
-## [configuration epoch](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=configuration-epoch)
+    /* Failover already in progress? */
+    if (master->flags & SRI_FAILOVER_IN_PROGRESS) return 0;
 
-哨兵会对一套 Redis master+slaves 进行监控，有相应的监控的配置。
+    /* Last failover attempt started too little time ago? */
+    if (mstime() - master->failover_start_time <
+        master->failover_timeout*2)
+    {
+        if (master->failover_delay_logged != master->failover_start_time) {
+            time_t clock = (master->failover_start_time +
+                            master->failover_timeout*2) / 1000;
+            char ctimebuf[26];
 
-执行切换的那个哨兵，会从要切换到的新 master（salve->master）那里得到一个 configuration epoch，这就是一个 version 号，每次切换的 version 号都必须是唯一的。
+            ctime_r(&clock,ctimebuf);
+            ctimebuf[24] = '\0'; /* Remove newline. */
+            master->failover_delay_logged = master->failover_start_time;
+            serverLog(LL_WARNING,
+                "Next failover delay: I will not start a failover before %s",
+                ctimebuf);
+        }
+        return 0;
+    }
 
-如果第一个选举出的哨兵切换失败了，那么其他哨兵，会等待 failover-timeout 时间，然后接替继续执行切换，此时会重新获取一个新的 configuration epoch，作为新的 version 号。
+    sentinelStartFailover(master);
+    return 1;
+}
+```
 
-## [configuration 传播](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-sentinel?id=configuration-传播)
+If we think the master is down, we start sending SENTINEL IS-MASTER-DOWN-BY-ADDR requests to other sentinels in order to get the replies that allow to reach the quorum needed to mark the master in ODOWN state and trigger a failover.
 
-哨兵完成切换之后，会在自己本地更新生成最新的 master 配置，然后同步给其他的哨兵，就是通过之前说的 `pub/sub` 消息机制。
+```c
+#define SENTINEL_ASK_FORCED (1<<0)
+void sentinelAskMasterStateToOtherSentinels(sentinelRedisInstance *master, int flags) {
+    dictIterator *di;
+    dictEntry *de;
 
-这里之前的 version 号就很重要了，因为各种消息都是通过一个 channel 去发布和监听的，所以一个哨兵完成一次新的切换之后，新的 master 配置是跟着新的 version 号的。其他的哨兵都是根据版本号的大小来更新自己的 master 配置的。
+    di = dictGetIterator(master->sentinels);
+    while((de = dictNext(di)) != NULL) {
+        sentinelRedisInstance *ri = dictGetVal(de);
+        mstime_t elapsed = mstime() - ri->last_master_down_reply_time;
+        char port[32];
+        int retval;
+
+        /* If the master state from other sentinel is too old, we clear it. */
+        if (elapsed > SENTINEL_ASK_PERIOD*5) {
+            ri->flags &= ~SRI_MASTER_DOWN;
+            sdsfree(ri->leader);
+            ri->leader = NULL;
+        }
+
+        /* Only ask if master is down to other sentinels if:
+         *
+         * 1) We believe it is down, or there is a failover in progress.
+         * 2) Sentinel is connected.
+         * 3) We did not receive the info within SENTINEL_ASK_PERIOD ms. */
+        if ((master->flags & SRI_S_DOWN) == 0) continue;
+        if (ri->link->disconnected) continue;
+        if (!(flags & SENTINEL_ASK_FORCED) &&
+            mstime() - ri->last_master_down_reply_time < SENTINEL_ASK_PERIOD)
+            continue;
+
+        /* Ask */
+        ll2string(port,sizeof(port),master->addr->port);
+        retval = redisAsyncCommand(ri->link->cc,
+                    sentinelReceiveIsMasterDownReply, ri,
+                    "%s is-master-down-by-addr %s %s %llu %s",
+                    sentinelInstanceMapCommand(ri,"SENTINEL"),
+                    announceSentinelAddr(master->addr), port,
+                    sentinel.current_epoch,
+                    (master->failover_state > SENTINEL_FAILOVER_STATE_NONE) ?
+                    sentinel.myid : "*");
+        if (retval == C_OK) ri->link->pending_commands++;
+    }
+    dictReleaseIterator(di);
+}
+```
+
+#### voteLeader
+
+Vote for the sentinel with 'req_runid' or return the old vote if already voted for the specified 'req_epoch' or one greater.
+If a vote is not available returns NULL, otherwise return the Sentinel runid and populate the leader_epoch with the epoch of the vote.
+
+```c
+char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char *req_runid, uint64_t *leader_epoch) {
+    if (req_epoch > sentinel.current_epoch) {
+        sentinel.current_epoch = req_epoch;
+        sentinelFlushConfig();
+        sentinelEvent(LL_WARNING,"+new-epoch",master,"%llu",
+            (unsigned long long) sentinel.current_epoch);
+    }
+
+    if (master->leader_epoch < req_epoch && sentinel.current_epoch <= req_epoch)
+    {
+        sdsfree(master->leader);
+        master->leader = sdsnew(req_runid);
+        master->leader_epoch = sentinel.current_epoch;
+        sentinelFlushConfig();
+        sentinelEvent(LL_WARNING,"+vote-for-leader",master,"%s %llu",
+            master->leader, (unsigned long long) master->leader_epoch);
+        /* If we did not voted for ourselves, set the master failover start
+         * time to now, in order to force a delay before we can start a
+         * failover for the same master. */
+        if (strcasecmp(master->leader,sentinel.myid))
+            master->failover_start_time = mstime()+rand()%SENTINEL_MAX_DESYNC;
+    }
+
+    *leader_epoch = master->leader_epoch;
+    return master->leader ? sdsnew(master->leader) : NULL;
+}
+```
+
+## Failover
+
+### State Machine
+
+```c
+
+void sentinelFailoverStateMachine(sentinelRedisInstance *ri) {
+    serverAssert(ri->flags & SRI_MASTER);
+
+    if (!(ri->flags & SRI_FAILOVER_IN_PROGRESS)) return;
+
+    switch(ri->failover_state) {
+        case SENTINEL_FAILOVER_STATE_WAIT_START:
+            sentinelFailoverWaitStart(ri);
+            break;
+        case SENTINEL_FAILOVER_STATE_SELECT_SLAVE:
+            sentinelFailoverSelectSlave(ri);
+            break;
+        case SENTINEL_FAILOVER_STATE_SEND_SLAVEOF_NOONE:
+            sentinelFailoverSendSlaveOfNoOne(ri);
+            break;
+        case SENTINEL_FAILOVER_STATE_WAIT_PROMOTION:
+            sentinelFailoverWaitPromotion(ri);
+            break;
+        case SENTINEL_FAILOVER_STATE_RECONF_SLAVES:
+            sentinelFailoverReconfNextSlave(ri);
+            break;
+    }
+}
+```
+
+### Failover-Start
+
+```c
+void sentinelFailoverWaitStart(sentinelRedisInstance *ri) {
+    char *leader;
+    int isleader;
+
+    /* Check if we are the leader for the failover epoch. */
+    leader = sentinelGetLeader(ri, ri->failover_epoch);
+    isleader = leader && strcasecmp(leader,sentinel.myid) == 0;
+    sdsfree(leader);
+
+    /* If I'm not the leader, and it is not a forced failover via
+     * SENTINEL FAILOVER, then I can't continue with the failover. */
+    if (!isleader && !(ri->flags & SRI_FORCE_FAILOVER)) {
+        int election_timeout = SENTINEL_ELECTION_TIMEOUT;
+
+        /* The election timeout is the MIN between SENTINEL_ELECTION_TIMEOUT
+         * and the configured failover timeout. */
+        if (election_timeout > ri->failover_timeout)
+            election_timeout = ri->failover_timeout;
+        /* Abort the failover if I'm not the leader after some time. */
+        if (mstime() - ri->failover_start_time > election_timeout) {
+            sentinelEvent(LL_WARNING,"-failover-abort-not-elected",ri,"%@");
+            sentinelAbortFailover(ri);
+        }
+        return;
+    }
+    sentinelEvent(LL_WARNING,"+elected-leader",ri,"%@");
+    if (sentinel.simfailure_flags & SENTINEL_SIMFAILURE_CRASH_AFTER_ELECTION)
+        sentinelSimFailureCrash();
+    ri->failover_state = SENTINEL_FAILOVER_STATE_SELECT_SLAVE;
+    ri->failover_state_change_time = mstime();
+    sentinelEvent(LL_WARNING,"+failover-state-select-slave",ri,"%@");
+}
+```
+
+### Recon Next Slave
+
+Send SLAVE OF <new master address> to all the remaining slaves that still don't appear to have the configuration updated.
+
+```c
+void sentinelFailoverReconfNextSlave(sentinelRedisInstance *master) {
+    dictIterator *di;
+    dictEntry *de;
+    int in_progress = 0;
+
+    di = dictGetIterator(master->slaves);
+    while((de = dictNext(di)) != NULL) {
+        sentinelRedisInstance *slave = dictGetVal(de);
+
+        if (slave->flags & (SRI_RECONF_SENT|SRI_RECONF_INPROG))
+            in_progress++;
+    }
+    dictReleaseIterator(di);
+
+    di = dictGetIterator(master->slaves);
+    while(in_progress < master->parallel_syncs &&
+          (de = dictNext(di)) != NULL)
+    {
+        sentinelRedisInstance *slave = dictGetVal(de);
+        int retval;
+
+        /* Skip the promoted slave, and already configured slaves. */
+        if (slave->flags & (SRI_PROMOTED|SRI_RECONF_DONE)) continue;
+
+        /* If too much time elapsed without the slave moving forward to
+         * the next state, consider it reconfigured even if it is not.
+         * Sentinels will detect the slave as misconfigured and fix its
+         * configuration later. */
+        if ((slave->flags & SRI_RECONF_SENT) &&
+            (mstime() - slave->slave_reconf_sent_time) >
+            SENTINEL_SLAVE_RECONF_TIMEOUT)
+        {
+            sentinelEvent(LL_NOTICE,"-slave-reconf-sent-timeout",slave,"%@");
+            slave->flags &= ~SRI_RECONF_SENT;
+            slave->flags |= SRI_RECONF_DONE;
+        }
+
+        /* Nothing to do for instances that are disconnected or already
+         * in RECONF_SENT state. */
+        if (slave->flags & (SRI_RECONF_SENT|SRI_RECONF_INPROG)) continue;
+        if (slave->link->disconnected) continue;
+
+        /* Send SLAVEOF <new master>. */
+        retval = sentinelSendSlaveOf(slave,master->promoted_slave->addr);
+        if (retval == C_OK) {
+            slave->flags |= SRI_RECONF_SENT;
+            slave->slave_reconf_sent_time = mstime();
+            sentinelEvent(LL_NOTICE,"+slave-reconf-sent",slave,"%@");
+            in_progress++;
+        }
+    }
+    dictReleaseIterator(di);
+
+    /* Check if all the slaves are reconfigured and handle timeout. */
+    sentinelFailoverDetectEnd(master);
+}
+```
+
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md)

@@ -714,3 +714,9 @@ int dictResize(dict *d)
 Set:
 
 - Insert the element in top
+
+
+
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md)

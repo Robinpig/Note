@@ -1931,7 +1931,7 @@ int writeToClient(client *c, int handler_installed) {
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
 
 ## References
 

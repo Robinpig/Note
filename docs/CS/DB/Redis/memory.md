@@ -36,13 +36,11 @@ small: << 8byte
 big : << 4KB
 huge : << 4MB
 
-
 ## Eviction
 
 ### Eviction Policies
 
 The exact behavior Redis follows when the `maxmemory` limit is reached is configured using the `maxmemory-policy` configuration directive.
-
 The following policies are available:
 
 * **noeviction** : New values aren’t saved when memory limit is reached. When a database uses replication, this applies to the primary database
@@ -65,14 +63,6 @@ In general as a rule of thumb:
 The **volatile-lru** and **volatile-random** policies are mainly useful when you want to use a single instance for both caching and to have a set of persistent keys. However it is usually a better idea to run two Redis instances to solve such a problem.
 
 It is also worth noting that setting an `expire` value to a key costs memory, so using a policy like **allkeys-lru** is more memory efficient since there is no need for an `expire` configuration for the key to be evicted under memory pressure.
-
-To improve the quality of the LRU approximation we take a set of keys that are good candidate for eviction across performEvictions() calls.
-
-Entries inside the eviction pool are taken ordered by idle time, putting greater idle times to the right (ascending order).
-
-When an LFU policy is used instead, a reverse frequency indication is used instead of the idle time, so that we still evict by larger value (larger inverse frequency means to evict keys with the least frequent accesses).
-
-Empty entries have the key pointer set to NULL.
 
 ```c
 #define EVPOOL_SIZE 16
@@ -151,7 +141,6 @@ active-defrag-max-scan-fields 1000
 Jemalloc background thread for purging will be enabled by default
 jemalloc-bg-thread yes
 ```
-
 
 ## maxMemory
 
@@ -458,24 +447,21 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 
 ### LRU
 
-Redis LRU algorithm is not an exact implementation. This means that Redis is not able to pick the *best candidate* for eviction, that is, the access that was accessed the furthest in the past. 
-Instead it will try to run an approximation of the LRU algorithm, by sampling a small number of keys, and evicting the one that is the best (with the oldest access time) among the sampled keys.
+Redis LRU algorithm is not an exact implementation.
+This means that Redis is not able to pick the *best candidate* for eviction, that is, the access that was accessed the furthest in the past.
 
-However, since Redis 3.0 the algorithm was improved to also take a pool of good candidates for eviction. 
-This improved the performance of the algorithm, making it able to approximate more closely the behavior of a real LRU algorithm.
-
-
+Instead it will try to run an approximation of the LRU algorithm, by **sampling a small number of keys**, and evicting the one that is the best (with the oldest access time) among the sampled keys.
 The reason Redis does not use a true LRU implementation is because it costs more memory. However, the approximation is virtually equivalent for an application using Redis.
-
 In a theoretical LRU implementation we expect that, among the old keys, the first half will be expired. The Redis LRU algorithm will instead only *probabilistically* expire the older keys.
 
+Note that LRU is just a model to predict how likely a given key will be accessed in the future.
+Moreover, if your data access pattern closely resembles the power law, most of the accesses will be in the set of keys the LRU approximated algorithm can handle well.
+We found that using a power law access pattern, the difference between true LRU and Redis approximation were minimal or non-existent.
 
-Note that LRU is just a model to predict how likely a given key will be accessed in the future. Moreover, if your data access pattern closely resembles the power law, most of the accesses will be in the set of keys the LRU approximated algorithm can handle well.
-
-In simulations we found that using a power law access pattern, the difference between true LRU and Redis approximation were minimal or non-existent.
-
-However you can raise the sample size to 10 at the cost of some additional CPU usage to closely approximate true LRU, and check if this makes a difference in your cache misses rate.
-
+To improve the quality of the LRU approximation we take a set of keys that are good candidate for eviction across performEvictions() calls.
+Entries inside the eviction pool are taken ordered by idle time, putting greater idle times to the right (ascending order).
+When an LFU policy is used instead, a reverse frequency indication is used instead of the idle time, so that we still evict by larger value (larger inverse frequency means to evict keys with the least frequent accesses).
+Empty entries have the key pointer set to NULL.
 
 ```c
 void initServerConfig(void) {
@@ -556,7 +542,6 @@ The counter *logarithm factor* changes how many hits are needed in order to satu
 | 100    | 8          | 11         | 49         | 143        | 255        |
 +--------+------------+------------+------------+------------+------------+
 ```
-
 
 ## Optimization
 

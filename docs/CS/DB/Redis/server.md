@@ -771,10 +771,14 @@ int processCommand(client *c) {
         return C_OK;
     }
 
-    /* If cluster is enabled perform the cluster redirection here.
-     * However we don't perform the redirection if:
-     * 1) The sender of this command is our master.
-     * 2) The command has no key arguments. */
+```
+If [cluster](/docs/CS/DB/Redis/cluster.md) is enabled perform the cluster redirection here.
+However we don't perform the redirection if:
+
+1. The sender of this command is our master.
+2. The command has no key arguments.
+
+```c
     if (server.cluster_enabled &&
         !(c->flags & CLIENT_MASTER) &&
         !(c->flags & CLIENT_LUA &&

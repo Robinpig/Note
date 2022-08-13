@@ -1,90 +1,494 @@
 ## Introduction
 
-
 Redis Cluster 16384 slots for master
 
 max 1000
 
-## gossip 
-Initially we don't know our "name", but we'll find it once we connect to the first node, using the getsockname() function. Then we'll use this address for all the next messages.
-
+clusterState
 
 ```c
-typedef struct {
-    char nodename[CLUSTER_NAMELEN];
-    uint32_t ping_sent;
-    uint32_t pong_received;
-    char ip[NET_IP_STR_LEN];  /* IP address last time it was seen */
-    uint16_t port;              /* base port last time it was seen */
-    uint16_t cport;             /* cluster port last time it was seen */
-    uint16_t flags;             /* node->flags copy */
-    uint16_t pport;             /* plaintext-port, when base port is TLS */
-    uint16_t notused1;
-} clusterMsgDataGossip;
+
+typedef struct clusterState {
+    clusterNode *myself;  /* This node */
+    uint64_t currentEpoch;
+    int state;            /* CLUSTER_OK, CLUSTER_FAIL, ... */
+    int size;             /* Num of master nodes with at least one slot */
+    dict *nodes;          /* Hash table of name -> clusterNode structures */
+    dict *nodes_black_list; /* Nodes we don't re-add for a few seconds. */
+    clusterNode *migrating_slots_to[CLUSTER_SLOTS];
+    clusterNode *importing_slots_from[CLUSTER_SLOTS];
+    clusterNode *slots[CLUSTER_SLOTS];
+    uint64_t slots_keys_count[CLUSTER_SLOTS];
+    rax *slots_to_keys;
+    /* The following fields are used to take the slave state on elections. */
+    mstime_t failover_auth_time; /* Time of previous or next election. */
+    int failover_auth_count;    /* Number of votes received so far. */
+    int failover_auth_sent;     /* True if we already asked for votes. */
+    int failover_auth_rank;     /* This slave rank for current auth request. */
+    uint64_t failover_auth_epoch; /* Epoch of the current election. */
+    int cant_failover_reason;   /* Why a slave is currently not able to
+                                   failover. See the CANT_FAILOVER_* macros. */
+    /* Manual failover state in common. */
+    mstime_t mf_end;            /* Manual failover time limit (ms unixtime).
+                                   It is zero if there is no MF in progress. */
+    /* Manual failover state of master. */
+    clusterNode *mf_slave;      /* Slave performing the manual failover. */
+    /* Manual failover state of slave. */
+    long long mf_master_offset; /* Master offset the slave needs to start MF
+                                   or -1 if still not received. */
+    int mf_can_start;           /* If non-zero signal that the manual failover
+                                   can start requesting masters vote. */
+    /* The following fields are used by masters to take state on elections. */
+    uint64_t lastVoteEpoch;     /* Epoch of the last vote granted. */
+    int todo_before_sleep; /* Things to do in clusterBeforeSleep(). */
+    /* Messages received and sent by type. */
+    long long stats_bus_messages_sent[CLUSTERMSG_TYPE_COUNT];
+    long long stats_bus_messages_received[CLUSTERMSG_TYPE_COUNT];
+    long long stats_pfail_nodes;    /* Number of nodes in PFAIL status,
+                                       excluding nodes without address. */
+} clusterState;
 ```
 
-Cluster node timeout is the amount of milliseconds a node must be unreachable for it to be considered in failure state. Most other internal time limits are a multiple of the node timeout.
+clusterNode
 
+```c
+
+typedef struct clusterNode {
+    mstime_t ctime; /* Node object creation time. */
+    char name[CLUSTER_NAMELEN]; /* Node name, hex string, sha1-size */
+    int flags;      /* CLUSTER_NODE_... */
+    uint64_t configEpoch; /* Last configEpoch observed for this node */
+    unsigned char slots[CLUSTER_SLOTS/8]; /* slots handled by this node */
+    sds slots_info; /* Slots info represented by string. */
+    int numslots;   /* Number of slots handled by this node */
+    int numslaves;  /* Number of slave nodes, if this is a master */
+    struct clusterNode **slaves; /* pointers to slave nodes */
+    struct clusterNode *slaveof; /* pointer to the master node. Note that it
+                                    may be NULL even if the node is a slave
+                                    if we don't have the master node in our
+                                    tables. */
+    mstime_t ping_sent;      /* Unix time we sent latest ping */
+    mstime_t pong_received;  /* Unix time we received the pong */
+    mstime_t data_received;  /* Unix time we received any data */
+    mstime_t fail_time;      /* Unix time when FAIL flag was set */
+    mstime_t voted_time;     /* Last time we voted for a slave of this master */
+    mstime_t repl_offset_time;  /* Unix time we received offset for this node */
+    mstime_t orphaned_time;     /* Starting time of orphaned master condition */
+    long long repl_offset;      /* Last known repl offset for this node. */
+    char ip[NET_IP_STR_LEN];  /* Latest known IP address of this node */
+    int port;                   /* Latest known clients port (TLS or plain). */
+    int pport;                  /* Latest known clients plaintext port. Only used
+                                   if the main clients port is for TLS. */
+    int cport;                  /* Latest known cluster port of this node. */
+    clusterLink *link;          /* TCP/IP link with this node */
+    list *fail_reports;         /* List of nodes signaling this as failing */
+} clusterNode;
 ```
-cluster-node-timeout 15000
+
+## main
+
+### cron
+
+This is executed 10 times every second
+
+```c
+void clusterCron(void) {
+    dictIterator *di;
+    dictEntry *de;
+    int update_state = 0;
+    int orphaned_masters; /* How many masters there are without ok slaves. */
+    int max_slaves; /* Max number of ok slaves for a single master. */
+    int this_slaves; /* Number of ok slaves for our master (if we are slave). */
+    mstime_t min_pong = 0, now = mstime();
+    clusterNode *min_pong_node = NULL;
+    static unsigned long long iteration = 0;
+    mstime_t handshake_timeout;
+
+    iteration++; /* Number of times this function was called so far. */
+
+    /* We want to take myself->ip in sync with the cluster-announce-ip option.
+     * The option can be set at runtime via CONFIG SET, so we periodically check
+     * if the option changed to reflect this into myself->ip. */
+    {
+        static char *prev_ip = NULL;
+        char *curr_ip = server.cluster_announce_ip;
+        int changed = 0;
+
+        if (prev_ip == NULL && curr_ip != NULL) changed = 1;
+        else if (prev_ip != NULL && curr_ip == NULL) changed = 1;
+        else if (prev_ip && curr_ip && strcmp(prev_ip,curr_ip)) changed = 1;
+
+        if (changed) {
+            if (prev_ip) zfree(prev_ip);
+            prev_ip = curr_ip;
+
+            if (curr_ip) {
+                /* We always take a copy of the previous IP address, by
+                 * duplicating the string. This way later we can check if
+                 * the address really changed. */
+                prev_ip = zstrdup(prev_ip);
+                strncpy(myself->ip,server.cluster_announce_ip,NET_IP_STR_LEN);
+                myself->ip[NET_IP_STR_LEN-1] = '\0';
+            } else {
+                myself->ip[0] = '\0'; /* Force autodetection. */
+            }
+        }
+    }
+
+    /* The handshake timeout is the time after which a handshake node that was
+     * not turned into a normal node is removed from the nodes. Usually it is
+     * just the NODE_TIMEOUT value, but when NODE_TIMEOUT is too small we use
+     * the value of 1 second. */
+    handshake_timeout = server.cluster_node_timeout;
+    if (handshake_timeout < 1000) handshake_timeout = 1000;
+
+    /* Update myself flags. */
+    clusterUpdateMyselfFlags();
+
+    /* Check if we have disconnected nodes and re-establish the connection.
+     * Also update a few stats while we are here, that can be used to make
+     * better decisions in other part of the code. */
+    di = dictGetSafeIterator(server.cluster->nodes);
+    server.cluster->stats_pfail_nodes = 0;
+    while((de = dictNext(di)) != NULL) {
+        clusterNode *node = dictGetVal(de);
+
+        /* Not interested in reconnecting the link with myself or nodes
+         * for which we have no address. */
+        if (node->flags & (CLUSTER_NODE_MYSELF|CLUSTER_NODE_NOADDR)) continue;
+
+        if (node->flags & CLUSTER_NODE_PFAIL)
+            server.cluster->stats_pfail_nodes++;
+
+        /* A Node in HANDSHAKE state has a limited lifespan equal to the
+         * configured node timeout. */
+        if (nodeInHandshake(node) && now - node->ctime > handshake_timeout) {
+            clusterDelNode(node);
+            continue;
+        }
+
+        if (node->link == NULL) {
+            clusterLink *link = createClusterLink(node);
+            link->conn = server.tls_cluster ? connCreateTLS() : connCreateSocket();
+            connSetPrivateData(link->conn, link);
+            if (connConnect(link->conn, node->ip, node->cport, NET_FIRST_BIND_ADDR,
+                        clusterLinkConnectHandler) == -1) {
+                /* We got a synchronous error from connect before
+                 * clusterSendPing() had a chance to be called.
+                 * If node->ping_sent is zero, failure detection can't work,
+                 * so we claim we actually sent a ping now (that will
+                 * be really sent as soon as the link is obtained). */
+                if (node->ping_sent == 0) node->ping_sent = mstime();
+                serverLog(LL_DEBUG, "Unable to connect to "
+                    "Cluster Node [%s]:%d -> %s", node->ip,
+                    node->cport, server.neterr);
+
+                freeClusterLink(link);
+                continue;
+            }
+            node->link = link;
+        }
+    }
+    dictReleaseIterator(di);
 ```
 
-gossip 协议包含多种消息，包含 `ping` , `pong` , `meet` , `fail` 等等。
+Ping some random node 1 time every 10 iterations, so that we usually ping one random node every second.
 
-- meet：某个节点发送 meet 给新加入的节点，让新节点加入集群中，然后新节点就会开始与其它节点进行通信。
+```c
+    if (!(iteration % 10)) {
+        int j;
 
-```bash
-Redis-trib.rb add-nodeCopy to clipboardErrorCopied
+        /* Check a few random nodes and ping the one with the oldest
+         * pong_received time. */
+        for (j = 0; j < 5; j++) {
+            de = dictGetRandomKey(server.cluster->nodes);
+            clusterNode *this = dictGetVal(de);
+
+            /* Don't ping nodes disconnected or with a ping currently active. */
+            if (this->link == NULL || this->ping_sent != 0) continue;
+            if (this->flags & (CLUSTER_NODE_MYSELF|CLUSTER_NODE_HANDSHAKE))
+                continue;
+            if (min_pong_node == NULL || min_pong > this->pong_received) {
+                min_pong_node = this;
+                min_pong = this->pong_received;
+            }
+        }
+        if (min_pong_node) {
+            serverLog(LL_DEBUG,"Pinging node %.40s", min_pong_node->name);
+            clusterSendPing(min_pong_node->link, CLUSTERMSG_TYPE_PING);
+        }
+    }
+
+    /* Iterate nodes to check if we need to flag something as failing.
+     * This loop is also responsible to:
+     * 1) Check if there are orphaned masters (masters without non failing
+     *    slaves).
+     * 2) Count the max number of non failing slaves for a single master.
+     * 3) Count the number of slaves for our master, if we are a slave. */
+    orphaned_masters = 0;
+    max_slaves = 0;
+    this_slaves = 0;
+    di = dictGetSafeIterator(server.cluster->nodes);
+    while((de = dictNext(di)) != NULL) {
+        clusterNode *node = dictGetVal(de);
+        now = mstime(); /* Use an updated time at every iteration. */
+
+        if (node->flags &
+            (CLUSTER_NODE_MYSELF|CLUSTER_NODE_NOADDR|CLUSTER_NODE_HANDSHAKE))
+                continue;
+
+        /* Orphaned master check, useful only if the current instance
+         * is a slave that may migrate to another master. */
+        if (nodeIsSlave(myself) && nodeIsMaster(node) && !nodeFailed(node)) {
+            int okslaves = clusterCountNonFailingSlaves(node);
+
+            /* A master is orphaned if it is serving a non-zero number of
+             * slots, have no working slaves, but used to have at least one
+             * slave, or failed over a master that used to have slaves. */
+            if (okslaves == 0 && node->numslots > 0 &&
+                node->flags & CLUSTER_NODE_MIGRATE_TO)
+            {
+                orphaned_masters++;
+            }
+            if (okslaves > max_slaves) max_slaves = okslaves;
+            if (nodeIsSlave(myself) && myself->slaveof == node)
+                this_slaves = okslaves;
+        }
+
+        /* If we are not receiving any data for more than half the cluster
+         * timeout, reconnect the link: maybe there is a connection
+         * issue even if the node is alive. */
+        mstime_t ping_delay = now - node->ping_sent;
+        mstime_t data_delay = now - node->data_received;
+        if (node->link && /* is connected */
+            now - node->link->ctime >
+            server.cluster_node_timeout && /* was not already reconnected */
+            node->ping_sent && /* we already sent a ping */
+            /* and we are waiting for the pong more than timeout/2 */
+            ping_delay > server.cluster_node_timeout/2 &&
+            /* and in such interval we are not seeing any traffic at all. */
+            data_delay > server.cluster_node_timeout/2)
+        {
+            /* Disconnect the link, it will be reconnected automatically. */
+            freeClusterLink(node->link);
+        }
+
+        /* If we have currently no active ping in this instance, and the
+         * received PONG is older than half the cluster timeout, send
+         * a new ping now, to ensure all the nodes are pinged without
+         * a too big delay. */
+        if (node->link &&
+            node->ping_sent == 0 &&
+            (now - node->pong_received) > server.cluster_node_timeout/2)
+        {
+            clusterSendPing(node->link, CLUSTERMSG_TYPE_PING);
+            continue;
+        }
+
+        /* If we are a master and one of the slaves requested a manual
+         * failover, ping it continuously. */
+        if (server.cluster->mf_end &&
+            nodeIsMaster(myself) &&
+            server.cluster->mf_slave == node &&
+            node->link)
+        {
+            clusterSendPing(node->link, CLUSTERMSG_TYPE_PING);
+            continue;
+        }
+
+        /* Check only if we have an active ping for this instance. */
+        if (node->ping_sent == 0) continue;
+
+        /* Check if this node looks unreachable.
+         * Note that if we already received the PONG, then node->ping_sent
+         * is zero, so can't reach this code at all, so we don't risk of
+         * checking for a PONG delay if we didn't sent the PING.
+         *
+         * We also consider every incoming data as proof of liveness, since
+         * our cluster bus link is also used for data: under heavy data
+         * load pong delays are possible. */
+        mstime_t node_delay = (ping_delay < data_delay) ? ping_delay :
+                                                          data_delay;
+
+        if (node_delay > server.cluster_node_timeout) {
+            /* Timeout reached. Set the node as possibly failing if it is
+             * not already in this state. */
+            if (!(node->flags & (CLUSTER_NODE_PFAIL|CLUSTER_NODE_FAIL))) {
+                serverLog(LL_DEBUG,"*** NODE %.40s possibly failing",
+                    node->name);
+                node->flags |= CLUSTER_NODE_PFAIL;
+                update_state = 1;
+            }
+        }
+    }
+    dictReleaseIterator(di);
+
+    /* If we are a slave node but the replication is still turned off,
+     * enable it if we know the address of our master and it appears to
+     * be up. */
+    if (nodeIsSlave(myself) &&
+        server.masterhost == NULL &&
+        myself->slaveof &&
+        nodeHasAddr(myself->slaveof))
+    {
+        replicationSetMaster(myself->slaveof->ip, myself->slaveof->port);
+    }
+
+    /* Abort a manual failover if the timeout is reached. */
+    manualFailoverCheckTimeout();
+
+    if (nodeIsSlave(myself)) {
+        clusterHandleManualFailover();
+        if (!(server.cluster_module_flags & CLUSTER_MODULE_FLAG_NO_FAILOVER))
+            clusterHandleSlaveFailover();
+        /* If there are orphaned slaves, and we are a slave among the masters
+         * with the max number of non-failing slaves, consider migrating to
+         * the orphaned masters. Note that it does not make sense to try
+         * a migration if there is no master with at least *two* working
+         * slaves. */
+        if (orphaned_masters && max_slaves >= 2 && this_slaves == max_slaves &&
+		server.cluster_allow_replica_migration)
+            clusterHandleSlaveMigration(max_slaves);
+    }
+
+    if (update_state || server.cluster->state == CLUSTER_FAIL)
+        clusterUpdateState();
+}
 ```
 
-其实内部就是发送了一个 gossip meet 消息给新加入的节点，通知那个节点去加入我们的集群。
+### sendPing
 
-- ping：每个节点都会频繁给其它节点发送 ping，其中包含自己的状态还有自己维护的集群元数据，互相通过 ping 交换元数据。
-- pong：返回 ping 和 meeet，包含自己的状态和其它信息，也用于信息广播和更新。
-- fail：某个节点判断另一个节点 fail 之后，就发送 fail 给其它节点，通知其它节点说，某个节点宕机啦。
+Send a PING or PONG packet to the specified node, making sure to add enough gossip information.
 
+```c
+void clusterSendPing(clusterLink *link, int type) {
+    unsigned char *buf;
+    clusterMsg *hdr;
+    int gossipcount = 0; /* Number of gossip sections added so far. */
+    int wanted; /* Number of gossip sections we want to append if possible. */
+    int totlen; /* Total packet length. */
+    /* freshnodes is the max number of nodes we can hope to append at all:
+     * nodes available minus two (ourself and the node we are sending the
+     * message to). However practically there may be less valid nodes since
+     * nodes in handshake state, disconnected, are not considered. */
+    int freshnodes = dictSize(server.cluster->nodes)-2;
 
-#### [ping 消息深入](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=ping-消息深入)
+    /* How many gossip sections we want to add? 1/10 of the number of nodes
+     * and anyway at least 3. Why 1/10?
+     *
+     * If we have N masters, with N/10 entries, and we consider that in
+     * node_timeout we exchange with each other node at least 4 packets
+     * (we ping in the worst case in node_timeout/2 time, and we also
+     * receive two pings from the host), we have a total of 8 packets
+     * in the node_timeout*2 failure reports validity time. So we have
+     * that, for a single PFAIL node, we can expect to receive the following
+     * number of failure reports (in the specified window of time):
+     *
+     * PROB * GOSSIP_ENTRIES_PER_PACKET * TOTAL_PACKETS:
+     *
+     * PROB = probability of being featured in a single gossip entry,
+     *        which is 1 / NUM_OF_NODES.
+     * ENTRIES = 10.
+     * TOTAL_PACKETS = 2 * 4 * NUM_OF_MASTERS.
+     *
+     * If we assume we have just masters (so num of nodes and num of masters
+     * is the same), with 1/10 we always get over the majority, and specifically
+     * 80% of the number of nodes, to account for many masters failing at the
+     * same time.
+     *
+     * Since we have non-voting slaves that lower the probability of an entry
+     * to feature our node, we set the number of entries per packet as
+     * 10% of the total nodes we have. */
+    wanted = floor(dictSize(server.cluster->nodes)/10);
+    if (wanted < 3) wanted = 3;
+    if (wanted > freshnodes) wanted = freshnodes;
 
-ping 时要携带一些元数据，如果很频繁，可能会加重网络负担。
+    /* Include all the nodes in PFAIL state, so that failure reports are
+     * faster to propagate to go from PFAIL to FAIL state. */
+    int pfail_wanted = server.cluster->stats_pfail_nodes;
 
-每个节点每秒会执行 10 次 ping，每次会选择 5 个最久没有通信的其它节点。当然如果发现某个节点通信延时达到了 `cluster_node_timeout / 2` ，那么立即发送 ping，避免数据交换延时过长，落后的时间太长了。比如说，两个节点之间都 10 分钟没有交换数据了，那么整个集群处于严重的元数据不一致的情况，就会有问题。所以 `cluster_node_timeout` 可以调节，如果调得比较大，那么会降低 ping 的频率。
+    /* Compute the maximum totlen to allocate our buffer. We'll fix the totlen
+     * later according to the number of gossip sections we really were able
+     * to put inside the packet. */
+    totlen = sizeof(clusterMsg)-sizeof(union clusterMsgData);
+    totlen += (sizeof(clusterMsgDataGossip)*(wanted+pfail_wanted));
+    /* Note: clusterBuildMessageHdr() expects the buffer to be always at least
+     * sizeof(clusterMsg) or more. */
+    if (totlen < (int)sizeof(clusterMsg)) totlen = sizeof(clusterMsg);
+    buf = zcalloc(totlen);
+    hdr = (clusterMsg*) buf;
 
-每次 ping，会带上自己节点的信息，还有就是带上 1/10 其它节点的信息，发送出去，进行交换。至少包含 `3` 个其它节点的信息，最多包含 `总节点数减 2` 个其它节点的信息。
+    /* Populate the header. */
+    if (link->node && type == CLUSTERMSG_TYPE_PING)
+        link->node->ping_sent = mstime();
+    clusterBuildMessageHdr(hdr,type);
 
-### [Redis cluster 的高可用与主备切换原理](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=redis-cluster-的高可用与主备切换原理)
+    /* Populate the gossip fields */
+    int maxiterations = wanted*3;
+    while(freshnodes > 0 && gossipcount < wanted && maxiterations--) {
+        dictEntry *de = dictGetRandomKey(server.cluster->nodes);
+        clusterNode *this = dictGetVal(de);
 
-Redis cluster 的高可用的原理，几乎跟哨兵是类似的。
+        /* Don't include this node: the whole packet header is about us
+         * already, so we just gossip about other nodes. */
+        if (this == myself) continue;
 
-#### [判断节点宕机](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=判断节点宕机)
+        /* PFAIL nodes will be added later. */
+        if (this->flags & CLUSTER_NODE_PFAIL) continue;
 
-如果一个节点认为另外一个节点宕机，那么就是 `pfail` ，**主观宕机**。如果多个节点都认为另外一个节点宕机了，那么就是 `fail` ，**客观宕机**，跟哨兵的原理几乎一样，sdown，odown。
+        /* In the gossip section don't include:
+         * 1) Nodes in HANDSHAKE state.
+         * 3) Nodes with the NOADDR flag set.
+         * 4) Disconnected nodes if they don't have configured slots.
+         */
+        if (this->flags & (CLUSTER_NODE_HANDSHAKE|CLUSTER_NODE_NOADDR) ||
+            (this->link == NULL && this->numslots == 0))
+        {
+            freshnodes--; /* Technically not correct, but saves CPU. */
+            continue;
+        }
 
-在 `cluster-node-timeout` 内，某个节点一直没有返回 `pong` ，那么就被认为 `pfail` 。
+        /* Do not add a node we already have. */
+        if (clusterNodeIsInGossipSection(hdr,gossipcount,this)) continue;
 
-如果一个节点认为某个节点 `pfail` 了，那么会在 `gossip ping` 消息中， `ping` 给其他节点，如果**超过半数**的节点都认为 `pfail` 了，那么就会变成 `fail` 。
+        /* Add it */
+        clusterSetGossipEntry(hdr,gossipcount,this);
+        freshnodes--;
+        gossipcount++;
+    }
 
-#### [从节点过滤](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=从节点过滤)
+    /* If there are PFAIL nodes, add them at the end. */
+    if (pfail_wanted) {
+        dictIterator *di;
+        dictEntry *de;
 
-对宕机的 master node，从其所有的 slave node 中，选择一个切换成 master node。
+        di = dictGetSafeIterator(server.cluster->nodes);
+        while((de = dictNext(di)) != NULL && pfail_wanted > 0) {
+            clusterNode *node = dictGetVal(de);
+            if (node->flags & CLUSTER_NODE_HANDSHAKE) continue;
+            if (node->flags & CLUSTER_NODE_NOADDR) continue;
+            if (!(node->flags & CLUSTER_NODE_PFAIL)) continue;
+            clusterSetGossipEntry(hdr,gossipcount,node);
+            freshnodes--;
+            gossipcount++;
+            /* We take the count of the slots we allocated, since the
+             * PFAIL stats may not match perfectly with the current number
+             * of PFAIL nodes. */
+            pfail_wanted--;
+        }
+        dictReleaseIterator(di);
+    }
 
-检查每个 slave node 与 master node 断开连接的时间，如果超过了 `cluster-node-timeout * cluster-slave-validity-factor` ，那么就**没有资格**切换成 `master` 。
-
-#### [从节点选举](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=从节点选举)
-
-每个从节点，都根据自己对 master 复制数据的 offset，来设置一个选举时间，offset 越大（复制数据越多）的从节点，选举时间越靠前，优先进行选举。
-
-所有的 master node 开始 slave 选举投票，给要进行选举的 slave 进行投票，如果大部分 master node `（N/2 + 1）` 都投票给了某个从节点，那么选举通过，那个从节点可以切换成 master。
-
-从节点执行主备切换，从节点切换为主节点。
-
-#### [与哨兵比较](https://doocs.github.io/advanced-java/#/./docs/high-concurrency/redis-cluster?id=与哨兵比较)
-
-整个流程跟哨兵相比，非常类似，所以说，Redis cluster 功能强大，直接集成了 replication 和 sentinel 的功能。
-
-
-
-
+    /* Ready to send... fix the totlen fiend and queue the message in the
+     * output buffer. */
+    totlen = sizeof(clusterMsg)-sizeof(union clusterMsgData);
+    totlen += (sizeof(clusterMsgDataGossip)*gossipcount);
+    hdr->count = htons(gossipcount);
+    hdr->totlen = htonl(totlen);
+    clusterSendMessage(link,buf,totlen);
+    zfree(buf);
+}
+```
 
 ## master
 
@@ -110,142 +514,29 @@ void clusterSetMaster(clusterNode *n) {
 }
 ```
 
-一个集群由多个Redis节点组成，不同的节点通过`CLUSTER MEET`命令进行连接：
+## gossip
 
-```
-CLUSTER MEET <ip> <port>
-```
+Initially we don't know our "name", but we'll find it once we connect to the first node, using the getsockname() function. Then we'll use this address for all the next messages.
 
-收到命令的节点会与命令中指定的目标节点进行握手，握手成功后目标节点会加入到集群中,看个例子,图片来自于[Redis的设计与实现](http://redisbook.com/preview/cluster/node.html)：
-
-[![image](https://camo.githubusercontent.com/6f1f8a2c673312dfd220f6d6ce8beff342100188dcfb1698fc58d70d0aa99332/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353436353539376631383f773d34353826683d32323226663d706e6726733d3231333936)](https://camo.githubusercontent.com/6f1f8a2c673312dfd220f6d6ce8beff342100188dcfb1698fc58d70d0aa99332/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353436353539376631383f773d34353826683d32323226663d706e6726733d3231333936)
-
-[![image](https://camo.githubusercontent.com/75ef437b642023cad9a3e5c8a521cda995b8a20c0d17603b3dd514d9b92e9af2/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353364353862303365653f773d35353226683d33373126663d706e6726733d3332333134)](https://camo.githubusercontent.com/75ef437b642023cad9a3e5c8a521cda995b8a20c0d17603b3dd514d9b92e9af2/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353364353862303365653f773d35353226683d33373126663d706e6726733d3332333134)
-
-[![image](https://camo.githubusercontent.com/1a90fa4bea67a133ec7b659a3a3c14b0263335ba7b02d895a02bda396144f48f/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353464653737303761383f773d36363426683d33363526663d706e6726733d3330343532)](https://camo.githubusercontent.com/1a90fa4bea67a133ec7b659a3a3c14b0263335ba7b02d895a02bda396144f48f/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353464653737303761383f773d36363426683d33363526663d706e6726733d3330343532)
-
-[![image](https://camo.githubusercontent.com/bfade42bd8225e2e32dbd4b8d0ff2cf574f1824669f91ef02aba90a23a803794/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353366306233333133363f773d35383926683d33363526663d706e6726733d3334313337)](https://camo.githubusercontent.com/bfade42bd8225e2e32dbd4b8d0ff2cf574f1824669f91ef02aba90a23a803794/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353366306233333133363f773d35383926683d33363526663d706e6726733d3334313337)
-
-[![image](https://camo.githubusercontent.com/b70da7bbcf999309b775d806302e14fd987ab7dde2c9a1fd4f8d69e85127a7f1/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353364353562313235303f773d36323626683d33323126663d706e6726733d3238303939)](https://camo.githubusercontent.com/b70da7bbcf999309b775d806302e14fd987ab7dde2c9a1fd4f8d69e85127a7f1/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353364353562313235303f773d36323626683d33323126663d706e6726733d3238303939)
-
-### 槽分配
-
-一个集群的所有数据被分为16384个槽，可以通过`CLUSTER ADDSLOTS`命令将槽指派给对应的节点。当所有的槽都有节点负责时，集群处于上线状态，否则处于下线状态不对外提供服务。
-
-clusterNode的位数组slots代表一个节点负责的槽信息。
-
-```
-struct clusterNode {
-
-
-    unsigned char slots[16384/8]; /* slots handled by this node */
-
-    int numslots;   /* Number of slots handled by this node */
-
-    ...
-}
+```c
+typedef struct {
+    char nodename[CLUSTER_NAMELEN];
+    uint32_t ping_sent;
+    uint32_t pong_received;
+    char ip[NET_IP_STR_LEN];  /* IP address last time it was seen */
+    uint16_t port;              /* base port last time it was seen */
+    uint16_t cport;             /* cluster port last time it was seen */
+    uint16_t flags;             /* node->flags copy */
+    uint16_t pport;             /* plaintext-port, when base port is TLS */
+    uint16_t notused1;
+} clusterMsgDataGossip;
 ```
 
-看个例子，下图中1、3、5、8、9、10位的值为1，代表该节点负责槽1、3、5、8、9、10。
-
-每个Redis Server上都有一个ClusterState的对象，代表了该Server所在集群的信息，其中字段slots记录了集群中所有节点负责的槽信息。
+Cluster node timeout is the amount of milliseconds a node must be unreachable for it to be considered in failure state. Most other internal time limits are a multiple of the node timeout.
 
 ```
-typedef struct clusterState {
-
-    // 负责处理各个槽的节点
-    // 例如 slots[i] = clusterNode_A 表示槽 i 由节点 A 处理
-    // slots[i] = null 代表该槽目前没有节点负责
-    clusterNode *slots[REDIS_CLUSTER_SLOTS];
-
-}
+cluster-node-timeout 15000
 ```
-
-### 槽重分配
-
-可以通过redis-trib工具对槽重新分配，重分配的实现步骤如下：
-
-1. 通知目标节点准备好接收槽
-2. 通知源节点准备好发送槽
-3. 向源节点发送命令：`CLUSTER GETKEYSINSLOT <slot> <count>`从源节点获取最多count个槽slot的key
-4. 对于步骤3的每个key，都向源节点发送一个`MIGRATE <target_ip> <target_port> <key_name> 0 <timeout> `命令，将被选中的键原子的从源节点迁移至目标节点。
-5. 重复步骤3、4。直到槽slot的所有键值对都被迁移到目标节点
-6. 将槽slot指派给目标节点的信息发送到整个集群。
-
-在槽重分配的过程中，槽中的一部分数据保存着源节点，另一部分保存在目标节点。这时如果要客户端向源节点发送一个命令，且相关数据在一个正在迁移槽中，源节点处理步骤如图:
-[![image](https://camo.githubusercontent.com/49788d2516d676cd45ccfda4572d0497687baade043dfe8d0111ca03c0873266/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353365663764623564623f773d39393626683d34373426663d706e6726733d313838343836)](https://camo.githubusercontent.com/49788d2516d676cd45ccfda4572d0497687baade043dfe8d0111ca03c0873266/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353365663764623564623f773d39393626683d34373426663d706e6726733d313838343836)
-
-当客户端收到一个ASK错误的时候，会根据返回的信息向目标节点重新发起一次请求。
-
-ASK和MOVED的区别主要是ASK是一次性的，MOVED是永久性的，有点像Http协议中的301和302。
-
-### 一次命令执行过程
-
-我们来看cluster下一次命令的请求过程,假设执行命令 `get testKey`
-
-1. cluster client在运行前需要配置若干个server节点的ip和port。我们称这些节点为种子节点。
-2. cluster的客户端在执行命令时，会先通过计算得到key的槽信息，计算规则为：`getCRC16(key) & (16384 - 1)`，得到槽信息后，会从一个缓存map中获得槽对应的redis server信息，如果能获取到，则调到第4步
-3. 向种子节点发送`slots`命令以获得整个集群的槽分布信息，然后跳转到第2步重试命令
-4. 向负责该槽的server发起调用
-   server处理如图：
-   [![image](https://camo.githubusercontent.com/0c6fc867400481025448a59c20d4c7a74f16fb365aa978755569970c963c2236/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353465376538376535303f773d3131313626683d35323626663d706e6726733d323134323931)](https://camo.githubusercontent.com/0c6fc867400481025448a59c20d4c7a74f16fb365aa978755569970c963c2236/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353465376538376535303f773d3131313626683d35323626663d706e6726733d323134323931)
-5. 客户端如果收到MOVED错误，则根据对应的地址跳转到第4步重新请求，
-6. 客户段如果收到ASK错误，则根据对应的地址跳转到第4步重新请求，并在请求前带上ASKING标识。
-
-以上步骤大致就是redis cluster下一次命令请求的过程，但忽略了一个细节，如果要查找的数据锁所在的槽正在重分配怎么办？
-
-### Redis故障转移
-
-#### 疑似下线与已下线
-
-集群中每个Redis节点都会定期的向集群中的其他节点发送PING消息，如果目标节点没有在有效时间内回复PONG消息，则会被标记为疑似下线。同时将该信息发送给其他节点。当一个集群中有半数负责处理槽的主节点都将某个节点A标记为疑似下线后，那么A会被标记为已下线，将A标记为已下线的节点会将该信息发送给其他节点。
-
-比如说有A,B,C,D,E 5个主节点。E有F、G两个从节点。
-当E节点发生异常后，其他节点发送给A的PING消息将不能得到正常回复。当过了最大超时时间后，假设A,B先将E标记为疑似下线；之后C也会将E标记为疑似下线，这时C发现集群中由3个节点（A、B、C）都将E标记为疑似下线，超过集群复制槽的主节点个数的一半(>2.5)则会将E标记为已下线，并向集群广播E下线的消息。
-
-#### 选取新的主节点
-
-当F、G（E的从节点）收到E被标记已下线的消息后，会根据Raft算法选举出一个新的主节点，新的主节点会将E复制的所有槽指派给自己，然后向集群广播消息，通知其他节点新的主节点信息。
-
-选举新的主节点算法与选举Sentinel头节点的[过程](http://www.farmerjohn.top/2018/08/20/redis-sentinel/#选举领头Sentinel)很像：
-
-1. 集群的配置纪元是一个自增计数器，它的初始值为0.
-2. 当集群里的某个节点开始一次故障转移操作时，集群配置纪元的值会被增一。
-3. 对于每个配置纪元，集群里每个负责处理槽的主节点都有一次投票的机会，而第一个向主节点要求投票的从节点将获得主节点的投票。
-4. 档从节点发现自己正在复制的主节点进入已下线状态时，从节点会想集群广播一条CLUSTER_TYPE_FAILOVER_AUTH_REQUEST消息，要求所有接收到这条消息、并且具有投票权的主节点向这个从节点投票。
-5. 如果一个主节点具有投票权（它正在负责处理槽），并且这个主节点尚未投票给其他从节点，那么主节点将向要求投票的从节点返回一条CLUSTERMSG_TYPE_FAILOVER_AUTH_ACK消息，表示这个主节点支持从节点成为新的主节点。
-6. 每个参与选举的从节点都会接收CLUSTERMSG_TYPE_FAILOVER_AUTH_ACK消息，并根据自己收到了多少条这种消息来同济自己获得了多少主节点的支持。
-7. 如果集群里有N个具有投票权的主节点，那么当一个从节点收集到大于等于N/2+1张支持票时，这个从节点就会当选为新的主节点。
-8. 因为在每一个配置纪元里面，每个具有投票权的主节点只能投一次票，所以如果有N个主节点进行投票，那么具有大于等于N/2+1张支持票的从节点只会有一个，这确保了新的主节点只会有一个。
-9. 如果在一个配置纪元里面没有从节点能收集到足够多的支持票，那么集群进入一个新的配置纪元，并再次进行选举，知道选出新的主节点为止。
-
-### Redis常用分布式实现方案
-
-最后，聊聊redis集群的其他两种实现方案。
-
-#### client做分片
-
-客户端做路由，采用一致性hash算法，将key映射到对应的redis节点上。
-其优点是实现简单，没有引用其他中间件。
-缺点也很明显：是一种静态分片方案，扩容性差。
-
-Jedis中的ShardedJedis是该方案的实现。
-
-#### proxy做分片
-
-该方案在client与redis之间引入一个代理层。client的所有操作都发送给代理层，由代理层实现路由转发给不同的redis服务器。
-
-[![image](https://camo.githubusercontent.com/bfa899736c8ccd998701f289446603b0302d96386f98dc39a57bbb21c558da35/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353365663936643635663f773d3130303026683d38303826663d7765627026733d3331373638)](https://camo.githubusercontent.com/bfa899736c8ccd998701f289446603b0302d96386f98dc39a57bbb21c558da35/68747470733a2f2f757365722d676f6c642d63646e2e786974752e696f2f323031382f392f31302f313635633366353365663936643635663f773d3130303026683d38303826663d7765627026733d3331373638)
-
-其优点是: 路由规则可自定义，扩容方便。
-缺点是： 代理层有单点问题，多一层转发的网络开销
-
-其开源实现有twitter的[twemproxy](https://github.com/twitter/twemproxy)
-和豌豆荚的[codis](https://github.com/CodisLabs/codis)
-
-### 结束
-
-分布式redis深度历险系列到此为止了，之后一个系列会详细讲讲单机Redis的实现，包括Redis的底层数据结构、对内存占用的优化、基于事件的处理机制、持久化的实现等等偏底层的内容，敬请期待~
 
 ## Msg
 
@@ -271,5 +562,234 @@ Jedis中的ShardedJedis是该方案的实现。
 #define CLUSTERMSG_TYPE_COUNT 10        /* Total number of message types. */
 ```
 
+## Failover
+
+### handleSlave
+
+This function is called if we are a slave node and our master serving a non-zero amount of hash slots is in FAIL state.
+
+The goal of this function is:
+
+1. To check if we are able to perform a failover, is our data updated?
+2. Try to get elected by masters.
+3. Perform the failover informing all the other nodes.
+
+```c
+void clusterHandleSlaveFailover(void) {
+    mstime_t data_age;
+    mstime_t auth_age = mstime() - server.cluster->failover_auth_time;
+    int needed_quorum = (server.cluster->size / 2) + 1;
+    int manual_failover = server.cluster->mf_end != 0 &&
+                          server.cluster->mf_can_start;
+    mstime_t auth_timeout, auth_retry_time;
+
+    server.cluster->todo_before_sleep &= ~CLUSTER_TODO_HANDLE_FAILOVER;
+
+    /* Compute the failover timeout (the max time we have to send votes
+     * and wait for replies), and the failover retry time (the time to wait
+     * before trying to get voted again).
+     *
+     * Timeout is MAX(NODE_TIMEOUT*2,2000) milliseconds.
+     * Retry is two times the Timeout.
+     */
+    auth_timeout = server.cluster_node_timeout*2;
+    if (auth_timeout < 2000) auth_timeout = 2000;
+    auth_retry_time = auth_timeout*2;
+
+    /* Pre conditions to run the function, that must be met both in case
+     * of an automatic or manual failover:
+     * 1) We are a slave.
+     * 2) Our master is flagged as FAIL, or this is a manual failover.
+     * 3) We don't have the no failover configuration set, and this is
+     *    not a manual failover.
+     * 4) It is serving slots. */
+    if (nodeIsMaster(myself) ||
+        myself->slaveof == NULL ||
+        (!nodeFailed(myself->slaveof) && !manual_failover) ||
+        (server.cluster_slave_no_failover && !manual_failover) ||
+        myself->slaveof->numslots == 0)
+    {
+        /* There are no reasons to failover, so we set the reason why we
+         * are returning without failing over to NONE. */
+        server.cluster->cant_failover_reason = CLUSTER_CANT_FAILOVER_NONE;
+        return;
+    }
+
+    /* Set data_age to the number of milliseconds we are disconnected from
+     * the master. */
+    if (server.repl_state == REPL_STATE_CONNECTED) {
+        data_age = (mstime_t)(server.unixtime - server.master->lastinteraction)
+                   * 1000;
+    } else {
+        data_age = (mstime_t)(server.unixtime - server.repl_down_since) * 1000;
+    }
+
+    /* Remove the node timeout from the data age as it is fine that we are
+     * disconnected from our master at least for the time it was down to be
+     * flagged as FAIL, that's the baseline. */
+    if (data_age > server.cluster_node_timeout)
+        data_age -= server.cluster_node_timeout;
+
+    /* Check if our data is recent enough according to the slave validity
+     * factor configured by the user.
+     *
+     * Check bypassed for manual failovers. */
+    if (server.cluster_slave_validity_factor &&
+        data_age >
+        (((mstime_t)server.repl_ping_slave_period * 1000) +
+         (server.cluster_node_timeout * server.cluster_slave_validity_factor)))
+    {
+        if (!manual_failover) {
+            clusterLogCantFailover(CLUSTER_CANT_FAILOVER_DATA_AGE);
+            return;
+        }
+    }
+
+    /* If the previous failover attempt timeout and the retry time has
+     * elapsed, we can setup a new one. */
+    if (auth_age > auth_retry_time) {
+        server.cluster->failover_auth_time = mstime() +
+            500 + /* Fixed delay of 500 milliseconds, let FAIL msg propagate. */
+            random() % 500; /* Random delay between 0 and 500 milliseconds. */
+        server.cluster->failover_auth_count = 0;
+        server.cluster->failover_auth_sent = 0;
+        server.cluster->failover_auth_rank = clusterGetSlaveRank();
+        /* We add another delay that is proportional to the slave rank.
+         * Specifically 1 second * rank. This way slaves that have a probably
+         * less updated replication offset, are penalized. */
+        server.cluster->failover_auth_time +=
+            server.cluster->failover_auth_rank * 1000;
+        /* However if this is a manual failover, no delay is needed. */
+        if (server.cluster->mf_end) {
+            server.cluster->failover_auth_time = mstime();
+            server.cluster->failover_auth_rank = 0;
+	    clusterDoBeforeSleep(CLUSTER_TODO_HANDLE_FAILOVER);
+        }
+        serverLog(LL_WARNING,
+            "Start of election delayed for %lld milliseconds "
+            "(rank #%d, offset %lld).",
+            server.cluster->failover_auth_time - mstime(),
+            server.cluster->failover_auth_rank,
+            replicationGetSlaveOffset());
+        /* Now that we have a scheduled election, broadcast our offset
+         * to all the other slaves so that they'll updated their offsets
+         * if our offset is better. */
+        clusterBroadcastPong(CLUSTER_BROADCAST_LOCAL_SLAVES);
+        return;
+    }
+
+    /* It is possible that we received more updated offsets from other
+     * slaves for the same master since we computed our election delay.
+     * Update the delay if our rank changed.
+     *
+     * Not performed if this is a manual failover. */
+    if (server.cluster->failover_auth_sent == 0 &&
+        server.cluster->mf_end == 0)
+    {
+        int newrank = clusterGetSlaveRank();
+        if (newrank > server.cluster->failover_auth_rank) {
+            long long added_delay =
+                (newrank - server.cluster->failover_auth_rank) * 1000;
+            server.cluster->failover_auth_time += added_delay;
+            server.cluster->failover_auth_rank = newrank;
+            serverLog(LL_WARNING,
+                "Replica rank updated to #%d, added %lld milliseconds of delay.",
+                newrank, added_delay);
+        }
+    }
+
+    /* Return ASAP if we can't still start the election. */
+    if (mstime() < server.cluster->failover_auth_time) {
+        clusterLogCantFailover(CLUSTER_CANT_FAILOVER_WAITING_DELAY);
+        return;
+    }
+
+    /* Return ASAP if the election is too old to be valid. */
+    if (auth_age > auth_timeout) {
+        clusterLogCantFailover(CLUSTER_CANT_FAILOVER_EXPIRED);
+        return;
+    }
+
+    /* Ask for votes if needed. */
+    if (server.cluster->failover_auth_sent == 0) {
+        server.cluster->currentEpoch++;
+        server.cluster->failover_auth_epoch = server.cluster->currentEpoch;
+        serverLog(LL_WARNING,"Starting a failover election for epoch %llu.",
+            (unsigned long long) server.cluster->currentEpoch);
+        clusterRequestFailoverAuth();
+        server.cluster->failover_auth_sent = 1;
+        clusterDoBeforeSleep(CLUSTER_TODO_SAVE_CONFIG|
+                             CLUSTER_TODO_UPDATE_STATE|
+                             CLUSTER_TODO_FSYNC_CONFIG);
+        return; /* Wait for replies. */
+    }
+
+    /* Check if we reached the quorum. */
+    if (server.cluster->failover_auth_count >= needed_quorum) {
+        /* We have the quorum, we can finally failover the master. */
+
+        serverLog(LL_WARNING,
+            "Failover election won: I'm the new master.");
+
+        /* Update my configEpoch to the epoch of the election. */
+        if (myself->configEpoch < server.cluster->failover_auth_epoch) {
+            myself->configEpoch = server.cluster->failover_auth_epoch;
+            serverLog(LL_WARNING,
+                "configEpoch set to %llu after successful failover",
+                (unsigned long long) myself->configEpoch);
+        }
+
+        /* Take responsibility for the cluster slots. */
+        clusterFailoverReplaceYourMaster();
+    } else {
+        clusterLogCantFailover(CLUSTER_CANT_FAILOVER_WAITING_VOTES);
+    }
+}
+```
+
+### replace Leader
+
+This function implements the final part of automatic and manual failovers, where the slave grabs its master's hash slots, and propagates the new configuration.
+
+Note that it's up to the caller to be sure that the node got a new configuration epoch already.
+
+```c
+void clusterFailoverReplaceYourMaster(void) {
+    int j;
+    clusterNode *oldmaster = myself->slaveof;
+
+    if (nodeIsMaster(myself) || oldmaster == NULL) return;
+
+    /* 1) Turn this node into a master. */
+    clusterSetNodeAsMaster(myself);
+    replicationUnsetMaster();
+
+    /* 2) Claim all the slots assigned to our master. */
+    for (j = 0; j < CLUSTER_SLOTS; j++) {
+        if (clusterNodeGetSlotBit(oldmaster,j)) {
+            clusterDelSlot(j);
+            clusterAddSlot(myself,j);
+        }
+    }
+
+    /* 3) Update state and save config. */
+    clusterUpdateState();
+    clusterSaveConfigOrDie(1);
+
+    /* 4) Pong all the other nodes so that they can update the state
+     *    accordingly and detect that we switched to master role. */
+    clusterBroadcastPong(CLUSTER_BROADCAST_ALL);
+
+    /* 5) If there was a manual failover in progress, clear the state. */
+    resetManualFailover();
+}
+```
+
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+
+
 ## References
+
 1. [Twemproxy, a Redis proxy from Twitter](http://antirez.com/news/44)
