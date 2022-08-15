@@ -158,6 +158,35 @@ Apollo’s architecture can accommodate any of such configurations. We implement
 The RM is never on the performance critical path: Apollo can continue to make scheduling decisions (at a degraded quality) even when the RM is temporarily unavailable, for example, during a transient master-slave switch due to a machine failure. 
 In addition, once a task is scheduled to a PN, the JM obtains up-to-date load information directly from the PN via frequent status updates.
 
+To better predict resource utilization in the near future and to optimize scheduling quality, 
+each PN maintains a local queue of tasks assigned to the server and advertises its future resource availability in the form of a wait-time matrix inferred from the queue.
+Apollo thereby adopts an estimation-based approach to making task scheduling decisions. 
+Specifically, Apollo considers the wait-time matrices, aggregated by the RM, together with the individual characteristics of tasks to be scheduled, such as the location of inputs.
+However, cluster dynamics pose many challenges in practice; for example, the wait-time matrices might be stale, estimates might be suboptimal, and the cluster environment might sometimes be unpredictable. 
+Apollo therefore incorporates correction mechanisms for robustness and dynamically adjusts scheduling decisions at runtime.
+Finally, there is an inherent tension between providing guaranteed resources to jobs (e.g., to ensure SLAs) and achieving high cluster utilization, because both the load on a cluster and the resource needs of a job fluctuate constantly. 
+Apollo resolves this tension through opportunistic scheduling, which creates secondclass tasks to use idle resources.
+
+## Firmament
+
+Firmament achieves low latency by using multiple MCMF algorithms, by solving the problem incrementally, and via problem-specific optimizations.
+
+
+Below figure gives an overview of the Firmament scheduler architecture. 
+
+![Firmament Architecture](./img/Firmament.png)
+
+Firmament, like Quincy, models the scheduling problem as a min-cost max-flow (MCMF) optimization over a flow network. 
+The flow network is a directed graph whose structure is defined by the scheduling policy. 
+In response to events and monitoring information, the flow network is modified according to the scheduling policy, and submitted to an MCMF solver to find an optimal (i.e., min-cost) flow. 
+Once the solver completes, it returns the optimal flow, from which Firmament extracts the implied task placements. 
+In the following, we first explain the basic structure of the flow network, and then discuss how to make the solver fast.
+
+### Scheduling policies
+
+- Load-spreading policy
+- Quincy policy
+- Network-aware policy
 
 
 ## References
