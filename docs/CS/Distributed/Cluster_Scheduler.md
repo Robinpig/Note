@@ -122,6 +122,43 @@ However, fully-distributed schedulers (like e.g., Sparrow) come with fairly rest
 set-up times are low (i.e., tasks are scheduled to long-running workers, as e.g., with MapReduce application-level tasks in YARN), and task churn is very high (i.e., many scheduling decisions must be made in a short time). 
 Distributed schedulers are substantially simpler than others, and do not support multiple resource dimensions, over-subscription, or re-scheduling.
 
+## Omega
+
+
+
+
+## Apollo
+
+- To balance scalability and scheduling quality, Apollo adopts a distributed and (loosely) coordinated scheduling framework, in which independent scheduling decisions are made in an optimistic and coordinated manner by incorporating synchronized cluster utilization information.
+- To achieve high-quality scheduling decisions, Apollo schedules each task on a server that minimizes the task completion time. 
+  The estimation model incorporates a variety of factors and allows a scheduler to perform a weighted decision, rather than solely considering data locality or server load. 
+  The data parallel nature of computation allows Apollo to refine the estimates of task execution time continuously based on observed runtime statistics from similar tasks during job execution.
+- To supply individual schedulers with cluster information, Apollo introduces a lightweight hardwareindependent mechanism to advertise load on servers. 
+  When combined with a local task queue on each server, the mechanism provides a near-future view of resource availability on all the servers, which is used by the schedulers in decision making.  
+- To cope with unexpected cluster dynamics, suboptimal estimations, and other abnormal runtime behaviors, which are facts of life in large-scale clusters, Apollo is made robust through a series of correction mechanisms that dynamically adjust and rectify suboptimal decisions at runtime. 
+  We present a unique deferred correction mechanism that allows resolving conflicts between independent schedulers only if they have a significant impact, and show that such an approach works well in practice.
+- To drive high cluster utilization while maintaining low job latencies, Apollo introduces opportunistic scheduling, which effectively creates two classes of tasks: regular tasks and opportunistic tasks. 
+  Apollo ensures low latency for regular tasks, while using the opportunistic tasks for high utilization to fill in the slack left by regular tasks.
+- To ensure no service disruption or performance regression when we roll out Apollo to replace a previous scheduler deployed in production, we designed Apollo to support staged rollout to production clusters and validation at scale. 
+  Those constraints have received little attention in research, but are nevertheless crucial in practice and we share our experiences in achieving those demanding goals.
+
+Below figure provides an overview of Apollo’s architecture.
+A Job Manager (JM), also called a scheduler, is assigned to manage the life cycle of each job.
+The global cluster load information used by each JM is provided through the cooperation of two additional entities in the Apollo framework: a Resource Monitor (RM) for each cluster and a Process Node (PN) on each server. 
+A PN process running on each server is responsible for managing the local resources on that server and performing local scheduling, while the RM aggregates load information from PNs across the cluster continuously,
+providing a global view of the cluster status for each JM to make informed scheduling decisions.
+
+
+![Apollo Architecture](./img/Apollo.png)
+
+While treated as a single logical entity, the RM can be implemented physically in different configurations
+with different mechanisms, as it essentially addresses the well-studied problem of monitoring dynamically changing state of a collection of distributed resources at a large scale.
+For example, it can use a tree hierarchy or a directory service with an eventually consistent gossip protocol.
+Apollo’s architecture can accommodate any of such configurations. We implemented the RM in a master-slave configuration using [Paxos](/docs/CS/Distributed/Paxos.md). 
+The RM is never on the performance critical path: Apollo can continue to make scheduling decisions (at a degraded quality) even when the RM is temporarily unavailable, for example, during a transient master-slave switch due to a machine failure. 
+In addition, once a task is scheduled to a PN, the JM obtains up-to-date load information directly from the PN via frequent status updates.
+
+
 
 ## References
 
