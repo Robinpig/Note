@@ -26,6 +26,10 @@ Borg is required to handle all these cases equally well.
 
 A Borg cell consists of a set of machines, a logically centralized controller called the Borgmaster, and an agent process called the Borglet that runs on each machine in a cell.
 
+![Borg Architecture](./img/Borg.png)
+
+
+
 ### Borgmaster
 
 Each cell’s Borgmaster consists of two processes: the main Borgmaster process and a separate scheduler.
@@ -73,6 +77,7 @@ It starts and stops tasks; restarts them if they fail; manages local resources b
 ## Links
 
 - [Google](/docs/CS/Distributed/Google.md)
+- [Cluster Scheduler](/docs/CS/Distributed/Cluster_Scheduler.md)
 - [Kubernetes](/docs/CS/Container/K8s.md)
 
 ## References

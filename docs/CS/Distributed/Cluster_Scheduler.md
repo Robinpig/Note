@@ -14,7 +14,7 @@ Arrows indicate placement decisions made by schedulers, and the three colours co
 
 ### Monolithic Scheduling
 
-Many cluster schedulers – such as most high-performance computing (HPC) schedulers, the [Borg scheduler](), various early [Hadoop schedulers]() and the [Kubernetes scheduler]() – are **monolithic**.
+Many cluster schedulers – such as most high-performance computing (HPC) schedulers, the [Borg scheduler](/docs/CS/Distributed/Borg.md?id=scheduling), various early [Hadoop schedulers]() and the [Kubernetes scheduler](/docs/CS/Container/K8s.md?id=scheduling) – are **monolithic**.
 A single scheduler process runs on one machine (e.g., the `JobTracker` in Hadoop v1, and `kube-scheduler` in Kubernetes) and assigns tasks to machines.
 **All workloads are handled by the same scheduler, and all tasks run through the same scheduling logic**(see Figure 1a).
 This is simple and uniform, and has led to increasingly sophisticated schedulers being developed.
