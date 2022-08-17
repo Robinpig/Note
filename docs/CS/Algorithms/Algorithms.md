@@ -115,6 +115,9 @@ Big O notation, Big-omega notation and Big-theta notation are used to this end.
 
 An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
 
+
+> An algorithm is efficient if its running time is polynomial.
+
 ### Computation Model
 
 Exact (not asymptotic) measures of efficiency can sometimes be computed but they usually require certain assumptions concerning the particular implementation of the algorithm, called model of computation.
@@ -151,7 +154,7 @@ Raft
 ### 
 
 Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
-Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes O(N^2) time complexity where N is the number of people involved.
+Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes $O(N^2)$ time complexity where N is the number of people involved.
 
 ## Links
 
