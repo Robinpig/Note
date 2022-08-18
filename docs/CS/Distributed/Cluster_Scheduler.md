@@ -122,7 +122,51 @@ However, fully-distributed schedulers (like e.g., Sparrow) come with fairly rest
 set-up times are low (i.e., tasks are scheduled to long-running workers, as e.g., with MapReduce application-level tasks in YARN), and task churn is very high (i.e., many scheduling decisions must be made in a short time). 
 Distributed schedulers are substantially simpler than others, and do not support multiple resource dimensions, over-subscription, or re-scheduling.
 
+## Mesos
+
+
+
+
+
+
 ## Omega
+
+Mesos is a thin resource sharing layer that enables fine-grained sharing across diverse cluster computing frameworks, by giving frameworks a common interface for accessing cluster resources.
+
+Mesos introduces a distributed **two-level scheduling mechanism** called resource offers. 
+Mesos decides how many resources to offer each framework, while frameworks decide which resources to accept and which computations to run on them.
+
+![Mesos architecture](./img/Mesos.png)
+
+Each framework running on Mesos consists of two components: a *scheduler* that registers with the master to be offered resources, and an *executor* process that is launched on slave nodes to run the framework’s tasks.
+While the master determines how many resources to offer to each framework, the frameworks’ schedulers select which of the offered resources to use. 
+When a framework accepts offered resources, it passes Mesos a description of the tasks it wants to launch on them.
+
+Pushing control to the frameworks has two benefits. 
+
+- First, it allows frameworks to implement diverse approaches to various problems in the cluster (e.g., achieving data locality, dealing with faults), and to evolve these solutions independently. 
+- Second, it keeps Mesos simple and minimizes the rate of change required of the system, which makes it easier to keep Mesos scalable and robust.
+
+
+Since all the frameworks depend on the Mesos master, it is critical to make the master fault-tolerant. 
+To achieve this, we have designed the master to be soft state, so that a new master can completely reconstruct its internal state from information held by the slaves and the framework schedulers. 
+In particular, the master’s only state is the list of active slaves, active frameworks, and running tasks.
+This information is sufficient to compute how many resources each framework is using and run the allocation policy. 
+We run multiple masters in a hot-standby configuration using [ZooKeeper](/docs/CS/Java/Zookeeper/Zookeeper.md) for leader election. 
+When the active master fails, the slaves and schedulers connect to the next elected master and repopulate its state.
+
+Aside from handling master failures, Mesos reports node failures and executor crashes to frameworks’ schedulers. 
+Frameworks can then react to these failures using the policies of their choice.
+
+Finally, to deal with scheduler failures, Mesos allows a framework to register multiple schedulers such that when one fails, another one is notified by the Mesos master to take over. 
+Frameworks must use their own mechanisms to share state between their schedulers.
+
+We have identified three limitations of the distributed model:
+
+- Fragmentation
+- Interdependent framework constraints
+- Framework complexity
+
 
 
 
