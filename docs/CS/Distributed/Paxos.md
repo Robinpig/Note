@@ -94,7 +94,6 @@ This permits a simple implementation of an arbitrarily sophisticated reconfigura
 
 [Revisiting the Paxos algorithm](http://citeseer.ist.psu.edu/viewdoc/download;jsessionid=C6EF80E450719CD5457C0E85CCDD0999?doi=10.1.1.44.5607&rep=rep1&type=pdf)
 
-
 [Brewer’s conjecture and the feasibility of consistent, available, partition-tolerant web services](https://users.ece.cmu.edu/~adrian/731-sp04/readings/GL-cap.pdf)
 
 ## Multi-Paxos
@@ -150,7 +149,13 @@ Cascade
 ## Fast Paxos
 
 - EPaxos
-- Vertical Paxos
+
+## Vertical Paxos
+
+
+Vertical Paxos is a variant of the Paxos algorithm family.
+It divides a consensus protocol into two parts, i.e., a steady state protocol and a reconfiguration protocol.
+
 - Flexible Paxos
 - CASPaxos
 - Mencius
@@ -170,3 +175,4 @@ Cascade
 7. [Fast Paxos](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2005-112.pdf)
 8. [Cheap Paxos](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/web-dsn-submission.pdf)
 9. [Generalized Consensus and Paxos](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-2005-33.pdf)
+10. [Vertical Paxos and Primary-Backup Replication](https://www.microsoft.com/en-us/research/wp-content/uploads/2009/05/podc09v6.pdf)

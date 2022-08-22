@@ -54,3 +54,8 @@ More complicated kinds of redundancy (such as error-correcting codes) are cheape
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+
+
+## References
+
+1. [Chain Replication for Supporting High Throughput and Availability](https://www.cs.cornell.edu/home/rvr/papers/OSDI04.pdf)
