@@ -210,19 +210,23 @@ robj *tryObjectEncoding(robj *o) {
         return emb;
     }
 
-    /* We can't encode the object...
-     *
-     * Do the last try, and at least optimize the SDS string inside
-     * the string object to require little space, in case there
-     * is more than 10% of free space at the end of the SDS string.
-     *
-     * We do that only for relatively large strings as this branch
-     * is only entered if the length of the string is greater than
-     * OBJ_ENCODING_EMBSTR_SIZE_LIMIT. */
     trimStringObjectIfNeeded(o);
 
-    /* Return the original object. */
     return o;
+}
+```
+
+
+
+Optimize the SDS string inside the string object to require little space, in case there is more than 10% of free space at the end of the SDS string. 
+This happens because SDS strings tend to overallocate to avoid wasting too much time in allocations when appending to the string.
+```c
+void trimStringObjectIfNeeded(robj *o) {
+    if (o->encoding == OBJ_ENCODING_RAW &&
+        sdsavail(o->ptr) > sdslen(o->ptr)/10)
+    {
+        o->ptr = sdsRemoveFreeSpace(o->ptr);
+    }
 }
 ```
 
@@ -541,7 +545,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
 1. avail >= addlen, return
 2. expand pow of 2 when len < 1M, or else expand 1M util 512M
-3. calc new Type, if same Type return, or else allocate new memory and `memcpy`
+3. calc new Type, if same Type return, or else allocate new memory, `memcpy` and `free`
 
 Enlarge the free space at the end of the sds string so that the caller is sure that after calling this function can overwrite up to addlen bytes after the end of the string, plus one more byte for nul term.
 
