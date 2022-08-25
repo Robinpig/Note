@@ -23,11 +23,7 @@ typedef struct listIter {
 } listIter;
 ```
 
-
-
-use in Pub/Sub Monitor 
-
-
+use in Pub/Sub Monitor
 
 dup free match can be override  by other method
 
@@ -38,6 +34,7 @@ dup free match can be override  by other method
 3. [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
 
 default using quicklist
+
 ```c
 // t_list.c
 /* LPUSH <key> <element> [<element> ...] */
@@ -78,23 +75,21 @@ void pushGenericCommand(client *c, int where, int xx) {
 }
 ```
 
-
-
 ## quicklist
 
-linked list of ziplists 
+linked list of ziplists
 
 try to reduce cascadeUpdate
-```c
 
-/* quicklist is a 40 byte struct (on 64-bit systems) describing a quicklist.
- * 'count' is the number of total entries.
- * 'len' is the number of quicklist nodes.
- * 'compress' is: 0 if compression disabled, otherwise it's the number
- *                of quicklistNodes to leave uncompressed at ends of quicklist.
- * 'fill' is the user-requested (or default) fill factor.
- * 'bookmakrs are an optional feature that is used by realloc this struct,
- *      so that they don't consume memory when not used. */
+quicklist is a 40 byte struct (on 64-bit systems) describing a quicklist.
+
+- 'count' is the number of total entries.
+- 'len' is the number of quicklist nodes.
+- 'compress' is: 0 if compression disabled, otherwise it's the number of quicklistNodes to leave uncompressed at ends of quicklist.
+- 'fill' is the user-requested (or default) fill factor.
+- 'bookmakrs are an optional feature that is used by realloc this struct, so that they don't consume memory when not used.
+
+```c
 typedef struct quicklist {
     quicklistNode *head;
     quicklistNode *tail;
@@ -107,7 +102,6 @@ typedef struct quicklist {
 } quicklist;
 ```
 
-
 quicklistNode is a 32 byte struct describing a ziplist for a quicklist.
 We use bit fields keep the quicklistNode at 32 bytes.
 count: 16 bits, max 65536 (max zl bytes is 65k, so max count actually < 32k).
@@ -116,6 +110,7 @@ container: 2 bits, NONE=1, ZIPLIST=2.
 recompress: 1 bit, bool, true if node is temporary decompressed for usage.
 attempted_compress: 1 bit, boolean, used for verifying during testing.
 extra: 10 bits, free for future use; pads out the remainder of 32 bits
+
 ```c
 typedef struct quicklistNode {
     struct quicklistNode *prev;
@@ -131,8 +126,8 @@ typedef struct quicklistNode {
 } quicklistNode;
 ```
 
-
 ### quicklistCreate
+
 ```c
 // quicklist.c
 // Create a new quicklist. Free with quicklistRelease().
@@ -150,10 +145,7 @@ quicklist *quicklistCreate(void) {
 }
 ```
 
-
-
 convertFromZiplist in rdb.c
-
 
 ```c
 // t_list.c
@@ -180,7 +172,6 @@ void listTypePush(robj *subject, robj *value, int where) {
 ```
 
 call [ziplistPush](/docs/CS/DB/Redis/zset.md?id=insert)
-
 
 ```c
 //quicklist.c
@@ -241,8 +232,6 @@ int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
     return (orig_tail != quicklist->tail);
 }
 ```
-
-
 
 ## Links
 

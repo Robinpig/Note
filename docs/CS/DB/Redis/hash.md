@@ -4,18 +4,7 @@
 
 redis command table
 
-### dicht
-
-This is our hash table structure. Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
-
-```c
-typedef struct dictht {
-    dictEntry **table;
-    unsigned long size;
-    unsigned long sizemask;// always size -1
-    unsigned long used;
-} dictht;
-```
+## Structures
 
 dictEntry:
 
@@ -41,6 +30,18 @@ typedef struct dictType {
     void (*keyDestructor)(void *privdata, void *key);
     void (*valDestructor)(void *privdata, void *obj);
 } dictType;
+```
+
+
+This is our hash table structure. Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
+
+```c
+typedef struct dictht {
+    dictEntry **table;
+    unsigned long size;
+    unsigned long sizemask;// always size -1
+    unsigned long used;
+} dictht;
 ```
 
 final struct dict
@@ -185,10 +186,9 @@ robj *hashTypeLookupWriteOrCreate(client *c, robj *key) {
 
 encoding **LISTPACK or HT**
 
+Check the length of a number of objects to see if we need to convert a listpack to a real hash. 
+Note that we only check string encoded objects as their string length can be queried in constant time.
 ```c
-/* Check the length of a number of objects to see if we need to convert a
- * listpack to a real hash. Note that we only check string encoded objects
- * as their string length can be queried in constant time. */
 void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
     int i;
 
@@ -205,13 +205,11 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
 }
 ```
 
-hash_max_listpack_value default 64
+Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a giventhreshold. 
+These thresholds can be configured using the following directives.
 
 ```conf
 // redis.conf
-# Hashes are encoded using a memory efficient data structure when they have a
-# small number of entries, and the biggest entry does not exceed a given
-# threshold. These thresholds can be configured using the following directives.
 hash-max-listpack-entries 512
 hash-max-listpack-value 64
 ```
@@ -284,8 +282,6 @@ dict *dictCreate(dictType *type)
     return d;
 }
 
-#define DICT_HT_INITIAL_SIZE     4
-#define HASHTABLE_MIN_FILL        10      /* Minimal hash table fill 10% */
 
 int _dictInit(dict *d, dictType *type)
 {
@@ -318,25 +314,59 @@ Expand the hash table if needed(check loadFactor & if has active childProcess):
 2. If we reached the 1:1 ratio, and we are allowed to resize the hash table (avoid `hasActiveChildProcess`)
 3. or we should avoid it but the ratio between elements/buckets is over the "safe" threshold, we resize doubling the number of buckets.
 
+
+
 ```c
-// dict.c
-static int dict_can_resize = 1;
-static unsigned int dict_force_resize_ratio = 5;
-
-static int _dictExpandIfNeeded(dict *d)
-{
-    /* Incremental rehashing already in progress. Return. */
-    if (dictIsRehashing(d)) return DICT_OK;
-
-    if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
-
-    if (d->ht[0].used >= d->ht[0].size &&
-        (dict_can_resize ||
-         d->ht[0].used/d->ht[0].size > dict_force_resize_ratio) &&
-        dictTypeExpandAllowed(d))
-    {
-        return dictExpand(d, d->ht[0].used + 1);
+static int _dictExpandIfNeeded(dict *ht) {
+    /* If the hash table is empty expand it to the initial size,
+     * if the table is "full" double its size. */
+    if (ht->size == 0)
+        return dictExpand(ht, DICT_HT_INITIAL_SIZE);
+    if (ht->used == ht->size)
+        return dictExpand(ht, ht->size*2);
+    return DICT_OK;
 }
+
+static int dictExpand(dict *ht, unsigned long size) {
+    dict n; /* the new hashtable */
+    unsigned long realsize = _dictNextPower(size), i;
+
+    _dictInit(&n, ht->type, ht->privdata);
+    n.size = realsize;
+    n.sizemask = realsize-1;
+    n.table = hi_calloc(realsize,sizeof(dictEntry*));
+    if (n.table == NULL)
+        return DICT_ERR;
+
+    /* Copy all the elements from the old to the new table:
+     * note that if the old hash table is empty ht->size is zero,
+     * so dictExpand just creates an hash table. */
+    n.used = ht->used;
+    for (i = 0; i < ht->size && ht->used > 0; i++) {
+        dictEntry *he, *nextHe;
+
+        if (ht->table[i] == NULL) continue;
+
+        /* For each hash entry on this slot... */
+        he = ht->table[i];
+        while(he) {
+            unsigned int h;
+
+            nextHe = he->next;
+            /* Get the new element index */
+            h = dictHashKey(ht, he->key) & n.sizemask;
+            he->next = n.table[h];
+            n.table[h] = he;
+            ht->used--;
+            /* Pass to the next element */
+            he = nextHe;
+        }
+    }
+    assert(ht->used == 0);
+    hi_free(ht->table);
+
+    /* Remap the new hashtable in the old */
+    *ht = n;
     return DICT_OK;
 }
 ```
@@ -422,8 +452,38 @@ int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
 ```
 
 ### incremental rehash
+Called in databasesCron and
 
-3. Load factor < 0.1, narrow
+
+narrow while size > 4 && used < 10%
+
+```c
+#define DICT_HT_INITIAL_SIZE     4
+#define HASHTABLE_MIN_FILL        10
+
+int htNeedsResize(dict *dict) {
+    long long size, used;
+
+    size = dictSlots(dict);
+    used = dictSize(dict);
+    return (size > DICT_HT_INITIAL_SIZE &&
+            (used*100/size < HASHTABLE_MIN_FILL));
+}
+```
+
+```c
+int dictResize(dict *d)
+{
+    unsigned long minimal;
+
+    if (!dict_can_resize || dictIsRehashing(d)) return DICT_ERR;
+    minimal = d->ht_used[0];
+    if (minimal < DICT_HT_INITIAL_SIZE)
+        minimal = DICT_HT_INITIAL_SIZE;
+    return dictExpand(d, minimal);
+}
+```
+
 
 ```c
 /* Rehash for an amount of time between ms milliseconds and ms+1 milliseconds */

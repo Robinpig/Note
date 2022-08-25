@@ -204,10 +204,8 @@ A few important notes about key expiration:
 
 ### Strings
 
-The Redis [String](/docs/CS/DB/Redis/SDS.md) type is the simplest type of value you can associate with a Redis key. It is the only data type in Memcached, so it is also very natural for newcomers to use it in Redis.
-
+The Redis [String](/docs/CS/DB/Redis/SDS.md) type is the simplest type of value you can associate with a Redis key.
 Since Redis keys are strings, when we use the string type as a value too, we are mapping a string to another string.
-
 Values can be strings (including binary data) of every kind, for instance you can store a jpeg image inside a value.
 A value can't be bigger than 512 MB.
 
