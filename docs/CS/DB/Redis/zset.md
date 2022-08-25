@@ -97,7 +97,7 @@ It is possible to return scores as well, using the `WITHSCORES` argument:
 
 ## zadd
 
-create [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist) or [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist)
+create [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist) or [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist) + [dict](/docs/CS/DB/Redis/hash.md)
 
 ```c
 void zaddCommand(client *c) {
@@ -1224,4 +1224,4 @@ void zslFree(zskiplist *zsl) {
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md)
+- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=Sorted-sets)

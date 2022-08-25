@@ -551,4 +551,4 @@ reverse binary iteration, has duplicate
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md)
+- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=hashes)

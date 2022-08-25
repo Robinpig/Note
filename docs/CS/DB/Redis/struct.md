@@ -75,15 +75,15 @@ rankdir=LR;
       label="encoding"
       stream_encoding[label="stream"]
  
-    {rank="same";quicklist;intset;hashtable;ziplist;skiplist;int;emstr;raw;stream_encoding;}
+    {rank="same";quicklist;intset;dict;ziplist;skiplist;int;emstr;raw;stream_encoding;}
   }
   
  list -> quicklist;
 
  set -> intset;
- set -> hashtable;
+ set -> dict;
  
- hash -> hashtable;
+ hash -> dict;
  hash -> ziplist;
 
  zset -> ziplist;

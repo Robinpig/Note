@@ -23,6 +23,37 @@ typedef struct listIter {
 } listIter;
 ```
 
+Lists are also encoded in a special way to save a lot of space.
+The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
+For a fixed maximum size, use -5 through -1, meaning:
+
+- -5: max size: 64 Kb  <-- not recommended for normal workloads
+- -4: max size: 32 Kb  <-- not recommended
+- -3: max size: 16 Kb  <-- probably not recommended
+- -2: max size: 8 Kb   <-- good
+- -1: max size: 4 Kb   <-- good
+
+Positive numbers mean store up to _exactly_ that number of elements per list node.
+The highest performing option is usually -2 (8 Kb size) or -1 (4 Kb size), but if your use case is unique, adjust the settings as necessary.
+
+```conf
+list-max-ziplist-size -2
+```
+
+Lists may also be compressed.
+Compress depth is the number of quicklist ziplist nodes from *each* side of the list to *exclude* from compression.
+The head and tail of the list are always uncompressed for fast push/pop operations.
+Settings are:
+
+- 0: disable all list compression
+- 1: depth 1 means "don't start compressing until after 1 node into the list, going from either the head or tail" So: [head]->node->node->...->node->[tail]. [head], [tail] will always be uncompressed; inner nodes will compress.
+- 2: [head]->[next]->node->node->...->node->[prev]->[tail] 2 here means: don't compress head or head->next or tail->prev or tail, but compress all nodes between them.
+- 3: [head]->[next]->[next]->node->node->...->node->[prev]->[prev]->[tail] etc.
+
+```conf
+list-compress-depth 0
+```
+
 use in Pub/Sub Monitor
 
 dup free match can be override  by other method
@@ -235,4 +266,4 @@ int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md)
+- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=lists)

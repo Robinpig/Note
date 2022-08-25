@@ -347,6 +347,35 @@ initCommandTable
 }
 ```
 
+
+### updateCachedTime
+
+We take a cached value of the unix time in the global state because with virtual memory and aging there is to store the current time in objects at every object access, and accuracy is not needed. 
+To access a global var is a lot faster than calling time(NULL).
+
+This function should be fast because it is called at every command execution in call(), so it is possible to decide if to update the daylight saving info or not using the 'update_daylight_info' argument. 
+Normally we update such info only when calling this function from serverCron() but not when calling it from call().
+```c
+void updateCachedTime(int update_daylight_info) {
+    server.ustime = ustime();
+    server.mstime = server.ustime / 1000;
+    time_t unixtime = server.mstime / 1000;
+    atomicSet(server.unixtime, unixtime);
+
+    /* To get information about daylight saving time, we need to call
+     * localtime_r and cache the result. However calling localtime_r in this
+     * context is safe since we will never fork() while here, in the main
+     * thread. The logging function will call a thread safe version of
+     * localtime that has no locks. */
+    if (update_daylight_info) {
+        struct tm tm;
+        time_t ut = server.unixtime;
+        localtime_r(&ut,&tm);
+        server.daylight_active = tm.tm_isdst;
+    }
+}
+```
+
 #### initCommandTable
 
 Command table -- we initiialize it here as it is part of the initial configuration, since command names may be changed via redis.conf using the rename-command directive.

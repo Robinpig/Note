@@ -244,10 +244,6 @@ call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind) to find dictEntry, the
 
 ```c
 // db.c
-
-/* Low level key lookup API, not actually called directly from commands
- * implementations that should instead rely on lookupKeyRead(),
- * lookupKeyWrite() and lookupKeyReadWithFlags(). */
 robj *lookupKey(redisDb *db, robj *key, int flags) {
     dictEntry *de = dictFind(db->dict,key->ptr);
     if (de) {
@@ -270,7 +266,35 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
 }
 ```
 
-### updateLFU
+#### LRUClock
+
+If the current resolution is lower than the frequency we refresh the LRU clock (as it should be in production servers) we return the precomputed value, otherwise we need to resort to a system call.
+
+```c
+#define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
+
+unsigned int LRU_CLOCK(void) {
+    unsigned int lruclock;
+    if (1000/server.hz <= LRU_CLOCK_RESOLUTION) {
+        atomicGet(server.lruclock,lruclock);
+    } else {
+        lruclock = getLRUClock();
+    }
+    return lruclock;
+}
+```
+
+[update cached mstime](/docs/CS/DB/Redis/start.md?id=updateCachedTime)
+
+```c
+unsigned int getLRUClock(void) {
+    return (mstime()/LRU_CLOCK_RESOLUTION) & LRU_CLOCK_MAX;
+}
+```
+
+
+
+#### updateLFU
 
 Update LFU when an object is accessed.
 
