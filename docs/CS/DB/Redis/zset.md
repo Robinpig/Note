@@ -33,8 +33,8 @@ Let's start with a simple example, adding a few selected hackers names as sorted
 (integer) 1
 ```
 
-As you can see [ZADD](https://redis.io/commands/zadd) is similar to [SADD](https://redis.io/commands/sadd), but takes one additional argument (placed before the element to be added) which is the score. 
-[ZADD](https://redis.io/commands/zadd) is also variadic, so you are free to specify multiple score-value pairs, even if this is not used in the example above.
+As you can see `ZADD` is similar to `SADD`, but takes one additional argument (placed before the element to be added) which is the score. 
+`ZADD` is also variadic, so you are free to specify multiple score-value pairs, even if this is not used in the example above.
 
 With sorted sets it is trivial to return a list of hackers sorted by their birth year because actually *they are already sorted*.
 
@@ -54,9 +54,9 @@ That's good, but when we ask for sorted elements Redis does not have to do any w
 9) "Linus Torvalds"
 ```
 
-Note: 0 and -1 means from element index 0 to the last element (-1 works here just as it does in the case of the [LRANGE](https://redis.io/commands/lrange) command).
+Note: 0 and -1 means from element index 0 to the last element (-1 works here just as it does in the case of the `LRANGE` command).
 
-What if I want to order them the opposite way, youngest to oldest? Use [ZREVRANGE](https://redis.io/commands/zrevrange) instead of [ZRANGE](https://redis.io/commands/zrange):
+What if I want to order them the opposite way, youngest to oldest? Use `ZREVRANGE` instead of `ZRANGE`:
 
 ```
 > zrevrange hackers 0 -1
@@ -470,6 +470,9 @@ It stores both strings and integer values, where **integers are encoded as actua
 It allows push and pop operations on either side of the list in O(1) time. 
 However, because every operation requires a reallocation of the memory used by the ziplist, the actual complexity is related to the amount of memory used by the ziplist.
 
+Search $O(N)$
+
+
 array
 ```c
 /**
@@ -822,10 +825,9 @@ unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int
 ```
 
 
-
 ### cascadeUpdate
 
-When an entry is inserted, we need to set the prevlen field of the next entry to equal the length of the inserted entry. 
+When an entry is inserted, we need to set the **prevlen field** of the next entry to equal the length of the inserted entry. 
 It can occur that this length cannot be encoded in 1 byte and the next entry needs to be grow a bit larger to hold the 5-byte encoded prevlen. 
 This can be done for free, because this only happens when an entry is already being inserted (which causes a realloc and memmove). 
 However, encoding the prevlen may require that this entry is grown as well. 
@@ -833,7 +835,7 @@ This effect may cascade throughout the ziplist when there are consecutive entrie
 
 Note that this effect can also happen in reverse, where the bytes required to encode the prevlen field can shrink. 
 This effect is deliberately ignored, because it can cause a "flapping" effect where a chain prevlen fields is first grown and then shrunk again after consecutive inserts. 
-Rather, the field is allowed to stay larger than necessary, because a large prevlen field implies the ziplist is holding large entries anyway.
+**Rather, the field is allowed to stay larger than necessary, because a large prevlen field implies the ziplist is holding large entries anyway.**
 
 ```c
 // ziplist.c

@@ -1,10 +1,5 @@
 ## Introduction
 
-
-
-
-
-
 ## sadd
 
 1. [lookupKeyWrite](/docs/CS/DB/Redis/redisDb.md?id=add)
@@ -20,7 +15,7 @@ void saddCommand(client *c) {
 
     set = lookupKeyWrite(c->db,c->argv[1]);
     if (checkType(c,set,OBJ_SET)) return;
-    
+  
     if (set == NULL) {
         set = setTypeCreate(c->argv[2]->ptr);
         dbAdd(c->db,c->argv[1],set);
@@ -37,8 +32,6 @@ void saddCommand(client *c) {
     addReplyLongLong(c,added);
 }
 ```
-
-
 
 ### setTypeCreate
 
@@ -87,13 +80,13 @@ robj *createSetObject(void) {
 }
 ```
 
-
-
 ### setTypeAdd
+
 [dictAddRaw in hash](/docs/CS/DB/Redis/hash.md?id=dictAddRaw)
 
 - if isSdsRepresentableAsLongLong, add to intset, when over max_intset_entries(512) convert to [dict](/docs/CS/DB/Redis/hash.md)
 - or else [dictAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
+
 ```c
 // t-set.c
 /* Add the specified value into a set.
@@ -137,7 +130,6 @@ int setTypeAdd(robj *subject, sds value) {
 }
 ```
 
-
 ## intset
 
 Array
@@ -151,6 +143,7 @@ typedef struct intset {
     int8_t contents[];
 } intset;
 ```
+
 ### add
 
 ```c
@@ -184,7 +177,72 @@ intset *intsetAdd(intset *is, int64_t value, uint8_t *success) {
     return is;
 }
 ```
+Set the value at pos, using the configured encoding.
+```c
+static void _intsetSet(intset *is, int pos, int64_t value) {
+    uint32_t encoding = intrev32ifbe(is->encoding);
 
+    if (encoding == INTSET_ENC_INT64) {
+        ((int64_t*)is->contents)[pos] = value;
+        memrev64ifbe(((int64_t*)is->contents)+pos);
+    } else if (encoding == INTSET_ENC_INT32) {
+        ((int32_t*)is->contents)[pos] = value;
+        memrev32ifbe(((int32_t*)is->contents)+pos);
+    } else {
+        ((int16_t*)is->contents)[pos] = value;
+        memrev16ifbe(((int16_t*)is->contents)+pos);
+    }
+}
+```
+
+## search
+
+$O(logN)$
+
+
+Search for the position of "value". Return 1 when the value was found and sets "pos" to the position of the value within the intset. 
+```c
+static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
+    int min = 0, max = intrev32ifbe(is->length)-1, mid = -1;
+    int64_t cur = -1;
+
+    /* The value can never be found when the set is empty */
+    if (intrev32ifbe(is->length) == 0) {
+        if (pos) *pos = 0;
+        return 0;
+    } else {
+        /* Check for the case where we know we cannot find the value,
+         * but do know the insert position. */
+        if (value > _intsetGet(is,max)) {
+            if (pos) *pos = intrev32ifbe(is->length);
+            return 0;
+        } else if (value < _intsetGet(is,0)) {
+            if (pos) *pos = 0;
+            return 0;
+        }
+    }
+
+    while(max >= min) {
+        mid = ((unsigned int)min + (unsigned int)max) >> 1;
+        cur = _intsetGet(is,mid);
+        if (value > cur) {
+            min = mid+1;
+        } else if (value < cur) {
+            max = mid-1;
+        } else {
+            break;
+        }
+    }
+
+    if (value == cur) {
+        if (pos) *pos = mid;
+        return 1;
+    } else {
+        if (pos) *pos = min;
+        return 0;
+    }
+}
+```
 
 ## Links
 

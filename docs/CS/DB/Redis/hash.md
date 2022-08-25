@@ -32,7 +32,6 @@ typedef struct dictType {
 } dictType;
 ```
 
-
 This is our hash table structure. Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
 
 ```c
@@ -59,7 +58,9 @@ typedef struct dict {
 } dict;
 ```
 
-### siphash
+## Hash Function
+
+siphash
 
 Hash Function: times33
 
@@ -146,7 +147,7 @@ index -1
 void hsetCommand(client *c) {
     int i, created = 0;
     robj *o;
-	
+
   	...
 
     if ((o = hashTypeLookupWriteOrCreate(c,c->argv[1])) == NULL) return;
@@ -186,8 +187,9 @@ robj *hashTypeLookupWriteOrCreate(client *c, robj *key) {
 
 encoding **LISTPACK or HT**
 
-Check the length of a number of objects to see if we need to convert a listpack to a real hash. 
+Check the length of a number of objects to see if we need to convert a listpack to a real hash.
 Note that we only check string encoded objects as their string length can be queried in constant time.
+
 ```c
 void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
     int i;
@@ -205,7 +207,7 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
 }
 ```
 
-Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a giventhreshold. 
+Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a giventhreshold.
 These thresholds can be configured using the following directives.
 
 ```conf
@@ -296,6 +298,9 @@ int _dictInit(dict *d, dictType *type)
 
 ## expand
 
+This function is called once a background process of some kind terminates, as we want to avoid resizing the hash tables when there is a child in order to play well with `copy-on-write` (otherwise when a resize happens lots of memory pages are copied).
+The goal of this function is to update the ability for `dict.c` to resize the hash tables accordingly to the fact we have an active fork child running.
+
 Using dictEnableResize() / dictDisableResize() we make possible to enable/disable resizing of the hash table as needed.
 This is very important for Redis, as we use copy-on-write and don't want to move too much memory around when there is a child performing saving operations.
 
@@ -304,6 +309,14 @@ Note that even when dict_can_resize is set to 0, not all resizes are prevented: 
 ```c
 static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
+
+// server.c
+void updateDictResizePolicy(void) {
+    if (!hasActiveChildProcess())
+        dictEnableResize();
+    else
+        dictDisableResize();
+}
 ```
 
 ### expandIfNeeded
@@ -314,106 +327,33 @@ Expand the hash table if needed(check loadFactor & if has active childProcess):
 2. If we reached the 1:1 ratio, and we are allowed to resize the hash table (avoid `hasActiveChildProcess`)
 3. or we should avoid it but the ratio between elements/buckets is over the "safe" threshold, we resize doubling the number of buckets.
 
-
-
 ```c
-static int _dictExpandIfNeeded(dict *ht) {
-    /* If the hash table is empty expand it to the initial size,
-     * if the table is "full" double its size. */
-    if (ht->size == 0)
-        return dictExpand(ht, DICT_HT_INITIAL_SIZE);
-    if (ht->used == ht->size)
-        return dictExpand(ht, ht->size*2);
-    return DICT_OK;
-}
+static int _dictExpandIfNeeded(dict *d)
+{
+    if (dictIsRehashing(d)) return DICT_OK;
 
-static int dictExpand(dict *ht, unsigned long size) {
-    dict n; /* the new hashtable */
-    unsigned long realsize = _dictNextPower(size), i;
+    if (d->ht[0].size == 0) return dictExpand(d, DICT_HT_INITIAL_SIZE);
 
-    _dictInit(&n, ht->type, ht->privdata);
-    n.size = realsize;
-    n.sizemask = realsize-1;
-    n.table = hi_calloc(realsize,sizeof(dictEntry*));
-    if (n.table == NULL)
-        return DICT_ERR;
-
-    /* Copy all the elements from the old to the new table:
-     * note that if the old hash table is empty ht->size is zero,
-     * so dictExpand just creates an hash table. */
-    n.used = ht->used;
-    for (i = 0; i < ht->size && ht->used > 0; i++) {
-        dictEntry *he, *nextHe;
-
-        if (ht->table[i] == NULL) continue;
-
-        /* For each hash entry on this slot... */
-        he = ht->table[i];
-        while(he) {
-            unsigned int h;
-
-            nextHe = he->next;
-            /* Get the new element index */
-            h = dictHashKey(ht, he->key) & n.sizemask;
-            he->next = n.table[h];
-            n.table[h] = he;
-            ht->used--;
-            /* Pass to the next element */
-            he = nextHe;
-        }
+    if (d->ht[0].used >= d->ht[0].size &&
+        (dict_can_resize ||
+         d->ht[0].used/d->ht[0].size > dict_force_resize_ratio) &&
+        // Because we may need to allocate huge memory chunk at once when dict expands, 
+        // we will check this allocation is allowed or not if the dict type has expandAllowed member function.
+        dictTypeExpandAllowed(d))
+    {
+        return dictExpand(d, d->ht[0].used + 1);
     }
-    assert(ht->used == 0);
-    hi_free(ht->table);
-
-    /* Remap the new hashtable in the old */
-    *ht = n;
     return DICT_OK;
 }
 ```
-
-This function is called once a background process of some kind terminates, as we want to avoid resizing the hash tables when there is a child in order
-to play well with `copy-on-write` (otherwise when a resize happens lots of memory pages are copied). The goal of this function is to update the ability
-for `dict.c` to resize the hash tables accordingly to the fact we have an active fork child running.
-
-```c
-// server.c
-void updateDictResizePolicy(void) {
-    if (!hasActiveChildProcess())
-        dictEnableResize();
-    else
-        dictDisableResize();
-}
-
-// dict.c
-void dictEnableResize(void) {
-    dict_can_resize = 1;
-}
-
-void dictDisableResize(void) {
-    dict_can_resize = 0;
-}
-```
-
-Because we may need to allocate huge memory chunk at once when dict expands, we will check this allocation is allowed or not if the dict type has expandAllowed member function.
-
-```c
-static int dictTypeExpandAllowed(dict *d) {
-    if (d->type->expandAllowed == NULL) return 1;
-    return d->type->expandAllowed(
-                    _dictNextPower(d->ht[0].used + 1) * sizeof(dictEntry*),
-                    (double)d->ht[0].used / d->ht[0].size);
-}
-```
-
-Expand or create the hash table, when malloc_failed is non-NULL, it'll avoid panic if malloc fails (in which case it'll be set to 1). Returns DICT_OK if expand was performed, and DICT_ERR if skipped.
+### dictExpand
+Expand or create the hash table, when malloc_failed is non-NULL, it'll avoid panic if malloc fails (in which case it'll be set to 1).
 
 ```c
 int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
 {
     if (malloc_failed) *malloc_failed = 0;
 
-    /* the size is invalid if it is smaller than the number of
-     * elements already inside the hash table */
     if (dictIsRehashing(d) || d->ht[0].used > size)
         return DICT_ERR;
 
@@ -448,14 +388,23 @@ int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
     d->rehashidx = 0;
     return DICT_OK;
 }
-
 ```
 
-### incremental rehash
-Called in databasesCron and
+## resize
 
+1. databasesCron -> tryResizeHashTables -> dictResize
+2. Del operations -> dictResize if htNeedsResize
 
-narrow while size > 4 && used < 10%
+```c
+void tryResizeHashTables(int dbid) {
+    if (htNeedsResize(server.db[dbid].dict))
+        dictResize(server.db[dbid].dict);
+    if (htNeedsResize(server.db[dbid].expires))
+        dictResize(server.db[dbid].expires);
+}
+```
+
+If the percentage of used slots in the HT reaches HASHTABLE_MIN_FILL we resize the hash table to save memory.
 
 ```c
 #define DICT_HT_INITIAL_SIZE     4
@@ -471,6 +420,8 @@ int htNeedsResize(dict *dict) {
 }
 ```
 
+Resize the table to the minimal size that contains all the elements, but with the invariant of a USED/BUCKETS ratio near to <= 1
+
 ```c
 int dictResize(dict *d)
 {
@@ -484,29 +435,10 @@ int dictResize(dict *d)
 }
 ```
 
+## rehash
 
-```c
-/* Rehash for an amount of time between ms milliseconds and ms+1 milliseconds */
-int dictRehashMilliseconds(dict *d, int ms) {
-    long long start = timeInMilliseconds();
-    int rehashes = 0;
-
-    while(dictRehash(d,100)) {
-        rehashes += 100;
-        if (timeInMilliseconds()-start > ms) break;
-    }
-    return rehashes;
-}
-
-long long timeInMilliseconds(void) {
-    struct timeval tv;
-
-    gettimeofday(&tv,NULL);
-    return (((long long)tv.tv_sec)*1000)+(tv.tv_usec/1000);
-}
-```
-
-This function performs just a step of rehashing, and only if hashing has not been paused for our hash table. When we have iterators in the middle of a rehashing we can't mess with the two hash tables otherwise some element can be missed or duplicated.
+This function performs just a step of rehashing, and only if hashing has not been paused for our hash table.
+When we have iterators in the middle of a rehashing we can't mess with the two hash tables otherwise some element can be missed or duplicated.
 
 This function is called by **common lookup or update operations** in the dictionary so that the hash table `automatically migrates` from H1 to H2 while it is actively used.
 
@@ -517,11 +449,31 @@ static void _dictRehashStep(dict *d) {
 }
 ```
 
+Try to use 1 millisecond of CPU time at every call of this function to perform some rehashing, but only if there are no other processes saving the DB on disk.
+Otherwise rehashing is bad as will cause a lot of copy-on-write of memory pages.
+
+> databasesCron -> incrementallyRehash -> dictRehashMilliseconds -> dictRehashMilliseconds
+
+```c
+int dictRehashMilliseconds(dict *d, int ms) {
+    if (d->pauserehash > 0) return 0;
+
+    long long start = timeInMilliseconds();
+    int rehashes = 0;
+
+    while(dictRehash(d,100)) {
+        rehashes += 100;
+        if (timeInMilliseconds()-start > ms) break;
+    }
+    return rehashes;
+}
+```
+
+### dictRehash
+
 Max number of empty buckets to visit **1000**
 
-Performs N steps of incremental rehashing. Returns 1 if there are still
-keys to move from the old to the new hash table, otherwise 0 is returned.
-
+Performs N steps of incremental rehashing.
 Note that a rehashing step consists in moving a bucket (that may have more than one key as we use chaining) from the old to the new hash table, however since part of the hash table may be composed of empty spaces,
 it is not guaranteed that this function will rehash even a single bucket, since it will visit at max N*10 empty buckets in total, otherwise the amount of work it does would be unbound and the function may block for a long time.
 
@@ -533,8 +485,6 @@ int dictRehash(dict *d, int n) {
     while(n-- && d->ht[0].used != 0) {
         dictEntry *de, *nextde;
 
-        /* Note that rehashidx can't overflow as we are sure there are more
-         * elements because ht[0].used != 0 */
         assert(d->ht[0].size > (unsigned long)d->rehashidx);
         while(d->ht[0].table[d->rehashidx] == NULL) {
             d->rehashidx++;
@@ -546,7 +496,11 @@ int dictRehash(dict *d, int n) {
             uint64_t h;
 
             nextde = de->next;
-            /* Get the index in the new hash table */
+```
+
+Get the index in the new hash table
+
+```c
             h = dictHashKey(d, de->key) & d->ht[1].sizemask;
             de->next = d->ht[1].table[h];
             d->ht[1].table[h] = de;
@@ -567,18 +521,15 @@ int dictRehash(dict *d, int n) {
         return 0;
     }
 
-    /* More to rehash... */
     return 1;
 }
 ```
 
 ## iterator
 
-If safe is set to 1 this is a safe iterator, that means, you can call dictAdd, dictFind, and other functions against the dictionary even while iterating.
-Otherwise it is a non safe iterator, and only dictNext() should be called while iterating.
+- If safe is set to 1 this is a safe iterator, that means, you can call dictAdd, dictFind, and other functions against the dictionary even while iterating.
+- Otherwise it is a non safe iterator, and only dictNext() should be called while iterating.
 
-- normal iterator: only iterate
-- safe iterator: rehash iterate elements, stop rehashStep
 
 ```c
 //dict.h
@@ -594,12 +545,9 @@ typedef struct dictIterator {
 
 ### scan
 
-reverse binary iteration
+reverse binary iteration, has duplicate
 
-## Summary
 
-- hash table init size 4
-- hash table minimal fill 10%
 
 ## Links
 
