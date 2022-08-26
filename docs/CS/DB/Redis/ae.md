@@ -434,8 +434,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
     if (server.cluster_enabled) clusterBeforeSleep();
 ```
 
-Run a fast expire cycle (the called function will return
-ASAP if a fast cycle is not needed).
+Run a fast expire cycle.
 
 ```c
     if (server.active_expire_enabled && server.masterhost == NULL)
@@ -517,21 +516,18 @@ The callback returns the time in milliseconds after which the callback must be c
 This change is recorded via a call to `ae.c:aeAddMilliSeconds` and will be handled on the next iteration of `ae.c:aeMain` while loop.
 
 ```c
-/* Process time events */
 static int processTimeEvents(aeEventLoop *eventLoop) {
     int processed = 0;
     aeTimeEvent *te;
     long long maxId;
     time_t now = time(NULL);
+```
 
-    /* If the system clock is moved to the future, and then set back to the
-     * right value, time events may be delayed in a random way. Often this
-     * means that scheduled operations will not be performed soon enough.
-     *
-     * Here we try to detect system clock skews, and force all the time
-     * events to be processed ASAP when this happens: the idea is that
-     * processing events earlier is less dangerous than delaying them
-     * indefinitely, and practice suggests it is. */
+If the system clock is moved to the future, and then set back to the right value, time events may be delayed in a random way. 
+Often this means that scheduled operations will not be performed soon enough.
+
+Here we try to detect system clock skews, and force all the time events to be processed ASAP when this happens: **the idea is that processing events earlier is less dangerous than delaying them indefinitely, and practice suggests it is**.
+```c
     if (now < eventLoop->lastTime) {
         te = eventLoop->timeEventHead;
         while(te) {

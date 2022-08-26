@@ -192,7 +192,8 @@ AOF advantages:
 
 - Using AOF Redis is much more durable: you can have different fsync policies: no fsync at all, fsync every second, fsync at every query.
   With the default policy of fsync every second write performances are still great (fsync is performed using a background thread and the main thread will try hard to perform writes when no fsync is in progress.) but you can only lose one second worth of writes.
-- The AOF log is an append only log, so there are no seeks, nor corruption problems if there is a power outage. Even if the log ends with an half-written command for some reason (disk full or other reasons) the redis-check-aof tool is able to fix it easily.
+- The AOF log is an append only log, so there are no seeks, nor corruption problems if there is a power outage. 
+  Even if the log ends with an half-written command for some reason (disk full or other reasons) the redis-check-aof tool is able to fix it easily.
 - Redis is able to automatically rewrite the AOF in background when it gets too big.
   The rewrite is completely safe as while Redis continue
   s appending to the old file, a completely new one is produced with the minimal set of operations needed to create the current data set, and once this second file is ready Redis switches the two and starts appending to the new one.
@@ -332,12 +333,95 @@ struct redisServer {
 }                     
 ```
 
+### append
+
+Propagate the specified command (in the context of the specified database id) to AOF and Slaves.
+```c
+void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
+               int flags)
+{
+   // ...
+    if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
+        feedAppendOnlyFile(cmd,dbid,argv,argc);
+}
+```
+#### feedAppendOnlyFile
+```c
+void feedAppendOnlyFile(struct redisCommand *cmd, int dictid, robj **argv, int argc) {
+    sds buf = sdsempty();
+    /* The DB this command was targeting is not the same as the last command
+     * we appended. To issue a SELECT command is needed. */
+    if (dictid != server.aof_selected_db) {
+        char seldb[64];
+
+        snprintf(seldb,sizeof(seldb),"%d",dictid);
+        buf = sdscatprintf(buf,"*2\r\n$6\r\nSELECT\r\n$%lu\r\n%s\r\n",
+            (unsigned long)strlen(seldb),seldb);
+        server.aof_selected_db = dictid;
+    }
+
+    if (cmd->proc == expireCommand || cmd->proc == pexpireCommand ||
+        cmd->proc == expireatCommand) {
+```
+Translate EXPIRE/PEXPIRE/EXPIREAT into PEXPIREAT
+```c
+        buf = catAppendOnlyExpireAtCommand(buf,cmd,argv[1],argv[2]);
+    } else if (cmd->proc == setCommand && argc > 3) {
+        robj *pxarg = NULL;
+        /* When SET is used with EX/PX argument setGenericCommand propagates them with PX millisecond argument.
+         * So since the command arguments are re-written there, we can rely here on the index of PX being 3. */
+        if (!strcasecmp(argv[3]->ptr, "px")) {
+            pxarg = argv[4];
+        }
+        /* For AOF we convert SET key value relative time in milliseconds to SET key value absolute time in
+         * millisecond. Whenever the condition is true it implies that original SET has been transformed
+         * to SET PX with millisecond time argument so we do not need to worry about unit here.*/
+        if (pxarg) {
+            robj *millisecond = getDecodedObject(pxarg);
+            long long when = strtoll(millisecond->ptr,NULL,10);
+            when += mstime();
+
+            decrRefCount(millisecond);
+
+            robj *newargs[5];
+            newargs[0] = argv[0];
+            newargs[1] = argv[1];
+            newargs[2] = argv[2];
+            newargs[3] = shared.pxat;
+            newargs[4] = createStringObjectFromLongLong(when);
+            buf = catAppendOnlyGenericCommand(buf,5,newargs);
+            decrRefCount(newargs[4]);
+        } else {
+            buf = catAppendOnlyGenericCommand(buf,argc,argv);
+        }
+    } else {
+        /* All the other commands don't need translation or need the
+         * same translation already operated in the command vector
+         * for the replication itself. */
+        buf = catAppendOnlyGenericCommand(buf,argc,argv);
+    }
+
+```
+Append to the AOF buffer. This will be flushed on disk just before of re-entering the event loop, so before the client will get a positive reply about the operation performed.
+```c
+    if (server.aof_state == AOF_ON)
+        server.aof_buf = sdscatlen(server.aof_buf,buf,sdslen(buf));
+```
+If a background append only file rewriting is in progress we want to accumulate the differences between the child DB and the current one in a buffer, so that when the child process will do its work we can append the differences to the new append only file.
+```c
+    if (server.child_type == CHILD_TYPE_AOF)
+        aofRewriteBufferAppend((unsigned char*)buf,sdslen(buf));
+
+    sdsfree(buf);
+}
+```
+
 
 ### flush
 
 #### flushAppendOnlyFile
 
-Max wait 2 seconds
+Max wait 2 seconds if sync_in_progress
 
 Write the append only file buffer on disk.
 
@@ -361,11 +445,9 @@ void flushAppendOnlyFile(int force) {
     mstime_t latency;
 
     if (sdslen(server.aof_buf) == 0) {
-        /* Check if we need to do fsync even the aof buffer is empty,
-         * because previously in AOF_FSYNC_EVERYSEC mode, fsync is
-         * called only when aof buffer is not empty, so if users
-         * stop write commands before fsync called in one second,
-         * the data in page cache cannot be flushed in time. */
+```
+Check if we need to do fsync even the aof buffer is empty, because previously in AOF_FSYNC_EVERYSEC mode, fsync is called only when aof buffer is not empty, so if users stop write commands before fsync called in one second, the data in page cache cannot be flushed in time.
+```c
         if (server.aof_fsync == AOF_FSYNC_EVERYSEC &&
             server.aof_fsync_offset != server.aof_current_size &&
             server.unixtime > server.aof_last_fsync &&
@@ -552,6 +634,10 @@ try_fsync:
         server.aof_last_fsync = server.unixtime;
     }
 }
+
+void aof_background_fsync(int fd) {
+    bioCreateFsyncJob(fd);
+}
 ```
 
 ### rewriting
@@ -577,9 +663,9 @@ Log rewriting uses the same copy-on-write trick already in use for snapshotting.
 * When the child is done rewriting the file, the parent gets a signal, and appends the in-memory buffer at the end of the file generated by the child.
 * Now Redis atomically renames the new file into the old one, and starts appending new data into the new file.
 
+Whenever you issue a `BGREWRITEAOF` Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory.
+#### rewriteAppendOnlyFileBackground
 
-
-Whenever you issue a [BGREWRITEAOF](https://redis.io/commands/bgrewriteaof) Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory.
 
 call by:
 

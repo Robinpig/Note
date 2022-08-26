@@ -85,9 +85,9 @@ typedef struct clusterNode {
 } clusterNode;
 ```
 
-## main
 
-### cron
+
+## cron
 
 This is executed 10 times every second
 
@@ -560,6 +560,69 @@ cluster-node-timeout 15000
 #define CLUSTERMSG_TYPE_MFSTART 8       /* Pause clients for manual failover */
 #define CLUSTERMSG_TYPE_MODULE 9        /* Module cluster API message. */
 #define CLUSTERMSG_TYPE_COUNT 10        /* Total number of message types. */
+```
+
+### handshake
+
+
+Start a handshake with the specified address if there is not one already in progress. Returns non-zero if the handshake was actually started. 
+On error zero is returned and errno is set to one of the following values:
+
+- EAGAIN - There is already a handshake in progress for this address.
+- EINVAL - IP or port are not valid. */
+```c
+int clusterStartHandshake(char *ip, int port, int cport) {
+    clusterNode *n;
+    char norm_ip[NET_IP_STR_LEN];
+    struct sockaddr_storage sa;
+
+    /* IP sanity check */
+    if (inet_pton(AF_INET,ip,
+            &(((struct sockaddr_in *)&sa)->sin_addr)))
+    {
+        sa.ss_family = AF_INET;
+    } else if (inet_pton(AF_INET6,ip,
+            &(((struct sockaddr_in6 *)&sa)->sin6_addr)))
+    {
+        sa.ss_family = AF_INET6;
+    } else {
+        errno = EINVAL;
+        return 0;
+    }
+
+    /* Port sanity check */
+    if (port <= 0 || port > 65535 || cport <= 0 || cport > 65535) {
+        errno = EINVAL;
+        return 0;
+    }
+
+    /* Set norm_ip as the normalized string representation of the node
+     * IP address. */
+    memset(norm_ip,0,NET_IP_STR_LEN);
+    if (sa.ss_family == AF_INET)
+        inet_ntop(AF_INET,
+            (void*)&(((struct sockaddr_in *)&sa)->sin_addr),
+            norm_ip,NET_IP_STR_LEN);
+    else
+        inet_ntop(AF_INET6,
+            (void*)&(((struct sockaddr_in6 *)&sa)->sin6_addr),
+            norm_ip,NET_IP_STR_LEN);
+
+    if (clusterHandshakeInProgress(norm_ip,port,cport)) {
+        errno = EAGAIN;
+        return 0;
+    }
+
+    /* Add the node with a random address (NULL as first argument to
+     * createClusterNode()). Everything will be fixed during the
+     * handshake. */
+    n = createClusterNode(NULL,CLUSTER_NODE_HANDSHAKE|CLUSTER_NODE_MEET);
+    memcpy(n->ip,norm_ip,sizeof(n->ip));
+    n->port = port;
+    n->cport = cport;
+    clusterAddNode(n);
+    return 1;
+}
 ```
 
 ## Failover

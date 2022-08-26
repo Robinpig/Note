@@ -13,7 +13,9 @@ This system works using three main mechanisms:
 3. When a partial resynchronization is not possible, the replica will ask for a full resynchronization.
    This will involve a more complex process in which the master needs to create a snapshot of all its data, send it to the replica, and then continue sending the stream of commands as the dataset changes.
 
-Redis uses by default asynchronous replication, which being low latency and high performance, is the natural replication mode for the vast majority of Redis use cases. However, Redis replicas asynchronously acknowledge the amount of data they received periodically with the master. So the master does not wait every time for a command to be processed by the replicas, however it knows, if needed, what replica already processed what command. This allows having optional synchronous replication.
+Redis uses by default asynchronous replication, which being low latency and high performance, is the natural replication mode for the vast majority of Redis use cases. 
+However, Redis replicas asynchronously acknowledge the amount of data they received periodically with the master. 
+So the master does not wait every time for a command to be processed by the replicas, however it knows, if needed, what replica already processed what command. This allows having optional synchronous replication.
 
 Synchronous replication of certain data can be requested by the clients using the `WAIT` command.
 However `WAIT` is only able to ensure there are the specified number of acknowledged copies in the other Redis instances, it does not turn a set of Redis instances into a CP system with strong consistency:
@@ -100,13 +102,19 @@ By calculating the delta value of the master_repl_offset from the INFO command d
 
 ## Expire Keys
 
-Redis expires allow keys to have a limited time to live (TTL). Such a feature depends on the ability of an instance to count the time, however Redis replicas correctly replicate keys with expires, even when such keys are altered using Lua scripts.
+Redis expires allow keys to have a limited time to live (TTL). 
+Such a feature depends on the ability of an instance to count the time, however Redis replicas correctly replicate keys with expires, even when such keys are altered using Lua scripts.
 
 To implement such a feature Redis cannot rely on the ability of the master and replica to have syncd clocks, since this is a problem that cannot be solved and would result in race conditions and diverging data sets, so Redis uses three main techniques to make the replication of expired keys able to work:
 
-1. Replicas don't expire keys, instead they wait for masters to expire the keys. When a master expires a key (or evict it because of LRU), it synthesizes a [`DEL`](https://redis.io/commands/del) command which is transmitted to all the replicas.
-2. However because of master-driven expire, sometimes replicas may still have in memory keys that are already logically expired, since the master was not able to provide the [`DEL`](https://redis.io/commands/del) command in time. To deal with that the replica uses its logical clock to report that a key does not exist **only for read operations** that don't violate the consistency of the data set (as new commands from the master will arrive). In this way replicas avoid reporting logically expired keys that are still existing. In practical terms, an HTML fragments cache that uses replicas to scale will avoid returning items that are already older than the desired time to live.
-3. During Lua scripts executions no key expiries are performed. As a Lua script runs, conceptually the time in the master is frozen, so that a given key will either exist or not for all the time the script runs. This prevents keys expiring in the middle of a script, and is needed to send the same script to the replica in a way that is guaranteed to have the same effects in the data set.
+1. Replicas don't expire keys, instead they wait for masters to expire the keys. 
+   When a master expires a key (or evict it because of LRU), it synthesizes a `DEL` command which is transmitted to all the replicas.
+2. However because of master-driven expire, sometimes replicas may still have in memory keys that are already logically expired, since the master was not able to provide the `DEL` command in time. 
+   To deal with that the replica uses its logical clock to report that a key does not exist **only for read operations** that don't violate the consistency of the data set (as new commands from the master will arrive). 
+   In this way replicas avoid reporting logically expired keys that are still existing. 
+   In practical terms, an HTML fragments cache that uses replicas to scale will avoid returning items that are already older than the desired time to live.
+3. During Lua scripts executions no key expiries are performed. As a Lua script runs, conceptually the time in the master is frozen, so that a given key will either exist or not for all the time the script runs. 
+   This prevents keys expiring in the middle of a script, and is needed to send the same script to the replica in a way that is guaranteed to have the same effects in the data set.
 
 Once a replica is promoted to a master it will start to expire keys independently, and will not require any help from its old master.
 
@@ -246,7 +254,6 @@ void syncWithMaster(connection *conn) {
 
 #### masterTryPartialResynchronization
 
-
 This function handles the PSYNC command from the point of view of a master receiving a request for partial resynchronization.
 
 On success return C_OK, otherwise C_ERR is returned and we proceed with the usual full resync.
@@ -359,21 +366,20 @@ need_full_resync:
 
 ### slave
 
-
 Try a partial resynchronization with the master if we are about to reconnect.
 If there is no cached master structure, at least try to issue a "PSYNC ? -1" command in order to trigger a full resync using the PSYNC command in order to obtain the master replid and the master replication global offset.
 
 This function is designed to be called from syncWithMaster(), so the following assumptions are made:
 
 1. We pass the function an already connected socket "fd".
-2. This function does not close the file descriptor "fd". 
+2. This function does not close the file descriptor "fd".
    However in case of successful partial resynchronization, the function will reuse 'fd' as file descriptor of the server.master client structure.
 
-The function is split in two halves: if read_reply is 0, the function writes the PSYNC command on the socket, and a new function call is needed, with read_reply set to 1, in order to read the reply of the command. 
+The function is split in two halves: if read_reply is 0, the function writes the PSYNC command on the socket, and a new function call is needed, with read_reply set to 1, in order to read the reply of the command.
 This is useful in order to support non blocking operations, so that we write, return into the event loop, and read when there are data.
 
-When read_reply is 0 the function returns PSYNC_WRITE_ERR if there was a write error, or PSYNC_WAIT_REPLY to signal we need another call with read_reply set to 1. 
-However even when read_reply is set to 1 the function may return PSYNC_WAIT_REPLY again to signal there were insufficient data to read to complete its work. 
+When read_reply is 0 the function returns PSYNC_WRITE_ERR if there was a write error, or PSYNC_WAIT_REPLY to signal we need another call with read_reply set to 1.
+However even when read_reply is set to 1 the function may return PSYNC_WAIT_REPLY again to signal there were insufficient data to read to complete its work.
 We should re-enter into the event loop and wait in such a case.
 
 The function returns:
@@ -559,11 +565,8 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 }
 ```
 
-
-
-
-Propagate write commands to slaves, and populate the replication backlog as well. 
-This function is used if the instance is a master: we use the commands received by our clients in order to create the replication stream. 
+Propagate write commands to slaves, and populate the replication backlog as well.
+This function is used if the instance is a master: we use the commands received by our clients in order to create the replication stream.
 Instead if the instance is a slave and has sub-slaves attached, we use replicationFeedSlavesFromMasterStream()
 
 ```c
@@ -580,6 +583,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * master replication history and has the same backlog and offsets). */
     if (server.masterhost != NULL) return;
 ```
+
 If there aren't slaves, and there is no backlog buffer to populate, we can return ASAP.
 
 ```c
@@ -673,13 +677,13 @@ If there aren't slaves, and there is no backlog buffer to populate, we can retur
 
 ## Memory
 
-By default, a replica will ignore `maxmemory` (unless it is promoted to master after a failover or manually). 
+By default, a replica will ignore `maxmemory` (unless it is promoted to master after a failover or manually).
 It means that the eviction of keys will be handled by the master, sending the DEL commands to the replica as keys evict in the master side.
 
-This behavior ensures that masters and replicas stay consistent, which is usually what you want. 
+This behavior ensures that masters and replicas stay consistent, which is usually what you want.
 However, if your replica is writable, or you want the replica to have a different memory setting, and you are sure all the writes performed to the replica are idempotent, then you may change this default (but be sure to understand what you are doing).
 
-Note that since the replica by default does not evict, it may end up using more memory than what is set via `maxmemory` (since there are certain buffers that may be larger on the replica, or data structures may sometimes take more memory and so forth). 
+Note that since the replica by default does not evict, it may end up using more memory than what is set via `maxmemory` (since there are certain buffers that may be larger on the replica, or data structures may sometimes take more memory and so forth).
 Make sure you monitor your replicas, and make sure they have enough memory to never hit a real out-of-memory condition before the master hits the configured `maxmemory` setting.
 
 To change this behavior, you can allow a replica to not ignore the `maxmemory`. The configuration directives to use is:
@@ -687,7 +691,6 @@ To change this behavior, you can allow a replica to not ignore the `maxmemory`. 
 ```
 replica-ignore-maxmemory no
 ```
-
 
 ## Links
 

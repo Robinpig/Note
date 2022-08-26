@@ -114,7 +114,7 @@ We need to init sentinel right now as parsing the configuration file in sentinel
             }
             j++;
         }
-       
+     
         resetServerSaveParams();
         loadServerConfig(configfile,options);
         sdsfree(options);
@@ -347,14 +347,14 @@ initCommandTable
 }
 ```
 
-
 ### updateCachedTime
 
-We take a cached value of the unix time in the global state because with virtual memory and aging there is to store the current time in objects at every object access, and accuracy is not needed. 
+We take a cached value of the unix time in the global state because with virtual memory and aging there is to store the current time in objects at every object access, and accuracy is not needed.
 To access a global var is a lot faster than calling time(NULL).
 
-This function should be fast because it is called at every command execution in call(), so it is possible to decide if to update the daylight saving info or not using the 'update_daylight_info' argument. 
+This function should be fast because it is called at every command execution in call(), so it is possible to decide if to update the daylight saving info or not using the 'update_daylight_info' argument.
 Normally we update such info only when calling this function from serverCron() but not when calling it from call().
+
 ```c
 void updateCachedTime(int update_daylight_info) {
     server.ustime = ustime();
@@ -844,8 +844,6 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
 
 #### createEventHandler
 
-
-
 ```c
 // networking.c
 #define MAX_ACCEPTS_PER_CALL 1000
@@ -993,7 +991,7 @@ client *createClient(connection *conn) {
 ```
 
 passing NULL as conn it is possible to create a non connected client.
-This is useful since all the commands needs to be executed in the context of a client. 
+This is useful since all the commands needs to be executed in the context of a client.
 When commands are executed in other contexts (for instance a Lua script) we need a non connected client.
 
 ```c
@@ -1151,7 +1149,6 @@ Three Ops:
 - Deferred AOF fsync.
 - Deferred objects freeing.
 
-
 Initialize the background system, spawning the thread.
 
 ```c
@@ -1190,8 +1187,7 @@ Ready to spawn our threads. We use the single argument the thread function accep
 }
 ```
 
-#### bioProcess 
-
+#### bioProcess
 
 ```c
 void *bioProcessBackgroundJobs(void *arg) {
@@ -1396,13 +1392,10 @@ void *IOThreadMain(void *myid) {
 
 ## aeMain
 
-
 There are two special functions called periodically by the event loop:
 
 1. `serverCron()` is called periodically (according to `server.hz` frequency), and performs tasks that must be performed from time to time, like checking for timed out clients.
 2. `beforeSleep()` is called every time the event loop fired, Redis served a few requests, and is returning back into the event loop.
-
-
 
 `ae.c:aeMain` called from `redis.c:main` does the job of processing the event loop that is initialized in the previous phase.
 
@@ -1954,6 +1947,193 @@ int writeToClient(client *c, int handler_installed) {
             return C_ERR;
         }
     }
+    return C_OK;
+}
+```
+
+## Shutdown
+
+```c
+
+void setupSignalHandlers(void) {
+    struct sigaction act;
+
+    /* When the SA_SIGINFO flag is set in sa_flags then sa_sigaction is used.
+     * Otherwise, sa_handler is used. */
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = 0;
+    act.sa_handler = sigShutdownHandler;
+    sigaction(SIGTERM, &act, NULL);
+    sigaction(SIGINT, &act, NULL);
+
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
+    act.sa_sigaction = sigsegvHandler;
+    if(server.crashlog_enabled) {
+        sigaction(SIGSEGV, &act, NULL);
+        sigaction(SIGBUS, &act, NULL);
+        sigaction(SIGFPE, &act, NULL);
+        sigaction(SIGILL, &act, NULL);
+        sigaction(SIGABRT, &act, NULL);
+    }
+    return;
+}
+```
+
+```c
+
+static void sigShutdownHandler(int sig) {
+    char *msg;
+
+    switch (sig) {
+    case SIGINT:
+        msg = "Received SIGINT scheduling shutdown...";
+        break;
+    case SIGTERM:
+        msg = "Received SIGTERM scheduling shutdown...";
+        break;
+    default:
+        msg = "Received shutdown signal, scheduling shutdown...";
+    };
+
+    /* SIGINT is often delivered via Ctrl+C in an interactive session.
+     * If we receive the signal the second time, we interpret this as
+     * the user really wanting to quit ASAP without waiting to persist
+     * on disk. */
+    if (server.shutdown_asap && sig == SIGINT) {
+        serverLogFromHandler(LL_WARNING, "You insist... exiting now.");
+        rdbRemoveTempFile(getpid(), 1);
+        exit(1); /* Exit with an error since this was not a clean shutdown. */
+    } else if (server.loading) {
+        serverLogFromHandler(LL_WARNING, "Received shutdown signal during loading, exiting now.");
+        exit(0);
+    }
+
+    serverLogFromHandler(LL_WARNING, msg);
+    server.shutdown_asap = 1;
+}
+```
+
+We received a SIGTERM, shutting down here in a safe way, as it is not ok doing so inside the signal handler.
+
+```c
+int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+    // ...
+    if (server.shutdown_asap) {
+        if (prepareForShutdown(SHUTDOWN_NOFLAGS) == C_OK) exit(0);
+        serverLog(LL_WARNING,"SIGTERM received but errors trying to shut down the server, check the logs for more information");
+        server.shutdown_asap = 0;
+    }
+    // ...  
+}
+```
+
+### prepareForShutdown
+
+```c
+
+int prepareForShutdown(int flags) {
+    /* When SHUTDOWN is called while the server is loading a dataset in
+     * memory we need to make sure no attempt is performed to save
+     * the dataset on shutdown (otherwise it could overwrite the current DB
+     * with half-read data).
+     *
+     * Also when in Sentinel mode clear the SAVE flag and force NOSAVE. */
+    if (server.loading || server.sentinel_mode)
+        flags = (flags & ~SHUTDOWN_SAVE) | SHUTDOWN_NOSAVE;
+
+    int save = flags & SHUTDOWN_SAVE;
+    int nosave = flags & SHUTDOWN_NOSAVE;
+
+    serverLog(LL_WARNING,"User requested shutdown...");
+    if (server.supervised_mode == SUPERVISED_SYSTEMD)
+        redisCommunicateSystemd("STOPPING=1\n");
+
+    /* Kill all the Lua debugger forked sessions. */
+    ldbKillForkedSessions();
+
+    /* Kill the saving child if there is a background saving in progress.
+       We want to avoid race conditions, for instance our saving child may
+       overwrite the synchronous saving did by SHUTDOWN. */
+    if (server.child_type == CHILD_TYPE_RDB) {
+        serverLog(LL_WARNING,"There is a child saving an .rdb. Killing it!");
+        killRDBChild();
+        /* Note that, in killRDBChild normally has backgroundSaveDoneHandler
+         * doing it's cleanup, but in this case this code will not be reached,
+         * so we need to call rdbRemoveTempFile which will close fd(in order
+         * to unlink file actully) in background thread.
+         * The temp rdb file fd may won't be closed when redis exits quickly,
+         * but OS will close this fd when process exits. */
+        rdbRemoveTempFile(server.child_pid, 0);
+    }
+
+    /* Kill module child if there is one. */
+    if (server.child_type == CHILD_TYPE_MODULE) {
+        serverLog(LL_WARNING,"There is a module fork child. Killing it!");
+        TerminateModuleForkChild(server.child_pid,0);
+    }
+
+    if (server.aof_state != AOF_OFF) {
+        /* Kill the AOF saving child as the AOF we already have may be longer
+         * but contains the full dataset anyway. */
+        if (server.child_type == CHILD_TYPE_AOF) {
+            /* If we have AOF enabled but haven't written the AOF yet, don't
+             * shutdown or else the dataset will be lost. */
+            if (server.aof_state == AOF_WAIT_REWRITE) {
+                serverLog(LL_WARNING, "Writing initial AOF, can't exit.");
+                return C_ERR;
+            }
+            serverLog(LL_WARNING,
+                "There is a child rewriting the AOF. Killing it!");
+            killAppendOnlyChild();
+        }
+        /* Append only file: flush buffers and fsync() the AOF at exit */
+        serverLog(LL_NOTICE,"Calling fsync() on the AOF file.");
+        flushAppendOnlyFile(1);
+        if (redis_fsync(server.aof_fd) == -1) {
+            serverLog(LL_WARNING,"Fail to fsync the AOF file: %s.",
+                                 strerror(errno));
+        }
+    }
+
+    /* Create a new RDB file before exiting. */
+    if ((server.saveparamslen > 0 && !nosave) || save) {
+        serverLog(LL_NOTICE,"Saving the final RDB snapshot before exiting.");
+        if (server.supervised_mode == SUPERVISED_SYSTEMD)
+            redisCommunicateSystemd("STATUS=Saving the final RDB snapshot\n");
+        /* Snapshotting. Perform a SYNC SAVE and exit */
+        rdbSaveInfo rsi, *rsiptr;
+        rsiptr = rdbPopulateSaveInfo(&rsi);
+        if (rdbSave(server.rdb_filename,rsiptr) != C_OK) {
+            /* Ooops.. error saving! The best we can do is to continue
+             * operating. Note that if there was a background saving process,
+             * in the next cron() Redis will be notified that the background
+             * saving aborted, handling special stuff like slaves pending for
+             * synchronization... */
+            serverLog(LL_WARNING,"Error trying to save the DB, can't exit.");
+            if (server.supervised_mode == SUPERVISED_SYSTEMD)
+                redisCommunicateSystemd("STATUS=Error trying to save the DB, can't exit.\n");
+            return C_ERR;
+        }
+    }
+
+    /* Fire the shutdown modules event. */
+    moduleFireServerEvent(REDISMODULE_EVENT_SHUTDOWN,0,NULL);
+
+    /* Remove the pid file if possible and needed. */
+    if (server.daemonize || server.pidfile) {
+        serverLog(LL_NOTICE,"Removing the pid file.");
+        unlink(server.pidfile);
+    }
+
+    /* Best effort flush of slave output buffers, so that we hopefully
+     * send them pending writes. */
+    flushSlavesOutputBuffers();
+
+    /* Close the listening sockets. Apparently this allows faster restarts. */
+    closeListeningSockets(1);
+    serverLog(LL_WARNING,"%s is now ready to exit, bye bye...",
+        server.sentinel_mode ? "Sentinel" : "Redis");
     return C_OK;
 }
 ```
