@@ -346,7 +346,9 @@ static int _dictExpandIfNeeded(dict *d)
     return DICT_OK;
 }
 ```
+
 ### dictExpand
+
 Expand or create the hash table, when malloc_failed is non-NULL, it'll avoid panic if malloc fails (in which case it'll be set to 1).
 
 ```c
@@ -530,7 +532,6 @@ Get the index in the new hash table
 - If safe is set to 1 this is a safe iterator, that means, you can call dictAdd, dictFind, and other functions against the dictionary even while iterating.
 - Otherwise it is a non safe iterator, and only dictNext() should be called while iterating.
 
-
 ```c
 //dict.h
 typedef struct dictIterator {
@@ -545,9 +546,18 @@ typedef struct dictIterator {
 
 ### scan
 
-reverse binary iteration, has duplicate
+The `SCAN` command, and the other commands in the `SCAN` family, are able to provide to the user a set of guarantees associated to full iterations.
 
+* A full iteration always retrieves all the elements that were present in the collection from the start to the end of a full iteration.
+  This means that if a given element is inside the collection when an iteration is started, and is still there when an iteration terminates, then at some point `SCAN` returned it to the user.
+* A full iteration never returns any element that was NOT present in the collection from the start to the end of a full iteration.
+  So if an element was removed before the start of an iteration, and is never added back to the collection for all the time an iteration lasts, `SCAN` ensures that this element will never be returned.
 
+However because `SCAN` has very little state associated (just the cursor) it has the following drawbacks:
+
+* A given element may be returned multiple times.
+  It is up to the application to handle the case of duplicated elements, for example only using the returned elements in order to perform operations that are safe when re-applied multiple times.
+* Elements that were not constantly present in the collection during a full iteration, may be returned or not: it is undefined.
 
 ## Links
 
