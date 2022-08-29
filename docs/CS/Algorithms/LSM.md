@@ -29,9 +29,13 @@ It can also simplify the recovery process by not overwriting old data.
 However, the major problem of this design is that read performance is sacrificed since a record may be stored in any of multiple locations.
 Furthermore, these structures generally require a separate data reorganization process to improve storage and query efficiency continuously.
 
+<div style="text-align: center;">
+
 ![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)](./images/LSM-Update-Structures.png)
 
-Fig.1. Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)
+</div>
+<p style="text-align: center;">Fig.1. Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)</p>
+
 
 ## Components
 
@@ -42,9 +46,14 @@ An LSM-tree is composed of two or more tree-like component data structures.
 
 Although the C1 component is disk resident, frequently referenced page nodes in C1 will remain in memory buffers as usual (buffers not shown), so that popular high level directory nodes of C1 can be counted on to be memory resident.
 
+<div style="text-align: center;">
+
 ![LSM Components](./images/LSM-Component.png)
 
-Fig.2. Two Components
+</div>
+<p style="text-align: center;">Fig.2. Two Components</p>
+
+
 
 As each new History row is generated, a log record to recover this insert is first written to the sequential log file in the usual way.
 The index entry for the History row is then inserted into the memory resident C0 tree, after which it will in time migrate out to the C1 tree on disk; any search for an index entry will look first in C0 and then in C1.
@@ -67,9 +76,14 @@ When this filling block has been packed full with newly merged leaf nodes of C1,
 The new multi-page block containing merged results is pictured in below figure as lying on the right of the former nodes.
 Subsequent merge steps bring together increasing index value segments of the C0 and C1 components until the maximum values are reached and the rolling merge starts again from the smallest values.
 
+<div style="text-align: center;">
+
 ![Rolling merge steps](./images/LSM-Rolling.png)
 
-Fig.3.
+</div>
+<p style="text-align: center;">Fig.3. Rolling Merge </p>
+
+
 
 Newly merged blocks are written to new disk positions, so that the old blocks will not be overwritten and will be available for recovery in case of a crash.
 The parent directory nodes in C1, also buffered in memory, are updated to reflect this new leaf structure, but usually remain in buffer for longer periods to minimize I/O;
@@ -112,9 +126,14 @@ the C0 component tree is memory resident and all other components are disk resid
 Under pressure from inserts, there are asynchronous rolling merge processes in train between all component pairs (Ci-1, Ci), that move entries out from the smaller to the larger component each time the smaller component, Ci-1, exceeds its threshold size.
 During the life of a long-lived entry inserted in an LSM-tree, it starts in the C0 tree and eventually migrates out to the CK, through a series of K asynchronous rolling merge steps.
 
+<div style="text-align: center;">
+
 ![Fig.4. Rolling merge](./images/LSM-Multi-Component.png)
 
-Fig.4. Rolling merge
+</div>
+<p style="text-align: center;">Fig.4. Rolling merge</p>
+
+
 
 The LSM-tree, proposed in 1996, addressed these problems by designing a merge process which is integrated into the structure itself,
 providing high write performance with bounded query performance and space utilization.
@@ -132,9 +151,14 @@ In parallel to the LSM-tree, Jagadish et al. proposed a similar structure with t
 It organizes the components into levels, and when level L is full with T components, these T components are merged together into a new component at level L+1.
 This policy become the tiering merge policy used in today’s LSM-tree implementations.
 
+<div style="text-align: center;">
+
 ![Fig.5. LSM-tree merge policies](./images/LSM-Merge-Policy.png)
 
-Fig.5. LSM-tree merge policies
+</div>
+<p style="text-align: center;">Fig.5. LSM-tree merge policies</p>
+
+
 
 Once the merge starts, the situation is more complex.
 We picture the rolling merge process in a two component LSM-tree as having a conceptual cursor which slowly circulates in quantized steps through equal key values of the C0 tree and C1 tree components, drawing indexing data out from the C0 tree to the C1 tree on disk.
@@ -322,9 +346,13 @@ This merge operation produces new SSTables labeled 0-10, 11-19, and 20-32 at lev
 Different policies can be used to select which SSTable to merge next at each level.
 For example, LevelDB uses a round-robin policy (to minimize the total write cost).
 
+<div style="text-align: center;">
+
 ![Fig.6. Partitioned leveling merge policy](./images/LSM-Partitioned-Policy.png)
 
-Fig.6. Partitioned leveling merge policy
+</div>
+
+<p style="text-align: center;">Fig.6. Partitioned leveling merge policy</p>
 
 The partitioning optimization can also be applied to the tiering merge policy.
 However, one major issue in doing so is that each level can contain multiple SSTables with overlapping key ranges.
@@ -337,9 +365,13 @@ Alternatively, under the horizontal grouping scheme, each logical disk component
 This allows a disk component to be formed incrementally based on the unit of SSTables.
 We will discuss these two schemes in detail below.
 
+<div style="text-align: center;">
+
 ![Fig.7. Partitioned tiering with vertical grouping](./images/LSM-Partitioned-Tiering-Vertical.png)
 
-Fig.7. Partitioned tiering with vertical grouping
+</div>
+
+<p style="text-align: center;">Fig.7. Partitioned tiering with vertical grouping</p>
 
 An example of the vertical grouping scheme is shown in Figure 7.
 In this scheme, SSTables with overlapping key
@@ -352,9 +384,13 @@ Before the merge operation, the SSTables labeled 0-30 and 0-31 have overlapping 
 However, after the merge operation, the SSTables labeled 0-12 and 17-31 have disjoint key ranges and only one of them needs to be examined by a point lookup query.
 It should also be noted that under this scheme SSTables are no longer fixed-size since they are produced based on the key ranges of the overlapping groups at the next level.
 
+<div style="text-align: center;">
+
 ![Fig.8. Partitioned tiering with horizontal grouping](./images/LSM-Partitioned-Tiering-Horizontal.png)
 
-Fig.8. Partitioned tiering with horizontal grouping
+</div>
+
+<p style="text-align: center;">Fig.8. Partitioned tiering with horizontal grouping</p>
 
 Figure 6 shows an example of the horizontal grouping scheme.
 In this scheme, each component, which is rangepartitioned into a set of fixed-size SSTables, serves as a logical group directly.
