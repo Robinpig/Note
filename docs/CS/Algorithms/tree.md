@@ -110,11 +110,11 @@ If the input comes into a tree presorted, then a series of *inserts* will take q
 
 ## AVL Trees
 
-An AVL (Adelson-Velskii and Landis) tree is a binary search tree with a *balance* condition. 
-The balance condition must be easy to maintain, and it ensures that the depth of the tree is  $O(\log{n})$. 
+An AVL (Adelson-Velskii and Landis) tree is a binary search tree with a *balance* condition.
+The balance condition must be easy to maintain, and it ensures that the depth of the tree is  $O(\log{n})$.
 The simplest idea is to require that the left and right subtrees have the same height.
 
-An AVL tree is identical to a binary search tree, except that for every node in the tree, the height of the left and right subtrees can differ by at most 1. 
+An AVL tree is identical to a binary search tree, except that for every node in the tree, the height of the left and right subtrees can differ by at most 1.
 (The height of an empty tree is defined to be -1.)
 
 In below figure the tree on the left is an AVL tree, but the tree on the right is not.
@@ -145,11 +145,11 @@ If any particular operation is allowed to have an  $O(n)$ worst-case time bound,
 Otherwise, once we find a deep node, we could keep performing *finds* on it.
 If the node does not change location, and each access costs  $O(n)$, then a sequence of *m* accesses will cost $O(M*N)$.
 
-The basic idea of the splay tree is that after a node is accessed, it is pushed to the root by a series of AVL tree rotations. 
-Notice that if a node is deep, there are many nodes on the path that are also relatively deep, and by restructuring we can make future accesses cheaper on all these nodes. 
-Thus, if the node is unduly deep, then we want this restructuring to have the side effect of balancing the tree (to some extent). 
-Besides giving a good time bound in theory, this method is likely to have practical utility, because in many applications when a node is accessed, it is likely to be accessed again in the near future. 
-Studies have shown that this happens much more often than one would expect. 
+The basic idea of the splay tree is that after a node is accessed, it is pushed to the root by a series of AVL tree rotations.
+Notice that if a node is deep, there are many nodes on the path that are also relatively deep, and by restructuring we can make future accesses cheaper on all these nodes.
+Thus, if the node is unduly deep, then we want this restructuring to have the side effect of balancing the tree (to some extent).
+Besides giving a good time bound in theory, this method is likely to have practical utility, because in many applications when a node is accessed, it is likely to be accessed again in the near future.
+Studies have shown that this happens much more often than one would expect.
 Splay trees also do not require the maintenance of height or balance information, thus saving space and simplifying the code to some extent (especially when careful implementations are written).
 
 ### Traversals
@@ -193,6 +193,10 @@ This means that a record can always be found in very few disk accesses, since a 
 Analysis suggests that a B-tree will be ln 2 = 69 percent full.
 Better space utilization can be obtained if, instead of always splitting a node when the tree obtains its (m + 1)th entry, the routine searches for a sibling that can take the extra child.
 
+## LSM-trees
+
+The [LSM-tree](/docs/CS/Algorithms/LSM.md) uses an algorithm that defers and batches index changes, migrating the changes out to disk in a particularly efficient way reminiscent of merge sort.
+
 ## Summary
 
 We have seen uses of trees in operating systems, compiler design, and searching.
@@ -224,8 +228,6 @@ but this is generally acceptable in view of the protection being given against e
 >
 > A final note: By inserting elements into a search tree and then performing an inorder traversal, we obtain the elements in sorted order.
 > This gives an $O(n\log{n})$ algorithm to sort, which is a worst-case bound if any sophisticated search tree is used.
-
-
 
 ## Links
 
