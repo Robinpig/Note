@@ -181,8 +181,8 @@ The tiering merge policy is more write optimized since it reduces the merge freq
 
 ## Concurrency
 
-We now briefly discuss the concurrency control and recovery techniques used by today’s LSM-tree implementations.
 For concurrency control, an LSM-tree needs to handle concurrent reads and writes and to take care of concurrent flush and merge operations.
+
 Ensuring correctness for concurrent reads and writes is a general requirement for access methods in a database system.
 Depending on the transactional isolation requirement, today’s LSM-tree implementations either use a locking scheme or a multi-version scheme.
 A multi-version scheme works well with an LSM-tree since obsolete versions of a key can be naturally garbage-collected during merges.
