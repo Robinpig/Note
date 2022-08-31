@@ -29,92 +29,117 @@ It can also simplify the recovery process by not overwriting old data.
 However, the major problem of this design is that read performance is sacrificed since a record may be stored in any of multiple locations.
 Furthermore, these structures generally require a separate data reorganization process to improve storage and query efficiency continuously.
 
+<div style="text-align: center;">
+
 ![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)](./images/LSM-Update-Structures.png)
 
-Fig.1. Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)
+</div>
+<p style="text-align: center;">Fig.1. Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)</p>
+
 
 ## Components
 
 An LSM-tree is composed of two or more tree-like component data structures.
 
-- A two component LSM-tree has a smaller component which is entirely memory resident, known as the C0 tree (or C0 component),
-- and a larger component which is resident on disk, known as the C1 tree (or C1 component).
+- A two component LSM-tree has a smaller component which is entirely memory resident, known as the $C_0$ tree (or $C_0$ component),
+- and a larger component which is resident on disk, known as the $C_1$ tree (or $C_1$ component).
 
-Although the C1 component is disk resident, frequently referenced page nodes in C1 will remain in memory buffers as usual (buffers not shown), so that popular high level directory nodes of C1 can be counted on to be memory resident.
+Although the $C_1$ component is disk resident, frequently referenced page nodes in $C_1$ will remain in memory buffers as usual (buffers not shown), so that popular high level directory nodes of $C_1$ can be counted on to be memory resident.
+
+<div style="text-align: center;">
 
 ![LSM Components](./images/LSM-Component.png)
 
-Fig.2. Two Components
+</div>
+<p style="text-align: center;">Fig.2. Two Components</p>
+
+
 
 As each new History row is generated, a log record to recover this insert is first written to the sequential log file in the usual way.
-The index entry for the History row is then inserted into the memory resident C0 tree, after which it will in time migrate out to the C1 tree on disk; any search for an index entry will look first in C0 and then in C1.
-There is a certain amount of latency (delay) before entries in the C0 tree migrate out to the disk resident C1 tree, implying a need for recovery of index entries that don't get out to disk prior to a crash.
+The index entry for the History row is then inserted into the memory resident $C_0$ tree, after which it will in time migrate out to the $C_1$ tree on disk; any search for an index entry will look first in $C_0$ and then in $C_1$.
+There is a certain amount of latency (delay) before entries in the $C_0$ tree migrate out to the disk resident $C_1$ tree, implying a need for recovery of index entries that don't get out to disk prior to a crash.
 
-Recovery is discussed in Section 4, but for now we simply note that the log records that allow us to recover new inserts of History rows can be treated as logical logs;
-during recovery we can reconstruct the History rows that have been inserted and simultaneously recreate any needed entries to index these rows to recapture the lost content of C0.
+Now we simply note that the log records that allow us to recover new inserts of History rows can be treated as logical logs;
+during recovery we can reconstruct the History rows that have been inserted and simultaneously recreate any needed entries to index these rows to recapture the lost content of $C_0$.
 
-The C1 tree has a comparable directory structure to a B-tree, but is optimized for sequential disk access, with nodes 100% full,
+The $C_1$ tree has a comparable directory structure to a B-tree, but is optimized for sequential disk access, with nodes 100% full,
 and sequences of single-page nodes on each level below the root packed together in contiguous multi-page disk blocks for efficient arm use; this optimization was also used in the SB-tree.
 Multi-page block I/O is used during the rolling merge and for long range retrievals, while single-page nodes are used for matching indexed finds to minimize buffering requirements.
 
 The rolling merge acts in a series of merge steps.
-A read of a multi-page block containing leaf nodes of the C1 tree makes a range of entries in C1 buffer resident.
-Each merge step then reads a disk page sized leaf node of the C1 tree buffered in this block, merges entries from the leaf node with entries taken from the leaf level of the C0 tree,
-thus decreasing the size of C0, and creates a newly merged leaf node of the C1 tree.
+A read of a multi-page block containing leaf nodes of the $C_1$ tree makes a range of entries in $C_1$ buffer resident.
+Each merge step then reads a disk page sized leaf node of the $C_1$ tree buffered in this block, merges entries from the leaf node with entries taken from the leaf level of the $C_0$ tree,
+thus decreasing the size of $C_0$, and creates a newly merged leaf node of the $C_1$ tree.
 
-The buffered multi-page block containing old C1 tree nodes prior to merge is called the emptying block, and new leaf nodes are written to a different buffered multi-page block called the filling block.
-When this filling block has been packed full with newly merged leaf nodes of C1, the block is written to a new free area on disk.
+The buffered multi-page block containing old $C_1$ tree nodes prior to merge is called the emptying block, and new leaf nodes are written to a different buffered multi-page block called the filling block.
+When this filling block has been packed full with newly merged leaf nodes of $C_1$, the block is written to a new free area on disk.
 The new multi-page block containing merged results is pictured in below figure as lying on the right of the former nodes.
-Subsequent merge steps bring together increasing index value segments of the C0 and C1 components until the maximum values are reached and the rolling merge starts again from the smallest values.
+Subsequent merge steps bring together increasing index value segments of the $C_0$ and $C_1$ components until the maximum values are reached and the rolling merge starts again from the smallest values.
+
+<div style="text-align: center;">
 
 ![Rolling merge steps](./images/LSM-Rolling.png)
 
-Fig.3.
+</div>
+<p style="text-align: center;">Fig.3. Rolling Merge </p>
+
+
 
 Newly merged blocks are written to new disk positions, so that the old blocks will not be overwritten and will be available for recovery in case of a crash.
-The parent directory nodes in C1, also buffered in memory, are updated to reflect this new leaf structure, but usually remain in buffer for longer periods to minimize I/O;
-the old leaf nodes from the C1 component are invalidated after the merge step is complete and are then deleted from the C1 directory.
-In general, there will be leftover leaf-level entries for the merged C1 component following each merge step, since a merge step is unlikely to result in a new node just as the old leaf node empties.
+The parent directory nodes in $C_1$, also buffered in memory, are updated to reflect this new leaf structure, but usually remain in buffer for longer periods to minimize I/O;
+the old leaf nodes from the $C_1$ component are invalidated after the merge step is complete and are then deleted from the $C_1$ directory.
+In general, there will be leftover leaf-level entries for the merged $C_1$ component following each merge step, since a merge step is unlikely to result in a new node just as the old leaf node empties.
 The same consideration holds for multi-page blocks, since in general when the filling block has filled with newly merged nodes, there will be numerous nodes containing entries still in the shrinking block.
 These leftover entries, as well as updated directory node information, remain in block memory buffers for a time without being written to disk.
 To reduce reconstruction time in recovery, checkpoints of the merge process are taken periodically, forcing all buffered information to disk.
 
-Unlike the C1 tree, the C0 tree is not expected to have a B-tree-like structure.
-For one thing, the nodes could be any size: there is no need to insist on disk page size nodes since the C0 tree never sits on disk, and so we need not sacrifice CPU efficiency to minimize depth.
-Thus a (2-3) tree or AVL-tree are possible alternative structures for a C0 tree.
-When the growing C0 tree first reaches its threshold size, a leftmost sequence of entries is deleted from the C0 tree (this should be done in an efficient batch manner rather than one entry at a time) and reorganized into a C1 tree leaf node packed 100% full.
-Successive leaf nodes are placed left-to-right in the initial pages of a buffer resident multi-page block until the block is full; then this block is written out to disk to become the first part of the C1 tree disk-resident leaf level.
-A directory node structure for the C1 tree is created in memory buffers as successive leaf nodes are added.
+Unlike the $C_1$ tree, the $C_0$ tree is not expected to have a B-tree-like structure.
+For one thing, the nodes could be any size: there is no need to insist on disk page size nodes since the $C_0$ tree never sits on disk, and so we need not sacrifice CPU efficiency to minimize depth.
+Thus a (2-3) tree or AVL-tree are possible alternative structures for a $C_0$ tree.
+When the growing $C_0$ tree first reaches its threshold size, a leftmost sequence of entries is deleted from the $C_0$ tree (this should be done in an efficient batch manner rather than one entry at a time) and reorganized into a $C_1$ tree leaf node packed 100% full.
+Successive leaf nodes are placed left-to-right in the initial pages of a buffer resident multi-page block until the block is full; then this block is written out to disk to become the first part of the $C_1$ tree disk-resident leaf level.
+A directory node structure for the $C_1$ tree is created in memory buffers as successive leaf nodes are added.
 
-Successive multi-page blocks of the C1 tree leaf level in ever increasing key-sequence order are written out to disk to keep the C0 tree threshold size from exceeding its threshold.
-Upper level C1 tree directory nodes are maintained in separate multi-page block buffers, or else in single page buffers, whichever makes more sense from a standpoint of total memory and disk arm cost;
+Successive multi-page blocks of the $C_1$ tree leaf level in ever increasing key-sequence order are written out to disk to keep the $C_0$ tree threshold size from exceeding its threshold.
+Upper level $C_1$ tree directory nodes are maintained in separate multi-page block buffers, or else in single page buffers, whichever makes more sense from a standpoint of total memory and disk arm cost;
 entries in these directory nodes contain separators that channel access to individual single-page nodes below, as in a B-tree.
 The intention is to provide efficient exact-match access along a path of single page index nodes down to the leaf level, avoiding multi-page block reads in such a case to minimize memory buffer requirements.
 Thus we read and write multipage blocks for the rolling merge or for long range retrievals, and single-page nodes for indexed find (exact-match) access.
-Partially full multi-page blocks of C1 directory nodes are usually allowed to remain in buffer while a sequence of leaf node blocks are written out.
-C1 directory nodes are forced to new positions on disk when:
+Partially full multi-page blocks of $C_1$ directory nodes are usually allowed to remain in buffer while a sequence of leaf node blocks are written out.
+$C_1$ directory nodes are forced to new positions on disk when:
 
 - A multi-page block buffer containing directory nodes becomes full
-- The root node splits, increasing the depth of the C1 tree (to a depth greater than two)
+- The root node splits, increasing the depth of the $C_1$ tree (to a depth greater than two)
 - A checkpoint is performed
 
 In the first case, the single multi-page block which has filled is written out to disk.
 In the latter two cases, all multi-page block buffers and directory node buffers are flushed to disk.
 
-After the rightmost leaf entry of the C0 tree is written out to the C1 tree for the first time, the process starts over on the left end of the two trees,
-except that now and with successive passes multi-page leaf-level blocks of the C1 tree must be read into buffer and merged with the entries in the C0 tree,
-thus creating new multi-page leaf blocks of C1 to be written to disk.
+After the rightmost leaf entry of the $C_0$ tree is written out to the $C_1$ tree for the first time, the process starts over on the left end of the two trees,
+except that now and with successive passes multi-page leaf-level blocks of the $C_1$ tree must be read into buffer and merged with the entries in the $C_0$ tree,
+thus creating new multi-page leaf blocks of $C_1$ to be written to disk.
+
+### Multi-Component
+
+In general, an LSM-tree of K+1 components has components $C_0$, $C_1$, $C_2$, . . ., $C_{K-1}$ and $C_K$, which are indexed tree structures of increasing size;
+the $C_0$ component tree is memory resident and all other components are disk resident (but with popular pages buffered in memory as with any disk resident access tree).
+Under pressure from inserts, there are asynchronous rolling merge processes in train between all component pairs ($C_{i-1}$, $C_i$), that move entries out from the smaller to the larger component each time the smaller component, $C_{i-1}$, exceeds its threshold size.
+During the life of a long-lived entry inserted in an LSM-tree, it starts in the $C_0$ tree and eventually migrates out to the CK, through a series of K asynchronous rolling merge steps.
+
+<div style="text-align: center;">
+
+![Fig.4. An LSM-tree of K+1 components](./images/LSM-Multi-Component.png)
+
+</div>
+<p style="text-align: center;">Fig.4. An LSM-tree of K+1 components</p>
+
+
+### Component Sizes
+
+
 
 ### Merge
 
-In general, an LSM-tree of K+1 components has components $C_0$, $C_1$, $C_2$, . . ., $C_{K-1}$ and $C_K$, which are indexed tree structures of increasing size;
-the C0 component tree is memory resident and all other components are disk resident (but with popular pages buffered in memory as with any disk resident access tree).
-Under pressure from inserts, there are asynchronous rolling merge processes in train between all component pairs (Ci-1, Ci), that move entries out from the smaller to the larger component each time the smaller component, Ci-1, exceeds its threshold size.
-During the life of a long-lived entry inserted in an LSM-tree, it starts in the C0 tree and eventually migrates out to the CK, through a series of K asynchronous rolling merge steps.
-
-![Fig.4. Rolling merge](./images/LSM-Multi-Component.png)
-
-Fig.4. Rolling merge
 
 The LSM-tree, proposed in 1996, addressed these problems by designing a merge process which is integrated into the structure itself,
 providing high write performance with bounded query performance and space utilization.
@@ -132,20 +157,25 @@ In parallel to the LSM-tree, Jagadish et al. proposed a similar structure with t
 It organizes the components into levels, and when level L is full with T components, these T components are merged together into a new component at level L+1.
 This policy become the tiering merge policy used in today’s LSM-tree implementations.
 
+<div style="text-align: center;">
+
 ![Fig.5. LSM-tree merge policies](./images/LSM-Merge-Policy.png)
 
-Fig.5. LSM-tree merge policies
+</div>
+<p style="text-align: center;">Fig.5. LSM-tree merge policies</p>
+
+
 
 Once the merge starts, the situation is more complex.
-We picture the rolling merge process in a two component LSM-tree as having a conceptual cursor which slowly circulates in quantized steps through equal key values of the C0 tree and C1 tree components, drawing indexing data out from the C0 tree to the C1 tree on disk.
-The rolling merge cursor has a position at the leaf level of the C1 tree and within each higher directory level as well.
-At each level, all currently merging multi-page blocks of the C1 tree will in general be split into two blocks:
+We picture the rolling merge process in a two component LSM-tree as having a conceptual cursor which slowly circulates in quantized steps through equal key values of the $C_0$ tree and $C_1$ tree components, drawing indexing data out from the $C_0$ tree to the $C_1$ tree on disk.
+The rolling merge cursor has a position at the leaf level of the $C_1$ tree and within each higher directory level as well.
+At each level, all currently merging multi-page blocks of the $C_1$ tree will in general be split into two blocks:
 the "emptying" block whose entries have been depleted but which retains information not yet reached by the merge cursor, and the "filling" block which reflects the result of the merge up to this moment.
 There will be an analogous "filling node" and "emptying node" defining the cursor which will certainly be buffer resident.
-For concurrent access purposes, both the emptying block and the filling block on each level contain an integral number of page-sized nodes of the C1 tree,
+For concurrent access purposes, both the emptying block and the filling block on each level contain an integral number of page-sized nodes of the $C_1$ tree,
 which simply happen to be buffer resident. (During the merge step that restructures individual nodes, other types of concurrent access to the entries on those nodes are blocked.)
 Whenever a complete flush of all buffered nodes to disk is required, all buffered information at each level must be written to new positions on disk (with positions reflected in superior directory information, and a sequential log entry for recovery purposes).
-At a later point, when the filling block in buffer on some level of the C1 tree fills and must be flushed again, it goes to a new position.
+At a later point, when the filling block in buffer on some level of the $C_1$ tree fills and must be flushed again, it goes to a new position.
 Old information that might still be needed during recovery is never overwritten on disk, only invalidated as new writes succeed with more up-to-date information.
 
 Today’s LSM-tree implementations still apply updates outof-place to reduce random I/Os.
@@ -205,39 +235,39 @@ For partitioned LSM-trees, this timestamp-based approach does not work anymore s
 To address this, a typical approach, used in LevelDB and RocksDB, is to maintain a separate metadata log to store all changes to the structural metadata, such as adding or deleting SSTables.
 The state of the LSM-tree structure can then be reconstructed by replaying the metadata log during recovery.
 
-In general, we are given an LSM-tree of K+1 components, C0, C1, C2, . . ., CK-1 and CK, of increasing size, where the C0 component tree is memory resident and all other components are disk resident.
-There are asynchronous rolling merge processes in train between all component pairs (Ci-1, Ci) that move entries out from the smaller to the larger component each time the smaller component, Ci-1, exceeds its threshold size.
+In general, we are given an LSM-tree of K+1 components, $C_0$, $C_1$, $C_2$, . . ., $C_{K-1}$ and $C_K$, of increasing size, where the $C_0$ component tree is memory resident and all other components are disk resident.
+There are asynchronous rolling merge processes in train between all component pairs ($C_{i-1}$, $C_i$) that move entries out from the smaller to the larger component each time the smaller component, $C_{i-1}$, exceeds its threshold size.
 Each disk resident component is constructed of page-sized nodes in a B-tree type structure, except that multiple nodes in key sequence order at all levels below the root sit on multi-page blocks.
 Directory information in upper levels of the tree channels access down through single page nodes and also indicates which sequence of nodes sits on a multi-page block, so that a read or write of such a block can be performed all at once.
 Under most circumstances, each multi-page block is packed full with single page nodes, but as we will see there are a few situations where a smaller number of nodes exist in such a block.
 In that case, the active nodes of the LSM-tree will fall on a contiguous set of pages of the multi-page block, though not necessarily the initial pages of the block.
 Apart from the fact that such contiguous pages are not necessarily the initial pages on the multi-page block, the structure of an LSM-tree component is identical to the structure of the SB-tree presented in, to which the reader is referred for supporting details.
 
-A node of a disk-based component Ci can be individually resident in a single page memory buffer, as when equal match finds are performed, or it can be memory resident within its containing multi-page block.
+A node of a disk-based component $C_i$ can be individually resident in a single page memory buffer, as when equal match finds are performed, or it can be memory resident within its containing multi-page block.
 A multi-page block will be buffered in memory as a result of a long range find or else because the rolling merge cursor is passing through the block in question at a high rate.
-In any event, all non-locked nodes of the Ci component are accessible to directory lookup at all times, and disk access will perform lookaside to locate any node in memory, even if it is resident as part of a multi-page block taking part in the rolling merge.
+In any event, all non-locked nodes of the $C_i$ component are accessible to directory lookup at all times, and disk access will perform lookaside to locate any node in memory, even if it is resident as part of a multi-page block taking part in the rolling merge.
 Given these considerations, a concurrency approach for the LSM-tree must mediate three distinct types of physical conflict.
 
 1. A find operation should not access a node of a disk-based component at the same time that a different process performing a rolling merge is modifying the contents of the node.
-2. A find or insert into the C0 component should not access the same part of the tree that a different process is simultaneously altering to perform a rolling merge out to C1.
-3. The cursor for the rolling merge from Ci-1 out to Ci will sometimes need to move past the cursor for the rolling merge from Ci out to Ci+1,
-   since the rate of migration out from the component Ci-1 is always at least as great as the rate of migration out from Ci and this implies a faster rate of circulation of the cursor attached to the smaller component Ci-1.
-   Whatever concurrency method is adopted must permit this passage to take place without one process (migration out to Ci) being blocked behind the other at the point of intersection (migration out from Ci).
+2. A find or insert into the $C_0$ component should not access the same part of the tree that a different process is simultaneously altering to perform a rolling merge out to $C_1$.
+3. The cursor for the rolling merge from $C_{i-1}$ out to $C_i$ will sometimes need to move past the cursor for the rolling merge from $C_i$ out to $C_{i+1}$,
+   since the rate of migration out from the component $C_{i-1}$ is always at least as great as the rate of migration out from $C_i$ and this implies a faster rate of circulation of the cursor attached to the smaller component $C_{i-1}$.
+   Whatever concurrency method is adopted must permit this passage to take place without one process (migration out to $C_i$) being blocked behind the other at the point of intersection (migration out from $C_i$).
 
 Nodes are the unit of locking used in the LSM-tree to avoid physical conflict during concurrent access to disk based components.
 Nodes being updated because of rolling merge are locked in write mode and nodes being read during a find are locked in read mode; methods of directory locking to avoid deadlocks are well understood.
-The locking approach taken in C0 is dependent on the data structure used.
-In the case of a (2-3)-tree, for example, we could write lock a subtree falling below a single (2-3)-directory node that contains all entries in the range affected during a merge to a node of C1; simultaneously,
+The locking approach taken in $C_0$ is dependent on the data structure used.
+In the case of a (2-3)-tree, for example, we could write lock a subtree falling below a single (2-3)-directory node that contains all entries in the range affected during a merge to a node of $C_1$; simultaneously,
 find operations would lock all (2-3)-nodes on their access path in read mode so that one type of access will exclude another.
 Note that we are only considering concurrency at the lowest physical level of multi-level locking.
 We leave to others the question of more abstract locks, such as key range locking to preserve transactional isolation, and avoid for now the problem of phantom updates.
 Thus read-locks are released as soon as the entries being sought at the leaf level have been scanned.
 Write locks for (all) nodes under the cursor are released following each node merged from the larger component.
-This gives an opportunity for a long range find or for a faster cursor to pass a relatively slower cursor position, and thus addresses point (iii) above..
+This gives an opportunity for a long range find or for a faster cursor to pass a relatively slower cursor position, and thus addresses point (3) above.
 
 ## Recovery
 
-As new entries are inserted into the C0 component of the LSM-tree, and the rolling merge processes migrates entry information out to successively larger components, this work takes place in memory buffered multi-page blocks.
+As new entries are inserted into the $C_0$ component of the LSM-tree, and the rolling merge processes migrates entry information out to successively larger components, this work takes place in memory buffered multi-page blocks.
 As with any such memory buffered changes, the work is not resistant to system failure until it has been written to disk.
 We are faced with a classical recovery problem: to reconstruct work that has taken place in memory after a crash occurs and memory is lost.
 We don't need to create special logs to recover index entries on newly created records: transactional insert logs for these new records are written out to a sequential log file in the normal course of events,
@@ -250,7 +280,7 @@ The scheme we use is as follows.
 When a checkpoint is requested at time T0, we complete all merge steps in operation so that node locks are released, then postpone all new entry inserts to the LSM-tree until the checkpoint completes;
 at this point we create an LSMtree checkpoint with the following actions.
 
-- We write the contents of component C0 to a known disk location; following this, entry inserts to C0 can begin again, but merge steps continue to be deferred.
+- We write the contents of component $C_0$ to a known disk location; following this, entry inserts to $C_0$ can begin again, but merge steps continue to be deferred.
 - We flush to disk all dirty memory buffered nodes of disk based components.
 - We create a special checkpoint log with the following information:
   - The Log Sequence Number, LSN0, of the last inserted indexed row at time T0
@@ -259,11 +289,11 @@ at this point we create an LSMtree checkpoint with the following actions.
   - The current information for dynamic allocation of new multi-page blocks.
 
 Once this checkpoint information has been placed on disk, we can resume regular operations of the LSM-tree.
-In the event of a crash and subsequent restart, this checkpoint can be located and the saved component C0 loaded back into memory, together with the buffered blocks of other components needed to continue rolling merges.
+In the event of a crash and subsequent restart, this checkpoint can be located and the saved component $C_0$ loaded back into memory, together with the buffered blocks of other components needed to continue rolling merges.
 Then logs starting with the first LSN after LSN0 are read into memory and have their associated index entries entered into the LSM-tree.
 As of the time of the checkpoint, the positions of all disk-based components containing all indexing information were recorded in component directories starting at the roots, whose locations are known from the checkpoint log.
 None of this information has been wiped out by later writes of multi-page disk blocks since these writes are always to new locations on disk until subsequent checkpoints make outmoded multi-page blocks unnecessary.
-As we recover logs of inserts for indexed rows, we place new entries into the C0 component; now the rolling merge starts again, overwriting any multi-page blocks written since the checkpoint,
+As we recover logs of inserts for indexed rows, we place new entries into the $C_0$ component; now the rolling merge starts again, overwriting any multi-page blocks written since the checkpoint,
 but recovering all new index entries, until the most recently inserted row has been indexed and recovery is complete.
 
 ## Optimizations
@@ -322,9 +352,13 @@ This merge operation produces new SSTables labeled 0-10, 11-19, and 20-32 at lev
 Different policies can be used to select which SSTable to merge next at each level.
 For example, LevelDB uses a round-robin policy (to minimize the total write cost).
 
+<div style="text-align: center;">
+
 ![Fig.6. Partitioned leveling merge policy](./images/LSM-Partitioned-Policy.png)
 
-Fig.6. Partitioned leveling merge policy
+</div>
+
+<p style="text-align: center;">Fig.6. Partitioned leveling merge policy</p>
 
 The partitioning optimization can also be applied to the tiering merge policy.
 However, one major issue in doing so is that each level can contain multiple SSTables with overlapping key ranges.
@@ -337,9 +371,13 @@ Alternatively, under the horizontal grouping scheme, each logical disk component
 This allows a disk component to be formed incrementally based on the unit of SSTables.
 We will discuss these two schemes in detail below.
 
+<div style="text-align: center;">
+
 ![Fig.7. Partitioned tiering with vertical grouping](./images/LSM-Partitioned-Tiering-Vertical.png)
 
-Fig.7. Partitioned tiering with vertical grouping
+</div>
+
+<p style="text-align: center;">Fig.7. Partitioned tiering with vertical grouping</p>
 
 An example of the vertical grouping scheme is shown in Figure 7.
 In this scheme, SSTables with overlapping key
@@ -352,9 +390,13 @@ Before the merge operation, the SSTables labeled 0-30 and 0-31 have overlapping 
 However, after the merge operation, the SSTables labeled 0-12 and 17-31 have disjoint key ranges and only one of them needs to be examined by a point lookup query.
 It should also be noted that under this scheme SSTables are no longer fixed-size since they are produced based on the key ranges of the overlapping groups at the next level.
 
+<div style="text-align: center;">
+
 ![Fig.8. Partitioned tiering with horizontal grouping](./images/LSM-Partitioned-Tiering-Horizontal.png)
 
-Fig.8. Partitioned tiering with horizontal grouping
+</div>
+
+<p style="text-align: center;">Fig.8. Partitioned tiering with horizontal grouping</p>
 
 Figure 6 shows an example of the horizontal grouping scheme.
 In this scheme, each component, which is rangepartitioned into a set of fixed-size SSTables, serves as a logical group directly.
@@ -364,9 +406,14 @@ A merge operation selects the SSTables with overlapping key ranges from all of t
 For example in the figure, the SSTables labeled 35-70 and 35-65 at level 1 are merged together, and the resulting SSTables labeled 35-52 and 53-70 are added to the first group at level 2.
 However, although SSTables are fixed-size under the horizontal grouping scheme, it is still possible that one SSTable from a group may overlap a large number of SSTables in the remaining groups.
 
+## Wisckey
+
+
+
+
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree.md)
+- [Trees](/docs/CS/Algorithms/tree.md?id=LSM)
 
 ## References
 
@@ -374,6 +421,6 @@ However, although SSTables are fixed-size under the horizontal grouping scheme, 
 2. [LSM-based Storage Techniques: A Survey](https://arxiv.org/pdf/1812.07527.pdf)
 3. [KernelMaker: Paper笔记 The Log structured Merge-Tree](https://kernelmaker.github.io/lsm-tree)
 4. [Dostoevsky: Better Space-Time Trade-Offs for LSM-Tree Based Key-Value Stores via Adaptive Removal of Superfluous Merging](https://stratos.seas.harvard.edu/files/stratos/files/dostoyevski.pdf)
-5. [The SB-tree: An Index-Sequential Structure for High-Performance Sequential Access](https://www.researchgate.net/profile/Patrick-Oneil-7/publication/227199016_TheSB-tree_an_index-sequential_structure_for_high-performance_sequential_access/links/00b49520567eb2dbbc000000/TheSB-tree-an-index-sequential-structure-for-high-performance-sequential-access.pdf)
+5. [The SB-tree: An Index-Sequential Structure for High-Performance Sequential Access](https://www.researchgate.net/profile/Patrick-Oneil-7/publication/227199016_TheSB-tree_an_index-sequential_structure_for_high-performance_sequential_access/links/00b49520567eb2dbb$C_0$00000/TheSB-tree-an-index-sequential-structure-for-high-performance-sequential-access.pdf)
 6. [Monkey: Optimal Navigable Key-Value Store](https://stratos.seas.harvard.edu/files/stratos/files/monkeykeyvaluestore.pdf)
 7. [Towards Accurate and Fast Evaluation of Multi-Stage Log-Structured Designs](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lim.pdf)

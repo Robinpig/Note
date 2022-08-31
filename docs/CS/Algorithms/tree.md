@@ -159,7 +159,7 @@ Level-order traversal differs from the other traversals in that it is not done r
 
 ## B-Trees
 
-A B-tree of order m is a tree with the following structural properties:
+A [B-tree](/docs/CS/Algorithms/B-tree.md) of order m is a tree with the following structural properties:
 
 - The root is either a leaf or has between 2 and m children.
 - All nonleaf nodes (except the root) have between m/2 and m children.
