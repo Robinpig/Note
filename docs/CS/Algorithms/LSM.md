@@ -294,6 +294,51 @@ but recovering all new index entries, until the most recently inserted row has b
 
 ## Optimizations
 
+We now identify the major issues of the basic LSM-tree design, and further present a taxon- omy of LSM-tree improvements based on these drawbacks.
+
+### Write Amplification 
+
+Even though LSM-trees can pro- vide much better write throughput than in-place update structures such as B+-trees by reducing random I/Os, the leveling merge policy, which has been adopted by modern key- value stores such as LevelDB [4] and RocksDB [6], still in- curs relatively high write amplification. 
+High write amplifi- cation not only limits the write performance of an LSM-tree but also reduces the lifespan of SSDs due to frequent disk writes. 
+A large body of research has been conducted to re- duce the write amplification of LSM-trees.
+
+#### Tiering
+
+One way to optimize write amplification is to apply tiering since it has much lower write amplification than leveling.
+This will lead to worse query performance and space utilization. 
+The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/LSM.md?id=Tiering-Merge_Policy).
+
+The WriteBuffer (WB) Tree [12] can be viewed as a vari- ant of the partitioned tiering design with vertical grouping. 
+It has made the following modifications.
+First, it relies on hash-partitioning to achieve workload balance so that each SSTable group roughly stores the same amount of data. 
+Furthermore, it organizes SSTable groups into a B+-tree-like structure to enable self-balancing to minimize the total number of levels. 
+Specifically, each SSTable group is treated like a node in a B+-tree. 
+When a non-leaf node becomes full with T SSTables, these T SSTables are merged together to form new SSTables that are added into its child nodes.
+When a leaf node becomes full with T SSTables, it is split into two leaf nodes by merging all of its SSTables into two leaf nodes with smaller key ranges so that each new node receives about T /2 SSTables.
+
+#### Merge Skipping
+The skip-tree [81] proposes a merge skipping idea to im- prove write performance. 
+The observation is that each entry must be merged from level 0 down to the largest level. 
+If some entries can be directly pushed to a higher level by skip- ping some level-by-level merges, then the total write cost will be reduced.
+
+#### Exploiting Data Skew
+TRIAD [16] reduces write amplification for skewed update workloads where some hot keys are updated frequently
+
+
+### Merge Operations
+
+Merge operations are critical to the performance of LSM-trees and must therefore be carefully implemented. Moreover, merge operations can have nega- tive impacts on the system, including buffer cache misses after merges and write stalls during large merges. Several improvements have been proposed to optimize merge oper- ations to address these problems.
+
+Hardware. In order to maximize performance, LSM- trees must be carefully implemented to fully utilize the un- derling hardware platforms. The original LSM-tree has been designed for hard disks, with the goal being reducing ran- dom I/Os. In recent years, new hardware platforms have pre- sented new opportunities for database systems to achieve better performance. A significant body of recent research has been devoted to improving LSM-trees to fully exploit the underling hardware platforms, including large memory, multi-core, SSD/NVM, and native storage.
+
+Special Workloads. In addition to hardware opportu- nities, certain special workloads can also be considered to achieve better performance in those use cases. In this case, the basic LSM-tree implementation must be adapted and customized to exploit the unique characteristics exhibited by these special workloads.
+
+Auto-Tuning. Based on the RUM conjecture [14], no ac- cess method can be read-optimal, write-optimal, and space- optimal at the same time. The tunability of LSM-trees is a promising solution to achieve optimal trade-offs for a given workload. However, LSM-trees can be hard to tune because of too many tuning knobs, such as memory allocation, merge policy, size ratio, etc. To address this issue, several auto- tuning techniques have been proposed in the literature.
+
+Secondary Indexing. A given LSM-tree only provides a simple key-value interface. To support the efficient process- ing of queries on non-key attributes, secondary indexes must be maintained. One issue in this area is how to maintain a set of related secondary indexes efficiently with a small over- head on write performance. Various LSM-based secondary indexing structures and techniques have been designed and evaluated as well.
+
+
+
 There are two well-known optimizations that are used by most LSM-tree implementations today.
 
 ### Bloom Filter
@@ -402,7 +447,6 @@ A merge operation selects the SSTables with overlapping key ranges from all of t
 For example in the figure, the SSTables labeled 35-70 and 35-65 at level 1 are merged together, and the resulting SSTables labeled 35-52 and 53-70 are added to the first group at level 2.
 However, although SSTables are fixed-size under the horizontal grouping scheme, it is still possible that one SSTable from a group may overlap a large number of SSTables in the remaining groups.
 
-## Wisckey
 
 
 
