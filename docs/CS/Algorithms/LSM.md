@@ -308,7 +308,7 @@ One way to optimize write amplification is to apply tiering since it has much lo
 This will lead to worse query performance and space utilization. 
 The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/LSM.md?id=Tiering-Merge_Policy).
 
-The WriteBuffer (WB) Tree [12] can be viewed as a vari- ant of the partitioned tiering design with vertical grouping. 
+The WriteBuffer (WB) Tree can be viewed as a vari- ant of the partitioned tiering design with vertical grouping. 
 It has made the following modifications.
 First, it relies on hash-partitioning to achieve workload balance so that each SSTable group roughly stores the same amount of data. 
 Furthermore, it organizes SSTable groups into a B+-tree-like structure to enable self-balancing to minimize the total number of levels. 
@@ -317,12 +317,12 @@ When a non-leaf node becomes full with T SSTables, these T SSTables are merged t
 When a leaf node becomes full with T SSTables, it is split into two leaf nodes by merging all of its SSTables into two leaf nodes with smaller key ranges so that each new node receives about T /2 SSTables.
 
 #### Merge Skipping
-The skip-tree [81] proposes a merge skipping idea to im- prove write performance. 
+The skip-tree proposes a merge skipping idea to im- prove write performance. 
 The observation is that each entry must be merged from level 0 down to the largest level. 
 If some entries can be directly pushed to a higher level by skip- ping some level-by-level merges, then the total write cost will be reduced.
 
 #### Exploiting Data Skew
-TRIAD [16] reduces write amplification for skewed update workloads where some hot keys are updated frequently
+TRIAD reduces write amplification for skewed update workloads where some hot keys are updated frequently
 
 
 ### Merge Operations
@@ -333,7 +333,7 @@ Hardware. In order to maximize performance, LSM- trees must be carefully impleme
 
 Special Workloads. In addition to hardware opportu- nities, certain special workloads can also be considered to achieve better performance in those use cases. In this case, the basic LSM-tree implementation must be adapted and customized to exploit the unique characteristics exhibited by these special workloads.
 
-Auto-Tuning. Based on the RUM conjecture [14], no ac- cess method can be read-optimal, write-optimal, and space- optimal at the same time. The tunability of LSM-trees is a promising solution to achieve optimal trade-offs for a given workload. However, LSM-trees can be hard to tune because of too many tuning knobs, such as memory allocation, merge policy, size ratio, etc. To address this issue, several auto- tuning techniques have been proposed in the literature.
+Auto-Tuning. Based on the RUM conjecture, no ac- cess method can be read-optimal, write-optimal, and space- optimal at the same time. The tunability of LSM-trees is a promising solution to achieve optimal trade-offs for a given workload. However, LSM-trees can be hard to tune because of too many tuning knobs, such as memory allocation, merge policy, size ratio, etc. To address this issue, several auto- tuning techniques have been proposed in the literature.
 
 Secondary Indexing. A given LSM-tree only provides a simple key-value interface. To support the efficient process- ing of queries on non-key attributes, secondary indexes must be maintained. One issue in this area is how to maintain a set of related secondary indexes efficiently with a small over- head on write performance. Various LSM-based secondary indexing structures and techniques have been designed and evaluated as well.
 
@@ -464,3 +464,4 @@ However, although SSTables are fixed-size under the horizontal grouping scheme, 
 5. [The SB-tree: An Index-Sequential Structure for High-Performance Sequential Access](https://www.researchgate.net/profile/Patrick-Oneil-7/publication/227199016_TheSB-tree_an_index-sequential_structure_for_high-performance_sequential_access/links/00b49520567eb2dbb$C_0$00000/TheSB-tree-an-index-sequential-structure-for-high-performance-sequential-access.pdf)
 6. [Monkey: Optimal Navigable Key-Value Store](https://stratos.seas.harvard.edu/files/stratos/files/monkeykeyvaluestore.pdf)
 7. [Towards Accurate and Fast Evaluation of Multi-Stage Log-Structured Designs](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lim.pdf)
+8. [WiscKey: Separating Keys from Values in SSD-conscious Storage](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lu.pdf)
