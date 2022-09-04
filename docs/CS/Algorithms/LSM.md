@@ -32,7 +32,7 @@ Furthermore, these structures generally require a separate data reorganization p
 
 <div style="text-align: center;">
 
-![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)](./images/LSM-Update-Structures.png)
+![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)](img/LSM-Update-Structures.png)
 
 </div>
 
@@ -47,9 +47,9 @@ An LSM-tree is composed of two or more tree-like component data structures.
 
 Although the $C_1$ component is disk resident, frequently referenced page nodes in $C_1$ will remain in memory buffers as usual (buffers not shown), so that popular high level directory nodes of $C_1$ can be counted on to be memory resident.
 
-<div style="text-align: center;">
+span
 
-![LSM Components](./images/LSM-Component.png)
+![LSM Components](img/LSM-Component.png)
 
 </div>
 
@@ -78,7 +78,7 @@ Subsequent merge steps bring together increasing index value segments of the $C_
 
 <div style="text-align: center;">
 
-![Rolling merge steps](./images/LSM-Rolling.png)
+![Rolling merge steps](img/LSM-Rolling.png)
 
 </div>
 
@@ -133,7 +133,7 @@ During the life of a long-lived entry inserted in an LSM-tree, it starts in the 
 
 <div style="text-align: center;">
 
-![Fig.4. An LSM-tree of K+1 components](./images/LSM-Multi-Component.png)
+![Fig.4. An LSM-tree of K+1 components](img/LSM-Multi-Component.png)
 
 </div>
 
@@ -142,6 +142,19 @@ During the life of a long-lived entry inserted in an LSM-tree, it starts in the 
 ### Component Sizes
 
 ## Merge
+
+An LSM-tree consists of a number of components of exponentially increasing sizes, C0 to Ck.
+The C0 component is a memory-resident update-in-place sorted tree, while the other components C1 to Ck are disk-resident append-only B-trees.
+During an insert in an LSM-tree, the inserted keyvalue pair is appended to an on-disk sequential log file, so as to enable recovery in case of a crash.
+Then, the key-value pair is added to the in-memory C0, which is sorted by keys; C0 allows efficient lookups and scans on recently inserted key-value pairs.
+Once C0 reaches its size limit, it will be merged with the on-disk C1 in an approach similar to merge sort; this process is known as compaction.
+The newly merged tree will be written to disk sequentially, replacing the old version of C1. Compaction (i.e., merge sorting) also happens for on-disk components, when each Ci reaches its size limit.
+Note that compactions are only performed between adjacent levels (Ci and Ci+1), and they can be executed asynchronously in the background.
+
+To serve a lookup operation, LSM-trees may need to search multiple components.
+Note that C0 contains the freshest data, followed by C1, and so on.
+Therefore, to retrieve a key-value pair, the LSM-tree searches components starting from C0 in a cascading fashion until it locates the desired data in the smallest component Ci.
+Compared with B-trees, LSM-trees may need multiple reads for a point lookup. Hence, LSM-trees are most useful when inserts are more common than lookups.
 
 As disk components accumulate over time, the query performance of an LSM-tree tends to degrade since more components must be examined.
 To address this, disk components are gradually merged to reduce the total number of components.
@@ -177,7 +190,7 @@ The tiering merge policy is more write optimized since it reduces the merge freq
 
 <div style="text-align: center;">
 
-![Fig.5. LSM-tree merge policies](./images/LSM-Merge-Policy.png)
+![Fig.5. LSM-tree merge policies](img/LSM-Merge-Policy.png)
 
 </div>
 
@@ -294,52 +307,242 @@ but recovering all new index entries, until the most recently inserted row has b
 
 ## Optimizations
 
-We now identify the major issues of the basic LSM-tree design, and further present a taxon- omy of LSM-tree improvements based on these drawbacks.
+We now identify the major issues of the basic LSM-tree design, and further present a taxonomy of LSM-tree improvements based on these drawbacks.
 
-### Write Amplification 
+Write and read amplification are major problems in LSM-trees such as LevelDB.
+Write (read) amplification is defined as the ratio between the amount of data written to (read from) the underlying storage device and the amount of data requested by the user.
 
-Even though LSM-trees can pro- vide much better write throughput than in-place update structures such as B+-trees by reducing random I/Os, the leveling merge policy, which has been adopted by modern key- value stores such as LevelDB [4] and RocksDB [6], still in- curs relatively high write amplification. 
-High write amplifi- cation not only limits the write performance of an LSM-tree but also reduces the lifespan of SSDs due to frequent disk writes. 
+To achieve mostly-sequential disk access, LevelDB writes more data than necessary (although still sequentially), i.e., LevelDB has high write amplification.
+Since the size limit of Li is 10 times that of Li−1, when merging a file from Li−1 to Li during compaction, LevelDB may read up to 10 files from Li in the worst case, and write back these files to Li after sorting.
+Therefore, the write amplification of moving a file across two levels can be up to 10.
+For a large dataset, since any newly generated table file can eventually migrate from L0 to L6 through a series of compaction steps, write amplification can be over 50 (10 for each gap between L1 to L6).
+
+Read amplification has been a major problem for LSM-trees due to trade-offs made in the design. There are two sources of read amplification in LevelDB.
+First, to lookup a key-value pair, LevelDB may need to check multiple levels. In the worst case, LevelDB needs to check eight files in L0, and one file for each of the remaining six levels: a total of 14 files.
+Second, to find a key-value pair within a SSTable file, LevelDB needs to read multiple metadata blocks within the file.
+Specifically, the amount of data actually read is given by (index block + bloom-filter blocks + data block).
+For example, to lookup a 1-KB key-value pair, LevelDB needs to read a 16-KB index block, a 4- KB bloom-filter block, and a 4-KB data block; in total, 24 KB.
+Therefore, considering the 14 SSTable files in the worst case, the read amplification of LevelDB is 24 × 14 = 336. Smaller key-value pairs will lead to an even higher read amplification.
+
+### Write Amplification
+
+Even though LSM-trees can pro- vide much better write throughput than in-place update structures such as B+-trees by reducing random I/Os, the leveling merge policy, which has been adopted by modern key-value stores such as LevelDB and RocksDB, still in- curs relatively high write amplification.
+High write amplifi- cation not only limits the write performance of an LSM-tree but also reduces the lifespan of SSDs due to frequent disk writes.
 A large body of research has been conducted to re- duce the write amplification of LSM-trees.
 
 #### Tiering
 
 One way to optimize write amplification is to apply tiering since it has much lower write amplification than leveling.
-This will lead to worse query performance and space utilization. 
+This will lead to worse query performance and space utilization.
 The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/LSM.md?id=Tiering-Merge_Policy).
 
-The WriteBuffer (WB) Tree can be viewed as a vari- ant of the partitioned tiering design with vertical grouping. 
+The WriteBuffer (WB) Tree can be viewed as a vari- ant of the partitioned tiering design with vertical grouping.
 It has made the following modifications.
-First, it relies on hash-partitioning to achieve workload balance so that each SSTable group roughly stores the same amount of data. 
-Furthermore, it organizes SSTable groups into a B+-tree-like structure to enable self-balancing to minimize the total number of levels. 
-Specifically, each SSTable group is treated like a node in a B+-tree. 
+First, it relies on hash-partitioning to achieve workload balance so that each SSTable group roughly stores the same amount of data.
+Furthermore, it organizes SSTable groups into a B+-tree-like structure to enable self-balancing to minimize the total number of levels.
+Specifically, each SSTable group is treated like a node in a B+-tree.
 When a non-leaf node becomes full with T SSTables, these T SSTables are merged together to form new SSTables that are added into its child nodes.
 When a leaf node becomes full with T SSTables, it is split into two leaf nodes by merging all of its SSTables into two leaf nodes with smaller key ranges so that each new node receives about T /2 SSTables.
 
 #### Merge Skipping
-The skip-tree proposes a merge skipping idea to im- prove write performance. 
-The observation is that each entry must be merged from level 0 down to the largest level. 
+
+The skip-tree proposes a merge skipping idea to im- prove write performance.
+The observation is that each entry must be merged from level 0 down to the largest level.
 If some entries can be directly pushed to a higher level by skip- ping some level-by-level merges, then the total write cost will be reduced.
 
 #### Exploiting Data Skew
-TRIAD reduces write amplification for skewed update workloads where some hot keys are updated frequently
 
+TRIAD reduces write amplification for skewed update workloads where some hot keys are updated frequently
 
 ### Merge Operations
 
-Merge operations are critical to the performance of LSM-trees and must therefore be carefully implemented. Moreover, merge operations can have nega- tive impacts on the system, including buffer cache misses after merges and write stalls during large merges. Several improvements have been proposed to optimize merge oper- ations to address these problems.
+Merge operations are critical to the performance of LSM-trees and must therefore be carefully implemented.
+Moreover, merge operations can have nega- tive impacts on the system, including buffer cache misses after merges and write stalls during large merges.
+Several improvements have been proposed to optimize merge oper- ations to address these problems.
 
-Hardware. In order to maximize performance, LSM- trees must be carefully implemented to fully utilize the un- derling hardware platforms. The original LSM-tree has been designed for hard disks, with the goal being reducing ran- dom I/Os. In recent years, new hardware platforms have pre- sented new opportunities for database systems to achieve better performance. A significant body of recent research has been devoted to improving LSM-trees to fully exploit the underling hardware platforms, including large memory, multi-core, SSD/NVM, and native storage.
+Hardware. In order to maximize performance, LSM- trees must be carefully implemented to fully utilize the un- derling hardware platforms.
+The original LSM-tree has been designed for hard disks, with the goal being reducing ran- dom I/Os.
+In recent years, new hardware platforms have pre- sented new opportunities for database systems to achieve better performance.
+A significant body of recent research has been devoted to improving LSM-trees to fully exploit the underling hardware platforms, including large memory, multi-core, SSD/NVM, and native storage.
 
-Special Workloads. In addition to hardware opportu- nities, certain special workloads can also be considered to achieve better performance in those use cases. In this case, the basic LSM-tree implementation must be adapted and customized to exploit the unique characteristics exhibited by these special workloads.
+Special Workloads. In addition to hardware opportu- nities, certain special workloads can also be considered to achieve better performance in those use cases.
+In this case, the basic LSM-tree implementation must be adapted and customized to exploit the unique characteristics exhibited by these special workloads.
 
-Auto-Tuning. Based on the RUM conjecture, no ac- cess method can be read-optimal, write-optimal, and space- optimal at the same time. The tunability of LSM-trees is a promising solution to achieve optimal trade-offs for a given workload. However, LSM-trees can be hard to tune because of too many tuning knobs, such as memory allocation, merge policy, size ratio, etc. To address this issue, several auto- tuning techniques have been proposed in the literature.
+Auto-Tuning. Based on the RUM conjecture, no ac- cess method can be read-optimal, write-optimal, and space- optimal at the same time.
+The tunability of LSM-trees is a promising solution to achieve optimal trade-offs for a given workload.
+However, LSM-trees can be hard to tune because of too many tuning knobs, such as memory allocation, merge policy, size ratio, etc.
+To address this issue, several auto- tuning techniques have been proposed in the literature.
 
-Secondary Indexing. A given LSM-tree only provides a simple key-value interface. To support the efficient process- ing of queries on non-key attributes, secondary indexes must be maintained. One issue in this area is how to maintain a set of related secondary indexes efficiently with a small over- head on write performance. Various LSM-based secondary indexing structures and techniques have been designed and evaluated as well.
-
-
+Secondary Indexing. A given LSM-tree only provides a simple key-value interface.
+To support the efficient processing of queries on non-key attributes, secondary indexes must be maintained.
+One issue in this area is how to maintain a set of related secondary indexes efficiently with a small overhead on write performance.
+Various LSM-based secondary indexing structures and techniques have been designed and evaluated as well.
 
 There are two well-known optimizations that are used by most LSM-tree implementations today.
+
+#### Wisckey
+
+The storage landscape is quickly changing, and modern solid-state storage devices (SSDs) are supplanting HDDs in many important use cases.
+As compared to HDDs, SSDs are fundamentally different in their performance and reliability characteristics; when considering key-value storage system design, we believe the following three differences are of paramount importance.
+
+- First, the difference between random and sequential performance is not nearly as large as with HDDs; thus, an LSM-tree that performs a large number of sequential I/Os to reduce later random I/Os may be wasting bandwidth needlessly.
+- Second, SSDs have a large degree of internal parallelism; an LSM built atop an SSD must be carefully designed to harness said parallelism.
+- Third, SSDs can wear out through repeated writes; the high write amplification in LSMtrees can significantly reduce device lifetime.
+  The combination of these factors greatly impacts LSM-tree performance on SSDs, reducing throughput by 90% and increasing write load by a factor over 10.
+  While replacing an HDD with an SSD underneath an LSM-tree does improve performance, with current LSM-tree technology, the SSD’s true potential goes largely unrealized.
+
+The central idea behind WiscKey is the **separation of keys and values**; only keys are kept sorted in the LSM-tree, while values are stored separately in a log. In other words, we decouple key sorting and garbage collection in WiscKey while LevelDB bundles them together.
+This simple technique can significantly reduce write amplification by avoiding the unnecessary movement of values while sorting.
+Furthermore, the size of the LSM-tree is noticeably decreased, leading to fewer device reads and better caching during lookups.
+WiscKey retains the benefits of LSMtree technology, including excellent insert and lookup performance, but without excessive I/O amplification.
+
+Separating keys from values introduces a number of challenges and optimization opportunities.
+
+- First, range query (scan) performance may be affected because values are not stored in sorted order anymore.
+  WiscKey solves this challenge by using the abundant internal parallelism of SSD devices.
+- Second, WiscKey needs garbage collection to reclaim the free space used by invalid values.
+  WiscKey proposes an online and lightweight garbage collector which only involves sequential I/Os and impacts the foreground workload minimally.
+- Third, separating keys and values makes crash consistency challenging; WiscKey leverages an interesting property in modern file systems, that appends never result in garbage data on a crash.
+  WiscKey optimizes performance while providing the same consistency guarantees as found in modern LSM-based systems.
+
+WiscKey’s performance is not always better than standard LSM-trees; if small values are written in random order, and a large dataset is range-queried sequentially, WiscKey performs worse than LevelDB.
+However, this workload does not reflect real-world use cases (which primarily use shorter range queries) and can be improved by log reorganization.
+
+WiscKey’s architecture is shown in Figure 9. Keys are
+stored in an LSM-tree while values are stored in a separate value-log file, the vLog. The artificial value stored
+along with the key in the LSM-tree is the address of the
+actual value in the vLog.
+When the user inserts a key-value pair in WiscKey, the
+value is first appended to the vLog, and the key is then
+inserted into the LSM tree along with the value’s address
+(<vLog-offset, value-size>). Deleting a key simply
+deletes it from the LSM tree, without touching the vLog.
+All valid values in the vLog have corresponding keys in
+the LSM-tree; the other values in the vLog are invalid
+and will be garbage collected later.
+
+When the user queries for a key, the key is first
+searched in the LSM-tree, and if found, the corresponding value’s address is retrieved. Then, WiscKey reads the
+value from the vLog. Note that this process is applied to both point queries and range queries.
+Although the idea behind key-value separation is simple, it leads to many challenges and optimization opportunities described in the following subsections.
+
+<div style="text-align: center;">
+
+![Fig.9. WiscKey Data Layout on SSD](img/LSM-Wisckey-Data-Layout.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.9. WiscKey Data Layout on SSD. 
+This figureshows the data layout of WiscKey on a single SSD device. 
+Keys and value’s locations are stored in LSM-tree while values areappended to a separate value log file.
+</p>
+
+To realize an SSD-optimized key-value store, WiscKey includes four critical ideas.
+
+- First, WiscKey separates keys from values, keeping only keys in the LSM-tree and the values in a separate log file.
+- Second, to deal with unsorted values (which necessitate random access during range queries), WiscKey uses the parallel random-read characteristic of SSD devices.
+- Third, WiscKey utilizes unique crash-consistency and garbagecollection techniques to efficiently manage the value log.
+- Finally, WiscKey optimizes performance by removing the LSM-tree log without sacrificing consistency, thus reducing system-call overhead from small writes.
+
+WiscKey is motivated by a simple revelation. Compaction only needs to sort keys, while values can be managed separately.
+Since keys are usually smaller than values, compacting only keys could significantly reduce the amount of data needed during the sorting.
+In WiscKey, only the location of the value is stored in the LSM-tree with the key, while the actual values are stored elsewhere in an SSD-friendly fashion.
+With this design, for a database with a given size, the size of the LSM-tree of WiscKey is much smaller than that of LevelDB.
+The smaller LSM-tree can remarkably reduce the write amplification for modern workloads that have a moderately large value size.
+
+WiscKey’s smaller read amplification improves lookup performance.
+During lookup, WiscKey first searches the LSM-tree for the key and the value’s location; once found, another read is issued to retrieve the value.
+Readers might assume that WiscKey will be slower than LevelDB for lookups, due to its extra I/O to retrieve the value.
+However, since the LSM-tree of WiscKey is much smaller than LevelDB (for the same database size), a lookup may search fewer levels of table files in the LSM-tree and a significant portion of the LSM-tree can be easily cached in memory.
+Hence, each lookup only requires a single random read (for retrieving the value) and thus achieves a lookup performance better than LevelDB.
+
+To make range queries efficient, WiscKey leverages the parallel I/O characteristic of SSD devices to prefetch values from the vLog during range queries.
+The underlying idea is that, with SSDs, only keys require special attention for efficient retrieval.
+So long as keys are retrieved efficiently, range queries can use parallel random reads for efficiently retrieving values.
+The prefetching framework can easily fit with the current range query interface.
+In the current interface, if the user requests a range query, an iterator is returned to the user.
+For each Next() or Prev() requested on the iterator, WiscKey tracks the access pattern of the range query.
+Once a contiguous sequence of key-value pairs is requested, WiscKey starts reading a number of following keys from the LSM-tree sequentially.
+The corresponding value addresses retrieved from the LSM-tree are inserted into a queue; multiple threads will fetch these addresses from the vLog concurrently in the background.
+
+<div style="text-align: center;">
+
+![Fig.10. WiscKey New Data Layout for Garbage Collection](img/LSM-Wisckey-vLog.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.10. WiscKey New Data Layout for Garbage Collection. 
+This figure shows the new data layout of WiscKey to support an efficient garbage collection. 
+A head and tail pointer are maintained in memory and stored persistently in the LSM-tree.
+Only the garbage collection thread changes thetail, while all writes to the vLog are append to the head.
+</p>
+
+Key-value stores based on standard LSM-trees do not immediately reclaim free space when a key-value pair is deleted or overwritten.
+Rather, during compaction, if data relating to a deleted or overwritten key-value pair is found, the data is discarded and space is reclaimed.
+In WiscKey, only invalid keys are reclaimed by the LSMtree compaction.
+Since WiscKey does not compact values, it needs a special garbage collector to reclaim free space in the vLog.
+
+WiscKey targets a lightweight and online garbage collector.
+To make this possible, we introduce a small change to WiscKey’s basic data layout: while storing values in the vLog, we also store the corresponding key along with the value.
+The new data layout is shown in Figure 10: the tuple `(key size, value size, key, value)` is stored in the vLog.
+WiscKey’s garbage collection aims to keep valid values (that do not correspond to deleted keys) in a contiguous range of the vLog, as shown in Figure 9.
+One end of this range, the head, always corresponds to the end of the vLog where new values will be appended.
+The other end of this range, known as the tail, is where garbage collection starts freeing space whenever it is triggered.
+Only the part of the vLog between the head and the tail contains valid values and will be searched during lookups.
+During garbage collection, WiscKey first reads a chunk of key-value pairs (e.g., several MBs) from the tail of the vLog, then finds which of those values are valid (not yet overwritten or deleted) by querying the LSM-tree.
+WiscKey then appends valid values back to the head of the vLog.
+Finally, it frees the space occupied previously by the chunk, and updates the tail accordingly.
+
+To avoid losing any data if a crash happens during garbage collection, WiscKey has to make sure that the newly appended valid values and the new tail are persistent on the device before actually freeing space.
+WiscKey achieves this using the following steps. After appending the valid values to the vLog, the garbage collection calls a fsync() on the vLog.
+Then, it adds these new value’s addresses and current tail to the LSMtree in a synchronous manner; the tail is stored in the LSM-tree as <‘‘tail’’, tail-vLog-offset>.
+Finally, the free space in the vLog is reclaimed.
+WiscKey can be configured to initiate and continue garbage collection periodically or until a particular threshold is reached.
+The garbage collection can also run in offline mode for maintenance.
+Garbage collection can be triggered rarely for workloads with few deletes and for environments with overprovisioned storage space.
+
+On a system crash, LSM-tree implementations usually guarantee atomicity of inserted key-value pairs and inorder recovery of inserted pairs.
+Since WiscKey’s architecture stores values separately from the LSM-tree, obtaining the same crash guarantees can appear complicated.
+However, WiscKey provides the same crash guarantees by using an interesting property of modern file systems (such as ext4, btrfs, and xfs).
+Consider a file that contains the sequence of bytes�b1b2b3...bn�, and the user appends the sequence �bn+1bn+2bn+3...bn+m� to it.
+If a crash happens, after file-system recovery in modern file systems, the file will be observed to contain the sequence of bytes �b1b2b3...bnbn+1bn+2bn+3...bn+x� ∃ x<m, i.e., only some prefix of the appended bytes will be added to the end of the file during file-system recovery.
+It is not possible for random bytes or a non-prefix subset of the appended bytes to be added to the file.
+Since values are appended sequentially to the end of the vLog file in WiscKey, the aforementioned property conveniently translates as follows: if a value X in the vLog is lost in a crash, all future values (inserted after X) are lost too.
+
+When the user queries a key-value pair, if WiscKey cannot find the key in the LSM-tree because the key had been lost during a system crash,
+WiscKey behaves exactly like traditional LSM-trees: even if the value had been written in vLog before the crash, it will be garbage collected later.
+If the key could be found in the LSM tree, however, an additional step is required to maintain consistency.
+In this case, WiscKey first verifies whether the value address retrieved from the LSM-tree falls within the current valid range of the vLog, and then whether the value found corresponds to the queried key.
+If the verifications fail, WiscKey assumes that the value was lost during a system crash, deletes the key from the LSMtree, and informs the user that the key was not found.
+
+Since each value added to the vLog has a header including the corresponding key, verifying whether the key and the value match is straightforward; if necessary, a magic number or checksum can be easily added to the header.
+
+LSM-tree implementations also guarantee the user durability of key value pairs after a system crash if the user specifically requests synchronous inserts.
+WiscKey implements synchronous inserts by flushing the vLog before performing a synchronous insert into its LSM-tree.
+
+For each Put(), WiscKey needs to append the value to the vLog by using a write() system call.
+However, for an insert-intensive workload, issuing a large number of small writes to a file system can introduce a noticeable overhead, especially on a fast storage device.
+Figure 10 shows the total time to sequentially write a 10GB file in ext4 (Linux 3.14).
+For small writes, the overhead of each system call aggregates significantly, leading to a long run time. With large writes (larger than 4 KB), the device throughput is fully utilized.
+
+To reduce overhead, WiscKey buffers values in a userspace buffer, and flushes the buffer only when the buffer size exceeds a threshold or when the user requests a synchronous insertion.
+Thus, WiscKey only issues large writes and reduces the number of write() system calls.
+For a lookup, WiscKey first searches the vLog buffer, and if not found there, actually reads from the vLog.
+Obviously, this mechanism might result in some data (that is buffered) to be lost during a crash; the crash consistency guarantee obtained is similar to LevelDB.
+
+The LSM-tree tracks inserted key-value pairs in the log file so that, if the user requests synchronous inserts and there is a crash, the log can be scanned after reboot and the inserted key-value pairs recovered.
+In WiscKey, the LSM-tree is only used for keys and value addresses.
+Moreover, the vLog also records inserted keys to support garbage collection.
+Hence, writes to the LSM-tree log file can be avoided without affecting correctness.
+
+If a crash happens before the keys are persistent in the LSM-tree, they can be recovered by scanning the vLog.
+However, a naive algorithm would require scanning the entire vLog for recovery.
+So as to require scanning only a small portion of the vLog, WiscKey records the head of the vLog periodically in the LSM-tree, as a key-value pair <‘‘head’’, head-vLog-offset>.
+When a database is opened, WiscKey starts the vLog scan from the most recent head position stored in the LSM-tree, and continues scanning until the end of the vLog.
+Since the head is stored in the LSM-tree, and the LSM-tree inherently guarantees that keys inserted into the LSM-tree will be recovered in the inserted order, this optimization is crash consistent.
+Therefore, removing the LSM-tree log of WiscKey is a safe optimization, and improves performance especially when there are many small insertions.
 
 ### Bloom Filter
 
@@ -387,7 +590,7 @@ In the partitioned leveling merge policy, pioneered by LevelDB, the disk compone
 Each SSTable is labeled with its key range in the figure.
 Note that the disk components at level 0 are not partitioned since they are directly flushed from memory.
 This design can also help the system to absorb write bursts since it can tolerate multiple unpartitioned components at level 0.
-To merge an SSTable from level L into level L+1, all of its overlapping SSTables at level L + 1 are selected, and these SSTables are merged with it to produce new SSTables still at level L +1.
+To merge an SSTable from level L into level L+1, all of its overlapping SSTables at level L+1 are selected, and these SSTables are merged with it to produce new SSTables still at level L+1.
 For example, in the figure, the SSTable labeled 0-30 at level 1 is merged with the SSTables labeled 0-15 and 16-32 at level 2.
 This merge operation produces new SSTables labeled 0-10, 11-19, and 20-32 at level 2, and the old SSTables will then be garbage-collected.
 Different policies can be used to select which SSTable to merge next at each level.
@@ -395,7 +598,7 @@ For example, LevelDB uses a round-robin policy (to minimize the total write cost
 
 <div style="text-align: center;">
 
-![Fig.6. Partitioned leveling merge policy](./images/LSM-Partitioned-Policy.png)
+![Fig.6. Partitioned leveling merge policy](img/LSM-Partitioned-Policy.png)
 
 </div>
 
@@ -414,7 +617,7 @@ We will discuss these two schemes in detail below.
 
 <div style="text-align: center;">
 
-![Fig.7. Partitioned tiering with vertical grouping](./images/LSM-Partitioned-Tiering-Vertical.png)
+![Fig.7. Partitioned tiering with vertical grouping](img/LSM-Partitioned-Tiering-Vertical.png)
 
 </div>
 
@@ -433,7 +636,7 @@ It should also be noted that under this scheme SSTables are no longer fixed-size
 
 <div style="text-align: center;">
 
-![Fig.8. Partitioned tiering with horizontal grouping](./images/LSM-Partitioned-Tiering-Horizontal.png)
+![Fig.8. Partitioned tiering with horizontal grouping](img/LSM-Partitioned-Tiering-Horizontal.png)
 
 </div>
 
@@ -446,10 +649,6 @@ This active group can be viewed as a partial component being formed by merging t
 A merge operation selects the SSTables with overlapping key ranges from all of the groups at a level, and the resulting SSTables are added to the active group at the next level.
 For example in the figure, the SSTables labeled 35-70 and 35-65 at level 1 are merged together, and the resulting SSTables labeled 35-52 and 53-70 are added to the first group at level 2.
 However, although SSTables are fixed-size under the horizontal grouping scheme, it is still possible that one SSTable from a group may overlap a large number of SSTables in the remaining groups.
-
-
-
-
 
 ## Links
 

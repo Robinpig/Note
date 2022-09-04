@@ -1,11 +1,57 @@
 ## Introduction
 
 [LevelDB](https://github.com/google/leveldb) is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.
+LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
+LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
+
+## Architecture
+
+<div style="text-align: center;">
+
+![Fig.1. LevelDB architecture](./img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. LevelDB architecture. 
+For LevelDB, inserting a key-value pair goes through many steps: (1) the log file; (2) the memtable; (3) the immutable memtable; (4) a SSTable in L0; (5) compacted to further levels.
+</p>
+
+The overall architecture of LevelDB is shown in Figure 1. The main data structures in LevelDB are an ondisk log file, two in-memory sorted skiplists (memtable
+and immutable memtable), and seven levels (L0 to L6)
+of on-disk Sorted String Table (SSTable) files. LevelDB
+initially stores inserted key-value pairs in a log file and
+the in-memory memtable. Once the memtable is full,
+LevelDB switches to a new memtable and log file to
+handle further inserts from the user. In the background,
+the previous memtable is converted into an immutable
+memtable, and a compaction thread then flushes it to the
+disk, generating a new SSTable file (about 2 MB usually)
+at level 0 (L0); the previous log file is discarded.
+The size of all files in each level is limited, and increases by a factor of ten with the level number. For
+example, the size limit of all files at L1 is 10 MB, while
+the limit of L2 is 100 MB. To maintain the size limit,
+once the total size of a level Li exceeds its limit, the
+compaction thread will choose one file from Li, merge
+sort with all the overlapped files of Li+1, and generate
+new Li+1 SSTable files. The compaction thread continues until all levels are within their size limits. Also,
+during compaction, LevelDB ensures that all files in a
+particular level, except L0, do not overlap in their keyranges; keys in files of L0 can overlap with each other
+since they are directly flushed from memtable.
+
+To serve a lookup operation, LevelDB searches the
+memtable first, immutable memtable next, and then files
+L0 to L6 in order. The number of file searches required to
+locate a random key is bounded by the maximum number
+of levels, since keys do not overlap between files within
+a single level, except in L0. Since files in L0 can contain overlapping keys, a lookup may search multiple files
+at L0. To avoid a large lookup latency, LevelDB slows
+down the foreground write traffic if the number of files
+at L0 is bigger than eight, in order to wait for the compaction thread to compact some files from L0 to L1.
 
 ## Data Types
 
 Keys and values are arbitrary byte arrays. The keys are ordered within the key value store according to a user-specified comparator function.
-
 
 Slice
 
@@ -367,10 +413,7 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
 }
 ```
 
-
 ## LRU
-
-
 
 ## Links
 

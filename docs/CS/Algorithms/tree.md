@@ -6,12 +6,12 @@ Otherwise, a tree consists of a distinguished node r, called the root, and zero 
 
 The root of each subtree is said to be a child of r, and r is the parent of each subtree root.
 
-![Generic Tree](./images/Generic-Tree.png)
+![Generic Tree](img/Generic-Tree.png)
 
 From the recursive definition, we find that a tree is a collection of n nodes, one of which is the root, and n - 1 edges.
 That there are n - 1 edges follows from the fact that each edge connects some node to its parent, and every node except the root has one parent.
 
-![A Tree](./images/tree.png)
+![A Tree](img/tree.png)
 
 Each node may have an arbitrary number of children, possibly zero.
 
@@ -98,7 +98,7 @@ Notice that this implies that all the elements in the tree can be ordered in som
 In below figure, the tree on the left is a binary search tree, but the tree on the right is not.
 The tree on the right has a node with key 7 in the left subtree of a node with key 6 (which happens to be the root).
 
-![Binary Search Tree](./images/Binary-Search-Tree.png)
+![Binary Search Tree](img/Binary-Search-Tree.png)
 
 Because the average depth of a binary search tree is $O(\log{n})$, we generally do not need to worry about running out of stack space.
 
@@ -119,7 +119,7 @@ An AVL tree is identical to a binary search tree, except that for every node in 
 
 In below figure the tree on the left is an AVL tree, but the tree on the right is not.
 
-![AVL Tree](./images/AVL-Tree.png)
+![AVL Tree](img/AVL-Tree.png)
 
 ### Single Rotation
 
