@@ -217,6 +217,93 @@ This is different from the rolling merge process proposed by the original LSM-tr
 
 ### Tiering Merge Policy
 
+### Partitioning
+
+Another commonly adopted optimization is to range-partition the disk components of LSM-trees into multiple (usually fixed-size) small partitions.
+To minimize the potential confusion caused by different terminologies, we use the term SSTable to denote such a partition, following the terminology from LevelDB.
+This optimization has several advantages.
+
+- First, partitioning breaks a large component merge operation into multiple smaller ones, bounding the processing time of each merge operation as well as the temporary disk space needed to create new components.
+- Moreover, partitioning can optimize for workloads with sequentially created keys or skewed updates by only merging components with overlapping key ranges.
+  For sequentially created keys, essentially no merge is performed since there are no components with overlapping key ranges.
+  For skewed updates, the merge frequency of the components with cold update ranges can be greatly reduced.
+
+It should be noted that the original LSM-tree automatically takes advantage of partitioning because of its rolling merges.
+However, due to the implementation complexity of its rolling merges, today’s LSM-tree implementations typically opt for actual physical partitioning rather than rolling merges.
+
+An early proposal that applied partitioning to LSM-trees is the partitioned exponential file (PE-file).
+A PE-file contains multiple partitions, where each partition can be logically viewed as a separate LSM-tree.
+A partition can be further split into two partitions when it becomes too large.
+However, this design enforces strict key range boundaries
+among partitions, which reduces the flexibility of merges.
+
+**It should be noted that partitioning is orthogonal to merge policies; both leveling and tiering (as well as other emerging merge policies) can be adapted to support partitioning.**
+To the best of our knowledge, only the partitioned leveling policy has been fully implemented by industrial LSM-based storage systems, such as LevelDB and RocksDB.
+
+In the partitioned leveling merge policy, pioneered by LevelDB, the disk component at each level is rangepartitioned into multiple fixed-size SSTables, as shown in Figure 6.
+Each SSTable is labeled with its key range in the figure.
+Note that the disk components at level 0 are not partitioned since they are directly flushed from memory.
+This design can also help the system to absorb write bursts since it can tolerate multiple unpartitioned components at level 0.
+To merge an SSTable from level L into level L+1, all of its overlapping SSTables at level L+1 are selected, and these SSTables are merged with it to produce new SSTables still at level L+1.
+For example, in the figure, the SSTable labeled 0-30 at level 1 is merged with the SSTables labeled 0-15 and 16-32 at level 2.
+This merge operation produces new SSTables labeled 0-10, 11-19, and 20-32 at level 2, and the old SSTables will then be garbage-collected.
+Different policies can be used to select which SSTable to merge next at each level.
+For example, LevelDB uses a round-robin policy (to minimize the total write cost).
+
+<div style="text-align: center;">
+
+![Fig.6. Partitioned leveling merge policy](img/LSM-Partitioned-Policy.png)
+
+</div>
+
+<p style="text-align: center;">Fig.6. Partitioned leveling merge policy</p>
+
+The partitioning optimization can also be applied to the tiering merge policy.
+However, one major issue in doing so is that each level can contain multiple SSTables with overlapping key ranges.
+These SSTables must be ordered properly based on their recency to ensure correctness.
+Two possible schemes can be used to organize the SSTables at each level, namely vertical grouping and horizontal grouping.
+In both schemes, the SSTables at each level are organized into groups.
+The vertical grouping scheme groups SSTables with overlapping key ranges together so that the groups have disjoint key ranges.
+Thus, it can be viewed as an extension of partitioned leveling to support tiering.
+Alternatively, under the horizontal grouping scheme, each logical disk component, which is range-partitioned into a set of SSTables, serves as a group directly.
+This allows a disk component to be formed incrementally based on the unit of SSTables.
+We will discuss these two schemes in detail below.
+
+<div style="text-align: center;">
+
+![Fig.7. Partitioned tiering with vertical grouping](img/LSM-Partitioned-Tiering-Vertical.png)
+
+</div>
+
+<p style="text-align: center;">Fig.7. Partitioned tiering with vertical grouping</p>
+
+An example of the vertical grouping scheme is shown in Figure 7.
+In this scheme, SSTables with overlapping key
+ranges are grouped together so that the groups have disjoint key ranges.
+During a merge operation, all of the SSTables in a group are merged together to produce the resulting SSTables based on the key ranges of the overlapping groups at the next level, which are then added to these overlapping groups.
+For example in the figure, the SSTables labeled 0-30 and 0-31 at level 1 are merged together to produce the SSTables labeled 0-12 and 17-31, which are then added to the overlapping groups at level 2.
+Note the difference between the SSTables before and after this merge operation.
+
+Before the merge operation, the SSTables labeled 0-30 and 0-31 have overlapping key ranges and both must be examined together by a point lookup query.
+However, after the merge operation, the SSTables labeled 0-12 and 17-31 have disjoint key ranges and only one of them needs to be examined by a point lookup query.
+It should also be noted that under this scheme SSTables are no longer fixed-size since they are produced based on the key ranges of the overlapping groups at the next level.
+
+<div style="text-align: center;">
+
+![Fig.8. Partitioned tiering with horizontal grouping](img/LSM-Partitioned-Tiering-Horizontal.png)
+
+</div>
+
+<p style="text-align: center;">Fig.8. Partitioned tiering with horizontal grouping</p>
+
+Figure 8 shows an example of the horizontal grouping scheme.
+In this scheme, each component, which is rangepartitioned into a set of fixed-size SSTables, serves as a logical group directly.
+Each level L further maintains an active group, which is also the first group, to receive new SSTables merged from the previous level.
+This active group can be viewed as a partial component being formed by merging the components at level L − 1 in the unpartitioned case.
+A merge operation selects the SSTables with overlapping key ranges from all of the groups at a level, and the resulting SSTables are added to the active group at the next level.
+For example in the figure, the SSTables labeled 35-70 and 35-65 at level 1 are merged together, and the resulting SSTables labeled 35-52 and 53-70 are added to the first group at level 2.
+However, although SSTables are fixed-size under the horizontal grouping scheme, it is still possible that one SSTable from a group may overlap a large number of SSTables in the remaining groups.
+
 ## Concurrency
 
 For concurrency control, an LSM-tree needs to handle concurrent reads and writes and to take care of concurrent flush and merge operations.
@@ -379,6 +466,8 @@ One issue in this area is how to maintain a set of related secondary indexes eff
 Various LSM-based secondary indexing structures and techniques have been designed and evaluated as well.
 
 There are two well-known optimizations that are used by most LSM-tree implementations today.
+
+### Hardware
 
 #### Wisckey
 
@@ -544,7 +633,11 @@ When a database is opened, WiscKey starts the vLog scan from the most recent hea
 Since the head is stored in the LSM-tree, and the LSM-tree inherently guarantees that keys inserted into the LSM-tree will be recovered in the inserted order, this optimization is crash consistent.
 Therefore, removing the LSM-tree log of WiscKey is a safe optimization, and improves performance especially when there are many small insertions.
 
-### Bloom Filter
+### Special Workloads
+
+### Auto Tuning
+
+#### Bloom Filter
 
 A Bloom filter is a space-efficient probabilistic data structure designed to aid in answering set membership queries.
 It supports two operations, i.e., inserting a key and testing the membership of a given key.
@@ -563,92 +656,7 @@ Furthermore, the optimal number of hash functions that minimizes the false posit
 In practice, most systems typically use 10 bits/key as a default configuration, which gives a 1% false positive rate.
 Since Bloom filters are very small and can often be cached in memory, the number of disk I/Os for point lookups is greatly reduced by their use.
 
-### Partitioning
-
-Another commonly adopted optimization is to range-partition the disk components of LSM-trees into multiple (usually fixed-size) small partitions.
-To minimize the potential confusion caused by different terminologies, we use the term SSTable to denote such a partition, following the terminology from LevelDB.
-This optimization has several advantages.
-
-- First, partitioning breaks a large component merge operation into multiple smaller ones, bounding the processing time of each merge operation as well as the temporary disk space needed to create new components.
-- Moreover, partitioning can optimize for workloads with sequentially created keys or skewed updates by only merging components with overlapping key ranges.
-  For sequentially created keys, essentially no merge is performed since there are no components with overlapping key ranges.
-  For skewed updates, the merge frequency of the components with cold update ranges can be greatly reduced.
-
-It should be noted that the original LSM-tree automatically takes advantage of partitioning because of its rolling merges.
-However, due to the implementation complexity of its rolling merges, today’s LSM-tree implementations typically opt for actual physical partitioning rather than rolling merges.
-
-An early proposal that applied partitioning to LSM-trees is the partitioned exponential file (PE-file).
-A PE-file contains multiple partitions, where each partition can be logically viewed as a separate LSM-tree.
-A partition can be further split into two partitions when it becomes too large.
-However, this design enforces strict key range boundaries
-among partitions, which reduces the flexibility of merges.
-
-**It should be noted that partitioning is orthogonal to merge policies; both leveling and tiering (as well as other emerging merge policies) can be adapted to support partitioning.**
-To the best of our knowledge, only the partitioned leveling policy has been fully implemented by industrial LSM-based storage systems, such as LevelDB and RocksDB.
-
-In the partitioned leveling merge policy, pioneered by LevelDB, the disk component at each level is rangepartitioned into multiple fixed-size SSTables, as shown in Figure 6.
-Each SSTable is labeled with its key range in the figure.
-Note that the disk components at level 0 are not partitioned since they are directly flushed from memory.
-This design can also help the system to absorb write bursts since it can tolerate multiple unpartitioned components at level 0.
-To merge an SSTable from level L into level L+1, all of its overlapping SSTables at level L+1 are selected, and these SSTables are merged with it to produce new SSTables still at level L+1.
-For example, in the figure, the SSTable labeled 0-30 at level 1 is merged with the SSTables labeled 0-15 and 16-32 at level 2.
-This merge operation produces new SSTables labeled 0-10, 11-19, and 20-32 at level 2, and the old SSTables will then be garbage-collected.
-Different policies can be used to select which SSTable to merge next at each level.
-For example, LevelDB uses a round-robin policy (to minimize the total write cost).
-
-<div style="text-align: center;">
-
-![Fig.6. Partitioned leveling merge policy](img/LSM-Partitioned-Policy.png)
-
-</div>
-
-<p style="text-align: center;">Fig.6. Partitioned leveling merge policy</p>
-
-The partitioning optimization can also be applied to the tiering merge policy.
-However, one major issue in doing so is that each level can contain multiple SSTables with overlapping key ranges.
-These SSTables must be ordered properly based on their recency to ensure correctness.
-Two possible schemes can be used to organize the SSTables at each level, namely vertical grouping and horizontal grouping.
-In both schemes, the SSTables at each level are organized into groups.
-The vertical grouping scheme groups SSTables with overlapping key ranges together so that the groups have disjoint key ranges.
-Thus, it can be viewed as an extension of partitioned leveling to support tiering.
-Alternatively, under the horizontal grouping scheme, each logical disk component, which is range-partitioned into a set of SSTables, serves as a group directly.
-This allows a disk component to be formed incrementally based on the unit of SSTables.
-We will discuss these two schemes in detail below.
-
-<div style="text-align: center;">
-
-![Fig.7. Partitioned tiering with vertical grouping](img/LSM-Partitioned-Tiering-Vertical.png)
-
-</div>
-
-<p style="text-align: center;">Fig.7. Partitioned tiering with vertical grouping</p>
-
-An example of the vertical grouping scheme is shown in Figure 7.
-In this scheme, SSTables with overlapping key
-ranges are grouped together so that the groups have disjoint key ranges.
-During a merge operation, all of the SSTables in a group are merged together to produce the resulting SSTables based on the key ranges of the overlapping groups at the next level, which are then added to these overlapping groups.
-For example in the figure, the SSTables labeled 0-30 and 0-31 at level 1 are merged together to produce the SSTables labeled 0-12 and 17-31, which are then added to the overlapping groups at level 2.
-Note the difference between the SSTables before and after this merge operation.
-
-Before the merge operation, the SSTables labeled 0-30 and 0-31 have overlapping key ranges and both must be examined together by a point lookup query.
-However, after the merge operation, the SSTables labeled 0-12 and 17-31 have disjoint key ranges and only one of them needs to be examined by a point lookup query.
-It should also be noted that under this scheme SSTables are no longer fixed-size since they are produced based on the key ranges of the overlapping groups at the next level.
-
-<div style="text-align: center;">
-
-![Fig.8. Partitioned tiering with horizontal grouping](img/LSM-Partitioned-Tiering-Horizontal.png)
-
-</div>
-
-<p style="text-align: center;">Fig.8. Partitioned tiering with horizontal grouping</p>
-
-Figure 8 shows an example of the horizontal grouping scheme.
-In this scheme, each component, which is rangepartitioned into a set of fixed-size SSTables, serves as a logical group directly.
-Each level L further maintains an active group, which is also the first group, to receive new SSTables merged from the previous level.
-This active group can be viewed as a partial component being formed by merging the components at level L − 1 in the unpartitioned case.
-A merge operation selects the SSTables with overlapping key ranges from all of the groups at a level, and the resulting SSTables are added to the active group at the next level.
-For example in the figure, the SSTables labeled 35-70 and 35-65 at level 1 are merged together, and the resulting SSTables labeled 35-52 and 53-70 are added to the first group at level 2.
-However, although SSTables are fixed-size under the horizontal grouping scheme, it is still possible that one SSTable from a group may overlap a large number of SSTables in the remaining groups.
+### Secondary Indexing
 
 ## Links
 
@@ -664,3 +672,6 @@ However, although SSTables are fixed-size under the horizontal grouping scheme, 
 6. [Monkey: Optimal Navigable Key-Value Store](https://stratos.seas.harvard.edu/files/stratos/files/monkeykeyvaluestore.pdf)
 7. [Towards Accurate and Fast Evaluation of Multi-Stage Log-Structured Designs](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lim.pdf)
 8. [WiscKey: Separating Keys from Values in SSD-conscious Storage](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lu.pdf)
+9. [LSM-trie: An LSM-tree-based Ultra-Large Key-Value Store for Small Data](https://www.usenix.org/system/files/conference/atc15/atc15-paper-wu.pdf)
+10. [PebblesDB: Building Key-Value Stores using Fragmented Log-Structured Merge Trees](https://www.cs.utexas.edu/~vijay/papers/sosp17-pebblesdb.pdf)
+11. [SILK: Preventing Latency Spikes in Log-Structured Merge Key-Value Stores](https://www.usenix.org/system/files/atc19-balmau.pdf)
