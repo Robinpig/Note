@@ -15,16 +15,16 @@ However, indexed finds requiring immediate response will lose I/O efficiency in 
 
 ## Basics
 
-In general, an index structure can choose one of two strategies to handle updates, that is, in-place updates and out-ofplace updates.
+In general, an index structure can choose one of two strategies to handle updates, that is, *in-place updates* and *out-of-place updates*.
 
-An in-place update structure, such as a B+-tree, directly overwrites old records to store new updates.
-For example in Figure 1a, to update the value associated with key k1 from v1 to v4, the index entry (k1, v1) is directly modified to apply this update.
+An **in-place update** structure, such as a B+-tree, directly overwrites old records to store new updates.
+For example in Figure 1a, to update the value associated with key k1 from v1 to v4, the index entry `(k1, v1)` is directly modified to apply this update.
 These structures are often read-optimized since only the most recent version of each record is stored.
 However, this design sacrifices write performance, as updates incur random I/Os.
 Moreover, index pages can be fragmented by updates and deletes, thus reducing the space utilization.
 
 In contrast, an **out-of-place update** structure, such as an LSM-tree, always stores updates into new locations instead of overwriting old entries.
-For example in Figure 1b, the update (k1, v4) is stored into a new place instead of updating the old entry (k1, v1) directly.
+For example in Figure 1b, the update `(k1, v4)` is stored into a new place instead of updating the old entry `(k1, v1)` directly.
 This design improves write performance since it can exploit sequential I/Os to handle writes.
 It can also simplify the recovery process by not overwriting old data.
 However, the major problem of this design is that read performance is sacrificed since a record may be stored in any of multiple locations.
@@ -41,13 +41,14 @@ Furthermore, these structures generally require a separate data reorganization p
 ## Components
 
 An LSM-tree is composed of two or more tree-like component data structures.
+A two component LSM-tree has
 
-- A two component LSM-tree has a smaller component which is entirely memory resident, known as the $C_0$ tree (or $C_0$ component),
+- a smaller component which is entirely memory resident, known as the $C_0$ tree (or $C_0$ component),
 - and a larger component which is resident on disk, known as the $C_1$ tree (or $C_1$ component).
 
 Although the $C_1$ component is disk resident, frequently referenced page nodes in $C_1$ will remain in memory buffers as usual (buffers not shown), so that popular high level directory nodes of $C_1$ can be counted on to be memory resident.
 
-span
+<div style="text-align: center;">
 
 ![LSM Components](img/LSM-Component.png)
 
@@ -59,7 +60,7 @@ As each new History row is generated, a log record to recover this insert is fir
 The index entry for the History row is then inserted into the memory resident $C_0$ tree, after which it will in time migrate out to the $C_1$ tree on disk; any search for an index entry will look first in $C_0$ and then in $C_1$.
 There is a certain amount of latency (delay) before entries in the $C_0$ tree migrate out to the disk resident $C_1$ tree, implying a need for recovery of index entries that don't get out to disk prior to a crash.
 
-Now we simply note that the log records that allow us to recover new inserts of History rows can be treated as logical logs;
+The log records that allow us to recover new inserts of History rows can be treated as logical logs;
 during recovery we can reconstruct the History rows that have been inserted and simultaneously recreate any needed entries to index these rows to recapture the lost content of $C_0$.
 
 The $C_1$ tree has a comparable directory structure to a B-tree, but is optimized for sequential disk access, with nodes 100% full,
@@ -177,6 +178,8 @@ In the leveling merge policy (Figure 3a), each level only maintains one componen
 As a result, the component at level L will be merged multiple times with incoming components at level L − 1 until it fills up, and it will then be merged into level L+1.
 For example in the figure, the component at level 0 is merged with the component at level 1, which will result in a bigger component at level 1.
 
+### Tiering
+
 In parallel to the LSM-tree, Jagadish et al. proposed a similar structure with the **stepped-merge policy** to achieve better write performance.
 It organizes the components into levels, and when level L is full with T components, these T components are merged together into a new component at level L+1.
 This policy become the **tiering merge policy** used in today’s LSM-tree implementations.
@@ -215,11 +218,9 @@ An insert or update operation simply adds a new entry, while a delete operation 
 Multiple disk components are merged together into a new one without modifying existing components.
 This is different from the rolling merge process proposed by the original LSM-tree.**
 
-### Tiering Merge Policy
-
 ### Partitioning
 
-Another commonly adopted optimization is to range-partition the disk components of LSM-trees into multiple (usually fixed-size) small partitions.
+A commonly adopted optimization is to range-partition the disk components of LSM-trees into multiple (usually fixed-size) small partitions.
 To minimize the potential confusion caused by different terminologies, we use the term SSTable to denote such a partition, following the terminology from LevelDB.
 This optimization has several advantages.
 
@@ -240,11 +241,14 @@ among partitions, which reduces the flexibility of merges.
 **It should be noted that partitioning is orthogonal to merge policies; both leveling and tiering (as well as other emerging merge policies) can be adapted to support partitioning.**
 To the best of our knowledge, only the partitioned leveling policy has been fully implemented by industrial LSM-based storage systems, such as LevelDB and RocksDB.
 
+#### Partitioned Leveling
+
 In the partitioned leveling merge policy, pioneered by LevelDB, the disk component at each level is rangepartitioned into multiple fixed-size SSTables, as shown in Figure 6.
-Each SSTable is labeled with its key range in the figure.
+**Each SSTable is labeled with its key range in the figure.**
 Note that the disk components at level 0 are not partitioned since they are directly flushed from memory.
 This design can also help the system to absorb write bursts since it can tolerate multiple unpartitioned components at level 0.
 To merge an SSTable from level L into level L+1, all of its overlapping SSTables at level L+1 are selected, and these SSTables are merged with it to produce new SSTables still at level L+1.
+<br>
 For example, in the figure, the SSTable labeled 0-30 at level 1 is merged with the SSTables labeled 0-15 and 16-32 at level 2.
 This merge operation produces new SSTables labeled 0-10, 11-19, and 20-32 at level 2, and the old SSTables will then be garbage-collected.
 Different policies can be used to select which SSTable to merge next at each level.
@@ -258,6 +262,8 @@ For example, LevelDB uses a round-robin policy (to minimize the total write cost
 
 <p style="text-align: center;">Fig.6. Partitioned leveling merge policy</p>
 
+#### Partitioned Tiering
+
 The partitioning optimization can also be applied to the tiering merge policy.
 However, one major issue in doing so is that each level can contain multiple SSTables with overlapping key ranges.
 These SSTables must be ordered properly based on their recency to ensure correctness.
@@ -267,7 +273,6 @@ The vertical grouping scheme groups SSTables with overlapping key ranges togethe
 Thus, it can be viewed as an extension of partitioned leveling to support tiering.
 Alternatively, under the horizontal grouping scheme, each logical disk component, which is range-partitioned into a set of SSTables, serves as a group directly.
 This allows a disk component to be formed incrementally based on the unit of SSTables.
-We will discuss these two schemes in detail below.
 
 <div style="text-align: center;">
 
@@ -278,9 +283,9 @@ We will discuss these two schemes in detail below.
 <p style="text-align: center;">Fig.7. Partitioned tiering with vertical grouping</p>
 
 An example of the vertical grouping scheme is shown in Figure 7.
-In this scheme, SSTables with overlapping key
-ranges are grouped together so that the groups have disjoint key ranges.
+In this scheme, SSTables with overlapping key ranges are grouped together so that the groups have disjoint key ranges.
 During a merge operation, all of the SSTables in a group are merged together to produce the resulting SSTables based on the key ranges of the overlapping groups at the next level, which are then added to these overlapping groups.
+<br>
 For example in the figure, the SSTables labeled 0-30 and 0-31 at level 1 are merged together to produce the SSTables labeled 0-12 and 17-31, which are then added to the overlapping groups at level 2.
 Note the difference between the SSTables before and after this merge operation.
 
@@ -303,6 +308,19 @@ This active group can be viewed as a partial component being formed by merging t
 A merge operation selects the SSTables with overlapping key ranges from all of the groups at a level, and the resulting SSTables are added to the active group at the next level.
 For example in the figure, the SSTables labeled 35-70 and 35-65 at level 1 are merged together, and the resulting SSTables labeled 35-52 and 53-70 are added to the first group at level 2.
 However, although SSTables are fixed-size under the horizontal grouping scheme, it is still possible that one SSTable from a group may overlap a large number of SSTables in the remaining groups.
+
+### Cost Analysis
+
+The I/O cost of a query depends on the number of components in an LSM-tree.
+Without Bloom filters, the I/O cost of a point lookup will be O(L) for leveling and O(T · L) for tiering.
+
+<p style="text-align: center;">Table.1. Summary of Cost Complexity of LSM-trees</p>
+
+
+| Merge Policy | Write              | Point Lookup(Zero-Result/ Non-Zero-Result) | Short Range Query | Long Range Query | Space Amplification |
+| -------------- | -------------------- | -------------------------------------------- | ------------------- | ------------------ | --------------------- |
+| Leveling     | $O(T*\frac{L}{B})$ | $O(L*e^{-\frac{M}{N}}/O(1)$                | $O(L)$            |                  |                     |
+| Tiering      | $O(\frac{L}{B})$   |                                            | $O(T-L)$          |                  | $O(T)$              |
 
 ## Concurrency
 
@@ -379,10 +397,10 @@ at this point we create an LSMtree checkpoint with the following actions.
 - We write the contents of component $C_0$ to a known disk location; following this, entry inserts to $C_0$ can begin again, but merge steps continue to be deferred.
 - We flush to disk all dirty memory buffered nodes of disk based components.
 - We create a special checkpoint log with the following information:
-  - The Log Sequence Number, LSN0, of the last inserted indexed row at time T0
-  - The disk addresses of the roots of all components
-  - The location of all merge cursors in the various components
-  - The current information for dynamic allocation of new multi-page blocks.
+    - The Log Sequence Number, LSN0, of the last inserted indexed row at time T0
+    - The disk addresses of the roots of all components
+    - The location of all merge cursors in the various components
+    - The current information for dynamic allocation of new multi-page blocks.
 
 Once this checkpoint information has been placed on disk, we can resume regular operations of the LSM-tree.
 In the event of a crash and subsequent restart, this checkpoint can be located and the saved component $C_0$ loaded back into memory, together with the buffered blocks of other components needed to continue rolling merges.
@@ -641,7 +659,7 @@ Therefore, removing the LSM-tree log of WiscKey is a safe optimization, and impr
 
 A Bloom filter is a space-efficient probabilistic data structure designed to aid in answering set membership queries.
 It supports two operations, i.e., inserting a key and testing the membership of a given key.
-To insert a key, it applies multiple hash functions to map the key into multiple locations in a bit vector and sets the bits at these locations to 1.
+To insert a key, it applies multiple hash functions to map the key into multiple locations in a bit vector and sets the bits at these locations to 1.z
 To check the existence of a given key, the key is again hashed to multiple locations.
 If all of the bits are 1, then the Bloom filter reports that the key probably exists.
 By design, the Bloom filter can report false positives but not false negatives.
