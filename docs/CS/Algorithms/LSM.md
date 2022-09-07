@@ -441,7 +441,7 @@ One way to optimize write amplification is to apply tiering since it has much lo
 This will lead to worse query performance and space utilization.
 The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/LSM.md?id=Tiering-Merge_Policy).
 
-The WriteBuffer (WB) Tree can be viewed as a vari- ant of the partitioned tiering design with vertical grouping.
+The WriteBuffer(WB) Tree can be viewed as a variant of the partitioned tiering design with vertical grouping.
 It has made the following modifications.
 First, it relies on hash-partitioning to achieve workload balance so that each SSTable group roughly stores the same amount of data.
 Furthermore, it organizes SSTable groups into a B+-tree-like structure to enable self-balancing to minimize the total number of levels.
@@ -467,12 +467,67 @@ Several improvements have been proposed to optimize merge operations to address 
 
 Next we review some existing work that improves the implementation of merge operations, including improving merge performance, minimizing buffer cache misses, and eliminating write stalls.
 
+#### Merge Performance
+
+The VT-tree presents a stitching operation to improve merge performance.
+The basic idea is that when merging multiple SSTables, if the key range of a page from an input SSTable does not overlap the key ranges of any pages from other SSTables, then this page can be simply pointed to by the resulting SSTable without reading and copying it again.
+Even though stitching improves merge performance for certain workloads, it has a number of drawbacks.
+
+- First, it can cause fragmentation since pages are no longer continuously stored on disk.
+  To alleviate this problem, the VT-tree introduces a stitching threshold K so that a stitching operation is triggered only when there are at least K continuous pages from an input SSTable.
+- Moreover, since the keys in stitched pages are not scanned during a merge operation, a Bloom filter cannot be produced.
+
+To address this issue, the VT-tree uses quotient filters since multiple quotient filters can be combined directly without accessing the original keys.
+
+#### Caching
+
+Merge operations can interfere with the caching behavior of a system.
+After a new component is enabled, queries may experience a large number of buffer cache misses since the new component has not been cached yet.
+A simple writethrough cache maintenance policy cannot solve this problem.
+If all of the pages of the new component were cached during a merge operation, a lot of other working pages would be evicted, which will again cause buffer cache misses.
+
+#### Write Stalls
+
+Although the LSM-tree offers a much higher write throughput compared to traditional B+-trees, it often exhibits write stalls and unpredictable write latencies since heavy operations such as flushes and merges run in the background.
+bLSM proposes a spring-and-gear merge scheduler to minimize write stalls for the unpartitioned leveling merge policy.
+Its basic idea is to tolerate an extra component at each level so that merges at different levels can proceed in parallel.
+Furthermore, the merge scheduler controls the progress of merge operations to ensure that level L produces a new component at level L+1 only after the previous merge operation at level L+1 has completed.
+This eventually cascades to limit the maximum write speed at the memory component and eliminates large write stalls.
+However, bLSM itself has several limitations.
+bLSM was only designed for the unpartitioned leveling merge policy.
+Moreover, it only bounds the maximum latency of writing to memory components while the queuing latency, which is often a major source of performance variability, is ignored.
+
 ### Hardware
 
 In order to maximize performance, LSM-trees must be carefully implemented to fully utilize the un- derling hardware platforms.
 The original LSM-tree has been designed for hard disks, with the goal being reducing ran- dom I/Os.
 In recent years, new hardware platforms have presented new opportunities for database systems to achieve better performance.
 A significant body of recent research has been devoted to improving LSM-trees to fully exploit the underling hardware platforms, including large memory, multi-core, SSD/NVM, and native storage.
+
+#### Large Memory
+
+It is beneficial for LSM-trees to have large memory components to reduce the total number of levels, as this will improve both write performance and query performance.
+However, managing large memory components brings several new challenges.
+If a memory component is implemented directly using on-heap data structures, large memory can result in a large number of small objects that lead to significant GC overheads.
+In contrast, if a memory component is implemented using off-heap structures such as a concurrent B+-tree, large memory can still cause a higher search cost (due to tree height) and cause more CPU cache misses for writes, as a write must first search for its position in the structure.
+
+#### Multi-Core
+
+cLSM optimizes for multi-core machines and presents new concurrency control algorithms for various LSM-tree operations.
+It organizes LSM components into a concurrent linked list to minimize blocking caused by synchronization.
+Flush and merge operations are carefully designed so that they only result in atomic modifications to the linked list that will never block queries.
+When a memory component becomes full, a new memory component is allocated while the old one will be flushed.
+To avoid writers inserting into the old memory component, a writer acquires a shared lock before modifications and the flush thread acquires an exclusive lock before flushes.
+cLSM also supports snapshot scans via multi-versioning and atomic read-modify-write operations using an optimistic concurrency control approach that exploits the fact that all writes, and thus all conflicts, involve the memory component.
+
+#### SSD/NVM
+
+The FD-tree uses a similar design to LSM-trees to reduce random writes on SSDs.
+One major difference is that the FD-tree exploits fractional cascading to improve query performance instead of Bloom filters.
+For the component at each level, the FD-tree additionally stores fence pointers that point to each page at the next level.
+
+Since SSDs support efficient random reads, separating values from keys becomes a viable solution to improve the write performance of LSM-trees.
+This approach was first implemented by WiscKey and subsequently adopted by HashKV and SifrDB.
 
 #### Wisckey
 
@@ -529,6 +584,7 @@ Although the idea behind key-value separation is simple, it leads to many challe
 <p style="text-align: center;">
 Fig.9. WiscKey Data Layout on SSD. 
 This figureshows the data layout of WiscKey on a single SSD device. 
+<br>
 Keys and value’s locations are stored in LSM-tree while values areappended to a separate value log file.
 </p>
 
@@ -569,7 +625,9 @@ The corresponding value addresses retrieved from the LSM-tree are inserted into 
 <p style="text-align: center;">
 Fig.10. WiscKey New Data Layout for Garbage Collection. 
 This figure shows the new data layout of WiscKey to support an efficient garbage collection. 
+<br>
 A head and tail pointer are maintained in memory and stored persistently in the LSM-tree.
+<br>
 Only the garbage collection thread changes thetail, while all writes to the vLog are append to the head.
 </p>
 
@@ -589,6 +647,27 @@ During garbage collection, WiscKey first reads a chunk of key-value pairs (e.g.,
 WiscKey then appends valid values back to the head of the vLog.
 Finally, it frees the space occupied previously by the chunk, and updates the tail accordingly.
 
+As shown in Figure 13, WiscKey stores key-value pairs into an append-only log and the LSM-tree simply serves as a primary index that maps each key to its location in the log.
+While this can greatly reduce the write cost by only merging keys, range query performance will be significantly impacted because values are not sorted anymore.
+Moreover, the value log must be garbage-collected efficiently to reclaim the storage space.
+In WiscKey, garbage-collection is performed in three steps.
+
+- First, WiscKey scans the log tail and validates each entry by performing point lookups against the LSM-tree to find out whether the location of each key has changed or not.
+- Second, valid entries, whose locations have not changed, are then appended to the log and their locations are updated in the LSM-tree as well.
+- Finally, the log tail is truncated to reclaim the storage space.
+
+However, this garbage-collection process has been shown to be a new performance bottleneck due to its expensive random point lookups.
+
+<div style="text-align: center;">
+
+![Fig.11. WiscKey stores values into an append-only log toreduce the write amplification of the LSM-tree.](img/LSM-Wisckey-vLog.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.11. WiscKey stores values into an append-only log toreduce the write amplification of the LSM-tree.
+</p>
+
 To avoid losing any data if a crash happens during garbage collection, WiscKey has to make sure that the newly appended valid values and the new tail are persistent on the device before actually freeing space.
 WiscKey achieves this using the following steps. After appending the valid values to the vLog, the garbage collection calls a fsync() on the vLog.
 Then, it adds these new value’s addresses and current tail to the LSMtree in a synchronous manner; the tail is stored in the LSM-tree as <‘‘tail’’, tail-vLog-offset>.
@@ -600,8 +679,8 @@ Garbage collection can be triggered rarely for workloads with few deletes and fo
 On a system crash, LSM-tree implementations usually guarantee atomicity of inserted key-value pairs and inorder recovery of inserted pairs.
 Since WiscKey’s architecture stores values separately from the LSM-tree, obtaining the same crash guarantees can appear complicated.
 However, WiscKey provides the same crash guarantees by using an interesting property of modern file systems (such as ext4, btrfs, and xfs).
-Consider a file that contains the sequence of bytes�b1b2b3...bn�, and the user appends the sequence �bn+1bn+2bn+3...bn+m� to it.
-If a crash happens, after file-system recovery in modern file systems, the file will be observed to contain the sequence of bytes �b1b2b3...bnbn+1bn+2bn+3...bn+x� ∃ x<m, i.e., only some prefix of the appended bytes will be added to the end of the file during file-system recovery.
+Consider a file that contains the sequence of bytes $b1b2b3...bn$, and the user appends the sequence $bn+1bn+2bn+3...bn+m$ to it.
+If a crash happens, after file-system recovery in modern file systems, the file will be observed to contain the sequence of bytes $b1b2b3...bnbn+1bn+2bn+3...bn+x$ ∃ x<m, i.e., only some prefix of the appended bytes will be added to the end of the file during file-system recovery.
 It is not possible for random bytes or a non-prefix subset of the appended bytes to be added to the file.
 Since values are appended sequentially to the end of the vLog file in WiscKey, the aforementioned property conveniently translates as follows: if a value X in the vLog is lost in a crash, all future values (inserted after X) are lost too.
 
@@ -638,6 +717,17 @@ When a database is opened, WiscKey starts the vLog scan from the most recent hea
 Since the head is stored in the LSM-tree, and the LSM-tree inherently guarantees that keys inserted into the LSM-tree will be recovered in the inserted order, this optimization is crash consistent.
 Therefore, removing the LSM-tree log of WiscKey is a safe optimization, and improves performance especially when there are many small insertions.
 
+#### Native Storage
+
+Finally, the last line of work in this category attempts to perform native management of storage devices, such as HDDs and SSDs, to optimize the performance of LSM-tree implementations.
+The LSM-tree-based Direct Storage system (LDS) bypasses the file system to better exploit the sequential and aggregated I/O patterns exhibited by LSM-trees.
+The on-disk layout of LDS contains three parts: chunks, a version log, and a backup log.
+Chunks store the disk components of the LSM-tree.
+The version log stores the metadata changes of the LSM-tree after each flush and merge.
+For example, a version log record can record the obsolete chunks and the new chunks resulting from a merge.
+The version log is regularly checkpointed to aggregate all changes so that the log can be truncated.
+Finally, the backup log provides durability for in-memory writes by write-ahead logging.
+
 ### Special Workloads
 
 In addition to hardware opportu- nities, certain special workloads can also be considered to achieve better performance in those use cases.
@@ -649,6 +739,10 @@ Based on the RUM conjecture, no ac- cess method can be read-optimal, write-optim
 The tunability of LSM-trees is a promising solution to achieve optimal trade-offs for a given workload.
 However, LSM-trees can be hard to tune because of too many tuning knobs, such as memory allocation, merge policy, size ratio, etc.
 To address this issue, several auto- tuning techniques have been proposed in the literature.
+
+#### Parameter Tuning
+
+#### Tuning Merge Policies
 
 #### Bloom Filter
 
@@ -669,12 +763,40 @@ Furthermore, the optimal number of hash functions that minimizes the false posit
 In practice, most systems typically use 10 bits/key as a default configuration, which gives a 1% false positive rate.
 Since Bloom filters are very small and can often be cached in memory, the number of disk I/Os for point lookups is greatly reduced by their use.
 
+#### Data Placement
+
+Mutant optimizes the data placement of the LSM-tree on cloud storage.
+Cloud vendors often provide a variety of storage options with different performance characteristics and monetary costs.
+Given a monetary budget, it can be important to place SSTables on different storage devices properly to maximize system performance.
+Mutant solves this problem by monitoring the access frequency of each SSTable and finding a subset of SSTables to be placed in fast storage so that the total number of accesses to fast storage is maximized while the number of selected SSTables is bounded.
+This optimization problem is equivalent to a 0/1 knapsack problem, which is N/P hard, and can be approximated using a greedy algorithm.
+
 ### Secondary Indexing
 
 A given LSM-tree only provides a simple key-value interface.
 To support the efficient processing of queries on non-key attributes, secondary indexes must be maintained.
 One issue in this area is how to maintain a set of related secondary indexes efficiently with a small overhead on write performance.
 Various LSM-based secondary indexing structures and techniques have been designed and evaluated as well.
+
+#### Index Structures
+
+#### Index Maintenance
+
+A key challenge of maintaining LSM-based secondary indexes is handling updates.
+For a primary LSM-tree, an update can blindly add the new entry (with the identical key)into the memory component so that the old entry is automatically deleted.
+However, this mechanism does not work for a secondary index since a secondary key value can change during an update.
+Extra work must be performed to clean up obsolete entries from secondary indexes during updates.
+
+#### Statistics Collection
+
+Absalyamov et al. proposed a lightweight statistics collection framework for LSM-based systems.
+The basic idea is to integrate the task of statistics collection into the flush and merge operations to minimize the statistics maintenance overhead.
+During flush and merge operations, statistical synopses, such as histograms and wavelets, are created on-thefly and are sent back to the system catalog.
+Due to the multicomponent nature of LSM-trees, the system catalog stores multiple statistics for a dataset.
+To reduce the overhead during query optimization, mergeable statistics, such as equiwidth histograms, are merged beforehand.
+For statistics that are not mergeable, multiple synopses are kept to improve the accuracy of cardinality estimation.
+
+#### Distributed Indexing
 
 ## Links
 
@@ -686,7 +808,7 @@ Various LSM-based secondary indexing structures and techniques have been designe
 2. [LSM-based Storage Techniques: A Survey](https://arxiv.org/pdf/1812.07527.pdf)
 3. [KernelMaker: Paper Note: The Log structured Merge-Tree](https://kernelmaker.github.io/lsm-tree)
 4. [Dostoevsky: Better Space-Time Trade-Offs for LSM-Tree Based Key-Value Stores via Adaptive Removal of Superfluous Merging](https://stratos.seas.harvard.edu/files/stratos/files/dostoyevski.pdf)
-5. [The SB-tree: An Index-Sequential Structure for High-Performance Sequential Access](https://www.researchgate.net/profile/Patrick-Oneil-7/publication/227199016_TheSB-tree_an_index-sequential_structure_for_high-performance_sequential_access/links/00b49520567eb2dbb$C_0$00000/TheSB-tree-an-index-sequential-structure-for-high-performance-sequential-access.pdf)
+5. [The SB-tree: An Index-Sequential Structure for High-Performance Sequential Access](https://www.researchgate.net/profile/Patrick-Oneil-7/publication/227199016_TheSB-tree_an_index-sequential_structure_for_high-performance_sequential_access/links/00b49520567eb2dbbC000000/TheSB-tree-an-index-sequential-structure-for-high-performance-sequential-access.pdf)
 6. [Monkey: Optimal Navigable Key-Value Store](https://stratos.seas.harvard.edu/files/stratos/files/monkeykeyvaluestore.pdf)
 7. [Towards Accurate and Fast Evaluation of Multi-Stage Log-Structured Designs](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lim.pdf)
 8. [WiscKey: Separating Keys from Values in SSD-conscious Storage](https://www.usenix.org/system/files/conference/fast16/fast16-papers-lu.pdf)
