@@ -36,34 +36,38 @@ The types of failures that can occur in a distributed system:
 
 Our goal is to design a distributed system with the characteristics listed above (faulttolerant, highly available, recoverable, etc.), which means we must design for failure.
 
+
+### The 8 Fallacies of Distributed Computing
+
 Everyone, when they first build a distributed system, makes the following eight assumptions.
 
-> [!NOTE]
->
-> [The 8 Fallacies of Distributed Computing](http://en.wikipedia.org/wiki/Fallacies_of_distributed_computing) are as follows:
->
-> 1. The network is reliable
-> 2. Latency is zero
-> 3. Bandwidth is infinite
-> 4. The network is secure
-> 5. Topology doesn't change
-> 6. There is one administrator
-> 7. Transport cost is zero
-> 8. The network is homogeneous
+[The 8 Fallacies of Distributed Computing](https://arnon.me/wp-content/uploads/Files/fallacies.pdf) are as follows:
 
-There is a tension between the second fallacy – latency is not 0 and the third fallacy – bandwidth is infinite.
-You should transfer more data to minimize the number of network round trips.
-You should transfer less data to minimize bandwidth usage. You need to balance these two forces and find the right amount of data to send over the wire.
-So transfer only the data that you might need.
 
-A distributed algorithm has two properties:
+1. **The network is reliable.**
+   Well, we could **automatically retry**. Queuing systems are very good at this. But this change will have a big impact on the design of your system. You are moving from a request/response model to fire and forget.
+2. **Latency is zero.**
+   Your application should be network aware. This means you should clearly separate local calls from remote calls. A possible solution is to move the data closer to the clients.
+3. **Bandwidth is infinite.**
+   There is a tension between the second fallacy – latency is not 0 and the third fallacy – bandwidth is infinite.
+   You should transfer more data to minimize the number of network round trips.
+   You should transfer less data to minimize bandwidth usage. You need to balance these two forces and find the right amount of data to send over the wire.
+   So transfer only the data that you might need.
+4. **The network is secure.**
+   here are a lot of components and links in a distributed system and each one of them is a possible target for malicious users. 
+   The business needs to balance the risk and probability of an attack with the cost of implementing prevention mechanisms.
+5. **Topology doesn't change.**
+   Nowadays, with cloud and containers on the rise, it’s hard to ignore this fallacy. The first thing you need to do is to abstract the physical structure of the network.
+6. **There is one administrator.**
+   There are many thing that could go wrong. One example is configuration. Another thing that could go wrong are system upgrades.
+   To work around this fallacy, you need to make your system easy to manage. DevOps, logging and monitoring can help.
+7. **Transport cost is zero.**
+   You should be mindful of the transport cost and how much serialization and deserialization your app is doing. This doesn’t mean that you should optimize, unless there is a need for it.
+8. **The network is homogeneous.**
+   You need to ensure that the system’s components can talk with each other. Using proprietary protocols will damage your app’s interoperability.
 
-- safety properties say that nothing bad will ever happen.
-  It is the generalization of partial correctness for sequential programs.
-  For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.
-- liveness properties say that something good will eventually happen.
-  It is the generalization of termination.
-  For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
+
+
 
 ### Two Generals’ Problem
 
@@ -142,6 +146,16 @@ Network File System
 [Time Clock](/docs/CS/Distributed/Time.md)
 
 ## Consensus
+
+A distributed algorithm has two properties:
+
+- safety properties say that nothing bad will ever happen.
+  It is the generalization of partial correctness for sequential programs.
+  For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.
+- liveness properties say that something good will eventually happen.
+  It is the generalization of termination.
+  For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
+  
 
 [Consensus](/docs/CS/Distributed/Consensus.md) is a fundamental problem in fault-tolerant distributed systems.
 Consensus involves multiple servers agreeing on values. Once they reach a decision on a value, that decision is final.
