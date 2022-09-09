@@ -38,7 +38,221 @@ To avoid a large lookup latency, LevelDB slows down the foreground write traffic
 
 Keys and values are arbitrary byte arrays. The keys are ordered within the key value store according to a user-specified comparator function.
 
-Slice
+### Slice
+
+```c
+class LEVELDB_EXPORT Slice {
+ public:
+  // Create an empty slice.
+  Slice() : data_(""), size_(0) {}
+
+  // Create a slice that refers to d[0,n-1].
+  Slice(const char* d, size_t n) : data_(d), size_(n) {}
+
+  // Create a slice that refers to the contents of "s"
+  Slice(const std::string& s) : data_(s.data()), size_(s.size()) {}
+
+  // Create a slice that refers to s[0,strlen(s)-1]
+  Slice(const char* s) : data_(s), size_(strlen(s)) {}
+
+  // Intentionally copyable.
+  Slice(const Slice&) = default;
+  Slice& operator=(const Slice&) = default;
+
+  // Return a pointer to the beginning of the referenced data
+  const char* data() const { return data_; }
+
+  // Return the length (in bytes) of the referenced data
+  size_t size() const { return size_; }
+
+  // Return true iff the length of the referenced data is zero
+  bool empty() const { return size_ == 0; }
+
+  // Return the ith byte in the referenced data.
+  // REQUIRES: n < size()
+  char operator[](size_t n) const {
+    assert(n < size());
+    return data_[n];
+  }
+
+  // Change this slice to refer to an empty array
+  void clear() {
+    data_ = "";
+    size_ = 0;
+  }
+
+  // Drop the first "n" bytes from this slice.
+  void remove_prefix(size_t n) {
+    assert(n <= size());
+    data_ += n;
+    size_ -= n;
+  }
+
+  // Return a string that contains the copy of the referenced data.
+  std::string ToString() const { return std::string(data_, size_); }
+
+  // Three-way comparison.  Returns value:
+  //   <  0 iff "*this" <  "b",
+  //   == 0 iff "*this" == "b",
+  //   >  0 iff "*this" >  "b"
+  int compare(const Slice& b) const;
+
+  // Return true iff "x" is a prefix of "*this"
+  bool starts_with(const Slice& x) const {
+    return ((size_ >= x.size_) && (memcmp(data_, x.data_, x.size_) == 0));
+  }
+
+ private:
+  const char* data_;
+  size_t size_;
+};
+```
+
+Code
+```c
+  enum Code {
+    kOk = 0,
+    kNotFound = 1,
+    kCorruption = 2,
+    kNotSupported = 3,
+    kInvalidArgument = 4,
+    kIOError = 5
+  };
+```
+### Comparator
+
+```c
+
+// A Comparator object provides a total order across slices that are
+// used as keys in an sstable or a database.  A Comparator implementation
+// must be thread-safe since leveldb may invoke its methods concurrently
+// from multiple threads.
+class LEVELDB_EXPORT Comparator {
+ public:
+  virtual ~Comparator();
+
+  // Three-way comparison.  Returns value:
+  //   < 0 iff "a" < "b",
+  //   == 0 iff "a" == "b",
+  //   > 0 iff "a" > "b"
+  virtual int Compare(const Slice& a, const Slice& b) const = 0;
+
+  // The name of the comparator.  Used to check for comparator
+  // mismatches (i.e., a DB created with one comparator is
+  // accessed using a different comparator.
+  //
+  // The client of this package should switch to a new name whenever
+  // the comparator implementation changes in a way that will cause
+  // the relative ordering of any two keys to change.
+  //
+  // Names starting with "leveldb." are reserved and should not be used
+  // by any clients of this package.
+  virtual const char* Name() const = 0;
+
+  // Advanced functions: these are used to reduce the space requirements
+  // for internal data structures like index blocks.
+
+  // If *start < limit, changes *start to a short string in [start,limit).
+  // Simple comparator implementations may return with *start unchanged,
+  // i.e., an implementation of this method that does nothing is correct.
+  virtual void FindShortestSeparator(std::string* start,
+                                     const Slice& limit) const = 0;
+
+  // Changes *key to a short string >= *key.
+  // Simple comparator implementations may return with *key unchanged,
+  // i.e., an implementation of this method that does nothing is correct.
+  virtual void FindShortSuccessor(std::string* key) const = 0;
+};
+```
+
+### Iterator
+
+```c
+
+class LEVELDB_EXPORT Iterator {
+ public:
+  Iterator();
+
+  Iterator(const Iterator&) = delete;
+  Iterator& operator=(const Iterator&) = delete;
+
+  virtual ~Iterator();
+
+  // An iterator is either positioned at a key/value pair, or
+  // not valid.  This method returns true iff the iterator is valid.
+  virtual bool Valid() const = 0;
+
+  // Position at the first key in the source.  The iterator is Valid()
+  // after this call iff the source is not empty.
+  virtual void SeekToFirst() = 0;
+
+  // Position at the last key in the source.  The iterator is
+  // Valid() after this call iff the source is not empty.
+  virtual void SeekToLast() = 0;
+
+  // Position at the first key in the source that is at or past target.
+  // The iterator is Valid() after this call iff the source contains
+  // an entry that comes at or past target.
+  virtual void Seek(const Slice& target) = 0;
+
+  // Moves to the next entry in the source.  After this call, Valid() is
+  // true iff the iterator was not positioned at the last entry in the source.
+  // REQUIRES: Valid()
+  virtual void Next() = 0;
+
+  // Moves to the previous entry in the source.  After this call, Valid() is
+  // true iff the iterator was not positioned at the first entry in source.
+  // REQUIRES: Valid()
+  virtual void Prev() = 0;
+
+  // Return the key for the current entry.  The underlying storage for
+  // the returned slice is valid only until the next modification of
+  // the iterator.
+  // REQUIRES: Valid()
+  virtual Slice key() const = 0;
+
+  // Return the value for the current entry.  The underlying storage for
+  // the returned slice is valid only until the next modification of
+  // the iterator.
+  // REQUIRES: Valid()
+  virtual Slice value() const = 0;
+
+  // If an error has occurred, return it.  Else return an ok status.
+  virtual Status status() const = 0;
+
+  // Clients are allowed to register function/arg1/arg2 triples that
+  // will be invoked when this iterator is destroyed.
+  //
+  // Note that unlike all of the preceding methods, this method is
+  // not abstract and therefore clients should not override it.
+  using CleanupFunction = void (*)(void* arg1, void* arg2);
+  void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
+
+ private:
+  // Cleanup functions are stored in a single-linked list.
+  // The list's head node is inlined in the iterator.
+  struct CleanupNode {
+    // True if the node is not used. Only head nodes might be unused.
+    bool IsEmpty() const { return function == nullptr; }
+    // Invokes the cleanup function.
+    void Run() {
+      assert(function != nullptr);
+      (*function)(arg1, arg2);
+    }
+
+    // The head node is used if the function pointer is not null.
+    CleanupFunction function;
+    void* arg1;
+    void* arg2;
+    CleanupNode* next;
+  };
+  CleanupNode cleanup_head_;
+};
+```
+## Operations
+
+### Open
+
 
 ```cpp
 // db_impl.cc
@@ -86,7 +300,7 @@ Status DB::Open(const Options& options, const std::string& dbname, DB** dbptr) {
 }
 ```
 
-Get
+### Get
 
 ```cpp
 
@@ -142,7 +356,7 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
 >
 > Ref() Unref()
 
-Put
+### Put
 
 ```cpp
 Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
@@ -152,7 +366,7 @@ Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
 }
 ```
 
-write
+#### write
 
 ```cpp
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
