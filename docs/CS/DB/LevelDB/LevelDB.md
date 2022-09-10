@@ -364,6 +364,20 @@ Status DB::Put(const WriteOptions& opt, const Slice& key, const Slice& value) {
   batch.Put(key, value);
   return Write(opt, &batch);
 }
+
+void WriteBatch::Put(const Slice& key, const Slice& value) {
+  WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
+  rep_.push_back(static_cast<char>(kTypeValue));
+  PutLengthPrefixedSlice(&rep_, key);
+  PutLengthPrefixedSlice(&rep_, value);
+}
+
+void PutLengthPrefixedSlice(std::string* dst, const Slice& value) {
+  PutVarint32(dst, value.size());
+  dst->append(value.data(), value.size());
+}
+
+
 ```
 
 #### write
@@ -442,6 +456,38 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   return status;
 }
 ```
+### Delete
+
+```c
+Status DB::Delete(const WriteOptions& opt, const Slice& key) {
+  WriteBatch batch;
+  batch.Delete(key);
+  return Write(opt, &batch);
+}
+
+void WriteBatch::Delete(const Slice& key) {
+  WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
+  rep_.push_back(static_cast<char>(kTypeDeletion));
+  PutLengthPrefixedSlice(&rep_, key);
+}
+
+void PutLengthPrefixedSlice(std::string* dst, const Slice& value) {
+  PutVarint32(dst, value.size());
+  dst->append(value.data(), value.size());
+}
+
+basic_string&
+append(const _CharT* __s, size_type __n) {
+  __glibcxx_requires_string_len(__s, __n);
+  _M_check_length(size_type(0), __n, "basic_string::append");
+  return _M_append(__s, __n);
+}
+```
+
+## Cache
+
+The contents of the database are stored in a set of files in the filesystem and each file stores a sequence of compressed blocks. 
+If options.block_cache is non-NULL, it is used to cache frequently used uncompressed block contents.
 
 ## Compress
 
