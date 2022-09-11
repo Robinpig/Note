@@ -109,6 +109,7 @@ class LEVELDB_EXPORT Slice {
 ```
 
 Code
+
 ```c
   enum Code {
     kOk = 0,
@@ -119,6 +120,7 @@ Code
     kIOError = 5
   };
 ```
+
 ### Comparator
 
 ```c
@@ -249,10 +251,38 @@ class LEVELDB_EXPORT Iterator {
   CleanupNode cleanup_head_;
 };
 ```
+
+### Status
+
+You may have noticed the `leveldb::Status` type above. Values of this type are
+returned by most functions in leveldb that may encounter an error. You can check
+if such a result is ok, and also print an associated error message:
+
+```c++
+leveldb::Status s = ...;
+if (!s.ok()) cerr << s.ToString() << endl;
+```
+
+
 ## Operations
 
 ### Open
 
+A leveldb database has a name which corresponds to a file system directory. 
+All of the contents of database are stored in this directory. 
+The following example shows how to open a database, creating it if necessary:
+
+```c++
+#include <cassert>
+#include "leveldb/db.h"
+
+leveldb::DB* db;
+leveldb::Options options;
+options.create_if_missing = true;
+leveldb::Status status = leveldb::DB::Open(options, "/tmp/testdb", &db);
+assert(status.ok());
+...
+```
 
 ```cpp
 // db_impl.cc
@@ -456,6 +486,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   return status;
 }
 ```
+
 ### Delete
 
 ```c
@@ -486,8 +517,36 @@ append(const _CharT* __s, size_type __n) {
 
 ## Cache
 
-The contents of the database are stored in a set of files in the filesystem and each file stores a sequence of compressed blocks. 
+The contents of the database are stored in a set of files in the filesystem and each file stores a sequence of compressed blocks.
 If options.block_cache is non-NULL, it is used to cache frequently used uncompressed block contents.
+
+```c++
+#include "leveldb/cache.h"
+
+leveldb::Options options;
+options.block_cache = leveldb::NewLRUCache(100 * 1048576);  // 100MB cache
+leveldb::DB* db;
+leveldb::DB::Open(options, name, &db);
+... use the db ...
+delete db
+delete options.block_cache;
+```
+
+Note that the cache holds uncompressed data, and therefore it should be sized according to application level data sizes, without any reduction from compression.
+(Caching of compressed blocks is left to the operating system buffer cache, or any custom Env implementation provided by the client.)
+
+When performing a bulk read, the application may wish to disable caching so that the data processed by the bulk read does not end up displacing most of the cached contents.
+A per-iterator option can be used to achieve this:
+
+```c++
+leveldb::ReadOptions options;
+options.fill_cache = false;
+leveldb::Iterator* it = db->NewIterator(options);
+for (it->SeekToFirst(); it->Valid(); it->Next()) {
+  ...
+}
+delete it;
+```
 
 ## Compress
 
@@ -657,8 +716,6 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
   return s;
 }
 ```
-
-## LRU
 
 ## Links
 
