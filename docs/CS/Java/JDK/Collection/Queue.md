@@ -6,7 +6,7 @@
 
 ### Queue Hierarchy
 
-![queue](../images/Queue.png)
+![queue](../img/Queue.png)
 
 
 

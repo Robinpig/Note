@@ -18,7 +18,7 @@ A class in the system is identified by the classloader used to load it as well a
 
 Here are ClassLoaders in **JDK17**:
 
-![](../images/ClassLoader.png)
+![](../img/ClassLoader.png)
 
 ### Delegation model
 

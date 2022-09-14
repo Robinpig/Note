@@ -113,7 +113,7 @@ private void init(ThreadGroup g, Runnable target, String name,
 
 图源《Java并发编程的艺术》4.1.4节:
 
-![Thread-Lifetime](../images/Thread-Lifetime.png)
+![Thread-Lifetime](../img/Thread-Lifetime.png)
 
 #### State
 

@@ -35,7 +35,7 @@ benefits：
 
 
 
-![ThreadPoolExecutor](../images/ThreadPoolExecutor.png)
+![ThreadPoolExecutor](../img/ThreadPoolExecutor.png)
 
 ## Executor
 
@@ -491,7 +491,7 @@ private static final int TERMINATED =  3 << COUNT_BITS;
 
 Transfer of state:
 
-![ThreadPoolExecutor](../images/ThreadPoolExecutor-state.png)
+![ThreadPoolExecutor](../img/ThreadPoolExecutor-state.png)
 
 
 
@@ -743,7 +743,7 @@ private void addWorkerFailed(Worker w) {
 
 
 
-![ThreadPoolExecutor](../images/ThreadPoolExecutor-addWorker.png)
+![ThreadPoolExecutor](../img/ThreadPoolExecutor-addWorker.png)
 
 
 
@@ -936,7 +936,7 @@ private Runnable getTask() {
 }
 ```
 
-![ThreadPoolExecutor](../images/ThreadPoolExecutor-getTask.png)
+![ThreadPoolExecutor](../img/ThreadPoolExecutor-getTask.png)
 
 
 

@@ -72,7 +72,7 @@ The leader appends the command to its log as a new entry, then issues AppendEntr
 When the entry has been safely replicated, the leader applies the entry to its state machine and returns the result of that execution to the client.
 If followers crash or run slowly, or if network packets are lost, the leader retries AppendEntries RPCs indefinitely (**even after it has responded to the client**) until all followers eventually store all log entries.
 
-Logs are composed of entries, which are numbered sequentially. 
+Logs are composed of entries, which are numbered sequentially.
 **Each entry contains the term in which it was created (the number in each box) and a command for the state machine.**
 An entry is considered committed if it is safe for that entry to be applied to state machines.
 Each log entry also has an integer index identifying its position in the log.

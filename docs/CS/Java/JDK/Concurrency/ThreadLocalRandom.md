@@ -1,7 +1,7 @@
 ### Random Hierarchy
 
 
-![Random](../images/Random.png)
+![Random](../img/Random.png)
 
 
 ## Random

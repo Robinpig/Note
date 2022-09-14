@@ -440,7 +440,7 @@ sequentialAllocate():
     free <- newFree
     return result
 ```
-![](../images/SequentialAllocation.png)
+![](../img/SequentialAllocation.png)
 
 ### Free-list allocation
 The alternative to sequential allocation is free-list allocation. 
@@ -627,11 +627,11 @@ old_collector
 
 From [JVM](https://book.douban.com/subject/34907497/):
 
-![Our Collectors](../images/our-collectors.png)
+![Our Collectors](../img/our-collectors.png)
 
 And
 
-![GC Collector](../images/GC-collector.png)
+![GC Collector](../img/GC-collector.png)
 
 [JEP 173: Retire Some Rarely-Used GC Combinations](https://openjdk.java.net/jeps/173)
 

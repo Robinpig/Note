@@ -23,7 +23,7 @@ Since:1.5
 5. *compareAndSet and all other read-and-update operations such as getAndIncrement **have the memory effects of both reading and writing volatile variables**.*
 
 
-![Atomic](../images/Atomic.png)
+![Atomic](../img/Atomic.png)
 
 Instances of classes **AtomicBoolean, AtomicInteger, AtomicLong, and AtomicReference each provide access and updates to a single variable of the corresponding type**. Each class also provides appropriate utility methods for that type. For example, classes AtomicLong and AtomicInteger provide atomic increment methods. One application is to generate sequence numbers, as in:
 

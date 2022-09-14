@@ -2,7 +2,7 @@
 
 ### Collection Hierarchy
 
-![Collection](../images/Collection.png)
+![Collection](../img/Collection.png)
 
 - [List](/docs/CS/Java/JDK/Collection/List.md)
 - [Map](/docs/CS/Java/JDK/Collection/Map.md)

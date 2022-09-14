@@ -534,7 +534,7 @@ class   CompiledICHolder;
 The klass hierarchy is separate from the oop hierarchy.
 
 
-![](../images/Klass.svg)
+![](../img/Klass.svg)
 
 ```cpp
 class Klass;
