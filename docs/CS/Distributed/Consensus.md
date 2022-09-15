@@ -234,6 +234,34 @@ such as proof of stake, proof of space, and proof of authority.
 
 ## Consensus Algorithms
 
+
+### Replicated State Machines
+
+Replicated state machines are typically implemented using a replicated log, as shown in Figure 1. 
+Each server stores a log containing a series of commands, which its state machine executes in order. 
+Each log contains the same commands in the same order, so each state machine processes the same sequence of commands. 
+Since the state machines are deterministic, each computes the same state and the same sequence of outputs.
+
+<div style="text-align: center;">
+
+![Fig.1. Replicated state machine architecture](./img/Replicated-State-Machine.png)
+
+</div>
+
+<p style="text-align: center;">
+
+Fig.1. Replicated state machine architecture. 
+The consensus algorithm manages a replicated log containing state machine commands from clients. 
+The state machines process identical sequences of commands from the logs, so they produce the same outputs.
+
+</p>
+
+Keeping the replicated log consistent is the job of the consensus algorithm. 
+The consensus module on a server receives commands from clients and adds them to its log.
+It communicates with the consensus modules on other servers to ensure that every log eventually contains the same requests in the same order, even if some servers fail.
+Once commands are properly replicated, each server’s state machine processes them in log order, and the outputs are returned to clients. 
+As a result, the servers appear to form a single, highly reliable state machine.
+
 ### 2PC
 
 Consensus is easy if there are no faults.
