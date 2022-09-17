@@ -36,7 +36,7 @@ In normal operation there is exactly one leader and all of the other servers are
 Followers are passive: they issue no requests on their own but simply respond to requests from leaders and candidates.
 The leader handles all client requests (if a client contacts a follower, the follower redirects it to the leader).
 The third state, candidate, is used to elect a new leader.
-Figure 4 shows the states and their transitions; the transitions are discussed below.
+Figure 1 shows the states and their transitions; the transitions are discussed below.
 
 <div style="text-align: center;">
 
@@ -54,7 +54,7 @@ A candidate that receives votes from a majority of the full cluster becomes the 
 Leaders typically operate until they fail.
 </p>
 
-Raft divides time into terms of arbitrary length, as shown in Figure 5.
+Raft divides time into terms of arbitrary length, as shown in Figure 2.
 Terms are numbered with consecutive integers.
 Each term begins with an election, in which one or more candidates attempt to become leader.
 If a candidate wins the election, then it serves as leader for the rest of the term.
@@ -68,7 +68,7 @@ Current terms are exchanged whenever servers communicate; if one server’s curr
 If a candidate or leader discovers that its term is out of date, it immediately reverts to follower state.
 If a server receives a request with a stale term number, it rejects the request.
 Raft servers communicate using remote procedure calls (RPCs), and the basic consensus algorithm requires only two types of RPCs.
-RequestVote RPCs are initiated by candidates during elections, and AppendEntries RPCs are initiated by leaders to replicate log entries and to provide a form of heartbeat (Section 5.3).
+RequestVote RPCs are initiated by candidates during elections, and AppendEntries RPCs are initiated by leaders to replicate log entries and to provide a form of heartbeat.
 Section 7 adds a third RPC for transferring snapshots between servers.
 Servers retry RPCs if they do not receive a response in a timely manner, and they issue RPCs in parallel for best performance.
 
@@ -291,7 +291,6 @@ Missing and extraneous entries in a log may span multiple terms.
 
 In Raft, the leader handles inconsistencies by forcing the followers’ logs to duplicate its own.
 This means that conflicting entries in follower logs will be overwritten with entries from the leader’s log.
-Section 5.4 will show that this is safe when coupled with one more restriction.
 
 To bring a follower’s log into consistency with its own, the leader must find the latest log entry where the two logs agree, delete any entries in the follower’s log after that point, and send the follower all of the leader’s entries after that point.
 All of these actions happen in response to the consistency check performed by AppendEntries RPCs.
@@ -310,9 +309,9 @@ In practice, we doubt this optimization is necessary, since failures happen infr
 
 With this mechanism, a leader does not need to take any special actions to restore log consistency when it comes to power.
 It just begins normal operation, and the logs automatically converge in response to failures of the AppendEntries consistency check.
-A leader never overwrites or deletes entries in its own log (the Leader Append-Only Property in Figure 3).
+A leader never overwrites or deletes entries in its own log.
 
-This log replication mechanism exhibits the desirable consensus properties described in Section 2: Raft can accept, replicate, and apply new log entries as long as a majority of the servers are up; in the normal case a new entry can be replicated with a single round of RPCs to a majority of the cluster; and a single slow follower will not impact performance.
+This log replication mechanism exhibits the desirable consensus properties: Raft can accept, replicate, and apply new log entries as long as a majority of the servers are up; in the normal case a new entry can be replicated with a single round of RPCs to a majority of the cluster; and a single slow follower will not impact performance.
 
 no-op log
 
@@ -351,7 +350,7 @@ If the logs end with the same term, then whichever log is longer is more up-to-d
 
 ### Committing entries from previous terms
 
-As described in Section 5.3, a leader knows that an entry from its current term is committed once that entry is stored on a majority of the servers.
+A leader knows that an entry from its current term is committed once that entry is stored on a majority of the servers.
 If a leader crashes before committing an entry, future leaders will attempt to finish replicating the entry.
 However, a leader cannot immediately conclude that an entry from a previous term is committed once it is stored on a majority of servers.
 Figure 8 illustrates a situation where an old log entry is stored on a majority of servers, yet can still be overwritten by a future leader.

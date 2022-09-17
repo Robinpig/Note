@@ -147,20 +147,15 @@ Network File System
 
 ## Consensus
 
-A distributed algorithm has two properties:
-
-- safety properties say that nothing bad will ever happen.
-  It is the generalization of partial correctness for sequential programs.
-  For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.
-- liveness properties say that something good will eventually happen.
-  It is the generalization of termination.
-  For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
-  
-
 [Consensus](/docs/CS/Distributed/Consensus.md) is a fundamental problem in fault-tolerant distributed systems.
 Consensus involves multiple servers agreeing on values. Once they reach a decision on a value, that decision is final.
 Typical consensus algorithms make progress when any majority of their servers is available; for example, a cluster of 5 servers can continue to operate even if 2 servers fail.
 If more servers fail, they stop making progress (but will never return an incorrect result).
+
+A distributed algorithm has two properties:                                                                                                                             
+- safety properties say that nothing bad will ever happen.                                      It is the generalization of partial correctness for sequential programs.                      For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.                                               
+- liveness properties say that something good will eventually happen.                           It is the generalization of termination.                                                      For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
+
 
 The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
 
