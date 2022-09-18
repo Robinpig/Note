@@ -211,7 +211,7 @@ fork子进程的速度变慢
 
 ## Links
 
-- [DataBases](/docs/CS/DB/DB.md)
+- [DataBases](/docs/CS/DB/DB.md?id=Redis)
 
 ## References
 

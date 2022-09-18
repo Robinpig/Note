@@ -24,28 +24,16 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 
 [DataBases](/docs/CS/DB/DB.md)
 
-### MySQL
-
-[MySQL Server](/docs/CS/DB/MySQL/MySQL.md), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
-
-### Redis
-
-[Redis](/docs/CS/DB/Redis/Redis.md) is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker.
-
-## MQ
-
-[MQ](/docs/CS/MQ/MQ.md)
-
-### Kafka
-
-[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
-
-### RocketMQ
 
 ## Distributed Systems
 
 A [distributed system](/docs/CS/Distributed/Distributed_Systems.md) is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
 This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
+
+
+## MQ
+
+[MQ](/docs/CS/MQ/MQ.md)
 
 ## C
 

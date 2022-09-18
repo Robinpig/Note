@@ -430,7 +430,7 @@ The accumulator uses a bounded amount of memory and append calls will block when
 
 ## Links
 
-- [MQ](/docs/CS/MQ/MQ.md)
+- [MQ](/docs/CS/MQ/MQ.md?id=Kafka)
 
 ## References
 

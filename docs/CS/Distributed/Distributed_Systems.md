@@ -36,13 +36,11 @@ The types of failures that can occur in a distributed system:
 
 Our goal is to design a distributed system with the characteristics listed above (faulttolerant, highly available, recoverable, etc.), which means we must design for failure.
 
-
 ### The 8 Fallacies of Distributed Computing
 
 Everyone, when they first build a distributed system, makes the following eight assumptions.
 
 [The 8 Fallacies of Distributed Computing](https://arnon.me/wp-content/uploads/Files/fallacies.pdf) are as follows:
-
 
 1. **The network is reliable.**
    Well, we could **automatically retry**. Queuing systems are very good at this. But this change will have a big impact on the design of your system. You are moving from a request/response model to fire and forget.
@@ -54,7 +52,7 @@ Everyone, when they first build a distributed system, makes the following eight 
    You should transfer less data to minimize bandwidth usage. You need to balance these two forces and find the right amount of data to send over the wire.
    So transfer only the data that you might need.
 4. **The network is secure.**
-   here are a lot of components and links in a distributed system and each one of them is a possible target for malicious users. 
+   here are a lot of components and links in a distributed system and each one of them is a possible target for malicious users.
    The business needs to balance the risk and probability of an attack with the cost of implementing prevention mechanisms.
 5. **Topology doesn't change.**
    Nowadays, with cloud and containers on the rise, it’s hard to ignore this fallacy. The first thing you need to do is to abstract the physical structure of the network.
@@ -65,9 +63,6 @@ Everyone, when they first build a distributed system, makes the following eight 
    You should be mindful of the transport cost and how much serialization and deserialization your app is doing. This doesn’t mean that you should optimize, unless there is a need for it.
 8. **The network is homogeneous.**
    You need to ensure that the system’s components can talk with each other. Using proprietary protocols will damage your app’s interoperability.
-
-
-
 
 ### Two Generals’ Problem
 
@@ -152,12 +147,15 @@ Consensus involves multiple servers agreeing on values. Once they reach a decisi
 Typical consensus algorithms make progress when any majority of their servers is available; for example, a cluster of 5 servers can continue to operate even if 2 servers fail.
 If more servers fail, they stop making progress (but will never return an incorrect result).
 
-A distributed algorithm has two properties:                                                                                                                             
-- safety properties say that nothing bad will ever happen.                                      It is the generalization of partial correctness for sequential programs.                      For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.                                               
-- liveness properties say that something good will eventually happen.                           It is the generalization of termination.                                                      For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
+A distributed algorithm has two properties:
 
+- safety properties say that nothing bad will ever happen.
+  It is the generalization of partial correctness for sequential programs.
+  For example, the property of never returning an inconsistent value is a safety property, as is never electing two leaders at the same time.
+- liveness properties say that something good will eventually happen.
+  It is the generalization of termination.
+  For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
 
-The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
 
 ## Failure
 
@@ -228,17 +226,17 @@ This approach has several potential downsides: its precision relies on the caref
 #### Timeout-Free Failure Detector
 
 Some algorithms avoid relying on timeouts for detecting failures.
-For example, Heartbeat, a timeout-free failure detector [AGUILERA97], is an algorithm that only counts heartbeats and allows the application to detect process failures based on the data in the heartbeat counter vectors.
+For example, Heartbeat, a timeout-free failure detector, is an algorithm that only counts heartbeats and allows the application to detect process failures based on the data in the heartbeat counter vectors.
 Since this algorithm is timeout-free, it operates under asynchronous system assumptions.”
 
 #### Outsourced Heartbeats
 
-An alternative approach, used by the Scalable Weakly Consistent Infection-style Process Group Membership Protocol (SWIM) [GUPTA01] is to use outsourced heartbeats to improve reliability using information about the process liveness from the perspective of its neighbors.
+An alternative approach, used by the Scalable Weakly Consistent Infection-style Process Group Membership Protocol (SWIM) is to use outsourced heartbeats to improve reliability using information about the process liveness from the perspective of its neighbors.
 This approach does not require processes to be aware of all other processes in the network, only a subset of connected peers.”
 
 ### Phi-Accural Failure Detector
 
-Instead of treating node failure as a binary problem, where the process can be only in two states: up or down, a phi-accrual (φ-accrual) failure detector [HAYASHIBARA04] has a continuous scale, capturing the probability of the monitored process’s crash.
+Instead of treating node failure as a binary problem, where the process can be only in two states: up or down, a phi-accrual (φ-accrual) failure detector has a continuous scale, capturing the probability of the monitored process’s crash.
 It works by maintaining a sliding window, collecting arrival times of the most recent heartbeats from the peer processes.
 This information is used to approximate arrival time of the next heartbeat, compare this approximation with the actual arrival time, and compute the suspicion level φ: how certain the failure detector is about the failure, given the current network conditions.
 
@@ -257,7 +255,7 @@ From the architecture perspective, a phi-accrual failure detector can be viewed 
 
 ### Gossip and Failure Detection
 
-Another approach that avoids relying on a single-node view to make a decision is a gossip-style failure detection service [VANRENESSE98], which uses gossip (see “Gossip Dissemination”) to collect and distribute states of neighboring processes.
+Another approach that avoids relying on a single-node view to make a decision is a gossip-style failure detection service, which uses gossip (see “Gossip Dissemination”) to collect and distribute states of neighboring processes.
 
 Each member maintains a list of other members, their heartbeat counters, and timestamps, specifying when the heartbeat counter was incremented for the last time.
 Periodically, each member increments its heartbeat counter and distributes its list to a random neighbor.
@@ -330,7 +328,7 @@ However, these algorithms use their own algorithm-specific means for leader elec
 ### Bully Algorithm
 
 One of the leader election algorithms, known as the bully algorithm, uses process ranks to identify the new leader.
-Each process gets a unique rank assigned to it. During the election, the process with the highest rank becomes a leader [MOLINA82].
+Each process gets a unique rank assigned to it. During the election, the process with the highest rank becomes a leader.
 
 This algorithm is known for its simplicity. The algorithm is named bully because the highest-ranked node “bullies” other nodes into accepting it.
 It is also known as monarchial leader election: the highest-ranked sibling becomes a monarch after the previous one ceases to exist.
@@ -344,7 +342,7 @@ This problem can be solved by distributing host quality metrics and taking them 
 
 ### Next-In-Line Failover
 
-There are many versions of the bully algorithm that improve its various properties. For example, we can use multiple next-in-line alternative processes as a failover to shorten reelections [GHOLIPOUR09].
+There are many versions of the bully algorithm that improve its various properties. For example, we can use multiple next-in-line alternative processes as a failover to shorten reelections.
 
 Each elected leader provides a list of failover nodes.
 When one of the processes detects a leader failure, it starts a new election round by sending a message to the highest-ranked alternative from the list provided by the failed leader.
@@ -354,7 +352,7 @@ If the process that has detected the leader failure is itself the highest ranked
 
 ### Candidate/Ordinary Optimization
 
-Another algorithm attempts to lower requirements on the number of messages by splitting the nodes into two subsets, candidate and ordinary, where only one of the candidate nodes can eventually become a leader [MURSHED12].
+Another algorithm attempts to lower requirements on the number of messages by splitting the nodes into two subsets, candidate and ordinary, where only one of the candidate nodes can eventually become a leader.
 
 The ordinary process initiates election by contacting candidate nodes, collecting responses from them, picking the highest-ranked alive candidate as a new leader, and then notifying the rest of the nodes about the election results.
 
@@ -412,8 +410,6 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [Chain Replication in Theory and in Practice](http://diyhpl.us/~bryan/papers2/distributed/distributed-systems/chain-replication-in-theory-and-in-practice.2010.pdf)
 
-
-
 ### snapshot
 
 A distributed system consists of a finite set of processes and a finite set of channels.
@@ -424,19 +420,14 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [Google Cluster](/docs/CS/Distributed/Google.md)
 
-
-
 [Dynamo](/docs/CS/Distributed/Dynamo.md)
 
 [Spark](/docs/CS/Distributed/Spark.md)
-
 
 [F1](https://courses.cs.washington.edu/courses/cse550/21au/papers/CSE550.F1.pdf)
 
 [MillWheel: Fault-Tolerant Stream Processing at Internet Scale]()
 
-
-[Dapper]()
 
 [Dryad]
 
@@ -445,7 +436,6 @@ A distributed system consists of a finite set of processes and a finite set of c
 [Ceph]
 
 [RAMCloud]
-
 
 [HyperDex: A Distributed, Searchable Key-Value Store](https://www.cs.cornell.edu/people/egs/papers/hyperdex-sigcomm.pdf)
 

@@ -318,7 +318,7 @@ kafka选举原理：就是利用zk临时节点，断开即删除，
 
 - 客户端发送一条消息的时候，Kafka并不会立即发送出去，先攒一波再一起处理，Kafka 不太适合在线业务场景
 
-## 自己设计一个Mq需要考虑哪些东西？
+自己设计一个Mq需要考虑哪些东西？
 
 - 优先级队列，延迟队列，死性队列，重试队列
 - 消息回踪，消息丢失
@@ -326,6 +326,16 @@ kafka选举原理：就是利用zk临时节点，断开即删除，
 - 消费模式
 - 消费关系处理
 - 可以参考Pulsar，存储和计算分离的设计
+
+## MQs
+
+### Kafka
+
+[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
+
+### RocketMQ
+
+[RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 
 ## Links
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)

@@ -30,6 +30,8 @@ Having a leader simplifies the management of the replicated log.
 For example, the leader can decide where to place new entries in the log without consulting other servers, and data flows in a simple fashion from the leader to other servers.
 A leader can fail or become disconnected from the other servers, in which case a new leader is elected.
 
+### States
+
 A Raft cluster contains several servers; five is a typical number, which allows the system to tolerate two failures.
 At any given time each server is in one of three states: leader, follower, or candidate.
 In normal operation there is exactly one leader and all of the other servers are followers.
@@ -53,6 +55,35 @@ If a follower receives no communication, it becomes a candidate and initiates an
 A candidate that receives votes from a majority of the full cluster becomes the new leader.
 Leaders typically operate until they fail.
 </p>
+
+Persistent state on all servers:
+(Updated on stable storage before responding to RPCs)
+
+
+| Arguments   | Descriptions                                                                                                              |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| currentTerm | latest term server has seen (initialized to 0 on first boot, increases monotonically)                                     |
+| votedFor    | candidateId that received vote in current term (or null if none)                                                          |
+| log[]       | log entries; each entry contains command for state machine, and term when entry was received by leader (first index is 1) |
+
+Volatile state on all servers:
+
+
+| Arguments   | Descriptions                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------- |
+| commitIndex | index of highest log entry known to be committed (initialized to 0, increases monotonically)    |
+| lastApplied | index of highest log entry applied to state machine (initialized to 0, increases monotonically) |
+
+Volatile state on leaders:
+(Reinitialized after election)
+
+
+| Arguments    | Descriptions                                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| nextIndex[]  | for each server, index of the next log entry to send to that server (initialized to leader last log index + 1)          |
+| matchIndex[] | for each server, index of highest log entry known to be replicated on server(initialized to 0, increases monotonically) |
+
+### Terms
 
 Raft divides time into terms of arbitrary length, as shown in Figure 2.
 Terms are numbered with consecutive integers.
@@ -85,35 +116,6 @@ After a successful election, a single leader manages the cluster until the end o
 Some elections fail, in which case the term ends without choosing a leader.
 The transitions between terms may be observed at different times on different servers.
 </p>
-
-### State
-
-Persistent state on all servers:
-(Updated on stable storage before responding to RPCs)
-
-
-| Arguments   | Descriptions                                                                                                              |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| currentTerm | latest term server has seen (initialized to 0 on first boot, increases monotonically)                                     |
-| votedFor    | candidateId that received vote in current term (or null if none)                                                          |
-| log[]       | log entries; each entry contains command for state machine, and term when entry was received by leader (first index is 1) |
-
-Volatile state on all servers:
-
-
-| Arguments   | Descriptions                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------------- |
-| commitIndex | index of highest log entry known to be committed (initialized to 0, increases monotonically)    |
-| lastApplied | index of highest log entry applied to state machine (initialized to 0, increases monotonically) |
-
-Volatile state on leaders:
-(Reinitialized after election)
-
-
-| Arguments    | Descriptions                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| nextIndex[]  | for each server, index of the next log entry to send to that server (initialized to leader last log index + 1)          |
-| matchIndex[] | for each server, index of highest log entry known to be replicated on server(initialized to 0, increases monotonically) |
 
 ### AppendEntries RPC
 
@@ -314,10 +316,6 @@ A leader never overwrites or deletes entries in its own log.
 This log replication mechanism exhibits the desirable consensus properties: Raft can accept, replicate, and apply new log entries as long as a majority of the servers are up; in the normal case a new entry can be replicated with a single round of RPCs to a majority of the cluster; and a single slow follower will not impact performance.
 
 no-op log
-
-[On the Parallels between Paxos and Raft, and how to Port Optimizations](https://ipads.se.sjtu.edu.cn/_media/publications/wang_podc19.pdf)
-
-[Paxos vs Raft: Have we reached consensus on distributed consensus?](https://www.ics.uci.edu/~cs237/reading/Paxos_vs_Raft.pdf)
 
 ## Safety
 
@@ -594,3 +592,5 @@ Alternatively, the leader could rely on the heartbeat mechanism to provide a for
 4. [CONSENSUS: BRIDGING THEORY AND PRACTICE](https://web.stanford.edu/~ouster/cgi-bin/papers/OngaroPhD.pdf)
 5. [Implementing Linearizability at Large Scale and Low Latency](https://web.stanford.edu/~ouster/cgi-bin/papers/rifl.pdf)
 6. [Coracle: Evaluating Consensus at the Internet Edge](https://conferences.sigcomm.org/sigcomm/2015/pdf/papers/p85.pdf)
+7. [Paxos vs Raft: Have we reached consensus on distributed consensus?](https://arxiv.org/pdf/2004.05074.pdf)
+8. [On the Parallels between Paxos and Raft, and how to Port Optimizations](https://ipads.se.sjtu.edu.cn/_media/publications/wang_podc19.pdf)

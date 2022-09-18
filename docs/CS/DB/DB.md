@@ -9,7 +9,15 @@ Database management systems use a client/server model, where database system ins
 Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language.
 The transport subsystem is also responsible for communication with other nodes in the database cluster.
 
+<div style="text-align: center;">
+
 ![Architecture of a database management system](./img/DB.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Architecture of a database management system
+</p>
 
 Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it.
 Later, access control checks are performed, as they can be done fully only after the query is interpreted.
@@ -169,7 +177,22 @@ Atomic Commitment Protocl(ACP)
 
 ## DBs
 
-[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)
+### MySQL
+
+[MySQL Server](/docs/CS/DB/MySQL/MySQL.md), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
+
+### Redis
+
+[Redis](/docs/CS/DB/Redis/Redis.md) is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker.
+
+### LevelDB
+
+[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.
+LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
+LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
+
+## Links
+
 
 ## References
 

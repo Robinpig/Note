@@ -26,7 +26,7 @@ PullMessageProcessor of broker
 
 ## Links
 
-- [MQ](/docs/CS/MQ/MQ.md)
+- [MQ](/docs/CS/MQ/MQ.md?id=RocketMQ)
 
 
 
