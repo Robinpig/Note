@@ -7,7 +7,7 @@ Resources sharing as a main motivation for constructing distributed systems.
 Resources may be managed by servers and accessed by clients or they may be encapsulated as objects and accessed by other client objects.
 
 The challenges arising from the construction of distributed systems are the heterogeneity of their components, openness (which allows components to be added or replaced),
-security, scalability – the ability to work well when the load or the number of users increases – failure handling, concurrency of components, transparency and providing quality of service.
+security, scalability(the ability to work well when the load or the number of users increases), failure handling, concurrency of components, transparency and providing quality of service.
 
 To be truly reliable, a distributed system must have the following characteristics:
 
