@@ -358,13 +358,13 @@ In any leader-based consensus algorithm, the leader must eventually store all of
 In some consensus algorithms, such as Viewstamped Replication, a leader can be elected even if it doesn’t initially contain all of the committed entries.
 These algorithms contain additional mechanisms to identify the missing entries and transmit them to the new leader, either during the election process or shortly afterwards.
 Unfortunately, this results in considerable additional mechanism and complexity.
-Raft uses a simpler approach where it guarantees that all the committed entries from previous terms are present on each new leader from the moment of its election, without the need to transfer those entries to the leader.
-This means that log entries only flow in one direction, from leaders to followers, and leaders never overwrite existing entries in their logs.
+**Raft uses a simpler approach where it guarantees that all the committed entries from previous terms are present on each new leader from the moment of its election, without the need to transfer those entries to the leader.**
+**This means that log entries only flow in one direction, from leaders to followers, and leaders never overwrite existing entries in their logs.**
 
 Raft uses the voting process to prevent a candidate from winning an election unless its log contains all committed entries.
 A candidate must contact a majority of the cluster in order to be elected, which means that every committed entry must be present in at least one of those servers.
 If the candidate’s log is at least as up-to-date as any other log in that majority (where “up-to-date” is defined precisely below), then it will hold all the committed entries.
-The RequestVote RPC implements this restriction: the RPC includes information about the candidate’s log, and the voter denies its vote if its own log is more up-to-date than that of the candidate.
+**The RequestVote RPC implements this restriction: the RPC includes information about the candidate’s log, and the voter denies its vote if its own log is more up-to-date than that of the candidate.**
 
 Raft determines which of two logs is more up-to-date by comparing the index and term of the last entries in the logs.
 If the logs have last entries with different terms, then the log with the later term is more up-to-date.
@@ -402,7 +402,7 @@ There are some situations where a leader could safely conclude that an older log
 Raft incurs this extra complexity in the commitment rules because log entries retain their original term numbers when a leader replicates entries from previous terms.
 In other consensus algorithms, if a new leader rereplicates entries from prior “terms,” it must do so with its new “term number.”
 Raft’s approach makes it easier to reason about log entries, since they maintain the same term number over time and across logs.
-In addition, new leaders in Raft send fewer log entries from previous terms than in other algorithms (other algorithms must send redundant log entries to renumber them before they can be committed).
+In addition, new leaders in Raft send fewer log entries from previous terms than in other algorithms (**other algorithms must send redundant log entries to renumber them before they can be committed**).
 
 ### Safety argument
 
@@ -441,6 +441,7 @@ Until this point we have focused on leader failures.
 Follower and candidate crashes are much simpler to handle than leader crashes, and they are both handled in the same way.
 If a follower or candidate crashes, then future RequestVote and AppendEntries RPCs sent to it will fail.
 Raft handles these failures by retrying indefinitely; if the crashed server restarts, then the RPC will complete successfully.
+
 If a server crashes after completing an RPC but before responding, then it will receive the same RPC again after it restarts. Raft RPCs are idempotent, so this causes no harm.
 For example, if a follower receives an AppendEntries request that includes log entries already present in its log, it ignores those entries in the new request.
 
