@@ -339,8 +339,6 @@ It just begins normal operation, and the logs automatically converge in response
 A leader never overwrites or deletes entries in its own log.
 This log replication mechanism exhibits the desirable consensus properties: Raft can accept, replicate, and apply new log entries as long as a majority of the servers are up; in the normal case a new entry can be replicated with a single round of RPCs to a majority of the cluster; and a single slow follower will not impact performance.
 
-no-op log
-
 ## Safety
 
 The previous sections described how Raft elects leaders and replicates log entries.
@@ -408,7 +406,8 @@ In addition, new leaders in Raft send fewer log entries from previous terms than
 
 Given the complete Raft algorithm, we can now argue more precisely that the Leader Completeness Property holds (this argument is based on the safety proof).
 We assume that the Leader Completeness Property does not hold, then we prove a contradiction.
-Suppose the leader for term T (leaderT) commits a log entry from its term, but that log entry is not stored by the leader of some future term. Consider the smallest term U
+Suppose the leader for term T (leaderT) commits a log entry from its term, but that log entry is not stored by the leader of some future term.
+Consider the smallest term U
 
 > T whose leader (leaderU) does not store the entry.
 
@@ -427,7 +426,17 @@ Suppose the leader for term T (leaderT) commits a log entry from its term, but t
 8. This completes the contradiction. Thus, the leaders of all terms greater than T must contain all entries from term T that are committed in term T.
 9. The Log Matching Property guarantees that future leaders will also contain entries that are committed indirectly, such as index 2 in Figure 5(d).
 
-Given the Leader Completeness Property, we can prove the State Machine Safety Property from Figure 3, which states that if a server has applied a log entry at a given index to its state machine, no other server will ever apply a different log entry for the same index.
+<div style="text-align: center;">
+
+![Fig.6. Safety Argument](./img/Raft-Safety-Argument.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.6. If S1 (leader for term T) commits a new log entry from its term, and S5 is elected leader for a later term U, then there must be at least one server (S3) that accepted the log entry and also voted for S5.
+</p>
+
+Given the Leader Completeness Property, we can prove the State Machine Safety Property which states that if a server has applied a log entry at a given index to its state machine, no other server will ever apply a different log entry for the same index.
 At the time a server applies a log entry to its state machine, its log must be identical to the leader’s log up through that entry and the entry must be committed.
 Now consider the lowest term in which any server applies a given log index; the Log Completeness Property guarantees that the leaders for all higher terms will store that same log entry, so servers that apply the index in later terms will apply the same value.
 Thus, the State Machine Safety Property holds.
@@ -464,12 +473,13 @@ In addition, if there are any manual steps, they risk operator error.
 In order to avoid these issues, we decided to automate configuration changes and incorporate them into the Raft consensus algorithm.
 For the configuration change mechanism to be safe, there must be no point during the transition where it is possible for two leaders to be elected for the same term.
 Unfortunately, any approach where servers switch directly from the old configuration to the new configuration is unsafe.
-It isn’t possible to atomically switch all of the servers at once, so the cluster can potentially split into two independent majorities during the transition (see Figure 10).
+It isn’t possible to atomically switch all of the servers at once, so the cluster can potentially split into two independent majorities during the transition (see Figure 7).
 
 In order to ensure safety, configuration changes must use a two-phase approach.
 There are a variety of ways to implement the two phases.
 For example, some systems use the first phase to disable the old configuration so it cannot process client requests; then the second phase enables the new configuration.
 In Raft the cluster first switches to a transitional configuration we call joint consensus; once the joint consensus has been committed, the system then transitions to the new configuration.
+<br>
 The joint consensus combines both the old and new configurations:
 
 - Log entries are replicated to all servers in both configurations.
@@ -489,7 +499,7 @@ Once $C_{old}$, new has been committed, neither$C_{old}$ nor$C_{new}$ can make d
 It is now safe for the leader to create a log entry describing $C_{new}$ and replicate it to the cluster.
 Again, this configuration will take effect on each server as soon as it is seen.
 When the new configuration has been committed under the rules of $C_{new}$, the old configuration is irrelevant and servers not in the new configuration can be shut down.
-As shown in Figure 11, there is no time when $C_{old}$ and $C_{new}$ can both make unilateral decisions; this guarantees safety.
+As shown in Figure 8, there is no time when $C_{old}$ and $C_{new}$ can both make unilateral decisions; this guarantees safety.
 
 There are three more issues to address for reconfiguration.
 The first issue is that new servers may not initially store any log entries.
@@ -516,10 +526,11 @@ However, it helps avoid disruptions from removed servers: if a leader is able to
 Raft’s log grows during normal operation to incorporate more client requests, but in a practical system, it cannot grow without bound.
 As the log grows longer, it occupies more space and takes more time to replay.
 This will eventually cause availability problems without some mechanism to discard obsolete information that has accumulated in the log.
+
 Snapshotting is the simplest approach to compaction.
 In snapshotting, the entire current system state is written to a snapshot on stable storage, then the entire log up to that point is discarded.
 Snapshotting is used in Chubby and ZooKeeper, and the remainder of this section describes snapshotting in Raft.
-Incremental approaches to compaction, such as log cleaning and log-structured merge trees, are also possible.
+Incremental approaches to compaction, such as log cleaning and [log-structured merge trees](/docs/CS/Algorithms/LSM.md), are also possible.
 These operate on a fraction of the data at once, so they spread the load of compaction more evenly over time.
 They first select a region of data that has accumulated many deleted and overwritten objects, then they rewrite the live objects from that region more compactly and free the region.
 This requires significant additional mechanism and complexity compared to snapshotting, which simplifies the problem by always operating on the entire data set.
@@ -535,11 +546,11 @@ Once a server completes writing a snapshot, it may delete all log entries up thr
 Although servers normally take snapshots independently, the leader must occasionally send snapshots to followers that lag behind.
 This happens when the leader has already discarded the next log entry that it needs to send to a follower.
 Fortunately, this situation is unlikely in normal operation: a follower that has kept up with the leader would already have this entry.
-However, an exceptionally slow follower or a new server joining the cluster(Section 6) would not.
+However, an exceptionally slow follower or a new server joining the cluster would not.
 The way to bring such a follower up-to-date is for the leader to send it a snapshot over the network.
 
-The leader uses a new RPC called InstallSnapshot to send snapshots to followers that are too far behind; see
-Figure 13. When a follower receives a snapshot with this RPC, it must decide what to do with its existing log entries.
+The leader uses a new RPC called InstallSnapshot to send snapshots to followers that are too far behind.
+When a follower receives a snapshot with this RPC, it must decide what to do with its existing log entries.
 Usually the snapshot will contain new information not already in the recipient’s log.
 In this case, the follower discards its entire log; it is all superseded by the snapshot and may possibly have uncommitted entries that conflict with the snapshot.
 If instead the follower receives a snapshot that describes a prefix of its log (due to retransmission or by mistake), then log entries covered by the snapshot are deleted but entries following the snapshot are still valid and must be retained.
@@ -548,20 +559,25 @@ This snapshotting approach departs from Raft’s strong leader principle, since 
 However, we think this departure is justified.
 While having a leader helps avoid conflicting decisions in reaching consensus, consensus has already been reached when snapshotting, so no decisions conflict.
 Data still only flows from leaders to followers, just followers can now reorganize their data.
-We considered an alternative leader-based approach in which only the leader would create a snapshot, then it would send this snapshot to each of its followers. However, this has two disadvantages.
-First, sending the snapshot to each follower would waste network bandwidth and slow the snapshotting process.
-Each follower already has the information needed to produce its own snapshots, and it is typically much cheaper for a server to produce a snapshot from its local state than it is to send and receive one over the network.
-Second, the leader’s implementation would be more complex.
-For example, the leader would need to send snapshots to followers in parallel with replicating new log entries to them, so as not to block new client requests.
+<br>
+We considered an alternative leader-based approach in which only the leader would create a snapshot, then it would send this snapshot to each of its followers.
+However, this has two disadvantages.
 
-There are two more issues that impact snapshotting performance. First, servers must decide when to snapshot.
-If a server snapshots too often, it wastes disk bandwidth and energy; if it snapshots too infrequently, it risks exhausting its storage capacity, and it increases the time required to replay the log during restarts.
-One simple strategy is to take a snapshot when the log reaches a fixed size in bytes.
-If this size is set to be significantly larger than the expected size of a snapshot, then the disk bandwidth overhead for snapshotting will be small.
-The second performance issue is that writing a snapshot can take a significant amount of time, and we do not want this to delay normal operations.
-The solution is to use copy-on-write techniques so that new updates can be accepted without impacting the snapshot being written.
-For example, state machines built with functional data structures naturally support this.
-Alternatively, the operating system’s copy-on-write support (e.g., fork on Linux) can be used to create an in-memory snapshot of the entire state machine (our implementation uses this approach).
+- First, sending the snapshot to each follower would waste network bandwidth and slow the snapshotting process.
+  Each follower already has the information needed to produce its own snapshots, and it is typically much cheaper for a server to produce a snapshot from its local state than it is to send and receive one over the network.
+- Second, the leader’s implementation would be more complex.
+  For example, the leader would need to send snapshots to followers in parallel with replicating new log entries to them, so as not to block new client requests.
+
+There are two more issues that impact snapshotting performance.
+
+- First, servers must decide when to snapshot.
+  If a server snapshots too often, it wastes disk bandwidth and energy; if it snapshots too infrequently, it risks exhausting its storage capacity, and it increases the time required to replay the log during restarts.
+  One simple strategy is to take a snapshot when the log reaches a fixed size in bytes.
+  If this size is set to be significantly larger than the expected size of a snapshot, then the disk bandwidth overhead for snapshotting will be small.
+- The second performance issue is that writing a snapshot can take a significant amount of time, and we do not want this to delay normal operations.
+  The solution is to use copy-on-write techniques so that new updates can be accepted without impacting the snapshot being written.
+  For example, state machines built with functional data structures naturally support this.
+  Alternatively, the operating system’s copy-on-write support (e.g., fork on Linux) can be used to create an in-memory snapshot of the entire state machine.
 
 ### InstallSnapshot RPC
 
@@ -601,6 +617,7 @@ Receiver implementation:
 
 This section describes how clients interact with Raft, including how clients find the cluster leader and how Raft supports linearizable semantics.
 These issues apply to all consensus-based systems, and Raft’s solutions are similar to other systems.
+
 Clients of Raft send all of their requests to the leader.
 When a client first starts up, it connects to a randomlychosen server.
 If the client’s first choice is not the leader, that server will reject the client’s request and supply information about the most recent leader it has heard from (AppendEntries requests include the network address of the leader).
@@ -614,13 +631,14 @@ If it receives a command whose serial number has already been executed, it respo
 Read-only operations can be handled without writing anything into the log.
 However, with no additional measures, this would run the risk of returning stale data, since the leader responding to the request might have been superseded by a newer leader of which it is unaware.
 Linearizable reads must not return stale data, and Raft needs two extra precautions to guarantee this without using the log.
-First, a leader must have the latest information on which entries are committed.
-The Leader Completeness Property guarantees that a leader has all committed entries, but at the start of its term, it may not know which those are.
-To find out, it needs to commit an entry from its term.
-Raft handles this by having each leader commit a blank no-op entry into the log at the start of its term.
-Second, a leader must check whether it has been deposed before processing a read-only request (its information may be stale if a more recent leader has been elected).
-Raft handles this by having the leader exchange heartbeat messages with a majority of the cluster before responding to read-only requests.
-Alternatively, the leader could rely on the heartbeat mechanism to provide a form of lease, but this would rely on timing for safety (it assumes bounded clock skew).
+
+- First, a leader must have the latest information on which entries are committed.
+  The Leader Completeness Property guarantees that a leader has all committed entries, but at the start of its term, it may not know which those are.
+  To find out, it needs to commit an entry from its term.
+  **Raft handles this by having each leader commit a blank no-op entry into the log at the start of its term.**
+- Second, a leader must check whether it has been deposed before processing a read-only request (its information may be stale if a more recent leader has been elected).
+  Raft handles this by having the leader exchange heartbeat messages with a majority of the cluster before responding to read-only requests.
+  Alternatively, the leader could rely on the heartbeat mechanism to provide a form of lease, but this would rely on timing for safety (it assumes bounded clock skew).
 
 ## Links
 
