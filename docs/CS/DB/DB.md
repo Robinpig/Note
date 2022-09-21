@@ -228,6 +228,21 @@ The schema-on-read approach is advantageous if the items in the collection don�
 
 In situations like these, a schema may hurt more than it helps, and schemaless documents can be a much more natural data model. But in cases where all records are expected to have the same structure, schemas are a useful mechanism for documenting and enforcing that structure.
 
+A document is usually stored as a single continuous string, encoded as JSON, XML, or a binary variant thereof (such as MongoDB’s BSON). 
+If your application often needs to access the entire document (for example, to render it on a web page), there is a performance advantage to this storage locality. 
+If data is split across multiple tables, multiple index lookups are required to retrieve it all, which may require more disk seeks and take more time.
+
+The locality advantage only applies if you need large parts of the document at the same time.
+The database typically needs to load the entire document, even if you access only a small portion of it, which can be wasteful on large documents. 
+On updates to a document, the entire document usually needs to be rewritten—only modifications that don’t change the encoded size of a document can easily be performed in place.
+For these reasons, it is generally recommended that you keep documents fairly small and avoid writes that increase the size of a document.
+These performance limitations significantly reduce the set of situations in which document databases are useful.
+
+New nonrelational “NoSQL” datastores have diverged in two main directions:
+1. Document databases target use cases where data comes in self-contained documents and relationships between one document and another are rare.
+2. Graph databases go in the opposite direction, targeting use cases where anything is potentially related to everything.
+   
+
 ### MySQL
 
 [MySQL Server](/docs/CS/DB/MySQL/MySQL.md), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
@@ -241,6 +256,12 @@ In situations like these, a schema may hurt more than it helps, and schemaless d
 [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.
 LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
 LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
+
+
+## Indexes
+
+
+
 
 ## Links
 
