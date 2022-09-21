@@ -418,7 +418,7 @@ Before Java 5.0, the only mechanisms for coordinating access to shared data were
 Java 5.0 adds another option: ***ReentrantLock***.
 ReentrantLock is not a replacement for intrinsic locking, but rather an alternative with advanced features for when intrinsic locking proves too limited.
 
-![locks](../images/juc-locks.png)
+![locks](../img/juc-locks.png)
 
 The [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md) interface defines a number of abstract locking operations.
 Unlike intrinsic locking, Lock offers a choice of unconditional, polled, timed, and interruptible lock acquisition,

@@ -11,7 +11,7 @@
 
 ```
 
-![java.lang.ref](../images/Ref.png)
+![java.lang.ref](../img/Ref.png)
 
 ### Abstract Reference
 

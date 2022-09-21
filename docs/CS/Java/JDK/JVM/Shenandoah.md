@@ -23,7 +23,7 @@ The trade off is that Shenandoah requires more space than other algorithms.
 The object layout for Shenandoah adds an additional word per object. 
 This word is located directly preceding the object and is only allocated when using the Shenandoah collector.
 
-![Shenandoah Object layout](../images/Shenandoah%20Object%20layout.png)
+![Shenandoah Object layout](../img/Shenandoah%20Object%20layout.png)
 
 ### Heap Layout
 
@@ -43,7 +43,7 @@ We’ve developed an interface for GC heuristics which track allocation and recl
 We have several custom policies to decide when to start a concurrent mark and which regions to include in a collection set. 
 Our default heuristic which was used for our measurements chooses only regions with 60 percent or more garbage and starts a concurrent marking cycle when 75 percent of regions have been allocated.
 
-![Shenandoah Heap layout](../images/Shenandoah%20Heap%20layout.png)
+![Shenandoah Heap layout](../img/Shenandoah%20Heap%20layout.png)
 
 
 

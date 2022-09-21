@@ -4,7 +4,7 @@
 
 ### List Hierarchy
 
-![](../images/List.png)
+![](../img/List.png)
 
 
 

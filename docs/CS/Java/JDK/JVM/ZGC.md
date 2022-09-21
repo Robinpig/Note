@@ -26,7 +26,7 @@ the colored-pointers scheme offers some very attractive properties. In particula
   
 From [ZGC The Next Generation Low-Latency Garbage Collector](http://cr.openjdk.java.net/~pliden/slides/ZGC-OracleDevLive-2020.pdf)
 
-![](../images/ZGC-Concurrent.png)
+![](../img/ZGC-Concurrent.png)
 
 Regions
 - Small 2MB for < 256KB
@@ -49,7 +49,7 @@ Colored Pointer/Tag Pointer/Version Pointer
 - Core design concept in ZGC
 - Metadata stored in unused bits in 64-bit pointers
 
-![](../images/ZGC-Colored-Pointer.png)
+![](../img/ZGC-Colored-Pointer.png)
 ### Load Barrier
 
 A small piece of code injected by the JIT in strategic places

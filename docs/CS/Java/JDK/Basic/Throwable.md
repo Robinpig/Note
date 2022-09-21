@@ -2,7 +2,7 @@
 
 ### Throwable Hierarchy
 
-![Throwable](../images/Throwable.png)
+![Throwable](../img/Throwable.png)
 
 
 

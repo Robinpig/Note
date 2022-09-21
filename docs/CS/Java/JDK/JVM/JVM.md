@@ -1165,7 +1165,7 @@ void* AllocateHeap(size_t size) {
 
 ### CollectedHeap
 
-![](../images/CollectedHeap.svg)
+![](../img/CollectedHeap.svg)
 
 ```cpp
 // share/gc/shared/collectedHeap.hpp
@@ -1690,7 +1690,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 
 
 
-![](../images/CollectorPolicy.svg)
+![](../img/CollectorPolicy.svg)
 
 
 ```cpp

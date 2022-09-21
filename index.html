@@ -26,6 +26,7 @@
 <body>
 <div id="app"></div>
 <script>
+  // var num = 0;
  // mermaid.initialize({ startOnLoad: true });
 
   window.$docsify = {
@@ -53,6 +54,13 @@
                     })+'</span>'
             );
           }
+          //
+          // if (lang === "mermaid") {
+          //   return (
+          //           '<div class="mermaid">' + mermaid.render('mermaid-svg-' + num++, code) + "</div>"
+          //   );
+          // }
+
           return this.origin.code.apply(this, arguments);
         }
       }

@@ -9,7 +9,15 @@ Database management systems use a client/server model, where database system ins
 Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language.
 The transport subsystem is also responsible for communication with other nodes in the database cluster.
 
+<div style="text-align: center;">
+
 ![Architecture of a database management system](./img/DB.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Architecture of a database management system
+</p>
 
 Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it.
 Later, access control checks are performed, as they can be done fully only after the query is interpreted.
@@ -169,7 +177,72 @@ Atomic Commitment Protocl(ACP)
 
 ## DBs
 
-[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)
+Document databases reverted back to the hierarchical model in one aspect: storing nested records (one-to-many relationships) within their parent record rather than in a separate table.
+
+When it comes to representing many-to-one and many-to-many relationships, relational and document databases are not fundamentally different:
+in both cases, the related item is referenced by a unique identifier, which is called a foreign key in the relational model and a document reference in the document model.
+That identifier is resolved at read time by using a join or follow-up queries.
+
+The main arguments in favor of the document data model are schema flexibility, better performance due to locality, and that for some applications it is closer to the data structures used by the application.
+The relational model counters by providing better support for joins, and many-to-one and many-to-many relationships.
+
+If the data in your application has a document-like structure (i.e., a tree of one-tomany relationships, where typically the entire tree is loaded at once), then it’s probably a good idea to use a document model.
+The relational technique of shredding—splitting a document-like structure into multiple tables can lead to cumbersome schemas and unnecessarily complicated application code.
+The document model has limitations: for example, you cannot refer directly to a nested item within a document, but instead you need to say something like “the second item in the list of positions for user 251” (much like an access path in the hierarchical model).
+However, as long as documents are not too deeply nested, that is not usually a problem.
+
+Document databases are called schema-on-read (the structure of the data is implicit, and only interpreted when the data is read), in contrast with schema-on-write (the traditional approach of relational databases, where the schema is explicit and the database ensures all written data conforms to it).
+Schema-on-read is similar to dynamic (runtime) type checking in programming lanuages, whereas schema-on-write is similar to static (compile-time) type checking.
+
+The difference between the approaches is particularly noticeable in situations where an application wants to change the format of its data.
+For example, say you are currently storing each user’s full name in one field, and you instead want to store the first name and last name separately.
+In a document database, you would just start writing new documents with the new fields and have code in the application that handles the case when old documents are read.
+For example:
+
+```
+if (user && user.name && !user.first_name) {
+// Documents written before Dec 8, 2013 don't have first_name
+user.first_name = user.name.split(" ")[0];
+}
+```
+
+On the other hand, in a “statically typed” database schema, you would typically perform a migration along the lines of:
+
+```sql
+ALTER TABLE users ADD COLUMN first_name text;
+UPDATE users SET first_name = split_part(name, ' ', 1); -- PostgreSQL
+UPDATE users SET first_name = substring_index(name, ' ', 1); -- MySQL
+```
+
+Schema changes have a bad reputation of being slow and requiring downtime.
+This reputation is not entirely deserved: most relational database systems execute the ALTER TABLE statement in a few milliseconds.
+MySQL is a notable exception—it copies the entire table on ALTER TABLE, which can mean minutes or even hours of downtime when altering a large table—although various tools exist to work around this limitation.
+
+Running the UPDATE statement on a large table is likely to be slow on any database, since every row needs to be rewritten.
+If that is not acceptable, the application can leave first_name set to its default of NULL and fill it in at read time, like it would with a document database.
+
+The schema-on-read approach is advantageous if the items in the collection don’t all have the same structure for some reason (i.e., the data is heterogeneous)—for example, because:
+
+- There are many different types of objects, and it is not practical to put each type of object in its own table.
+- The structure of the data is determined by external systems over which you have no control and which may change at any time.
+
+In situations like these, a schema may hurt more than it helps, and schemaless documents can be a much more natural data model. But in cases where all records are expected to have the same structure, schemas are a useful mechanism for documenting and enforcing that structure.
+
+### MySQL
+
+[MySQL Server](/docs/CS/DB/MySQL/MySQL.md), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
+
+### Redis
+
+[Redis](/docs/CS/DB/Redis/Redis.md) is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker.
+
+### LevelDB
+
+[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.
+LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
+LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
+
+## Links
 
 ## References
 

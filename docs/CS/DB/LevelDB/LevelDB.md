@@ -123,12 +123,10 @@ Code
 
 ### Comparator
 
-```c
+A Comparator object provides a total order across slices that are used as keys in an sstable or a database.
+A Comparator implementation must be thread-safe since leveldb may invoke its methods concurrently from multiple threads.
 
-// A Comparator object provides a total order across slices that are
-// used as keys in an sstable or a database.  A Comparator implementation
-// must be thread-safe since leveldb may invoke its methods concurrently
-// from multiple threads.
+```c
 class LEVELDB_EXPORT Comparator {
  public:
   virtual ~Comparator();
@@ -515,6 +513,14 @@ append(const _CharT* __s, size_type __n) {
 }
 ```
 
+### File
+
+RandomAccessFile
+
+SequentialFile
+
+WritableFile
+
 ## Cache
 
 The contents of the database are stored in a set of files in the filesystem and each file stores a sequence of compressed blocks.
@@ -552,7 +558,17 @@ delete it;
 
 Snappy
 
+## Write-Ahead Log
+
+addRecord
+
+readRecord
+
+recoverLogFile
+
 ## MemTable
+
+### add MemTable
 
 ```cpp
 
@@ -581,7 +597,11 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
   assert(p + val_size == buf + encoded_len);
   table_.Insert(buf);
 }
+```
 
+### get MemTable
+
+```c
 bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
   Slice memkey = key.memtable_key();
   Table::Iterator iter(&table_);
@@ -619,6 +639,8 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
 }
 ```
 
+### SkipList
+
 MaxHeight = 12
 
 Random() % 4 = 0
@@ -646,6 +668,16 @@ int SkipList<Key, Comparator>::RandomHeight() {
   return height;
 }
 ```
+
+### Seek
+
+## SSTable
+
+### WriteLevel0Table
+
+BlockBuilder
+
+### TableBuilder
 
 Build Table
 
@@ -717,8 +749,19 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
 }
 ```
 
+### FilterPolicy
+
+BloomFilter
+
+## Compression
+
+BackgroundCompaction
+
+DoCompaction
+
 ## Links
 
+- [DataBases](/docs/CS/DB/DB.md?id=LevelDB)
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
 
 ## References

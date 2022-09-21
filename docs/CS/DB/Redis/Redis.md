@@ -209,6 +209,10 @@ fork子进程的速度变慢
 - redis-check-aof
 - redis-benchmark
 
+## Links
+
+- [DataBases](/docs/CS/DB/DB.md?id=Redis)
+
 ## References
 
 1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)

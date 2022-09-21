@@ -3,7 +3,7 @@
 
 All Thread subclasses must be either JavaThread or NonJavaThread.
 
-![](../images/Thread.svg)
+![](../img/Thread.svg)
 
 ```
 Thread execution sequence and actions:
