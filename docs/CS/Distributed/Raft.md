@@ -645,6 +645,20 @@ Linearizable reads must not return stale data, and Raft needs two extra precauti
   Raft handles this by having the leader exchange heartbeat messages with a majority of the cluster before responding to read-only requests.
   Alternatively, the leader could rely on the heartbeat mechanism to provide a form of lease, but this would rely on timing for safety (it assumes bounded clock skew).
 
+## Core Raft Review
+
+1. Leader election
+   - Heartbeats and timeouts to detect crashes
+   - Randomized timeouts to avoid split votes
+   - Majority voting to guarantee at most one leader per term
+2. Log replication (normal operation)
+   - Leader takes commands from clients, appends to its log
+   - Leader replicates its log to other servers (overwriting inconsistencies)
+   - Built-in consistency check simplifies how logs may differ
+3. Safety
+   - Only elect leaders with all committed entries in their logs
+   - New leader defers committing entries from prior terms
+
 ## Links
 
 - [Consensus](/docs/CS/Distributed/Consensus.md)
@@ -661,3 +675,4 @@ Linearizable reads must not return stale data, and Raft needs two extra precauti
 7. [Coracle: Evaluating Consensus at the Internet Edge](https://conferences.sigcomm.org/sigcomm/2015/pdf/papers/p85.pdf)
 8. [Paxos vs Raft: Have we reached consensus on distributed consensus?](https://arxiv.org/pdf/2004.05074.pdf)
 9. [On the Parallels between Paxos and Raft, and how to Port Optimizations](https://ipads.se.sjtu.edu.cn/_media/publications/wang_podc19.pdf)
+10. [Raft Refloated: Do We Have Consensus?](https://www.cl.cam.ac.uk/~ms705/pub/papers/2015-osr-raft.pdf)
