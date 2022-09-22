@@ -83,6 +83,52 @@ A version of the tree that would be better suited for disk implementation has to
 > Fanout and height are inversely correlated: the higher the fanout, the lower the height.
 > If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
 
+
+## OLAP
+
+Table. Comparing characteristics of transaction processing versus analytic systems
+
+
+| Property             | Transaction processing systems (OLTP)             | Analytic systems (OLAP)                   |
+| ---------------------- | --------------------------------------------------- | ------------------------------------------- |
+| Main read pattern    | Small number of records per query, fetched by key | Aggregate over large number of records    |
+| Main write pattern   | Random-access, low-latency writes from user input | Bulk import (ETL) or event stream         |
+| Primarily used by    | End user/customer, via web application            | Internal analyst, for decision support    |
+| What data represents | Latest state of data (current point in time)      | History of events that happened over time |
+| Dataset size         | Gigabytes to terabytes                            | Terabytes to petabytes                    |
+
+At first, the same databases were used for both transaction processing and analytic queries.
+SQL turned out to be quite flexible in this regard: it works well for OLTPtype queries as well as OLAP-type queries. 
+Nevertheless, in the late 1980s and early 1990s, there was a trend for companies to stop using their OLTP systems for analytics purposes, and to run the analytics on a separate database instead. 
+This separate database was called a *data warehouse*
+
+### Data Warehousing
+
+An enterprise may have dozens of different transaction processing systems: systems powering the customer-facing website, controlling point of sale (checkout) systems in physical stores, 
+tracking inventory in warehouses, planning routes for vehicles, managing suppliers, administering employees, etc. 
+Each of these systems is complex and needs a team of people to maintain it, so the systems end up operating mostly autonomously from each other.
+These OLTP systems are usually expected to be highly available and to process transactions with low latency, since they are often critical to the operation of the business. 
+Database administrators therefore closely guard their OLTP databases. 
+They are usually reluctant to let business analysts run ad hoc analytic queries on an OLTP database, since those queries are often expensive, scanning large parts of the dataset, which can harm the performance of concurrently executing transactions.
+
+A data warehouse, by contrast, is a separate database that analysts can query to their hearts’ content, without affecting OLTP operations. 
+The data warehouse contains a read-only copy of the data in all the various OLTP systems in the company.
+Data is extracted from OLTP databases (using either a periodic data dump or a continuous stream of updates), transformed into an analysis-friendly schema, cleaned up, and then loaded into the data warehouse. 
+This process of getting data into the warehouse is known as Extract–Transform–Load (ETL).
+
+A big advantage of using a separate data warehouse, rather than querying OLTP systems directly for analytics, is that the data warehouse can be optimized for analytic access patterns. 
+It turns out that the indexing algorithms work well for OLTP, but are not very good at answering analytic queries.
+
+The data model of a data warehouse is most commonly relational, because SQL is generally a good fit for analytic queries.
+There are many graphical data analysis tools that generate SQL queries, visualize the results, and allow analysts to explore the data(through operations such as drill-down and slicing and dicing).
+On the surface, a data warehouse and a relational OLTP database look similar, because they both have a SQL query interface. 
+However, the internals of the systems can look quite different, because they are optimized for very different query patterns.
+Many database vendors now focus on supporting either transaction processing or analytics workloads, but not both.
+Some databases, such as Microsoft SQL Server and SAP HANA, have support for transaction processing and data warehousing in the same product. However, they are increasingly becoming two separate storage and query engines, which happen to be accessible through a common SQL interface.
+
+
+
+
 ## Concurrency Control
 
 ### Why is concurrency control needed?
@@ -228,20 +274,54 @@ The schema-on-read approach is advantageous if the items in the collection don�
 
 In situations like these, a schema may hurt more than it helps, and schemaless documents can be a much more natural data model. But in cases where all records are expected to have the same structure, schemas are a useful mechanism for documenting and enforcing that structure.
 
-A document is usually stored as a single continuous string, encoded as JSON, XML, or a binary variant thereof (such as MongoDB’s BSON). 
-If your application often needs to access the entire document (for example, to render it on a web page), there is a performance advantage to this storage locality. 
+A document is usually stored as a single continuous string, encoded as JSON, XML, or a binary variant thereof (such as MongoDB’s BSON).
+If your application often needs to access the entire document (for example, to render it on a web page), there is a performance advantage to this storage locality.
 If data is split across multiple tables, multiple index lookups are required to retrieve it all, which may require more disk seeks and take more time.
 
 The locality advantage only applies if you need large parts of the document at the same time.
-The database typically needs to load the entire document, even if you access only a small portion of it, which can be wasteful on large documents. 
+The database typically needs to load the entire document, even if you access only a small portion of it, which can be wasteful on large documents.
 On updates to a document, the entire document usually needs to be rewritten—only modifications that don’t change the encoded size of a document can easily be performed in place.
 For these reasons, it is generally recommended that you keep documents fairly small and avoid writes that increase the size of a document.
 These performance limitations significantly reduce the set of situations in which document databases are useful.
 
 New nonrelational “NoSQL” datastores have diverged in two main directions:
+
 1. Document databases target use cases where data comes in self-contained documents and relationships between one document and another are rare.
 2. Graph databases go in the opposite direction, targeting use cases where anything is potentially related to everything.
-   
+
+### Inmemory DB
+
+The data structures discussed so far in this chapter have all been answers to the limitations of disks. Compared to main memory, disks are awkward to deal with.
+With both magnetic disks and SSDs, data on disk needs to be laid out carefully if you want good performance on reads and writes.
+However, we tolerate this awkwardness because disks have two significant advantages: they are durable (their contents are not lost if the power is turned off), and they have a lower cost per gigabyte than RAM.
+As RAM becomes cheaper, the cost-per-gigabyte argument is eroded.
+Many datasets are simply not that big, so it’s quite feasible to keep them entirely in memory, potenially distributed across several machines.
+This has led to the development of *inmemory databases*.
+Some in-memory key-value stores, such as Memcached, are intended for caching use only, where it’s acceptable for data to be lost if a machine is restarted.
+But other inmemory databases aim for durability, which can be achieved with special hardware(such as battery-powered RAM), by writing a log of changes to disk, by writing periodic snapshots to disk, or by replicating the in-memory state to other machines.
+When an in-memory database is restarted, it needs to reload its state, either from disk or over the network from a replica (unless special hardware is used).
+Despite writing to disk, it’s still an in-memory database, because the disk is merely used as an append-only log for durability, and reads are served entirely from memory.
+Writing to disk also has operational advantages: files on disk can easily be backed up, inspected, and analyzed by external utilities.
+
+Products such as VoltDB, MemSQL, and Oracle TimesTen are in-memory databases with a relational model, and the vendors claim that they can offer big performance improvements by removing all the overheads associated with managing on-disk data structures.
+RAMCloud is an open source, in-memory key-value store with durability (using a log-structured approach for the data in memory as well as the data on disk).
+Redis and Couchbase provide weak durability by writing to disk asynchronously.
+
+Counterintuitively, the performance advantage of in-memory databases is not due to the fact that they don’t need to read from disk.
+Even a disk-based storage engine may never need to read from disk if you have enough memory, because the operating system caches recently used disk blocks in memory anyway.
+Rather, they can be faster because they can avoid the overheads of encoding in-memory data structures in a form that can be written to disk.
+
+Besides performance, another interesting area for in-memory databases is providing data models that are difficult to implement with disk-based indexes.
+For example, Redis offers a database-like interface to various data structures such as priority queues and sets.
+Because it keeps all data in memory, its implementation is comparatively simple.
+Recent research indicates that an in-memory database architecture could be extended to support datasets larger than the available memory, without bringing back the over heads of a disk-centric architecture.
+
+The so-called anti-caching approach works by evicting the least recently used data from memory to disk when there is not enough memory, and loading it back into memory when it is accessed again in the future.
+This is similar to what operating systems do with virtual memory and swap files, but the database can manage memory more efficiently than the OS, as it can work at the granularity of individual records rather than entire memory pages.
+This approach still requires indexes to fit entirely in memory, though (like the Bitcask example at the beginning of the chapter).
+
+Further changes to storage engine design will probably be needed if non-volatile memory (NVM) technologies become more widely adopted.
+At present, this is a new area of research, but it is worth keeping an eye on in the future.
 
 ### MySQL
 
@@ -257,11 +337,83 @@ New nonrelational “NoSQL” datastores have diverged in two main directions:
 LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
 LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
 
-
 ## Indexes
 
+A *primary key* uniquely identifies one row in a relational table, or one document in a document database, or one vertex in a graph database.
+Other records in the database can refer to that row/document/vertex by its primary key (or ID), and the index is used to resolve such references.
 
+It is also very common to have *secondary indexes*.
+In relational databases, you can create several secondary indexes on the same table using the CREATE INDEX command, and they are often crucial for performing joins efficiently.
+A secondary index can easily be constructed from a key-value index.
+The main difference is that keys are not unique; i.e., there might be many rows (documents, vertices) with the same key.
+This can be solved in two ways: either by making each value in the index a list of matching row identifiers (like a postings list in a full-text index) or by making each key unique by appending a row identifier to it.
+Either way, both B-trees and log-structured indexes can be used as secondary indexes.
 
+### Storing values within the index
+
+The key in an index is the thing that queries search for, but the value can be one of two things: it could be the actual row (document, vertex) in question, or it could be a reference to the row stored elsewhere.
+In the latter case, the place where rows are stored is known as a heap file, and it stores data in no particular order (it may be append-only, or it may keep track of deleted rows in order to overwrite them with new data later).
+The heap file approach is common because it avoids duplicating data when multiple secondary indexes are present: each index just references a location in the heap file, and the actual data is kept in one place.
+
+When updating a value without changing the key, the heap file approach can be quite efficient: the record can be overwritten in place, provided that the new value is not larger than the old value.
+The situation is more complicated if the new value is larger, as it probably needs to be moved to a new location in the heap where there is enough space.
+In that case, either all indexes need to be updated to point at the new heap location of the record, or a forwarding pointer is left behind in the old heap location.
+
+In some situations, the extra hop from the index to the heap file is too much of a performance penalty for reads, so it can be desirable to store the indexed row directly within an index.
+This is known as a clustered index.
+For example, in MySQL’s InnoDB storage engine, the primary key of a table is always a clustered index, and secondary indexes refer to the primary key (rather than a heap file location).
+In SQL Server, you can specify one clustered index per table.
+A compromise between a clustered index (storing all row data within the index) and a nonclustered index (storing only references to the data within the index) is known as a covering index or index with included columns, which stores some of a table’s columns within the index.
+This allows some queries to be answered by using the index alone (in which case, the index is said to cover the query).
+
+As with any kind of duplication of data, clustered and covering indexes can speed up reads, but they require additional storage and can add overhead on writes.
+Databases also need to go to additional effort to enforce transactional guarantees, because applications should not see inconsistencies due to the duplication.
+
+### Multi-column indexes
+
+The indexes discussed so far only map a single key to a value.
+That is not sufficient if we need to query multiple columns of a table (or multiple fields in a document) simultaneously.
+The most common type of multi-column index is called a concatenated index, which simply combines several fields into one key by appending one column to another (the index definition specifies in which order the fields are concatenated).
+This is like an old-fashioned paper phone book, which provides an index from (lastname, firstname) to phone number.
+Due to the sort order, the index can be used to find all the people with a particular last name, or all the people with a particular lastnamefirstname combination.
+However, the index is useless if you want to find all the people with a particular first name.
+Multi-dimensional indexes are a more general way of querying several columns at once, which is particularly important for geospatial data.
+For example, a restaurantsearch website may have a database containing the latitude and longitude of each restaurant.
+When a user is looking at the restaurants on a map, the website needs to search for all the restaurants within the rectangular map area that the user is currently viewing.
+This requires a two-dimensional range query like the following:
+
+```
+SELECT * FROM restaurants WHERE latitude > 51.4946 AND latitude < 51.5079 AND longitude > -0.1162 AND longitude < -0.1004;
+```
+
+A standard B-tree or LSM-tree index is not able to answer that kind of query efficiently: it can give you either all the restaurants in a range of latitudes (but at any longitude), or all the restaurants in a range of longitudes (but anywhere between the North and South poles), but not both simultaneously.
+
+One option is to translate a two-dimensional location into a single number using a space-filling curve, and then to use a regular B-tree index.
+More commonly, specialized spatial indexes such as R-trees are used.
+For example, PostGIS implements geospatial indexes as R-trees using PostgreSQL’s Generalized Search Tree indexing facility.
+We don’t have space to describe R-trees in detail here, but there is plenty of literature on them.
+
+An interesting idea is that multi-dimensional indexes are not just for geographic locations.
+For example, on an ecommerce website you could use a three-dimensional index on the dimensions (red, green, blue) to search for products in a certain range of colors, or in a database of weather observations you could have a two-dimensional index on (date, temperature) in order to efficiently search for all the observations during the year 2013 where the temperature was between 25 and 30.
+With a onedimensional index, you would have to either scan over all the records from 2013 (regardless of temperature) and then filter them by temperature, or vice versa.
+A 2D index could narrow down by timestamp and temperature simultaneously.
+This technique is used by HyperDex.
+
+### Full-text search and fuzzy indexes
+
+All the indexes discussed so far assume that you have exact data and allow you to query for exact values of a key, or a range of values of a key with a sort order.
+What they don’t allow you to do is search for similar keys, such as misspelled words.
+Such fuzzy querying requires different techniques.
+
+For example, full-text search engines commonly allow a search for one word to be expanded to include synonyms of the word, to ignore grammatical variations of words, and to search for occurrences of words near each other in the same document, and support various other features that depend on linguistic analysis of the text.
+To cope with typos in documents or queries, Lucene is able to search text for words within a certain edit distance (an edit distance of 1 means that one letter has been added, removed, or replaced).
+
+As mentioned in “Making an LSM-tree out of SSTables” on page 78, Lucene uses a SSTable-like structure for its term dictionary.
+This structure requires a small inmemory index that tells queries at which offset in the sorted file they need to look for a key.
+In LevelDB, this in-memory index is a sparse collection of some of the keys, but in Lucene, the in-memory index is a finite state automaton over the characters in the keys, similar to a trie.
+This automaton can be transformed into a Levenshtein automaton, which supports efficient search for words within a given edit distance.
+
+Other fuzzy search techniques go in the direction of document classification and machine learning. See an information retrieval textbook for more detail.
 
 ## Links
 
