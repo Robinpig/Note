@@ -58,6 +58,63 @@ cache line
 
 db，缓存一致性问题，缓存竞争后面讨论解决方案
 
+## Database Cache
+
+
+A database cache supplements your primary database by removing unnecessary pressure on it, typically in the form of frequently-accessed read data. The cache itself can live in several areas, including in your database, in the application, or as a standalone layer.
+The following are the three most common types of database caches:
+- Database-integrated caches
+  Some databases, such as Amazon Aurora, offer an integrated cache that is managed within the database engine and has built-in write-through capabilities. The database updates its cache automatically when the underlying data changes. Nothing in the application tier is required to use this cache.
+The downside of integrated caches is their size and capabilities. Integrated caches are typically limited to the available memory that is allocated to the cache by the database instance and can’t be used for other purposes, such as sharing data with other instances.
+- Local caches
+  A local cache stores your frequently-used data within your application. This makes data retrieval faster than with other caching architectures because it removes network traffic that is associated with retrieving data.
+A major disadvantage is that among your applications, each node has its own resident cache working
+in a disconnected manner. The information that is stored in an individual cache node (whether it’s cached database rows, web content, or session data) can’t be shared with other local caches. This creates challenges in a distributed environment where information sharing is critical to support scalable dynamic environments.
+Because most applications use multiple application servers, coordinating the values across them becomes a major challenge if each server has its own cache. In addition, when outages occur, the data in the local cache is lost and must be rehydrated, which effectively negates the cache. The majority of these disadvantages are mitigated with remote caches.
+- Remote caches
+  A remote cache (or side cache) is a separate instance (or separate instances) dedicated for storing the cached data in-memory. Remote caches are stored on dedicated servers and are typically built on key/ value NoSQL stores, such as Redis and Memcached. They provide hundreds of thousands of requests (and up to a million) per second per cache node. Many solutions, such as Amazon ElastiCache for Redis, also provide the high availability needed for critical workloads.
+The average latency of a request to a remote cache is on the sub-millisecond timescale, which, in the order of magnitude, is faster than a request to a disk-based database. At these speeds, local caches are seldom necessary. Remote caches are ideal for distributed environments because they work as a connected cluster that all your disparate systems can utilize. However, when network latency is a concern, you can apply a two-tier caching strategy that uses a local and remote cache together. It’s typically used only when needed because of the complexity it adds.
+  With remote caches, the orchestration between caching the data and managing the validity of the data is managed by your applications and/or processes that use it. The cache itself is not directly connected to the database but is used adjacently to it.
+
+### Caching patterns
+
+When you are caching data from your database, there are caching patterns for Redis and Memcached that you can implement, including proactive and reactive approaches. The patterns you choose to implement should be directly related to your caching and application objectives.
+
+Two common approaches are cache-aside or lazy loading (a reactive approach) and write-through (a proactive approach). A cache-aside cache is updated after the data is requested. A write-through cache is updated immediately when the primary database is updated. With both approaches, the application is essentially managing what data is being cached and for how long.
+
+A proper caching strategy includes effective use of both write-through and lazy loading of your data and setting an appropriate expiration for the data to keep it relevant and lean.
+
+#### Cache-Aside (Lazy Loading)
+
+A cache-aside cache is the most common caching strategy available. The fundamental data retrieval logic can be summarized as follows:
+1. When your application needs to read data from the database, it checks the cache first to determine whether the data is available.
+2. If the data is available (a cache hit), the cached data is returned, and the response is issued to the caller.
+3. If the data isn’t available (a cache miss), the database is queried for the data. The cache is then populated with the data that is retrieved from the database, and the data is returned to the caller.
+
+
+This approach has a couple of advantages:
+- The cache contains only data that the application actually requests,whichhelpskeepthecache size cost-effective.
+- Implementing this approach is straightforward and produces immediate performance gains, whether you use an application framework that encapsulates lazy caching or your own custom application logic.
+
+A disadvantage when using cache-aside as the only caching pattern is that because the data is loaded into the cache only after a cache miss, some overhead is added to the initial response time because additional roundtrips to the cache and database are needed.
+    
+    
+    
+#### Write-Through
+A write-through cache reverses the order of how the cache is populated. Instead of lazy-loading the data in the cache after a cache miss, the cache is proactively updated immediately following the primary database update. The fundamental data retrieval logic can be summarized as follows:
+
+1. The application, batch, or backend process updates the primary database.
+2. Immediately afterward, the data is also updated in the cache.
+
+
+The write-through pattern is almost always implemented along with lazy loading. If the application gets a cache miss because the data is not present or has expired, the lazy loading pattern is performed to update the cache.
+The write-through approach has a couple of advantages:
+
+- Because the cache is up-to-date with the primary database,there is a much greater likelihood that the data will be found in the cache. This, in turn, results in better overall application performance and user experience.
+- The performance of your database is optimal because fewer database reads are performed.
+
+A disadvantage of the write-through approach is that infrequently-requested data is also written to the cache, resulting in a larger and more expensive cache.
+
 
 
 ## 缓存特征
