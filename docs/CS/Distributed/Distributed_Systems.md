@@ -456,6 +456,7 @@ A distributed system consists of a finite set of processes and a finite set of c
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
+- [Encoding](/docs/CS/Encoding.md)
 
 ## References
 
