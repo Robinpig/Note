@@ -61,26 +61,44 @@ db，缓存一致性问题，缓存竞争后面讨论解决方案
 ## Database Cache
 
 
-A database cache supplements your primary database by removing unnecessary pressure on it, typically in the form of frequently-accessed read data. The cache itself can live in several areas, including in your database, in the application, or as a standalone layer.
+A database cache supplements your primary database by removing unnecessary pressure on it, typically in the form of frequently-accessed read data. 
+The cache itself can live in several areas, including in your database, in the application, or as a standalone layer.
 The following are the three most common types of database caches:
 - Database-integrated caches
-  Some databases, such as Amazon Aurora, offer an integrated cache that is managed within the database engine and has built-in write-through capabilities. The database updates its cache automatically when the underlying data changes. Nothing in the application tier is required to use this cache.
+  Some databases, such as Amazon Aurora, offer an integrated cache that is managed within the database engine and has built-in write-through capabilities. 
+  The database updates its cache automatically when the underlying data changes. Nothing in the application tier is required to use this cache.
 The downside of integrated caches is their size and capabilities. Integrated caches are typically limited to the available memory that is allocated to the cache by the database instance and can’t be used for other purposes, such as sharing data with other instances.
 - Local caches
-  A local cache stores your frequently-used data within your application. This makes data retrieval faster than with other caching architectures because it removes network traffic that is associated with retrieving data.
-A major disadvantage is that among your applications, each node has its own resident cache working
-in a disconnected manner. The information that is stored in an individual cache node (whether it’s cached database rows, web content, or session data) can’t be shared with other local caches. This creates challenges in a distributed environment where information sharing is critical to support scalable dynamic environments.
-Because most applications use multiple application servers, coordinating the values across them becomes a major challenge if each server has its own cache. In addition, when outages occur, the data in the local cache is lost and must be rehydrated, which effectively negates the cache. The majority of these disadvantages are mitigated with remote caches.
+  A local cache stores your frequently-used data within your application. 
+  This makes data retrieval faster than with other caching architectures because it removes network traffic that is associated with retrieving data.
+  A major disadvantage is that among your applications, each node has its own resident cache working
+in a disconnected manner. 
+  The information that is stored in an individual cache node (whether it’s cached database rows, web content, or session data) can’t be shared with other local caches. 
+  This creates challenges in a distributed environment where information sharing is critical to support scalable dynamic environments.
+  Because most applications use multiple application servers, coordinating the values across them becomes a major challenge if each server has its own cache. 
+  In addition, when outages occur, the data in the local cache is lost and must be rehydrated, which effectively negates the cache. 
+  The majority of these disadvantages are mitigated with remote caches.
 - Remote caches
-  A remote cache (or side cache) is a separate instance (or separate instances) dedicated for storing the cached data in-memory. Remote caches are stored on dedicated servers and are typically built on key/ value NoSQL stores, such as Redis and Memcached. They provide hundreds of thousands of requests (and up to a million) per second per cache node. Many solutions, such as Amazon ElastiCache for Redis, also provide the high availability needed for critical workloads.
-The average latency of a request to a remote cache is on the sub-millisecond timescale, which, in the order of magnitude, is faster than a request to a disk-based database. At these speeds, local caches are seldom necessary. Remote caches are ideal for distributed environments because they work as a connected cluster that all your disparate systems can utilize. However, when network latency is a concern, you can apply a two-tier caching strategy that uses a local and remote cache together. It’s typically used only when needed because of the complexity it adds.
-  With remote caches, the orchestration between caching the data and managing the validity of the data is managed by your applications and/or processes that use it. The cache itself is not directly connected to the database but is used adjacently to it.
+  A remote cache (or side cache) is a separate instance (or separate instances) dedicated for storing the cached data in-memory. 
+  Remote caches are stored on dedicated servers and are typically built on key/ value NoSQL stores, such as Redis and Memcached. 
+  They provide hundreds of thousands of requests (and up to a million) per second per cache node. 
+  Many solutions, such as Amazon ElastiCache for Redis, also provide the high availability needed for critical workloads.
+  The average latency of a request to a remote cache is on the sub-millisecond timescale, which, in the order of magnitude, is faster than a request to a disk-based database. 
+  At these speeds, local caches are seldom necessary. 
+  Remote caches are ideal for distributed environments because they work as a connected cluster that all your disparate systems can utilize. 
+  However, when network latency is a concern, you can apply a two-tier caching strategy that uses a local and remote cache together. 
+  It’s typically used only when needed because of the complexity it adds.
+  With remote caches, the orchestration between caching the data and managing the validity of the data is managed by your applications and/or processes that use it. 
+  The cache itself is not directly connected to the database but is used adjacently to it.
 
 ### Caching patterns
 
-When you are caching data from your database, there are caching patterns for Redis and Memcached that you can implement, including proactive and reactive approaches. The patterns you choose to implement should be directly related to your caching and application objectives.
+When you are caching data from your database, there are caching patterns for Redis and Memcached that you can implement, including proactive and reactive approaches. 
+The patterns you choose to implement should be directly related to your caching and application objectives.
 
-Two common approaches are cache-aside or lazy loading (a reactive approach) and write-through (a proactive approach). A cache-aside cache is updated after the data is requested. A write-through cache is updated immediately when the primary database is updated. With both approaches, the application is essentially managing what data is being cached and for how long.
+Two common approaches are cache-aside or lazy loading (a reactive approach) and write-through (a proactive approach).
+A cache-aside cache is updated after the data is requested. A write-through cache is updated immediately when the primary database is updated. 
+With both approaches, the application is essentially managing what data is being cached and for how long.
 
 A proper caching strategy includes effective use of both write-through and lazy loading of your data and setting an appropriate expiration for the data to keep it relevant and lean.
 
@@ -89,7 +107,8 @@ A proper caching strategy includes effective use of both write-through and lazy 
 A cache-aside cache is the most common caching strategy available. The fundamental data retrieval logic can be summarized as follows:
 1. When your application needs to read data from the database, it checks the cache first to determine whether the data is available.
 2. If the data is available (a cache hit), the cached data is returned, and the response is issued to the caller.
-3. If the data isn’t available (a cache miss), the database is queried for the data. The cache is then populated with the data that is retrieved from the database, and the data is returned to the caller.
+3. If the data isn’t available (a cache miss), the database is queried for the data. 
+   The cache is then populated with the data that is retrieved from the database, and the data is returned to the caller.
 
 
 This approach has a couple of advantages:
@@ -101,6 +120,7 @@ A disadvantage when using cache-aside as the only caching pattern is that becaus
     
     
 #### Write-Through
+
 A write-through cache reverses the order of how the cache is populated. Instead of lazy-loading the data in the cache after a cache miss, the cache is proactively updated immediately following the primary database update. The fundamental data retrieval logic can be summarized as follows:
 
 1. The application, batch, or backend process updates the primary database.
@@ -110,7 +130,8 @@ A write-through cache reverses the order of how the cache is populated. Instead 
 The write-through pattern is almost always implemented along with lazy loading. If the application gets a cache miss because the data is not present or has expired, the lazy loading pattern is performed to update the cache.
 The write-through approach has a couple of advantages:
 
-- Because the cache is up-to-date with the primary database,there is a much greater likelihood that the data will be found in the cache. This, in turn, results in better overall application performance and user experience.
+- Because the cache is up-to-date with the primary database,there is a much greater likelihood that the data will be found in the cache. 
+  This, in turn, results in better overall application performance and user experience.
 - The performance of your database is optimal because fewer database reads are performed.
 
 A disadvantage of the write-through approach is that infrequently-requested data is also written to the cache, resulting in a larger and more expensive cache.
@@ -118,27 +139,82 @@ A disadvantage of the write-through approach is that infrequently-requested data
 ## Cache Validity
 
   
-You can control the freshness of your cached data by applying a time to live (TTL) or expiration to your cached keys. After the set time has passed, the key is deleted from the cache, and access to the origin data store is required along with reaching the updated data.
-Two principles can help you determine the appropriate TTLs to apply and the types of caching patterns to implement. First, it’s important that you understand the rate of change of the underlying data. Second, it’s important that you evaluate the risk of outdated data being returned back to your application instead of its updated counterpart.
+You can control the freshness of your cached data by applying a time to live (TTL) or expiration to your cached keys. 
+After the set time has passed, the key is deleted from the cache, and access to the origin data store is required along with reaching the updated data.
+
+Two principles can help you determine the appropriate TTLs to apply and the types of caching patterns to implement. 
+First, it’s important that you understand the rate of change of the underlying data. 
+Second, it’s important that you evaluate the risk of outdated data being returned back to your application instead of its updated counterpart.
+
 For example, it might make sense to keep static or reference data (that is, data that is seldom updated) valid for longer periods of time with write-throughs to the cache when the underlying data gets updated.
-With dynamic data that changes often, you might want to apply lower TTLs that expire the data at a rate of change that matches that of the primary database. This lowers the risk of returning outdated data while still providing a buffer to offload database requests.
+With dynamic data that changes often, you might want to apply lower TTLs that expire the data at a rate of change that matches that of the primary database. 
+This lowers the risk of returning outdated data while still providing a buffer to offload database requests.
+
 It’s also important to recognize that, even if you are only caching data for minutes or seconds versus longer durations, appropriately applying TTLs to your cached keys can result in a huge performance boost and an overall better user experience with your application.
-Another best practice when applying TTLs to your cache keys is to add some time jitter to your TTLs. This reduces the possibility of heavy database load occurring when your cached data expires. Take,
-for example, the scenario of caching product information. If all your product data expires at the same time and your application is under heavy load, then your backend database has to fulfill all the product requests. Depending on the load, that could generate too much pressure on your database, resulting in poor performance. By adding slight jitter to your TTLs, a randomly-generated time value (for example, TTL = your initial TTL value in seconds + jitter) would reduce the pressure on your backend database and also reduce the CPU use on your cache engine as a result of deleting expired keys.
+
+Another best practice when applying TTLs to your cache keys is to add some time jitter to your TTLs. 
+This reduces the possibility of heavy database load occurring when your cached data expires. 
+Take, for example, the scenario of caching product information. 
+If all your product data expires at the same time and your application is under heavy load, then your backend database has to fulfill all the product requests. 
+Depending on the load, that could generate too much pressure on your database, resulting in poor performance. 
+By adding slight jitter to your TTLs, a randomly-generated time value (for example, TTL = your initial TTL value in seconds + jitter) would reduce the pressure on your backend database and also reduce the CPU use on your cache engine as a result of deleting expired keys.
 
 
-## 缓存特征
+### Evictions
 
-### 命中率
 
-### 最大容量
+Evictions occur when cache memory is overfilled or is greater than the maxmemory setting for the cache, causing the engine selecting keys to evict in order to manage its memory. The keys that are chosen are based on the eviction policy you select.
 
-### 过期策略
+By default, Amazon ElastiCache for Redis sets the volatile-lru eviction policy to your Redis cluster. 
+When this policy is selected, the least recently used keys that have an expiration (TTL) value set are evicted. 
+Other eviction policies are available and can be applied in the configurable maxmemory-policy parameter.
+The following table summarizes eviction policies:
 
-1. FIFO
-2. LRU
-3. LFU
-4. Others
+| Eviction Policy | Description |
+| ——- | ——— |
+|  allkeys-lru | The cache evicts the least recently used (LRU) keys regardless of TTL set. |
+| allkeys-lfu  | The cache evicts the least frequently used (LFU) keys regardless of TTL set. |
+| volatile-lru | The cache evicts the least recently used (LRU) keys from those that have a TTL set. |
+| volatile-lfu | The cache evicts the least frequently used (LFU) keys from those that have a TTL set. |
+| volatile-ttl | The cache evicts the keys with the shortest TTL set. |
+| volatile-random  | The cache randomly evicts keys with a TTL set. |
+| allkeys-random | The cache randomly evicts keys regardless of TTL set. |
+| no-eviction | The cache doesn’t evict keys at all. This blocks future writes until memory frees up. |
+
+
+A good strategy in selecting an appropriate eviction policy is to consider the data stored in your cluster and the outcome of keys being evicted.
+Generally, least recently used (LRU)-based policies are more common for basic caching use cases. 
+However, depending on your objectives, you might want to use a TTL or random-based eviction policy that better suits your requirements.
+
+Also, if you are experiencing evictions with your cluster, it is usually a sign that you should scale up (that is, use a node with a larger memory footprint) or scale out (that is, add more nodes to your cluster) to accommodate the additional data. 
+An exception to this rule is if you are purposefully relying on the cache engine to manage your keys by means of eviction, also referred to an LRU cache.
+
+
+
+The basic paradigm when you query data from a relational database includes executing SQL statements and iterating over the returned ResultSet object cursor to retrieve the database rows. There are several techniques you can apply when you want to cache the returned data. However, it’s best to choose a method that simplifies your data access pattern and/or optimizes the architectural goals that you have for your application.
+
+Iterating over the ResultSet cursor lets you retrieve the fields and values from the database rows. From that point, the application can choose where and how to use that data.
+
+
+Cache a serialized ResultSet object that contains the fetched database row.
+
+- Advantage:Whendataretrievallogicisabstracted(forexample,asinaDataAccessObjectorDAO layer), the consuming code expects only a ResultSet object and does not need to be made aware of its origination. 
+- A ResultSet object can be iterated over, regardless of whether it originated from the database or was deserialized from the cache, which greatly reduces integration logic. 
+- This pattern can be applied to any relational database.
+- Disadvantage:DataretrievalstillrequiresextractingvaluesfromtheResultSetobjectcursoranddoes not further simplify data access; it only reduces data retrieval latency.
+
+Note: When you cache the row, it’s important that it’s serializable. The following example uses a CachedRowSet implementation for this purpose. When you are using Redis, this is stored as a byte array value.
+
+The following code converts the CachedRowSet object into a byte array and then stores that byte array as a Redis byte array value. The actual SQL statement is stored as the key and converted into bytes.
+
+
+One advantage of storing the SQL statement as the key is that it enables a transparent caching abstraction layer that hides the implementation details. The other added benefit is that you don’t need to create any additional mappings between a custom key ID and the executed SQL statement.
+At the time of setting data in the Redis, you are applying the expiry time, which is specified in milliseconds.
+For lazy caching/cache aside, you would initially query the cache before executing the query against the database. To hide the implementation details, use the DAO pattern and expose a generic method for your application to retrieve the data.
+
+
+
+Assuming that your application framework can’t be used to abstract your caching implementation, how do you best cache the returned database data?
 
 
 
