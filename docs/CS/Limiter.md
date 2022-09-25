@@ -57,7 +57,7 @@ guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in 
 
 #### Guava RateLimiter
 
-![Guava RateLimiter](./images/Ratelimiter.png)
+![Guava RateLimiter](img/Ratelimiter.png)
 
 
 

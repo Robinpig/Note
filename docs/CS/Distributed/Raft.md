@@ -89,6 +89,8 @@ Volatile state on leaders:
 
 ### Terms
 
+Since Raft cannot assume global clock synchronization, global partial ordering on events is achieved with a monotonically increasing value, known as a *term*.
+
 Raft divides time into terms of arbitrary length, as shown in Figure 2.
 Terms are numbered with consecutive integers.
 Each term begins with an election, in which one or more candidates attempt to become leader.
@@ -106,6 +108,10 @@ Raft servers communicate using remote procedure calls (RPCs), and the basic cons
 RequestVote RPCs are initiated by candidates during elections, and AppendEntries RPCs are initiated by leaders to replicate log entries and to provide a form of heartbeat.
 Add a third RPC for transferring snapshots between servers.
 Servers retry RPCs if they do not receive a response in a timely manner, and they issue RPCs in parallel for best performance.
+
+A node’s term is only updated when it starts (or restarts) an election, or when it learns from another node that its term is out of date. 
+All messages include the source node’s term.
+The receiving node checks it, with two possible outcomes: if the receiver’s term is larger, a negative response is sent, while if the receiver’s term is smaller than or equal to the source’s, its term is updated before parsing the message.
 
 <div style="text-align: center;">
 
