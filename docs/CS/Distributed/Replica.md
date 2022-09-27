@@ -640,11 +640,9 @@ As we shall see, this difference in design has profound consequences for the way
 Imagine you have a database with three replicas, and one of the replicas is currently unavailable—perhaps it is being rebooted to install a system update.
 In a leader-based configuration, if you want to continue processing writes, you may need to perform a failover.
 
-On the other hand, in a leaderless configuration, failover does not exist. Figure 10
-shows what happens: the client (user 1234) sends the write to all three replicas in par‐
-allel, and the two available replicas accept the write but the unavailable replica misses
-it. Let’s say that it’s sufficient for two out of three replicas to acknowledge the write:
-after user 1234 has received two ok responses, we consider the write to be successful.
+On the other hand, in a leaderless configuration, failover does not exist.
+Figure 10 shows what happens: the client (user 1234) sends the write to all three replicas in parallel, and the two available replicas accept the write but the unavailable replica misses it.
+Let’s say that it’s sufficient for two out of three replicas to acknowledge the write: after user 1234 has received two ok responses, we consider the write to be successful.
 The client simply ignores the fact that one of the replicas missed the write.
 
 <div style="text-align: center;">
@@ -657,39 +655,31 @@ The client simply ignores the fact that one of the replicas missed the write.
 Fig.10. A quorum write, quorum read, and read repair after a node outage.
 </p>
 
-Now imagine that the unavailable node comes back online, and clients start reading
-from it. Any writes that happened while the node was down are missing from that
-node. Thus, if you read from that node, you may get stale (outdated) values as
-responses.
+Now imagine that the unavailable node comes back online, and clients start reading from it.
+Any writes that happened while the node was down are missing from that node.
+Thus, if you read from that node, you may get stale (outdated) values as responses.
 
-To solve that problem, when a client reads from the database, it doesn’t just send its
-request to one replica: read requests are also sent to several nodes in parallel. The cli‐
-ent may get different responses from different nodes; i.e., the up-to-date value from
-one node and a stale value from another. Version numbers are used to determine
-which value is newer
+To solve that problem, when a client reads from the database, it doesn’t just send its request to one replica: read requests are also sent to several nodes in parallel.
+The client may get different responses from different nodes; i.e., the up-to-date value from one node and a stale value from another. Version numbers are used to determine which value is newer
 
 Read repair and anti-entropy
-The replication scheme should ensure that eventually all the data is copied to every
-replica. After an unavailable node comes back online, how does it catch up on the
-writes that it missed?
+
+The replication scheme should ensure that eventually all the data is copied to every replica.
+After an unavailable node comes back online, how does it catch up on the writes that it missed?
 
 Two mechanisms are often used in Dynamo-style datastores:
-Read repair
-When a client makes a read from several nodes in parallel, it can detect any stale
-responses. For example, in Figure 10, user 2345 gets a version 6 value from rep‐
-lica 3 and a version 7 value from replicas 1 and 2. The client sees that replica 3
-has a stale value and writes the newer value back to that replica. This approach
-works well for values that are frequently read.
-Anti-entropy process
-In addition, some datastores have a background process that constantly looks for
-differences in the data between replicas and copies any missing data from one
-replica to another. Unlike the replication log in leader-based replication, this
-anti-entropy process does not copy writes in any particular order, and there may
-be a significant delay before data is copied.
-Not all systems implement both of these; for example, Voldemort currently does not
-have an anti-entropy process. Note that without an anti-entropy process, values that
-are rarely read may be missing from some replicas and thus have reduced durability,
-because read repair is only performed when a value is read by the application.
+
+- Read repair
+  When a client makes a read from several nodes in parallel, it can detect any stale responses.
+  For example, in Figure 10, user 2345 gets a version 6 value from replica 3 and a version 7 value from replicas 1 and 2.
+  The client sees that replica 3 has a stale value and writes the newer value back to that replica.
+  This approach works well for values that are frequently read.
+- Anti-entropy process
+  In addition, some datastores have a background process that constantly looks for differences in the data between replicas and copies any missing data from one replica to another.
+  Unlike the replication log in leader-based replication, this anti-entropy process does not copy writes in any particular order, and there may be a significant delay before data is copied.
+
+Not all systems implement both of these; for example, Voldemort currently does not have an anti-entropy process.
+Note that without an anti-entropy process, values that are rarely read may be missing from some replicas and thus have reduced durability, because read repair is only performed when a value is read by the application.
 
 Quorums for reading and writing
 
@@ -713,18 +703,15 @@ This makes reads faster, but has the disadvantage that just one failed node caus
 
 > There may be more than n nodes in the cluster, but any given value is stored only on n nodes. This allows the dataset to be partitioned, supporting datasets that are larger than you can fit on one node.
 
-The quorum condition, w + r > n, allows the system to tolerate unavailable nodes as
-follows:
+The quorum condition, w + r > n, allows the system to tolerate unavailable nodes as follows:
 
 - If w < n, we can still process writes if a node is unavailable.
 - If r < n, we can still process reads if a node is unavailable.
 - With n = 3, w = 2, r = 2 we can tolerate one unavailable node.
-- With n = 5, w = 3, r = 3 we can tolerate two unavailable nodes. This case is illus‐
-  trated in Figure 11.
-- Normally, reads and writes are always sent to all n replicas in parallel. The
-  parameters w and r determine how many nodes we wait for—i.e., how many of
-  the n nodes need to report success before we consider the read or write to be suc‐
-  cessful.
+- With n = 5, w = 3, r = 3 we can tolerate two unavailable nodes.
+  This case is illustrated in Figure 11.
+- Normally, reads and writes are always sent to all n replicas in parallel.
+  The parameters w and r determine how many nodes we wait for—i.e., how many of the n nodes need to report success before we consider the read or write to be successful.
 
 <div style="text-align: center;">
 
@@ -737,155 +724,99 @@ Fig.11. If w + r > n, at least one of the r replicas you read from must have see
 </p>
 
 If fewer than the required w or r nodes are available, writes or reads return an error.
-A node could be unavailable for many reasons: because the node is down (crashed,
-powered down), due to an error executing the operation (can’t write because the disk
-is full), due to a network interruption between the client and the node, or for any
-number of other reasons. We only care whether the node returned a successful
-response and don’t need to distinguish between different kinds of fault.
+A node could be unavailable for many reasons: because the node is down (crashed, powered down), due to an error executing the operation (can’t write because the disk is full), due to a network interruption between the client and the node, or for any number of other reasons.
+We only care whether the node returned a successful response and don’t need to distinguish between different kinds of fault.
 
 ### Limitations of Quorum Consistency
 
-If you have n replicas, and you choose w and r such that w + r > n, you can generally
-expect every read to return the most recent value written for a key. This is the case
-because the set of nodes to which you’ve written and the set of nodes from which
-you’ve read must overlap. That is, among the nodes you read there must be at least
-one node with the latest value (illustrated in Figure 11).
-Often, r and w are chosen to be a majority (more than n/2) of nodes, because that
-ensures w + r > n while still tolerating up to n/2 node failures. But quorums are not
-necessarily majorities—it only matters that the sets of nodes used by the read and
-write operations overlap in at least one node. Other quorum assignments are possi‐
-ble, which allows some flexibility in the design of distributed algorithms [45].
-You may also set w and r to smaller numbers, so that w + r ≤ n (i.e., the quorum con‐
-dition is not satisfied). In this case, reads and writes will still be sent to n nodes, but a
-smaller number of successful responses is required for the operation to succeed.
-With a smaller w and r you are more likely to read stale values, because it’s more
-likely that your read didn’t include the node with the latest value. On the upside, this
-configuration allows lower latency and higher availability: if there is a network inter‐
-ruption and many replicas become unreachable, there’s a higher chance that you can
-continue processing reads and writes. Only after the number of reachable replicas
-falls below w or r does the database become unavailable for writing or reading,
-respectively.
-However, even with w + r > n, there are likely to be edge cases where stale values are
-returned. These depend on the implementation, but possible scenarios include:
+If you have n replicas, and you choose w and r such that w + r > n, you can generally expect every read to return the most recent value written for a key.
+This is the case because the set of nodes to which you’ve written and the set of nodes from which you’ve read must overlap.
+That is, among the nodes you read there must be at least one node with the latest value (illustrated in Figure 11).
+Often, r and w are chosen to be a majority (more than n/2) of nodes, because that ensures w + r > n while still tolerating up to n/2 node failures.
+But quorums are not necessarily majorities—it only matters that the sets of nodes used by the read and write operations overlap in at least one node.
+Other quorum assignments are possible, which allows some flexibility in the design of distributed algorithms.
+You may also set w and r to smaller numbers, so that w + r ≤ n (i.e., the quorum condition is not satisfied).
+In this case, reads and writes will still be sent to n nodes, but a smaller number of successful responses is required for the operation to succeed.
+With a smaller w and r you are more likely to read stale values, because it’s more likely that your read didn’t include the node with the latest value.
+On the upside, this configuration allows lower latency and higher availability: if there is a network interruption and many replicas become unreachable, there’s a higher chance that you can continue processing reads and writes.
+Only after the number of reachable replicas falls below w or r does the database become unavailable for writing or reading, respectively.
 
-- If a sloppy quorum is used (see “Sloppy Quorums and Hinted Handoff” on page
-  183), the w writes may end up on different nodes than the r reads, so there is no
-  longer a guaranteed overlap between the r nodes and the w nodes [46].
-- If two writes occur concurrently, it is not clear which one happened first. In this
-  case, the only safe solution is to merge the concurrent writes (see “Handling
-  Write Conflicts” on page 171). If a winner is picked based on a timestamp (last
-  write wins), writes can be lost due to clock skew [35]. We will return to this topic
-  in “Detecting Concurrent Writes” on page 184.
-- If a write happens concurrently with a read, the write may be reflected on only
-  some of the replicas. In this case, it’s undetermined whether the read returns the
-  old or the new value.
-- If a write succeeded on some replicas but failed on others (for example because
-  the disks on some nodes are full), and overall succeeded on fewer than w replicas,
-  it is not rolled back on the replicas where it succeeded. This means that if a write
-  was reported as failed, subsequent reads may or may not return the value from
-  that write [47].
-- If a node carrying a new value fails, and its data is restored from a replica carry‐
-  ing an old value, the number of replicas storing the new value may fall below w,
-  breaking the quorum condition.
-- Even if everything is working correctly, there are edge cases in which you can get
-  unlucky with the timing, as we shall see in “Linearizability and quorums”.
+However, even with w + r > n, there are likely to be edge cases where stale values are returned.
+These depend on the implementation, but possible scenarios include:
 
-Thus, although quorums appear to guarantee that a read returns the latest written
-value, in practice it is not so simple. Dynamo-style databases are generally optimized
-for use cases that can tolerate eventual consistency. The parameters w and r allow you
-to adjust the probability of stale values being read, but it’s wise to not take them as
-absolute guarantees.
+- If a sloppy quorum is used, the w writes may end up on different nodes than the r reads, so there is no longer a guaranteed overlap between the r nodes and the w nodes.
+- If two writes occur concurrently, it is not clear which one happened first.
+  In this case, the only safe solution is to merge the concurrent writes.
+  If a winner is picked based on a timestamp (last write wins), writes can be lost due to clock skew.
+- If a write happens concurrently with a read, the write may be reflected on only some of the replicas.
+  In this case, it’s undetermined whether the read returns the old or the new value.
+- If a write succeeded on some replicas but failed on others (for example because the disks on some nodes are full), and overall succeeded on fewer than w replicas, it is not rolled back on the replicas where it succeeded.
+  This means that if a write was reported as failed, subsequent reads may or may not return the value from that write.
+- If a node carrying a new value fails, and its data is restored from a replica carrying an old value, the number of replicas storing the new value may fall below w, breaking the quorum condition.
+- Even if everything is working correctly, there are edge cases in which you can get unlucky with the timing, as we shall see in “Linearizability and quorums”.
 
-In particular, you usually do not get the guarantees discussed in “Problems with Rep‐
-lication Lag” on page 161 (reading your writes, monotonic reads, or consistent prefix
-reads), so the previously mentioned anomalies can occur in applications. Stronger
-guarantees generally require transactions or consensus.
+Thus, although quorums appear to guarantee that a read returns the latest written value, in practice it is not so simple.
+Dynamo-style databases are generally optimized for use cases that can tolerate eventual consistency.
+The parameters w and r allow you to adjust the probability of stale values being read, but it’s wise to not take them as absolute guarantees.
+
+In particular, you usually do not get the guarantees discussed in “Problems with Replication Lag” on page 161 (reading your writes, monotonic reads, or consistent prefix reads), so the previously mentioned anomalies can occur in applications.
+Stronger guarantees generally require transactions or consensus.
 
 ### Monitoring staleness
 
-From an operational perspective, it’s important to monitor whether your databases
-are returning up-to-date results. Even if your application can tolerate stale reads, you
-need to be aware of the health of your replication. If it falls behind significantly, it
-should alert you so that you can investigate the cause (for example, a problem in the
-network or an overloaded node).
-For leader-based replication, the database typically exposes metrics for the replication
-lag, which you can feed into a monitoring system. This is possible because writes are
-applied to the leader and to followers in the same order, and each node has a position
-in the replication log (the number of writes it has applied locally). By subtracting a
-follower’s current position from the leader’s current position, you can measure the
-amount of replication lag.
-However, in systems with leaderless replication, there is no fixed order in which
-writes are applied, which makes monitoring more difficult. Moreover, if the database only uses read repair (no anti-entropy), there is no limit to how old a value might be
-—if a value is only infrequently read, the value returned by a stale replica may be
-ancient.
-There has been some research on measuring replica staleness in databases with lead‐
-erless replication and predicting the expected percentage of stale reads depending on
-the parameters n, w, and r [48]. This is unfortunately not yet common practice, but it
-would be good to include staleness measurements in the standard set of metrics for
-databases. Eventual consistency is a deliberately vague guarantee, but for operability
-it’s important to be able to quantify “eventual".
+From an operational perspective, it’s important to monitor whether your databases are returning up-to-date results.
+Even if your application can tolerate stale reads, you need to be aware of the health of your replication.
+If it falls behind significantly, it should alert you so that you can investigate the cause (for example, a problem in the network or an overloaded node).
+
+For leader-based replication, the database typically exposes metrics for the replication lag, which you can feed into a monitoring system.
+This is possible because writes are applied to the leader and to followers in the same order, and each node has a position in the replication log (the number of writes it has applied locally).
+By subtracting a follower’s current position from the leader’s current position, you can measure the amount of replication lag.
+However, in systems with leaderless replication, there is no fixed order in which writes are applied, which makes monitoring more difficult.
+Moreover, if the database only uses read repair (no anti-entropy), there is no limit to how old a value might be —if a value is only infrequently read, the value returned by a stale replica may be ancient.
+There has been some research on measuring replica staleness in databases with leaderless replication and predicting the expected percentage of stale reads depending on the parameters n, w, and r.
+This is unfortunately not yet common practice, but it would be good to include staleness measurements in the standard set of metrics for databases.
+Eventual consistency is a deliberately vague guarantee, but for operability it’s important to be able to quantify “eventual".
 
 ### Sloppy Quorums and Hinted Handoff
 
-Databases with appropriately configured quorums can tolerate the failure of individ‐
-ual nodes without the need for failover. They can also tolerate individual nodes going
-slow, because requests don’t have to wait for all n nodes to respond—they can return
-when w or r nodes have responded. These characteristics make databases with leader‐
-less replication appealing for use cases that require high availability and low latency,
-and that can tolerate occasional stale reads.
-However, quorums (as described so far) are not as fault-tolerant as they could be. A
-network interruption can easily cut off a client from a large number of database
-nodes. Although those nodes are alive, and other clients may be able to connect to
-them, to a client that is cut off from the database nodes, they might as well be dead. In
-this situation, it’s likely that fewer than w or r reachable nodes remain, so the client
-can no longer reach a quorum.
-In a large cluster (with significantly more than n nodes) it’s likely that the client can
-connect to some database nodes during the network interruption, just not to the
-nodes that it needs to assemble a quorum for a particular value. In that case, database
-designers face a trade-off:
+Databases with appropriately configured quorums can tolerate the failure of individual nodes without the need for failover.
+They can also tolerate individual nodes going slow, because requests don’t have to wait for all n nodes to respond—they can return when w or r nodes have responded.
+These characteristics make databases with leaderless replication appealing for use cases that require high availability and low latency, and that can tolerate occasional stale reads.
 
-- Is it better to return errors to all requests for which we cannot reach a quorum of
-  w or r nodes?
-- Or should we accept writes anyway, and write them to some nodes that are
-  reachable but aren’t among the n nodes on which the value usually lives?
-  The latter is known as a sloppy quorum [37]: writes and reads still require w and r
-  successful responses, but those may include nodes that are not among the designated
-  n “home” nodes for a value. By analogy, if you lock yourself out of your house, you
-  may knock on the neighbor’s door and ask whether you may stay on their couch tem‐
-  porarily.
+However, quorums (as described so far) are not as fault-tolerant as they could be.
+A network interruption can easily cut off a client from a large number of database nodes.
+Although those nodes are alive, and other clients may be able to connect to them, to a client that is cut off from the database nodes, they might as well be dead.
+In this situation, it’s likely that fewer than w or r reachable nodes remain, so the client can no longer reach a quorum.
 
-Once the network interruption is fixed, any writes that one node temporarily
-accepted on behalf of another node are sent to the appropriate “home” nodes. This is called hinted handoff. (Once you find the keys to your house again, your neighbor
-politely asks you to get off their couch and go home.)
-Sloppy quorums are particularly useful for increasing write availability: as long as any
-w nodes are available, the database can accept writes. However, this means that even
-when w + r > n, you cannot be sure to read the latest value for a key, because the
-latest value may have been temporarily written to some nodes outside of n [47].
-Thus, a sloppy quorum actually isn’t a quorum at all in the traditional sense. It’s only
-an assurance of durability, namely that the data is stored on w nodes somewhere.
-There is no guarantee that a read of r nodes will see it until the hinted handoff has
-completed.
-Sloppy quorums are optional in all common Dynamo implementations. In Riak they
-are enabled by default, and in Cassandra and Voldemort they are disabled by default.
+In a large cluster (with significantly more than n nodes) it’s likely that the client can connect to some database nodes during the network interruption, just not to the nodes that it needs to assemble a quorum for a particular value.
+In that case, database designers face a trade-off:
+
+- Is it better to return errors to all requests for which we cannot reach a quorum of w or r nodes?
+- Or should we accept writes anyway, and write them to some nodes that are reachable but aren’t among the n nodes on which the value usually lives?
+  The latter is known as a sloppy quorum: writes and reads still require w and r successful responses, but those may include nodes that are not among the designated n “home” nodes for a value.
+  By analogy, if you lock yourself out of your house, you may knock on the neighbor’s door and ask whether you may stay on their couch temporarily.
+
+Once the network interruption is fixed, any writes that one node temporarily accepted on behalf of another node are sent to the appropriate “home” nodes.
+This is called hinted handoff. (Once you find the keys to your house again, your neighbor politely asks you to get off their couch and go home.)
+Sloppy quorums are particularly useful for increasing write availability: as long as any w nodes are available, the database can accept writes.
+However, this means that even when w + r > n, you cannot be sure to read the latest value for a key, because the latest value may have been temporarily written to some nodes outside of n.
+Thus, a sloppy quorum actually isn’t a quorum at all in the traditional sense.
+It’s only an assurance of durability, namely that the data is stored on w nodes somewhere.
+There is no guarantee that a read of r nodes will see it until the hinted handoff has completed.
+Sloppy quorums are optional in all common Dynamo implementations.
+In Riak they are enabled by default, and in Cassandra and Voldemort they are disabled by default.
 
 #### Multi-datacenter operation
 
-We previously discussed cross-datacenter replication as a use case for multi-leader
-replication (see “Multi-Leader Replication” on page 168). Leaderless replication is
-also suitable for multi-datacenter operation, since it is designed to tolerate conflicting
-concurrent writes, network interruptions, and latency spikes.
-Cassandra and Voldemort implement their multi-datacenter support within the nor‐
-mal leaderless model: the number of replicas n includes nodes in all datacenters, and
-in the configuration you can specify how many of the n replicas you want to have in
-each datacenter. Each write from a client is sent to all replicas, regardless of datacen‐
-ter, but the client usually only waits for acknowledgment from a quorum of nodes
-within its local datacenter so that it is unaffected by delays and interruptions on the
-cross-datacenter link.
+We previously discussed cross-datacenter replication as a use case for multi-leader replication.
+Leaderless replication is also suitable for multi-datacenter operation, since it is designed to tolerate conflicting concurrent writes, network interruptions, and latency spikes.
+
+Cassandra and Voldemort implement their multi-datacenter support within the normal leaderless model: the number of replicas n includes nodes in all datacenters, and in the configuration you can specify how many of the n replicas you want to have in each datacenter.
+Each write from a client is sent to all replicas, regardless of datacenter, but the client usually only waits for acknowledgment from a quorum of nodes within its local datacenter so that it is unaffected by delays and interruptions on the cross-datacenter link.
+
 The higher-latency writes to other datacenters are often configured to happen asynchronously, although there is some flexibility in the configuration.
-Riak keeps all communication between clients and database nodes local to one data‐
-center, so n describes the number of replicas within one datacenter. Cross-datacenter
-replication between database clusters happens asynchronously in the background, in
-a style that is similar to multi-leader replication.
+Riak keeps all communication between clients and database nodes local to one datacenter, so n describes the number of replicas within one datacenter.
+Cross-datacenter replication between database clusters happens asynchronously in the background, in a style that is similar to multi-leader replication.
 
 ## Concurrent Writes
 
@@ -933,7 +864,7 @@ Even though the writes don’t have a natural ordering, we can force an arbitrar
 For example, we can attach a timestamp to each write, pick the biggest timestamp as the most “recent,” and discard any writes with an earlier timestamp.
 This conflict resolution algorithm, called last write wins (LWW), is the only supported conflict resolution method in Cassandra, and an optional feature in Riak.
 LWW achieves the goal of eventual convergence, but at the cost of durability: if there are several concurrent writes to the same key, even if they were all reported as successful to the client (because they were written to w replicas), only one of the writes will survive and the others will be silently discarded.
-Moreover, LWW may even drop writes that are not concurrent, as we shall discuss in “Timestamps for ordering events” on page 291.
+Moreover, LWW may even drop writes that are not concurrent.
 There are some situations, such as caching, in which lost writes are perhaps acceptable.
 If losing data is not acceptable, LWW is a poor choice for conflict resolution.
 The only safe way of using a database with LWW is to ensure that a key is only written once and the reafter treated as immutable, thus avoiding any concurrent updates to the same key.
