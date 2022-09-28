@@ -36,7 +36,7 @@ The most common solution for this is called leader-based replication (also known
    Each follower takes the log from the leader and updates its local copy of the database accordingly, by applying all writes in the same order as they were processed on the leader.
 3. When a client wants to read from the database, it can query either the leader or any of the followers. However, writes are only accepted on the leader (the followers are read-only from the client’s point of view).
 
-<div style="text-align: center;">
+span
 
 ![Fig.1. Leader-based (master–slave) replication](./img/Replica-Leader-Based.png)
 
@@ -928,22 +928,6 @@ To prevent this probem, an item cannot simply be deleted from the database when 
 As merging siblings in application code is complex and error-prone, there are some efforts to design data structures that can perform this merging automatically.
 For example, Riak’s datatype support uses a family of data structures called CRDTs that can automatically merge siblings in sensible ways, including preserving deletions.
 
-```dot
-digraph {
-    ranksep=1;
-    nodesep=1;
-    Master;
-   slave1[label="Slave"];
-   slave2[label="Slave"];
-  
-  
-   Master -> slave1[label="sync"];
-   slave1 -> Master[label="ok" ]
-   Master -> slave2[label="sync" ];
-   slave2 -> Master[label="ok" ]
-}
-```
-
 ## Replicated State Machines
 
 Redundancy is not enough; to be useful it must be coordinated.
@@ -956,11 +940,11 @@ More complicated kinds of redundancy (such as error-correcting codes) are cheape
 We discussed three main approaches to replication:
 
 
-| Replication               | Description                                                                                                                                                                                                          |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Single-leader replication | Clients send all writes to a single node (the leader), which sends a stream of data change events to the other replicas (followers). Reads can be performed on any replica, but reads from followers might be stale. |
-| Multi-leader replication  | Clients send each write to one of several leader nodes, any of which can accept writes. The leaders send streams of data change events to each other and to any follower nodes.                                      |
-| Leaderless replication    | Clients send each write to several nodes, and read from several nodes in parallel in order to detect and correct nodes with stale data.                                                                              |
+| Replication   | Description                                                                                                                                                                                                          |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Single-leader replication** | Clients send all writes to a single node (the leader), which sends a stream of data change events to the other replicas (followers). <br> Reads can be performed on any replica, but reads from followers might be stale. |
+| **Multi-leader replication** | Clients send each write to one of several leader nodes, any of which can accept writes. <br> The leaders send streams of data change events to each other and to any follower nodes.                                      |
+| **Leaderless replication** | Clients send each write to several nodes, and read from several nodes in parallel in order to detect and correct nodes with stale data.                                                                              |
 
 Each approach has advantages and disadvantages.
 Single-leader replication is popular because it is fairly easy to understand and there is no conflict resolution to worry about.
@@ -986,6 +970,7 @@ We also touched on methods for resolving conflicts by merging together concurren
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Partitioning](/docs/CS/Distributed/Partition.md)
 
 ## References
 
