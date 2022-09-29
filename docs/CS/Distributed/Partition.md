@@ -163,7 +163,6 @@ You want to let users search for cars, allowing them to filter by color and by m
 If you have declared the index, the database can perform the indexing automatically.
 For example, whenever a red car is added to the database, the database partition automatically adds it to the list of document IDs for the index entry color:red.
 
-
 <div style="text-align: center;">
 
 ![Fig.4. Combining secondary indexes by document](./img/Partitioning-Document.png)
@@ -196,8 +195,6 @@ A global index must also be partitioned, but it can be partitioned differently f
 
 Figure 5 illustrates what this could look like: red cars from all partitions appear under color:red in the index, but the index is partitioned so that colors starting with the letters a to r appear in partition 0 and colors starting with s to z appear in partition 1.
 The index on the make of car is partitioned similarly (with the partition boundary being between f and h).
-
-
 
 <div style="text-align: center;">
 
@@ -264,7 +261,6 @@ For example, a database running on a cluster of 10 nodes may be split into 1,000
 Now, if a node is added to the cluster, the new node can steal a few partitions from every existing node until partitions are fairly distributed once again.
 This process is illustrated in Figure 6.
 If a node is removed from the cluster, the same happens in reverse.
-
 
 <div style="text-align: center;">
 
@@ -390,7 +386,6 @@ There are protocols for achieving consensus in a distributed system, but they ar
 Many distributed data systems rely on a separate coordination service such as ZooKeeper to keep track of this cluster metadata, as illustrated in Figure 8.
 Each node registers itself in ZooKeeper, and ZooKeeper maintains the authoritative mapping of partitions to nodes. Other actors, such as the routing tier or the partitioning-aware client, can subscribe to this information in ZooKeeper.
 Whenever a partition changes ownership, or a node is added or removed, ZooKeeper notifies the routing tier so that it can keep its routing information up to date.
-
 
 <div style="text-align: center;">
 

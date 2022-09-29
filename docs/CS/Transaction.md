@@ -71,7 +71,6 @@ last “forever”
 
 [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf)
 
-
 [An Empirical Evaluation of In-Memory Multi-Version Concurrency Control](https://db.cs.cmu.edu/papers/2017/p781-wu.pdf)
 
 ### Phenomena
@@ -179,17 +178,13 @@ MySQL
 
 ### Two-Phase Locking
 
-
 ### Validation-Based Concurrency
-
 
 ### MVCC
 
 - Multi-Version Two-Phase Locking
 - Multi-Version Optimistic Concurrency Control
 - Multi-Version Timestamp Ordering
-
-
 
 ## Links
 
