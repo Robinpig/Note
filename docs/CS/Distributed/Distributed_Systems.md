@@ -21,6 +21,8 @@ To be truly reliable, a distributed system must have the following characteristi
 - Predictable Performance: The ability to provide desired responsiveness in a timely manner.
 - Secure: The system authenticates access to data and services.
 
+## The Trouble with Distributed Systems
+
 The types of failures that can occur in a distributed system:
 
 - Halting failures: A component simply stops. There is no way to detect the failure except by timeout: it either stops sending "I'm alive" (heartbeat) messages or fails to respond to requests.
@@ -36,7 +38,9 @@ The types of failures that can occur in a distributed system:
 
 Our goal is to design a distributed system with the characteristics listed above (faulttolerant, highly available, recoverable, etc.), which means we must design for failure.
 
-### The 8 Fallacies of Distributed Computing
+### Faults and Partial Failures
+
+### Unreliable Networks
 
 Everyone, when they first build a distributed system, makes the following eight assumptions.
 
@@ -64,77 +68,149 @@ Everyone, when they first build a distributed system, makes the following eight 
 8. **The network is homogeneous.**
    You need to ensure that the system’s components can talk with each other. Using proprietary protocols will damage your app’s interoperability.
 
-### Two Generals’ Problem
-
 One of the most prominent descriptions of an agreement in a distributed system is a thought experiment widely known as the *Two Generals’ Problem*.
 This thought experiment shows that it is impossible to achieve an agreement between two parties if communication is asynchronous in the presence of link failures.
 
 The Two Generals Problem is provably unsolvable.
 
-## Computation Model
+### Unreliable Clocks
 
-### Consistency Model
+#### Monotonic Versus Time-of-Day Clocks
 
-A consistency model is a set of histories.
+Modern computers have at least two different kinds of clocks: a *time-of-day clock* and a *monotonic clock*.
 
-> link [Jepsen Consistency Models](https://jepsen.io/consistency)
+A time-of-day clock does what you intuitively expect of a clock: it returns the current date and time according to some calendar (also known as wall-clock time).
+For example, `clock_gettime(CLOCK_REALTIME)` on Linux and `System.currentTimeMillis()` in Java return the number of seconds (or milliseconds) since the epoch: midnight UTC on January 1, 1970, according to the Gregorian calendar, not counting leap seconds.
+Some systems use other dates as their reference point.
 
-[Highly Available Transactions: Virtues and Limitations](http://www.vldb.org/pvldb/vol7/p181-bailis.pdf)
+Time-of-day clocks are usually synchronized with NTP, which means that a timestamp from one machine (ideally) means the same as a timestamp on another machine.
+However, time-of-day clocks also have various oddities, as described in the next section.
+In particular, if the local clock is too far ahead of the NTP server, it may be forcibly reset and appear to jump back to a previous point in time.
+These jumps, as well as the fact that they often ignore leap seconds, make time-of-day clocks unsuitable for measuring elapsed time.
+Time-of-day clocks have also historically had quite a coarse-grained resolution, e.g., moving forward in steps of 10 ms on older Windows systems.
+On recent systems, this is less of a problem.
 
-[Consistency in Non-Transactional Distributed Storage Systems](https://arxiv.org/pdf/1512.00168.pdf)
+A monotonic clock is suitable for measuring a duration (time interval), such as a timeout or a service’s response time: `clock_gettime(CLOCK_MONOTONIC)` on Linux and `System.nanoTime()` in Java are monotonic clocks, for example.
+The name comes from the fact that they are guaranteed to always move forward (whereas a time-ofday clock may jump back in time).
 
-#### Linearizability
+You can check the value of the monotonic clock at one point in time, do something, and then check the clock again at a later time. The difference between the two values tells you how much time elapsed between the two checks.
+However, the absolute value of the clock is meaningless: it might be the number of nanoseconds since the computer was started, or something similarly arbitrary.
+In particular, it makes no sense to compare monotonic clock values from two different computers, because they don’t mean the same thing.
+<br>
+On a server with multiple CPU sockets, there may be a separate timer per CPU, which is not necessarily synchronized with other CPUs.
+Operating systems compensate for any discrepancy and try to present a monotonic view of the clock to application threads, even as they are scheduled across different CPUs.
+However, it is wise to take this guarantee of monotonicity with a pinch of salt.
 
-[Linearizability: A Correctness Condition for Concurrent Objects](https://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf)
+NTP may adjust the frequency at which the monotonic clock moves forward (this is known as *slewing* the clock) if it detects that the computer’s local quartz is moving faster or slower than the NTP server.
+By default, NTP allows the clock rate to be speeded up or slowed down by up to 0.05%, but NTP cannot cause the monotonic clock to jump forward or backward.
+The resolution of monotonic clocks is usually quite good: on most systems they can measure time intervals in microseconds or less.
+In a distributed system, using a monotonic clock for measuring elapsed time (e.g., timeouts) is usually fine, because it doesn’t assume any synchronization between different nodes’ clocks and is not sensitive to slight inaccuracies of measurement.
 
-Viotti and Vukolić rephrase this definition in terms of three set-theoretic constraints on histories:
+Monotonic clocks don’t need synchronization, but time-of-day clocks need to be set according to an NTP server or other external time source in order to be useful.
+Unfortunately, our methods for getting a clock to tell the correct time aren’t nearly as reliable or accurate as you might hope—hardware clocks and NTP can be fickle beasts.
 
-- SingleOrder (there exists some total order of operations)
-- RealTime (consistent with the real time bound)
-- RVal (obeying the single-threaded laws of the associated object’s datatype)
+#### Confidence interval
 
-[How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Progranms](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/How-to-Make-a-Multiprocessor-Computer-That-Correctly-Executes-Multiprocess-Programs.pdf)
+You may be able to read a machine’s time-of-day clock with microsecond or even nanosecond resolution.
+But even if you can get such a fine-grained measurement, that doesn’t mean the value is actually accurate to such precision.
+In fact, it most likely is not—as mentioned previously, the drift in an imprecise quartz clock can easily be several milliseconds, even if you synchronize with an NTP server on the local network every minute.
+With an NTP server on the public internet, the best possible accuracy is probably to the tens of milliseconds, and the error may easily spike to over 100 ms when there is network congestion.
 
-Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the real-time ordering of those operations: e.g.,
-if operation A completes before operation B begins, then B should logically take effect after A.
+Thus, it doesn’t make sense to think of a clock reading as a point in time—it is more like a range of times, within a confidence interval:
+for example, a system may be 95% confident that the time now is between 10.3 and 10.5 seconds past the minute, but it doesn’t know any more precisely than that.
+If we only know the time +/– 100 ms, the microsecond digits in the timestamp are essentially meaningless.
 
-[Testing for Linearizability](http://www.cs.ox.ac.uk/people/gavin.lowe/LinearizabiltyTesting/paper.pdf)
+The uncertainty bound can be calculated based on your time source.
+If you have a GPS receiver or atomic (caesium) clock directly attached to your computer, the expected error range is reported by the manufacturer.
+If you’re getting the time from a server, the uncertainty is based on the expected quartz drift since your last sync with the server, plus the NTP server’s uncertainty, plus the network round-trip time to the server (to a first approximation, and assuming you trust the server).
+Unfortunately, most systems don’t expose this uncertainty: for example, when you call clock_gettime(), the return value doesn’t tell you the expected error of the timestamp, so you don’t know if its confidence interval is five milliseconds or five years.
 
-[Faster linearizability checking via P-compositionality](https://arxiv.org/pdf/1504.00204.pdf)
+An interesting exception is Google’s TrueTime API in [Spanner](/docs/CS/Distributed/Spanner.md), which explicitly reports the confidence interval on the local clock.
+When you ask it for the current time, you get back two values: [earliest, latest], which are the earliest possible and the latest possible timestamp.
+Based on its uncertainty calculations, the clock knows that the actual current time is somewhere within that interval.
+The width of the interval depends, among other things, on how long it has been since the local quartz clock was last synchronized with a more accurate clock source.
 
-#### Sequential Consistency
+### Knowledge, Truth, and Lies
 
-Viotti and Vukolić decompose sequential consistency into three properties:
-
-- SingleOrder (there exists some total order of operations)
-- PRAM
-- RVal (the order must be consistent with the semantics of the datatype)
-
-#### Causal consistency
-
-[Causal memory: definitions, implementation, and programming](https://www.cs.tau.ac.il/~orilahav/seminar18/causal.pdf)
-
-Causal consistency captures the notion that causally-related operations should appear in the same order on all processes—though processes may disagree about the order of causally independent operations.
-
-If you need total availability, you’ll have to give up causal (and read-your-writes), but can still obtain writes follow reads, monotonic reads, and monotonic writes.
-
-NFS
-
-Network File System
-
-#### Eventual Consistency
-
-[Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
-
-### Isolation Level
-
-## Byzantine Problem
+#### Byzantine Problem
 
 [Byzantine Problem](/docs/CS/Distributed/Byzantine.md)
 
-## CAP Theory
+### System Model and Reality
 
-[CAP Theory](/docs/CS/Distributed/CAP.md)
+Many algorithms have been designed to solve distributed systems problems.
+In order to be useful, these algorithms need to tolerate the various faults of distributed systems that we discussed.
+
+Algorithms need to be written in a way that does not depend too heavily on the details of the hardware and software configuration on which they are run.
+This in turn requires that we somehow formalize the kinds of faults that we expect to happen in a system.
+We do this by defining a system model, which is an abstraction that describes what things an algorithm may assume.
+
+With regard to timing assumptions, three system models are in common use:
+
+- Synchronous model
+  The synchronous model assumes bounded network delay, bounded process pauses, and bounded clock error.
+  This does not imply exactly synchronized clocks or zero network delay; it just means you know that network delay, pauses, and clock drift will never exceed some fixed upper bound.
+  The synchronous model is not a realistic model of most practical systems, because unbounded delays and pauses do occur.
+- Partially synchronous model
+  Partial synchrony means that a system behaves like a synchronous system most of the time, but it sometimes exceeds the bounds for network delay, process pauses, and clock drift.
+  This is a realistic model of many systems: most of the time, networks and processes are quite well behaved—otherwise we would never be able to get anything done—but we have to reckon with the fact that any timing assumptions may be shattered occasionally.
+  When this happens, network delay, pauses, and clock error may become arbitrarily large.
+- Asynchronous model
+  In this model, an algorithm is not allowed to make any timing assumptions—in fact, it does not even have a clock (so it cannot use timeouts).
+  Some algorithms can be designed for the asynchronous model, but it is very restrictive.
+
+Moreover, besides timing issues, we have to consider node failures.
+The three most common system models for nodes are:
+
+- Crash-stop faults
+  In the crash-stop model, an algorithm may assume that a node can fail in only one way, namely by crashing.
+  This means that the node may suddenly stop responding at any moment, and thereafter that node is gone forever—it never comes back.
+- Crash-recovery faults
+  We assume that nodes may crash at any moment, and perhaps start responding again after some unknown time.
+  In the crash-recovery model, nodes are assumed to have stable storage (i.e., nonvolatile disk storage) that is preserved across crashes, while the in-memory state is assumed to be lost.
+- Byzantine (arbitrary) faults
+  Nodes may do absolutely anything, including trying to trick and deceive other nodes.
+
+For modeling real systems, the partially synchronous model with crash-recovery faults is generally the most useful model.
+
+### Correctness of an algorithm
+
+To define what it means for an algorithm to be correct, we can describe its properties.
+We can write down the properties we want of a distributed algorithm to define what it means to be correct.
+For example, if we are generating fencing tokens for a lock, we may require the algorithm to have the following properties:
+
+- Uniqueness
+  No two requests for a fencing token return the same value.
+- Monotonic sequence
+  If request x returned token tx, and request y returned token ty, and x completed before y began, then tx < ty.
+- Availability
+  A node that requests a fencing token and does not crash eventually receives a response.
+
+An algorithm is correct in some system model if it always satisfies its properties in all situations that we assume may occur in that system model. But how does this make sense?
+If all nodes crash, or all network delays suddenly become infinitely long, then no algorithm will be able to get anything done.
+
+#### Safety and liveness
+
+To clarify the situation, it is worth distinguishing between two different kinds of properties: *safety* and *liveness* properties.
+In the example just given, *uniqueness* and *monotonic sequence* are safety properties, but *availability* is a liveness property.
+What distinguishes the two kinds of properties? A giveaway is that liveness properties often include the word “eventually” in their definition. (*eventual consistency* is a liveness property.)
+
+Safety is often informally defined as nothing bad happens, and liveness as something good eventually happens.
+However, it’s best to not read too much into those informal definitions, because the meaning of good and bad is subjective.
+The actual definitions of safety and liveness are precise and mathematical:
+
+- If a safety property is violated, we can point at a particular point in time at which it was broken (for example, if the uniqueness property was violated, we can identify the particular operation in which a duplicate fencing token was returned).
+  After a safety property has been violated, the violation cannot be undone—the damage is already done.
+- A liveness property works the other way round: it may not hold at some point in time (for example, a node may have sent a request but not yet received a response), but there is always hope that it may be satisfied in the future (namely by receiving a response).
+
+An advantage of distinguishing between safety and liveness properties is that it helps us deal with difficult system models.
+For distributed algorithms, it is common to require that safety properties always hold, in all possible situations of a system model.
+That is, even if all nodes crash, or the entire network fails, the algorithm must nevertheless ensure that it does not return a wrong result (i.e., that the safety properties remain satisfied).
+
+However, with liveness properties we are allowed to make caveats: for example, we could say that a request needs to receive a response only if a majority of nodes have not crashed, and only if the network eventually recovers from an outage.
+The definition of the partially synchronous model requires that eventually the system returns to a synchronous state—that is, any period of network interruption lasts only for a finite duration and is then repaired.
+
+
 
 ## Time
 
@@ -155,7 +231,6 @@ A distributed algorithm has two properties:
 - liveness properties say that something good will eventually happen.
   It is the generalization of termination.
   For example, saying that a system will eventually return a result to every API call is a liveness property, as is guaranteeing that a write to disk always eventually completes.
-
 
 ## Failure
 
@@ -427,7 +502,6 @@ A distributed system consists of a finite set of processes and a finite set of c
 [F1](https://courses.cs.washington.edu/courses/cse550/21au/papers/CSE550.F1.pdf)
 
 [MillWheel: Fault-Tolerant Stream Processing at Internet Scale]()
-
 
 [Dryad]
 
