@@ -759,7 +759,7 @@ Thus, although quorums appear to guarantee that a read returns the latest writte
 Dynamo-style databases are generally optimized for use cases that can tolerate eventual consistency.
 The parameters w and r allow you to adjust the probability of stale values being read, but it’s wise to not take them as absolute guarantees.
 
-In particular, you usually do not get the guarantees discussed in “Problems with Replication Lag” on page 161 (reading your writes, monotonic reads, or consistent prefix reads), so the previously mentioned anomalies can occur in applications.
+In particular, you usually do not get the guarantees discussed in “Replication Lag”(reading your writes, monotonic reads, or consistent prefix reads), so the previously mentioned anomalies can occur in applications.
 Stronger guarantees generally require transactions or consensus.
 
 ### Monitoring staleness
