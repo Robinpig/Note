@@ -57,11 +57,11 @@ In a Pulsar instance:
 * A configuration store quorum stores configuration for tenants, namespaces, and other entities that need to be globally consistent.
 * Each cluster has its own local ZooKeeper ensemble that stores cluster-specific configuration and coordination such as which brokers are responsible for which topics as well as ownership metadata, broker load reports, BookKeeper ledger metadata, and more.
 
-## Configuration store[](https://pulsar.apache.org/docs/next/concepts-architecture-overview#configuration-store "Direct link to heading")
+## Configuration store
 
 The configuration store maintains all the configurations of a Pulsar instance, such as clusters, tenants, namespaces, partitioned topic-related configurations, and so on. A Pulsar instance can have a single local cluster, multiple local clusters, or multiple cross-region clusters. Consequently, the configuration store can share the configurations across multiple clusters under a Pulsar instance. The configuration store can be deployed on a separate ZooKeeper cluster or deployed on an existing ZooKeeper cluster.
 
-## Persistent storage[](https://pulsar.apache.org/docs/next/concepts-architecture-overview#persistent-storage "Direct link to heading")
+## Persistent storage
 
 Pulsar provides guaranteed message delivery for applications. If a message successfully reaches a Pulsar broker, it will be delivered to its intended target.
 
@@ -69,7 +69,7 @@ This guarantee requires that non-acknowledged messages are stored durably until 
 
 
 
-### Apache BookKeeper[](https://pulsar.apache.org/docs/next/concepts-architecture-overview#apache-bookkeeper "Direct link to heading")
+### Apache BookKeeper
 
 Pulsar uses a system called [Apache BookKeeper](http://bookkeeper.apache.org/) for persistent message storage. BookKeeper is a distributed [write-ahead log](https://en.wikipedia.org/wiki/Write-ahead_logging) (WAL) system that provides several crucial advantages for Pulsar:
 
@@ -96,7 +96,7 @@ You can see an illustration of how brokers and bookies interact in the diagram b
 
 
 
-### Ledgers[](https://pulsar.apache.org/docs/next/concepts-architecture-overview#ledgers "Direct link to heading")
+### Ledgers
 
 A ledger is an append-only data structure with a single writer that is assigned to multiple BookKeeper storage nodes, or bookies. Ledger entries are replicated to multiple bookies. Ledgers themselves have very simple semantics:
 

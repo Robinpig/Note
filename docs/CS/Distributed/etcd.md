@@ -9,7 +9,6 @@ etcd is a distributed reliable key-value store for the most critical data of a d
 
 etcd is written in Go and uses the [Raft](/docs/CS/Distributed/Raft.md) consensus algorithm to manage a highly-available replicated log.
 
-
 ## Network
 
 ```go
@@ -26,16 +25,16 @@ func (t *Transport) Handler() http.Handler {
 }
 ```
 
-
 ## Serve
 
-Serve accepts incoming connections on the Listener l, creating a new service goroutine for each. 
+Serve accepts incoming connections on the Listener l, creating a new service goroutine for each.
 The service goroutines read requests and then call srv.Handler to reply to them.
 
 HTTP/2 support is only enabled if the Listener returns *tls.Conn connections and they were configured with "h2" in the TLS Config.NextProtos.
 
 Serve always returns a non-nil error and closes l.
 After Shutdown or Close, the returned error is ErrServerClosed.
+
 ```go
 func (srv *Server) Serve(l net.Listener) error {
 	if fn := testHookServerServe; fn != nil {
@@ -104,7 +103,6 @@ func (srv *Server) Serve(l net.Listener) error {
 }
 ```
 
-
 ```go
 func (ln stoppableListener) Accept() (c net.Conn, err error) {
 	connc := make(chan *net.TCPConn, 1)
@@ -129,8 +127,6 @@ func (ln stoppableListener) Accept() (c net.Conn, err error) {
 	}
 }
 ```
-
-
 
 Serve a new connection.
 
@@ -320,7 +316,6 @@ func (c *conn) serve(ctx context.Context) {
 }
 ```
 
-
 ### ServeHTTP
 
 ```go
@@ -360,9 +355,8 @@ Depending on the HTTP client software, HTTP protocol version, and any intermedia
 Except for reading the body, handlers should not modify the provided Request.
 
 If ServeHTTP panics, the server (the caller of ServeHTTP) assumes that the effect of the panic was isolated to the active request.
-It recovers the panic, logs a stack trace to the server error log, and either closes the network connection or sends an HTTP/2 RST_STREAM, depending on the HTTP protocol. 
+It recovers the panic, logs a stack trace to the server error log, and either closes the network connection or sends an HTTP/2 RST_STREAM, depending on the HTTP protocol.
 To abort a handler so the client sees an interrupted response but the server doesn't log an error, panic with the value ErrAbortHandler.
-
 
 ```go
 type Handler interface {
@@ -370,40 +364,38 @@ type Handler interface {
 }
 ```
 
-
-
 RoundTripper is an interface representing the ability to execute a single HTTP transaction, obtaining the Response for a given Request.
 
 A RoundTripper must be safe for concurrent use by multiple goroutines.
 
 RoundTrip executes a single HTTP transaction, returning a Response for the provided Request.
 
-RoundTrip should not attempt to interpret the response. 
+RoundTrip should not attempt to interpret the response.
 In particular, RoundTrip must return err == nil if it obtained a response, regardless of the response's HTTP status code.
 A non-nil err should be reserved for failure to obtain a response.
 Similarly, RoundTrip should not attempt to handle higher-level protocol details such as redirects, authentication, or cookies.
 
-RoundTrip should not modify the request, except for consuming and closing the Request's Body. RoundTrip may read fields of the request in a separate goroutine. 
+RoundTrip should not modify the request, except for consuming and closing the Request's Body. RoundTrip may read fields of the request in a separate goroutine.
 Callers should not mutate or reuse the request until the Response's Body has been closed.
 
-RoundTrip must always close the body, including on errors, but depending on the implementation may do so in a separate goroutine even after RoundTrip returns. 
+RoundTrip must always close the body, including on errors, but depending on the implementation may do so in a separate goroutine even after RoundTrip returns.
 This means that callers wanting to reuse the body for subsequent requests must arrange to wait for the Close call before doing so.
 
 The Request's URL and Header fields must be initialized.
 
 ```go
 type RoundTripper interface {
-	
+
 	RoundTrip(*Request) (*Response, error)
 }
 ```
-
 
 RoundTrip implements the RoundTripper interface.
 
 For higher-level HTTP client support (such as handling of cookies and redirects), see Get, Post, and the Client type.
 
 Like the RoundTripper interface, the error types returned by RoundTrip are unspecified.
+
 ```go
 func (t *Transport) RoundTrip(req *Request) (*Response, error) {
 return t.roundTrip(req)
@@ -430,10 +422,10 @@ type Peer interface {
 	// stream usage. After the call, the ownership of the outgoing
 	// connection hands over to the peer. The peer will close the connection when it is no longer used.
 	attachOutgoingConn(conn *outgoingConn)
-	
+
 	// activeSince returns the time that the connection with the peer becomes active.
 	activeSince() time.Time
-	
+
 	// stop performs any necessary finalization and terminates the peer elegantly.
 	stop()
 }

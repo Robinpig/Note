@@ -1,46 +1,96 @@
 ## Introduction
 
-
-
-In computer science, message queues and mailboxes are software-engineering components typically used for inter-process communication (IPC), or for inter-thread communication within the same process. 
+In computer science, message queues and mailboxes are software-engineering components typically used for inter-process communication (IPC), or for inter-thread communication within the same process.
 They use a queue for messaging – the passing of control or of content. Group communication systems provide similar kinds of functionality.
 
+A message queue is a form of asynchronous service-to-service communication used in serverless and microservices architectures.
+Messages are stored on the queue until they are processed and deleted. Each message is processed only once, by a single consumer.
+Message queues can be used to decouple heavyweight processing, to buffer or batch work, and to smooth spiky workloads.
+
+In modern cloud architecture, applications are decoupled into smaller, independent building blocks that are easier to develop, deploy and maintain.
+Message queues provide communication and coordination for these distributed applications.
+Message queues can significantly simplify coding of decoupled applications, while improving performance, reliability and scalability.
+
+Message queues allow different parts of a system to communicate and process operations asynchronously.
+A message queue provides a lightweight buffer which temporarily stores messages, and endpoints that allow software components to connect to the queue in order to send and receive messages.
+The messages are usually small, and can be things like requests, replies, error messages, or just plain information. To send a message, a component called a producer adds a message to the queue.
+The message is stored on the queue until another component called a consumer retrieves the message and does something with it.
+
+<div style="text-align: center;">
+
+![Fig.1. Message queue](./img/P2P.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Message queue.
+</p>
+
+Many producers and consumers can use the queue, but each message is processed only once, by a single consumer.
+For this reason, this messaging pattern is often called one-to-one, or point-to-point, communications.
+When a message needs to be processed by more than one consumer, message queues can be combined with Pub/Sub messaging in a fanout design pattern.
+
+### Pub/Sub
+
+The Publish Subscribe model allows messages to be broadcast to different parts of a system asynchronously.
+A sibling to a message queue, a message topic provides a lightweight mechanism to broadcast asynchronous event notifications, and endpoints that allow software components to connect to the topic in order to send and receive those messages.
+To broadcast a message, a component called a publisher simply pushes a message to the topic.
+Unlike message queues, which batch messages until they are retrieved, message topics transfer messages with no or very little queuing, and push them out immediately to all subscribers.
+All components that subscribe to the topic will receive every message that is broadcast, unless a message filtering policy is set by the subscriber.
+
+<div style="text-align: center;">
+
+![Fig.2. Pub/Sub](./img/PubSub.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.2. Pub/Sub.
+</p>
+
+The subscribers to the message topic often perform different functions, and can each do something different with the message in parallel.
+The publisher doesn’t need to know who is using the information that it is broadcasting, and the subscribers don’t need to know who the message comes from.
+This style of messaging is a bit different than message queues, where the component that sends the message often knows the destination it is sending to.
 
 Half Message
 
-
-
-
 - 解耦：A系统依赖B,C,D系统，A只需要发送topic，B,C,D后期不需要消息自行取消消费即可，类似消息总线
 - 消峰：应对突发的流量高峰时段（错峰与流控）
-
 
 issues
 
 - 系统复杂度提高
 - 系统可用性降低
 
-## Model
+### Message Delivery Semantics
+
+By message delivery semantics, we refer to the expected message delivery guaranties in the case of failure recovery.
+After a failure recovery, we recognize these different message delivery guarantees:
+
+- *At most once*
+  Data may have been processed but will never be processed twice. In this case, data may be lost but processing will never result in duplicate records.
+- *At-least-once*
+  Data that has been processed may be replayed and processed again. In this case, each data record is guaranteed to be processed and may result in duplicate records.
+- *Exactly once*
+  Data is processed once and only once. All data is guaranteed to be processed and no duplicate records are generated.
+  This is the most desirable guarantee for many enterprise applications, but it’s considered impossible to achieve in a distributed environment.
+- *Effectively Exactly Once*
+  is a variant of *exactly once* delivery semantics that tolerates duplicates during data processing and requires the producer side of the process to be idempotent.
+  That is, producing the same record more than once is the same as producing it only once. In practical terms, this translates to writing the data to a system that can preserve the uniqueness of keys or use a deduplication process to prevent duplicate records from being produced to an external system.
+
+Model
 
 Queue
 
 Pub/Sub
 
-
-
 ### Pull/Push
 
 #### push
 
-
-
 #### pull
 
 Long waiting
-
-
-
-
 
 ## Mq怎么选型，各个Mq中间件的优缺点？
 
@@ -52,25 +102,17 @@ Long waiting
 
 ![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/83347d6db01b43269235e1130753f1d8~tplv-k3u1fbpfcp-zoom-1.image?imageslim)
 
-
-
-
-
 ## issues
-
 
 - At most one
 - At least one
 - exactly one
-
-
 
 ### High Avaliability
 
 RabbitMQ
 
 Mirroring Cluster
-
 
 Kafka
 
@@ -80,11 +122,9 @@ partitions have replicate in other brokers
 
 we can only read/write leader
 
-
 leader will sync data to followers, return ack when most of followers sync successfully
 
 ### lost message
-
 
 RabbitMQ
 
@@ -99,38 +139,30 @@ Kafka
   - set topic repliaction factor > 1 : at least 2 partitions
   - set broker min.insync.replicas > 1 : at least 1 follower
   - replication.factor = min.insync.replicas + 1
-- producer    
+- producer
   - set producer acks = all : must write to all replicas then ack
   - set producer retries = MAX : retry util success
 - consumer
   - enable.auto.commit: false
 
-
-
 ### Duplicate Consume
 
 Based on no message losing
-
 
 - Redis is always idempotent.
 - DB primary key is unique.
 - update wehn exist, insert when not exist.
 - every request has own id, check if has consumed(a set).
 
-
-
 ### message ordering
 
 Kafka partition -> queue -> thread
 
-
 ### Backlog and recover
-
-
 
 ### Consistency
 
- 使用可靠消息最终一致性的分布式事务方案来保障
+使用可靠消息最终一致性的分布式事务方案来保障
 
 ### Ordering
 
@@ -246,11 +278,9 @@ rabbitMq推模式实现SimpleMessageListenerContainer 拉模式：basicGet
 
 为了实现广播功能，我们必须要维护消费关系，通常消息队列本身不维护消费订阅关系，可以利用zookeeper等成熟的系统维护消费关系，在消费关系发生变化时下发通知
 
-
-
 ## RabbitMq
 
-based on Erang, and it's hard to deploy the environment. 
+based on Erang, and it's hard to deploy the environment.
 
 ![image](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/ebf2c7e68c0148808fcc5798e7b7711f~tplv-k3u1fbpfcp-zoom-1.image)
 
@@ -338,9 +368,7 @@ kafka选举原理：就是利用zk临时节点，断开即删除，
 [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 
 ## Links
+
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
-
-
-

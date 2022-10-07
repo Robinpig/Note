@@ -423,3 +423,9 @@ public abstract Selector wakeup();
 
 
 ## AIO
+
+
+
+## References
+
+1. [Efficient data transfer through zero copy](https://developer.ibm.com/articles/j-zerocopy/)
