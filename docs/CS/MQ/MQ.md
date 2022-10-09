@@ -3,6 +3,98 @@
 In computer science, message queues and mailboxes are software-engineering components typically used for inter-process communication (IPC), or for inter-thread communication within the same process.
 They use a queue for messaging – the passing of control or of content. Group communication systems provide similar kinds of functionality.
 
+## Message System
+
+Within this publish/subscribe model, different systems take a wide range of approaches, and there is no one right answer for all purposes.
+To differentiate the systems, it is particularly helpful to ask the following two questions:
+
+1. What happens if the producers send messages faster than the consumers can process them?
+   Broadly speaking, there are three options: the system can drop messages, buffer messages in a queue, or apply backpressure (also known as flow control; i.e., blocking the producer from sending more messages).
+   For example, Unix pipes and TCP use backpressure: they have a small fixed-size buffer, and if it fills up, the sender is blocked until the recipient takes data out of the buffer.
+   If messages are buffered in a queue, it is important to understand what happens as that queue grows.
+   Does the system crash if the queue no longer fits in memory, or does it write messages to disk?
+   If so, how does the disk access affect the performance of the messaging system?
+2. What happens if nodes crash or temporarily go offline—are any messages lost?
+   As with databases, durability may require some combination of writing to disk and/or replication, which has a cost.
+   If you can afford to sometimes lose messages, you can probably get higher throughput and lower latency on the same hardware.
+
+Whether message loss is acceptable depends very much on the application.
+For example, with sensor readings and metrics that are transmitted periodically, an occasional missing data point is perhaps not important, since an updated value will be sent a short time later anyway.
+However, beware that if a large number of messages are dropped, it may not be immediately apparent that the metrics are incorrect.
+If you are counting events, it is more important that they are delivered reliably, since every lost message means incorrect counters.
+
+### Direct messaging from producers to consumers
+
+A number of messaging systems use direct network communication between producers and consumers without going via intermediary nodes.
+
+### Message brokers
+
+A widely used alternative is to send messages via a message broker (also known as a message queue), which is essentially a kind of database that is optimized for handling message streams.
+It runs as a server, with producers and consumers connecting to it as clients.
+Producers write messages to the broker, and consumers receive them by reading them from the broker.
+
+By centralizing the data in the broker, these systems can more easily tolerate clients that come and go (connect, disconnect, and crash), and the question of durability is moved to the broker instead.
+Some message brokers only keep messages in memory, while others (depending on configuration) write them to disk so that they are not lost in case of a broker crash. Faced with slow consumers, they generally allow unbounded queueing (as opposed to dropping messages or backpressure), although this choice may also depend on the configuration.
+
+A consequence of queueing is also that consumers are generally asynchronous: when a producer sends a message, it normally only waits for the broker to confirm that it has buffered the message and does not wait for the message to be processed by consumers.
+The delivery to consumers will happen at some undetermined future point in time—often within a fraction of a second, but sometimes significantly later if there is a queue backlog.
+
+#### Message brokers compared to databases
+
+Some message brokers can even participate in two-phase commit protocols using XA or JTA.
+This feature makes them quite similar in nature to databases, although there are still important practical differences between message brokers and databases:
+
+- Databases usually keep data until it is explicitly deleted, whereas most message brokers automatically delete a message when it has been successfully delivered to its consumers.
+  Such message brokers are not suitable for long-term data storage.
+- Since they quickly delete messages, most message brokers assume that their working set is fairly small—i.e., the queues are short.
+  If the broker needs to buffer a lot of messages because the consumers are slow (perhaps spilling messages to disk if they no longer fit in memory), each individual message takes longer to process, and the overall throughput may degrade.
+- Databases often support secondary indexes and various ways of searching for data, while message brokers often support some way of subscribing to a subset of topics matching some pattern.
+  The mechanisms are different, but both are essentially ways for a client to select the portion of the data that it wants to know about.
+- When querying a database, the result is typically based on a point-in-time snapshot of the data; if another client subsequently writes something to the database that changes the query result,
+  the first client does not find out that its prior result is now outdated (unless it repeats the query, or polls for changes).
+  By contrast, message brokers do not support arbitrary queries, but they do notify clients when data changes (i.e., when new messages become available).
+
+#### Multiple consumers
+
+When multiple consumers read messages in the same topic, two main patterns of messaging are used:
+
+- Load balancing
+  Each message is delivered to one of the consumers, so the consumers can share the work of processing the messages in the topic. The broker may assign messages to consumers arbitrarily.
+  This pattern is useful when the messages are expensive to process, and so you want to be able to add consumers to parallelize the processing.
+  (In AMQP, you can implement load balancing by having multiple clients consuming from the same queue, and in JMS it is called a shared subscription.)
+- Fan-out
+  Each message is delivered to all of the consumers.
+  Fan-out allows several independent consumers to each “tune in” to the same broadcast of messages, without affecting each other—the streaming equivalent of having several different batch jobs that read the same input file.
+  (This feature is provided by topic subscriptions in JMS, and exchange bindings in AMQP.)
+
+The two patterns can be combined: for example, two separate groups of consumers may each subscribe to a topic, such that each group collectively receives all messages, but within each group only one of the nodes receives each message.
+
+## Partitioned Logs
+
+A [log](/docs/CS/log/Log.md) is simply an append-only sequence of records on disk.
+
+The same structure can be used to implement a message broker: a producer sends a message by appending it to the end of the log, and a consumer receives messages by reading the log sequentially.
+If a consumer reaches the end of the log, it waits for a notification that a new message has been appended.
+
+In order to scale to higher throughput than a single disk can offer, the log can be partitioned.
+Different partitions can then be hosted on different machines, making each partition a separate log that can be read and written independently from other partitions.
+A topic can then be defined as a group of partitions that all carry messages of the same type.
+This approach is illustrated in Figure 11-3.
+Within each partition, the broker assigns a monotonically increasing sequence number, or offset, to every message (in Figure 11-3, the numbers in boxes are message off‐sets).
+Such a sequence number makes sense because a partition is append-only, so the messages within a partition are totally ordered. There is no ordering guarantee across different partitions.
+
+<div style="text-align: center;">
+
+![Fig.1. Partition logs](./img/Partition-Log.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Producers send messages by appending them to a topic-partition file, and consumers read these files sequentially.
+</p>
+
+## Model
+
 ### Message Queue
 
 A message queue is a form of asynchronous service-to-service communication used in serverless and microservices architectures.
@@ -31,7 +123,7 @@ Many producers and consumers can use the queue, but each message is processed on
 For this reason, this messaging pattern is often called one-to-one, or point-to-point, communications.
 When a message needs to be processed by more than one consumer, message queues can be combined with Pub/Sub messaging in a fanout design pattern.
 
-### Pub/Sub
+### Pub-Sub
 
 The Publish Subscribe model allows messages to be broadcast to different parts of a system asynchronously.
 A sibling to a message queue, a message topic provides a lightweight mechanism to broadcast asynchronous event notifications, and endpoints that allow software components to connect to the topic in order to send and receive those messages.
@@ -53,6 +145,8 @@ The subscribers to the message topic often perform different functions, and can 
 The publisher doesn’t need to know who is using the information that it is broadcasting, and the subscribers don’t need to know who the message comes from.
 This style of messaging is a bit different than message queues, where the component that sends the message often knows the destination it is sending to.
 
+## Features
+
 ### Message Delivery Semantics
 
 By message delivery semantics, we refer to the expected message delivery guaranties in the case of failure recovery.
@@ -71,6 +165,11 @@ After a failure recovery, we recognize these different message delivery guarante
 
 ### Push versus Pull
 
+Most message queues provide both push and pull options for retrieving messages.
+
+- Pull means continuously querying the queue for new messages.
+- Push means that a consumer is notified when a message is available.
+
 A push-based system has difficulty dealing with diverse consumers as the broker controls the rate at which data is transferred.
 The goal is generally for the consumer to be able to consume at the maximum possible rate; unfortunately, in a push system this means the consumer tends to be overwhelmed when its rate of consumption falls below the rate of production (a denial of service attack, in essence).
 A pull-based system has the nicer property that the consumer simply falls behind and catches up when it can.
@@ -84,6 +183,53 @@ A pull-based design fixes this as the consumer always pulls all available messag
 So one gets optimal batching without introducing unnecessary latency.
 
 The deficiency of a naive pull-based system is that if the broker has no data the consumer may end up polling in a tight loop, effectively busy-waiting for data to arrive.
+
+### Schedule or Delay Delivery
+
+Many message queues support setting a specific delivery time for a message. If you need to have a common delay for all messages, you can set up a delay queue.
+
+### Dead-letter Queues
+
+Sometimes, messages can't be processed because of a variety of possible issues, such as erroneous conditions within the producer or consumer application or an unexpected state change that causes an issue with your application code.
+For example, if a user places a web order with a particular product ID, but the product ID is deleted, the web store's code fails and displays an error, and the message with the order request is sent to a dead-letter queue.
+
+Occasionally, producers and consumers might fail to interpret aspects of the protocol that they use to communicate, causing message corruption or loss. Also, the consumer's hardware errors might corrupt message payload.
+
+A dead-letter queue is a queue to which other queues can send messages that can't be processed successfully.
+This makes it easy to set them aside for further inspection without blocking the queue processing or spending CPU cycles on a message that might never be consumed successfully.
+
+The main task of a dead-letter queue is handling message failure.
+A dead-letter queue lets you set aside and isolate messages that can’t be processed correctly to determine why their processing didn’t succeed.
+Setting up a dead-letter queue allows you to do the following:
+
+- Configure an alarm for any messages delivered to a dead-letter queue.
+- Examine logs for exceptions that might have caused messages to be delivered to a dead-letter queue.
+- Analyze the contents of messages delivered to a dead-letter queue to diagnose software or the producer’s or consumer’s hardware issues.
+- Determine whether you have given your consumer sufficient time to process messages.
+
+When should I use a dead-letter queue?
+
+- Do use dead-letter queues with high-throughput, unordered queues.
+- You should always take advantage of dead-letter queues when your applications don’t depend on ordering. Dead-letter queues can help you troubleshoot incorrect message transmission operations.
+- Note: Even when you use dead-letter queues, you should continue to monitor your queues and retry sending messages that fail for transient reasons.
+- Do use dead-letter queues to decrease the number of messages and to reduce the possibility of exposing your system to poison-pill messages (messages that can be received but can’t be processed).
+- Don’t use a dead-letter queue with high-throughput, unordered queues when you want to be able to keep retrying the transmission of a message indefinitely.
+- For example, don’t use a dead-letter queue if your program must wait for a dependent process to become active or available.
+- Don’t use a dead-letter queue with a FIFO queue if you don’t want to break the exact order of messages or operations.
+- For example, don’t use a dead-letter queue with instructions in an Edit Decision List (EDL) for a video editing suite, where changing the order of edits changes the context of subsequent edits.
+
+### Ordering
+
+Most message queues provide best-effort ordering which ensures that messages are generally delivered in the same order as they're sent, and that a message is delivered at least once.
+
+### Poison-pill Messages
+
+Poison pills are special messages that can be received, but not processed.
+They are a mechanism used in order to signal a consumer to end its work so it is no longer waiting for new inputs, and is similar to closing a socket in a client/server model.
+
+## Security
+
+Message queues will authenticate applications that try to access the queue, and allow you to use encryption to encrypt messages over the network as well as in the queue itself.
 
 ## Issues
 
