@@ -79,8 +79,8 @@ If a consumer reaches the end of the log, it waits for a notification that a new
 In order to scale to higher throughput than a single disk can offer, the log can be partitioned.
 Different partitions can then be hosted on different machines, making each partition a separate log that can be read and written independently from other partitions.
 A topic can then be defined as a group of partitions that all carry messages of the same type.
-This approach is illustrated in Figure 11-3.
-Within each partition, the broker assigns a monotonically increasing sequence number, or offset, to every message (in Figure 11-3, the numbers in boxes are message off‐sets).
+
+Within each partition, the broker assigns a monotonically increasing sequence number, or offset, to every message (in Figure 1, the numbers in boxes are message off‐sets).
 Such a sequence number makes sense because a partition is append-only, so the messages within a partition are totally ordered. There is no ordering guarantee across different partitions.
 
 <div style="text-align: center;">
@@ -92,6 +92,65 @@ Such a sequence number makes sense because a partition is append-only, so the me
 <p style="text-align: center;">
 Fig.1. Producers send messages by appending them to a topic-partition file, and consumers read these files sequentially.
 </p>
+
+[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md), Amazon Kinesis Streams, and Twitter’s DistributedLog are log-based message brokers that work like this. 
+Google Cloud Pub/Sub is architecturally similar but exposes a JMS-style API rather than a log abstraction.
+Even though these message brokers write all messages to disk, they are able to achieve throughput of millions of messages per second by partitioning across multiple machines, and fault tolerance by replicating messages [22, 23].
+
+The log-based approach trivially supports fan-out messaging, because several consumers can independently read the log without affecting each other—reading a message does not delete it from the log.
+To achieve load balancing across a group of consumers, instead of assigning individual messages to consumer clients, the broker can assign entire partitions to nodes in the consumer group. 
+
+Each client then consumes all the messages in the partitions it has been assigned.
+Typically, when a consumer has been assigned a log partition, it reads the messages in the partition sequentially, in a straightforward single-threaded manner.
+This coarsegrained load balancing approach has some downsides:
+- The number of nodes sharing the work of consuming a topic can be at most the number of log partitions in that topic, because messages within the same partition are delivered to the same node.i
+- If a single message is slow to process, it holds up the processing of subsequent messages in that partition (a form of head-of-line blocking.
+
+Thus, in situations where messages may be expensive to process and you want to parallelize processing on a message-by-message basis, and where message ordering is not so important, the JMS/AMQP style of message broker is preferable. 
+On the other hand, in situations with high message throughput, where each message is fast to process and where message ordering is important, the log-based approach works very well.
+
+### Compaction
+
+If you only ever append to the log, you will eventually run out of disk space. 
+To reclaim disk space, the log is actually divided into segments, and from time to time old segments are deleted or moved to archive storage.
+(We’ll discuss a more sophisticated way of freeing disk space later.)
+
+This means that if a slow consumer cannot keep up with the rate of messages, and it falls so far behind that its consumer offset points to a deleted segment, it will miss some of the messages.
+Effectively, the log implements a bounded-size buffer that discards old messages when it gets full, also known as a circular buffer or ring buffer.
+However, since that buffer is on disk, it can be quite large.
+
+Let’s do a back-of-the-envelope calculation. At the time of writing, a typical large hard drive has a capacity of 6 TB and a sequential write throughput of 150 MB/s. 
+If you are writing messages at the fastest possible rate, it takes about 11 hours to fill the drive.
+Thus, the disk can buffer 11 hours’ worth of messages, after which it will start overwriting old messages.
+This ratio remains the same, even if you use many hard drives and machines.
+In practice, deployments rarely use the full write bandwidth of the disk, so the log can typically keep a buffer of several days’ or even weeks’ worth of messages.
+
+Regardless of how long you retain messages, the throughput of a log remains more or less constant, since every message is written to disk anyway. 
+This behavior is in contrast to messaging systems that keep messages in memory by default and only write them to disk if the queue grows too large: 
+such systems are fast when queues are short and become much slower when they start writing to disk, so the throughput depends on the amount of history retained.
+
+
+#### When consumers cannot keep up with producers
+
+We discussed three choices of what to do if a consumer cannot keep up with the rate at which producers are sending messages: dropping messages, buffering, or applying backpressure. 
+In this taxonomy, the log-based approach is a form of buffering with a large but fixed-size buffer (limited by the available disk space).
+If a consumer falls so far behind that the messages it requires are older than what is retained on disk, it will not be able to read those messages—so the broker effectively drops old messages that go back further than the size of the buffer can accommodate.
+You can monitor how far a consumer is behind the head of the log, and raise an alert if it falls behind significantly. 
+As the buffer is large, there is enough time for a human operator to fix the slow consumer and allow it to catch up before it starts missing messages.
+
+Even if a consumer does fall too far behind and starts missing messages, only that consumer is affected; it does not disrupt the service for other consumers. 
+This fact is a big operational advantage: you can experimentally consume a production log for development, testing, or debugging purposes, without having to worry much about disrupting production services. 
+When a consumer is shut down or crashes, it stops consuming resources—the only thing that remains is its consumer offset.
+
+This behavior also contrasts with traditional message brokers, where you need to be careful to delete any queues whose consumers have been shut down—otherwise they continue unnecessarily accumulating messages and taking away memory from consumers that are still active.
+
+#### Replaying old messages
+We noted previously that with AMQP- and JMS-style message brokers, processing and acknowledging messages is a destructive operation, since it causes the messages to be deleted on the broker.
+On the other hand, in a log-based message broker, consuming messages is more like reading from a file: it is a read-only operation that does not change the log.
+
+The only side effect of processing, besides any output of the consumer, is that the consumer offset moves forward. 
+But the offset is under the consumer’s control, so it can easily be manipulated if necessary: for example, you can start a copy of a consumer with yesterday’s offsets and write the output to a different location, in order to reprocess the last day’s worth of messages.
+You can repeat this any number of times, varying the processing code.
 
 ## Model
 

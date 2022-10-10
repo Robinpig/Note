@@ -55,6 +55,54 @@ This can be prevented by the use of properly synchronized physical clocks.
 
 ## Hybrid Logical Clocks
 
+
+## Total Order Broadcast
+
+In fault-tolerant distributed computing, an atomic broadcast or total order broadcast is a broadcast where all correct processes in a system of multiple processes receive the same set of messages in the same order; that is, the same sequence of messages.
+The broadcast is termed "atomic" because it either eventually completes correctly at all participants, or all participants abort without side effects. Atomic broadcasts are an important distributed computing primitive.
+
+The following properties are usually required from an atomic broadcast protocol:
+
+- Validity: if a correct participant broadcasts a message, then all correct participants will eventually receive it.
+- Uniform Agreement: if one correct participant receives a message, then all correct participants will eventually receive that message.
+- Uniform Integrity: a message is received by each participant at most once, and only if it was previously broadcast.
+- Uniform Total Order: the messages are totally ordered in the mathematical sense; that is, if any correct participant receives message 1 first and message 2 second, then every other correct participant must receive message 1 before message 2.
+
+Note that total order is not equivalent to FIFO order, which requires that if a process sent message 1 before it sent message 2, then all participants must receive message 1 before receiving message 2. 
+It is also not equivalent to "causal order", where if message 2 "depends on" or "occurs after" message 1 then all participants must receive message 2 after receiving message 1. 
+While a strong and useful condition, total order requires only that all participants receive the messages in the same order, but does not place other constraints on that order.
+
+For example, what if the natural numbers 7, 8, 1, 4, and 5 are given? We can then serialize 1<4<5<7<8. In other words, the natural numbers are total order.
+What about the sets {b, d}, {d,d} {z, b} next? They cannot be serialized. In other words, these sets are not in total order.
+
+State machine replication requires the total order of operations.
+
+
+
+### Equivalent to consensus
+
+In order for the conditions for atomic broadcast to be satisfied, the participants must effectively "agree" on the order of receipt of the messages.
+Participants recovering from failure, after the other participants have "agreed" an order and started to receive the messages, must be able to learn and comply with the agreed order. 
+Such considerations indicate that in systems with crash failures, atomic broadcast and [consensus](/docs/CS/Distributed/Consensus.md) are equivalent problems.
+
+A value can be proposed by a process for consensus by atomically broadcasting it, and a process can decide a value by selecting the value of the first message which it atomically receives.
+Thus, consensus can be reduced to atomic broadcast.
+<br>
+Conversely, a group of participants can atomically broadcast messages by achieving consensus regarding the first message to be received, followed by achieving consensus on the next message, and so forth until all the messages have been received. 
+Thus, atomic broadcast reduces to consensus.
+
+
+Remember that total order broadcast requires messages to be delivered exactly once, in the same order, to all nodes. 
+If you think about it, this is equivalent to performing several rounds of consensus: in each round, nodes propose the message that they want to send next, and then decide on the next message to be delivered in the total order.
+So, total order broadcast is equivalent to repeated rounds of consensus (each consensus decision corresponding to one message delivery):
+- Due to the agreement property of consensus, all nodes decide to deliver the same messages in the same order.
+- Due to the integrity property, messages are not duplicated.
+- Due to the validity property, messages are not corrupted and not fabricated out of thin air.
+- Due to the termination property, messages are not lost.
+
+Viewstamped Replication, Raft, and Zab implement total order broadcast directly, because that is more efficient than doing repeated rounds of one-value-at-a-time consensus. 
+In the case of Paxos, this optimization is known as Multi-Paxos.
+
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
@@ -68,3 +116,4 @@ This can be prevented by the use of properly synchronized physical clocks.
 5. [Synchronizing Clocks in the Presence of Faults](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/Synchronizing-Clocks-in-the-Presence-of-Faults.pdf)
 6. [Byzantine Clock Synchronization](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Byzantine-Clock-Synchronization.pdf)
 7. [An Overview of Clock Synchronization.](https://www.researchgate.net/publication/221655803_An_Overview_of_Clock_Synchronization)
+8. [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey]()https://csis.pace.edu/~marchese/CS865/Papers/defago_200356.pdf
