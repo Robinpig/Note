@@ -117,3 +117,4 @@ In the case of Paxos, this optimization is known as Multi-Paxos.
 6. [Byzantine Clock Synchronization](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Byzantine-Clock-Synchronization.pdf)
 7. [An Overview of Clock Synchronization.](https://www.researchgate.net/publication/221655803_An_Overview_of_Clock_Synchronization)
 8. [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey]()https://csis.pace.edu/~marchese/CS865/Papers/defago_200356.pdf
+9. [Atomic Broadcasts and Consensus: A Survey](https://www.net.in.tum.de/fileadmin/TUM/NET/NET-2020-11-1/NET-2020-11-1_19.pdf)

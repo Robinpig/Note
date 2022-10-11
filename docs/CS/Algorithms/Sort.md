@@ -126,19 +126,94 @@ No compare-based sorting algorithm can guarantee to sort N items with fewer than
 
 ## Quicksort
 
-> [!NOTE]
->
-> A common solution is not to use quicksort recursively for small files, but instead use a sorting algorithm that is efficient for small files, such as insertion sort.
+Like Merge Sort, QuickSort is a Divide and Conquer algorithm.
+It picks an element as a pivot and partitions the given array around the picked pivot.
+There are many different versions of quickSort that pick pivot in different ways.
 
-```cpp
-int Pa
+- Always pick the first element as a pivot.
+- Always pick the last element as a pivot (implemented below)
+- Pick a random element as a pivot.
+- Pick median as the pivot.
+
+The key process in quickSort is a partition(). 
+The target of partitions is, given an array and an element x of an array as the pivot, put x at its correct position in a sorted array and put all smaller elements (smaller than x) before x, and put all greater elements (greater than x) after x.
+All this should be done in linear time.
+
+
+Partition Algorithm:
+<br>
+There can be many ways to do partition, following pseudo-code adopts the method given in the CLRS book. 
+The logic is simple, we start from the leftmost element and keep track of the index of smaller (or equal to) elements as i.
+While traversing, if we find a smaller element, we swap the current element with arr[i]. 
+Otherwise, we ignore the current element.
+
+
+Pseudo Code for recursive QuickSort function:
 ```
+/* low  –> Starting index,  high  –> Ending index */
+quickSort(arr[], low, high) {
+    if (low < high) {
+        /* pi is partitioning index, arr[pi] is now at right place */
+        pi = partition(arr, low, high);
+        quickSort(arr, low, pi – 1);  // Before pi
+        quickSort(arr, pi + 1, high); // After pi
+    }
+}
+```
+Example:
+```go
+func quickSort(array []int, low int, high int) []int {
+	if low < high {
+		pi := partition(array, low, high)
+		quickSort(array, low, pi-1)
+		quickSort(array, pi+1, high)
+	}
+	return array
+}
+
+func partition(array []int, low int, high int) int {
+	pivot := array[high]
+	start := -1
+	for j := low; j < high; j++ {
+		if array[j] < pivot {
+			start++
+			if start != j {
+				swap(array, start, j)
+			}
+		}
+	}
+	swap(array, start+1, high)
+	return start + 1
+}
+
+func swap(array []int, i int, j int) []int {
+	temp := array[j]
+	array[j] = array[i]
+	array[i] = temp
+	return array
+}
+
+func main() {
+	array := []int{33, 4, 5, 23, 43, 65, 545}
+	quickSort(array, 0, len(array)-1)
+	for _, v := range array {
+		println(v)
+	}
+}
+```
+
 
 ### Picking the Pivot
 
 A safe course is merely to choose the pivot randomly.
 
 Median-of-Three Partitioning
+
+
+> [!NOTE]
+>
+> A common solution is not to use quicksort recursively for small files, but instead use a sorting algorithm that is efficient for small files, such as insertion sort.
+
 
 ## Counting Sort
 
