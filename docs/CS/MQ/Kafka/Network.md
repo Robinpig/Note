@@ -10,6 +10,9 @@ As a result it is the duty of the Handler implementation to catch and serialize 
 <br>
 This slightly lower-level interface that models sending and receiving rather than requests and responses is necessary in order to allow the send or receive to be overridden with a non-user-space writing of bytes using FileChannel.transferTo.
 
+The sendfile implementation is done by giving the MessageSet interface a writeTo method. 
+This allows the file-backed message set to use the more efficient transferTo implementation instead of an in-process buffered write.
+The threading model is a single acceptor thread and N processor threads which handle a fixed number of connections each.
 ```java
 /**
  *                                           Sender
