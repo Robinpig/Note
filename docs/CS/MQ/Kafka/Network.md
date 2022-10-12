@@ -32,6 +32,9 @@ The threading model is a single acceptor thread and N processor threads which ha
 
 ## NetworkClient
 
+A network client for asynchronous request/response network i/o. This is an internal class used to implement the user-facing producer and consumer clients.
+This class is not thread-safe!
+
 ### Connect
 
 ```java
@@ -179,7 +182,7 @@ public void connect(String id, InetSocketAddress address, int sendBufferSize, in
 
 
 
-### Send
+### send
 
 ```java
 public class NetworkClient implements KafkaClient {
@@ -274,100 +277,8 @@ Queue the given request for sending in the subsequent poll(long) calls
     }
 ```
 
-### Sender
 
-The main run loop for the sender thread
-```java
-public class Sender implements Runnable {
-    public void run() {
-
-        // main loop, runs until close is called
-        while (running) {
-            try {
-                runOnce();
-            } catch (Exception e) {
-                log.error("Uncaught error in kafka producer I/O thread: ", e);
-            }
-        }
-
-        // okay we stopped accepting requests but there may still be
-        // requests in the transaction manager, accumulator or waiting for acknowledgment,
-        // wait until these are completed.
-        while (!forceClose && ((this.accumulator.hasUndrained() || this.client.inFlightRequestCount() > 0) || hasPendingTransactionalRequests())) {
-            try {
-                runOnce();
-            } catch (Exception e) {
-            }
-        }
-
-        // Abort the transaction if any commit or abort didn't go through the transaction manager's queue
-        while (!forceClose && transactionManager != null && transactionManager.hasOngoingTransaction()) {
-            if (!transactionManager.isCompleting()) {
-                transactionManager.beginAbort();
-            }
-            try {
-                runOnce();
-            } catch (Exception e) {
-            }
-        }
-
-        if (forceClose) {
-            // We need to fail all the incomplete transactional requests and batches and wake up the threads waiting on
-            // the futures.
-            if (transactionManager != null) {
-                transactionManager.close();
-            }
-            this.accumulator.abortIncompleteBatches();
-        }
-        try {
-            this.client.close();
-        } catch (Exception e) {
-        }
-    }
-}
-```
-runOnce():
-1. Transaction Management
-2. sendProducerData
-3. KafkaClient.poll()
-
-```java
-public class Sender implements Runnable {
-    void runOnce() {
-        if (transactionManager != null) {
-            try {
-                transactionManager.maybeResolveSequences();
-
-                // do not continue sending if the transaction manager is in a failed state
-                if (transactionManager.hasFatalError()) {
-                    RuntimeException lastError = transactionManager.lastError();
-                    if (lastError != null)
-                        maybeAbortBatches(lastError);
-                    client.poll(retryBackoffMs, time.milliseconds());
-                    return;
-                }
-
-                // Check whether we need a new producerId. If so, we will enqueue an InitProducerId
-                // request which will be sent below
-                transactionManager.bumpIdempotentEpochAndResetIdIfNeeded();
-
-                if (maybeSendAndPollTransactionalRequest()) {
-                    return;
-                }
-            } catch (AuthenticationException e) {
-                // This is already logged as error, but propagated here to perform any clean ups.
-                transactionManager.authenticationFailed(e);
-            }
-        }
-
-        long currentTimeMs = time.milliseconds();
-        long pollTimeout = sendProducerData(currentTimeMs);
-        client.poll(pollTimeout, currentTimeMs);
-    }
-}
-```
-
-#### poll
+### poll
 
 Do actual reads and writes to sockets.
 

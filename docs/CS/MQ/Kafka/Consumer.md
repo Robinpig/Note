@@ -47,7 +47,6 @@ The consumer group state.
 
 ```java
 public enum ConsumerGroupState {
-   UNKNOWN("Unknown"),
    PREPARING_REBALANCE("PreparingRebalance"),
    COMPLETING_REBALANCE("CompletingRebalance"),
    STABLE("Stable"),

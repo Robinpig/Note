@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 Load balancing
 
 The client controls which partition it publishes messages to. This can be done at random, implementing a kind of random load balancing, or it can be done by some semantic partitioning function.
@@ -36,43 +34,11 @@ Failure to close the producer after use will leak these resources.
 
 acks
 
-### ProducerInterceptor
 
-Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.
-As a result, if the user configures the interceptor with the wrong key and value type parameters, the producer will not throw an exception, just log the errors.
-```java
-public interface ProducerInterceptor<K, V> extends Configurable, AutoCloseable {
-    
-    ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
 
-    void onAcknowledgement(RecordMetadata metadata, Exception exception);
 
-    void close();
-}
-```
+## send
 
-### send
-
-A container that holds the list ProducerInterceptor and wraps calls to the chain of custom interceptors.
-
-A plugin interface that allows you to intercept (and possibly mutate) the records received by the producer before they are published to the Kafka cluster.
-This class will get producer config properties via configure() method, including clientId assigned by KafkaProducer if not specified in the producer config. The interceptor implementation needs to be aware that it will be sharing producer config namespace with other interceptors and serializers, and ensure that there are no conflicts.
-
-**Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.** As a result, if the user configures the interceptor with the wrong key and value type parameters, the producer will not throw an exception, just log the errors.
-ProducerInterceptor callbacks may be called from multiple threads. Interceptor implementation must ensure thread-safety, if needed.
-
-Implement org.apache.kafka.common.ClusterResourceListener to receive cluster metadata once it's available. Please see the class documentation for ClusterResourceListener for more information.
-
-```java
-public interface ProducerInterceptor<K, V> extends Configurable, AutoCloseable {
-  
-    ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
-  
-    void onAcknowledgement(RecordMetadata metadata, Exception exception);
-
-    void close();
-}
-```
 
 ```plantuml
 participant Actor
@@ -80,22 +46,14 @@ Actor -> KafkaProducer : send
 activate KafkaProducer
 KafkaProducer -> ProducerInterceptors : onSend
 activate ProducerInterceptors
-ProducerInterceptors --> KafkaProducer
+ProducerInterceptors --> KafkaProducer: ProducerRecord
 deactivate ProducerInterceptors
 KafkaProducer -> KafkaProducer : doSend
 activate KafkaProducer
 KafkaProducer -> KafkaProducer : waitOnMetadata
 activate KafkaProducer
 deactivate KafkaProducer
-KafkaProducer -> Sender : wakeup
-activate Sender
-Sender --> KafkaProducer
-deactivate Sender
-KafkaProducer -> Serializer : serialize
-activate Serializer
-Serializer --> KafkaProducer
-deactivate Serializer
-KafkaProducer -> Serializer : serialize
+KafkaProducer -> Serializer : serialize key and value
 activate Serializer
 Serializer --> KafkaProducer
 deactivate Serializer
@@ -106,7 +64,7 @@ KafkaProducer -> RecordAccumulator : append
 activate RecordAccumulator
 RecordAccumulator --> KafkaProducer
 deactivate RecordAccumulator
-KafkaProducer -> Sender : wakeup
+KafkaProducer -> Sender : wakeup if batchIsFull or newBatchCreated
 activate Sender
 Sender --> KafkaProducer
 deactivate Sender
@@ -129,9 +87,33 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
+### ProducerInterceptor
+
+A container that holds the list ProducerInterceptor and wraps calls to the chain of custom interceptors.
+
+A plugin interface that allows you to intercept (and possibly mutate) the records received by the producer before they are published to the Kafka cluster.
+This class will get producer config properties via configure() method, including clientId assigned by KafkaProducer if not specified in the producer config. The interceptor implementation needs to be aware that it will be sharing producer config namespace with other interceptors and serializers, and ensure that there are no conflicts.
+
+**Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.** 
+As a result, if the user configures the interceptor with the wrong key and value type parameters, the producer will not throw an exception, just log the errors.
+ProducerInterceptor callbacks may be called from multiple threads. Interceptor implementation must ensure thread-safety, if needed.
+
+Implement org.apache.kafka.common.ClusterResourceListener to receive cluster metadata once it's available. Please see the class documentation for ClusterResourceListener for more information.
+
+```java
+public interface ProducerInterceptor<K, V> extends Configurable, AutoCloseable {
+  
+    ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
+  
+    void onAcknowledgement(RecordMetadata metadata, Exception exception);
+
+    void close();
+}
+```
+### doSend
 doSend():
 
-1. waitOnMetadata
+1. make sure the metadata for the topic is available
 2. serializedKey and value
 3. get partition
 4. ensureValidRecordSize
@@ -179,9 +161,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                 this.sender.wakeup();
             }
             return result.future;
-            // handling exceptions and record the errors;
-            // for API exceptions return them in the future,
-            // for other exceptions throw directly
         } catch (Exception e) {
             // we notify interceptor about all exceptions, since onSend is called before anything else in this method
             this.interceptors.onSendError(record, tp, e);
@@ -303,6 +282,7 @@ public RecordAppendResult append(String topic,
         }
     }
 ```
+
 #### ready
 
 Get a list of nodes whose partitions are ready to be sent, and the earliest time at which any non-sendable partition will be ready;
@@ -312,10 +292,10 @@ A destination node is ready to send data if:
 1. There is at least one partition that is not backing off its send
 2. and those partitions are not muted (to prevent reordering if "max.in.flight.requests.per.connection" is set to one)
 3. and any of the following are true
-    - The record set is full
-    - The record set has sat in the accumulator for at least lingerMs milliseconds
-    - The accumulator is out of memory and threads are blocking waiting for data (in this case all partitions are immediately considered ready).
-    - The accumulator has been closed
+   - The record set is full
+   - The record set has sat in the accumulator for at least lingerMs milliseconds
+   - The accumulator is out of memory and threads are blocking waiting for data (in this case all partitions are immediately considered ready).
+   - The accumulator has been closed
 
 ```java
 public ReadyCheckResult ready(Cluster cluster, long nowMs) {
@@ -336,14 +316,113 @@ TODO:
 
 1. Connection with brokers
 2. Connection close
-    - Kafka will close idle timeout connection if clients set `connections.max.idle.ms!=-1`.
-    - Otherwise, clients don't explicit close() and will keep CLOSE_WAIT until it send again.
+   - Kafka will close idle timeout connection if clients set `connections.max.idle.ms!=-1`.
+   - Otherwise, clients don't explicit close() and will keep CLOSE_WAIT until it send again.
 
-### Idempotence
+
+
+## Sender
+
+
+
+The main run loop for the sender thread
+```java
+public class Sender implements Runnable {
+    public void run() {
+
+        // main loop, runs until close is called
+        while (running) {
+            try {
+                runOnce();
+            } catch (Exception e) {
+                log.error("Uncaught error in kafka producer I/O thread: ", e);
+            }
+        }
+
+        // okay we stopped accepting requests but there may still be
+        // requests in the transaction manager, accumulator or waiting for acknowledgment,
+        // wait until these are completed.
+        while (!forceClose && ((this.accumulator.hasUndrained() || this.client.inFlightRequestCount() > 0) || hasPendingTransactionalRequests())) {
+            try {
+                runOnce();
+            } catch (Exception e) {
+            }
+        }
+
+        // Abort the transaction if any commit or abort didn't go through the transaction manager's queue
+        while (!forceClose && transactionManager != null && transactionManager.hasOngoingTransaction()) {
+            if (!transactionManager.isCompleting()) {
+                transactionManager.beginAbort();
+            }
+            try {
+                runOnce();
+            } catch (Exception e) {
+            }
+        }
+
+        if (forceClose) {
+            // We need to fail all the incomplete transactional requests and batches and wake up the threads waiting on
+            // the futures.
+            if (transactionManager != null) {
+                transactionManager.close();
+            }
+            this.accumulator.abortIncompleteBatches();
+        }
+        try {
+            this.client.close();
+        } catch (Exception e) {
+        }
+    }
+}
+```
+
+runOnce():
+1. Transaction Management
+2. sendProducerData
+3. [KafkaClient.poll()](/docs/CS/MQ/Kafka/Network.md?id=poll)
+
+```java
+public class Sender implements Runnable {
+    void runOnce() {
+        if (transactionManager != null) {
+            try {
+                transactionManager.maybeResolveSequences();
+
+                // do not continue sending if the transaction manager is in a failed state
+                if (transactionManager.hasFatalError()) {
+                    RuntimeException lastError = transactionManager.lastError();
+                    if (lastError != null)
+                        maybeAbortBatches(lastError);
+                    client.poll(retryBackoffMs, time.milliseconds());
+                    return;
+                }
+
+                // Check whether we need a new producerId. If so, we will enqueue an InitProducerId
+                // request which will be sent below
+                transactionManager.bumpIdempotentEpochAndResetIdIfNeeded();
+
+                if (maybeSendAndPollTransactionalRequest()) {
+                    return;
+                }
+            } catch (AuthenticationException e) {
+                // This is already logged as error, but propagated here to perform any clean ups.
+                transactionManager.authenticationFailed(e);
+            }
+        }
+
+        long currentTimeMs = time.milliseconds();
+        long pollTimeout = sendProducerData(currentTimeMs);
+        client.poll(pollTimeout, currentTimeMs);
+    }
+}
+```
+
+
+## Idempotence
 
 single partition, single session
 
-### Transaction
+## Transaction
 
 all partitions, all sessions
 
