@@ -1,6 +1,14 @@
 ## Introduction
 
 
+- Producer
+- Consumer
+- Broker
+- NameServer
+
+
+Topic -> multi message queue(like partition)
+
 
 
 

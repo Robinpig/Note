@@ -290,8 +290,7 @@ public class NetworkClient implements KafkaClient {
         ensureActive();
 
         if (!abortedSends.isEmpty()) {
-            // If there are aborted sends because of unsupported version exceptions or disconnects,
-            // handle them immediately without waiting for Selector#poll.
+            // If there are aborted sends because of unsupported version exceptions or disconnects, handle them immediately without waiting for Selector#poll.
             List<ClientResponse> responses = new ArrayList<>();
             handleAbortedSends(responses);
             completeResponses(responses);
@@ -321,6 +320,7 @@ public class NetworkClient implements KafkaClient {
     }
 }
 ```
+#### handleCompletedSends
 Handle any completed request send. In particular if no response is expected consider the request complete.
 
 ```java
