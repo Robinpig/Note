@@ -352,6 +352,16 @@ Kafka partition -> queue -> thread
 
 [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 
+
+Topic
+- 
+
+Kafka partition -> segment -> .log, .index, .timeindex
+
+RocketMQ all topics using single commitlog and multiple index
+
+
+
 ## Links
 
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)

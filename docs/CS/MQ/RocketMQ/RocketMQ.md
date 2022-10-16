@@ -148,6 +148,35 @@ public class NamesrvStartup {
 
 
 
+```java
+public class NettyServerConfig implements Cloneable {
+
+  private int serverWorkerThreads = 8;
+  private int serverCallbackExecutorThreads = 0;
+  private int serverSelectorThreads = 3;
+  private int serverOnewaySemaphoreValue = 256;
+  
+}
+```
+
+
+
+```java
+public class NamesrvController {
+  public boolean initialize() {
+    loadConfig();
+    initiateNetworkComponents(); // Netty 
+    initiateThreadExecutors();
+    registerProcessor();
+    startScheduleService();
+    initiateSslContext();
+    initiateRpcHooks();
+    return true;
+  }
+}
+```
+
+
 ## Consumer
 
 Message model defines the way how messages are delivered to each consumer clients. 
@@ -439,3 +468,6 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
 
 
+## References
+
+1. [RocketMQ技术内幕](https://book.douban.com/subject/35626441/)
