@@ -1,22 +1,58 @@
 ## Introduction
 
+Apache RocketMQ is a distributed middleware service that adopts an asynchronous communication model and a publish/subscribe message transmission model.
+The asynchronous communication model of Apache RocketMQ features simple system topology and weak upstream-downstream coupling.
+Apache RocketMQ is used in asynchronous decoupling and load shifting scenarios.
 
+### Domain Model
+
+<div style="text-align: center;">
+
+![Fig.1. Domain model](./img/Domain-Model.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Domain model of Apache RocketMQ.
+</p>
+
+As shown in the preceding figure, the lifecycle of a Apache RocketMQ message consists of three stages: production, storage, and consumption.
+A producer generates a message and sends it to a Apache RocketMQ broker. The message is stored in a topic on the broker. A consumer subscribes to the topic to consume the message.
+
+Message production
+
+Producer：
+The running entity that is used to generate messages in Apache RocketMQ. Producers are the upstream parts of business call links. Producers are lightweight, anonymous, and do not have identities.
+
+Message storage
+
+- Topic：
+  The grouping container that is used for message transmission and storage in Apache RocketMQ. A topic consists of multiple message queues, which are used to store messages and scale out the topic.
+- MessageQueue：
+  The unit container that is used for message transmission and storage in Apache RocketMQ. Message queues are similar to partitions in Kafka. Apache RocketMQ stores messages in a streaming manner based on an infinite queue structure. Messages are stored in order in a queue.
+- Message：
+  The minimum unit of data transmission in Apache RocketMQ. Messages are immutable after they are initialized and stored.
+
+Message consumption
+
+- ConsumerGroup：
+  An independent group of consumption identities defined in the publish/subscribe model of Apache RocketMQ. A consumer group is used to centrally manage consumers that run at the bottom layer. Consumers in the same group must maintain the same consumption logic and configurations with each other, and consume the messages subscribed by the group together to scale out the consumption capacity of the group.
+- Consumer：
+  The running entity that is used to consume messages in Apache RocketMQ. Consumers are the downstream parts of business call links, A consumer must belong to a specific consumer group.
+- Subscription：
+  The collection of configurations in the publish/subscribe model of Apache RocketMQ. The configurations include message filtering, retry, and consumer progress Subscriptions are managed at the consumer group level. You use consumer groups to specify subscriptions to manage how consumers in the group filter messages, retry consumption, and restore a consumer offset.
+  The configurations in a Apache RocketMQ subscription are all persistent, except for filter expressions. Subscriptions are unchanged regardless of whether the broker restarts or the connection is closed.
 - Producer
 - Consumer
+
   - DefaultLitePullConsumer
   - DefaultMQPushConsumer
 - Broker
 - NameServer
 
-
 Topic -> multi message queue(like partition)
 
-
-
 BrokerController
-
-
-
 
 ```java
 public void start() throws Exception {
@@ -84,6 +120,7 @@ public void start() throws Exception {
 ```
 
 RouteInfoManager
+
 ```java
 public RegisterBrokerResult registerBroker(
         final String clusterName,
@@ -103,25 +140,14 @@ public RegisterBrokerResult registerBroker(
 Route info is not real-time. The clients need to pull latest topic info in fix rate.
 Brokers send heart beats to name server every 30 seconds and name server update live broker table time stamp.
 Name server scan live broker table every 10s and remove last time stamp > 120s brokers.
-    
-
-
 
 PushConumser
 
 Actually a pull
 
-
-
-
-
 RebalanceService thread
 
 pullRequestQueue
-
-
-
-
 
 PullMessageProcessor of broker
 
@@ -146,8 +172,6 @@ public class NamesrvStartup {
 }
 ```
 
-
-
 ```java
 public class NettyServerConfig implements Cloneable {
 
@@ -159,7 +183,7 @@ public class NettyServerConfig implements Cloneable {
 }
 ```
 
-
+initialize -> start -> 
 
 ```java
 public class NamesrvController {
@@ -173,19 +197,183 @@ public class NamesrvController {
     initiateRpcHooks();
     return true;
   }
+
+  private void initiateNetworkComponents() {
+    this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
+    this.remotingClient = new NettyRemotingClient(this.nettyClientConfig);
+  }
+
+  private void initiateThreadExecutors() {
+    this.defaultThreadPoolQueue = new LinkedBlockingQueue<>(this.namesrvConfig.getDefaultThreadPoolQueueCapacity());
+    this.defaultExecutor = new ThreadPoolExecutor(this.namesrvConfig.getDefaultThreadPoolNums(), this.namesrvConfig.getDefaultThreadPoolNums(), 1000 * 60, TimeUnit.MILLISECONDS, this.defaultThreadPoolQueue, new ThreadFactoryImpl("RemotingExecutorThread_")) {
+      @Override
+      protected <T> RunnableFuture<T> newTaskFor(final Runnable runnable, final T value) {
+        return new FutureTaskExt<>(runnable, value);
+      }
+    };
+
+    this.clientRequestThreadPoolQueue = new LinkedBlockingQueue<>(this.namesrvConfig.getClientRequestThreadPoolQueueCapacity());
+    this.clientRequestExecutor = new ThreadPoolExecutor(this.namesrvConfig.getClientRequestThreadPoolNums(), this.namesrvConfig.getClientRequestThreadPoolNums(), 1000 * 60, TimeUnit.MILLISECONDS, this.clientRequestThreadPoolQueue, new ThreadFactoryImpl("ClientRequestExecutorThread_")) {
+      @Override
+      protected <T> RunnableFuture<T> newTaskFor(final Runnable runnable, final T value) {
+        return new FutureTaskExt<>(runnable, value);
+      }
+    };
+  }
+
+  private void registerProcessor() {
+    if (namesrvConfig.isClusterTest()) {
+
+      this.remotingServer.registerDefaultProcessor(new ClusterTestRequestProcessor(this, namesrvConfig.getProductEnvName()), this.defaultExecutor);
+    } else {
+      // Support get route info only temporarily
+      ClientRequestProcessor clientRequestProcessor = new ClientRequestProcessor(this);
+      this.remotingServer.registerProcessor(RequestCode.GET_ROUTEINFO_BY_TOPIC, clientRequestProcessor, this.clientRequestExecutor);
+
+      this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.defaultExecutor);
+    }
+  }
+
+  private void startScheduleService() {
+    this.scanExecutorService.scheduleAtFixedRate(NamesrvController.this.routeInfoManager::scanNotActiveBroker,
+            5, this.namesrvConfig.getScanNotActiveBrokerInterval(), TimeUnit.MILLISECONDS);
+
+    this.scheduledExecutorService.scheduleAtFixedRate(NamesrvController.this.kvConfigManager::printAllPeriodically,
+            1, 10, TimeUnit.MINUTES);
+
+    this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+      try {
+        NamesrvController.this.printWaterMark();
+      } catch (Throwable e) {
+        LOGGER.error("printWaterMark error.", e);
+      }
+    }, 10, 1, TimeUnit.SECONDS);
+  }
 }
 ```
 
 
+
+```java
+public class DefaultRequestProcessor implements NettyRequestProcessor {
+  @Override
+  public RemotingCommand processRequest(ChannelHandlerContext ctx,
+                                        RemotingCommand request) throws RemotingCommandException {
+
+    if (ctx != null) {
+      log.debug("receive request, {} {} {}",
+              request.getCode(),
+              RemotingHelper.parseChannelRemoteAddr(ctx.channel()),
+              request);
+    }
+
+    switch (request.getCode()) {
+      case RequestCode.PUT_KV_CONFIG:
+        return this.putKVConfig(ctx, request);
+      case RequestCode.GET_KV_CONFIG:
+        return this.getKVConfig(ctx, request);
+      case RequestCode.DELETE_KV_CONFIG:
+        return this.deleteKVConfig(ctx, request);
+      case RequestCode.QUERY_DATA_VERSION:
+        return this.queryBrokerTopicConfig(ctx, request);
+      case RequestCode.REGISTER_BROKER:
+        return this.registerBroker(ctx, request);
+      case RequestCode.UNREGISTER_BROKER:
+        return this.unregisterBroker(ctx, request);
+      case RequestCode.BROKER_HEARTBEAT:
+        return this.brokerHeartbeat(ctx, request);
+      case RequestCode.GET_BROKER_MEMBER_GROUP:
+        return this.getBrokerMemberGroup(ctx, request);
+      case RequestCode.GET_BROKER_CLUSTER_INFO:
+        return this.getBrokerClusterInfo(ctx, request);
+      case RequestCode.WIPE_WRITE_PERM_OF_BROKER:
+        return this.wipeWritePermOfBroker(ctx, request);
+      case RequestCode.ADD_WRITE_PERM_OF_BROKER:
+        return this.addWritePermOfBroker(ctx, request);
+      case RequestCode.GET_ALL_TOPIC_LIST_FROM_NAMESERVER:
+        return this.getAllTopicListFromNameserver(ctx, request);
+      case RequestCode.DELETE_TOPIC_IN_NAMESRV:
+        return this.deleteTopicInNamesrv(ctx, request);
+      case RequestCode.REGISTER_TOPIC_IN_NAMESRV:
+        return this.registerTopicToNamesrv(ctx, request);
+      case RequestCode.GET_KVLIST_BY_NAMESPACE:
+        return this.getKVListByNamespace(ctx, request);
+      case RequestCode.GET_TOPICS_BY_CLUSTER:
+        return this.getTopicsByCluster(ctx, request);
+      case RequestCode.GET_SYSTEM_TOPIC_LIST_FROM_NS:
+        return this.getSystemTopicListFromNs(ctx, request);
+      case RequestCode.GET_UNIT_TOPIC_LIST:
+        return this.getUnitTopicList(ctx, request);
+      case RequestCode.GET_HAS_UNIT_SUB_TOPIC_LIST:
+        return this.getHasUnitSubTopicList(ctx, request);
+      case RequestCode.GET_HAS_UNIT_SUB_UNUNIT_TOPIC_LIST:
+        return this.getHasUnitSubUnUnitTopicList(ctx, request);
+      case RequestCode.UPDATE_NAMESRV_CONFIG:
+        return this.updateConfig(ctx, request);
+      case RequestCode.GET_NAMESRV_CONFIG:
+        return this.getConfig(ctx, request);
+      case RequestCode.GET_CLIENT_CONFIG:
+        return this.getClientConfigs(ctx, request);
+      default:
+        String error = " request type " + request.getCode() + " not supported";
+        return RemotingCommand.createResponseCommand(RemotingSysResponseCode.REQUEST_CODE_NOT_SUPPORTED, error);
+    }
+  }
+}
+```
+
+### RouteInfoManager
+
+
+```java
+
+public class RouteInfoManager {
+  private final Map<String/* topic */, Map<String, QueueData>> topicQueueTable;
+  private final Map<String/* brokerName */, BrokerData> brokerAddrTable;
+  private final Map<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+  private final Map<BrokerAddrInfo/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+  private final Map<BrokerAddrInfo/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
+  private final Map<String/* topic */, Map<String/*brokerName*/, TopicQueueMappingInfo>> topicQueueMappingInfoTable;
+
+  private final BatchUnregistrationService unRegisterService;
+
+  private final NamesrvController namesrvController;
+  private final NamesrvConfig namesrvConfig;
+
+  public RouteInfoManager(final NamesrvConfig namesrvConfig, NamesrvController namesrvController) {
+    this.topicQueueTable = new ConcurrentHashMap<>(1024);
+    this.brokerAddrTable = new ConcurrentHashMap<>(128);
+    this.clusterAddrTable = new ConcurrentHashMap<>(32);
+    this.brokerLiveTable = new ConcurrentHashMap<>(256);
+    this.filterServerTable = new ConcurrentHashMap<>(256);
+    this.topicQueueMappingInfoTable = new ConcurrentHashMap<>(1024);
+    this.unRegisterService = new BatchUnregistrationService(this, namesrvConfig);
+    this.namesrvConfig = namesrvConfig;
+    this.namesrvController = namesrvController;
+  }
+}
+```
+
+Use [ReentrantReadWriteLock](/docs/CS/Java/JDK/Concurrency/Lock.md?id=Read-Write-Lock)
+
+## Producer
+
+The producers of Apache RocketMQ are underlying resources that can be reused, like the connection pool of a database.
+You do not need to create producers each time you send messages or destroy the producers after you send messages.
+If you regularly create and destroy producers, a large number of short connection requests are generated on the broker.
+We recommend that you create and initialize the minimum number of producers that your business scenarios require, and reuse as many producers as you can.
+
+
+
 ## Consumer
 
-Message model defines the way how messages are delivered to each consumer clients. 
-RocketMQ supports two message models: clustering and broadcasting. 
-- If clustering is set, consumer clients with the same consumerGroup would only consume shards of the messages subscribed, which achieves load balances; 
-- Conversely, if the broadcasting is set, each consumer client will consume all subscribed messages separately. 
+Message model defines the way how messages are delivered to each consumer clients.
+RocketMQ supports two message models: clustering and broadcasting.
+
+- If clustering is set, consumer clients with the same consumerGroup would only consume shards of the messages subscribed, which achieves load balances;
+- Conversely, if the broadcasting is set, each consumer client will consume all subscribed messages separately.
 
 This defaults model is clustering.
-
 
 ```java
 public class PullMessageService extends ServiceThread {
@@ -465,8 +653,6 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=RocketMQ)
-
-
 
 ## References
 
