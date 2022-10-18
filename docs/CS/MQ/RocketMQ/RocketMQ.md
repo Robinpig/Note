@@ -141,6 +141,8 @@ Route info is not real-time. The clients need to pull latest topic info in fix r
 Brokers send heart beats to name server every 30 seconds and name server update live broker table time stamp.
 Name server scan live broker table every 10s and remove last time stamp > 120s brokers.
 
+sync route table every 30s
+
 PushConumser
 
 Actually a pull
@@ -363,7 +365,260 @@ You do not need to create producers each time you send messages or destroy the p
 If you regularly create and destroy producers, a large number of short connection requests are generated on the broker.
 We recommend that you create and initialize the minimum number of producers that your business scenarios require, and reuse as many producers as you can.
 
+### send
 
+```java
+public SendResult send(Message msg,
+      long timeout) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+      return this.sendDefaultImpl(msg, CommunicationMode.SYNC, null, timeout);
+  }
+```
+
+1. findTopic -> update Topic
+2. selectOneMessageQueue
+
+```java
+public class DefaultMQProducerImpl implements MQProducerInner {
+
+  private MQClientInstance mQClientFactory;
+
+  private MQFaultStrategy mqFaultStrategy = new MQFaultStrategy();
+  
+  private SendResult sendDefaultImpl(
+          Message msg,
+          final CommunicationMode communicationMode,
+          final SendCallback sendCallback,
+          final long timeout
+  ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+    this.makeSureStateOK();
+    Validators.checkMessage(msg, this.defaultMQProducer);
+    final long invokeID = random.nextLong();
+    long beginTimestampFirst = System.currentTimeMillis();
+    long beginTimestampPrev = beginTimestampFirst;
+    long endTimestamp = beginTimestampFirst;
+    TopicPublishInfo topicPublishInfo = this.tryToFindTopicPublishInfo(msg.getTopic());
+    if (topicPublishInfo != null && topicPublishInfo.ok()) {
+      boolean callTimeout = false;
+      MessageQueue mq = null;
+      Exception exception = null;
+      SendResult sendResult = null;
+      int timesTotal = communicationMode == CommunicationMode.SYNC ? 1 + this.defaultMQProducer.getRetryTimesWhenSendFailed() : 1;
+      int times = 0;
+      String[] brokersSent = new String[timesTotal];
+      for (; times < timesTotal; times++) {
+        String lastBrokerName = null == mq ? null : mq.getBrokerName();
+        MessageQueue mqSelected = this.selectOneMessageQueue(topicPublishInfo, lastBrokerName);
+        if (mqSelected != null) {
+          mq = mqSelected;
+          brokersSent[times] = mq.getBrokerName();
+          try {
+            beginTimestampPrev = System.currentTimeMillis();
+            if (times > 0) {
+              //Reset topic with namespace during resend.
+              msg.setTopic(this.defaultMQProducer.withNamespace(msg.getTopic()));
+            }
+            long costTime = beginTimestampPrev - beginTimestampFirst;
+            if (timeout < costTime) {
+              callTimeout = true;
+              break;
+            }
+
+            sendResult = this.sendKernelImpl(msg, mq, communicationMode, sendCallback, topicPublishInfo, timeout - costTime);
+            endTimestamp = System.currentTimeMillis();
+            this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+            switch (communicationMode) {
+              case ASYNC:
+                return null;
+              case ONEWAY:
+                return null;
+              case SYNC:
+                if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
+                  if (this.defaultMQProducer.isRetryAnotherBrokerWhenNotStoreOK()) {
+                    continue;
+                  }
+                }
+
+                return sendResult;
+              default:
+                break;
+            }
+          } catch (RemotingException e) {
+            endTimestamp = System.currentTimeMillis();
+            this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
+            log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
+            log.warn(msg.toString());
+            exception = e;
+            continue;
+          } catch (MQClientException e) {
+            endTimestamp = System.currentTimeMillis();
+            this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
+            log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
+            log.warn(msg.toString());
+            exception = e;
+            continue;
+          } catch (MQBrokerException e) {
+            endTimestamp = System.currentTimeMillis();
+            this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, true);
+            log.warn(String.format("sendKernelImpl exception, resend at once, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
+            log.warn(msg.toString());
+            exception = e;
+            if (this.defaultMQProducer.getRetryResponseCodes().contains(e.getResponseCode())) {
+              continue;
+            } else {
+              if (sendResult != null) {
+                return sendResult;
+              }
+
+              throw e;
+            }
+          } catch (InterruptedException e) {
+            endTimestamp = System.currentTimeMillis();
+            this.updateFaultItem(mq.getBrokerName(), endTimestamp - beginTimestampPrev, false);
+            log.warn(String.format("sendKernelImpl exception, throw exception, InvokeID: %s, RT: %sms, Broker: %s", invokeID, endTimestamp - beginTimestampPrev, mq), e);
+            log.warn(msg.toString());
+            throw e;
+          }
+        } else {
+          break;
+        }
+      }
+
+      if (sendResult != null) {
+        return sendResult;
+      }
+
+      String info = String.format("Send [%d] times, still failed, cost [%d]ms, Topic: %s, BrokersSent: %s",
+              times,
+              System.currentTimeMillis() - beginTimestampFirst,
+              msg.getTopic(),
+              Arrays.toString(brokersSent));
+
+      info += FAQUrl.suggestTodo(FAQUrl.SEND_MSG_FAILED);
+
+      MQClientException mqClientException = new MQClientException(info, exception);
+      if (callTimeout) {
+        throw new RemotingTooMuchRequestException("sendDefaultImpl call timeout");
+      }
+
+      if (exception instanceof MQBrokerException) {
+        mqClientException.setResponseCode(((MQBrokerException) exception).getResponseCode());
+      } else if (exception instanceof RemotingConnectException) {
+        mqClientException.setResponseCode(ClientErrorCode.CONNECT_BROKER_EXCEPTION);
+      } else if (exception instanceof RemotingTimeoutException) {
+        mqClientException.setResponseCode(ClientErrorCode.ACCESS_BROKER_TIMEOUT);
+      } else if (exception instanceof MQClientException) {
+        mqClientException.setResponseCode(ClientErrorCode.BROKER_NOT_EXIST_EXCEPTION);
+      }
+
+      throw mqClientException;
+    }
+
+    validateNameServerSetting();
+
+    throw new MQClientException("No route info of this topic: " + msg.getTopic() + FAQUrl.suggestTodo(FAQUrl.NO_TOPIC_ROUTE_INFO),
+            null).setResponseCode(ClientErrorCode.NOT_FOUND_TOPIC_EXCEPTION);
+  }
+}
+```
+
+
+#### FaultStrategy
+
+### MQClientInstance
+
+```java
+public class MQClientInstance {
+    
+    
+}
+```
+
+
+start
+
+```java
+public class MQClientInstance {
+  public void start() throws MQClientException {
+
+    synchronized (this) {
+      switch (this.serviceState) {
+        case CREATE_JUST:
+          this.serviceState = ServiceState.START_FAILED;
+          // If not specified,looking address from name server
+          if (null == this.clientConfig.getNamesrvAddr()) {
+            this.mQClientAPIImpl.fetchNameServerAddr();
+          }
+          // Start request-response channel
+          this.mQClientAPIImpl.start();
+          // Start various schedule tasks
+          this.startScheduledTask();
+          // Start pull service
+          this.pullMessageService.start();
+          // Start rebalance service
+          this.rebalanceService.start();
+          // Start push service
+          this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
+          log.info("the client factory [{}] start OK", this.clientId);
+          this.serviceState = ServiceState.RUNNING;
+          break;
+        case START_FAILED:
+          throw new MQClientException("The Factory object[" + this.getClientId() + "] has been created before, and failed.", null);
+        default:
+          break;
+      }
+    }
+  }
+}
+```
+
+startScheduledTask
+```java
+
+    private void startScheduledTask() {
+        if (null == this.clientConfig.getNamesrvAddr()) {
+            this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+                try {
+                    MQClientInstance.this.mQClientAPIImpl.fetchNameServerAddr();
+                } catch (Exception e) {
+                    log.error("ScheduledTask fetchNameServerAddr exception", e);
+                }
+            }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
+        }
+
+        this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+            try {
+                MQClientInstance.this.updateTopicRouteInfoFromNameServer();
+            } catch (Exception e) {
+                log.error("ScheduledTask updateTopicRouteInfoFromNameServer exception", e);
+            }
+        }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
+
+        this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+            try {
+                MQClientInstance.this.cleanOfflineBroker();
+                MQClientInstance.this.sendHeartbeatToAllBrokerWithLock();
+            } catch (Exception e) {
+                log.error("ScheduledTask sendHeartbeatToAllBroker exception", e);
+            }
+        }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
+
+        this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+            try {
+                MQClientInstance.this.persistAllConsumerOffset();
+            } catch (Exception e) {
+                log.error("ScheduledTask persistAllConsumerOffset exception", e);
+            }
+        }, 1000 * 10, this.clientConfig.getPersistConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
+
+        this.scheduledExecutorService.scheduleAtFixedRate(() -> {
+            try {
+                MQClientInstance.this.adjustThreadPool();
+            } catch (Exception e) {
+                log.error("ScheduledTask adjustThreadPool exception", e);
+            }
+        }, 1, 1, TimeUnit.MINUTES);
+    }
+```
 
 ## Consumer
 
@@ -401,6 +656,113 @@ public class PullMessageService extends ServiceThread {
 ```
 
 ### PushConsumer
+
+
+#### start
+DefaultMQPushConsumerImpl#start
+
+```java
+public class DefaultMQPushConsumerImpl implements MQConsumerInner {
+  public synchronized void start() throws MQClientException {
+    switch (this.serviceState) {
+      case CREATE_JUST:
+        log.info("the consumer [{}] start beginning. messageModel={}, isUnitMode={}", this.defaultMQPushConsumer.getConsumerGroup(),
+                this.defaultMQPushConsumer.getMessageModel(), this.defaultMQPushConsumer.isUnitMode());
+        this.serviceState = ServiceState.START_FAILED;
+
+        this.checkConfig();
+
+        this.copySubscription();
+
+        if (this.defaultMQPushConsumer.getMessageModel() == MessageModel.CLUSTERING) {
+          this.defaultMQPushConsumer.changeInstanceNameToPID();
+        }
+
+        this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQPushConsumer, this.rpcHook);
+
+        this.rebalanceImpl.setConsumerGroup(this.defaultMQPushConsumer.getConsumerGroup());
+        this.rebalanceImpl.setMessageModel(this.defaultMQPushConsumer.getMessageModel());
+        this.rebalanceImpl.setAllocateMessageQueueStrategy(this.defaultMQPushConsumer.getAllocateMessageQueueStrategy());
+        this.rebalanceImpl.setmQClientFactory(this.mQClientFactory);
+
+        if (this.pullAPIWrapper == null) {
+          this.pullAPIWrapper = new PullAPIWrapper(
+                  mQClientFactory,
+                  this.defaultMQPushConsumer.getConsumerGroup(), isUnitMode());
+        }
+        this.pullAPIWrapper.registerFilterMessageHook(filterMessageHookList);
+
+        if (this.defaultMQPushConsumer.getOffsetStore() != null) {
+          this.offsetStore = this.defaultMQPushConsumer.getOffsetStore();
+        } else {
+          switch (this.defaultMQPushConsumer.getMessageModel()) {
+            case BROADCASTING:
+              this.offsetStore = new LocalFileOffsetStore(this.mQClientFactory, this.defaultMQPushConsumer.getConsumerGroup());
+              break;
+            case CLUSTERING:
+              this.offsetStore = new RemoteBrokerOffsetStore(this.mQClientFactory, this.defaultMQPushConsumer.getConsumerGroup());
+              break;
+            default:
+              break;
+          }
+          this.defaultMQPushConsumer.setOffsetStore(this.offsetStore);
+        }
+        this.offsetStore.load();
+
+        if (this.getMessageListenerInner() instanceof MessageListenerOrderly) {
+          this.consumeOrderly = true;
+          this.consumeMessageService =
+                  new ConsumeMessageOrderlyService(this, (MessageListenerOrderly) this.getMessageListenerInner());
+          //POPTODO reuse Executor ?
+          this.consumeMessagePopService = new ConsumeMessagePopOrderlyService(this, (MessageListenerOrderly) this.getMessageListenerInner());
+        } else if (this.getMessageListenerInner() instanceof MessageListenerConcurrently) {
+          this.consumeOrderly = false;
+          this.consumeMessageService =
+                  new ConsumeMessageConcurrentlyService(this, (MessageListenerConcurrently) this.getMessageListenerInner());
+          //POPTODO reuse Executor ?
+          this.consumeMessagePopService =
+                  new ConsumeMessagePopConcurrentlyService(this, (MessageListenerConcurrently) this.getMessageListenerInner());
+        }
+
+        this.consumeMessageService.start();
+        // POPTODO
+        this.consumeMessagePopService.start();
+
+        boolean registerOK = mQClientFactory.registerConsumer(this.defaultMQPushConsumer.getConsumerGroup(), this);
+        if (!registerOK) {
+          this.serviceState = ServiceState.CREATE_JUST;
+          this.consumeMessageService.shutdown(defaultMQPushConsumer.getAwaitTerminationMillisWhenShutdown());
+          throw new MQClientException("The consumer group[" + this.defaultMQPushConsumer.getConsumerGroup()
+                  + "] has been created before, specify another name please." + FAQUrl.suggestTodo(FAQUrl.GROUP_NAME_DUPLICATE_URL),
+                  null);
+        }
+
+        mQClientFactory.start();
+        log.info("the consumer [{}] start OK.", this.defaultMQPushConsumer.getConsumerGroup());
+        this.serviceState = ServiceState.RUNNING;
+        break;
+      case RUNNING:
+      case START_FAILED:
+      case SHUTDOWN_ALREADY:
+        throw new MQClientException("The PushConsumer service state not OK, maybe started once, "
+                + this.serviceState
+                + FAQUrl.suggestTodo(FAQUrl.CLIENT_SERVICE_NOT_OK),
+                null);
+      default:
+        break;
+    }
+
+    this.updateTopicSubscribeInfoWhenSubscriptionChanged();
+    this.mQClientFactory.checkClientInBroker();
+    this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
+    this.mQClientFactory.rebalanceImmediately();
+  }
+}
+```
+
+
+
+#### pullMessage
 
 ```java
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
@@ -649,6 +1011,56 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
   }
 }
 ```
+
+
+#### concurrent
+
+```java
+public class ConsumeMessageConcurrentlyService implements ConsumeMessageService {
+  private static final InternalLogger log = ClientLogger.getLog();
+  private final DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
+  private final DefaultMQPushConsumer defaultMQPushConsumer;
+  private final MessageListenerConcurrently messageListener;
+  private final BlockingQueue<Runnable> consumeRequestQueue;
+  private final ThreadPoolExecutor consumeExecutor;
+  private final String consumerGroup;
+
+  private final ScheduledExecutorService scheduledExecutorService;
+  private final ScheduledExecutorService cleanExpireMsgExecutors;
+
+  public ConsumeMessageConcurrentlyService(DefaultMQPushConsumerImpl defaultMQPushConsumerImpl,
+                                           MessageListenerConcurrently messageListener) {
+    this.defaultMQPushConsumerImpl = defaultMQPushConsumerImpl;
+    this.messageListener = messageListener;
+
+    this.defaultMQPushConsumer = this.defaultMQPushConsumerImpl.getDefaultMQPushConsumer();
+    this.consumerGroup = this.defaultMQPushConsumer.getConsumerGroup();
+    this.consumeRequestQueue = new LinkedBlockingQueue<Runnable>();
+
+    String consumeThreadPrefix = null;
+    if (consumerGroup.length() > 100) {
+      consumeThreadPrefix = new StringBuilder("ConsumeMessageThread_").append(consumerGroup, 0, 100).append("_").toString();
+    } else {
+      consumeThreadPrefix = new StringBuilder("ConsumeMessageThread_").append(consumerGroup).append("_").toString();
+    }
+    this.consumeExecutor = new ThreadPoolExecutor(
+            this.defaultMQPushConsumer.getConsumeThreadMin(),
+            this.defaultMQPushConsumer.getConsumeThreadMax(),
+            1000 * 60,
+            TimeUnit.MILLISECONDS,
+            this.consumeRequestQueue,
+            new ThreadFactoryImpl(consumeThreadPrefix));
+
+    this.scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("ConsumeMessageScheduledThread_"));
+    this.cleanExpireMsgExecutors = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("CleanExpireMsgScheduledThread_"));
+  }
+}
+```
+
+### PullConsumer
+
+
+
 
 ## Links
 
