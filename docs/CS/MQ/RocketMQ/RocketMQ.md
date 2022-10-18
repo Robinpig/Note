@@ -42,13 +42,8 @@ Message consumption
 - Subscription：
   The collection of configurations in the publish/subscribe model of Apache RocketMQ. The configurations include message filtering, retry, and consumer progress Subscriptions are managed at the consumer group level. You use consumer groups to specify subscriptions to manage how consumers in the group filter messages, retry consumption, and restore a consumer offset.
   The configurations in a Apache RocketMQ subscription are all persistent, except for filter expressions. Subscriptions are unchanged regardless of whether the broker restarts or the connection is closed.
-- Producer
-- Consumer
 
-  - DefaultLitePullConsumer
-  - DefaultMQPushConsumer
-- Broker
-- NameServer
+
 
 Topic -> multi message queue(like partition)
 

@@ -344,6 +344,16 @@ Kafka partition -> queue -> thread
 
 ## MQs
 
+When the message sending and consumption ends coexist, the increasing number of topics will cause a drastic decline of Kafka's throughput, while Apache RocketMQ delivers a stable performance.
+Therefore, Kafka is more suitable for business scenarios with only a few topics and consumption ends, while Apache RocketMQ is a better choice for business scenarios with multiple topics and consumption ends.
+
+The difference is attributable to the fact that every topic and partition of Kafka correspond to one physical file. 
+When the number of topics increases, the policy of deconcentrated storage of messages to disks will lead to disk IO competition to cause performance bottlenecks.
+In contrast, all the messages in Apache RocketMQ are stored in the same physical file. The number of topics and partitions is just a logic division for Apache RocketMQ. 
+So the increasing number of topics won't generate a huge impact on the Apache RocketMQ performance.
+
+
+
 ### Kafka
 
 [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
@@ -367,3 +377,8 @@ RocketMQ all topics using single commitlog and multiple index
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
+
+
+## References
+
+1. [Kafka vs. Apache RocketMQ™- Multiple Topic Stress Test Results](https://www.alibabacloud.com/blog/kafka-vs-rocketmq--multiple-topic-stress-test-results_69781)
