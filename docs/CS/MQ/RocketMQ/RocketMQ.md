@@ -52,6 +52,9 @@ Message consumption
 
 Topic -> multi message queue(like partition)
 
+## Broker
+
+
 BrokerController
 
 ```java
@@ -119,29 +122,9 @@ public void start() throws Exception {
     }
 ```
 
-RouteInfoManager
 
-```java
-public RegisterBrokerResult registerBroker(
-        final String clusterName,
-        final String brokerAddr,
-        final String brokerName,
-        final long brokerId,
-        final String haServerAddr,
-        final String zoneName,
-        final Long timeoutMillis,
-        final TopicConfigSerializeWrapper topicConfigWrapper,
-        final List<String> filterServerList,
-        final Channel channel) {
-        return registerBroker(clusterName, brokerAddr, brokerName, brokerId, haServerAddr, zoneName, timeoutMillis, false, topicConfigWrapper, filterServerList, channel);
-    }
-```
 
-Route info is not real-time. The clients need to pull latest topic info in fix rate.
-Brokers send heart beats to name server every 30 seconds and name server update live broker table time stamp.
-Name server scan live broker table every 10s and remove last time stamp > 120s brokers.
-
-sync route table every 30s
+Broker sync route table every 30s
 
 PushConumser
 
@@ -154,6 +137,13 @@ pullRequestQueue
 PullMessageProcessor of broker
 
 ## NameServer
+
+Brokers send heart beats to name server every 30 seconds and name server update live broker table time stamp.
+Name server scan live broker table every 10s and remove last time stamp > 120s brokers.
+
+
+
+
 
 ```java
 public class NamesrvStartup {
@@ -235,7 +225,7 @@ public class NamesrvController {
       this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.defaultExecutor);
     }
   }
-
+  // Three tasks： 
   private void startScheduleService() {
     this.scanExecutorService.scheduleAtFixedRate(NamesrvController.this.routeInfoManager::scanNotActiveBroker,
             5, this.namesrvConfig.getScanNotActiveBrokerInterval(), TimeUnit.MILLISECONDS);
@@ -253,6 +243,10 @@ public class NamesrvController {
   }
 }
 ```
+
+
+Processor
+
 
 
 
@@ -324,6 +318,11 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
 }
 ```
 
+clients get latest route information by active
+
+
+
+
 ### RouteInfoManager
 
 
@@ -357,6 +356,31 @@ public class RouteInfoManager {
 ```
 
 Use [ReentrantReadWriteLock](/docs/CS/Java/JDK/Concurrency/Lock.md?id=Read-Write-Lock)
+
+
+
+
+RouteInfoManager
+
+```java
+public RegisterBrokerResult registerBroker(
+        final String clusterName,
+        final String brokerAddr,
+        final String brokerName,
+        final long brokerId,
+        final String haServerAddr,
+        final String zoneName,
+        final Long timeoutMillis,
+        final TopicConfigSerializeWrapper topicConfigWrapper,
+        final List<String> filterServerList,
+        final Channel channel) {
+        return registerBroker(clusterName, brokerAddr, brokerName, brokerId, haServerAddr, zoneName, timeoutMillis, false, topicConfigWrapper, filterServerList, channel);
+    }
+```
+
+Route info is not real-time. The clients need to pull latest topic info in fix rate.
+
+
 
 ## Producer
 
