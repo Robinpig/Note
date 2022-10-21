@@ -381,6 +381,193 @@ Note that we allow the use of KRaft mode controller APIs when forwarding is enab
 }
 ```
 
+
+ZkAdminManager#createTopics
+
+
+
+Create topics and wait until the topics have been completely created.
+The callback function will be triggered either when timeout, error or the topics are created.
+
+```scala
+  def createTopics(timeout: Int,
+                   validateOnly: Boolean,
+                   toCreate: Map[String, CreatableTopic],
+                   includeConfigsAndMetadata: Map[String, CreatableTopicResult],
+                   controllerMutationQuota: ControllerMutationQuota,
+                   responseCallback: Map[String, ApiError] => Unit): Unit = {
+
+    // 1. map over topics creating assignment and calling zookeeper
+    val brokers = metadataCache.getAliveBrokers()
+    val metadata = toCreate.values.map(topic =>
+      try {
+        if (metadataCache.contains(topic.name))
+          throw new TopicExistsException(s"Topic '${topic.name}' already exists.")
+
+        val nullConfigs = topic.configs.asScala.filter(_.value == null).map(_.name)
+        if (nullConfigs.nonEmpty)
+          throw new InvalidConfigurationException(s"Null value not supported for topic configs: ${nullConfigs.mkString(",")}")
+
+        if ((topic.numPartitions != NO_NUM_PARTITIONS || topic.replicationFactor != NO_REPLICATION_FACTOR)
+            && !topic.assignments().isEmpty) {
+          throw new InvalidRequestException("Both numPartitions or replicationFactor and replicasAssignments were set. " +
+            "Both cannot be used at the same time.")
+        }
+
+        val resolvedNumPartitions = if (topic.numPartitions == NO_NUM_PARTITIONS)
+          defaultNumPartitions else topic.numPartitions
+        val resolvedReplicationFactor = if (topic.replicationFactor == NO_REPLICATION_FACTOR)
+          defaultReplicationFactor else topic.replicationFactor
+
+        val assignments = if (topic.assignments.isEmpty) {
+          AdminUtils.assignReplicasToBrokers(
+            brokers, resolvedNumPartitions, resolvedReplicationFactor)
+        } else {
+          val assignments = new mutable.HashMap[Int, Seq[Int]]
+          // Note: we don't check that replicaAssignment contains unknown brokers - unlike in add-partitions case,
+          // this follows the existing logic in TopicCommand
+          topic.assignments.forEach { assignment =>
+            assignments(assignment.partitionIndex) = assignment.brokerIds.asScala.map(a => a: Int)
+          }
+          assignments
+        }
+        trace(s"Assignments for topic $topic are $assignments ")
+
+        val configs = new Properties()
+        topic.configs.forEach(entry => configs.setProperty(entry.name, entry.value))
+        adminZkClient.validateTopicCreate(topic.name, assignments, configs)
+        validateTopicCreatePolicy(topic, resolvedNumPartitions, resolvedReplicationFactor, assignments)
+
+        // For responses with DescribeConfigs permission, populate metadata and configs. It is
+        // safe to populate it before creating the topic because the values are unset if the
+        // creation fails.
+        maybePopulateMetadataAndConfigs(includeConfigsAndMetadata, topic.name, configs, assignments)
+
+        if (validateOnly) {
+          CreatePartitionsMetadata(topic.name, assignments.keySet)
+        } else {
+          controllerMutationQuota.record(assignments.size)
+          adminZkClient.createTopicWithAssignment(topic.name, configs, assignments, validate = false, config.usesTopicId)
+          populateIds(includeConfigsAndMetadata, topic.name)
+          CreatePartitionsMetadata(topic.name, assignments.keySet)
+        }
+      } catch {
+        // Log client errors at a lower level than unexpected exceptions
+        case e: TopicExistsException =>
+          debug(s"Topic creation failed since topic '${topic.name}' already exists.", e)
+          CreatePartitionsMetadata(topic.name, e)
+        case e: ThrottlingQuotaExceededException =>
+          debug(s"Topic creation not allowed because quota is violated. Delay time: ${e.throttleTimeMs}")
+          CreatePartitionsMetadata(topic.name, e)
+        case e: ApiException =>
+          info(s"Error processing create topic request $topic", e)
+          CreatePartitionsMetadata(topic.name, e)
+        case e: ConfigException =>
+          info(s"Error processing create topic request $topic", e)
+          CreatePartitionsMetadata(topic.name, new InvalidConfigurationException(e.getMessage, e.getCause))
+        case e: Throwable =>
+          error(s"Error processing create topic request $topic", e)
+          CreatePartitionsMetadata(topic.name, e)
+      }).toBuffer
+
+    // 2. if timeout <= 0, validateOnly or no topics can proceed return immediately
+    if (timeout <= 0 || validateOnly || !metadata.exists(_.error.is(Errors.NONE))) {
+      val results = metadata.map { createTopicMetadata =>
+        // ignore topics that already have errors
+        if (createTopicMetadata.error.isSuccess && !validateOnly) {
+          (createTopicMetadata.topic, new ApiError(Errors.REQUEST_TIMED_OUT, null))
+        } else {
+          (createTopicMetadata.topic, createTopicMetadata.error)
+        }
+      }.toMap
+      responseCallback(results)
+    } else {
+      // 3. else pass the assignments and errors to the delayed operation and set the keys
+      val delayedCreate = new DelayedCreatePartitions(timeout, metadata, this,
+        responseCallback)
+      val delayedCreateKeys = toCreate.values.map(topic => TopicKey(topic.name)).toBuffer
+      // try to complete the request immediately, otherwise put it into the purgatory
+      topicPurgatory.tryCompleteElseWatch(delayedCreate, delayedCreateKeys)
+    }
+  }
+```
+AdminUtils#assignReplicasToBrokersRackAware
+
+```scala
+  
+  private def assignReplicasToBrokersRackAware(nPartitions: Int,
+                                               replicationFactor: Int,
+                                               brokerMetadatas: Iterable[BrokerMetadata],
+                                               fixedStartIndex: Int,
+                                               startPartitionId: Int): Map[Int, Seq[Int]] = {
+    val brokerRackMap = brokerMetadatas.collect { case BrokerMetadata(id, Some(rack)) =>
+      id -> rack
+    }.toMap
+    val numRacks = brokerRackMap.values.toSet.size
+    val arrangedBrokerList = getRackAlternatedBrokerList(brokerRackMap)
+    val numBrokers = arrangedBrokerList.size
+    val ret = mutable.Map[Int, Seq[Int]]()
+    val startIndex = if (fixedStartIndex >= 0) fixedStartIndex else rand.nextInt(arrangedBrokerList.size)
+    var currentPartitionId = math.max(0, startPartitionId)
+    var nextReplicaShift = if (fixedStartIndex >= 0) fixedStartIndex else rand.nextInt(arrangedBrokerList.size)
+    for (_ <- 0 until nPartitions) {
+      if (currentPartitionId > 0 && (currentPartitionId % arrangedBrokerList.size == 0))
+        nextReplicaShift += 1
+      val firstReplicaIndex = (currentPartitionId + startIndex) % arrangedBrokerList.size
+      val leader = arrangedBrokerList(firstReplicaIndex)
+      val replicaBuffer = mutable.ArrayBuffer(leader)
+      val racksWithReplicas = mutable.Set(brokerRackMap(leader))
+      val brokersWithReplicas = mutable.Set(leader)
+      var k = 0
+      for (_ <- 0 until replicationFactor - 1) {
+        var done = false
+        while (!done) {
+          val broker = arrangedBrokerList(replicaIndex(firstReplicaIndex, nextReplicaShift * numRacks, k, arrangedBrokerList.size))
+          val rack = brokerRackMap(broker)
+          // Skip this broker if
+          // 1. there is already a broker in the same rack that has assigned a replica AND there is one or more racks
+          //    that do not have any replica, or
+          // 2. the broker has already assigned a replica AND there is one or more brokers that do not have replica assigned
+          if ((!racksWithReplicas.contains(rack) || racksWithReplicas.size == numRacks)
+              && (!brokersWithReplicas.contains(broker) || brokersWithReplicas.size == numBrokers)) {
+            replicaBuffer += broker
+            racksWithReplicas += rack
+            brokersWithReplicas += broker
+            done = true
+          }
+          k += 1
+        }
+      }
+      ret.put(currentPartitionId, replicaBuffer)
+      currentPartitionId += 1
+    }
+    ret
+  }
+
+```
+replicaIndex
+
+```scala
+  private def replicaIndex(firstReplicaIndex: Int, secondReplicaShift: Int, replicaIndex: Int, nBrokers: Int): Int = {
+    val shift = 1 + (secondReplicaShift + replicaIndex) % (nBrokers - 1)
+    (firstReplicaIndex + shift) % nBrokers
+  }
+```
+
+AdminZkClient
+```scala
+  def createTopic(topic: String,
+                  partitions: Int,
+                  replicationFactor: Int,
+                  topicConfig: Properties = new Properties,
+                  rackAwareMode: RackAwareMode = RackAwareMode.Enforced,
+                  usesTopicId: Boolean = false): Unit = {
+    val brokerMetadatas = getBrokerMetadatas(rackAwareMode)
+    val replicaAssignment = AdminUtils.assignReplicasToBrokers(brokerMetadatas, partitions, replicationFactor)
+    createTopicWithAssignment(topic, topicConfig, replicaAssignment, usesTopicId = usesTopicId)
+  }
+```
+
 ### ISR
 
 
