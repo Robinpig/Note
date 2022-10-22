@@ -144,7 +144,159 @@ See KIP-794 for more info. The partitioning strategy:
 - Otherwise choose the sticky partition that changes when the batch is full. NOTE: In contrast to the DefaultPartitioner, the record key is NOT used as part of the partitioning strategy in this partitioner.
   Records with the same key are not guaranteed to be sent to the same partition. See KIP-480 for details about sticky partitioning.
 
-### poll
+## fetch
+
+```java
+public class KafkaConsumer<K, V> implements Consumer<K, V> {
+  private Fetch<K, V> pollForFetches(Timer timer) {
+    long pollTimeout = coordinator == null ? timer.remainingMs() :
+            Math.min(coordinator.timeToNextPoll(timer.currentTimeMs()), timer.remainingMs());
+
+    // if data is available already, return it immediately
+    final Fetch<K, V> fetch = fetcher.collectFetch();
+    if (!fetch.isEmpty()) {
+      return fetch;
+    }
+
+    // send any new fetches (won't resend pending fetches)
+    fetcher.sendFetches();
+
+    // We do not want to be stuck blocking in poll if we are missing some positions
+    // since the offset lookup may be backing off after a failure
+
+    // NOTE: the use of cachedSubscriptionHasAllFetchPositions means we MUST call
+    // updateAssignmentMetadataIfNeeded before this method.
+    if (!cachedSubscriptionHasAllFetchPositions && pollTimeout > retryBackoffMs) {
+      pollTimeout = retryBackoffMs;
+    }
+
+    Timer pollTimer = time.timer(pollTimeout);
+    client.poll(pollTimer, () -> {
+      // since a fetch might be completed by the background thread, we need this poll condition
+      // to ensure that we do not block unnecessarily in poll()
+      return !fetcher.hasAvailableFetches();
+    });
+    timer.update(pollTimer.currentTimeMs());
+
+    return fetcher.collectFetch();
+  }
+}
+```
+
+#### sendFetches
+```java
+public class Fetcher<K, V> implements Closeable {
+  public synchronized int sendFetches() {
+    // Update metrics in case there was an assignment change
+    sensors.maybeUpdateAssignment(subscriptions);
+
+    Map<Node, FetchSessionHandler.FetchRequestData> fetchRequestMap = prepareFetchRequests();
+    for (Map.Entry<Node, FetchSessionHandler.FetchRequestData> entry : fetchRequestMap.entrySet()) {
+      final Node fetchTarget = entry.getKey();
+      final FetchSessionHandler.FetchRequestData data = entry.getValue();
+      final short maxVersion;
+      if (!data.canUseTopicIds()) {
+        maxVersion = (short) 12;
+      } else {
+        maxVersion = ApiKeys.FETCH.latestVersion();
+      }
+      final FetchRequest.Builder request = FetchRequest.Builder
+              .forConsumer(maxVersion, this.maxWaitMs, this.minBytes, data.toSend())
+              .isolationLevel(isolationLevel)
+              .setMaxBytes(this.maxBytes)
+              .metadata(data.metadata())
+              .removed(data.toForget())
+              .replaced(data.toReplace())
+              .rackId(clientRackId);
+
+      RequestFuture<ClientResponse> future = client.send(fetchTarget, request);
+      // We add the node to the set of nodes with pending fetch requests before adding the
+      // listener because the future may have been fulfilled on another thread (e.g. during a
+      // disconnection being handled by the heartbeat thread) which will mean the listener
+      // will be invoked synchronously.
+      this.nodesWithPendingFetchRequests.add(entry.getKey().id());
+      future.addListener(new RequestFutureListener<ClientResponse>() {
+        @Override
+        public void onSuccess(ClientResponse resp) {
+          synchronized (Fetcher.this) {
+            try {
+              FetchResponse response = (FetchResponse) resp.responseBody();
+              FetchSessionHandler handler = sessionHandler(fetchTarget.id());
+              if (handler == null) {
+                log.error("Unable to find FetchSessionHandler for node {}. Ignoring fetch response.",
+                        fetchTarget.id());
+                return;
+              }
+              if (!handler.handleResponse(response, resp.requestHeader().apiVersion())) {
+                if (response.error() == Errors.FETCH_SESSION_TOPIC_ID_ERROR) {
+                  metadata.requestUpdate();
+                }
+                return;
+              }
+
+              Map<TopicPartition, FetchResponseData.PartitionData> responseData = response.responseData(handler.sessionTopicNames(), resp.requestHeader().apiVersion());
+              Set<TopicPartition> partitions = new HashSet<>(responseData.keySet());
+              FetchResponseMetricAggregator metricAggregator = new FetchResponseMetricAggregator(sensors, partitions);
+
+              for (Map.Entry<TopicPartition, FetchResponseData.PartitionData> entry : responseData.entrySet()) {
+                TopicPartition partition = entry.getKey();
+                FetchRequest.PartitionData requestData = data.sessionPartitions().get(partition);
+                if (requestData == null) {
+                  String message;
+                  if (data.metadata().isFull()) {
+                    message = MessageFormatter.arrayFormat(
+                            "Response for missing full request partition: partition={}; metadata={}",
+                            new Object[]{partition, data.metadata()}).getMessage();
+                  } else {
+                    message = MessageFormatter.arrayFormat(
+                            "Response for missing session request partition: partition={}; metadata={}; toSend={}; toForget={}; toReplace={}",
+                            new Object[]{partition, data.metadata(), data.toSend(), data.toForget(), data.toReplace()}).getMessage();
+                  }
+
+                  // Received fetch response for missing session partition
+                  throw new IllegalStateException(message);
+                } else {
+                  long fetchOffset = requestData.fetchOffset;
+                  FetchResponseData.PartitionData partitionData = entry.getValue();
+
+                  log.debug("Fetch {} at offset {} for partition {} returned fetch data {}",
+                          isolationLevel, fetchOffset, partition, partitionData);
+
+                  Iterator<? extends RecordBatch> batches = FetchResponse.recordsOrFail(partitionData).batches().iterator();
+                  short responseVersion = resp.requestHeader().apiVersion();
+
+                  completedFetches.add(new CompletedFetch(partition, partitionData,
+                          metricAggregator, batches, fetchOffset, responseVersion));
+                }
+              }
+
+              sensors.fetchLatency.record(resp.requestLatencyMs());
+            } finally {
+              nodesWithPendingFetchRequests.remove(fetchTarget.id());
+            }
+          }
+        }
+
+        @Override
+        public void onFailure(RuntimeException e) {
+          synchronized (Fetcher.this) {
+            try {
+              FetchSessionHandler handler = sessionHandler(fetchTarget.id());
+              if (handler != null) {
+                handler.handleError(e);
+              }
+            } finally {
+              nodesWithPendingFetchRequests.remove(fetchTarget.id());
+            }
+          }
+        }
+      });
+
+    }
+    return fetchRequestMap.size();
+  }
+}
+```
 
 
 ## Rebalance
@@ -186,7 +338,412 @@ digraph g{
     Coordinator->Member2->Coordinator
 }
 ```
+Poll for coordinator events. This ensures that the coordinator is known and that the consumer has joined the group (if it is using group management). This also handles periodic offset commits if they are enabled.
+Returns early if the timeout expires or if waiting on rejoin is not required
 
+```java
+public final class ConsumerCoordinator extends AbstractCoordinator {
+  public boolean poll(Timer timer, boolean waitForJoinGroup) {
+    maybeUpdateSubscriptionMetadata();
+
+    invokeCompletedOffsetCommitCallbacks();
+
+    if (subscriptions.hasAutoAssignedPartitions()) {
+      if (protocol == null) {
+        throw new IllegalStateException("User configured " + ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG +
+                " to empty while trying to subscribe for group protocol to auto assign partitions");
+      }
+      // Always update the heartbeat last poll time so that the heartbeat thread does not leave the
+      // group proactively due to application inactivity even if (say) the coordinator cannot be found.
+      pollHeartbeat(timer.currentTimeMs());
+      if (coordinatorUnknownAndUnreadySync(timer)) {
+        return false;
+      }
+
+      if (rejoinNeededOrPending()) {
+        // due to a race condition between the initial metadata fetch and the initial rebalance,
+        // we need to ensure that the metadata is fresh before joining initially. This ensures
+        // that we have matched the pattern against the cluster's topics at least once before joining.
+        if (subscriptions.hasPatternSubscription()) {
+          // For consumer group that uses pattern-based subscription, after a topic is created,
+          // any consumer that discovers the topic after metadata refresh can trigger rebalance
+          // across the entire consumer group. Multiple rebalances can be triggered after one topic
+          // creation if consumers refresh metadata at vastly different times. We can significantly
+          // reduce the number of rebalances caused by single topic creation by asking consumer to
+          // refresh metadata before re-joining the group as long as the refresh backoff time has
+          // passed.
+          if (this.metadata.timeToAllowUpdate(timer.currentTimeMs()) == 0) {
+            this.metadata.requestUpdate();
+          }
+
+          if (!client.ensureFreshMetadata(timer)) {
+            return false;
+          }
+
+          maybeUpdateSubscriptionMetadata();
+        }
+
+        // if not wait for join group, we would just use a timer of 0
+        if (!ensureActiveGroup(waitForJoinGroup ? timer : time.timer(0L))) {
+          // since we may use a different timer in the callee, we'd still need
+          // to update the original timer's current time after the call
+          timer.update(time.milliseconds());
+
+          return false;
+        }
+      }
+    } else {
+      // For manually assigned partitions, we do not try to pro-actively lookup coordinator;
+      // instead we only try to refresh metadata when necessary.
+      // If connections to all nodes fail, wakeups triggered while attempting to send fetch
+      // requests result in polls returning immediately, causing a tight loop of polls. Without
+      // the wakeup, poll() with no channels would block for the timeout, delaying re-connection.
+      // awaitMetadataUpdate() in ensureCoordinatorReady initiates new connections with configured backoff and avoids the busy loop.
+      if (metadata.updateRequested() && !client.hasReadyNodes(timer.currentTimeMs())) {
+        client.awaitMetadataUpdate(timer);
+      }
+
+      // if there is pending coordinator requests, ensure they have a chance to be transmitted.
+      client.pollNoWakeup();
+    }
+
+    maybeAutoCommitOffsetsAsync(timer.currentTimeMs());
+    return true;
+  }
+}
+```
+
+
+ensureActiveGroup
+```java
+boolean ensureActiveGroup(final Timer timer) {
+        // always ensure that the coordinator is ready because we may have been disconnected
+        // when sending heartbeats and does not necessarily require us to rejoin the group.
+        if (!ensureCoordinatorReady(timer)) {
+            return false;
+        }
+
+        startHeartbeatThreadIfNeeded();
+        return joinGroupIfNeeded(timer);
+    }
+
+        boolean joinGroupIfNeeded(final Timer timer) {
+        while (rejoinNeededOrPending()) {
+        if (!ensureCoordinatorReady(timer)) {
+        return false;
+        }
+
+        // call onJoinPrepare if needed. We set a flag to make sure that we do not call it a second
+        // time if the client is woken up before a pending rebalance completes. This must be called
+        // on each iteration of the loop because an event requiring a rebalance (such as a metadata
+        // refresh which changes the matched subscription set) can occur while another rebalance is
+        // still in progress.
+        if (needsJoinPrepare) {
+        // need to set the flag before calling onJoinPrepare since the user callback may throw
+        // exception, in which case upon retry we should not retry onJoinPrepare either.
+        needsJoinPrepare = false;
+        // return false when onJoinPrepare is waiting for committing offset
+        if (!onJoinPrepare(timer, generation.generationId, generation.memberId)) {
+        needsJoinPrepare = true;
+        //should not initiateJoinGroup if needsJoinPrepare still is true
+        return false;
+        }
+        }
+
+final RequestFuture<ByteBuffer> future = initiateJoinGroup();
+        client.poll(future, timer);
+        if (!future.isDone()) {
+        // we ran out of time
+        return false;
+        }
+
+        if (future.succeeded()) {
+        Generation generationSnapshot;
+        MemberState stateSnapshot;
+
+// Generation data maybe concurrently cleared by Heartbeat thread.
+// Can't use synchronized for {@code onJoinComplete}, because it can be long enough
+// and shouldn't block heartbeat thread.
+// See {@link PlaintextConsumerTest#testMaxPollIntervalMsDelayInAssignment}
+synchronized (AbstractCoordinator.this) {
+        generationSnapshot = this.generation;
+        stateSnapshot = this.state;
+        }
+
+        if (!hasGenerationReset(generationSnapshot) && stateSnapshot == MemberState.STABLE) {
+        // Duplicate the buffer in case `onJoinComplete` does not complete and needs to be retried.
+        ByteBuffer memberAssignment = future.value().duplicate();
+
+        onJoinComplete(generationSnapshot.generationId, generationSnapshot.memberId, generationSnapshot.protocolName, memberAssignment);
+
+        // Generally speaking we should always resetJoinGroupFuture once the future is done, but here
+        // we can only reset the join group future after the completion callback returns. This ensures
+        // that if the callback is woken up, we will retry it on the next joinGroupIfNeeded.
+        // And because of that we should explicitly trigger resetJoinGroupFuture in other conditions below.
+        resetJoinGroupFuture();
+        needsJoinPrepare = true;
+        } else {
+final String reason = String.format("rebalance failed since the generation/state was " +
+        "modified by heartbeat thread to %s/%s before the rebalance callback triggered",
+        generationSnapshot, stateSnapshot);
+
+        resetStateAndRejoin(reason, true);
+        resetJoinGroupFuture();
+        }
+        } else {
+final RuntimeException exception = future.exception();
+
+        resetJoinGroupFuture();
+synchronized (AbstractCoordinator.this) {
+final String simpleName = exception.getClass().getSimpleName();
+final String shortReason = String.format("rebalance failed due to %s", simpleName);
+final String fullReason = String.format("rebalance failed due to '%s' (%s)",
+        exception.getMessage(),
+        simpleName);
+        requestRejoin(shortReason, fullReason);
+        }
+
+        if (exception instanceof UnknownMemberIdException ||
+        exception instanceof IllegalGenerationException ||
+        exception instanceof RebalanceInProgressException ||
+        exception instanceof MemberIdRequiredException)
+        continue;
+        else if (!future.isRetriable())
+        throw exception;
+
+        timer.sleep(rebalanceConfig.retryBackoffMs);
+        }
+        }
+        return true;
+        }
+
+```
+
+#### joinGroupIfNeeded
+Joins the group without starting the heartbeat thread. If this function returns true, the state must always be in STABLE and heartbeat enabled. If this function returns false, the state can be in one of the following: * UNJOINED: got error response but times out before being able to re-join, heartbeat disabled * PREPARING_REBALANCE: not yet received join-group response before timeout, heartbeat disabled * COMPLETING_REBALANCE: not yet received sync-group response before timeout, heartbeat enabled Visible for testing.
+
+
+
+```java
+public abstract class AbstractCoordinator implements Closeable {
+  boolean joinGroupIfNeeded(final Timer timer) {
+    while (rejoinNeededOrPending()) {
+      if (!ensureCoordinatorReady(timer)) {
+        return false;
+      }
+
+      // call onJoinPrepare if needed. We set a flag to make sure that we do not call it a second
+      // time if the client is woken up before a pending rebalance completes. This must be called
+      // on each iteration of the loop because an event requiring a rebalance (such as a metadata
+      // refresh which changes the matched subscription set) can occur while another rebalance is
+      // still in progress.
+      if (needsJoinPrepare) {
+        // need to set the flag before calling onJoinPrepare since the user callback may throw
+        // exception, in which case upon retry we should not retry onJoinPrepare either.
+        needsJoinPrepare = false;
+        // return false when onJoinPrepare is waiting for committing offset
+        if (!onJoinPrepare(timer, generation.generationId, generation.memberId)) {
+          needsJoinPrepare = true;
+          //should not initiateJoinGroup if needsJoinPrepare still is true
+          return false;
+        }
+      }
+
+      final RequestFuture<ByteBuffer> future = initiateJoinGroup();
+      client.poll(future, timer);
+      if (!future.isDone()) {
+        // we ran out of time
+        return false;
+      }
+
+      if (future.succeeded()) {
+        Generation generationSnapshot;
+        MemberState stateSnapshot;
+
+        // Generation data maybe concurrently cleared by Heartbeat thread.
+        // Can't use synchronized for {@code onJoinComplete}, because it can be long enough
+        // and shouldn't block heartbeat thread.
+        // See {@link PlaintextConsumerTest#testMaxPollIntervalMsDelayInAssignment}
+        synchronized (AbstractCoordinator.this) {
+          generationSnapshot = this.generation;
+          stateSnapshot = this.state;
+        }
+
+        if (!hasGenerationReset(generationSnapshot) && stateSnapshot == MemberState.STABLE) {
+          // Duplicate the buffer in case `onJoinComplete` does not complete and needs to be retried.
+          ByteBuffer memberAssignment = future.value().duplicate();
+
+          onJoinComplete(generationSnapshot.generationId, generationSnapshot.memberId, generationSnapshot.protocolName, memberAssignment);
+
+          // Generally speaking we should always resetJoinGroupFuture once the future is done, but here
+          // we can only reset the join group future after the completion callback returns. This ensures
+          // that if the callback is woken up, we will retry it on the next joinGroupIfNeeded.
+          // And because of that we should explicitly trigger resetJoinGroupFuture in other conditions below.
+          resetJoinGroupFuture();
+          needsJoinPrepare = true;
+        } else {
+          final String reason = String.format("rebalance failed since the generation/state was " +
+                          "modified by heartbeat thread to %s/%s before the rebalance callback triggered",
+                  generationSnapshot, stateSnapshot);
+
+          resetStateAndRejoin(reason, true);
+          resetJoinGroupFuture();
+        }
+      } else {
+        final RuntimeException exception = future.exception();
+
+        resetJoinGroupFuture();
+        synchronized (AbstractCoordinator.this) {
+          final String simpleName = exception.getClass().getSimpleName();
+          final String shortReason = String.format("rebalance failed due to %s", simpleName);
+          final String fullReason = String.format("rebalance failed due to '%s' (%s)",
+                  exception.getMessage(),
+                  simpleName);
+          requestRejoin(shortReason, fullReason);
+        }
+
+        if (exception instanceof UnknownMemberIdException ||
+                exception instanceof IllegalGenerationException ||
+                exception instanceof RebalanceInProgressException ||
+                exception instanceof MemberIdRequiredException)
+          continue;
+        else if (!future.isRetriable())
+          throw exception;
+
+        timer.sleep(rebalanceConfig.retryBackoffMs);
+      }
+    }
+    return true;
+  }
+}
+```
+#### getCoordinator
+
+```scala
+  
+  private def getCoordinator(request: RequestChannel.Request, keyType: Byte, key: String): (Errors, Node) = {
+    if (keyType == CoordinatorType.GROUP.id &&
+        !authHelper.authorize(request.context, DESCRIBE, GROUP, key))
+      (Errors.GROUP_AUTHORIZATION_FAILED, Node.noNode)
+    else if (keyType == CoordinatorType.TRANSACTION.id &&
+        !authHelper.authorize(request.context, DESCRIBE, TRANSACTIONAL_ID, key))
+      (Errors.TRANSACTIONAL_ID_AUTHORIZATION_FAILED, Node.noNode)
+    else {
+      val (partition, internalTopicName) = CoordinatorType.forId(keyType) match {
+        case CoordinatorType.GROUP =>
+          (groupCoordinator.partitionFor(key), GROUP_METADATA_TOPIC_NAME)
+
+        case CoordinatorType.TRANSACTION =>
+          (txnCoordinator.partitionFor(key), TRANSACTION_STATE_TOPIC_NAME)
+      }
+
+      val topicMetadata = metadataCache.getTopicMetadata(Set(internalTopicName), request.context.listenerName)
+
+      if (topicMetadata.headOption.isEmpty) {
+        val controllerMutationQuota = quotas.controllerMutation.newPermissiveQuotaFor(request)
+        autoTopicCreationManager.createTopics(Seq(internalTopicName).toSet, controllerMutationQuota, None)
+        (Errors.COORDINATOR_NOT_AVAILABLE, Node.noNode)
+      } else {
+        if (topicMetadata.head.errorCode != Errors.NONE.code) {
+          (Errors.COORDINATOR_NOT_AVAILABLE, Node.noNode)
+        } else {
+          val coordinatorEndpoint = topicMetadata.head.partitions.asScala
+            .find(_.partitionIndex == partition)
+            .filter(_.leaderId != MetadataResponse.NO_LEADER_ID)
+            .flatMap(metadata => metadataCache.
+                getAliveBrokerNode(metadata.leaderId, request.context.listenerName))
+
+          coordinatorEndpoint match {
+            case Some(endpoint) =>
+              (Errors.NONE, endpoint)
+            case _ =>
+              (Errors.COORDINATOR_NOT_AVAILABLE, Node.noNode)
+          }
+        }
+      }
+    }
+  }
+
+```
+#### handleJoinGroup
+```scala
+  
+  def handleJoinGroup(groupId: String,
+                      memberId: String,
+                      groupInstanceId: Option[String],
+                      requireKnownMemberId: Boolean,
+                      supportSkippingAssignment: Boolean,
+                      clientId: String,
+                      clientHost: String,
+                      rebalanceTimeoutMs: Int,
+                      sessionTimeoutMs: Int,
+                      protocolType: String,
+                      protocols: List[(String, Array[Byte])],
+                      responseCallback: JoinCallback,
+                      reason: Option[String] = None,
+                      requestLocal: RequestLocal = RequestLocal.NoCaching): Unit = {
+    validateGroupStatus(groupId, ApiKeys.JOIN_GROUP).foreach { error =>
+      responseCallback(JoinGroupResult(memberId, error))
+      return
+    }
+
+    if (sessionTimeoutMs < groupConfig.groupMinSessionTimeoutMs ||
+      sessionTimeoutMs > groupConfig.groupMaxSessionTimeoutMs) {
+      responseCallback(JoinGroupResult(memberId, Errors.INVALID_SESSION_TIMEOUT))
+    } else {
+      val isUnknownMember = memberId == JoinGroupRequest.UNKNOWN_MEMBER_ID
+      // group is created if it does not exist and the member id is UNKNOWN. if member
+      // is specified but group does not exist, request is rejected with UNKNOWN_MEMBER_ID
+      groupManager.getOrMaybeCreateGroup(groupId, isUnknownMember) match {
+        case None =>
+          responseCallback(JoinGroupResult(memberId, Errors.UNKNOWN_MEMBER_ID))
+        case Some(group) =>
+          group.inLock {
+            val joinReason = reason.getOrElse("not provided")
+            if (!acceptJoiningMember(group, memberId)) {
+              group.remove(memberId)
+              responseCallback(JoinGroupResult(JoinGroupRequest.UNKNOWN_MEMBER_ID, Errors.GROUP_MAX_SIZE_REACHED))
+            } else if (isUnknownMember) {
+              doNewMemberJoinGroup(
+                group,
+                groupInstanceId,
+                requireKnownMemberId,
+                supportSkippingAssignment,
+                clientId,
+                clientHost,
+                rebalanceTimeoutMs,
+                sessionTimeoutMs,
+                protocolType,
+                protocols,
+                responseCallback,
+                requestLocal,
+                joinReason
+              )
+            } else {
+              doCurrentMemberJoinGroup(
+                group,
+                memberId,
+                groupInstanceId,
+                clientId,
+                clientHost,
+                rebalanceTimeoutMs,
+                sessionTimeoutMs,
+                protocolType,
+                protocols,
+                responseCallback,
+                joinReason
+              )
+            }
+
+            // attempt to complete JoinGroup
+            if (group.is(PreparingRebalance)) {
+              rebalancePurgatory.checkAndComplete(GroupJoinKey(group.groupId))
+            }
+          }
+      }
+    }
+  }
+```
 
 
 prepareRebalance
