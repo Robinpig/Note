@@ -1,8 +1,5 @@
 ## Introduction
 
-
-
-
 ```scala
 object Kafka extends Logging {
   def main(args: Array[String]): Unit = {
@@ -67,7 +64,9 @@ object Kafka extends Logging {
   }
 }
 ```
+
 Raft
+
 ```scala
 class KafkaRaftServer(
                        config: KafkaConfig,
@@ -86,7 +85,9 @@ class KafkaRaftServer(
   }
 }
 ```
+
 Server
+
 ```scala
 class KafkaServer(
                    val config: KafkaConfig,
@@ -211,10 +212,12 @@ class KafkaServer(
           metadataCache
         )
 ```
+
 Create and start the socket server acceptor threads so that the bound port is known.
 Delay starting processors until the end of the initialization sequence to ensure that credentials have been loaded before processing authentications.
 
 Note that we allow the use of KRaft mode controller APIs when forwarding is enabled so that the Envelope request is exposed. This is only used in testing currently.
+
 ```scala
         socketServer = new SocketServer(config, metrics, time, credentialProvider, apiVersionManager)
 
@@ -382,9 +385,8 @@ Note that we allow the use of KRaft mode controller APIs when forwarding is enab
 ```
 
 ### createTopics
+
 ZkAdminManager#createTopics
-
-
 
 Create topics and wait until the topics have been completely created.
 The callback function will be triggered either when timeout, error or the topics are created.
@@ -491,6 +493,7 @@ The callback function will be triggered either when timeout, error or the topics
     }
   }
 ```
+
 AdminUtils#assignReplicasToBrokersRackAware
 
 ```scala
@@ -545,6 +548,7 @@ AdminUtils#assignReplicasToBrokersRackAware
   }
 
 ```
+
 replicaIndex
 
 ```scala
@@ -555,6 +559,7 @@ replicaIndex
 ```
 
 AdminZkClient
+
 ```scala
   def createTopic(topic: String,
                   partitions: Int,
@@ -567,6 +572,7 @@ AdminZkClient
     createTopicWithAssignment(topic, topicConfig, replicaAssignment, usesTopicId = usesTopicId)
   }
 ```
+
 Create topic and optionally validate its parameters. Note that this method is used by the TopicCommand as well.
 
 ```scala
@@ -586,7 +592,6 @@ Create topic and optionally validate its parameters. Note that this method is us
       isUpdate = false, usesTopicId)
   }
 ```
-
 
 ### appendRecords
 
@@ -816,6 +821,7 @@ All callers to ReplicaManager.appendRecords() are expected to call ActionQueue.t
 ```
 
 #### appendToLocalLog
+
 ```scala
   private def appendToLocalLog(internalTopicsAllowed: Boolean,
                                origin: AppendOrigin,
@@ -888,9 +894,9 @@ All callers to ReplicaManager.appendRecords() are expected to call ActionQueue.t
 
 ### read
 
-
 Fetch messages from a replica, and wait until enough data can be fetched and return; the callback function will be triggered either when timeout or required fetch info is satisfied.
 Consumers may fetch from any replica, but followers can only fetch from the leader.
+
 ```scala
   def fetchMessages(
     params: FetchParams,
@@ -960,8 +966,11 @@ Consumers may fetch from any replica, but followers can only fetch from the lead
   }
 
 ```
+
 #### readFromLocalLog
+
 Read from multiple topic partitions at the given offset up to maxSize bytes
+
 ```scala
   def readFromLocalLog(
     params: FetchParams,
@@ -1105,9 +1114,6 @@ Read from multiple topic partitions at the given offset up to maxSize bytes
 
 Partition#readRecords
 
-
-
-
 ## Controller
 
 It is also important to optimize the leadership election process as that is the critical window of unavailability.
@@ -1131,7 +1137,49 @@ The future associated with each operation will not be completed until the result
 2. Register Topics
 3. load Balance
 
+
+```scala
+  
+  private def elect(): Unit = {
+    activeControllerId = zkClient.getControllerId.getOrElse(-1)
+    /*
+     * We can get here during the initial startup and the handleDeleted ZK callback. Because of the potential race condition,
+     * it's possible that the controller has already been elected when we get here. This check will prevent the following
+     * createEphemeralPath method from getting into an infinite loop if this broker is already the controller.
+     */
+    if (activeControllerId != -1) {
+      debug(s"Broker $activeControllerId has been elected as the controller, so stopping the election process.")
+      return
+    }
+
+    try {
+      val (epoch, epochZkVersion) = zkClient.registerControllerAndIncrementControllerEpoch(config.brokerId)
+      controllerContext.epoch = epoch
+      controllerContext.epochZkVersion = epochZkVersion
+      activeControllerId = config.brokerId
+
+      info(s"${config.brokerId} successfully elected as the controller. Epoch incremented to ${controllerContext.epoch} " +
+        s"and epoch zk version is now ${controllerContext.epochZkVersion}")
+
+      onControllerFailover()
+    } catch {
+      case e: ControllerMovedException =>
+        maybeResign()
+
+        if (activeControllerId != -1)
+          debug(s"Broker $activeControllerId was elected as controller instead of broker ${config.brokerId}", e)
+        else
+          warn("A controller has been elected but just resigned, this will result in another round of election", e)
+      case t: Throwable =>
+        error(s"Error while electing or becoming controller on broker ${config.brokerId}. " +
+          s"Trigger controller movement immediately", t)
+        triggerControllerMove()
+    }
+  }
+```
+
 ### handleLeader
+
 ```scala
   def handleLeaderAndIsrRequest(request: RequestChannel.Request): Unit = {
     val zkSupport = metadataSupport.requireZkOrThrow(KafkaApis.shouldNeverReceive(request))
@@ -1155,17 +1203,19 @@ The future associated with each operation will not be completed until the result
     }
   }
 ```
+
 becomeLeaderOrFollower
-#### makeLeaders 
+
+#### makeLeaders
+
 Make the current broker to become leader for a given set of partitions by:
+
 1. Stop fetchers for these partitions
 2. Update the partition metadata in cache
 3. Add these partitions to the leader partitions set
 
-If an unexpected error is thrown in this function, it will be propagated to KafkaApis where the error message will be set on each partition since we do not know which partition caused it. 
+If an unexpected error is thrown in this function, it will be propagated to KafkaApis where the error message will be set on each partition since we do not know which partition caused it.
 Otherwise, return the set of partitions that are made leader due to this method
-
-
 
 TODO: the above may need to be fixed later
 
@@ -1237,7 +1287,6 @@ TODO: the above may need to be fixed later
 
 ### followers
 
-
 ```scala
   
   def addFetcherForPartitions(partitionAndOffsets: Map[TopicPartition, InitialFetchState]): Unit = {
@@ -1272,6 +1321,208 @@ TODO: the above may need to be fixed later
     }
   }
 ```
+
+Make the current broker to become follower for a given set of partitions by:
+
+1. Remove these partitions from the leader partitions set.
+2. Mark the replicas as followers so that no more data can be added from the producer clients.
+3. Stop fetchers for these partitions so that no more data can be added by the replica fetcher threads.
+4. Truncate the log and checkpoint offsets for these partitions.
+5. Clear the produce and fetch requests in the purgatory
+6. If the broker is not shutting down, add the fetcher to the new leaders.
+
+The ordering of doing these steps make sure that the replicas in transition will not take any more messages before checkpointing offsets so that all messages before the checkpoint are guaranteed to be flushed to disks.
+
+If an unexpected error is thrown in this function, it will be propagated to KafkaApis where he error message will be set on each partition since we do not know which partition caused it.
+Otherwise, return the set of partitions that are made follower due to this method
+
+ReplicaManager#makeFollowers -> addFetcherForPartitions
+
+```scala
+  def addFetcherForPartitions(partitionAndOffsets: Map[TopicPartition, InitialFetchState]): Unit = {
+    lock synchronized {
+      val partitionsPerFetcher = partitionAndOffsets.groupBy { case (topicPartition, brokerAndInitialFetchOffset) =>
+        BrokerAndFetcherId(brokerAndInitialFetchOffset.leader, getFetcherId(topicPartition))
+      }
+
+      def addAndStartFetcherThread(brokerAndFetcherId: BrokerAndFetcherId,
+                                   brokerIdAndFetcherId: BrokerIdAndFetcherId): T = {
+        val fetcherThread = createFetcherThread(brokerAndFetcherId.fetcherId, brokerAndFetcherId.broker)
+        fetcherThreadMap.put(brokerIdAndFetcherId, fetcherThread)
+        fetcherThread.start()
+        fetcherThread
+      }
+
+      for ((brokerAndFetcherId, initialFetchOffsets) <- partitionsPerFetcher) {
+        val brokerIdAndFetcherId = BrokerIdAndFetcherId(brokerAndFetcherId.broker.id, brokerAndFetcherId.fetcherId)
+        val fetcherThread = fetcherThreadMap.get(brokerIdAndFetcherId) match {
+          case Some(currentFetcherThread) if currentFetcherThread.leader.brokerEndPoint() == brokerAndFetcherId.broker =>
+            // reuse the fetcher thread
+            currentFetcherThread
+          case Some(f) =>
+            f.shutdown()
+            addAndStartFetcherThread(brokerAndFetcherId, brokerIdAndFetcherId)
+          case None =>
+            addAndStartFetcherThread(brokerAndFetcherId, brokerIdAndFetcherId)
+        }
+        // failed partitions are removed when added partitions to thread
+        addPartitionsToFetcherThread(fetcherThread, initialFetchOffsets)
+      }
+    }
+  }
+
+```
+
+
+ReplicaFetcherManager#addFetcherForPartitions
+
+```scala
+  override def doWork(): Unit = {
+    maybeTruncate()
+    maybeFetch()
+  }
+```
+maybeFetch -> processFetchRequest
+
+```scala
+  
+  private def processFetchRequest(sessionPartitions: util.Map[TopicPartition, FetchRequest.PartitionData],
+                                  fetchRequest: FetchRequest.Builder): Unit = {
+    val partitionsWithError = mutable.Set[TopicPartition]()
+    val divergingEndOffsets = mutable.Map.empty[TopicPartition, EpochEndOffset]
+    var responseData: Map[TopicPartition, FetchData] = Map.empty
+
+    try {
+      trace(s"Sending fetch request $fetchRequest")
+      responseData = leader.fetch(fetchRequest)
+    } catch {
+      case t: Throwable =>
+        if (isRunning) {
+          warn(s"Error in response for fetch request $fetchRequest", t)
+          inLock(partitionMapLock) {
+            partitionsWithError ++= partitionStates.partitionSet.asScala
+          }
+        }
+    }
+    fetcherStats.requestRate.mark()
+
+    if (responseData.nonEmpty) {
+      // process fetched data
+      inLock(partitionMapLock) {
+        responseData.forKeyValue { (topicPartition, partitionData) =>
+          Option(partitionStates.stateValue(topicPartition)).foreach { currentFetchState =>
+            // It's possible that a partition is removed and re-added or truncated when there is a pending fetch request.
+            // In this case, we only want to process the fetch response if the partition state is ready for fetch and
+            // the current offset is the same as the offset requested.
+            val fetchPartitionData = sessionPartitions.get(topicPartition)
+            if (fetchPartitionData != null && fetchPartitionData.fetchOffset == currentFetchState.fetchOffset && currentFetchState.isReadyForFetch) {
+              Errors.forCode(partitionData.errorCode) match {
+                case Errors.NONE =>
+                  try {
+                    // Once we hand off the partition data to the subclass, we can't mess with it any more in this thread
+                    val logAppendInfoOpt = processPartitionData(topicPartition, currentFetchState.fetchOffset,
+                      partitionData)
+
+                    logAppendInfoOpt.foreach { logAppendInfo =>
+                      val validBytes = logAppendInfo.validBytes
+                      val nextOffset = if (validBytes > 0) logAppendInfo.lastOffset + 1 else currentFetchState.fetchOffset
+                      val lag = Math.max(0L, partitionData.highWatermark - nextOffset)
+                      fetcherLagStats.getAndMaybePut(topicPartition).lag = lag
+
+                      // ReplicaDirAlterThread may have removed topicPartition from the partitionStates after processing the partition data
+                      if (validBytes > 0 && partitionStates.contains(topicPartition)) {
+                        // Update partitionStates only if there is no exception during processPartitionData
+                        val newFetchState = PartitionFetchState(currentFetchState.topicId, nextOffset, Some(lag),
+                          currentFetchState.currentLeaderEpoch, state = Fetching,
+                          logAppendInfo.lastLeaderEpoch)
+                        partitionStates.updateAndMoveToEnd(topicPartition, newFetchState)
+                        fetcherStats.byteRate.mark(validBytes)
+                      }
+                    }
+                    if (leader.isTruncationOnFetchSupported) {
+                      FetchResponse.divergingEpoch(partitionData).ifPresent { divergingEpoch =>
+                        divergingEndOffsets += topicPartition -> new EpochEndOffset()
+                          .setPartition(topicPartition.partition)
+                          .setErrorCode(Errors.NONE.code)
+                          .setLeaderEpoch(divergingEpoch.epoch)
+                          .setEndOffset(divergingEpoch.endOffset)
+                      }
+                    }
+                  } catch {
+                    case ime@(_: CorruptRecordException | _: InvalidRecordException) =>
+                      // we log the error and continue. This ensures two things
+                      // 1. If there is a corrupt message in a topic partition, it does not bring the fetcher thread
+                      //    down and cause other topic partition to also lag
+                      // 2. If the message is corrupt due to a transient state in the log (truncation, partial writes
+                      //    can cause this), we simply continue and should get fixed in the subsequent fetches
+                      error(s"Found invalid messages during fetch for partition $topicPartition " +
+                        s"offset ${currentFetchState.fetchOffset}", ime)
+                      partitionsWithError += topicPartition
+                    case e: KafkaStorageException =>
+                      error(s"Error while processing data for partition $topicPartition " +
+                        s"at offset ${currentFetchState.fetchOffset}", e)
+                      markPartitionFailed(topicPartition)
+                    case t: Throwable =>
+                      // stop monitoring this partition and add it to the set of failed partitions
+                      error(s"Unexpected error occurred while processing data for partition $topicPartition " +
+                        s"at offset ${currentFetchState.fetchOffset}", t)
+                      markPartitionFailed(topicPartition)
+                  }
+                case Errors.OFFSET_OUT_OF_RANGE =>
+                  if (handleOutOfRangeError(topicPartition, currentFetchState, fetchPartitionData.currentLeaderEpoch))
+                    partitionsWithError += topicPartition
+
+                case Errors.UNKNOWN_LEADER_EPOCH =>
+                  debug(s"Remote broker has a smaller leader epoch for partition $topicPartition than " +
+                    s"this replica's current leader epoch of ${currentFetchState.currentLeaderEpoch}.")
+                  partitionsWithError += topicPartition
+
+                case Errors.FENCED_LEADER_EPOCH =>
+                  if (onPartitionFenced(topicPartition, fetchPartitionData.currentLeaderEpoch))
+                    partitionsWithError += topicPartition
+
+                case Errors.NOT_LEADER_OR_FOLLOWER =>
+                  debug(s"Remote broker is not the leader for partition $topicPartition, which could indicate " +
+                    "that the partition is being moved")
+                  partitionsWithError += topicPartition
+
+                case Errors.UNKNOWN_TOPIC_OR_PARTITION =>
+                  warn(s"Received ${Errors.UNKNOWN_TOPIC_OR_PARTITION} from the leader for partition $topicPartition. " +
+                    "This error may be returned transiently when the partition is being created or deleted, but it is not " +
+                    "expected to persist.")
+                  partitionsWithError += topicPartition
+
+                case Errors.UNKNOWN_TOPIC_ID =>
+                  warn(s"Received ${Errors.UNKNOWN_TOPIC_ID} from the leader for partition $topicPartition. " +
+                    "This error may be returned transiently when the partition is being created or deleted, but it is not " +
+                    "expected to persist.")
+                  partitionsWithError += topicPartition
+
+                case Errors.INCONSISTENT_TOPIC_ID =>
+                  warn(s"Received ${Errors.INCONSISTENT_TOPIC_ID} from the leader for partition $topicPartition. " +
+                    "This error may be returned transiently when the partition is being created or deleted, but it is not " +
+                    "expected to persist.")
+                  partitionsWithError += topicPartition
+
+                case partitionError =>
+                  error(s"Error for partition $topicPartition at offset ${currentFetchState.fetchOffset}", partitionError.exception)
+                  partitionsWithError += topicPartition
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (divergingEndOffsets.nonEmpty)
+      truncateOnFetchResponse(divergingEndOffsets)
+    if (partitionsWithError.nonEmpty) {
+      handlePartitionsWithErrors(partitionsWithError, "processFetchRequest")
+    }
+  }
+```
+
+
 
 
 
@@ -1328,25 +1579,22 @@ Instead of the controller pushing out updates to the other brokers, those broker
 
 A MetadataFetch is similar to a fetch request.  Just like with a fetch request, the broker will track the offset of the last updates it fetched, and only request newer updates from the active controller.
 
-The broker will persist the metadata it fetched to disk.  
+The broker will persist the metadata it fetched to disk.
 This will allow the broker to start up very quickly, even if there are hundreds of thousands or even millions of partitions.
 (Note that since this persistence is an optimization, we can leave it out of the first version, if it makes development easier.)
 
-Most of the time, the broker should only need to fetch the deltas, not the full state.  
+Most of the time, the broker should only need to fetch the deltas, not the full state.
 However, if the broker is too far behind the active controller, or if the broker has no cached metadata at all, the controller will send a full metadata image rather than a series of deltas.
-
 
 ## Delay
 
-An operation whose processing needs to be delayed for at most the given delayMs. 
+An operation whose processing needs to be delayed for at most the given delayMs.
 For example a delayed produce operation could be waiting for specified number of acks; or a delayed fetch operation could be waiting for a given number of bytes to accumulate.
 The logic upon completing a delayed operation is defined in onComplete() and will be called exactly once.
-Once an operation is completed, isCompleted() will return true. onComplete() can be triggered by either forceComplete(), 
+Once an operation is completed, isCompleted() will return true. onComplete() can be triggered by either forceComplete(),
 which forces calling onComplete() after delayMs if the operation is not yet completed, or tryComplete(), which first checks if the operation can be completed or not now, and if yes calls forceComplete().
 A subclass of DelayedOperation needs to provide an implementation of both onComplete() and tryComplete().
 Noted that if you add a future delayed operation that calls ReplicaManager.appendRecords() in onComplete() like DelayedJoin, you must be aware that this operation's onExpiration() needs to call actionQueue.tryCompleteAction().
-
-
 
 Check if the operation can be completed, if not watch it based on the given watch keys
 Note that a delayed operation can be watched on multiple keys. It is possible that an operation is completed after it has been added to the watch list for some, but not all of the keys. In this case, the operation is considered completed and won't be added to the watch list of the remaining keys. The expiration reaper thread will remove this operation from any watcher list in which the operation exists.
@@ -1581,8 +1829,8 @@ private[timer] class TimingWheel(tickMs: Long, wheelSize: Int, startMs: Long, ta
     }
   }
 ```
-The cleaner threads do the actual log cleaning. Each thread processes does its cleaning repeatedly by choosing the dirtiest log, cleaning it, and then swapping in the cleaned segments.
 
+The cleaner threads do the actual log cleaning. Each thread processes does its cleaning repeatedly by choosing the dirtiest log, cleaning it, and then swapping in the cleaned segments.
 
 ```scala
   def startup(): Unit = {
@@ -1598,8 +1846,8 @@ The cleaner threads do the actual log cleaning. Each thread processes does its c
 run -> doWork -> tryCleanFilthiestLog -> cleanFilthiestLog -> cleanLog
 
 ### doClean
-group the segments and clean the groups
 
+group the segments and clean the groups
 
 ```scala
   
@@ -1647,21 +1895,11 @@ group the segments and clean the groups
 
 ```
 
-
-
-
-
-
-
-
 ### write
-
 
 ### read
 
-
 ### compact
-
 
 ```scala
   
@@ -1709,24 +1947,11 @@ group the segments and clean the groups
   }
 ```
 
-
-
-
-
-
 ## Membership
-
-
 
 ### ZooKeeper
 
-
-
-
-
 ### KRaft
-
-
 
 ## Links
 
