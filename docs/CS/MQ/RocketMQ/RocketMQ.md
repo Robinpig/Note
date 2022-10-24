@@ -543,6 +543,79 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
 #### FaultStrategy
 
+if sendLatencyFaultEnable = true
+```java
+public class MQFaultStrategy {
+  public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
+    if (this.sendLatencyFaultEnable) {
+      try {
+        int index = tpInfo.getSendWhichQueue().incrementAndGet();
+        for (int i = 0; i < tpInfo.getMessageQueueList().size(); i++) {
+          int pos = Math.abs(index++) % tpInfo.getMessageQueueList().size();
+          if (pos < 0)
+            pos = 0;
+          MessageQueue mq = tpInfo.getMessageQueueList().get(pos);
+          if (latencyFaultTolerance.isAvailable(mq.getBrokerName()))
+            return mq;
+        }
+
+        final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
+        int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
+        if (writeQueueNums > 0) {
+          final MessageQueue mq = tpInfo.selectOneMessageQueue();
+          if (notBestBroker != null) {
+            mq.setBrokerName(notBestBroker);
+            mq.setQueueId(tpInfo.getSendWhichQueue().incrementAndGet() % writeQueueNums);
+          }
+          return mq;
+        } else {
+          latencyFaultTolerance.remove(notBestBroker);
+        }
+      } catch (Exception e) {
+        log.error("Error occurred when selecting message queue", e);
+      }
+
+      return tpInfo.selectOneMessageQueue();
+    }
+
+    return tpInfo.selectOneMessageQueue(lastBrokerName);
+  }
+}
+```
+
+else sendLatencyFaultEnable = false
+```java
+public class TopicPublishInfo {
+  public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
+    if (lastBrokerName == null) {
+      return selectOneMessageQueue();
+    } else {
+      for (int i = 0; i < this.messageQueueList.size(); i++) {
+        int index = this.sendWhichQueue.incrementAndGet();
+        int pos = Math.abs(index) % this.messageQueueList.size();
+        if (pos < 0)
+          pos = 0;
+        MessageQueue mq = this.messageQueueList.get(pos);
+        if (!mq.getBrokerName().equals(lastBrokerName)) {
+          return mq;
+        }
+      }
+      return selectOneMessageQueue();
+    }
+  }
+
+  public MessageQueue selectOneMessageQueue() {
+    int index = this.sendWhichQueue.incrementAndGet();
+    int pos = Math.abs(index) % this.messageQueueList.size();
+    if (pos < 0)
+      pos = 0;
+    return this.messageQueueList.get(pos);
+  }
+}
+```
+
+
+
 ### MQClientInstance
 
 ```java

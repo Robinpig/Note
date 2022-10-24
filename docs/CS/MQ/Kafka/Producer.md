@@ -417,6 +417,18 @@ public class Sender implements Runnable {
 }
 ```
 
+### batch
+
+
+5 max uncompleted batches batch.size
+
+buffer size
+
+
+delay
+
+
+
 
 ## Idempotence
 
