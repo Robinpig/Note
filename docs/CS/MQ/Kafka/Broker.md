@@ -823,12 +823,14 @@ All callers to ReplicaManager.appendRecords() are expected to call ActionQueue.t
 #### appendToLocalLog
 
 ```scala
+class ReplicaManager {
   private def appendToLocalLog(internalTopicsAllowed: Boolean,
                                origin: AppendOrigin,
                                entriesPerPartition: Map[TopicPartition, MemoryRecords],
                                requiredAcks: Short,
                                requestLocal: RequestLocal): Map[TopicPartition, LogAppendResult] = {
     val traceEnabled = isTraceEnabled
+
     def processFailedRecord(topicPartition: TopicPartition, t: Throwable) = {
       val logStartOffset = onlinePartition(topicPartition).map(_.logStartOffset).getOrElse(-1L)
       brokerTopicStats.topicStats(topicPartition.topic).failedProduceRequestRate.mark()
@@ -837,9 +839,6 @@ All callers to ReplicaManager.appendRecords() are expected to call ActionQueue.t
 
       logStartOffset
     }
-
-    if (traceEnabled)
-      trace(s"Append [$entriesPerPartition] to local log")
 
     entriesPerPartition.map { case (topicPartition, records) =>
       brokerTopicStats.topicStats(topicPartition.topic).totalProduceRequestRate.mark()
@@ -870,12 +869,12 @@ All callers to ReplicaManager.appendRecords() are expected to call ActionQueue.t
         } catch {
           // NOTE: Failed produce requests metric is not incremented for known exceptions
           // it is supposed to indicate un-expected failures of a broker in handling a produce request
-          case e@ (_: UnknownTopicOrPartitionException |
-                   _: NotLeaderOrFollowerException |
-                   _: RecordTooLargeException |
-                   _: RecordBatchTooLargeException |
-                   _: CorruptRecordException |
-                   _: KafkaStorageException) =>
+          case e@(_: UnknownTopicOrPartitionException |
+                  _: NotLeaderOrFollowerException |
+                  _: RecordTooLargeException |
+                  _: RecordBatchTooLargeException |
+                  _: CorruptRecordException |
+                  _: KafkaStorageException) =>
             (topicPartition, LogAppendResult(LogAppendInfo.UnknownLogAppendInfo, Some(e)))
           case rve: RecordValidationException =>
             val logStartOffset = processFailedRecord(topicPartition, rve.invalidException)
@@ -889,8 +888,81 @@ All callers to ReplicaManager.appendRecords() are expected to call ActionQueue.t
       }
     }
   }
+}
+```
+
+
+appendRecordsToLeader
+
+```scala
+  
+  def appendRecordsToLeader(records: MemoryRecords, origin: AppendOrigin, requiredAcks: Int,
+                            requestLocal: RequestLocal): LogAppendInfo = {
+    val (info, leaderHWIncremented) = inReadLock(leaderIsrUpdateLock) {
+      leaderLogIfLocal match {
+        case Some(leaderLog) =>
+          val minIsr = leaderLog.config.minInSyncReplicas
+          val inSyncSize = partitionState.isr.size
+
+          // Avoid writing to leader if there are not enough insync replicas to make it safe
+          if (inSyncSize < minIsr && requiredAcks == -1) {
+            throw new NotEnoughReplicasException(s"The size of the current ISR ${partitionState.isr} " +
+              s"is insufficient to satisfy the min.isr requirement of $minIsr for partition $topicPartition")
+          }
+
+          val info = leaderLog.appendAsLeader(records, leaderEpoch = this.leaderEpoch, origin,
+            interBrokerProtocolVersion, requestLocal)
+
+          // we may need to increment high watermark since ISR could be down to 1
+          (info, maybeIncrementLeaderHW(leaderLog))
+
+        case None =>
+          throw new NotLeaderOrFollowerException("Leader not local for partition %s on broker %d"
+            .format(topicPartition, localBrokerId))
+      }
+    }
+
+    info.copy(leaderHwChange = if (leaderHWIncremented) LeaderHwChange.Increased else LeaderHwChange.Same)
+  }
+```
+
+Append the given messages starting with the given offset. Add an entry to the index if needed.
+
+```scala
+  def append(largestOffset: Long,
+             largestTimestamp: Long,
+             shallowOffsetOfMaxTimestamp: Long,
+             records: MemoryRecords): Unit = {
+    if (records.sizeInBytes > 0) {
+      trace(s"Inserting ${records.sizeInBytes} bytes at end offset $largestOffset at position ${log.sizeInBytes} " +
+            s"with largest timestamp $largestTimestamp at shallow offset $shallowOffsetOfMaxTimestamp")
+      val physicalPosition = log.sizeInBytes()
+      if (physicalPosition == 0)
+        rollingBasedTimestamp = Some(largestTimestamp)
+
+      ensureOffsetInRange(largestOffset)
+
+      // append the messages
+      val appendedBytes = log.append(records)
+      trace(s"Appended $appendedBytes to ${log.file} at end offset $largestOffset")
+      // Update the in memory max timestamp and corresponding offset.
+      if (largestTimestamp > maxTimestampSoFar) {
+        maxTimestampAndOffsetSoFar = TimestampOffset(largestTimestamp, shallowOffsetOfMaxTimestamp)
+      }
+      // append an entry to the index (if needed)
+      if (bytesSinceLastIndexEntry > indexIntervalBytes) {
+        offsetIndex.append(largestOffset, physicalPosition)
+        timeIndex.maybeAppend(maxTimestampSoFar, offsetOfMaxTimestampSoFar)
+        bytesSinceLastIndexEntry = 0
+      }
+      bytesSinceLastIndexEntry += records.sizeInBytes
+    }
+  }
 
 ```
+
+
+
 
 ### read
 
@@ -966,6 +1038,88 @@ Consumers may fetch from any replica, but followers can only fetch from the lead
   }
 
 ```
+
+
+
+ConsumerCoordinator#poll
+
+
+```java
+public final class ConsumerCoordinator extends AbstractCoordinator {
+    public boolean poll(Timer timer, boolean waitForJoinGroup) {
+        maybeUpdateSubscriptionMetadata();
+
+        invokeCompletedOffsetCommitCallbacks();
+
+        if (subscriptions.hasAutoAssignedPartitions()) {
+            if (protocol == null) {
+                throw new IllegalStateException("User configured " + ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG +
+                        " to empty while trying to subscribe for group protocol to auto assign partitions");
+            }
+            // Always update the heartbeat last poll time so that the heartbeat thread does not leave the
+            // group proactively due to application inactivity even if (say) the coordinator cannot be found.
+            pollHeartbeat(timer.currentTimeMs());
+            if (coordinatorUnknownAndUnreadySync(timer)) {
+                return false;
+            }
+
+            if (rejoinNeededOrPending()) {
+                // due to a race condition between the initial metadata fetch and the initial rebalance,
+                // we need to ensure that the metadata is fresh before joining initially. This ensures
+                // that we have matched the pattern against the cluster's topics at least once before joining.
+                if (subscriptions.hasPatternSubscription()) {
+                    // For consumer group that uses pattern-based subscription, after a topic is created,
+                    // any consumer that discovers the topic after metadata refresh can trigger rebalance
+                    // across the entire consumer group. Multiple rebalances can be triggered after one topic
+                    // creation if consumers refresh metadata at vastly different times. We can significantly
+                    // reduce the number of rebalances caused by single topic creation by asking consumer to
+                    // refresh metadata before re-joining the group as long as the refresh backoff time has
+                    // passed.
+                    if (this.metadata.timeToAllowUpdate(timer.currentTimeMs()) == 0) {
+                        this.metadata.requestUpdate();
+                    }
+
+                    if (!client.ensureFreshMetadata(timer)) {
+                        return false;
+                    }
+
+                    maybeUpdateSubscriptionMetadata();
+                }
+
+                // if not wait for join group, we would just use a timer of 0
+                if (!ensureActiveGroup(waitForJoinGroup ? timer : time.timer(0L))) {
+                    // since we may use a different timer in the callee, we'd still need
+                    // to update the original timer's current time after the call
+                    timer.update(time.milliseconds());
+
+                    return false;
+                }
+            }
+        } else {
+            // For manually assigned partitions, we do not try to pro-actively lookup coordinator;
+            // instead we only try to refresh metadata when necessary.
+            // If connections to all nodes fail, wakeups triggered while attempting to send fetch
+            // requests result in polls returning immediately, causing a tight loop of polls. Without
+            // the wakeup, poll() with no channels would block for the timeout, delaying re-connection.
+            // awaitMetadataUpdate() in ensureCoordinatorReady initiates new connections with configured backoff and avoids the busy loop.
+            if (metadata.updateRequested() && !client.hasReadyNodes(timer.currentTimeMs())) {
+                client.awaitMetadataUpdate(timer);
+            }
+
+            // if there is pending coordinator requests, ensure they have a chance to be transmitted.
+            client.pollNoWakeup();
+        }
+
+        maybeAutoCommitOffsetsAsync(timer.currentTimeMs());
+        return true;
+    }
+}
+```
+
+
+
+
+
 
 #### readFromLocalLog
 

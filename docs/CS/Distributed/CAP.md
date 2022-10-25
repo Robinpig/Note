@@ -151,7 +151,7 @@ L and C are fundamentally at odds
 PRAM Theorem:
 Impossible for sequentially consistent system to always provide low latency
 
-FLP: No deterministic 1-crash-robust consensus algorithm exists with asynchronous communication.
+FLP: No deterministic 1-crash-robust consensus algorithm exists with asynchronous communication. 
 
 [Eventually Consistent Register Revisited](https://www.researchgate.net/publication/284096787_Eventually_Consistent_Register_Revisited)
 
@@ -168,3 +168,4 @@ FLP: No deterministic 1-crash-robust consensus algorithm exists with asynchronou
 2. [CAP Twelve Years Later:How the “Rules” Have Changed](https://www.anantjain.dev/aeb39daf1c8c1360d401e8afe84a00b7/cap-annotated.pdf)
 3. [CAP Theorem: Revisited](https://robertgreiner.com/cap-theorem-revisited/)
 4. [You Can’t Sacrifice Partition Tolerance](https://codahale.com/you-cant-sacrifice-partition-tolerance/)
+5. [Brewer’s Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web Services](https://www.comp.nus.edu.sg/~gilbert/pubs/BrewersConjecture-SigAct.pdf)

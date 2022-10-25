@@ -37,6 +37,8 @@ RaftManager
   }
 ```
 
+### state
+
 This class is responsible for managing the current state of this node and ensuring
 only valid state transitions. Below we define the possible state transitions and
 how they are triggered:
@@ -79,50 +81,88 @@ Follower: After discovering a leader with a larger epoch
 
 
 
+
 ```scala
- public void poll() {
-        pollListeners();
+class KafkaRaftClient {
+  public void poll() {
+    pollListeners();
+    
+    long pollStateTimeoutMs = pollCurrentState(currentTimeMs);
+    
+    long cleaningTimeoutMs = snapshotCleaner.maybeClean(currentTimeMs);
 
-        long currentTimeMs = time.milliseconds();
-        if (maybeCompleteShutdown(currentTimeMs)) {
-            return;
-        }
+    RaftMessage message = messageQueue.poll(pollTimeoutMs);
 
-        long pollStateTimeoutMs = pollCurrentState(currentTimeMs);
-        long cleaningTimeoutMs = snapshotCleaner.maybeClean(currentTimeMs);
-        long pollTimeoutMs = Math.min(pollStateTimeoutMs, cleaningTimeoutMs);
-
-        kafkaRaftMetrics.updatePollStart(currentTimeMs);
-
-        RaftMessage message = messageQueue.poll(pollTimeoutMs);
-
-        currentTimeMs = time.milliseconds();
-        kafkaRaftMetrics.updatePollEnd(currentTimeMs);
-
-        if (message != null) {
-            handleInboundMessage(message, currentTimeMs);
-        }
+    if (message != null) {
+      handleInboundMessage(message, currentTimeMs);
     }
-
-private long pollCurrentState(long currentTimeMs) {
-  if (quorum.isLeader()) {
-    return pollLeader(currentTimeMs);
-  } else if (quorum.isCandidate()) {
-    return pollCandidate(currentTimeMs);
-  } else if (quorum.isFollower()) {
-    return pollFollower(currentTimeMs);
-  } else if (quorum.isVoted()) {
-    return pollVoted(currentTimeMs);
-  } else if (quorum.isUnattached()) {
-    return pollUnattached(currentTimeMs);
-  } else if (quorum.isResigned()) {
-    return pollResigned(currentTimeMs);
-  } else {
-    throw new IllegalStateException("Unexpected quorum state " + quorum);
   }
 }
 ```
+#### pollCurrentState
 
+```java
+class KafkaRaftClient {
+    private long pollCurrentState(long currentTimeMs) {
+        if (quorum.isLeader()) {
+            return pollLeader(currentTimeMs);
+        } else if (quorum.isCandidate()) {
+            return pollCandidate(currentTimeMs);
+        } else if (quorum.isFollower()) {
+            return pollFollower(currentTimeMs);
+        } else if (quorum.isVoted()) {
+            return pollVoted(currentTimeMs);
+        } else if (quorum.isUnattached()) {
+            return pollUnattached(currentTimeMs);
+        } else if (quorum.isResigned()) {
+            return pollResigned(currentTimeMs);
+        } else {
+            throw new IllegalStateException("Unexpected quorum state " + quorum);
+        }
+    }
+}
+```
+
+##### pollLeader
+```java
+  private long pollLeader(long currentTimeMs) {
+        LeaderState<T> state = quorum.leaderStateOrThrow();
+        maybeFireLeaderChange(state);
+
+        if (shutdown.get() != null || state.isResignRequested()) {
+            transitionToResigned(state.nonLeaderVotersByDescendingFetchOffset());
+            return 0L;
+        }
+
+        long timeUntilFlush = maybeAppendBatches(
+            state,
+            currentTimeMs
+        );
+
+        long timeUntilSend = maybeSendRequests(
+            currentTimeMs,
+            state.nonAcknowledgingVoters(),
+            this::buildBeginQuorumEpochRequest
+        );
+
+        return Math.min(timeUntilFlush, timeUntilSend);
+    }
+```
+
+##### pollFollower
+
+```java
+private long pollFollower(long currentTimeMs) {
+        FollowerState state = quorum.followerStateOrThrow();
+        if (quorum.isVoter()) {
+            return pollFollowerAsVoter(state, currentTimeMs);
+        } else {
+            return pollFollowerAsObserver(state, currentTimeMs);
+        }
+    }
+```
+
+#### handleInboundMessage
 
 ```scala
 private void handleInboundMessage(RaftMessage message, long currentTimeMs) {

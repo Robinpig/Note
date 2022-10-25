@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 **The Kafka consumer is NOT thread-safe.**
 All network I/O happens in the thread of the application making the call.
 It is the responsibility of the user to ensure that multi-threaded access is properly synchronized.
@@ -15,7 +13,6 @@ Create Connections
 - FindCoordinator
 - connect Coordinator
 - consume records
-
 
 ```java
 public static void main(String[]args){
@@ -41,6 +38,7 @@ public static void main(String[]args){
     }
 }
 ```
+
 ### Consumer Group
 
 The consumer group state.
@@ -57,6 +55,19 @@ public enum ConsumerGroupState {
 
 Best Practice: Consumer Number == Partition Number
 
+### ConsumerPartitionAssignor
+
+This interface is used to define custom partition assignment for use in KafkaConsumer.
+Members of the consumer group subscribe to the topics they are interested in and forward their subscriptions to a Kafka broker serving as the group coordinator.
+The coordinator selects one member to perform the group assignment and propagates the subscriptions of all members to it.
+Then assign(Cluster, ConsumerPartitionAssignor.GroupSubscription) is called to perform the assignment and the results are forwarded back to each respective members In some cases, it is useful to forward additional metadata to the assignor in order to make assignment decisions.
+For this, you can override subscriptionUserData(Set) and provide custom userData in the returned Subscription.
+For example, to have a rack-aware assignor, an implementation can use this user data to forward the rackId belonging to each member.
+
+- RangeAssignor
+- RoundRobinAssignor
+- StickyAssignor
+- CooperativeStickyAssignor
 
 ### strategy
 
@@ -65,7 +76,6 @@ partition.assignment.strategy
 A list of class names or class types, ordered by preference, of supported partition assignment strategies that the client will use to distribute partition ownership amongst consumer instances when group management is used.
 Available options are:
 
-
 - org.apache.kafka.clients.consumer.RangeAssignor: Assigns partitions on a per-topic basis.
 - org.apache.kafka.clients.consumer.RoundRobinAssignor: Assigns partitions to consumers in a round-robin fashion.
 - org.apache.kafka.clients.consumer.StickyAssignor: Guarantees an assignment that is maximally balanced while preserving as many existing partition assignments as possible.
@@ -73,9 +83,10 @@ Available options are:
 
 The default assignor is [RangeAssignor, CooperativeStickyAssignor], which will use the RangeAssignor by default, but allows upgrading to the CooperativeStickyAssignor with just a single rolling bounce that removes the RangeAssignor from the list.
 
-Implementing the org.apache.kafka.clients.consumer.ConsumerPartitionAssignor interface allows you to plug in a custom assignment strategy.
+Implementing the `org.apache.kafka.clients.consumer.ConsumerPartitionAssignor` interface allows you to plug in a custom assignment strategy.
 
 ### commit offset
+
 Kafka consumer tracks the maximum offset it has consumed in each partition and has the capability to commit offsets so that it can resume from those offsets in the event of a restart.
 Kafka provides the option to store all the offsets for a given consumer group in a designated broker (for that group) called the group coordinator.
 i.e., any consumer instance in that consumer group should send its offset commits and fetches to that group coordinator (broker).
@@ -184,6 +195,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
 ```
 
 #### sendFetches
+
 ```java
 public class Fetcher<K, V> implements Closeable {
   public synchronized int sendFetches() {
@@ -298,7 +310,6 @@ public class Fetcher<K, V> implements Closeable {
 }
 ```
 
-
 ## Rebalance
 
 1. Partitions
@@ -318,15 +329,11 @@ partitionId=Math.abs(groupId.hashCode() % offsetsTopicPartitionCount)
 
 Choose a leader of consumers and let leader selects strategy.
 
-
-
 - JOIN_GROUP
 - HEARTBEAT
 - LEAVE_GROUP
 - SYNC_GROUP
 - DESCRIBE_GROUPS
-
-
 
 JOIN_GROUP -> SYNC_GROUP
 
@@ -338,6 +345,7 @@ digraph g{
     Coordinator->Member2->Coordinator
 }
 ```
+
 Poll for coordinator events. This ensures that the coordinator is known and that the consumer has joined the group (if it is using group management). This also handles periodic offset commits if they are enabled.
 Returns early if the timeout expires or if waiting on rejoin is not required
 
@@ -413,8 +421,8 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 }
 ```
 
-
 ensureActiveGroup
+
 ```java
 boolean ensureActiveGroup(final Timer timer) {
         // always ensure that the coordinator is ready because we may have been disconnected
@@ -520,9 +528,8 @@ final String fullReason = String.format("rebalance failed due to '%s' (%s)",
 ```
 
 #### joinGroupIfNeeded
+
 Joins the group without starting the heartbeat thread. If this function returns true, the state must always be in STABLE and heartbeat enabled. If this function returns false, the state can be in one of the following: * UNJOINED: got error response but times out before being able to re-join, heartbeat disabled * PREPARING_REBALANCE: not yet received join-group response before timeout, heartbeat disabled * COMPLETING_REBALANCE: not yet received sync-group response before timeout, heartbeat enabled Visible for testing.
-
-
 
 ```java
 public abstract class AbstractCoordinator implements Closeable {
@@ -617,6 +624,7 @@ public abstract class AbstractCoordinator implements Closeable {
   }
 }
 ```
+
 #### getCoordinator
 
 ```scala
@@ -665,7 +673,9 @@ public abstract class AbstractCoordinator implements Closeable {
   }
 
 ```
+
 #### handleJoinGroup
+
 ```scala
   
   def handleJoinGroup(groupId: String,
@@ -745,8 +755,8 @@ public abstract class AbstractCoordinator implements Closeable {
   }
 ```
 
-
 prepareRebalance
+
 ```scala
   private[group] def prepareRebalance(group: GroupMetadata, reason: String): Unit = {
     // if any members are awaiting sync, cancel their request and have them rejoin
@@ -775,6 +785,7 @@ prepareRebalance
     rebalancePurgatory.tryCompleteElseWatch(delayedRebalance, Seq(groupKey))
   }
 ```
+
 onCompleteJoin
 
 ```scala
@@ -859,7 +870,6 @@ offsets.topic.num.partitions
 
 Compact commmitted ack
 
-
 #### listener
 
 ```java
@@ -875,8 +885,6 @@ public interface ConsumerRebalanceListener {
 }
 
 ```
-
-
 
 ## Links
 
