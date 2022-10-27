@@ -179,6 +179,8 @@ public interface FactoryBean<T> {
 
 ## getBean
 
+he Spring framework, by default, initializes all singleton beans eagerly at the application startup and put them in application context.
+
 1. resolve aliases to canonical beanName
 2. [eagerly check singleton cache](/docs/CS/Java/Spring/IoC.md?id=getSingleton), allows for an early reference to a currently created singleton (resolving a [circular reference](/docs/CS/Java/Spring/IoC.md?id=circular-references)).
    1. [Get the object if the non-null bean instance](/docs/CS/Java/Spring/IoC.md?id=getObjectForBeanInstance)
