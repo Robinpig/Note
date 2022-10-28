@@ -11,6 +11,16 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 
 ## Architecture
 
+<div style="text-align: center;">
+
+![Fig.1. Netty architecture](https://netty.io/images/components.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Netty architecture.
+</p>
+
 ### Combining and Slicing ChannelBuffers
 
 When transfering data between communication layers, data often needs to be combined or sliced.
@@ -34,7 +44,6 @@ This is another differentiator against other frameworks.
 ## Sequence
 
 > [Example writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
-
 
 ### Bind
 
@@ -127,7 +136,6 @@ sl ->> pipe: fireChannelActive()
 note right: selectionKey.interestOps(OP_READ)
 ```
 
-
 ### Read
 
 - ReadComplete contains multiple Reads(max 16)
@@ -135,7 +143,7 @@ note right: selectionKey.interestOps(OP_READ)
 - default execute in WorkerEventLoop, also can define own ThreadPool when add Handlers
 
 > [!TIP]
-> 
+>
 > Don't use EventLoopGroup to execute business because of its thread affinity.
 
 ```plantuml
@@ -306,7 +314,6 @@ AllocateByteBuf
 - Direct Memory
 - Composite ByteBuf
 - FileChannel transfer
-
 
 [Future and Promise](/docs/CS/Java/Netty/Future.md)
 
