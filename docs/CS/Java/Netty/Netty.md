@@ -1,7 +1,13 @@
 ## Introduction
 
-[Netty](https://netty.io) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients.
+[Netty](https://netty.io) is a [NIO](/docs/CS/Java/JDK/IO/NIO.md) client server framework which enables quick and easy development of network applications such as protocol servers and clients.
 It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
+
+- **Ease of use**: Netty is simpler to use than plain Java NIO and has an extensive set of examples covering most use cases
+- **Minimal dependency**: As we will see in a minute, you can get the whole framework with just a single dependency
+- **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
+- **Security**: Complete SSL/TLS and StartTLS support.
+
 
 - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
 - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
@@ -42,6 +48,17 @@ It also allows you to implement your own event type without breaking the existin
 This is another differentiator against other frameworks.
 
 ## Sequence
+In Java-based networking, the fundamental construct is the class Socket . 
+Netty’s Channel interface provides an API that greatly simplifies the complexity of working directly with Socket. 
+To work with TCP/IP Channels, we will deal with SocketChannel which represents the TCP connection between client and servers:
+
+SocketChannels are managed by EventLoop which is looking for new events, such as incoming data.. When an event occurs, it is eventually passed on to the appropriate Handler for example a ChannelHandler.
+
+Next, to share resources like threads, Netty groups each EventLoop into an EventLoopGroup.
+
+Finally, to handle the bootstrapping of Netty and its resources, you can use the BootStrap class.
+
+Let’s see how to use the above Classes with a simple Server echo example.
 
 > [Example writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
