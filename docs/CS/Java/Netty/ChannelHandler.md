@@ -202,7 +202,232 @@ public ChannelFuture disconnect(final ChannelPromise promise) {
 }
 ```
 
-## inbound
+## ChannelHandler
+
+Handles an I/O event or intercepts an I/O operation, and forwards it to its next handler in its ChannelPipeline.
+
+**Sub-types**
+
+ChannelHandler itself does not provide many methods, but you usually have to implement one of its subtypes:
+
+- ChannelInboundHandler to handle inbound I/O events, and
+- ChannelOutboundHandler to handle outbound I/O operations.
+
+Alternatively, the following adapter classes are provided for your convenience:
+
+- ChannelInboundHandlerAdapter to handle inbound I/O events,
+- ChannelOutboundHandlerAdapter to handle outbound I/O operations, and
+- ChannelDuplexHandler to handle both inbound and outbound events
+
+For more information, please refer to the documentation of each subtype.
+
+**The context object**
+
+A ChannelHandler is provided with a ChannelHandlerContext object.
+A ChannelHandler is supposed to interact with the ChannelPipeline it belongs to via a context object.
+Using the context object, the ChannelHandler can pass events upstream or downstream, modify the pipeline dynamically, or store the information (using AttributeKeys) which is specific to the handler.
+
+**State management**
+
+A ChannelHandler often needs to store some stateful information. The simplest and recommended approach is to use member variables:
+
+```java
+ public interface Message {
+     // your methods here
+ }
+
+ public class DataServerHandler extends SimpleChannelInboundHandler<Message> {
+
+     private boolean loggedIn;
+
+      @Override
+     public void channelRead0(ChannelHandlerContext ctx, Message message) {
+         if (message instanceof LoginMessage) {
+             authenticate((LoginMessage) message);
+             loggedIn = true;
+         } else (message instanceof GetDataMessage) {
+             if (loggedIn) {
+                 ctx.writeAndFlush(fetchSecret((GetDataMessage) message));
+             } else {
+                 fail();
+             }
+         }
+     }
+     ...
+ }
+ 
+```
+
+Because the handler instance has a state variable which is dedicated to one connection, you have to create a new handler instance for each new channel to avoid a race condition where a unauthenticated client can get the confidential information:
+
+```java
+ // Create a new handler instance per channel.
+ // See ChannelInitializer.initChannel(Channel).
+ public class DataServerInitializer extends ChannelInitializer<Channel> {
+      @Override
+     public void initChannel(Channel channel) {
+         channel.pipeline().addLast("handler", new DataServerHandler());
+     }
+ }
+
+ 
+```
+
+**Using AttributeKeys**
+
+Although it's recommended to use member variables to store the state of a handler, for some reason you might not want to create many handler instances.
+In such a case, you can use AttributeKeys which is provided by ChannelHandlerContext:
+
+```java
+ public interface Message {
+     // your methods here
+ }
+
+  @Sharable
+ public class DataServerHandler extends SimpleChannelInboundHandler<Message> {
+     private final AttributeKey<Boolean> auth =
+           AttributeKey.valueOf("auth");
+
+      @Override
+     public void channelRead(ChannelHandlerContext ctx, Message message) {
+         Attribute<Boolean> attr = ctx.attr(auth);
+         if (message instanceof LoginMessage) {
+             authenticate((LoginMessage) o);
+             attr.set(true);
+         } else (message instanceof GetDataMessage) {
+             if (Boolean.TRUE.equals(attr.get())) {
+                 ctx.writeAndFlush(fetchSecret((GetDataMessage) o));
+             } else {
+                 fail();
+             }
+         }
+     }
+     ...
+ }
+ 
+```
+
+Now that the state of the handler is attached to the ChannelHandlerContext, you can add the same handler instance to different pipelines:
+
+```java
+ public class DataServerInitializer extends ChannelInitializer<Channel> {
+
+     private static final DataServerHandler SHARED = new DataServerHandler();
+
+      @Override
+     public void initChannel(Channel channel) {
+         channel.pipeline().addLast("handler", SHARED);
+     }
+ }
+ 
+```
+
+**The `@Sharable` annotation**
+
+In the example above which used an AttributeKey, you might have noticed the `@Sharable` annotation.
+
+If a ChannelHandler is annotated with the `@Sharable` annotation, it means you can create an instance of the handler just once and add it to one or more ChannelPipelines multiple times without a race condition.
+
+If this annotation is not specified, you have to create a new handler instance every time you add it to a pipeline because it has unshared state such as member variables.
+
+This annotation is provided for documentation purpose, just like [the JCIP annotations](http://www.javaconcurrencyinpractice.com/annotations/doc/).
+
+**Additional resources worth reading**
+
+Please refer to the ChannelHandler, and ChannelPipeline to find out more about inbound and outbound operations, what fundamental differences they have, how they flow in a pipeline, and how to handle the operation in your application.
+
+### LengthFieldBasedFrameDecoder
+
+```java
+// LengthFieldBasedFrameDecoder
+@Override
+protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+    Object decoded = decode(ctx, in);
+    if (decoded != null) {
+        out.add(decoded);
+    }
+}
+```
+
+lengthAdjustment
+
+discardingTooLongFrame
+
+tooLongFrameLength
+
+bytesToDiscard
+
+readableBytes < lengthFieldEndOffset, return null
+
+### ChannelInitializer
+
+#### initChannel
+
+Only call by `handlerAdded` or `channelRegistered`.
+
+Prevent multiple calls to initChannel().
+
+```java
+private boolean initChannel(ChannelHandlerContext ctx) throws Exception {
+    if (initMap.add(ctx)) { // Guard against re-entrance.
+        try {
+            initChannel((C) ctx.channel());
+        } catch (Throwable cause) {
+            // Explicitly call exceptionCaught(...) as we removed the handler before calling initChannel(...).
+            // We do so to prevent multiple calls to initChannel(...).
+            exceptionCaught(ctx, cause);
+        } finally {
+            ChannelPipeline pipeline = ctx.pipeline();
+            if (pipeline.context(this) != null) {
+                pipeline.remove(this);
+            }
+        }
+        return true;
+    }
+    return false;
+}
+```
+
+Gets called after the ChannelHandler was added to the actual context and it's ready to handle events. If override this method ensure you call super!
+
+```java
+@Override
+public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+    if (ctx.channel().isRegistered()) {
+        // This should always be true with our current DefaultChannelPipeline implementation.
+        // The good thing about calling initChannel(...) in handlerAdded(...) is that there will be no ordering
+        // surprises if a ChannelInitializer will add another ChannelInitializer. This is as all handlers will be added in the expected order.
+        if (initChannel(ctx)) {
+            // We are done with init the Channel, removing the initializer now.
+            removeState(ctx);
+        }
+    }
+}
+```
+
+Calls ChannelHandlerContext.fireChannelRegistered() to forward to the next ChannelInboundHandler in the ChannelPipeline. Sub-classes may override this method to change behavior.
+
+```java
+@Override
+@SuppressWarnings("unchecked")
+public final void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+    // Normally this method will never be called as handlerAdded(...) should call initChannel(...) and remove
+    // the handler.
+    if (initChannel(ctx)) {
+        // we called initChannel(...) so we need to call now pipeline.fireChannelRegistered() to ensure we not
+        // miss an event.
+        ctx.pipeline().fireChannelRegistered();
+
+        // We are done with init the Channel, removing all the state for the Channel now.
+        removeState(ctx);
+    } else {
+        // Called initChannel(...) before which is the expected behavior, so just forward the event.
+        ctx.fireChannelRegistered();
+    }
+}
+```
+
+### inbound
 
 from head -> tail
 
@@ -289,7 +514,7 @@ private static boolean skipContext(
 }
 ```
 
-### HeadContext
+#### HeadContext
 
 ```java
 final class HeadContext extends AbstractChannelHandlerContext
@@ -394,15 +619,15 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 }
 ```
 
-### SimpleChannelInboundHandler
+#### SimpleChannelInboundHandler
 
 release automatically
 
-## outbound
+### outbound
 
 tail -> head
 
-### TailContext
+#### TailContext
 
 ```java
 // A special catch-all handler that handles both bytes and messages.
@@ -441,7 +666,7 @@ protected void onUnhandledInboundMessage(Object msg) {
 }
 ```
 
-#### addMessage
+##### addMessage
 
 Add given message to this ChannelOutboundBuffer. The given ChannelPromise will be notified once the message was written.
 
@@ -467,7 +692,7 @@ public final class ChannelOutboundBuffer {
 }
 ```
 
-#### addFlush
+##### addFlush
 
 Add a flush to this ChannelOutboundBuffer. This means all previous added messages are marked as flushed and so you will be able to handle them.
 
@@ -595,7 +820,7 @@ protected abstract class AbstractUnsafe implements Unsafe {
 }
 ```
 
-### flush
+#### flush
 
 ChannelDuplexHandler which consolidates Channel.flush() / ChannelHandlerContext.flush() operations
 (which also includes Channel.writeAndFlush(Object) / Channel.writeAndFlush(Object, ChannelPromise)
@@ -663,228 +888,6 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
     private void resetReadAndFlushIfNeeded(ChannelHandlerContext ctx) {
         readInProgress = false;
         flushIfNeeded(ctx);
-    }
-}
-```
-
-## ChannelHandler
-
-Handles an I/O event or intercepts an I/O operation, and forwards it to its next handler in its [`ChannelPipeline`](https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html).
-
-**Sub-types**
-
-[`ChannelHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelHandler.html) itself does not provide many methods, but you usually have to implement one of its subtypes:
-
-- [`ChannelInboundHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelInboundHandler.html) to handle inbound I/O events, and
-- [`ChannelOutboundHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelOutboundHandler.html) to handle outbound I/O operations.
-
-Alternatively, the following adapter classes are provided for your convenience:
-
-- [`ChannelInboundHandlerAdapter`](https://netty.io/4.1/api/io/netty/channel/ChannelInboundHandlerAdapter.html) to handle inbound I/O events,
-- [`ChannelOutboundHandlerAdapter`](https://netty.io/4.1/api/io/netty/channel/ChannelOutboundHandlerAdapter.html) to handle outbound I/O operations, and
-- [`ChannelDuplexHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelDuplexHandler.html) to handle both inbound and outbound events
-
-For more information, please refer to the documentation of each subtype.
-
-**The context object**
-
-A [`ChannelHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelHandler.html) is provided with a [`ChannelHandlerContext`](https://netty.io/4.1/api/io/netty/channel/ChannelHandlerContext.html) object. A [`ChannelHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelHandler.html) is supposed to interact with the [`ChannelPipeline`](https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html) it belongs to via a context object. Using the context object, the [`ChannelHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelHandler.html) can pass events upstream or downstream, modify the pipeline dynamically, or store the information (using [`AttributeKey`](https://netty.io/4.1/api/io/netty/util/AttributeKey.html)s) which is specific to the handler.
-
-**State management**
-
-A [`ChannelHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelHandler.html) often needs to store some stateful information. The simplest and recommended approach is to use member variables:
-
-```java
- public interface Message {
-     // your methods here
- }
-
- public class DataServerHandler extends SimpleChannelInboundHandler<Message> {
-
-     private boolean loggedIn;
-
-      @Override
-     public void channelRead0(ChannelHandlerContext ctx, Message message) {
-         if (message instanceof LoginMessage) {
-             authenticate((LoginMessage) message);
-             loggedIn = true;
-         } else (message instanceof GetDataMessage) {
-             if (loggedIn) {
-                 ctx.writeAndFlush(fetchSecret((GetDataMessage) message));
-             } else {
-                 fail();
-             }
-         }
-     }
-     ...
- }
- 
-```
-
-Because the handler instance has a state variable which is dedicated to one connection, you have to create a new handler instance for each new channel to avoid a race condition where a unauthenticated client can get the confidential information:
-
-```java
- // Create a new handler instance per channel.
- // See ChannelInitializer.initChannel(Channel).
- public class DataServerInitializer extends ChannelInitializer<Channel> {
-      @Override
-     public void initChannel(Channel channel) {
-         channel.pipeline().addLast("handler", new DataServerHandler());
-     }
- }
-
- 
-```
-
-**Using [`AttributeKey`](https://netty.io/4.1/api/io/netty/util/AttributeKey.html)s**
-
-Although it's recommended to use member variables to store the state of a handler, for some reason you might not want to create many handler instances. In such a case, you can use [`AttributeKey`](https://netty.io/4.1/api/io/netty/util/AttributeKey.html)s which is provided by [`ChannelHandlerContext`](https://netty.io/4.1/api/io/netty/channel/ChannelHandlerContext.html):
-
-```java
- public interface Message {
-     // your methods here
- }
-
-  @Sharable
- public class DataServerHandler extends SimpleChannelInboundHandler<Message> {
-     private final AttributeKey<Boolean> auth =
-           AttributeKey.valueOf("auth");
-
-      @Override
-     public void channelRead(ChannelHandlerContext ctx, Message message) {
-         Attribute<Boolean> attr = ctx.attr(auth);
-         if (message instanceof LoginMessage) {
-             authenticate((LoginMessage) o);
-             attr.set(true);
-         } else (message instanceof GetDataMessage) {
-             if (Boolean.TRUE.equals(attr.get())) {
-                 ctx.writeAndFlush(fetchSecret((GetDataMessage) o));
-             } else {
-                 fail();
-             }
-         }
-     }
-     ...
- }
- 
-```
-
-Now that the state of the handler is attached to the [`ChannelHandlerContext`](https://netty.io/4.1/api/io/netty/channel/ChannelHandlerContext.html), you can add the same handler instance to different pipelines:
-
-```java
- public class DataServerInitializer extends ChannelInitializer<Channel> {
-
-     private static final DataServerHandler SHARED = new DataServerHandler();
-
-      @Override
-     public void initChannel(Channel channel) {
-         channel.pipeline().addLast("handler", SHARED);
-     }
- }
- 
-```
-
-**The `@Sharable` annotation**
-
-In the example above which used an [`AttributeKey`](https://netty.io/4.1/api/io/netty/util/AttributeKey.html), you might have noticed the `@Sharable` annotation.
-
-If a [`ChannelHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelHandler.html) is annotated with the `@Sharable` annotation, it means you can create an instance of the handler just once and add it to one or more [`ChannelPipeline`](https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html)s multiple times without a race condition.
-
-If this annotation is not specified, you have to create a new handler instance every time you add it to a pipeline because it has unshared state such as member variables.
-
-This annotation is provided for documentation purpose, just like [the JCIP annotations](http://www.javaconcurrencyinpractice.com/annotations/doc/).
-
-**Additional resources worth reading**
-
-Please refer to the [`ChannelHandler`](https://netty.io/4.1/api/io/netty/channel/ChannelHandler.html), and [`ChannelPipeline`](https://netty.io/4.1/api/io/netty/channel/ChannelPipeline.html) to find out more about inbound and outbound operations, what fundamental differences they have, how they flow in a pipeline, and how to handle the operation in your application.
-
-### LengthFieldBasedFrameDecoder
-
-```java
-// LengthFieldBasedFrameDecoder
-@Override
-protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-    Object decoded = decode(ctx, in);
-    if (decoded != null) {
-        out.add(decoded);
-    }
-}
-```
-
-lengthAdjustment
-
-discardingTooLongFrame
-
-tooLongFrameLength
-
-bytesToDiscard
-
-readableBytes < lengthFieldEndOffset, return null
-
-### ChannelInitializer
-
-#### initChannel
-
-Only call by `handlerAdded` or `channelRegistered`.
-
-Prevent multiple calls to initChannel().
-
-```java
-private boolean initChannel(ChannelHandlerContext ctx) throws Exception {
-    if (initMap.add(ctx)) { // Guard against re-entrance.
-        try {
-            initChannel((C) ctx.channel());
-        } catch (Throwable cause) {
-            // Explicitly call exceptionCaught(...) as we removed the handler before calling initChannel(...).
-            // We do so to prevent multiple calls to initChannel(...).
-            exceptionCaught(ctx, cause);
-        } finally {
-            ChannelPipeline pipeline = ctx.pipeline();
-            if (pipeline.context(this) != null) {
-                pipeline.remove(this);
-            }
-        }
-        return true;
-    }
-    return false;
-}
-```
-
-Gets called after the ChannelHandler was added to the actual context and it's ready to handle events. If override this method ensure you call super!
-
-```java
-@Override
-public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    if (ctx.channel().isRegistered()) {
-        // This should always be true with our current DefaultChannelPipeline implementation.
-        // The good thing about calling initChannel(...) in handlerAdded(...) is that there will be no ordering
-        // surprises if a ChannelInitializer will add another ChannelInitializer. This is as all handlers will be added in the expected order.
-        if (initChannel(ctx)) {
-            // We are done with init the Channel, removing the initializer now.
-            removeState(ctx);
-        }
-    }
-}
-```
-
-Calls ChannelHandlerContext.fireChannelRegistered() to forward to the next ChannelInboundHandler in the ChannelPipeline. Sub-classes may override this method to change behavior.
-
-```java
-@Override
-@SuppressWarnings("unchecked")
-public final void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-    // Normally this method will never be called as handlerAdded(...) should call initChannel(...) and remove
-    // the handler.
-    if (initChannel(ctx)) {
-        // we called initChannel(...) so we need to call now pipeline.fireChannelRegistered() to ensure we not
-        // miss an event.
-        ctx.pipeline().fireChannelRegistered();
-
-        // We are done with init the Channel, removing all the state for the Channel now.
-        removeState(ctx);
-    } else {
-        // Called initChannel(...) before which is the expected behavior, so just forward the event.
-        ctx.fireChannelRegistered();
     }
 }
 ```
@@ -1038,14 +1041,11 @@ override userEventTriggered method and reply IdleStateEvent
 | WRITER_IDLE | WriterIdleTimeoutTask |                    |                                                                                      |
 | ALL_IDLE    | AllIdleTimeoutTask    |                    |                                                                                      |
 
-
 WriteTimeoutHandler Raises a WriteTimeoutException when a write operation cannot finish in a certain period of time.
 
 ### WriteTimeoutHandler
 
 ## Filter
-
-
 
 ## Log
 
@@ -1060,7 +1060,6 @@ You can change it to your preferred logging framework before other Netty classes
 >
 > The new default factory is effective only for the classes which were loaded after the default factory is changed.
 > Therefore, setDefaultFactory(InternalLoggerFactory) should be called as early as possible and shouldn't be called more than once.
-
 
 ## Links
 

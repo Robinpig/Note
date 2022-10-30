@@ -82,7 +82,7 @@ activate ma
 ma ->> we: create EventLoopGroup
 we ->> bl: create EventLoops
 bl -->> bl: openSelector
-note right: EventLoop for IO tasks
+note right: one Selector per EventLoop
 we -->> ma: EventLoopGroup
 ma ->> sb: bind()
 sb ->> cc: init ServerSocketChannel
@@ -143,7 +143,7 @@ note right: ServerSocketChannel.accept()
 sc -->> us: SocketChannel
 us ->> sa: pipeline.fireChannelRead()
 sa ->> sa: init SocketChannel
-us ->> wg: regster()
+sa ->> wg: regster()
 wg ->> el: execute()
 el --> el: startThread()
 activate el

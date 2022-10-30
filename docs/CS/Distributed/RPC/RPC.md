@@ -44,7 +44,6 @@ The question is ‘‘How long should the server hold the irreplaceable data?’
 
 This problem, known as the two-army problem, also occurs in virtual circuit systems when trying to close a connection gracefully.
 
-
 ### Heterogeneous Machines
 
 Another class of problems occurs if the client and server run on different kinds of computers. The ISO model handles most of these problems with the general mechanism of *option negotiation*.
@@ -136,10 +135,6 @@ With RPC, the server must wait until all the tuples have been found before makin
 If the operation of finding all the tuples is a time consuming one, the client may be idle for a long time waiting for the last tuple to be found.
 
 Now [gRPC](/docs/CS/Distributed/RPC/grpc.md) and Finagle support to build stream clients and servers.
-
-
-
-
 
 ## Links
 
