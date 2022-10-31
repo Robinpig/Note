@@ -155,7 +155,9 @@ See KIP-794 for more info. The partitioning strategy:
 - Otherwise choose the sticky partition that changes when the batch is full. NOTE: In contrast to the DefaultPartitioner, the record key is NOT used as part of the partitioning strategy in this partitioner.
   Records with the same key are not guaranteed to be sent to the same partition. See KIP-480 for details about sticky partitioning.
 
-## fetch
+## poll
+
+### pollForFetches
 
 ```java
 public class KafkaConsumer<K, V> implements Consumer<K, V> {
@@ -271,9 +273,6 @@ public class Fetcher<K, V> implements Closeable {
                   long fetchOffset = requestData.fetchOffset;
                   FetchResponseData.PartitionData partitionData = entry.getValue();
 
-                  log.debug("Fetch {} at offset {} for partition {} returned fetch data {}",
-                          isolationLevel, fetchOffset, partition, partitionData);
-
                   Iterator<? extends RecordBatch> batches = FetchResponse.recordsOrFail(partitionData).batches().iterator();
                   short responseVersion = resp.requestHeader().apiVersion();
 
@@ -306,6 +305,68 @@ public class Fetcher<K, V> implements Closeable {
 
     }
     return fetchRequestMap.size();
+  }
+}
+```
+
+#### ConsumerNetworkClient#poll
+```java
+public class ConsumerNetworkClient implements Closeable {
+  public void poll(Timer timer, PollCondition pollCondition, boolean disableWakeup) {
+    // there may be handlers which need to be invoked if we woke up the previous call to poll
+    firePendingCompletedRequests();
+
+    lock.lock();
+    try {
+      // Handle async disconnects prior to attempting any sends
+      handlePendingDisconnects();
+
+      // send all the requests we can send now
+      long pollDelayMs = trySend(timer.currentTimeMs());
+
+      // check whether the poll is still needed by the caller. Note that if the expected completion
+      // condition becomes satisfied after the call to shouldBlock() (because of a fired completion
+      // handler), the client will be woken up.
+      if (pendingCompletion.isEmpty() && (pollCondition == null || pollCondition.shouldBlock())) {
+        // if there are no requests in flight, do not block longer than the retry backoff
+        long pollTimeout = Math.min(timer.remainingMs(), pollDelayMs);
+        if (client.inFlightRequestCount() == 0)
+          pollTimeout = Math.min(pollTimeout, retryBackoffMs);
+        client.poll(pollTimeout, timer.currentTimeMs());
+      } else {
+        client.poll(0, timer.currentTimeMs());
+      }
+      timer.update();
+
+      // handle any disconnects by failing the active requests. note that disconnects must
+      // be checked immediately following poll since any subsequent call to client.ready()
+      // will reset the disconnect status
+      checkDisconnects(timer.currentTimeMs());
+      if (!disableWakeup) {
+        // trigger wakeups after checking for disconnects so that the callbacks will be ready
+        // to be fired on the next call to poll()
+        maybeTriggerWakeup();
+      }
+      // throw InterruptException if this thread is interrupted
+      maybeThrowInterruptException();
+
+      // try again to send requests since buffer space may have been
+      // cleared or a connect finished in the poll
+      trySend(timer.currentTimeMs());
+
+      // fail requests that couldn't be sent if they have expired
+      failExpiredRequests(timer.currentTimeMs());
+
+      // clean unsent requests collection to keep the map from growing indefinitely
+      unsent.clean();
+    } finally {
+      lock.unlock();
+    }
+
+    // called without the lock to avoid deadlock potential if handlers need to acquire locks
+    firePendingCompletedRequests();
+
+    metadata.maybeThrowAnyException();
   }
 }
 ```
@@ -392,9 +453,16 @@ digraph g{
 }
 ```
 
-Poll for coordinator events. This ensures that the coordinator is known and that the consumer has joined the group (if it is using group management). This also handles periodic offset commits if they are enabled.
+### ConsumerCoordinator#poll
+
+
+Poll for coordinator events. 
+This ensures that the coordinator is known and that the consumer has joined the group (if it is using group management). 
+This also handles periodic offset commits if they are enabled.
 Returns early if the timeout expires or if waiting on rejoin is not required
 
+
+[KafkaConsumer#poll](/docs/CS/MQ/Kafka/Consumer.md?id=poll) -> updateAssignmentMetadataIfNeeded -> ConsumerCoordinator#poll
 ```java
 public final class ConsumerCoordinator extends AbstractCoordinator {
   public boolean poll(Timer timer, boolean waitForJoinGroup) {
@@ -470,112 +538,46 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 ensureActiveGroup
 
 ```java
-boolean ensureActiveGroup(final Timer timer) {
-        // always ensure that the coordinator is ready because we may have been disconnected
-        // when sending heartbeats and does not necessarily require us to rejoin the group.
-        if (!ensureCoordinatorReady(timer)) {
-            return false;
-        }
-
-        startHeartbeatThreadIfNeeded();
-        return joinGroupIfNeeded(timer);
+public abstract class AbstractCoordinator implements Closeable {
+  boolean ensureActiveGroup(final Timer timer) {
+    // always ensure that the coordinator is ready because we may have been disconnected
+    // when sending heartbeats and does not necessarily require us to rejoin the group.
+    if (!ensureCoordinatorReady(timer)) {
+      return false;
     }
 
-        boolean joinGroupIfNeeded(final Timer timer) {
-        while (rejoinNeededOrPending()) {
-        if (!ensureCoordinatorReady(timer)) {
-        return false;
-        }
-
-        // call onJoinPrepare if needed. We set a flag to make sure that we do not call it a second
-        // time if the client is woken up before a pending rebalance completes. This must be called
-        // on each iteration of the loop because an event requiring a rebalance (such as a metadata
-        // refresh which changes the matched subscription set) can occur while another rebalance is
-        // still in progress.
-        if (needsJoinPrepare) {
-        // need to set the flag before calling onJoinPrepare since the user callback may throw
-        // exception, in which case upon retry we should not retry onJoinPrepare either.
-        needsJoinPrepare = false;
-        // return false when onJoinPrepare is waiting for committing offset
-        if (!onJoinPrepare(timer, generation.generationId, generation.memberId)) {
-        needsJoinPrepare = true;
-        //should not initiateJoinGroup if needsJoinPrepare still is true
-        return false;
-        }
-        }
-
-final RequestFuture<ByteBuffer> future = initiateJoinGroup();
-        client.poll(future, timer);
-        if (!future.isDone()) {
-        // we ran out of time
-        return false;
-        }
-
-        if (future.succeeded()) {
-        Generation generationSnapshot;
-        MemberState stateSnapshot;
-
-// Generation data maybe concurrently cleared by Heartbeat thread.
-// Can't use synchronized for {@code onJoinComplete}, because it can be long enough
-// and shouldn't block heartbeat thread.
-// See {@link PlaintextConsumerTest#testMaxPollIntervalMsDelayInAssignment}
-synchronized (AbstractCoordinator.this) {
-        generationSnapshot = this.generation;
-        stateSnapshot = this.state;
-        }
-
-        if (!hasGenerationReset(generationSnapshot) && stateSnapshot == MemberState.STABLE) {
-        // Duplicate the buffer in case `onJoinComplete` does not complete and needs to be retried.
-        ByteBuffer memberAssignment = future.value().duplicate();
-
-        onJoinComplete(generationSnapshot.generationId, generationSnapshot.memberId, generationSnapshot.protocolName, memberAssignment);
-
-        // Generally speaking we should always resetJoinGroupFuture once the future is done, but here
-        // we can only reset the join group future after the completion callback returns. This ensures
-        // that if the callback is woken up, we will retry it on the next joinGroupIfNeeded.
-        // And because of that we should explicitly trigger resetJoinGroupFuture in other conditions below.
-        resetJoinGroupFuture();
-        needsJoinPrepare = true;
-        } else {
-final String reason = String.format("rebalance failed since the generation/state was " +
-        "modified by heartbeat thread to %s/%s before the rebalance callback triggered",
-        generationSnapshot, stateSnapshot);
-
-        resetStateAndRejoin(reason, true);
-        resetJoinGroupFuture();
-        }
-        } else {
-final RuntimeException exception = future.exception();
-
-        resetJoinGroupFuture();
-synchronized (AbstractCoordinator.this) {
-final String simpleName = exception.getClass().getSimpleName();
-final String shortReason = String.format("rebalance failed due to %s", simpleName);
-final String fullReason = String.format("rebalance failed due to '%s' (%s)",
-        exception.getMessage(),
-        simpleName);
-        requestRejoin(shortReason, fullReason);
-        }
-
-        if (exception instanceof UnknownMemberIdException ||
-        exception instanceof IllegalGenerationException ||
-        exception instanceof RebalanceInProgressException ||
-        exception instanceof MemberIdRequiredException)
-        continue;
-        else if (!future.isRetriable())
-        throw exception;
-
-        timer.sleep(rebalanceConfig.retryBackoffMs);
-        }
-        }
-        return true;
-        }
-
+    startHeartbeatThreadIfNeeded();
+    return joinGroupIfNeeded(timer);
+  }
+}
 ```
 
-#### joinGroupIfNeeded
+### joinGroupIfNeeded
 
-Joins the group without starting the heartbeat thread. If this function returns true, the state must always be in STABLE and heartbeat enabled. If this function returns false, the state can be in one of the following: * UNJOINED: got error response but times out before being able to re-join, heartbeat disabled * PREPARING_REBALANCE: not yet received join-group response before timeout, heartbeat disabled * COMPLETING_REBALANCE: not yet received sync-group response before timeout, heartbeat enabled Visible for testing.
+
+
+AbstractCoordinator implements group management for a single group member by interacting with a designated Kafka broker (the coordinator). 
+Group semantics are provided by extending this class. See ConsumerCoordinator for example usage. 
+From a high level, Kafka's group management protocol consists of the following sequence of actions:
+1. Group Registration: Group members register with the coordinator providing their own metadata (such as the set of topics they are interested in). 
+2. Group/Leader Selection: The coordinator select the members of the group and chooses one member as the leader. 
+3. State Assignment: The leader collects the metadata from all the members of the group and assigns state. 
+4. Group Stabilization: Each member receives the state assigned by the leader and begins processing.
+
+To leverage this protocol, an implementation must define the format of metadata provided by each member for group registration in metadata() and 
+the format of the state assignment provided by the leader in onLeaderElected(String, String, List, boolean) and becomes available to members in onJoinComplete(int, String, String, ByteBuffer). 
+Note on locking: this class shares state between the caller and a background thread which is used for sending heartbeats after the client has joined the group. 
+All mutable state as well as state transitions are protected with the class's monitor. 
+Generally this means acquiring the lock before reading or writing the state of the group (e.g. generation, memberId) and holding the lock when sending a request that affects the state of the group (e.g. JoinGroup, LeaveGroup).
+
+
+Joins the group without starting the heartbeat thread. If this function returns true, the state must always be in STABLE and heartbeat enabled. 
+If this function returns false, the state can be in one of the following: 
+* UNJOINED: got error response but times out before being able to re-join, heartbeat disabled 
+* PREPARING_REBALANCE: not yet received join-group response before timeout, heartbeat disabled 
+* COMPLETING_REBALANCE: not yet received sync-group response before timeout, heartbeat enabled Visible for testing.
+
+
 
 ```java
 public abstract class AbstractCoordinator implements Closeable {
@@ -588,8 +590,7 @@ public abstract class AbstractCoordinator implements Closeable {
       // call onJoinPrepare if needed. We set a flag to make sure that we do not call it a second
       // time if the client is woken up before a pending rebalance completes. This must be called
       // on each iteration of the loop because an event requiring a rebalance (such as a metadata
-      // refresh which changes the matched subscription set) can occur while another rebalance is
-      // still in progress.
+      // refresh which changes the matched subscription set) can occur while another rebalance is still in progress.
       if (needsJoinPrepare) {
         // need to set the flag before calling onJoinPrepare since the user callback may throw
         // exception, in which case upon retry we should not retry onJoinPrepare either.
@@ -629,8 +630,8 @@ public abstract class AbstractCoordinator implements Closeable {
           onJoinComplete(generationSnapshot.generationId, generationSnapshot.memberId, generationSnapshot.protocolName, memberAssignment);
 
           // Generally speaking we should always resetJoinGroupFuture once the future is done, but here
-          // we can only reset the join group future after the completion callback returns. This ensures
-          // that if the callback is woken up, we will retry it on the next joinGroupIfNeeded.
+          // we can only reset the join group future after the completion callback returns. 
+          // This ensures that if the callback is woken up, we will retry it on the next joinGroupIfNeeded.
           // And because of that we should explicitly trigger resetJoinGroupFuture in other conditions below.
           resetJoinGroupFuture();
           needsJoinPrepare = true;
@@ -655,10 +656,7 @@ public abstract class AbstractCoordinator implements Closeable {
           requestRejoin(shortReason, fullReason);
         }
 
-        if (exception instanceof UnknownMemberIdException ||
-                exception instanceof IllegalGenerationException ||
-                exception instanceof RebalanceInProgressException ||
-                exception instanceof MemberIdRequiredException)
+        if (exception instanceof UnknownMemberIdException)
           continue;
         else if (!future.isRetriable())
           throw exception;
@@ -671,7 +669,49 @@ public abstract class AbstractCoordinator implements Closeable {
 }
 ```
 
-#### getCoordinator
+
+
+#### initiateJoinGroup
+
+sending JoinGroupRequest
+
+```java
+public abstract class AbstractCoordinator implements Closeable {
+  private synchronized RequestFuture<ByteBuffer> initiateJoinGroup() {
+    // we store the join future in case we are woken up by the user after beginning the
+    // rebalance in the call to poll below. This ensures that we do not mistakenly attempt
+    // to rejoin before the pending rebalance has completed.
+    if (joinFuture == null) {
+      state = MemberState.PREPARING_REBALANCE;
+      // a rebalance can be triggered consecutively if the previous one failed,
+      // in this case we would not update the start time.
+      if (lastRebalanceStartMs == -1L)
+        lastRebalanceStartMs = time.milliseconds();
+      joinFuture = sendJoinGroupRequest();
+      joinFuture.addListener(new RequestFutureListener<ByteBuffer>() {
+        @Override
+        public void onSuccess(ByteBuffer value) {
+          // do nothing since all the handler logic are in SyncGroupResponseHandler already
+        }
+
+        @Override
+        public void onFailure(RuntimeException e) {
+          // we handle failures below after the request finishes. if the join completes
+          // after having been woken up, the exception is ignored and we will rejoin;
+          // this can be triggered when either join or sync request failed
+          synchronized (AbstractCoordinator.this) {
+            sensors.failedRebalanceSensor.record();
+          }
+        }
+      });
+    }
+    return joinFuture;
+  }
+}
+```
+
+### getCoordinator
+KafkaApis
 
 ```scala
   
@@ -701,11 +741,11 @@ public abstract class AbstractCoordinator implements Closeable {
         if (topicMetadata.head.errorCode != Errors.NONE.code) {
           (Errors.COORDINATOR_NOT_AVAILABLE, Node.noNode)
         } else {
+          // choose the leader partition
           val coordinatorEndpoint = topicMetadata.head.partitions.asScala
             .find(_.partitionIndex == partition)
             .filter(_.leaderId != MetadataResponse.NO_LEADER_ID)
-            .flatMap(metadata => metadataCache.
-                getAliveBrokerNode(metadata.leaderId, request.context.listenerName))
+            .flatMap(metadata => metadataCache.getAliveBrokerNode(metadata.leaderId, request.context.listenerName))
 
           coordinatorEndpoint match {
             case Some(endpoint) =>
@@ -905,6 +945,87 @@ onCompleteJoin
     }
   }
 ```
+
+#### handleSyncGroupRequest
+
+```scala
+  
+  def handleSyncGroupRequest(request: RequestChannel.Request, requestLocal: RequestLocal): Unit = {
+    val syncGroupRequest = request.body[SyncGroupRequest]
+
+    def sendResponseCallback(syncGroupResult: SyncGroupResult): Unit = {
+      requestHelper.sendResponseMaybeThrottle(request, requestThrottleMs =>
+        new SyncGroupResponse(
+          new SyncGroupResponseData()
+            .setErrorCode(syncGroupResult.error.code)
+            .setProtocolType(syncGroupResult.protocolType.orNull)
+            .setProtocolName(syncGroupResult.protocolName.orNull)
+            .setAssignment(syncGroupResult.memberAssignment)
+            .setThrottleTimeMs(requestThrottleMs)
+        ))
+    }
+
+    if (syncGroupRequest.data.groupInstanceId != null && config.interBrokerProtocolVersion.isLessThan(IBP_2_3_IV0)) {
+      // Only enable static membership when IBP >= 2.3, because it is not safe for the broker to use the static member logic
+      // until we are sure that all brokers support it. If static group being loaded by an older coordinator, it will discard
+      // the group.instance.id field, so static members could accidentally become "dynamic", which leads to wrong states.
+      sendResponseCallback(SyncGroupResult(Errors.UNSUPPORTED_VERSION))
+    } else if (!syncGroupRequest.areMandatoryProtocolTypeAndNamePresent()) {
+      // Starting from version 5, ProtocolType and ProtocolName fields are mandatory.
+      sendResponseCallback(SyncGroupResult(Errors.INCONSISTENT_GROUP_PROTOCOL))
+    } else if (!authHelper.authorize(request.context, READ, GROUP, syncGroupRequest.data.groupId)) {
+      sendResponseCallback(SyncGroupResult(Errors.GROUP_AUTHORIZATION_FAILED))
+    } else {
+      val assignmentMap = immutable.Map.newBuilder[String, Array[Byte]]
+      syncGroupRequest.data.assignments.forEach { assignment =>
+        assignmentMap += (assignment.memberId -> assignment.assignment)
+      }
+
+      groupCoordinator.handleSyncGroup(
+        syncGroupRequest.data.groupId,
+        syncGroupRequest.data.generationId,
+        syncGroupRequest.data.memberId,
+        Option(syncGroupRequest.data.protocolType),
+        Option(syncGroupRequest.data.protocolName),
+        Option(syncGroupRequest.data.groupInstanceId),
+        assignmentMap.result(),
+        sendResponseCallback,
+        requestLocal
+      )
+    }
+  }
+
+
+  def handleSyncGroup(groupId: String,
+                      generation: Int,
+                      memberId: String,
+                      protocolType: Option[String],
+                      protocolName: Option[String],
+                      groupInstanceId: Option[String],
+                      groupAssignment: Map[String, Array[Byte]],
+                      responseCallback: SyncCallback,
+                      requestLocal: RequestLocal = RequestLocal.NoCaching): Unit = {
+    validateGroupStatus(groupId, ApiKeys.SYNC_GROUP) match {
+      case Some(error) if error == Errors.COORDINATOR_LOAD_IN_PROGRESS =>
+        // The coordinator is loading, which means we've lost the state of the active rebalance and the
+        // group will need to start over at JoinGroup. By returning rebalance in progress, the consumer
+        // will attempt to rejoin without needing to rediscover the coordinator. Note that we cannot
+        // return COORDINATOR_LOAD_IN_PROGRESS since older clients do not expect the error.
+        responseCallback(SyncGroupResult(Errors.REBALANCE_IN_PROGRESS))
+
+      case Some(error) => responseCallback(SyncGroupResult(error))
+
+      case None =>
+        groupManager.getGroup(groupId) match {
+          case None => responseCallback(SyncGroupResult(Errors.UNKNOWN_MEMBER_ID))
+          case Some(group) => doSyncGroup(group, generation, memberId, protocolType, protocolName,
+            groupInstanceId, groupAssignment, requestLocal, responseCallback)
+        }
+    }
+  }
+```
+
+
 
 ### Consumer Offset
 

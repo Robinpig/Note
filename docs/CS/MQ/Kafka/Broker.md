@@ -1,6 +1,5 @@
 ## Introduction
 
-
 ## Structure
 
 - kafkaScheduler
@@ -739,8 +738,6 @@ if the callback function itself is already synchronized on some object then pass
 Noted that all pending [delayed](/docs/CS/MQ/Kafka/Broker.md?id=delay) check operations are stored in a queue.
 All callers to ReplicaManager.appendRecords() are expected to call `ActionQueue.tryCompleteActions` for all affected partitions, without holding any conflicting locks.
 
-
-
 ```scala
   def appendRecords(timeout: Long,
                     requiredAcks: Short,
@@ -868,10 +865,6 @@ class ReplicaManager {
           brokerTopicStats.topicStats(topicPartition.topic).messagesInRate.mark(numAppendedMessages)
           brokerTopicStats.allTopicsStats.messagesInRate.mark(numAppendedMessages)
 
-          if (traceEnabled)
-            trace(s"${records.sizeInBytes} written to log $topicPartition beginning at offset " +
-              s"${info.firstOffset.getOrElse(-1)} and ending at offset ${info.lastOffset}")
-
           (topicPartition, LogAppendResult(info))
         } catch {
           // NOTE: Failed produce requests metric is not incremented for known exceptions
@@ -898,8 +891,7 @@ class ReplicaManager {
 }
 ```
 
-
-appendRecordsToLeader
+#### appendRecordsToLeader
 
 ```scala
   
@@ -933,6 +925,214 @@ appendRecordsToLeader
   }
 ```
 
+Append this message set to the active segment of the local log, assigning offsets and Partition Leader Epochs
+
+```scala
+  def appendAsLeader(records: MemoryRecords,
+                     leaderEpoch: Int,
+                     origin: AppendOrigin = AppendOrigin.Client,
+                     interBrokerProtocolVersion: MetadataVersion = MetadataVersion.latest,
+                     requestLocal: RequestLocal = RequestLocal.NoCaching): LogAppendInfo = {
+    val validateAndAssignOffsets = origin != AppendOrigin.RaftLeader
+    append(records, origin, interBrokerProtocolVersion, validateAndAssignOffsets, leaderEpoch, Some(requestLocal), ignoreRecordSize = false)
+  }
+```
+
+#### UnifiedLog#append
+
+Append this message set to the active segment of the local log, rolling over to a fresh segment if necessary.
+
+This method will generally be responsible for assigning offsets to the messages, however if the assignOffsets=false flag is passed we will only check that the existing offsets are valid.
+
+```scala
+  private def append(records: MemoryRecords,
+                     origin: AppendOrigin,
+                     interBrokerProtocolVersion: MetadataVersion,
+                     validateAndAssignOffsets: Boolean,
+                     leaderEpoch: Int,
+                     requestLocal: Option[RequestLocal],
+                     ignoreRecordSize: Boolean): LogAppendInfo = {
+    // We want to ensure the partition metadata file is written to the log dir before any log data is written to disk.
+    // This will ensure that any log data can be recovered with the correct topic ID in the case of failure.
+    maybeFlushMetadataFile()
+
+    val appendInfo = analyzeAndValidateRecords(records, origin, ignoreRecordSize, leaderEpoch)
+
+    // return if we have no valid messages or if this is a duplicate of the last appended entry
+    if (appendInfo.shallowCount == 0) appendInfo
+    else {
+
+      // trim any invalid bytes or partial messages before appending it to the on-disk log
+      var validRecords = trimInvalidBytes(records, appendInfo)
+
+      // they are valid, insert them in the log
+      lock synchronized {
+        maybeHandleIOException(s"Error while appending records to $topicPartition in dir ${dir.getParent}") {
+          localLog.checkIfMemoryMappedBufferClosed()
+          if (validateAndAssignOffsets) {
+            // assign offsets to the message set
+            val offset = new LongRef(localLog.logEndOffset)
+            appendInfo.firstOffset = Some(LogOffsetMetadata(offset.value))
+            val now = time.milliseconds
+            val validateAndOffsetAssignResult = try {
+              LogValidator.validateMessagesAndAssignOffsets(validRecords,
+                topicPartition,
+                offset,
+                time,
+                now,
+                appendInfo.sourceCodec,
+                appendInfo.targetCodec,
+                config.compact,
+                config.recordVersion.value,
+                config.messageTimestampType,
+                config.messageTimestampDifferenceMaxMs,
+                leaderEpoch,
+                origin,
+                interBrokerProtocolVersion,
+                brokerTopicStats,
+                requestLocal.getOrElse(throw new IllegalArgumentException(
+                  "requestLocal should be defined if assignOffsets is true")))
+            } catch {
+              case e: IOException =>
+                throw new KafkaException(s"Error validating messages while appending to log $name", e)
+            }
+            validRecords = validateAndOffsetAssignResult.validatedRecords
+            appendInfo.maxTimestamp = validateAndOffsetAssignResult.maxTimestamp
+            appendInfo.offsetOfMaxTimestamp = validateAndOffsetAssignResult.shallowOffsetOfMaxTimestamp
+            appendInfo.lastOffset = offset.value - 1
+            appendInfo.recordConversionStats = validateAndOffsetAssignResult.recordConversionStats
+            if (config.messageTimestampType == TimestampType.LOG_APPEND_TIME)
+              appendInfo.logAppendTime = now
+
+            // re-validate message sizes if there's a possibility that they have changed (due to re-compression or message
+            // format conversion)
+            if (!ignoreRecordSize && validateAndOffsetAssignResult.messageSizeMaybeChanged) {
+              validRecords.batches.forEach { batch =>
+                if (batch.sizeInBytes > config.maxMessageSize) {
+                  // we record the original message set size instead of the trimmed size
+                  // to be consistent with pre-compression bytesRejectedRate recording
+                  brokerTopicStats.topicStats(topicPartition.topic).bytesRejectedRate.mark(records.sizeInBytes)
+                  brokerTopicStats.allTopicsStats.bytesRejectedRate.mark(records.sizeInBytes)
+                  throw new RecordTooLargeException(s"Message batch size is ${batch.sizeInBytes} bytes in append to" +
+                    s"partition $topicPartition which exceeds the maximum configured size of ${config.maxMessageSize}.")
+                }
+              }
+            }
+          } else {
+            // we are taking the offsets we are given
+            if (!appendInfo.offsetsMonotonic)
+              throw new OffsetsOutOfOrderException(s"Out of order offsets found in append to $topicPartition: " +
+                records.records.asScala.map(_.offset))
+
+            if (appendInfo.firstOrLastOffsetOfFirstBatch < localLog.logEndOffset) {
+              // we may still be able to recover if the log is empty
+              // one example: fetching from log start offset on the leader which is not batch aligned,
+              // which may happen as a result of AdminClient#deleteRecords()
+              val firstOffset = appendInfo.firstOffset match {
+                case Some(offsetMetadata) => offsetMetadata.messageOffset
+                case None => records.batches.asScala.head.baseOffset()
+              }
+
+              val firstOrLast = if (appendInfo.firstOffset.isDefined) "First offset" else "Last offset of the first batch"
+              throw new UnexpectedAppendOffsetException(
+                s"Unexpected offset in append to $topicPartition. $firstOrLast " +
+                  s"${appendInfo.firstOrLastOffsetOfFirstBatch} is less than the next offset ${localLog.logEndOffset}. " +
+                  s"First 10 offsets in append: ${records.records.asScala.take(10).map(_.offset)}, last offset in" +
+                  s" append: ${appendInfo.lastOffset}. Log start offset = $logStartOffset",
+                firstOffset, appendInfo.lastOffset)
+            }
+          }
+
+          // update the epoch cache with the epoch stamped onto the message by the leader
+          validRecords.batches.forEach { batch =>
+            if (batch.magic >= RecordBatch.MAGIC_VALUE_V2) {
+              maybeAssignEpochStartOffset(batch.partitionLeaderEpoch, batch.baseOffset)
+            } else {
+              // In partial upgrade scenarios, we may get a temporary regression to the message format. In
+              // order to ensure the safety of leader election, we clear the epoch cache so that we revert
+              // to truncation by high watermark after the next leader election.
+              leaderEpochCache.filter(_.nonEmpty).foreach { cache =>
+                warn(s"Clearing leader epoch cache after unexpected append with message format v${batch.magic}")
+                cache.clearAndFlush()
+              }
+            }
+          }
+
+          // check messages set size may be exceed config.segmentSize
+          if (validRecords.sizeInBytes > config.segmentSize) {
+            throw new RecordBatchTooLargeException(s"Message batch size is ${validRecords.sizeInBytes} bytes in append " +
+              s"to partition $topicPartition, which exceeds the maximum configured segment size of ${config.segmentSize}.")
+          }
+
+          // maybe roll the log if this segment is full
+          val segment = maybeRoll(validRecords.sizeInBytes, appendInfo)
+
+          val logOffsetMetadata = LogOffsetMetadata(
+            messageOffset = appendInfo.firstOrLastOffsetOfFirstBatch,
+            segmentBaseOffset = segment.baseOffset,
+            relativePositionInSegment = segment.size)
+
+          // now that we have valid records, offsets assigned, and timestamps updated, we need to
+          // validate the idempotent/transactional state of the producers and collect some metadata
+          val (updatedProducers, completedTxns, maybeDuplicate) = analyzeAndValidateProducerState(
+            logOffsetMetadata, validRecords, origin)
+
+          maybeDuplicate match {
+            case Some(duplicate) =>
+              appendInfo.firstOffset = Some(LogOffsetMetadata(duplicate.firstOffset))
+              appendInfo.lastOffset = duplicate.lastOffset
+              appendInfo.logAppendTime = duplicate.timestamp
+              appendInfo.logStartOffset = logStartOffset
+            case None =>
+              // Before appending update the first offset metadata to include segment information
+              appendInfo.firstOffset = appendInfo.firstOffset.map { offsetMetadata =>
+                offsetMetadata.copy(segmentBaseOffset = segment.baseOffset, relativePositionInSegment = segment.size)
+              }
+
+              // Append the records, and increment the local log end offset immediately after the append because a
+              // write to the transaction index below may fail and we want to ensure that the offsets
+              // of future appends still grow monotonically. The resulting transaction index inconsistency
+              // will be cleaned up after the log directory is recovered. Note that the end offset of the
+              // ProducerStateManager will not be updated and the last stable offset will not advance
+              // if the append to the transaction index fails.
+              localLog.append(appendInfo.lastOffset, appendInfo.maxTimestamp, appendInfo.offsetOfMaxTimestamp, validRecords)
+              updateHighWatermarkWithLogEndOffset()
+
+              // update the producer state
+              updatedProducers.values.foreach(producerAppendInfo => producerStateManager.update(producerAppendInfo))
+
+              // update the transaction index with the true last stable offset. The last offset visible
+              // to consumers using READ_COMMITTED will be limited by this value and the high watermark.
+              completedTxns.foreach { completedTxn =>
+                val lastStableOffset = producerStateManager.lastStableOffset(completedTxn)
+                segment.updateTxnIndex(completedTxn, lastStableOffset)
+                producerStateManager.completeTxn(completedTxn)
+              }
+
+              // always update the last producer id map offset so that the snapshot reflects the current offset
+              // even if there isn't any idempotent data being written
+              producerStateManager.updateMapEndOffset(appendInfo.lastOffset + 1)
+
+              // update the first unstable offset (which is used to compute LSO)
+              maybeIncrementFirstUnstableOffset()
+
+              trace(s"Appended message set with last offset: ${appendInfo.lastOffset}, " +
+                s"first offset: ${appendInfo.firstOffset}, " +
+                s"next offset: ${localLog.logEndOffset}, " +
+                s"and messages: $validRecords")
+
+              if (localLog.unflushedMessages >= config.flushInterval) flush(false)
+          }
+          appendInfo
+        }
+      }
+    }
+  }
+
+```
+
+### LogSegment#append
+
 Append the given messages starting with the given offset. Add an entry to the index if needed.
 
 ```scala
@@ -941,8 +1141,6 @@ Append the given messages starting with the given offset. Add an entry to the in
              shallowOffsetOfMaxTimestamp: Long,
              records: MemoryRecords): Unit = {
     if (records.sizeInBytes > 0) {
-      trace(s"Inserting ${records.sizeInBytes} bytes at end offset $largestOffset at position ${log.sizeInBytes} " +
-            s"with largest timestamp $largestTimestamp at shallow offset $shallowOffsetOfMaxTimestamp")
       val physicalPosition = log.sizeInBytes()
       if (physicalPosition == 0)
         rollingBasedTimestamp = Some(largestTimestamp)
@@ -951,7 +1149,6 @@ Append the given messages starting with the given offset. Add an entry to the in
 
       // append the messages
       val appendedBytes = log.append(records)
-      trace(s"Appended $appendedBytes to ${log.file} at end offset $largestOffset")
       // Update the in memory max timestamp and corresponding offset.
       if (largestTimestamp > maxTimestampSoFar) {
         maxTimestampAndOffsetSoFar = TimestampOffset(largestTimestamp, shallowOffsetOfMaxTimestamp)
@@ -968,10 +1165,315 @@ Append the given messages starting with the given offset. Add an entry to the in
 
 ```
 
+## read
 
+### handleFetchRequest
 
+```scala
+  def handleFetchRequest(request: RequestChannel.Request): Unit = {
+    val versionId = request.header.apiVersion
+    val clientId = request.header.clientId
+    val fetchRequest = request.body[FetchRequest]
+    val topicNames =
+      if (fetchRequest.version() >= 13)
+        metadataCache.topicIdsToNames()
+      else
+        Collections.emptyMap[Uuid, String]()
 
-### read
+    val fetchData = fetchRequest.fetchData(topicNames)
+    val forgottenTopics = fetchRequest.forgottenTopics(topicNames)
+
+    val fetchContext = fetchManager.newContext(
+      fetchRequest.version,
+      fetchRequest.metadata,
+      fetchRequest.isFromFollower,
+      fetchData,
+      forgottenTopics,
+      topicNames)
+
+    val erroneous = mutable.ArrayBuffer[(TopicIdPartition, FetchResponseData.PartitionData)]()
+    val interesting = mutable.ArrayBuffer[(TopicIdPartition, FetchRequest.PartitionData)]()
+    if (fetchRequest.isFromFollower) {
+      // The follower must have ClusterAction on ClusterResource in order to fetch partition data.
+      if (authHelper.authorize(request.context, CLUSTER_ACTION, CLUSTER, CLUSTER_NAME)) {
+        fetchContext.foreachPartition { (topicIdPartition, data) =>
+          if (topicIdPartition.topic == null)
+            erroneous += topicIdPartition -> FetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)
+          else if (!metadataCache.contains(topicIdPartition.topicPartition))
+            erroneous += topicIdPartition -> FetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_OR_PARTITION)
+          else
+            interesting += topicIdPartition -> data
+        }
+      } else {
+        fetchContext.foreachPartition { (topicIdPartition, _) =>
+          erroneous += topicIdPartition -> FetchResponse.partitionResponse(topicIdPartition, Errors.TOPIC_AUTHORIZATION_FAILED)
+        }
+      }
+    } else {
+      // Regular Kafka consumers need READ permission on each partition they are fetching.
+      val partitionDatas = new mutable.ArrayBuffer[(TopicIdPartition, FetchRequest.PartitionData)]
+      fetchContext.foreachPartition { (topicIdPartition, partitionData) =>
+        if (topicIdPartition.topic == null)
+          erroneous += topicIdPartition -> FetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_ID)
+        else
+          partitionDatas += topicIdPartition -> partitionData
+      }
+      val authorizedTopics = authHelper.filterByAuthorized(request.context, READ, TOPIC, partitionDatas)(_._1.topicPartition.topic)
+      partitionDatas.foreach { case (topicIdPartition, data) =>
+        if (!authorizedTopics.contains(topicIdPartition.topic))
+          erroneous += topicIdPartition -> FetchResponse.partitionResponse(topicIdPartition, Errors.TOPIC_AUTHORIZATION_FAILED)
+        else if (!metadataCache.contains(topicIdPartition.topicPartition))
+          erroneous += topicIdPartition -> FetchResponse.partitionResponse(topicIdPartition, Errors.UNKNOWN_TOPIC_OR_PARTITION)
+        else
+          interesting += topicIdPartition -> data
+      }
+    }
+
+    def maybeDownConvertStorageError(error: Errors): Errors = {
+      // If consumer sends FetchRequest V5 or earlier, the client library is not guaranteed to recognize the error code
+      // for KafkaStorageException. In this case the client library will translate KafkaStorageException to
+      // UnknownServerException which is not retriable. We can ensure that consumer will update metadata and retry
+      // by converting the KafkaStorageException to NotLeaderOrFollowerException in the response if FetchRequest version <= 5
+      if (error == Errors.KAFKA_STORAGE_ERROR && versionId <= 5) {
+        Errors.NOT_LEADER_OR_FOLLOWER
+      } else {
+        error
+      }
+    }
+
+    def maybeConvertFetchedData(tp: TopicIdPartition,
+                                partitionData: FetchResponseData.PartitionData): FetchResponseData.PartitionData = {
+      // We will never return a logConfig when the topic is unresolved and the name is null. This is ok since we won't have any records to convert.
+      val logConfig = replicaManager.getLogConfig(tp.topicPartition)
+
+      if (logConfig.exists(_.compressionType == ZStdCompressionCodec.name) && versionId < 10) {
+        trace(s"Fetching messages is disabled for ZStandard compressed partition $tp. Sending unsupported version response to $clientId.")
+        FetchResponse.partitionResponse(tp, Errors.UNSUPPORTED_COMPRESSION_TYPE)
+      } else {
+        // Down-conversion of fetched records is needed when the on-disk magic value is greater than what is
+        // supported by the fetch request version.
+        // If the inter-broker protocol version is `3.0` or higher, the log config message format version is
+        // always `3.0` (i.e. magic value is `v2`). As a result, we always go through the down-conversion
+        // path if the fetch version is 3 or lower (in rare cases the down-conversion may not be needed, but
+        // it's not worth optimizing for them).
+        // If the inter-broker protocol version is lower than `3.0`, we rely on the log config message format
+        // version as a proxy for the on-disk magic value to maintain the long-standing behavior originally
+        // introduced in Kafka 0.10.0. An important implication is that it's unsafe to downgrade the message
+        // format version after a single message has been produced (the broker would return the message(s)
+        // without down-conversion irrespective of the fetch version).
+        val unconvertedRecords = FetchResponse.recordsOrFail(partitionData)
+        val downConvertMagic =
+          logConfig.map(_.recordVersion.value).flatMap { magic =>
+            if (magic > RecordBatch.MAGIC_VALUE_V0 && versionId <= 1)
+              Some(RecordBatch.MAGIC_VALUE_V0)
+            else if (magic > RecordBatch.MAGIC_VALUE_V1 && versionId <= 3)
+              Some(RecordBatch.MAGIC_VALUE_V1)
+            else
+              None
+          }
+
+        downConvertMagic match {
+          case Some(magic) =>
+            // For fetch requests from clients, check if down-conversion is disabled for the particular partition
+            if (!fetchRequest.isFromFollower && !logConfig.forall(_.messageDownConversionEnable)) {
+              trace(s"Conversion to message format ${downConvertMagic.get} is disabled for partition $tp. Sending unsupported version response to $clientId.")
+              FetchResponse.partitionResponse(tp, Errors.UNSUPPORTED_VERSION)
+            } else {
+              try {
+                trace(s"Down converting records from partition $tp to message format version $magic for fetch request from $clientId")
+                // Because down-conversion is extremely memory intensive, we want to try and delay the down-conversion as much
+                // as possible. With KIP-283, we have the ability to lazily down-convert in a chunked manner. The lazy, chunked
+                // down-conversion always guarantees that at least one batch of messages is down-converted and sent out to the
+                // client.
+                new FetchResponseData.PartitionData()
+                  .setPartitionIndex(tp.partition)
+                  .setErrorCode(maybeDownConvertStorageError(Errors.forCode(partitionData.errorCode)).code)
+                  .setHighWatermark(partitionData.highWatermark)
+                  .setLastStableOffset(partitionData.lastStableOffset)
+                  .setLogStartOffset(partitionData.logStartOffset)
+                  .setAbortedTransactions(partitionData.abortedTransactions)
+                  .setRecords(new LazyDownConversionRecords(tp.topicPartition, unconvertedRecords, magic, fetchContext.getFetchOffset(tp).get, time))
+                  .setPreferredReadReplica(partitionData.preferredReadReplica())
+              } catch {
+                case e: UnsupportedCompressionTypeException =>
+                  trace("Received unsupported compression type error during down-conversion", e)
+                  FetchResponse.partitionResponse(tp, Errors.UNSUPPORTED_COMPRESSION_TYPE)
+              }
+            }
+          case None =>
+            new FetchResponseData.PartitionData()
+              .setPartitionIndex(tp.partition)
+              .setErrorCode(maybeDownConvertStorageError(Errors.forCode(partitionData.errorCode)).code)
+              .setHighWatermark(partitionData.highWatermark)
+              .setLastStableOffset(partitionData.lastStableOffset)
+              .setLogStartOffset(partitionData.logStartOffset)
+              .setAbortedTransactions(partitionData.abortedTransactions)
+              .setRecords(unconvertedRecords)
+              .setPreferredReadReplica(partitionData.preferredReadReplica)
+              .setDivergingEpoch(partitionData.divergingEpoch)
+        }
+      }
+    }
+
+    // the callback for process a fetch response, invoked before throttling
+    def processResponseCallback(responsePartitionData: Seq[(TopicIdPartition, FetchPartitionData)]): Unit = {
+      val partitions = new util.LinkedHashMap[TopicIdPartition, FetchResponseData.PartitionData]
+      val reassigningPartitions = mutable.Set[TopicIdPartition]()
+      responsePartitionData.foreach { case (tp, data) =>
+        val abortedTransactions = data.abortedTransactions.map(_.asJava).orNull
+        val lastStableOffset = data.lastStableOffset.getOrElse(FetchResponse.INVALID_LAST_STABLE_OFFSET)
+        if (data.isReassignmentFetch) reassigningPartitions.add(tp)
+        val partitionData = new FetchResponseData.PartitionData()
+          .setPartitionIndex(tp.partition)
+          .setErrorCode(maybeDownConvertStorageError(data.error).code)
+          .setHighWatermark(data.highWatermark)
+          .setLastStableOffset(lastStableOffset)
+          .setLogStartOffset(data.logStartOffset)
+          .setAbortedTransactions(abortedTransactions)
+          .setRecords(data.records)
+          .setPreferredReadReplica(data.preferredReadReplica.getOrElse(FetchResponse.INVALID_PREFERRED_REPLICA_ID))
+        data.divergingEpoch.foreach(partitionData.setDivergingEpoch)
+        partitions.put(tp, partitionData)
+      }
+      erroneous.foreach { case (tp, data) => partitions.put(tp, data) }
+
+      var unconvertedFetchResponse: FetchResponse = null
+
+      def createResponse(throttleTimeMs: Int): FetchResponse = {
+        // Down-convert messages for each partition if required
+        val convertedData = new util.LinkedHashMap[TopicIdPartition, FetchResponseData.PartitionData]
+        unconvertedFetchResponse.data().responses().forEach { topicResponse =>
+          topicResponse.partitions().forEach { unconvertedPartitionData =>
+            val tp = new TopicIdPartition(topicResponse.topicId, new TopicPartition(topicResponse.topic, unconvertedPartitionData.partitionIndex()))
+            val error = Errors.forCode(unconvertedPartitionData.errorCode)
+            if (error != Errors.NONE)
+              debug(s"Fetch request with correlation id ${request.header.correlationId} from client $clientId " +
+                s"on partition $tp failed due to ${error.exceptionName}")
+            convertedData.put(tp, maybeConvertFetchedData(tp, unconvertedPartitionData))
+          }
+        }
+
+        // Prepare fetch response from converted data
+        val response =
+          FetchResponse.of(unconvertedFetchResponse.error, throttleTimeMs, unconvertedFetchResponse.sessionId, convertedData)
+        // record the bytes out metrics only when the response is being sent
+        response.data.responses.forEach { topicResponse =>
+          topicResponse.partitions.forEach { data =>
+            // If the topic name was not known, we will have no bytes out.
+            if (topicResponse.topic != null) {
+              val tp = new TopicIdPartition(topicResponse.topicId, new TopicPartition(topicResponse.topic, data.partitionIndex))
+              brokerTopicStats.updateBytesOut(tp.topic, fetchRequest.isFromFollower, reassigningPartitions.contains(tp), FetchResponse.recordsSize(data))
+            }
+          }
+        }
+        response
+      }
+
+      def updateConversionStats(send: Send): Unit = {
+        send match {
+          case send: MultiRecordsSend if send.recordConversionStats != null =>
+            send.recordConversionStats.asScala.toMap.foreach {
+              case (tp, stats) => updateRecordConversionStats(request, tp, stats)
+            }
+          case _ =>
+        }
+      }
+
+      if (fetchRequest.isFromFollower) {
+        // We've already evaluated against the quota and are good to go. Just need to record it now.
+        unconvertedFetchResponse = fetchContext.updateAndGenerateResponseData(partitions)
+        val responseSize = KafkaApis.sizeOfThrottledPartitions(versionId, unconvertedFetchResponse, quotas.leader)
+        quotas.leader.record(responseSize)
+        val responsePartitionsSize = unconvertedFetchResponse.data().responses().stream().mapToInt(_.partitions().size()).sum()
+        trace(s"Sending Fetch response with partitions.size=$responsePartitionsSize, " +
+          s"metadata=${unconvertedFetchResponse.sessionId}")
+        requestHelper.sendResponseExemptThrottle(request, createResponse(0), Some(updateConversionStats))
+      } else {
+        // Fetch size used to determine throttle time is calculated before any down conversions.
+        // This may be slightly different from the actual response size. But since down conversions
+        // result in data being loaded into memory, we should do this only when we are not going to throttle.
+        //
+        // Record both bandwidth and request quota-specific values and throttle by muting the channel if any of the
+        // quotas have been violated. If both quotas have been violated, use the max throttle time between the two
+        // quotas. When throttled, we unrecord the recorded bandwidth quota value
+        val responseSize = fetchContext.getResponseSize(partitions, versionId)
+        val timeMs = time.milliseconds()
+        val requestThrottleTimeMs = quotas.request.maybeRecordAndGetThrottleTimeMs(request, timeMs)
+        val bandwidthThrottleTimeMs = quotas.fetch.maybeRecordAndGetThrottleTimeMs(request, responseSize, timeMs)
+
+        val maxThrottleTimeMs = math.max(bandwidthThrottleTimeMs, requestThrottleTimeMs)
+        if (maxThrottleTimeMs > 0) {
+          request.apiThrottleTimeMs = maxThrottleTimeMs
+          // Even if we need to throttle for request quota violation, we should "unrecord" the already recorded value
+          // from the fetch quota because we are going to return an empty response.
+          quotas.fetch.unrecordQuotaSensor(request, responseSize, timeMs)
+          if (bandwidthThrottleTimeMs > requestThrottleTimeMs) {
+            requestHelper.throttle(quotas.fetch, request, bandwidthThrottleTimeMs)
+          } else {
+            requestHelper.throttle(quotas.request, request, requestThrottleTimeMs)
+          }
+          // If throttling is required, return an empty response.
+          unconvertedFetchResponse = fetchContext.getThrottledResponse(maxThrottleTimeMs)
+        } else {
+          // Get the actual response. This will update the fetch context.
+          unconvertedFetchResponse = fetchContext.updateAndGenerateResponseData(partitions)
+          val responsePartitionsSize = unconvertedFetchResponse.data().responses().stream().mapToInt(_.partitions().size()).sum()
+          trace(s"Sending Fetch response with partitions.size=$responsePartitionsSize, " +
+            s"metadata=${unconvertedFetchResponse.sessionId}")
+        }
+
+        // Send the response immediately.
+        requestChannel.sendResponse(request, createResponse(maxThrottleTimeMs), Some(updateConversionStats))
+      }
+    }
+
+    if (interesting.isEmpty) {
+      processResponseCallback(Seq.empty)
+    } else {
+      // for fetch from consumer, cap fetchMaxBytes to the maximum bytes that could be fetched without being throttled given
+      // no bytes were recorded in the recent quota window
+      // trying to fetch more bytes would result in a guaranteed throttling potentially blocking consumer progress
+      val maxQuotaWindowBytes = if (fetchRequest.isFromFollower)
+        Int.MaxValue
+      else
+        quotas.fetch.getMaxValueInQuotaWindow(request.session, clientId).toInt
+
+      val fetchMaxBytes = Math.min(Math.min(fetchRequest.maxBytes, config.fetchMaxBytes), maxQuotaWindowBytes)
+      val fetchMinBytes = Math.min(fetchRequest.minBytes, fetchMaxBytes)
+
+      val clientMetadata: Option[ClientMetadata] = if (versionId >= 11) {
+        // Fetch API version 11 added preferred replica logic
+        Some(new DefaultClientMetadata(
+          fetchRequest.rackId,
+          clientId,
+          request.context.clientAddress,
+          request.context.principal,
+          request.context.listenerName.value))
+      } else {
+        None
+      }
+
+      val params = FetchParams(
+        requestVersion = versionId,
+        replicaId = fetchRequest.replicaId,
+        maxWaitMs = fetchRequest.maxWait,
+        minBytes = fetchMinBytes,
+        maxBytes = fetchMaxBytes,
+        isolation = FetchIsolation(fetchRequest),
+        clientMetadata = clientMetadata
+      )
+
+      // call the replica manager to fetch messages from the local replica
+      replicaManager.fetchMessages(
+        params = params,
+        fetchInfos = interesting,
+        quota = replicationQuota(fetchRequest),
+        responseCallback = processResponseCallback,
+      )
+    }
+  }
+
+```
 
 Fetch messages from a replica, and wait until enough data can be fetched and return; the callback function will be triggered either when timeout or required fetch info is satisfied.
 Consumers may fetch from any replica, but followers can only fetch from the leader.
@@ -1046,10 +1548,7 @@ Consumers may fetch from any replica, but followers can only fetch from the lead
 
 ```
 
-
-
 ConsumerCoordinator#poll
-
 
 ```java
 public final class ConsumerCoordinator extends AbstractCoordinator {
@@ -1122,11 +1621,6 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
     }
 }
 ```
-
-
-
-
-
 
 #### readFromLocalLog
 
@@ -1297,7 +1791,6 @@ The future associated with each operation will not be completed until the result
 1. Register Brokers
 2. Register Topics
 3. load Balance
-
 
 ```scala
   
@@ -1534,7 +2027,6 @@ ReplicaManager#makeFollowers -> addFetcherForPartitions
 
 ```
 
-
 ReplicaFetcherManager#addFetcherForPartitions
 
 ```scala
@@ -1543,6 +2035,7 @@ ReplicaFetcherManager#addFetcherForPartitions
     maybeFetch()
   }
 ```
+
 maybeFetch -> processFetchRequest
 
 ```scala
@@ -1683,10 +2176,6 @@ maybeFetch -> processFetchRequest
   }
 ```
 
-
-
-
-
 ### quorum replace zookeeper
 
 why
@@ -1810,26 +2299,27 @@ Note that a delayed operation can be watched on multiple keys. It is possible th
     false
   }
 ```
+
 ### Timing Wheel
 
 Hierarchical Timing Wheels
 
 A simple timing wheel is a circular list of buckets of timer tasks. Let u be the time unit.
 A timing wheel with size n has n buckets and can hold timer tasks in n * u time interval.
-Each bucket holds timer tasks that fall into the corresponding time range. 
-At the beginning, the first bucket holds tasks for [0, u), the second bucket holds tasks for [u, 2u), …, the n-th bucket for [u * (n -1), u * n). 
+Each bucket holds timer tasks that fall into the corresponding time range.
+At the beginning, the first bucket holds tasks for [0, u), the second bucket holds tasks for [u, 2u), …, the n-th bucket for [u * (n -1), u * n).
 Every interval of time unit u, the timer ticks and moved to the next bucket then expire all timer tasks in it. So, the timer never insert a task into the bucket for the current time since it is already expired. The timer immediately runs the expired task.
 The emptied bucket is then available for the next round, so if the current bucket is for the time t, it becomes the bucket for [t + u * n, t + (n + 1) * u) after a tick.
 A timing wheel has O(1) cost for insert/delete (start-timer/stop-timer) whereas priority queue based timers, such as java.util.concurrent.DelayQueue and java.util.Timer, have O(log n) insert/delete cost.
 
-A major drawback of a simple timing wheel is that it assumes that a timer request is within the time interval of n * u from the current time. 
-If a timer request is out of this interval, it is an overflow. A hierarchical timing wheel deals with such overflows. 
-It is a hierarchically organized timing wheels. The lowest level has the finest time resolution. 
-As moving up the hierarchy, time resolutions become coarser. 
-If the resolution of a wheel at one level is u and the size is n, the resolution of the next level should be n * u. 
-At each level overflows are delegated to the wheel in one level higher. 
-When the wheel in the higher level ticks, it reinsert timer tasks to the lower level. An overflow wheel can be created on-demand. 
-When a bucket in an overflow bucket expires, all tasks in it are reinserted into the timer recursively. 
+A major drawback of a simple timing wheel is that it assumes that a timer request is within the time interval of n * u from the current time.
+If a timer request is out of this interval, it is an overflow. A hierarchical timing wheel deals with such overflows.
+It is a hierarchically organized timing wheels. The lowest level has the finest time resolution.
+As moving up the hierarchy, time resolutions become coarser.
+If the resolution of a wheel at one level is u and the size is n, the resolution of the next level should be n * u.
+At each level overflows are delegated to the wheel in one level higher.
+When the wheel in the higher level ticks, it reinsert timer tasks to the lower level. An overflow wheel can be created on-demand.
+When a bucket in an overflow bucket expires, all tasks in it are reinserted into the timer recursively.
 The tasks are then moved to the finer grain wheels or be executed.
 The insert (start-timer) cost is O(m) where m is the number of wheels, which is usually very small compared to the number of requests in the system, and the delete (stop-timer) cost is still O(1).
 

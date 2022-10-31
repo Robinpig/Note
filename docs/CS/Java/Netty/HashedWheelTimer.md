@@ -1,7 +1,3 @@
-
-
-
-
 ## Introduction
 
 ![](./images/Timer.png)
@@ -10,34 +6,34 @@ A `Timer`optimized for approximated I/O timeout scheduling.
 
 ### Tick Duration
 
-As described with 'approximated', this timer does not execute the scheduled `TimerTask` on time. 
+As described with 'approximated', this timer does not execute the scheduled `TimerTask` on time.
 `HashedWheelTimer`, on every tick, will check if there are any `TimerTask`s behind the schedule and execute them.
 
-You can increase or decrease the accuracy of the execution timing by specifying smaller or larger tick duration in the constructor. 
-In most network applications, I/O timeout does not need to be accurate. 
+You can increase or decrease the accuracy of the execution timing by specifying smaller or larger tick duration in the constructor.
+In most network applications, I/O timeout does not need to be accurate.
 Therefore, the default tick duration is 100 milliseconds and you will not need to try different configurations in most cases.
 
 ### Ticks per Wheel (Wheel Size)
 
-`HashedWheelTimer` maintains a data structure called 'wheel'. 
-To put simply, a wheel is a hash table of TimerTasks whose hash function is 'dead line of the task'. 
+`HashedWheelTimer` maintains a data structure called 'wheel'.
+To put simply, a wheel is a hash table of TimerTasks whose hash function is 'dead line of the task'.
 The default number of ticks per wheel (i.e. the size of the wheel) is 512. You could specify a larger value if you are going to schedule a lot of timeouts.
 
 ### Do not create many instances.
 
-`HashedWheelTimer` creates a new thread whenever it is instantiated and started. 
-Therefore, you should make sure to create only one instance and share it across your application. 
+`HashedWheelTimer` creates a new thread whenever it is instantiated and started.
+Therefore, you should make sure to create only one instance and share it across your application.
 One of the common mistakes, that makes your application unresponsive, is to create a new instance for every connection.
 
 ### Implementation Details
 
-`HashedWheelTimer` is based on [George Varghese](https://cseweb.ucsd.edu/users/varghese/) and Tony Lauck's paper, ['Hashed and Hierarchical Timing Wheels: data structures to efficiently implement a timer facility'](https://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z). 
+`HashedWheelTimer` is based on [George Varghese](https://cseweb.ucsd.edu/users/varghese/) and Tony Lauck's paper, ['Hashed and Hierarchical Timing Wheels: data structures to efficiently implement a timer facility'](https://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z).
 More comprehensive slides are located [here](https://www.cse.wustl.edu/~cdgill/courses/cs6874/TimingWheels.ppt).
 
-
-
 ## Timer
+
 Schedules TimerTasks for one-time future execution in a background thread.
+
 ```java
 public interface Timer {
 
@@ -67,8 +63,6 @@ public interface TimerTask {
     void run(Timeout timeout) throws Exception;
 }
 ```
-
-
 
 ```java
 public class HashedWheelTimer implements Timer {
@@ -124,6 +118,7 @@ public class HashedWheelTimer implements Timer {
 ```
 
 ### Constructor
+
 Instance Count <= 64
 
 1. Normalize ticksPerWheel to power of two and initialize the wheel.
@@ -131,7 +126,8 @@ Instance Count <= 64
 3. Prevent overflow.
 4. newThread
 5. if need leakDetector.track
-6. 
+6.
+
 ```java
 // tickDuration 100; ticksPerWheel 512; leakDetection true; maxPendingTimeouts -1
 public HashedWheelTimer(
@@ -172,13 +168,10 @@ public HashedWheelTimer(
 }
 ```
 
-
-
-
-
 #### createWheel
 
 0 < ticksPerWheel <= 2^30 and pow of two
+
 ```java
 private static HashedWheelBucket[] createWheel(int ticksPerWheel) {
     if (ticksPerWheel <= 0) {
@@ -267,9 +260,6 @@ public void start() {
 }
 ```
 
-
-
-
 ```java
 // Returns the number of pending timeouts of this {@link Timer}.
 public long pendingTimeouts() {
@@ -287,10 +277,6 @@ private static void reportTooManyInstances() {
 
 ```
 
-
-
-
-
 ## run
 
 1. Initialize the startTime.
@@ -299,7 +285,6 @@ private static void reportTooManyInstances() {
 4. processCancelledTasks
 5. transferTimeoutsToBuckets
 6. expireTimeouts
-
 
 ```java
 public void run() {
@@ -342,8 +327,8 @@ public void run() {
 }
 ```
 
-
 ### waitForNextTick
+
 calculate goal nanoTime from startTime and current tick number, then wait until that goal has been reached.
 
 ```java
@@ -373,7 +358,6 @@ private long waitForNextTick() {
 }
 ```
 
-
 ### processCancelledTasks
 
 ```java
@@ -394,8 +378,6 @@ private void processCancelledTasks() {
 
 tickDuration default 100
 
-
-
 ```java
 
 private final Set<Timeout> unprocessedTimeouts = new HashSet<Timeout>();
@@ -408,13 +390,7 @@ public Set<Timeout> unprocessedTimeouts() {
 
 ```
 
-
-
-
-
 #### HashedWheelTimeout
-
-
 
 ```java
 private static final class HashedWheelTimeout implements Timeout {
@@ -501,10 +477,6 @@ private static final class HashedWheelTimeout implements Timeout {
     }
 }
 ```
-
-
-
-
 
 #### HashedWheelBucket
 
@@ -627,7 +599,6 @@ private static final class HashedWheelBucket {
 }
 ```
 
-
 ### transferTimeoutsToBuckets
 
 transfer only max. **100000** timeouts per tick to prevent a thread to stale the workerThread when it just adds new timeouts in a loop.
@@ -657,7 +628,6 @@ private void transferTimeoutsToBuckets() {
     }
 ```
 
-
 ### expireTimeouts
 
 ```java
@@ -686,8 +656,8 @@ public void expireTimeouts(long deadline) {
 }
 ```
 
-
 #### expire
+
 run Task
 
 ```java
@@ -781,11 +751,7 @@ public Set<Timeout> stop() {
 }
 ```
 
-
-
 ## compare schedule
-
-
 
 DefaultPriorityQueue
 
@@ -843,8 +809,6 @@ PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue() {
 }
 ```
 
-
-
 Netty 对于单个时间轮的优化方式就是记录下 remainingRounds，从而减少 bucket 过多的内存占用。
 
 ### 时间轮和 PriorityQueue 对比
@@ -864,8 +828,6 @@ for(Tasks task : tasks) {
 ```
 
 这个抽象是个什么意思呢？你要注意一个点，这里的任务循环执行是同步的，**这意味着你第一个任务执行很慢延迟很高，那么后面的任务全都会被堵住**，所以你加进时间轮的任务不可以是耗时任务，比如一些延迟很高的数据库查询，如果有这种耗时任务，最好再嵌入线程池处理，不要让任务阻塞在这一层。
-
-
 
 ## Links
 
