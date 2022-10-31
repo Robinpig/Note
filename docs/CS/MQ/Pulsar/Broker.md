@@ -1,5 +1,18 @@
 ## Introduction
 
+
+## Structure
+
+- coordinationService
+- leaderElectionService
+- schemaStorage
+- brokerService
+  - start netty
+- loadManager
+- webService
+- webSocketService
+- 
+
 ```java
 public class PulsarBrokerStarter {
     public static void main(String[] args) throws Exception {

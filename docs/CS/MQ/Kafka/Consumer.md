@@ -55,7 +55,7 @@ public enum ConsumerGroupState {
 
 Best Practice: Consumer Number == Partition Number
 
-### ConsumerPartitionAssignor
+## ConsumerPartitionAssignor
 
 This interface is used to define custom partition assignment for use in KafkaConsumer.
 Members of the consumer group subscribe to the topics they are interested in and forward their subscriptions to a Kafka broker serving as the group coordinator.
@@ -337,12 +337,58 @@ Choose a leader of consumers and let leader selects strategy.
 
 JOIN_GROUP -> SYNC_GROUP
 
+
+new Consumer1 subscribes and the Coordinator sends REBALANCE_IN_PROGRESS through Heartbeat
 ```dot
 digraph g{
     Coordinator
-    Coordinator->Member1[label="JoinGroup: suscribe"]
-    Member1 ->Coordinator [label="JoinGroup: you are the leader, the desc of topic is"]
-    Coordinator->Member2->Coordinator
+    Consumer1 ->Coordinator [label="JoinGroup: suscribe"]
+    Coordinator->Consumer2 [label="Hearbeat: REBALANCE_IN_PROGRESS"]
+    Coordinator->Consumer3 [label="Hearbeat: REBALANCE_IN_PROGRESS"]
+}
+```
+
+All consumers send subscribe info
+
+```dot
+digraph g{
+    Coordinator
+    Consumer1 -> Coordinator
+    Consumer2 -> Coordinator [label="JoinGroup: suscribe"]
+    Consumer3 -> Coordinator [label="JoinGroup: suscribe"]
+}
+```
+choose a leader
+
+```dot
+digraph g{
+    Coordinator
+    Coordinator -> Consumer1 [label="null"]
+    Coordinator -> Consumer2 [label="suscribe info"]
+    Coordinator -> Consumer3 [label="null"]
+}
+```
+
+
+syncGroup
+
+```dot
+digraph g{
+blank1 [label="",color=none];
+    Coordinator -> Consumer1 [headlabel="SyncGroup: \n null" dir=back]
+    Coordinator -> Consumer2 [label="SyncGroup: \n suscribe" dir=back]
+    Coordinator -> Consumer3 [label="SyncGroup: \n null" dir=back]
+}
+```
+
+learning
+
+```dot
+digraph g{
+    Coordinator
+    Coordinator -> Consumer1 [label="suscribe info"]
+    Coordinator -> Consumer2 [label="suscribe info"]
+    Coordinator -> Consumer3 [label="suscribe info"]
 }
 ```
 

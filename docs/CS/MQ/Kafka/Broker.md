@@ -1,5 +1,21 @@
 ## Introduction
 
+
+## Structure
+
+- kafkaScheduler
+- socketServer
+  - Acceptor
+  - Processor
+  - KafkaRequestHandler
+- replicaManager
+- kafkaController
+- groupCoordinator
+- transactionCoordinator
+- dynamicConfigManager
+- quotaManagers
+- logManager
+
 ```scala
 object Kafka extends Logging {
   def main(args: Array[String]): Unit = {
@@ -455,20 +471,7 @@ The callback function will be triggered either when timeout, error or the topics
         }
       } catch {
         // Log client errors at a lower level than unexpected exceptions
-        case e: TopicExistsException =>
-          debug(s"Topic creation failed since topic '${topic.name}' already exists.", e)
-          CreatePartitionsMetadata(topic.name, e)
-        case e: ThrottlingQuotaExceededException =>
-          debug(s"Topic creation not allowed because quota is violated. Delay time: ${e.throttleTimeMs}")
-          CreatePartitionsMetadata(topic.name, e)
-        case e: ApiException =>
-          info(s"Error processing create topic request $topic", e)
-          CreatePartitionsMetadata(topic.name, e)
-        case e: ConfigException =>
-          info(s"Error processing create topic request $topic", e)
-          CreatePartitionsMetadata(topic.name, new InvalidConfigurationException(e.getMessage, e.getCause))
-        case e: Throwable =>
-          error(s"Error processing create topic request $topic", e)
+        case e: Exceptions =>
           CreatePartitionsMetadata(topic.name, e)
       }).toBuffer
 
@@ -592,6 +595,8 @@ Create topic and optionally validate its parameters. Note that this method is us
       isUpdate = false, usesTopicId)
   }
 ```
+
+## write
 
 ### appendRecords
 
@@ -731,8 +736,10 @@ Create topic and optionally validate its parameters. Note that this method is us
 
 Append messages to leader replicas of the partition, and wait for them to be replicated to other replicas; the callback function will be triggered either when timeout or the required acks are satisfied;
 if the callback function itself is already synchronized on some object then pass this object to avoid deadlock.
-Noted that all pending delayed check operations are stored in a queue.
-All callers to ReplicaManager.appendRecords() are expected to call ActionQueue.tryCompleteActions for all affected partitions, without holding any conflicting locks.
+Noted that all pending [delayed](/docs/CS/MQ/Kafka/Broker.md?id=delay) check operations are stored in a queue.
+All callers to ReplicaManager.appendRecords() are expected to call `ActionQueue.tryCompleteActions` for all affected partitions, without holding any conflicting locks.
+
+
 
 ```scala
   def appendRecords(timeout: Long,
@@ -1803,33 +1810,28 @@ Note that a delayed operation can be watched on multiple keys. It is possible th
     false
   }
 ```
+### Timing Wheel
 
 Hierarchical Timing Wheels
+
 A simple timing wheel is a circular list of buckets of timer tasks. Let u be the time unit.
 A timing wheel with size n has n buckets and can hold timer tasks in n * u time interval.
-Each bucket holds timer tasks that fall into the corresponding time range. At the beginning,
-the first bucket holds tasks for [0, u), the second bucket holds tasks for [u, 2u), …,
-the n-th bucket for [u * (n -1), u * n). Every interval of time unit u, the timer ticks and
-moved to the next bucket then expire all timer tasks in it. So, the timer never insert a task
-into the bucket for the current time since it is already expired. The timer immediately runs
-the expired task. The emptied bucket is then available for the next round, so if the current
-bucket is for the time t, it becomes the bucket for [t + u * n, t + (n + 1) * u) after a tick.
-A timing wheel has O(1) cost for insert/delete (start-timer/stop-timer) whereas priority queue
-based timers, such as java.util.concurrent.DelayQueue and java.util.Timer, have O(log n)
-insert/delete cost.
+Each bucket holds timer tasks that fall into the corresponding time range. 
+At the beginning, the first bucket holds tasks for [0, u), the second bucket holds tasks for [u, 2u), …, the n-th bucket for [u * (n -1), u * n). 
+Every interval of time unit u, the timer ticks and moved to the next bucket then expire all timer tasks in it. So, the timer never insert a task into the bucket for the current time since it is already expired. The timer immediately runs the expired task.
+The emptied bucket is then available for the next round, so if the current bucket is for the time t, it becomes the bucket for [t + u * n, t + (n + 1) * u) after a tick.
+A timing wheel has O(1) cost for insert/delete (start-timer/stop-timer) whereas priority queue based timers, such as java.util.concurrent.DelayQueue and java.util.Timer, have O(log n) insert/delete cost.
 
-A major drawback of a simple timing wheel is that it assumes that a timer request is within
-the time interval of n * u from the current time. If a timer request is out of this interval,
-it is an overflow. A hierarchical timing wheel deals with such overflows. It is a hierarchically
-organized timing wheels. The lowest level has the finest time resolution. As moving up the
-hierarchy, time resolutions become coarser. If the resolution of a wheel at one level is u and
-the size is n, the resolution of the next level should be n * u. At each level overflows are
-delegated to the wheel in one level higher. When the wheel in the higher level ticks, it reinsert
-timer tasks to the lower level. An overflow wheel can be created on-demand. When a bucket in an
-overflow bucket expires, all tasks in it are reinserted into the timer recursively. The tasks
-are then moved to the finer grain wheels or be executed. The insert (start-timer) cost is O(m)
-where m is the number of wheels, which is usually very small compared to the number of requests
-in the system, and the delete (stop-timer) cost is still O(1).
+A major drawback of a simple timing wheel is that it assumes that a timer request is within the time interval of n * u from the current time. 
+If a timer request is out of this interval, it is an overflow. A hierarchical timing wheel deals with such overflows. 
+It is a hierarchically organized timing wheels. The lowest level has the finest time resolution. 
+As moving up the hierarchy, time resolutions become coarser. 
+If the resolution of a wheel at one level is u and the size is n, the resolution of the next level should be n * u. 
+At each level overflows are delegated to the wheel in one level higher. 
+When the wheel in the higher level ticks, it reinsert timer tasks to the lower level. An overflow wheel can be created on-demand. 
+When a bucket in an overflow bucket expires, all tasks in it are reinserted into the timer recursively. 
+The tasks are then moved to the finer grain wheels or be executed.
+The insert (start-timer) cost is O(m) where m is the number of wheels, which is usually very small compared to the number of requests in the system, and the delete (stop-timer) cost is still O(1).
 
 Example
 Let's say that u is 1 and n is 3. If the start time is c, then the buckets at different levels are:
@@ -1865,8 +1867,7 @@ Level 3 stay at c.
 
 The hierarchical timing wheels works especially well when operations are completed before they time out.
 Even when everything times out, it still has advantageous when there are many items in the timer.
-Its insert cost (including reinsert) and delete cost are O(m) and O(1), respectively while priority
-queue based timers takes O(log N) for both insert and delete where N is the number of items in the queue.
+Its insert cost (including reinsert) and delete cost are O(m) and O(1), respectively while priority queue based timers takes O(log N) for both insert and delete where N is the number of items in the queue.
 
 This class is not thread-safe. There should not be any add calls while advanceClock is executing.
 It is caller's responsibility to enforce it. Simultaneous add calls are thread-safe.
