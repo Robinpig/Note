@@ -1,31 +1,32 @@
-# Atomic
+## Introduction
 
-Since:1.5
-
-*A small toolkit of classes that **support lock-free thread-safe programming on single variables**.* 
-
-*In essence, **the classes in this package extend the notion of volatile values, fields, and array elements to those that also provide an atomic conditional update operation of the form**:*
+A small toolkit of classes that **support lock-free thread-safe programming on single variables**.
+In essence, **the classes in this package extend the notion of volatile values, fields, and array elements to those that also provide an atomic conditional update operation of the form**:
 
 ```java
  boolean compareAndSet(expectedValue, updateValue);
 ```
 
-*This method (which varies in argument types across different classes) **atomically sets a variable to the updateValue if it currently holds the expectedValue, reporting true on success**. The classes in this package also contain methods to **get and unconditionally set values**, as well as a weaker conditional atomic update operation **weakCompareAndSet** described below.*
+This method (which varies in argument types across different classes) **atomically sets a variable to the updateValue if it currently holds the expectedValue, reporting true on success**.
+The classes in this package also contain methods to **get and unconditionally set values**, as well as a weaker conditional atomic update operation **weakCompareAndSet** described below.
 
-*The specifications of these methods enable implementations to employ **efficient machine-level atomic instructions** that are available on contemporary processors. However on some platforms, support may entail some form of **internal locking**. **Thus the methods are not strictly guaranteed to be non-blocking -- a thread may block transiently before performing the operation**.*
+The specifications of these methods enable implementations to employ **efficient machine-level atomic instructions** that are available on contemporary processors.
+However on some platforms, support may entail some form of **internal locking**. **Thus the methods are not strictly guaranteed to be non-blocking -- a thread may block transiently before performing the operation**.
 
-*The memory effects for accesses and updates of atomics generally follow the rules for volatiles, as stated in The Java Language Specification (17.4 Memory Model) :*
+The memory effects for accesses and updates of atomics generally follow the rules for volatiles, as stated in The Java Language Specification (17.4 Memory Model) :
 
-1. *get has the memory effects of reading a volatile variable.*
-2. *set has the memory effects of writing (assigning) a volatile variable.*
-3. *lazySet has the memory effects of writing (assigning) a volatile variable except that it permits reorderings with subsequent (but not previous) memory actions that do not themselves impose reordering constraints with ordinary non-volatile writes. Among other usage contexts, lazySet may apply when nulling out, for the sake of garbage collection, a reference that is never accessed again.*
-4. *weakCompareAndSet **atomically reads and conditionally writes a variable but does not create any happens-before orderings**, so provides no guarantees with respect to previous or subsequent reads and writes of any variables other than the target of the weakCompareAndSet.*
-5. *compareAndSet and all other read-and-update operations such as getAndIncrement **have the memory effects of both reading and writing volatile variables**.*
-
+1. get has the memory effects of reading a volatile variable.
+2. set has the memory effects of writing (assigning) a volatile variable.
+3. lazySet has the memory effects of writing (assigning) a volatile variable except that it permits reorderings with subsequent (but not previous) memory actions that do not themselves impose reordering constraints with ordinary non-volatile writes.
+4. Among other usage contexts, lazySet may apply when nulling out, for the sake of garbage collection, a reference that is never accessed again.
+5. weakCompareAndSet **atomically reads and conditionally writes a variable but does not create any happens-before orderings**, so provides no guarantees with respect to previous or subsequent reads and writes of any variables other than the target of the weakCompareAndSet.
+6. compareAndSet and all other read-and-update operations such as getAndIncrement **have the memory effects of both reading and writing volatile variables**.
 
 ![Atomic](../img/Atomic.png)
 
-Instances of classes **AtomicBoolean, AtomicInteger, AtomicLong, and AtomicReference each provide access and updates to a single variable of the corresponding type**. Each class also provides appropriate utility methods for that type. For example, classes AtomicLong and AtomicInteger provide atomic increment methods. One application is to generate sequence numbers, as in:
+Instances of classes **AtomicBoolean, AtomicInteger, AtomicLong, and AtomicReference each provide access and updates to a single variable of the corresponding type**.
+Each class also provides appropriate utility methods for that type. For example, classes AtomicLong and AtomicInteger provide atomic increment methods.
+One application is to generate sequence numbers, as in:
 
 ```java
 class Sequencer {
@@ -37,24 +38,36 @@ class Sequencer {
  }
 ```
 
+In addition to classes representing single values, this package contains Updater classes that can be used to obtain compareAndSet operations on any selected volatile field of any selected class.
+**AtomicReferenceFieldUpdater, AtomicIntegerFieldUpdater, and AtomicLongFieldUpdater are reflection-based utilities that provide access to the associated field types**.
+These are mainly of use in atomic data structures in which several volatile fields of the same node (for example, the links of a tree node) are independently subject to atomic updates.
+**These classes enable greater flexibility in how and when to use atomic updates, at the expense of more awkward reflection-based setup, less convenient usage, and weaker guarantees**.
 
+The `AtomicIntegerArray`, `AtomicLongArray`, and `AtomicReferenceArray` classes further extend atomic operation support to arrays of these types.
+These classes are also notable in providing `volatile` access semantics for their array elements.
 
-*In addition to classes representing single values, this package contains Updater classes that can be used to obtain compareAndSet operations on any selected volatile field of any selected class. **AtomicReferenceFieldUpdater, AtomicIntegerFieldUpdater, and AtomicLongFieldUpdater are reflection-based utilities that provide access to the associated field types**. These are mainly of use in atomic data structures in which several volatile fields of the same node (for example, the links of a tree node) are independently subject to atomic updates. **These classes enable greater flexibility in how and when to use atomic updates, at the expense of more awkward reflection-based setup, less convenient usage, and weaker guarantees**.*
+The atomic classes also support method **weakCompareAndSet**, which has **limited applicability**.
+On some platforms, the weak version may be more efficient than compareAndSet in the normal case, but differs in that any given invocation of the **weakCompareAndSet method may return false spuriously (that is, for no apparent reason)**.
+A false return means only that the operation may be retried if desired, relying on the guarantee that repeated invocation when the variable holds expectedValue and no other thread is also attempting to set the variable will eventually succeed.
+(Such spurious failures may for example be due to memory contention effects that are unrelated to whether the expected and current values are equal.)
+Additionally **weakCompareAndSet does not provide ordering guarantees that are usually needed for synchronization control**.
+However, the method may be useful for updating counters and statistics when such updates are unrelated to the other happens-before orderings of a program.
+When a thread sees an update to an atomic variable caused by a weakCompareAndSet, it does not necessarily see updates to any other variables that occurred before the weakCompareAndSet.
+This may be acceptable when, for example, updating performance statistics, but rarely otherwise.*
 
-The [`AtomicIntegerArray`](https://docs.oracle.com/javase/10/docs/api/java/util/concurrent/atomic/AtomicIntegerArray.html), [`AtomicLongArray`](https://docs.oracle.com/javase/10/docs/api/java/util/concurrent/atomic/AtomicLongArray.html), and [`AtomicReferenceArray`](https://docs.oracle.com/javase/10/docs/api/java/util/concurrent/atomic/AtomicReferenceArray.html) classes further extend atomic operation support to arrays of these types. These classes are also notable in providing `volatile` access semantics for their array elements.
+The **AtomicMarkableReference class associates a single boolean with a reference**.
+For example, this bit might be used inside a data structure to mean that the object being referenced has logically been deleted.
 
-*The atomic classes also support method **weakCompareAndSet**, which has **limited applicability**. On some platforms, the weak version may be more efficient than compareAndSet in the normal case, but differs in that any given invocation of the **weakCompareAndSet method may return false spuriously (that is, for no apparent reason)**. A false return means only that the operation may be retried if desired, relying on the guarantee that repeated invocation when the variable holds expectedValue and no other thread is also attempting to set the variable will eventually succeed. (Such spurious failures may for example be due to memory contention effects that are unrelated to whether the expected and current values are equal.) Additionally **weakCompareAndSet does not provide ordering guarantees that are usually needed for synchronization control**. However, the method may be useful for updating counters and statistics when such updates are unrelated to the other happens-before orderings of a program. When a thread sees an update to an atomic variable caused by a weakCompareAndSet, it does not necessarily see updates to any other variables that occurred before the weakCompareAndSet. This may be acceptable when, for example, updating performance statistics, but rarely otherwise.*
+The **AtomicStampedReference class associates an integer value with a reference**.
+This may be used for example, to represent version numbers corresponding to series of updates.
 
-*The **AtomicMarkableReference class associates a single boolean with a reference**. For example, this bit might be used inside a data structure to mean that the object being referenced has logically been deleted. 
-
-*The **AtomicStampedReference class associates an integer value with a reference**. This may be used for example, to represent version numbers corresponding to series of updates.
-
-
-
-*Atomic classes are designed primarily as building blocks for implementing non-blocking data structures and related infrastructure classes. **The compareAndSet method is not a general replacement for locking. It applies only when critical updates for an object are confined to a single variable**.*
-*The **Atomic classes are not general purpose replacements for java.lang.Integer and related classes**. They do not define methods such as equals, hashCode and compareTo. (Because atomic variables are expected to be mutated, they are poor choices for hash table keys.) Additionally, classes are provided only for those types that are commonly useful in intended applications. For example, there is no atomic class for representing byte. In those infrequent cases where you would like to do so, **you can use an AtomicInteger to hold byte values, and cast appropriately**. You can also hold floats using Float.floatToRawIntBits and Float.intBitsToFloat conversions, and doubles using Double.doubleToRawLongBits and Double.longBitsToDouble conversions.*
-
-
+Atomic classes are designed primarily as building blocks for implementing non-blocking data structures and related infrastructure classes.
+**The compareAndSet method is not a general replacement for locking. It applies only when critical updates for an object are confined to a single variable**.
+The **Atomic classes are not general purpose replacements for java.lang.Integer and related classes**.
+They do not define methods such as equals, hashCode and compareTo. (Because atomic variables are expected to be mutated, they are poor choices for hash table keys.)
+Additionally, classes are provided only for those types that are commonly useful in intended applications. For example, there is no atomic class for representing byte.
+In those infrequent cases where you would like to do so, **you can use an AtomicInteger to hold byte values, and cast appropriately**.
+You can also hold floats using Float.floatToRawIntBits and Float.intBitsToFloat conversions, and doubles using Double.doubleToRawLongBits and Double.longBitsToDouble conversions.
 
 ## AtomicInteger
 
@@ -66,16 +79,30 @@ private volatile int value;
 ```
 
 
+Atomically updates Java variable to x if it is currently holding expected.
+This operation has memory semantics of a volatile read and write. 
+Corresponds to C11 atomic_compare_exchange_strong.
+```java
+public final class Unsafe {
+    @ForceInline
+    public final boolean compareAndSwapInt(Object o, long offset,
+                                           int expected,
+                                           int x) {
+        return theInternalUnsafe.compareAndSetInt(o, offset, expected, x);
+    }
+}
+
+    @IntrinsicCandidate
+    public final native boolean compareAndSetInt(Object o, long offset,
+                                                 int expected,
+                                                 int x);
+```
 
 ## AtomicReference
 
 AtomicReference fix CAS
 
 Lock
-
-
-
-
 
 ## LongAdder
 
@@ -88,8 +115,6 @@ This class extends Number, but does not define methods such as equals, hashCode 
 public class LongAdder extends Striped64 implements Serializable {
 }
 ```
-
-
 
 Padded variant of AtomicLong supporting only raw accesses plus **CAS**. JVM intrinsics note: It would be possible to use a release-only form of CAS here, if it were provided.
 
@@ -117,10 +142,6 @@ Padded variant of AtomicLong supporting only raw accesses plus **CAS**. JVM intr
     }
 }
 ```
-
-
-
-
 
 ```java
 public void add(long x) {
@@ -225,7 +246,6 @@ final void longAccumulate(long x, LongBinaryOperator fn,
 >
 > See [Netty Memory](/docs/CS/Java/Netty/memory.md)
 
-
 ### LongAccumulator
 
 One or more variables that together maintain a running long value updated using a supplied function. When updates (method accumulate) are contended across threads, the set of variables may grow dynamically to reduce contention. Method get (or, equivalently, longValue) returns the current value across the variables maintaining updates.
@@ -249,3 +269,30 @@ public void accumulate(long x) {
     }
 }
 ```
+
+
+## Array
+
+
+
+Get/Set with VarHandle.getVolatile.
+```java
+
+private static final VarHandle AA = MethodHandles.arrayElementVarHandle(int[].class);
+
+    public final int get(int i) {
+        return (int)AA.getVolatile(array, i);
+    }
+
+    public final void set(int i, int newValue) {
+        AA.setVolatile(array, i, newValue);
+    }
+
+```
+
+## Links
+
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+
+## References
+

@@ -304,3 +304,4 @@ Other happens‐before orderings guaranteed by the class library include:
 2. [Java 并发基础之内存模型](https://www.javadoop.com/post/java-memory-model)
 3. [JLS - Chapter 17. Threads and Locks](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.4)
 4. [Double-checked locking: Clever, but broken](https://www.infoworld.com/article/2074979/double-checked-locking--clever--but-broken.html)
+5. [JSR 133 (Java Memory Model) FAQ](https://www.cs.umd.edu/~pugh/java/memoryModel/jsr-133-faq.html)
