@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 The producers of Apache RocketMQ are underlying resources that can be reused, like the connection pool of a database.
 You do not need to create producers each time you send messages or destroy the producers after you send messages.
 If you regularly create and destroy producers, a large number of short connection requests are generated on the broker.
@@ -163,10 +161,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 }
 ```
 
-
 #### FaultStrategy
 
 if sendLatencyFaultEnable = true
+
 ```java
 public class MQFaultStrategy {
   public MessageQueue selectOneMessageQueue(final TopicPublishInfo tpInfo, final String lastBrokerName) {
@@ -207,6 +205,7 @@ public class MQFaultStrategy {
 ```
 
 else sendLatencyFaultEnable = false
+
 ```java
 public class TopicPublishInfo {
   public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
@@ -237,17 +236,14 @@ public class TopicPublishInfo {
 }
 ```
 
-
-
 ### MQClientInstance
 
 ```java
 public class MQClientInstance {
-    
-    
+  
+  
 }
 ```
-
 
 start
 
@@ -287,6 +283,7 @@ public class MQClientInstance {
 ```
 
 startScheduledTask
+
 ```java
 
     private void startScheduledTask() {
@@ -334,8 +331,6 @@ startScheduledTask
         }, 1, 1, TimeUnit.MINUTES);
     }
 ```
-
-
 
 ## Links
 
