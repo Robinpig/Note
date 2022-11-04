@@ -17,11 +17,12 @@ Fig.1. Domain model of Apache RocketMQ.
 </p>
 
 As shown in the preceding figure, the lifecycle of a Apache RocketMQ message consists of three stages: production, storage, and consumption.
-A producer generates a message and sends it to a Apache RocketMQ broker. The message is stored in a topic on the broker. A consumer subscribes to the topic to consume the message.
+A producer generates a message and sends it to a Apache RocketMQ [broker](/docs/CS/MQ/RocketMQ/Broker.md). The message is stored in a topic on the broker. 
+A consumer subscribes to the topic to consume the message.
 
 Message production
 
-Producer：
+[Producer](/docs/CS/MQ/RocketMQ/Producer.md)：
 The running entity that is used to generate messages in Apache RocketMQ. Producers are the upstream parts of business call links. Producers are lightweight, anonymous, and do not have identities.
 
 Message storage
@@ -36,8 +37,9 @@ Message storage
 Message consumption
 
 - ConsumerGroup：
-  An independent group of consumption identities defined in the publish/subscribe model of Apache RocketMQ. A consumer group is used to centrally manage consumers that run at the bottom layer. Consumers in the same group must maintain the same consumption logic and configurations with each other, and consume the messages subscribed by the group together to scale out the consumption capacity of the group.
-- Consumer：
+  An independent group of consumption identities defined in the publish/subscribe model of Apache RocketMQ. A consumer group is used to centrally manage consumers that run at the bottom layer. 
+- Consumers in the same group must maintain the same consumption logic and configurations with each other, and consume the messages subscribed by the group together to scale out the consumption capacity of the group.
+- [Consumer](/docs/CS/MQ/RocketMQ/Consumer.md)：
   The running entity that is used to consume messages in Apache RocketMQ. Consumers are the downstream parts of business call links, A consumer must belong to a specific consumer group.
 - Subscription：
   The collection of configurations in the publish/subscribe model of Apache RocketMQ. The configurations include message filtering, retry, and consumer progress Subscriptions are managed at the consumer group level. You use consumer groups to specify subscriptions to manage how consumers in the group filter messages, retry consumption, and restore a consumer offset.
@@ -47,91 +49,7 @@ Message consumption
 
 Topic -> multi message queue(like partition)
 
-## Broker
-
-
-BrokerController
-
-```java
-public void start() throws Exception {
-
-        this.shouldStartTime = System.currentTimeMillis() + messageStoreConfig.getDisappearTimeAfterStart();
-
-        if (messageStoreConfig.getTotalReplicas() > 1 && this.brokerConfig.isEnableSlaveActingMaster() || this.brokerConfig.isEnableControllerMode()) {
-            isIsolated = true;
-        }
-
-        if (this.brokerOuterAPI != null) {
-            this.brokerOuterAPI.start();
-        }
-
-        startBasicService();
-
-        if (!isIsolated && !this.messageStoreConfig.isEnableDLegerCommitLog() && !this.messageStoreConfig.isDuplicationEnable()) {
-            changeSpecialServiceStatus(this.brokerConfig.getBrokerId() == MixAll.MASTER_ID);
-            this.registerBrokerAll(true, false, true);
-        }
-
-        scheduledFutures.add(this.scheduledExecutorService.scheduleAtFixedRate(new AbstractBrokerRunnable(this.getBrokerIdentity()) {
-            @Override
-            public void run2() {
-                try {
-                    if (System.currentTimeMillis() < shouldStartTime) {
-                        BrokerController.LOG.info(“Register to namesrv after {}”, shouldStartTime);
-                        return;
-                    }
-                    if (isIsolated) {
-                        BrokerController.LOG.info(“Skip register for broker is isolated”);
-                        return;
-                    }
-                    // Send heartbeat
-                    BrokerController.this.registerBrokerAll(true, false, brokerConfig.isForceRegister());
-                } catch (Throwable e) {
-                    BrokerController.LOG.error(“registerBrokerAll Exception”, e);
-                }
-            }
-        }, 1000 * 10, Math.max(10000, Math.min(brokerConfig.getRegisterNameServerPeriod(), 60000)), TimeUnit.MILLISECONDS));
-
-        if (this.brokerConfig.isEnableSlaveActingMaster()) {
-            scheduleSendHeartbeat();
-
-            scheduledFutures.add(this.syncBrokerMemberGroupExecutorService.scheduleAtFixedRate(new AbstractBrokerRunnable(this.getBrokerIdentity()) {
-                @Override
-                public void run2() {
-                    try {
-                        BrokerController.this.syncBrokerMemberGroup();
-                    } catch (Throwable e) {
-                        BrokerController.LOG.error(“sync BrokerMemberGroup error. “, e);
-                    }
-                }
-            }, 1000, this.brokerConfig.getSyncBrokerMemberGroupPeriod(), TimeUnit.MILLISECONDS));
-        }
-
-        if (this.brokerConfig.isEnableControllerMode()) {
-            scheduleSendHeartbeat();
-        }
-
-        if (brokerConfig.isSkipPreOnline()) {
-            startServiceWithoutCondition();
-        }
-    }
-```
-
-
-
-Broker sync route table every 30s
-
-PushConumser
-
-Actually a pull
-
-RebalanceService thread
-
-pullRequestQueue
-
-PullMessageProcessor of broker
-
-
+[Name server](/docs/CS/MQ/RocketMQ/Namesrv.md)
 
 ## Links
 
