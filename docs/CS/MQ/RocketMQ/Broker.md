@@ -1,8 +1,7 @@
 ## Introduction
 
-
-
 ## start
+
 BrokerController
 
 ```java
@@ -70,8 +69,6 @@ public void start() throws Exception {
     }
 ```
 
-
-
 Broker sync route table every 30s
 
 PushConumser
@@ -84,23 +81,20 @@ pullRequestQueue
 
 PullMessageProcessor of broker
 
-
-#### busy 
+#### busy
 
 write into direct buffer and async to pagecache
 
-
 ## storage
 
-
-
 Files
+
 - CommitLog
 - multi ConsumeQueue
 - Index
 
-
 DefaultMessageStore
+
 - MessageStoreConfig
 - CommitLog
 - consumeQueueTable
@@ -118,6 +112,7 @@ DefaultMessageStore
 - dispatcherList
 
 ### putMessage
+
 ```java
 public class DefaultMessageStore implements MessageStore {
     @Override
@@ -174,6 +169,7 @@ public class DefaultMessageStore implements MessageStore {
 ```
 
 #### CommitLog#asyncPutMessages
+
 ```java
 public class CommitLog implements Swappable {
     public CompletableFuture<PutMessageResult> asyncPutMessages(final MessageExtBatch messageExtBatch) {
@@ -319,6 +315,7 @@ public class CommitLog implements Swappable {
     }
 }
 ```
+
 appendMessages
 
 ```java
@@ -361,10 +358,443 @@ public class DefaultMappedFile extends AbstractMappedFile {
 }
 ```
 
+##### findMappedFileByOffset
+
+```java
+   public MappedFile findMappedFileByOffset(final long offset, final boolean returnFirstOnNotFound) {
+        try {
+            MappedFile firstMappedFile = this.getFirstMappedFile();
+            MappedFile lastMappedFile = this.getLastMappedFile();
+            if (firstMappedFile != null && lastMappedFile != null) {
+                if (offset < firstMappedFile.getFileFromOffset() || offset >= lastMappedFile.getFileFromOffset() + this.mappedFileSize) {
+                    LOG_ERROR.warn("Offset not matched. Request offset: {}, firstOffset: {}, lastOffset: {}, mappedFileSize: {}, mappedFiles count: {}",
+                        offset,
+                        firstMappedFile.getFileFromOffset(),
+                        lastMappedFile.getFileFromOffset() + this.mappedFileSize,
+                        this.mappedFileSize,
+                        this.mappedFiles.size());
+                } else {
+                    int index = (int) ((offset / this.mappedFileSize) - (firstMappedFile.getFileFromOffset() / this.mappedFileSize));
+                    MappedFile targetFile = null;
+                    try {
+                        targetFile = this.mappedFiles.get(index);
+                    } catch (Exception ignored) {
+                    }
+
+                    if (targetFile != null && offset >= targetFile.getFileFromOffset()
+                        && offset < targetFile.getFileFromOffset() + this.mappedFileSize) {
+                        return targetFile;
+                    }
+
+                    for (MappedFile tmpMappedFile : this.mappedFiles) {
+                        if (offset >= tmpMappedFile.getFileFromOffset()
+                            && offset < tmpMappedFile.getFileFromOffset() + this.mappedFileSize) {
+                            return tmpMappedFile;
+                        }
+                    }
+                }
+
+                if (returnFirstOnNotFound) {
+                    return firstMappedFile;
+                }
+            }
+        } catch (Exception e) {
+            log.error("findMappedFileByOffset Exception", e);
+        }
+
+        return null;
+    }
+
+```
+
+##### getMappedFileByTime
+
+```java
+public MappedFile getMappedFileByTime(final long timestamp) {
+        Object[] mfs = this.copyMappedFiles(0);
+
+        if (null == mfs)
+            return null;
+
+        for (int i = 0; i < mfs.length; i++) {
+            MappedFile mappedFile = (MappedFile) mfs[i];
+            if (mappedFile.getLastModifiedTimestamp() >= timestamp) {
+                return mappedFile;
+            }
+        }
+
+        return (MappedFile) mfs[mfs.length - 1];
+    }
+```
+
+DefaultMessageStore#getOffsetInQueueByTime
+
+```java
+@Override
+    public long getOffsetInQueueByTime(String topic, int queueId, long timestamp) {
+        ConsumeQueueInterface logic = this.findConsumeQueue(topic, queueId);
+        if (logic != null) {
+            long resultOffset = logic.getOffsetInQueueByTime(timestamp);
+            // Make sure the result offset is in valid range.
+            resultOffset = Math.max(resultOffset, logic.getMinOffsetInQueue());
+            resultOffset = Math.min(resultOffset, logic.getMaxOffsetInQueue());
+            return resultOffset;
+        }
+
+        return 0;
+    }
+```
+
+ConsumeQueue#rollNextFile
+
+```java
+ @Override
+    public long rollNextFile(final long nextBeginOffset) {
+        int mappedFileSize = this.mappedFileSize;
+        int totalUnitsInFile = mappedFileSize / CQ_STORE_UNIT_SIZE;
+        return nextBeginOffset + totalUnitsInFile - nextBeginOffset % totalUnitsInFile;
+    }
+```
+
+#### TransientStorePool
+
+```java
+
+public class TransientStorePool {
+    private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
+    private final int poolSize;
+    private final int fileSize;
+    private final Deque<ByteBuffer> availableBuffers;
+    private final MessageStoreConfig storeConfig;
+
+    public void init() {
+        for (int i = 0; i < poolSize; i++) {
+            ByteBuffer byteBuffer = ByteBuffer.allocateDirect(fileSize);
+
+            final long address = ((DirectBuffer) byteBuffer).address();
+            Pointer pointer = new Pointer(address);
+            LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize));
+
+            availableBuffers.offer(byteBuffer);
+        }
+    }
+}
+```
+
+#### IndexFile
+
+```java
+
+public class IndexFile {
+    private static int hashSlotSize = 4;
+    private static int indexSize = 20;
+    private static int invalidIndex = 0;
+    private final int hashSlotNum;
+    private final int indexNum;
+    private final int fileTotalSize;
+    private final MappedFile mappedFile;
+    private final MappedByteBuffer mappedByteBuffer;
+    private final IndexHeader indexHeader;
+}
+```
+
+putKey
+
+```java
+
+    public boolean putKey(final String key, final long phyOffset, final long storeTimestamp) {
+        if (this.indexHeader.getIndexCount() < this.indexNum) {
+            int keyHash = indexKeyHashMethod(key);
+            int slotPos = keyHash % this.hashSlotNum;
+            int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
+
+            try {
+
+                int slotValue = this.mappedByteBuffer.getInt(absSlotPos);
+                if (slotValue <= invalidIndex || slotValue > this.indexHeader.getIndexCount()) {
+                    slotValue = invalidIndex;
+                }
+
+                long timeDiff = storeTimestamp - this.indexHeader.getBeginTimestamp();
+
+                timeDiff = timeDiff / 1000;
+
+                if (this.indexHeader.getBeginTimestamp() <= 0) {
+                    timeDiff = 0;
+                } else if (timeDiff > Integer.MAX_VALUE) {
+                    timeDiff = Integer.MAX_VALUE;
+                } else if (timeDiff < 0) {
+                    timeDiff = 0;
+                }
+
+                int absIndexPos =
+                    IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * hashSlotSize
+                        + this.indexHeader.getIndexCount() * indexSize;
+
+                this.mappedByteBuffer.putInt(absIndexPos, keyHash);
+                this.mappedByteBuffer.putLong(absIndexPos + 4, phyOffset);
+                this.mappedByteBuffer.putInt(absIndexPos + 4 + 8, (int) timeDiff);
+                this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue);
+
+                this.mappedByteBuffer.putInt(absSlotPos, this.indexHeader.getIndexCount());
+
+                if (this.indexHeader.getIndexCount() <= 1) {
+                    this.indexHeader.setBeginPhyOffset(phyOffset);
+                    this.indexHeader.setBeginTimestamp(storeTimestamp);
+                }
+
+                if (invalidIndex == slotValue) {
+                    this.indexHeader.incHashSlotCount();
+                }
+                this.indexHeader.incIndexCount();
+                this.indexHeader.setEndPhyOffset(phyOffset);
+                this.indexHeader.setEndTimestamp(storeTimestamp);
+
+                return true;
+            } catch (Exception e) {
+                log.error("putKey exception, Key: " + key + " KeyHashCode: " + key.hashCode(), e);
+            }
+        } else {
+            log.warn("Over index file capacity: index count = " + this.indexHeader.getIndexCount()
+                + "; index max num = " + this.indexNum);
+        }
+
+        return false;
+    }
+
+```
+
+indexKeyHashMethod
+
+```java
+    public int indexKeyHashMethod(final String key) {
+        int keyHash = key.hashCode();
+        int keyHashPositive = Math.abs(keyHash);
+        if (keyHashPositive < 0) {
+            keyHashPositive = 0;
+        }
+        return keyHashPositive;
+    }
+```
+
+#### ReputMessageService
+
+```java
+
+    class ReputMessageService extends ServiceThread {
+
+        private volatile long reputFromOffset = 0;
+
+        public long getReputFromOffset() {
+            return reputFromOffset;
+        }
+
+        public void setReputFromOffset(long reputFromOffset) {
+            this.reputFromOffset = reputFromOffset;
+        }
+
+        @Override
+        public void shutdown() {
+            for (int i = 0; i < 50 && this.isCommitLogAvailable(); i++) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {
+                }
+            }
+
+            if (this.isCommitLogAvailable()) {
+                LOGGER.warn("shutdown ReputMessageService, but CommitLog have not finish to be dispatched, CommitLog max" +
+                        " offset={}, reputFromOffset={}", DefaultMessageStore.this.commitLog.getMaxOffset(),
+                    this.reputFromOffset);
+            }
+
+            super.shutdown();
+        }
+
+        public long behind() {
+            return DefaultMessageStore.this.getConfirmOffset() - this.reputFromOffset;
+        }
+
+        private boolean isCommitLogAvailable() {
+            if (DefaultMessageStore.this.getMessageStoreConfig().isDuplicationEnable()) {
+                return this.reputFromOffset <= DefaultMessageStore.this.commitLog.getConfirmOffset();
+            }
+            if (DefaultMessageStore.this.getBrokerConfig().isEnableControllerMode()) {
+                return this.reputFromOffset < ((AutoSwitchHAService) DefaultMessageStore.this.haService).getConfirmOffset();
+            }
+            return this.reputFromOffset < DefaultMessageStore.this.commitLog.getMaxOffset();
+        }
+
+        private void doReput() {
+            if (this.reputFromOffset < DefaultMessageStore.this.commitLog.getMinOffset()) {
+                LOGGER.warn("The reputFromOffset={} is smaller than minPyOffset={}, this usually indicate that the dispatch behind too much and the commitlog has expired.",
+                    this.reputFromOffset, DefaultMessageStore.this.commitLog.getMinOffset());
+                this.reputFromOffset = DefaultMessageStore.this.commitLog.getMinOffset();
+            }
+            for (boolean doNext = true; this.isCommitLogAvailable() && doNext; ) {
+
+                SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
+                if (result != null) {
+                    try {
+                        this.reputFromOffset = result.getStartOffset();
+
+                        for (int readSize = 0; readSize < result.getSize() && reputFromOffset < DefaultMessageStore.this.getConfirmOffset() && doNext; ) {
+                            DispatchRequest dispatchRequest =
+                                DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false, false);
+                            int size = dispatchRequest.getBufferSize() == -1 ? dispatchRequest.getMsgSize() : dispatchRequest.getBufferSize();
+
+                            if (reputFromOffset + size > DefaultMessageStore.this.getConfirmOffset()) {
+                                doNext = false;
+                                break;
+                            }
+
+                            if (dispatchRequest.isSuccess()) {
+                                if (size > 0) {
+                                    DefaultMessageStore.this.doDispatch(dispatchRequest);
+
+                                    if (DefaultMessageStore.this.brokerConfig.isLongPollingEnable()
+                                        && DefaultMessageStore.this.messageArrivingListener != null) {
+                                        DefaultMessageStore.this.messageArrivingListener.arriving(dispatchRequest.getTopic(),
+                                            dispatchRequest.getQueueId(), dispatchRequest.getConsumeQueueOffset() + 1,
+                                            dispatchRequest.getTagsCode(), dispatchRequest.getStoreTimestamp(),
+                                            dispatchRequest.getBitMap(), dispatchRequest.getPropertiesMap());
+                                        notifyMessageArrive4MultiQueue(dispatchRequest);
+                                    }
+
+                                    this.reputFromOffset += size;
+                                    readSize += size;
+                                    if (!DefaultMessageStore.this.getMessageStoreConfig().isDuplicationEnable() &&
+                                        DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole() == BrokerRole.SLAVE) {
+                                        DefaultMessageStore.this.storeStatsService
+                                            .getSinglePutMessageTopicTimesTotal(dispatchRequest.getTopic()).add(1);
+                                        DefaultMessageStore.this.storeStatsService
+                                            .getSinglePutMessageTopicSizeTotal(dispatchRequest.getTopic())
+                                            .add(dispatchRequest.getMsgSize());
+                                    }
+                                } else if (size == 0) {
+                                    this.reputFromOffset = DefaultMessageStore.this.commitLog.rollNextFile(this.reputFromOffset);
+                                    readSize = result.getSize();
+                                }
+                            } else if (!dispatchRequest.isSuccess()) {
+
+                                if (size > 0) {
+                                    LOGGER.error("[BUG]read total count not equals msg total size. reputFromOffset={}", reputFromOffset);
+                                    this.reputFromOffset += size;
+                                } else {
+                                    doNext = false;
+                                    // If user open the dledger pattern or the broker is master node,
+                                    // it will not ignore the exception and fix the reputFromOffset variable
+                                    if (DefaultMessageStore.this.getMessageStoreConfig().isEnableDLegerCommitLog() ||
+                                        DefaultMessageStore.this.brokerConfig.getBrokerId() == MixAll.MASTER_ID) {
+                                        LOGGER.error("[BUG]dispatch message to consume queue error, COMMITLOG OFFSET: {}",
+                                            this.reputFromOffset);
+                                        this.reputFromOffset += result.getSize() - readSize;
+                                    }
+                                }
+                            }
+                        }
+                    } finally {
+                        result.release();
+                    }
+                } else {
+                    doNext = false;
+                }
+            }
+        }
+
+        private void notifyMessageArrive4MultiQueue(DispatchRequest dispatchRequest) {
+            Map<String, String> prop = dispatchRequest.getPropertiesMap();
+            if (prop == null) {
+                return;
+            }
+            String multiDispatchQueue = prop.get(MessageConst.PROPERTY_INNER_MULTI_DISPATCH);
+            String multiQueueOffset = prop.get(MessageConst.PROPERTY_INNER_MULTI_QUEUE_OFFSET);
+            if (StringUtils.isBlank(multiDispatchQueue) || StringUtils.isBlank(multiQueueOffset)) {
+                return;
+            }
+            String[] queues = multiDispatchQueue.split(MixAll.MULTI_DISPATCH_QUEUE_SPLITTER);
+            String[] queueOffsets = multiQueueOffset.split(MixAll.MULTI_DISPATCH_QUEUE_SPLITTER);
+            if (queues.length != queueOffsets.length) {
+                return;
+            }
+            for (int i = 0; i < queues.length; i++) {
+                String queueName = queues[i];
+                long queueOffset = Long.parseLong(queueOffsets[i]);
+                int queueId = dispatchRequest.getQueueId();
+                if (DefaultMessageStore.this.getMessageStoreConfig().isEnableLmq() && MixAll.isLmq(queueName)) {
+                    queueId = 0;
+                }
+                DefaultMessageStore.this.messageArrivingListener.arriving(
+                    queueName, queueId, queueOffset + 1, dispatchRequest.getTagsCode(),
+                    dispatchRequest.getStoreTimestamp(), dispatchRequest.getBitMap(), dispatchRequest.getPropertiesMap());
+            }
+        }
+
+        @Override
+        public void run() {
+            DefaultMessageStore.LOGGER.info(this.getServiceName() + " service started");
+
+            while (!this.isStopped()) {
+                try {
+                    Thread.sleep(1);
+                    this.doReput();
+                } catch (Exception e) {
+                    DefaultMessageStore.LOGGER.warn(this.getServiceName() + " service has exception. ", e);
+                }
+            }
+
+            DefaultMessageStore.LOGGER.info(this.getServiceName() + " service end");
+        }
+
+        @Override
+        public String getServiceName() {
+            if (DefaultMessageStore.this.getBrokerConfig().isInBrokerContainer()) {
+                return DefaultMessageStore.this.getBrokerIdentity().getLoggerIdentifier() + ReputMessageService.class.getSimpleName();
+            }
+            return ReputMessageService.class.getSimpleName();
+        }
+
+    }
+
+```
+
 ### sync
 
 - sync
-- Async 500ms 
+- Async 500ms
+
+CommitLog#asyncPutMessages -> handleDiskFlushAndHA -> CommitLog#handleDiskFlush
+
+```java
+
+        @Override
+        public CompletableFuture<PutMessageStatus> handleDiskFlush(AppendMessageResult result, MessageExt messageExt) {
+            // Synchronization flush
+            if (FlushDiskType.SYNC_FLUSH == CommitLog.this.defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
+                final GroupCommitService service = (GroupCommitService) this.flushCommitLogService;
+                if (messageExt.isWaitStoreMsgOK()) {
+                    GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes(), CommitLog.this.defaultMessageStore.getMessageStoreConfig().getSyncFlushTimeout());
+                    flushDiskWatcher.add(request);
+                    service.putRequest(request);
+                    return request.future();
+                } else {
+                    service.wakeup();
+                    return CompletableFuture.completedFuture(PutMessageStatus.PUT_OK);
+                }
+            }
+            // Asynchronous flush
+            else {
+                if (!CommitLog.this.defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
+                    flushCommitLogService.wakeup();
+                } else {
+                    commitLogService.wakeup();
+                }
+                return CompletableFuture.completedFuture(PutMessageStatus.PUT_OK);
+            }
+        }
+
+```
 
 ### recover
 

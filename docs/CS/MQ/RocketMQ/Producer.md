@@ -511,6 +511,8 @@ public class TopicPublishInfo {
 
 ### MQClientInstance
 
+a JVM only has one MQClientInstance
+
 DefaultMQProducerImpl#start -> MQClientManager#getAndCreateMQClientInstance
 
 ```java

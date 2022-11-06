@@ -35,10 +35,11 @@ public class PullMessageService extends ServiceThread {
 }
 ```
 
-### PushConsumer
+## PushConsumer
 
-
-#### start
+- RebalanceImpl
+- 
+### start
 DefaultMQPushConsumerImpl#start
 
 ```java
@@ -142,8 +143,47 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
 
 
-#### pullMessage
+### pullMessage
 
+
+
+```java
+public class PullMessageService extends ServiceThread {
+    @Override
+    public void run() {
+        log.info(this.getServiceName() + " service started");
+
+        while (!this.isStopped()) {
+            try {
+                MessageRequest messageRequest = this.messageRequestQueue.take();
+                if (messageRequest.getMessageRequestMode() == MessageRequestMode.POP) {
+                    this.popMessage((PopRequest) messageRequest);
+                } else {
+                    this.pullMessage((PullRequest) messageRequest);
+                }
+            } catch (InterruptedException ignored) {
+            } catch (Exception e) {
+                log.error("Pull Message Service Run Method exception", e);
+            }
+        }
+
+        log.info(this.getServiceName() + " service end");
+    }
+
+
+    private void pullMessage(final PullRequest pullRequest) {
+        final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
+        if (consumer != null) {
+            DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;
+            impl.pullMessage(pullRequest);
+        } else {
+            log.warn("No matched consumer for the PullRequest {}, drop it", pullRequest);
+        }
+    }
+}
+```
+
+DefaultMQPushConsumerImpl#pullMessage
 ```java
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
   public void pullMessage(final PullRequest pullRequest) {
@@ -437,7 +477,10 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 }
 ```
 
-### PullConsumer
+## PullConsumer
+
+
+## Rebalance
 
 
 
