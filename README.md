@@ -82,7 +82,7 @@ Spring’s focus on speed, simplicity, and productivity has made it the world's 
 
 ### ZooKeeper
 
-[Apache ZooKeeper](/docs/CS/Java/Zookeeper/Zookeeper.md) is an effort to develop and maintain an open-source server which enables highly reliable distributed coordination.
+[Apache ZooKeeper](/docs/CS/Java/ZooKeeper/ZooKeeper.md) is an effort to develop and maintain an open-source server which enables highly reliable distributed coordination.
 
 
 ## Go

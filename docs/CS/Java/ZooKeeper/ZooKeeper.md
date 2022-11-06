@@ -134,7 +134,7 @@ One of the design goals of ZooKeeper is providing a very simple programming inte
 At the heart of ZooKeeper is an atomic messaging system that keeps all of the servers in sync.
 
 **All requests that update ZooKeeper state are forwarded to the leader.**
-The leader executes the request and broadcasts the change to the ZooKeeper state through Zab, an atomic broadcast protocol.
+The leader executes the request and broadcasts the change to the ZooKeeper state through [Zab](/docs/CS/Java/ZooKeeper/Zab.md), an atomic broadcast protocol.
 The server that receives the client request responds to the client when it delivers the corresponding state change.
 Zab uses by default simple majority quorums to decide on a proposal, so Zab and thus ZooKeeper can only work if a majority of servers are correct (i.e., with $2f + 1$ server we can tolerate $f$ failures).
 
@@ -320,17 +320,6 @@ Note that two subsets of processes composed each of a majority of servers from e
 It is reasonable to expect that a majority of co-locations will have a majority of servers available with high probability.
 
 With ZooKeeper, we provide a user with the ability of configuring servers to use majority quorums, weights, or a hierarchy of groups.
-
-## ZAB
-
-[A simple totally ordered broadcast protocol](https://www.datadoghq.com/pdf/zab.totally-ordered-broadcast-protocol.2008.pdf)
-
-[ZooKeeper’s atomic broadcast protocol:Theory and practice](http://www.tcs.hut.fi/Studies/T-79.5001/reports/2012-deSouzaMedeiros.pdf)
-
-[Zab: High-performance broadcast for primary-backup systems](https://marcoserafini.github.io/papers/zab.pdf)
-
-Zab is very similar to Paxos [15], with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
-This difference allows Zab to preserve primary order, which may be violated by Paxos.
 
 ## Recipes
 

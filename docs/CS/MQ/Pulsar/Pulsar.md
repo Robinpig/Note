@@ -9,9 +9,10 @@ Clusters within an instance can replicate data amongst themselves.
 
 In a Pulsar cluster:
 
-- One or more brokers handles and load balances incoming messages from producers, dispatches messages to consumers, communicates with the Pulsar configuration store to handle various coordination tasks, stores messages in BookKeeper instances (aka bookies), relies on a cluster-specific ZooKeeper cluster for certain tasks, and more.
-- BookKeeper cluster consisting of one or more bookies handles persistent storage of messages.
-- ZooKeeper cluster specific to that cluster handles coordination tasks between Pulsar clusters.
+- One or more brokers handles and load balances incoming messages from producers, dispatches messages to consumers, communicates with the Pulsar configuration store to handle various coordination tasks,
+  stores messages in BookKeeper instances (aka bookies), relies on a cluster-specific ZooKeeper cluster for certain tasks, and more.
+- [BookKeeper](/docs/CS/BooKeeper/BooKeeper.md) cluster consisting of one or more bookies handles persistent storage of messages.
+- [ZooKeeper](/docs/CS/Java/ZooKeeper/ZooKeeper.md) cluster specific to that cluster handles coordination tasks between Pulsar clusters.
 
 The diagram below illustrates a Pulsar cluster:
 
@@ -21,39 +22,13 @@ At the broader instance level, an instance-wide ZooKeeper cluster called the con
 
 ## Model
 
+### Topic
 
-PartitionedTopic 
-- NonPartitionedTopic
-- CompactedTopic
+PartitionedTopic
 
+- NonPartitionedTopic -- only one partition
 
-```java
-public class TopicsImpl extends BaseResource implements Topics {
-    @Override
-    public void createPartitionedTopic(String topic, int numPartitions) throws PulsarAdminException {
-        try {
-            createPartitionedTopicAsync(topic, numPartitions).get(this.readTimeoutMs, TimeUnit.MILLISECONDS);
-        } catch (ExecutionException e) {
-            throw (PulsarAdminException) e.getCause();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new PulsarAdminException(e);
-        } catch (TimeoutException e) {
-            throw new PulsarAdminException.TimeoutException(e);
-        }
-    }
-
-    public CompletableFuture<Void> createPartitionedTopicAsync(
-            String topic, int numPartitions, boolean createLocalTopicOnly) {
-        checkArgument(numPartitions > 0, "Number of partitions should be more than 0");
-        TopicName tn = validateTopic(topic);
-        WebTarget path = topicPath(tn, "partitions")
-                .queryParam("createLocalTopicOnly", Boolean.toString(createLocalTopicOnly));
-        return asyncPutRequest(path, Entity.entity(numPartitions, MediaType.APPLICATION_JSON));
-    }
-}
-```
-
+Persistent
 
 ```java
 public class LookupProxyHandler {
@@ -153,22 +128,42 @@ public class LookupProxyHandler {
 
 Ledger Fragment
 
+Bundle -> multi-topics
 
+```java
+public class BundleData {
+  // Short term data for this bundle. The time frame of this data is
+  // determined by the number of short term samples
+  // and the bundle update period.
+  private TimeAverageMessageData shortTermData;
 
+  // Long term data for this bundle. The time frame of this data is determined
+  // by the number of long term samples
+  // and the bundle update period.
+  private TimeAverageMessageData longTermData;
 
+  // number of topics present under this bundle
+  private int topics;
+}
+```
+
+#### CompactedTopic
+
+view to latest messages of topic keys.
+though append null like delete
 
 ## Brokers
 
 The Pulsar message broker is a stateless component that's primarily responsible for running two other components:
 
-* An HTTP server that exposes a [REST](https://pulsar.apache.org/admin-rest-api#/) API for both administrative tasks and [topic lookup](https://pulsar.apache.org/docs/next/concepts-clients#client-setup-phase) for producers and consumers.
+* An HTTP server that exposes a REST API for both administrative tasks and [topic lookup](https://pulsar.apache.org/docs/next/concepts-clients#client-setup-phase) for producers and consumers.
 * The producers connect to the brokers to publish messages and the consumers connect to the brokers to consume the messages.
-* A dispatcher, which is an asynchronous TCP server over a custom [binary protocol](https://pulsar.apache.org/docs/next/developing-binary-protocol) used for all data transfers
+* A dispatcher, which is an asynchronous TCP server over a custom binary protocol used for all data transfers
 
 Messages are typically dispatched out of a [managed ledger](https://pulsar.apache.org/docs/next/concepts-architecture-overview#managed-ledgers) cache for the sake of performance, *unless* the backlog exceeds the cache size.
 If the backlog grows too large for the cache, the broker will start reading entries from BookKeeper.
 
-Finally, to support geo-replication on global topics, the broker manages replicators that tail the entries published in the local region and republish them to the remote region using the Pulsar [Java client library](https://pulsar.apache.org/docs/next/client-libraries-java).
+Finally, to support geo-replication on global topics, the broker manages replicators that tail the entries published in the local region and republish them to the remote region using the Pulsar Java client library.
 
 ## Clusters
 
@@ -184,8 +179,8 @@ Clusters can replicate among themselves using [geo-replication](https://pulsar.a
 
 ## Metadata store
 
-The Pulsar metadata store maintains all the metadata of a Pulsar cluster, such as topic metadata, schema, broker load data, and so on. 
-Pulsar uses [Apache ZooKeeper](https://zookeeper.apache.org/) for metadata storage, cluster configuration, and coordination. 
+The Pulsar metadata store maintains all the metadata of a Pulsar cluster, such as topic metadata, schema, broker load data, and so on.
+Pulsar uses [Apache ZooKeeper](https://zookeeper.apache.org/) for metadata storage, cluster configuration, and coordination.
 The Pulsar metadata store can be deployed on a separate ZooKeeper cluster or deployed on an existing ZooKeeper cluster.
 You can use one ZooKeeper cluster for both Pulsar metadata store and BookKeeper metadata store.
 If you want to deploy Pulsar brokers connected to an existing BookKeeper cluster, you need to deploy separate ZooKeeper clusters for Pulsar metadata store and BookKeeper metadata store respectively.
@@ -304,13 +299,13 @@ Some important things to know about the Pulsar proxy:
 ## Client
 
 Client instances are thread-safe and can be reused for managing multiple Producer, Consumer and Reader instances.
+
 ```java
-PulsarClient client = PulsarClient.builder()                               
-                            .serviceUrl("pulsar://broker:6650")                               
+PulsarClient client = PulsarClient.builder()                             
+                            .serviceUrl("pulsar://broker:6650")                             
                             .build();
 
 ```
-
 
 ```java
 
@@ -342,10 +337,7 @@ public class PulsarClientImpl implements PulsarClient {
 }
 ```
 
-
 ## Transaction
-
-
 
 ## Links
 

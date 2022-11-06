@@ -278,6 +278,202 @@ public class ConsumerInterceptors<T> implements Closeable {
     }
 ```
 
+
+### retry
+
+reconsumeLater the consumption of Messages.
+When a message is "reconsumeLater" it will be marked for redelivery after some custom delay.
+
+Example of usage:
+```java
+  while (true) {
+      Message<String> msg = consumer.receive();
+ 
+      try {
+           // Process message...
+ 
+           consumer.acknowledge(msg);
+      } catch (Throwable t) {
+           log.warn("Failed to process message");
+           consumer.reconsumeLater(msg, 1000 , TimeUnit.MILLISECONDS);
+      }
+  }
+```
+reconsumeLater
+
+```java
+public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T> {
+    @Override
+    public void reconsumeLater(Message<?> message, long delayTime, TimeUnit unit) throws PulsarClientException {
+        if (!conf.isRetryEnable()) {
+            throw new PulsarClientException("reconsumeLater method not support!");
+        }
+        try {
+            reconsumeLaterAsync(message, delayTime, unit).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw PulsarClientException.unwrap(e);
+        } catch (ExecutionException e) {
+            throw PulsarClientException.unwrap(e);
+        }
+    }
+
+    @Override
+    public CompletableFuture<Void> reconsumeLaterAsync(Message<?> message, long delayTime, TimeUnit unit) {
+        if (!conf.isRetryEnable()) {
+            return FutureUtil.failedFuture(new PulsarClientException("reconsumeLater method not support!"));
+        }
+        try {
+            validateMessageId(message);
+        } catch (PulsarClientException e) {
+            return FutureUtil.failedFuture(e);
+        }
+        return doReconsumeLater(message, AckType.Individual, Collections.emptyMap(), delayTime, unit);
+    }
+}
+```
+
+do
+```java
+public class ConsumerImpl<T> extends ConsumerBase<T> implements ConnectionHandler.Connection {
+    @Override
+    protected CompletableFuture<Void> doReconsumeLater(Message<?> message, AckType ackType,
+                                                       Map<String, Long> properties,
+                                                       long delayTime,
+                                                       TimeUnit unit) {
+        MessageId messageId = message.getMessageId();
+        if (messageId == null) {
+            return FutureUtil.failedFuture(new PulsarClientException
+                    .InvalidMessageException("Cannot handle message with null messageId"));
+        }
+
+        if (messageId instanceof TopicMessageIdImpl) {
+            messageId = ((TopicMessageIdImpl) messageId).getInnerMessageId();
+        }
+        checkArgument(messageId instanceof MessageIdImpl);
+        if (getState() != State.Ready && getState() != State.Connecting) {
+            stats.incrementNumAcksFailed();
+            PulsarClientException exception = new PulsarClientException("Consumer not ready. State: " + getState());
+            if (AckType.Individual.equals(ackType)) {
+                onAcknowledge(messageId, exception);
+            } else if (AckType.Cumulative.equals(ackType)) {
+                onAcknowledgeCumulative(messageId, exception);
+            }
+            return FutureUtil.failedFuture(exception);
+        }
+        if (delayTime < 0) {
+            delayTime = 0;
+        }
+        if (retryLetterProducer == null) {
+            createProducerLock.writeLock().lock();
+            try {
+                if (retryLetterProducer == null) {
+                    retryLetterProducer = client.newProducer(schema)
+                            .topic(this.deadLetterPolicy.getRetryLetterTopic())
+                            .enableBatching(false)
+                            .blockIfQueueFull(false)
+                            .create();
+                }
+            } catch (Exception e) {
+                log.error("Create retry letter producer exception with topic: {}",
+                        deadLetterPolicy.getRetryLetterTopic(), e);
+                return FutureUtil.failedFuture(e);
+            } finally {
+                createProducerLock.writeLock().unlock();
+            }
+        }
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        if (retryLetterProducer != null) {
+            try {
+                MessageImpl<T> retryMessage = (MessageImpl<T>) getMessageImpl(message);
+                String originMessageIdStr = getOriginMessageIdStr(message);
+                String originTopicNameStr = getOriginTopicNameStr(message);
+                SortedMap<String, String> propertiesMap
+                        = getPropertiesMap(message, originMessageIdStr, originTopicNameStr);
+                int reconsumetimes = 1;
+                if (propertiesMap.containsKey(RetryMessageUtil.SYSTEM_PROPERTY_RECONSUMETIMES)) {
+                    reconsumetimes = Integer.parseInt(propertiesMap.get(RetryMessageUtil.SYSTEM_PROPERTY_RECONSUMETIMES));
+                    reconsumetimes = reconsumetimes + 1;
+                }
+                propertiesMap.put(RetryMessageUtil.SYSTEM_PROPERTY_RECONSUMETIMES, String.valueOf(reconsumetimes));
+                propertiesMap.put(RetryMessageUtil.SYSTEM_PROPERTY_DELAY_TIME, String.valueOf(unit.toMillis(delayTime)));
+
+                MessageId finalMessageId = messageId;
+                if (reconsumetimes > this.deadLetterPolicy.getMaxRedeliverCount() && StringUtils.isNotBlank(deadLetterPolicy.getDeadLetterTopic())) {
+                    initDeadLetterProducerIfNeeded();
+                    deadLetterProducer.thenAccept(dlqProducer -> {
+                        TypedMessageBuilder<byte[]> typedMessageBuilderNew =
+                                dlqProducer.newMessage(Schema.AUTO_PRODUCE_BYTES(retryMessage.getReaderSchema().get()))
+                                        .value(retryMessage.getData())
+                                        .properties(propertiesMap);
+                        typedMessageBuilderNew.sendAsync().thenAccept(msgId -> {
+                            doAcknowledge(finalMessageId, ackType, properties, null).thenAccept(v -> {
+                                result.complete(null);
+                            }).exceptionally(ex -> {
+                                result.completeExceptionally(ex);
+                                return null;
+                            });
+                        }).exceptionally(ex -> {
+                            result.completeExceptionally(ex);
+                            return null;
+                        });
+                    }).exceptionally(ex -> {
+                        result.completeExceptionally(ex);
+                        deadLetterProducer = null;
+                        return null;
+                    });
+                } else {
+                    TypedMessageBuilder<T> typedMessageBuilderNew = retryLetterProducer.newMessage()
+                            .value(retryMessage.getValue())
+                            .properties(propertiesMap);
+                    if (delayTime > 0) {
+                        typedMessageBuilderNew.deliverAfter(delayTime, unit);
+                    }
+                    if (message.hasKey()) {
+                        typedMessageBuilderNew.key(message.getKey());
+                    }
+                    typedMessageBuilderNew.sendAsync()
+                            .thenCompose(__ -> doAcknowledge(finalMessageId, ackType, properties, null))
+                            .thenAccept(v -> result.complete(null))
+                            .exceptionally(ex -> {
+                                result.completeExceptionally(ex);
+                                return null;
+                            });
+                }
+            } catch (Exception e) {
+                result.completeExceptionally(e);
+            }
+        }
+        MessageId finalMessageId = messageId;
+        result.exceptionally(ex -> {
+            log.error("Send to retry letter topic exception with topic: {}, messageId: {}",
+                    retryLetterProducer.getTopic(), finalMessageId, ex);
+            Set<MessageId> messageIds = Collections.singleton(finalMessageId);
+            unAckedMessageTracker.remove(finalMessageId);
+            redeliverUnacknowledgedMessages(messageIds);
+            return null;
+        });
+        return result;
+    }
+}
+```
+
+
+```java
+ protected void increaseAvailablePermits(ClientCnx currentCnx, int delta) {
+        int available = AVAILABLE_PERMITS_UPDATER.addAndGet(this, delta);
+
+        while (available >= receiverQueueRefillThreshold && !paused) {
+            if (AVAILABLE_PERMITS_UPDATER.compareAndSet(this, available, 0)) {
+                sendFlowPermitsToBroker(currentCnx, available);
+                break;
+            } else {
+                available = AVAILABLE_PERMITS_UPDATER.get(this);
+            }
+        }
+    }
+```
+
 ## message Retention
 
 
@@ -290,6 +486,8 @@ defaultRetentionTimeInMinutes
 backlog
 
 
+
+## Reader
 
 
 
