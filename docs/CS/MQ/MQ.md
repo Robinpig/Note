@@ -292,6 +292,20 @@ Message queues will authenticate applications that try to access the queue, and 
 
 ## Issues
 
+### Disk Access
+
+#### PageCache
+
+mmap 
+
+sendfile
+
+
+
+- Write
+- Tailing Read
+- Catch-up Read
+
 ### High Avaliability
 
 RabbitMQ

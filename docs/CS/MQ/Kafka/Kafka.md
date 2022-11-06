@@ -103,15 +103,9 @@ Notes:
 
 Rebalance
 
-
 - [Producer](/docs/CS/MQ/Kafka/Producer.md)
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
-
-
-
-
-
 
 ## Efficiency
 
@@ -367,26 +361,21 @@ TransactionManager
 
 TransactionCoordinator
 
-
-
-
-
-
 TransactionMetadata
-
 
 Commits the ongoing transaction. This method will flush any unsent records before actually committing the transaction.
 
-Further, if any of the send(ProducerRecord) calls which were part of the transaction hit irrecoverable errors, this method will throw the last received exception immediately and the transaction will not be committed. 
+Further, if any of the send(ProducerRecord) calls which were part of the transaction hit irrecoverable errors, this method will throw the last received exception immediately and the transaction will not be committed.
 So all send(ProducerRecord) calls in a transaction must succeed in order for this method to succeed.
 
-If the transaction is committed successfully and this method returns without throwing an exception, it is guaranteed that all callbacks for records in the transaction will have been invoked and completed. 
+If the transaction is committed successfully and this method returns without throwing an exception, it is guaranteed that all callbacks for records in the transaction will have been invoked and completed.
 Note that exceptions thrown by callbacks are ignored; the producer proceeds to commit the transaction in any case.
 
-Note that this method will raise TimeoutException if the transaction cannot be committed before expiration of `max.block.ms`. 
-Additionally, it will raise InterruptException if interrupted. 
-It is safe to retry in either case, but it is not possible to attempt a different operation (such as abortTransaction) since the commit may already be in the progress of completing. 
+Note that this method will raise TimeoutException if the transaction cannot be committed before expiration of `max.block.ms`.
+Additionally, it will raise InterruptException if interrupted.
+It is safe to retry in either case, but it is not possible to attempt a different operation (such as abortTransaction) since the commit may already be in the progress of completing.
 If not retrying, the only option is to close the producer.
+
 ```java
 class KafkaProducer {
    public void commitTransaction() throws ProducerFencedException {
@@ -400,7 +389,6 @@ class KafkaProducer {
    }
 }
 ```
-
 
 ```scala
 object TransactionCoordinator {
