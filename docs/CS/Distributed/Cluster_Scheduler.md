@@ -148,7 +148,7 @@ Since all the frameworks depend on the Mesos master, it is critical to make the 
 To achieve this, we have designed the master to be soft state, so that a new master can completely reconstruct its internal state from information held by the slaves and the framework schedulers.
 In particular, the master’s only state is the list of active slaves, active frameworks, and running tasks.
 This information is sufficient to compute how many resources each framework is using and run the allocation policy.
-We run multiple masters in a hot-standby configuration using [ZooKeeper](/docs/CS/Java/Zookeeper/Zookeeper.md) for leader election.
+We run multiple masters in a hot-standby configuration using [ZooKeeper](/docs/CS/Java/ZooKeeper/ZooKeeper.md) for leader election.
 When the active master fails, the slaves and schedulers connect to the next elected master and repopulate its state.
 
 Aside from handling master failures, Mesos reports node failures and executor crashes to frameworks’ schedulers.

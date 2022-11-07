@@ -1,5 +1,7 @@
 ## Introduction
 
+## start
+
 Brokers send heart beats to name server every 30 seconds and name server update live broker table time stamp.
 Name server scan live broker table every 10s and remove last time stamp > 120s brokers.
 
@@ -102,7 +104,7 @@ public class NamesrvController {
 }
 ```
 
-Processor
+### Processor
 
 ```java
 public class DefaultRequestProcessor implements NettyRequestProcessor {
@@ -174,6 +176,8 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
 
 clients get latest route information by active
 
+## RouteInfo
+
 ### RouteInfoManager
 
 ```java
@@ -209,6 +213,8 @@ Use [ReentrantReadWriteLock](/docs/CS/Java/JDK/Concurrency/Lock.md?id=Read-Write
 
 RouteInfoManager
 
+#### registerBroker
+
 ```java
 public RegisterBrokerResult registerBroker(
         final String clusterName,
@@ -226,6 +232,117 @@ public RegisterBrokerResult registerBroker(
 ```
 
 Route info is not real-time. The clients need to pull latest topic info in fix rate.
+
+```java
+public class DefaultRequestProcessor implements NettyRequestProcessor {
+    public RemotingCommand registerBroker(ChannelHandlerContext ctx,
+                                          RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(RegisterBrokerResponseHeader.class);
+        final RegisterBrokerResponseHeader responseHeader = (RegisterBrokerResponseHeader) response.readCustomHeader();
+        final RegisterBrokerRequestHeader requestHeader =
+                (RegisterBrokerRequestHeader) request.decodeCommandCustomHeader(RegisterBrokerRequestHeader.class);
+
+        if (!checksum(ctx, request, requestHeader)) {
+            response.setCode(ResponseCode.SYSTEM_ERROR);
+            response.setRemark("crc32 not match");
+            return response;
+        }
+
+        TopicConfigSerializeWrapper topicConfigWrapper = null;
+        List<String> filterServerList = null;
+
+        Version brokerVersion = MQVersion.value2Version(request.getVersion());
+        if (brokerVersion.ordinal() >= MQVersion.Version.V3_0_11.ordinal()) {
+            final RegisterBrokerBody registerBrokerBody = extractRegisterBrokerBodyFromRequest(request, requestHeader);
+            topicConfigWrapper = registerBrokerBody.getTopicConfigSerializeWrapper();
+            filterServerList = registerBrokerBody.getFilterServerList();
+        } else {
+            // RegisterBrokerBody of old version only contains TopicConfig.
+            topicConfigWrapper = extractRegisterTopicConfigFromRequest(request);
+        }
+
+        RegisterBrokerResult result = this.namesrvController.getRouteInfoManager().registerBroker(
+                requestHeader.getClusterName(),
+                requestHeader.getBrokerAddr(),
+                requestHeader.getBrokerName(),
+                requestHeader.getBrokerId(),
+                requestHeader.getHaServerAddr(),
+                request.getExtFields().get(MixAll.ZONE_NAME),
+                requestHeader.getHeartbeatTimeoutMillis(),
+                requestHeader.getEnableActingMaster(),
+                topicConfigWrapper,
+                filterServerList,
+                ctx.channel()
+        );
+
+        if (result == null) {
+            // Register single topic route info should be after the broker completes the first registration.
+            response.setCode(ResponseCode.SYSTEM_ERROR);
+            response.setRemark("register broker failed");
+            return response;
+        }
+
+        responseHeader.setHaServerAddr(result.getHaServerAddr());
+        responseHeader.setMasterAddr(result.getMasterAddr());
+
+        if (this.namesrvController.getNamesrvConfig().isReturnOrderTopicConfigToBroker()) {
+            byte[] jsonValue = this.namesrvController.getKvConfigManager().getKVListByNamespace(NamesrvUtil.NAMESPACE_ORDER_TOPIC_CONFIG);
+            response.setBody(jsonValue);
+        }
+
+        response.setCode(ResponseCode.SUCCESS);
+        response.setRemark(null);
+        return response;
+    }
+}
+```
+
+#### getRouteInfoByTopic
+
+```java
+
+public class ClientRequestProcessor implements NettyRequestProcessor {
+    protected NamesrvController namesrvController;
+
+    public RemotingCommand getRouteInfoByTopic(ChannelHandlerContext ctx,
+                                               RemotingCommand request) throws RemotingCommandException {
+        final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        final GetRouteInfoRequestHeader requestHeader =
+                (GetRouteInfoRequestHeader) request.decodeCommandCustomHeader(GetRouteInfoRequestHeader.class);
+
+        TopicRouteData topicRouteData = this.namesrvController.getRouteInfoManager().pickupTopicRouteData(requestHeader.getTopic());
+
+        if (topicRouteData != null) {
+            if (this.namesrvController.getNamesrvConfig().isOrderMessageEnable()) {
+                String orderTopicConf =
+                        this.namesrvController.getKvConfigManager().getKVConfig(NamesrvUtil.NAMESPACE_ORDER_TOPIC_CONFIG,
+                                requestHeader.getTopic());
+                topicRouteData.setOrderTopicConf(orderTopicConf);
+            }
+
+            byte[] content;
+            Boolean standardJsonOnly = requestHeader.getAcceptStandardJsonOnly();
+            if (request.getVersion() >= MQVersion.Version.V4_9_4.ordinal() || null != standardJsonOnly && standardJsonOnly) {
+                content = topicRouteData.encode(SerializerFeature.BrowserCompatible,
+                        SerializerFeature.QuoteFieldNames, SerializerFeature.SkipTransientField,
+                        SerializerFeature.MapSortField);
+            } else {
+                content = topicRouteData.encode();
+            }
+
+            response.setBody(content);
+            response.setCode(ResponseCode.SUCCESS);
+            response.setRemark(null);
+            return response;
+        }
+
+        response.setCode(ResponseCode.TOPIC_NOT_EXIST);
+        response.setRemark("No topic route info in name server for the topic: " + requestHeader.getTopic()
+                + FAQUrl.suggestTodo(FAQUrl.APPLY_TOPIC_URL));
+        return response;
+    }
+}
+```
 
 ## Links
 
