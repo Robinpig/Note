@@ -227,7 +227,7 @@ class KafkaServer(
           metadataCache
         )
 ```
-
+### SocketServer
 Create and start the socket server acceptor threads so that the bound port is known.
 Delay starting processors until the end of the initialization sequence to ensure that credentials have been loaded before processing authentications.
 
@@ -495,7 +495,7 @@ The callback function will be triggered either when timeout, error or the topics
     }
   }
 ```
-
+#### assignReplicasToBrokersRackAware
 AdminUtils#assignReplicasToBrokersRackAware
 
 ```scala

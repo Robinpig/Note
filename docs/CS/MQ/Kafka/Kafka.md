@@ -164,64 +164,6 @@ Since the code is of similar complexity (and simpler if we consider the whole PR
 Move the logic to separate classes that are only invoked when the relevant compression library is actually used.
 Place such classes in their own package and enforce via checkstyle that only these classes refer to compression library packages.
 
-#### SocketServer
-
-监听Socket请求，提供Socket服务模块。
-
-##### Acceptor
-
-监听Socket连接，Acceptor初始化主要步骤如下：
-
-- 开启Socket服务
-- 注册Accept事件
-- 监听此ServerChannel上ACCEPT事件，事件发生时轮询把对应SocketChannel转交给Processor处理线程
-
-##### Processor
-
-转发Socket请求与响应，Processor初始化。
-
-##### RequestChannel
-
-缓存Socket请求和响应
-
-#### KafkaRequestHandlerPool
-
-处理Socket请求线程池，默认为8个。
-
-循环调用requestChannel的Request阻塞队列中获取请求，
-
-判断请求类型
-
-#### LogManager
-
-日志管理模块。
-
-#### ReplicaManager
-
-#### OffsetManager
-
-偏移量管理模块
-
-#### TopicConfigManager
-
-#### KafkaController
-
-Topic 无序
-
-paritition内部有序, 同一个key只会散列到同一个parition, 可以设置业务唯一性的key来保证消费顺序
-
-消息重试:消息存储 异步重试
-
-消息积压: 减小传输数据大小 IO压力 路由分配规则
-
-高并发下重复主键是否需加锁
-
-消息重复:幂等性
-
-环境隔离
-
-消息恢复
-
 ## Replication
 
 Kafka replicates the log for each topic's partitions across a configurable number of servers (you can set this replication factor on a topic-by-topic basis).
