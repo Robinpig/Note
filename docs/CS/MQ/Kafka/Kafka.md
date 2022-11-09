@@ -103,15 +103,9 @@ Notes:
 
 Rebalance
 
-
 - [Producer](/docs/CS/MQ/Kafka/Producer.md)
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
-
-
-
-
-
 
 ## Efficiency
 
@@ -169,64 +163,6 @@ Method handles were designed to be faster than Core Reflection, particularly if 
 Since the code is of similar complexity (and simpler if we consider the whole PR), I am treating this as a clean-up instead of a performance improvement (which would require doing benchmarks). -> <br>
 Move the logic to separate classes that are only invoked when the relevant compression library is actually used.
 Place such classes in their own package and enforce via checkstyle that only these classes refer to compression library packages.
-
-#### SocketServer
-
-监听Socket请求，提供Socket服务模块。
-
-##### Acceptor
-
-监听Socket连接，Acceptor初始化主要步骤如下：
-
-- 开启Socket服务
-- 注册Accept事件
-- 监听此ServerChannel上ACCEPT事件，事件发生时轮询把对应SocketChannel转交给Processor处理线程
-
-##### Processor
-
-转发Socket请求与响应，Processor初始化。
-
-##### RequestChannel
-
-缓存Socket请求和响应
-
-#### KafkaRequestHandlerPool
-
-处理Socket请求线程池，默认为8个。
-
-循环调用requestChannel的Request阻塞队列中获取请求，
-
-判断请求类型
-
-#### LogManager
-
-日志管理模块。
-
-#### ReplicaManager
-
-#### OffsetManager
-
-偏移量管理模块
-
-#### TopicConfigManager
-
-#### KafkaController
-
-Topic 无序
-
-paritition内部有序, 同一个key只会散列到同一个parition, 可以设置业务唯一性的key来保证消费顺序
-
-消息重试:消息存储 异步重试
-
-消息积压: 减小传输数据大小 IO压力 路由分配规则
-
-高并发下重复主键是否需加锁
-
-消息重复:幂等性
-
-环境隔离
-
-消息恢复
 
 ## Replication
 
@@ -367,26 +303,21 @@ TransactionManager
 
 TransactionCoordinator
 
-
-
-
-
-
 TransactionMetadata
-
 
 Commits the ongoing transaction. This method will flush any unsent records before actually committing the transaction.
 
-Further, if any of the send(ProducerRecord) calls which were part of the transaction hit irrecoverable errors, this method will throw the last received exception immediately and the transaction will not be committed. 
+Further, if any of the send(ProducerRecord) calls which were part of the transaction hit irrecoverable errors, this method will throw the last received exception immediately and the transaction will not be committed.
 So all send(ProducerRecord) calls in a transaction must succeed in order for this method to succeed.
 
-If the transaction is committed successfully and this method returns without throwing an exception, it is guaranteed that all callbacks for records in the transaction will have been invoked and completed. 
+If the transaction is committed successfully and this method returns without throwing an exception, it is guaranteed that all callbacks for records in the transaction will have been invoked and completed.
 Note that exceptions thrown by callbacks are ignored; the producer proceeds to commit the transaction in any case.
 
-Note that this method will raise TimeoutException if the transaction cannot be committed before expiration of `max.block.ms`. 
-Additionally, it will raise InterruptException if interrupted. 
-It is safe to retry in either case, but it is not possible to attempt a different operation (such as abortTransaction) since the commit may already be in the progress of completing. 
+Note that this method will raise TimeoutException if the transaction cannot be committed before expiration of `max.block.ms`.
+Additionally, it will raise InterruptException if interrupted.
+It is safe to retry in either case, but it is not possible to attempt a different operation (such as abortTransaction) since the commit may already be in the progress of completing.
 If not retrying, the only option is to close the producer.
+
 ```java
 class KafkaProducer {
    public void commitTransaction() throws ProducerFencedException {
@@ -400,7 +331,6 @@ class KafkaProducer {
    }
 }
 ```
-
 
 ```scala
 object TransactionCoordinator {
