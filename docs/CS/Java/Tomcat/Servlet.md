@@ -20,6 +20,17 @@ Directory structure of Most Web Applications
 
 In functionality, servlets provide a higher level abstraction than Common Gateway Interface (CGI) programs but a lower level of abstraction than that provided by web frameworks such as Jakarta Server Faces.
 
+
+### Servlet Container
+
+A servlet container is a complex system. However, basically there are three things that a servlet container does to service a request for a servlet:
+
+- Creating a request object and populate it with information that may be used by the invoked servlet, such as parameters, headers, cookies, query string, URI, etc. 
+  A request object is an instance of the `javax.servlet.ServletRequest` interface or the `javax.servlet.http.ServletRequest` interface.
+- Creating a response object that the invoked servlet uses to send the response to the web client. 
+  A response object is an instance of the `javax.servlet.ServletResponse` interface or the `javax.servlet.http.ServletResponse` interface.
+- Invoking the service method of the servlet, passing the request and response objects. Here the servlet reads the values from the request object and writes to the response object.
+
 ## Servlet
 
 Defines methods that all servlets must implement.
