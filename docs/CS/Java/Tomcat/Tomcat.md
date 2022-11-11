@@ -4,8 +4,8 @@
 
 > [Apache Tomcat Versions](https://tomcat.apache.org/whichversion.html)
 
-
 Different versions of Apache Tomcat are available for different versions of the specifications. The mapping between the specifications and the respective Apache Tomcat versions is:
+
 
 | **Servlet Spec** | **JSP Spec** | **EL Spec** | **WebSocket Spec** | **Authentication (JASPIC) Spec** | **Apache Tomcat Version** | **Latest Released Version** | **Supported Java Versions**                 |
 | ------------------ | -------------- | ------------- | -------------------- | ---------------------------------- | --------------------------- | ----------------------------- | --------------------------------------------- |
@@ -20,10 +20,11 @@ Different versions of Apache Tomcat are available for different versions of the 
 | 2.3              | 1.2          | N/A         | N/A                | N/A                              | 4.1.x (archived)          | 4.1.40 (archived)           | 1.3 and later                               |
 | 2.2              | 1.1          | N/A         | N/A                | N/A                              | 3.3.x (archived)          | 3.3.2 (archived)            | 1.1 and later                               |
 
-
 Debug Tomcat
+
 1. git clone git@github.com:apache/tomcat.git
 2. add pom.xml
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -114,7 +115,13 @@ Debug Tomcat
   </build>
 </project>
 ```
+
 3. set Project Structure
+4. add JasperInitializer in ContextConfig#configureStart
+
+```java
+context.addServletContainerInitializer(new JasperInitializer(), null);
+```
 
 ## Architecture
 
@@ -161,7 +168,7 @@ autosize=false;
                     subgraph cluster_Endpoint {
                         label="Endpoint"
                         forcelabels= true
-      
+    
                         SocketWrapper;
                         Poller;
                         Acceptor;
@@ -176,7 +183,7 @@ autosize=false;
             Processor -> Adapter;
             Adapter -> Processor;
             Processor -> SocketWrapper;
-          
+        
         }
 
         subgraph cluster_Engine {
@@ -192,19 +199,19 @@ autosize=false;
                     size="10.0, 18.3";
  
                     Context_Valve [label="Valve"];
-          
+        
                     subgraph cluster_Wrapper_1 {
                         label="Wrapper"
                         Wrapper_Valve_1 [label="Valve"];
                         Servlet_1[label="JspServlet"];
-                      
+                    
                         Wrapper_Valve_1 -> Servlet_1 [headlabel="FilterChain" constraint=false];
                     }
                     subgraph cluster_Wrapper_2 {
                         label="Wrapper"
                         Wrapper_Valve_2 [label="Valve"];
                         Servlet_2[label="DefaultServlet"];
-                      
+                    
                         Wrapper_Valve_2 -> Servlet_2 [headlabel="FilterChain" constraint=false];
                     }
                     subgraph cluster_Wrapper_3 {
@@ -215,7 +222,7 @@ autosize=false;
                         Wrapper_Valve_3 -> Servlet_3 [headlabel="FilterChain" constraint=false];
                     }
                 }
-          
+        
             }
         }
     }
@@ -240,8 +247,6 @@ These interfaces are Engine, Host, Context, and Wrapper. All the four extends th
 Standard implementations of the four containers are StandardEngine, StandardHost, StandardContext, and StandardWrapper, respectively, all of which are part of the org.apache.catalina.core package.
 
 Note All implementation classes derive from the abstract class ContainerBase.
-
-
 
 ## HotSwap
 
