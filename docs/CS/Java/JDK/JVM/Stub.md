@@ -1,72 +1,30 @@
 ## Introduction
 
 
+## call_stub
 
-## init
-
-init when [start vm](/docs/CS/Java/JDK/JVM/start.md?id=init_globals)
-
+a function pointer
 ```cpp
+class StubRoutines: AllStatic {
 
-void StubRoutines::initialize1() {
-  if (_code1 == NULL) {
-    ResourceMark rm;
-    TraceTime timer("StubRoutines generation 1", TRACETIME_LOG(Info, startuptime));
-    _code1 = BufferBlob::create("StubRoutines (1)", code_size1);
-    if (_code1 == NULL) {
-      vm_exit_out_of_memory(code_size1, OOM_MALLOC_ERROR, "CodeCache: no room for StubRoutines (1)");
-    }
-    CodeBuffer buffer(_code1);
-    StubGenerator_generate(&buffer, false);
-    // When new stubs added we need to make sure there is some space left
-    // to catch situation when we should increase size again.
-    assert(code_size1 == 0 || buffer.insts_remaining() > 200, "increase code_size1");
-  }
+static CallStub call_stub()                              { return CAST_TO_FN_PTR(CallStub, _call_stub_entry); }
+
+
+  // Calls to Java
+  typedef void (*CallStub)(
+    address   link,
+    intptr_t* result,
+    BasicType result_type,
+    Method* method,
+    address   entry_point,
+    intptr_t* parameters,
+    int       size_of_parameters,
+    TRAPS
+  );
 }
 ```
 
-```cpp
-#define UCM_TABLE_MAX_ENTRIES 16
-void StubGenerator_generate(CodeBuffer* code, bool all) {
-  if (UnsafeCopyMemory::_table == NULL) {
-    UnsafeCopyMemory::create_table(UCM_TABLE_MAX_ENTRIES);
-  }
-  StubGenerator g(code, all);
-}
-
-```
-
-call generate_initial
-```cpp
-StubGenerator(CodeBuffer* code, bool all) : StubCodeGenerator(code) {
-    if (all) {
-      generate_all();
-    } else {
-      generate_initial();
-    }
-}
-```
-
-Generates all stubs and initializes the entry points
-
-entry points that exist in all platforms Note: 
-This is code that could be shared among different platforms - however the
-benefit seems to be smaller than the disadvantage of having a much more complicated generator structure. 
-
-See also comment in stubRoutines.hpp.
-```cpp
-// cpu/zero/stubGenerator_zero.cpp
-void generate_initial() {
-  StubRoutines::_forward_exception_entry   = ShouldNotCallThisStub();
-  StubRoutines::_call_stub_entry           = (address) call_stub;
-  ...
-}
-```
-And generate_initial -> [generate_call_stub](/docs/CS/Java/JDK/JVM/Stub.md?id=generate_call_stub)
-
-
-### call_stub
-The call stub is used to call Java from C
+lets thought call_stub in stubGenerator_zero.cpp
 ```cpp
 static void call_stub(
   JavaCallWrapper *call_wrapper,
@@ -83,6 +41,28 @@ static void call_stub(
   // Make sure we have no pending exceptions
   assert(!HAS_PENDING_EXCEPTION, "call_stub called with pending exception");
 ```
+
+### JavaCallWrapper
+
+A JavaCallWrapper is constructed before each JavaCall and destructed after the call.
+Its purpose is to allocate/deallocate a new handle block and to save/restore the last Java fp/sp.
+A pointer to the JavaCallWrapper is stored on the stack.
+```c
+class JavaCallWrapper: StackObj {
+  friend class VMStructs;
+ private:
+  JavaThread*      _thread;                 // the thread to which this call belongs
+  JNIHandleBlock*  _handles;                // the saved handle block
+  Method*          _callee_method;          // to be able to collect arguments if entry frame is top frame
+  oop              _receiver;               // the receiver of the call (if a non-static call)
+
+  JavaFrameAnchor  _anchor;                 // last thread anchor state that we must restore
+
+  JavaValue*       _result;                 // result value
+}
+```
+
+
 Set up the stack if necessary
 ```cpp
   bool stack_needs_teardown = false;
@@ -138,6 +118,72 @@ Make the call
     stack->teardown();
 }
 ```
+
+
+
+
+## init
+
+init when [start vm](/docs/CS/Java/JDK/JVM/start.md?id=init_globals)
+
+```cpp
+
+void StubRoutines::initialize1() {
+  if (_code1 == NULL) {
+    ResourceMark rm;
+    TraceTime timer("StubRoutines generation 1", TRACETIME_LOG(Info, startuptime));
+    _code1 = BufferBlob::create("StubRoutines (1)", code_size1);
+    if (_code1 == NULL) {
+      vm_exit_out_of_memory(code_size1, OOM_MALLOC_ERROR, "CodeCache: no room for StubRoutines (1)");
+    }
+    CodeBuffer buffer(_code1);
+    StubGenerator_generate(&buffer, false);
+    // When new stubs added we need to make sure there is some space left
+    // to catch situation when we should increase size again.
+    assert(code_size1 == 0 || buffer.insts_remaining() > 200, "increase code_size1");
+  }
+}
+```
+
+```cpp
+#define UCM_TABLE_MAX_ENTRIES 16
+void StubGenerator_generate(CodeBuffer* code, bool all) {
+  if (UnsafeCopyMemory::_table == NULL) {
+    UnsafeCopyMemory::create_table(UCM_TABLE_MAX_ENTRIES);
+  }
+  StubGenerator g(code, all);
+}
+
+```
+
+call generate_initial
+```cpp
+StubGenerator(CodeBuffer* code, bool all) : StubCodeGenerator(code) {
+    if (all) {
+      generate_all();
+    } else {
+      generate_initial();
+    }
+}
+```
+
+Generates all stubs and initializes the entry points
+
+entry points that exist in all platforms Note:
+This is code that could be shared among different platforms - however the
+benefit seems to be smaller than the disadvantage of having a much more complicated generator structure.
+
+See also comment in stubRoutines.hpp.
+```cpp
+// cpu/zero/stubGenerator_zero.cpp
+void generate_initial() {
+  StubRoutines::_forward_exception_entry   = ShouldNotCallThisStub();
+  StubRoutines::_call_stub_entry           = (address) call_stub;
+  ...
+}
+```
+And generate_initial -> [generate_call_stub](/docs/CS/Java/JDK/JVM/Stub.md?id=generate_call_stub)
+
 
 
 ### generate_call_stub
@@ -305,6 +351,7 @@ call Java function, entry_point generate when [class linking](/docs/CS/Java/JDK/
 
 ## JavaCalls
 
+
 ![](../img/JavaCalls.svg)
 
 Check if we need to wrap a potential OS exception handler around thread.
@@ -443,4 +490,4 @@ static CallStub call_stub()                              { return CAST_TO_FN_PTR
 
 
 ## Links
-- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)

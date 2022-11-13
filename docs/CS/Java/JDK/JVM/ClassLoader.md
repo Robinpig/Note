@@ -1,28 +1,25 @@
 ## Introduction
 
-
 Every time you create an instance of a Java class, the class must first be loaded into memory.
 The JVM uses a class loader to load classes.
 The class loader normally searches some core Java libraries and all directories included in the CLASSPATH environment variable.
 If it does not find the required class, it throws a `java.lang.ClassNotFoundException`.
 
-
 The Java Virtual Machine dynamically loads, links and initializes classes and interfaces.
-- Loading is the process of finding the binary representation of a class or interface type with a particular name and creating a class or interface from that binary representation. 
-- Linking is the process of taking a class or interface and combining it into the run-time state of the Java Virtual Machine so that it can be executed. 
-- Initialization of a class or interface consists of executing the class or interface initialization method `<clinit>`.
 
+- Loading is the process of finding the binary representation of a class or interface type with a particular name and creating a class or interface from that binary representation.
+- Linking is the process of taking a class or interface and combining it into the run-time state of the Java Virtual Machine so that it can be executed.
+- Initialization of a class or interface consists of executing the class or interface initialization method `<clinit>`.
 
 A class in the system is identified by the classloader used to load it as well as the fully qualified class name (which includes the package name).
 
 
-| ClassLoader            | Languages | Load path           | Parent(Composition)                   | JDK11                                                     |
-| ---------------------- | --------- | ------------------- | ------------------------ | --------------------------------------------------------- |
-| `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                          |                                                           |
-| `ExtensionClassLoader` | Java      | <JAVA_HOME>/lib/ext | `BootstrapClassLoader`   | rename to PlatformClassLoader, not extends URLClassLoader |
-| `AppClassLoader`       | Java      | classpath/          | `ExtensionClassLoader`   | not extends URLClassLoader                                |
-| `User ClassLoader`     | Java      | all                 | default `AppClassLoader` |                                                           |
-
+| ClassLoader            | Languages | Load path           | Parent(Composition)     | JDK11                                                     |
+| ------------------------ | ----------- | --------------------- | ------------------------- | ----------------------------------------------------------- |
+| `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                         |                                                           |
+| `ExtensionClassLoader` | Java      | <JAVA_HOME>/lib/ext | `BootstrapClassLoader`  | rename to PlatformClassLoader, not extends URLClassLoader |
+| `AppClassLoader`       | Java      | classpath/          | `ExtensionClassLoader`  | not extends URLClassLoader                                |
+| `User ClassLoader`     | Java      | all                 | default`AppClassLoader` |                                                           |
 
 Here are ClassLoaders in **JDK17**:
 
@@ -30,19 +27,17 @@ Here are ClassLoaders in **JDK17**:
 
 ### Delegation model
 
-The ClassLoader class uses a **delegation model** to search for classes and resources. 
-**Each instance of ClassLoader has an associated parent class loader.** 
+The ClassLoader class uses a **delegation model** to search for classes and resources.
+**Each instance of ClassLoader has an associated parent class loader.**
 When requested to find a class or resource, a ClassLoader instance will delegate the search for the class or resource to its parent class loader before attempting to find the class or resource itself.
 The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent but may serve as the parent of a ClassLoader instance.
 
 > The delegation model is very important for security.
 
-
-
 #### Parallel
 
 Class loaders that support concurrent loading of classes are known as parallel capable class loaders and are required to register themselves at their class initialization time by invoking the ClassLoader.registerAsParallelCapable method.
-Note that the ClassLoader class is registered as parallel capable by default. 
+Note that the ClassLoader class is registered as parallel capable by default.
 However, its subclasses still need to register themselves if they are parallel capable.
 In environments in which the delegation model is not strictly hierarchical, class loaders need to be parallel capable, otherwise class loading can lead to deadlocks because the loader lock is held for the duration of the class loading process (see loadClass methods).
 
@@ -55,7 +50,7 @@ Loads the class with the specified binary name. The default implementation of th
 3. Invoke the findClass(String) method to find the class.
 
 If the class was found using the above steps, and the resolve flag is true, this method will then invoke the `resolveClass(Class)` method on the resulting Class object.
-Subclasses of ClassLoader are encouraged to override `findClass(String)`, rather than this method. 
+Subclasses of ClassLoader are encouraged to override `findClass(String)`, rather than this method.
 Unless overridden, this method synchronizes on the result of getClassLoadingLock method during the entire class loading process.
 
 ```java
@@ -135,7 +130,7 @@ private final ConcurrentHashMap<String, Object> parallelLockMap;
 
 ### load source
 
-Normally, the Java virtual machine loads classes from the local file system in a platform-dependent manner. 
+Normally, the Java virtual machine loads classes from the local file system in a platform-dependent manner.
 For example, on UNIX systems, the virtual machine loads classes from the directory defined by the CLASSPATH environment variable.
 However, some classes may not originate from a file; they may originate from other sources, such as the network, or they could be constructed by an application.
 The method defineClass converts an array of bytes into an instance of class Class.
@@ -152,7 +147,7 @@ For example, an application could create a network class loader to download clas
 ```
 
 The network class loader subclass must define the methods findClass and loadClassData to load a class from the network.
-Once it has downloaded the bytes that make up the class, it should use the method defineClass to create a class instance. 
+Once it has downloaded the bytes that make up the class, it should use the method defineClass to create a class instance.
 A sample implementation is:
 
 ```java
@@ -198,7 +193,9 @@ void SystemDictionary::compute_java_loaders(TRAPS) {
   JavaValue result(T_OBJECT);
   InstanceKlass* class_loader_klass = vmClasses::ClassLoader_klass();
 ```
+
 call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and its parent
+
 ```cpp
   JavaCalls::call_static(&result,
                          class_loader_klass,
@@ -220,7 +217,6 @@ call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and 
 
 ## Class Lifetime
 
-
 - Loading completely before it is linked
   - parse stream
     - create Constant Pool
@@ -239,7 +235,6 @@ call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and 
   - call `clinit` method if exist
 - Using
 - Unloading
-
 
 ## Loading
 
@@ -320,13 +315,12 @@ static native Class<?> defineClass2(ClassLoader loader, String name, java.nio.By
 ```
 
 ### load Class
+
 > [!TIP]
-> 
+>
 > Both [loadClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=loadClass) and [defineClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=defineClass) call [create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
 
 #### loadClass
-
-
 
 ```c
 SystemDictionary::resolve_or_fail
@@ -342,7 +336,7 @@ SystemDictionary::resolve_instance_class_or_null
 -> KlassFactory::create_from_stream
 ```
 
->  call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
+> call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
 
 ```cpp
 //classLoader.cpp
@@ -360,6 +354,7 @@ InstanceKlass* ClassLoader::load_class(Symbol* name, bool search_append_only, TR
 #### defineClass
 
 defineClass1 and defineClass2 both call JVM_DefineClassWithSource -> jvm_define_class_common
+
 ```c
 // jvm.cpp
 JVM_ENTRY(jclass, JVM_DefineClassWithSource(JNIEnv *env, const char *name, jobject loader, const jbyte *buf, jsize len, jobject pd, const char *source))
@@ -369,6 +364,7 @@ JVM_END
 ```
 
 > call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream) too
+
 ```
 jni_DefineClass -----+----- JVM_DefineClass
                      |
@@ -380,12 +376,8 @@ jni_DefineClass -----+----- JVM_DefineClass
         KlassFactory::create_from_stream
 ```
 
-
-
-
-
-
 ### create_from_stream
+
 1. [parse_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream)
 2. [create_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_instance_klass)
 
@@ -425,14 +417,18 @@ ClassFileParser::ClassFileParser(...) {
   post_process_parsed_stream(stream, _cp, CHECK);
 }
 ```
+
 parse_stream
+
 ```cpp
 //classFileParser.cpp
 void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                                    TRAPS) {
   // verify
 ```
+
 allocate [Constant Pool](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Constant-Pool)
+
 ```
   _cp = ConstantPool::allocate(_loader_data, cp_size, CHECK);
   ConstantPool* const cp = _cp;
@@ -457,9 +453,11 @@ allocate [Constant Pool](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Constant-Pool)
                    CHECK);
 
 ```
-Fields (offsets are filled in later) 
+
+Fields (offsets are filled in later)
 
 `ConstantValue` index
+
 ```
   _fac = new FieldAllocationCount();
   parse_fields(stream,
@@ -471,7 +469,9 @@ Fields (offsets are filled in later)
                CHECK);
 
 ```
+
 Methods
+
 ```
   AccessFlags promoted_flags;
   parse_methods(stream,
@@ -492,7 +492,6 @@ Methods
   create_combined_annotations(CHECK);
 }
 ```
-
 
 ### create_instance_klass
 
@@ -549,7 +548,6 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
 ```
 
 #### fill_instance_klass
-
 
 1. set minor/major version
 2. Initialize itable offset tables
@@ -671,8 +669,10 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
   // Obtain java.lang.Module
   Handle module_handle(THREAD, module_entry->module());
 ```
+
 Allocate mirror and initialize static fields
 The create_mirror() call will also call compute_modifiers()
+
 ```cpp
   java_lang_Class::create_mirror(ik,
                                  Handle(THREAD, _loader_data->class_loader()),
@@ -752,7 +752,6 @@ The create_mirror() call will also call compute_modifiers()
 }
 ```
 
-
 init _the_null_class_loader_data
 
 ```cpp
@@ -780,7 +779,7 @@ void ClassLoaderData::init_null_class_loader_data() {
 // javaClasses.cpp
 void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
                                     Handle module, Handle protection_domain, TRAPS) {
-     
+   
   	initialize_mirror_fields(k, mirror, protection_domain, THREAD);
 
     // set the classLoader field in the java_lang_Class instance
@@ -804,28 +803,27 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
 
 ## Linking
 
-Linking a class or interface involves verifying and preparing that class or interface, its direct superclass, its direct superinterfaces, and its element type (if it is an array type), if necessary. 
+Linking a class or interface involves verifying and preparing that class or interface, its direct superclass, its direct superinterfaces, and its element type (if it is an array type), if necessary.
 Linking also involves resolution of symbolic references in the class or interface, though not necessarily at the same time as the class or interface is verified and prepared.
 
 This specification allows an implementation flexibility as to when linking activities (and, because of recursion, loading) take place, provided that all of the following properties are maintained:
+
 - A class or interface is completely loaded before it is linked.
 - A class or interface is completely verified and prepared before it is initialized.
 - Errors detected during linkage are thrown at a point in the program where some action is taken by the program that might, directly or indirectly, require linkage to the class or interface involved in the error.
 - A symbolic reference to a dynamically-computed constant is not resolved until either (i) an *ldc*, *ldc_w*, or *ldc2_w* instruction that refers to it is executed, or (ii) a bootstrap method that refers to it as a static argument is invoked.
 - A symbolic reference to a dynamically-computed call site is not resolved until a bootstrap method that refers to it as a static argument is invoked.
 
-For example, a Java Virtual Machine implementation may choose a "lazy" linkage strategy, where each symbolic reference in a class or interface (other than the symbolic references above) is resolved individually when it is used. 
+For example, a Java Virtual Machine implementation may choose a "lazy" linkage strategy, where each symbolic reference in a class or interface (other than the symbolic references above) is resolved individually when it is used.
 Alternatively, an implementation may choose an "eager" linkage strategy, where all symbolic references are resolved at once when the class or interface is being verified. This means that the resolution process may continue, in some implementations, after a class or interface has been initialized. Whichever strategy is followed, any error detected during resolution must be thrown at a point in the program that (directly or indirectly) uses a symbolic reference to the class or interface.
 
 Because linking involves the allocation of new data structures, it may fail with an `OutOfMemoryError`.
 
-
-
-1. [verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification) 
+1. [verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification)
 2. [Rewriting](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Rewriting) after verification but before the first method of the class is executed
-2. relocate jsrs and link methods after they are all rewritten
-3. [Initialize_vtable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_vtable) and [initialize_itable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_itable)
-4. set_init_state
+3. relocate jsrs and link methods after they are all rewritten
+4. [Initialize_vtable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_vtable) and [initialize_itable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_itable)
+5. set_init_state
 
 ```cpp
 // InstanceKlass.cpp
@@ -896,7 +894,9 @@ bool InstanceKlass::link_class_impl(TRAPS) {
                              jt->get_thread_stat()->perf_timers_addr(),
                              PerfClassTraceTime::CLASS_LINK);
 ```
-[verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification) & 
+
+[verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification) &
+
 ```
   {
     HandleMark hm(THREAD);
@@ -924,7 +924,9 @@ bool InstanceKlass::link_class_impl(TRAPS) {
         }
 
 ```
+
 [Rewriting](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Rewriting)
+
 ```
         // also sets rewritten
         rewrite_class(CHECK_false);
@@ -933,15 +935,19 @@ bool InstanceKlass::link_class_impl(TRAPS) {
       }
 
 ```
+
 relocate jsrs and [link methods]() after they are all rewritten
+
 ```
       link_methods(CHECK_false);
 ```
+
 Initialize the vtable and interface table after
 methods have been rewritten since rewrite may fabricate new Method*s.
 also does loader constraint checking
 
 initialize_vtable and initialize_itable need to be rerun for a shared class if the class is not loaded by the NULL classloader.
+
 ```cpp
       ClassLoaderData * loader_data = class_loader_data();
       if (!(is_shared() &&
@@ -957,7 +963,9 @@ initialize_vtable and initialize_itable need to be rerun for a shared class if t
       }
 #endif
 ```
+
 set_init_state
+
 ```cpp
       set_init_state(linked);
       if (JvmtiExport::should_post_class_prepare()) {
@@ -972,16 +980,15 @@ set_init_state
 ```
 
 ### Verification
-Verification ensures that the binary representation of a class or interface is structurally correct. 
+
+Verification ensures that the binary representation of a class or interface is structurally correct.
 Verification may cause additional classes and interfaces to be loaded but need not cause them to be verified or prepared.
 
-If the binary representation of a class or interface does not satisfy the static or structural constraints listed, 
+If the binary representation of a class or interface does not satisfy the static or structural constraints listed,
 then a VerifyError must be thrown at the point in the program that caused the class or interface to be verified.
 
-If an attempt by the Java Virtual Machine to verify a class or interface fails because an error is thrown that is an instance of LinkageError (or a subclass), 
+If an attempt by the Java Virtual Machine to verify a class or interface fails because an error is thrown that is an instance of LinkageError (or a subclass),
 then subsequent attempts to verify the class or interface always fail with the same error that was thrown as a result of the initial verification attempt.
-
-
 
 ```cpp
 // InstanceKlass.cpp
@@ -990,7 +997,6 @@ bool InstanceKlass::verify_code(TRAPS) {
   return Verifier::verify(this, should_verify_class(), THREAD);
 }
 ```
-
 
 classfile/verifier.cpp
 
@@ -1019,7 +1025,9 @@ void Rewriter::rewrite(InstanceKlass* klass, TRAPS) {
   Rewriter     rw(klass, cpool, klass->methods(), CHECK);
 }
 ```
+
 #### Rewriter
+
 ```cpp
 
 Rewriter::Rewriter(InstanceKlass* klass, const constantPoolHandle& cpool, Array<Method*>* methods, TRAPS)
@@ -1078,8 +1086,6 @@ Rewriter::Rewriter(InstanceKlass* klass, const constantPoolHandle& cpool, Array<
 }
 ```
 
-
-
 ```cpp
 
 void Rewriter::rewrite_bytecodes(TRAPS) {
@@ -1131,6 +1137,7 @@ void Rewriter::rewrite_bytecodes(TRAPS) {
 ```
 
 #### rewrite_Object_init
+
 ```
 // share/interpreter/rewriter.cpp
 void Rewriter::rewrite_Object_init(const methodHandle& method, TRAPS) {
@@ -1139,7 +1146,9 @@ void Rewriter::rewrite_Object_init(const methodHandle& method, TRAPS) {
     Bytecodes::Code opcode = bcs.raw_next();
     switch (opcode) {
 ```
+
 rewrite if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Object.md?id=finalize) and call [Finalizer.register()](/docs/CS/Java/JDK/Basic/Ref.md?id=register)
+
 ```cpp
       case Bytecodes::_return: *bcs.bcp() = Bytecodes::_return_register_finalizer; break;
 
@@ -1167,11 +1176,11 @@ rewrite if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Object.md?id=fin
 }
 ```
 
-
-
 ### link_methods
+
 Now relocate and link method entry points after class is rewritten.
 This is outside is_rewritten flag. In case of an exception, it can be executed more than once.
+
 ```cpp
 // instanceKlass.cpp
 void InstanceKlass::link_methods(TRAPS) {
@@ -1184,19 +1193,25 @@ void InstanceKlass::link_methods(TRAPS) {
   }
 }
 ```
+
 Called when the method_holder is getting linked. Setup entrypoints so the method is ready to be called from interpreter, compiler, and vtables.
+
 ```cpp
 // method.cpp
 void Method::link_method(const methodHandle& h_method, TRAPS) {
 ```
+
 If the code cache is full, we may reenter this function for the leftover methods that weren't linked.
+
 ```cpp
   if (_i2i_entry != NULL) {
     return;
   }
 ```
+
 Setup interpreter entrypoint
 Sets both _i2i_entry and _from_interpreted_entry
+
 ```cpp
   address entry = Interpreter::entry_for_method(h_method);
   set_interpreter_entry(entry);
@@ -1208,23 +1223,24 @@ Sets both _i2i_entry and _from_interpreted_entry
       !native_bind_event_is_interesting);
   }
 ```
-Setup compiler entrypoint.  
 
-This is made eagerly, so we do not need special handling of vtables.  
-An alternative is to make adapters more lazily by calling make_adapter() from from_compiled_entry() for the normal calls.  
+Setup compiler entrypoint.
 
-For vtable calls life gets more complicated.  
-When a call-site goes mega-morphic we need adapters in all methods which can be called from the vtable.  
-We need adapters on such methods that get loaded later.  
+This is made eagerly, so we do not need special handling of vtables.
+An alternative is to make adapters more lazily by calling make_adapter() from from_compiled_entry() for the normal calls.
+
+For vtable calls life gets more complicated.
+When a call-site goes mega-morphic we need adapters in all methods which can be called from the vtable.
+We need adapters on such methods that get loaded later.
 
 Ditto for mega-morphic itable calls.  If this proves to be a problem we'll make these lazily later.
+
 ```cpp
   (void) make_adapters(h_method, CHECK);
 
   // ONLY USE the h_method now as make_adapter may have blocked
 }
 ```
-
 
 #### init methods
 
@@ -1266,21 +1282,21 @@ class Method : public Metadata {
 }
 ```
 
-The following illustrates how the entries work for CDS shared Methods: 
+The following illustrates how the entries work for CDS shared Methods:
 
-Our goal is to delay writing into a shared Method until it's compiled. Hence, we want to determine the initial values for _i2i_entry, _from_interpreted_entry and _from_compiled_entry during CDS dump time. 
+Our goal is to delay writing into a shared Method until it's compiled. Hence, we want to determine the initial values for _i2i_entry, _from_interpreted_entry and _from_compiled_entry during CDS dump time.
 
-In this example, both Methods A and B have the _i2i_entry of "zero_locals". They also have similar signatures so that they will share the same AdapterHandlerEntry. 
+In this example, both Methods A and B have the _i2i_entry of "zero_locals". They also have similar signatures so that they will share the same AdapterHandlerEntry.
 
-_adapter_trampoline points to a fixed location in the RW section of the CDS archive. This location initially contains a NULL pointer. When the first of method A or B is linked, an AdapterHandlerEntry is allocated dynamically, and its c2i/i2c entries are generated. 
+_adapter_trampoline points to a fixed location in the RW section of the CDS archive. This location initially contains a NULL pointer. When the first of method A or B is linked, an AdapterHandlerEntry is allocated dynamically, and its c2i/i2c entries are generated.
 
-_i2i_entry and _from_interpreted_entry initially points to the same (fixed) location in the CODE section of the CDS archive. This contains an unconditional branch to the actual entry for "zero_locals", which is generated at run time and may be on an arbitrary address. Thus, the unconditional branch is also generated at run time to jump to the correct address. 
+_i2i_entry and _from_interpreted_entry initially points to the same (fixed) location in the CODE section of the CDS archive. This contains an unconditional branch to the actual entry for "zero_locals", which is generated at run time and may be on an arbitrary address. Thus, the unconditional branch is also generated at run time to jump to the correct address.
 
-Similarly, _from_compiled_entry points to a fixed address in the CODE section. 
+Similarly, _from_compiled_entry points to a fixed address in the CODE section.
 
-This address has enough space for an unconditional branch instruction, and is initially zero-filled. After the AdapterHandlerEntry is initialized, and the address for the actual c2i_entry is known, we emit a branch instruction here to branch to the actual c2i_entry. 
+This address has enough space for an unconditional branch instruction, and is initially zero-filled. After the AdapterHandlerEntry is initialized, and the address for the actual c2i_entry is known, we emit a branch instruction here to branch to the actual c2i_entry.
 
-The effect of the extra branch on the i2i and c2i entries is negligible. 
+The effect of the extra branch on the i2i and c2i entries is negligible.
 
 The reason for putting _adapter_trampoline in RO is many shared Methods share the same AdapterHandlerEntry, so we can save space in the RW section by having the extra indirection.
 
@@ -1321,7 +1337,9 @@ The reason for putting _adapter_trampoline in RO is many shared Methods share th
  **/
 
 ```
+
 link_method
+
 ```cpp
 
 // Called when the method_holder is getting linked. Setup entrypoints so the method
@@ -1377,6 +1395,7 @@ void Method::link_method(const methodHandle& h_method, TRAPS) {
 ```
 
 ##### install or Deoptimization
+
 ```cpp
 
 // Install compiled code.  Instantly it can execute.
@@ -1424,11 +1443,13 @@ void Method::clear_code(bool acquire_lock /* = true */) {
 ```
 
 ### Preparation
-Preparation involves creating the static fields for a class or interface and initializing such fields to their **default values**. 
+
+Preparation involves creating the static fields for a class or interface and initializing such fields to their **default values**.
+
 > [!NOTE]
-> This does not require the execution of any Java Virtual Machine code; 
+> This does not require the execution of any Java Virtual Machine code;
 > explicit initializers for static fields are executed as part of initialization, not preparation.
-> 
+>
 > Preparation may occur at any time following creation but must be completed prior to initialization.
 
 ### Resolution
@@ -1437,9 +1458,7 @@ Many Java Virtual Machine instructions - *anewarray*, *checkcast*, *getfield*, *
 
 Resolution is the process of dynamically determining one or more concrete values from a symbolic reference in the run-time constant pool. Initially, all symbolic references in the run-time constant pool are unresolved.
 
-Lazy linked, loading other classes can be done after Initiailzation. It will run with no error when link a Error Class which not used. 
-
-
+Lazy linked, loading other classes can be done after Initiailzation. It will run with no error when link a Error Class which not used.
 
 ## Initialization
 
@@ -1452,17 +1471,12 @@ A class or interface C may be initialized only as a result of:
   Upon execution of a *new* instruction, the class to be initialized is the class referenced by the instruction.
 
   Upon execution of a *getstatic*, *putstatic*, or *invokestatic* instruction, the class or interface to be initialized is the class or interface that declares the resolved field or method.
-
 - The first invocation of a `java.lang.invoke.MethodHandle` instance which was the result of method handle resolution for a method handle of kind 2 (`REF_getStatic`), 4 (`REF_putStatic`), 6 (`REF_invokeStatic`), or 8 (`REF_newInvokeSpecial`).
 
   This implies that the class of a bootstrap method is initialized when the bootstrap method is invoked for an *invokedynamic* instruction, as part of the continuing resolution of the call site specifier.
-
 - Invocation of certain reflective methods in the class library, for example, in class `Class` or in package `java.lang.reflect`.
-
 - If C is a class, the initialization of one of its subclasses.
-
 - If C is an interface that declares a non-`abstract`, non-`static` method, the initialization of a class that implements C directly or indirectly.
-
 - Its designation as the initial class or interface at Java Virtual Machine startup.
 
 Prior to initialization, a class or interface must be linked, that is, verified, prepared, and optionally resolved.
@@ -1473,8 +1487,6 @@ Because the Java Virtual Machine is multithreaded, initialization of a class or 
 - This `Class` object is being initialized by some particular thread.
 - This `Class` object is fully initialized and ready for use.
 - This `Class` object is in an erroneous state, perhaps because initialization was attempted and failed.
-
-
 
 For each class or interface C, there is a unique initialization lock `LC`. The mapping from C to `LC` is left to the discretion of the Java Virtual Machine implementation. For example, `LC` could be the `Class` object for C, or the monitor associated with that `Class` object. The procedure for initializing C is then as follows:
 
@@ -1492,19 +1504,16 @@ For each class or interface C, there is a unique initialization lock `LC`. The m
 8. Next, determine whether assertions are enabled for C by querying its defining loader.
 9. Next, **execute the class or interface initialization method of C**.
 10. If the execution of the class or interface initialization method completes normally, then acquire `LC`, label the `Class` object for C as fully initialized, notify all waiting threads, release `LC`, and complete this procedure normally.
-11. Otherwise, the class or interface initialization method must have completed abruptly by throwing some exception E. 
-    If the class of E is not `Error` or one of its subclasses, then create a new instance of the class `ExceptionInInitializerError` with E as the argument, and use this object in place of E in the following step. 
+11. Otherwise, the class or interface initialization method must have completed abruptly by throwing some exception E.
+    If the class of E is not `Error` or one of its subclasses, then create a new instance of the class `ExceptionInInitializerError` with E as the argument, and use this object in place of E in the following step.
     If a new instance of `ExceptionInInitializerError` cannot be created because an `OutOfMemoryError` occurs, then use an `OutOfMemoryError` object in place of E in the following step.
 12. Acquire `LC`, label the `Class` object for C as erroneous, notify all waiting threads, release `LC`, and complete this procedure abruptly with reason E or its replacement as determined in the previous step.
 
 A Java Virtual Machine implementation may optimize this procedure by eliding the lock acquisition in step 1 (and release in step 4/5) when it can determine that the initialization of the class has already completed, provided that, in terms of the Java memory model, all *happens-before* orderings (JLS §17.4.5) that would exist if the lock were acquired, still exist when the optimization is performed.
 
-
-
 > [!NOTE]
-> 
+>
 > Note: implementation moved to static method to expose the this pointer.
-
 
 ```cpp
 void InstanceKlass::initialize(TRAPS) {
@@ -1521,8 +1530,10 @@ void InstanceKlass::initialize(TRAPS) {
 void InstanceKlass::initialize_impl(TRAPS) {
   HandleMark hm(THREAD);
 ```
+
 Make sure klass is linked (verified) before initialization
 A class could already be verified, since it has been reflected upon.
+
 ```cpp
   link_class(CHECK);
 
@@ -1530,8 +1541,10 @@ A class could already be verified, since it has been reflected upon.
 
   bool wait = false;
 ```
+
 refer to the JVM book page 47 for description of steps
 Step 1
+
 ```cpp
   {
     Handle h_init_lock(THREAD, init_lock());
@@ -1539,31 +1552,39 @@ Step 1
 
     Thread *self = THREAD; // it's passed the current thread
 ```
+
 Step 2
 If we were to use wait() instead of waitInterruptibly() then
 we might end up throwing IE from link/symbol resolution sites
 that aren't expected to throw.  This would wreak havoc.  See 6320309.
+
 ```cpp
     while(is_being_initialized() && !is_reentrant_initialization(self)) {
         wait = true;
       ol.waitUninterruptibly(CHECK);
     }
 ```
+
 Step 3
+
 ```cpp
     if (is_being_initialized() && is_reentrant_initialization(self)) {
       DTRACE_CLASSINIT_PROBE_WAIT(recursive, -1, wait);
       return;
     }
 ```
+
 Step 4
+
 ```cpp
     if (is_initialized()) {
       DTRACE_CLASSINIT_PROBE_WAIT(concurrent, -1, wait);
       return;
     }
 ```
+
 Step 5
+
 ```cpp
     if (is_in_error_state()) {
       DTRACE_CLASSINIT_PROBE_WAIT(erroneous, -1, wait);
@@ -1581,15 +1602,19 @@ Step 5
       }
     }
 ```
+
 Step 6 set state = being_initialized and init_thread = self
+
 ```cpp
     set_init_state(being_initialized);
     set_init_thread(self);
   }
 ```
+
 Step 7
 Next, if C is a class rather than an interface, initialize it's super class and super
 interfaces.
+
 ```cpp
   if (!is_interface()) {
     Klass* super_klass = super();
@@ -1623,7 +1648,9 @@ interfaces.
   // Look for aot compiled methods for this klass, including class initializer.
   AOTLoader::load_for_klass(this, THREAD);
 ```
+
 Step 8 [call_class_initializer](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=call_class_initializer)
+
 ```cpp
   {
     assert(THREAD->is_Java_thread(), "non-JavaThread in initialize_impl");
@@ -1640,7 +1667,9 @@ Step 8 [call_class_initializer](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=call_cla
     call_class_initializer(THREAD);
   }
 ```
+
 Step 9
+
 ```cpp
   if (!HAS_PENDING_EXCEPTION) {
     set_initialization_state_and_notify(fully_initialized, CHECK);
@@ -1650,7 +1679,9 @@ Step 9
   }
   else {
 ```
+
 Step 10 and 11
+
 ```cpp
     Handle e(THREAD, PENDING_EXCEPTION);
     CLEAR_PENDING_EXCEPTION;
@@ -1679,8 +1710,8 @@ Step 10 and 11
 }
 ```
 
-
 ### call_class_initializer
+
 > call `clinit` method if exist
 
 ```cpp
@@ -1720,13 +1751,9 @@ Method* InstanceKlass::class_initializer() const {
 }
 ```
 
-
-
 ## redefine Class
 
 `java.lang.instrument.Instrumentation`
-
-
 
 ```cpp
 /*
@@ -1737,23 +1764,22 @@ redefineClasses(JNIEnv * jnienv, JPLISAgent * agent, jobjectArray classDefinitio
 }
 ```
 
-
 redefine_single_class by [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
 
-
 Install the redefinition of a class:
+
 - house keeping (flushing breakpoints and caches, deoptimizing
   dependent compiled code)
 - replacing parts in the_class with parts from scratch_class
 - adding a weak reference to track the obsolete but interesting
   parts of the_class
- - adjusting constant pool caches and vtables in other classes
-   that refer to methods in the_class. These adjustments use the
-   ClassLoaderDataGraph::classes_do() facility which only allows
-   a helper method to be specified. The interesting parameters
-   that we would like to pass to the helper method are saved in
-   static global fields in the VM operation.
-   
+- adjusting constant pool caches and vtables in other classes
+  that refer to methods in the_class. These adjustments use the
+  ClassLoaderDataGraph::classes_do() facility which only allows
+  a helper method to be specified. The interesting parameters
+  that we would like to pass to the helper method are saved in
+  static global fields in the VM operation.
+
 ```cpp
 // jvmtiRedefineClasses.cpp
 void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
@@ -2014,10 +2040,6 @@ void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
 } // end redefine_single_class()
 ```
 
-
-
-
-
 ## Unloading
 
 ```shell
@@ -2026,12 +2048,10 @@ void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
 
 use ClassLoaderDataGraph::classed_do can iterate all loaded class when GC
 
-
-
-
 ClassLoaderDataGraph::classes_do
 
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 
