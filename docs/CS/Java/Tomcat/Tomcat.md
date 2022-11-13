@@ -155,6 +155,7 @@ strict digraph  {
 rankdir=LR;
 autosize=false;
  size="30.0, 38.3";
+  node [shape=box];
 
   User -> SocketWrapper;
  
@@ -163,11 +164,12 @@ autosize=false;
   Processor;
   Executor -> Processor 
   
-  Engine_Valve -> Host_Valve;
-  Host_Valve -> Context_Valve;
-  Context_Valve -> Wrapper_Valve_1;
-  Context_Valve -> Wrapper_Valve_2;
-  Context_Valve -> Wrapper_Valve_3;
+  StanardEngineValve -> Host_Valve;
+  Host_Valve -> StandardHostValve;
+  StandardHostValve -> Context_Valve;
+  Context_Valve -> StandardContextValve;
+  StandardContextValve -> Wrapper_Valve_1;
+  Wrapper_Valve_1 -> StandardWrapperValve;
   
    SocketWrapper -> Acceptor;
    SocketWrapper -> User;
@@ -198,6 +200,7 @@ autosize=false;
   
                 }
             Adapter;
+            {rank="same"; Adapter;Mapper;}
             Processor -> Adapter;
             Adapter -> Mapper;
             Adapter -> Processor;
@@ -210,38 +213,29 @@ autosize=false;
             label="Engine"
             Engine_Valve [label="Valve"];
              Adapter -> Engine_Valve;
-             Adapter -> cc;
+             Engine_Valve -> StanardEngineValve;
+             {rank="same"; Engine_Valve;StanardEngineValve;}
              subgraph cluster_Host {
                 label="Host"
                 Host_Valve [label="Valve"];
+                {rank="same"; Host_Valve;StandardHostValve;}
                 subgraph cluster_Context {
                     label="Context"
                     autosize=false;
                     size="10.0, 18.3";
  
                     Context_Valve [label="Valve"];
-    
+                    {rank="same"; Context_Valve;StandardContextValve;}
                     subgraph cluster_Wrapper_1 {
                         label="Wrapper"
                         Wrapper_Valve_1 [label="Valve"];
-                        Servlet_1[label="JspServlet"];
+                        StandardWrapperValve;
+                        Servlet_1[label="Servlet"];
+                        {rank="same"; Wrapper_Valve_1;StandardWrapperValve;Servlet_1;}
                 
-                        Wrapper_Valve_1 -> Servlet_1 [headlabel="FilterChain" constraint=false];
+                        StandardWrapperValve -> Servlet_1 [headlabel="FilterChain"];
                     }
-                    subgraph cluster_Wrapper_2 {
-                        label="Wrapper"
-                        Wrapper_Valve_2 [label="Valve"];
-                        Servlet_2[label="DefaultServlet"];
-                
-                        Wrapper_Valve_2 -> Servlet_2 [headlabel="FilterChain" constraint=false];
-                    }
-                    subgraph cluster_Wrapper_3 {
-                        label="Wrapper"
-                        Wrapper_Valve_3 [label="Valve"];
-                        Servlet_3[label="HttpServlet"];
-  
-                        Wrapper_Valve_3 -> Servlet_3 [headlabel="FilterChain" constraint=false];
-                    }
+                    
                 }
     
             }
@@ -351,6 +345,16 @@ It also provides a convenient mechanism to use Interceptors that see every reque
 **The parent Container attached to a Context is generally a Host, but may be some other implementation, or may be omitted if it is not necessary.**
 The child containers attached to a Context are generally implementations of Wrapper (representing individual servlet definitions).
 
+#### Wrapper
+
+A Wrapper is a Container that represents an individual servlet definition from the deployment descriptor of the web application.
+It provides a convenient mechanism to use Interceptors that see every single request to the servlet represented by this definition.
+Implementations of Wrapper are responsible for managing the servlet life cycle for their underlying servlet class, including calling init() and destroy() at appropriate times.
+The parent Container attached to a Wrapper will generally be an implementation of Context, representing the servlet context (and therefore the web application) within which this servlet executes.
+Since a wrapper is the lowest level of container, you must not add a child to it.
+Child Containers are not allowed on Wrapper implementations, so the addChild() method should throw an IllegalArgumentException.
+
+
 ### Server and Service
 
 A Server element represents the entire Catalina servlet container. Its attributes represent the characteristics of the servlet container as a whole. 
@@ -427,15 +431,6 @@ public class CoyoteAdapter implements Adapter {
     }
 }
 ```
-
-#### Wrapper
-
-A Wrapper is a Container that represents an individual servlet definition from the deployment descriptor of the web application.
-It provides a convenient mechanism to use Interceptors that see every single request to the servlet represented by this definition.
-Implementations of Wrapper are responsible for managing the servlet life cycle for their underlying servlet class, including calling init() and destroy() at appropriate times.
-The parent Container attached to a Wrapper will generally be an implementation of Context, representing the servlet context (and therefore the web application) within which this servlet executes.
-Since a wrapper is the lowest level of container, you must not add a child to it.
-Child Containers are not allowed on Wrapper implementations, so the addChild() method should throw an IllegalArgumentException.
 
 ## reload
 
@@ -543,8 +538,139 @@ public class StandardContext extends ContainerBase implements Context, Notificat
 }
 ```
 
-## Upgrade
+## Log
 
-Comet
 
-Websocket
+
+## Websocket
+
+Registers an interest in any class that is annotated with ServerEndpoint so that Endpoint can be published via the WebSocket server.
+
+```java
+@HandlesTypes({ServerEndpoint.class, ServerApplicationConfig.class, Endpoint.class})
+public class WsSci implements ServletContainerInitializer {
+
+  @Override
+  public void onStartup(Set<Class<?>> clazzes, ServletContext ctx)
+          throws ServletException {
+
+    WsServerContainer sc = init(ctx, true);
+
+    // Group the discovered classes by type
+    Set<ServerApplicationConfig> serverApplicationConfigs = new HashSet<>();
+    Set<Class<? extends Endpoint>> scannedEndpointClazzes = new HashSet<>();
+    Set<Class<?>> scannedPojoEndpoints = new HashSet<>();
+
+    try {
+      // wsPackage is "jakarta.websocket."
+      String wsPackage = ContainerProvider.class.getName();
+      wsPackage = wsPackage.substring(0, wsPackage.lastIndexOf('.') + 1);
+      for (Class<?> clazz : clazzes) {
+        int modifiers = clazz.getModifiers();
+        if (!Modifier.isPublic(modifiers) ||
+                Modifier.isAbstract(modifiers) ||
+                Modifier.isInterface(modifiers) ||
+                !isExported(clazz)) {
+          // Non-public, abstract, interface or not in an exported
+          // package - skip it.
+          continue;
+        }
+        // Protect against scanning the WebSocket API JARs
+        if (clazz.getName().startsWith(wsPackage)) {
+          continue;
+        }
+        if (ServerApplicationConfig.class.isAssignableFrom(clazz)) {
+          serverApplicationConfigs.add(
+                  (ServerApplicationConfig) clazz.getConstructor().newInstance());
+        }
+        if (Endpoint.class.isAssignableFrom(clazz)) {
+          @SuppressWarnings("unchecked")
+          Class<? extends Endpoint> endpoint =
+                  (Class<? extends Endpoint>) clazz;
+          scannedEndpointClazzes.add(endpoint);
+        }
+        if (clazz.isAnnotationPresent(ServerEndpoint.class)) {
+          scannedPojoEndpoints.add(clazz);
+        }
+      }
+    } catch (ReflectiveOperationException e) {
+      throw new ServletException(e);
+    }
+
+    // Filter the results
+    Set<ServerEndpointConfig> filteredEndpointConfigs = new HashSet<>();
+    Set<Class<?>> filteredPojoEndpoints = new HashSet<>();
+
+    if (serverApplicationConfigs.isEmpty()) {
+      filteredPojoEndpoints.addAll(scannedPojoEndpoints);
+    } else {
+      for (ServerApplicationConfig config : serverApplicationConfigs) {
+        Set<ServerEndpointConfig> configFilteredEndpoints =
+                config.getEndpointConfigs(scannedEndpointClazzes);
+        if (configFilteredEndpoints != null) {
+          filteredEndpointConfigs.addAll(configFilteredEndpoints);
+        }
+        Set<Class<?>> configFilteredPojos =
+                config.getAnnotatedEndpointClasses(
+                        scannedPojoEndpoints);
+        if (configFilteredPojos != null) {
+          filteredPojoEndpoints.addAll(configFilteredPojos);
+        }
+      }
+    }
+
+    try {
+      // Deploy endpoints
+      for (ServerEndpointConfig config : filteredEndpointConfigs) {
+        sc.addEndpoint(config);
+      }
+      // Deploy POJOs
+      for (Class<?> clazz : filteredPojoEndpoints) {
+        sc.addEndpoint(clazz, true);
+      }
+    } catch (DeploymentException e) {
+      throw new ServletException(e);
+    }
+  }
+}
+```
+
+WsFilter
+
+
+
+```java
+public class UpgradeProcessorInternal extends UpgradeProcessorBase {
+    
+  private final InternalHttpUpgradeHandler internalHttpUpgradeHandler;
+
+  public UpgradeProcessorInternal(SocketWrapperBase<?> wrapper, UpgradeToken upgradeToken,
+                                  UpgradeGroupInfo upgradeGroupInfo) {
+    super(upgradeToken);
+    this.internalHttpUpgradeHandler = (InternalHttpUpgradeHandler) upgradeToken.getHttpUpgradeHandler();
+    /*
+     * Leave timeouts in the hands of the upgraded protocol.
+     */
+    wrapper.setReadTimeout(INFINITE_TIMEOUT);
+    wrapper.setWriteTimeout(INFINITE_TIMEOUT);
+
+    internalHttpUpgradeHandler.setSocketWrapper(wrapper);
+
+    // HTTP/2 uses RequestInfo objects so does not provide upgradeInfo
+    UpgradeInfo upgradeInfo = internalHttpUpgradeHandler.getUpgradeInfo();
+    if (upgradeInfo != null && upgradeGroupInfo != null) {
+      upgradeInfo.setGroupInfo(upgradeGroupInfo);
+    }
+  }
+}
+```
+
+
+
+## Links
+
+
+
+## References
+
+1. [JSR 356, Java API for WebSocket](https://www.oracle.com/technical-resources/articles/java/jsr356.html)
