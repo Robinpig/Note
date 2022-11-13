@@ -1,7 +1,16 @@
 ## Introduction
 
+Tomcat startup using two classes in the `org.apache.catalina.startup` package, Catalina and Bootstrap. 
+The Catalina class is used to start and stop a Server object as well as parse the Tomcat configuration file, server.xml. 
+The Bootstrap class is the entry point that creates an instance of Catalina and calls its process method.
+In theory, these two classes could have been merged.
+However, to support more than one mode of running Tomcat, a number of bootstrap classes are provided. For example, the aforementioned Bootstrap class is used for running Tomcat as a stand-alone application.
 
-### Lifecycle
+For user's convenience, Tomcat also comes with the batch files and shell scripts to start and stop the servlet container easily. 
+With the help of these batch files and shell scripts, the user does not need to remember the options for the java.exe program to run the Bootstrap class. 
+Instead, he/she can just run the appropriate batch file or shell script.
+
+## Lifecycle
 
 Common interface for component life cycle methods.
 Catalina components may implement this interface (as well as the appropriate interface(s) for the functionality they support) in order to *provide a consistent mechanism to start and stop the component*.
@@ -46,6 +55,20 @@ Any state can transition to FAILED.
 - Calling stop() while a component is in state NEW transitions the component to STOPPED.
   This is typically encountered when a component fails to start and does not start all its sub-components.
   When the component is stopped, it will try to stop all sub-components - even those it didn't start.
+
+The most important methods in Lifecycle are start and stop. 
+A component provides implementations of these methods so that its parent component can start and stop it.
+The other three methods—addLifecycleListener, findLifecycleListeners, and removeLifecycleListener—are related to listeners. 
+A component can have listeners that are interested in an event that occurs in that component. When an event occurs, the listener interested in that event will be notified. 
+The names of the six events that can be triggered by a Lifecycle instance are defined in public static final Strings of the interface.
+
+
+
+
+
+
+
+
 
 
 ## Bootstrap
@@ -456,6 +479,9 @@ public final synchronized void stop() throws LifecycleException {
 }
 ```
 
+## ShutdownHook
+
+CatalinaShutdownHook
 
 
 ## Links

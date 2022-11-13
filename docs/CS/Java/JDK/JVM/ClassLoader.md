@@ -1,4 +1,12 @@
 ## Introduction
+
+
+Every time you create an instance of a Java class, the class must first be loaded into memory.
+The JVM uses a class loader to load classes.
+The class loader normally searches some core Java libraries and all directories included in the CLASSPATH environment variable.
+If it does not find the required class, it throws a `java.lang.ClassNotFoundException`.
+
+
 The Java Virtual Machine dynamically loads, links and initializes classes and interfaces.
 - Loading is the process of finding the binary representation of a class or interface type with a particular name and creating a class or interface from that binary representation. 
 - Linking is the process of taking a class or interface and combining it into the run-time state of the Java Virtual Machine so that it can be executed. 
@@ -22,38 +30,33 @@ Here are ClassLoaders in **JDK17**:
 
 ### Delegation model
 
-The ClassLoader class uses a **delegation model** to search for classes and resources. **Each instance of ClassLoader
-has an associated parent class loader.** When requested to find a class or resource, a ClassLoader instance will
-delegate the search for the class or resource to its parent class loader before attempting to find the class or resource
-itself. The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent
-but may serve as the parent of a ClassLoader instance.
+The ClassLoader class uses a **delegation model** to search for classes and resources. 
+**Each instance of ClassLoader has an associated parent class loader.** 
+When requested to find a class or resource, a ClassLoader instance will delegate the search for the class or resource to its parent class loader before attempting to find the class or resource itself.
+The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent but may serve as the parent of a ClassLoader instance.
+
+> The delegation model is very important for security.
+
 
 
 #### Parallel
 
-Class loaders that support concurrent loading of classes are known as parallel capable class loaders and are required to
-register themselves at their class initialization time by invoking the ClassLoader.registerAsParallelCapable method.
-Note that the ClassLoader class is registered as parallel capable by default. However, its subclasses still need to
-register themselves if they are parallel capable. In environments in which the delegation model is not strictly
-hierarchical, class loaders need to be parallel capable, otherwise class loading can lead to deadlocks because the
-loader lock is held for the duration of the class loading process (see loadClass methods).
+Class loaders that support concurrent loading of classes are known as parallel capable class loaders and are required to register themselves at their class initialization time by invoking the ClassLoader.registerAsParallelCapable method.
+Note that the ClassLoader class is registered as parallel capable by default. 
+However, its subclasses still need to register themselves if they are parallel capable.
+In environments in which the delegation model is not strictly hierarchical, class loaders need to be parallel capable, otherwise class loading can lead to deadlocks because the loader lock is held for the duration of the class loading process (see loadClass methods).
 
-In environments in which the delegation model is not strictly hierarchical, class loaders need to be parallel capable,
-otherwise class loading can lead to deadlocks because the loader lock is held for the duration of the class loading
-process (see `loadClass` methods).
+In environments in which the delegation model is not strictly hierarchical, class loaders need to be parallel capable, otherwise class loading can lead to deadlocks because the loader lock is held for the duration of the class loading process (see `loadClass` methods).
 
-Loads the class with the specified binary name. The default implementation of this method searches for classes in the
-following order:
+Loads the class with the specified binary name. The default implementation of this method searches for classes in the following order:
 
 1. Invoke findLoadedClass(String) to check if the class has already been loaded.
-2. **Invoke the loadClass method on the parent class loader.** If the parent is null the class loader built-in to the
-   virtual machine is used, instead.
+2. **Invoke the loadClass method on the parent class loader.** If the parent is null the class loader built-in to the virtual machine is used, instead.
 3. Invoke the findClass(String) method to find the class.
 
-If the class was found using the above steps, and the resolve flag is true, this method will then invoke the
-resolveClass(Class) method on the resulting Class object. Subclasses of ClassLoader are encouraged to override
-findClass(String), rather than this method. Unless overridden, this method synchronizes on the result of
-getClassLoadingLock method during the entire class loading process.
+If the class was found using the above steps, and the resolve flag is true, this method will then invoke the `resolveClass(Class)` method on the resulting Class object.
+Subclasses of ClassLoader are encouraged to override `findClass(String)`, rather than this method. 
+Unless overridden, this method synchronizes on the result of getClassLoadingLock method during the entire class loading process.
 
 ```java
 protected Class<?> loadClass(String name,boolean resolve)
@@ -132,16 +135,15 @@ private final ConcurrentHashMap<String, Object> parallelLockMap;
 
 ### load source
 
-Normally, the Java virtual machine loads classes from the local file system in a platform-dependent manner. For example,
-on UNIX systems, the virtual machine loads classes from the directory defined by the CLASSPATH environment variable.
-However, some classes may not originate from a file; they may originate from other sources, such as the network, or they
-could be constructed by an application. The method defineClass converts an array of bytes into an instance of class
-Class. Instances of this newly defined class can be created using Class.newInstance. The methods and constructors of
-objects created by a class loader may reference other classes. To determine the class(es) referred to, the Java virtual
-machine invokes the loadClass method of the class loader that originally created the class.
+Normally, the Java virtual machine loads classes from the local file system in a platform-dependent manner. 
+For example, on UNIX systems, the virtual machine loads classes from the directory defined by the CLASSPATH environment variable.
+However, some classes may not originate from a file; they may originate from other sources, such as the network, or they could be constructed by an application.
+The method defineClass converts an array of bytes into an instance of class Class.
+Instances of this newly defined class can be created using Class.newInstance.
+The methods and constructors of objects created by a class loader may reference other classes.
+To determine the class(es) referred to, the Java virtual machine invokes the loadClass method of the class loader that originally created the class.
 
-For example, an application could create a network class loader to download class files from a server. Sample code might
-look like:
+For example, an application could create a network class loader to download class files from a server. Sample code might look like:
 
 ```java
      ClassLoader loader=new NetworkClassLoader(host,port);
@@ -150,8 +152,8 @@ look like:
 ```
 
 The network class loader subclass must define the methods findClass and loadClassData to load a class from the network.
-Once it has downloaded the bytes that make up the class, it should use the method defineClass to create a class
-instance. A sample implementation is:
+Once it has downloaded the bytes that make up the class, it should use the method defineClass to create a class instance. 
+A sample implementation is:
 
 ```java
 class NetworkClassLoader extends ClassLoader {
