@@ -18,16 +18,12 @@ The simplest way to understand how a program works is to understand the [data st
 
 - [db](/docs/CS/DB/Redis/redisDb.md)
 
-
 Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
-
 
 ## Persistence
 
 [Persistence](/docs/CS/DB/Redis/persist.md) refers to the writing of data to durable storage, such as a solid-state disk (SSD).
 The most important thing to understand is the different trade-offs between the RDB and AOF persistence.
-
-
 
 ## [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
 

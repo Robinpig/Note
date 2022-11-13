@@ -942,7 +942,7 @@ class ConstantPool : public Metadata {
   };
 }  
 ```
-
+parse_constant_pool -> 
 allocate
 ```cpp
 // constantPool.cpp
