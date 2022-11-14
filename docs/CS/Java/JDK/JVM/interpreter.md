@@ -1113,7 +1113,7 @@ void TemplateTable::if_icmp(Condition cc) {
   __ profile_not_taken_branch(rax);
 }
 ```
-
+branch
 ```cpp
 
 void TemplateTable::branch(bool is_jsr, bool is_wide) {

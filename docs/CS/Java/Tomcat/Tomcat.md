@@ -127,7 +127,79 @@ context.addServletContainerInitializer(new JasperInitializer(), null);
 
 ## Architecture
 
-![Lifecycle](./images/Lifecycle.png)
+
+```dot
+digraph "Container" {
+
+splines  = ortho;
+fontname = "Inconsolata";
+
+node [colorscheme = ylgnbu4];
+edge [colorscheme = dark28, dir = both];
+
+"AbstractEndpoint<S, U>" [shape = record, label = "{ AbstractEndpoint\<S, U\> }"];
+"AbstractProtocol<S>"    [shape = record, label = "{ AbstractProtocol\<S\> }"];
+Adapter                  [shape = record, label = "{ Adapter }"];
+Catalina                 [shape = record, label = "{ Catalina }"];
+Connector                [shape = record, label = "{ Connector }"];
+Container                [shape = record, label = "{ Container }"];
+Context                  [shape = record, label = "{ Context }"];
+CoyoteAdapter            [shape = record, label = "{ CoyoteAdapter }"];
+Engine                   [shape = record, label = "{ Engine }"];
+Executor                 [shape = record, label = "{ Executor }"];
+Host                     [shape = record, label = "{ Host }"];
+Lifecycle                [shape = record, label = "{ Lifecycle }"];
+Mapper                   [shape = record, label = "{ Mapper }"];
+MapperListener           [shape = record, label = "{ MapperListener }"];
+Pipeline                 [shape = record, label = "{ Pipeline }"];
+Processor                [shape = record, label = "{ Processor }"];
+ProtocolHandler          [shape = record, label = "{ ProtocolHandler }"];
+Server                   [shape = record, label = "{ Server }"];
+Service                  [shape = record, label = "{ Service }"];
+Servlet                  [shape = record, label = "{ Servlet }"];
+StandardPipeline         [shape = record, label = "{ StandardPipeline }"];
+StandardWrapper          [shape = record, label = "{ StandardWrapper }"];
+Valve                    [shape = record, label = "{ Valve }"];
+Wrapper                  [shape = record, label = "{ Wrapper }"];
+
+"AbstractProtocol<S>"    -> "AbstractEndpoint<S, U>" [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "endpoint\n1"];
+"AbstractProtocol<S>"    -> Adapter                  [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "adapter\n1"];
+"AbstractProtocol<S>"    -> Processor                [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "waitingProcessors\n*"];
+"AbstractProtocol<S>"    -> ProtocolHandler          [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Catalina                 -> Server                   [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "server\n1"];
+Connector                -> Adapter                  [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "adapter\n1"];
+Connector                -> CoyoteAdapter            [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+Connector                -> Lifecycle                [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Connector                -> ProtocolHandler          [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "protocolHandler\n1"];
+Connector                -> Service                  [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "service\n1"];
+Container                -> Lifecycle                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Context                  -> Container                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+CoyoteAdapter            -> Adapter                  [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+CoyoteAdapter            -> Connector                [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "connector\n1"];
+Engine                   -> Container                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Executor                 -> Lifecycle                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Host                     -> Container                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Mapper                   -> Context                  [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+Mapper                   -> Context                  [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "contextObjectToContextVersionMap\n*"];
+MapperListener           -> Lifecycle                [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+MapperListener           -> Mapper                   [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "mapper\n1"];
+MapperListener           -> Service                  [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "service\n1"];
+Server                   -> Lifecycle                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Service                  -> Lifecycle                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+StandardPipeline         -> Container                [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "container\n1"];
+StandardPipeline         -> Lifecycle                [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+StandardPipeline         -> Pipeline                 [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+StandardPipeline         -> Valve                    [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+StandardPipeline         -> Valve                    [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "basic\n1"];
+StandardWrapper          -> Container                [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+StandardWrapper          -> Lifecycle                [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+StandardWrapper          -> Servlet                  [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "instance\n1"];
+StandardWrapper          -> Wrapper                  [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+Wrapper                  -> Container                [color = "#008200", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+
+}
+
+```
 
 Catalina is a very sophisticated piece of software, which was elegantly designed and developed. It is also modular too.
 Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the container.。
@@ -180,6 +252,11 @@ autosize=false;
   
     subgraph cluster_Service {
         label="Serice"
+        
+        Mapper;
+        Mapper2[style=invis];
+        
+            {rank="same"; Mapper2;Mapper;}
         subgraph cluster_Connector {
             label="Connector"
             subgraph cluster_ProtocolHandler {
@@ -200,7 +277,6 @@ autosize=false;
   
                 }
             Adapter;
-            {rank="same"; Adapter;Mapper;}
             Processor -> Adapter;
             Adapter -> Mapper;
             Adapter -> Processor;
@@ -212,26 +288,43 @@ autosize=false;
         subgraph cluster_Engine {
             label="Engine"
             Engine_Valve [label="Valve"];
+            
+              subgraph cluster_Engine_Pipeline {
+                label="Pipeline"
+                StanardEngineValve[label="Stanard\nEngineValve"]
+                {rank="same"; Engine_Valve;StanardEngineValve;}
+              }  
              Adapter -> Engine_Valve;
              Engine_Valve -> StanardEngineValve;
-             {rank="same"; Engine_Valve;StanardEngineValve;}
              subgraph cluster_Host {
                 label="Host"
+                subgraph cluster_Host_Pipeline {
+                  label="Pipeline"
+                  StandardHostValve[label="Standard\nHostValve"]
+                  {rank="same"; Host_Valve;StandardHostValve;}
+                }
                 Host_Valve [label="Valve"];
-                {rank="same"; Host_Valve;StandardHostValve;}
                 subgraph cluster_Context {
                     label="Context"
                     autosize=false;
                     size="10.0, 18.3";
- 
+                    subgraph cluster_Engine_Pipeline {
+                      label="Pipeline"
+                      StandardContextValve[label="Standard\nContextValve"]
+                      {rank="same"; Context_Valve;StandardContextValve;}
+                    }  
                     Context_Valve [label="Valve"];
-                    {rank="same"; Context_Valve;StandardContextValve;}
                     subgraph cluster_Wrapper_1 {
                         label="Wrapper"
+                        
+                        subgraph cluster_Host_Pipeline {
+                          label="Pipeline"
+                          StandardWrapperValve[label="Standard\nWrapperValve"]
+                          {rank="same"; Wrapper_Valve_1;StandardWrapperValve;}
+                        }
                         Wrapper_Valve_1 [label="Valve"];
                         StandardWrapperValve;
                         Servlet_1[label="Servlet"];
-                        {rank="same"; Wrapper_Valve_1;StandardWrapperValve;Servlet_1;}
                 
                         StandardWrapperValve -> Servlet_1 [headlabel="FilterChain"];
                     }
