@@ -21,20 +21,100 @@ Fig.1. Architecture of a database management system
 
 Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it.
 Later, access control checks are performed, as they can be done fully only after the query is interpreted.
-
-“The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer).
+### optimizer
+“The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, 
+and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer).
 The optimizer handles both relational operations required for query resolution, usually presented as a dependency tree, and optimizations, such as index ordering, cardinality estimation, and choosing access methods.
 
 “The query is usually presented in the form of an execution plan (or query plan): a sequence of operations that have to be carried out for its results to be considered complete.”
 
 “Since the same query can be satisfied using different execution plans that can vary in efficiency, the optimizer picks the best available plan.
 
+One of the long-standing advantages of relational databases has been that data is requested with little or no thought for the way in which the data is to be accessed.
+This decision is made by a component of the DBMS called the optimizer. 
+These have varied widely across different relational systems and probably always will, but they all try to access the data in the most effective way possible, using statistics stored by the system collected on the data.
+
+
+Before an SQL statement can be executed, the optimizer must first decide how to access the data; which index, if any, should be used; how the index should be used; should assisted random read be used; and so forth. 
+All of this information is embodied in the access path.
+
+
+
+<div style="text-align: center;">
+
+![Traditional index scan](./img/Traditional-Index-Scan.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.2. Traditional index scan.
+</p>
+
+Index Slices and Matching Columns
+Thus a thin slice of the index, depicted in Figure 3.1, will be sequentially scanned,
+and for each index row having a value between 100 and 110, the corresponding
+row will be accessed from the table using a synchronous read unless the page
+is already in the buffer pool. The cost of the access path is clearly going to
+depend on the thickness of the slice, which in turn will depend on the range
+predicate; a thicker slice will, of course, require more index pages to be read
+sequentially and more index rows will have to be processed. The real increase
+in cost though is going to come from an increase in the number of synchronous
+reads to the table at a cost of perhaps 10 ms per page. Similarly, a thinner slice
+will certainly reduce the index costs, but again the major saving will be due to
+fewer synchronous reads to the table. The size of the index slice may be very
+important for this reason.
+
+The term index slice is not one that is used by any of the relational database
+systems; these all use their own terminology, but we feel that an index slice
+is a much more descriptive term and one that we can use regardless of DBMS.
+Another way that is often used to describe an index slice is to define the number of
+matching columns used in the processing of the index. In our example (having
+a value between 100 and 110), we have only a single matching column. 
+This single matching column in fact defines the thickness of our slice. If there had
+been a second column, both in the WHERE clause and in the index, such that the
+two columns together were able to define an even thinner slice of the index, we
+would have two matching columns. Less index processing would be required,
+but of even greater importance, fewer synchronous reads to the table would
+be required.
+
+
+#### Index Screening and Screening Columns
+
+Sometimes a column may indeed be in both the WHERE clause and in the index, suffice it to say at this time that not all columns in the index are able to define the index slice.
+Such columns, however, may still be able to reduce the number of synchronous reads to the table and so play the more important part.
+We will call these columns screening columns, as indeed do some relational database systems, because this is exactly what they do. 
+They avoid the necessity of accessing the table rows because they are able to determine that it is not necessary to do so by their very presence in the index.
+
+Examine index columns from leading to trailing
+1. In the WHERE clause, does a column have at least one simple enough predicate referring to it?
+   If yes, the column is an M column.
+   If not, this column and the remaining columns are not M columns.
+2. If the predicate is a range predicate, the remaining columns are not M columns.
+3. Any column after the last M column is an S column if there is a simple enough predicate referring to that column.
+
+#### Access Path Terminology
+
+Unfortunately, the terminology used to describe access paths is far from standardized—even the term access path itself, another term that is often used being the execution plan.
+We will use access path when referring to the way the data is actually accessed; we will use execution plan when referring to the output provided by the DBMS by means of an `EXPLAIN` facility (described below). 
+This is a subtle distinction, and it is really of no consequence if the terms are used interchangeably.
+
 The execution plan is handled by the execution engine, which collects the results of the execution of local and remote operations. Remote execution can involve writing and reading data to and from other nodes in the cluster, and replication.
 
-Local queries (coming directly from clients or from other nodes) are executed by the storage engine.
-The storage engine has several components with dedicated responsibilities:”
+Matching predicates are sometimes called range delimiting predicates. 
+If a predicate is simple enough for an optimizer in the sense that it is a matching predicate when a suitable index is available, it is called indexable or sargable. 
+The opposite term is nonindexable or nonsargable.
 
-“Transaction manager
+SQL Server uses the term table lookup for an access path that uses an index but also reads table rows. This is the opposite of index only. 
+The obvious way to eliminate the table accesses is to add the missing columns to the index. 
+Many SQL Server books call an index a covering index when it makes an index-only access path possible for a SELECT call. 
+SELECT statements that use a covering index are sometimes called covering SELECTs.
+
+
+
+### Transaction manager
+Local queries (coming directly from clients or from other nodes) are executed by the storage engine.
+The storage engine has several components with dedicated responsibilities:
+
 
 This manager schedules transactions and ensures they cannot leave the database in a logically inconsistent state.
 
@@ -338,6 +418,8 @@ LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms
 LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
 
 ## Indexes
+
+[Indexes](/docs/CS/DB/Index.md)
 
 A *primary key* uniquely identifies one row in a relational table, or one document in a document database, or one vertex in a graph database.
 Other records in the database can refer to that row/document/vertex by its primary key (or ID), and the index is used to resolve such references.
