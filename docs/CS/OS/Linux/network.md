@@ -437,7 +437,24 @@ call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to 
 	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 }
 ```
+#### netif_rx
+netif_rx	-	post buffer to the network code
 
+This function receives a packet from a device driver and queues it for the upper (protocol) levels to process.  
+It always succeeds. The buffer may be dropped during processing for congestion control or by the protocol layers.
+```c
+int netif_rx(struct sk_buff *skb)
+{
+	int ret;
+
+	trace_netif_rx_entry(skb);
+
+	ret = netif_rx_internal(skb);
+	trace_netif_rx_exit(ret);
+
+	return ret;
+}
+```
 
 
 ### net_rx_action
