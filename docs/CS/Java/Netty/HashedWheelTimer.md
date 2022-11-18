@@ -37,32 +37,20 @@ Schedules TimerTasks for one-time future execution in a background thread.
 ```java
 public interface Timer {
 
-    /**
-     * Schedules the specified {@link TimerTask} for one-time execution after
-     * the specified delay.
-     */
     Timeout newTimeout(TimerTask task, long delay, TimeUnit unit);
 
-    /**
-     * Releases all resources acquired by this {@link Timer} and cancels all
-     * tasks which were scheduled but not executed yet.
-     */
     Set<Timeout> stop();
 }
 
-/**
- * A task which is executed after the delay specified with
- * {@link Timer#newTimeout(TimerTask, long, TimeUnit)}.
- */
+
 public interface TimerTask {
 
-    /**
-     * Executed after the delay specified with
-     * {@link Timer#newTimeout(TimerTask, long, TimeUnit)}.
-     */
     void run(Timeout timeout) throws Exception;
 }
 ```
+
+
+A timer
 
 ```java
 public class HashedWheelTimer implements Timer {
@@ -98,24 +86,9 @@ public class HashedWheelTimer implements Timer {
     private final long maxPendingTimeouts;
 
     private volatile long startTime;
-  
-  
-     @Override
-    protected void finalize() throws Throwable {
-        try {
-            super.finalize();
-        } finally {
-            // This object is going to be GCed and it is assumed the ship has sailed to do a proper shutdown. If
-            // we have not yet shutdown then we want to make sure we decrement the active instance count.
-            if (WORKER_STATE_UPDATER.getAndSet(this, WORKER_STATE_SHUTDOWN) != WORKER_STATE_SHUTDOWN) {
-                INSTANCE_COUNTER.decrementAndGet();
-            }
-        }
-    }
-  
-...
 }
 ```
+
 
 ### Constructor
 

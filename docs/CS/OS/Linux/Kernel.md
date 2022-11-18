@@ -1,46 +1,35 @@
 ## Introduction
 
+## Working with the Source Code
 
 ```shell
 cat /proc/version
+
 ```
 
+Directory
 
 
-
-
-
-
-## Directory
-
-| Directory |        |      |
-| --------- | ------ | ---- |
-| arch      |        |      |
-| block     |        |      |
-| crypto    |        |      |
-| drivers   |        |      |
-| fs        | VFS    |      |
-| firmware  |        |      |
-| include   |        |      |
-| init      |        |      |
-| ipc       |        |      |
-| kernel    |        |      |
-| lib       |        |      |
-| mm        | memory |      |
-| virt      |        |      |
-| usr       |        |      |
-| net       |        |      |
-| security  |        |      |
-| tools     |        |      |
-| scripts   |        |      |
-|           |        |      |
-|           |        |      |
-|           |        |      |
-|           |        |      |
-|           |        |      |
-|           |        |      |
-
-
+| Directory |                                                                                                                                                                                                           |  |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -- |
+| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                     |  |
+| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources. There is a separate subdirectory for each processor architecture supported by the kernel.                   |  |
+| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book). It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |  |
+| mm        | High-level memory management resides in mm/.                                                                                                                                                              |  |
+| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                             |  |
+| include   | include/ contains all header files with publicly exported functions.                                                                                                                                      |  |
+| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                |  |
+| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                         |  |
+| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel, including data structures to implement various trees and data compression routines.                              |  |
+| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                         |  |
+| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                              |  |
+| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                               |  |
+| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                  |  |
+| firmware  |                                                                                                                                                                                                           |  |
+| virt      |                                                                                                                                                                                                           |  |
+| usr       |                                                                                                                                                                                                           |  |
+| tools     |                                                                                                                                                                                                           |  |
+| block     |                                                                                                                                                                                                           |  |
 
 ## 内存管理
 
@@ -127,7 +116,7 @@ inode保存文件大小、创建时间、文件的块大小等参数，以及对
 
 ## Spurious wakeup
 
-A spurious wakeup happens when a thread wakes up from waiting on a condition variable that's been signaled, only to discover that the condition it was waiting for isn't satisfied. It's called spurious because the thread has seemingly been awakened for no reason. But spurious wakeups don't happen for no reason: 
+A spurious wakeup happens when a thread wakes up from waiting on a condition variable that's been signaled, only to discover that the condition it was waiting for isn't satisfied. It's called spurious because the thread has seemingly been awakened for no reason. But spurious wakeups don't happen for no reason:
 
 *they usually happen because, in between the time when the condition variable was signaled and when the waiting thread finally ran, another thread ran and changed the condition.* There was a race condition between the threads, with the typical result that sometimes, the thread waking up on the condition variable runs first, winning the race, and sometimes it runs second, losing the race.
 
@@ -136,4 +125,3 @@ On many systems, especially multiprocessor systems, the problem of spurious wake
 To allow for implementation flexibility in dealing with error conditions and races inside the operating system, condition variables may also be allowed to return from a wait even if not signaled, though it is not clear how many implementations actually do that. In the Solaris implementation of condition variables, a spurious wakeup may occur without the condition being signaled if the process is signaled; the wait system call aborts and returns EINTR. The Linux pthread implementation of condition variables guarantees it will not do that.
 
 Because spurious wakeups can happen whenever there's a race and possibly even in the absence of a race or a signal, when a thread wakes on a condition variable, it should always check that the condition it sought is satisfied. If it's not, it should go back to sleeping on the condition variable, waiting for another opportunity.
-

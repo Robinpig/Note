@@ -605,7 +605,7 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 }
 ```
 
-1. match HandlerMapping
+1. RequestMappingHandlerMapping.mapping
 2. interceptor preHandler
 3. HandlerMethodArgumentResolver resolve params
 4. call method in Controller
