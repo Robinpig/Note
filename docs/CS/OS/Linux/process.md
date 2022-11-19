@@ -2,6 +2,31 @@
 
 
 
+Linux employs a hierarchical scheme in which each process depends on a parent process.
+The kernel starts the init program as the first process that is responsible for further system initialization actions and display of the login prompt or (in more widespread use today) display of a graphical login interface.
+init is therefore the root from which all processes originate, more or less directly, as shown graphically by the pstree program. init is the top of a tree structure whose branches spread further and further down.
+```shell
+[root@master-node ~]# pstree
+systemd─┬─AliSecGuard───6*[{AliSecGuard}]
+        ├─AliYunDun───9*[{AliYunDun}]
+        ├─AliYunDunMonito───25*[{AliYunDunMonito}]
+        ├─AliYunDunUpdate───5*[{AliYunDunUpdate}]
+        ├─2*[agetty]
+        ├─aliyun-service───6*[{aliyun-service}]
+        ├─assist_daemon───7*[{assist_daemon}]
+        ├─atd
+
+```
+
+
+How this tree structure spreads is closely connected with how new processes are generated.
+For this purpose, Unix uses two mechanisms called fork and exec.
+
+1. [fork](/docs/CS/OS/Linux/process.md?id=fork) — Generates an exact copy of the current process that differs from the parent process only in its PID (process identification).
+   After the system call has been executed, there are two processes in the system, both performing the same actions.
+   The memory contents of the initial process are duplicated -- at least in the view of the program.
+   Linux uses a well-known technique known as copy on write that allows it to make the operation much more efficient by deferring the copy operations until either parent or child writes to a page -— read-only accessed can be satisfied from the same page for both.
+2. [exec](/docs/CS/OS/Linux/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
 
 
 ### task struct
@@ -1196,6 +1221,8 @@ The init process periodically invokes wait(), thereby allowing the exit status o
 
 ## fork
 
+
+
 Processes are created in Linux in an especially simple manner. The fork system call creates an exact copy of the original process. 
 The forking process is called the *parent process*. The new process is called the *child process*. The parent and child each have their own, private memory images. 
 If the parent subsequently changes any of its variables, the changes are not visible to the child, and vice versa.
@@ -1255,6 +1282,41 @@ in most cases, the shell then figures out where in the file system the executabl
 calls some variant of exec() to run the command, and then waits for the command to complete by calling wait(). 
 When the child completes, the shell returns from wait() and prints out a prompt again, ready for your next command.
 
+
+
+
+```dot
+strict digraph {
+
+fork[label="fork()"];
+vfork[label="vfork()"];
+clone[label="clone()"];
+kernel_clone[label="kernel_clone()"];
+
+fork -> kernel_clone;
+vfork -> kernel_clone;
+clone -> kernel_clone;
+
+}
+```
+
+Create a kernel thread.
+```c
+pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+{
+	struct kernel_clone_args args = {
+		.flags		= ((lower_32_bits(flags) | CLONE_VM |
+				    CLONE_UNTRACED) & ~CSIGNAL),
+		.exit_signal	= (lower_32_bits(flags) & CSIGNAL),
+		.stack		= (unsigned long)fn,
+		.stack_size	= (unsigned long)arg,
+	};
+
+	return kernel_clone(&args);
+}
+```
+
+
 > [!NOTE]
 > 
 > Link: [fork: introduce kernel_clone()](https://lore.kernel.org/all/20200819104655.436656-2-christian.brauner@ubuntu.com/)
@@ -1271,100 +1333,6 @@ When the child completes, the shell returns from wait() and prints out a prompt 
 > Follow-up patches will switch each caller of _do_fork() and each place where it is referenced over to kernel_clone().
 > After all these changes are done, we can remove _do_fork() completely and will only be left with kernel_clone().
 
-
-#### clone flags
-
-cloning flags:
-
-```c
-#define CSIGNAL		0x000000ff	/* signal mask to be sent at exit */
-#define CLONE_VM	0x00000100	/* set if VM shared between processes */
-#define CLONE_FS	0x00000200	/* set if fs info shared between processes */
-#define CLONE_FILES	0x00000400	/* set if open files shared between processes */
-#define CLONE_SIGHAND	0x00000800	/* set if signal handlers and blocked signals shared */
-#define CLONE_PIDFD	0x00001000	/* set if a pidfd should be placed in parent */
-#define CLONE_PTRACE	0x00002000	/* set if we want to let tracing continue on the child too */
-#define CLONE_VFORK	0x00004000	/* set if the parent wants the child to wake it up on mm_release */
-#define CLONE_PARENT	0x00008000	/* set if we want to have the same parent as the cloner */
-#define CLONE_THREAD	0x00010000	/* Same thread group? */
-#define CLONE_NEWNS	0x00020000	/* New mount namespace group */
-#define CLONE_SYSVSEM	0x00040000	/* share system V SEM_UNDO semantics */
-#define CLONE_SETTLS	0x00080000	/* create a new TLS for the child */
-#define CLONE_PARENT_SETTID	0x00100000	/* set the TID in the parent */
-#define CLONE_CHILD_CLEARTID	0x00200000	/* clear the TID in the child */
-#define CLONE_DETACHED		0x00400000	/* Unused, ignored */
-#define CLONE_UNTRACED		0x00800000	/* set if the tracing process can't force CLONE_PTRACE on this clone */
-#define CLONE_CHILD_SETTID	0x01000000	/* set the TID in the child */
-#define CLONE_NEWCGROUP		0x02000000	/* New cgroup namespace */
-#define CLONE_NEWUTS		0x04000000	/* New utsname namespace */
-#define CLONE_NEWIPC		0x08000000	/* New ipc namespace */
-#define CLONE_NEWUSER		0x10000000	/* New user namespace */
-#define CLONE_NEWPID		0x20000000	/* New pid namespace */
-#define CLONE_NEWNET		0x40000000	/* New network namespace */
-#define CLONE_IO		0x80000000	/* Clone io context */
-
-/* Flags for the clone3() syscall. */
-#define CLONE_CLEAR_SIGHAND 0x100000000ULL /* Clear any signal handler and reset to SIG_DFL. */
-#define CLONE_INTO_CGROUP 0x200000000ULL /* Clone into a specific cgroup given the right permissions. */
-
-/*
- * cloning flags intersect with CSIGNAL so can be used with unshare and clone3
- * syscalls only:
- */
-#define CLONE_NEWTIME	0x00000080	/* New time namespace */
-
-```
-
-
-### system calls
-
-fork
-```c
-#ifdef __ARCH_WANT_SYS_FORK
-SYSCALL_DEFINE0(fork)
-{
-#ifdef CONFIG_MMU
-       struct kernel_clone_args args = {
-              .exit_signal = SIGCHLD,
-       };
-
-       return kernel_clone(&args);
-#else
-       /* can not support in nommu mode */
-       return -EINVAL;
-#endif
-}
-#endif
-```
-vfork
-```c
-#ifdef __ARCH_WANT_SYS_VFORK
-SYSCALL_DEFINE0(vfork)
-{
-       struct kernel_clone_args args = {
-              .flags        = CLONE_VFORK | CLONE_VM,
-              .exit_signal   = SIGCHLD,
-       };
-
-       return kernel_clone(&args);
-}
-#endif
-```
-Create a kernel thread.
-```c
-pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
-{
-	struct kernel_clone_args args = {
-		.flags		= ((lower_32_bits(flags) | CLONE_VM |
-				    CLONE_UNTRACED) & ~CSIGNAL),
-		.exit_signal	= (lower_32_bits(flags) & CSIGNAL),
-		.stack		= (unsigned long)fn,
-		.stack_size	= (unsigned long)arg,
-	};
-
-	return kernel_clone(&args);
-}
-```
 
 
 ### kernel_clone
@@ -2379,7 +2347,13 @@ At this point, the new command can start running.
 
 ## exit
 
-do_exit
+Processes must terminate with the exit system call. This gives the kernel the opportunity to free the resources used by the processes to the system. 
+The entry point for this call is the sys_exit function that requires an error code as its parameter in order to exit the process.
+Its definition is architecture-independent and is held in kernel/exit.c. 
+Its implementation is not particularly interesting because it immediately delegates its work to do_exit.
+
+Suffice it to say that the implementation of this function consists essentially of decrementing reference counters and returning memory areas to memory management once the reference counter has reverted to 0 and the corresponding structure is no longer being used by any process in the system.
+
 
 ```c
 void __noreturn do_exit(long code)
@@ -2740,6 +2714,7 @@ The nice values, instead of yielding additive increases to timeslices, yield geo
 CFS is called a fair scheduler because it gives each process a fair share—a proportion—of the processor’s time.
 As mentioned, note that CFS isn’t perfectly fair, because it only approximates perfect multitasking, but it can place a lower bound on latency of n for n runnable processes on the unfairness.
 
+#### Scheduling Entities
 
 ```c
 // sched.h

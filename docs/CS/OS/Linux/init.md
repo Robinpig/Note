@@ -1,5 +1,25 @@
 ## Introduction
 
+Like any other program, the kernel goes through a load and initialization phase before performing its normal tasks.
+Although this phase is not particularly interesting in the case of normal applications, the kernel — as the central system layer — has to address a number of specific problems. 
+The boot phase is split into the following three parts:
+- Kernel loading into RAM and the creation of a minimal runtime environment.
+- Branching to the (platform-dependent) machine code of the kernel and system-specific initialization of the elementary system functions written in assembly language.
+- Branching to the (platform-independent) part of the initialization code written in C, and complete initialization of all subsystems with a subsequent switch to normal operation.
+
+As usual, a boot loader is responsible for the first phase. Its tasks depend largely on what the particular architecture is required to do. 
+Because in-depth knowledge of specific processor features and problems is needed to understand all details of the first phase, the architecture-specific reference manual is a good source of information. 
+The second phase is also very hardware-dependent.
+
+
+In the third, system-independent phase, the kernel is already resident in memory and (on some architectures) the processor has switched from boot mode to execution mode in which the kernel then runs.
+On IA-32 machines, it is necessary to switch the processor from 8086 emulation, which is immediately active at boot time, to protected mode to make the system 32-bit capable.
+Setup work is also required on other architectures — for instance, it is often necessary to activate paging explicitly, and central system components must be placed in a defined initial state so that work can begin. 
+All these tasks must be coded in assembly language and therefore are not the most inviting parts of the kernel.
+
+Concentrating on the third phase of startup allows for dispensing with many architecture-specific trifles and has the added advantage that, 
+generally speaking, the remaining sequence of operations is independent of the particular platform on which the kernel runs.
+
 When the computer starts, the BIOS performs Power-On-Self-Test (POST) and initial device discovery and initialization, since the OS’ boot process may rely on access to disks, screens, keyboards, and so on. 
 Next, the first sector of the boot disk, the MBR (Master Boot Record), is read into a fixed memory location and executed. 
 This sector contains a small (512-byte) program that loads a standalone program called boot from the boot device, such as a SATA or SCSI disk. 
@@ -61,7 +81,10 @@ The code scanning for EFI embedded-firmware runs near the end of start_kernel(),
 
 ## start_kernel
 
-
+`start_kernel` acts as a dispatcher function to perform both platform-independent and platform-dependent tasks, all of which are implemented in C. 
+It is responsible for invoking the high-level initialization routines of almost all kernel subsystems.
+Users can recognize when the kernel enters this initialization phase because one of the first things the function does is display the Linux banner on screen.
+(The message is generated early on in the boot operation but is not displayed on-screen until the console system has been initialized. It is buffered in the intervening period.)
 
 ```c
 asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
