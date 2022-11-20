@@ -38,7 +38,22 @@ Java uses three explicit keywords to set the boundaries in a class: **public**, 
 
 Java object identifiers are *actually* “object references.” **And everything is actually pass by value**. So you’re not passing by reference, you’re “passing an object reference by value.
 
+### 'this' pointer
+To understand ‘this’ pointer, it is important to know how objects look at functions and data members of a class.
 
+1. Each object gets its own copy of the data member.
+2. All-access the same function definition as present in the code segment.
+
+Meaning each object gets its own copy of data members and all objects share a single copy of member functions.
+Then now question is that if only one copy of each member function exists and is used by multiple objects, how are the proper data members are accessed and updated?
+
+The compiler supplies an implicit pointer along with the names of the functions as ‘this’.
+The ‘this’ pointer is passed as a hidden argument to all nonstatic member function calls and is available as a local variable within the body of all nonstatic functions. 
+‘this’ pointer is not available in static member functions as static member functions can be called without any object (with class name).
+
+Most of the time, you will not need to access it directly, but you can if needed.
+It’s worth noting that “this” is a const pointer -- you can change the value of the underlying object it points to, but you can not make it point to something else!
+By having functions that would otherwise return void return *this instead, you can make those functions chainable.
 
 ## Method
 Check parameters for validity. In other words, failure to validate parameters, can result in a violation of failure atomicity.

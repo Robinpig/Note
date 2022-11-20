@@ -3,8 +3,7 @@
 Almost all modern programming languages make use of dynamic memory allocation.
 This allows objects to be allocated and deallocated even if their total size was not known at the time that the program was compiled, 
 and if their lifetime may exceed that of the subroutine activation1 that allocated them. 
-A dynamically allocated object is stored in a heap, 
-rather than on the `stack` (in the `activation record` or `stack frame` of the procedure that allocated it) 
+A dynamically allocated object is stored in a heap, rather than on the `stack` (in the `activation record` or `stack frame` of the procedure that allocated it) 
 or `statically` (whereby the name of an object is bound to a storage location known at compile or link time). 
 
 Heap allocation is particularly important because it allows the programmer:
@@ -784,6 +783,9 @@ It is generally best to stick to the defaults as much as possible to avoid surpr
 This also reduces dependencies on a specific JVM offering or version, making ongoing maintenance simpler and less risky.
 
 
+[The Power of Two Choices in Randomized Load Balancing](http://www.eecs.harvard.edu/~michaelm/postscripts/tpds2001.pdf)
+
+[Characterizing and Optimizing Hotspot Parallel Garbage Collection on Multicore Systems](https://ranger.uta.edu/~jrao/papers/EuroSys18.pdf)
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
