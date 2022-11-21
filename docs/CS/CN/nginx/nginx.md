@@ -3,7 +3,7 @@
 [nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by Igor Sysoev.
 
 
-[Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
+### [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
 
 
 ## Architecture
@@ -17,6 +17,45 @@ Src packages:
 - misc   
 - os     
 - stream
+
+
+<div style="text-align: center;">
+
+![nginx's architecture](https://www.aosabook.org/images/nginx/architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. nginx's architecture.
+</p>
+
+Architecture and scalability
+- One master and several worker processes; worker processes run under an unprivileged user;
+- Flexible configuration;
+- Reconfiguration and upgrade of an executable without interruption of the client servicing;
+- Support for kqueue (FreeBSD 4.1+), epoll (Linux 2.6+), /dev/poll (Solaris 7 11/99+), event ports (Solaris 10), select, and poll;
+- The support of the various kqueue features including EV_CLEAR, EV_DISABLE (to temporarily disable events), NOTE_LOWAT, EV_EOF, number of available data, error codes;
+- The support of various epoll features including EPOLLRDHUP (Linux 2.6.17+, glibc 2.8+) and EPOLLEXCLUSIVE (Linux 4.5+, glibc 2.24+);
+- sendfile (FreeBSD 3.1+, Linux 2.2+, macOS 10.5+), sendfile64 (Linux 2.4.21+), and sendfilev (Solaris 8 7/01+) support;
+- File AIO (FreeBSD 4.3+, Linux 2.6.22+);
+- DIRECTIO (FreeBSD 4.4+, Linux 2.4+, Solaris 2.6+, macOS);
+- Accept-filters (FreeBSD 4.1+, NetBSD 5.0+) and TCP_DEFER_ACCEPT (Linux 2.4+) support;
+- 10,000 inactive HTTP keep-alive connections take about 2.5M memory;
+- Data copy operations are kept to a minimum.
+
+### process model
+NGINX uses a predictable process model that is tuned to the available hardware resources:
+
+- The master process performs the privileged operations such as reading configuration and binding to ports, and then creates a small number of child processes (the next three types).
+- The cache loader process runs at startup to load the disk‑based cache into memory, and then exits. It is scheduled conservatively, so its resource demands are low.
+- The cache manager process runs periodically and prunes entries from the disk caches to keep them within the configured sizes.
+- The worker processes do all of the work! They handle network connections, read and write content to disk, and communicate with upstream servers.
+
+The NGINX configuration recommended in most cases – running one worker process per CPU core – makes the most efficient use of hardware resources. You configure it by setting the parameter on the directive:autoworker_processes
+
+When an NGINX server is active, only the worker processes are busy. Each worker process handles multiple connections in a nonblocking fashion, reducing the number of context switches.
+
+Each worker process is single‑threaded and runs independently, grabbing new connections and processing them. The processes can communicate using shared memory for shared cache data, session persistence data, and other shared resources.
 
 
 ## Struct
@@ -464,3 +503,9 @@ ngx_conf_handler
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
+
+
+## References
+
+1. [](https://www.aosabook.org/en/nginx.html)
+2. [Inside NGINX: How We Designed for Performance & Scale](https://www.nginx.com/blog/inside-nginx-how-we-designed-for-performance-scale/)

@@ -2,7 +2,7 @@
 
 
 
-## Memory
+## In-progress Memory
 
 
 ```c
@@ -248,7 +248,7 @@ ngx_destroy_pool(ngx_pool_t *pool)
 }
 ```
 
-## Share Memory
+## Shared Memory
 
 ```c
 // 
