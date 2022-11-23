@@ -580,6 +580,214 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
 
 ### worker cycle
 
+
+```c
+
+static void
+ngx_start_worker_processes(ngx_cycle_t *cycle, ngx_int_t n, ngx_int_t type)
+{
+    ngx_int_t      i;
+    ngx_channel_t  ch;
+
+    ngx_memzero(&ch, sizeof(ngx_channel_t));
+
+    ch.command = NGX_CMD_OPEN_CHANNEL;
+
+    for (i = 0; i < n; i++) {
+
+        ngx_spawn_process(cycle, ngx_worker_process_cycle,
+                          (void *) (intptr_t) i, "worker process", type);
+
+        ch.pid = ngx_processes[ngx_process_slot].pid;
+        ch.slot = ngx_process_slot;
+        ch.fd = ngx_processes[ngx_process_slot].channel[0];
+
+        ngx_pass_open_channel(cycle, &ch);
+    }
+}
+```
+create worker process
+
+worker progress set ngx_channel = ngx_processes[s].channel[1];
+
+```c
+
+ngx_pid_t
+ngx_spawn_process(ngx_cycle_t *cycle, ngx_spawn_proc_pt proc, void *data,
+    char *name, ngx_int_t respawn)
+{
+    u_long     on;
+    ngx_pid_t  pid;
+    ngx_int_t  s;
+
+    if (respawn >= 0) {
+        s = respawn;
+
+    } else {
+        for (s = 0; s < ngx_last_process; s++) {
+            if (ngx_processes[s].pid == -1) {
+                break;
+            }
+        }
+
+        if (s == NGX_MAX_PROCESSES) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
+                          "no more than %d processes can be spawned",
+                          NGX_MAX_PROCESSES);
+            return NGX_INVALID_PID;
+        }
+    }
+
+
+    if (respawn != NGX_PROCESS_DETACHED) {
+
+        /* Solaris 9 still has no AF_LOCAL */
+
+        if (socketpair(AF_UNIX, SOCK_STREAM, 0, ngx_processes[s].channel) == -1)
+        {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                          "socketpair() failed while spawning \"%s\"", name);
+            return NGX_INVALID_PID;
+        }
+
+        ngx_log_debug2(NGX_LOG_DEBUG_CORE, cycle->log, 0,
+                       "channel %d:%d",
+                       ngx_processes[s].channel[0],
+                       ngx_processes[s].channel[1]);
+
+        if (ngx_nonblocking(ngx_processes[s].channel[0]) == -1) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                          ngx_nonblocking_n " failed while spawning \"%s\"",
+                          name);
+            ngx_close_channel(ngx_processes[s].channel, cycle->log);
+            return NGX_INVALID_PID;
+        }
+
+        if (ngx_nonblocking(ngx_processes[s].channel[1]) == -1) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                          ngx_nonblocking_n " failed while spawning \"%s\"",
+                          name);
+            ngx_close_channel(ngx_processes[s].channel, cycle->log);
+            return NGX_INVALID_PID;
+        }
+
+        on = 1;
+        if (ioctl(ngx_processes[s].channel[0], FIOASYNC, &on) == -1) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                          "ioctl(FIOASYNC) failed while spawning \"%s\"", name);
+            ngx_close_channel(ngx_processes[s].channel, cycle->log);
+            return NGX_INVALID_PID;
+        }
+
+        if (fcntl(ngx_processes[s].channel[0], F_SETOWN, ngx_pid) == -1) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                          "fcntl(F_SETOWN) failed while spawning \"%s\"", name);
+            ngx_close_channel(ngx_processes[s].channel, cycle->log);
+            return NGX_INVALID_PID;
+        }
+
+        if (fcntl(ngx_processes[s].channel[0], F_SETFD, FD_CLOEXEC) == -1) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                          "fcntl(FD_CLOEXEC) failed while spawning \"%s\"",
+                           name);
+            ngx_close_channel(ngx_processes[s].channel, cycle->log);
+            return NGX_INVALID_PID;
+        }
+
+        if (fcntl(ngx_processes[s].channel[1], F_SETFD, FD_CLOEXEC) == -1) {
+            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                          "fcntl(FD_CLOEXEC) failed while spawning \"%s\"",
+                           name);
+            ngx_close_channel(ngx_processes[s].channel, cycle->log);
+            return NGX_INVALID_PID;
+        }
+
+        ngx_channel = ngx_processes[s].channel[1];
+
+    } else {
+        ngx_processes[s].channel[0] = -1;
+        ngx_processes[s].channel[1] = -1;
+    }
+
+    ngx_process_slot = s;
+
+
+    pid = fork();
+
+    switch (pid) {
+
+    case -1:
+        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
+                      "fork() failed while spawning \"%s\"", name);
+        ngx_close_channel(ngx_processes[s].channel, cycle->log);
+        return NGX_INVALID_PID;
+
+    case 0:
+        ngx_parent = ngx_pid;
+        ngx_pid = ngx_getpid();
+        proc(cycle, data);
+        break;
+
+    default:
+        break;
+    }
+
+    ngx_log_error(NGX_LOG_NOTICE, cycle->log, 0, "start %s %P", name, pid);
+
+    ngx_processes[s].pid = pid;
+    ngx_processes[s].exited = 0;
+
+    if (respawn >= 0) {
+        return pid;
+    }
+
+    ngx_processes[s].proc = proc;
+    ngx_processes[s].data = data;
+    ngx_processes[s].name = name;
+    ngx_processes[s].exiting = 0;
+
+    switch (respawn) {
+
+    case NGX_PROCESS_NORESPAWN:
+        ngx_processes[s].respawn = 0;
+        ngx_processes[s].just_spawn = 0;
+        ngx_processes[s].detached = 0;
+        break;
+
+    case NGX_PROCESS_JUST_SPAWN:
+        ngx_processes[s].respawn = 0;
+        ngx_processes[s].just_spawn = 1;
+        ngx_processes[s].detached = 0;
+        break;
+
+    case NGX_PROCESS_RESPAWN:
+        ngx_processes[s].respawn = 1;
+        ngx_processes[s].just_spawn = 0;
+        ngx_processes[s].detached = 0;
+        break;
+
+    case NGX_PROCESS_JUST_RESPAWN:
+        ngx_processes[s].respawn = 1;
+        ngx_processes[s].just_spawn = 1;
+        ngx_processes[s].detached = 0;
+        break;
+
+    case NGX_PROCESS_DETACHED:
+        ngx_processes[s].respawn = 0;
+        ngx_processes[s].just_spawn = 0;
+        ngx_processes[s].detached = 1;
+        break;
+    }
+
+    if (s == ngx_last_process) {
+        ngx_last_process++;
+    }
+
+    return pid;
+}
+```
+
+ngx_worker_process_cycle
 ```c
 
 static void
@@ -602,8 +810,6 @@ ngx_worker_process_cycle(ngx_cycle_t *cycle, void *data)
                 ngx_worker_process_exit(cycle);
             }
         }
-
-        ngx_log_debug0(NGX_LOG_DEBUG_EVENT, cycle->log, 0, "worker cycle");
 
         ngx_process_events_and_timers(cycle);
 
@@ -707,6 +913,11 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
 #### ngx_process_events
 
 ngx_event_actions_t see [Event](/docs/CS/CN/nginx/event.md)
+
+
+### signal
+
+
 
 ## Configuration
 

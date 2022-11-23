@@ -96,7 +96,7 @@ And thus the context switch is complete.
 ## Architecture
 
 - [Processes and Threads](/docs/CS/OS/process.md)
-- [Memory Management](/docs/CS/OS/memory.md)
+- [Memory Management](/docs/CS/OS/memory/memory.md)
 - [File Systems](/docs/CS/OS/file.md)
 - [Input/Output](/docs/CS/OS/IO.md)
 - [Security](/docs/CS/OS/Security.md)
