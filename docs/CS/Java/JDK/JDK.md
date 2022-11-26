@@ -92,4 +92,5 @@ then the overall effect can be to reduce latency, even though more requests are 
 
 
 ## References
-1. [Java Performance Tuning](http://www.javaperformancetuning.com/)
+1. [The Java Language Environment: Contents A White Paper](https://www.oracle.com/java/technologies/language-environment.html)
+2. [Java Performance Tuning](http://www.javaperformancetuning.com/)
