@@ -1,6 +1,7 @@
 ## Introduction
 
-### Collection Hierarchy
+As is common with modern data structure libraries, the Java collection library separates interfaces and implementations. 
+
 
 ![Collection](../img/Collection.png)
 
@@ -8,6 +9,17 @@
 - [Map](/docs/CS/Java/JDK/Collection/Map.md)
 - [Set](/docs/CS/Java/JDK/Collection/Set.md)
 - [Queue](/docs/CS/Java/JDK/Collection/Queue.md)
+
+
+
+## Queue
+
+Let us look at that separation with a familiar data structure, the queue.
+
+
+A queue interface specifies that you can add elements at the tail end of the queue, remove them at the head, and find out how many elements are in the queue. You use a queue when you need to collect objects and retrieve them in a “first in, first out” fashion.
+
+
 
 
 ### Collection

@@ -131,7 +131,67 @@ Compare
 
 ## Stream
 
+Compared to collections, streams provide a view of data that lets you specify computations at a higher conceptual level.
+With a stream, you specify what you want to have done, not how to do it. 
+You leave the scheduling of operations to the implementation. 
+For example, suppose you want to compute the average of a certain property.
+You specify the source of data and the property, and the stream library can then optimize the computation, for example by using multiple threads for computing sums and counts and combining the results.
+
 *A Stream is a tool for building up complex operations on collections using a functional approach.*
+
+When you process a collection, you usually iterate over its elements and do some work with each of them.
+ For example, suppose we want to count all long words in a book.
+ First, let’s put them into a list:
+
+var contents =  Files.readString(Path.of("alice.txt")); // Read file into string
+```
+List<String> words = List.of(contents.split("\\PL+"));
+// Split into words; nonletters are delimiters
+```
+Now we are ready to iterate:
+```
+int count = 0;
+for (String w : words)
+{
+if (w.length() > 12) count++;
+}
+```
+With streams, the same operation looks like this:
+```
+long count = words.stream()
+.filter(w -> w.length() > 12)
+.count();
+```
+Now you don't have to scan the loop for evidence of filtering and counting. The method names tell you right away what the code intends to do. 
+Moreover, where the loop prescribes the order of operations in complete detail, a stream is able to schedule the operations any way it wants, as long as the result is correct.
+Simply changing stream to parallelStream allows the stream library to do the filtering and counting in parallel.
+```
+long count = words.parallelStream()
+.filter(w -> w.length() > 12)
+.count();
+```
+Streams follow the “what, not how” principle. In our stream example, we describe what needs to be done: get the long words and count them. We don't specify in which order, or in which thread, this should happen. 
+In contrast, the loop at the beginning of this section specifies exactly how the computation should work, and thereby forgoes any chances of optimization.
+
+A stream seems superficially similar to a collection, allowing you to transform and retrieve data. But there are significant differences:
+
+- A stream does not store its elements. They may be stored in an underlying collection or generated on demand.
+- Stream operations don't mutate their source. For example, the filter method does not remove elements from a stream but yields a new stream in which they are not “present.
+- Stream operations are lazy when possible. This means they are not executed until their result is needed. 
+  For example, if you only ask for the first five long words instead of all, the filter method will stop filtering after the fifth match. As a consequence, you can even have infinite streams!
+
+Let us have another look at the example. The stream and parallelStream methods yield a stream for the words list. 
+The filter method returns another stream that contains only the words of length greater than 12. The count method reduces that stream to a result.
+
+This workflow is typical when you work with streams. You set up a pipeline of operations in three stages:
+
+1. Create a stream.
+1. Specify intermediate operations for transforming the initial stream into others, possibly in multiple steps.
+1. Apply a terminal operation to produce a result. This operation forces the execution of the lazy operations that precede it. Afterwards, the stream can no longer be used.
+
+In the previous example, the stream is created with the stream or parallelStream methods. The filter method transforms it, and count is the terminal operation.
+
+
 
 ### Iterator & Stream
 
