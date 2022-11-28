@@ -38,6 +38,29 @@ hotspot
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
 
+### heap object
+
+CHeapObj
+- 0xAB around obj to check if the memory been broken
+
+AllStatic
+
+```hpp
+// os.hpp
+class os: AllStatic {
+  friend class VMStructs;
+  friend class JVMCIVMStructs;
+  friend class MallocTracker;
+
+static char*  reserve_memory(size_t bytes, char* addr = 0,
+                               size_t alignment_hint = 0, int file_desc = -1);
+}
+```
+
+
+
+
+
 ## The class File Format
 
 - [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
@@ -160,6 +183,22 @@ Execution of the method continues in the interpreter.
 
 
 ### Native Method Library
+
+```dot
+
+strict digraph {
+    subgraph cluster_CollectedHeap {
+            label="CollectedHeap"
+        Heap;
+        Interface[label="Manger interface"];
+        Heap ->  Interface;
+        Interface -> Heap;    
+    }
+    CollectPolicy -> Heap;
+    Allocate_Request -> Interface;
+    Active_GC_request -> Interface;
+}
+```
 
 
 Top-of-Stack Cashing
