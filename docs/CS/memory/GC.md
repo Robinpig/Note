@@ -18,8 +18,7 @@ Typically, a reference is a pointer to the object (that is, the address in memor
 However, a reference may alternatively refer to an object only indirectly, for instance through a handle which in turn points to the object.
 Handles offer the advantage of allowing an object to be relocated (updating its handle) without having to change every reference to that object/handle throughout the program.
 
-Memory used by heap objects can be reclaimed using *explicit deallocation* (for example, with C's `free` or C++'s `delete` operator) or automatically by the run-time system,
-using reference counting or a tracing garbage collector.
+**Memory used by heap objects can be reclaimed using *explicit deallocation* (for example, with C's `free` or C++'s `delete` operator) or automatically by the run-time system, using reference counting or a tracing garbage collector.**
 
 ### Explicit deallocation
 
@@ -28,7 +27,15 @@ Manual reclamation risks programming errors; these may arise in two ways.
 - Memory may be freed prematurely, while there are still references to it. Such a reference is called a `dangling pointer`.
 - The second kind of error is that the programmer may fail to free an object no longer required by the program, leading to a `memory leak`.
 
-The issue is more fundamental than simply being a matter of programmers needing to take more care. Difficulties of correct memory management are often inherent to the programming problem in question.
+Programming errors of this kind are particularly prevalent in the presence of sharing, when two or more subroutines may hold references to an object. 
+This is even more problematic for concurrent programming when two or more threads may reference an object.
+With the increasing ubiquity of multicore processors, considerable effort has gone into the construction of libraries of data structures that are thread-safe.
+Algorithms that access these structures need to guard against a number of problems, including deadlock, livelock and ABA3 errors.
+Automatic memory management eases the construction of concurrent algorithms significantly (for example, by eliminating certain ABA problems). 
+Without this, programming solutions are much more complicated.
+
+The issue is more fundamental than simply being a matter of programmers needing to take more care.
+Difficulties of correct memory management are often inherent to the programming problem in question.
 More generally, safe deallocation of an object is complex because, as Wilson points out, "**liveness is a global property**", whereas the decision to call `free` on a variable is a local one.
 
 So how do programmers cope in languages not supported by automatic dynamic memory management?
@@ -44,6 +51,15 @@ Belotsky and others offer several possible strategies for C++.
   At the end of a program phase, the entire pool can be freed as a whole.
 
 ### Automatic dynamic memory management
+
+The advantages that garbage collected languages offer to software development are legion. 
+It eliminates whole classes of bugs, such as attempting to follow dangling pointers that still refer to memory that has been reclaimed or worse, reused in another context. 
+It is no longer possible to free memory that has already been freed. 
+It reduces the chances of programs leaking memory, although it cannot cure all errors of this kind.
+It greatly simplifies the construction and use of concurrent data structures.
+Above all, the abstraction offered by garbage collection provides for better software engineering practice.
+It simplifies user interfaces and leads to code that is easier to understand and to maintain, and hence more reliable. 
+By removing memory management worries from interfaces, it leads to code that is easier to reuse.
 
 Automatic dynamic memory management resolves many of these issues.
 `Garbage collection`(GC) prevents dangling pointers being created: an object is reclaimed only when there is no pointer to it from a reachable object.

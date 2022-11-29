@@ -46,6 +46,42 @@ FGC频次异常
 - 对象预估和担保
 - 堆大小动态调整
 
+
+
+is forwarded
+
+```cpp
+
+// Used only for markSweep, scavenging
+bool oopDesc::is_gc_marked() const {
+  return mark_raw()->is_marked();
+}
+
+
+// Used by scavengers
+bool oopDesc::is_forwarded() const {
+  // The extra heap check is needed since the obj might be locked, in which case the
+  // mark would point to a stack location and have the sentinel bit cleared
+  return mark_raw()->is_marked();
+}
+
+
+
+// Used by scavengers
+void oopDesc::forward_to(oop p) {
+  assert(check_obj_alignment(p),
+         "forwarding to something not aligned");
+  assert(Universe::heap()->is_in_reserved(p),
+         "forwarding to something not in heap");
+  assert(!is_archived_object(oop(this)) &&
+         !is_archived_object(p),
+         "forwarding archive object");
+  markOop m = markOopDesc::encode_pointer_as_mark(p);
+  assert(m->decode_pointer() == p, "encoding must be reversable");
+  set_mark_raw(m);
+}
+```
+
 ## Collectors
 
 Following Dijkstra *et al*, a garbage-collected program is divided into two semiindependent parts.
@@ -63,6 +99,8 @@ threads.
 - [G1](/docs/CS/Java/JDK/JVM/G1.md)
 - [Shenandoah](/docs/CS/Java/JDK/JVM/Shenandoah.md)
 - [ZGC](/docs/CS/Java/JDK/JVM/ZGC.md)
+
+> See  gcConfiguration.cpp
 
 young_collector
 
