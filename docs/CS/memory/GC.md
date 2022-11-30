@@ -27,11 +27,11 @@ Manual reclamation risks programming errors; these may arise in two ways.
 - Memory may be freed prematurely, while there are still references to it. Such a reference is called a `dangling pointer`.
 - The second kind of error is that the programmer may fail to free an object no longer required by the program, leading to a `memory leak`.
 
-Programming errors of this kind are particularly prevalent in the presence of sharing, when two or more subroutines may hold references to an object. 
+Programming errors of this kind are particularly prevalent in the presence of sharing, when two or more subroutines may hold references to an object.
 This is even more problematic for concurrent programming when two or more threads may reference an object.
 With the increasing ubiquity of multicore processors, considerable effort has gone into the construction of libraries of data structures that are thread-safe.
 Algorithms that access these structures need to guard against a number of problems, including deadlock, livelock and ABA3 errors.
-Automatic memory management eases the construction of concurrent algorithms significantly (for example, by eliminating certain ABA problems). 
+Automatic memory management eases the construction of concurrent algorithms significantly (for example, by eliminating certain ABA problems).
 Without this, programming solutions are much more complicated.
 
 The issue is more fundamental than simply being a matter of programmers needing to take more care.
@@ -40,7 +40,6 @@ More generally, safe deallocation of an object is complex because, as Wilson poi
 
 So how do programmers cope in languages not supported by automatic dynamic memory management?
 The key advice has been to be consistent in the way that they manage the `ownership` of objects.
-
 Belotsky and others offer several possible strategies for C++.
 
 - First, programmers should avoid heap allocation altogether, wherever possible. For example, objects can be allocated on the stack instead.
@@ -50,15 +49,30 @@ Belotsky and others offer several possible strategies for C++.
 - In some circumstances it may be appropriate to use custom allocators, for example, that manage a pool of objects.
   At the end of a program phase, the entire pool can be freed as a whole.
 
+C++ has seen several attempts to use special pointer classes and templates to improve memory management.
+These overload normal pointer operations in order to provide safe storage reclamation.
+However, such smart pointers have several limitations.
+The aut o_pt r class template cannot be used with the Standard Template Library and will be deprecated in the expected next edition of the C++ standard.
+It will be replaced by an improved `unique_ptr` that provides strict ownership semantics that allow the target object to be deleted when the unique pointer is.
+The standard will also include a reference counted `shared_ptr`, but these also have limitations.
+Reference counted pointers are unable to manage self-referential (cyclic) data structures.
+Most smart pointers are provided as libraries, which restricts their applicability if efficiency is a concern.
+Possibly, they are most appropriately used to manage very large blocks, references to which are rarely assigned or passed, in which case they might be significantly cheaper than tracing collection.
+On the other hand, without the cooperation of the compiler and run-time system, reference counted pointers are not an efficient, general purpose solution to the management of small objects, especially if pointer manipulation is to be thread-safe.
+
+The plethora of strategies for safe manual memory management throws up yet another problem.
+If it is essential for the programmer to manage object ownership consistently, which approach should she adopt? This is particularly problematic when using library code.
+Which approach does the library take? Do all the libraries used by the program use the same approach?
+
 ### Automatic dynamic memory management
 
-The advantages that garbage collected languages offer to software development are legion. 
-It eliminates whole classes of bugs, such as attempting to follow dangling pointers that still refer to memory that has been reclaimed or worse, reused in another context. 
-It is no longer possible to free memory that has already been freed. 
+The advantages that garbage collected languages offer to software development are legion.
+It eliminates whole classes of bugs, such as attempting to follow dangling pointers that still refer to memory that has been reclaimed or worse, reused in another context.
+It is no longer possible to free memory that has already been freed.
 It reduces the chances of programs leaking memory, although it cannot cure all errors of this kind.
 It greatly simplifies the construction and use of concurrent data structures.
 Above all, the abstraction offered by garbage collection provides for better software engineering practice.
-It simplifies user interfaces and leads to code that is easier to understand and to maintain, and hence more reliable. 
+It simplifies user interfaces and leads to code that is easier to understand and to maintain, and hence more reliable.
 By removing memory management worries from interfaces, it leads to code that is easier to reuse.
 
 Automatic dynamic memory management resolves many of these issues.
@@ -85,7 +99,7 @@ Requiring code to understand the rules of engagement limits the reusability of c
 The key argument in favour of garbage collection is not just that it **simplifies coding** - which it does -
 but that it uncouples the problem of memory management from interfaces, rather than scattering it throughout the code. **It improves reusability.**
 
-We do not claim that garbage collection is a silver bullet that will eradicate all memoryrelated programming errors or that it is applicable in all situations.
+We do not claim that garbage collection is a *silver bullet* that will eradicate all memoryrelated programming errors or that it is applicable in all situations.
 Although garbage collection tends to reduce the chance of memory leaks, it does not guarantee to eliminate them.
 It has no answer to the problem of a data structure that is still reachable,
 but grows without limit (for example, if a programmer repeatedly adds data to a cache but never removes objects from that cache),
@@ -106,15 +120,126 @@ Moreover, the metrics are not independent variables.
 Not only does the performance of an algorithm depend on the topology and volume of objects in the heap, but also on the access patterns of the application.
 Worse, the tuning options in production virtual machines are inter-connected.
 
-- Safety
-- Throughput
-- Completeness and promptness
-- Pause time
-- Space overhead
-- Optimisations for specific languages
-- Scalability and portability
+#### Safety
 
-### performance
+The prime consideration is that garbage collection should be safe: the collector must never reclaim the storage of live objects.
+However, safety comes with a cost, particularly for concurrent collectors. The safety of conservative collection, which receives no assistance from the compiler or run-time system, may in principle be vulnerable to certain compiler optimisations that disguise pointers.
+
+#### Throughput
+
+A common goal for end users is that their programs should run faster. However, there
+are several aspects to this. One is that the overall time spent in garbage collection should
+be as low as possible. This is commonly referred to in the literature as the mark/cons ratio,
+comparing the early Lisp activities of the collector ('marking' live objects) and the mutator
+(creating or 'consing' new list cells). However, the user is most likely to want the application as a whole (mutator plus collector) to execute in as little time as possible. In most well
+designed configurations, much more CPU time is spent in the mutator than the collector.
+Therefore it may be worthwhile trading some collector performance for increased mutator
+throughput. For example, systems managed by mark-sweep collection occasionally perform more expensive compacting phases in order to reduce fragmentation so as to improve
+mutator allocation performance (and possibly mutator performance more generally).
+
+#### Completeness and promptness
+
+Ideally, garbage collection should be complete: eventually, all garbage in the heap should be
+reclaimed. However, this is not always possible nor even desirable. Pure reference counting collectors, for example, are unable to reclaim cyclic garbage (self-referential structures).
+For performance reasons, it may be desirable not to collect the whole heap at every collection cycle. For example, generational collectors segregate objects by their age into two or
+more regions called generations (we discuss generational garbage collection in Chapter 9).
+By concentrating effort on the youngest generation, generational collectors can both improve total collection time and reduce the average pause time for individual collections.
+
+Concurrent collectors interleave the execution of mutators and collectors; the goal of
+such collectors is to avoid, or at least bound, interruptions to the user program. One consequence is that objects that become garbage after a collection cycle has started may not be
+reclaimed until the end of the next cycle; such objects are calledfloating garbage.
+Hence, in a concurrent setting it may be more appropriate to define completeness as eventual reclamation of all garbage, as opposed to reclamation within one cycle.
+Different collection algorithms may vary in their promptness of reclamation, again leading to time/space trade-offs.
+
+#### Pause time
+
+On the other hand, an important requirement may be to minimise the collector's intrusion on program execution. Many collectors introduce pauses into a program's execution
+because they stop all mutator threads while collecting garbage. It is clearly desirable to
+make these pauses as short as possible. This might be particularly important for interactive applications or servers handling transactions (when failure to meet a deadline might
+lead to the transaction being retried, thus building up a backlog of work). However, mechanisms for limiting pause times may have side-effects, as we shall see in more detail in
+later chapters. For example, generational collectors address this goal by frequently and
+quickly collecting a small nursery region, and only occasionally collecting larger, older
+generations. Clearly, when tuning a generational collector, there is a balance to be struck
+between the sizes of the generations, and hence not only the pause times required to collect
+different generations but also the frequency of collections. However, because the sources
+of some inter-generational pointers must be recorded, generational collection imposes a
+small tax on pointer write operations by the mutator.
+Parallel collectors stop the world to collect but reduce pause times by employing multiple threads. Concurrent and incremental collectors aim to reduce pause times still further
+by occasionally performing a small quantum of collection work interleaved or in parallel
+with mutator actions. This too requires taxation of the mutator in order to ensure correct
+synchronisation between mutators and collectors. As we shall see in Chapter 15, there are
+different ways to handle this synchronisation. The choice of mechanism affects both space
+and time costs. It also affects termination of a garbage collection cycle. The cost of the
+taxation on mutator time depends on how and which manipulations of the heap by the
+mutator (loads or stores) are recorded. The costs on space, and also collector termination,
+depends on how much floating garbage (see below) a system tolerates. Multiple mutator and collector threads add to the complexity. In any case, decreasing pause time will
+increase overall processing time (decrease processing rate).
+Maximum or average pause times on their own are not adequate measures. It is also
+important that the mutator makes progress. The distribution of pause times is therefore
+also of interest. There are a number of ways that pause time distributions may be reported.
+The simplest might be a measure ofvariation such as standard deviation or a graphical representation of the distribution. More interesting measures include minimum mutator utilisation (MMU) and bounded mutator utilisation (BMU). Both the MMU [Cheng and Blelloch,
+2001) and BMU [Sachindran et al, 2004] measures seek to display concisely the (minimum)
+fraction of time spent in the mutator, for any given time window. The x-axis of Figure 1.2
+represents time, from 0 to total execution time, and its y-axis the fraction of CPU time spent
+in the mutator (utilisation). Thus, not only do MMU and BMU curves show total garbage
+collection time as a fraction of overall execution time (the y-intercept, at the top right of the
+curves is the mutators' overall share of processor time), but they also show the maximum
+pause time (the longest window for which the mutator's CPU utilisation is zero) as the
+x-intercept. In general, curves that are higher and more to the left are preferable since they
+tend towards a higher mutator utilisation for a smaller maximum pause. Note that the
+MMU is the minimum mutator utilisation (y) in any time window (x). As a consequence
+it is possible for a larger window to have a lower MMU than a smaller window, leading
+to dips in the curve. In contrast, BMU curves give the MMU in that time window or any
+larger one. Monotonically increasing BMU curves are perhaps more intuitive than MMU.
+
+Figure 1.2: Minimum mutator utilisation and bounded mutator utilisation
+curves display concisely the (minimum) fraction of time spent in the mutator,
+for any given time window. MMU is the minimum mutator utilisation (y)
+in any time window (x) whereas BMU is minimum mutator utilisation in
+that time window or any larger one. In both cases, the x-intercept gives the
+maximum pause time and the y-intercept is the overall fraction of processor
+time used by the mutator.
+
+#### Space overhead
+
+The goal of memory management is safe and efficient use of space. Different memory
+managers, both explicit and automatic, impose different space overheads. Some garbage
+collectors may impose per-object space costs (for example, to store reference counts); others may be able to smuggle these overheads into objects' existing layouts (for example, a
+mark bit can often be hidden in a header word, or a forwarding pointer may be written
+over user data). Collectors may have a per-heap space overhead. For example, copying
+collectors divide the heap into two semispaces. Only one semispace is available to the mutator at any time; the other is held as a copy reserve into which the collector will evacuate
+live objects at collection time. Collectors may require auxiliary data structures. Tracing
+collectors need mark stacks to guide the traversal of the pointer graph in the heap; they
+may also store mark bits in separate bitmap tables rather than in the objects themselves.
+Concurrent collectors, or collectors that divide the heap into independently collected regions, require remembered sets that record where the mutator has changed the value of
+pointers, or the locations of pointers that span regions, respectively
+
+#### Optimisations for specific languages
+
+Garbage collection algorithms can also be characterised by their applicability to different
+language paradigms. Functional languages in particular have offered a rich vein for optimisations related to memory management. Some languages, such as ML, distinguish
+mutable from immutable data. Pure functional languages, such as Haskell, go further and
+do not allow the user to modify any values (programs are referentially transparent). Internally, however, they typically update data structures at most once (from a 'thunk' to weak head normal form); this gives multi-generation collectors opportunities to promote fully
+evaluated data structures eagerly (see Chapter 9). Authors have also suggested complete
+mechanisms for handling cyclic data structures with reference counting. Declarative languages may also allow other mechanisms for efficient management of heap spaces. Any
+data created in a logic language after a 'choice point' becomes unreachable after the program backtracks to that point. With a memory manager that keeps objects laid out in the
+heap in their order of allocation, memory allocated after the choice point can be reclaimed
+in constant time. Conversely, different language definitions may make specific requirements of the collector. The most notable are the ability to deal with a variety of pointer
+strengths and the need for the collector to cause dead objects to be finalised.
+
+#### Scalability and portability
+
+The final metrics we identify here are scalability and portability. With the increasing prevalence of multicore hardware on the desktop and even laptop (rather than just in large
+servers), it is becoming increasingly important that garbage collection can take advantage
+of the parallel hardware on offer. Furthermore, we expect parallel hardware to increase
+in scale (number of cores and sockets) and for heterogeneous processors to become more
+common. The demands on servers are also increasing, as heap sizes move into the tens
+or hundreds of gigabytes scale and as transaction loads increase. A number of collection
+algorithms depend on support from the operating system or hardware (for instance, by
+protecting pages or by double mapping virtual memory space, or on the availability of
+certain atomic operations on the processor). Such techniques are not necessarily portable.
+
+### performance disadvantage
 
 Nevertheless, a long running criticism of garbage collection has been that it is slow compared to explicit memory management and imposes unacceptable overheads,
 both in terms of overall throughput and in pauses for garbage collection.
@@ -123,6 +248,97 @@ While it is true that automatic memory management does impose a performance pena
 Although, as expected, results varied between both collectors and explicit allocators, Hertz *et al* found garbage collectors could match the
 execution time performance of explicit allocation provided they were given a sufficiently large heap (five times the minimum required).
 For more typical heap sizes, the garbage collection overhead increased to 17% on average.
+
+### Terminology and notation
+
+##### The heap
+The heap is either a contiguous array of memory words or organised into a set of discontiguous blocks of contiguous words. A granule is the smallest unit of allocation, typically a word or double-word, depending on alignment requirements. A chunk is a large contiguous group of granules. A cell is a generally smaller contiguous group of granules and may
+be allocated or free, or even wasted or unusable for some reason.
+
+A block is an aligned chunk of a particular size, usually a power of two. For completeness we mention also that a frame (when not referring to a stack frame) means a large
+2k sized portion of address space, and a space is a possibly discontiguous collection of
+chunks, or even objects, that receive similar treatment by the system. A page is as defined
+by the hardware and operating system's virtual memory mechanism, and a cache line (or
+cache block) is as defined by its cache. A card is a 2k aligned chunk, smaller than a page,
+related to some schemes for remembering cross-space pointers (Section 11 .8).
+The heap is often characterised as an object graph, which is a directed graph whose nodes
+are heap objects and whose directed edges are the references to heap objects stored in their
+fields. An edge is a reference from a source node or a root (see below) to a destination node.
+
+##### The mutator and the collector
+Following Dijkstra et al, a garbage-collected program is divided into two semiindependent parts.
+
+- The mutator executes application code, which allocates new objects and mutates the
+  object graph by changing reference fields so that they refer to different destination
+  objects. These reference fields may be contained in heap objects as well as other
+  places known as roots, such as static variables, thread stacks, and so on. As a result
+  of such reference updates, any object can end up disconnected from the roots, that is,
+  unreachable by following any sequence of edges from the roots.
+- The collector executes garbage collection code, which discovers unreachable objects and reclaims their storage.
+
+A program may have more than one mutator thread, but the threads together can usually be thought of as a single actor over the heap. Equally, there may be one or more collector threads.
+
+##### Liveness, correctness and reachability
+
+An object is said to be live if it will be accessed at some time in the future execution of the
+mutator. A garbage collector is correct only if it never reclaims live objects. Unfortunately,
+liveness is an undecidable property of programs: there is no way to decide for an arbitrary
+program whether it will ever access a particular heap object or not.8 Just because a program continues to hold a pointer to an object does not mean it will access it. Fortunately,
+we can approximate liveness by a property that is decidable: pointer reachability. An object
+N is reachable from an object M if N can be reached by following a chain of pointers, starting from some field f of M. By extension, an object is only usable by a mutator if there is a
+chain of pointers from one of the mutator's roots to the object.
+More formally (in the mathematical sense that allows reasoning about reachability), we
+can define the immediate 'points-to' relation --+1 as follows. For any two heap nodes M, N
+in Node s, M -+t N if and only if there is some field location J= & M[i] in P o i nt e r s (M) such that *J=N. Similarly, Root s --+1 N if and only if there is some field f in Root s such
+that * f=N. We say that N is directly reachable from M, written M --+ N, if there is some
+field f in P o i n t e r s (M) such that M --+1 N (that is, some field f of M points to N). Then,
+the set of reachable objects in the heap is the transitive referential closure from the set of
+Root s under the --+ relation, that is, the least set
+reachable = {N E N o d e s I (:lr E Root s : r --+ N) V (3M E reachable : M --+ N) } (1.1)
+An object that is unreachable in the heap, and not pointed to by any mutator root, can
+never be accessed by a type-safe mutator. Conversely, any object reachable from the roots
+may be accessed by the mutator. Thus, liveness is more profitably defined for garbage collectors by reachability. Unreachable objects are certainly dead and can safely be reclaimed.
+But any reachable object may still be live and must be retained. Although we realise that
+doing so is not strictly accurate, we will tend to use live and dead interchangeably with
+reachable and unreachable, and garbage as synonymous with unreachable.
+
+##### Mutator read and write operations
+
+As they execute, mutator threads perform several operations of interest to the collector: New, Read and Write.
+We adopt the convention of naming mutator operations with a leading upper-case letter, as opposed to lower-case for collector operations. 
+Generally, these operations have the expected behaviour: allocating a new object, reading an object field or writing an object field.
+Specific memory managers may augment these basic operations with additional functionality that turns the operation into a barrier: an action that results in synchronous or asynchronous communication with the collector.
+We distinguish read barriers and write barriers.
+
+In the face of concurrency between mutator threads, collector threads, and between the
+mutator and collector, all collector algorithms require that certain code sequences appear
+to execute atomically. For example, stopping mutator threads makes the task of garbage
+collection appear to occur atomically: the mutator threads will never access the heap in the
+middle of garbage collection. Moreover, when running the collector concurrently with the
+mutator, the New, Read, and Write operations may need to appear to execute atomically
+with respect to the collector and/or other mutator threads. To simplify the exposition
+of collector algorithms we will usually leave implicit the precise mechanism by which
+atomicity of operations is achieved, simply marking them with the keyword atomic. The
+meaning is clear: all the steps of an atomic operation must appear to execute indivisibly
+and instantaneously with respect to other operations. That is, other operations will appear
+to execute either before or after the atomic operation, but never interleaved between any
+of the steps that constitute the atomic operation.
+
+##### The mutator roots
+
+Separately from the heap memory, we assume some finite set of mutator roots, representing pointers held in storage that is directly accessible to the mutator without going through other objects.
+By extension, objects in the heap referred to directly by the roots are called root objects.
+The mutator visits objects in the graph by loading pointers from the current set of root objects (adding new roots as it goes).
+The mutator can also discard a root by overwriting the root pointer's storage with some other reference (that is, nul.J. or a pointer to another object). We denote the set of (addresses of) the roots by Roots.
+
+In practice, the roots usually comprise static/global storage and thread-local storage (such as thread stacks) containing pointers through which mutator threads can directly manipulate heap objects.
+As mutator threads execute over time, their state (and so their roots) will change.
+
+In a type-safe programming language, once an object becomes unreachable in the heap, and the mutator has discarded all root pointers to that object, then there is no way for the mutator to reacquire a pointer to the object.
+The mutator cannot 'rediscover' the object arbitrarily (without interaction with the run-time system) - there is no pointer the mutator can traverse to it and arithmetic construction of new pointers is prohibited.
+A variety of languages supportfinalisation of at least some objects.
+These appear to the mutator to be 'resurrected' by the run-time system.
+Our point is that the mutator cannot gain access to any arbitrary unreachable object by its efforts alone.
 
 ## Algorithms
 
@@ -579,3 +795,7 @@ This also reduces dependencies on a specific JVM offering or version, making ong
 
 - [Memory](/docs/CS/memory/memory.md)
 - [JVM GC](/docs/CS/Java/JDK/JVM/GC.md)
+
+## References
+
+1. [The Garbage Collection Handbook: The Art of Automatic Memory Management](http://gchandbook.org/)
