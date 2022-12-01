@@ -310,6 +310,35 @@ Generally, these operations have the expected behaviour: allocating a new object
 Specific memory managers may augment these basic operations with additional functionality that turns the operation into a barrier: an action that results in synchronous or asynchronous communication with the collector.
 We distinguish read barriers and write barriers.
 
+New( ). The New operation obtains a new heap object from the heap allocator which returns the address of the first word of the newly-allocated object. The mechanism for actual
+allocation may vary from one heap implementation to another, but collectors usually need
+to be informed that a given object has been allocated in order to initialise metadata for that
+object, and before it can be manipulated by the mutator. The trivial default definition of
+New simply allocates.
+```
+New():
+  return allocate()
+```
+Read(src,i). The Read operation accesses an object field in memory (which may hold a
+scalar or a pointer) and returns the value stored at that location. Read generalises memory
+loads and takes two arguments: (a pointer to) the object and the (index of its) field being
+accessed. We allow s rc=Root s if the field s rc [i] is a root (that is, & s rc [i] E Root s). The
+default, trivial definition of Re ad simply returns the contents of the field.
+```
+Read(src, i):
+  return src[i]
+```
+Write(src,i,val). The Wr i t e operation modifies a particular location in memory. It
+generalises memory stores and takes three arguments: (a pointer to) the source object and
+the (index of its) field to be modified, plus the (scalar or pointer) value to be stored. Again,
+if s r c=Root s then the field s r c [ i] is a root (that is, & s r c [i] E Ro ot s). The default, trivial
+definition of Wr i t e simply updates the field.
+```
+Write(src, i, val):
+  src[i] <- val
+```
+
+
 In the face of concurrency between mutator threads, collector threads, and between the
 mutator and collector, all collector algorithms require that certain code sequences appear
 to execute atomically. For example, stopping mutator threads makes the task of garbage
@@ -342,9 +371,18 @@ Our point is that the mutator cannot gain access to any arbitrary unreachable ob
 
 ## Algorithms
 
-All garbage collection schemes are based on one of four fundamental approaches: marksweep collection, copying collection, mark-compact collection or reference counting.
+All garbage collection schemes are based on one of four fundamental approaches: *mark-sweep collection*, *copying collection*, *mark-compact collection* or *reference counting*.
 Different collectors may combine these approaches in different ways, for example, by collecting one region of the heap with one method and another part of the heap with a second method.
-The next four chapters focus on these four basic styles of collection.
+
+
+For now we shall assume that the mutator is running one or more threads, but that there is a single collector thread.
+All mutator threads are stopped while the collector thread runs.
+This stop-the-world approach simplifies the construction of collectors considerably.
+From the perspective of the mutator threads, collection appears to execute atomically: no mutator thread will see any intermediate state of the collector, and the collector will not see interference with its task by the mutator threads. 
+We can assume that each mutator thread is stopped at a point where it is safe to examine its roots: we look at the details of the run-time interface.
+Stopping the world provides a snapshot of the heap, so we do not have to worry about mutators rearranging the topology of objects in the heap while the collector is trying to determine which objects are live.
+This also means that there is no need to synchronise the collector thread as it returns free space with other collector threads or with the allocator as it tries to acquire space.
+
 
 The goal of an ideal garbage collector is to reclaim the space used by every object that will no longer be used by the program.
 Any automatic memory management system has three tasks:
@@ -353,7 +391,8 @@ Any automatic memory management system has three tasks:
 2. to identify live objects; and
 3. to reclaim the space occupied by dead objects.
 
-These tasks are not independent. In particular, the way space is reclaimed affects how fresh space is allocated.
+**These tasks are not independent.**
+In particular, the way space is reclaimed affects how fresh space is allocated.
 
 ### The tricolour abstraction
 
@@ -394,16 +433,19 @@ As previously discussed this leads to unnecessary cache conflicts and page acces
 
 ### Mark-sweep
 
-It is a straightforward embodiment of the recursive definition of pointer reachability. Collection
-operates in two phases.
+The first algorithm that we look at is mark-sweep collection.
+It is a straightforward embodiment of the recursive definition of pointer reachability. 
+Collection operates in two phases.
 
 - First, the collector traverses the graph of objects, starting from the roots (registers, thread stacks, global variables) through
   which the program might immediately access objects and then following pointers and marking each object that it finds.
   Such a traversal is called `tracing`.
 - In the second, sweeping phase, the collector examines every object in the heap: any unmarked object is deemed to be garbage and its space reclaimed.
 
-Mark-sweep is an indirect collection algorithm. It does not detect garbage per se, but rather identifies all the live objects and then concludes that anything else must be garbage.
+Mark-sweep is an *indirect collection algorithm*. It does not detect garbage per se, but rather identifies all the live objects and then concludes that anything else must be garbage.
 Note that it needs to recalculate its estimate of the set of live objects at each invocation.
+Not all garbage collection algorithms behave like this. We will examine a *direct collection* method, reference counting.
+Unlike indirect methods, direct algorithms determine the liveness of an object from the object alone, without recourse to tracing.
 
 Note that the mark-sweep collector imposes constraints upon the heap layout.
 
@@ -412,6 +454,11 @@ Note that the mark-sweep collector imposes constraints upon the heap layout.
   which would lead to the collector being called too frequently, or in the worst case, preventing the allocation of new memory at all.
 - Second, the sweeper must be able to find each node in the heap.
   In practice, given a node, sweep must be able to find the next node even in the presence of padding introduced between objects in order to observe alignment requirements.
+
+
+From the viewpoint of the garbage collector, mutator threads perform just three operations
+of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=Mutator-read-and-write-operations)").
+
 
 #### Lazy sweeping
 
