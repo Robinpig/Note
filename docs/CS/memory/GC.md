@@ -120,12 +120,12 @@ Moreover, the metrics are not independent variables.
 Not only does the performance of an algorithm depend on the topology and volume of objects in the heap, but also on the access patterns of the application.
 Worse, the tuning options in production virtual machines are inter-connected.
 
-#### Safety
+**Safety**
 
 The prime consideration is that garbage collection should be safe: the collector must never reclaim the storage of live objects.
 However, safety comes with a cost, particularly for concurrent collectors. The safety of conservative collection, which receives no assistance from the compiler or run-time system, may in principle be vulnerable to certain compiler optimisations that disguise pointers.
 
-#### Throughput
+**Throughput**
 
 A common goal for end users is that their programs should run faster. However, there
 are several aspects to this. One is that the overall time spent in garbage collection should
@@ -137,7 +137,7 @@ Therefore it may be worthwhile trading some collector performance for increased 
 throughput. For example, systems managed by mark-sweep collection occasionally perform more expensive compacting phases in order to reduce fragmentation so as to improve
 mutator allocation performance (and possibly mutator performance more generally).
 
-#### Completeness and promptness
+**Completeness and promptness**
 
 Ideally, garbage collection should be complete: eventually, all garbage in the heap should be
 reclaimed. However, this is not always possible nor even desirable. Pure reference counting collectors, for example, are unable to reclaim cyclic garbage (self-referential structures).
@@ -151,7 +151,7 @@ reclaimed until the end of the next cycle; such objects are calledfloating garba
 Hence, in a concurrent setting it may be more appropriate to define completeness as eventual reclamation of all garbage, as opposed to reclamation within one cycle.
 Different collection algorithms may vary in their promptness of reclamation, again leading to time/space trade-offs.
 
-#### Pause time
+**Pause time**
 
 On the other hand, an important requirement may be to minimise the collector's intrusion on program execution. Many collectors introduce pauses into a program's execution
 because they stop all mutator threads while collecting garbage. It is clearly desirable to
@@ -200,7 +200,7 @@ that time window or any larger one. In both cases, the x-intercept gives the
 maximum pause time and the y-intercept is the overall fraction of processor
 time used by the mutator.
 
-#### Space overhead
+**Space overhead**
 
 The goal of memory management is safe and efficient use of space. Different memory
 managers, both explicit and automatic, impose different space overheads. Some garbage
@@ -214,7 +214,7 @@ may also store mark bits in separate bitmap tables rather than in the objects th
 Concurrent collectors, or collectors that divide the heap into independently collected regions, require remembered sets that record where the mutator has changed the value of
 pointers, or the locations of pointers that span regions, respectively
 
-#### Optimisations for specific languages
+**Optimisations for specific languages**
 
 Garbage collection algorithms can also be characterised by their applicability to different
 language paradigms. Functional languages in particular have offered a rich vein for optimisations related to memory management. Some languages, such as ML, distinguish
@@ -227,7 +227,7 @@ heap in their order of allocation, memory allocated after the choice point can b
 in constant time. Conversely, different language definitions may make specific requirements of the collector. The most notable are the ability to deal with a variety of pointer
 strengths and the need for the collector to cause dead objects to be finalised.
 
-#### Scalability and portability
+**Scalability and portability**
 
 The final metrics we identify here are scalability and portability. With the increasing prevalence of multicore hardware on the desktop and even laptop (rather than just in large
 servers), it is becoming increasingly important that garbage collection can take advantage
@@ -252,6 +252,7 @@ For more typical heap sizes, the garbage collection overhead increased to 17% on
 ### Terminology and notation
 
 ##### The heap
+
 The heap is either a contiguous array of memory words or organised into a set of discontiguous blocks of contiguous words. A granule is the smallest unit of allocation, typically a word or double-word, depending on alignment requirements. A chunk is a large contiguous group of granules. A cell is a generally smaller contiguous group of granules and may
 be allocated or free, or even wasted or unusable for some reason.
 
@@ -266,6 +267,7 @@ are heap objects and whose directed edges are the references to heap objects sto
 fields. An edge is a reference from a source node or a root (see below) to a destination node.
 
 ##### The mutator and the collector
+
 Following Dijkstra et al, a garbage-collected program is divided into two semiindependent parts.
 
 - The mutator executes application code, which allocates new objects and mutates the
@@ -305,39 +307,42 @@ reachable and unreachable, and garbage as synonymous with unreachable.
 ##### Mutator read and write operations
 
 As they execute, mutator threads perform several operations of interest to the collector: New, Read and Write.
-We adopt the convention of naming mutator operations with a leading upper-case letter, as opposed to lower-case for collector operations. 
+We adopt the convention of naming mutator operations with a leading upper-case letter, as opposed to lower-case for collector operations.
 Generally, these operations have the expected behaviour: allocating a new object, reading an object field or writing an object field.
 Specific memory managers may augment these basic operations with additional functionality that turns the operation into a barrier: an action that results in synchronous or asynchronous communication with the collector.
 We distinguish read barriers and write barriers.
 
-New( ). The New operation obtains a new heap object from the heap allocator which returns the address of the first word of the newly-allocated object. The mechanism for actual
-allocation may vary from one heap implementation to another, but collectors usually need
-to be informed that a given object has been allocated in order to initialise metadata for that
-object, and before it can be manipulated by the mutator. The trivial default definition of
-New simply allocates.
+`New()`. <br>
+The New operation obtains a new heap object from the heap allocator which returns the address of the first word of the newly-allocated object.
+The mechanism for actual allocation may vary from one heap implementation to another, but collectors usually need to be informed that a given object has been allocated in order to initialise metadata for that object, and before it can be manipulated by the mutator.
+The trivial default definition of New simply allocates.
+
 ```
 New():
   return allocate()
 ```
-Read(src,i). The Read operation accesses an object field in memory (which may hold a
-scalar or a pointer) and returns the value stored at that location. Read generalises memory
-loads and takes two arguments: (a pointer to) the object and the (index of its) field being
-accessed. We allow s rc=Root s if the field s rc [i] is a root (that is, & s rc [i] E Root s). The
-default, trivial definition of Re ad simply returns the contents of the field.
+
+`Read(src,i)`. <br>
+The Read operation accesses an object field in memory (which may hold a scalar or a pointer) and returns the value stored at that location.
+Read generalises memory loads and takes two arguments: (a pointer to) the object and the (index of its) field being accessed.
+We allow s rc=Root s if the field s rc [i] is a root (that is, & s rc [i] E Root s).
+The default, trivial definition of Re ad simply returns the contents of the field.
+
 ```
 Read(src, i):
   return src[i]
 ```
-Write(src,i,val). The Wr i t e operation modifies a particular location in memory. It
-generalises memory stores and takes three arguments: (a pointer to) the source object and
-the (index of its) field to be modified, plus the (scalar or pointer) value to be stored. Again,
-if s r c=Root s then the field s r c [ i] is a root (that is, & s r c [i] E Ro ot s). The default, trivial
-definition of Wr i t e simply updates the field.
+
+`Write(src,i,val)`. <br>
+The Write operation modifies a particular location in memory.
+It generalises memory stores and takes three arguments: (a pointer to) the source object and the (index of its) field to be modified, plus the (scalar or pointer) value to be stored.
+Again, if s r c=Root s then the field src[i] is a root(that is, &src[i] ERoots).
+The default, trivial definition of Write simply updates the field.
+
 ```
 Write(src, i, val):
   src[i] <- val
 ```
-
 
 In the face of concurrency between mutator threads, collector threads, and between the
 mutator and collector, all collector algorithms require that certain code sequences appear
@@ -374,15 +379,13 @@ Our point is that the mutator cannot gain access to any arbitrary unreachable ob
 All garbage collection schemes are based on one of four fundamental approaches: *mark-sweep collection*, *copying collection*, *mark-compact collection* or *reference counting*.
 Different collectors may combine these approaches in different ways, for example, by collecting one region of the heap with one method and another part of the heap with a second method.
 
-
 For now we shall assume that the mutator is running one or more threads, but that there is a single collector thread.
 All mutator threads are stopped while the collector thread runs.
 This stop-the-world approach simplifies the construction of collectors considerably.
-From the perspective of the mutator threads, collection appears to execute atomically: no mutator thread will see any intermediate state of the collector, and the collector will not see interference with its task by the mutator threads. 
+From the perspective of the mutator threads, collection appears to execute atomically: no mutator thread will see any intermediate state of the collector, and the collector will not see interference with its task by the mutator threads.
 We can assume that each mutator thread is stopped at a point where it is safe to examine its roots: we look at the details of the run-time interface.
 Stopping the world provides a snapshot of the heap, so we do not have to worry about mutators rearranging the topology of objects in the heap while the collector is trying to determine which objects are live.
 This also means that there is no need to synchronise the collector thread as it returns free space with other collector threads or with the allocator as it tries to acquire space.
-
 
 The goal of an ideal garbage collector is to reclaim the space used by every object that will no longer be used by the program.
 Any automatic memory management system has three tasks:
@@ -408,6 +411,35 @@ A grey mutator has roots that have not yet been scanned by the collector.
 A black mutator has roots that have already been scanned by the collector(and do not need to be scanned again).
 Tracing makes progress through the heap by moving the collector wavefront (the grey objects) separating black objects from white objects until all reachable objects have been traced black.
 
+## Mark-sweep garbage collection
+
+The first algorithm that we look at is mark-sweep collection.
+It is a straightforward embodiment of the recursive definition of pointer reachability.
+Collection operates in two phases.
+
+- First, the collector traverses the graph of objects, starting from the roots (registers, thread stacks, global variables) through
+  which the program might immediately access objects and then following pointers and marking each object that it finds.
+  Such a traversal is called `tracing`.
+- In the second, sweeping phase, the collector examines every object in the heap: any unmarked object is deemed to be garbage and its space reclaimed.
+
+Mark-sweep is an *indirect collection algorithm*. It does not detect garbage per se, but rather identifies all the live objects and then concludes that anything else must be garbage.
+Note that it needs to recalculate its estimate of the set of live objects at each invocation.
+Not all garbage collection algorithms behave like this. We will examine a *direct collection* method, reference counting.
+Unlike indirect methods, direct algorithms determine the liveness of an object from the object alone, without recourse to tracing.
+
+Note that the mark-sweep collector imposes constraints upon the heap layout.
+
+- First, this collector does not move objects.
+  The memory manager must therefore be careful to try to reduce the chance that the heap becomes so fragmented that the allocator finds it difficult to meet new requests,
+  which would lead to the collector being called too frequently, or in the worst case, preventing the allocation of new memory at all.
+- Second, the sweeper must be able to find each node in the heap.
+  In practice, given a node, sweep must be able to find the next node even in the presence of padding introduced between objects in order to observe alignment requirements.
+
+From the viewpoint of the garbage collector, mutator threads perform just three operations
+of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=Mutator-read-and-write-operations)").
+
+
+
 ### Bitmap marking
 
 Space for a mark-bit can usually be found in an object header word.
@@ -431,36 +463,8 @@ Many memory managers use a block structured heap (for example, Boehm and Weiser)
 A straightforward implementation might reserve a prefix of each block for its bitmap.
 As previously discussed this leads to unnecessary cache conflicts and page accesses, so collectors tend to store bitmaps separately from user data blocks.
 
-### Mark-sweep
 
-The first algorithm that we look at is mark-sweep collection.
-It is a straightforward embodiment of the recursive definition of pointer reachability. 
-Collection operates in two phases.
-
-- First, the collector traverses the graph of objects, starting from the roots (registers, thread stacks, global variables) through
-  which the program might immediately access objects and then following pointers and marking each object that it finds.
-  Such a traversal is called `tracing`.
-- In the second, sweeping phase, the collector examines every object in the heap: any unmarked object is deemed to be garbage and its space reclaimed.
-
-Mark-sweep is an *indirect collection algorithm*. It does not detect garbage per se, but rather identifies all the live objects and then concludes that anything else must be garbage.
-Note that it needs to recalculate its estimate of the set of live objects at each invocation.
-Not all garbage collection algorithms behave like this. We will examine a *direct collection* method, reference counting.
-Unlike indirect methods, direct algorithms determine the liveness of an object from the object alone, without recourse to tracing.
-
-Note that the mark-sweep collector imposes constraints upon the heap layout.
-
-- First, this collector does not move objects.
-  The memory manager must therefore be careful to try to reduce the chance that the heap becomes so fragmented that the allocator finds it difficult to meet new requests,
-  which would lead to the collector being called too frequently, or in the worst case, preventing the allocation of new memory at all.
-- Second, the sweeper must be able to find each node in the heap.
-  In practice, given a node, sweep must be able to find the next node even in the presence of padding introduced between objects in order to observe alignment requirements.
-
-
-From the viewpoint of the garbage collector, mutator threads perform just three operations
-of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=Mutator-read-and-write-operations)").
-
-
-#### Lazy sweeping
+### Lazy sweeping
 
 The complexity of the mark phase is O(L), where L is the size of the live data in the heap;
 the complexity of the sweep phase is O(H) where H is the size of the heap. Since H > L, at
@@ -488,27 +492,104 @@ If the live objects occupy too large a proportion of the heap, and the allocator
 For moderate to large heaps, the headroom necessary may be between 20% and 50% of the heap though Hertz and Berger show that, in order to provide the same throughput,
 Java programs managed by mark-sweep collection may need a heap several times larger than if it were to be managed by explicit deallocation.
 
-### Mark-compact
+### Mark-sweep garbage collection considerations
+
+**Mutator overhead**
+
+Mark-sweep in its simplest form imposes no overhead on mutator read and write operations.
+In contrast, reference counting imposes a significant overhead on the mutator.
+However, note that mark-sweep is also commonly used as a base algorithm for more sophisticated collectors which do require some synchronisation between mutator and collector.
+Both generational collectors, and concurrent and incremental collectors, require the mutator to inform the collector when they modify pointers.
+However, the overhead of doing so is typically small, a few percent of overall execution time.
+
+**Throughput**
+
+Combined with lazy sweeping, mark-sweep offers good throughput. The mark phase is
+comparatively cheap, and dominated by the cost of pointer chasing. It simply needs to
+set a bit or byte for each live object discovered, in contrast to algorithms like semispace
+copying collection (Chapter 4) or mark-compact (Chapter 3) which must copy or move
+objects. On the other hand, like all the tracing collectors in these initial chapters, marksweep requires that all mutators be stopped while the collector runs. The pause-time for
+collection depends on the program being run and its input, but can easily extend to several
+seconds or worse for large systems.
+
+**Space usage**
+
+Mark-sweep has significantly better space usage than approaches based on semispace
+copying. It also potentially has better space usage than reference counting algorithms.
+Mark-bits can often be stored at no cost in spare bits in object headers. Alternatively, if a
+side bitmap table is used, the space overhead depend on object alignment requirements;
+it will be no worse 1 /alignment of the heap (-k or -l4 of the heap, depending on architecture), and possibly better depending on alignment restrictions. Reference counting, on the
+other hand, requires a full slot in each object header to store counts (although this can be
+reduced if a limit is placed on the maximum reference count stored). Copying collectors
+make even worse use of available memory, dividing the available heap into two equally
+sized semispaces, only one of which is used by the mutator at any time. On the debit
+side, non-compacting collectors, like mark-sweep and reference counting, require more complex allocators, such as segregated fits free-lists. The structures needed to support
+such collectors impose a further, non-negligible overhead. Furthermore, non-compacting
+collectors can suffer from fragmentation, thus increasing their effective space usage.
+However, mark-sweep is a tracing algorithm. Like other tracing algorithms, it must
+identify all live objects in a space before it can reclaim the memory used by any dead
+objects. This is an expensive operation and so should be done infrequently. This means
+that tracing collectors must be given some headroom in which to operate in the heap. If
+the live objects occupy too large a proportion of the heap, and the allocators allocate too
+fast, then a mark-sweep collector will be called too often: it will thrash. For moderate to
+large heaps, the headroom necessary may be between 20% and 50% of the heap Uones,
+1996] though Hertz and Berger [2005] show that, in order to provide the same throughput,
+Java programs managed by mark-sweep collection may need a heap several times larger
+than if it were to be managed by explicit deallocation.
+
+**To move or not to move?**
+
+Not moving objects has both advantages and disadvantages. 
+Its benefit is that it makes mark-sweep a suitable candidate for use in uncooperative environments where there is no communication between language compiler and garbage collector.
+Without type-accurate information about the mutators' roots and the fields of objects, they cannot be updated with the new locations of moved objects - the putative 'root' might not be a pointer but other user data.
+In some cases, hybrid mostly-copying collection is possible.
+
+Here, a program's roots must be treated conservatively (if
+it looks like a pointer, assume it is a pointer), so the collector cannot move their referents.
+However, type-accurate information about the layout of objects is available to the collector
+so it can move others that are not otherwise pinned to their location.
+Safety in uncooperative systems managed by a conservative collector precludes the collector's modifying user data, including object headers. It also encourages placing collector
+metadata separate from user or other run-time system data, to reduce the risk of modification by the mutator. For both reasons, it is desirable to store mark-bits in bitmaps rather
+than object headers.
+
+The problem with not moving objects is that, in long running applications, the heap tends to become fragmented.
+Non-moving memory allocators require space $O(log{}{max/min})$ larger than the minimum possible, where min and max are the smallest and largest possible object sizes.
+Thus a non-compacting collector may have to be called more frequently than one that compacts. 
+Note that all tracing collectors need sufficient headroom (say, 20-50%) in the heap in order to avoid thrashing the collector.
+
+**To avoid having performance suffer due to excessive fragmentation, many production collectors that use mark-sweep to manage a region of the heap also periodically use another algorithm such as mark-compact to defragment it.** 
+This is particularly true if the application does not maintain fairly constant ratios of object sizes or allocates many very large objects.
+If the application allocates more large objects than it previously did, the result may be many small holes in the heap no longer being reused for new allocations of objects of the same size.
+Conversely, if the application begins to allocate smaller objects than before, these smaller objects might be allocated in gaps previously occupied by larger objects, with the remaining space in each gap being wasted. 
+However, careful heap management can reduce the tendency to fragment by taking advantage of objects' tendency to live and die in clumps. 
+Allocation with segregated-fits can also reduce the need to compact.
+
+## Mark-compact garbage collection
 
 The major benefit of a compacted heap is that it allows very fast, sequential allocation,
 simply by testing against a heap limit and 'bumping' a free pointer by the size of the allocation request.
+The strategy we consider is in-place compaction of objects into one end of the same region.
 
-Mark-compact algorithms operate in a number of phases. The first phase is always a
-marking phase, which we discussed in the previous chapter. Then, further compacting
-phases compact the live data by relocating objects and updating the pointer values of all
-live references to objects that have moved. The number of passes over the heap, the order
-in which these are executed and the way in which objects are relocated varies from algorithm to algorithm. The compaction order has locality implications. Any moving collector
-may rearrange objects in the heap in one of three ways.
+Mark-compact algorithms operate in a number of phases. 
+The first phase is always a marking phase, which we discussed in the previous chapter. 
+Then, further compacting phases compact the live data by relocating objects and updating the pointer values of all live references to objects that have moved.
 
-- Arbitrary: objects are relocated without regard for their original order or whether they
-  point to one another.
-- Linearising: objects are relocated so that they are adjacent to related objects, such as ones
-  to which they refer, which refer to them, which are siblings in a data structure, and
-  so on, as far as this is possible.
-- Sliding: objects are slid to one end of the heap, squeezing out garbage, thereby maintaining their original allocation order in the heap
+The number of passes over the heap, the order in which these are executed and the way in which objects are relocated varies from algorithm to algorithm.
+The compaction order has locality implications. Any moving collector may rearrange objects in the heap in one of three ways.
+
+- **Arbitrary**: objects are relocated without regard for their original order or whether they point to one another.
+- **Linearising**: objects are relocated so that they are adjacent to related objects, such as ones to which they refer, which refer to them, which are siblings in a data structure, and so on, as far as this is possible.
+- **Sliding**: objects are slid to one end of the heap, squeezing out garbage, thereby maintaining their original allocation order in the heap
 
 Most compacting collectors of which we are aware use arbitrary or sliding orders.
 All modern mark-compact collectors implement sliding compaction, which does not interfere with mutator locality by changing the relative order of object placement.
+
+Compaction algorithms may impose further constraints. 
+Arbitrary order algorithms handle objects of only a single size or compact objects of different sizes separately. 
+Compaction may require two or three passes through the heap. 
+It may be necessary to provide an extra slot in object headers to hold relocation information: such an overhead is likely to be significant for a general purpose memory manager. 
+Compaction algorithms may impose restrictions on pointers.
+
 
 All compaction algorithms are invoked as follows:
 
@@ -519,14 +600,355 @@ atomic collect():
 ```
 
 Mark-compact collectors eliminate fragmentation and support very fast, 'bump a pointer' allocation but require multiple passes over live objects, and significantly increase collection times.
+### Two-finger compaction
 
-### Copying
 
-Basic copying collectors divide the heap into two, equally sized semispaces, called *fromspace* and *tospace*.
+Edwards's Two-Finger algorithm is a two-pass, arbitrary order algorithm, best suited to compacted regions containing objects of a fixed size. 
+The idea is simple: given the volume of live data in the region to be compacted, we know where the highwater mark of the region will be after compaction. 
+Live objects above this threshold are moved into gaps below the threshold.
+Algorithm 3.1 starts with two pointers or 'fingers', free which points to the start of the region and s c a n which starts at the end of the region.
+The first pass repeatedly advances the free pointer until it finds a gap (an unmarked object) in the heap, and retreats the s c a n pointer until it finds a live object. 
+If the free and s c a n fingers pass each other, the phase is complete. 
+Otherwise, the object at scan is moved into the gap at f r ee, overwriting a field of the old copy (at `scan`) with a forwarding address, and the process continues.
+This is illustrated in Figure 3.1, where object A has been moved to its new location A' and some slot of A (say, the first slot) has been overwritten with the address A'. 
+Note that the quality of compaction depends on the size of the gap at f re e closely matching the size of the live object at s can. 
+Unless this algorithm is used on fixed-size objects, the degree of defragmentation might be very poor indeed.
 
-Unlike most mark-compact collectors, semispace copying does not require any extra space in object headers.
 
-### References Counting
+<div style="text-align: center;">
+
+![Fig.1. The Two-Finger compaction algorithm](img/Two-Finger-compaction.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Edwards's Two-Finger algorithm.
+Live objects at the top of the heap are moved into free gaps at the bottom of the heap. 
+<br>
+Here, the object at A has been moved to A'. 
+The algorithm terminates when the free and scan pointers meet.
+</p>
+
+
+<p style="text-align: center;">
+The Two-Finger compaction algorithm
+</p>
+
+```
+compact ( ) :
+  re l ocate (Heap start, HeapEnd)
+  updateRe ferenc e s (Heap start, free)
+  
+relocate(start, end) :
+  free +-- start
+  scan +-- end
+
+  while free < s can
+    while i sMarked( free)
+    unsetMarked( free )
+    free +- free + s i z e ( free)
+    
+    while not i sMarked( s can) && scan> free
+    /* find next hole 4
+    s can +- s can - s i z e ( s can) l* find previous live object */
+    
+    if scan > free
+      unsetMa rked(s can)
+      move ( s can, free)
+      * S can +- free
+      free +-- free +
+      scan+-- scan-
+      /* leaveforwarding address (destructively) 4
+      s i ze (free)
+      s i ze ( scan)
+      
+updateRe ferences ( st art, end) :
+  for each fld in Root s /* update roots that pointed to moved objects *I
+re f +-- * fld
+ifref 2: end
+* fld +- * ref /* use theforwarding address left infirst pass 4
+
+  scan +-- start
+  while s can < end
+    for each fld in P o i nters (scan)
+      ref +- * fld
+      if re f 2: end /* updatefields in live region */
+    if1d +-- * re f /* use theforwarding address left infirst pass 4
+        s can +-- s can + s i ze ( s can) /* next object 4
+```
+At the end of this phase, free points at the high-water mark. The second pass updates
+the old values of pointers that referred to locations beyond the high-water mark with the
+forwarding addresses found in those locations, that is, with the objects' new locations.
+The benefits of this algorithm are that it is simple and fast, doing minimal work at each
+iteration. It has no memory overhead, since forwarding addresses are written into slots
+above the high-water mark only after the live object at that location has been relocated: no
+information is destroyed. The algorithm supports interior pointers. Its memory access patterns are predictable, and hence provide opportunities for prefetching (by either hardware
+or software) which should lead to good cache behaviour in the collector. However, the
+movement of the s can pointer in r e l ocate does require that the heap (or at least the live
+objects) can be parsed 'backwards'; this could be done by storing mark-bits in a separate
+bitmap, or recording the start of each object in a bitmap when it is allocated. Unfortunately,
+the order of objects in the heap that results from this style of compaction is arbitrary, and
+this tends to harm the mutator 's locality. Nevertheless, it is easy to imagine how mutator
+locality might be improved somewhat. Since related objects tend to live and die together
+in clumps, rather than moving individual objects, we could move groups of consecutive
+live objects into large gaps.
+
+### One-pass algorithms
+If we are to reduce the number of passes a sliding collector makes over the heap to two
+(one to mark and one to slide objects), and avoid the expense of threading, then we must
+store forwarding addresses in a side table that is preserved throughout compaction. 
+Abuaiadh et al [2004], and Kermany and Petrank [2006] both designed high performance markcompact algorithms for multiprocessors that do precisely this. 
+The former is a parallel,
+stop-the-world algorithm (it employs multiple compaction threads); the latter can be can
+also be configured to be concurrent (allowing mutator threads to run alongside collector
+threads), and incremental (periodically suspending a mutator thread briefly to perform a
+small quantum of compaction work). We discuss the parallel, concurrent and incremental aspects of these algorithms in later chapters. Here, we focus on the core compaction
+algorithms in a stop-the-world setting.
+
+Both algorithms use a number of side tables or vectors. Common to many collectors,
+marking uses a bitmap with one bit for each granule (say, a word). Marking sets the bits
+corresponding to the first and last granules of each live object. For example, bits 16 and
+19 are set for the object marked old in Figure 3.3. By scrutinising the mark bitmap in the
+compaction phase, the collector can calculate the size of any live object.
+
+
+Second, a table is used to store forwarding addresses. It would be prohibitively expensive to do this for every object (especially if we assume that objects are word-aligned) so
+both these algorithms divide the heap into small, equal-sized blocks (256 or 512 bytes, respectively). The `offset` table stores the forwarding address of the first live object in each
+block. The new locations of the other live objects in a block can be computed on-the-fly
+from the offset and mark-bit vectors. Similarly, given a reference to any object, we can
+compute its block number and thus derive its forwarding address from the entry in the
+offset table and the mark-bits for that block. This allows the algorithms to replace multiple passes over the full heap to relocate objects and to update pointers with a single pass
+over the mark-bit vector to construct the offset vector and a single pass over the heap (after
+marking) to move objects and update references by consulting these summary vectors. Reducing the number of heap passes has consequent advantages for locality. Let us consider
+the details as they appear in Algorithm 3.4.
+
+After marking is complete, the `computeLocations` routine passes over the mark-bit vector to produce the `offset` vector.
+Essentially, it performs the same calculation as in Lisp 2 (Algorithm 3.2) but does not need to touch any object in the heap.
+For example, consider the first marked object in block 2, shown with a bold border in Figure 3.3. 
+Bits 2 and 3, and 6 and 7 are set in the first block, and bits 3 and 5 in the second (in this example, each block comprises eight slots).
+This represents 7 granules (words) that are marked in the bitmap before this object.
+Thus the first live object in block 2 will be relocated to the seventh slot in the heap.
+This address is recorded in the `offset` vector for the block (see the dashed arrow marked `offset[block]` in the figure).
+
+
+Once the o f f s e t vector has been calculated, the roots and live fields are updated to
+reflect the new locations. The Lisp 2 algorithm had to separate the updating of references
+and moving of objects because relocation information was held in the heap and object
+movement destroyed this information as relocated objects are slid over old objects. In contrast, Compressor-type algorithms relocate objects and update references in a single pass,
+upda t eRe fe r e nc e s Re l o cat e in Algorithm 3.4. This is possible because new addresses
+can be calculated reasonably quickly from the mark bitmap and the o f f s e t vector onthe-fly: Compressor does not have to store forwarding addresses in the heap. Given the
+address of any object in the heap, newAddre s s obtains its block number (through shift and mask operations), and uses this as an index into the o f f s et vector. The o f f s et vector gives the forwarding address of thefirst object in that block. Compressor must then
+consult the bitmap for that block to discover how much live data precedes this object in its
+block, and therefore how much to add to the offset. This can be done in constant time by
+a table lookup. For example, the o l d object in the figure has an offset of 3 marked slots in
+its block so it is moved to slot 10: o f fset [b l o c k] = 7 plus `offsetInBlock(old) = 3` .
+
+### Mark-compact garbage collection considerations
+
+**Throughput costs of compaction**
+
+Sequential allocation in a compacted heap is fast. If the heap is large compared to the
+amount of memory available, mark-compact is an appropriate moving collection strategy.
+It has half the memory requirements of copying collectors. Algorithms like Compressor
+are also easier to use with multiple collector threads than many copying algorithms (as we
+shall see in Chapter 14). There is, of course, a price to be paid. Mark-compact collection
+is likely to be slower than either mark-sweep or copying collection. Furthermore, many
+compaction algorithms incur additional overheads or place restrictions on the mutator.
+Mark-compact algorithms offer worse throughput than mark-sweep or copying collection largely because they tend to make more passes over objects in the heap; Compressor
+is an exception. Each pass tends to be expensive, not least because many require access to
+type information and object pointer fields, and these are the costs that tend to dominate
+after 'pointer chasing', as we saw in Chapter 2. A common solution is to run with marksweep collection for as long as possible, switching to mark-compact collection only when
+fragmentation metrics suggest that this be profitable.
+
+**Long-lived data**
+
+It is not uncommon for long-lived or even immortal data to accumulate near the beginning of the heap in moving collectors.
+Copying collectors handle such objects poorly, repeatedly copying them from one semispace to another. 
+On the other hand, generational collectors deal with these well, by moving them to a different space which is collected only infrequently. However, a generational solution might not be acceptable if heap space is tight. 
+It is also obviously not a solution if the space being collected is the oldest generation of a generational collector! Mark-compact, however, can simply elect not to compact objects in this 'sediment'. 
+
+Hanson was the first to observe that these objects tended to accumulate at the bottom of the 'transient object area' in his SITBOL system.
+His solution was to track the height of this 'sediment' dynamically, and simply avoid collecting it unless absolutely necessary, at the expense of a small amount of fragmentation.
+Sun Microsystems' HotSpot Java virtual machine uses mark-compact as the default collector for its old generation.
+It too avoids compacting objects in the user-configurable'dense prefix' of the heap.
+If bitmap marking is used, the extent of a live prefix of desired density can be determined simply by examining the bitmap.
+
+**Locality**
+
+Mark-compact collectors may preserve the allocation order of objects in the heap or they may rearrange them arbitrarily.
+Although arbitrary order collectors may be faster than other mark-compact collectors and impose no space overheads, the mutator's locality is likely to suffer from an arbitrary scrambling of object order. 
+Sliding compaction has a further benefit for some systems: the space occupied by all objects allocated after a certain point can be reclaimed in constant time, just by retreating the free space pointer.
+
+**Limitations of mark-compact algorithms**
+
+A wide variety of mark-compact collection algorithms has been proposed. 
+Many of these have properties that may be undesirable or unacceptable. 
+The issues to consider include what space overheads may be incurred to store forwarding pointers (although this cost will be lower than that of a copying collector). 
+Some compaction algorithms place restrictions on the mutator.
+Simple compactors like the Two-Finger algorithm can only manage fixed-size objects.
+It is certainly possible to segregate objects by size class, but in this case, to what extent is compaction necessary? 
+Threaded compaction requires that it be possible to distinguish pointers from non-pointer values temporarily stored in pointer fields.
+Threading is also incompatible with concurrent collection because it (temporarily) destroys information in pointer fields. 
+Morris's threaded algorithm also restricts the direction in which references may point.
+Finally, most compaction algorithms preclude the use of interior pointers: the Two-Finger algorithm is an exception
+
+
+
+## Copying garbage collection
+
+Copying compacts the heap, thus allowing fast allocation, yet requires only a single pass over the live objects in the heap. 
+Its chief disadvantage is that it reduces the size of the available heap by half.
+
+Basic copying collectors divide the heap into two, equally sized *semispaces*, called *fromspace* and *tospace*.
+For simplicity, Algorithm 4.1 assumes that the heap is one contiguous region
+of memory, but this is not essential. New objects are allocated in tospace by incrementing
+the value of a free pointer if there is sufficient room.1 Otherwise, the role of the two
+semispaces isflipped (line 2 in Algorithm 4.2) before the collector copies all live objects from
+what is now the fromspace to the tospace. This collector simply picks out - evacuating or
+scavenging - live objects from the old semispace. At the end of the collection, all live
+objects will have been placed in a dense prefix of tospace. The collector simply abandons
+fromspace (and the objects it contains) until the next collection. In practice, however, many
+collectors will zero that space for safety during the initialisation of the next collection cycle
+(see Chapter 11 where we discuss the interface with the run-time system).
+
+After initialisation, semispace copying collectors populate their work list by copying
+the root objects into tospace (line 4). Copied but not yet scanned objects are grey. Each
+pointer field of a grey object will hold either null or a reference to a fromspace object. The
+copying scan traces each grey field, updating it to point to the tospace replica of its target. When the trace visits a fromspace object, copy checks whether it has been evacuated
+(forwarded) yet. If not, the object is copied now to the location in tospace to which free
+points, and the f re e pointer is incremented by the size o f the object (as for allocation) . It i s essential that collectors preserve the topology of live objects in the tospace copy o f the
+heap. This is achieved by storing the address of each tospace object as aforwarding address
+in its old, fromspace replica when the object is copied (line 34). The f o r w a rd routine,
+tracing from a tospace field, uses this forwarding address to update the field, regardless of
+whether the copy was made in this tracing step or a previous one (line 22). Collection is
+complete when all tospace objects have been scanned.
+
+
+```
+createSemispaces():
+  tospace <- HeapStart
+  extent <- (HeapEnd - HeapStart) / 2                              /* size ofa semispace */
+  top <- fromspace <- HeapStart + extent
+  free <- tospace
+
+atomic allocate(size):
+  result <- free
+  newfree <- result + size
+  if newfree > top
+    return null                                                    /* signal 'Memory exhausted' */
+  free <- newfree
+  return result
+```
+Unlike most mark-compact collectors, semispace copying does not require any extra space in object headers. 
+Any slot in a fromspace object can be used for the forwarding address (at least, in stop-the-world implementations), since that copy of the object is not used after the collection.
+This makes copying collection suitable even for header-less objects.
+
+<p style="text-align: center;">
+Semispace copying garbage collection
+</p>
+
+```
+atomic collect():
+  flip()
+  initialise(worklist)                                              /* empty */
+  for each fld in Roots                                             /* copy the roots */
+  process(fld)
+  while not isEmpty(worklist)                                       /* copy transitive closure */
+  ref <- remove(worklist)
+  scan(ref)
+
+flip():                                                             /* switch semispaces */
+  fromspace, tospace <- tospace, fromspace
+  top <- tospace + extent
+  free <- tospace
+
+scan(ref) :
+  for each fld in Pointers(ref)
+    process(fld)
+
+process(fld):                                                       /* updatefield with reference to tospace replica 4
+  fromRef <- *fld
+  if fromRef != null
+    *fld <- forward(fromRef)                                        /* update with tospace reference */
+
+
+forward(fromRef):
+  toRef <- forwardingAddress(fromRef)
+  if toRef = null                                                   /* not copied (not marked) */
+    toRef <- copy(fromRef)
+  return toRef
+
+copy(fromRef):                                                      /* copy object and return forwarding address */
+  toRef <- free
+  free <- free + size(fromRef)
+  move(fromRef, toRef)
+  forwardingAddress(fromRef) <- toRef                               /* mark */
+  add(worklist, toRef)
+  return toRef
+```
+
+
+### Copying garbage collection considerations
+Copying collection offers two immediately attractive advantages over non-moving collectors like mark-sweep: fast allocation and the elimination of fragmentation (other than to satisfy alignment requirements).
+Simple copying collectors are also easier to implement than mark-sweep or mark-compact collectors. 
+The trade-off is that copying collection uses twice as much virtual memory as other collectors in order to match their frequency of collections.
+
+**Allocation**
+
+
+Allocation in a compacted heap is fast because it is simple. 
+In the common case, it simply requires a test against a heap or block limit and that a free pointer be implemented. 
+If a block-structured rather than a contiguous heap is used, occasionally the test will fail and a new block must be acquired. 
+The slow path frequency will depend on the ratio of the average size of objects allocated and the block size.
+Sequential allocation also works well with multithreaded applications since each mutator can be given its own local allocation buffer
+in which to allocate without needing to synchronise with other threads.
+This arrangement is simpler and requires little metadata, in contrast with local allocation schemes for non-moving collectors where each thread might need its own size-class data structures for segregated-fits allocation.
+
+The code sequence for such a bump-a-pointer allocation is short but, even better, it is well behaved with respect to the cache as allocation advances linearly through the heap.
+Although the combination of sequential allocation, typically short object lifetimes and semispaces means that the next location to be allocated is likely to be the one least recently used,
+the prefetching abilities of modern processors are likely to hide the latency that might otherwise result.
+If this behaviour conflicts with the operating system's least recently used (LRU) page eviction policy to the extent that paging becomes a problem, it is time to reconsider the configuration of the system. 
+Either it requires more physical memory to run the application satisfactorily, or another collection policy - maybe one of the generational collectors - should be used.
+
+Blackburn et al found that although sequential allocation had an 11% advantage over free-list allocation in a micro-benchmark limit study, allocation itself accounted for less than 10% of overall running time in real applications. 
+Thus, the difference in cost between bump-a-pointer allocation and free-list allocation may not be significant. 
+However, allocation is only part of the picture for the mutator since the cost of creating a new object is likely to be dominated by its initialisation, certainly in systems that distinguish these actions.
+Furthermore, objects share similar life-cycles in many applications.
+The mutator creates some semantically related objects at around the same time, uses them, and finally tends to abandon them all at once.
+Here, compacted heaps offer good spatial locality, with related objects typically allocated on the same page and maybe in the same cache line if they are small.
+Such a layout is likely to lead to fewer cache misses than if related objects are allocated from different free-lists.
+
+
+**Space and locality**
+
+The immediate disadvantage of semispace copying is the need to maintain a second semispace, sometimes called a copy reserve.
+For a given memory budget and ignoring the data structures needed by the collector itself, semispace copying provides only half the heap space of that offered by other whole heap collectors. 
+The consequence is that copying collectors will perform more garbage collection cycles than other collectors. 
+Whether or not this translates into better or worse performance depends on trade-offs between the mutator and the collector, the characteristics of the application program and the volume of heap space available.
+
+
+**Moving objects**
+
+The choice of a copying collector will depend in part on whether it is possible to move objects and the cost of doing so. 
+In some environments objects cannot be moved. 
+One reason is that lack of type accuracy means that it would not be safe to modify the slot holding a reference to a putative object.
+Another is that a reference to the object has been passed to unmanaged code (perhaps, as an argument in a system call) that does not expect the reference to change.
+Furthermore, the problem of pointer finding can often be simpler in a mark-sweep context than that of a moving collector. 
+It suffices to find at least one reference to a live object with a non-moving collector. 
+On the other hand, a moving collector must find and update all references to an evacuated object. 
+This also makes the problem of concurrent moving collection much harder than concurrent non-moving collection since all the references to an object must appear to be updated atomically.
+
+It is expensive to copy some objects. 
+Although copying even a small object is likely to be more expensive than marking it, the cost and latency of doing so is often absorbed by the costs of chasing pointers and discovering type information. 
+On the other hand, repeatedly copying large, pointer-free objects will lead to poor performance. 
+One solution is simply not to copy them but instead devolve the management of large objects to a nonmoving collector.
+Another is to copy them virtually but not physically. 
+This can be done either by holding such objects on a linked list maintained by the collector, or by allocating large objects on their own virtual memory pages which can be remapped.
+
+
+
+
+## References counting
 
 Reference counting maintains a simple invariant: an object is presumed to be live if and only if the number of references to that object is greater than zero.
 *Reference listing algorithms*, commonly used by distributed systems such as Java's RMI libraries,

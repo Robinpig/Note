@@ -243,6 +243,7 @@ The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimenta
 
 ## Links
 
+- [Garbage Collection](/docs/CS/memory/GC.md)
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 
 ## References
