@@ -411,6 +411,9 @@ A grey mutator has roots that have not yet been scanned by the collector.
 A black mutator has roots that have already been scanned by the collector(and do not need to be scanned again).
 Tracing makes progress through the heap by moving the collector wavefront (the grey objects) separating black objects from white objects until all reachable objects have been traced black.
 
+
+
+
 ## Mark-sweep garbage collection
 
 The first algorithm that we look at is mark-sweep collection.
@@ -950,7 +953,52 @@ This can be done either by holding such objects on a linked list maintained by t
 
 ## References counting
 
-Reference counting maintains a simple invariant: an object is presumed to be live if and only if the number of references to that object is greater than zero.
+Rather than tracing reachable objects and then inferring that all unvisited objects must be garbage, reference counting operates directly on objects as references are created or destroyed.
+
+Reference counting maintains a simple invariant: an object is presumed to be live if and only if the number of references to that object is greater than zero. 
+Reference counting therefore associates a reference coun t with each object managed; typically this count is stored as an additional slot in the object's header. 
+In its most nai"ve implementation, shown in Algorithm 5.1, reference counts are incremented or decremented as references to objects are created or destroyed.
+Procedure W r i t e increments the reference count of the new target and then decrements the count of the old target. 
+Note that it is called even for updates of local variables.
+We also assume it is called to write null into local variables before each procedure returns.
+The operations addRe fe rence and de leteRe f e r e n c e increment and decrement respectively the reference counts of their object argument. 
+Note that it is essential that the reference counts are adjusted in this order (lines 9-10) to prevent premature reclamation of the target in the case when the old and the new targets of the pointer are the same, that is, s r c [i] = re f.
+Once a reference count is zero (line 20), the object can be freed and the reference counts of all its children decremented, which may in turn lead to their reclamation and so on recursively.
+
+The W r i t e method in Algorithm 5.1 is an example of a write barrier. For these, the
+compiler emits a short code sequence around the actual pointer write. As we shall see
+later in this book, mutators are required to execute barriers in many systems. More precisely, they are required whenever collectors do not consider the liveness of the entire object
+graph, atomically with respect to the mutator. Such collectors may execute concurrently, either in lock-step with the mutator as for reference counting or asynchronously in another
+thread. Alternatively, the collector may process different regions of the heap at different
+frequencies, as do generational collectors. In all these cases, mutator barriers must be executed in order to preserve the invariants of the collector algorithm.
+
+
+```
+New() :
+  ref t-- a l locate ( )
+  i f r e f = null
+  e r r o r " Out o f memo ry "
+  rc ( re f ) t-- 0
+  return r e f
+
+atomic W r i t e ( s rc, i, r e f ) :
+  addRe f e r e n ce( re f )
+  de l e t e Re f e rence ( s r c [i] )
+  s r c [i] t-- r e f
+
+addRe f e r e n c e ( ref) :
+  if re f "I null
+    r c ( r e f ) t-- r c ( r e f ) + 1
+
+de leteRe f e rence(r e f ) :
+  if r e f "I null
+    r c ( re f ) t-- r c ( r e f ) - 1
+    if r c ( ref) = 0
+      for each f l d in P o i nt e r s ( r e f)
+        de leteRe f e rence ( • f l d)
+      free(ref)
+```
+
 *Reference listing algorithms*, commonly used by distributed systems such as Java's RMI libraries,
 modify this invariant so that an object is deemed to be live if and only if the set of clients believed to be holding a reference to the object is non-empty.
 This offers certain fault tolerance benefits, for example, set insertion or deletion is idempotent, unlike counter arithmetic.
@@ -961,6 +1009,33 @@ Since reference counting operates directly on the sources and targets of pointer
 Client programs can use destructive updates rather than copying objects if they can prove that an object is not shared.
 Reference counting can be implemented without assistance from or knowledge of the run-time system.
 In particular, it is not necessary to know the roots of the program. Reference counting can reclaim some memory even if parts of the system are unavailable: this is particularly useful in distributed systems.
+
+
+
+### Advantages and disadvantages of reference counting
+There are a number of reasons why reference counting might be an attractive option.
+
+Memory management costs are distributed throughout the computation.
+Potentially, reference counting can recycle memory as soon as an object becomes garbage (but we shall see below why this may not always be desirable).
+Consequently, it may continue to operate satisfactorily in a nearly full heap, unlike tracing collectors which need some headroom. 
+Since reference counting operates directly on the sources and targets of pointers, the locality of a reference counting algorithm may be no worse than that of its client program. 
+Client programs can use destructive updates rather than copying objects if they can prove that an object is not shared.
+Reference counting can be implemented without assistance from or knowledge of the run-time system. In particular, it is not necessary to know the roots of the program.
+Reference counting can reclaim some memory even if parts of the system are unavailable: this is particularly useful in distributed systems.
+
+For these reasons, reference counting has been adopted for many systems including programming language implementations (early versions of Smalltalk and Lisp; also awk, peri and python);
+applications such as Photoshop, Real Networks' Rhapsody Music Service, Oce printers, scanners and document management systems; as well as operating systems' file managers.
+Libraries to support safe reclamation of objects are widely available for languages like C++ that do not yet require automatic memory management. 
+Such libraries often use smart pointers to access objects. 
+Smart pointers typically overload constructors and operators such as assignment, either to enforce unique ownership of objects or to provide reference counting. Unique pointers ensure that an object has a single 'owner'.
+
+When this owner is destroyed, the object also can be destroyed. For example, the next
+C++ standard is expected to include a uni que_pt r template. Many C++ programmers
+use smart pointers to provide reference counting to manage memory automatically. The
+best known smart pointer library for C++ is the Boost library/ which provides reference
+counting through shared pointer objects. One drawback of smart pointers is that they have semantics different from those of the raw pointers that they imitate.
+
+
 
 Unfortunately, there are also a number of disadvantages to reference counting.
 
@@ -985,8 +1060,22 @@ This means that the reference count field must be pointer sized, that is, a whol
 
 Finally, reference counting may still induce pauses.
 
-we can resolve two of the major problems facing reference counting: the cost of reference count manipulations and collecting cyclic garbage.
+We can resolve two of the major problems facing reference counting: the cost of reference count manipulations and collecting cyclic garbage.
 It turns out that common solutions to both of these problems involve a stop-the-world pause.
+
+### Improving reference counting
+
+There are two ways in which the efficiency of reference counting can be improved. 
+Either the number of barrier operations must be reduced or expensive synchronised operations must be replaced by cheaper, unsynchronised ones. 
+Blackburn and McKinley define a useful taxonomy of solutions.
+- **Deferral** Deferred reference counting trades fine grained incrementality (the immediate recovery of all garbage) for efficiency.
+  The identification of some garbage objects is deferred to a reclamation phase at the end of some period. These schemes eliminate some barrier operations.
+- **Coalescing** Many reference count adjustments are temporary and hence 'unnecessary'; programmers often remove them by hand. In some special cases, this can also be done by the compiler. 
+  However, it is also possible to do this more generally at run time by tracking only the state of an object at the beginning and end of some period. 
+  This coalesced reference counting ignores all but the first modification to a field of an object in each period.
+- **Buffering** Buffered reference counting also defers identification of garbage. However, unlike deferred or coalesced reference counting, it buffers all reference count increments and decrements for later processing. 
+  Only the collector thread is allowed to apply reference count modifications. Buffering considers when to apply reference count modifications not whether to.
+
 
 Manipulating reference counts is expensive compared with the cost to the mutator of simple tracing algorithms.
 Reference counting is attractive for the promptness with which it reclaims garbage objects and its good locality properties.
@@ -999,6 +1088,75 @@ Reference counting is attractive for the promptness with which it reclaims garba
 - Furthermore, multithreaded applications require the manipulation of reference counts and updating of pointers to be expensively synchronised.
   This tight coupling of mutator actions and memory manager risks some fragility, especially if 'unnecessary' reference count updates are optimised away by hand.
 - Finally, reference counts increase the sizes of objects.
+
+### References counting considerations
+
+Reference counting is attractive for the promptness with which it reclaims garbage objects and its good locality properties. 
+Simple reference counting can reclaim the space occupied by an object as soon as the last pointer to that object is removed. 
+Its operation involves only the targets of old and new pointers read or written, unlike tracing collection which visits every live object in the heap.
+However, these strengths are also the weaknesses of simple reference counting.
+Because it cannot reclaim an object until the last pointer to that object has been removed, it cannot reclaim cycles of garbage.
+Reference counting taxes every pointer read and write operation and thus imposes a much larger tax on throughput than tracing does.
+Furthermore, multithreaded applications require the manipulation of reference counts and updating of pointers to be expensively synchronised. 
+This tight coupling of mutator actions and memory manager risks some fragility, especially if 'unnecessary' reference count updates are optimised away by hand. 
+Finally, reference counts increase the sizes of objects.
+
+**The environment**
+
+Despite these concerns, it would be wrong to dismiss reference counting without further thought.
+Certainly, its drawbacks make simple reference counting uncompetitive as a general purpose memory management component of a virtual machine, especially if the majority of objects managed are small, cycles are common and the rate of pointer mutation is high.
+However, there are environments which are favourable to reference counting. 
+Reference counting can play well in a mixed ecology where the lifetimes of most objects are sufficiently simple to be managed explicitly.
+It can be restricted to managing a smaller number of resources with more complex owner relationships. 
+Often such resources will be large, in which case the overhead for an additional reference count field in the header will be negligible.
+Data such as bitmaps for images and so on will not contain any pointers, so the problem of reclaiming cyclic structures does not arise. 
+Furthermore, reference counting can be implemented as part of a library rather than being baked into the language's run-time system. 
+It can therefore give the programmer complete control over its use, allowing her to make the decision between performance overhead and guarantees of safety. 
+Nevertheless, it is essential that reference counting be used carefully. 
+In particular, the programmer must ensure that races between pointer modifications and reference count updates are avoided.
+If reference counting is implemented through smart pointers, he must also be aware that the semantics of pointers and smart pointers differ. 
+As Edelson wrote, 'They are smart, but they are not pointers'.
+
+**Advanced solutions**
+
+Sophisticated reference counting algorithms can offer solutions to many of the problems
+faced by na'ive reference counting but, paradoxically, these algorithms often introduce behaviours similar to those of stop-the-world tracing collectors. We examine this duality
+further in the next chapter.
+Garbage cycles can be reclaimed by a backup, tracing collector or by using the trial deletion algorithms we discussed in Section 5.5. In both cases, this requires mutator threads to
+be suspended while we reclaim cyclic data (although we show how these stop-the-world
+pauses can be removed in later chapters).
+
+Although the worst case requires reference count fields to be almost as large as pointer
+fields, most applications hold only a few references to most objects. Often, it is possible
+for the reference count to hijack a few bits from an existing header word (for example,
+one used for object hashing or for locks). However, it is common for a very few objects to
+be heavily referenced. If limited-field reference counting is used, these objects will either
+leak - which may not be a serious problem if they are few in number or have very long
+lifetimes - or must be reclaimed by a backup tracing collector. Note, however, that in
+comparing the space overhead of reference counting and, say, mark-sweep collection it
+is not sufficient simply to measure the cost of the reference count fields. In order not to
+thrash, tracing collectors require some headroom in the heap. If the application is given
+a heap of, say, 20% larger than its maximum volume of live data, then at least 10% of the
+heap will be 'wasted' on average. This fraction may be similar to the overhead of reference
+counting (depending on the average size of objects it manages).
+
+The throughput overhead of reference counting can be addressed by omitting to count
+some pointer manipulations and by reducing the cost of others. Deferred reference counting ignores mutator operations on local variables. This allows the counts of objects reachable from roots to be lower than their true value, and hence prevents their prompt reclamation (since a reference count of zero no longer necessarily means that the object is garbage).
+Coalesced reference counting accounts for the state of an object only at the beginning and
+end of an epoch: it ignores pointer manipulations in between. In one sense, this automates
+the behaviour of programmers who often optimise away temporary adjustments to reference counts (for example, to an iterator as it traverses a list) . However, once again, one
+consequence of deferred and coalesced reference counting is to reintroduce stop-the-world
+pauses during which reference counts are corrected.
+
+As well as removing some reference counting operations, both deferred and coalesced reference counting reduce the synchronisation cost of other operations. 
+Deferred reference counting does so simply by omitting to manipulate reference counts on local variables.
+Coalesced reference counting does not need synchronisation because races are benign: at worst, the same values might be written to the logs of two different threads. 
+However, both solutions add space overhead to the cost of reference counting, either to store the zero count table or to store update logs.
+
+A further attraction of these advanced reference counting techniques is that they scale well with large heaps. 
+Their cost is proportional only to the number of pointer writes made, and not to the volume of live data. 
+As we shall see that hybrid collectors are possible, combining tracing collection for short-lived, heavily mutated data with reference counting for longer-lived, more stable data.
+
 
 ## Generational Garbage Collection
 
