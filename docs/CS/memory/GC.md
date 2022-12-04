@@ -412,7 +412,206 @@ A black mutator has roots that have already been scanned by the collector(and do
 Tracing makes progress through the heap by moving the collector wavefront (the grey objects) separating black objects from white objects until all reachable objects have been traced black.
 
 
+### Comparing garbage collectors
 
+It is common to ask: which is the best garbage collector to use? However, the temptation to provide a simple answer needs to be resisted. First, what does 'best' mean? Do we
+want the collector that provides the application with the best throughput, or do we want
+the shortest pause times? Is space utilisation important? 
+Or is a compromise that combines these desirable properties required? Second, it is clear that, even if a single metric is chosen, the ranking of different collectors will vary between different applications. 
+For example, in a study of twenty Java benchmarks and six different collectors, Fitzgerald and Tarditi found that for each collector there was at least one benchmark that would have been at least 15% faster with a more appropriate collector. 
+And furthermore, not only do programs tend to run faster given larger heaps, but also the relative performance of collectors varies according the amount of heap space available. 
+To complicate matters yet further, excessively large heaps may disperse temporally related objects, leading to worsened locality that may slow down applications.
+
+**Throughput**
+
+The first item on many users' wish lists is likely to be overall application throughput. This
+might be the primary goal for a 'batch' application or for a web server where pauses might
+be tolerable or obscured by aspects of the system such as network delays. Although it is
+important that garbage collector actions be performed as quickly as possible, employing
+a faster collector does not necessarily mean that a computation will necessarily execute
+faster. In a well configured system, garbage collection should account for only a small
+fraction of overall execution time. If the price to be paid for faster collection is a larger
+tax on mutator operations, then it is quite possible for the application's execution time to
+become longer rather than shorter. The cost to the mutator may be explicit or implicit. Explicit actions include read and write barrier actions, such as those that reference counting
+requires. However, the performance of the mutator may also be affected implicitly, for example because a copying collector has rearranged objects in such a way as to affect cache behaviour adversely, or because a reference count decrement has touched a cold object. It
+is also important to avoid wherever possible any need to synchronise operations. Unfortunately, reference count modifications must be synchronised in order not to miss updates.
+Deferred and coalesced reference counting can eliminate much of these synchronisation
+costs.
+
+One can consider the algorithmic complexity of different algorithms. For mark-sweep
+collection, we would need to include the cost of the tracing (mark) and the sweep phases,
+whereas the cost of copying collection depends only on tracing. Tracing requires visiting
+every live object whereas sweeping requires visiting every object (live and dead). It is
+tempting to assume that the cost of mark-sweep collection must therefore necessarily be
+greater than copying collection. However, the number of instructions executed to visit an
+object for mark-sweep tracing are fewer than those for copying tracing. Locality plays a
+significant part here as well. We saw in Section 2.6 how prefetching techniques could be
+used to hide cache misses. However, it is an open question as to whether such techniques
+can be applied to copying collection without losing the benefits to the mutator of depthfirst copying. In either of these tracing collectors, the cost of chasing pointers is likely to
+dominate. Furthermore, if marking is combined with lazy sweeping, we obtain greatest
+benefit in the same circumstances that copying performs best: when the proportion of live
+data in the heap is small.
+
+**Pause time**
+
+The next item for many users is the extent to which garbage collection interrupts program
+execution. Low pause times are important not only for interactive applications but also
+for others such as transaction processors for which delays may cause backlogs of work to
+build up. The tracing collectors considered so far have all been stop-the-world: all mutator
+threads must be brought to a halt before the collector runs to completion. Garbage collection pause times in early systems were legendary but, even on modem hardware, stopthe-world collectors may pause very large applications for over a second. The immediate
+attraction of reference counting is that it should avoid such pauses, instead distributing
+the costs of memory management throughout the program. However, as we have seen,
+this benefit is not realised in high performance reference counting systems. First, the removal of the last reference to a large pointer structure leads to recursive reference count
+modifications and freeing of components. Fortunately, reference count modifications on
+garbage objects are not contended, though they may cause contention on the cache lines
+containing the objects. More importantly, we saw that deferred and coalesced reference
+counting, the most effective ways to improve reference counting performance, both reintroduce a stop-the-world pause to reconcile reference counts and reclaim garbage objects
+in the zero count table. As we shall see in Section 6.6, high performance reference counting
+and tracing schemes are not so different as they might first appear.
+
+
+**Space**
+
+Memory footprint is important if there are tight physical constraints on memory, if applications are very large, or in order to allow applications to scale well. All garbage collection
+algorithms incur space overheads. Several factors contribute to this overhead. Algorithms
+may pay a per-object penalty, for example for reference count fields. Semispace copying
+collectors need additional heap space for a copy reserve; to be safe, this needs to be as large
+as the volume of data currently allocated, unless a fall-back mechanism is used (for example, mark-compact collection). Non-moving collectors face the problem of fragmentation, reducing the amount of heap usable to the application. It is important not to ignore the
+costs of non-heap, metadata space. Tracing collectors may require marking stacks, mark
+bitmaps or other auxiliary data structures. Any non-compacting memory manager, including explicit managers, will use space for their own data structures, such as segregated
+free-lists and so on. Finally, if a tracing or a deferred reference counting collector is not
+to thrash by collecting too frequently, it requires sufficient room for garbage in the heap.
+Systems are typically configured to use a heap anything from 30% to 200% or 300% larger
+than the minimum required by the program. Many systems also allow the heap to expand
+when necessary, for example in order to avoid thrashing the collector. Hertz and Berger
+[2005] suggest that a garbage collected heap three to six times larger than that required by
+explicitly managed heaps is needed to achieve comparable application performance.
+In contrast, simple reference counting frees objects as soon as they become unlinked
+from the graph of live objects. Apart from the obvious advantage of preventing the accumulation of garbage in the heap, this may offer other potential benefits. Space is likely
+to be reused shortly after it is freed, which may improve cache performance. It may also
+be possible in some circumstances for the compiler to detect when an object becomes free,
+and to reuse it immediately, without recycling it through the memory manager.
+It is desirable for collectors to be not only complete (to reclaim all dead objects eventually) but also to be prompt, that is, to reclaim all dead objects at each collection cycle. The
+basic tracing collectors presented in earlier chapters achieve this, but at the cost of tracing
+all live objects at every collection. However, modern high-performance collectors typically
+trade immediacy for performance, allowing some garbage to float in the heap from one
+collection to a subsequent one. Reference counting faces the additional problem of being
+incomplete; specifically, it is unable to reclaim cyclic garbage structures without recourse
+to tracing.
+
+
+### Implementation
+Garbage collection algorithms are difficult to implement correctly, and concurrent algorithms notoriously so. The interface between the collector and the compiler is critical.
+Errors made by the collector often manifest themselves long afterwards (maybe many collections afterwards), and then typically as a mutator attempts to follow a reference that
+is no longer valid. It is important, therefore, that garbage collectors be constructed to be
+robust as well as fast. Blackburn et al [2004a] have shown that this performance-critical
+system component can be designed with respect for good software engineering practices
+of modularity and composability, leading to maintainable code.
+One advantage of simple tracing collectors is that the interface between the collector
+and the mutator is simple: when the allocator exhausts memory, the collector is called.
+The chief source of complexity in this interface is determining the roots of collection, including global variables, and references held in registers and stack slots. We discuss this
+in more detail in Chapter 11. However, we note here that the task facing copying and
+compacting collectors is more complex than that facing non-moving collectors. A moving
+collector must identify every root and update the reference accordingly, whereas a nonmoving collector need only identify at least one reference to each live object, and never
+needs to change the value of a pointer. So-called conservative collectors [Boehm and Weiser,
+1988] can reclaim memory without accurate knowledge of mutator stack or indeed object
+layouts. Instead they make intelligent (but safe, conservative) guesses about whether a
+value really is a reference. Because non-moving collectors do not update references, the
+risk of misidentifying a value as a heap pointer is confined to introducing a space leak: the
+value itself will not be corrupted. A full discussion of conservative garbage collection can
+be found in Jones [1996, Chapters 9 and 10]
+
+Reference counting has both the advantages and disadvantages of being tightly coupled to the mutator. The advantages are that reference counting can be implemented in a
+library, making it possible for the programmer to decide selectively which objects should
+be managed by reference counting and which should be managed explicitly. The disadvantages are that this coupling introduces the processing overheads discussed above and
+that it is essential that all reference count manipulations are correct.
+The performance of any modem language that makes heavy use of dynamically allocated data is heavily dependent on the memory manager. The critical actions typically
+include allocation, mutator updates including barriers, and the garbage collector's inner
+loops. Wherever possible, the code sequences for these critical actions needs to be inlined
+but this has to be done carefully to avoid exploding the size of the generated code. If
+the processor's instruction cache is sufficiently large and the code expansion is sufficiently
+small (in older systems with much smaller caches, Steenkiste [1989] suggested less than
+30%), this blowup may have negligible effect on performance. Otherwise, it will be necessary to distinguish in these actions the common case which needs to be small enough
+to be inlined (the 'fast path'), whilst calling out to a procedure for the less common 'slow
+path' [Blackburn and McKinley, 2002]. There are two lessons to be learnt here. The output
+from the compiler matters and it is essential to examine the assembler code produced. The
+effect on the caches also has a major impact on performance.
+
+Commercial systems often offer the user a choice of garbage collectors, each of which
+comes with a large number of tuning options. To complicate matters further, the tuning levers provided with these collectors tend not to be independent of one another. A
+number of researchers have suggested having systems adapt to the environment at hand.
+The Java run-time developed by Soman et al [2004] adapts dynamically by switching collectors at run time, according to heap size available. Their system either requires off-line
+profiling runs to annotate programs with the best collector/heap-size combination, or it
+can switch based on comparing the current space usage of the program with the maximum heap available. Singer et al [2007a], in contrast, apply machine learning techniques
+to predict the best collector from static properties of the program (and thus require only
+a single training run). Sun's Ergonomic tuning1 attempts to tune their HotSpot collector's
+performance against user-supplied throughput and maximum pause time goals, adjusting
+the size of spaces within the heap accordingly.
+The best, and possibly the only, advice that we can offer to developers is, know your
+application. Measure its behaviour, and the size and lifetime distributions of the objects it
+uses. Then experiment with the different collector configurations on offer. Unfortunately
+this needs to be done with real data sets. Synthetic and toy benchmarks are likely to mislead.
+
+
+### A unified theory of garbage collection
+In the preceding chapters, we considered two styles ofcollection: direct, reference counting
+and indirect, tracing collection. Bacon et al [2004] show that these collectors share remarkable similarities. Their abstract framework allows us to express a wide variety of different
+collectors in a way that highlights precisely where they are similar and where they differ.
+
+Abstract garbage collection
+In place of concrete data structures, the following abstract framework makes use of simple abstract data structures whose implementations can vary. We start by observing that
+garbage collection can be expressed as a fixed-point computation that assigns reference
+counts p(n ) to nodes n E Node s . Reference counts include contributions from the root
+set and incoming edges from nodes with non-zero reference counts:
+$$
+VrefE Node s :
+p(re f) l { fld E Root s : * f l d = ref } I (6.1)
++ l { fld E P o i nt e r s (n) : n E Node s /\ p(n) > 0 1\ * f l d = re f} I
+$$
+
+Having assigned reference counts, nodes with a non-zero count are retained and the rest
+  should be reclaimed. Reference counts need not be precise, but may simply be a safe approximation of the true value. Abstract garbage collection algorithms compute such fixedpoints using a work list W of objects to be processed. When W is empty these algorithms
+  terminate. In the following, W is a multiset, since every entry in W represents a distinct
+  source for each reference.
+
+
+#### Tracing garbage collection
+The abstraction casts tracing collection as a form of reference counting. Abstract tracing
+collection is illustrated by Algorithm 6.1, which starts with the reference counts of all nodes
+being zero. At the end of each collection cycle sweepT r a c i ng resets the count of all nodes
+to zero, and New initialises new nodes with a zero reference count. The col lect T r a c ing
+procedure accumulates all non-null root pointers using root s T r a c i ng and passes them
+to s canTracing as the work list W.
+Collection proceeds as we would expect by tracing the object graph to discover all
+the nodes reachable from the roots. The procedure s canT r a c i n g accomplishes this by
+tracing elements from the work list, reconstructing the reference count of each node, by
+incrementing its reference count each time it is encountered (recall how we suggested in
+Section 5.6 that a tracing collector could be used to correct sticky reference counts). When
+a reachable node s rc is discovered for the first time (when p( s r c ) is set to 1, line 10), the
+collector recurses through all the out-edges of s r c by scanning its fields and adding the
+(pointers to) child nodes found in those fields to the work list W.
+
+Termination of the while loop yields all the live nodes, each of which has a non-zero
+reference count equal to the number of its in-edges. The sweepT r a c i ng procedure then
+frees unused nodes, and resets the reference counts for the next round of collection. Note
+that a practical implementation of tracing can use a single-bit value for each node's reference count, in other words a mark-bit rather than a full-sized reference count, to record
+whether the node has already been visited. The mark-bit is thus a coarse approximation of
+the true reference count.
+The tracing collector computes the least fixed-point solution to Equation 6.1: the reference counts on the nodes are the lowest counts that satisfy it.
+We can interpret garbage collection algorithms in terms of the tricolour abstraction
+discussed in Section 2.2. In Algorithm 6.1, nodes with reference count 0 are white, while
+nodes with non-zero reference count are black. The transition of a node from white via
+grey to black occurs as that node is first traced and then scanned. Thus, we can re-cast the
+abstract tracing algorithm as partitioning the nodes into two sets, black being reachable
+and white being garbage.
+
+#### Reference counting garbage collection
+The abstract reference counting collection Algorithm 6.2 shows reference count operations
+being buffered by the mutator's i n c and de c procedures rather than performed immediately, in order to highlight the similarity with tracing. This buffering technique turns out to
+be very practical for multithreaded applications; we consider it further in Chapter 18. This
+logging of actions also shares similarities with coalesced reference counting, discussed in
+Section 5.4. The garbage collector, c o l lectCount ing, performs the deferred increments
+I with apply I n c rement s and the deferred decrements D with s c anCount i ng.
 
 ## Mark-sweep garbage collection
 
@@ -1264,6 +1463,13 @@ False Sharing
 
 ## Allocation
 
+There are three aspects to a memory management system: 
+- allocation of memory in the first place,
+- identification of live data and 
+- reclamation for future use of memory previously allocated but currently occupied by dead objects.
+Garbage collectors address these issues differently than do explicit memory managers, and different automatic memory managers use different algorithms to manage these actions. 
+However, in all cases allocation and reclamation of memory are tightly linked: how memory is reclaimed places constraints on how it is allocated.
+
 There are two fundamental strategies, `sequential allocation` and `free-list allocation`.
 We then take up the more complex case of allocation from `multiplefree-lists`.
 
@@ -1274,12 +1480,13 @@ allocates that much from one end of the free chunk. The data structure for seque
 allocation is quite simple, consisting of a free pointer and a limit pointer. Algorithm 7.1
 shows pseudocode for allocation that proceeds from lower addresses to higher ones, and Figure 7.1 illustrates the technique. Sequential allocation is colloquially called bump pointer
 allocation because of the way it 'bumps' the free pointer. It is also sometimes called linear
-allocation because the sequence of allocation addresses is linear for a given chunk. See
+allocation because the sequence of allocation addresses is linear for a given chunk.
+See
 Section 7.6 and Algorithm 7.8 for details concerning any necessary alignment and padding
 when allocating. The properties of sequential allocation include the following.
 
 - It is simple.
-- It is efficient, although Blackburn *et al* have shown that the fundamental performance difference between sequential allocation and segregated-fits free-list allocation (see Section 7.4) for a Java system is on the order of 1% of total execution time.
+- It is efficient, although Blackburn *et al* have shown that the fundamental performance difference between sequential allocation and segregated-fits free-list allocation for a Java system is on the order of 1% of total execution time.
 - It appears to result in better cache locality than does free-list allocation, especially for initial allocation of objects in moving collectors.
 - It may be less suitable than free-list allocation for non-moving collectors, if uncollected objects break up larger chunks of space into smaller ones,
   resulting in many small sequential allocation chunks as opposed to one or a small number of large ones.
