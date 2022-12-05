@@ -1361,21 +1361,17 @@ As we shall see that hybrid collectors are possible, combining tracing collectio
 
 The goal of a collector is to find dead objects and reclaim the space they occupy.
 Tracing collectors (and copying collectors in particular) are most efficient if the space they manage contains few live objects.
-On the other hand, long-lived objects are handled poorly if the collector processes them repeatedly,
-either marking and sweeping or copying them again and again from one semispace to another.
+On the other hand, long-lived objects are handled poorly if the collector processes them repeatedly, either marking and sweeping or copying them again and again from one semispace to another.
 Long-lived objects tend to accumulate in the bottom of a heap managed by a mark-compact collector, and that some collectors avoid compacting this dense prefix.
 While this eliminates the cost of relocating these objects, they must still be traced and all references they contain must be updated.
 
 Generational collectors extend this idea by not considering the oldest objects whenever possible.
-By concentrating reclamation effort on the youngest objects in order to exploit the weak generational hypothesis that most objects die young,
-they hope to maximise yield(recovered space) while minimising effort.
+**By concentrating reclamation effort on the youngest objects in order to exploit the weak generational hypothesis that most objects die young, they hope to maximise yield(recovered space) while minimising effort.**
 Generational collectors segregate objects by age into generations, typically physically distinct areas of the heap.
-Younger generations are collected in preference to older ones,
-and objects that survive long enough are promoted(or tenured) from the generation being collected to an older one.
+Younger generations are collected in preference to older ones, and objects that survive long enough are promoted(or tenured) from the generation being collected to an older one.
 
 Most generational collectors manage younger generations by copying.
-If, as expected, few objects are live in the generation being collected,
-then the mark/cons ratio between the volume of data processed by the collector and the volume allocated for that collection will be low.
+If, as expected, few objects are live in the generation being collected, then the mark/cons ratio between the volume of data processed by the collector and the volume allocated for that collection will be low.
 The time taken to collect the youngest generation (or nursery) will in general depend on its size.
 By tuning its size, we can control the expected pause times for collection of a generation.
 Young generation pause times for a well configured collector (running an application that conforms to the weak generational hypothesis) are typically of the order of ten milliseconds on current hardware.
@@ -1383,7 +1379,8 @@ Provided the interval between collections is sufficient, such a collector will b
 
 Occasionally a generational collector must collect the whole heap,
 for example when the allocator runs out of space and the collector estimates that insufficient space would be recovered by collecting only the younger generations.
-Generational collection therefore improves only expected pause times, not the worst case. On its own, it is not sufficient for real-time systems.
+Generational collection therefore improves only expected pause times, not the worst case. 
+On its own, it is not sufficient for real-time systems.
 
 Generational collection can also improve throughput by avoiding repeatedly processing long-lived objects.
 However, there are costs to pay. Any garbage in an old generation cannot be reclaimed by collection of younger generations: collection of long-lived objects that become garbage is not prompt.
@@ -1392,20 +1389,115 @@ generational collectors impose a bookkeeping overhead on mutators in order to tr
 an overhead hoped to be small compared to the benefits of generational collection.
 Tuning generational collectors to meet throughput and pause-time goals simultaneously is a subtle art.
 
+A generational collector will promote objects it discovers from the young generation to the old one, provided they are old enough. 
+This decision requires that a generational collector has a way of *measuring time* and a *mechanism for recording ages*.
+Since the old generation is not to be traced here, a generational system must record *inter-generational pointers*.
+
+Such inter-generational pointers can arise in two ways. First, the mutator creates a
+pointer that requires tracking whenever it writes a pointer to an object in a generation G1
+into a field of an object in a generation G2 that will be collected later than G1 . Second, the
+collector itself may create inter-generational pointers when it promotes an object. In the
+example, the collector will create such a pointer if it promotes P but not Q. In both cases,
+the inter-generational pointer can be detected with a write barrier. The mutator requires
+a barrier on pointer writes that records whether a pointer between generations has been written. A generational collector needs a similar copy write barrier to detect any intergenerational references created by promotion. In the example, the remembered set (remset)
+records the location of any objects (or fields) that may contain an inter-generational pointer
+of interest to the garbage collector, in this case S and U .
+
+Unfortunately, treating the source o f inter-generational pointers a s roots for a minor collection exacerbates the problem of floating garbage. Minor collections are frequent but do
+not reclaim garbage in the old generation, such as U . Worse, U holds an inter-generational
+pointer so must be considered a root for the young generation. This nepotism will lead to
+the young garbage child V of the old garbage object being promoted rather than reclaimed,
+thus further reducing the space available for live objects in the older generation.
+
+Before objects can be segregated by their age, we need to decide how time is to be measured. There are two choices: bytes allocated or seconds elapsed. Wall-dock time is useful
+for understanding a system's external behaviour. How long does it run? What are the
+pause times for garbage collection and how are they distributed? Answers to these questions determine whether a system is fit for purpose: will it complete its task in sufficient
+time and will it be sufficiently responsive? One requirement might be that it does not
+disturb an interactive human user. Another requirement might be to meet a hard realtime guarantee (say, in an embedded system) or a soft one (where occasionally missing a
+deadline is not disastrous but missing many is). On the other hand, internally, object lifetimes are better measured by the number of bytes of heap space allocated between their
+birth and their death. Space allocated is a largely machine-independent measure, although
+clearly a system with 64-bit addresses or integers will use more space than a 32-bit one.
+Bytes-allocated also directly measures the pressure placed upon the memory manager; it
+is closely related to the frequency with which the collector must be called.
+
+Unfortunately measuring time in terms of bytes allocated is tricky in multithreaded
+systems (where there are multiple application or system threads). A simple global measure
+of the volume of allocation may inflate the lifetime of an object, since the counter will
+include allocation by threads unrelated to the object in question [Jones and Ryder, 2008].
+
+In practice generational collectors often measure time in terms of how many collections
+an object has survived, because this is more convenient to record and requires fewer bits,
+but the collections survived is appropriately considered to be an approximate proxy for
+actual age in terms of bytes allocated.
+
 ### Generational hypotheses
 
 The weak generational hypothesis, that most objects die young, appears to be widely valid, regardless of programming paradigm or implementation language.
+It also holds for many programs written in object-oriented languages.
 
-Generation see https://dl.acm.org/doi/10.1145/800020.80826
-
-Generational garbage collectors need to keep track of references from older to younger generations so that younger generations can be garbage-collected without inspecting every object in the older generation(s). The set of locations potentially containing pointers to newer objects is often called the `remembered set`.
-
-At every store, the system must ensure that the updated location is added to the `remembered set` if the store creates a reference from an older to a newer object. This mechanism is usually referred to as a `write barrier` or `store check`.
 
 On the other hand, there is much less evidence for the `strong generational hypothesis` that, even for objects that are not newly-created, younger objects will have a lower survival rate than older ones.
+Simple models like the weak generational hypothesis account adequately in many programs for the behaviour of objects overall. 
+However, once the shortest lived objects are discounted, objects' demographics over a longer timescale are more complex. Object lifetimes are not random. 
+They commonly live in clumps and die all at the same time, because programs operate in phases.
+A significant number of objects may never die. 
+The lifetime of objects may be correlated with their size, although opinion has differed on this.
+However, as we saw above, there are other reasons why we might want to treat large objects specially.
 
-1. Card Marking
-2. Two-Instruction
+### Generations and heap layout
+
+A wide variety of strategies have been used to organise generations. 
+Collectors may use two or more generations, which may be segregated physically or logically. 
+Each generation may be bounded in size or the size of one space may be traded against that of another. 
+The structure within a generation may be flat or it may comprise a number of age-based subspaces, called steps or buckets. 
+Generations may also hold their own large object subspaces.
+Each generation may be managed by a different algorithm.
+
+The primary goals of generational garbage collection are reduced pause times and improved throughput.
+Assuming that the youngest generation is processed by copying collection, expected pause times depend largely on the volume of data that survives a minor collection of that generation, which in turn depends on the size of the generation.
+However, if the size of the nursery is too small, collection will be fast but little memory will be reclaimed as the objects in the nursery will have had insufficient time to die. 
+This will have many undesirable consequences.
+
+- First, young generation collections will be too frequent; as well as its copying cost proportional to the volume of surviving objects - 
+  which will be higher since object have had less time to die - each collection must also bear the cost of stopping threads and scanning their stacks.
+- Second, the older generation will fill too fast and then it too will have to be collected. 
+  High promotion rates will cause time-consuming older generation or full heap collections to take place too frequently. 
+  In addition, premature promotion will increase the incidence of nepotism, as 'tenured' garbage objects in the old generation preserve their offspring in the young generation, 
+  artificially inflating the survivor rate as those dead children will also be promoted.
+- Third, there is considerable evidence that newly created objects are modified more frequently than older ones. 
+  If these young objects are promoted prematurely, their high mutation rate will put further pressure on the mutator's write barrier; this is particularly undesirable if the cost of the write barrier is high. 
+  Any transfer of overheads between mutator and collector needs careful evaluation with realistic workloads.
+  Typically, the collector will account for a much smaller proportion of execution time than the mutator in any well configured system. 
+  For example, suppose a write barrier comprises just a few instructions in its fast path yet accounts for 5% of overall execution time; suppose further that the collector accounts for 10% of overall run time. 
+  It would be quite easy for an alternative write barrier implementation to double the cost of the barrier, thus adding 5% to overall execution time. 
+  To recover this, garbage collection time must be reduced by 50%, which would be hard to do.
+- Finally, by promoting objects the program's working set may be diluted.
+  Generational organisation is a balancing act between keeping minor collections as short as possible, minimising the number of minor and the much more expensive full,
+  major collections, and avoiding passing too much of the cost of memory management to the mutator. 
+  We now look at how this can be achieved.
+
+### Multiple generations
+Adding further generations is one solution to the dilemma of how to preserve short pause times for nursery collections without incurring excessively frequent full heap collections, because the oldest generation has filled too soon. 
+The role of the intermediate generations is to filter out objects that have survived collection of the youngest generation but do not live much longer. 
+If a collector promotes all live objects en masse from the youngest generation, the survivors will include the most recently allocated objects despite the expectation that most of these will die very soon. 
+By using multiple generations, the size of the youngest generation can be kept small enough to meet expected pause time requirements without increasing the volume of objects dying in the oldest generation shortly after their promotion.
+
+Using multiple generations has a number of drawbacks.
+Most systems will collect all younger generations when any older generation is collected. 
+This offers the benefit that pointers need to be tracked in one direction only: old to young, which occur less frequently than young to old. 
+Although the time taken to collect an intermediate generation will be less than that required to collect the full heap, pause times will be longer than those for nursery collections.
+Multiple generation collectors are also more complex to implement and may introduce additional overheads to the collector's tracing loop, 
+as this performance critical code must now distinguish between multiple generations rather than just two (which can often be accomplished with a single check against an address, maybe a compile-time constant).
+Increasing the number of generations will tend to increase the number of inter-generational pointers created, which in turn may increase the pressure on the mutator's write barrier, depending on implementation. 
+It will also increase the size of the root set for younger generations since objects have been promoted that would not have been if some of the space used for the intermediate generations had been used to increase the size of the young generation.
+
+Although many early generational collectors for Smalltalk and Lisp offered multiple generations, most modem generational collectors for object-oriented systems provide just two.
+Even where collectors provide more than two generations, such as those for functional languages where allocation and death rates are prodigiously high, often only two generations are used by default.
+Instead, mechanisms within generations, especially the youngest generation, can be used to control promotion rates.
+
+### Age recording
+
+
 
 ### Young Generation
 

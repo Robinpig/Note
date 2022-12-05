@@ -1,5 +1,19 @@
 ## Introduction
 
+
+
+Generational garbage collectors need to keep track of references from older to younger generations so that younger generations can be garbage-collected without inspecting every object in the older generation(s).
+The set of locations potentially containing pointers to newer objects is often called the `remembered set`.
+
+At every store, the system must ensure that the updated location is added to the `remembered set` if the store creates a reference from an older to a newer object.
+This mechanism is usually referred to as a `write barrier` or `store check`.
+
+
+1. Card Marking
+2. Two-Instruction
+
+
+
 ## MetaSpace
 
 Starting with Java 8, the MetaSpace memory space replaces the PermGen space. The implementation differs from the PermGen and this space of the heap is now automatically resized.
