@@ -14,6 +14,97 @@ This mechanism is usually referred to as a `write barrier` or `store check`.
 
 
 
+
+
+**GC Roots:**
+
+Examples of such Garbage Collection roots are:
+
+- Classes loaded by system class loader (not custom class loaders) `ClassLoaderDataGraph::roots_cld_do`
+- Live threads `Threads::possibly_parallel_oops_do`
+- Local variables and parameters of the currently executing methods
+- Local variables and parameters of JNI methods
+- Global JNI reference `JNIHandles::oops_do`
+- Objects used as a monitor for synchronization
+- Objects held from garbage collection by JVM for its purposes
+- CodeCache `CodeCache::blobs_do`
+
+See [G1 Roots](/docs/CS/Java/JDK/JVM/G1.md?id=roots)
+
+Tri-color Marking
+
+
+interceptor and JIT use Write Barrier to maintain Card Table
+
+Premature Promotion
+
+Promotion Failure
+
+gcCause.cpp
+
+### mark
+
+- at oop like serial
+- bitMap out of object like G1 Shenandoah
+- Colored Pointer like ZGC
+
+
+
+
+### Young Generation
+
+Newly created objects start in the Young Generation. The Young Generation is further subdivided into:
+
+- Eden space - all new objects start here, and initial memory is allocated to them
+- Survivor spaces (FromSpace and ToSpace) - objects are moved here from Eden after surviving one garbage collection cycle.
+
+When objects are garbage collected from the Young Generation, it is a `minor garbage collection` event.
+
+When Eden space is filled with objects, a Minor GC is performed.
+All the dead objects are deleted, and all the live objects are moved to one of the survivor spaces.
+Minor GC also checks the objects in a survivor space, and moves them to the other survivor space.
+
+Take the following sequence as an example:
+
+- Eden has all objects (live and dead)
+- Minor GC occurs - all dead objects are removed from Eden. All live objects are moved to S1 (FromSpace). Eden and S2 are now empty.
+- New objects are created and added to Eden. Some objects in Eden and S1 become dead.
+- Minor GC occurs - all dead objects are removed from Eden and S1. All live objects are moved to S2 (ToSpace). Eden and S1 are now empty.
+
+So, at any time, one of the survivor spaces is always empty. When the surviving objects reach a certain threshold of moving around the survivor spaces, they are moved to the Old Generation.
+
+You can use the `-Xmn` flag to set the size of the Young Generation.
+
+default old/young=2:1
+
+Eden:from:to=8:1:1
+
+#### Handle Promotion
+
+### Old Generation
+
+Objects that are long-lived are eventually moved from the Young Generation to the Old Generation.
+This is also known as Tenured Generation, and contains objects that have remained in the survivor spaces for a long time.
+
+When objects are garbage collected from the Old Generation, it is a `major garbage collection` event.
+
+You can use the -Xms and -Xmx flags to set the size of the initial and maximum size of the Heap memory.
+
+### Intergenerational Reference Hypothesis
+
+Remembered Set
+
+- bits
+- objects
+- Card Table
+
+False Sharing
+
+```
+  product(bool, UseCondCardMark, false,                                     \
+          "Check for already marked card before updating card table")       \
+```
+
 ## MetaSpace
 
 Starting with Java 8, the MetaSpace memory space replaces the PermGen space. The implementation differs from the PermGen and this space of the heap is now automatically resized.

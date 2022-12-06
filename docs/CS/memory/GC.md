@@ -411,15 +411,14 @@ A grey mutator has roots that have not yet been scanned by the collector.
 A black mutator has roots that have already been scanned by the collector(and do not need to be scanned again).
 Tracing makes progress through the heap by moving the collector wavefront (the grey objects) separating black objects from white objects until all reachable objects have been traced black.
 
-
 ### Comparing garbage collectors
 
 It is common to ask: which is the best garbage collector to use? However, the temptation to provide a simple answer needs to be resisted. First, what does 'best' mean? Do we
 want the collector that provides the application with the best throughput, or do we want
-the shortest pause times? Is space utilisation important? 
-Or is a compromise that combines these desirable properties required? Second, it is clear that, even if a single metric is chosen, the ranking of different collectors will vary between different applications. 
-For example, in a study of twenty Java benchmarks and six different collectors, Fitzgerald and Tarditi found that for each collector there was at least one benchmark that would have been at least 15% faster with a more appropriate collector. 
-And furthermore, not only do programs tend to run faster given larger heaps, but also the relative performance of collectors varies according the amount of heap space available. 
+the shortest pause times? Is space utilisation important?
+Or is a compromise that combines these desirable properties required? Second, it is clear that, even if a single metric is chosen, the ranking of different collectors will vary between different applications.
+For example, in a study of twenty Java benchmarks and six different collectors, Fitzgerald and Tarditi found that for each collector there was at least one benchmark that would have been at least 15% faster with a more appropriate collector.
+And furthermore, not only do programs tend to run faster given larger heaps, but also the relative performance of collectors varies according the amount of heap space available.
 To complicate matters yet further, excessively large heaps may disperse temporally related objects, leading to worsened locality that may slow down applications.
 
 **Throughput**
@@ -469,7 +468,6 @@ counting, the most effective ways to improve reference counting performance, bot
 in the zero count table. As we shall see in Section 6.6, high performance reference counting
 and tracing schemes are not so different as they might first appear.
 
-
 **Space**
 
 Memory footprint is important if there are tight physical constraints on memory, if applications are very large, or in order to allow applications to scale well. All garbage collection
@@ -499,8 +497,8 @@ collection to a subsequent one. Reference counting faces the additional problem 
 incomplete; specifically, it is unable to reclaim cyclic garbage structures without recourse
 to tracing.
 
-
 ### Implementation
+
 Garbage collection algorithms are difficult to implement correctly, and concurrent algorithms notoriously so. The interface between the collector and the compiler is critical.
 Errors made by the collector often manifest themselves long afterwards (maybe many collections afterwards), and then typically as a mutator attempts to follow a reference that
 is no longer valid. It is important, therefore, that garbage collectors be constructed to be
@@ -552,8 +550,8 @@ application. Measure its behaviour, and the size and lifetime distributions of t
 uses. Then experiment with the different collector configurations on offer. Unfortunately
 this needs to be done with real data sets. Synthetic and toy benchmarks are likely to mislead.
 
-
 ### A unified theory of garbage collection
+
 In the preceding chapters, we considered two styles ofcollection: direct, reference counting
 and indirect, tracing collection. Bacon et al [2004] show that these collectors share remarkable similarities. Their abstract framework allows us to express a wide variety of different
 collectors in a way that highlights precisely where they are similar and where they differ.
@@ -563,19 +561,21 @@ In place of concrete data structures, the following abstract framework makes use
 garbage collection can be expressed as a fixed-point computation that assigns reference
 counts p(n ) to nodes n E Node s . Reference counts include contributions from the root
 set and incoming edges from nodes with non-zero reference counts:
+
 $$
 VrefE Node s :
 p(re f) l { fld E Root s : * f l d = ref } I (6.1)
 + l { fld E P o i nt e r s (n) : n E Node s /\ p(n) > 0 1\ * f l d = re f} I
+
 $$
 
 Having assigned reference counts, nodes with a non-zero count are retained and the rest
-  should be reclaimed. Reference counts need not be precise, but may simply be a safe approximation of the true value. Abstract garbage collection algorithms compute such fixedpoints using a work list W of objects to be processed. When W is empty these algorithms
-  terminate. In the following, W is a multiset, since every entry in W represents a distinct
-  source for each reference.
-
+should be reclaimed. Reference counts need not be precise, but may simply be a safe approximation of the true value. Abstract garbage collection algorithms compute such fixedpoints using a work list W of objects to be processed. When W is empty these algorithms
+terminate. In the following, W is a multiset, since every entry in W represents a distinct
+source for each reference.
 
 #### Tracing garbage collection
+
 The abstraction casts tracing collection as a form of reference counting. Abstract tracing
 collection is illustrated by Algorithm 6.1, which starts with the reference counts of all nodes
 being zero. At the end of each collection cycle sweepT r a c i ng resets the count of all nodes
@@ -606,6 +606,7 @@ abstract tracing algorithm as partitioning the nodes into two sets, black being 
 and white being garbage.
 
 #### Reference counting garbage collection
+
 The abstract reference counting collection Algorithm 6.2 shows reference count operations
 being buffered by the mutator's i n c and de c procedures rather than performed immediately, in order to highlight the similarity with tracing. This buffering technique turns out to
 be very practical for multithreaded applications; we consider it further in Chapter 18. This
@@ -640,8 +641,6 @@ Note that the mark-sweep collector imposes constraints upon the heap layout.
 From the viewpoint of the garbage collector, mutator threads perform just three operations
 of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=Mutator-read-and-write-operations)").
 
-
-
 ### Bitmap marking
 
 Space for a mark-bit can usually be found in an object header word.
@@ -664,7 +663,6 @@ A corollary is that it is simple from the bitmap to determine whether a complete
 Many memory managers use a block structured heap (for example, Boehm and Weiser).
 A straightforward implementation might reserve a prefix of each block for its bitmap.
 As previously discussed this leads to unnecessary cache conflicts and page accesses, so collectors tend to store bitmaps separately from user data blocks.
-
 
 ### Lazy sweeping
 
@@ -741,7 +739,7 @@ than if it were to be managed by explicit deallocation.
 
 **To move or not to move?**
 
-Not moving objects has both advantages and disadvantages. 
+Not moving objects has both advantages and disadvantages.
 Its benefit is that it makes mark-sweep a suitable candidate for use in uncooperative environments where there is no communication between language compiler and garbage collector.
 Without type-accurate information about the mutators' roots and the fields of objects, they cannot be updated with the new locations of moved objects - the putative 'root' might not be a pointer but other user data.
 In some cases, hybrid mostly-copying collection is possible.
@@ -756,14 +754,14 @@ than object headers.
 
 The problem with not moving objects is that, in long running applications, the heap tends to become fragmented.
 Non-moving memory allocators require space $O(log{}{max/min})$ larger than the minimum possible, where min and max are the smallest and largest possible object sizes.
-Thus a non-compacting collector may have to be called more frequently than one that compacts. 
+Thus a non-compacting collector may have to be called more frequently than one that compacts.
 Note that all tracing collectors need sufficient headroom (say, 20-50%) in the heap in order to avoid thrashing the collector.
 
-**To avoid having performance suffer due to excessive fragmentation, many production collectors that use mark-sweep to manage a region of the heap also periodically use another algorithm such as mark-compact to defragment it.** 
+**To avoid having performance suffer due to excessive fragmentation, many production collectors that use mark-sweep to manage a region of the heap also periodically use another algorithm such as mark-compact to defragment it.**
 This is particularly true if the application does not maintain fairly constant ratios of object sizes or allocates many very large objects.
 If the application allocates more large objects than it previously did, the result may be many small holes in the heap no longer being reused for new allocations of objects of the same size.
-Conversely, if the application begins to allocate smaller objects than before, these smaller objects might be allocated in gaps previously occupied by larger objects, with the remaining space in each gap being wasted. 
-However, careful heap management can reduce the tendency to fragment by taking advantage of objects' tendency to live and die in clumps. 
+Conversely, if the application begins to allocate smaller objects than before, these smaller objects might be allocated in gaps previously occupied by larger objects, with the remaining space in each gap being wasted.
+However, careful heap management can reduce the tendency to fragment by taking advantage of objects' tendency to live and die in clumps.
 Allocation with segregated-fits can also reduce the need to compact.
 
 ## Mark-compact garbage collection
@@ -772,8 +770,8 @@ The major benefit of a compacted heap is that it allows very fast, sequential al
 simply by testing against a heap limit and 'bumping' a free pointer by the size of the allocation request.
 The strategy we consider is in-place compaction of objects into one end of the same region.
 
-Mark-compact algorithms operate in a number of phases. 
-The first phase is always a marking phase, which we discussed in the previous chapter. 
+Mark-compact algorithms operate in a number of phases.
+The first phase is always a marking phase, which we discussed in the previous chapter.
 Then, further compacting phases compact the live data by relocating objects and updating the pointer values of all live references to objects that have moved.
 
 The number of passes over the heap, the order in which these are executed and the way in which objects are relocated varies from algorithm to algorithm.
@@ -786,12 +784,11 @@ The compaction order has locality implications. Any moving collector may rearran
 Most compacting collectors of which we are aware use arbitrary or sliding orders.
 All modern mark-compact collectors implement sliding compaction, which does not interfere with mutator locality by changing the relative order of object placement.
 
-Compaction algorithms may impose further constraints. 
-Arbitrary order algorithms handle objects of only a single size or compact objects of different sizes separately. 
-Compaction may require two or three passes through the heap. 
-It may be necessary to provide an extra slot in object headers to hold relocation information: such an overhead is likely to be significant for a general purpose memory manager. 
+Compaction algorithms may impose further constraints.
+Arbitrary order algorithms handle objects of only a single size or compact objects of different sizes separately.
+Compaction may require two or three passes through the heap.
+It may be necessary to provide an extra slot in object headers to hold relocation information: such an overhead is likely to be significant for a general purpose memory manager.
 Compaction algorithms may impose restrictions on pointers.
-
 
 All compaction algorithms are invoked as follows:
 
@@ -802,20 +799,19 @@ atomic collect():
 ```
 
 Mark-compact collectors eliminate fragmentation and support very fast, 'bump a pointer' allocation but require multiple passes over live objects, and significantly increase collection times.
+
 ### Two-finger compaction
 
-
-Edwards's Two-Finger algorithm is a two-pass, arbitrary order algorithm, best suited to compacted regions containing objects of a fixed size. 
-The idea is simple: given the volume of live data in the region to be compacted, we know where the highwater mark of the region will be after compaction. 
+Edwards's Two-Finger algorithm is a two-pass, arbitrary order algorithm, best suited to compacted regions containing objects of a fixed size.
+The idea is simple: given the volume of live data in the region to be compacted, we know where the highwater mark of the region will be after compaction.
 Live objects above this threshold are moved into gaps below the threshold.
 Algorithm 3.1 starts with two pointers or 'fingers', free which points to the start of the region and s c a n which starts at the end of the region.
-The first pass repeatedly advances the free pointer until it finds a gap (an unmarked object) in the heap, and retreats the s c a n pointer until it finds a live object. 
-If the free and s c a n fingers pass each other, the phase is complete. 
+The first pass repeatedly advances the free pointer until it finds a gap (an unmarked object) in the heap, and retreats the s c a n pointer until it finds a live object.
+If the free and s c a n fingers pass each other, the phase is complete.
 Otherwise, the object at scan is moved into the gap at f r ee, overwriting a field of the old copy (at `scan`) with a forwarding address, and the process continues.
-This is illustrated in Figure 3.1, where object A has been moved to its new location A' and some slot of A (say, the first slot) has been overwritten with the address A'. 
-Note that the quality of compaction depends on the size of the gap at f re e closely matching the size of the live object at s can. 
+This is illustrated in Figure 3.1, where object A has been moved to its new location A' and some slot of A (say, the first slot) has been overwritten with the address A'.
+Note that the quality of compaction depends on the size of the gap at f re e closely matching the size of the live object at s can.
 Unless this algorithm is used on fixed-size objects, the degree of defragmentation might be very poor indeed.
-
 
 <div style="text-align: center;">
 
@@ -830,7 +826,6 @@ Live objects at the top of the heap are moved into free gaps at the bottom of th
 Here, the object at A has been moved to A'. 
 The algorithm terminates when the free and scan pointers meet.
 </p>
-
 
 <p style="text-align: center;">
 The Two-Finger compaction algorithm
@@ -849,11 +844,11 @@ relocate(start, end) :
     while i sMarked( free)
     unsetMarked( free )
     free +- free + s i z e ( free)
-    
+  
     while not i sMarked( s can) && scan> free
     /* find next hole 4
     s can +- s can - s i z e ( s can) l* find previous live object */
-    
+  
     if scan > free
       unsetMa rked(s can)
       move ( s can, free)
@@ -863,7 +858,7 @@ relocate(start, end) :
       /* leaveforwarding address (destructively) 4
       s i ze (free)
       s i ze ( scan)
-      
+  
 updateRe ferences ( st art, end) :
   for each fld in Root s /* update roots that pointed to moved objects *I
 re f +-- * fld
@@ -878,6 +873,7 @@ ifref 2: end
     if1d +-- * re f /* use theforwarding address left infirst pass 4
         s can +-- s can + s i ze ( s can) /* next object 4
 ```
+
 At the end of this phase, free points at the high-water mark. The second pass updates
 the old values of pointers that referred to locations beyond the high-water mark with the
 forwarding addresses found in those locations, that is, with the objects' new locations.
@@ -896,10 +892,11 @@ in clumps, rather than moving individual objects, we could move groups of consec
 live objects into large gaps.
 
 ### One-pass algorithms
+
 If we are to reduce the number of passes a sliding collector makes over the heap to two
 (one to mark and one to slide objects), and avoid the expense of threading, then we must
-store forwarding addresses in a side table that is preserved throughout compaction. 
-Abuaiadh et al [2004], and Kermany and Petrank [2006] both designed high performance markcompact algorithms for multiprocessors that do precisely this. 
+store forwarding addresses in a side table that is preserved throughout compaction.
+Abuaiadh et al [2004], and Kermany and Petrank [2006] both designed high performance markcompact algorithms for multiprocessors that do precisely this.
 The former is a parallel,
 stop-the-world algorithm (it employs multiple compaction threads); the latter can be can
 also be configured to be concurrent (allowing mutator threads to run alongside collector
@@ -913,7 +910,6 @@ corresponding to the first and last granules of each live object. For example, b
 19 are set for the object marked old in Figure 3.3. By scrutinising the mark bitmap in the
 compaction phase, the collector can calculate the size of any live object.
 
-
 Second, a table is used to store forwarding addresses. It would be prohibitively expensive to do this for every object (especially if we assume that objects are word-aligned) so
 both these algorithms divide the heap into small, equal-sized blocks (256 or 512 bytes, respectively). The `offset` table stores the forwarding address of the first live object in each
 block. The new locations of the other live objects in a block can be computed on-the-fly
@@ -926,12 +922,11 @@ the details as they appear in Algorithm 3.4.
 
 After marking is complete, the `computeLocations` routine passes over the mark-bit vector to produce the `offset` vector.
 Essentially, it performs the same calculation as in Lisp 2 (Algorithm 3.2) but does not need to touch any object in the heap.
-For example, consider the first marked object in block 2, shown with a bold border in Figure 3.3. 
+For example, consider the first marked object in block 2, shown with a bold border in Figure 3.3.
 Bits 2 and 3, and 6 and 7 are set in the first block, and bits 3 and 5 in the second (in this example, each block comprises eight slots).
 This represents 7 granules (words) that are marked in the bitmap before this object.
 Thus the first live object in block 2 will be relocated to the seventh slot in the heap.
 This address is recorded in the `offset` vector for the block (see the dashed arrow marked `offset[block]` in the figure).
-
 
 Once the o f f s e t vector has been calculated, the roots and live fields are updated to
 reflect the new locations. The Lisp 2 algorithm had to separate the updating of references
@@ -965,9 +960,9 @@ fragmentation metrics suggest that this be profitable.
 **Long-lived data**
 
 It is not uncommon for long-lived or even immortal data to accumulate near the beginning of the heap in moving collectors.
-Copying collectors handle such objects poorly, repeatedly copying them from one semispace to another. 
-On the other hand, generational collectors deal with these well, by moving them to a different space which is collected only infrequently. However, a generational solution might not be acceptable if heap space is tight. 
-It is also obviously not a solution if the space being collected is the oldest generation of a generational collector! Mark-compact, however, can simply elect not to compact objects in this 'sediment'. 
+Copying collectors handle such objects poorly, repeatedly copying them from one semispace to another.
+On the other hand, generational collectors deal with these well, by moving them to a different space which is collected only infrequently. However, a generational solution might not be acceptable if heap space is tight.
+It is also obviously not a solution if the space being collected is the oldest generation of a generational collector! Mark-compact, however, can simply elect not to compact objects in this 'sediment'.
 
 Hanson was the first to observe that these objects tended to accumulate at the bottom of the 'transient object area' in his SITBOL system.
 His solution was to track the height of this 'sediment' dynamically, and simply avoid collecting it unless absolutely necessary, at the expense of a small amount of fragmentation.
@@ -978,27 +973,25 @@ If bitmap marking is used, the extent of a live prefix of desired density can be
 **Locality**
 
 Mark-compact collectors may preserve the allocation order of objects in the heap or they may rearrange them arbitrarily.
-Although arbitrary order collectors may be faster than other mark-compact collectors and impose no space overheads, the mutator's locality is likely to suffer from an arbitrary scrambling of object order. 
+Although arbitrary order collectors may be faster than other mark-compact collectors and impose no space overheads, the mutator's locality is likely to suffer from an arbitrary scrambling of object order.
 Sliding compaction has a further benefit for some systems: the space occupied by all objects allocated after a certain point can be reclaimed in constant time, just by retreating the free space pointer.
 
 **Limitations of mark-compact algorithms**
 
-A wide variety of mark-compact collection algorithms has been proposed. 
-Many of these have properties that may be undesirable or unacceptable. 
-The issues to consider include what space overheads may be incurred to store forwarding pointers (although this cost will be lower than that of a copying collector). 
+A wide variety of mark-compact collection algorithms has been proposed.
+Many of these have properties that may be undesirable or unacceptable.
+The issues to consider include what space overheads may be incurred to store forwarding pointers (although this cost will be lower than that of a copying collector).
 Some compaction algorithms place restrictions on the mutator.
 Simple compactors like the Two-Finger algorithm can only manage fixed-size objects.
-It is certainly possible to segregate objects by size class, but in this case, to what extent is compaction necessary? 
+It is certainly possible to segregate objects by size class, but in this case, to what extent is compaction necessary?
 Threaded compaction requires that it be possible to distinguish pointers from non-pointer values temporarily stored in pointer fields.
-Threading is also incompatible with concurrent collection because it (temporarily) destroys information in pointer fields. 
+Threading is also incompatible with concurrent collection because it (temporarily) destroys information in pointer fields.
 Morris's threaded algorithm also restricts the direction in which references may point.
 Finally, most compaction algorithms preclude the use of interior pointers: the Two-Finger algorithm is an exception
 
-
-
 ## Copying garbage collection
 
-Copying compacts the heap, thus allowing fast allocation, yet requires only a single pass over the live objects in the heap. 
+Copying compacts the heap, thus allowing fast allocation, yet requires only a single pass over the live objects in the heap.
 Its chief disadvantage is that it reduces the size of the available heap by half.
 
 Basic copying collectors divide the heap into two, equally sized *semispaces*, called *fromspace* and *tospace*.
@@ -1025,7 +1018,6 @@ tracing from a tospace field, uses this forwarding address to update the field, 
 whether the copy was made in this tracing step or a previous one (line 22). Collection is
 complete when all tospace objects have been scanned.
 
-
 ```
 createSemispaces():
   tospace <- HeapStart
@@ -1041,7 +1033,8 @@ atomic allocate(size):
   free <- newfree
   return result
 ```
-Unlike most mark-compact collectors, semispace copying does not require any extra space in object headers. 
+
+Unlike most mark-compact collectors, semispace copying does not require any extra space in object headers.
 Any slot in a fromspace object can be used for the forwarding address (at least, in stop-the-world implementations), since that copy of the object is not used after the collection.
 This makes copying collection suitable even for header-less objects.
 
@@ -1089,18 +1082,17 @@ copy(fromRef):                                                      /* copy obje
   return toRef
 ```
 
-
 ### Copying garbage collection considerations
+
 Copying collection offers two immediately attractive advantages over non-moving collectors like mark-sweep: fast allocation and the elimination of fragmentation (other than to satisfy alignment requirements).
-Simple copying collectors are also easier to implement than mark-sweep or mark-compact collectors. 
+Simple copying collectors are also easier to implement than mark-sweep or mark-compact collectors.
 The trade-off is that copying collection uses twice as much virtual memory as other collectors in order to match their frequency of collections.
 
 **Allocation**
 
-
-Allocation in a compacted heap is fast because it is simple. 
-In the common case, it simply requires a test against a heap or block limit and that a free pointer be implemented. 
-If a block-structured rather than a contiguous heap is used, occasionally the test will fail and a new block must be acquired. 
+Allocation in a compacted heap is fast because it is simple.
+In the common case, it simply requires a test against a heap or block limit and that a free pointer be implemented.
+If a block-structured rather than a contiguous heap is used, occasionally the test will fail and a new block must be acquired.
 The slow path frequency will depend on the ratio of the average size of objects allocated and the block size.
 Sequential allocation also works well with multithreaded applications since each mutator can be given its own local allocation buffer
 in which to allocate without needing to synchronise with other threads.
@@ -1109,58 +1101,53 @@ This arrangement is simpler and requires little metadata, in contrast with local
 The code sequence for such a bump-a-pointer allocation is short but, even better, it is well behaved with respect to the cache as allocation advances linearly through the heap.
 Although the combination of sequential allocation, typically short object lifetimes and semispaces means that the next location to be allocated is likely to be the one least recently used,
 the prefetching abilities of modern processors are likely to hide the latency that might otherwise result.
-If this behaviour conflicts with the operating system's least recently used (LRU) page eviction policy to the extent that paging becomes a problem, it is time to reconsider the configuration of the system. 
+If this behaviour conflicts with the operating system's least recently used (LRU) page eviction policy to the extent that paging becomes a problem, it is time to reconsider the configuration of the system.
 Either it requires more physical memory to run the application satisfactorily, or another collection policy - maybe one of the generational collectors - should be used.
 
-Blackburn et al found that although sequential allocation had an 11% advantage over free-list allocation in a micro-benchmark limit study, allocation itself accounted for less than 10% of overall running time in real applications. 
-Thus, the difference in cost between bump-a-pointer allocation and free-list allocation may not be significant. 
+Blackburn et al found that although sequential allocation had an 11% advantage over free-list allocation in a micro-benchmark limit study, allocation itself accounted for less than 10% of overall running time in real applications.
+Thus, the difference in cost between bump-a-pointer allocation and free-list allocation may not be significant.
 However, allocation is only part of the picture for the mutator since the cost of creating a new object is likely to be dominated by its initialisation, certainly in systems that distinguish these actions.
 Furthermore, objects share similar life-cycles in many applications.
 The mutator creates some semantically related objects at around the same time, uses them, and finally tends to abandon them all at once.
 Here, compacted heaps offer good spatial locality, with related objects typically allocated on the same page and maybe in the same cache line if they are small.
 Such a layout is likely to lead to fewer cache misses than if related objects are allocated from different free-lists.
 
-
 **Space and locality**
 
 The immediate disadvantage of semispace copying is the need to maintain a second semispace, sometimes called a copy reserve.
-For a given memory budget and ignoring the data structures needed by the collector itself, semispace copying provides only half the heap space of that offered by other whole heap collectors. 
-The consequence is that copying collectors will perform more garbage collection cycles than other collectors. 
+For a given memory budget and ignoring the data structures needed by the collector itself, semispace copying provides only half the heap space of that offered by other whole heap collectors.
+The consequence is that copying collectors will perform more garbage collection cycles than other collectors.
 Whether or not this translates into better or worse performance depends on trade-offs between the mutator and the collector, the characteristics of the application program and the volume of heap space available.
-
 
 **Moving objects**
 
-The choice of a copying collector will depend in part on whether it is possible to move objects and the cost of doing so. 
-In some environments objects cannot be moved. 
+The choice of a copying collector will depend in part on whether it is possible to move objects and the cost of doing so.
+In some environments objects cannot be moved.
 One reason is that lack of type accuracy means that it would not be safe to modify the slot holding a reference to a putative object.
 Another is that a reference to the object has been passed to unmanaged code (perhaps, as an argument in a system call) that does not expect the reference to change.
-Furthermore, the problem of pointer finding can often be simpler in a mark-sweep context than that of a moving collector. 
-It suffices to find at least one reference to a live object with a non-moving collector. 
-On the other hand, a moving collector must find and update all references to an evacuated object. 
+Furthermore, the problem of pointer finding can often be simpler in a mark-sweep context than that of a moving collector.
+It suffices to find at least one reference to a live object with a non-moving collector.
+On the other hand, a moving collector must find and update all references to an evacuated object.
 This also makes the problem of concurrent moving collection much harder than concurrent non-moving collection since all the references to an object must appear to be updated atomically.
 
-It is expensive to copy some objects. 
-Although copying even a small object is likely to be more expensive than marking it, the cost and latency of doing so is often absorbed by the costs of chasing pointers and discovering type information. 
-On the other hand, repeatedly copying large, pointer-free objects will lead to poor performance. 
+It is expensive to copy some objects.
+Although copying even a small object is likely to be more expensive than marking it, the cost and latency of doing so is often absorbed by the costs of chasing pointers and discovering type information.
+On the other hand, repeatedly copying large, pointer-free objects will lead to poor performance.
 One solution is simply not to copy them but instead devolve the management of large objects to a nonmoving collector.
-Another is to copy them virtually but not physically. 
+Another is to copy them virtually but not physically.
 This can be done either by holding such objects on a linked list maintained by the collector, or by allocating large objects on their own virtual memory pages which can be remapped.
-
-
-
 
 ## References counting
 
 Rather than tracing reachable objects and then inferring that all unvisited objects must be garbage, reference counting operates directly on objects as references are created or destroyed.
 
-Reference counting maintains a simple invariant: an object is presumed to be live if and only if the number of references to that object is greater than zero. 
-Reference counting therefore associates a reference coun t with each object managed; typically this count is stored as an additional slot in the object's header. 
+Reference counting maintains a simple invariant: an object is presumed to be live if and only if the number of references to that object is greater than zero.
+Reference counting therefore associates a reference coun t with each object managed; typically this count is stored as an additional slot in the object's header.
 In its most nai"ve implementation, shown in Algorithm 5.1, reference counts are incremented or decremented as references to objects are created or destroyed.
-Procedure W r i t e increments the reference count of the new target and then decrements the count of the old target. 
+Procedure W r i t e increments the reference count of the new target and then decrements the count of the old target.
 Note that it is called even for updates of local variables.
 We also assume it is called to write null into local variables before each procedure returns.
-The operations addRe fe rence and de leteRe f e r e n c e increment and decrement respectively the reference counts of their object argument. 
+The operations addRe fe rence and de leteRe f e r e n c e increment and decrement respectively the reference counts of their object argument.
 Note that it is essential that the reference counts are adjusted in this order (lines 9-10) to prevent premature reclamation of the target in the case when the old and the new targets of the pointer are the same, that is, s r c [i] = re f.
 Once a reference count is zero (line 20), the object can be freed and the reference counts of all its children decremented, which may in turn lead to their reclamation and so on recursively.
 
@@ -1170,7 +1157,6 @@ later in this book, mutators are required to execute barriers in many systems. M
 graph, atomically with respect to the mutator. Such collectors may execute concurrently, either in lock-step with the mutator as for reference counting or asynchronously in another
 thread. Alternatively, the collector may process different regions of the heap at different
 frequencies, as do generational collectors. In all these cases, mutator barriers must be executed in order to preserve the invariants of the collector algorithm.
-
 
 ```
 New() :
@@ -1209,23 +1195,22 @@ Client programs can use destructive updates rather than copying objects if they 
 Reference counting can be implemented without assistance from or knowledge of the run-time system.
 In particular, it is not necessary to know the roots of the program. Reference counting can reclaim some memory even if parts of the system are unavailable: this is particularly useful in distributed systems.
 
-
-
 ### Advantages and disadvantages of reference counting
+
 There are a number of reasons why reference counting might be an attractive option.
 
 Memory management costs are distributed throughout the computation.
 Potentially, reference counting can recycle memory as soon as an object becomes garbage (but we shall see below why this may not always be desirable).
-Consequently, it may continue to operate satisfactorily in a nearly full heap, unlike tracing collectors which need some headroom. 
-Since reference counting operates directly on the sources and targets of pointers, the locality of a reference counting algorithm may be no worse than that of its client program. 
+Consequently, it may continue to operate satisfactorily in a nearly full heap, unlike tracing collectors which need some headroom.
+Since reference counting operates directly on the sources and targets of pointers, the locality of a reference counting algorithm may be no worse than that of its client program.
 Client programs can use destructive updates rather than copying objects if they can prove that an object is not shared.
 Reference counting can be implemented without assistance from or knowledge of the run-time system. In particular, it is not necessary to know the roots of the program.
 Reference counting can reclaim some memory even if parts of the system are unavailable: this is particularly useful in distributed systems.
 
 For these reasons, reference counting has been adopted for many systems including programming language implementations (early versions of Smalltalk and Lisp; also awk, peri and python);
 applications such as Photoshop, Real Networks' Rhapsody Music Service, Oce printers, scanners and document management systems; as well as operating systems' file managers.
-Libraries to support safe reclamation of objects are widely available for languages like C++ that do not yet require automatic memory management. 
-Such libraries often use smart pointers to access objects. 
+Libraries to support safe reclamation of objects are widely available for languages like C++ that do not yet require automatic memory management.
+Such libraries often use smart pointers to access objects.
 Smart pointers typically overload constructors and operators such as assignment, either to enforce unique ownership of objects or to provide reference counting. Unique pointers ensure that an object has a single 'owner'.
 
 When this owner is destroyed, the object also can be destroyed. For example, the next
@@ -1233,8 +1218,6 @@ C++ standard is expected to include a uni que_pt r template. Many C++ programmer
 use smart pointers to provide reference counting to manage memory automatically. The
 best known smart pointer library for C++ is the Boost library/ which provides reference
 counting through shared pointer objects. One drawback of smart pointers is that they have semantics different from those of the raw pointers that they imitate.
-
-
 
 Unfortunately, there are also a number of disadvantages to reference counting.
 
@@ -1264,17 +1247,17 @@ It turns out that common solutions to both of these problems involve a stop-the-
 
 ### Improving reference counting
 
-There are two ways in which the efficiency of reference counting can be improved. 
-Either the number of barrier operations must be reduced or expensive synchronised operations must be replaced by cheaper, unsynchronised ones. 
+There are two ways in which the efficiency of reference counting can be improved.
+Either the number of barrier operations must be reduced or expensive synchronised operations must be replaced by cheaper, unsynchronised ones.
 Blackburn and McKinley define a useful taxonomy of solutions.
+
 - **Deferral** Deferred reference counting trades fine grained incrementality (the immediate recovery of all garbage) for efficiency.
   The identification of some garbage objects is deferred to a reclamation phase at the end of some period. These schemes eliminate some barrier operations.
-- **Coalescing** Many reference count adjustments are temporary and hence 'unnecessary'; programmers often remove them by hand. In some special cases, this can also be done by the compiler. 
-  However, it is also possible to do this more generally at run time by tracking only the state of an object at the beginning and end of some period. 
+- **Coalescing** Many reference count adjustments are temporary and hence 'unnecessary'; programmers often remove them by hand. In some special cases, this can also be done by the compiler.
+  However, it is also possible to do this more generally at run time by tracking only the state of an object at the beginning and end of some period.
   This coalesced reference counting ignores all but the first modification to a field of an object in each period.
-- **Buffering** Buffered reference counting also defers identification of garbage. However, unlike deferred or coalesced reference counting, it buffers all reference count increments and decrements for later processing. 
+- **Buffering** Buffered reference counting also defers identification of garbage. However, unlike deferred or coalesced reference counting, it buffers all reference count increments and decrements for later processing.
   Only the collector thread is allowed to apply reference count modifications. Buffering considers when to apply reference count modifications not whether to.
-
 
 Manipulating reference counts is expensive compared with the cost to the mutator of simple tracing algorithms.
 Reference counting is attractive for the promptness with which it reclaims garbage objects and its good locality properties.
@@ -1290,30 +1273,30 @@ Reference counting is attractive for the promptness with which it reclaims garba
 
 ### References counting considerations
 
-Reference counting is attractive for the promptness with which it reclaims garbage objects and its good locality properties. 
-Simple reference counting can reclaim the space occupied by an object as soon as the last pointer to that object is removed. 
+Reference counting is attractive for the promptness with which it reclaims garbage objects and its good locality properties.
+Simple reference counting can reclaim the space occupied by an object as soon as the last pointer to that object is removed.
 Its operation involves only the targets of old and new pointers read or written, unlike tracing collection which visits every live object in the heap.
 However, these strengths are also the weaknesses of simple reference counting.
 Because it cannot reclaim an object until the last pointer to that object has been removed, it cannot reclaim cycles of garbage.
 Reference counting taxes every pointer read and write operation and thus imposes a much larger tax on throughput than tracing does.
-Furthermore, multithreaded applications require the manipulation of reference counts and updating of pointers to be expensively synchronised. 
-This tight coupling of mutator actions and memory manager risks some fragility, especially if 'unnecessary' reference count updates are optimised away by hand. 
+Furthermore, multithreaded applications require the manipulation of reference counts and updating of pointers to be expensively synchronised.
+This tight coupling of mutator actions and memory manager risks some fragility, especially if 'unnecessary' reference count updates are optimised away by hand.
 Finally, reference counts increase the sizes of objects.
 
 **The environment**
 
 Despite these concerns, it would be wrong to dismiss reference counting without further thought.
 Certainly, its drawbacks make simple reference counting uncompetitive as a general purpose memory management component of a virtual machine, especially if the majority of objects managed are small, cycles are common and the rate of pointer mutation is high.
-However, there are environments which are favourable to reference counting. 
+However, there are environments which are favourable to reference counting.
 Reference counting can play well in a mixed ecology where the lifetimes of most objects are sufficiently simple to be managed explicitly.
-It can be restricted to managing a smaller number of resources with more complex owner relationships. 
+It can be restricted to managing a smaller number of resources with more complex owner relationships.
 Often such resources will be large, in which case the overhead for an additional reference count field in the header will be negligible.
-Data such as bitmaps for images and so on will not contain any pointers, so the problem of reclaiming cyclic structures does not arise. 
-Furthermore, reference counting can be implemented as part of a library rather than being baked into the language's run-time system. 
-It can therefore give the programmer complete control over its use, allowing her to make the decision between performance overhead and guarantees of safety. 
-Nevertheless, it is essential that reference counting be used carefully. 
+Data such as bitmaps for images and so on will not contain any pointers, so the problem of reclaiming cyclic structures does not arise.
+Furthermore, reference counting can be implemented as part of a library rather than being baked into the language's run-time system.
+It can therefore give the programmer complete control over its use, allowing her to make the decision between performance overhead and guarantees of safety.
+Nevertheless, it is essential that reference counting be used carefully.
 In particular, the programmer must ensure that races between pointer modifications and reference count updates are avoided.
-If reference counting is implemented through smart pointers, he must also be aware that the semantics of pointers and smart pointers differ. 
+If reference counting is implemented through smart pointers, he must also be aware that the semantics of pointers and smart pointers differ.
 As Edelson wrote, 'They are smart, but they are not pointers'.
 
 **Advanced solutions**
@@ -1347,17 +1330,33 @@ the behaviour of programmers who often optimise away temporary adjustments to re
 consequence of deferred and coalesced reference counting is to reintroduce stop-the-world
 pauses during which reference counts are corrected.
 
-As well as removing some reference counting operations, both deferred and coalesced reference counting reduce the synchronisation cost of other operations. 
+As well as removing some reference counting operations, both deferred and coalesced reference counting reduce the synchronisation cost of other operations.
 Deferred reference counting does so simply by omitting to manipulate reference counts on local variables.
-Coalesced reference counting does not need synchronisation because races are benign: at worst, the same values might be written to the logs of two different threads. 
+Coalesced reference counting does not need synchronisation because races are benign: at worst, the same values might be written to the logs of two different threads.
 However, both solutions add space overhead to the cost of reference counting, either to store the zero count table or to store update logs.
 
-A further attraction of these advanced reference counting techniques is that they scale well with large heaps. 
-Their cost is proportional only to the number of pointer writes made, and not to the volume of live data. 
+A further attraction of these advanced reference counting techniques is that they scale well with large heaps.
+Their cost is proportional only to the number of pointer writes made, and not to the volume of live data.
 As we shall see that hybrid collectors are possible, combining tracing collection for short-lived, heavily mutated data with reference counting for longer-lived, more stable data.
 
+## Partitioning the heap
 
-## Generational Garbage Collection
+So far we have assumed a monolithic approach to garbage collection: all objects are managed by the same collection algorithm and all are collected at the same time. 
+However there is no reason why this should be so and substantial performance benefits accrue from a more discriminating treatment of objects.
+The best known example is [generational collection](/docs/CS/memory/GC.md?id=Generational-garbage-collection), which segregates objects by age and preferentially collects younger objects. 
+There are many reasons why it might be beneficial to treat different categories of object in different ways. 
+Some but not all of these reasons are related to the collector technology that might be used to manage them. 
+Objects can be managed either by a direct algorithm (such as reference counting) or by an indirect, tracing algorithm.
+Tracing algorithms may move objects (mark-compact or copying) or not (mark-sweep).
+We might therefore consider whether or not we wish to have the collector move different categories of object and, if so, how we might wish to move them.
+We might wish to distinguish, quickly by their address, which collection or allocation algorithm to apply to different objects. 
+Most commonly, we might wish to distinguish when we collect different categories of object
+
+It is often effective to split the heap into partitions, each managed under a different policy or with a different mechanism.
+These ideas were first explored in Bishop's influential thesis.
+These reasons include object mobility, size, lower space overheads, easier identification of object properties, improved garbage collection yield, reduced pause time, better locality, and so on.
+
+## Generational garbage collection
 
 The goal of a collector is to find dead objects and reclaim the space they occupy.
 Tracing collectors (and copying collectors in particular) are most efficient if the space they manage contains few live objects.
@@ -1379,7 +1378,7 @@ Provided the interval between collections is sufficient, such a collector will b
 
 Occasionally a generational collector must collect the whole heap,
 for example when the allocator runs out of space and the collector estimates that insufficient space would be recovered by collecting only the younger generations.
-Generational collection therefore improves only expected pause times, not the worst case. 
+Generational collection therefore improves only expected pause times, not the worst case.
 On its own, it is not sufficient for real-time systems.
 
 Generational collection can also improve throughput by avoiding repeatedly processing long-lived objects.
@@ -1389,7 +1388,7 @@ generational collectors impose a bookkeeping overhead on mutators in order to tr
 an overhead hoped to be small compared to the benefits of generational collection.
 Tuning generational collectors to meet throughput and pause-time goals simultaneously is a subtle art.
 
-A generational collector will promote objects it discovers from the young generation to the old one, provided they are old enough. 
+A generational collector will promote objects it discovers from the young generation to the old one, provided they are old enough.
 This decision requires that a generational collector has a way of *measuring time* and a *mechanism for recording ages*.
 Since the old generation is not to be traced here, a generational system must record *inter-generational pointers*.
 
@@ -1435,60 +1434,60 @@ actual age in terms of bytes allocated.
 The weak generational hypothesis, that most objects die young, appears to be widely valid, regardless of programming paradigm or implementation language.
 It also holds for many programs written in object-oriented languages.
 
-
 On the other hand, there is much less evidence for the `strong generational hypothesis` that, even for objects that are not newly-created, younger objects will have a lower survival rate than older ones.
-Simple models like the weak generational hypothesis account adequately in many programs for the behaviour of objects overall. 
-However, once the shortest lived objects are discounted, objects' demographics over a longer timescale are more complex. Object lifetimes are not random. 
+Simple models like the weak generational hypothesis account adequately in many programs for the behaviour of objects overall.
+However, once the shortest lived objects are discounted, objects' demographics over a longer timescale are more complex. Object lifetimes are not random.
 They commonly live in clumps and die all at the same time, because programs operate in phases.
-A significant number of objects may never die. 
+A significant number of objects may never die.
 The lifetime of objects may be correlated with their size, although opinion has differed on this.
 However, as we saw above, there are other reasons why we might want to treat large objects specially.
 
 ### Generations and heap layout
 
-A wide variety of strategies have been used to organise generations. 
-Collectors may use two or more generations, which may be segregated physically or logically. 
-Each generation may be bounded in size or the size of one space may be traded against that of another. 
-The structure within a generation may be flat or it may comprise a number of age-based subspaces, called steps or buckets. 
+A wide variety of strategies have been used to organise generations.
+Collectors may use two or more generations, which may be segregated physically or logically.
+Each generation may be bounded in size or the size of one space may be traded against that of another.
+The structure within a generation may be flat or it may comprise a number of age-based subspaces, called steps or buckets.
 Generations may also hold their own large object subspaces.
 Each generation may be managed by a different algorithm.
 
 The primary goals of generational garbage collection are reduced pause times and improved throughput.
 Assuming that the youngest generation is processed by copying collection, expected pause times depend largely on the volume of data that survives a minor collection of that generation, which in turn depends on the size of the generation.
-However, if the size of the nursery is too small, collection will be fast but little memory will be reclaimed as the objects in the nursery will have had insufficient time to die. 
+However, if the size of the nursery is too small, collection will be fast but little memory will be reclaimed as the objects in the nursery will have had insufficient time to die.
 This will have many undesirable consequences.
 
-- First, young generation collections will be too frequent; as well as its copying cost proportional to the volume of surviving objects - 
+- First, young generation collections will be too frequent; as well as its copying cost proportional to the volume of surviving objects -
   which will be higher since object have had less time to die - each collection must also bear the cost of stopping threads and scanning their stacks.
-- Second, the older generation will fill too fast and then it too will have to be collected. 
-  High promotion rates will cause time-consuming older generation or full heap collections to take place too frequently. 
-  In addition, premature promotion will increase the incidence of nepotism, as 'tenured' garbage objects in the old generation preserve their offspring in the young generation, 
+- Second, the older generation will fill too fast and then it too will have to be collected.
+  High promotion rates will cause time-consuming older generation or full heap collections to take place too frequently.
+  In addition, premature promotion will increase the incidence of nepotism, as 'tenured' garbage objects in the old generation preserve their offspring in the young generation,
   artificially inflating the survivor rate as those dead children will also be promoted.
-- Third, there is considerable evidence that newly created objects are modified more frequently than older ones. 
-  If these young objects are promoted prematurely, their high mutation rate will put further pressure on the mutator's write barrier; this is particularly undesirable if the cost of the write barrier is high. 
+- Third, there is considerable evidence that newly created objects are modified more frequently than older ones.
+  If these young objects are promoted prematurely, their high mutation rate will put further pressure on the mutator's write barrier; this is particularly undesirable if the cost of the write barrier is high.
   Any transfer of overheads between mutator and collector needs careful evaluation with realistic workloads.
-  Typically, the collector will account for a much smaller proportion of execution time than the mutator in any well configured system. 
-  For example, suppose a write barrier comprises just a few instructions in its fast path yet accounts for 5% of overall execution time; suppose further that the collector accounts for 10% of overall run time. 
-  It would be quite easy for an alternative write barrier implementation to double the cost of the barrier, thus adding 5% to overall execution time. 
+  Typically, the collector will account for a much smaller proportion of execution time than the mutator in any well configured system.
+  For example, suppose a write barrier comprises just a few instructions in its fast path yet accounts for 5% of overall execution time; suppose further that the collector accounts for 10% of overall run time.
+  It would be quite easy for an alternative write barrier implementation to double the cost of the barrier, thus adding 5% to overall execution time.
   To recover this, garbage collection time must be reduced by 50%, which would be hard to do.
 - Finally, by promoting objects the program's working set may be diluted.
   Generational organisation is a balancing act between keeping minor collections as short as possible, minimising the number of minor and the much more expensive full,
-  major collections, and avoiding passing too much of the cost of memory management to the mutator. 
+  major collections, and avoiding passing too much of the cost of memory management to the mutator.
   We now look at how this can be achieved.
 
 ### Multiple generations
-Adding further generations is one solution to the dilemma of how to preserve short pause times for nursery collections without incurring excessively frequent full heap collections, because the oldest generation has filled too soon. 
-The role of the intermediate generations is to filter out objects that have survived collection of the youngest generation but do not live much longer. 
-If a collector promotes all live objects en masse from the youngest generation, the survivors will include the most recently allocated objects despite the expectation that most of these will die very soon. 
+
+Adding further generations is one solution to the dilemma of how to preserve short pause times for nursery collections without incurring excessively frequent full heap collections, because the oldest generation has filled too soon.
+The role of the intermediate generations is to filter out objects that have survived collection of the youngest generation but do not live much longer.
+If a collector promotes all live objects en masse from the youngest generation, the survivors will include the most recently allocated objects despite the expectation that most of these will die very soon.
 By using multiple generations, the size of the youngest generation can be kept small enough to meet expected pause time requirements without increasing the volume of objects dying in the oldest generation shortly after their promotion.
 
 Using multiple generations has a number of drawbacks.
-Most systems will collect all younger generations when any older generation is collected. 
-This offers the benefit that pointers need to be tracked in one direction only: old to young, which occur less frequently than young to old. 
+Most systems will collect all younger generations when any older generation is collected.
+This offers the benefit that pointers need to be tracked in one direction only: old to young, which occur less frequently than young to old.
 Although the time taken to collect an intermediate generation will be less than that required to collect the full heap, pause times will be longer than those for nursery collections.
-Multiple generation collectors are also more complex to implement and may introduce additional overheads to the collector's tracing loop, 
+Multiple generation collectors are also more complex to implement and may introduce additional overheads to the collector's tracing loop,
 as this performance critical code must now distinguish between multiple generations rather than just two (which can often be accomplished with a single check against an address, maybe a compile-time constant).
-Increasing the number of generations will tend to increase the number of inter-generational pointers created, which in turn may increase the pressure on the mutator's write barrier, depending on implementation. 
+Increasing the number of generations will tend to increase the number of inter-generational pointers created, which in turn may increase the pressure on the mutator's write barrier, depending on implementation.
 It will also increase the size of the root set for younger generations since objects have been promoted that would not have been if some of the space used for the intermediate generations had been used to increase the size of the young generation.
 
 Although many early generational collectors for Smalltalk and Lisp offered multiple generations, most modem generational collectors for object-oriented systems provide just two.
@@ -1497,70 +1496,44 @@ Instead, mechanisms within generations, especially the youngest generation, can 
 
 ### Age recording
 
+## Other partitioned schemes
 
+We looked at generational and other age-based collection schemes.
+Those algorithms partitioned objects by their age and chose a partition to collect based on some age-related property.
+For example, generational collectors preferentially collect the youngest partition (or generation).
+Although this strategy in particular is highly effective for a wide range of applications, it does not address all the problems facing the collector.
+In this chapter we examine schemes outside the age-based collection framework but still based on partitioning the heap.
 
-### Young Generation
+We start by considering one of the commonest forms of segregation, allocating large objects in a separate space.
+We then examine collectors that partition the heap based on the topology of the object graph, before looking at possibilities for allocation on thread stacks or into scoped regions.
+We conclude by discussing hybrid algorithms that partition the heap and collect different spaces at different times or using different algorithms, or both.
 
-Newly created objects start in the Young Generation. The Young Generation is further subdivided into:
+### Large object spaces
 
-- Eden space - all new objects start here, and initial memory is allocated to them
-- Survivor spaces (FromSpace and ToSpace) - objects are moved here from Eden after surviving one garbage collection cycle.
+Large object spaces are one of the most common ways to partition the heap.
+The definition of 'large' can be chosen on the basis of either the absolute size of an object (say, greater than 1024 bytes or its size relative to that of the blocks used by the allocator), or relative to the heap.
 
-When objects are garbage collected from the Young Generation, it is a `minor garbage collection` event.
+### Topological collectors
 
-When Eden space is filled with objects, a Minor GC is performed.
-All the dead objects are deleted, and all the live objects are moved to one of the survivor spaces.
-Minor GC also checks the objects in a survivor space, and moves them to the other survivor space.
+### Hybrid mark-sweep, copying collectors
 
-Take the following sequence as an example:
+#### Garbage-First
 
-- Eden has all objects (live and dead)
-- Minor GC occurs - all dead objects are removed from Eden. All live objects are moved to S1 (FromSpace). Eden and S2 are now empty.
-- New objects are created and added to Eden. Some objects in Eden and S1 become dead.
-- Minor GC occurs - all dead objects are removed from Eden and S1. All live objects are moved to S2 (ToSpace). Eden and S1 are now empty.
-
-So, at any time, one of the survivor spaces is always empty. When the surviving objects reach a certain threshold of moving around the survivor spaces, they are moved to the Old Generation.
-
-You can use the `-Xmn` flag to set the size of the Young Generation.
-
-default old/young=2:1
-
-Eden:from:to=8:1:1
-
-#### Handle Promotion
-
-### Old Generation
-
-Objects that are long-lived are eventually moved from the Young Generation to the Old Generation.
-This is also known as Tenured Generation, and contains objects that have remained in the survivor spaces for a long time.
-
-When objects are garbage collected from the Old Generation, it is a `major garbage collection` event.
-
-You can use the -Xms and -Xmx flags to set the size of the initial and maximum size of the Heap memory.
-
-### Intergenerational Reference Hypothesis
-
-Remembered Set
-
-- bits
-- objects
-- Card Table
-
-False Sharing
-
-```
-  product(bool, UseCondCardMark, false,                                     \
-          "Check for already marked card before updating card table")       \
-```
+Garbage-First [Detlefs et al, 2004) is a sophisticated and complex incrementally compacting algorithm, designed to meet a soft real-time performance goal that collection should
+consume no more than x milliseconds of any y millisecond time slice. It was introduced
+in Sun Microsystems' HotSpot VM in JDK 7 as a longer term replacement to a concurrent
+mark-sweep collector in order provide compaction with more predictable response times.
+Here we focus on how it treats partitions.
 
 ## Allocation
 
-There are three aspects to a memory management system: 
+There are three aspects to a memory management system:
+
 - allocation of memory in the first place,
-- identification of live data and 
+- identification of live data and
 - reclamation for future use of memory previously allocated but currently occupied by dead objects.
-Garbage collectors address these issues differently than do explicit memory managers, and different automatic memory managers use different algorithms to manage these actions. 
-However, in all cases allocation and reclamation of memory are tightly linked: how memory is reclaimed places constraints on how it is allocated.
+  Garbage collectors address these issues differently than do explicit memory managers, and different automatic memory managers use different algorithms to manage these actions.
+  However, in all cases allocation and reclamation of memory are tightly linked: how memory is reclaimed places constraints on how it is allocated.
 
 There are two fundamental strategies, `sequential allocation` and `free-list allocation`.
 We then take up the more complex case of allocation from `multiplefree-lists`.
@@ -1583,12 +1556,16 @@ when allocating. The properties of sequential allocation include the following.
 - It may be less suitable than free-list allocation for non-moving collectors, if uncollected objects break up larger chunks of space into smaller ones,
   resulting in many small sequential allocation chunks as opposed to one or a small number of large ones.
 
+<p style="text-align: center;">
+Sequential allocation
+</p>
+
 ```
 sequentialAllocate():
     result <- free
     newFree <- result + n
     if newFree > limit
-        return null
+        return null             /* signal 'Memory exh a u s t ed ' */
     free <- newFree
     return result
 ```
@@ -1627,59 +1604,240 @@ First-fit can also lead to a large number of small fragments, which tend to clus
 Next-fit will tend to distribute small fragments more evenly across the heap, but that is not necessarily better.
 **The only total solution to fragmentation is compaction or copying collection.**
 
+In the simpler free-list allocators we discussed previously, there was only one kind of fragmentation: free cells that were too small to satisfy a request. This is known as external
+fragmentation, because it is unusable space outside any allocated cell. When we introduce
+size classes, if the sizes are at all spread out then there is also internalfragmentation, where
+space is wasted inside an individual cell because the requested size was rounded up. The
+need for specific alignment may introduce fragmentation in a similar way, although strictly
+speaking it is external fragmentation (between allocated cells). Segregated-fits introduces
+a trade-off between internal fragmentation and the number of size classes.
+
 ### Additional considerations
 
 Actual allocators often must take into account some additional considerations.
 We now discuss these: alignment, size constraints, boundary tags, heap parsability, locality, wilderness preservation and crossing maps.
 
-## When an instance is dead？
+## Run-time interface
 
-Link: [Java References](/docs/CS/Java/JDK/Basic/Ref.md)
+The heart of an automatic memory management system is the collector and allocator, their
+algorithms and data structures, but these are of little use without suitable means to access
+them from a program or if they themselves cannot appropriately access the underlying
+platform. Furthermore, some algorithms impose requirements on the programming language implementation, for example to provide certain information or to enforce particular
+invariants. The interfaces between the collector (and allocator) and the rest of the system,
+both the language and compiler above and the operating system and libraries beneath, are
+the focus of this chapter.
+We consider in turn allocating new objects; finding and adjusting pointers in objects,
+global areas and stacks; actions when accessing or updating pointers or objects (barriers);
+synchronisation between mutators and the collector; managing address space; and using
+virtual memory
 
-### Reference Counting
+### Interface to allocation
 
-### Reachability Analysis
+From the point of view of a programming language, a request for a new object returns
+an object that is not only allocated, but also initialised to whatever extent the language
+and its implementation require. Different languages span a large range of requirements.
+At one end of the spectrum is C, which requires only a freshly allocated cell of storage of
+the requested size - the values in that cell are arbitrary and initialising the cell is entirely
+the programmer's responsibility. At the other end of the spectrum lie pure functional languages such as Haskell, where at the language level one must provide values for all the
+fields of a new object, and it is not possible to perceive an uninitialised object. Languages
+more concerned with type safety require proper initialisation of all fields, either by requiring the programmer to provide (or assign) values, or by using safe defaults for each type
+or through some combination of these techniques.
+For our purposes we break allocation and initialisation down into three steps, not all of
+which apply in every language or case.
 
-**GC Roots:**
+1. Allocate a cell of the proper size and alignment. This is the job of the allocation
+   subsystem of the memory manager.
+2. System initialisation. By this we mean the initialisation of fields that must be properly set before the object is usable in any way. For example, in object-oriented languages this might include setting the method dispatch vector in the new object. It
+   generally also includes setting up any header fields required by either the language, the memory manager or both. For Java objects this might include space for a hash
+   code or synchronisation information, and for Java arrays we clearly need to record
+   their length somewhere.
+3. Secondary initialisation. By this we mean to set (or update) fields of the new object
+   after the new object reference has 'escaped' from the allocation subsystem and has
+   become potentially visible to the rest of the program, other threads and so on.
 
-Examples of such Garbage Collection roots are:
+Consider the three example languages again.
 
-- Classes loaded by system class loader (not custom class loaders) `ClassLoaderDataGraph::roots_cld_do`
-- Live threads `Threads::possibly_parallel_oops_do`
-- Local variables and parameters of the currently executing methods
-- Local variables and parameters of JNI methods
-- Global JNI reference `JNIHandles::oops_do`
-- Objects used as a monitor for synchronization
-- Objects held from garbage collection by JVM for its purposes
-- CodeCache `CodeCache::blobs_do`
+- C: All the work happens in Step 1; the language neither requires nor offers any system or secondary initialisation - the programmer does all the work (or fails to). Notice, though, that allocation may include setting up or modifying a header, outside
+  of the cell returned, used to assist in freeing the object later.
+  Java: Steps 1 and 2 together provide an object whose method dispatch vector, hash
+  code and synchronisation information are initialised, and all fields set to a default
+  value (typically all zeroes). For arrays, the length field is also filled in. At this point
+  the object is type safe but 'blank'. This is what the new bytecode returns. Step 3 in
+- Java happens in code provided inside a constructor or static initialiser, or even afterwards, to set fields to non-zero values. Even initialisation of f i n a l fields happens in
+  Step 3, so it can be tricky to ensure that other threads do not see those fields change
+  if the object is made public too soon.
+- Haskell: The programmer provides the constructor with values for all fields of the requested object, and the compiler and memory manager together guarantee complete
+  initialisation before the new object becomes available to the program. That is, everything happens in Steps 1 and 2, and Step 3 is disallowed. ML works the same way
+  for object creation, even though it offers mutable objects as a special case, and Lisp
+  is likewise biased towards functional creation of objects even though it also supports
+  mutation.
 
-See [G1 Roots](/docs/CS/Java/JDK/JVM/G1.md?id=roots)
+Note that functional initialisation has two strong advantages: it helps ensure complete
+initialisation of objects and, provided that the initialisation code is effectively atomic with
+respect to possible garbage collection, it allows the initialising stores to avoid some write
+barriers. In particular one can omit generational write barriers in the functional initialisation case because the object being initialised must be younger than any objects to which it
+refers. In contrast, this is not generally true in Java constructors [Zee and Rinard, 2002].
+A language-level request for a new object will eventually translate into a call to an
+allocation routine, which may sometimes be inlined by a compiler, to accomplish Step 1
+and possibly some or all of Step 2. The key property that allocation needs to satisfy is that
+Steps 1 and 2 are effectively atomic with respect to other threads and to collection. This
+guarantees that no other component of the system will perceive an object that lacks its
+system initialisation. However, if we consider the interface to the allocator (Step 1), there
+remains a range of possibilities depending on the division of labour between Steps 1, 2 and 3.
+Arguments to an allocation request may include:
 
-Tri-color Marking
+- The size requested, generally in bytes, but possibly in words or some other granule size.
+  When requesting an array, the interface may present the element size and the number
+  of elements separately.
+- An alignment constraint. Typically there is a default alignment and a way to request an
+  alignment that is more strict. These constraints may consist of only a power of two
+  indication (word, double-word, quad-word alignment, and so on) or a power of two
+  and an offset within that modulus (such as aligned on word two of a quad-word).
+- The kind of obj ect to allocate. For example, managed run-time languages such as Java
+  typically distinguish between array and non-array objects. Some systems distinguish
+  between objects that contain no pointers and ones that may contain pointers [Boehm
+  and Weiser, 1988]; objects containing executable code may also be special. In short,
+  any distinction that requires attention by the allocator needs to appear at the interface.
+- The specific type of object to allocate, in the sense of programming language types. This
+  is different from 'kind' in that it may not of itself be interesting to the allocator.
+  Rather, the allocator may use it in initialising the object, and so forth. Passing this
+  value in may simplify making Step 2 atomic (by moving the burden to Step 1) and
+  may also reduce code size by avoiding one or more extra instructions at each allocation site
 
-#### Incremental Update
+### Speeding allocation
 
-CMS
+Since many systems and applications tend to allocate at a high rate relative to the rest
+of their computation, it is important to tune allocation to be fast. A key technique is to
+inline the common case code (the 'fast path') and call out to 'slow path' code that handles
+the rarer, more complex cases. Making good choices here requires careful comparative
+measurements under suitable workloads.
 
-#### Snapshot At The Beginning
+An apparent virtue of sequential allocation is its simplicity, which leads to a short code
+sequence for the common case. This is especially true if the target processor provides
+enough registers to dedicate one to hold the bump pointer, and possibly one more to hold
+the heap limit. In that case the typical code sequence might be: move the bump pointer to the result register; add-immediate the needed size to the bump pointer; compare the bump
+pointer against the limit; conditionally branch to a slow path call. Notice that putting the
+bump pointer into a register assumes per-thread sequential allocation areas. Some ML
+and Haskell implementations further combine multiple allocations in a straight line (basic
+block) of code into one larger allocation, resulting in just one limit test and branch. The
+same technique can work for code sequences that are single-entry but multiple-exit by
+allocating the maximum required along any of the paths, or at least using that as the basis
+for one limit test on entry to the code sequence.
 
-G1 Shenandoah
+It might seem that sequential allocation is necessarily faster than free-list techniques,
+but segregated fits can also be quite efficient if partially inlined and optimised. If we know
+the desired size class statically, and we keep the base pointer to the array of free-list pointers in a dedicated register, the sequence is: load the desired list pointer; compare it with
+zero; branch if zero to a slow path call; load the next pointer; store the next pointer back
+to the list head. In a multithreaded system the last step may need to be atomic, say a
+C ompa reAndSwap with branch back to retry on failure, or we can provide each thread
+with a separate collection of free-list heads.
 
-### Recycle
+### Zeroing
 
-interceptor and JIT use Write Barrier to maintain Card Table
+Some system designs require that free space contain a distinguished value, often zero, for
+safety, or perhaps some other value (generally for debugging). Systems offering a weak
+allocation guarantee, such as C, may not do this, or may do it only as an option for debugging. Systems with a strong guarantee, such as functional languages with complete initialisation, do not need zeroing - though optionally setting free space to a special value may
+aid in system debugging. Java is the typical example of a language that requires zeroing.
+How and when might a system zero memory? We could zero each object as we allocate
+it, but experience suggests that bulk zeroing is more efficient. Also, zeroing with explicit
+memory writes at that time may cause a number of cache misses, and on some architectures, reads may block until the zeroing writes drain from a hardware write bufferIstore
+queue. Some ML implementations, and also Sun's HotSpot Java virtual machine, prefetch
+ahead of the (optimised) bump pointer precisely to try to hide the latency of fetching newly
+allocated words into the cache [Appel, 1994; Gonc;alves and Appel, 1995]. Modern processors may also detect this pattern and perform the prefetching in hardware. Diwan et al
+[1994] found that write-allocate caches that can allocate on a per-word basis offered the
+best performance, but these do not seem to be common in practice.
+From the standpoint of writing an allocator, it is often best to zero whole chunks using
+a call to a library routine such as b z e ro. These routines are typically well optimised for
+the target system, and may even use special instructions that zero directly in the cache
+without fetching from memory, such as dcbz (Data Cache Block Zero) on the PowerPC.
+Notice that direct use of such instructions may be tricky since the cache line size is a modelspecific parameter. In any case, a system is likely to obtain best performance if it zeroes
+large chunks that are power-of-two aligned.
+Another technique is to use demand-zero pages in virtual memory. While these are
+fine for start up, the overhead of the calls to remap freed pages that we are going to reuse,
+and of the traps to obtain freshly zeroed real memory from the operating system, may be
+higher than zeroing pages ourselves. In any case, we should probably remap pages in bulk
+if we are going to use this technique, to amortise some of the cost of the call.
+Another question is when to zero. We might zero immediately after collection. This has
+the obvious disadvantage of lengthening the collection pause, and the less obvious disadvantage of dirtying memory long before it will be used. Such freshly zeroed words will
+likely be flushed from the cache, causing write-backs, and then will need to be reloaded during allocation. Anecdotal experience suggests the best time to zero from the standpoint
+of performance is somewhat ahead of the allocator, so that the processor has time to fetch
+the words into the cache before the allocator reads or writes them, but not so far ahead
+of the allocator that the zeroed words are likely to be flushed. Given modern cache miss
+times, it is not clear that the prefetching technique that Appel described will work; at least
+it may need tuning to determine the proper distance ahead of the allocator that we should
+prefetch. For purposes of debugging, zeroing or writing a special value into memory should
+be done as soon as we free cells, to maximise the range of time during which we will catch
+errors.
 
-Premature Promotion
+### Finding pointers
 
-Promotion Failure
+### GC-safe points and mutator suspension
 
-gcCause.cpp
+system is simpler in one way if it can allow garbage collection at any IP - there
+is no concern about whether a thread is suspended at a point safe for garbage collection,
+a GC-safe point or GC-point for short. However, such a system is more complex in that it
+must support stack maps for every IP, or else employ techniques that do not require them,
+as for uncooperative C and C++ compilers. If a system allows garbage collection at most
+IPs, then if it needs to collect and a thread is suspended at an unsafe point, it can either
+interpret instructions ahead for the suspended thread until it is at a safe point, or it can
+wake the thread up for a short time to get it to advance (probabilistically) to a safe point.
+Interpretation risks rarely exercised bugs, while nudging a thread gives only a probabilistic
+guarantee. Such systems may also pay the cost of larger maps.
 
-### mark
+### Garbage collecting code
 
-- at oop like serial
-- bitMap out of object like G1 Shenandoah
-- Colored Pointer like ZGC
+### Read and write barriers
+
+## Language-specific concerns
+
+### Finalisation
+
+Automatic storage reclamation with a garbage collector provides the appropriate semantics for most objects. However, if a managed object refers to some other resource that lies
+outside the scope or knowledge of the collector, automatic garbage collection does not
+help, and in fact can lead to resource leaks that are hard to fix. A typical case is open files.
+The interface to the operating system usually represents each open file with a small integer called a file descriptor, and the interface limits the number of files that a given process
+may have open at one time. A language implementation will generally have, for each open
+file, an object that the programmer uses to manage that file stream. Most of the time it is
+clear when a program has finished with a given file stream, and the program can ask the
+run-time system to close the stream, which can close the corresponding file descriptor at
+the operating system interface, allowing the descriptor number to be reused
+
+But if the file stream is shared across a number of components in a program, it can be
+difficult to know when they have all finished with the stream. If each component that uses
+a given stream sets its reference to the stream to null when the component is finished with
+the stream, then when there are no more references the collector can (eventually) detect
+that fact. We show such a situation in Figure 12.1. Perhaps we can arrange for the collector
+somehow to cause the file descriptor to be closed.
+To do so, we need the ability to cause some programmer-specified action to happen
+when a given object becomes no longer reachable - more specifically, when it is no longer
+reachable by any mutator. This is called finalisation. A typical finalisation scheme allows the programmer to indicate a piece of code, called a finaliser, that is to be run when
+the collector determines that a particular object is no longer mutator reachable. The typical implementation of this has the run-time system maintain a special table of objects for
+which the programmer has indicated a finaliser. The mutators cannot access this table, but
+the collector can. We call an object finaliser-reachable if it is reachable from this table but not from mutator roots. 
+In Figure 12.2 we show the previous situation but with a finaliser added.
+The finaliser's call to close the descriptor is conditional, since the application may have already closed the file.
+
+In a reference counting system, before freeing an object the collector checks the finalisation table to see if the object requires finalisation. If it does, then the collector causes the
+finaliser function to run, and removes the object's entry in the finalisation table. Similarly,
+in a tracing system, after the tracing phase the collector checks the finalisation table to see
+if any untraced object has a finaliser, and if so, the collector causes the finaliser to run, and
+so on.
+There are a range of subtly different ways in which finalisation can work. We now
+consider some of the possibilities and issues.
+
+**When do finalisers run?**
+
+At what time do finalisers run? In particular, finalisation might occur during collection, as
+soon as the collector determines the need for it. However, the situation during collection
+might not support execution of general user code. For example, it may not be possible for
+user code to allocate new objects at this time. Therefore most finalisation approaches run
+finalisers after collection. The collector simply queues the finalisers. To avoid the need
+to allocate space for the queue during collection, the collector can partition the finalisation
+table into two portions, one for objects queued for finalisation and one for objects that have
+a finaliser but are not yet queued. When the collector enqueues an object for finalisation,
+it moves that queue entry to the enqueued-objects partition. A simple, but possibly inefficient, approach is to associate an enqueued flag with each entry and have the finalisation
+activity scan the finalisation table. To avoid scanning, we can group the enqueued objects together in the table, perhaps permuting entries when the collector needs to enqueue
+another object.
 
 ## Performance
 
