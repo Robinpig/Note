@@ -1144,14 +1144,14 @@ Rather than tracing reachable objects and then inferring that all unvisited obje
 Reference counting maintains a simple invariant: an object is presumed to be live if and only if the number of references to that object is greater than zero.
 Reference counting therefore associates a reference coun t with each object managed; typically this count is stored as an additional slot in the object's header.
 In its most nai"ve implementation, shown in Algorithm 5.1, reference counts are incremented or decremented as references to objects are created or destroyed.
-Procedure W r i t e increments the reference count of the new target and then decrements the count of the old target.
+Procedure write increments the reference count of the new target and then decrements the count of the old target.
 Note that it is called even for updates of local variables.
 We also assume it is called to write null into local variables before each procedure returns.
 The operations addRe fe rence and de leteRe f e r e n c e increment and decrement respectively the reference counts of their object argument.
 Note that it is essential that the reference counts are adjusted in this order (lines 9-10) to prevent premature reclamation of the target in the case when the old and the new targets of the pointer are the same, that is, s r c [i] = re f.
 Once a reference count is zero (line 20), the object can be freed and the reference counts of all its children decremented, which may in turn lead to their reclamation and so on recursively.
 
-The W r i t e method in Algorithm 5.1 is an example of a write barrier. For these, the
+The write method in Algorithm 5.1 is an example of a write barrier. For these, the
 compiler emits a short code sequence around the actual pointer write. As we shall see
 later in this book, mutators are required to execute barriers in many systems. More precisely, they are required whenever collectors do not consider the liveness of the entire object
 graph, atomically with respect to the mutator. Such collectors may execute concurrently, either in lock-step with the mutator as for reference counting or asynchronously in another
@@ -1166,7 +1166,7 @@ New() :
   rc ( re f ) t-- 0
   return r e f
 
-atomic W r i t e ( s rc, i, r e f ) :
+atomic write ( s rc, i, r e f ) :
   addRe f e r e n ce( re f )
   de l e t e Re f e rence ( s r c [i] )
   s r c [i] t-- r e f
@@ -1213,11 +1213,10 @@ Libraries to support safe reclamation of objects are widely available for langua
 Such libraries often use smart pointers to access objects.
 Smart pointers typically overload constructors and operators such as assignment, either to enforce unique ownership of objects or to provide reference counting. Unique pointers ensure that an object has a single 'owner'.
 
-When this owner is destroyed, the object also can be destroyed. For example, the next
-C++ standard is expected to include a uni que_pt r template. Many C++ programmers
-use smart pointers to provide reference counting to manage memory automatically. The
-best known smart pointer library for C++ is the Boost library/ which provides reference
-counting through shared pointer objects. One drawback of smart pointers is that they have semantics different from those of the raw pointers that they imitate.
+When this owner is destroyed, the object also can be destroyed.
+For example, the next C++ standard is expected to include a uni que_pt r template. Many C++ programmers use smart pointers to provide reference counting to manage memory automatically.
+The best known smart pointer library for C++ is the Boost library/ which provides reference counting through shared pointer objects.
+One drawback of smart pointers is that they have semantics different from those of the raw pointers that they imitate.
 
 Unfortunately, there are also a number of disadvantages to reference counting.
 
@@ -1301,34 +1300,25 @@ As Edelson wrote, 'They are smart, but they are not pointers'.
 
 **Advanced solutions**
 
-Sophisticated reference counting algorithms can offer solutions to many of the problems
-faced by na'ive reference counting but, paradoxically, these algorithms often introduce behaviours similar to those of stop-the-world tracing collectors. We examine this duality
-further in the next chapter.
-Garbage cycles can be reclaimed by a backup, tracing collector or by using the trial deletion algorithms we discussed in Section 5.5. In both cases, this requires mutator threads to
-be suspended while we reclaim cyclic data (although we show how these stop-the-world
-pauses can be removed in later chapters).
+Sophisticated reference counting algorithms can offer solutions to many of the problems faced by na'ive reference counting but, paradoxically, these algorithms often introduce behaviours similar to those of stop-the-world tracing collectors.
+We examine this duality further in the next chapter.
+Garbage cycles can be reclaimed by a backup, tracing collector or by using the trial deletion algorithms we discussed in Section 5.5.
+In both cases, this requires mutator threads to be suspended while we reclaim cyclic data (although we show how these stop-the-world pauses can be removed in later chapters).
 
-Although the worst case requires reference count fields to be almost as large as pointer
-fields, most applications hold only a few references to most objects. Often, it is possible
-for the reference count to hijack a few bits from an existing header word (for example,
-one used for object hashing or for locks). However, it is common for a very few objects to
-be heavily referenced. If limited-field reference counting is used, these objects will either
-leak - which may not be a serious problem if they are few in number or have very long
-lifetimes - or must be reclaimed by a backup tracing collector. Note, however, that in
-comparing the space overhead of reference counting and, say, mark-sweep collection it
-is not sufficient simply to measure the cost of the reference count fields. In order not to
-thrash, tracing collectors require some headroom in the heap. If the application is given
-a heap of, say, 20% larger than its maximum volume of live data, then at least 10% of the
-heap will be 'wasted' on average. This fraction may be similar to the overhead of reference
-counting (depending on the average size of objects it manages).
+Although the worst case requires reference count fields to be almost as large as pointer fields, most applications hold only a few references to most objects. Often, it is possible for the reference count to hijack a few bits from an existing header word (for example, one used for object hashing or for locks).
+However, it is common for a very few objects to be heavily referenced.
+If limited-field reference counting is used, these objects will either leak - which may not be a serious problem if they are few in number or have very long lifetimes - or must be reclaimed by a backup tracing collector.
+Note, however, that in comparing the space overhead of reference counting and, say, mark-sweep collection it is not sufficient simply to measure the cost of the reference count fields.
+In order not to thrash, tracing collectors require some headroom in the heap.
+If the application is given a heap of, say, 20% larger than its maximum volume of live data, then at least 10% of the heap will be 'wasted' on average.
+This fraction may be similar to the overhead of reference counting (depending on the average size of objects it manages).
 
-The throughput overhead of reference counting can be addressed by omitting to count
-some pointer manipulations and by reducing the cost of others. Deferred reference counting ignores mutator operations on local variables. This allows the counts of objects reachable from roots to be lower than their true value, and hence prevents their prompt reclamation (since a reference count of zero no longer necessarily means that the object is garbage).
-Coalesced reference counting accounts for the state of an object only at the beginning and
-end of an epoch: it ignores pointer manipulations in between. In one sense, this automates
-the behaviour of programmers who often optimise away temporary adjustments to reference counts (for example, to an iterator as it traverses a list) . However, once again, one
-consequence of deferred and coalesced reference counting is to reintroduce stop-the-world
-pauses during which reference counts are corrected.
+The throughput overhead of reference counting can be addressed by omitting to count some pointer manipulations and by reducing the cost of others.
+Deferred reference counting ignores mutator operations on local variables.
+This allows the counts of objects reachable from roots to be lower than their true value, and hence prevents their prompt reclamation (since a reference count of zero no longer necessarily means that the object is garbage).
+Coalesced reference counting accounts for the state of an object only at the beginning and end of an epoch: it ignores pointer manipulations in between.
+In one sense, this automates the behaviour of programmers who often optimise away temporary adjustments to reference counts (for example, to an iterator as it traverses a list) .
+However, once again, one consequence of deferred and coalesced reference counting is to reintroduce stop-the-world pauses during which reference counts are corrected.
 
 As well as removing some reference counting operations, both deferred and coalesced reference counting reduce the synchronisation cost of other operations.
 Deferred reference counting does so simply by omitting to manipulate reference counts on local variables.
@@ -1341,15 +1331,15 @@ As we shall see that hybrid collectors are possible, combining tracing collectio
 
 ## Partitioning the heap
 
-So far we have assumed a monolithic approach to garbage collection: all objects are managed by the same collection algorithm and all are collected at the same time. 
+So far we have assumed a monolithic approach to garbage collection: all objects are managed by the same collection algorithm and all are collected at the same time.
 However there is no reason why this should be so and substantial performance benefits accrue from a more discriminating treatment of objects.
-The best known example is [generational collection](/docs/CS/memory/GC.md?id=Generational-garbage-collection), which segregates objects by age and preferentially collects younger objects. 
-There are many reasons why it might be beneficial to treat different categories of object in different ways. 
-Some but not all of these reasons are related to the collector technology that might be used to manage them. 
+The best known example is [generational collection](/docs/CS/memory/GC.md?id=Generational-garbage-collection), which segregates objects by age and preferentially collects younger objects.
+There are many reasons why it might be beneficial to treat different categories of object in different ways.
+Some but not all of these reasons are related to the collector technology that might be used to manage them.
 Objects can be managed either by a direct algorithm (such as reference counting) or by an indirect, tracing algorithm.
 Tracing algorithms may move objects (mark-compact or copying) or not (mark-sweep).
 We might therefore consider whether or not we wish to have the collector move different categories of object and, if so, how we might wish to move them.
-We might wish to distinguish, quickly by their address, which collection or allocation algorithm to apply to different objects. 
+We might wish to distinguish, quickly by their address, which collection or allocation algorithm to apply to different objects.
 Most commonly, we might wish to distinguish when we collect different categories of object
 
 It is often effective to split the heap into partitions, each managed under a different policy or with a different mechanism.
@@ -1376,58 +1366,47 @@ By tuning its size, we can control the expected pause times for collection of a 
 Young generation pause times for a well configured collector (running an application that conforms to the weak generational hypothesis) are typically of the order of ten milliseconds on current hardware.
 Provided the interval between collections is sufficient, such a collector will be unobtrusive to many applications.
 
-Occasionally a generational collector must collect the whole heap,
-for example when the allocator runs out of space and the collector estimates that insufficient space would be recovered by collecting only the younger generations.
+Occasionally a generational collector must collect the whole heap, for example when the allocator runs out of space and the collector estimates that insufficient space would be recovered by collecting only the younger generations.
 Generational collection therefore improves only expected pause times, not the worst case.
 On its own, it is not sufficient for real-time systems.
 
 Generational collection can also improve throughput by avoiding repeatedly processing long-lived objects.
 However, there are costs to pay. Any garbage in an old generation cannot be reclaimed by collection of younger generations: collection of long-lived objects that become garbage is not prompt.
-In order to be able to collect one generation without collecting others,
-generational collectors impose a bookkeeping overhead on mutators in order to track references that span generations,
-an overhead hoped to be small compared to the benefits of generational collection.
+In order to be able to collect one generation without collecting others, generational collectors impose a bookkeeping overhead on mutators in order to track references that span generations, an overhead hoped to be small compared to the benefits of generational collection.
 Tuning generational collectors to meet throughput and pause-time goals simultaneously is a subtle art.
 
 A generational collector will promote objects it discovers from the young generation to the old one, provided they are old enough.
 This decision requires that a generational collector has a way of *measuring time* and a *mechanism for recording ages*.
 Since the old generation is not to be traced here, a generational system must record *inter-generational pointers*.
 
-Such inter-generational pointers can arise in two ways. First, the mutator creates a
-pointer that requires tracking whenever it writes a pointer to an object in a generation G1
-into a field of an object in a generation G2 that will be collected later than G1 . Second, the
-collector itself may create inter-generational pointers when it promotes an object. In the
-example, the collector will create such a pointer if it promotes P but not Q. In both cases,
-the inter-generational pointer can be detected with a write barrier. The mutator requires
-a barrier on pointer writes that records whether a pointer between generations has been written. A generational collector needs a similar copy write barrier to detect any intergenerational references created by promotion. In the example, the remembered set (remset)
-records the location of any objects (or fields) that may contain an inter-generational pointer
-of interest to the garbage collector, in this case S and U .
+Such inter-generational pointers can arise in two ways.
+First, the mutator creates a pointer that requires tracking whenever it writes a pointer to an object in a generation G1 into a field of an object in a generation G2 that will be collected later than G1 .
+Second, the collector itself may create inter-generational pointers when it promotes an object.
+In the example, the collector will create such a pointer if it promotes P but not Q.
+In both cases, the inter-generational pointer can be detected with a write barrier.
+The mutator requires a barrier on pointer writes that records whether a pointer between generations has been written.
+A generational collector needs a similar copy write barrier to detect any intergenerational references created by promotion.
+In the example, the remembered set (remset) records the location of any objects (or fields) that may contain an inter-generational pointer of interest to the garbage collector, in this case S and U .
 
-Unfortunately, treating the source o f inter-generational pointers a s roots for a minor collection exacerbates the problem of floating garbage. Minor collections are frequent but do
-not reclaim garbage in the old generation, such as U . Worse, U holds an inter-generational
-pointer so must be considered a root for the young generation. This nepotism will lead to
-the young garbage child V of the old garbage object being promoted rather than reclaimed,
-thus further reducing the space available for live objects in the older generation.
+Unfortunately, treating the source o f inter-generational pointers a s roots for a minor collection exacerbates the problem of floating garbage.
+Minor collections are frequent but do not reclaim garbage in the old generation, such as U .
+Worse, U holds an inter-generational pointer so must be considered a root for the young generation.
+This nepotism will lead to the young garbage child V of the old garbage object being promoted rather than reclaimed, thus further reducing the space available for live objects in the older generation.
 
-Before objects can be segregated by their age, we need to decide how time is to be measured. There are two choices: bytes allocated or seconds elapsed. Wall-dock time is useful
-for understanding a system's external behaviour. How long does it run? What are the
-pause times for garbage collection and how are they distributed? Answers to these questions determine whether a system is fit for purpose: will it complete its task in sufficient
-time and will it be sufficiently responsive? One requirement might be that it does not
-disturb an interactive human user. Another requirement might be to meet a hard realtime guarantee (say, in an embedded system) or a soft one (where occasionally missing a
-deadline is not disastrous but missing many is). On the other hand, internally, object lifetimes are better measured by the number of bytes of heap space allocated between their
-birth and their death. Space allocated is a largely machine-independent measure, although
-clearly a system with 64-bit addresses or integers will use more space than a 32-bit one.
-Bytes-allocated also directly measures the pressure placed upon the memory manager; it
-is closely related to the frequency with which the collector must be called.
+Before objects can be segregated by their age, we need to decide how time is to be measured. There are two choices: bytes allocated or seconds elapsed.
+Wall-dock time is useful for understanding a system's external behaviour. How long does it run?
+What are the pause times for garbage collection and how are they distributed?
+Answers to these questions determine whether a system is fit for purpose: will it complete its task in sufficient time and will it be sufficiently responsive? One requirement might be that it does not disturb an interactive human user.
+Another requirement might be to meet a hard realtime guarantee (say, in an embedded system) or a soft one (where occasionally missing a deadline is not disastrous but missing many is).
+On the other hand, internally, object lifetimes are better measured by the number of bytes of heap space allocated between their birth and their death.
+Space allocated is a largely machine-independent measure, although clearly a system with 64-bit addresses or integers will use more space than a 32-bit one.
+Bytes-allocated also directly measures the pressure placed upon the memory manager; it is closely related to the frequency with which the collector must be called.
 
-Unfortunately measuring time in terms of bytes allocated is tricky in multithreaded
-systems (where there are multiple application or system threads). A simple global measure
-of the volume of allocation may inflate the lifetime of an object, since the counter will
-include allocation by threads unrelated to the object in question [Jones and Ryder, 2008].
+Unfortunately measuring time in terms of bytes allocated is tricky in multithreaded systems (where there are multiple application or system threads).
+A simple global measure of the volume of allocation may inflate the lifetime of an object, since the counter will include allocation by threads unrelated to the object in question.
 
-In practice generational collectors often measure time in terms of how many collections
-an object has survived, because this is more convenient to record and requires fewer bits,
-but the collections survived is appropriately considered to be an approximate proxy for
-actual age in terms of bytes allocated.
+In practice generational collectors often measure time in terms of how many collections an object has survived, because this is more convenient to record and requires fewer bits,
+but the collections survived is appropriately considered to be an approximate proxy for actual age in terms of bytes allocated.
 
 ### Generational hypotheses
 
@@ -1540,15 +1519,12 @@ We then take up the more complex case of allocation from `multiplefree-lists`.
 
 ### Sequential allocation
 
-Sequential allocation uses a large free chunk of memory. Given a request for n bytes, it
-allocates that much from one end of the free chunk. The data structure for sequential
-allocation is quite simple, consisting of a free pointer and a limit pointer. Algorithm 7.1
-shows pseudocode for allocation that proceeds from lower addresses to higher ones, and Figure 7.1 illustrates the technique. Sequential allocation is colloquially called bump pointer
-allocation because of the way it 'bumps' the free pointer. It is also sometimes called linear
-allocation because the sequence of allocation addresses is linear for a given chunk.
-See
-Section 7.6 and Algorithm 7.8 for details concerning any necessary alignment and padding
-when allocating. The properties of sequential allocation include the following.
+Sequential allocation uses a large free chunk of memory. Given a request for n bytes, it allocates that much from one end of the free chunk.
+The data structure for sequential allocation is quite simple, consisting of a free pointer and a limit pointer.
+Algorithm 7.1 shows pseudocode for allocation that proceeds from lower addresses to higher ones, and Figure 7.1 illustrates the technique.
+Sequential allocation is colloquially called bump pointer allocation because of the way it 'bumps' the free pointer.
+It is also sometimes called linear allocation because the sequence of allocation addresses is linear for a given chunk.
+See Section 7.6 and Algorithm 7.8 for details concerning any necessary alignment and padding when allocating. The properties of sequential allocation include the following.
 
 - It is simple.
 - It is efficient, although Blackburn *et al* have shown that the fundamental performance difference between sequential allocation and segregated-fits free-list allocation for a Java system is on the order of 1% of total execution time.
@@ -1576,8 +1552,7 @@ sequentialAllocate():
 
 The alternative to sequential allocation is free-list allocation.
 In free-list allocation, a data structure records the location and size of free cells of memory.
-Strictly speaking, the data structure describes a set of free cells, and some organisations are in fact not list-like,
-but w e will use the traditional term 'free-list' for them anyway.
+Strictly speaking, the data structure describes a set of free cells, and some organisations are in fact not list-like, but w e will use the traditional term 'free-list' for them anyway.
 One can think of sequential allocation as a degenerate case of free-list allocation, but its special properties and simple implementation distinguish it in practice.
 
 ### Fragmentation
@@ -1594,8 +1569,7 @@ Fragmentation has at least two negative effects in an allocation system:
   It is impractical to avoid fragmentation altogether.
 
 For one thing, the allocator usually cannot know what the future request sequence will be.
-For another, even given a known request sequence, optimal allocation - that is,
-using the smallest amount of space necessary for an entire sequence of allocate and free requests to succeed - is NP-hard.
+For another, even given a known request sequence, optimal allocation - that is, using the smallest amount of space necessary for an entire sequence of allocate and free requests to succeed - is NP-hard.
 However, some approaches tend to be better than others; while we cannot eliminate fragmentation, we have some hope of managing it.
 Generally speaking, we should expect a rough trade-off between allocation speed and fragmentation, while also expecting that fragmentation is quite difficult to predict in any given case
 
@@ -1604,13 +1578,11 @@ First-fit can also lead to a large number of small fragments, which tend to clus
 Next-fit will tend to distribute small fragments more evenly across the heap, but that is not necessarily better.
 **The only total solution to fragmentation is compaction or copying collection.**
 
-In the simpler free-list allocators we discussed previously, there was only one kind of fragmentation: free cells that were too small to satisfy a request. This is known as external
-fragmentation, because it is unusable space outside any allocated cell. When we introduce
-size classes, if the sizes are at all spread out then there is also internalfragmentation, where
-space is wasted inside an individual cell because the requested size was rounded up. The
-need for specific alignment may introduce fragmentation in a similar way, although strictly
-speaking it is external fragmentation (between allocated cells). Segregated-fits introduces
-a trade-off between internal fragmentation and the number of size classes.
+In the simpler free-list allocators we discussed previously, there was only one kind of fragmentation: free cells that were too small to satisfy a request.
+This is known as external fragmentation, because it is unusable space outside any allocated cell.
+When we introduce size classes, if the sizes are at all spread out then there is also internalfragmentation, where space is wasted inside an individual cell because the requested size was rounded up.
+The need for specific alignment may introduce fragmentation in a similar way, although strictly speaking it is external fragmentation (between allocated cells).
+Segregated-fits introduces a trade-off between internal fragmentation and the number of size classes.
 
 ### Additional considerations
 
@@ -1626,163 +1598,113 @@ platform. Furthermore, some algorithms impose requirements on the programming la
 invariants. The interfaces between the collector (and allocator) and the rest of the system,
 both the language and compiler above and the operating system and libraries beneath, are
 the focus of this chapter.
-We consider in turn allocating new objects; finding and adjusting pointers in objects,
-global areas and stacks; actions when accessing or updating pointers or objects (barriers);
-synchronisation between mutators and the collector; managing address space; and using
-virtual memory
+
+We consider in turn allocating new objects; finding and adjusting pointers in objects, global areas and stacks; actions when accessing or updating pointers or objects (barriers);
+synchronisation between mutators and the collector; managing address space; and using virtual memory.
 
 ### Interface to allocation
 
-From the point of view of a programming language, a request for a new object returns
-an object that is not only allocated, but also initialised to whatever extent the language
-and its implementation require. Different languages span a large range of requirements.
-At one end of the spectrum is C, which requires only a freshly allocated cell of storage of
-the requested size - the values in that cell are arbitrary and initialising the cell is entirely
-the programmer's responsibility. At the other end of the spectrum lie pure functional languages such as Haskell, where at the language level one must provide values for all the
-fields of a new object, and it is not possible to perceive an uninitialised object. Languages
-more concerned with type safety require proper initialisation of all fields, either by requiring the programmer to provide (or assign) values, or by using safe defaults for each type
-or through some combination of these techniques.
-For our purposes we break allocation and initialisation down into three steps, not all of
-which apply in every language or case.
+From the point of view of a programming language, a request for a new object returns an object that is not only allocated, but also initialised to whatever extent the language and its implementation require.
+Different languages span a large range of requirements.
+At one end of the spectrum is C, which requires only a freshly allocated cell of storage of the requested size - the values in that cell are arbitrary and initialising the cell is entirely the programmer's responsibility.
+At the other end of the spectrum lie pure functional languages such as Haskell, where at the language level one must provide values for all the fields of a new object, and it is not possible to perceive an uninitialised object.
+Languages more concerned with type safety require proper initialisation of all fields, either by requiring the programmer to provide (or assign) values, or by using safe defaults for each type or through some combination of these techniques.
+For our purposes we break allocation and initialisation down into three steps, not all of which apply in every language or case.
 
-1. Allocate a cell of the proper size and alignment. This is the job of the allocation
-   subsystem of the memory manager.
-2. System initialisation. By this we mean the initialisation of fields that must be properly set before the object is usable in any way. For example, in object-oriented languages this might include setting the method dispatch vector in the new object. It
-   generally also includes setting up any header fields required by either the language, the memory manager or both. For Java objects this might include space for a hash
-   code or synchronisation information, and for Java arrays we clearly need to record
-   their length somewhere.
-3. Secondary initialisation. By this we mean to set (or update) fields of the new object
-   after the new object reference has 'escaped' from the allocation subsystem and has
-   become potentially visible to the rest of the program, other threads and so on.
+1. Allocate a cell of the proper size and alignment. This is the job of the allocation subsystem of the memory manager.
+2. System initialisation. By this we mean the initialisation of fields that must be properly set before the object is usable in any way.
+   For example, in object-oriented languages this might include setting the method dispatch vector in the new object.
+   It generally also includes setting up any header fields required by either the language, the memory manager or both.
+   For Java objects this might include space for a hash code or synchronisation information, and for Java arrays we clearly need to record their length somewhere.
+3. Secondary initialisation. By this we mean to set (or update) fields of the new object after the new object reference has 'escaped' from the allocation subsystem and has become potentially visible to the rest of the program, other threads and so on.
 
 Consider the three example languages again.
 
-- C: All the work happens in Step 1; the language neither requires nor offers any system or secondary initialisation - the programmer does all the work (or fails to). Notice, though, that allocation may include setting up or modifying a header, outside
-  of the cell returned, used to assist in freeing the object later.
-  Java: Steps 1 and 2 together provide an object whose method dispatch vector, hash
-  code and synchronisation information are initialised, and all fields set to a default
-  value (typically all zeroes). For arrays, the length field is also filled in. At this point
-  the object is type safe but 'blank'. This is what the new bytecode returns. Step 3 in
-- Java happens in code provided inside a constructor or static initialiser, or even afterwards, to set fields to non-zero values. Even initialisation of f i n a l fields happens in
-  Step 3, so it can be tricky to ensure that other threads do not see those fields change
-  if the object is made public too soon.
-- Haskell: The programmer provides the constructor with values for all fields of the requested object, and the compiler and memory manager together guarantee complete
-  initialisation before the new object becomes available to the program. That is, everything happens in Steps 1 and 2, and Step 3 is disallowed. ML works the same way
-  for object creation, even though it offers mutable objects as a special case, and Lisp
-  is likewise biased towards functional creation of objects even though it also supports
-  mutation.
+- C: All the work happens in Step 1; the language neither requires nor offers any system or secondary initialisation - the programmer does all the work (or fails to).
+  Notice, though, that allocation may include setting up or modifying a header, outside of the cell returned, used to assist in freeing the object later.
+- Java: Steps 1 and 2 together provide an object whose method dispatch vector, hash code and synchronisation information are initialised, and all fields set to a default value (typically all zeroes).
+  For arrays, the length field is also filled in. At this point the object is type safe but 'blank'. This is what the new bytecode returns.
+  Step 3 in Java happens in code provided inside a constructor or static initialiser, or even afterwards, to set fields to non-zero values.
+  Even initialisation of f i n a l fields happens in Step 3, so it can be tricky to ensure that other threads do not see those fields change if the object is made public too soon.
+- Haskell: The programmer provides the constructor with values for all fields of the requested object, and the compiler and memory manager together guarantee complete initialisation before the new object becomes available to the program.
+  That is, everything happens in Steps 1 and 2, and Step 3 is disallowed.
+  ML works the same way for object creation, even though it offers mutable objects as a special case, and Lisp is likewise biased towards functional creation of objects even though it also supports mutation.
 
-Note that functional initialisation has two strong advantages: it helps ensure complete
-initialisation of objects and, provided that the initialisation code is effectively atomic with
-respect to possible garbage collection, it allows the initialising stores to avoid some write
-barriers. In particular one can omit generational write barriers in the functional initialisation case because the object being initialised must be younger than any objects to which it
-refers. In contrast, this is not generally true in Java constructors [Zee and Rinard, 2002].
-A language-level request for a new object will eventually translate into a call to an
-allocation routine, which may sometimes be inlined by a compiler, to accomplish Step 1
-and possibly some or all of Step 2. The key property that allocation needs to satisfy is that
-Steps 1 and 2 are effectively atomic with respect to other threads and to collection. This
-guarantees that no other component of the system will perceive an object that lacks its
-system initialisation. However, if we consider the interface to the allocator (Step 1), there
-remains a range of possibilities depending on the division of labour between Steps 1, 2 and 3.
+Note that functional initialisation has two strong advantages: it helps ensure complete initialisation of objects and, provided that the initialisation code is effectively atomic with respect to possible garbage collection, it allows the initialising stores to avoid some write barriers.
+In particular one can omit generational write barriers in the functional initialisation case because the object being initialised must be younger than any objects to which it refers.
+In contrast, this is not generally true in Java constructors.
+A language-level request for a new object will eventually translate into a call to an allocation routine, which may sometimes be inlined by a compiler, to accomplish Step 1 and possibly some or all of Step 2.
+The key property that allocation needs to satisfy is that Steps 1 and 2 are effectively atomic with respect to other threads and to collection.
+This guarantees that no other component of the system will perceive an object that lacks its system initialisation.
+However, if we consider the interface to the allocator (Step 1), there remains a range of possibilities depending on the division of labour between Steps 1, 2 and 3.
 Arguments to an allocation request may include:
 
 - The size requested, generally in bytes, but possibly in words or some other granule size.
-  When requesting an array, the interface may present the element size and the number
-  of elements separately.
-- An alignment constraint. Typically there is a default alignment and a way to request an
-  alignment that is more strict. These constraints may consist of only a power of two
-  indication (word, double-word, quad-word alignment, and so on) or a power of two
-  and an offset within that modulus (such as aligned on word two of a quad-word).
-- The kind of obj ect to allocate. For example, managed run-time languages such as Java
-  typically distinguish between array and non-array objects. Some systems distinguish
-  between objects that contain no pointers and ones that may contain pointers [Boehm
-  and Weiser, 1988]; objects containing executable code may also be special. In short,
-  any distinction that requires attention by the allocator needs to appear at the interface.
-- The specific type of object to allocate, in the sense of programming language types. This
-  is different from 'kind' in that it may not of itself be interesting to the allocator.
-  Rather, the allocator may use it in initialising the object, and so forth. Passing this
-  value in may simplify making Step 2 atomic (by moving the burden to Step 1) and
-  may also reduce code size by avoiding one or more extra instructions at each allocation site
+  When requesting an array, the interface may present the element size and the number of elements separately.
+- An alignment constraint. Typically there is a default alignment and a way to request an alignment that is more strict.
+  These constraints may consist of only a power of two indication (word, double-word, quad-word alignment, and so on) or a power of two and an offset within that modulus (such as aligned on word two of a quad-word).
+- The kind of obj ect to allocate. For example, managed run-time languages such as Java typically distinguish between array and non-array objects.
+  Some systems distinguish between objects that contain no pointers and ones that may contain pointers; objects containing executable code may also be special.
+  In short, any distinction that requires attention by the allocator needs to appear at the interface.
+- The specific type of object to allocate, in the sense of programming language types. This is different from 'kind' in that it may not of itself be interesting to the allocator.
+  Rather, the allocator may use it in initialising the object, and so forth.
+  Passing this value in may simplify making Step 2 atomic (by moving the burden to Step 1) and may also reduce code size by avoiding one or more extra instructions at each allocation site
 
 ### Speeding allocation
 
-Since many systems and applications tend to allocate at a high rate relative to the rest
-of their computation, it is important to tune allocation to be fast. A key technique is to
-inline the common case code (the 'fast path') and call out to 'slow path' code that handles
-the rarer, more complex cases. Making good choices here requires careful comparative
-measurements under suitable workloads.
+Since many systems and applications tend to allocate at a high rate relative to the rest of their computation, it is important to tune allocation to be fast.
+A key technique is to inline the common case code (the 'fast path') and call out to 'slow path' code that handles the rarer, more complex cases.
+Making good choices here requires careful comparative measurements under suitable workloads.
 
-An apparent virtue of sequential allocation is its simplicity, which leads to a short code
-sequence for the common case. This is especially true if the target processor provides
-enough registers to dedicate one to hold the bump pointer, and possibly one more to hold
-the heap limit. In that case the typical code sequence might be: move the bump pointer to the result register; add-immediate the needed size to the bump pointer; compare the bump
-pointer against the limit; conditionally branch to a slow path call. Notice that putting the
-bump pointer into a register assumes per-thread sequential allocation areas. Some ML
-and Haskell implementations further combine multiple allocations in a straight line (basic
-block) of code into one larger allocation, resulting in just one limit test and branch. The
-same technique can work for code sequences that are single-entry but multiple-exit by
-allocating the maximum required along any of the paths, or at least using that as the basis
-for one limit test on entry to the code sequence.
+An apparent virtue of sequential allocation is its simplicity, which leads to a short code sequence for the common case.
+This is especially true if the target processor provides enough registers to dedicate one to hold the bump pointer, and possibly one more to hold the heap limit.
+In that case the typical code sequence might be: move the bump pointer to the result register; add-immediate the needed size to the bump pointer; compare the bump pointer against the limit; conditionally branch to a slow path call.
 
-It might seem that sequential allocation is necessarily faster than free-list techniques,
-but segregated fits can also be quite efficient if partially inlined and optimised. If we know
-the desired size class statically, and we keep the base pointer to the array of free-list pointers in a dedicated register, the sequence is: load the desired list pointer; compare it with
-zero; branch if zero to a slow path call; load the next pointer; store the next pointer back
-to the list head. In a multithreaded system the last step may need to be atomic, say a
-C ompa reAndSwap with branch back to retry on failure, or we can provide each thread
-with a separate collection of free-list heads.
+Notice that putting the bump pointer into a register assumes per-thread sequential allocation areas.
+Some ML and Haskell implementations further combine multiple allocations in a straight line (basic block) of code into one larger allocation, resulting in just one limit test and branch.
+The same technique can work for code sequences that are single-entry but multiple-exit by allocating the maximum required along any of the paths, or at least using that as the basis for one limit test on entry to the code sequence.
+
+It might seem that sequential allocation is necessarily faster than free-list techniques, but segregated fits can also be quite efficient if partially inlined and optimised.
+If we know the desired size class statically, and we keep the base pointer to the array of free-list pointers in a dedicated register, the sequence is: load the desired list pointer;
+compare it with zero; branch if zero to a slow path call; load the next pointer; store the next pointer back to the list head.
+In a multithreaded system the last step may need to be atomic, say a C ompa reAndSwap with branch back to retry on failure, or we can provide each thread with a separate collection of free-list heads.
 
 ### Zeroing
 
-Some system designs require that free space contain a distinguished value, often zero, for
-safety, or perhaps some other value (generally for debugging). Systems offering a weak
-allocation guarantee, such as C, may not do this, or may do it only as an option for debugging. Systems with a strong guarantee, such as functional languages with complete initialisation, do not need zeroing - though optionally setting free space to a special value may
-aid in system debugging. Java is the typical example of a language that requires zeroing.
-How and when might a system zero memory? We could zero each object as we allocate
-it, but experience suggests that bulk zeroing is more efficient. Also, zeroing with explicit
-memory writes at that time may cause a number of cache misses, and on some architectures, reads may block until the zeroing writes drain from a hardware write bufferIstore
-queue. Some ML implementations, and also Sun's HotSpot Java virtual machine, prefetch
-ahead of the (optimised) bump pointer precisely to try to hide the latency of fetching newly
-allocated words into the cache [Appel, 1994; Gonc;alves and Appel, 1995]. Modern processors may also detect this pattern and perform the prefetching in hardware. Diwan et al
-[1994] found that write-allocate caches that can allocate on a per-word basis offered the
-best performance, but these do not seem to be common in practice.
-From the standpoint of writing an allocator, it is often best to zero whole chunks using
-a call to a library routine such as b z e ro. These routines are typically well optimised for
-the target system, and may even use special instructions that zero directly in the cache
-without fetching from memory, such as dcbz (Data Cache Block Zero) on the PowerPC.
-Notice that direct use of such instructions may be tricky since the cache line size is a modelspecific parameter. In any case, a system is likely to obtain best performance if it zeroes
-large chunks that are power-of-two aligned.
-Another technique is to use demand-zero pages in virtual memory. While these are
-fine for start up, the overhead of the calls to remap freed pages that we are going to reuse,
-and of the traps to obtain freshly zeroed real memory from the operating system, may be
-higher than zeroing pages ourselves. In any case, we should probably remap pages in bulk
-if we are going to use this technique, to amortise some of the cost of the call.
-Another question is when to zero. We might zero immediately after collection. This has
-the obvious disadvantage of lengthening the collection pause, and the less obvious disadvantage of dirtying memory long before it will be used. Such freshly zeroed words will
-likely be flushed from the cache, causing write-backs, and then will need to be reloaded during allocation. Anecdotal experience suggests the best time to zero from the standpoint
-of performance is somewhat ahead of the allocator, so that the processor has time to fetch
-the words into the cache before the allocator reads or writes them, but not so far ahead
-of the allocator that the zeroed words are likely to be flushed. Given modern cache miss
-times, it is not clear that the prefetching technique that Appel described will work; at least
-it may need tuning to determine the proper distance ahead of the allocator that we should
-prefetch. For purposes of debugging, zeroing or writing a special value into memory should
-be done as soon as we free cells, to maximise the range of time during which we will catch
-errors.
+Some system designs require that free space contain a distinguished value, often zero, for safety, or perhaps some other value (generally for debugging).
+Systems offering a weak allocation guarantee, such as C, may not do this, or may do it only as an option for debugging.
+Systems with a strong guarantee, such as functional languages with complete initialisation, do not need zeroing - though optionally setting free space to a special value may aid in system debugging.
+Java is the typical example of a language that requires zeroing.
+How and when might a system zero memory? We could zero each object as we allocate it, but experience suggests that bulk zeroing is more efficient.
+Also, zeroing with explicit memory writes at that time may cause a number of cache misses, and on some architectures, reads may block until the zeroing writes drain from a hardware write bufferIstore queue.
+Some ML implementations, and also Sun's HotSpot Java virtual machine, prefetch ahead of the (optimised) bump pointer precisely to try to hide the latency of fetching newly allocated words into the cache.
+Modern processors may also detect this pattern and perform the prefetching in hardware.
+Diwan et al found that write-allocate caches that can allocate on a per-word basis offered the best performance, but these do not seem to be common in practice.
+From the standpoint of writing an allocator, it is often best to zero whole chunks using a call to a library routine such as b zero.
+These routines are typically well optimised for the target system, and may even use special instructions that zero directly in the cache without fetching from memory, such as dcbz (Data Cache Block Zero) on the PowerPC.
+Notice that direct use of such instructions may be tricky since the cache line size is a modelspecific parameter.
+In any case, a system is likely to obtain best performance if it zeroes large chunks that are power-of-two aligned.
+
+Another technique is to use demand-zero pages in virtual memory.
+While these are fine for start up, the overhead of the calls to remap freed pages that we are going to reuse, and of the traps to obtain freshly zeroed real memory from the operating system, may be higher than zeroing pages ourselves.
+In any case, we should probably remap pages in bulk if we are going to use this technique, to amortise some of the cost of the call.
+Another question is when to zero. We might zero immediately after collection.
+This has the obvious disadvantage of lengthening the collection pause, and the less obvious disadvantage of dirtying memory long before it will be used.
+Such freshly zeroed words will likely be flushed from the cache, causing write-backs, and then will need to be reloaded during allocation.
+Anecdotal experience suggests the best time to zero from the standpoint of performance is somewhat ahead of the allocator,
+so that the processor has time to fetch the words into the cache before the allocator reads or writes them, but not so far ahead of the allocator that the zeroed words are likely to be flushed.
+Given modern cache miss times, it is not clear that the prefetching technique that Appel described will work; at least it may need tuning to determine the proper distance ahead of the allocator that we should prefetch.
+For purposes of debugging, zeroing or writing a special value into memory should be done as soon as we free cells, to maximise the range of time during which we will catch errors.
 
 ### Finding pointers
 
 ### GC-safe points and mutator suspension
 
-system is simpler in one way if it can allow garbage collection at any IP - there
-is no concern about whether a thread is suspended at a point safe for garbage collection,
-a GC-safe point or GC-point for short. However, such a system is more complex in that it
-must support stack maps for every IP, or else employ techniques that do not require them,
-as for uncooperative C and C++ compilers. If a system allows garbage collection at most
-IPs, then if it needs to collect and a thread is suspended at an unsafe point, it can either
-interpret instructions ahead for the suspended thread until it is at a safe point, or it can
-wake the thread up for a short time to get it to advance (probabilistically) to a safe point.
-Interpretation risks rarely exercised bugs, while nudging a thread gives only a probabilistic
-guarantee. Such systems may also pay the cost of larger maps.
+System is simpler in one way if it can allow garbage collection at any IP - there is no concern about whether a thread is suspended at a point safe for garbage collection, a GC-safe point or GC-point for short.
+However, such a system is more complex in that it must support stack maps for every IP, or else employ techniques that do not require them, as for uncooperative C and C++ compilers.
+If a system allows garbage collection at most IPs, then if it needs to collect and a thread is suspended at an unsafe point,
+it can either interpret instructions ahead for the suspended thread until it is at a safe point, or it can wake the thread up for a short time to get it to advance (probabilistically) to a safe point.
+Interpretation risks rarely exercised bugs, while nudging a thread gives only a probabilistic guarantee. Such systems may also pay the cost of larger maps.
 
 ### Garbage collecting code
 
@@ -1790,54 +1712,393 @@ guarantee. Such systems may also pay the cost of larger maps.
 
 ## Language-specific concerns
 
+While we have termed finalisation and weak pointers 'language-specific' concerns, they are now largely part of the accepted landscape of automatic memory management.
+Automatic management is a software engineering boon, enabling easier construction of more complex systems that work correctly,
+but various specific problems motivate finalisation and weak pointers as extensions to language semantics - extensions that have been introduced precisely because of the assumption that memory will be managed automatically.
+
+If the collector and run-time system implementer receive the language being implemented as a given, then many of the design considerations mentioned here have already been decided: the language is what it is.
+The design questions mentioned earlier, particularly with respect to choices in the design of support for finalisation, are more relevant in the context of designing a new programming language.
+Likewise, the varieties of weak pointer mechanisms, such as which 'weak' data structures to offer, how many strengths of references to support, and so on, are also more the province of language design.
+
+Where a collector and run-time system implementer has more scope is in the choice and design of allocation and collection techniques.
+Here are some of the considerations of how those choices relate to the mechanisms discussed in this chapter.
+
+- Weak pointers and finalisation tend to require additional tracing 'passes'. These typically complete quickly - their performance is typically not of unusual concern.
+  However, they complicate otherwise basic algorithms, and require considerable care in their design.
+  It is best to design in the necessary support from the beginning rather than to attempt to add it on later.
+  Needless to say, it is very important to gain a solid understanding of the semantics of the features and of how proposed implementation strategies enact those semantics.
+- Some mechanisms, notably some of the 'strengths' of Java's weak references, require that a whole group of related weak references be cleared at the same time.
+  This is relatively easy to accomplish in a stop-the-world collector, but in a more concurrent setting it requires additional mechanism and care.
+  As mentioned in earlier discussion, traversing the weak references needs to include a check of a shared flag and possibly
+  some additional synchronisation, to ensure that collector and mutator threads make
+  the same determination as to which weakly-referenced objects are live - they need to resolve the race between any mutator thread trying to obtain a strong reference and the collector trying to clear a group of weak references atomically.
+  This race is by no means peculiar to Java's weak reference mechanisms, and is a potentiality in
+  supporting weak pointers in any concurrent setting.
+- Given the concerns about atomic clearing of sets of weak references and the general complexity of weak pointer and finalisation support,
+  it may be reasonable to handle those features in a stop-the-world phase of an otherwise concurrent collector, or at least to use locks rather than lock-free or wait-free techniques.
+- Java soft references require a collector mechanism to decide whether it is appropriate to clear them during a given collection cycle.
+
 ### Finalisation
 
-Automatic storage reclamation with a garbage collector provides the appropriate semantics for most objects. However, if a managed object refers to some other resource that lies
-outside the scope or knowledge of the collector, automatic garbage collection does not
-help, and in fact can lead to resource leaks that are hard to fix. A typical case is open files.
-The interface to the operating system usually represents each open file with a small integer called a file descriptor, and the interface limits the number of files that a given process
-may have open at one time. A language implementation will generally have, for each open
-file, an object that the programmer uses to manage that file stream. Most of the time it is
-clear when a program has finished with a given file stream, and the program can ask the
-run-time system to close the stream, which can close the corresponding file descriptor at
-the operating system interface, allowing the descriptor number to be reused
+Automatic storage reclamation with a garbage collector provides the appropriate semantics for most objects.
+However, if a managed object refers to some other resource that lies outside the scope or knowledge of the collector, automatic garbage collection does not help, and in fact can lead to resource leaks that are hard to fix.
+A typical case is open files.
+The interface to the operating system usually represents each open file with a small integer called a file descriptor, and the interface limits the number of files that a given process may have open at one time.
+A language implementation will generally have, for each open file, an object that the programmer uses to manage that file stream.
+Most of the time it is clear when a program has finished with a given file stream, and the program can ask the run-time system to close the stream,
+which can close the corresponding file descriptor at the operating system interface, allowing the descriptor number to be reused.
 
-But if the file stream is shared across a number of components in a program, it can be
-difficult to know when they have all finished with the stream. If each component that uses
-a given stream sets its reference to the stream to null when the component is finished with
-the stream, then when there are no more references the collector can (eventually) detect
-that fact. We show such a situation in Figure 12.1. Perhaps we can arrange for the collector
-somehow to cause the file descriptor to be closed.
-To do so, we need the ability to cause some programmer-specified action to happen
-when a given object becomes no longer reachable - more specifically, when it is no longer
-reachable by any mutator. This is called finalisation. A typical finalisation scheme allows the programmer to indicate a piece of code, called a finaliser, that is to be run when
-the collector determines that a particular object is no longer mutator reachable. The typical implementation of this has the run-time system maintain a special table of objects for
-which the programmer has indicated a finaliser. The mutators cannot access this table, but
-the collector can. We call an object finaliser-reachable if it is reachable from this table but not from mutator roots. 
+But if the file stream is shared across a number of components in a program, it can be difficult to know when they have all finished with the stream.
+If each component that uses a given stream sets its reference to the stream to null when the component is finished with the stream, then when there are no more references the collector can (eventually) detect that fact.
+We show such a situation in Figure 12.1.
+Perhaps we can arrange for the collector somehow to cause the file descriptor to be closed.
+
+To do so, we need the ability to cause some programmer-specified action to happen when a given object becomes no longer reachable - more specifically, when it is no longer reachable by any mutator. This is called finalisation.
+A typical finalisation scheme allows the programmer to indicate a piece of code, called a finaliser, that is to be run when the collector determines that a particular object is no longer mutator reachable.
+The typical implementation of this has the run-time system maintain a special table of objects for which the programmer has indicated a finaliser.
+The mutators cannot access this table, but the collector can.
+We call an object finaliser-reachable if it is reachable from this table but not from mutator roots.
 In Figure 12.2 we show the previous situation but with a finaliser added.
 The finaliser's call to close the descriptor is conditional, since the application may have already closed the file.
 
-In a reference counting system, before freeing an object the collector checks the finalisation table to see if the object requires finalisation. If it does, then the collector causes the
-finaliser function to run, and removes the object's entry in the finalisation table. Similarly,
-in a tracing system, after the tracing phase the collector checks the finalisation table to see
-if any untraced object has a finaliser, and if so, the collector causes the finaliser to run, and
-so on.
-There are a range of subtly different ways in which finalisation can work. We now
-consider some of the possibilities and issues.
+In a reference counting system, before freeing an object the collector checks the finalisation table to see if the object requires finalisation.
+If it does, then the collector causes the finaliser function to run, and removes the object's entry in the finalisation table.
+Similarly, in a tracing system, after the tracing phase the collector checks the finalisation table to see if any untraced object has a finaliser, and if so, the collector causes the finaliser to run, and so on.
+There are a range of subtly different ways in which finalisation can work.
+We now consider some of the possibilities and issues.
 
 **When do finalisers run?**
 
-At what time do finalisers run? In particular, finalisation might occur during collection, as
-soon as the collector determines the need for it. However, the situation during collection
-might not support execution of general user code. For example, it may not be possible for
-user code to allocate new objects at this time. Therefore most finalisation approaches run
-finalisers after collection. The collector simply queues the finalisers. To avoid the need
-to allocate space for the queue during collection, the collector can partition the finalisation
-table into two portions, one for objects queued for finalisation and one for objects that have
-a finaliser but are not yet queued. When the collector enqueues an object for finalisation,
-it moves that queue entry to the enqueued-objects partition. A simple, but possibly inefficient, approach is to associate an enqueued flag with each entry and have the finalisation
-activity scan the finalisation table. To avoid scanning, we can group the enqueued objects together in the table, perhaps permuting entries when the collector needs to enqueue
-another object.
+At what time do finalisers run? In particular, finalisation might occur during collection, as soon as the collector determines the need for it.
+However, the situation during collection might not support execution of general user code.
+For example, it may not be possible for user code to allocate new objects at this time.
+Therefore most finalisation approaches run finalisers after collection.
+The collector simply queues the finalisers.
+To avoid the need to allocate space for the queue during collection, the collector can partition the finalisation table into two portions, one for objects queued for finalisation and one for objects that have a finaliser but are not yet queued.
+When the collector enqueues an object for finalisation, it moves that queue entry to the enqueued-objects partition.
+A simple, but possibly inefficient, approach is to associate an enqueued flag with each entry and have the finalisation activity scan the finalisation table.
+To avoid scanning, we can group the enqueued objects together in the table, perhaps permuting entries when the collector needs to enqueue another object.
+
+In general, finalisers affect shared state; there is little reason to operate only on finalisable objects since they are about to disappear.
+For example, finalisers may need to access some global data to release a shared resource, and so often need to acquire locks.
+This is another reason not to run finalisers during collection: it could result in a deadlock.
+Worse, if the run-time system provides re-entrant locks - locks where the same thread can acquire a lock that it already holds - we can have the absence of deadlock and silent corruption of the state of the application.
+
+> Java avoids this by indicating that a finalisation thread will invoke a finaliser with no locks held. Thus the
+> finalisation thread must be one that does not hold a lock on the object being finalised. In practice this pretty much
+> requires finalisation threads to be distinct threads used only for that purpose.
+
+Even assuming that finalisers run after collection, there remain several options as to exactly when they run. One possibility is immediately after collection, before mutator thread(s) resume.
+This improves promptness of finalisation but perhaps to the detriment of mutator pause time.
+Also, if finalisers communicate with other threads, which remain blocked at this time, or if finalisers compete for locks on global data structures, this policy could lead to communication problems or deadlock.
+A last consideration is that it is not desirable for a language's specification of finalisation to constrain the possible collection techniques.
+In particular, collection on the fly, concurrent with mutation, most naturally leads to running finalisers at arbitrary times, concurrent with mutator execution.
+
+Which thread runs a finaliser?
+
+In a language that permits multiple threads, the most natural approach is to have a background finalisation thread run the enqueued finalisers asynchronously with the mutator threads.
+In this case finalisers may run concurrently with mutators and must therefore be safe for concurrent execution.
+Of particular concern is the possibility that a finaliser for an object of type T might run at the same time as the allocation and initialisation code for a new instance of T.
+Any shared data structures must therefore be synchronised to handle that case.
+
+> Java has a special rule to help prevent this: if an object's finaliser can cause synchronisation on the object, then
+> the object is considered mutator reachable whenever its lock is held. This can inhibit removal of synchronisation.
+
+In a single-threaded language, which thread runs a finaliser is not a question - though it does reraise the question of when finalisers run.
+Given the difficulties previously mentioned, it appears that the only feasible and safe way, in general, to run finalisers in a single-threaded system is to queue them and have the program run them under explicit control.
+In a multithreaded system, as previously noted it is best that distinct finalisation threads invoke finalisers, to avoid issues around locks.
+
+Can finalisers run concurrently with each other?
+
+If a large concurrent application uses finalisers, it may need more than one finalisation thread in order to be scalable.
+Thus, from the standpoint of language design it appears better to allow finalisers to run concurrently with each other, as well as concurrently with mutators.
+Since, in general, programmers must code finalisers carefully so that they operate correctly in the face of concurrency - because finalisers are essentially asynchronous with respect to mutator operations - there should be no additional problem with running finalisers concurrently with each other.
+
+Can finalisers access the obj ect that became unreachable?
+
+In many cases it is convenient for a finaliser to access the state of the object being reclaimed.
+In the file stream example, the operating system file descriptor number, a small integer, might most conveniently be stored as a field in the file stream object, as we showed in Figure 12.2.
+The simplest finaliser can read that field and call on the operating system to close the file (possibly after flushing a buffer of any pending output data).
+Notice that if the finaliser does not have access to the object, and is provided no additional data but is just a piece of code to run, then finalisation will not be very useful - the finaliser needs some context for its work.
+In a functional language, this context may be a closure; in an objectoriented language it may be an object.
+Thus the queuing mechanism needs to provide for the passing of arguments to the finaliser.
+
+On balance it seems more convenient if finalisers can access the object being finalised.
+Assuming finalisers run after collection, this implies that objects enqueued for finalisation survive the collection cycle in which they are enqueued.
+So that finalisers have access to everything they might need, the collector must also retain all objects reachable from objects enqueued for finalisation.
+This implies that tracing collectors need to operate in two passes.
+The first pass discovers the objects to be finalised, and the second pass traces and preserves objects reachable from the finaliser queue.
+In a reference counting collector the system can increment the object's reference count as it enqueues it for finalisation, that is, the finalisation queue's reference to the object 'counts'.
+Once the object is dequeued and its finaliser runs, the reference count will become zero and the object can be reclaimed.
+Until then, objects reachable from it will not even be considered for reclamation.
+
+When are finalised obj ects reclaimed?
+
+The fact that finalisers usually hold a reference to the object being finalised means that they might store that reference in a global data structure. This has been called *resurrection*.
+
+In a mechanical sense resurrection is not a problem, though it may be surprising to the programmer.
+Since it is probably difficult to detect stores that resurrect objects, and since setting up an object for future finalisation tends to happen as part of allocation and initialisation, resurrected objects will generally not be re-finalised.
+Java, for example, guarantees that an object will not be finalised more than once.
+A language design in which setting up finalisation works more dynamically might allow the programmer to request finalisation for a resurrected object - because it allows such requests for any object.
+If a finalised object is not resurrected, then the next collection cycle can reclaim it.
+In a system with partitioned spaces, such as a generational collector, the finalised object might reside in a space that will not be collected again for a long time, so making it available to the finaliser can substantially extend the object's physical lifetime.
+
+What happens if there is an error in a finaliser?
+
+If finalisation is run synchronously at times known to the application, then programmers can easily wrap finalisation actions with recovery handlers for when a finaliser returns an error or throws an exception.
+If finalisers run asynchronously then it may be best to catch and log exceptions for later handling by the application at an appropriate time.
+This is more a concern of software engineering than of garbage collection algorithm or mechanism.
+
+Is there any guaranteed order to finalisation?
+
+Finalisation order can matter to an application.
+For example, consider a Bu f fe redSt ream object connected to a FileStream that holds an open operating system file descriptor, as shown in Figure 12.3.
+Both objects may need finalisers, but it is important to flush (write) the buffer of the Bu f fe redSt ream before closing the file descriptor.
+Clearly, in a layered design like this, the sensible semantics will finalise from higher layers to lower.
+In this case, because the lower level object is reachable from the higher level one, it is possible for finalisation to occur in the sensible order automatically.
+Notice that if we impose order on finalisations, ultimate finalisation may be slow, since we finalise only one 'level' in the order at each collection.
+That is, in a given collection we finalise only those unreached objects that are not themselves reachable from other unreached objects.
+This proposal has a significant flaw: it does not handle cycles of unreachable objects where more than one needs finalisation.
+Given that such cases appear to be rare, it seems simpler and more helpful to guarantee finalisation in order of reachability; that is, if B is reachable from A, the system should invoke the finaliser for A first.
+In the rare case of cycles, the programmer will need to get more involved.
+Mechanisms such as weak references may help, though using them correctly may be tricky.
+A general technique is to separate out fields needed for finalisation in such a way as to break the cycle of objects needing finalisation, as suggested by Boehm.
+That is, if A and B have finalisers and cross reference each other as shown in Figure 12.4a, we can split B into B and B', where B does not have a finaliser but B' does (see Figure 12.4b).
+A and B still cross reference each other, but (importantly) B' does not refer to A.
+In this scenario, finalisation in reachability order will finalise A first and then B'.
+
+The finalisation race problem
+
+Lest we think that finalisation can be used straightforwardly without risk of subtle bugs, even in the case of objects not requiring special finalisation order there is a subtle kind of race condition that can arise.
+Consider the FileStream example shown in Figure 12.2.
+Suppose that the mutator is making its last call to write data to the file.
+The writeData method of FileStream may fetch the descriptor, and then as its last action call write on the descriptor, passing the data.
+Significantly, at this point the method's reference to the FileStream object is dead, and the compiler may optimise it away.
+If collection happens during the call to write, the finaliser on FileStream may run and close the file, before write actually invokes the operating system to write the data.
+This is a difficult problem and Boehm's experience is that the bug is pervasive, but rarely incurred because the window of vulnerability is short.
+One fix for this is the Java rule that we mentioned previously that an object must be considered live whenever its lock is held and a finaliser could run that requires synchronisation on the object.
+A more general way to avoid the race is to force the compiler to retain the reference to the FileStream longer.
+The trick to doing this is to pass the FileStream reference in a later call (to a routine that does nothing) that the compiler cannot optimise away.
+The .NET framework and C# (for example) provide a function for this called GC . KeepA l ive.
+At present Java does not provide a similar call.
+
+Finalisers and locks
+
+I* whatever condition is appropriate 4 As noted, for example by Boehm, the purpose of a finaliser is usually to update some global data structure in order to release a resource connected with the object that becomes unreachable.
+Since such data structures are global, they generally require synchronised access.
+In cases such as closing open file handles, some other software component (in this case, the operating system) handles the synchronisation implicitly, but for data structures within the program, it must be explicit.
+The concern is that, from the standpoint of most code in the program, finalisers are asynchronous.
+There are two general approaches a programmer can take to the situation.
+One is to apply synchronisation to all operations on the global data structure - even in the single threaded case (because a finaliser could run in the middle of a data structure operation otherwise).
+This counts on the underlying implementation not to elide synchronisation on an apparently private object if that object has a finalisation method.
+The other approach is to arrange for the collector only to queue the object for finalisation, but not to begin the actual finalisation work.
+Some language implementations offer such queueing mechanisms as built-in features; if a particular implementation does not, then the programmer can code the finalisation method so that all it does is place the object in a programmerdefined queue.
+In the queueing approach, the programmer will add code to the program, at desirable (that is, safe) points. The code will process any enqueued objects needing finalisation.
+Since running finalisers can cause other objects to be enqueued for finalisation, such queue-processing code should generally continue processing until the queue is empty, and may want to force collections if it is important to reclaim resources promptly.
+Suitable pseudocode appears in Algorithm 12.1.
+As previously noted, the thread that runs this algorithm should not be holding a lock on any object to be finalised, which constrains the places where this processing can proceed safely.
+The pain involved in this approach is the need to identify appropriate places in the code at which to empty the finalisation queue.
+In addition to sprinkling enough invocations throughout the code, the programmer must also take care that invocations do not happen in the middle of other operations on the shared data structures.
+Locks alone cannot prevent this, since the invoking thread may already hold the lock, and thus can be allowed to proceed.
+This is the source of the statement in the Java Language Specification that the system will invoke fina l i z e methods only while holding no user-visible locks.
+
+Finalisation in particular languages
+
+Java.
+The `Object` class at the top of the Java class hierarchy provides a method named finalize, which does nothing.
+Any subclass can override the method to request finalisation.
+Java does not guarantee finalisation order, and with respect to concurrency says only that finalisation runs in a context starting with no (user-visible) synchronisation locks held.
+This pretty much means that finalisation runs in one or more separate threads, even though the specification is not quite worded that way.
+If finalize throws an exception, the Java system ignores it and moves on.
+If the finalised object is not resurrected, a future collection will reclaim it.
+Java also provides support for programmer-controlled finalisation through appropriate use of the j ava . l ang . ref API.
+
+C++.
+The C++ language offers destructors to handle disposal of objects, as a converse to constructors which initialise new objects.
+The primary role of most destructors is to cause explicit freeing of memory and its return to the allocator for reuse.
+However, since programmers can offer any code they want, C++ destructors can handle the case of closing a file, and so forth.
+Destructors also provide a hook through which a programmer can support reference counting to reclaim (acyclic) shared data structures.
+In fact, C++ templates allow a general smart pointer mechanism to drive the reference counting.
+But this shows again that destructors are mostly about reclaiming memory - a job that a garbage collector already handles. Thus, true finalisation remains relatively rare, even for C++.
+The memory reclamation aspect of destructors is relatively safe and straightforward, not least because it does not involve user-visible locks.
+However, as soon as the programmer veers into the realm of 'true' finalisation, all the issues we mention here arise and are dropped into the programmer 's lap. This includes dealing with locking, order of invocation of finalisers, and so on.
+Placing the responsibility for all this on the programmer's shoulders makes it difficult to ensure that it is done correctly.
+
+### Weak references
+
+Garbage collection determines which memory to retain and which to reclaim using reachability through chains of pointers.
+For automatic reclamation this is a sound approach.
+Still, there are a number of situations in which it is problematic.
+For example, in a compiler it can be useful to ensure that every reference to a given variable name, say xy z, uses exactly the same string instance.
+Then, to compare two variable names for equality it suffices to compare their pointers. To set this up, the compiler builds a table of all the variable names it has seen so far.
+The strings in the table are the canonical instances of the variable names, and such tables are therefore sometimes called canonicalisation tables.
+But consider what happens if some names fall into disuse as the compiler runs.
+There are no references to the names from other data structures, but the canonical copy remains.
+It would be possible to reclaim a string whose only reference is from the table, but the situation is difficult for the program to detect reliably.
+Weak references (also called weak pointers) address this difficulty.
+A weak reference continues to refer to its target so long as the target is reachable from the roots via a chain consisting of ordinary strong references. Such objects are called strongly reachable.
+However, if every path from roots to an object includes at least one weak reference, then the collector may reclaim the object and set any weak reference to the object to null.
+Such objects are called weakly-reachable.
+As we will see, the collector may also take additional action, such as notifying the mutator that a given weak reference has been set to null.
+
+In the case of the canonicalisation table for variable names, if the reference from the table to the name is a weak reference, then once there are no ordinary references to the string, the collector can reclaim the string and set the table's weak reference to null.
+Notice that the table design must take this possibility into account, and it may be necessary or helpful for the program to clean up the table from time to time.
+For example, if the table is organised by hashing with each hash bucket being a linked list, defunct weak references result in linked list entries whose referent is null.
+We should clean those out of the table from time to time. This also shows why a notification facility might be helpful: we can use it to trigger the cleaning up.
+
+Below we offer a more general definition of weak references, which allows several different strengths of references, and we indicate how a collector can support them, but first we consider how to implement just two strengths: strong and weak.
+First, we take the case of tracing collectors.
+To support weak references, the collector does not trace the target of a weak reference in the first tracing pass.
+Rather, it records where the weak pointer is, for processing in a second pass.
+Thus, in the first tracing pass the collector finds all the objects reachable via chains of strong references only, that is, all strongly reachable objects.
+In a second pass, the collector examines the weak references that it found and noted in the first pass.
+If a weak reference's target was reached in the first pass, then the collector retains the weak reference, and in copying collectors it updates the weak reference to refer to the new copy.
+If a weak reference's target was not reached, the collector sets the weak reference to null, thus making the referent no longer reachable.
+At the end of the second pass, the collector can reclaim all unreached objects.
+
+The collector must be able to identify a weak reference.
+It may be possible to use a bit in the reference to indicate that it is weak.
+For example, if objects are word-aligned in a byte-addressed machine, then pointers normally have their low two bits set to zero.
+One of those bits could indicate a weak reference if the bit is set to one.
+This approach has the disadvantage that it requires the low bits to be cleared before trying to use a reference that may be weak.
+That may be acceptable if weak references arise only in certain restricted places in a given language design.
+Some languages and their implementations may use tagged values anyway, and this simply requires one more possible tag value.
+Another disadvantage of this approach is that the collector needs to find and null all weak references to objects being reclaimed, requiring another pass over the collector roots and heap, or that the collector remember from its earlier phases of work where all the weak pointers are.
+An alternative to using low bits is to use high order bits and double-map the heap.
+In this case every heap page appears twice in the virtual address space, once in its natural place and again at a high memory (different) address.
+The addresses differ only in the value of a chosen bit near the high-order end of the address.
+This technique avoids the need to mask pointers before using them, and its test for weakness is simple and efficient.
+However, it uses half the address space, which may make it undesirable except in large address spaces.
+
+Perhaps the most common implementation approach is to use indirection, so that specially marked weak objects hold the weak references.
+The disadvantage of the weak object approach is that it is less transparent to use - it requires an explicit dereferencing operation on the weak object - and it imposes a level of indirection.
+It also requires allocating a weak object in addition to the object whose reclamation we are trying to control.
+However, an advantage is that weak objects are special only to the allocator and collector - to all other code they are like ordinary objects.
+A system can distinguish weak objects from ordinary ones by setting a particular bit in the object header reserved for that purpose.
+Alternatively, if objects have custom-generated tracing methods, weak objects will just have a special one.
+
+How does a programmer obtain a weak reference (weak object) in the first place?
+In the case of true weak references, the system must supply a primitive that, when given a strong reference to object 0, returns a weak reference to 0.
+In the case of weak objects, the weak object types likewise supply a constructor that, given a strong reference to 0, returns a new weak object whose target is 0.
+It is also possible for a system to allow programs to change the referent field in a weak object.
+
+#### Additional motivations
+
+Canonicalisation tables are but one example of situations where weak references of some kind help solve a programming problem, or solve it more easily or efficiently.
+Another example is managing a cache whose contents can be retrieved or rebuilt as necessary.
+Such caches embody a space-time trade-off, but it can be difficult to determine how to control the size of a cache.
+If space is plentiful, then a larger size makes sense, but how can a program know? And what if the space constraints change dynamically?
+In such situations it might be useful to let the collector decide, based on its knowledge of available space.
+The result is a kind of weak reference that the collector may set to null if the referent is not strongly reachable, if it so desires.
+It can make the judgement based on the space consumed by the weakly reachable objects in question.
+
+It is sometimes useful is to let a program know when an object is weakly reachable but not strongly reachable, and to allow it to take some action before the collector reclaims the object.
+This is a generalisation of finalisation, a topic we took up in Section 12. 1 .
+Among other things, suitable arrangements of these sorts of weak references can allow better control of the order in which the program finalises objects.
+
+#### Supporting multiple pointer strengths
+
+Weak references can be generalised to provide multiple levels of weak pointers in addition to strong references. These levels can be used to address the issues described above.
+A totally ordered collection of strengths allows each strength level to be associated with a positive integer.
+For a given integer IX > 0, an object is IX*-reachable if it can be reached by a path of references where each reference has strength at least IX. An object is �X-reachable(without the superscript * ) if it is IX*-reachable but not (�X + I ) -reachable.
+An object is IXreachable if every path to it from a root includes at least one reference of strength a, and at least one path includes no references of strength less than IX.
+Below we will use the names of strengths in place of numeric values; the values are somewhat arbitrary anyway, since what we rely on is the relative order of the strengths.
+Also, for gracefulness of expression, we will say Weakly-reachable instead of Weak-reachable, and so on.
+Each level of strength will generally have some collector action associated with it.
+The best-known language that supports multiple flavours of weak reference is Java; it provides the following strengths, from stronger to weaker.4
+
+- Strong: Ordinary references have the highest strength. The collector never clears these.
+- Soft: The collector can clear a Soft reference at its discretion, based on current space usage.
+  If a Java collector clears a Soft reference to object 0 (that is, sets the reference to null), it must at the same time atomically5 clear all other Soft references from which 0 is Strongly-reachable.
+  This rule ensures that after the collector clears the reference, 0 will no longer be Softly-reachable.
+- Weak: The collector must clear a (Soft*-reachable) Weak reference as soon as the collector
+  determines its referent is Weak-reachable (and thus not Soft*-reachable). As with
+- Soft references, if the collector clears a Weak reference to 0, it must at the same time
+  clear all other Soft*-reachable Weak references from which 0 is Soft*-reachable.
+- Finaliser: We term a reference from the table of objects with finalisers to an object that has a finaliser afinaliser reference.
+  We described Java finalisation before, but list it here to clarify the relative strength of this kind of weak reference, even though it is internal to the run-time system as opposed to a weak object exposed to the programmer.
+- Phantom: These are the weakest kind of weak reference in Java. The program must explicitly clear a Phantom for the collector to reclaim the referent.
+  It makes sense to use this only in conjunction with notification, since the Phantom Reference object does not allow the program to obtain a reference to the Phantom's referent - it only permits clearing of the referent.
+
+The point of the different strengths in Java is not so much the levels of strength, but the special semantics associated with each kind of weak reference that the language specification defines.
+Soft references allow the system to shrink adjustable caches. Weak references help with canonicalisation tables and other constructs. Phantom references allow the programmer to control the order and time of reclamation.
+
+Implementing multiple strengths requires multiple additional passes in the collector cycle, but they typically complete quickly.
+We use Java's four strengths as an example, and describe the actions for a copying collector - a mark-sweep collector would be similar, though simpler. We consider reference counting collectors afterwards.
+The passes the collector must make are as follows.
+
+1. Working from the roots, trace and copy all Strongly-reachable objects, noting (but not tracing through) any Soft, Weak, or Phantom objects found.
+2. Optionally, clear all Soft references atomically.6 If we chose not to clear Soft references, then trace and copy from them, finding all Soft* -reachable objects, continuing to note any Weak or Phantom objects found by tracing through Soft objects.
+3. If the target of any Weak object noted previously has been copied, update the Weak object's pointer to refer to the new copy. If the target has not been copied, clear the Weak object's pointer.
+4. If any object requiring finalisation has not yet been copied, enqueue it for finalisation.
+   Go back to Step 1, treating the objects newly enqueued for finalisation as new roots.
+   Notice that in this second round through the algorithm there can be no additional objects requiring finalisation?
+5. If the referent of any Phantom object noted previously has not yet been copied, then enqueue the Phantom on its Re fe renceQueue.
+   In any case, trace and copy all Phantom*-reachable objects, starting from the Phantom's target. Notice that the collector cannot clear any Phantom object's pointer - the programmer must do that explicitly.
+
+While we worded the steps as for a copying collector, they work just as well for mark sweep collection.
+However, it is more difficult to construct a reference counting version of the Java semantics.
+One way to do this is not to count the references from Soft, Weak and Phantom objects in the ordinary reference count, but rather to have a separate bit to indicate if an object is a referent of any of these Re fe rence objects.
+It is also convenient if an object has a separate bit indicating that it has a finaliser.
+We assume that there is a global table that, for each object 0 that is the referent of at least one Re ference object, indicates those Re fe r e n ce objects that refer to 0. We call this the Reverse Reference Table.
+
+Since reference counting does not involve separate invocations of a collector, some other heuristic must be used to determine when to clear all Soft references, which must be done atomically.
+Given that approach, it seems easiest to count Soft references as ordinary references which, when they are cleared using the heuristic, may trigger reclamation, or processing of weaker strengths of pointers.
+
+When an object's ordinary (strong) reference count drops to zero, the object can be reclaimed (and the reference counts of its referents decrements) unless it is the referent of a Re ference object and requires finalisation.
+If the object's bits indicate that it is the referent of at least one Re fe rence, we check the Reverse Reference Table.
+Here are the cases for handling the Re fe rence objects that refer to the object whose ordinary reference count went to zero; we assume they are processed from strongest to weakest.
+
+- Weak: Clear the referent field of the WeakRe ference and enqueue it if requested.
+- Finaliser: Enqueue the object for finalisation. Let the entry in the finalisation queue count as an ordinary reference. Thus, the reference count will go back up to one. Clear the object's 'I have a finaliser' bit.
+- Phantom: If the referent has a finaliser, then do nothing. Otherwise, enqueue the Phantom. In order to trigger reconsideration of the referent for reclamation, increment its ordinary reference count and mark the Phantom as enqueued.
+  When the Phantom's reference is cleared, if the Phantom has been enqueued, decrement the referent's ordinary reference count.
+  Do the same processing when reclaiming a Phantom reference.
+
+There are some more special cases to note. When we reclaim a Re fe rence object, we need to remove it from the Reverse Reference Table.
+We also need to do that when a Reference object is cleared.
+A tricky case is when a detector of garbage cycles finds such a cycle.
+It appears that, before doing anything else, we need to see if any of the objects is the referent of a Soft object, and in that case retain them all, but keep checking periodically somehow.
+If none are Soft referents but some are Weak referents, then we need to clear all those Weak objects atomically, and enqueue any objects requiring finalisation.
+Finally, if none of the previous cases apply but there are some Phantom referents to the cycle, we need to retain the whole cycle and enqueue the Phantoms.
+If no object in the cycle is the referent of a Reference object or requires finalisation, we can reclaim the whole cycle.
+
+Using Phantom obj ects to control finalisation order
+Suppose we have two objects, A and B, that we wish to finalise in that order.
+One way to do this is to create a Phantom object A', a Phantom reference to A.
+In addition, this Phantom reference should extend the Java PhantomRe f e rence class so that it holds an ordinary (strong) reference to B in order to prevent early reclamation of B.8 We illustrate this situation in Figure 12.5.
+
+When the collector enqueues A', the Phantom for A, we know not only that A is unreachable from the application, but also that the finaliser for A has run.
+This is because reachability from the table of objects requiring finalisation is stronger than Phantom reachability.
+Then, we clear the Phantom reference to A and null the reference to B. At the next collection the finaliser for B will be triggered.
+We further delete the Phantom object itself from the global table, so that it too can be reclaimed.
+It is easy to extend this approach to ordered finalisation of three or more objects by using a Phantom between each pair of objects with a finalisation order constraint.
+
+We need Phantoms - Weak objects are not enough. Suppose we used an arrangement similar to that of Figure 12.5.
+When A is no longer reachable, the weak reference in A' will be cleared and A' will be enqueued.
+We can then clear the reference from A' to B.
+Unfortunately, the clearing of the weak reference to A happens before the finaliser for A runs, and we cannot easily tell when that finaliser has finished.
+Therefore we might cause the finaliser for B to run first.
+Phantoms are intentionally designed to be weaker than finalisation reachability, and thus will not be enqueued until after their referent's finaliser has run.
+
+Race in weak pointer clearing
+
+We note that, just as certain compiler optimisations can lead to a race that can cause premature finalisation, the same situations can lead to premature clearing of weak pointers.
+We described the finalisation case in Section 12.1.
+
+Notification of weak pointer clearing
+
+Given a weak reference mechanism, the program may find it useful to know when certain weak references are cleared (or, in the case of Phantoms, could be cleared), and then to take some appropriate action.
+To this end, weak reference mechanisms often also include support for notification. Generally this works by inserting the weak object into a queue.
+For example, Java has a built-in class Re ferenceQueue for this purpose, and a program can poll a queue or use a blocking operation to wait (with or without a timeout).
+Likewise a program can check whether a given weak object is enqueued Gava allows a weak object to be enqueued on at most one queue).
+It is straightforward to add the necessary enqueuing actions to the collector's multi-pass processing of weak pointers described above.
+A number of other languages add similar notification support.
+
+Weak pointers in other languages
+
+We discussed Java separately because of its multiple strengths of weak references.
+Other languages offer alternative or additional weak reference features.
 
 ## Performance
 
