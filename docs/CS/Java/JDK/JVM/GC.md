@@ -272,6 +272,10 @@ The serial collector uses a single thread to perform all garbage collection work
 It's best-suited to single processor machines because it can't take advantage of multiprocessor hardware, although it can be useful on multiprocessors for applications with small data sets (up to approximately 100 MB).
 The serial collector is selected by default on certain hardware and operating system configurations, or can be explicitly enabled with the option `-XX:+UseSerialGC`.
 
+Cheney algorithm
+
+Moon algorithm
+
 #### Serial Old
 
 - with Parallel JDK5

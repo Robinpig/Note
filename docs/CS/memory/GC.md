@@ -18,7 +18,7 @@ Typically, a reference is a pointer to the object (that is, the address in memor
 However, a reference may alternatively refer to an object only indirectly, for instance through a handle which in turn points to the object.
 Handles offer the advantage of allowing an object to be relocated (updating its handle) without having to change every reference to that object/handle throughout the program.
 
-**Memory used by heap objects can be reclaimed using *explicit deallocation* (for example, with C's `free` or C++'s `delete` operator) or automatically by the run-time system, using reference counting or a tracing garbage collector.**
+Memory used by heap objects can be reclaimed using *explicit deallocation* (for example, with C's `free` or C++'s `delete` operator) or automatically by the run-time system, using reference counting or a tracing garbage collector.
 
 ### Explicit deallocation
 
