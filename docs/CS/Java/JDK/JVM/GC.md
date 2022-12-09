@@ -1,20 +1,13 @@
 ## Introduction
 
-
-
 Generational garbage collectors need to keep track of references from older to younger generations so that younger generations can be garbage-collected without inspecting every object in the older generation(s).
 The set of locations potentially containing pointers to newer objects is often called the `remembered set`.
 
 At every store, the system must ensure that the updated location is added to the `remembered set` if the store creates a reference from an older to a newer object.
 This mechanism is usually referred to as a `write barrier` or `store check`.
 
-
 1. Card Marking
 2. Two-Instruction
-
-
-
-
 
 **GC Roots:**
 
@@ -33,7 +26,6 @@ See [G1 Roots](/docs/CS/Java/JDK/JVM/G1.md?id=roots)
 
 Tri-color Marking
 
-
 interceptor and JIT use Write Barrier to maintain Card Table
 
 Premature Promotion
@@ -47,9 +39,6 @@ gcCause.cpp
 - at oop like serial
 - bitMap out of object like G1 Shenandoah
 - Colored Pointer like ZGC
-
-
-
 
 ### Young Generation
 
@@ -150,8 +139,6 @@ FGC频次异常
 - 永久代/元空间 空间不足
 - 对象预估和担保
 - 堆大小动态调整
-
-
 
 is forwarded
 
