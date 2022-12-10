@@ -124,7 +124,7 @@ Bottom-up mergesort
 
 No compare-based sorting algorithm can guarantee to sort N items with fewer than lg(N!) ~ NlgN compares.
 
-## Quicksort
+## QuickSort
 
 Like Merge Sort, QuickSort is a Divide and Conquer algorithm.
 It picks an element as a pivot and partitions the given array around the picked pivot.
@@ -214,6 +214,15 @@ Median-of-Three Partitioning
 >
 > A common solution is not to use quicksort recursively for small files, but instead use a sorting algorithm that is efficient for small files, such as insertion sort.
 
+
+### Randomized QuickSort
+Choosing the first element of a subarray as the pivot takes only $O(1)$ time but can cause QuickSort to run in $O(n^2)$ time.
+Choosing the median element as the pivot guarantees an overall running time of $O(nlogn)$ but is much more time-consuming (if still linear-time). 
+Can we have the best of both worlds? Is there a simple and lightweight way to choose a pivot element that leads to a roughly balanced split of the array? The answer is yes, and the key idea is to use randomization.
+
+> For every input array of length n $ 1, the average running time of randomized QuickSort is $O(nlogn)$.
+
+The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/Sort.md?id=MergeSort)).
 
 ## Counting Sort
 
