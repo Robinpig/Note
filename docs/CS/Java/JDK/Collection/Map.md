@@ -23,8 +23,6 @@
 
 
 
-### Introduction
-
 ```java
 public class HashMap<K,V> extends AbstractMap<K,V>
     implements Map<K,V>, Cloneable, Serializable {
@@ -419,7 +417,7 @@ JDK1.8 vs JDK1.7 at resize
 
 todo JDK1.7 resize 
 
-### treeifyBin
+#### treeifyBin
 
 *Replaces all linked nodes in bin at index for given hash unless table is too small, in which case resizes instead.*
 
@@ -495,7 +493,7 @@ final void treeify(Node<K,V>[] tab) {
 }
 ```
 
-### get
+#### get
 
 ```java
 public V get(Object key) {
@@ -530,7 +528,7 @@ final Node<K,V> getNode(int hash, Object key) {
 
 因为AVL树比红黑树保持更加严格的平衡，是以更多旋转操作导致更慢的插入和删除为代价的树，B+树所有的节点挤在一起，当数据量不多的时候会退化成链表
 
-### remove
+#### remove
 
 ```java
 public V remove(Object key) {
@@ -703,14 +701,30 @@ final Node<K,V> untreeify(HashMap<K,V> map) {
 ```
 
 
-### Methods
+### New Methods
 
 The default implementation makes no guarantees about synchronization or atomicity properties of this method.
 Any implementation providing atomicity guarantees must override this method and document its concurrency properties.
 In particular, all implementations of subinterface java.util.concurrent.ConcurrentMap must document whether the function is applied once atomically only if the value is not present.
 
+##### putIfAbsent
+If the specified key is not already associated with a value (or is mapped to null) associates it with the given value and returns null, else returns the current value.
 
-**getOrDefault**
+```java
+public interface Map {
+    default V putIfAbsent(K key, V value) {
+        V v = get(key);
+        if (v == null) {
+            v = put(key, value);
+        }
+
+        return v;
+    }
+}
+```
+
+
+##### getOrDefault
 
 Returns the value to which the specified key is mapped, or defaultValue if this map contains no mapping for the key.
 
@@ -733,7 +747,7 @@ public interface Map {
 }
 ```
 
-**forEach**
+##### forEach
 
 Performs the given action for each entry in this map until all entries have been processed or the action throws an exception. Unless otherwise specified by the implementing class, actions are performed in the order of entry set iteration (if an iteration order is specified.) Exceptions thrown by the action are relayed to the caller.
 
@@ -757,7 +771,84 @@ public interface Map {
 }
 ```
 
-**computeIfAbsent**
+##### remove
+Removes the entry for the specified key only if it is currently mapped to the specified value.
+
+```java
+public interface Map {
+    default boolean remove(Object key, Object value) {
+        Object curValue = get(key);
+        if (!Objects.equals(curValue, value) ||
+                (curValue == null && !containsKey(key))) {
+            return false;
+        }
+        remove(key);
+        return true;
+    }
+}
+```
+
+##### replace
+Replaces the entry for the specified key only if currently mapped to the specified value.
+```java
+public interface Map {
+    default boolean replace(K key, V oldValue, V newValue) {
+        Object curValue = get(key);
+        if (!Objects.equals(curValue, oldValue) ||
+                (curValue == null && !containsKey(key))) {
+            return false;
+        }
+        put(key, newValue);
+        return true;
+    }
+}
+```
+Replaces the entry for the specified key only if it is currently mapped to some value.
+```java
+public interface Map {
+    default V replace(K key, V value) {
+        V curValue;
+        if (((curValue = get(key)) != null) || containsKey(key)) {
+            curValue = put(key, value);
+        }
+        return curValue;
+    }
+}
+```
+
+Replaces each entry's value with the result of invoking the given function on that entry until all entries have been processed or the function throws an exception.
+Exceptions thrown by the function are relayed to the caller.
+```java
+public interface Map {
+    default void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
+        Objects.requireNonNull(function);
+        for (Map.Entry<K, V> entry : entrySet()) {
+            K k;
+            V v;
+            try {
+                k = entry.getKey();
+                v = entry.getValue();
+            } catch (IllegalStateException ise) {
+                // this usually means the entry is no longer in the map.
+                throw new ConcurrentModificationException(ise);
+            }
+
+            // ise thrown from function is not a cme.
+            v = function.apply(k, v);
+
+            try {
+                entry.setValue(v);
+            } catch (IllegalStateException ise) {
+                // this usually means the entry is no longer in the map.
+                throw new ConcurrentModificationException(ise);
+            }
+        }
+    }
+}
+```
+
+
+##### computeIfAbsent
 
 If the specified key is not already associated with a value (or is mapped to null), attempts to compute its value using the given mapping function and enters it into this map unless null.
 - If the function returns null no mapping is recorded.
@@ -780,7 +871,7 @@ public interface Map {
 }
 ```
 
-**computeIfPresent**
+##### computeIfPresent
 
 If the value for the specified key is present and non-null, attempts to compute a new mapping given the key and its current mapped value.
 - If the function returns null, the mapping is removed. 
@@ -806,9 +897,70 @@ public interface Map {
 }
 ```
 
-Removes the entry for the specified key only if it is currently mapped to the specified value.
 
+##### compute
 
+Attempts to compute a mapping for the specified key and its current mapped value (or null if there is no current mapping). For example, to either create or append a String msg to a value mapping:
+`map.compute(key, (k, v) -> (v == null) ? msg : v.concat(msg))`
+
+Method [merge()](/docs/CS/Java/JDK/Collection/Map.md?id=merge) is often simpler to use for such purposes.)
+- If the function returns null, the mapping is removed (or remains absent if initially absent). 
+- If the function itself throws an (unchecked) exception, the exception is rethrown, and the current mapping is left unchanged.
+
+```java
+public interface Map {
+    default V compute(K key,
+                      BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+        Objects.requireNonNull(remappingFunction);
+        V oldValue = get(key);
+
+        V newValue = remappingFunction.apply(key, oldValue);
+        if (newValue == null) {
+            // delete mapping
+            if (oldValue != null || containsKey(key)) {
+                // something to remove
+                remove(key);
+                return null;
+            } else {
+                // nothing to do. Leave things as they were.
+                return null;
+            }
+        } else {
+            // add or replace old mapping
+            put(key, newValue);
+            return newValue;
+        }
+    }
+}
+```
+
+##### merge
+
+f the specified key is not already associated with a value or is associated with null, associates it with the given non-null value. 
+Otherwise, replaces the associated value with the results of the given remapping function, or removes if the result is null.
+This method may be of use when combining multiple mapped values for a key. For example, to either create or append a String msg to a value mapping:
+`map.merge(key, msg, String::concat)`
+
+- If the function returns null the mapping is removed. 
+- If the function itself throws an (unchecked) exception, the exception is rethrown, and the current mapping is left unchanged.
+```java
+public interface Map {
+    default V merge(K key, V value,
+                    BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+        Objects.requireNonNull(remappingFunction);
+        Objects.requireNonNull(value);
+        V oldValue = get(key);
+        V newValue = (oldValue == null) ? value :
+                remappingFunction.apply(oldValue, value);
+        if (newValue == null) {
+            remove(key);
+        } else {
+            put(key, newValue);
+        }
+        return newValue;
+    }
+}
+```
 
 ## ConcurrentHashMap
 
