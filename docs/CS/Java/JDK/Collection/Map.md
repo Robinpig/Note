@@ -703,6 +703,112 @@ final Node<K,V> untreeify(HashMap<K,V> map) {
 ```
 
 
+### Methods
+
+The default implementation makes no guarantees about synchronization or atomicity properties of this method.
+Any implementation providing atomicity guarantees must override this method and document its concurrency properties.
+In particular, all implementations of subinterface java.util.concurrent.ConcurrentMap must document whether the function is applied once atomically only if the value is not present.
+
+
+**getOrDefault**
+
+Returns the value to which the specified key is mapped, or defaultValue if this map contains no mapping for the key.
+
+> [!TIP]
+> 
+> get
+> 
+> If this map permits null values, then a return value of null does not necessarily indicate that the map contains no mapping for the key; 
+> it's also possible that the map explicitly maps the key to null.
+> The `containsKey` operation may be used to distinguish these two cases.
+
+```java
+public interface Map {
+    default V getOrDefault(Object key, V defaultValue) {
+        V v;
+        return (((v = get(key)) != null) || containsKey(key))
+                ? v
+                : defaultValue; // get(key)
+    }
+}
+```
+
+**forEach**
+
+Performs the given action for each entry in this map until all entries have been processed or the action throws an exception. Unless otherwise specified by the implementing class, actions are performed in the order of entry set iteration (if an iteration order is specified.) Exceptions thrown by the action are relayed to the caller.
+
+```java
+public interface Map {
+    default void forEach(BiConsumer<? super K, ? super V> action) {
+        Objects.requireNonNull(action);
+        for (Map.Entry<K, V> entry : entrySet()) {
+            K k;
+            V v;
+            try {
+                k = entry.getKey();
+                v = entry.getValue();
+            } catch (IllegalStateException ise) {
+                // this usually means the entry is no longer in the map.
+                throw new ConcurrentModificationException(ise);
+            }
+            action.accept(k, v);
+        }
+    }
+}
+```
+
+**computeIfAbsent**
+
+If the specified key is not already associated with a value (or is mapped to null), attempts to compute its value using the given mapping function and enters it into this map unless null.
+- If the function returns null no mapping is recorded.
+- If the function itself throws an (unchecked) exception, the exception is rethrown, and no mapping is recorded.
+```java
+public interface Map {
+    default V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+        Objects.requireNonNull(mappingFunction);
+        V v;
+        if ((v = get(key)) == null) {
+            V newValue;
+            if ((newValue = mappingFunction.apply(key)) != null) {
+                put(key, newValue);
+                return newValue;
+            }
+        }
+
+        return v;
+    }
+}
+```
+
+**computeIfPresent**
+
+If the value for the specified key is present and non-null, attempts to compute a new mapping given the key and its current mapped value.
+- If the function returns null, the mapping is removed. 
+- If the function itself throws an (unchecked) exception, the exception is rethrown, and the current mapping is left unchanged.
+```java
+public interface Map {
+    default V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
+        Objects.requireNonNull(remappingFunction);
+        V oldValue;
+        if ((oldValue = get(key)) != null) {
+            V newValue = remappingFunction.apply(key, oldValue);
+            if (newValue != null) {
+                put(key, newValue);
+                return newValue;
+            } else {
+                remove(key);
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+}
+```
+
+Removes the entry for the specified key only if it is currently mapped to the specified value.
+
+
 
 ## ConcurrentHashMap
 
