@@ -131,47 +131,36 @@ Compare
 
 ## Stream
 
-Compared to collections, streams provide a view of data that lets you specify computations at a higher conceptual level.
-With a stream, you specify what you want to have done, not how to do it. 
-You leave the scheduling of operations to the implementation. 
-For example, suppose you want to compute the average of a certain property.
-You specify the source of data and the property, and the stream library can then optimize the computation, for example by using multiple threads for computing sums and counts and combining the results.
 
-*A Stream is a tool for building up complex operations on collections using a functional approach.*
+A sequence of elements supporting sequential and parallel aggregate operations.
+The following example illustrates an aggregate operation using Stream and IntStream:
+```
+int sum = widgets.stream()                   
+                 .filter(w -> w.getColor() == RED)                   
+                 .mapToInt(w -> w.getWeight())                   
+                 .sum();
+```
+In this example, widgets is a Collection<Widget>. We create a stream of Widget objects via Collection.stream(), filter it to produce a stream containing only the red widgets, and then transform it into a stream of int values representing the weight of each red widget. Then this stream is summed to produce a total weight.
 
-When you process a collection, you usually iterate over its elements and do some work with each of them.
- For example, suppose we want to count all long words in a book.
- First, let’s put them into a list:
+In addition to Stream, which is a stream of object references, there are primitive specializations for IntStream, LongStream, and DoubleStream, all of which are referred to as "streams" and conform to the characteristics and restrictions described here.
 
-var contents =  Files.readString(Path.of("alice.txt")); // Read file into string
-```
-List<String> words = List.of(contents.split("\\PL+"));
-// Split into words; nonletters are delimiters
-```
-Now we are ready to iterate:
-```
-int count = 0;
-for (String w : words)
-{
-if (w.length() > 12) count++;
-}
-```
-With streams, the same operation looks like this:
-```
-long count = words.stream()
-.filter(w -> w.length() > 12)
-.count();
-```
-Now you don't have to scan the loop for evidence of filtering and counting. The method names tell you right away what the code intends to do. 
-Moreover, where the loop prescribes the order of operations in complete detail, a stream is able to schedule the operations any way it wants, as long as the result is correct.
-Simply changing stream to parallelStream allows the stream library to do the filtering and counting in parallel.
-```
-long count = words.parallelStream()
-.filter(w -> w.length() > 12)
-.count();
-```
-Streams follow the “what, not how” principle. In our stream example, we describe what needs to be done: get the long words and count them. We don't specify in which order, or in which thread, this should happen. 
-In contrast, the loop at the beginning of this section specifies exactly how the computation should work, and thereby forgoes any chances of optimization.
+To perform a computation, stream operations are composed into a stream pipeline. A stream pipeline consists of a source (which might be an array, a collection, a generator function, an I/O channel, etc), zero or more intermediate operations (which transform a stream into another stream, such as filter(Predicate)), and a terminal operation (which produces a result or side-effect, such as count() or forEach(Consumer)). Streams are lazy; computation on the source data is only performed when the terminal operation is initiated, and source elements are consumed only as needed.
+
+Collections and streams, while bearing some superficial similarities, have different goals. Collections are primarily concerned with the efficient management of, and access to, their elements. By contrast, streams do not provide a means to directly access or manipulate their elements, and are instead concerned with declaratively describing their source and the computational operations which will be performed in aggregate on that source. However, if the provided stream operations do not offer the desired functionality, the iterator() and spliterator() operations can be used to perform a controlled traversal.
+
+A stream pipeline, like the "widgets" example above, can be viewed as a query on the stream source. Unless the source was explicitly designed for concurrent modification (such as a ConcurrentHashMap), unpredictable or erroneous behavior may result from modifying the stream source while it is being queried.
+
+Most stream operations accept parameters that describe user-specified behavior, such as the lambda expression w -> w.getWeight() passed to mapToInt in the example above. To preserve correct behavior, these behavioral parameters:
+- must be non-interfering (they do not modify the stream source); and
+- in most cases must be stateless (their result should not depend on any state that might change during execution of the stream pipeline).
+
+Such parameters are always instances of a functional interface such as Function, and are often lambda expressions or method references. Unless otherwise specified these parameters must be non-null.
+
+A stream should be operated on (invoking an intermediate or terminal stream operation) only once. This rules out, for example, "forked" streams, where the same source feeds two or more pipelines, or multiple traversals of the same stream. A stream implementation may throw IllegalStateException if it detects that the stream is being reused. However, since some stream operations may return their receiver rather than a new stream object, it may not be possible to detect reuse in all cases.
+
+Streams have a close() method and implement AutoCloseable, but nearly all stream instances do not actually need to be closed after use. Generally, only streams whose source is an IO channel (such as those returned by Files.lines(Path, Charset)) will require closing. Most streams are backed by collections, arrays, or generating functions, which require no special resource management. (If a stream does require closing, it can be declared as a resource in a try-with-resources statement.)
+
+Stream pipelines may execute either sequentially or in parallel. This execution mode is a property of the stream. Streams are created with an initial choice of sequential or parallel execution. (For example, Collection.stream() creates a sequential stream, and Collection.parallelStream() creates a parallel one.) This choice of execution mode may be modified by the sequential() or parallel() methods, and may be queried with the isParallel() method.
 
 A stream seems superficially similar to a collection, allowing you to transform and retrieve data. But there are significant differences:
 
@@ -190,6 +179,11 @@ This workflow is typical when you work with streams. You set up a pipeline of op
 1. Apply a terminal operation to produce a result. This operation forces the execution of the lazy operations that precede it. Afterwards, the stream can no longer be used.
 
 In the previous example, the stream is created with the stream or parallelStream methods. The filter method transforms it, and count is the terminal operation.
+
+
+Stream operations are either intermediate or terminal. 
+Intermediate operations return a stream so we can chain multiple intermediate operations without using semicolons. 
+Terminal operations are either void or return a non-stream result.
 
 
 
@@ -387,3 +381,4 @@ use Predicate interface
 1. [底层原理之旅—带你看透Lambda表达式的本质](https://juejin.cn/post/6966839856421044237)
 2. [JSR 335: Lambda Expressions for the JavaTM Programming Language](https://jcp.org/en/jsr/detail?id=335)
 3. [Project Lambda](https://openjdk.java.net/projects/lambda/)
+4. [Java 8 Stream Tutorial](https://winterbe.com/posts/2014/07/31/java8-stream-tutorial-examples/)
