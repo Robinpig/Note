@@ -1,7 +1,6 @@
 ## Introduction
 
-
-- [Object](/docs/CS/Java/JDK/Basic/Object.md)
+- 
 - [String](/docs/CS/Java/JDK/Basic/String.md)
 - [SPI](/docs/CS/Java/JDK/Basic/SPI.md)
 - [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)

@@ -1,4 +1,56 @@
-## Lambda
+## Lambda expressions
+
+In computer programming, an anonymous function (function literal, lambda abstraction, lambda function, lambda expression or block) is a function definition that is not bound to an identifier.
+Anonymous functions are often arguments being passed to higher-order functions or used for constructing the result of a higher-order function that needs to return a function.
+If the function is only used once, or a limited number of times, an anonymous function may be syntactically lighter than using a named function.
+Anonymous functions are ubiquitous in functional programming languages and other languages with first-class functions, where they fulfil the same role for the function type as literals do for other data types.
+
+The names "lambda abstraction", "lambda function", and "lambda expression" refer to the notation of function abstraction in lambda calculus, where the usual function f(x) = M would be written (λx.M) (M is an expression that uses x).
+Compare to the Python syntax of lambda x: M.
+The name "arrow function" refers to the mathematical "maps to" symbol, x ↦ M. Compare to the JavaScript syntax of x => M.
+
+Anonymous functions can be used for containing functionality that need not be named and possibly for short-term use. Some notable examples include closures and currying.
+
+**The use of anonymous functions is a matter of style.**
+Using them is never the only way to solve a problem; each anonymous function could instead be defined as a named function and called by name.
+Some programmers use anonymous functions to encapsulate specific, non-reusable code without littering the code with a lot of little one-line normal functions.
+
+In some programming languages, anonymous functions are commonly implemented for very specific purposes such as binding events to callbacks or instantiating the function for particular values, which may be more efficient, more readable, and less error-prone than calling a more-generic named function.
+
+Closures are functions evaluated in an environment containing bound variables. The following example binds the variable "threshold" in an anonymous function that compares the input to the threshold.
+
+It would be impractical to create a function for every possible comparison function and may be too inconvenient to keep the threshold around for further use.
+Regardless of the reason why a closure is used, the anonymous function is the entity that contains the functionality that does the comparing.
+
+Currying is the process of changing a function so that rather than taking multiple inputs, it takes a single input and returns a function which accepts the second input, and so forth.
+In this example, a function that performs division by any integer is transformed into one that performs division by a set integer.
+
+While the use of anonymous functions is perhaps not common with currying, it still can be used. In the above example, the function divisor generates functions with a specified divisor.
+The functions half and third curry the divide function with a fixed divisor.
+
+The divisor function also forms a closure by binding the variable d.
+
+A higher-order function is a function that takes a function as an argument.
+This is commonly used to customize the behavior of a generically defined function, often a looping construct or recursion scheme.
+Anonymous functions are a convenient way to specify such function arguments.
+
+A fold function runs over all elements in a structure (for lists usually left-to-right, a "left fold", called reduce in Python), accumulating a value as it goes.
+This can be used to combine all elements of a structure into one value, for example:
+
+
+Like local and anonymous classes, lambda expressions can capture variables; they have the same access to local variables of the enclosing scope.
+However, unlike local and anonymous classes, lambda expressions do not have any [shadowing](/docs/CS/Java/JDK/Basic/Object.md?id=Shadowing) issues.
+Lambda expressions are lexically scoped. This means that they do not inherit any names from a supertype or introduce a new level of scoping. 
+Declarations in a lambda expression are interpreted just as they are in the enclosing environment.
+
+### Method References
+
+Sometimes, however, a lambda expression does nothing but call an existing method. In those cases, it's often clearer to refer to the existing method by name. 
+Method references enable you to do this; they are compact, easy-to-read lambda expressions for methods that already have a name.
+
+
+
+
 
 - Anonymous Inner Class -> invokespecial
 - lambda -> invokedynamic
@@ -116,9 +168,9 @@ A sequence of elements supporting sequential and parallel aggregate operations.
 The following example illustrates an aggregate operation using Stream and IntStream:
 
 ```
-int sum = widgets.stream()                 
-                 .filter(w -> w.getColor() == RED)                 
-                 .mapToInt(w -> w.getWeight())                 
+int sum = widgets.stream()               
+                 .filter(w -> w.getColor() == RED)               
+                 .mapToInt(w -> w.getWeight())               
                  .sum();
 ```
 
@@ -173,9 +225,6 @@ Terminal operations are either void or return a non-stream result.
 
 ##### **External Iteration**
 
-
-
-
 Counting London-based artists using a for loop
 
 ```java
@@ -187,8 +236,7 @@ for (Artist artist : allArtists) {
 }
 ```
 
-
-Looking under the covers a little bit, the for loop is actually syntactic sugar that wraps up the iteration and hides it. 
+Looking under the covers a little bit, the for loop is actually syntactic sugar that wraps up the iteration and hides it.
 It’s worth taking a moment to look at what’s going on under the hood here. The first step in this process is a call to the iterator method, which creates a new **Iterator** object in order to control the iteration process. We call this **external iteration**.
 The iteration then proceeds by explicitly calling the hasNext and next methods on this Iterator.
 
@@ -204,7 +252,6 @@ while(iterator.hasNext()) {
     }
 }
 ```
-
 
 <div style="text-align: center;">
 
