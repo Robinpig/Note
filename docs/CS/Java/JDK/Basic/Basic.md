@@ -10,7 +10,7 @@
 - [Direct Buffer](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
 - [JDK Tools and Utilities](/docs/CS/Java/JDK/Basic/Tools.md)
 - [Annotation](/docs/CS/Java/JDK/Basic/Annotation.md)
-
+- [Lambda](/docs/CS/Java/JDK/Basic/Lambda.md)
 
 Like the Java programming language, the Java Virtual Machine operates on two kinds of types: [primitive types](/docs/CS/Java/JDK/Basic/PrimitiveType.md) and reference types.
 
