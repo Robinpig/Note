@@ -32,3 +32,7 @@ Vmware workstation 16 with macOS 11
 
 
 TODO: [beamoff](https://github.com/JasF/beamoff.git) for vmware mac to fix high latency
+
+[Opencore Gen-X](https://github.com/Pavo-IM/OC-Gen-X)
+
+[OpenCore Sanity Checker](https://opencore.slowgeek.com/)
