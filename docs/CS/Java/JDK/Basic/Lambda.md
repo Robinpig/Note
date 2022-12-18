@@ -37,20 +37,20 @@ Anonymous functions are a convenient way to specify such function arguments.
 A fold function runs over all elements in a structure (for lists usually left-to-right, a "left fold", called reduce in Python), accumulating a value as it goes.
 This can be used to combine all elements of a structure into one value, for example:
 
-
 Like local and anonymous classes, lambda expressions can capture variables; they have the same access to local variables of the enclosing scope.
 However, unlike local and anonymous classes, lambda expressions do not have any [shadowing](/docs/CS/Java/JDK/Basic/Object.md?id=Shadowing) issues.
-Lambda expressions are lexically scoped. This means that they do not inherit any names from a supertype or introduce a new level of scoping. 
+Lambda expressions are lexically scoped. This means that they do not inherit any names from a supertype or introduce a new level of scoping.
 Declarations in a lambda expression are interpreted just as they are in the enclosing environment.
+
+Lambda Expressions, a new language feature, has been introduced in this release.
+They enable you to treat functionality as a method argument, or code as data.
+Lambda expressions let you express instances of single-method interfaces (referred to as functional interfaces) more compactly.
 
 ### Method References
 
-Sometimes, however, a lambda expression does nothing but call an existing method. In those cases, it's often clearer to refer to the existing method by name. 
+Sometimes, however, a lambda expression does nothing but call an existing method.
+In those cases, it's often clearer to refer to the existing method by name.
 Method references enable you to do this; they are compact, easy-to-read lambda expressions for methods that already have a name.
-
-
-
-
 
 - Anonymous Inner Class -> invokespecial
 - lambda -> invokedynamic
@@ -140,13 +140,16 @@ Compare
 
 ## Functional Interface
 
-*There are some interfaces in Java that have only a single method but aren’t normally meant to be implemented by lambda expressions. For example, they might assume that the object has internal state and be interfaces with a single method only coincidentally. A couple of good examples are **java.lang.Comparable** and **java.io.Closeable**.*
+*There are some interfaces in Java that have only a single method but aren’t normally meant to be implemented by lambda expressions.
+For example, they might assume that the object has internal state and be interfaces with a single method only coincidentally.
+A couple of good examples are **java.lang.Comparable** and **java.io.Closeable**.*
 
-*In contrast to Closeable and Comparable, all the new interfaces introduced in order to provide Stream interoperability are expected to be implemented by lambda expressions. They are really there to **bundle up blocks of code as data**. Consequently, they have the @FunctionalInterface annotation applied.*
+*In contrast to Closeable and Comparable, all the new interfaces introduced in order to provide Stream interoperability are expected to be implemented by lambda expressions.
+They are really there to **bundle up blocks of code as data**. Consequently, they have the @FunctionalInterface annotation applied.*
 
 
 | Functional Interface | Parameter Type | Return Type | Scence |
-| ---------------------- | ---------------- | ------------- | -------- |
+| -------------------- | -------------- | ----------- | ------ |
 | Consumer             | T              | void        |        |
 | Supplier             | -              | T           |        |
 | Function<T,R>        | T              | R           |        |
@@ -154,7 +157,7 @@ Compare
 
 
 | Functional Interface | Parameter Type | Return Type | Scence                |
-| ---------------------- | ---------------- | ------------- | ----------------------- |
+| -------------------- | -------------- | ----------- | --------------------- |
 | Comparator<T>        | T              | int         | A comparison function |
 |                      |                |             |                       |
 |                      |                |             |                       |
@@ -164,45 +167,67 @@ Compare
 
 ## Stream
 
+Classes in the new `java.util.stream` package provide a Stream API to support functional-style operations on streams of elements.
+The Stream API is integrated into the Collections API, which enables bulk operations on collections, such as sequential or parallel map-reduce transformations.
+
 A sequence of elements supporting sequential and parallel aggregate operations.
 The following example illustrates an aggregate operation using Stream and IntStream:
 
 ```
-int sum = widgets.stream()               
-                 .filter(w -> w.getColor() == RED)               
-                 .mapToInt(w -> w.getWeight())               
+int sum = widgets.stream()       
+                 .filter(w -> w.getColor() == RED)       
+                 .mapToInt(w -> w.getWeight())       
                  .sum();
 ```
 
-In this example, widgets is a Collection<Widget>. We create a stream of Widget objects via Collection.stream(), filter it to produce a stream containing only the red widgets, and then transform it into a stream of int values representing the weight of each red widget. Then this stream is summed to produce a total weight.
+In this example, widgets is a Collection<Widget>. We create a stream of Widget objects via Collection.stream(), filter it to produce a stream containing only the red widgets, and then transform it into a stream of int values representing the weight of each red widget.
+Then this stream is summed to produce a total weight.
 
 In addition to Stream, which is a stream of object references, there are primitive specializations for IntStream, LongStream, and DoubleStream, all of which are referred to as "streams" and conform to the characteristics and restrictions described here.
 
-To perform a computation, stream operations are composed into a stream pipeline. A stream pipeline consists of a source (which might be an array, a collection, a generator function, an I/O channel, etc), zero or more intermediate operations (which transform a stream into another stream, such as filter(Predicate)), and a terminal operation (which produces a result or side-effect, such as count() or forEach(Consumer)). Streams are lazy; computation on the source data is only performed when the terminal operation is initiated, and source elements are consumed only as needed.
+To perform a computation, stream operations are composed into a stream pipeline.
+A stream pipeline consists of a source (which might be an array, a collection, a generator function, an I/O channel, etc), zero or more intermediate operations (which transform a stream into another stream, such as filter(Predicate)), and a terminal operation (which produces a result or side-effect, such as count() or forEach(Consumer)).
+Streams are lazy; computation on the source data is only performed when the terminal operation is initiated, and source elements are consumed only as needed.
 
-Collections and streams, while bearing some superficial similarities, have different goals. Collections are primarily concerned with the efficient management of, and access to, their elements. By contrast, streams do not provide a means to directly access or manipulate their elements, and are instead concerned with declaratively describing their source and the computational operations which will be performed in aggregate on that source. However, if the provided stream operations do not offer the desired functionality, the iterator() and spliterator() operations can be used to perform a controlled traversal.
+Collections and streams, while bearing some superficial similarities, have different goals.
+Collections are primarily concerned with the efficient management of, and access to, their elements.
+By contrast, streams do not provide a means to directly access or manipulate their elements, and are instead concerned with declaratively describing their source and the computational operations which will be performed in aggregate on that source.
+However, if the provided stream operations do not offer the desired functionality, the iterator() and spliterator() operations can be used to perform a controlled traversal.
 
-A stream pipeline, like the "widgets" example above, can be viewed as a query on the stream source. Unless the source was explicitly designed for concurrent modification (such as a ConcurrentHashMap), unpredictable or erroneous behavior may result from modifying the stream source while it is being queried.
+A stream pipeline, like the "widgets" example above, can be viewed as a query on the stream source.
+Unless the source was explicitly designed for concurrent modification (such as a ConcurrentHashMap), unpredictable or erroneous behavior may result from modifying the stream source while it is being queried.
 
-Most stream operations accept parameters that describe user-specified behavior, such as the lambda expression w -> w.getWeight() passed to mapToInt in the example above. To preserve correct behavior, these behavioral parameters:
+Most stream operations accept parameters that describe user-specified behavior, such as the lambda expression w -> w.getWeight() passed to mapToInt in the example above.
+To preserve correct behavior, these behavioral parameters:
 
 - must be non-interfering (they do not modify the stream source); and
 - in most cases must be stateless (their result should not depend on any state that might change during execution of the stream pipeline).
 
-Such parameters are always instances of a functional interface such as Function, and are often lambda expressions or method references. Unless otherwise specified these parameters must be non-null.
+Such parameters are always instances of a functional interface such as Function, and are often lambda expressions or method references.
+Unless otherwise specified these parameters must be non-null.
 
-A stream should be operated on (invoking an intermediate or terminal stream operation) only once. This rules out, for example, "forked" streams, where the same source feeds two or more pipelines, or multiple traversals of the same stream. A stream implementation may throw IllegalStateException if it detects that the stream is being reused. However, since some stream operations may return their receiver rather than a new stream object, it may not be possible to detect reuse in all cases.
+A stream should be operated on (invoking an intermediate or terminal stream operation) only once.
+This rules out, for example, "forked" streams, where the same source feeds two or more pipelines, or multiple traversals of the same stream.
+A stream implementation may throw IllegalStateException if it detects that the stream is being reused.
+However, since some stream operations may return their receiver rather than a new stream object, it may not be possible to detect reuse in all cases.
 
-Streams have a close() method and implement AutoCloseable, but nearly all stream instances do not actually need to be closed after use. Generally, only streams whose source is an IO channel (such as those returned by Files.lines(Path, Charset)) will require closing. Most streams are backed by collections, arrays, or generating functions, which require no special resource management. (If a stream does require closing, it can be declared as a resource in a try-with-resources statement.)
+Streams have a close() method and implement AutoCloseable, but nearly all stream instances do not actually need to be closed after use.
+Generally, only streams whose source is an IO channel (such as those returned by Files.lines(Path, Charset)) will require closing.
+Most streams are backed by collections, arrays, or generating functions, which require no special resource management.
+(If a stream does require closing, it can be declared as a resource in a try-with-resources statement.)
 
-Stream pipelines may execute either sequentially or in parallel. This execution mode is a property of the stream. Streams are created with an initial choice of sequential or parallel execution. (For example, Collection.stream() creates a sequential stream, and Collection.parallelStream() creates a parallel one.) This choice of execution mode may be modified by the sequential() or parallel() methods, and may be queried with the isParallel() method.
+Stream pipelines may execute either sequentially or in parallel. This execution mode is a property of the stream.
+Streams are created with an initial choice of sequential or parallel execution.
+(For example, Collection.stream() creates a sequential stream, and Collection.parallelStream() creates a parallel one.)
+This choice of execution mode may be modified by the sequential() or parallel() methods, and may be queried with the isParallel() method.
 
 A stream seems superficially similar to a collection, allowing you to transform and retrieve data. But there are significant differences:
 
 - A stream does not store its elements. They may be stored in an underlying collection or generated on demand.
 - Stream operations don't mutate their source. For example, the filter method does not remove elements from a stream but yields a new stream in which they are not “present.
 - Stream operations are lazy when possible. This means they are not executed until their result is needed.
-  For example, if you only ask for the first five long words instead of all, the filter method will stop filtering after the fifth match. As a consequence, you can even have infinite streams!
+  For example, if you only ask for the first five long words instead of all, the filter method will stop filtering after the fifth match.
+- As a consequence, you can even have infinite streams!
 
 Let us have another look at the example. The stream and parallelStream methods yield a stream for the words list.
 The filter method returns another stream that contains only the words of length greater than 12. The count method reduces that stream to a result.
@@ -237,7 +262,8 @@ for (Artist artist : allArtists) {
 ```
 
 Looking under the covers a little bit, the for loop is actually syntactic sugar that wraps up the iteration and hides it.
-It’s worth taking a moment to look at what’s going on under the hood here. The first step in this process is a call to the iterator method, which creates a new **Iterator** object in order to control the iteration process. We call this **external iteration**.
+It’s worth taking a moment to look at what’s going on under the hood here.
+The first step in this process is a call to the iterator method, which creates a new **Iterator** object in order to control the iteration process. We call this **external iteration**.
 The iteration then proceeds by explicitly calling the hasNext and next methods on this Iterator.
 
 Counting London-based artists using an iterator
@@ -294,7 +320,8 @@ It’s very easy to figure out whether an operation is eager or lazy: **look at 
 
 *Collection provide a **default method** to avert all third-party collections libraries being broken.*
 
-*default methods are designed primarily to allow binary compatible API evolution. Allowing classes to win over any default methods simplifies a lot of Hierarchy scenarios.*
+*default methods are designed primarily to allow binary compatible API evolution.
+Allowing classes to win over any default methods simplifies a lot of Hierarchy scenarios.*
 
 #### Arrays
 
@@ -361,7 +388,8 @@ public <P_IN> R evaluateParallel(PipelineHelper<T> helper,
 
 #### Use caution when making streams parallel
 
-As a rule, performance gains from parallelism are best on streams over ArrayList, HashMap, HashSet, and ConcurrentHashMap instances; arrays; int ranges; and long ranges. What these data structures have in common is that they can all be accurately and cheaply split into subranges of any desired sizes, which makes it easy to divide work among parallel threads.
+As a rule, performance gains from parallelism are best on streams over ArrayList, HashMap, HashSet, and ConcurrentHashMap instances; arrays; int ranges; and long ranges.
+What these data structures have in common is that they can all be accurately and cheaply split into subranges of any desired sizes, which makes it easy to divide work among parallel threads.
 
 Another important factor that all of these data structures have in common is that they provide good-to-excellent locality of reference when processed sequentially: sequential element references are stored together in memory.
 
@@ -389,9 +417,81 @@ use Predicate interface
 
 ### Key Points
 
-*Whenever you pass lambda expressions into the higher-order functions on the Stream interface, you should seek to **avoid side effects**. The only exception to this is the **forEach** method, which is a terminal operation.*
+*Whenever you pass lambda expressions into the higher-order functions on the Stream interface, you should seek to **avoid side effects**.
+The only exception to this is the **forEach** method, which is a terminal operation.*
 
 *A significant performance advantage can be had by **using primitive specialized lambda expressions and streams** such as IntStream.*
+
+### Stream discuss
+
+Probably the worst thing about Java 8 streams is that they’re usable only once. As soon as a terminal method has been called on them, they can no longer be used. Any further access will produce an exception.
+This has two consequences.
+
+- The first is that memoization isn’t possible. Instead of accessing a stream a second time, you can only create a new one.
+  The result is that if the values were lazily evaluated, they’ll have to be evaluated again.
+- The second consequence is even worse: Java 8 streams can’t be used in the comprehension pattern.
+
+## Optional
+
+The Optional class has a get method that will return the “enclosed” value if there is one, and null otherwise. Of course, calling this method defeats the original goal.
+If you want to use the Optional class, you should remember to never call get.
+You might object that the Option class has the getOrThrow method which, although never returning null, will throw an exception if no data is available.
+But this method is protected, and the class can’t be extended from outside.
+This makes a huge difference. This method is equivalent to the head or tail methods in List: they should never be called from outside.
+
+Besides this, the Optional class suffers from the same limitations as Option: Optional can be used for truly optional data, but generally the absence of data is due to an error.
+Optional, like Option, doesn’t allow you to carry the error cause, so it’s only useful for truly optional data, which means when the cause for
+the absence of data is obvious, such as returning a value from a map, or the position of a character in a string.
+If the get(key) method of a map returns no value, whether it means null or an empty Optional, it should be obvious that the key wasn’t found.
+And if the indexOf(char) method returns no value or an empty Optional, it should mean that the character isn’t present in the string.
+
+But even this isn’t true. The get(key) method of a map could return null because the null value was stored under that key.
+Or it could return no value because the key was null (provided null isn’t a valid key).
+The indexOf(char) method could also return no value for many reasons, such as a negative argument. Returning Optional in these cases wouldn’t indicate the nature of the error.
+Furthermore, this Optional would be difficult to compose with values returned by other methods that could produce errors.
+
+## Monad
+
+## Functional
+
+I defined pure functions as functions without any observable side effects. An effect is anything that can be observed from outside the program.
+The role of a function is to return a value, and a side effect is anything, besides the returned value, that’s observable from the outside of the function.
+It’s called a side effect because it comes in addition to the value that’s returned.
+An effect (without “side”) is like a side effect, but it’s the main (and generally unique) role of a program.
+Functional programming is about writing programs with pure functions (with no side effects) and pure effects in a functional way.
+
+The question is, what does it mean to handle effects in a functional way?
+The closest definition I can give at this stage is “handling effects in a way that doesn’t interfere with the principles of functional programming, the most important principle being referential transparency.”
+There are several ways to approach or reach this goal, and reaching this goal fully can be complex.
+Often, approaching it is sufficient. It’s up to you to decide which technique you want to use.
+Applying effects to contexts is the simplest (although not fully functional) way to make otherwise functional programs produce observable effects.
+
+As I just said, an effect is anything that’s observable from outside the program.
+Of course, to be valuable, this effect must generally reflect the result of the program, so you’ll generally need to take the result of the program and do something observable with it.
+Note that “observable” doesn’t always mean observable by a human operator.
+Often the result is observable by another program, which might then translate this effect into something observable by a human operator, either in synchronous or asynchronous form.
+Printing to the computer screen can be seen by the operator.
+Writing to a database, on the other hand, might not always be directly visible to a human user. Sometimes the result will be looked up by a human, but usually it will be read later by another program.
+
+Because an effect is generally applied to a value, a pure effect can be modeled as a special kind of function, returning no value.
+I represent this in the book by the following interface:
+
+```java
+public interface Effect<T> {
+    void apply(T t);
+}
+```
+
+Note that this is equivalent to Java’s Consumer interface. Only the name of the class and the name of the method are different.
+In fact, as I mentioned several times in the beginning of this book, names are irrelevant, but meaningful names are better.
+
+“Throwing an exception in the case of a failure isn’t what you generally want to do, at least in the Result class.
+Generally it’s up to the client to decide what to do, and you might want to do something less radical than throwing an exception.
+For “example, you might want to log the exception before continuing.
+
+Logging isn’t very functional, because logging is generally a side effect. No programs are written with logging as their main goal.
+Applying an effect with a method like forEach is breaking the functional contract. This isn’t a problem in itself, but when you log, you’re suddenly ceasing to be functional—this is in some respects the end of a functional program.
+After the effect is applied, you’re ready to start another new functional program.
 
 ## Links
 
@@ -403,3 +503,4 @@ use Predicate interface
 2. [JSR 335: Lambda Expressions for the JavaTM Programming Language](https://jcp.org/en/jsr/detail?id=335)
 3. [Project Lambda](https://openjdk.java.net/projects/lambda/)
 4. [Java 8 Stream Tutorial](https://winterbe.com/posts/2014/07/31/java8-stream-tutorial-examples/)
+5. [What's Wrong with Java 8: Currying vs Closures](https://dzone.com/articles/whats-wrong-java-8-currying-vs)
