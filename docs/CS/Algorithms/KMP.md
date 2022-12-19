@@ -47,10 +47,10 @@ public class KMPSearch {
 
     /**
      * index, i
-     * 1. if equals, lps[i] = index + 1, both index and i step next
+     * 1. if equals, lps[i] = index + 1, index++ i++
      * 2. else 
      *      1. if index != 0, index = lps[index - 1]
-     *      2. else lps[i] = 0, i step
+     *      2. else lps[i] = 0, i++
      */
     private int[] computeTemporaryArray(char[] pattern) {
         int[] lps = new int[pattern.length];
