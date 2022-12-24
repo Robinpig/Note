@@ -202,8 +202,9 @@ Wrapper                 -[#008200,plain]-^  Container
 ```
 
 
-Catalina is a very sophisticated piece of software, which was elegantly designed and developed. It is also modular too.
-Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the container.。
+Catalina is a very sophisticated piece of software, which was elegantly designed and developed. 
+It is also modular too.<br>
+Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the [container](/docs/CS/Java/Tomcat/Tomcat.md?id=Container).
 
 ```plantuml
 @startuml

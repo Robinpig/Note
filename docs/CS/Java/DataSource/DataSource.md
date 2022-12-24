@@ -19,6 +19,9 @@ leak connections
 
 statement execute timeout
 
+
+Test connections with isValid() before returning them from the pool
+
 socket timeout
 
 link [TCP keepalive](/docs/CS/CN/TCP.md?id=keepalive)

@@ -13,21 +13,20 @@ Directory structure of Most Web Applications
 ```
 | -  MyWebApp
       | -  WEB-INF/web.xml  
-      | -  WEB-INF/lib/     
+      | -  WEB-INF/lib/   
       | -  WEB-INF/classes/   
-      | -  META-INF/        
+      | -  META-INF/      
 ```
 
 In functionality, servlets provide a higher level abstraction than Common Gateway Interface (CGI) programs but a lower level of abstraction than that provided by web frameworks such as Jakarta Server Faces.
-
 
 ### Servlet Container
 
 A servlet container is a complex system. However, basically there are three things that a servlet container does to service a request for a servlet:
 
-- Creating a request object and populate it with information that may be used by the invoked servlet, such as parameters, headers, cookies, query string, URI, etc. 
+- Creating a request object and populate it with information that may be used by the invoked servlet, such as parameters, headers, cookies, query string, URI, etc.
   A request object is an instance of the `javax.servlet.ServletRequest` interface or the `javax.servlet.http.ServletRequest` interface.
-- Creating a response object that the invoked servlet uses to send the response to the web client. 
+- Creating a response object that the invoked servlet uses to send the response to the web client.
   A response object is an instance of the `javax.servlet.ServletResponse` interface or the `javax.servlet.http.ServletResponse` interface.
 - Invoking the service method of the servlet, passing the request and response objects. Here the servlet reads the values from the request object and writes to the response object.
 
@@ -204,9 +203,8 @@ create a Servlet
 
 ### Servlet Life Cycle
 
-A servlet is managed through a well defined life cycle that defines how it is loaded and instantiated, is initialized, handles requests from clients, and is taken out of service. 
+A servlet is managed through a well defined life cycle that defines how it is loaded and instantiated, is initialized, handles requests from clients, and is taken out of service.
 This life cycle is expressed in the API by the init, service, and destroy methods of the jakarta.servlet.Servlet interface that all servlets must implement directly or indirectly through the GenericServlet or HttpServlet abstract classes.
-
 
 #### GenericServlet
 
@@ -531,6 +529,142 @@ public interface HttpServletResponse extends ServletResponse {
 }
 ```
 
+### DefaultServlet
+
+The default resource-serving servlet for most web applications, used to serve static resources such as HTML pages and images.
+
+This servlet is intended to be mapped to /e.g.:
+
+```xml
+<servlet-mapping>
+    <servlet-name>default</servlet-name>
+    <url-pattern>/</url-pattern>
+</servlet-mapping>
+```
+
+input output buffer
+
+```java
+    protected void serveResource(HttpServletRequest request,
+                               HttpServletResponse response,
+                               boolean content,
+                               String inputEncoding)
+          throws IOException, ServletException {
+      // ... 
+      // Check if the conditions specified in the optional If headers are
+      // satisfied.
+      if (resource.isFile()) {
+        // Checking If headers
+        included = (request.getAttribute(
+                RequestDispatcher.INCLUDE_CONTEXT_PATH) != null);
+        if (!included && !isError && !checkIfHeaders(request, response, resource)) {
+          return;
+        }
+      }
+    }
+```
+
+checkIfHeaders
+
+- Etag : If-None-Match
+- Last-Modified : If-Modified-Since
+
+```java
+public class DefaultServlet {
+  protected boolean checkIfHeaders(HttpServletRequest request,
+                                   HttpServletResponse response,
+                                   WebResource resource)
+          throws IOException {
+
+    return checkIfMatch(request, response, resource)
+            && checkIfModifiedSince(request, response, resource)
+            && checkIfNoneMatch(request, response, resource)
+            && checkIfUnmodifiedSince(request, response, resource);
+
+  }
+
+  protected boolean checkIfNoneMatch(HttpServletRequest request, HttpServletResponse response, WebResource resource)
+          throws IOException {
+
+    String headerValue = request.getHeader("If-None-Match");
+    if (headerValue != null) {
+
+      boolean conditionSatisfied;
+
+      String resourceETag = generateETag(resource);
+      if (!headerValue.equals("*")) {
+        if (resourceETag == null) {
+          conditionSatisfied = false;
+        } else {
+          // RFC 7232 requires weak comparison for If-None-Match headers
+          Boolean matched = EntityTag.compareEntityTag(new StringReader(headerValue), true, resourceETag);
+          if (matched == null) {
+            if (debug > 10) {
+              log("DefaultServlet.checkIfNoneMatch:  Invalid header value [" + headerValue + "]");
+            }
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return false;
+          }
+          conditionSatisfied = matched.booleanValue();
+        }
+      } else {
+        conditionSatisfied = true;
+      }
+
+      if (conditionSatisfied) {
+        // For GET and HEAD, we should respond with
+        // 304 Not Modified.
+        // For every other method, 412 Precondition Failed is sent
+        // back.
+        if ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())) {
+          response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+          response.setHeader("ETag", resourceETag);
+        } else {
+          response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED);
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+}
+```
+
+CacheResource
+
+If the `cachingAllowed` flag is true, the cache for static resources will be used.
+If not specified, the default value of the flag is true.
+This value may be changed while the web application is running (e.g. via JMX).
+When the cache is disabled any resources currently in the cache are cleared from the cache.
+
+The maximum size of the static resource cache in kilobytes.
+If `cacheMaxSize` not specified, the default value is 10240(10 megabytes).
+This value may be changed while the web application is running (e.g. via JMX).
+If the cache is using more memory than the new limit the cache will attempt to reduce in size over time to meet the new limit.
+If necessary, cacheObjectMaxSize will be reduced to ensure that it is no larger than cacheMaxSize/20.
+
+The amount of time in milliseconds between the revalidation of cache entries.
+If `cacheTtl` not specified, the default value is 5000 (5 seconds).
+This value may be changed while the web application is running(e.g. via JMX).
+When a resource is cached it will inherit the TTL in force at the time it was cached and retain that TTL until the resource is evicted from the cache regardless of any subsequent changes that may be made to this attribute.
+
+```java
+public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot {
+  protected WebResource getResource(String path, boolean validate,
+                                    boolean useClassLoaderResources) {
+    if (validate) {
+      path = validate(path);
+    }
+
+    if (isCachingAllowed()) {
+      return cache.getResource(path, useClassLoaderResources);
+    } else {
+      return getResourceInternal(path, useClassLoaderResources);
+    }
+  }
+}
+```
+
 ## Listener
 
 ## Filter
@@ -568,7 +702,6 @@ HttpHandler Adapter
 
 - [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
 - [Spring MVC](/docs/CS/Java/Spring/MVC.md)
-
 
 ## References
 
