@@ -398,6 +398,40 @@ Note that we allow the use of KRaft mode controller APIs when forwarding is enab
   }
 }
 ```
+Processor#run
+
+```scala
+  
+  override def run(): Unit = {
+    try {
+      while (shouldRun.get()) {
+        try {
+          // setup any new connections that have been queued up
+          configureNewConnections()
+          // register any new responses for writing
+          processNewResponses()
+          poll()
+          processCompletedReceives()
+          processCompletedSends()
+          processDisconnected()
+          closeExcessConnections()
+        } catch {
+          // We catch all the throwables here to prevent the processor thread from exiting. We do this because
+          // letting a processor exit might cause a bigger impact on the broker. This behavior might need to be
+          // reviewed if we see an exception that needs the entire broker to stop. Usually the exceptions thrown would
+          // be either associated with a specific socket channel or a bad request. These exceptions are caught and
+          // processed by the individual methods above which close the failing channel and continue processing other
+          // channels. So this catch block should only ever see ControlThrowables.
+          case e: Throwable => processException("Processor got uncaught exception.", e)
+        }
+      }
+    } finally {
+      debug(s"Closing selector - processor $id")
+      CoreUtils.swallow(closeAll(), this, Level.ERROR)
+    }
+  }
+
+```
 
 ### createTopics
 

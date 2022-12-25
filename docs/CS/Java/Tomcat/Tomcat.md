@@ -8,7 +8,7 @@ Different versions of Apache Tomcat are available for different versions of the 
 
 
 | **Servlet Spec** | **JSP Spec** | **EL Spec** | **WebSocket Spec** | **Authentication (JASPIC) Spec** | **Apache Tomcat Version** | **Latest Released Version** | **Supported Java Versions**                 |
-| ------------------ | -------------- | ------------- | -------------------- | ---------------------------------- | --------------------------- | ----------------------------- | --------------------------------------------- |
+| ---------------- | ------------ | ----------- | ------------------ | -------------------------------- | ------------------------- | --------------------------- | ------------------------------------------- |
 | 6.0              | 3.1          | 5.0         | 2.1                | 3.0                              | 10.1.x                    | 10.1.1                      | 11 and later                                |
 | 5.0              | 3.0          | 4.0         | 2.0                | 2.0                              | 10.0.x (superseded)       | 10.0.27 (superseded)        | 8 and later                                 |
 | 4.0              | 2.3          | 3.0         | 1.1                | 1.1                              | 9.0.x                     | 9.0.68                      | 8 and later                                 |
@@ -127,8 +127,6 @@ context.addServletContainerInitializer(new JasperInitializer(), null);
 
 ## Architecture
 
-
-
 ```plantuml
 @startuml
 
@@ -162,47 +160,46 @@ class StandardWrapper
 interface Valve << interface >>
 interface Wrapper << interface >>
 
-AbstractProtocol       "1" *-[#595959,plain]-> "endpoint\n1" AbstractEndpoint       
-AbstractProtocol       "1" *-[#595959,plain]-> "adapter\n1" Adapter                
-AbstractProtocol       "1" *-[#595959,plain]-> "waitingProcessors\n*" Processor              
-AbstractProtocol        -[#008200,dashed]-^  ProtocolHandler        
-ApplicationFilterChain "1" *-[#595959,plain]-> "servlet\n1" Servlet                
-Catalina               "1" *-[#595959,plain]-> "server\n1" Server                 
-Connector              "1" *-[#595959,plain]-> "adapter\n1" Adapter                
+AbstractProtocol       "1" *-[#595959,plain]-> "endpoint\n1" AbstractEndpoint     
+AbstractProtocol       "1" *-[#595959,plain]-> "adapter\n1" Adapter              
+AbstractProtocol       "1" *-[#595959,plain]-> "waitingProcessors\n*" Processor            
+AbstractProtocol        -[#008200,dashed]-^  ProtocolHandler      
+ApplicationFilterChain "1" *-[#595959,plain]-> "servlet\n1" Servlet              
+Catalina               "1" *-[#595959,plain]-> "server\n1" Server               
+Connector              "1" *-[#595959,plain]-> "adapter\n1" Adapter              
 Connector               -[#595959,dashed]->  CoyoteAdapter          : "«create»"
-Connector               -[#008200,dashed]-^  Lifecycle              
-Connector              "1" *-[#595959,plain]-> "protocolHandler\n1" ProtocolHandler        
-Connector              "1" *-[#595959,plain]-> "service\n1" Service                
-Container               -[#008200,plain]-^  Lifecycle              
-Context                 -[#008200,plain]-^  Container              
-CoyoteAdapter           -[#008200,dashed]-^  Adapter                
-CoyoteAdapter          "1" *-[#595959,plain]-> "connector\n1" Connector              
-Engine                  -[#008200,plain]-^  Container              
-Executor                -[#008200,plain]-^  Lifecycle              
-Host                    -[#008200,plain]-^  Container              
+Connector               -[#008200,dashed]-^  Lifecycle            
+Connector              "1" *-[#595959,plain]-> "protocolHandler\n1" ProtocolHandler      
+Connector              "1" *-[#595959,plain]-> "service\n1" Service              
+Container               -[#008200,plain]-^  Lifecycle            
+Context                 -[#008200,plain]-^  Container            
+CoyoteAdapter           -[#008200,dashed]-^  Adapter              
+CoyoteAdapter          "1" *-[#595959,plain]-> "connector\n1" Connector            
+Engine                  -[#008200,plain]-^  Container            
+Executor                -[#008200,plain]-^  Lifecycle            
+Host                    -[#008200,plain]-^  Container            
 Mapper                  -[#595959,dashed]->  Context                : "«create»"
-Mapper                 "1" *-[#595959,plain]-> "contextObjectToContextVersionMap\n*" Context                
-MapperListener          -[#008200,dashed]-^  Lifecycle              
-MapperListener         "1" *-[#595959,plain]-> "mapper\n1" Mapper                 
-MapperListener         "1" *-[#595959,plain]-> "service\n1" Service                
-Server                  -[#008200,plain]-^  Lifecycle              
-Service                 -[#008200,plain]-^  Lifecycle              
-StandardPipeline       "1" *-[#595959,plain]-> "container\n1" Container              
-StandardPipeline        -[#008200,dashed]-^  Lifecycle              
-StandardPipeline        -[#008200,dashed]-^  Pipeline               
+Mapper                 "1" *-[#595959,plain]-> "contextObjectToContextVersionMap\n*" Context              
+MapperListener          -[#008200,dashed]-^  Lifecycle            
+MapperListener         "1" *-[#595959,plain]-> "mapper\n1" Mapper               
+MapperListener         "1" *-[#595959,plain]-> "service\n1" Service              
+Server                  -[#008200,plain]-^  Lifecycle            
+Service                 -[#008200,plain]-^  Lifecycle            
+StandardPipeline       "1" *-[#595959,plain]-> "container\n1" Container            
+StandardPipeline        -[#008200,dashed]-^  Lifecycle            
+StandardPipeline        -[#008200,dashed]-^  Pipeline             
 StandardPipeline        -[#595959,dashed]->  Valve                  : "«create»"
-StandardPipeline       "1" *-[#595959,plain]-> "basic\n1" Valve                  
-StandardWrapper         -[#008200,dashed]-^  Container              
-StandardWrapper         -[#008200,dashed]-^  Lifecycle              
-StandardWrapper        "1" *-[#595959,plain]-> "instance\n1" Servlet                
-StandardWrapper         -[#008200,dashed]-^  Wrapper                
-Wrapper                 -[#008200,plain]-^  Container              
+StandardPipeline       "1" *-[#595959,plain]-> "basic\n1" Valve                
+StandardWrapper         -[#008200,dashed]-^  Container            
+StandardWrapper         -[#008200,dashed]-^  Lifecycle            
+StandardWrapper        "1" *-[#595959,plain]-> "instance\n1" Servlet              
+StandardWrapper         -[#008200,dashed]-^  Wrapper              
+Wrapper                 -[#008200,plain]-^  Container            
 @enduml
 
 ```
 
-
-Catalina is a very sophisticated piece of software, which was elegantly designed and developed. 
+Catalina is a very sophisticated piece of software, which was elegantly designed and developed.
 It is also modular too.<br>
 Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the [container](/docs/CS/Java/Tomcat/Tomcat.md?id=Container).
 
@@ -254,10 +251,10 @@ autosize=false;
   
     subgraph cluster_Service {
         label="Serice"
-        
+      
         Mapper;
         Mapper2[style=invis];
-        
+      
             {rank="same"; Mapper2;Mapper;}
         subgraph cluster_Connector {
             label="Connector"
@@ -282,15 +279,15 @@ autosize=false;
             Processor -> Adapter;
             Adapter -> Mapper;
             Adapter -> Processor;
-            
+          
             Processor -> SocketWrapper;
-    
+  
         }
 
         subgraph cluster_Engine {
             label="Engine"
             Engine_Valve [label="Valve"];
-            
+          
               subgraph cluster_Engine_Pipeline {
                 label="Pipeline"
                 StanardEngineValve[label="Stanard\nEngineValve"]
@@ -318,7 +315,7 @@ autosize=false;
                     Context_Valve [label="Valve"];
                     subgraph cluster_Wrapper_1 {
                         label="Wrapper"
-                        
+                      
                         subgraph cluster_Host_Pipeline {
                           label="Pipeline"
                           StandardWrapperValve[label="Standard\nWrapperValve"]
@@ -327,12 +324,12 @@ autosize=false;
                         Wrapper_Valve_1 [label="Valve"];
                         StandardWrapperValve;
                         Servlet_1[label="Servlet"];
-                
+              
                         StandardWrapperValve -> Servlet_1 [headlabel="FilterChain"];
                     }
-                    
+                  
                 }
-    
+  
             }
         }
     }
@@ -384,9 +381,9 @@ Host             -[#008200,plain]-^  Container
 StandardContext  -[#000082,plain]-^  ContainerBase   
 StandardContext  -[#008200,dashed]-^  Context   
 StandardEngine   -[#000082,plain]-^  ContainerBase   
-StandardEngine   -[#008200,dashed]-^  Engine    
+StandardEngine   -[#008200,dashed]-^  Engine  
 StandardHost     -[#000082,plain]-^  ContainerBase   
-StandardHost     -[#008200,dashed]-^  Host      
+StandardHost     -[#008200,dashed]-^  Host    
 StandardWrapper  -[#000082,plain]-^  ContainerBase   
 StandardWrapper  -[#008200,dashed]-^  Wrapper   
 Wrapper          -[#008200,plain]-^  Container   
@@ -420,7 +417,6 @@ setManager, getRealm and setRealm, and getResources and setResources.
 More interestingly, the Container interface has been designed in such a way that at the time of deployment a Tomcat administrator can determine what a container performs by editing the configuration file (server.xml).
 This is achieved by introducing a pipeline and a set of valves in a container.
 
-
 #### Engine
 
 An Engine is a Container that represents the entire Catalina servlet engine. It is useful in the following types of scenarios:
@@ -449,13 +445,12 @@ The parent Container attached to a Wrapper will generally be an implementation o
 Since a wrapper is the lowest level of container, you must not add a child to it.
 Child Containers are not allowed on Wrapper implementations, so the addChild() method should throw an IllegalArgumentException.
 
-
 ### Server and Service
 
-A Server element represents the entire Catalina servlet container. Its attributes represent the characteristics of the servlet container as a whole. 
+A Server element represents the entire Catalina servlet container. Its attributes represent the characteristics of the servlet container as a whole.
 A Server may contain one or more Services, and the top level set of naming resources.
 Normally, an implementation of this interface will also implement Lifecycle, such that when the start() and stop() methods are called, all of the defined Services are also started or stopped.
-In between, the implementation must open a server socket on the port number specified by the port property. When a connection is accepted, the first line is read and compared with the specified shutdown command. 
+In between, the implementation must open a server socket on the port number specified by the port property. When a connection is accepted, the first line is read and compared with the specified shutdown command.
 If the command matches, shutdown of the server is initiated.
 
 - JreMemoryLeakPreventionListener Provide a workaround for known places where the Java Runtime environment can cause a memory leak or lock files.
@@ -463,8 +458,6 @@ If the command matches, shutdown of the server is initiated.
   Locked files usually occur when a resource inside a JAR is accessed without first disabling Jar URL connection caching. The workaround is to disable this caching by default.
 - ThreadLocalLeakPreventionListener A LifecycleListener that triggers the renewal of threads in Executor pools when a Context is being stopped to avoid thread-local related memory leaks.
   Note : active threads will be renewed one by one when they come back to the pool after executing their task, see ThreadPoolExecutor.afterExecute().
-
-
 
 A service component encapsulates a container and one or many connectors.
 
@@ -487,6 +480,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
     private Engine engine = null;
 }
 ```
+
 ### Pipeline
 
 A pipeline contains tasks that the container will invoke.
@@ -527,7 +521,7 @@ public class CoyoteAdapter implements Adapter {
 }
 ```
 
-## reload
+## BackgroundProcess
 
 Private runnable class to invoke the backgroundProcess method of this container and its children after a fixed delay.
 
@@ -586,6 +580,7 @@ public class StandardContext extends ContainerBase implements Context, Notificat
     }
 }
 ```
+
 Execute a periodic task, such as reloading, etc. This method will be invoked inside the classloading context of this container. Unexpected throwables will be caught and logged.
 
 ```java
@@ -607,11 +602,13 @@ public class WebappLoader extends LifecycleMBeanBase implements Loader {
     }
 }
 ```
-### StandardContext#reload
+
+### reload
+
 Reload this web application, if reloading is supported.
-**This method is designed to deal with reloads required by changes to classes in the underlying repositories of our class loader and changes to the web.xml file.** 
-It does not handle changes to any context.xml file. 
-If the context.xml has changed, you should stop this Context and create (and start) a new Context instance instead. 
+**This method is designed to deal with reloads required by changes to classes in the underlying repositories of our class loader and changes to the web.xml file.**
+It does not handle changes to any context.xml file.
+If the context.xml has changed, you should stop this Context and create (and start) a new Context instance instead.
 Note that there is additional code in CoyoteAdapter#postParseRequest() to handle mapping requests to paused Contexts.
 
 ```java
@@ -634,8 +631,6 @@ public class StandardContext extends ContainerBase implements Context, Notificat
 ```
 
 ## Log
-
-
 
 ## Websocket
 
@@ -732,11 +727,9 @@ public class WsSci implements ServletContainerInitializer {
 
 WsFilter
 
-
-
 ```java
 public class UpgradeProcessorInternal extends UpgradeProcessorBase {
-    
+  
   private final InternalHttpUpgradeHandler internalHttpUpgradeHandler;
 
   public UpgradeProcessorInternal(SocketWrapperBase<?> wrapper, UpgradeToken upgradeToken,
@@ -760,11 +753,7 @@ public class UpgradeProcessorInternal extends UpgradeProcessorBase {
 }
 ```
 
-
-
 ## Links
-
-
 
 ## References
 
