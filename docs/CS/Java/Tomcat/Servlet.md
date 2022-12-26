@@ -15,7 +15,7 @@ Directory structure of Most Web Applications
       | -  WEB-INF/web.xml  
       | -  WEB-INF/lib/   
       | -  WEB-INF/classes/   
-      | -  META-INF/      
+      | -  META-INF/    
 ```
 
 In functionality, servlets provide a higher level abstraction than Common Gateway Interface (CGI) programs but a lower level of abstraction than that provided by web frameworks such as Jakarta Server Faces.
@@ -201,10 +201,29 @@ public interface ServletContext {
 
 create a Servlet
 
-### Servlet Life Cycle
+## Servlet Life Cycle
 
 A servlet is managed through a well defined life cycle that defines how it is loaded and instantiated, is initialized, handles requests from clients, and is taken out of service.
 This life cycle is expressed in the API by the init, service, and destroy methods of the jakarta.servlet.Servlet interface that all servlets must implement directly or indirectly through the GenericServlet or HttpServlet abstract classes.
+
+### Loading and Instantiation
+
+The servlet container is responsible for loading and instantiating servlets.
+The loading and instantiation can occur when the container is started, or delayed until the container determines the servlet is needed to service a request.
+
+When the servlet engine is started, needed servlet classes must be located by the servlet container.
+The servlet container loads the servlet class using normal Java class loading facilities.
+The loading may be from a local file system, a remote file system, or other network services.
+
+After loading the Servlet class, the container instantiates it for use.
+
+### Initialization
+
+After the servlet object is instantiated, the container must initialize the servlet before it can handle requests from clients.
+Initialization is provided so that a servlet can read persistent configuration data, initialize costly resources (such as JDBC™ APIbased connections), and perform other one-time activities. 
+The container initializes the servlet instance by calling the init method of the Servlet interface with a unique (per servlet declaration) object implementing the ServletConfig interface.
+This configuration object allows the servlet to access name-value initialization parameters from the Web application’s configuration information. 
+The configuration object also gives the servlet access to an object (implementing the ServletContext interface) that describes the servlet’s runtime environment.
 
 #### GenericServlet
 
@@ -470,8 +489,8 @@ public abstract class HttpServlet extends GenericServlet {
 ## Request Handling
 
 After a servlet is properly initialized, the servlet container may use it to handle client requests.
-Requests are represented by request objects of type `ServletRequest`. 
-The servlet fills out response to requests by calling methods of a provided object of type `ServletResponse`. 
+Requests are represented by request objects of type `ServletRequest`.
+The servlet fills out response to requests by calling methods of a provided object of type `ServletResponse`.
 These objects are passed as parameters to the service method of the `Servlet` interface.
 
 In the case of an HTTP request, the objects provided by the container are of types `HttpServletRequest` and `HttpServletResponse`.
