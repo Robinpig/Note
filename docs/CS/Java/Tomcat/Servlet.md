@@ -5,24 +5,15 @@ Like other Jakarta technology-based components, servlets are platform-independen
 Containers, sometimes called servlet engines, are web server extensions that provide servlet functionality.
 Servlets interact with web clients via a request/response paradigm implemented by the servlet container.
 
-The servlet container is a part of a web server or application server that provides the network services over which requests and responses are sent, decodes MIME-based requests, and formats MIME-based responses.
-A servlet container also contains and manages servlets through their lifecycle.
-
-Directory structure of Most Web Applications
-
-```
-| -  MyWebApp
-      | -  WEB-INF/web.xml  
-      | -  WEB-INF/lib/   
-      | -  WEB-INF/classes/   
-      | -  META-INF/    
-```
-
 In functionality, servlets provide a higher level abstraction than Common Gateway Interface (CGI) programs but a lower level of abstraction than that provided by web frameworks such as Jakarta Server Faces.
 
 ### Servlet Container
 
-A servlet container is a complex system. However, basically there are three things that a servlet container does to service a request for a servlet:
+The servlet container is a part of a web server or application server that provides the network services over which requests and responses are sent, decodes MIME-based requests, and formats MIME-based responses.
+A servlet container also contains and manages servlets through their lifecycle.
+
+A servlet container is a complex system.
+However, basically there are three things that a servlet container does to service a request for a servlet:
 
 - Creating a request object and populate it with information that may be used by the invoked servlet, such as parameters, headers, cookies, query string, URI, etc.
   A request object is an instance of the `javax.servlet.ServletRequest` interface or the `javax.servlet.http.ServletRequest` interface.
@@ -30,286 +21,35 @@ A servlet container is a complex system. However, basically there are three thin
   A response object is an instance of the `javax.servlet.ServletResponse` interface or the `javax.servlet.http.ServletResponse` interface.
 - Invoking the service method of the servlet, passing the request and response objects. Here the servlet reads the values from the request object and writes to the response object.
 
-## Servlet
+A servlet container can be built into a host Web server, or installed as an add-on component to a Web Server via that server’s native extension API.
+Servlet containers can also be built into or possibly installed into Web-enabled application servers.
 
-Defines methods that all servlets must implement.
+All servlet containers must support HTTP as a protocol for requests and responses, but additional request/response-based protocols such as HTTPS (HTTP over SSL)may be supported.
 
-A servlet is a small Java program that runs within a Web server. Servlets receive and respond to requests from Web clients, usually across [HTTP](/docs/CS/CN/HTTP/HTTP.md), the HyperText Transfer Protocol.
+## The Servlet Interface
 
-To implement this interface, you can write a generic servlet that extends `javax.servlet.GenericServlet` or an HTTP servlet that extends `javax.servlet.http.HttpServlet`.
+The Servlet interface is the central abstraction of the Java Servlet API.
+All servlets implement this interface either directly, or more commonly, by extending a class that implements the interface.
+The two classes in the Java Servlet API that implement the Servlet interface are GenericServlet and HttpServlet.
+For most purposes, Developers will extend HttpServlet to implement their servlets.
 
-This interface defines methods to initialize a servlet, to service requests, and to remove a servlet from the server.
-These are known as life-cycle methods and are called in the following sequence:
+### Request Handling Methods
 
-- The servlet is constructed, then initialized with the init method.
-- Any calls from clients to the service method are handled.
-- The servlet is taken out of service, then destroyed with the destroy method, then garbage collected and finalized.
-
-In addition to the life-cycle methods, this interface provides the getServletConfig method, which the servlet can use to get any startup information,
-and the getServletInfo method, which allows the servlet to return basic information about itself, such as author, version, and copyright.
+The basic Servlet interface defines a service method for handling client requests.
+This method is called for each request that the servlet container routes to an instance of a servlet.
+The handling of concurrent requests to a Web application generally requires that the Web Developer design servlets that can deal with multiple threads executing within the service method at a particular time.
+Generally the Web container handles concurrent requests to the same servlet by concurrent execution of the service method on different threads.
 
 ```java
 package javax.servlet;
 
 public interface Servlet {
-
-    public void init(ServletConfig config) throws ServletException;
-
-    public ServletConfig getServletConfig();
-
     public void service(ServletRequest req, ServletResponse res)
             throws ServletException, IOException;
-  
-    public String getServletInfo();
-
-    public void destroy();
-}
-
-```
-
-### ServletConfig
-
-A servlet configuration object used by a servlet container to pass information to a servlet during initialization.
-
-```java
-package javax.servlet;
-
-public interface ServletConfig {
-
-    public String getServletName();
-
-    public ServletContext getServletContext();
-
-    public String getInitParameter(String name);
-
-    public Enumeration<String> getInitParameterNames();
 }
 ```
-
-### ServletContext
-
-Defines a set of methods that a servlet uses to communicate with its servlet container, for example, to get the MIME type of a file, dispatch requests, or write to a log file.
-
-There is one context per "web application" per Java Virtual Machine. (A "web application" is a collection of servlets and content installed under a specific subset of the server's URL namespace such as /catalog and possibly installed via a .war file.)
-
-In the case of a web application marked "distributed" in its deployment descriptor, there will be one context instance for each virtual machine.
-In this situation, the context cannot be used as a location to share global information (because the information won't be truly global). Use an external resource like a database instead.
-
-The ServletContext object is contained within the ServletConfig object, which the Web server provides the servlet when the servlet is initialized.
-
-```java
-
-public interface ServletContext {
-
-    public static final String TEMPDIR = "javax.servlet.context.tempdir";
-
-    public static final String ORDERED_LIBS = "javax.servlet.context.orderedLibs";
-
-    public String getContextPath();
-
-    public ServletContext getContext(String uripath);
-
-    public int getMajorVersion();
-
-    public int getMinorVersion();
-
-    public int getEffectiveMajorVersion();
-
-    public int getEffectiveMinorVersion();
-
-    public String getMimeType(String file);
-
-    public Set<String> getResourcePaths(String path);
-
-    public URL getResource(String path) throws MalformedURLException;
-
-    public InputStream getResourceAsStream(String path);
-
-    public RequestDispatcher getRequestDispatcher(String path);
-
-    public RequestDispatcher getNamedDispatcher(String name);
-
-    @SuppressWarnings("dep-ann")
-    // Spec API does not use @Deprecated
-    public Servlet getServlet(String name) throws ServletException;
-
-    @SuppressWarnings("dep-ann")
-    // Spec API does not use @Deprecated
-    public Enumeration<Servlet> getServlets();
-
-    @SuppressWarnings("dep-ann")
-    // Spec API does not use @Deprecated
-    public Enumeration<String> getServletNames();
-
-    public void log(String msg);
-
-    public String getRealPath(String path);
-
-    public String getServerInfo();
-
-    public String getInitParameter(String name);
-
-    public Enumeration<String> getInitParameterNames();
-
-    public boolean setInitParameter(String name, String value);
-
-    public void setAttribute(String name, Object object);
-  
-    public void removeAttribute(String name);
-
-    public String getServletContextName();
-
-    public ServletRegistration.Dynamic addServlet(String servletName, Servlet servlet);
-
-    public ServletRegistration.Dynamic addServlet(String servletName,
-            Class<? extends Servlet> servletClass);
-
-    public <T extends Servlet> T createServlet(Class<T> c)
-            throws ServletException;
-
-    public ServletRegistration getServletRegistration(String servletName);
-
-    public Map<String, ? extends ServletRegistration> getServletRegistrations();
-
-    public FilterRegistration.Dynamic addFilter(String filterName, String className);
-
-    public FilterRegistration.Dynamic addFilter(String filterName, Filter filter);
-
-    public FilterRegistration.Dynamic addFilter(String filterName,
-            Class<? extends Filter> filterClass);
-
-    public <T extends Filter> T createFilter(Class<T> c) throws ServletException;
-
-    public FilterRegistration getFilterRegistration(String filterName);
-
-    public Map<String, ? extends FilterRegistration> getFilterRegistrations();
-
-    public SessionCookieConfig getSessionCookieConfig();
-
-    public void addListener(String className);
-
-    public <T extends EventListener> void addListener(T t);
-
-    public void addListener(Class<? extends EventListener> listenerClass);
-
-    public <T extends EventListener> T createListener(Class<T> c)
-            throws ServletException;
-
-    public ClassLoader getClassLoader();
-}
-```
-
-create a Servlet
-
-## Servlet Life Cycle
-
-A servlet is managed through a well defined life cycle that defines how it is loaded and instantiated, is initialized, handles requests from clients, and is taken out of service.
-This life cycle is expressed in the API by the init, service, and destroy methods of the jakarta.servlet.Servlet interface that all servlets must implement directly or indirectly through the GenericServlet or HttpServlet abstract classes.
-
-### Loading and Instantiation
-
-The servlet container is responsible for loading and instantiating servlets.
-The loading and instantiation can occur when the container is started, or delayed until the container determines the servlet is needed to service a request.
-
-When the servlet engine is started, needed servlet classes must be located by the servlet container.
-The servlet container loads the servlet class using normal Java class loading facilities.
-The loading may be from a local file system, a remote file system, or other network services.
-
-After loading the Servlet class, the container instantiates it for use.
-
-### Initialization
-
-After the servlet object is instantiated, the container must initialize the servlet before it can handle requests from clients.
-Initialization is provided so that a servlet can read persistent configuration data, initialize costly resources (such as JDBC™ APIbased connections), and perform other one-time activities. 
-The container initializes the servlet instance by calling the init method of the Servlet interface with a unique (per servlet declaration) object implementing the ServletConfig interface.
-This configuration object allows the servlet to access name-value initialization parameters from the Web application’s configuration information. 
-The configuration object also gives the servlet access to an object (implementing the ServletContext interface) that describes the servlet’s runtime environment.
-
-#### GenericServlet
-
-Defines a generic, protocol-independent servlet. To write an HTTP servlet for use on the Web, extend javax.servlet.http.HttpServlet instead.
-
-GenericServlet implements the Servlet and ServletConfig interfaces. GenericServlet may be directly extended by a servlet, although it's more common to extend a protocol-specific subclass such as HttpServlet.
-
-GenericServlet makes writing servlets easier.
-It provides simple versions of the lifecycle methods init and destroy and of the methods in the ServletConfig interface. GenericServlet also implements the log method, declared in the ServletContext interface.
-
-To write a generic servlet, you need only override the abstract service method.
-
-```java
-public abstract class GenericServlet implements Servlet, ServletConfig,
-        java.io.Serializable {
-
-    private static final long serialVersionUID = 1L;
-
-    private transient ServletConfig config;
-
-    public GenericServlet() {
-        // NOOP
-    }
-
-    @Override
-    public void destroy() {
-        // NOOP by default
-    }
-
-    @Override
-    public String getInitParameter(String name) {
-        return getServletConfig().getInitParameter(name);
-    }
-
-    @Override
-    public Enumeration<String> getInitParameterNames() {
-        return getServletConfig().getInitParameterNames();
-    }
-
-    @Override
-    public ServletConfig getServletConfig() {
-        return config;
-    }
-
-    @Override
-    public ServletContext getServletContext() {
-        return getServletConfig().getServletContext();
-    }
-
-    @Override
-    public void init(ServletConfig config) throws ServletException {
-        this.config = config;
-        this.init();
-    }
-
-    public void init() throws ServletException {
-        // NOOP by default
-    }
-}
-```
-
-### Request Handling Methods
-
-#### service
-
-The basic Servlet interface defines a service method for handling client requests.
-This method is called for each request that the servlet container routes to an instance of a servlet.
-See [HttpServlet](/docs/CS/Java/Tomcat/Servlet.md?id=http).
-
-The handling of concurrent requests to a web application requires that the web developer design servlets that can deal with multiple threads executing within the service method at a particular time.
-
-```java
-public abstract class GenericServlet implements Servlet, ServletConfig,
-        java.io.Serializable {
-  
-    @Override
-    public abstract void service(ServletRequest req, ServletResponse res)
-            throws ServletException, IOException;
-
-}
-```
-
-### HttpServlet
 
 The HttpServlet abstract subclass adds additional methods beyond the basic Servlet interface that are automatically called by the service method in the HttpServlet class to aid in processing HTTP-based requests.
-
 These methods are:
 
 - doGet for handling HTTP GET requests
@@ -320,244 +60,133 @@ These methods are:
 - doOptions for handling HTTP OPTIONS requests
 - doTrace for handling HTTP TRACE requests
 
-Typically when developing HTTP-based servlets, an Application Developer is concerned with the doGet
-and doPost methods. The other methods are considered to be methods for use by programmers very
-familiar with HTTP programming.
-
-Provides an abstract class to be subclassed to create an HTTP servlet suitable for a Web site. A subclass of HttpServlet must override at least one method, usually one of these:
-
-- doGet, if the servlet supports HTTP GET requests
-- doPost, for HTTP POST requests
-- doPut, for HTTP PUT requests
-- doDelete, for HTTP DELETE requests
-- init and destroy, to manage resources that are held for the life of the servlet
-- getServletInfo, which the servlet uses to provide information about itself
-
-There's almost no reason to override the service method. service handles standard HTTP requests by dispatching them to the handler methods for each HTTP request type (the doMethod methods listed above).
-Likewise, there's almost no reason to override the doOptions and doTrace methods.
-
-Servlets typically run on multithreaded servers, so be aware that a servlet must handle concurrent requests and be careful to synchronize access to shared resources. Shared resources include in-memory data such as instance or class variables and external objects such as files, database connections, and network connections. See the Java Tutorial on Multithreaded Programming  for more information on handling multiple threads in a Java program.
-
-```java
-public abstract class HttpServlet extends GenericServlet {
-
-    public HttpServlet() {
-        // NOOP
-    }
-
-    private static Method[] getAllDeclaredMethods(Class<?> c) {
-
-        if (c.equals(javax.servlet.http.HttpServlet.class)) {
-            return null;
-        }
-
-        Method[] parentMethods = getAllDeclaredMethods(c.getSuperclass());
-        Method[] thisMethods = c.getDeclaredMethods();
-
-        if ((parentMethods != null) && (parentMethods.length > 0)) {
-            Method[] allMethods =
-                    new Method[parentMethods.length + thisMethods.length];
-            System.arraycopy(parentMethods, 0, allMethods, 0,
-                    parentMethods.length);
-            System.arraycopy(thisMethods, 0, allMethods, parentMethods.length,
-                    thisMethods.length);
-
-            thisMethods = allMethods;
-        }
-
-        return thisMethods;
-    }
-
-
-    @Override
-    public void service(ServletRequest req, ServletResponse res)
-            throws ServletException, IOException {
-
-        HttpServletRequest request;
-        HttpServletResponse response;
-
-        try {
-            request = (HttpServletRequest) req;
-            response = (HttpServletResponse) res;
-        } catch (ClassCastException e) {
-            throw new ServletException("non-HTTP request or response");
-        }
-        service(request, response);
-    }
-}
-```
-
-#### http
+Typically when developing HTTP-based servlets, a Servlet Developer will only concern himself with the doGet and doPost methods.
+The other methods are considered to be methods for use by programmers very familiar with HTTP programming.
 
 See `doPost` override by [org.springframework.web.servlet.FrameworkServlet](/docs/CS/Java/Spring/MVC.md?id=dispatch)
 
-```java
-public abstract class HttpServlet extends GenericServlet {
-    protected void service(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
+### Number of Instances
 
-        String method = req.getMethod();
+For a servlet not hosted in a distributed environment (the default), the servlet container must use only one instance per servlet declaration.
+However, for a servlet implementing the SingleThreadModel interface, the servlet container may instantiate multiple instances to handle a heavy request load and serialize requests to a particular instance.
 
-        if (method.equals(METHOD_GET)) {
-            long lastModified = getLastModified(req);
-            if (lastModified == -1) {
-                // servlet doesn't support if-modified-since, no reason
-                // to go through further expensive logic
-                doGet(req, resp);
-            } else {
-                long ifModifiedSince;
-                try {
-                    ifModifiedSince = req.getDateHeader(HEADER_IFMODSINCE);
-                } catch (IllegalArgumentException iae) {
-                    // Invalid date header - proceed as if none was set
-                    ifModifiedSince = -1;
-                }
-                if (ifModifiedSince < (lastModified / 1000 * 1000)) {
-                    // If the servlet mod time is later, call doGet()
-                    // Round down to the nearest second for a proper compare
-                    // A ifModifiedSince of -1 will always be less
-                    maybeSetLastModified(resp, lastModified);
-                    doGet(req, resp);
-                } else {
-                    resp.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
-                }
-            }
+In the case where a servlet was deployed as part of an application marked in the deployment descriptor as distributable, a container may have only one instance per servlet declaration per Java Virtual Machine.
+However, if the servlet in a distributable application implements the SingleThreadModel interface, the container may instantiate multiple instances of that servlet in each JVM of the container.
 
-        } else if (method.equals(METHOD_HEAD)) {
-            long lastModified = getLastModified(req);
-            maybeSetLastModified(resp, lastModified);
-            doHead(req, resp);
+### Servlet Life Cycle
 
-        } else if (method.equals(METHOD_POST)) {
-            doPost(req, resp);
+A servlet is managed through a well defined life cycle that defines how it is loaded and instantiated, is initialized, handles requests from clients, and is taken out of service.
+This life cycle is expressed in the API by the init, service, and destroy methods of the jakarta.servlet.Servlet interface that all servlets must implement directly or indirectly through the GenericServlet or HttpServlet abstract classes.
 
-        } else if (method.equals(METHOD_PUT)) {
-            doPut(req, resp);
+#### Loading and Instantiation
 
-        } else if (method.equals(METHOD_DELETE)) {
-            doDelete(req, resp);
+The servlet container is responsible for loading and instantiating servlets.
+The loading and instantiation can occur when the container is started, or delayed until the container determines the servlet is needed to service a request.
 
-        } else if (method.equals(METHOD_OPTIONS)) {
-            doOptions(req,resp);
+When the servlet engine is started, needed servlet classes must be located by the servlet container.
+The servlet container loads the servlet class using normal Java class loading facilities.
+The loading may be from a local file system, a remote file system, or other network services.
 
-        } else if (method.equals(METHOD_TRACE)) {
-            doTrace(req,resp);
+After loading the Servlet class, the container instantiates it for use.
 
-        } else {
-            //
-            // Note that this means NO servlet supports whatever
-            // method was requested, anywhere on this server.
-            //
+#### Initialization
 
-            String errMsg = lStrings.getString("http.method_not_implemented");
-            Object[] errArgs = new Object[1];
-            errArgs[0] = method;
-            errMsg = MessageFormat.format(errMsg, errArgs);
+After the servlet object is instantiated, the container must initialize the servlet before it can handle requests from clients.
+Initialization is provided so that a servlet can read persistent configuration data, initialize costly resources (such as JDBC™ APIbased connections), and perform other one-time activities.
+The container initializes the servlet instance by calling the init method of the Servlet interface with a unique (per servlet declaration) object implementing the ServletConfig interface.
+This configuration object allows the servlet to access name-value initialization parameters from the Web application’s configuration information.
+The configuration object also gives the servlet access to an object (implementing the ServletContext interface) that describes the servlet’s runtime environment.
 
-            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, errMsg);
-        }
-    }
-
-
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException
-    {
-        String protocol = req.getProtocol();
-        String msg = lStrings.getString("http.method_get_not_supported");
-        if (protocol.endsWith("1.1")) {
-            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED, msg);
-        } else {
-            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, msg);
-        }
-    }
-
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
-
-        String protocol = req.getProtocol();
-        String msg = lStrings.getString("http.method_post_not_supported");
-        if (protocol.endsWith("1.1")) {
-            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED, msg);
-        } else {
-            resp.sendError(HttpServletResponse.SC_BAD_REQUEST, msg);
-        }
-    }
-
-}
-```
-
-## Request Handling
+#### Request Handling
 
 After a servlet is properly initialized, the servlet container may use it to handle client requests.
-Requests are represented by request objects of type `ServletRequest`.
-The servlet fills out response to requests by calling methods of a provided object of type `ServletResponse`.
-These objects are passed as parameters to the service method of the `Servlet` interface.
-
-In the case of an HTTP request, the objects provided by the container are of types `HttpServletRequest` and `HttpServletResponse`.
+Requests are represented by request objects of type ServletRequest.
+The servlet fills out response to requests by calling methods of a provided object of type ServletResponse.
+These objects are passed as parameters to the service method of the Servlet interface.
+In the case of an HTTP request, the objects provided by the container are of types HttpServletRequest and HttpServletResponse.
 
 Note that a servlet instance placed into service by a servlet container may handle no requests during its lifetime.
 
-### ServletRequest
+#### End of Service
 
-Defines an object to provide client request information to a servlet. The servlet container creates a ServletRequest object and passes it as an argument to the servlet's service method.
+The servlet container is not required to keep a servlet loaded for any particular
+period of time. A servlet instance may be kept active in a servlet container for a
+period of milliseconds, for the lifetime of the servlet container (which could be a
+number of days, months, or years), or any amount of time in between.
+When the servlet container determines that a servlet should be removed from
+service, it calls the destroy method of the Servlet interface to allow the servlet to
+release any resources it is using and save any persistent state. For example, the
+container may do this when it wants to conserve memory resources, or when it is
+being shut down.
+Before the servlet container calls the destroy method, it must allow any threads that
+are currently running in the service method of the servlet to complete execution, or
+exceed a server-defined time limit.
+Once the destroy method is called on a servlet instance, the container may not route
+other requests to that instance of the servlet. If the container needs to enable the
+servlet again, it must do so with a new instance of the servlet’s class.
 
-A ServletRequest object provides data including parameter name and values, attributes, and an input stream.
-Interfaces that extend ServletRequest can provide additional protocol-specific data (for example, HTTP data is provided by javax.servlet.http.HttpServletRequest.
+After the destroy method completes, the servlet container must release the servlet instance so that it is eligible for garbage collection.
 
-```java
-public interface ServletRequest {
+## The Request
 
-}
-```
+The request object encapsulates all information from the client request.
+In the HTTP protocol, this information is transmitted from the client to the server in the HTTP headers and the message body of the request.
 
-### HttpServletRequest
+Each request object is valid only within the scope of a servlet’s service method, or within the scope of a filter’s doFilter method,
+unless the asynchronous processing is enabled for the component and the startAsync method is invoked on the request object.
+In the case where asynchronous processing occurs, the request object remains valid until complete is invoked on the AsyncContext.
+Containers commonly recycle request objects in order to avoid the performance overhead of request object creation.
+The developer must be aware that maintaining references to request objects for which startAsync has not been called outside the scope described above is not recommended as it may have indeterminate results.
 
-Extends the ServletRequest interface to provide request information for HTTP servlets.
-The servlet container creates an HttpServletRequest object and passes it as an argument to the servlet's service methods (doGet, doPost, etc).
+## Servlet Context
 
-```java
-public interface HttpServletRequest extends ServletRequest {
+The ServletContext interface defines a servlet’s view of the Web application within which the servlet is running.
+The Container Provider is responsible for providing an implementation of the ServletContext interface in the servlet container.
+Using the ServletContext object, a servlet can log events, obtain URL references to resources, and set and store attributes that other servlets in the context can access.
 
-}
-```
+There is one instance object of the ServletContext interface associated with each Web application deployed into a container.
+In cases where the container is distributed over many virtual machines, a Web application will have an instance of the ServletContext for each JVM.
 
-### ServletResponse
+Servlets in a container that were not deployed as part of a Web application are implicitly part of a “default” Web application and have a default ServletContext.
+In a distributed container, the default ServletContext is non-distributable and must only exist in one JVM.
 
-Defines an object to assist a servlet in sending a response to the client. The servlet container creates a ServletResponse object and passes it as an argument to the servlet's service method.
+### Reloading Considerations
 
-To send binary data in a MIME body response, use the ServletOutputStream returned by getOutputStream. To send character data, use the PrintWriter object returned by getWriter.
-To mix binary and text data, for example, to create a multipart response, use a ServletOutputStream and manage the character sections manually.
+Although a Container Provider implementation of a class reloading scheme for ease of development is not required, any such implementation must ensure that all servlets, and classes that they may use2, are loaded in the scope of a single class loader.
+This requirement is needed to guarantee that the application will behave as expected by the Developer.
+As a development aid, the full semantics of notification to session binding listeners should be supported by containers for use in the monitoring of session termination upon class reloading.
 
-The charset for the MIME body response can be specified explicitly or implicitly. The priority order for specifying the response body is:
+Previous generations of containers created new class loaders to load a servlet, distinct from class loaders used to load other servlets or classes used in the servlet context.
+This could cause object references within a servlet context to point at unexpected classes or objects, and cause unexpected behavior.
+The requirement is needed to prevent problems caused by demand generation of new class loaders.
 
-1. explicitly per request using setCharacterEncoding and setContentType
-2. implicitly per request using setLocale
-3. per web application via the deployment descriptor or ServletContext.setRequestCharacterEncoding(String)
-4. container default via vendor specific configuration
-5. ISO-8859-1
+## The Response
 
-The setCharacterEncoding, setContentType, or setLocale method must be called before getWriter and before committing the response for the character encoding to be used.
-See the Internet RFCs such as RFC 2045  for more information on MIME. Protocols such as SMTP and HTTP define profiles of MIME, and those standards are still evolving.
+The response object encapsulates all information to be returned from the server to the client.
+In the HTTP protocol, this information is transmitted from the server to the client either by HTTP headers or the message body of the request.
 
-```java
-public interface ServletResponse {
+Each response object is valid only within the scope of a servlet’s service method, or within the scope of a filter’s doFilter method, unless the associated request object has asynchronous processing enabled for the component.
+If asynchronous processing on the associated request is started, then the response object remains valid until complete method on AsyncContext is called.
+Containers commonly recycle response objects in order to avoid the performance overhead of response object creation.
+The developer must be aware that maintaining references to response objects for which startAsync on the corresponding request has not been called, outside the scope described above may lead to non-deterministic behavior.
 
+### Buffering
 
-}
-```
+A servlet container is allowed, but not required, to buffer output going to the client for efficiency purposes.
+Typically servers that do buffering make it the default, but allow servlets to specify buffering parameters.
 
-### HttpServletResponse
+### Closure of Response Object
 
-Extends the ServletResponse interface to provide HTTP-specific functionality in sending a response. For example, it has methods to access HTTP headers and cookies.
-The servlet container creates an HttpServletResponse object and passes it as an argument to the servlet's service methods (doGet, doPost, etc).
+When a response is closed, the container must immediately flush all remaining content in the response buffer to the client.
+The following events indicate that the servlet has satisfied the request and that the response object is to be closed:
 
-```java
-public interface HttpServletResponse extends ServletResponse {
+- The termination of the service method of the servlet.
+- The amount of content specified in the setContentLength or setContentLengthLong method of the response has been greater than zero and has been written to the response.
+- The sendError method is called.
+- The sendRedirect method is called.
+- The complete method on AsyncContext is called
 
-}
-```
-
-### DefaultServlet
+## DefaultServlet
 
 The default resource-serving servlet for most web applications, used to serve static resources such as HTML pages and images.
 
@@ -695,36 +324,40 @@ public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot 
 
 ## Listener
 
-## Filter
+## Filtering
 
-Servlet3.0之前1请求1线程
+Filters are Java components that allow on the fly transformations of payload and header information in both the request into a resource and the response from a resource.
 
-3.0
+The Java Servlet API classes and methods that provide a lightweight framework for filtering active and static content.
+It describes how filters are configured in a Web application, and conventions and semantics for their implementation.
 
-1. 请求被Servlet容器接受,分配线程流转Filter链
-2. Servlet使用req.startAsync返回异步上下文
-3. 异步线程处理完请求后拿AsyncContext写回请求方
+A filter is a reusable piece of code that can transform the content of HTTP requests, responses, and header information.
+Filters do not generally create a response or respond to a request as servlets do, rather they modify or adapt the requests for a resource, and modify or adapt responses from a resource.
 
-`@WebServlet(asyncSupport = true)` 开启异步支持, `AsyncContext` start task
+Filters can act on dynamic or static content(dynamic and static content are referred to as Web resources).
+Among the types of functionality available to the developer needing to use filters are the following:
 
-`AsyncListener`
+- The accessing of a resource before a request to it is invoked.
+- The processing of the request for a resource before it is invoked.
+- The modification of request headers and data by wrapping the request in customized versions of the request object.
+- The modification of response headers and response data by providing customized versions of the response object.
+- The interception of an invocation of a resource after its call.
+- Actions on a servlet, on groups of servlets, or static content by zero, one, or more filters in a specifiable order.
 
-Servlet3.1非阻塞IO
+**Examples of Filtering Components**
 
-在Servlet处理请求时，从ServletInputStream中读取请求体时是阻塞的。而我们想要的是，当数据就绪时通知我们去读取就可以了，因为这可以避免占用Servlet容器线程或者业务线程来进行阻塞读取
+- Authentication filters
+- Logging and auditing filters
+- Image conversion filters
+- Data compression filters
+- Encryption filters
+- Tokenizing filters
+- Filters that trigger resource access events
+- XSL/T filters that transform XML content
+- MIME-type chain filters
+- Caching filters
 
-IO数据需要等待内核接收就绪方可,期间会阻塞容器线程
-
-ReadListener到ServletInputStream 数据准备好后回调onDataAvailable方法
-
-响应不同的异步
-
-1. DeferredResult封装 代理了AsyncContext的流程
-2. Callable封装 使用TaskExecutor执行
-
-webflux
-
-HttpHandler Adapter
+## Sessions
 
 ## Links
 
