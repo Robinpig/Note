@@ -7,6 +7,13 @@ Servlets interact with web clients via a request/response paradigm implemented b
 
 In functionality, servlets provide a higher level abstraction than Common Gateway Interface (CGI) programs but a lower level of abstraction than that provided by web frameworks such as Jakarta Server Faces.
 
+Servlets have the following advantages over other server extension mechanisms:
+
+- They are generally much faster than CGI scripts because a different process model is used.
+- They use a standard API that is supported by many web servers.
+- They have all the advantages of the Java programming language, including ease of development and platform independence.
+- They can access the large set of APIs available for the Java platform.
+
 ### Servlet Container
 
 The servlet container is a part of a web server or application server that provides the network services over which requests and responses are sent, decodes MIME-based requests, and formats MIME-based responses.
@@ -107,23 +114,21 @@ In the case of an HTTP request, the objects provided by the container are of typ
 
 Note that a servlet instance placed into service by a servlet container may handle no requests during its lifetime.
 
+A servlet container may send concurrent requests through the service method of the servlet.
+To handle the requests, the Application Developer must make adequate provisions for concurrent processing with multiple threads in the service method.
+It is strongly recommended that Developers not synchronize the service method (or methods dispatched to it) because of the detrimental effects on performance
+
 #### End of Service
 
-The servlet container is not required to keep a servlet loaded for any particular
-period of time. A servlet instance may be kept active in a servlet container for a
-period of milliseconds, for the lifetime of the servlet container (which could be a
-number of days, months, or years), or any amount of time in between.
-When the servlet container determines that a servlet should be removed from
-service, it calls the destroy method of the Servlet interface to allow the servlet to
-release any resources it is using and save any persistent state. For example, the
-container may do this when it wants to conserve memory resources, or when it is
-being shut down.
-Before the servlet container calls the destroy method, it must allow any threads that
-are currently running in the service method of the servlet to complete execution, or
-exceed a server-defined time limit.
-Once the destroy method is called on a servlet instance, the container may not route
-other requests to that instance of the servlet. If the container needs to enable the
-servlet again, it must do so with a new instance of the servlet’s class.
+The servlet container is not required to keep a servlet loaded for any particular period of time.
+A servlet instance may be kept active in a servlet container for a period of milliseconds, for the lifetime of the servlet container (which could be a number of days, months, or years), or any amount of time in between.
+
+When the servlet container determines that a servlet should be removed from service, it calls the destroy method of the Servlet interface to allow the servlet to release any resources it is using and save any persistent state.
+For example, the container may do this when it wants to conserve memory resources, or when it is being shut down.
+
+Before the servlet container calls the destroy method, it must allow any threads that are currently running in the service method of the servlet to complete execution, or exceed a server-defined time limit.
+Once the destroy method is called on a servlet instance, the container may not route other requests to that instance of the servlet.
+If the container needs to enable the servlet again, it must do so with a new instance of the servlet’s class.
 
 After the destroy method completes, the servlet container must release the servlet instance so that it is eligible for garbage collection.
 
@@ -186,144 +191,6 @@ The following events indicate that the servlet has satisfied the request and tha
 - The sendRedirect method is called.
 - The complete method on AsyncContext is called
 
-## DefaultServlet
-
-The default resource-serving servlet for most web applications, used to serve static resources such as HTML pages and images.
-
-This servlet is intended to be mapped to /e.g.:
-
-```xml
-<servlet-mapping>
-    <servlet-name>default</servlet-name>
-    <url-pattern>/</url-pattern>
-</servlet-mapping>
-```
-
-input output buffer
-
-```java
-    protected void serveResource(HttpServletRequest request,
-                               HttpServletResponse response,
-                               boolean content,
-                               String inputEncoding)
-          throws IOException, ServletException {
-      // ... 
-      // Check if the conditions specified in the optional If headers are
-      // satisfied.
-      if (resource.isFile()) {
-        // Checking If headers
-        included = (request.getAttribute(
-                RequestDispatcher.INCLUDE_CONTEXT_PATH) != null);
-        if (!included && !isError && !checkIfHeaders(request, response, resource)) {
-          return;
-        }
-      }
-    }
-```
-
-checkIfHeaders
-
-- Etag : If-None-Match
-- Last-Modified : If-Modified-Since
-
-```java
-public class DefaultServlet {
-  protected boolean checkIfHeaders(HttpServletRequest request,
-                                   HttpServletResponse response,
-                                   WebResource resource)
-          throws IOException {
-
-    return checkIfMatch(request, response, resource)
-            && checkIfModifiedSince(request, response, resource)
-            && checkIfNoneMatch(request, response, resource)
-            && checkIfUnmodifiedSince(request, response, resource);
-
-  }
-
-  protected boolean checkIfNoneMatch(HttpServletRequest request, HttpServletResponse response, WebResource resource)
-          throws IOException {
-
-    String headerValue = request.getHeader("If-None-Match");
-    if (headerValue != null) {
-
-      boolean conditionSatisfied;
-
-      String resourceETag = generateETag(resource);
-      if (!headerValue.equals("*")) {
-        if (resourceETag == null) {
-          conditionSatisfied = false;
-        } else {
-          // RFC 7232 requires weak comparison for If-None-Match headers
-          Boolean matched = EntityTag.compareEntityTag(new StringReader(headerValue), true, resourceETag);
-          if (matched == null) {
-            if (debug > 10) {
-              log("DefaultServlet.checkIfNoneMatch:  Invalid header value [" + headerValue + "]");
-            }
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
-            return false;
-          }
-          conditionSatisfied = matched.booleanValue();
-        }
-      } else {
-        conditionSatisfied = true;
-      }
-
-      if (conditionSatisfied) {
-        // For GET and HEAD, we should respond with
-        // 304 Not Modified.
-        // For every other method, 412 Precondition Failed is sent
-        // back.
-        if ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())) {
-          response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
-          response.setHeader("ETag", resourceETag);
-        } else {
-          response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED);
-        }
-        return false;
-      }
-    }
-    return true;
-  }
-}
-```
-
-CacheResource
-
-If the `cachingAllowed` flag is true, the cache for static resources will be used.
-If not specified, the default value of the flag is true.
-This value may be changed while the web application is running (e.g. via JMX).
-When the cache is disabled any resources currently in the cache are cleared from the cache.
-
-The maximum size of the static resource cache in kilobytes.
-If `cacheMaxSize` not specified, the default value is 10240(10 megabytes).
-This value may be changed while the web application is running (e.g. via JMX).
-If the cache is using more memory than the new limit the cache will attempt to reduce in size over time to meet the new limit.
-If necessary, cacheObjectMaxSize will be reduced to ensure that it is no larger than cacheMaxSize/20.
-
-The amount of time in milliseconds between the revalidation of cache entries.
-If `cacheTtl` not specified, the default value is 5000 (5 seconds).
-This value may be changed while the web application is running(e.g. via JMX).
-When a resource is cached it will inherit the TTL in force at the time it was cached and retain that TTL until the resource is evicted from the cache regardless of any subsequent changes that may be made to this attribute.
-
-```java
-public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot {
-  protected WebResource getResource(String path, boolean validate,
-                                    boolean useClassLoaderResources) {
-    if (validate) {
-      path = validate(path);
-    }
-
-    if (isCachingAllowed()) {
-      return cache.getResource(path, useClassLoaderResources);
-    } else {
-      return getResourceInternal(path, useClassLoaderResources);
-    }
-  }
-}
-```
-
-## Listener
-
 ## Filtering
 
 Filters are Java components that allow on the fly transformations of payload and header information in both the request into a resource and the response from a resource.
@@ -357,7 +224,164 @@ Among the types of functionality available to the developer needing to use filte
 - MIME-type chain filters
 - Caching filters
 
+The application developer creates a filter by implementing the `jakarta.servlet.Filter` interface and providing a public constructor taking no arguments.
+The class is packaged in the web archive along with the static content and servlets that make up the web application.
+A filter is declared using the `<filter>` element in the deployment descriptor.
+A filter or collection of filters can be configured for invocation by defining `<filter-mapping>` elements in the deployment descriptor.
+This is done by mapping filters to a particular servlet by the servlet’s logical name, or mapping to a group of servlets and static content resources by mapping a filter to a URL pattern.
+
+### Filter Lifecycle
+
+After deployment of the web application, and before a request causes the container to access a web resource, the container must locate the list of filters that must be applied to the web resource as described below.
+The container must ensure that it has instantiated a filter of the appropriate class for each filter in the list, and called its init(FilterConfig config) method.
+The filter may throw an exception to indicate that it cannot function properly.
+If the exception is of type UnavailableException, the container may examine the isPermanent attribute of the exception and may choose to retry the filter at some later time.
+
+Only one instance per <filter> declaration in the deployment descriptor is instantiated per JVM of the container.
+The container provides the filter config as declared in the filter’s deployment descriptor, the reference to the ServletContext for the web application, and the set of initialization parameters.
+When the container receives an incoming request, it takes the first filter instance in the list and calls its doFilter method, passing in the ServletRequest and ServletResponse , and a reference to the FilterChain object it will use.
+
+The doFilter method of a filter will typically be implemented following this or some subset of the following pattern:
+
+1. The method examines the request’s headers.
+2. The method may wrap the request object with a customized implementation of ServletRequest or
+   HttpServletRequest in order to modify request headers or data.
+3. The method may wrap the response object passed in to its doFilter method with a customized
+   implementation of ServletResponse or HttpServletResponse to modify response headers or data.
+4. The filter may invoke the next entity in the filter chain. The next entity may be another filter, or if
+   the filter making the invocation is the last filter configured in the deployment descriptor for this
+   chain, the next entity is the target web resource. The invocation of the next entity is effected by
+   calling the doFilter method on the FilterChain object, and passing in the request and response with
+   which it was called or passing in wrapped versions it may have created.
+   The filter chain’s implementation of the doFilter method, provided by the container, must locate
+   the next entity in the filter chain and invoke its doFilter method, passing in the appropriate
+   request and response objects.
+   Alternatively, the filter chain can block the request by not making the call to invoke the next entity,
+   leaving the filter responsible for filling out the response object.
+   The service method is required to run in the same thread as all filters that apply to the servlet.
+5. After invocation of the next filter in the chain, the filter may examine response headers.
+6. Alternatively, the filter may have thrown an exception to indicate an error in processing. If the
+   filter throws an UnavailableException during its doFilter processing, the container must not
+   attempt continued processing down the filter chain. It may choose to retry the whole chain at a
+   later time if the exception is not marked permanent.
+7. When the last filter in the chain has been invoked, the next entity accessed is the target servlet or
+   resource at the end of the chain.
+8. Before a filter instance can be removed from service by the container, the container must first call
+   the destroy method on the filter to enable the filter to release any resources and perform other
+   cleanup operations.
+
+### Wrapping Requests and Responses
+
+Central to the notion of filtering is the concept of wrapping a request or response in order that it can
+override behavior to perform a filtering task. In this model, the developer not only has the ability to
+override existing methods on the request and response objects, but to provide new API suited to a
+particular filtering task to a filter or target web resource down the chain. For example, the developer
+may wish to extend the response object with higher level output objects than the output stream or the
+writer, such as API that allows DOM objects to be written back to the client.
+
+In order to support this style of filter the container must support the following requirements:
+
+- When a filter invokes the doFilter method on the container’s filter chain implementation, the
+  container must ensure that the request and response objects that it passes to the next entity in the
+  filter chain, or to the target web resource if the filter was the last in the chain, is the same object
+  that was passed into the doFilter method by the calling filter.
+- When a filter or servlet calls RequestDispatcher.forward or RequestDispatcher.include, then the request and response objects seen by the called filter(s) and/or servlet must either: be the same
+  wrapper objects that were passed; or wrappers of the objects that were passed.
+- When startAsync(ServletRequest, ServletResponse) is used to commence an asynchronous cycle
+  then the request and response objects seen by any filter(s) and/or servlet subsequent to an
+  AsyncContext.dispatch() (or overloaded variant) must either: be the same wrapper objects that
+  were passed; or wrappers of the objects that were passed.
+
 ## Sessions
+
+The Hypertext Transfer Protocol (HTTP) is by design a stateless protocol.
+To build effective web applications, it is imperative that requests from a particular client be associated with each other.
+Many strategies for session tracking have evolved over time, but all are difficult or troublesome for the programmer to use directly.
+This specification defines a simple HttpSession interface that allows a servlet container to use any of several approaches to track a user’s session without involving the Application Developer in the nuances of any one approach.
+
+### Session Tracking Mechanisms
+
+#### Cookies
+
+Session tracking through HTTP cookies is the most used session tracking mechanism and is required to be supported by all servlet containers.
+
+The container sends a cookie to the client. The client will then return the cookie on each subsequent request to the server, unambiguously associating the request with a session.
+The standard name of the session tracking cookie must be JSESSIONID.
+Containers may allow the name of the session tracking cookie to be customized through container specific configuration.
+
+All servlet containers MUST provide an ability to configure whether or not the container marks the session tracking cookie as HttpOnly.
+The established configuration must apply to all contexts for which a context specific configuration has not been established (see SessionCookieConfig javadoc for more details).
+
+If a web application configures a custom name for its session tracking cookies, the same custom name will also be used as the name of the URI parameter if the session id is encoded in the URL (provided that URL rewriting has been enabled).
+
+#### SSL Sessions
+
+Secure Sockets Layer, the encryption technology used in the HTTPS protocol, has a built-in mechanism allowing multiple requests from a client to be unambiguously identified as being part of a session.
+A servlet container can easily use this data to define a session.
+
+#### URL Rewriting
+
+URL rewriting is the lowest common denominator of session tracking. When a client will not accept a
+cookie, URL rewriting may be used by the server as the basis for session tracking. URL rewriting
+involves adding data, a session ID, to the URL path that is interpreted by the container to associate the request with a session.
+The session ID must be encoded as a path parameter in the URL string. The name of the parameter
+must be jsessionid. Here is an example of a URL containing encoded path information:
+
+```http
+http://www.example.com/catalog/index.html;jsessionid=1234
+```
+
+URL rewriting exposes session identifiers in logs, bookmarks, referer headers, cached HTML, and the
+URL bar. URL rewriting should not be used as a session tracking mechanism where cookies or SSL
+sessions are supported and suitable.
+
+#### Session Integrity
+
+Web containers must be able to support the HTTP session while servicing HTTP requests from clients that do not support the use of cookies.
+To fulfill this requirement, web containers commonly support the URL rewriting mechanism.
+
+### Session Lifecycle
+
+A session is considered “new” when it is only a prospective session and has not been established.
+Because HTTP is a request-response based protocol, an HTTP session is considered to be new until a client “joins” it.
+A client joins a session when session tracking information has been returned to the server indicating that a session has been established.
+Until the client joins a session, it cannot be assumed that the next request from the client will be recognized as part of a session.
+
+The session is considered to be “new” if either of the following is true:
+
+- The client does not yet know about the session
+- The client chooses not to join a session.
+
+These conditions define the situation where the servlet container has no mechanism by which to associate a request with a previous request.
+An Application Developer must design the application to handle a situation where a client has not, can not, or will not join a session.
+
+Associated with each session, there is a string containing a unique identifier, which is referred to as the session id.
+The value of the session id can be obtained by calling jakarta.servlet.http.HttpSession.getId() and can be changed after creation by invoking jakarta.servlet.http.HttpServletRequest.changeSessionId().
+
+## Web Applications
+
+A web application is a collection of servlets, HTML pages, classes, and other resources that make up a complete application on a web server.
+The web application can be bundled and run on multiple containers from multiple vendors.
+
+The servlet container must enforce a one to one correspondence between a web application and a ServletContext.
+A ServletContext object provides a servlet with its view of the application.
+
+Web applications can be packaged and signed into a Web ARchive format (WAR) file using the standard Java archive tools.
+For example, an application for issue tracking might be distributed in an archive file called issuetrack.war.
+
+## Application Lifecycle Events
+
+Application event listeners are classes that implement one or more of the servlet event listener interfaces.
+They are instantiated and registered in the web container at the time of the deployment of the web application.
+They are provided by the Application Developer in the WAR.
+
+Servlet event listeners support event notifications for state changes in the ServletContext, HttpSession and ServletRequest objects.
+Servlet context listeners are used to manage resources or state held at a JVM level for the application.
+HTTP session listeners are used to manage state or resources associated with a series of requests made into a web application from the same client or user.
+Servlet request listeners are used to manage state across the lifecycle of servlet requests.
+Async listeners are used to manage async events such as time outs and completion of async processing.
+
+There may be multiple listener classes listening to each event type, and the Application Developer may specify the order in which the container invokes the listener beans for each event type.
 
 ## Links
 
