@@ -88,7 +88,7 @@ This life cycle is expressed in the API by the init, service, and destroy method
 #### Loading and Instantiation
 
 The servlet container is responsible for loading and instantiating servlets.
-The loading and instantiation can occur when the container is started, or delayed until the container determines the servlet is needed to service a request.
+**The loading and instantiation can occur when the container is started, or delayed until the container determines the servlet is needed to service a request.**
 
 When the servlet engine is started, needed servlet classes must be located by the servlet container.
 The servlet container loads the servlet class using normal Java class loading facilities.
@@ -99,7 +99,7 @@ After loading the Servlet class, the container instantiates it for use.
 #### Initialization
 
 After the servlet object is instantiated, the container must initialize the servlet before it can handle requests from clients.
-Initialization is provided so that a servlet can read persistent configuration data, initialize costly resources (such as JDBC™ APIbased connections), and perform other one-time activities.
+Initialization is provided so that a servlet can read persistent configuration data, initialize costly resources (such as JDBC™ API based connections), and perform other one-time activities.
 The container initializes the servlet instance by calling the init method of the Servlet interface with a unique (per servlet declaration) object implementing the ServletConfig interface.
 This configuration object allows the servlet to access name-value initialization parameters from the Web application’s configuration information.
 The configuration object also gives the servlet access to an object (implementing the ServletContext interface) that describes the servlet’s runtime environment.

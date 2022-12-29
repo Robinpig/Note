@@ -1,9 +1,7 @@
-
-
 ## Introduction
 
-That is, instead of creating the variable by using **new**, an “automatic” variable is created that is *not a reference*. 
-The variable holds the value, and it’s **placed on the stack**, so it’s much more efficient. 
+That is, instead of creating the variable by using **new**, an “automatic” variable is created that is *not a reference*.
+The variable holds the value, and it’s **placed on the stack**, so it’s much more efficient.
 
 **Prefer primitive types to boxed primitives**.
 
@@ -15,78 +13,72 @@ The variable holds the value, and it’s **placed on the stack**, so it’s much
 
 #### The returnAddress Type and Values
 
-The values of the returnAddress type are pointers to the opcodes of Java Virtual Machine instructions. 
+The values of the returnAddress type are pointers to the opcodes of Java Virtual Machine instructions.
 Of the primitive types, only the returnAddress type is not directly associated with a Java programming language type.
 
 #### The boolean Type
+
 Expressions in the Java programming language that operate on boolean values are compiled to use values of the Java Virtual Machine int data type.
 
-The Java Virtual Machine encodes boolean array components using 1 to represent true and 0 to represent false. 
-Where Java programming language boolean values are mapped by compilers to values of Java Virtual Machine type int, 
+The Java Virtual Machine encodes boolean array components using 1 to represent true and 0 to represent false.
+Where Java programming language boolean values are mapped by compilers to values of Java Virtual Machine type int,
 the compilers must use the same encoding.
 
 ### Size
 
 Java determines the size of each primitive type. These sizes don’t change from one machine architecture to another as they do in most languages.
 
- `This size invariance is one reason Java programs are portable.`
+`This size invariance is one reason Java programs are portable.`
+
 
 | **Primitive type** | **Size** | **Minimum** | **Maximum**    | **Wrapper type** |
 | ------------------ | -------- | ----------- | -------------- | ---------------- |
-| **boolean**        | —        | —           | —              | **Boolean**      |
+| **boolean**        | —       | —          | —             | **Boolean**      |
 | **char**           | 16-bit   | Unicode 0   | Unicode 216- 1 | **Character**    |
 | **byte**           | 8-bit    | -128        | +127           | **Byte**         |
-| **short**          | 16-bit   | -215        | +215—1         | **Short**        |
-| **int**            | 32-bit   | -231        | +231—1         | **Integer**      |
-| **long**           | 64-bit   | -263        | +263—1         | **Long**         |
+| **short**          | 16-bit   | -215        | +215—1        | **Short**        |
+| **int**            | 32-bit   | -231        | +231—1        | **Integer**      |
+| **long**           | 64-bit   | -263        | +263—1        | **Long**         |
 | **float**          | 32-bit   | IEEE754     | IEEE754        | **Float**        |
 | **double**         | 64-bit   | IEEE754     | IEEE754        | **Double**       |
-| **void**           | —        | —           | —              | **Void**         |
+| **void**           | —       | —          | —             | **Void**         |
 
 All numeric types are **signed**, so don’t look for unsigned types.
 
-The size of the **boolean** type is not explicitly specified; it is only defined to be able to take the literal values **true**(1) or **false**(0). 
+The size of the **boolean** type is not explicitly specified; it is only defined to be able to take the literal values **true**(1) or **false**(0).
 
-The “wrapper” classes for the primitive data types allow you to make a nonprimitive object on the heap to represent that primitive type. 
-
-
+The “wrapper” classes for the primitive data types allow you to make a nonprimitive object on the heap to represent that primitive type.
 
 #### Java has no “sizeof”
 
-In C and C++, the sizeof( ) operator satisfies a specific need: it tells you the number of bytes allocated for data items. The most compelling need for sizeof( ) in C and C++ is portability. Different data types might be different sizes on different machines, so the programmer must find out how big those types are when performing operations that are sensitive to size. For example, one computer might store integers in 32 bits, whereas another might store integers as 16 bits. Programs could store larger values in integers on the first machine. As you might imagine, portability is a huge headache for C and C++ programmers. 
+In C and C++, the sizeof( ) operator satisfies a specific need: it tells you the number of bytes allocated for data items. The most compelling need for sizeof( ) in C and C++ is portability. Different data types might be different sizes on different machines, so the programmer must find out how big those types are when performing operations that are sensitive to size. For example, one computer might store integers in 32 bits, whereas another might store integers as 16 bits. Programs could store larger values in integers on the first machine. As you might imagine, portability is a huge headache for C and C++ programmers.
 
-*Java does not need a sizeof( ) operator for this purpose, because all the data types are the same size on all machines.*You do not need to think about portability on this level—it is designed into the language. 
-
-
+*Java does not need a sizeof( ) operator for this purpose, because all the data types are the same size on all machines.*You do not need to think about portability on this level—it is designed into the language.
 
 ### Default values
 
 When a primitive data type is a member of a class, it is guaranteed to get a default value if you do not initialize it:
 
-| **Primitive type** | **Default**         |
-| ------------------ | ------------------- |
-| **boolean**        | **false**           |
+
+| **Primitive type** | **Default**           |
+| ------------------ | --------------------- |
+| **boolean**        | **false**             |
 | **char**           | **‘\u0000’ (null)** |
-| **byte**           | **(byte)0**         |
-| **short**          | **(short)0**        |
-| **int**            | **0**               |
-| **long**           | **0L**              |
-| **float**          | **0.0f**            |
-| **double**         | **0.0d**            |
-
-
+| **byte**           | **(byte)0**           |
+| **short**          | **(short)0**          |
+| **int**            | **0**                 |
+| **long**           | **0L**                |
+| **float**          | **0.0f**              |
+| **double**         | **0.0d**              |
 
 ## Wrapper Class
 
 All Integer wrapper class must use equals to compare values.
 
-
-
 ## FlyWeight
 
-
-
 IntegerCache
+
 ```
 -XX:AutoBoxCacheMax = 
 ```
@@ -108,6 +100,7 @@ public static int compare(boolean x, boolean y) {
     return (x == y) ? 0 : (x ? 1 : -1);
 }
 ```
+
 构造器:可传入原始类型或String忽略大小写判断是否为true
 
 ```java
@@ -126,10 +119,9 @@ public static Boolean valueOf(boolean b) {
 
 override hashCode()
 
-    public static int hashCode(boolean value) {
-            return value ? 1231 : 1237;
-        }
-
+public static int hashCode(boolean value) {
+        return value ? 1231 : 1237;
+    }
 add logicAnd\logicOr\logicXor methods since 1.8
 
 #### implement by int
@@ -137,10 +129,6 @@ add logicAnd\logicOr\logicXor methods since 1.8
 ### Integer
 
 Cache
-
-
-
-
 
 属性值：
 
@@ -161,10 +149,6 @@ final static char[] digits = {
         'u' , 'v' , 'w' , 'x' , 'y' , 'z'
     };
 ```
-
-
-
-
 ```java
 public static int highestOneBit(int i) {
     // HD, Figure 3-1
@@ -176,8 +160,8 @@ public static int highestOneBit(int i) {
     return i - (i >>> 1);
 }
 ```
-
 ## Float
+
 **Avoid float and double if exact answers are required**.
 
 ### BigDecimal
@@ -227,18 +211,10 @@ public int compareTo(BigDecimal val) {
   return (xsign > 0) ? cmp : -cmp;
 }
 ```
-
-
-
 use **BigDecimal(String)**  create object param must be notBlank
-
-
 
 ### BigInteger
 
-
-
-
 ## Links
-- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)

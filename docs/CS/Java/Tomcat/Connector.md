@@ -1656,7 +1656,7 @@ public final class ApplicationFilterChain implements FilterChain {
         filter.doFilter(request, response, this);
 ```
 
-We fell off the end of the chain -- call the [servlet.service()](/docs/CS/Java/Tomcat/Servlet.md?id=service) instance ignore try block
+We fell off the end of the chain -- call the [servlet.service()](/docs/CS/Java/JDK/Servlet.md?id=service) instance ignore try block
 
 ```java
         servlet.service(request, response);

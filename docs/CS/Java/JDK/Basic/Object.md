@@ -12,30 +12,41 @@ Inheritance provides a powerful and natural mechanism for organizing and structu
 **What Is an Interface?**<br>
 An interface is a contract between a class and the outside world. When a class implements an interface, it promises to provide the behavior published by that interface.
 
-## OOP
+## What is an Object?
 
 > “We cut nature up, organize it into concepts, and ascribe significances as we do, largely because we are parties to an agreement that holds throughout our speech community and is codified in the patterns of our language ... we cannot talk at all except by subscribing to the organization and classification of data which the agreement decrees.” Benjamin Lee Whorf (1897-1941)
 
-**Object-oriented programming OOP**
+Alan Kay summarized five basic characteristics of SmallTalk, the first successful object-oriented language and a language that inspired Java.
+These characteristics represent a pure approach to object-oriented programming:
 
-> - **Everything is an object**
-> - **A program is a bunch of objects telling each other what to do by sending messages**
-> - **Each object has its own memory made up of other objects**
-> - **Every object has a type**
-> - **All objects of a particular type can receive the same messages**
+- **Everything is an object**
+- **A program is a bunch of objects telling each other what to do by sending messages**
+- **Each object has its own memory made up of other objects**
+- **Every object has a type**
+- **All objects of a particular type can receive the same messages**
 
-An *object* is a *class instance* or an *array*.`An object has state, behavior and identity.`
+Grady Booch offers an even more succinct description of an object:
+
+> *An object has state, behavior and identity.*
 
 This means that an object can have internal data (which gives it state), methods (to produce behavior), and each object can be uniquely distinguished from every other object—to put this in a concrete sense, each object has a unique address in memory.
 
-## Access Control
+### Access Control
 
-### Reason
+We can break up the playing field into class creators (those who create new data types) and client programmers (the class consumers who use the data types in their applications).
+The goal of the client programmer is to collect a toolbox full of classes to use for rapid application development.
+The goal of the class creator is to build a class that exposes only what’s necessary to the client programmer and keeps everything else hidden.<br>
+Why? Because if it’s hidden, the client programmer can’t access it, which means the class creator can change the hidden portion at will without worrying about the impact on anyone else.
+The hidden portion usually represents the tender insides of an object that could easily be corrupted by a careless or uninformed client programmer, so hiding the implementation reduces program bugs.
 
-- `keep client programmers’ hands off portions they shouldn’t touch—parts that are necessary for the internal operation of the data type but not part of the interface that users need in order to solve their particular problems.`
-- `allow the library designer to change the internal workings of the class without worrying about how it will affect the client programmer.`
+All relationships need boundaries, respected by all parties involved.
+When you create a library, you establish a relationship with the client programmer, who is also a programmer, but one who is putting together an application by using your library, possibly to build a bigger library.
+If all members of a class are available to everyone, the client programmer can do anything with that class and there’s no way to enforce rules.
+Even though you might prefer that the client programmer not directly manipulate some of the members of your class, without access control there’s no way to prevent it.
+Everything’s naked to the world.
 
-### Access specifier
+- The first reason for access control is to keep client programmers’ hands off portions they shouldn’t touch—parts that are necessary for the internal operation of the data type but not part of the interface that users need in order to solve their particular problems.
+- The second reason for access control is to enable the library designer to change the internal workings of the class without worrying about how it will affect the client programmer.
 
 Java uses three explicit keywords to set the boundaries in a class: **public**, **private**, and **protected**. Their use and meaning are quite straightforward. These *access specifiers* determine who can use the definitions that follow.
 
@@ -46,7 +57,9 @@ Java uses three explicit keywords to set the boundaries in a class: **public**, 
 
 Java object identifiers are *actually* “object references.” **And everything is actually pass by value**. So you’re not passing by reference, you’re “passing an object reference by value.
 
-### 'this' pointer
+### Inheritance
+
+#### 'this' pointer
 
 To understand ‘this’ pointer, it is important to know how objects look at functions and data members of a class.
 
@@ -63,6 +76,69 @@ The ‘this’ pointer is passed as a hidden argument to all nonstatic member fu
 Most of the time, you will not need to access it directly, but you can if needed.
 It’s worth noting that “this” is a const pointer -- you can change the value of the underlying object it points to, but you can not make it point to something else!
 By having functions that would otherwise return void return *this instead, you can make those functions chainable.
+
+### Polymorphism
+
+To solve the problem, object-oriented languages use the concept of *late binding*.
+When you send a message to an object, the code called isn’t determined until run time.
+The compiler does ensure that the method exists and performs type checking on the arguments and return value, but it doesn’t know the exact code to execute.
+
+To perform late binding, Java uses a special bit of code in lieu of the absolute call.
+This code calculates the address of the method body, using information stored in the object.
+Thus, each object behaves differently according to the contents of that special bit of code.
+When you send a message to an object, the object actually does figure out what to do with that message.
+
+In some languages you must explicitly grant a method the flexibility of late-binding properties.
+For example, C++ uses the *virtual* keyword.
+In such languages, methods are not dynamically bound by default.
+In Java, dynamic binding is the default behavior and you don’t need extra keywords to produce polymorphism.
+
+
+Abstract Class vs Interface
+
+
+|                 | Abstract Class     | Interface                                          |
+| --------------- | ------------------ | -------------------------------------------------- |
+| Abstract Method | public/protected   | public                                             |
+| Fields          | all                | public static final                                |
+| Constructor     | Has                | no constructor                                     |
+| Hierarchy       | only one           | multiple implement                                 |
+| Method & Block  | all                | only default/static/public static method, no block |
+| For             | template by extend | add function                                       |
+|                 | is a               | like a                                             |
+
+
+
+### The Singly-Rooted Hierarchy
+
+An OOP issue that has become especially prominent since the introduction of C++ is whether all classes should by default be inherited from a single base class.
+In Java (as with virtually all other OOP languages except for C++) the answer is yes, and the name of this ultimate base class is simply Object.
+
+There are many benefits to a singly-rooted hierarchy.
+All objects have a common interface, so they are all ultimately the same fundamental type.
+The alternative (provided by C++) is that you don’t know that everything is the same basic type.
+From a backward-compatibility standpoint this fits the model of C better and can be thought of as less restrictive, but for full-on object-oriented programming you must build your own hierarchy to provide the same convenience that’s built into other OOP languages.
+
+And in any new class library you acquire, some other incompatible interface is used. It requires effort to work the new interface into your design.
+Is the extra “flexibility” of C++ worth it?
+If you need it—if you have a large investment in C—it’s quite valuable.
+If you’re starting from scratch, alternatives such as Java can be more productive.
+
+A singly rooted hierarchy makes it much easier to implement a garbage collector, one of the fundamental improvements of Java over C++.
+And since information about the type of an object is guaranteed to be in all objects, you’ll never end up with an object whose type you cannot determine.
+This is especially important with system-level operations, such as exception handling (a language mechanism for reporting errors), and to allow greater flexibility in programming.
+
+
+
+Three rules:
+
+1. Any class wins over any interface. So if there’s a method with a body, or an abstract declaration, in the superclass chain, we can ignore the interfaces completely.
+2. Subtype wins over supertype. If we have a situation in which two interfaces are competing to provide a default method and one interface extends the other, the subclass wins.
+3. No rule 3. If the previous two rules don’t give us the answer, the subclass must either implement the method or declare it abstract.
+
+*Rule 1 is what brings us compatibility with old code.*
+
+
 
 ## Method
 
@@ -97,39 +173,12 @@ You can always give methods different names instead of overloading them.
 
 Class override method in superclass with same method name and argument list.
 
-## Polymorphism
-
-Type
-
-- compile type
-- runtime type
-
-### Abstract Class vs Interface
 
 
-|                 | Abstract Class     | Interface                                          |
-| --------------- | ------------------ | -------------------------------------------------- |
-| Abstract Method | public/protected   | public                                             |
-| Fields          | all                | public static final                                |
-| Constructor     | Has                | no constructor                                     |
-| Hierarchy       | only one           | multiple implement                                 |
-| Method & Block  | all                | only default/static/public static method, no block |
-| For             | template by extend | add function                                       |
-|                 | is a               | like a                                             |
-
-## Multiple Hierarchy
-
-Three rules:
-
-1. *Any class wins over any interface. So if there’s a method with a body, or an abstract declaration, in the superclass chain, we can ignore the interfaces completely.*
-2. *Subtype wins over supertype. If we have a situation in which two interfaces are competing to provide a default method and one interface extends the other, the subclass wins.*
-3. *No rule 3. If the previous two rules don’t give us the answer, the subclass must either implement the method or declare it abstract.*
-
-*Rule 1 is what brings us compatibility with old code.*
 
 ## Object Class
 
-`Class Object is the root of the class hierarchy. Every class has Object as a superclass. All objects, including arrays, implement the methods of this class.`
+Class Object is the root of the class hierarchy. Every class has Object as a superclass. All objects, including arrays, implement the methods of this class.
 
 ### newInstance
 
@@ -145,6 +194,10 @@ Enforce the singleton property with a private constructor or an enum type
 Enforce noninstantiability with a private constructor
 
 Prefer dependency injection to hardwiring resources
+
+
+Because constructors allow you to guarantee proper initialization and cleanup (the compiler will not allow an object to be created without the proper constructor calls), you get complete control and safety.
+
 
 ### registerNatives
 

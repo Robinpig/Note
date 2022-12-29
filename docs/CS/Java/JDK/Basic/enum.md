@@ -1,16 +1,25 @@
 ## Introduction
 
-**The `enum` keyword was introduced in Java 5.** It denotes a special type of class that **always extends the *java.lang.Enum* class.** 
+**The `enum` keyword was introduced in Java 5.** It denotes a special type of class that **always extends the *java.lang.Enum* class.**
+**Java enum**, also called Java *enumeration type*, is a type whose **fields consist of a fixed set of constants**.
+The very purpose of enum is to **enforce compile time type safety**.
 
-**Java enum**, also called Java **enumeration type**, is a type whose **fields consist of a fixed set of constants**. The very purpose of enum is to **enforce compile time type safety**. 
+The compiler automatically adds useful features when you create an enum.
+For example, it creates a toString() to easily display the name of an enum instance, which is how the print statement above produced its output.
+The compiler also creates an ordinal() method to indicate the declaration order of a particular enum constant, and a static values() method that produces an array of values of the enum constants in the order they were declared.
+
+Although enums appear to be a new data type, the keyword only produces some compiler behavior while generating a class for the enum, so in many ways you can treat an enum as if it were any other class.
+In fact, enums are classes and have their own methods.
+
+An especially nice feature is the way that enums can be used inside switch statements.
+Since a switch is intended to select from a limited set of possibilities, it’s an ideal match for an enum. Notice how enum names can produce a much clearer expression of intent.
+In general you can use an enum as if it were another way to create a data type, then just put the results to work.
 
 **Comparing Enum Types Using “==”  rather than equals.**
 
 **Use enums instead of int constants**.
 
 `finalize` is final
-
-
 
 ### Serialization
 
@@ -28,8 +37,6 @@ private void readObjectNoData() throws ObjectStreamException {
 }
 ```
 
-
-
 ```java
 // Writes given enum constant to stream. only write Enum.name
 private void writeEnum(Enum<?> en,
@@ -45,8 +52,6 @@ private void writeEnum(Enum<?> en,
 }
 ```
 
-
-
 ~~~java
 /** ObjectInputStream
  * Reads in and returns enum constant, or null if enum type is
@@ -61,8 +66,6 @@ private Enum<?> readEnum(boolean unshared) throws IOException {
 }
 ~~~
 
-
-
 ## EnumSet and EnumMap
 
 ### EnumSet
@@ -75,12 +78,10 @@ The *EnumSet* is an abstract class that has two implementations called *RegularE
 
 Therefore it is always a good idea to use this set whenever we want to work with a collection of enum constants in most of the scenarios (like subsetting, adding, removing, and for bulk operations like *containsAll* and *removeAll*) and use *Enum.values()* if you just want to iterate over all possible constants.
 
-
-
 ### EnumMap
 
 *EnumMap* is a specialized *Map* implementation meant to be used with enum constants as keys. It is an efficient and compact implementation compared to its counterpart *HashMap* and is internally represented as an array:
 
-
 ## Links
+
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)

@@ -6,7 +6,17 @@
 > -- by James Gosling
 
 
-[Object-Oriented Programming Concepts](/docs/CS/Java/JDK/Basic/Object.md)
+
+Every programming language manipulates elements in memory. 
+Sometimes the programmer must be constantly aware of that manipulation.
+Do you manipulate the element directly, or use an indirect representation that requires special syntax (for example, pointers in C or C++)?
+
+Java simplifies the issue by [considering everything an object](/docs/CS/Java/JDK/Basic/Object.md), using a single consistent syntax. 
+Although you treat everything as an object, the identifier you manipulate is actually a “reference” to an object.
+
+In one book I read that it was “completely wrong to say that Java supports pass by reference,” because Java object identifiers(according to that author) are actually “object references.”
+And everything is actually pass by value. <br>
+**So you’re not passing by reference, you’re “passing an object reference by value.”** 
 
 
 [Basics of Java](/docs/CS/Java/JDK/Basic/Basic.md)
