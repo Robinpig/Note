@@ -2,9 +2,28 @@
 
 ## Data Structures
 
+Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.
+A data structure is a special format for organizing and storing data. General data structure types include arrays, files, linked lists, stacks, queues, trees, graphs and so on.
+<br>
+Depending on the organization of the elements, data structures are classified into two types:
+
+1) Linear data structures: Elements are accessed in a sequential order but it is not compulsory to store all elements sequentially (say, Linked Lists).
+   Examples: Linked Lists, Stacks and Queues.
+2) Non – linear data structures: Elements of this data structure are stored / accessed in a non-linear order. Examples: Trees and graphs.
+
 An abstract data type (ADT) is a set of operations.
 Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.
 This can be viewed as an extension of modular design.
+
+Commonly used ADTs include: Linked Lists, Stacks, Queues, Priority Queues, Binary Trees, Dictionaries, Disjoint Sets (Union and Find), Hash Tables, Graphs, and many others.
+For example, stack uses a LIFO (Last-In-First-Out) mechanism while storing the data in data structures.
+The last element inserted into the stack is the first element that gets deleted.
+Common operations are: creating the stack, pushing an element onto the stack, popping an element from the stack, finding the current top of the stack, finding the number of elements in the stack, etc.
+
+While defining the ADTs do not worry about the implementation details.
+They come into the picture only when we want to use them.
+Different kinds of ADTs are suited to different kinds of applications, and some are highly specialized to specific tasks.
+We will go through many of them and you will be in a position to relate the data structures to the kind of problems they solve.
 
 ### Lists, Stacks, and Queues
 
@@ -12,7 +31,7 @@ This can be viewed as an extension of modular design.
 
 
 | Parameter                       | Linked List          | Array                                                   | Dynamic Array                                              |
-| --------------------------------- | ---------------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
+| ------------------------------- | -------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
 | Indexing                        | $O(n)$               | $O(1)$                                                  | $O(1)$                                                     |
 | Inserting/deletion at beginning | $O(1)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
 | Insertion at ending             | $O(n)$               | $O(1)$, if array is not full                            | $O(1)$, if array is not full<br />$O(n)$, if array is full |
@@ -66,7 +85,7 @@ A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts a
 
 
 | 算法规则                | 优缺点                                                                                                                                                                           |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | OPT                     | 优先淘汰最长时间内不会被访问的页面	缺页率最小，性能最好;但无法实现                                                                                                               |
 | FIFO                    | 优先淘汰最先进入内存的页面	实现简单;但性能很差，可能出现Belady异常                                                                                                               |
 | LRU                     | 优先淘汰最近最久没访问的页面	性能很好;但需要硬件支持，算法开销大                                                                                                                 |
@@ -114,7 +133,6 @@ In theoretical analysis of algorithms it is common to estimate their complexity 
 Big O notation, Big-omega notation and Big-theta notation are used to this end.
 
 An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
-
 
 > An algorithm is efficient if its running time is polynomial.
 
