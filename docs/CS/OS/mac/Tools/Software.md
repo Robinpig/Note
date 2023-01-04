@@ -45,6 +45,11 @@ Disk
 - Typora
 - Marked 2
 
+PDF Reader
+
+- PDF Reader Pro
+- PDF Expert
+
 ## Others
 
 - Magnet

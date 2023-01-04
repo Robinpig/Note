@@ -29,20 +29,7 @@ We will go through many of them and you will be in a position to relate the data
 
 [Lists](/docs/CS/Algorithms/list.md), [stacks](/docs/CS/Algorithms/stack.md), and [queues](/docs/CS/Algorithms/queue.md) are perhaps the three fundamental data structures in all of computer science.
 
-
-| Parameter                       | Linked List          | Array                                                   | Dynamic Array                                              |
-| ------------------------------- | -------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
-| Indexing                        | $O(n)$               | $O(1)$                                                  | $O(1)$                                                     |
-| Inserting/deletion at beginning | $O(1)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Insertion at ending             | $O(n)$               | $O(1)$, if array is not full                            | $O(1)$, if array is not full<br />$O(n)$, if array is full |
-| Deletion at ending              | $O(n)$               | $O(1)$                                                  | $O(n)$                                                     |
-| Insertion in middle             | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Deletion in middle              | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Wasted space                    | $O(n)$(for pointers) | 0                                                       | $O(n)$                                                     |
-
-array
-
-- [Linked List](/docs/CS/Algorithms/linked-list.md)
+[Arrays and Linked Lists](/docs/CS/Algorithms/linked-list.md)
 
 One of the basic rules concerning programming is that no routine should ever exceed a page.
 This is accomplished by breaking the program down into modules. Each module is a logical unit and does a specific job.
