@@ -1,14 +1,10 @@
 ## Introduction
 
-
-
 ## Install Tools
-
-
 
 ### Homebrew
 
-Install tutorial: 
+Install tutorial:
 
 > https://mirrors.tuna.tsinghua.edu.cn/help/homebrew/
 
@@ -19,8 +15,6 @@ echo 'export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebr
 export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"
 ```
 
-
-
 ### ohmyzsh
 
 ```shell
@@ -28,8 +22,6 @@ git clone https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git
 cd ohmyzsh/tools
 REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
 ```
-
-
 
 ### autojump
 
@@ -39,29 +31,19 @@ REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
    2. Add a new row below `[[ -s $(brew --prefix)/etc/profile.d/autojump.sh ]] && . $(brew --prefix)/etc/profile.d/autojump.sh`
    3. `wq`
 
-## Moniter Tools
+## Monitor Tools
 
 - iStat Menu
 - Better MenuBar(Apple Store)
-
-
-
-
 
 Disk
 
 - Disk Space Analyzer PRO
 
- 
-
-
-
 ## Markdown
 
 - Typora
 - Marked 2
-
-
 
 ## Others
 
@@ -71,8 +53,6 @@ Disk
 - OneSwitch
 - V2rayU
 
-
-
 ## Developer
 
 - Navicat Premium
@@ -81,11 +61,7 @@ Disk
 - Charles
 - Dash
 
-
-
 ### Visual Studio Code
-
-
 
 For example: https://vscode.cdn.azure.cn/stable/3866c3553be8b268c8a7f8c0482c0c0177aa8bfa/VSCode-darwin-arm64.zip
 
@@ -95,3 +71,6 @@ The mirror url:
 
 https://vscode.cdn.azure.cn/stable/3866c3553be8b268c8a7f8c0482c0c0177aa8bfa/VSCode-darwin-arm64.zip
 
+## Links
+
+- [Mac Tools](/docs/CS/OS/mac/Tools/Tools.md)
