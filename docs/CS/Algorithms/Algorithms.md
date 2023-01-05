@@ -48,7 +48,6 @@ The idea that global variables and side effects are bad is directly attributable
 [Trees](/docs/CS/Algorithms/tree.md) in general are very useful abstractions in computer science.
 
 - [Trie](/docs/CS/Algorithms/Trie.md)
-- [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
 - [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)
 
 A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts an input of arbitrary length into an encrypted output of a fixed length.

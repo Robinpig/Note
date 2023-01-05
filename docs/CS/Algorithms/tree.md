@@ -87,6 +87,20 @@ We could draw the binary trees using the rectangular boxes that are customary fo
 
 This general strattegy ( left, node, right ) is known as an *inorder* traversal.
 
+
+
+
+
+
+
+Full binary  Tree
+
+Complete Binary Tree
+
+Heap
+
+
+
 ## Binary Search Tree
 
 An important application of binary trees is their use in searching.

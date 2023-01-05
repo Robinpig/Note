@@ -14,12 +14,12 @@ Suppose you have a group of n numbers and would like to determine the kth larges
 We consider two classes of sorting algorithms. 
 
 The first class of algorithms makes use of the structure of the elements to be sorted.
-For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 elemeQts. in O(n + m) time; 
+For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 elemeQts. in $O(n + m)$ time; 
 if the elements to be sorted are strings over a fixed alphabet, then a sequence of strings can be sorted in time linearly proportional to the sum of the lengths of the strings.
 
 The second class of algorithms assumes no structure on the elements to be sorted. The basic operation is a comparison between a pair of elements.
 With algorithms of this nature we shall see that at least n log /1 comparisons are needed to sort a sequence of n elements. 
-We give two Oc(n log n) sorting algorithms-Heapsort. which is Oc(n log n) in the worst case, and Quicksort, which is Oc(n log n) in the expected case.
+We give two O(nlogn) sorting algorithms-Heapsort. which is Oc(n log n) in the worst case, and Quicksort, which is $O(nlogn)$ in the expected case.
 
 | Sort   | Avg Time | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
 | -------- | ---------- | ----------- | ----------- | ------------ | ---------- | ----------- |

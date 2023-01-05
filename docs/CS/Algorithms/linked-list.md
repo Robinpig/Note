@@ -91,15 +91,15 @@ Finally, linked lists waste memory in terms of extra reference points.
 ## Comparison of Linked Lists with Arrays
 
 
-| Parameter                       | Linked List          | Array                                                   | Dynamic Array                                              |
-| ------------------------------- | -------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
-| Indexing                        | $O(n)$               | $O(1)$                                                  | $O(1)$                                                     |
-| Inserting/deletion at beginning | $O(1)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Insertion at ending             | $O(n)$               | $O(1)$, if array is not full                            | $O(1)$, if array is not full<br />$O(n)$, if array is full |
-| Deletion at ending              | $O(n)$               | $O(1)$                                                  | $O(n)$                                                     |
-| Insertion in middle             | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Deletion in middle              | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Wasted space                    | $O(n)$(for pointers) | 0                                                       | $O(n)$                                                     |
+| Parameter                       | Linked List          | Array                                                   | Dynamic Array                                             |
+| ------------------------------- | -------------------- | ------------------------------------------------------- | --------------------------------------------------------- |
+| Indexing                        | $O(n)$               | $O(1)$                                                  | $O(1)$                                                    |
+| Inserting/deletion at beginning | $O(1)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                    |
+| Insertion at ending             | $O(n)$               | $O(1)$, if array is not full                            | $O(1)$, if array is not full<br/>$O(n)$, if array is full |
+| Deletion at ending              | $O(n)$               | $O(1)$                                                  | $O(n)$                                                    |
+| Insertion in middle             | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                    |
+| Deletion in middle              | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                    |
+| Wasted space                    | $O(n)$(for pointers) | 0                                                       | $O(n)$                                                    |
 
 ## Singly Linked Lists
 
@@ -122,6 +122,31 @@ This clearly affects some of the tests, but the structure is popular in some app
 
 For large amounts of input, the linear access time of linked lists is prohibitive.
 
+## Skip Lists
+
+Binary trees can be used for representing abstract data types such as dictionaries and ordered lists.
+They work well when the elements are inserted in a random order.
+Some sequences of operations, such as inserting the elements in order, produce degenerate data structures that give very poor performance.
+If it were possible to randomly permute the list of items to be inserted, trees would work well with high probability for any input sequence.
+In most cases queries must be answered on-line, so randomly permuting the input is impractical.
+Balanced tree algorithms rearrange the tree as operations are performed to maintain certain balance conditions and assure good performance.
+
+Skip lists are a probabilistic alternative to balanced trees. 
+Skip list is a data structure that can be used as an alternative to [balanced binary trees](/docs/CS/Algorithms/tree.md).
+As compared to a binary tree, skip lists allow quick search, insertion and deletion of elements.
+This is achieved by using probabilistic balancing rather than strictly enforce balancing.
+It is basically a linked list with additional pointers such that intermediate nodes can be skipped. 
+It uses a random number generator to make some decisions.
+
+In an ordinary sorted linked list, search, insert, and delete are in $O(n)$ because the list must be scanned node-by-node from the head to find the relevant node.
+If somehow we could scan down the list in bigger steps (skip down, as it were), we would reduce the cost of scanning.
+This is the fundamental idea behind Skip Lists.
+
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+-
+
+## References
+
+1. [Skip Lists: A Probabilistic Alternative to Balanced Trees]()
