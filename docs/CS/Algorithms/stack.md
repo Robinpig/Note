@@ -11,12 +11,11 @@ The usual operations to make empty stacks and test for emptiness are part of the
 
 ## Implementation
 
-Linked List Implementation of Stacks
+There are many ways of implementing stack ADT; given below are the commonly used methods.
 
-The first implementation of a stack uses a singly linked list.
-We perform a push by inserting at the front of the list. We perform a pop by deleting the element at the front of the list.
-
-Array Implementation of Stacks
+- Simple array based implementation
+- Dynamic array based implementation
+- Linked lists implementation
 
 ## Applications
 
