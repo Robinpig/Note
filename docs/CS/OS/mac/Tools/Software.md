@@ -35,6 +35,7 @@ REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
 
 - iStat Menu
 - Better MenuBar(Apple Store)
+- [SMCAMDProcessor](https://github.com/trulyspinach/SMCAMDProcessor)
 
 Disk
 
