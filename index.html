@@ -6,11 +6,17 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width,user-scalable=no,  initial-scale=1.0, minimum-scale=1.0">
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/lib/themes/vue.css" />
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/style.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/docsify-darklight-theme/3.2.0/style.min.css" />
+  <link rel="stylesheet" href="https://cdn.staticfile.org/docsify/4.13.0/themes/vue.css" />
 
 <!--  see https://jhildenbiddle.github.io/docsify-themeable/#/-->
 <!--  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css">-->
+
+
+  <link rel="stylesheet" href="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.css" integrity="sha384-vKruj+a13U8yHIkAyGgK1J3ArTLzrFGBbBc0tDp4ad/EyewESeXE/Iv67Aj8gKZ0" crossorigin="anonymous">
+  <script defer src="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.js" integrity="sha384-PwRUT/YqbnEjkZO0zZxNqcxACrXe+j766U2amXcgMg5457rve2Y7I6ZJSm2A0mS4" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
+          onload="renderMathInElement(document.body);"></script>
 
   <style>
     .markdown-section code {
@@ -128,56 +134,66 @@
 <!-- Docsify v4 -->
 
 
-<script defer src="//cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js" integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-katex@latest/dist/docsify-katex.js"></script>
-<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css"/>
+<!--<script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>-->
+<!--<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css" />-->
+<!--<script src="https://cdn.jsdelivr.net/npm/marked@3"></script>-->
+
+<!--&lt;!&ndash; CDN files for docsify-katex &ndash;&gt;-->
+<!--<script src="//cdn.jsdelivr.net/npm/docsify-katex@latest/dist/docsify-katex.js"></script>-->
+
+<!--&lt;!&ndash;<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.4/katex.min.js" integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>&ndash;&gt;-->
+<!--&lt;!&ndash;<script src="//cdn.staticfile.org/npm/docsify-katex@latest/dist/docsify-katex.js"></script>&ndash;&gt;-->
+<!--&lt;!&ndash;<link rel="stylesheet" href="//cdn.staticfile.org/npm/katex@latest/dist/katex.min.css"/>&ndash;&gt;-->
+<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/auto-render.min.js"></script>-->
+<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/mathtex-script-type.min.js"></script>-->
+<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.css"></script>-->
+<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/copy-tex.min.js"></script>-->
 
 
-<script src="//cdn.jsdelivr.net/npm/viz.js@1.8.0/viz.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/viz.js"></script>
 
 <script src="//unpkg.com/docsify-puml/dist/docsify-puml.min.js"></script>
 <script src="//unpkg.com/docsify-plantuml/dist/docsify-plantuml.min.js"></script>
 
 
-<script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-flow.min.js"></script>
 
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docsify/4.13.0/docsify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/emoji-js/3.7.0/emoji.min.js"></script>
 
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-java.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-c.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-go.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-scala.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-python.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-cpp.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-ruby.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-yaml.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-bash.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-markdown.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-nginx.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-http.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-sql.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-java.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-c.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-go.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-scala.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-python.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-cpp.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-ruby.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-yaml.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-bash.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-markdown.js"></script>
+<!--<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-nginx.min.js"></script>-->
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-http.min.js"></script>
+<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-sql.min.js"></script>
 
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/zoom-image.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-copy-code"></script>
+<script src="https://cdn.staticfile.org/docsify/4.13.0/plugins/search.min.js"></script>
+<script src="https://cdn.staticfile.org/docsify/4.13.0/plugins/zoom-image.min.js"></script>
 <script src="//unpkg.com/docsify-count/dist/countable.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/index.min.js"></script>
+<!--<script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>-->
+<!--<script src="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/index.min.js"></script>-->
 
 <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
 
 
 <!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<script src="https://cdn.jsdelivr.net/npm/docsify-example-panels"></script>
+<!--<script src="https://cdn.jsdelivr.net/npm/docsify-example-panels"></script>-->
 
 <!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<script src="https://cdn.jsdelivr.net/npm/docsify-tabs@1"></script>
+<!--<script src="https://cdn.jsdelivr.net/npm/docsify-tabs@1"></script>-->
 
 
 <script src="https://unpkg.com/docsify-copy-code"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/docsify-sidebarfooter/4.0.0/docsify-sidebarFooter.min.js"></script>
 
 
 <!--see https://github.com/imyelo/docsify-sequence-diagram-->
