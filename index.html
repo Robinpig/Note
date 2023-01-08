@@ -6,17 +6,15 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width,user-scalable=no,  initial-scale=1.0, minimum-scale=1.0">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/docsify-darklight-theme/3.2.0/style.min.css" />
+<!--  <link rel="stylesheet" href="https://unpkg.com/docsify-toc@1.0.0/dist/toc.css">-->
+<!--  <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/docsify-darklight-theme/3.2.0/docsify-style.min.css">-->
+<!--  <script src="https://cdn.bootcdn.net/ajax/libs/docsify-darklight-theme/3.2.0/index.min.js"></script>-->
   <link rel="stylesheet" href="https://cdn.staticfile.org/docsify/4.13.0/themes/vue.css" />
+
+<!--  <link rel="stylesheet" href="https://unpkg.com/docsify-sidebar-collapse@1.3.5/src/index.js" />-->
 
 <!--  see https://jhildenbiddle.github.io/docsify-themeable/#/-->
 <!--  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css">-->
-
-
-  <link rel="stylesheet" href="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.css" integrity="sha384-vKruj+a13U8yHIkAyGgK1J3ArTLzrFGBbBc0tDp4ad/EyewESeXE/Iv67Aj8gKZ0" crossorigin="anonymous">
-  <script defer src="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.js" integrity="sha384-PwRUT/YqbnEjkZO0zZxNqcxACrXe+j766U2amXcgMg5457rve2Y7I6ZJSm2A0mS4" crossorigin="anonymous"></script>
-  <script defer src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
-          onload="renderMathInElement(document.body);"></script>
 
   <style>
     .markdown-section code {
@@ -108,7 +106,6 @@
     'flexible-alerts': {
       style: 'flat'
     },
-
     copyCode: {
       buttonText : 'Copy to clipboard',
       errorText  : 'Error',
@@ -120,6 +117,24 @@
       theme      : 'classic', // default
       tabComments: true,      // default
       tabHeadings: true       // default
+    },
+    toc: {
+      scope: '.markdown-section',
+      headings: 'h1, h2, h3',
+      title: 'Table of Contents',
+    },
+    share: {
+      reddit: true,
+      linkedin: true,
+      facebook: true,
+      twitter: true,
+      whatsapp: true,
+      telegram: true,
+    },
+    progress: {
+      position: "top",
+      color: "var(--theme-color,#42b983)",
+      height: "3px",
     },
   }
 </script>
@@ -134,20 +149,11 @@
 <!-- Docsify v4 -->
 
 
-<!--<script src="https://cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>-->
-<!--<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css" />-->
-<!--<script src="https://cdn.jsdelivr.net/npm/marked@3"></script>-->
-
-<!--&lt;!&ndash; CDN files for docsify-katex &ndash;&gt;-->
-<!--<script src="//cdn.jsdelivr.net/npm/docsify-katex@latest/dist/docsify-katex.js"></script>-->
-
-<!--&lt;!&ndash;<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.4/katex.min.js" integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>&ndash;&gt;-->
-<!--&lt;!&ndash;<script src="//cdn.staticfile.org/npm/docsify-katex@latest/dist/docsify-katex.js"></script>&ndash;&gt;-->
-<!--&lt;!&ndash;<link rel="stylesheet" href="//cdn.staticfile.org/npm/katex@latest/dist/katex.min.css"/>&ndash;&gt;-->
-<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/auto-render.min.js"></script>-->
-<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/mathtex-script-type.min.js"></script>-->
-<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.css"></script>-->
-<!--<script src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/copy-tex.min.js"></script>-->
+<script defer src="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.js" integrity="sha384-PwRUT/YqbnEjkZO0zZxNqcxACrXe+j766U2amXcgMg5457rve2Y7I6ZJSm2A0mS4" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/docsify-katex@1.4.3/dist/docsify-katex.js"></script>
+<link rel="stylesheet" href="https://cdn.staticfile.org/KaTeX/0.16.4/katex.min.css">
+<!--<script defer src="https://cdn.staticfile.org/KaTeX/0.16.4/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"-->
+<!--        onload="renderMathInElement(document.body);"></script>-->
 
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/viz.js"></script>
@@ -171,29 +177,47 @@
 <script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-yaml.min.js"></script>
 <script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-bash.min.js"></script>
 <script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-markdown.js"></script>
-<!--<script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-nginx.min.js"></script>-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.20.0/components/prism-nginx.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.20.0/components/prism-flow.js"></script>
 <script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-http.min.js"></script>
 <script src="//cdn.staticfile.org/prism/9000.0.1/components/prism-sql.min.js"></script>
 
+<script src="http://cdn.staticfile.org/docsify/4.13.0/plugins/external-script.min.js"></script>
 
 <script src="https://cdn.staticfile.org/docsify/4.13.0/plugins/search.min.js"></script>
 <script src="https://cdn.staticfile.org/docsify/4.13.0/plugins/zoom-image.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/docsify-copy-code/2.1.1/docsify-copy-code.min.js"></script>
 <script src="//unpkg.com/docsify-count/dist/countable.js"></script>
-<!--<script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>-->
+<script src="//unpkg.com/docsify-pagination/dist/docsify-pagination.min.js"></script>
 <!--<script src="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/index.min.js"></script>-->
 
 <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
 
+<script src="https://unpkg.com/docsify-remote-markdown/dist/docsify-remote-markdown.min.js"></script>
+
+<script src="//unpkg.com/docsify-share/build/index.min.js"></script>
+<script src="https://unpkg.com/docsify-progress@1.0.3/dist/progress.js"></script>
+
+
+<script src="https://unpkg.com/docsify-toc@1.0.0/dist/toc.js"></script>
+
 
 <!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<!--<script src="https://cdn.jsdelivr.net/npm/docsify-example-panels"></script>-->
+<script src="https://unpkg.com/docsify-example-panels@1.1.0/dist/docsify-example-panels.min.js"></script>
 
 <!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<!--<script src="https://cdn.jsdelivr.net/npm/docsify-tabs@1"></script>-->
+<script src="https://unpkg.com/docsify-tabs@1.5.2/dist/docsify-tabs.min.js"></script>
 
+<script src="//unpkg.com/docsify-slides/dist/docsify-slides.min.js"></script>
 
-<script src="https://unpkg.com/docsify-copy-code"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/docsify-sidebarfooter/4.0.0/docsify-sidebarFooter.min.js"></script>
+
+<script src="https://unpkg.com/docsify-sidebar-collapse@1.3.5/src/index.js"></script>
+
+<script src="https://unpkg.com/docsify-link-preview@0.1.1/src/index.js"></script>
+
+<script src="https://cdn.staticfile.org/docsify-sidebarfooter/4.0.0/docsify-sidebarFooter.min.js"></script>
+
 
 
 <!--see https://github.com/imyelo/docsify-sequence-diagram-->

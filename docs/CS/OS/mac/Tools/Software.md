@@ -4,6 +4,10 @@
 
 ### Homebrew
 
+<!-- tabs:start -->
+
+###### **Traditional**
+
 Install tutorial:
 
 > https://mirrors.tuna.tsinghua.edu.cn/help/homebrew/
@@ -14,6 +18,16 @@ Homebrew-bottles mirror:
 echo 'export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"' >> ~/.zprofile
 export HOMEBREW_BOTTLE_DOMAIN="https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles"
 ```
+
+###### **Quick Script**
+
+Otherwise:
+
+```shell
+/bin/zsh -c "$(curl -fsSL https://gitee.com/cunkai/HomebrewCN/raw/master/Homebrew.sh)"
+```
+
+<!-- tabs:end -->
 
 ### ohmyzsh
 
