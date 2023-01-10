@@ -22,7 +22,12 @@ Different versions of Apache Tomcat are available for different versions of the 
 
 ### Debug Tomcat
 
-1. git clone git@github.com:apache/tomcat.git
+1. clone
+
+```shell
+git clone git@github.com:apache/tomcat.git
+```
+
 2. add pom.xml
 
 ```xml
@@ -160,41 +165,41 @@ class StandardWrapper
 interface Valve << interface >>
 interface Wrapper << interface >>
 
-AbstractProtocol       "1" *-[#595959,plain]-> "endpoint\n1" AbstractEndpoint     
-AbstractProtocol       "1" *-[#595959,plain]-> "adapter\n1" Adapter              
-AbstractProtocol       "1" *-[#595959,plain]-> "waitingProcessors\n*" Processor            
-AbstractProtocol        -[#008200,dashed]-^  ProtocolHandler      
-ApplicationFilterChain "1" *-[#595959,plain]-> "servlet\n1" Servlet              
-Catalina               "1" *-[#595959,plain]-> "server\n1" Server               
-Connector              "1" *-[#595959,plain]-> "adapter\n1" Adapter              
+AbstractProtocol       "1" *-[#595959,plain]-> "endpoint\n1" AbstractEndpoint   
+AbstractProtocol       "1" *-[#595959,plain]-> "adapter\n1" Adapter            
+AbstractProtocol       "1" *-[#595959,plain]-> "waitingProcessors\n*" Processor          
+AbstractProtocol        -[#008200,dashed]-^  ProtocolHandler    
+ApplicationFilterChain "1" *-[#595959,plain]-> "servlet\n1" Servlet            
+Catalina               "1" *-[#595959,plain]-> "server\n1" Server             
+Connector              "1" *-[#595959,plain]-> "adapter\n1" Adapter            
 Connector               -[#595959,dashed]->  CoyoteAdapter          : "«create»"
-Connector               -[#008200,dashed]-^  Lifecycle            
-Connector              "1" *-[#595959,plain]-> "protocolHandler\n1" ProtocolHandler      
-Connector              "1" *-[#595959,plain]-> "service\n1" Service              
-Container               -[#008200,plain]-^  Lifecycle            
-Context                 -[#008200,plain]-^  Container            
-CoyoteAdapter           -[#008200,dashed]-^  Adapter              
-CoyoteAdapter          "1" *-[#595959,plain]-> "connector\n1" Connector            
-Engine                  -[#008200,plain]-^  Container            
-Executor                -[#008200,plain]-^  Lifecycle            
-Host                    -[#008200,plain]-^  Container            
+Connector               -[#008200,dashed]-^  Lifecycle          
+Connector              "1" *-[#595959,plain]-> "protocolHandler\n1" ProtocolHandler    
+Connector              "1" *-[#595959,plain]-> "service\n1" Service            
+Container               -[#008200,plain]-^  Lifecycle          
+Context                 -[#008200,plain]-^  Container          
+CoyoteAdapter           -[#008200,dashed]-^  Adapter            
+CoyoteAdapter          "1" *-[#595959,plain]-> "connector\n1" Connector          
+Engine                  -[#008200,plain]-^  Container          
+Executor                -[#008200,plain]-^  Lifecycle          
+Host                    -[#008200,plain]-^  Container          
 Mapper                  -[#595959,dashed]->  Context                : "«create»"
-Mapper                 "1" *-[#595959,plain]-> "contextObjectToContextVersionMap\n*" Context              
-MapperListener          -[#008200,dashed]-^  Lifecycle            
-MapperListener         "1" *-[#595959,plain]-> "mapper\n1" Mapper               
-MapperListener         "1" *-[#595959,plain]-> "service\n1" Service              
-Server                  -[#008200,plain]-^  Lifecycle            
-Service                 -[#008200,plain]-^  Lifecycle            
-StandardPipeline       "1" *-[#595959,plain]-> "container\n1" Container            
-StandardPipeline        -[#008200,dashed]-^  Lifecycle            
-StandardPipeline        -[#008200,dashed]-^  Pipeline             
+Mapper                 "1" *-[#595959,plain]-> "contextObjectToContextVersionMap\n*" Context            
+MapperListener          -[#008200,dashed]-^  Lifecycle          
+MapperListener         "1" *-[#595959,plain]-> "mapper\n1" Mapper             
+MapperListener         "1" *-[#595959,plain]-> "service\n1" Service            
+Server                  -[#008200,plain]-^  Lifecycle          
+Service                 -[#008200,plain]-^  Lifecycle          
+StandardPipeline       "1" *-[#595959,plain]-> "container\n1" Container          
+StandardPipeline        -[#008200,dashed]-^  Lifecycle          
+StandardPipeline        -[#008200,dashed]-^  Pipeline           
 StandardPipeline        -[#595959,dashed]->  Valve                  : "«create»"
-StandardPipeline       "1" *-[#595959,plain]-> "basic\n1" Valve                
-StandardWrapper         -[#008200,dashed]-^  Container            
-StandardWrapper         -[#008200,dashed]-^  Lifecycle            
-StandardWrapper        "1" *-[#595959,plain]-> "instance\n1" Servlet              
-StandardWrapper         -[#008200,dashed]-^  Wrapper              
-Wrapper                 -[#008200,plain]-^  Container            
+StandardPipeline       "1" *-[#595959,plain]-> "basic\n1" Valve              
+StandardWrapper         -[#008200,dashed]-^  Container          
+StandardWrapper         -[#008200,dashed]-^  Lifecycle          
+StandardWrapper        "1" *-[#595959,plain]-> "instance\n1" Servlet            
+StandardWrapper         -[#008200,dashed]-^  Wrapper            
+Wrapper                 -[#008200,plain]-^  Container          
 @enduml
 
 ```
@@ -251,10 +256,10 @@ autosize=false;
   
     subgraph cluster_Service {
         label="Serice"
-      
+    
         Mapper;
         Mapper2[style=invis];
-      
+    
             {rank="same"; Mapper2;Mapper;}
         subgraph cluster_Connector {
             label="Connector"
@@ -279,7 +284,7 @@ autosize=false;
             Processor -> Adapter;
             Adapter -> Mapper;
             Adapter -> Processor;
-          
+        
             Processor -> SocketWrapper;
   
         }
@@ -287,7 +292,7 @@ autosize=false;
         subgraph cluster_Engine {
             label="Engine"
             Engine_Valve [label="Valve"];
-          
+        
               subgraph cluster_Engine_Pipeline {
                 label="Pipeline"
                 StanardEngineValve[label="Stanard\nEngineValve"]
@@ -315,7 +320,7 @@ autosize=false;
                     Context_Valve [label="Valve"];
                     subgraph cluster_Wrapper_1 {
                         label="Wrapper"
-                      
+                    
                         subgraph cluster_Host_Pipeline {
                           label="Pipeline"
                           StandardWrapperValve[label="Standard\nWrapperValve"]
@@ -324,10 +329,10 @@ autosize=false;
                         Wrapper_Valve_1 [label="Valve"];
                         StandardWrapperValve;
                         Servlet_1[label="Servlet"];
-              
+            
                         StandardWrapperValve -> Servlet_1 [headlabel="FilterChain"];
                     }
-                  
+                
                 }
   
             }
@@ -383,7 +388,7 @@ StandardContext  -[#008200,dashed]-^  Context
 StandardEngine   -[#000082,plain]-^  ContainerBase   
 StandardEngine   -[#008200,dashed]-^  Engine  
 StandardHost     -[#000082,plain]-^  ContainerBase   
-StandardHost     -[#008200,dashed]-^  Host    
+StandardHost     -[#008200,dashed]-^  Host  
 StandardWrapper  -[#000082,plain]-^  ContainerBase   
 StandardWrapper  -[#008200,dashed]-^  Wrapper   
 Wrapper          -[#008200,plain]-^  Container   
@@ -632,8 +637,6 @@ public class StandardContext extends ContainerBase implements Context, Notificat
 
 ## Log
 
-
-
 ## DefaultServlet
 
 The default resource-serving servlet for most web applications, used to serve static resources such as HTML pages and images.
@@ -769,9 +772,6 @@ public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot 
   }
 }
 ```
-
-
-
 
 ## Links
 
