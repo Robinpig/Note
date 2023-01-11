@@ -1,13 +1,59 @@
 ## Introduction
 
-A stack is a list with the restriction that inserts and deletes can be performed in only one position, namely the end of the list called the top.
-The fundamental operations on a stack are push, which is equivalent to an insert, and pop, which deletes the most recently inserted element.
-The most recently inserted element can be examined prior to performing a pop by use of the top routine.
-A pop or top on an empty stack is generally considered an error in the stack ADT.
-On the other hand, running out of space when performing a push is an implementation error but not an ADT error.
+A stack is a simple data structure used for storing data (similar to [Linked Lists](/docs/CS/Algorithms/linked-list.md)).
+A stack is an ordered list in which insertion and deletion are done at one end, called top. 
+The last element inserted is the first one to be deleted.
+Hence, it is called the Last in First out (LIFO) or First in Last out (FILO) list.
 
-Stacks are sometimes known as LIFO (last in, first out) lists.
-The usual operations to make empty stacks and test for emptiness are part of the repertoire, but essentially all that you can do to a stack is push and pop.
+Special names are given to the two changes that can be made to a stack. 
+When an element is inserted in a stack, the concept is called *push*, and when an element is removed from the stack, the concept is called *pop*.
+Trying to pop out an empty stack is called *underflow* and trying to push an element in a full stack is called *overflow*.
+Generally, we treat them as exceptions.
+
+
+## Stack ADT
+
+The following operations make a stack an ADT.
+For simplicity, assume the data is an integer type.
+
+**Main stack operations**
+
+- Push (int data): Inserts data onto stack.
+- int Pop(): Removes and returns the last inserted element from the stack.
+
+**Auxiliary stack operations**
+
+- int Top(): Returns the last inserted element without removing it.
+- int Size(): Returns the number of elements stored in the stack.
+- int IsEmptyStack(): Indicates whether any elements are stored in the stack or not.
+- int IsFullStack(): Indicates whether the stack is full or not.
+
+**Exceptions**
+
+Attempting the execution of an operation may sometimes cause an error condition, called an exception.
+Exceptions are said to be “thrown” by an operation that cannot be executed.
+In the Stack ADT, operations pop and top cannot be performed if the stack is empty. Attempting the execution of pop (top) on an empty stack throws an exception.
+Trying to push an element in a full stack throws an exception.
+
+## Applications
+
+Following are some of the applications in which stacks play an important role.
+
+**Direct applications**
+
+- Balancing of symbols
+- Infix-to-postfix conversion
+- Evaluation of postfix expression
+- Implementing function calls (including recursion)
+- Finding of spans (finding spans in stock markets, refer to Problems section)
+- Page-visited history in a Web browser [Back Buttons]
+- Undo sequence in a text editor
+- Matching Tags in HTML and XML
+
+**Indirect applications**
+
+- Auxiliary data structure for other algorithms (Example: Tree traversal algorithms)
+- Component of other data structures (Example: [Simulating queues]())
 
 ## Implementation
 
@@ -17,22 +63,35 @@ There are many ways of implementing stack ADT; given below are the commonly used
 - Dynamic array based implementation
 - Linked lists implementation
 
-## Applications
+### Comparison of Implementations
 
-Reverse Polish Notation(RPN)
+**Comparing Incremental Strategy and Doubling Strategy**
 
-### Balancing Symbols
+We compare the incremental strategy and doubling strategy by analyzing the total time T(n) needed to perform a series of n push operations.
+We start with an empty stack represented by an array of size 1.
+We call amortized time of a push operation is the average time taken by a push over the series of operations, that is, $T(n)/n$.
 
-### Postfix Expressions
+**Incremental Strategy**
 
-### Function Calls
+The amortized time (average time per operation) of a push operation is $O(n)$ $[O(n2)/n]$.
 
-The information saved is called either an activation record or stack frame.
+**Doubling Strategy**
 
-Tail recursion refers to a recursive call at the last line.
-Tail recursion can be mechanically eliminated by changing the recursive call to a goto preceded by one assignment per function argument.
+In this method, the amortized time of a push operation is $O(1)$ $[O(n)/n]$.
 
-Although nonrecursive programs are certainly generally faster than recursive programs, the speed advantage rarely justifies the lack of clarity that results from removing the recursion.
+Comparing Array Implementation and Linked List Implementation
+
+Array Implementation
+
+- Operations take constant time.
+- Expensive doubling operation every once in a while.
+- Any sequence of n operations (starting from empty stack) - “amortized” bound takes time proportional to n.
+
+Linked List Implementation
+
+- Grows and shrinks gracefully.
+- Every operation takes constant time O(1).
+- Every operation uses extra space and time to deal with references.
 
 ## Links
 

@@ -22,12 +22,12 @@ First, the size of an element of that data type is calculated and then it is mul
 This process takes one multiplication and one addition.
 Since these two operations take constant time, we can say the array access can be performed in constant time.
 
-Advantages of Arrays
+**Advantages of Arrays**
 
 - Simple and easy to use
 - Faster access to the elements (constant access)
 
-Disadvantages of Arrays
+**Disadvantages of Arrays**
 
 - Preallocates all needed memory up front and wastes memory space for indices in the array that are empty.
 - Fixed size: The size of the array is static (specify the array size before using it).
@@ -38,7 +38,10 @@ Disadvantages of Arrays
 
 ### Dynamic Arrays
 
-Dynamic array (also called growable array, resizable array, dynamic table, or array list) is a random access, variable-size list data structure that allows elements to be added or removed. One simple way of implementing dynamic arrays is to initially start with some fixed size array. As soon as that array becomes full, create the new array double the size of the original array. Similarly, reduce the array size to half if the elements in the array are less than half the size.
+Dynamic array (also called growable array, resizable array, dynamic table, or array list) is a random access, variable-size list data structure that allows elements to be added or removed.
+One simple way of implementing dynamic arrays is to initially start with some fixed size array. 
+As soon as that array becomes full, create the new array double the size of the original array. 
+Similarly, reduce the array size to half if the elements in the array are less than half the size.
 
 Note: We will see the implementation for dynamic arrays in the Stacks, Queues and Hashing chapters.
 
@@ -52,14 +55,16 @@ A linked list is a data structure used for storing collections of data A linked 
 - Can be made just as long as required (until systems memory exhausts)
 - Does not waste memory space (but takes some extra memory for pointers). It allocates memory as list grows.
 
+### Linked Lists ADT
+
 The following operations make linked lists an ADT:
 
-Main Linked Lists Operations
+**Main Linked Lists Operations**
 
 - Insert: inserts an element into the list
 - Delete: removes and returns the specified position element from the list
 
-Auxiliary Linked Lists Operations
+**Auxiliary Linked Lists Operations**
 
 - Delete List: removes all elements of the list (dispose of the list)
 - Count: returns the number of elements in the list
@@ -149,4 +154,4 @@ This is the fundamental idea behind Skip Lists.
 
 ## References
 
-1. [Skip Lists: A Probabilistic Alternative to Balanced Trees]()
+1. [Skip Lists: A Probabilistic Alternative to Balanced Trees](https://dl.acm.org/doi/pdf/10.1145/78973.78977)
