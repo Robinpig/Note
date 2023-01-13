@@ -1,38 +1,112 @@
 ## Introduction
 
-A priority queue is a data structure that allows at least the following two operations:  *insert* , which does the obvious thing, and  *delete_min* , which finds, returns and removes the minimum element in the heap.
-The *insert* operation is the equivalent of  *enqueue* , and *delete_min* is the priority queue equivalent of the queue's *dequeue* operation.
+In some situations we may need to find the minimum/maximum element among a collection of elements. We can do this with the help of Priority Queue ADT.
+A priority queue ADT is a data structure that supports the operations Insert and DeleteMin (which returns and removes the minimum element) or DeleteMax (which returns and removes the maximum element).
+These operations are equivalent to EnQueue and DeQueue operations of a queue. The difference is that, in priority queues, the order in which the elements enter the queue may not be the same in which they were processed.
+An example application of a priority queue is job scheduling, which is prioritized instead of serving in first come first serve.
+
+A priority queue is called an *ascending – priority* queue, if the item with the smallest key has the highest priority (that means, delete the smallest element always).
+Similarly, a priority queue is said to be a *descending – priority* queue if the item with the largest key has the highest priority (delete the maximum element always).
+Since these two types are symmetric we will be concentrating on one of them: ascending-priority queue.
 
 Priority queues are also important in the implementation of  [*greedy algorithms*](/docs/CS/Algorithms/Greedy.md) , which operate by repeatedly finding a minimum.
 
-## Simple Implementations
+## Priority Queue ADT
 
-There are several obvious ways to implement a priority queue. We could use a simple linked list, performing insertions at the front in  *O* (1) and traversing the list, which requires  *O* ( *n* ) time, to delete the minimum.
-Alternatively, we could insist that the list be always kept sorted; this makes insertions expensive ( *O* ( *n* )) and *delete_mins* cheap ( *O* (1)).
-The former is probably the better idea of the two, based on the fact that there are never more *delete_mins* than insertions.
+The following operations make priority queues an ADT.
 
-Another way of implementing priority queues would be to use a binary search tree. This gives an  *O* (log  *n* ) average running time for both operations.
-This is true in spite of the fact that although the insertions are random, the deletions are not. Recall that the only element we ever delete is the minimum.
-Repeatedly removing a node that is in the left subtree would seem to hurt the balance of the tree by making the right subtree heavy. However, the right subtree is random.
-In the worst case, where the *delete_mins* have depleted the left subtree, the right subtree would have at most twice as many elements as it should.
-This adds only a small constant to its expected depth. Notice that the bound can be made into a worst-case bound by using a balanced tree; this protects one against bad insertion sequences.
+**Main Priority Queues Operations**
 
-We will refer to binary heaps as merely  *heaps* . Like binary search trees, heaps have two properties, namely, a structure property and a heap order property.
-As with AVL trees, an operation on a heap can destroy one of the properties, so a heap operation must not terminate until all heap properties are in order.
+A priority queue is a container of elements, each having an associated key.
 
-## Binary Heap
+- Insert (key, data): Inserts data with key to the priority queue. Elements are ordered based on key.
+- DeleteMin/DeleteMax: Remove and return the element with the smallest/largest key.
+- GetMinimum/GetMaximum: Return the element with the smallest/largest key without deleting it.
 
-A heap is a binary tree that is completely filled, with the possible exception of the bottom level, which is filled from left to right. Such a tree is known as a  *complete binary tree*.
+**Auxiliary Priority Queues Operations**
 
-It is easy to show that a complete binary tree of height *h* has between 2*^h^* and 2 *^h^* +1 - 1 nodes. This implies that the height of a complete binary tree is log *n*, which is clearly  *O* (log  *n* ).
+- kth – Smallest/kth – Largest: Returns the kth –Smallest/kth –Largest key in priority queue.
+- Size: Returns number of elements in priority queue.
+- Heap Sort: Sorts the elements in the priority queue based on priority (key)
 
-An important observation is that because a complete binary tree is so regular, it can be represented in an array and no pointers are necessary.
+## Priority Queue Applications
 
-For any element in array position  *i* , the left child is in position 2 *i* , the right child is in the cell after the left child (2*i* + 1), and the parent is in position i/2.
-Thus not only are pointers not required, but the operations required to traverse the tree are extremely simple and likely to be very fast on most computers.
-The only problem with this implementation is that an estimate of the maximum heap size is required in advance.
+Priority queues have many applications - a few of them are listed below:
 
-A heap data structure will, then, consist of an array (of whatever type the key is) and integers representing the maximum 2nd current heap size.
+- Data compression: Huffman Coding algorithm
+- Shortest path algorithms: Dijkstra’s algorithm
+- Minimum spanning tree algorithms: Prim’s algorithm
+- Event-driven simulation: customers in a line
+- Selection problem: Finding kth- smallest element
+
+## Priority Queue Implementations
+
+Before discussing the actual implementation, let us enumerate the possible options.
+
+Unordered Array Implementation
+Elements are inserted into the array without bothering about the order. Deletions (DeleteMax) are performed by searching the key and then deleting.
+Insertions complexity: O(1). DeleteMin complexity: O(n).
+
+Unordered List Implementation
+It is very similar to array implementation, but instead of using arrays, linked lists are used. Insertions complexity: O(1). DeleteMin complexity: O(n).
+
+Ordered Array Implementation
+Elements are inserted into the array in sorted order based on key field. Deletions are performed at only one end.
+Insertions complexity: O(n). DeleteMin complexity: O(1).
+
+Ordered List Implementation
+Elements are inserted into the list in sorted order based on key field. Deletions are performed at only one end, hence preserving the status of the priority queue. All other functionalities associated with a linked list ADT are performed without modification.
+Insertions complexity: O(n). DeleteMin complexity: O(1).
+
+Binary Search Trees Implementation
+Both insertions and deletions take O(logn) on average if insertions are random (refer to Trees chapter).
+
+Balanced Binary Search Trees Implementation
+Both insertions and deletion take O(logn) in the worst case (refer to Trees chapter).
+
+Binary Heap Implementation
+In subsequent sections we will discuss this in full detail. For now, assume that binary heap implementation gives O(logn) complexity for search, insertions and deletions and O(1) for finding the maximum or minimum element.
+
+Comparing Implementations
+
+
+| Implementation               | Insertion       | Deletion(DeleteMax) | Find Min        |
+| ---------------------------- | --------------- | ------------------- | --------------- |
+| Unordered Array              | 1               | n                   | n               |
+| Unordered List               | 1               | n                   | n               |
+| Ordered Array                | n               | 1                   | 1               |
+| Ordered List                 | n               | 1                   | 1               |
+| Binary Search Trees          | $logn(average)$ | $logn(average)$     | $logn(average)$ |
+| Balanced Binary Search Trees | $logn$          | $logn$              | $logn$          |
+| Binary Heap                  | $logn$          | $logn$              | 1               |
+
+## Heaps and Binary Heaps
+
+A heap is a tree with some special properties.
+The basic requirement of a heap is that the value of a node must be ≥ (or ≤) than the values of its children.
+This is called heap property.
+A heap also has the additional property that all leaves should be at h or h – 1 levels (where h is the height of the tree) for some h > 0 (complete binary trees).
+That means heap should form a complete binary tree.
+
+Based on the property of a heap we can classify heaps into two types:
+
+- **Min heap:** The value of a node must be less than or equal to the values of its children
+- **Max heap:** The value of a node must be greater than or equal to the values of its children
+
+### Binary Heaps
+
+In binary heap each node may have up to two children. In practice, binary heaps are enough and we concentrate on binary min heaps and binary max heaps for the remaining discussion.
+
+**Representing Heaps:**
+Before looking at heap operations, let us see how heaps can be represented. One possibility is using arrays.
+Since heaps are forming complete binary trees, there will not be any wastage of locations.
+For the discussion below let us assume that elements are stored in arrays, which starts at index 0. The previous max heap can be represented as:
+
+<div style="text-align: center;">
+
+![A Tree](img/Binary-Heap.png)
+
+</div>
 
 ## d-Heaps
 
