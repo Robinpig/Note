@@ -11,18 +11,19 @@ After considering the classic selection sort, insertion sort, shellsort, mergeso
 
 Suppose you have a group of n numbers and would like to determine the kth largest. This is known as the _selection problem_.
 
-We consider two classes of sorting algorithms. 
+We consider two classes of sorting algorithms.
 
 The first class of algorithms makes use of the structure of the elements to be sorted.
-For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 elemeQts. in $O(n + m)$ time; 
+For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 elemeQts. in $O(n + m)$ time;
 if the elements to be sorted are strings over a fixed alphabet, then a sequence of strings can be sorted in time linearly proportional to the sum of the lengths of the strings.
 
 The second class of algorithms assumes no structure on the elements to be sorted. The basic operation is a comparison between a pair of elements.
-With algorithms of this nature we shall see that at least n log /1 comparisons are needed to sort a sequence of n elements. 
+With algorithms of this nature we shall see that at least n log /1 comparisons are needed to sort a sequence of n elements.
 We give two O(nlogn) sorting algorithms-Heapsort. which is Oc(n log n) in the worst case, and Quicksort, which is $O(nlogn)$ in the expected case.
 
+
 | Sort   | Avg Time | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
-| -------- | ---------- | ----------- | ----------- | ------------ | ---------- | ----------- |
+| ------ | -------- | --------- | --------- | ---------- | -------- | --------- |
 | Bubble |          |           |           |            |          |           |
 | Select |          |           |           |            |          |           |
 | Insert |          |           |           |            |          |           |
@@ -89,6 +90,9 @@ Consequently, the *O(nlgn)* lower bound does not apply to them.
 
 ## Heapsort
 
+Time complexity: As we remove the elements from the heap, the values become sorted (since maximum elements are always root only).
+Since the time complexity of both the insertion algorithm and deletion algorithm is $O(logn)$ (where n is the number of items in the heap), the time complexity of the heap sort algorithm is $O(nlogn)$.
+
 ## Mergesort
 
 > [!NOTE]
@@ -135,20 +139,19 @@ There are many different versions of quickSort that pick pivot in different ways
 - Pick a random element as a pivot.
 - Pick median as the pivot.
 
-The key process in quickSort is a partition(). 
+The key process in quickSort is a partition().
 The target of partitions is, given an array and an element x of an array as the pivot, put x at its correct position in a sorted array and put all smaller elements (smaller than x) before x, and put all greater elements (greater than x) after x.
 All this should be done in linear time.
 
-
 Partition Algorithm:
 <br>
-There can be many ways to do partition, following pseudo-code adopts the method given in the CLRS book. 
+There can be many ways to do partition, following pseudo-code adopts the method given in the CLRS book.
 The logic is simple, we start from the leftmost element and keep track of the index of smaller (or equal to) elements as i.
-While traversing, if we find a smaller element, we swap the current element with arr[i]. 
+While traversing, if we find a smaller element, we swap the current element with arr[i].
 Otherwise, we ignore the current element.
 
-
 Pseudo Code for recursive QuickSort function:
+
 ```
 /* low  –> Starting index,  high  –> Ending index */
 quickSort(arr[], low, high) {
@@ -160,7 +163,9 @@ quickSort(arr[], low, high) {
     }
 }
 ```
+
 Example:
+
 ```go
 func quickSort(array []int, low int, high int) []int {
 	if low < high {
@@ -202,22 +207,20 @@ func main() {
 }
 ```
 
-
 ### Picking the Pivot
 
 A safe course is merely to choose the pivot randomly.
 
 Median-of-Three Partitioning
 
-
 > [!NOTE]
 >
 > A common solution is not to use quicksort recursively for small files, but instead use a sorting algorithm that is efficient for small files, such as insertion sort.
 
-
 ### Randomized QuickSort
+
 Choosing the first element of a subarray as the pivot takes only $O(1)$ time but can cause QuickSort to run in $O(n^2)$ time.
-Choosing the median element as the pivot guarantees an overall running time of $O(nlogn)$ but is much more time-consuming (if still linear-time). 
+Choosing the median element as the pivot guarantees an overall running time of $O(nlogn)$ but is much more time-consuming (if still linear-time).
 Can we have the best of both worlds? Is there a simple and lightweight way to choose a pivot element that leads to a roughly balanced split of the array? The answer is yes, and the key idea is to use randomization.
 
 > For every input array of length n $ 1, the average running time of randomized QuickSort is $O(nlogn)$.
@@ -230,10 +233,6 @@ The algorithm doesn’t spend time allocating and managing additional memory (un
 
 Radix sort is sometimes known as *card sort*.
 
-
-
-
-
 ## Bucket Sort
 
 ## External Sort
@@ -244,8 +243,6 @@ Merging is the central idea of external sorts.
 
 ### Multiway Merge
 
-
-
 ## Others
 
 The Pancake Flipping problem is NP-hard.(see [Pancake Flipping is Hard](https://arxiv.org/pdf/1111.0434v1.pdf))
@@ -254,6 +251,5 @@ The Pancake Flipping problem is NP-hard.(see [Pancake Flipping is Hard](https://
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
-
 
 [AlphaSort: A RISC Machine Sort](https://courses.cs.washington.edu/courses/cse590q/05wi/paper/p233-nyberg.pdf)

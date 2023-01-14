@@ -104,9 +104,108 @@ For the discussion below let us assume that elements are stored in arrays, which
 
 <div style="text-align: center;">
 
-![A Tree](img/Binary-Heap.png)
+![Binary Heap](img/Binary-Heap.png)
 
 </div>
+
+
+#### Heapifying
+After inserting an element into heap, it may not satisfy the heap property.
+In that case we need to adjust the locations of the heap to make it heap again.
+This process is called heapifying. 
+In max-heap, to heapify an element, we have to find the maximum of its children and swap it with the current element and continue this process until the heap property is satisfied at every node.
+
+
+```dot
+digraph {
+
+ 31 -> 1;
+ 1[style=dashed];
+ 31 -> 21;
+ 1 -> 9;
+ 1 -> 10;
+ 21 -> 12;
+ 21 -> 18;
+ 9 -> 3;
+ 9 -> 2;
+ 10 -> 8;
+ 10 -> 7;
+}
+```
+Observation: One important property of heap is that, if an element is not satisfying the heap property, then all the elements from that element to the root will have the same problem. 
+In the example below, element 1 is not satisfying the heap property and its parent 31 is also having the issue.
+Similarly, if we heapify an element, then all the elements from that element to the root will also satisfy the heap property automatically.
+Let us go through an example. In the above heap, the element 1 is not satisfying the heap property. Let us try heapifying this element.
+
+To heapify 1, find the maximum of its children and swap with that.
+
+
+```dot
+digraph {
+
+ 31 -> 10;
+ 10[style=dashed];
+ 31 -> 21;
+ 10 -> 9;
+ 1[style=dashed];
+ 10 -> 1;
+ 21 -> 12;
+ 21 -> 18;
+ 9 -> 3;
+ 9 -> 2;
+ 1 -> 8;
+ 1 -> 7;
+}
+```
+We need to continue this process until the element satisfies the heap properties. Now, swap 1 with 8.
+
+```dot
+digraph {
+
+ 31 -> 10;
+ 31 -> 21;
+ 10 -> 9;
+ 8[style=dashed];
+ 10 -> 8;
+ 21 -> 12;
+ 21 -> 18;
+ 9 -> 3;
+ 9 -> 2;
+ 1[style=dashed];
+ 8 -> 1;
+ 8 -> 7;
+}
+```
+Now the tree is satisfying the heap property. In the above heapifying process, since we aremoving from top to bottom, this process is sometimes called percolate down. 
+Similarly, if we start heapifying from any other node to root, we can that process percolate up as move from bottom to top.
+
+##### Deleting an Element
+To delete an element from heap, we just need to delete the element from the root.
+This is the only operation (maximum element) supported by standard heap.
+After deleting the root element, copy the last element of the heap (tree) and delete that last element.
+
+After replacing the last element, the tree may not satisfy the heap property. To make it heap again, call the PercolateDown function.
+- Copy the first element into some variable
+- Copy the last element into first element location
+- PercolateDown the first element
+
+Time Complexity: same as Heapify function and it is O(logn).
+
+
+##### Inserting an Element
+Insertion of an element is similar to the heapify and deletion process.
+- Increase the heap size
+- Keep the new element at the end of the heap (tree)
+- Heapify the element from bottom to top (root)
+
+
+## HeapSort
+
+One main application of heap ADT is sorting (heap sort).
+The heap sort algorithm inserts all elements (from an unsorted array) into a heap, then removes them from the root of a heap until the heap is empty.
+Note that heap sort can be done in place with the array to be sorted.
+Instead of deleting an element, exchange the first element (maximum) with the last element and reduce the heap size (array size). 
+Then, we heapify the first element. Continue this process until the number of remaining elements is one.
 
 ## d-Heaps
 
