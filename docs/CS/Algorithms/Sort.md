@@ -14,19 +14,56 @@ Suppose you have a group of n numbers and would like to determine the kth larges
 We consider two classes of sorting algorithms.
 
 The first class of algorithms makes use of the structure of the elements to be sorted.
-For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 elemeQts. in $O(n + m)$ time;
+For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 eleme Qts. in $O(n + m)$ time;
 if the elements to be sorted are strings over a fixed alphabet, then a sequence of strings can be sorted in time linearly proportional to the sum of the lengths of the strings.
 
 The second class of algorithms assumes no structure on the elements to be sorted. The basic operation is a comparison between a pair of elements.
 With algorithms of this nature we shall see that at least n log /1 comparisons are needed to sort a sequence of n elements.
-We give two O(nlogn) sorting algorithms-Heapsort. which is Oc(n log n) in the worst case, and Quicksort, which is $O(nlogn)$ in the expected case.
+We give two $O(nlogn)$ sorting algorithms-Heapsort. which is $O(nlogn)$ in the worst case, and Quicksort, which is $O(nlogn)$ in the expected case.
+
+## Classification of Sorting Algorithms
+
+Sorting algorithms are generally categorized based on the following parameters.
+
+**By Number of Comparisons**
+
+In this method, sorting algorithms are classified based on the number of comparisons. For comparison based sorting algorithms, best case behavior is O(nlogn) and worst case behavior is $O(n^2)$.
+Comparison-based sorting algorithms evaluate the elements of the list by key comparison operation and need at least O(nlogn) comparisons for most inputs.
+Later in this chapter we will discuss a few non – comparison (linear) sorting algorithms like Counting sort, Bucket sort, Radix sort, etc. Linear Sorting algorithms impose few restrictions on the inputs to improve the complexity
+
+**By Number of Swaps**
+
+In this method, sorting algorithms are categorized by the number of swaps (also called inversions).
+
+**By Memory Usage**
+
+Some sorting algorithms are “in place” and they need O(1) or O(logn) memory to create auxiliary locations for sorting the data temporarily.
+
+**By Recursion**
+
+Sorting algorithms are either recursive [quick sort] or non-recursive [selection sort, and insertion sort], and there are some algorithms which use both (merge sort).
+
+**By Stability**
+
+Sorting algorithm is stable if for all indices i and j such that the key A[i] equals key A[j], if record R[i] precedes record R[j] in the original file, record R[i] precedes record R[j] in the sorted list. Few sorting algorithms maintain the relative order of elements with equal keys (equivalent elements retain their relative positions even after sorting).
+
+**By Adaptability**
+
+With a few sorting algorithms, the complexity changes based on pre-sortedness [quick sort]: pre- sortedness of the input affects the running time. Algorithms that take this into account are known to be adaptive.
+
+Another method of classifying sorting algorithms is:
+
+- Internal Sort
+  Sort algorithms that use main memory exclusively during the sort are called internal sorting algorithms. This kind of algorithm assumes high-speed random access to all memory.
+- External Sort
+  Sorting algorithms that use external memory, such as tape or disk, during the sort come under this category.
 
 
 | Sort   | Avg Time | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
 | ------ | -------- | --------- | --------- | ---------- | -------- | --------- |
-| Bubble |          |           |           |            |          |           |
-| Select |          |           |           |            |          |           |
-| Insert |          |           |           |            |          |           |
+| Bubble | $O(n^2)$ | $O(1)$    | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(1)$    |
+| Select | $O(n^2)$ | $O(1)$    | $O(n^2)$  | $O(1)$     | $O(n^2)$ | $O(1)$    |
+| Insert | $O(n^2)$ | $O(n^2)$  | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(n^2)$  |
 | Shell  |          |           |           |            |          |           |
 | Heap   |          |           |           |            |          |           |
 | Merge  |          |           |           |            |          |           |
@@ -34,7 +71,41 @@ We give two O(nlogn) sorting algorithms-Heapsort. which is Oc(n log n) in the wo
 | Radix  |          |           |           |            |          |           |
 | Bucket |          |           |           |            |          |           |
 
+## Bubble Sort
+
+Bubble sort is the simplest sorting algorithm. It works by iterating the input array from the first element to the last, comparing each pair of elements and swapping them if needed.
+Bubble sort continues its iterations until no more swaps are needed.
+The algorithm gets its name from the way smaller elements “bubble” to the top of the list.
+Generally, insertion sort has better performance than bubble sort.
+Some researchers suggest that we should not teach bubble sort because of its simplicity and high time complexity.
+The only significant advantage that bubble sort has over other implementations is that it can detect whether the input list is already sorted or not.
+
+```java
+public static void swap (int[] A, int i, int j) {
+	A[i] ^= A[j];
+	A[j] ^= A[i];
+	A[i] ^= A[j];
+}
+```
+
+Several algorithms that can sort n numbers in $O(nlogn)$ time.
+Merge sort and heapsort achieve this upper bound in the worst case; quicksort achieves it on average.
+These algorithms share an interesting property: the sorted order they determine is based only on comparisons between the input elements.
+We call such sorting algorithms *comparison sorts*.
+
+Any comparison sort must make $O(nlogn)$ comparisons in the worst case to sort *n* elements.
+Thus, merge sort and heapsort are asymptotically optimal, and no comparison sort exists that is faster by more than a constant factor.
+
+We examine three sorting algorithms—counting sort, radix sort, and bucket sort—that run in linear time.
+Of course, these algorithms use operations other than comparisons to determine the sorted order.
+Consequently, the $O(nlogn)$ lower bound does not apply to them.
+
 ## Selection Sort
+
+Selection sort is an in-place sorting algorithm. Selection sort works well for small files.
+It is used for sorting the files with very large values and small keys.
+This is because selection is made based on keys and swaps are made only when required.
+This algorithm is called *selection sort* since it repeatedly selects the smallest element.
 
 One of the simplest sorting algorithms works as follows:
 
@@ -55,45 +126,35 @@ This method is called _selection sort_ because it works by repeatedly selecting 
 
 ## Insertion sort
 
+Insertion sort is a simple and efficient comparison sort.
+In this algorithm, each iteration removes an element from the input data and inserts it into the correct position in the list being sorted.
+The choice of the element being removed from the input is random and this process is repeated until all input elements have gone through.
+
 Insertion sort uses `N^2/4` compares and `N^2/4` exchanges to sort a randomly ordered array of length N with distinct keys, on the average.
 The worst case is `N^2/2` compares and `N^2/2` exchanges and the best case is N  1 compares and 0 exchanges.
 
 The number of exchanges used by insertion sort is equal to the number of inversions in the array,
 and the number of compares is at least equal to the number of inversions and at most equal to the number of inversions plus the array size minus 1.
 
-## Shellsort
+## Shell Sort
 
-Shellsort is sometimes referred to as diminishing increment sort.
-
-## Bubble Sort
-
-```java
-public static void swap (int[] A, int i, int j) {
-	A[i] ^= A[j];
-	A[j] ^= A[i];
-	A[i] ^= A[j];
-}
-```
-
-Several algorithms that can sort n numbers in *O(nlgn)* time.
-Merge sort and heapsort achieve this upper bound in the worst case; quicksort achieves it on average.
-These algorithms share an interesting property: the sorted order they determine is based only on comparisons between the input elements.
-We call such sorting algorithms ***comparison sorts***.
-
-Any comparison sort must make *O(nlgn)*
-comparisons in the worst case to sort *n* elements.
-Thus, merge sort and heapsort are asymptotically optimal, and no comparison sort exists that is faster by more than a constant factor.
-
-We examine three sorting algorithms—counting sort, radix sort, and bucket sort—that run in linear time.
-Of course, these algorithms use operations other than comparisons to determine the sorted order.
-Consequently, the *O(nlgn)* lower bound does not apply to them.
+Shell sort (also called diminishing increment sort) was invented by Donald Shell.
+This sorting algorithm is a generalization of insertion sort. Insertion sort works efficiently on input that is already almost sorted.
+Shell sort is also known as n-gap insertion sort.
+Instead of comparing only the adjacent pair, shell sort makes several passes and uses various gaps between adjacent elements (ending with the gap of 1 or classical insertion sort).
+In insertion sort, comparisons are made between the adjacent elements.
+At most 1 inversion is eliminated for each comparison done with insertion sort.
+The variation used in shell sort is to avoid comparing adjacent elements until the last step of the algorithm.
+So, the last step of shell sort is effectively the insertion sort algorithm.
+It improves insertion sort by allowing the comparison and exchange of elements that are far away.
+This is the first algorithm which got less than quadratic complexity among comparison sort algorithms.
 
 ## Heapsort
 
 Time complexity: As we remove the elements from the heap, the values become sorted (since maximum elements are always root only).
 Since the time complexity of both the insertion algorithm and deletion algorithm is $O(logn)$ (where n is the number of items in the heap), the time complexity of the heap sort algorithm is $O(nlogn)$.
 
-## Mergesort
+## Merge Sort
 
 > [!NOTE]
 >
