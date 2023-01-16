@@ -43,14 +43,18 @@ For instance, if output needs to be written in a certain format, it is certainly
 If printing statements are scattered throughout the program, it will take considerably longer to make modifications.
 The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
 
+
+We introduce [hash tables](/docs/CS/Algorithms/hash.md), a widely used data structure supporting the dictionary operations INSERT, DELETE, and SEARCH.
+In the worst case, hash tables require Θ(n) time to perform a SEARCH operation, but the expected time for hash-table operations is $O(1)$.
+We rely on probability to analyze hash-table operations, but you can understand how the operations work even without probability.
+
+
 ### Tree
 
 [Trees](/docs/CS/Algorithms/tree.md) in general are very useful abstractions in computer science.
 
 - [Trie](/docs/CS/Algorithms/Trie.md)
 - [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)
-
-A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts an input of arbitrary length into an encrypted output of a fixed length.
 
 > [!NOTE]
 >
@@ -71,7 +75,7 @@ A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts a
 
 
 | 算法规则                | 优缺点                                                                                                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | OPT                     | 优先淘汰最长时间内不会被访问的页面	缺页率最小，性能最好;但无法实现                                                                                                               |
 | FIFO                    | 优先淘汰最先进入内存的页面	实现简单;但性能很差，可能出现Belady异常                                                                                                               |
 | LRU                     | 优先淘汰最近最久没访问的页面	性能很好;但需要硬件支持，算法开销大                                                                                                                 |
