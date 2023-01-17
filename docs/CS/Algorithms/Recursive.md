@@ -84,5 +84,3 @@ Iteration
 - [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
-
-
