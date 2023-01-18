@@ -6,11 +6,11 @@
 -Xmixed default
 ```
 
-
 On Stack Replacement
 
 - Invocation Counter -- for call method
 - Back Edge Counter -- for code in loop
+
 ```
 CompileThreshold                          = 10000
 BackEdgeThreshold                         = 100000
@@ -18,11 +18,13 @@ OnStackReplacePercentage                  = 140
 ```
 
 count will decr by time
+
 ```
 UseCounterDecay                           = true
 ```
 
 compile hot code async
+
 ```
 BackgroundCompilation                     = true
 ```
@@ -70,7 +72,7 @@ Code
 
 Code Cache
 
-CodeCacheExpansionSize                    = 65536  
+CodeCacheExpansionSize                    = 65536
 CodeCacheMinimumFreeSpace                 = 512000
 InitialCodeCacheSize                      = 2555904
 PrintCodeCache                            = false
@@ -78,11 +80,11 @@ PrintCodeCacheOnCompilation               = false
 ReservedCodeCacheSize                     = 251658240
 UseCodeCacheFlushing                      = true
 
-
 JIT
+
 1. c1
 2. opto(c2)
 
-
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
