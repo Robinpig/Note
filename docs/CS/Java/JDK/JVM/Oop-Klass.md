@@ -1,23 +1,18 @@
-
-
 ## Introduction
 
 One reason for the oop/klass dichotomy in the implementation is that we don't want a C++ vtbl pointer in every object.
-Thus, normal oops don't have any virtual functions. 
+Thus, normal oops don't have any virtual functions.
 Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type. (See `oop.inline.hpp` for some of the forwarding code.)
 
-
 ## oop
+
 oopDesc is the top baseclass for objects classes. The Desc classes describe the format of Java objects so the fields can be accessed from C++.
 oopDesc is abstract, and no virtual functions allowed.
 
-
 ### Object Hierarchy
 
-This hierarchy is a representation hierarchy, i.e. 
+This hierarchy is a representation hierarchy, i.e.
 if A is a superclass of B, A's representation is a prefix of B's representation.
-
-
 
 ```dot
 strict digraph {
@@ -33,7 +28,6 @@ strict digraph {
 }
 ```
 
-
 ```cpp
 // oopsHierarchy.hpp
 
@@ -48,12 +42,13 @@ typedef class   arrayOopDesc*                    arrayOop;
 typedef class     objArrayOopDesc*            objArrayOop;
 typedef class     typeArrayOopDesc*            typeArrayOop;
 ```
-| Type         | Java |
-| ------------ | ---- |
-| instanceOop  |  Obj    |
-| objArrayOop  |  Obj[]  |
-| typeArrayOop |  []     |
 
+
+| Type         | Java  |
+| -------------- | ------- |
+| instanceOop  | Obj   |
+| objArrayOop  | Obj[] |
+| typeArrayOop | []    |
 
 ### struct
 
@@ -73,7 +68,6 @@ class oopDesc {
   } _metadata;
 }
 ```
-
 
 ## allocate_instance
 
@@ -118,6 +112,7 @@ oop MemAllocator::allocate() const {
 ```
 
 ### allocate
+
 ```cpp
 HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
   if (UseTLAB) {
@@ -141,7 +136,6 @@ HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
 
 #### inside tlab
 
-
 Try refilling the TLAB and allocating the object in it.
 
 ```cpp
@@ -161,8 +155,6 @@ HeapWord* MemAllocator::allocate_inside_tlab(Allocation& allocation) const {
 ```
 
 #### EMA
-
-
 
 ##### slow
 
@@ -195,7 +187,9 @@ HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const 
   size_t new_tlab_size = tlab.compute_size(_word_size);
 
 ```
+
 fill with dummy object(GC friendly)
+
 ```cpp
   tlab.retire_before_allocation();
 
@@ -203,7 +197,9 @@ fill with dummy object(GC friendly)
     return NULL;
   }
 ```
+
 Allocate a new TLAB requesting new_tlab_size. Any size between minimal and new_tlab_size is accepted.
+
 ```
   size_t min_tlab_size = ThreadLocalAllocBuffer::compute_min_size(_word_size);
   mem = Universe::heap()->allocate_new_tlab(min_tlab_size, new_tlab_size, &allocation._allocated_tlab_size);
@@ -237,7 +233,6 @@ Allocate a new TLAB requesting new_tlab_size. Any size between minimal and new_t
 }
 ```
 
-
 #### outside tlab
 
 implement by different collectors
@@ -260,7 +255,9 @@ HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
 ```
 
 ### initialize
+
 clear_mem & set [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
+
 ```cpp
 // share/gc/shared/memAllocator.cpp
 oop ObjAllocator::initialize(HeapWord* mem) const {
@@ -280,16 +277,17 @@ oop MemAllocator::finish(HeapWord* mem) const {
 }
 ```
 
-
 ## MarkWord
 
 The markOop describes the header of an object.
+
 > [!NOTE]
-> 
+>
 > Note that the mark is not a real oop but just a word.
 > It is placed in the oop hierarchy for historical reasons.
 
 Bit-format of an object header (most significant first, big endian layout below):
+
 ```
  32 bits:
  --------
@@ -316,7 +314,6 @@ unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS fr
   a hash value no bigger than 32 bits because they will not
   properly generate a mask larger than that: see library_call.cpp
   and c1_CodePatterns_sparc.cpp.(see [HashCode](/docs/CS/Java/JDK/Basic/Object.md?id=hashCode))
-
 - the biased lock pattern is used to bias a lock toward a given
   thread. When this pattern is set in the low three bits, the lock
   is either biased toward a given thread or "anonymously" biased,
@@ -341,11 +338,14 @@ unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS fr
   a very large value (currently 128 bytes (32bVM) or 256 bytes (64bVM))
   to make room for the age bits & the epoch bits (used in support of
   biased locking), and for the CMS "freeness" bit in the 64bVM (+COOPs).
+
 ```
   [JavaThread* | epoch | age | 1 | 01]       lock is biased toward given thread
   [0           | epoch | age | 1 | 01]       lock is anonymously biased
 ```
+
 - the two lock bits are used to describe three states: locked/unlocked and monitor.
+
 ```
   [ptr             | 00]  locked             ptr points to real header on stack
   [header      | 0 | 01]  unlocked           regular object header
@@ -355,8 +355,8 @@ unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS fr
 
 We assume that stack/thread pointers have the lowest two bits cleared.
 
-
 In JDK12, and now `markOopDesc` changed to `markWord`
+
 ```cpp
 //markOop.hpp
 class markOopDesc: public oopDesc
@@ -368,7 +368,6 @@ class markOopDesc: public oopDesc
   ...
 }
 ```
-
 
 ```cpp
 // share/oops/markWord.hpp
@@ -383,11 +382,6 @@ class markWord {
 }
 ```
 
-
-
-
-
-
 ```shell
 -XX:+UseCompressedOops
 ```
@@ -396,8 +390,6 @@ class markWord {
 在此基础上再去掉最高位，就完成了指针从8字节到4字节的压缩。而在实际使用时，在压缩后的指针后加3位0，就能够实现向真实地址的映射。
 指针的32位中的每一个bit，都可以代表8个字节，这样就相当于使原有的内存地址得到了8倍的扩容。所以在8字节对齐的情况下，32位最大能表示2^32*8=32GB内存
 由于能够表示的最大内存是32GB，所以如果配置的最大的堆内存超过这个数值时，那么指针压缩将会失效。
-
-
 
 ```hpp
 // globals.hpp
@@ -412,13 +404,16 @@ product(bool, CompactFields, true,                                          \
 ```
 
 64-bit padding for 8bytes
+
 ```hpp
 lp64_product(intx, ObjectAlignmentInBytes, 8,                               \
           "Default object alignment in bytes, 8 is minimum")                \
           range(8, 256)                                                     \
           constraint(ObjectAlignmentInBytesConstraintFunc,AtParse)          \
 ```
+
 if UseCompressedOops in 64-bit VM
+
 ```hpp
 
  lp64_product(bool, UseCompressedOops, false,                               \
@@ -426,16 +421,13 @@ if UseCompressedOops in 64-bit VM
           "lp64_product means flag is always constant in 32 bit VM")        \
 ```
 
-
 超过15 报错
 
 ```
 -XX:MaxTenuringThreshold=15
 ```
 
-
 access object use direct-pointer or handle
-
 
 ### Example
 
@@ -447,6 +439,7 @@ compile group: 'org.openjdk.jol', name: 'jol-core', version: '0.13'
 ```
 
 Print VM details.
+
 ```java
 System.out.println(VM.current().details());
 ```
@@ -463,8 +456,8 @@ System.out.println(VM.current().details());
 # Array element sizes: 4, 1, 1, 2, 2, 4, 4, 8, 8 [bytes]
 ```
 
-
 Print object layout.
+
 ```java
 Object o = new Object();
 System.out.println(ClassLayout.parseInstance(o).toPrintable());
@@ -472,8 +465,6 @@ System.out.println(ClassLayout.parseInstance(o).toPrintable());
 String[] array = new String[]{"dfs", "fds", "ds", "fs"};
 System.out.println(ClassLayout.parseInstance(array).toPrintable());
 ```
-
-
 
 Output:
 
@@ -498,15 +489,10 @@ Instance size: 32 bytes
 Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 ```
 
-
-
-
-
-
 ## Metadata
 
-
 ### Metadata hierarchy
+
 ```cpp
 // The metadata hierarchy is separate from the oop hierarchy
 
@@ -533,7 +519,6 @@ class   CompiledICHolder;
 
 The klass hierarchy is separate from the oop hierarchy.
 
-
 ![](../img/Klass.svg)
 
 ```cpp
@@ -548,16 +533,12 @@ class     TypeArrayKlass;
 ```
 
 
-
-| Type                     | Java Level                |      |
-| ------------------------ | ------------------------- | ---- |
-|                          |                           |      |
-| InstanceMirrorKlass      | `java.lang.CLass`         |      |
-| InstanceRefKlass         | `java.lang.ref.Reference` |      |
-| InstanceClassLoaderKlass | `java.lang.ClassLoader`   |      |
-
-
-
+| Type                     | Java Level                |  |
+| -------------------------- | --------------------------- | -- |
+|                          |                           |  |
+| InstanceMirrorKlass      | `java.lang.CLass`         |  |
+| InstanceRefKlass         | `java.lang.ref.Reference` |  |
+| InstanceClassLoaderKlass | `java.lang.ClassLoader`   |  |
 
 ### follow_object
 
@@ -574,8 +555,6 @@ inline void MarkSweep::follow_object(oop obj) {
 }
 ```
 
-
-
 ```cpp
 // InstanceKlass.inline.hpp
 template <typename T, class OopClosureType>
@@ -588,6 +567,7 @@ ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_maps(oop obj, OopClosureTyp
   }
 }
 ```
+
 The iteration over the oops in objects is a hot path in the GC code.
 By force inlining the following functions, we get similar GC performance as the previous macro based implementation.
 
@@ -653,7 +633,7 @@ non-static oop-map block
 
 ### vtable
 
-array 
+array
 
 -Xlog:vtables=trace
 
@@ -664,6 +644,7 @@ update_inherited_vtable
 called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
 
 Revised lookup semantics   introduced 1.3 (Kestrel beta)
+
 ```cpp
 // share/oops/klassVtable.cpp
 void klassVtable::initialize_vtable(bool checkconstraints, TRAPS) {
@@ -702,15 +683,19 @@ void klassVtable::initialize_vtable(bool checkconstraints, TRAPS) {
     int len = methods->length();
     int initialized = super_vtable_len;
 ```
+
 Check each of this class's methods against super;
 if override, replace in copy of super vtable, otherwise append to end
+
 ```cpp
     for (int i = 0; i < len; i++) {
       HandleMark hm(THREAD);
       methodHandle mh(THREAD, methods->at(i));
 
 ```
+
 update_inherited_vtable can stop for gc - ensure using handles
+
 ```cpp
       bool needs_new_entry = update_inherited_vtable(ik(), mh, super_vtable_len, -1, checkconstraints, CHECK);
       if (needs_new_entry) {
@@ -720,7 +705,9 @@ update_inherited_vtable can stop for gc - ensure using handles
       }
     }
 ```
+
 update vtable with default_methods
+
 ```cpp
     Array<Method*>* default_methods = ik()->default_methods();
     if (default_methods != NULL) {
@@ -782,15 +769,13 @@ update vtable with default_methods
 }
 ```
 
-
-
 Update child's copy of super vtable for overrides
 OR return true if a new vtable entry is required.
 Only called for InstanceKlass's, i.e. not for arrays
 If that changed, could not use _klass as handle for klass
 
-
 #### initialize_itable
+
 called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
 
 ```cpp
@@ -802,7 +787,6 @@ void klassItable::initialize_itable(GrowableArray<Method*>* supers) {
     assign_itable_indices_for_interface(InstanceKlass::cast(_klass));
   }
 ```
-
 
 ### CLD
 
@@ -816,7 +800,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   WeakHandle<vm_class_loader_data> _holder; // The oop that determines lifetime of this class loader
   OopHandle _class_loader;    // The instance of java/lang/ClassLoader associated with
                               // this ClassLoaderData
-           
+         
   ClassLoaderMetaspace * volatile _metaspace;  // Meta-space where meta-data defined by the
                                     // classes in the class loader are allocated.
   Mutex* _metaspace_lock;  // Locks the metaspace for allocations and setup.
@@ -833,7 +817,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
                            // Used for unsafe anonymous classes and the boot class
                            // loader. _keep_alive does not need to be volatile or
                            // atomic since there is one unique CLD per unsafe anonymous class.
-                                             
+                                           
   // Support for walking class loader data objects
   ClassLoaderData* _next; /// Next loader_datas created
   
@@ -904,10 +888,9 @@ void ClassLoaderData::classes_do(KlassClosure* klass_closure) {
 
 A ConstantPool is an **array** containing class constants as described in the class file.
 
-Most of the constant pool entries are written during [class parsing](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream), which is safe.  
-For klass types, the constant pool entry is modified when the entry is resolved.  
+Most of the constant pool entries are written during [class parsing](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream), which is safe.
+For klass types, the constant pool entry is modified when the entry is resolved.
 If a klass constant pool entry is read without a lock, only the resolved state guarantees that the entry in the constant pool is a klass object and not a Symbol*.
-
 
 ```cpp
 
@@ -942,8 +925,10 @@ class ConstantPool : public Metadata {
   };
 }  
 ```
-parse_constant_pool -> 
+
+parse_constant_pool ->
 allocate
+
 ```cpp
 // constantPool.cpp
 ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, TRAPS) {
@@ -955,15 +940,14 @@ ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, T
 
 ### Cache
 
-A constant pool cache is a runtime data structure set aside to a constant pool. 
-The cache holds interpreter runtime information for all field access and invoke bytecodes. 
+A constant pool cache is a runtime data structure set aside to a constant pool.
+The cache holds interpreter runtime information for all field access and invoke bytecodes.
 The cache is created and initialized before a class is actively used (i.e., initialized), the individual cache entries are filled at resolution (i.e., "link") time (see also: rewriter.*).
-
 
 `ConstantPool::resolved_references_or_null()`
 
-
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 - [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)

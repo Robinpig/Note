@@ -3,10 +3,16 @@
 A procedure that calls itself, directly or indirectly, is said to be *recursive*.
 The use of recursion often permits more lucid and concise descriptions of algorithms than would be possible without recursion.
 
-These considerations lead to the first two fundamental rules of recursion:
+When writing recursive routines, it is crucial to keep in mind the four basic rules of recursion:
 
-1. Base cases. You must always have some base cases, which can be solved without recursion.
-2. Making progress. For the cases that are to be solved recursively, the recursive call must always be to a case that makes progress toward a base case.
+1. *Base cases.* You must always have some base cases, which can be solved without recursion.
+2. *Making progress.* For the cases that are to be solved recursively, the recursive call must always be to a case that makes progress toward a base case.
+3. *Design rule.* Assume that all the recursive calls work.
+4. *Compound interest rule.* Never duplicate work by solving the same instance of a problem in separate recursive calls.
+
+Each recursive call makes a new copy of that method (actually only the variables) in memory.
+Once a method ends (that is, returns some data), the copy of that returning method is removed from memory.
+The recursive solutions look simple but visualization and tracing takes time.
 
 A recursive function performs a task in part by calling itself to perform the subtasks.
 At some point, the function encounters a subtask that it can perform without calling itself.
@@ -23,17 +29,6 @@ else if(test for another base case)
 else
 	return (some work and then a recursive call)
 ```
-
-When writing recursive routines, it is crucial to keep in mind the four basic rules of recursion:
-
-1. Base cases. You must always have some base cases, which can be solved without recursion.
-2. Making progress. For the cases that are to be solved recursively, the recursive call must always be to a case that makes progress toward a base case.
-3. Design rule. Assume that all the recursive calls work.
-4. Compound interest rule. Never duplicate work by solving the same instance of a problem in separate recursive calls.
-
-Each recursive call makes a new copy of that method (actually only the variables) in memory.
-Once a method ends (that is, returns some data), the copy of that returning method is removed from memory.
-The recursive solutions look simple but visualization and tracing takes time.
 
 ## Recursion versus Iteration
 
