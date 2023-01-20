@@ -140,6 +140,10 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 
 ### Advanced Design and Analysis Techniques
 
+Text-editing programs frequently need to find all occurrences of a pattern in the text.
+Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.
+Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/KMP.md)”—can greatly aid the responsiveness of the text-editing program.
+
 - [Dynamic Programming](/docs/CS/Algorithms/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
 - [Amortized Analysis](/docs/CS/Algorithms/Amortized.md)

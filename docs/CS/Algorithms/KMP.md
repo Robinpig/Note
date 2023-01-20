@@ -1,6 +1,56 @@
 ## Introduction
 
-Substring Search
+The string-matching problem can be stated formally as follows.
+The text is given as an array T[1 : n] of length n, and the pattern is an array P[1 : m] of length m ≤ n.
+The elements of P and T are characters drawn from an alphabet ∑, which is a finite set of characters.
+For example, ∑ could be the set {0, 1}, or it could be the set {a, b, …, z}.
+The character arrays P and T are often called strings of characters.
+
+As Figure 1 shows, pattern P occurs with shift s in text T (or, equivalently, that pattern P occurs beginning at position s + 1 in text T)
+if 0 ≤ s ≤ n – m and $T[s + 1:s + m] = P[1:m]$, that is, if T[s + j] = P[j], for 1 ≤ j ≤ m.
+If P occurs with shift s in T, then s is a valid shift, and otherwise, s is an invalid shift.
+The string-matching problem is the problem of finding all valid shifts with which a given pattern P occurs in a given text T.
+
+<div style="text-align: center;">
+
+![Fig.1. String-matching](./img/String-Matching.png)
+
+</div>
+
+<p style="text-align: center;">
+Figure 1 An example of the string-matching problem to find all occurrences of the pattern P = abaa in the text T = abcabaabcabac.
+<br/>
+The pattern occurs only once in the text, at shift s = 3, which is a valid shift.
+<br/>
+A vertical line connects each character of the pattern to its matching character in the text, and all matched characters are shaded blue.
+</p>
+
+Except for the naive brute-force algorithm, each string-matching algorithm in this chapter performs some preprocessing based on the pattern and then finds all valid shifts.
+We call this latter phase “matching.”
+Here are the preprocessing and matching times for each of the string-matching algorithms.
+
+The total running time of each algorithm is the sum of the preprocessing and matching times:
+
+
+| Algorithm          | Preprocessing time | Matching time      |
+| -------------------- | -------------------- | -------------------- |
+| Naive              | $0$                | $O((n – m + 1)m)$ |
+| Rabin-Karp         | $O(m)$             | $O((n – m + 1)m)$ |
+| Finite automaton   | $O(m$              | $∑$               |
+| Knuth-Morris-Pratt | $O(m)$             | $O(n)$             |
+| Suffix array1      | $O(n1gn)$        | $O(m 1g n + km)$   |
+
+We present an interesting string-matching algorithm, due to Rabin and Karp.
+Although the Θ((n – m + 1)m) worst-case running time of this algorithm is no better than that of the naive method, it works much better on average and in practice.
+It also generalizes nicely to other pattern-matching problems.
+Then describes a stringmatching algorithm that begins by constructing a finite automaton specifically designed to search for occurrences of the given pattern P in a text.
+This algorithm takes $O(m |∑|)$ preprocessing time, but only Θ(n) matching time.
+We present the similar, but much cleverer, [Knuth-Morris-Pratt (or KMP) algorithm](/docs/CS/Algorithms/KMP.md?id=KMP), which has the same Θ(n) matching time, but it reduces the preprocessing time to only Θ(m).
+
+A completely different approach appears which examines suffix arrays and the longest common prefix array.
+You can use these arrays not only to find a pattern in a text, but also to answer other questions, 
+such as what is the longest repeated substring in the text and what is the longest common substring between two texts.
+The algorithm to form the suffix array takes O(n 1g n) time and, given the suffix array, shows how to compute the longest common prefix array in O(n) time.
 
 ## BF
 
