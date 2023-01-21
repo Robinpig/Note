@@ -38,19 +38,73 @@ The total running time of each algorithm is the sum of the preprocessing and mat
 | Rabin-Karp         | $O(m)$             | $O((n – m + 1)m)$ |
 | Finite automaton   | $O(m$              | $∑$               |
 | Knuth-Morris-Pratt | $O(m)$             | $O(n)$             |
-| Suffix array1      | $O(n1gn)$        | $O(m 1g n + km)$   |
+| Suffix array1      | $O(n1gn)$          | $O(m 1g n + km)$   |
 
 We present an interesting string-matching algorithm, due to Rabin and Karp.
 Although the Θ((n – m + 1)m) worst-case running time of this algorithm is no better than that of the naive method, it works much better on average and in practice.
 It also generalizes nicely to other pattern-matching problems.
-Then describes a stringmatching algorithm that begins by constructing a finite automaton specifically designed to search for occurrences of the given pattern P in a text.
+Then describes a string-matching algorithm that begins by constructing a finite automaton specifically designed to search for occurrences of the given pattern P in a text.
 This algorithm takes $O(m |∑|)$ preprocessing time, but only Θ(n) matching time.
-We present the similar, but much cleverer, [Knuth-Morris-Pratt (or KMP) algorithm](/docs/CS/Algorithms/KMP.md?id=KMP), which has the same Θ(n) matching time, but it reduces the preprocessing time to only Θ(m).
+We present the similar, but much cleverer, [Knuth-Morris-Pratt (or KMP) algorithm](/docs/CS/Algorithms/KMP.md?id=KMP), which has the same $O(n)$ matching time, but it reduces the preprocessing time to only $O(m)$.
 
 A completely different approach appears which examines suffix arrays and the longest common prefix array.
-You can use these arrays not only to find a pattern in a text, but also to answer other questions, 
+You can use these arrays not only to find a pattern in a text, but also to answer other questions,
 such as what is the longest repeated substring in the text and what is the longest common substring between two texts.
-The algorithm to form the suffix array takes O(n 1g n) time and, given the suffix array, shows how to compute the longest common prefix array in O(n) time.
+The algorithm to form the suffix array takes $O(n 1g n)$ time and, given the suffix array, shows how to compute the longest common prefix array in $O(n)$ time.
+
+## The naive string-matching algorithm
+
+The *Naive-String-Matcher* procedure finds all valid shifts using a loop that checks the condition $P[1:m] = T[s+1:s+m]$ for each of the n−m+1 possible values of s.
+
+Naive-String-Matcher(T, P, n, m)
+```
+for s = 0 to n – m
+    if P[1:m] == T[s + 1:s + m]
+        print “Pattern occurs with shift” s
+```
+
+Figure 3 portrays the naive string-matching procedure as sliding a “template” containing the pattern over the text,
+noting for which shifts all of the characters on the template equal the corresponding characters in the text.
+The for loop of lines 1–3 considers each possible shift explicitly.
+The test in line 2 determines whether the current shift is valid.
+This test implicitly loops to check corresponding character positions until all positions match successfully or a mismatch is found.
+Line 3 prints out each valid shift s.
+
+
+<div style="text-align: center;">
+
+![Fig.1. Naive string matcher](./img/Naive-String-Matcher.png)
+
+</div>
+
+<p style="text-align: center;">
+Figure 2 
+The operation of the Naive-String-Matcher procedure for the pattern P = aab and the text T = acaabc.
+<br/>
+Imagine the pattern P as a template that slides next to the text. (a)–(d) 
+The four successive alignments tried by the naive string matcher. 
+In each part, vertical lines connect corresponding regions found to match (shown in blue), and a red jagged line connects the first mismatched character found, if any. 
+<br/>
+The algorithm finds one occurrence of the pattern, at shift s = 2, shown in part (c).
+</p>
+
+
+
+Procedure Naive-String-Matcher takes $O((n – m + 1)m)$ time, and this bound is tight in the worst case.
+For example, consider the text string an (a string of na’s) and the pattern am.
+For each of the n−m+1 possible values of the shift s, the implicit loop on line 2 to compare corresponding characters must execute m times to validate the shift.
+The worst-case running time is thus $O((n − m + 1)m)$, which is $Θ(n^2)$ if $m = [n/2]$.
+Because it requires no preprocessing, Naive-String-Matcher’s running time equals its matching time.
+
+Naive-String-Matcher is far from an optimal procedure for this problem.
+The naive string matcher is inefficient because it entirely ignores information gained about the text for one value of s when it considers other values of s.
+Such information can be quite valuable, however. For example, if P = aaab and s = 0 is valid, then none of the shifts 1, 2, or 3 are valid, since T[4] = b.
+The following sections examine several ways to make effective use of this sort of information.
+
+
+## The Rabin-Karp algorithm
+
+
 
 ## BF
 
