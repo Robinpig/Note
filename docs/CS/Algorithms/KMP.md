@@ -57,6 +57,7 @@ The algorithm to form the suffix array takes $O(n 1g n)$ time and, given the suf
 The *Naive-String-Matcher* procedure finds all valid shifts using a loop that checks the condition $P[1:m] = T[s+1:s+m]$ for each of the n−m+1 possible values of s.
 
 Naive-String-Matcher(T, P, n, m)
+
 ```
 for s = 0 to n – m
     if P[1:m] == T[s + 1:s + m]
@@ -69,7 +70,6 @@ The for loop of lines 1–3 considers each possible shift explicitly.
 The test in line 2 determines whether the current shift is valid.
 This test implicitly loops to check corresponding character positions until all positions match successfully or a mismatch is found.
 Line 3 prints out each valid shift s.
-
 
 <div style="text-align: center;">
 
@@ -88,8 +88,6 @@ In each part, vertical lines connect corresponding regions found to match (shown
 The algorithm finds one occurrence of the pattern, at shift s = 2, shown in part (c).
 </p>
 
-
-
 Procedure Naive-String-Matcher takes $O((n – m + 1)m)$ time, and this bound is tight in the worst case.
 For example, consider the text string an (a string of na’s) and the pattern am.
 For each of the n−m+1 possible values of the shift s, the implicit loop on line 2 to compare corresponding characters must execute m times to validate the shift.
@@ -101,10 +99,7 @@ The naive string matcher is inefficient because it entirely ignores information 
 Such information can be quite valuable, however. For example, if P = aaab and s = 0 is valid, then none of the shifts 1, 2, or 3 are valid, since T[4] = b.
 The following sections examine several ways to make effective use of this sort of information.
 
-
 ## The Rabin-Karp algorithm
-
-
 
 ## BF
 
