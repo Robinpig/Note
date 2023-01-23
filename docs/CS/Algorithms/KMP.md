@@ -101,6 +101,28 @@ The following sections examine several ways to make effective use of this sort o
 
 ## The Rabin-Karp algorithm
 
+
+Rabin and Karp proposed a string-matching algorithm that performs well in practice and that also generalizes to other algorithms for related problems, such as two-dimensional pattern matching. 
+The Rabin-Karp algorithm uses Θ(m) preprocessing time, and its worst-case running time is Θ((n−m+1)m).
+Based on certain assumptions, however, its average-case running time is better.
+
+This algorithm makes use of elementary number-theoretic notions such as the equivalence of two numbers modulo a third number.
+You might want to refer to Section 31.1 for the relevant definitions.
+
+For expository purposes, let’s assume that ∑ = {0, 1, 2, …, 9}, so that each character is a decimal digit. 
+(In the general case, you can assume that each character is a digit in radix-d notation, so that it has a numerical value in the range 0 to d – 1, where d = |∑|.) 
+You can then view a string of k consecutive characters as representing a length-k decimal number.
+For example, the character string 31415 corresponds to the decimal number 31,415. 
+Because we interpret the input characters as both graphical symbols and digits, it will be convenient in this section to denote them as digits in standard text font.
+
+Given a pattern P[1:m], let p denote its corresponding decimal value.
+In a similar manner, given a text T[1:n], let ts denote the decimal value of the length-m substring T[s + 1:s + m], for s = 0, 1, …, n – m.
+Certainly, ts = p if and only if T [s + 1:s + m] = P[1:m], and thus, s is a valid shift if and only if ts = p.
+If you could compute p in Θ(m) time and all the t s values in a total of Θ(n – m + 1) time,2 then you could determine all valid shifts s in Θ(m)+Θ(n − m + 1) = Θ(n) time by comparing p with each of the ts values.
+(For the moment, let’s not worry about the possibility that p and the ts values might be very large numbers.)
+
+
+
 ## BF
 
 Brute-force substring search requires ~NM character compares to search for a pattern of length M in a text of length N, in the worst case.
@@ -109,7 +131,13 @@ Brute-force substring search requires ~NM character compares to search for a pat
 
 ## KMP
 
-Temp array
+Knuth, Morris, and Pratt developed a linear-time string matching algorithm that avoids computing the transition function δ altogether.
+Instead, the KMP algorithm uses an auxiliary function π, which it precomputes from the pattern in Θ(m) time and stores in an array π[1:m].
+The array π allows the algorithm to compute the transition function δ efficiently (in an amortized sense) “on the fly” as needed.
+Loosely speaking, for any state q = 0, 1, …, m and any character a ∈ ∑, the value π[q] contains the information needed to compute δ(q, a) but that does not depend on a. 
+Since the array π has only m entries, whereas δ has Θ(m |∑|) entries, the KMP algorithm saves a factor of |∑| in the preprocessing time by computing π rather than δ. 
+Like the procedure FINITE-AUTOMATON-MATCHER, once preprocessing has completed, the KMP algorithm uses Θ(n) matching time.
+
 
 Knuth-Morris-Pratt substring search accesses no more than M+N characters to search for a pattern of length M in a text of length N.
 
