@@ -101,18 +101,17 @@ The following sections examine several ways to make effective use of this sort o
 
 ## The Rabin-Karp algorithm
 
-
-Rabin and Karp proposed a string-matching algorithm that performs well in practice and that also generalizes to other algorithms for related problems, such as two-dimensional pattern matching. 
+Rabin and Karp proposed a string-matching algorithm that performs well in practice and that also generalizes to other algorithms for related problems, such as two-dimensional pattern matching.
 The Rabin-Karp algorithm uses Θ(m) preprocessing time, and its worst-case running time is Θ((n−m+1)m).
 Based on certain assumptions, however, its average-case running time is better.
 
 This algorithm makes use of elementary number-theoretic notions such as the equivalence of two numbers modulo a third number.
 You might want to refer to Section 31.1 for the relevant definitions.
 
-For expository purposes, let’s assume that ∑ = {0, 1, 2, …, 9}, so that each character is a decimal digit. 
-(In the general case, you can assume that each character is a digit in radix-d notation, so that it has a numerical value in the range 0 to d – 1, where d = |∑|.) 
+For expository purposes, let’s assume that ∑ = {0, 1, 2, …, 9}, so that each character is a decimal digit.
+(In the general case, you can assume that each character is a digit in radix-d notation, so that it has a numerical value in the range 0 to d – 1, where d = |∑|.)
 You can then view a string of k consecutive characters as representing a length-k decimal number.
-For example, the character string 31415 corresponds to the decimal number 31,415. 
+For example, the character string 31415 corresponds to the decimal number 31,415.
 Because we interpret the input characters as both graphical symbols and digits, it will be convenient in this section to denote them as digits in standard text font.
 
 Given a pattern P[1:m], let p denote its corresponding decimal value.
@@ -120,8 +119,6 @@ In a similar manner, given a text T[1:n], let ts denote the decimal value of the
 Certainly, ts = p if and only if T [s + 1:s + m] = P[1:m], and thus, s is a valid shift if and only if ts = p.
 If you could compute p in Θ(m) time and all the t s values in a total of Θ(n – m + 1) time,2 then you could determine all valid shifts s in Θ(m)+Θ(n − m + 1) = Θ(n) time by comparing p with each of the ts values.
 (For the moment, let’s not worry about the possibility that p and the ts values might be very large numbers.)
-
-
 
 ## BF
 
@@ -134,71 +131,19 @@ Brute-force substring search requires ~NM character compares to search for a pat
 Knuth, Morris, and Pratt developed a linear-time string matching algorithm that avoids computing the transition function δ altogether.
 Instead, the KMP algorithm uses an auxiliary function π, which it precomputes from the pattern in Θ(m) time and stores in an array π[1:m].
 The array π allows the algorithm to compute the transition function δ efficiently (in an amortized sense) “on the fly” as needed.
-Loosely speaking, for any state q = 0, 1, …, m and any character a ∈ ∑, the value π[q] contains the information needed to compute δ(q, a) but that does not depend on a. 
-Since the array π has only m entries, whereas δ has Θ(m |∑|) entries, the KMP algorithm saves a factor of |∑| in the preprocessing time by computing π rather than δ. 
+Loosely speaking, for any state q = 0, 1, …, m and any character a ∈ ∑, the value π[q] contains the information needed to compute δ(q, a) but that does not depend on a.
+Since the array π has only m entries, whereas δ has Θ(m |∑|) entries, the KMP algorithm saves a factor of |∑| in the preprocessing time by computing π rather than δ.
 Like the procedure FINITE-AUTOMATON-MATCHER, once preprocessing has completed, the KMP algorithm uses Θ(n) matching time.
 
+The prefix function π for a pattern encapsulates knowledge about how the pattern matches against shifts of itself.
+The KMP algorithm takes advantage of this information to avoid testing useless shifts in the naive pattern-matching algorithm and to avoid precomputing the full transition function δ for a string-matching automaton.
 
 Knuth-Morris-Pratt substring search accesses no more than M+N characters to search for a pattern of length M in a text of length N.
 
 space complexity O(N)
 
 ```java
-public class KMPSearch {
-    public static void main(String[] args) {
-        String str = "abcxabcdabcdabcy";
-        String subString = "abcdabcy";
-        KMPSearch ss = new KMPSearch();
-        boolean result = ss.KMP(str.toCharArray(), subString.toCharArray());
-        System.out.print(result);
-    }
-
-    public boolean KMP(char[] text, char[] pattern) {
-        int[] lps = computeTemporaryArray(pattern);
-        int i = 0;
-        int j = 0;
-        while (i < text.length && j < pattern.length) {
-            if (text[i] == pattern[j]) {
-                i++;
-                j++;
-            } else {
-                if (j != 0) {
-                    j = lps[j - 1]; // return the latest matched index
-                } else {
-                    i++;
-                }
-            }
-        }
-        return j == pattern.length;
-    }
-
-    /**
-     * index, i
-     * 1. if equals, lps[i] = index + 1, index++ i++
-     * 2. else 
-     *      1. if index != 0, index = lps[index - 1]
-     *      2. else lps[i] = 0, i++
-     */
-    private int[] computeTemporaryArray(char[] pattern) {
-        int[] lps = new int[pattern.length];
-        int index = 0;
-        for (int i = 1; i < pattern.length; ) {
-            if (pattern[i] == pattern[index]) {
-                lps[i] = index + 1;
-                index++;
-                i++;
-            } else {
-                if (index != 0) {
-                    index = lps[index - 1];
-                } else {
-                    lps[i] = 0;
-                    i++;
-                }
-            }
-        }
-        return lps;
-    }
-}
+span
 ```
 
 ## BM
@@ -206,6 +151,37 @@ public class KMPSearch {
 ## BMH
 
 ## RK
+
+## Suffix arrays
+
+The algorithms we have seen thus far in this chapter can efficiently find all occurrences of a pattern in a text.
+That is, however, all they can do.
+This section presents a different approach—suffix arrays—with which you can find all occurrences of a pattern in a text, but also quite a bit more.
+A suffix array won’t find all occurrences of a pattern as quickly as, say, the Knuth-Morris-Pratt algorithm, but its additional flexibility makes it well worth studying.
+
+A suffix array is simply a compact way to represent the lexicographically sorted order of all n suffixes of a length-n text.
+Given a text $T[1:n]$, let $T[i:]$ denote the suffix $T[i:n]$.
+The *suffix array* $SA[1:n]$ of T is defined such that if $SA[i] = j$, then $T[j:]$ is the ith suffix of T in lexicographic order.
+That is, the ith suffix of T in lexicographic order is T[SA[i]:].
+Along with the suffix array, another useful array is the *longest common prefix array* $LCPOE[1:n]$.
+The entry $LCP[i]$ gives the length of the longest common prefix between the ith and $(i – 1)$st suffixes in the sorted order (with $LCP[SA[1]]$ defined to be 0,
+since there is no prefix lexicographically smaller than $T[SA[1]:]$).
+Figure 32.11 shows the suffix array and longest common prefix array for the 7-character text ratatat.
+
+Given the suffix array for a text, you can search for a pattern via binary search on the suffix array.
+Each occurrence of a pattern in the text starts some suffix of the text, and because the suffix array is in lexicographically sorted order,
+all occurrences of a pattern will appear at the start of consecutive entries of the suffix array. 
+For example, in Figure 32.11, the three occurrences of at in ratatat appear in entries 1 through 3 of the suffix array. 
+If you find the length-m pattern in the length-n suffix array via binary search (taking O(m 1g n) time because each comparison takes O(m) time),
+then you can find all occurrences of the pattern in the text by searching backward and forward from that spot until you find a suffix that does not start with the pattern (or you go beyond the bounds of the suffix array).
+If the pattern occurs k times, then the time to find all k occurrences is $O(m 1g n + km)$.
+
+With the longest common prefix array, you can find a longest repeated substring, that is, the longest substring that occurs more than once in the text.
+If LCP[i] contains a maximum value in the LCP array, then a longest repeated substring appears in $T[SA[i]:SA[i] + LCP[i] – 1]$.
+In the example of Figure 32.11, the LCP array has one maximum value: LCP[3] = 4.
+Therefore, since SA[3] = 2, the longest repeated substring is T[2:5] = atat.
+Exercise 32.5-3 asks you to use the suffix array and longest common prefix array to find the longest common substrings between two texts.
+Next, we’ll see how to compute the suffix array for an n-character text in $O(n1gn)$ time and, given the suffix array and the text, how to compute the longest common prefix array in $O(n)$ time.
 
 ## Links
 
