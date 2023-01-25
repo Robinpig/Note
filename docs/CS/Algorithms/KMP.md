@@ -170,8 +170,8 @@ Figure 32.11 shows the suffix array and longest common prefix array for the 7-ch
 
 Given the suffix array for a text, you can search for a pattern via binary search on the suffix array.
 Each occurrence of a pattern in the text starts some suffix of the text, and because the suffix array is in lexicographically sorted order,
-all occurrences of a pattern will appear at the start of consecutive entries of the suffix array. 
-For example, in Figure 32.11, the three occurrences of at in ratatat appear in entries 1 through 3 of the suffix array. 
+all occurrences of a pattern will appear at the start of consecutive entries of the suffix array.
+For example, in Figure 32.11, the three occurrences of at in ratatat appear in entries 1 through 3 of the suffix array.
 If you find the length-m pattern in the length-n suffix array via binary search (taking O(m 1g n) time because each comparison takes O(m) time),
 then you can find all occurrences of the pattern in the text by searching backward and forward from that spot until you find a suffix that does not start with the pattern (or you go beyond the bounds of the suffix array).
 If the pattern occurs k times, then the time to find all k occurrences is $O(m 1g n + km)$.
@@ -182,6 +182,57 @@ In the example of Figure 32.11, the LCP array has one maximum value: LCP[3] = 4.
 Therefore, since SA[3] = 2, the longest repeated substring is T[2:5] = atat.
 Exercise 32.5-3 asks you to use the suffix array and longest common prefix array to find the longest common substrings between two texts.
 Next, we’ll see how to compute the suffix array for an n-character text in $O(n1gn)$ time and, given the suffix array and the text, how to compute the longest common prefix array in $O(n)$ time.
+
+```
+COMPUTE-SUFFIX-ARRAY(T, n)
+// allocate arrays substr-rank[1:n], rank[1:n], and SA[1:n]
+for i = 1 to n
+    substr-rank[i].left-rank = ord(T[i])
+    if i < n
+        substr-rank[i].right-rank = ord(T[i + 1])
+    else substr-rank[i].right-rank = 0
+    substr-rank[i].index = i
+// sort the array substr-rank into monotonically increasing order based on the left-rank attributes, using the right-rank attributes to break ties; if still a tie, the order does not matter
+l = 2
+while l < n
+    MAKE-RANKS(substr-rank, rank, n)
+    for i = 1 to n
+        substr-rank[i].left-rank = rank[i]
+        if i + l ≤ n
+            substr-rank[i].right-rank = rank[i + l]
+        else substr-rank[i].right-rank = 0
+        substr-rank[i].index = i
+    // sort the array substr-rank into monotonically increasing order based on the left-rank attributes, using the rightrank attributes to break ties; if still a tie, the order does not matter
+    l = 2l
+for i = 1 to n
+    SA[i] = substr-rank[i].index
+return SA
+
+MAKE-RANKS(substr-rank, rank, n)
+r = 1
+rank[substr-rank[1].index] = r
+for i = 2 to n
+    if substr-rank[i].left-rank ≠ substr-rank[i – 1].left-rank or substr-rank[i].right-rank ≠ substr-rank[i – 1].rightrank
+        r = r + 1
+    rank[substr-rank[i].index] = r
+```
+
+The COMPUTE-SUFFIX-ARRAY procedure uses objects internally to keep track of the relative ordering of the substrings according to their ranks.
+When considering substrings of a given length, the procedure creates and sorts an array substr-rank[1:n] of n objects, each with the following attributes:
+
+- left-rank contains the rank of the left part of the substring.
+- right-rank contains the rank of the right part of the substring.
+- index contains the index into the text T of where the substring starts.
+
+Before delving into the details of how the procedure works, let’s look at how it operates on the input text ratatat, with n = 7.
+Assuming that the ord function returns the ASCII code for a character, Figure 32.12 shows the substr-rank array after the for loop of lines 2–7 and then after the sorting step in line 8.
+The left-rank and right-rank values after lines 2–7 are the ranks of length-1 substrings in positions i and i + 1, for i = 1, 2, …, n.
+These initial ranks are the ASCII values of the characters.
+At this point, the left-rank and right-rank values give the ranks of the left and right part of each substring of length 2.
+Because the substring starting at index 7 consists of only one character, its right part is empty and so its right-rank is 0.
+After the sorting step in line 8, the substr-rank array gives the relative lexicographic order of all the substrings of length 2, with starting points of these substrings in the index attribute.
+For example, the lexicographically smallest length-2 substring is at, which starts at position substr-rank[1].index, which equals 2.
+This substring also occurs at positions substr-rank[2].index = 4 and substr-rank[3].index = 6.
 
 ## Links
 
