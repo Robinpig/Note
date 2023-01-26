@@ -11,7 +11,9 @@ There are several reasons why you might want to replicate data:
 
 If the data that you’re replicating does not change over time, then replication is easy: you just need to copy the data to every node once, and you’re done.
 All of the difficulty in replication lies in handling changes to replicated data.
-We will discuss three popular algorithms for replicating changes between nodes: single-leader, multi-leader, and leaderless replication.
+
+We will discuss three popular algorithms for replicating changes between nodes: single-leader, [multi-leader](/docs/CS/Distributed/Replica.md?id=Multi-Leader-Replication), 
+and [leaderless replication](/docs/CS/Distributed/Replica.md?id=leaderless-replication).
 Almost all distributed databases use one of these three approaches.
 There are many trade-offs to consider with replication: for example, whether to use synchronous or asynchronous replication, and how to handle failed replicas.
 Those are often configuration options in databases, and although the details vary by database, the general principles are similar across many different implementations.
@@ -36,7 +38,7 @@ The most common solution for this is called leader-based replication (also known
    Each follower takes the log from the leader and updates its local copy of the database accordingly, by applying all writes in the same order as they were processed on the leader.
 3. When a client wants to read from the database, it can query either the leader or any of the followers. However, writes are only accepted on the leader (the followers are read-only from the client’s point of view).
 
-span
+<div style="text-align: center;">
 
 ![Fig.1. Leader-based (master–slave) replication](./img/Replica-Leader-Based.png)
 
@@ -158,8 +160,10 @@ Failover is fraught with things that can go wrong:
   For example, in one incident at GitHub, an out-of-date MySQL follower was promoted to leader.
   The database used an autoincrementing counter to assign primary keys to new rows, but because the new leader’s counter lagged behind the old leader’s, it reused some primary keys that were previously assigned by the old leader.
   These primary keys were also used in a Redis store, so the reuse of primary keys resulted in inconsistency between MySQL and Redis, which caused some private data to be disclosed to the wrong users.
-- In certain fault scenarios (see Chapter 8), it could happen that two nodes both believe that they are the leader. This situation is called split brain, and it is dangerous: if both leaders accept writes, and there is no process for resolving conflicts (see “Multi-Leader Replication” on page 168), data is likely to be lost or corrupted.
-  As a safety catch, some systems have a mechanism to shut down one node if two leaders are detected.ii However, if this mechanism is not carefully designed, you can end up with both nodes being shut down.
+- In certain fault scenarios (see Chapter 8), it could happen that two nodes both believe that they are the leader. 
+  This situation is called split brain, and it is dangerous: if both leaders accept writes, and there is no process for resolving conflicts (see “Multi-Leader Replication”), data is likely to be lost or corrupted.
+  As a safety catch, some systems have a mechanism to shut down one node if two leaders are detected.
+  However, if this mechanism is not carefully designed, you can end up with both nodes being shut down.
 - What is the right timeout before the leader is declared dead? A longer timeout means a longer time to recovery in the case where the leader fails.
   However, if the timeout is too short, there could be unnecessary failovers.
   For example, a temporary load spike could cause a node’s response time to increase above the timeout, or a network glitch could cause delayed packets.
@@ -940,11 +944,11 @@ More complicated kinds of redundancy (such as error-correcting codes) are cheape
 We discussed three main approaches to replication:
 
 
-| Replication   | Description                                                                                                                                                                                                          |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Single-leader replication** | Clients send all writes to a single node (the leader), which sends a stream of data change events to the other replicas (followers). <br> Reads can be performed on any replica, but reads from followers might be stale. |
-| **Multi-leader replication** | Clients send each write to one of several leader nodes, any of which can accept writes. <br> The leaders send streams of data change events to each other and to any follower nodes.                                      |
-| **Leaderless replication** | Clients send each write to several nodes, and read from several nodes in parallel in order to detect and correct nodes with stale data.                                                                              |
+| Replication                   | Description                                                                                                                                                                                                              |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Single-leader replication** | Clients send all writes to a single node (the leader), which sends a stream of data change events to the other replicas (followers).<br> Reads can be performed on any replica, but reads from followers might be stale. |
+| **Multi-leader replication**  | Clients send each write to one of several leader nodes, any of which can accept writes.<br> The leaders send streams of data change events to each other and to any follower nodes.                                      |
+| **Leaderless replication**    | Clients send each write to several nodes, and read from several nodes in parallel in order to detect and correct nodes with stale data.                                                                                  |
 
 Each approach has advantages and disadvantages.
 Single-leader replication is popular because it is fairly easy to understand and there is no conflict resolution to worry about.
