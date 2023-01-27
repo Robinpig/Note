@@ -168,6 +168,17 @@ Raft
 Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
 Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes $O(N^2)$ time complexity where N is the number of people involved.
 
+
+The subject called the [“NP-complete” problems](/docs/CS/Algorithms/NP.md), whose status is unknown.
+No polynomial-time algorithm has yet been discovered for an NP-complete problem, nor has anyone yet been able to prove that no polynomial-time algorithm can exist for any one of them. 
+This so-called $P != NP$ question has been one of the deepest, most perplexing open research problems in theoretical computer science since it was first posed in 1971.
+
+
+
+
+
+
+
 ## Links
 
 - [Computer Organization](/docs/CS/CO/CO.md)

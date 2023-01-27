@@ -1,9 +1,16 @@
 ## Introduction
 
-If a problem cannot be solved in less than exponential time, then the problem should be considered completely intractable. 
+
+Almost all the algorithms we have studied thus far have been *polynomial-time algorithms*: on inputs of size n, their worst-case running time is $O(n^k)$ for some constant k.
+You might wonder whether all problems can be solved in polynomial time. The answer is no.
+For example, there are problems, such as Turing’s famous “Halting Problem,” that cannot be solved by any computer, no matter how long you’re willing to wait for an answer.
+There are also problems that can be solved, but not in O(nk) time for any constant k.
+Generally, we think of problems that are solvable by polynomial-time algorithms as being tractable, or “easy,” and problems that require superpolynomial time as being intractable, or "hard".
+
+
 
 The implication of this "rating scheme" is that problems _having polynomial-time-bounded algorithms are tractable. 
-But bear in mind that although an exponential function such as 2" grows faster than any polynomial function of 11, for small values of n an 0(2")-time-bounded algorithm can be more efficient than many polynomial-time-bounded algorithms.
+But bear in mind that although an exponential function such as 2" grows faster than any polynomial function of 11, for small values of n an $0(2")$-time-bounded algorithm can be more efficient than many polynomial-time-bounded algorithms.
 For example. 2" itself does not overtaken'° until /1 reaches 59. 
 Nevertheless, the growth rate of an exponential function is so explosive that we say a problem is intractable if all algorithms to solve that problem are of at least exponential time complexity.
 
