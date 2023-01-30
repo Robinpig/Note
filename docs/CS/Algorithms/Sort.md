@@ -292,7 +292,39 @@ The algorithm doesn’t spend time allocating and managing additional memory (un
 
 ## Radix Sort
 
+Similar to Counting sort and Bucket sort, this sorting algorithm also assumes some kind of information about the input elements.
+Suppose that the input values to be sorted are from base d. That means all numbers are d-digit numbers.
+
+In Radix sort, first sort the elements based on the last digit [the least significant digit].
+These results are again sorted by second digit [the next to least significant digit].
+Continue this process for all digits until we reach the most significant digits. Use some stable sort to sort them by last digit.
+Then stable sort them by the second least significant digit, then by the third, etc.
+If we use Counting sort as the stable sort, the total time is $O(nd) ≈ O(n)$.
 Radix sort is sometimes known as *card sort*.
+
+Algorithm:
+
+1. Take the least significant digit of each element.
+2. Sort the list of elements based on that digit, but keep the order of elements with the same digit (this is the definition of a stable sort).
+3. Repeat the sort with each more significant digit.
+
+The speed of Radix sort depends on the inner basic operations. If the operations are not efficient enough, Radix sort can be slower than other algorithms such as Quick sort and Merge sort. 
+These operations include the insert and delete functions of the sub-lists and the process of isolating the digit we want. 
+If the numbers are not of equal length then a test is needed to check for additional digits that need sorting.
+This can be one of the slowest parts of Radix sort and also one of the hardest to make efficient.
+
+Since Radix sort depends on the digits or letters, it is less flexible than other sorts.
+For every different type of data, Radix sort needs to be rewritten, and if the sorting order changes, the sort needs to be rewritten again. 
+In short, Radix sort takes more time to write, and it is very difficult to write a general purpose Radix sort that can handle all kinds of data.
+
+For many programs that need a fast sort, Radix sort is a good choice. 
+Still, there are faster sorts, which is one reason why Radix sort is not used as much as some other sorts.
+
+
+Time Complexity: $O(nd) ≈ O(n)$, if d is small.
+
+
+
 
 ## Bucket Sort
 
