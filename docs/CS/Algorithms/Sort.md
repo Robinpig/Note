@@ -59,17 +59,17 @@ Another method of classifying sorting algorithms is:
   Sorting algorithms that use external memory, such as tape or disk, during the sort come under this category.
 
 
-| Sort   | Avg Time | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
-| ------ | -------- | --------- | --------- | ---------- | -------- | --------- |
-| Bubble | $O(n^2)$ | $O(1)$    | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(1)$    |
-| Select | $O(n^2)$ | $O(1)$    | $O(n^2)$  | $O(1)$     | $O(n^2)$ | $O(1)$    |
-| Insert | $O(n^2)$ | $O(n^2)$  | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(n^2)$  |
-| Shell  |          |           |           |            |          |           |
-| Heap   |          |           |           |            |          |           |
-| Merge  |          |           |           |            |          |           |
-| Quick  | nlogn    | logn      | nlogn     | logn       | n^2      | n         |
-| Radix  |          |           |           |            |          |           |
-| Bucket |          |           |           |            |          |           |
+| Sort   | Avg Time   | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
+| ------ |------------| --------- | --------- | ---------- | -------- | --------- |
+| Bubble | $O(n^2)$   | $O(1)$    | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(1)$    |
+| Select | $O(n^2)$   | $O(1)$    | $O(n^2)$  | $O(1)$     | $O(n^2)$ | $O(1)$    |
+| Insert | $O(n^2)$   | $O(n^2)$  | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(n^2)$  |
+| Shell  |            |           |           |            |          |           |
+| Heap   |            |           |           |            |          |           |
+| Merge  |            |           |           |            |          |           |
+| Quick  | $O(nlogn)$ | logn      | nlogn     | logn       | n^2      | n         |
+| Radix  |            |           |           |            |          |           |
+| Bucket |            |           |           |            |          |           |
 
 ## Bubble Sort
 
@@ -327,6 +327,16 @@ Time Complexity: $O(nd) ≈ O(n)$, if d is small.
 
 
 ## Bucket Sort
+
+## Tree Sort
+
+Tree sort uses a binary search tree. It involves scanning each element of the input and placing it into its proper position in a binary search tree. 
+This has two phases:
+- First phase is creating a binary search tree using the given array elements.
+- Second phase is traversing the given binary search tree in inorder, thus resulting in a sorted array.
+
+The average number of comparisons for this method is $O(nlogn)$. 
+But in worst case, the number of comparisons is reduced by $O(n^2)$, a case which arises when the sort tree is skew tree.
 
 ## External Sort
 
