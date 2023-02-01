@@ -59,17 +59,18 @@ Another method of classifying sorting algorithms is:
   Sorting algorithms that use external memory, such as tape or disk, during the sort come under this category.
 
 
-| Sort   | Avg Time   | Avg Space | Best Time | Best Space | Bad Time | Bad Space |
-| ------ |------------| --------- | --------- | ---------- | -------- | --------- |
-| Bubble | $O(n^2)$   | $O(1)$    | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(1)$    |
-| Select | $O(n^2)$   | $O(1)$    | $O(n^2)$  | $O(1)$     | $O(n^2)$ | $O(1)$    |
-| Insert | $O(n^2)$   | $O(n^2)$  | $O(n)$    | $O(1)$     | $O(n^2)$ | $O(n^2)$  |
-| Shell  |            |           |           |            |          |           |
-| Heap   |            |           |           |            |          |           |
-| Merge  |            |           |           |            |          |           |
-| Quick  | $O(nlogn)$ | logn      | nlogn     | logn       | n^2      | n         |
-| Radix  |            |           |           |            |          |           |
-| Bucket |            |           |           |            |          |           |
+| Sort   | Avg Time   | Avg Space  | Best Time  | Best Space | Bad Time   | Bad Space |
+|--------| ---------- | ---------- | ---------- | ---------- |------------|-----------|
+| Bubble | $O(n^2)$   | $O(1)$     | $O(n)$     | $O(1)$     | $O(n^2)$   | $O(1)$    |
+| Select | $O(n^2)$   | $O(1)$     | $O(n^2)$   | $O(1)$     | $O(n^2)$   | $O(1)$    |
+| Insert | $O(n^2)$   | $O(n^2)$   | $O(n)$     | $O(1)$     | $O(n^2)$   | $O(n^2)$  |
+| Shell  |   $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Heap   |    $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Merge  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Quick  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n^2)$   | $O(n)$    |
+| Radix  |     $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Bucket |       $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Tree   |       $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
 
 ## Bubble Sort
 
@@ -308,34 +309,31 @@ Algorithm:
 2. Sort the list of elements based on that digit, but keep the order of elements with the same digit (this is the definition of a stable sort).
 3. Repeat the sort with each more significant digit.
 
-The speed of Radix sort depends on the inner basic operations. If the operations are not efficient enough, Radix sort can be slower than other algorithms such as Quick sort and Merge sort. 
-These operations include the insert and delete functions of the sub-lists and the process of isolating the digit we want. 
+The speed of Radix sort depends on the inner basic operations. If the operations are not efficient enough, Radix sort can be slower than other algorithms such as Quick sort and Merge sort.
+These operations include the insert and delete functions of the sub-lists and the process of isolating the digit we want.
 If the numbers are not of equal length then a test is needed to check for additional digits that need sorting.
 This can be one of the slowest parts of Radix sort and also one of the hardest to make efficient.
 
 Since Radix sort depends on the digits or letters, it is less flexible than other sorts.
-For every different type of data, Radix sort needs to be rewritten, and if the sorting order changes, the sort needs to be rewritten again. 
+For every different type of data, Radix sort needs to be rewritten, and if the sorting order changes, the sort needs to be rewritten again.
 In short, Radix sort takes more time to write, and it is very difficult to write a general purpose Radix sort that can handle all kinds of data.
 
-For many programs that need a fast sort, Radix sort is a good choice. 
+For many programs that need a fast sort, Radix sort is a good choice.
 Still, there are faster sorts, which is one reason why Radix sort is not used as much as some other sorts.
 
-
 Time Complexity: $O(nd) ≈ O(n)$, if d is small.
-
-
-
 
 ## Bucket Sort
 
 ## Tree Sort
 
-Tree sort uses a binary search tree. It involves scanning each element of the input and placing it into its proper position in a binary search tree. 
+Tree sort uses a binary search tree. It involves scanning each element of the input and placing it into its proper position in a binary search tree.
 This has two phases:
+
 - First phase is creating a binary search tree using the given array elements.
 - Second phase is traversing the given binary search tree in inorder, thus resulting in a sorted array.
 
-The average number of comparisons for this method is $O(nlogn)$. 
+The average number of comparisons for this method is $O(nlogn)$.
 But in worst case, the number of comparisons is reduced by $O(n^2)$, a case which arises when the sort tree is skew tree.
 
 ## External Sort
