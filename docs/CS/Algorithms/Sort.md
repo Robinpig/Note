@@ -60,17 +60,17 @@ Another method of classifying sorting algorithms is:
 
 
 | Sort   | Avg Time   | Avg Space  | Best Time  | Best Space | Bad Time   | Bad Space |
-|--------| ---------- | ---------- | ---------- | ---------- |------------|-----------|
+| ------ | ---------- | ---------- | ---------- | ---------- | ---------- | --------- |
 | Bubble | $O(n^2)$   | $O(1)$     | $O(n)$     | $O(1)$     | $O(n^2)$   | $O(1)$    |
 | Select | $O(n^2)$   | $O(1)$     | $O(n^2)$   | $O(1)$     | $O(n^2)$   | $O(1)$    |
 | Insert | $O(n^2)$   | $O(n^2)$   | $O(n)$     | $O(1)$     | $O(n^2)$   | $O(n^2)$  |
-| Shell  |   $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
-| Heap   |    $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Shell  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Heap   | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
 | Merge  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
 | Quick  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n^2)$   | $O(n)$    |
-| Radix  |     $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
-| Bucket |       $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
-| Tree   |       $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Radix  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Bucket | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Tree   | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
 
 ## Bubble Sort
 
