@@ -19,7 +19,7 @@ Almost all high level programming languages have compilers and interpreters.
 So being compiled or interpreted is not an intrinsic characteristic of a language; nevertheless, there are some general differences between compiled and interpreted languages.
 
 Many interpreted languages support dynamic types, but compiled languages are usually limited to static types.
-In a statically-typed language, you can tell by looking at the program what type each variable refers to. 
+In a statically-typed language, you can tell by looking at the program what type each variable refers to.
 In a dynamically- typed language, you don’t always know the type of a variable until the pro- gram is running.
 In general, static refers to things that happen at compile time (while a program is being compiled), and dynamic refers to things that happen at run time (while a program is running).
 For example, in Python you can write a function like this:
@@ -29,7 +29,7 @@ def add(x, y):
     return x + y
 ```
 
-Looking at this code, you can’t tell what type x and y will refer to at run time. 
+Looking at this code, you can’t tell what type x and y will refer to at run time.
 This function might be called several times, each time with values with different types.
 Any values that support the addition operator will work; any other types will cause an exception or runtime error.
 In C you would write the same function like this:
@@ -56,6 +56,21 @@ For example, in Python the built-in function locals returns a dictionary that co
 In compiled languages, variable names exist at compile-time but not at run time. The compiler chooses a location for each variable and records these locations as part of the compiled program.
 The location of a variable is called its address.
 At run time, the value of each variable is stored at its address, but the names of the variables are not stored at all (unless they are added by the compiler for purposes of debugging).
+
+### The compilation process
+
+The steps of compilation are:
+
+1. Preprocessing: C is one of several languages that include preprocessing directives that take effect before the program is compiled.
+   For example, the #include directive causes the source code from another file to be inserted at the location of the directive.
+2. Parsing: During parsing, the compiler reads the source code and builds an internal representation of the program, called an abstract syntax tree.
+   Errors detected during this step are generally syntax errors.
+3. Static checking: The compiler checks whether variables and values have the right type, whether functions are called with the right number and type of arguments, etc.
+   Errors detected during this step are sometimes called static semantic errors.
+4. Code generation: The compiler reads the internal representation of the program and generates machine code or byte code.
+5. Linking: If the program uses values and functions defined in a library, the compiler has to find the appropriate library and include the required code.
+6. Optimization: At several points in the process, the compiler can trans- form the program to generate code that runs faster or uses less space.
+   Most optimizations are simple changes that eliminate obvious waste, but some compilers perform sophisticated analyses and transformations.
 
 **Difference between compiler and interpreter**
 
