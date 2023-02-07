@@ -99,7 +99,7 @@ If safety is more important than liveness, we might assume F < M .
 The classic Fischer, Lynch, Paterson result(**FLP**) implies that no purely asynchronous algorithm can solve consensus.
 However, we interpret “can communicate with one another” in the liveness requirement to include a synchrony requirement.
 Thus, nontriviality and safety must be maintained in any case; liveness is required only if the system eventually behaves synchronously.
-Dwork, Lynch, and Stockmeyer([Consensus in the Presence of Partial Synchrony](https://dl.acm.org/doi/pdf/10.1145/42282.42283)) showed the existence of an algorithm satisfying these requirements.
+Dwork, Lynch, and Stockmeyer([Consensus in the Presence of Partial Synchrony](http://courses.csail.mit.edu/6.897/fall04/papers/Dwork/consensus-in-ps.pdf)) showed the existence of an algorithm satisfying these requirements.
 
 Here are approximate lower-bound results for an asynchronous consensus algorithm. Their precise statements and proofs will appear later.
 
@@ -367,3 +367,4 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 6. [Consensus on Transaction Commit](https://www.microsoft.com/en-us/research/uploads/prod/2004/01/twophase-revised.pdf)
 7. [Consistency, Availability, and Convergence](https://apps.cs.utexas.edu/tech_reports/reports/tr/TR-2036.pdf)
 8. [Vive La Difference: Paxos vs. Viewstamped Replication vs. Zab](https://arxiv.org/pdf/1309.5671.pdf)
+9. [A Quorum-based Commit and Termination Protocol for Distributed Database Systems](https://hub.hku.hk/bitstream/10722/158032/1/Content.pdf)
