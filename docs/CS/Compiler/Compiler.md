@@ -270,16 +270,41 @@ such things as the number and types of its arguments, the method of passing each
 The symbol table is a data structure containing a record for each variable name, with elds for the attributes of the name. 
 The data structure should be designed to allow the compiler to nd the record for each name quickly and to store or retrieve data from that record quickly.
 
-## IR
+## Lexical Analysis
 
+
+
+## Syntax Analysis
+
+## Lexical Analysis
+
+## Intermediate-Code Generation
 1. HIR
 2. LIR
 3. MIR
 
 Basic Block
 
-Control Flow Graph
+## Run-Time Environments
 
+A compiler must accurately implement the abstractions embodied in the sourcelanguage definition. 
+These abstractions typically include such as names, scopes, bindings, data types, operators, procedures, parameters, and ow-of-control constructs.
+The compiler must cooperate with the operating system and other systems software to support these abstractions on the target machine.
+
+To do so, the compiler creates and manages a run-time environment in which it assumes its target programs are being executed. 
+This environment deals with a variety of issues such as the layout and allocation of storage locations for the objects named in the source program, the mechanisms used by the target program to access variables, 
+the linkages between procedures, the mechanisms for passing parameters, and the interfaces to the operating system, input/output devices, and other programs.
+
+### Storage Organization
+
+From the perspective of the compiler writer, the executing target program runs in its own logical address space in which each program value has a location. 
+The management and organization of this logical address space is shared between the compiler, operating system, and target machine. 
+The operating system maps the logical addresses into physical addresses, which are usually spread throughout memory.
+
+
+
+Control Flow Graph
+## Instruction-Level Parallelism
 ## Links
 
 ## References
