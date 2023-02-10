@@ -19,19 +19,19 @@ This often requires coordinating processes to reach consensus, or agree on some 
 Example applications of consensus include agreeing on what transactions to commit to a database in which order, state machine replication, and atomic broadcasts.
 Real-world applications often requiring consensus include cloud computing, clock synchronization, PageRank, opinion formation, smart power grids, state estimation, control of UAVs (and multiple robots/agents in general), load balancing, blockchain, and others.
 
-
 There are a number of situations in which it is important for nodes to agree. For example:
+
 - Leader election
   In a database with single-leader replication, all nodes need to agree on which node is the leader.
-  The leadership position might become contested if some nodes can’t communicate with others due to a network fault. 
+  The leadership position might become contested if some nodes can’t communicate with others due to a network fault.
   In this case, consensus is important to avoid a bad failover, resulting in a split brain situation in which two nodes both believe themselves to be the leader.
   If there were two leaders, they would both accept writes and their data would diverge, leading to inconsistency and data loss.
 - Atomic commit
-  In a database that supports transactions spanning several nodes or partitions, we have the problem that a transaction may fail on some nodes but succeed on others. 
+  In a database that supports transactions spanning several nodes or partitions, we have the problem that a transaction may fail on some nodes but succeed on others.
   If we want to maintain transaction atomicity, we have to get all nodes to agree on the outcome of the transaction: either they all abort/roll back (if anything goes wrong) or they all commit (if nothing goes wrong). This instance of consensus is known as the atomic commit problem.
 
 Atomic commit is formalized slightly differently from consensus: an atomic transaction can commit only if all participants vote to commit, and must abort if any participant needs to abort.
-Consensus is allowed to decide on any value that is proposed by one of the participants. 
+Consensus is allowed to decide on any value that is proposed by one of the participants.
 However, atomic commit and consensus are reducible to each other.
 Nonblocking atomic commit is harder than consensus—see “Three-phase commit".
 
