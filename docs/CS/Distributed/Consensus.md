@@ -301,9 +301,6 @@ Then, if a replica that committed crashes along with the co-ordinator, the syste
 Since the transaction might already have been committed at the crashed replica, the protocol cannot pessimistically abort - as the transaction might have had side-effects that are impossible to undo.
 Similarly, the protocol cannot optimistically force the transaction to commit, as the original vote might have been to abort.
 
-[Notes on Data Base Operating Systems](http://jimgray.azurewebsites.net/papers/dbos.pdf)
-
-[A brief history of Consensus, 2PC and Transaction Commit](https://betathoughts.blogspot.com/2007/06/brief-history-of-consensus-2pc-and.html)
 
 ### 3PC
 
@@ -371,3 +368,5 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 10. [A Comprehensive Study on Failure Detectors of Distributed Systems](https://www.researchgate.net/publication/343168303_A_Comprehensive_Study_on_Failure_Detectors_of_Distributed_Systems)
 11. [A Quorum-Based Commit Protocol]()
 12. [Reconfiguring a state machine](http://lamport.azurewebsites.net/pubs/reconfiguration-tutorial.pdf)
+13. [Notes on Data Base Operating Systems](http://jimgray.azurewebsites.net/papers/dbos.pdf)
+14. [A brief history of Consensus, 2PC and Transaction Commit](https://betathoughts.blogspot.com/2007/06/brief-history-of-consensus-2pc-and.html)
