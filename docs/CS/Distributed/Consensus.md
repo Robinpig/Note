@@ -246,7 +246,6 @@ and probabilistically earn the right to commit blocks and earn associated reward
 Motivated in part by the high energy cost of this approach, subsequent permissionless consensus protocols have proposed or adopted other alternative participation rules for Sybil attack protection,
 such as proof of stake, proof of space, and proof of authority.
 
-[On Optimal Probabilistic Asynchronous Byzantine Agreement]()
 
 ## Consensus Algorithms
 
@@ -330,7 +329,6 @@ The fact that 3PC will not block on single node failures makes it much more appe
 
 3PC in fact only works well in a synchronous network with crash-stop failures.
 
-[NonBlocking Commit Protocols](https://www.cs.cornell.edu/courses/cs614/2004sp/papers/Ske81.pdf)
 
 ### Paxos
 
@@ -346,9 +344,6 @@ The fact that 3PC will not block on single node failures makes it much more appe
 
 Standard consensus algorithms won’t do as they themselves are not Byzantine fault tolerant.
 
-[Practical Byzantine Fault Tolerance and Proactive Recovery](https://www.microsoft.com/en-us/research/wp-content/uploads/2017/01/p398-castro-bft-tocs.pdf)
-
-[A Comparison of the Byzantine Agreement Problem and the Transaction Commit Problem](http://jimgray.azurewebsites.net/papers/tandemtr88.6_comparisonofbyzantineagreementandtwophasecommit.pdf)
 
 ## Links
 
@@ -370,3 +365,11 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 12. [Reconfiguring a state machine](http://lamport.azurewebsites.net/pubs/reconfiguration-tutorial.pdf)
 13. [Notes on Data Base Operating Systems](http://jimgray.azurewebsites.net/papers/dbos.pdf)
 14. [A brief history of Consensus, 2PC and Transaction Commit](https://betathoughts.blogspot.com/2007/06/brief-history-of-consensus-2pc-and.html)
+15. [Practical Byzantine Fault Tolerance and Proactive Recovery](https://www.microsoft.com/en-us/research/wp-content/uploads/2017/01/p398-castro-bft-tocs.pdf)
+16. [A Comparison of the Byzantine Agreement Problem and the Transaction Commit Problem](http://jimgray.azurewebsites.net/papers/tandemtr88.6_comparisonofbyzantineagreementandtwophasecommit.pdf)
+17. [NonBlocking Commit Protocols](https://www.cs.cornell.edu/courses/cs614/2004sp/papers/Ske81.pdf)
+18. [On Optimal Probabilistic Asynchronous Byzantine Agreement](https://www.researchgate.net/publication/220725355_On_Optimal_Probabilistic_Asynchronous_Byzantine_Agreement)
+
+
+
+
