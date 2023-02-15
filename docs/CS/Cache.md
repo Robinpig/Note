@@ -27,7 +27,7 @@ Design strategies and characteristics of different In-Memory engines can be appl
 
 
 | Layer        | Client-Side                                                           | DNS                                                                              | Web                                                                           | App                                                | Database                                               |
-| -------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------- |
+| ------------ | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------ |
 | Use Case     | Accelerate retrieval of web content from websites (browser or device) | Domain to IP ResolutionAccelerate retrieval of web content from web/app servers. | Manage Web Sessions (server side)                                             | Accelerate application performance and data access | Reduce latency associated with database query requests |
 | Technologies | HTTP Cache Headers, Browsers                                          | DNS Servers                                                                      | HTTP Cache Headers, CDNs, Reverse Proxies, Web Accelerators, Key/Value Stores | Key/Value data stores, Local caches                | Database buffers, Key/Value data stores                |
 
@@ -128,7 +128,7 @@ The following table summarizes eviction policies:
 
 
 | Eviction Policy | Description                                                                            |
-| ----------------- | ---------------------------------------------------------------------------------------- |
+| --------------- | -------------------------------------------------------------------------------------- |
 | allkeys-lru     | The cache evicts the least recently used (LRU) keys regardless of TTL set.             |
 | allkeys-lfu     | The cache evicts the least frequently used (LFU) keys regardless of TTL set.           |
 | volatile-lru    | The cache evicts the least recently used (LRU) keys from those that have a TTL set.    |
