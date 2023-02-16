@@ -19,19 +19,19 @@ This often requires coordinating processes to reach consensus, or agree on some 
 Example applications of consensus include agreeing on what transactions to commit to a database in which order, state machine replication, and atomic broadcasts.
 Real-world applications often requiring consensus include cloud computing, clock synchronization, PageRank, opinion formation, smart power grids, state estimation, control of UAVs (and multiple robots/agents in general), load balancing, blockchain, and others.
 
-
 There are a number of situations in which it is important for nodes to agree. For example:
+
 - Leader election
   In a database with single-leader replication, all nodes need to agree on which node is the leader.
-  The leadership position might become contested if some nodes can’t communicate with others due to a network fault. 
+  The leadership position might become contested if some nodes can’t communicate with others due to a network fault.
   In this case, consensus is important to avoid a bad failover, resulting in a split brain situation in which two nodes both believe themselves to be the leader.
   If there were two leaders, they would both accept writes and their data would diverge, leading to inconsistency and data loss.
 - Atomic commit
-  In a database that supports transactions spanning several nodes or partitions, we have the problem that a transaction may fail on some nodes but succeed on others. 
+  In a database that supports transactions spanning several nodes or partitions, we have the problem that a transaction may fail on some nodes but succeed on others.
   If we want to maintain transaction atomicity, we have to get all nodes to agree on the outcome of the transaction: either they all abort/roll back (if anything goes wrong) or they all commit (if nothing goes wrong). This instance of consensus is known as the atomic commit problem.
 
 Atomic commit is formalized slightly differently from consensus: an atomic transaction can commit only if all participants vote to commit, and must abort if any participant needs to abort.
-Consensus is allowed to decide on any value that is proposed by one of the participants. 
+Consensus is allowed to decide on any value that is proposed by one of the participants.
 However, atomic commit and consensus are reducible to each other.
 Nonblocking atomic commit is harder than consensus—see “Three-phase commit".
 
@@ -99,7 +99,7 @@ If safety is more important than liveness, we might assume F < M .
 The classic Fischer, Lynch, Paterson result(**FLP**) implies that no purely asynchronous algorithm can solve consensus.
 However, we interpret “can communicate with one another” in the liveness requirement to include a synchrony requirement.
 Thus, nontriviality and safety must be maintained in any case; liveness is required only if the system eventually behaves synchronously.
-Dwork, Lynch, and Stockmeyer([Consensus in the Presence of Partial Synchrony](https://dl.acm.org/doi/pdf/10.1145/42282.42283)) showed the existence of an algorithm satisfying these requirements.
+Dwork, Lynch, and Stockmeyer([Consensus in the Presence of Partial Synchrony](http://courses.csail.mit.edu/6.897/fall04/papers/Dwork/consensus-in-ps.pdf)) showed the existence of an algorithm satisfying these requirements.
 
 Here are approximate lower-bound results for an asynchronous consensus algorithm. Their precise statements and proofs will appear later.
 
@@ -246,7 +246,6 @@ and probabilistically earn the right to commit blocks and earn associated reward
 Motivated in part by the high energy cost of this approach, subsequent permissionless consensus protocols have proposed or adopted other alternative participation rules for Sybil attack protection,
 such as proof of stake, proof of space, and proof of authority.
 
-[On Optimal Probabilistic Asynchronous Byzantine Agreement]()
 
 ## Consensus Algorithms
 
@@ -301,9 +300,6 @@ Then, if a replica that committed crashes along with the co-ordinator, the syste
 Since the transaction might already have been committed at the crashed replica, the protocol cannot pessimistically abort - as the transaction might have had side-effects that are impossible to undo.
 Similarly, the protocol cannot optimistically force the transaction to commit, as the original vote might have been to abort.
 
-[Notes on Data Base Operating Systems](http://jimgray.azurewebsites.net/papers/dbos.pdf)
-
-[A brief history of Consensus, 2PC and Transaction Commit](https://betathoughts.blogspot.com/2007/06/brief-history-of-consensus-2pc-and.html)
 
 ### 3PC
 
@@ -333,7 +329,6 @@ The fact that 3PC will not block on single node failures makes it much more appe
 
 3PC in fact only works well in a synchronous network with crash-stop failures.
 
-[NonBlocking Commit Protocols](https://www.cs.cornell.edu/courses/cs614/2004sp/papers/Ske81.pdf)
 
 ### Paxos
 
@@ -349,9 +344,6 @@ The fact that 3PC will not block on single node failures makes it much more appe
 
 Standard consensus algorithms won’t do as they themselves are not Byzantine fault tolerant.
 
-[Practical Byzantine Fault Tolerance and Proactive Recovery](https://www.microsoft.com/en-us/research/wp-content/uploads/2017/01/p398-castro-bft-tocs.pdf)
-
-[A Comparison of the Byzantine Agreement Problem and the Transaction Commit Problem](http://jimgray.azurewebsites.net/papers/tandemtr88.6_comparisonofbyzantineagreementandtwophasecommit.pdf)
 
 ## Links
 
@@ -367,3 +359,17 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 6. [Consensus on Transaction Commit](https://www.microsoft.com/en-us/research/uploads/prod/2004/01/twophase-revised.pdf)
 7. [Consistency, Availability, and Convergence](https://apps.cs.utexas.edu/tech_reports/reports/tr/TR-2036.pdf)
 8. [Vive La Difference: Paxos vs. Viewstamped Replication vs. Zab](https://arxiv.org/pdf/1309.5671.pdf)
+9. [A Quorum-based Commit and Termination Protocol for Distributed Database Systems](https://hub.hku.hk/bitstream/10722/158032/1/Content.pdf)
+10. [A Comprehensive Study on Failure Detectors of Distributed Systems](https://www.researchgate.net/publication/343168303_A_Comprehensive_Study_on_Failure_Detectors_of_Distributed_Systems)
+11. [A Quorum-Based Commit Protocol]()
+12. [Reconfiguring a state machine](http://lamport.azurewebsites.net/pubs/reconfiguration-tutorial.pdf)
+13. [Notes on Data Base Operating Systems](http://jimgray.azurewebsites.net/papers/dbos.pdf)
+14. [A brief history of Consensus, 2PC and Transaction Commit](https://betathoughts.blogspot.com/2007/06/brief-history-of-consensus-2pc-and.html)
+15. [Practical Byzantine Fault Tolerance and Proactive Recovery](https://www.microsoft.com/en-us/research/wp-content/uploads/2017/01/p398-castro-bft-tocs.pdf)
+16. [A Comparison of the Byzantine Agreement Problem and the Transaction Commit Problem](http://jimgray.azurewebsites.net/papers/tandemtr88.6_comparisonofbyzantineagreementandtwophasecommit.pdf)
+17. [NonBlocking Commit Protocols](https://www.cs.cornell.edu/courses/cs614/2004sp/papers/Ske81.pdf)
+18. [On Optimal Probabilistic Asynchronous Byzantine Agreement](https://www.researchgate.net/publication/220725355_On_Optimal_Probabilistic_Asynchronous_Byzantine_Agreement)
+
+
+
+

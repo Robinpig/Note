@@ -169,6 +169,73 @@ If one website crashes, only its renderer process is affected; all other process
 Furthermore, renderer processes run in a sandbox, which means that access to disk and network I/O is restricted, minimizing the effects of any security exploits.
 
 
+### Memory segments
+The data of a running process is organized into five segments:
+- The code segment contains the program text; that is, the machine language instructions that make up the program.
+- The static segment contains immutable values, like string literals. For example, if your program contains the string "Hello, World", those characters will be stored in the static segment.
+- The global segment contains global variables and local variables that are declared static.
+- The heap segment contains chunks of memory allocated at run time, most often by calling the C library function malloc.
+- The stack segment contains the call stack, which is a sequence of stack frames. Each time a function is called, a stack frame is allocated to contain the parameters and local variables of the function. 
+  When the function completes, its stack frame is removed from the stack.
+
+The arrangement of these segments is determined partly by the compiler and partly by the operating system. The details vary from one system to another, but in the most common arrangement:
+- The text segment is near the “bottom” of memory, that is, at addresses near 0.
+- The static segment is often just above the text segment, that is, at higher addresses.
+- The global segment is often just above the static segment.
+- The heap is often above the global segment. As it expands, it grows up toward larger addresses.
+- The stack is near the top of memory; that is, near the highest addresses in the virtual address space. As the stack expands, it grows down toward smaller addresses.
+
+To determine the layout of these segments on your system, try running this program:
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int global;
+
+int main () {
+    int local = 5;
+    void *p = malloc(128);
+    char *s = "Hello, World";
+    printf ("Address of main is %p\n", main);
+    printf ("Address of global is %p\n", &global);
+    printf ("Address of local is %p\n", &local);
+    printf ("p points to %p\n", p);
+    printf ("s points to %p\n", s);
+}
+```
+
+main is the name of a function; when it is used as a variable, it refers to the address of the first machine language instruction in main, which we expect to be in the text segment.
+
+global is a global variable, so we expect it to be in the global segment. local is a local variable, so we expect it to be on the stack.
+
+s refers to a “string literal”, which is a string that appears as part of the program (as opposed to a string that is read from a file, input by a user, etc.). 
+We expect the location of the string to be in the static segment (as opposed to the pointer, s, which is a local variable).
+
+p contains an address returned by malloc, which allocates space in the heap. “malloc” stands for “memory allocate.”
+
+The format sequence %p tells printf to format each address as a “pointer”, so it displays the results in hexadecimal.
+
+When I run this program, the output looks like this (I added spaces to make it easier to read):
+```
+Address of main is   0x      40057d
+Address of global is 0x      60104c
+Address of local is  0x7ffe6085443c
+p points to          0x     16c3010
+s points to          0x      4006a4
+```
+
+As expected, the address of main is the lowest, followed by the location of the string literal. 
+The location of global is next, then the address p points to. The address of local is much bigger.
+
+The largest address has 12 hexadecimal digits. Each hex digit corresponds to 4 bits, so it is a 48-bit address. 
+That suggests that the usable part of the virtual address space is 248 bytes.
+
+As an exercise, run this program on your computer and compare your results to mine. 
+Add a second call to malloc and check whether the heap on your system grows up (toward larger addresses).
+Add a function that prints the address of a local variable, and check whether the stack grows down.
+
+
+
 ## Threads
 
 - The main reason for having threads is that in many applications, multiple activities are going on at once. Some of these may block from time to time. 

@@ -168,6 +168,8 @@ With, say, a 4-KB page size, a 32-bit address space has 1 million pages, and a 6
 
 ##### Multilevel Page Tables
 
+One option is a multilevel page table, which is what many operating systems, including Linux, use.
+
 The secret to the multilevel page table method is to avoid keeping all the page tables in memory all the time.
 
 ##### Inverted Page Tables

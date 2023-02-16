@@ -59,6 +59,7 @@ Disk
 
 - Typora
 - Marked 2
+- [Glow](https://github.com/charmbracelet/glow) is a terminal based markdown reader designed from the ground up to bring out the beauty—and power—of the CLI.
 
 PDF Reader
 
