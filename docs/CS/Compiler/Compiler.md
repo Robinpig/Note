@@ -14,12 +14,7 @@ An important role of the compiler is to report any errors in the source program 
 <div style="text-align: center;">
 
 ```dot
-digraph g{
-    source[label="source program", shape=none]
-    Compiler[label="Compiler", shape=box]
-    target[label="target program", shape=none]
-    source->Compiler->target
-}
+span
 ```
 
 </div>

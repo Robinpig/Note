@@ -12,7 +12,7 @@ There are several reasons why you might want to replicate data:
 If the data that you’re replicating does not change over time, then replication is easy: you just need to copy the data to every node once, and you’re done.
 All of the difficulty in replication lies in handling changes to replicated data.
 
-We will discuss three popular algorithms for replicating changes between nodes: single-leader, [multi-leader](/docs/CS/Distributed/Replica.md?id=Multi-Leader-Replication), 
+We will discuss three popular algorithms for replicating changes between nodes: single-leader, [multi-leader](/docs/CS/Distributed/Replica.md?id=Multi-Leader-Replication),
 and [leaderless replication](/docs/CS/Distributed/Replica.md?id=leaderless-replication).
 Almost all distributed databases use one of these three approaches.
 There are many trade-offs to consider with replication: for example, whether to use synchronous or asynchronous replication, and how to handle failed replicas.
@@ -160,7 +160,7 @@ Failover is fraught with things that can go wrong:
   For example, in one incident at GitHub, an out-of-date MySQL follower was promoted to leader.
   The database used an autoincrementing counter to assign primary keys to new rows, but because the new leader’s counter lagged behind the old leader’s, it reused some primary keys that were previously assigned by the old leader.
   These primary keys were also used in a Redis store, so the reuse of primary keys resulted in inconsistency between MySQL and Redis, which caused some private data to be disclosed to the wrong users.
-- In certain fault scenarios (see Chapter 8), it could happen that two nodes both believe that they are the leader. 
+- In certain fault scenarios (see Chapter 8), it could happen that two nodes both believe that they are the leader.
   This situation is called split brain, and it is dangerous: if both leaders accept writes, and there is no process for resolving conflicts (see “Multi-Leader Replication”), data is likely to be lost or corrupted.
   As a safety catch, some systems have a mechanism to shut down one node if two leaders are detected.
   However, if this mechanism is not carefully designed, you can end up with both nodes being shut down.
