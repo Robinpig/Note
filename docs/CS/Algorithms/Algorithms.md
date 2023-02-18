@@ -43,11 +43,9 @@ For instance, if output needs to be written in a certain format, it is certainly
 If printing statements are scattered throughout the program, it will take considerably longer to make modifications.
 The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
 
-
 We introduce [hash tables](/docs/CS/Algorithms/hash.md), a widely used data structure supporting the dictionary operations INSERT, DELETE, and SEARCH.
 In the worst case, hash tables require Θ(n) time to perform a SEARCH operation, but the expected time for hash-table operations is $O(1)$.
 We rely on probability to analyze hash-table operations, but you can understand how the operations work even without probability.
-
 
 ### Tree
 
@@ -168,16 +166,9 @@ Raft
 Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
 Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes $O(N^2)$ time complexity where N is the number of people involved.
 
-
 The subject called the [“NP-complete” problems](/docs/CS/Algorithms/NP.md), whose status is unknown.
-No polynomial-time algorithm has yet been discovered for an NP-complete problem, nor has anyone yet been able to prove that no polynomial-time algorithm can exist for any one of them. 
+No polynomial-time algorithm has yet been discovered for an NP-complete problem, nor has anyone yet been able to prove that no polynomial-time algorithm can exist for any one of them.
 This so-called $P != NP$ question has been one of the deepest, most perplexing open research problems in theoretical computer science since it was first posed in 1971.
-
-
-
-
-
-
 
 ## Links
 
