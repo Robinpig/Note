@@ -6,7 +6,7 @@ A log is perhaps the simplest possible storage abstraction. It is an append-only
 
 ![Fig.1. Log](./img/Log.png)
 
-</div>
+span
 
 <p style="text-align: center;">
 Fig.1. Records are appended to the end of the log, and reads proceed left-to-right. Each entry is assigned a unique sequential log entry number.
