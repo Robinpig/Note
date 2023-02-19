@@ -76,7 +76,7 @@ Fig.3. An interpreter.
 The machine-language target program produced by a compiler is usually much faster than an interpreter at mapping inputs to outputs .
 An interpreter, however, can usually give better error diagnostics than a compiler, because it executes the source program statement by statement.
 
-Java language processors combine compilation and interpretation, as shown in Fig. 1.4.
+Java language processors combine compilation and interpretation, as shown in Figure 4.
 A Java source program may First be compiled into an intermediate form called bytecodes.
 The bytecodes are then interpreted by a virtual machine.
 A benefit of this arrangement is that bytecodes compiled on one machine can be interpreted on another machine, perhaps across a network.
