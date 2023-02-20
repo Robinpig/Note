@@ -1,14 +1,14 @@
 ## Introduction
 
-
 JVM (Java Virtual Machine) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
 
 ### Directories
+
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
 
 ```
 hotspot
-    |--- cpu                     
+    |--- cpu                   
     |--- os
     |--- os_cpu
     |--- share
@@ -18,29 +18,32 @@ hotspot
         |--- c1                 # C1 JIT
         |--- ci                 # compiler interface
         |--- classfile          #
-        |--- code               
-        |--- compiler           
-        |--- gc                 
-        |--- include            
-        |--- interpreter        
+        |--- code             
+        |--- compiler         
+        |--- gc               
+        |--- include          
+        |--- interpreter      
         |--- jfr                # Java Flight Record
-        |--- jvmci              
-        |--- libadt             
-        |--- logging            
-        |--- memory             
-        |--- metaprogramming    
-        |--- oops               
+        |--- jvmci            
+        |--- libadt           
+        |--- logging          
+        |--- memory           
+        |--- metaprogramming  
+        |--- oops             
         |--- opto               # C2 JIT
-        |--- precompiled        
+        |--- precompiled      
         |--- prims              # implement JNI, JVMTI, Unsafe
-        |--- runtime            
+        |--- runtime          
         |--- services           # HeapDump, MXBean, jcmd, jinfo
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
 
+
+
 ### heap object
 
 CHeapObj
+
 - 0xAB around obj to check if the memory been broken
 
 AllStatic
@@ -57,23 +60,33 @@ static char*  reserve_memory(size_t bytes, char* addr = 0,
 }
 ```
 
+## Architecture
 
+![Architecture](./img/Architecture.png)
 
+As shown in the above architecture diagram, the JVM is divided into three main subsystems:
 
+1. ClassLoader Subsystem 
+2. Runtime Data Area
+3. Execution Engine
 
 ## The class File Format
 
 - [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
 - [Javac](/docs/CS/Java/JDK/JVM/Javac.md)
 
+## Class Loader Subsystem
+
+It is mainly responsible for three activities.
+
+- Loading
+- Linking
+- Initialization
 
 ## Runtime
 
-
 - [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 - [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
-
-
 
 [JavaCalls](/docs/CS/Java/JDK/JVM/Stub.md?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
 
@@ -87,43 +100,47 @@ strict digraph {
 }
 ```
 
-
-              
-
-
 ### Class
 
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 - [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 
 ### Run-Time Data Areas
-The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md) that are used during execution of a program. 
-Some of these data areas are created on Java Virtual Machine start-up and are destroyed only when the Java Virtual Machine exits. 
+
+The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md) that are used during execution of a program.
+Some of these data areas are created on Java Virtual Machine start-up and are destroyed only when the Java Virtual Machine exits.
 
 Other data areas are per thread. Per-thread data areas are created when a thread is created and destroyed when the thread exits.
 
 [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)
 
+### Representation of Objects
 
-###  Representation of Objects
 The Java Virtual Machine does not mandate any particular internal structure for objects.
 
 In some of Oracle’s implementations of the Java Virtual Machine, a reference to a class instance is a pointer to a handle that is itself a pair of pointers(see [OOP-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)):
+
 - one to a table containing the methods of the object and a pointer to the Class object that represents the type of the object
 - and the other to the memory allocated from the heap for the object data.
 
-
 ## GC
+
 - [GC](/docs/CS/Java/JDK/JVM/GC.md)
 - [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 
-
-
-
 ## Execution Engine
 
-BytecodeInterpreter is deprecated
+Execution engine executes the “.class” (bytecode).
+It reads the byte-code line by line, uses data and information present in various memory area and executes instructions.
+It can be classified into three parts:
 
+- Interpreter: It interprets the bytecode line by line and then executes.
+  The disadvantage here is that when one method is called multiple times, every time interpretation is required.
+- Just-In-Time Compiler(JIT) : It is used to increase the efficiency of an interpreter.
+  It compiles the entire bytecode and changes it to native code so whenever the interpreter sees repeated method calls, JIT provides direct native code for that part so re-interpretation is not required, thus efficiency is improved.
+- Garbage Collector: It destroys un-referenced objects. For more on Garbage Collector, refer Garbage Collector.
+
+BytecodeInterpreter is deprecated
 
 Early VM’s were interpreter−only. Later VM’s were interpreter plus template generated code, and finally interpreter plus optimized code.
 
@@ -134,11 +151,9 @@ accurate garbage collection using card−marks, exception handling, efficient sy
 on−stack replacement of interpreter frames with compiled−code frames, deoptimization from compiled code back to the interpreter, a compiler interface that supports compilations in parallel with garbage collection,
 and runtime support routines which may be generated at system startup.
 
-
 The runtime generates the interpreter at startup using macro assembler templates for each bytecode and an interpreter dispatch loop.
 This provides assembly level instrumentation that collects counts at method entry and backward branches, type−profiles at call sites, and never−null object pointers for instanceof or checkcast bytecodes.
 Additional instrumentation has been implemented, e.g., branch frequencies, but is not turned on by default.
-
 
 The runtime environment uses adaptive optimization to focus compilation efforts on performance critical methods.
 These methods are identified using method−entry and backward−branch counters with additional heuristics that investigate the caller of a triggering method.
@@ -156,7 +171,6 @@ The methodOop is used to cache other information as well, including the possibil
 
 The server compiler proceeds through the following traditional phases: parser, machine−independent optimization, instruction selection, global code motion and scheduling, register allocation, peephole optimization, and code generation.
 
-
 In HotSpot, we compile methods that have crossed a threshold.
 In most cases any necessary class initialization or class loading has already been done by the interpreter which handles all initialization semantics.
 We investigated having the generated code handle class initialization properly and discovered that it is too rare.
@@ -171,16 +185,10 @@ Threads currently executing in the method are rolled forward to a safepoint, at 
 The invalidating class load is not visible to the executing thread until it has been brought to a safepoint.
 Execution of the method continues in the interpreter.
 
-
-
 - [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 - [interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)
 
-
-
 ## Native Method Interface
-
-
 
 ### Native Method Library
 
@@ -192,7 +200,7 @@ strict digraph {
         Heap;
         Interface[label="Manger interface"];
         Heap ->  Interface;
-        Interface -> Heap;    
+        Interface -> Heap;  
     }
     CollectPolicy -> Heap;
     Allocate_Request -> Interface;
@@ -200,12 +208,11 @@ strict digraph {
 }
 ```
 
-
-
 Top-of-Stack Cashing
 based on stack VM need more instrument dispatch
 
 cached in CPU registers and reduce accessing memory
+
 ```cpp
 // globalDefinitions.hpp
 
@@ -233,8 +240,8 @@ enum TosState {         // describes the tos cache contents
   ilgl                  // illegal state: should not occur
 };
 ```
-check previous and after TosState in transition,
 
+check previous and after TosState in transition,
 
 ```cpp
 // templateTable_x86.cpp
@@ -256,9 +263,9 @@ void TemplateTable::iop2(Operation op) {
 }
 ```
 
-
 All classes in adlc may be derived from one of the following allocation classes:
 For objects allocated in the C-heap (managed by: malloc & free).
+
 - CHeapObj
   For classes used as name spaces.
 - AllStatic
@@ -282,7 +289,6 @@ class AllStatic {
   void operator delete(void* p);
 };
 ```
-
 
 AllStatic
 
@@ -532,7 +538,9 @@ class os: AllStatic {
 
   static int    vm_allocation_granularity();
 ```
+
 reserve_memory
+
 ```cpp
 
   static char*  reserve_memory(size_t bytes, char* addr = 0,
@@ -1187,8 +1195,6 @@ reserve_memory
 };
 ```
 
-
-
 ```cpp
 // share/adlc/arena.cpp
 void* AllocateHeap(size_t size) {
@@ -1207,7 +1213,6 @@ void* AllocateHeap(size_t size) {
 
 ![](../img/CollectedHeap.svg)
 
-
 ```cpp
 class CollectedHeap : public CHeapObj<mtInternal> {
   virtual oop obj_allocate(Klass* klass, int size, TRAPS);
@@ -1215,8 +1220,6 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   virtual oop class_allocate(Klass* klass, int size, TRAPS);
 }
 ```
-
-
 
 ```cpp
 class Universe: AllStatic {
@@ -1233,10 +1236,7 @@ class Universe: AllStatic {
 
 ### CollectorPolicy
 
-
-
 ![](../img/CollectorPolicy.svg)
-
 
 ```cpp
 // share/gc/shared/collectorPolicy.hpp
@@ -1277,7 +1277,6 @@ class CollectorPolicy : public CHeapObj<mtGC> {
 };
 ```
 
-
 ### universe_init
 
 ```cpp
@@ -1296,7 +1295,9 @@ jint universe_init() {
 
   initialize_global_behaviours();
 ```
+
 initialize_heap
+
 ```cpp
   jint status = Universe::initialize_heap();
   if (status != JNI_OK) {
@@ -1360,9 +1361,10 @@ initialize_heap
 }
 ```
 
-
 ### initialize_heap
+
 Choose the heap base address and oop encoding mode when compressed oops are used:
+
 - Unscaled  - Use 32-bits oops without encoding when NarrowOopHeapBaseMin + heap_size < 4Gb
 - ZeroBased - Use zero based compressed oops with encoding when NarrowOopHeapBaseMin + heap_size < 32Gb
 - HeapBased - Use compressed oops with heap base + encoding.
@@ -1431,17 +1433,17 @@ jint Universe::initialize_heap() {
 }
 ```
 
-
-
 ```cpp
 CollectedHeap* Universe::create_heap() {
   assert(_collectedHeap == NULL, "Heap already created");
   return GCConfig::arguments()->create_heap();
 }
 ```
+
 create_heap() implemented by different collector Arguments
 
 Such as g1Arguments
+
 ```cpp
 // share/gc/g1/g1Arguments.cpp
 CollectedHeap* G1Arguments::create_heap() {
@@ -1454,9 +1456,11 @@ CollectedHeap* G1Arguments::create_heap() {
 ```
 
 ## Links
+
 - [JDK](/docs/CS/Java/JDK/JDK.md)
 
 ## References
+
 1. [Java T point](https://www.javatpoint.com/jvm-java-virtual-machine)
 2. [The Java® Virtual Machine Specification Java SE 17 Edition](https://docs.oracle.com/javase/specs/jvms/se17/html/)
 3. [深入理解Java虚拟机（第3版）- 周志明](https://book.douban.com/subject/34907497/)
