@@ -1,6 +1,14 @@
 ## Introduction
 
-JVM (Java Virtual Machine) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
+JVM is the core of the Java ecosystem, and makes it possible for Java-based software programs to follow the "write once, run anywhere" approach.
+
+JVM was initially designed to support only Java.
+However, over the time, many other languages such as Scala, Kotlin and Groovy were adopted on the Java platform.
+All of these languages are collectively known as JVM languages.
+
+Before we jump into the JVM, let's revisit the concept of a [Virtual Machine (VM)](/docs/CS/OS/VM.md).
+Similar to virtual machines, the JVM creates an isolated space on a host machine.
+This space can be used to execute Java programs irrespective of the platform or operating system of the machine.
 
 ### Directories
 
@@ -8,7 +16,7 @@ Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree
 
 ```
 hotspot
-    |--- cpu                   
+    |--- cpu               
     |--- os
     |--- os_cpu
     |--- share
@@ -18,27 +26,25 @@ hotspot
         |--- c1                 # C1 JIT
         |--- ci                 # compiler interface
         |--- classfile          #
-        |--- code             
-        |--- compiler         
-        |--- gc               
-        |--- include          
-        |--- interpreter      
+        |--- code         
+        |--- compiler     
+        |--- gc           
+        |--- include      
+        |--- interpreter  
         |--- jfr                # Java Flight Record
-        |--- jvmci            
-        |--- libadt           
-        |--- logging          
-        |--- memory           
+        |--- jvmci        
+        |--- libadt       
+        |--- logging      
+        |--- memory       
         |--- metaprogramming  
-        |--- oops             
+        |--- oops         
         |--- opto               # C2 JIT
-        |--- precompiled      
+        |--- precompiled  
         |--- prims              # implement JNI, JVMTI, Unsafe
-        |--- runtime          
+        |--- runtime      
         |--- services           # HeapDump, MXBean, jcmd, jinfo
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
-
-
 
 ### heap object
 
@@ -62,11 +68,19 @@ static char*  reserve_memory(size_t bytes, char* addr = 0,
 
 ## Architecture
 
-![Architecture](./img/Architecture.png)
+<div style="text-align: center;">
+
+![Fig.1. Architecture](./img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. JVM Architecture.
+</p>
 
 As shown in the above architecture diagram, the JVM is divided into three main subsystems:
 
-1. ClassLoader Subsystem 
+1. ClassLoader Subsystem
 2. Runtime Data Area
 3. Execution Engine
 
@@ -82,6 +96,16 @@ It is mainly responsible for three activities.
 - Loading
 - Linking
 - Initialization
+
+<div style="text-align: center;">
+
+![Fig.2. ClassLoader](./img/ClassLoader.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. ClassLoader.
+</p>
 
 ## Runtime
 
