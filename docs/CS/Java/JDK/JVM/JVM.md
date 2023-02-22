@@ -1,7 +1,6 @@
 ## Introduction
 
 JVM is the core of the Java ecosystem, and makes it possible for Java-based software programs to follow the "write once, run anywhere" approach.
-
 JVM was initially designed to support only Java.
 However, over the time, many other languages such as Scala, Kotlin and Groovy were adopted on the Java platform.
 All of these languages are collectively known as JVM languages.
@@ -16,7 +15,7 @@ Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree
 
 ```
 hotspot
-    |--- cpu               
+    |--- cpu         
     |--- os
     |--- os_cpu
     |--- share
@@ -26,22 +25,22 @@ hotspot
         |--- c1                 # C1 JIT
         |--- ci                 # compiler interface
         |--- classfile          #
-        |--- code         
-        |--- compiler     
-        |--- gc           
-        |--- include      
+        |--- code   
+        |--- compiler   
+        |--- gc     
+        |--- include  
         |--- interpreter  
         |--- jfr                # Java Flight Record
-        |--- jvmci        
-        |--- libadt       
-        |--- logging      
-        |--- memory       
+        |--- jvmci  
+        |--- libadt   
+        |--- logging  
+        |--- memory   
         |--- metaprogramming  
-        |--- oops         
+        |--- oops   
         |--- opto               # C2 JIT
         |--- precompiled  
         |--- prims              # implement JNI, JVMTI, Unsafe
-        |--- runtime      
+        |--- runtime  
         |--- services           # HeapDump, MXBean, jcmd, jinfo
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
@@ -84,18 +83,15 @@ As shown in the above architecture diagram, the JVM is divided into three main s
 2. Runtime Data Area
 3. Execution Engine
 
-## The class File Format
+### The class File Format
 
 - [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
 - [Javac](/docs/CS/Java/JDK/JVM/Javac.md)
 
-## Class Loader Subsystem
+### Class Loader Subsystem
 
-It is mainly responsible for three activities.
-
-- Loading
-- Linking
-- Initialization
+Java's dynamic class loading functionality is handled by the [ClassLoader subsystem](/docs/CS/Java/JDK/JVM/ClassLoader.md).
+It loads, links. and initializes the class file when it refers to a class for the first time at runtime, not compile time.
 
 <div style="text-align: center;">
 
@@ -104,32 +100,10 @@ It is mainly responsible for three activities.
 </div>
 
 <p style="text-align: center;">
-Fig.1. ClassLoader.
+Fig.2. ClassLoader.
 </p>
 
-## Runtime
-
-- [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
-- [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
-
-[JavaCalls](/docs/CS/Java/JDK/JVM/Stub.md?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
-
-```dot
-strict digraph {
-    rankdir=LR
-    java [shape="polygon" label="Java Method"]
-    VM [shape="polygon" label="VM"]
-    java -> VM [label="JNI"]
-    VM -> java [label="\n\nJavaCalls" labelfloat=false]
-}
-```
-
-### Class
-
-- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
-- [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
-
-### Run-Time Data Areas
+### Runtime Data Area
 
 The Java Virtual Machine defines various [run-time data areas](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md) that are used during execution of a program.
 Some of these data areas are created on Java Virtual Machine start-up and are destroyed only when the Java Virtual Machine exits.
@@ -138,33 +112,28 @@ Other data areas are per thread. Per-thread data areas are created when a thread
 
 [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)
 
-### Representation of Objects
+The Runtime Data Area is divided into five major components:
 
-The Java Virtual Machine does not mandate any particular internal structure for objects.
+1. **Method Area** – All the class-level data will be stored here, including static variables. There is only one method area per JVM, and it is a shared resource.
+2. **Heap Area** – All the Objects and their corresponding instance variables and arrays will be stored here. There is also one Heap Area per JVM. Since the Method and Heap areas share memory for multiple threads, the data stored is not thread-safe.
+3. **Stack Area** – For every thread, a separate runtime stack will be created. For every method call, one entry will be made in the stack memory which is called Stack Frame. All local variables will be created in the stack memory. The stack area is thread-safe since it is not a shared resource. The Stack Frame is divided into three subentities:
+   1. **Local Variable Array** – Related to the method how many local variables are involved and the corresponding values will be stored here.
+   2. **Operand stack** – If any intermediate operation is required to perform, operand stack acts as runtime workspace to perform the operation.
+   3. **Frame data** – All symbols corresponding to the method is stored here. In the case of any  **exception** , the catch block information will be maintained in the frame data.
+4. **PC Registers** – Each thread will have separate PC Registers, to hold the address of current executing instruction once the instruction is executed the PC register will be updated with the next instruction.
+5. **Native Method stacks** – Native Method Stack holds native method information. For every thread, a separate native method stack will be created.
 
-In some of Oracle’s implementations of the Java Virtual Machine, a reference to a class instance is a pointer to a handle that is itself a pair of pointers(see [OOP-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)):
+### Execution Engine
 
-- one to a table containing the methods of the object and a pointer to the Class object that represents the type of the object
-- and the other to the memory allocated from the heap for the object data.
+The bytecode, which is assigned to the **Runtime Data Area,** will be executed by the Execution Engine. The Execution Engine reads the bytecode and executes it piece by piece.
 
-## GC
-
-- [GC](/docs/CS/Java/JDK/JVM/GC.md)
-- [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
-
-## Execution Engine
-
-Execution engine executes the “.class” (bytecode).
-It reads the byte-code line by line, uses data and information present in various memory area and executes instructions.
-It can be classified into three parts:
-
-- Interpreter: It interprets the bytecode line by line and then executes.
-  The disadvantage here is that when one method is called multiple times, every time interpretation is required.
-- Just-In-Time Compiler(JIT) : It is used to increase the efficiency of an interpreter.
-  It compiles the entire bytecode and changes it to native code so whenever the interpreter sees repeated method calls, JIT provides direct native code for that part so re-interpretation is not required, thus efficiency is improved.
-- Garbage Collector: It destroys un-referenced objects. For more on Garbage Collector, refer Garbage Collector.
-
-BytecodeInterpreter is deprecated
+1. **Interpreter** – The interpreter interprets the bytecode faster but executes slowly. The disadvantage of the interpreter is that when one method is called multiple times, every time a new interpretation is required.
+2. **JIT Compiler** – The JIT Compiler neutralizes the disadvantage of the interpreter. The Execution Engine will be using the help of the interpreter in converting byte code, but when it finds repeated code it uses the JIT compiler, which compiles the entire bytecode and changes it to native code. This native code will be used directly for repeated method calls, which improve the performance of the system.
+3. **Intermediate Code Generator** – Produces intermediate code
+4. **Code Optimizer** – Responsible for optimizing the intermediate code generated above
+5. **Target Code Generator** – Responsible for Generating Machine Code or Native Code
+6. **Profiler** – A special component, responsible for finding hotspots, i.e. whether the method is called multiple times or not.
+7. **Garbage Collector** : Collects and removes unreferenced objects. Garbage Collection can be triggered by calling `System.gc()`, but the execution is not guaranteed. Garbage collection of the JVM collects the objects that are created.
 
 Early VM’s were interpreter−only. Later VM’s were interpreter plus template generated code, and finally interpreter plus optimized code.
 
@@ -201,6 +170,48 @@ We investigated having the generated code handle class initialization properly a
 Instead the compiler generates an uncommon trap, a trampoline back to interpreted mode, when it compiles a reference to an uninitialized class.
 The compiled code is then deoptimized and it is flagged as being unusable.
 Threads entering the method are interpreted until its recompilation is finished. As a side effect, field offsets are always known so short−form addressing modes can be used without backpatching.
+
+### JNI
+
+Java Native Interface (JNI): JNI will be interacting with the Native Method Libraries and provides the Native Libraries required for the Execution Engine.
+
+Native Method Libraries: This is a collection of the Native Libraries, which is required for the Execution Engine.
+
+## Runtime
+
+- [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
+- [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
+
+[JavaCalls](/docs/CS/Java/JDK/JVM/Stub.md?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
+
+```dot
+strict digraph {
+    rankdir=LR
+    java [shape="polygon" label="Java Method"]
+    VM [shape="polygon" label="VM"]
+    java -> VM [label="JNI"]
+    VM -> java [label="\n\nJavaCalls" labelfloat=false]
+}
+```
+
+### Class
+
+- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
+- [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
+
+### Representation of Objects
+
+The Java Virtual Machine does not mandate any particular internal structure for objects.
+
+In some of Oracle’s implementations of the Java Virtual Machine, a reference to a class instance is a pointer to a handle that is itself a pair of pointers(see [OOP-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)):
+
+- one to a table containing the methods of the object and a pointer to the Class object that represents the type of the object
+- and the other to the memory allocated from the heap for the object data.
+
+## GC
+
+- [GC](/docs/CS/Java/JDK/JVM/GC.md)
+- [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 
 ### Deoptimization
 
