@@ -15,7 +15,7 @@ Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree
 
 ```
 hotspot
-    |--- cpu         
+    |--- cpu       
     |--- os
     |--- os_cpu
     |--- share
@@ -27,7 +27,7 @@ hotspot
         |--- classfile          #
         |--- code   
         |--- compiler   
-        |--- gc     
+        |--- gc   
         |--- include  
         |--- interpreter  
         |--- jfr                # Java Flight Record

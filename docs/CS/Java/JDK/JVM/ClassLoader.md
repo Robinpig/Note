@@ -3,7 +3,6 @@
 Java's dynamic class loading functionality is handled by the ClassLoader subsystem.
 It loads, links. and initializes the class file when it refers to a class for the first time at runtime, not compile time.
 
-
 <div style="text-align: center;">
 
 ![Fig.1. ClassLoader](./img/ClassLoader.png)
@@ -14,7 +13,6 @@ It loads, links. and initializes the class file when it refers to a class for th
 Fig.1. ClassLoader.
 </p>
 
-
 It is mainly responsible for three activities.
 
 - Loading
@@ -24,6 +22,7 @@ It is mainly responsible for three activities.
 **Loading**
 
 Classes will be loaded by this component. BootStrap ClassLoader, Extension ClassLoader, and Application ClassLoader are the three ClassLoaders that will help in achieving it.
+
 1. BootStrap ClassLoader – Responsible for loading classes from the bootstrap classpath, nothing but rt.jar. Highest priority will be given to this loader.
 2. Extension ClassLoader – Responsible for loading classes which are inside the ext folder (jre\lib).
 3. Application ClassLoader –Responsible for loading Application Level Classpath, path mentioned Environment Variable, etc.
