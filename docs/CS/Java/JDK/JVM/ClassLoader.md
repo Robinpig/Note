@@ -1,7 +1,11 @@
 ## Introduction
 
-Java's dynamic class loading functionality is handled by the ClassLoader subsystem.
-It loads, links. and initializes the class file when it refers to a class for the first time at runtime, not compile time.
+When you compile a .java source file, it is converted into byte code as a .class file. 
+When you try to use this class in your program, the class loader loads it into the main memory.
+
+The first class to be loaded into memory is usually the class that contains the `main()` method.
+
+There are three phases in the class loading process: loading, linking, and initialization.
 
 <div style="text-align: center;">
 
@@ -19,15 +23,7 @@ It is mainly responsible for three activities.
 - Linking
 - Initialization
 
-**Loading**
 
-Classes will be loaded by this component. BootStrap ClassLoader, Extension ClassLoader, and Application ClassLoader are the three ClassLoaders that will help in achieving it.
-
-1. BootStrap ClassLoader – Responsible for loading classes from the bootstrap classpath, nothing but rt.jar. Highest priority will be given to this loader.
-2. Extension ClassLoader – Responsible for loading classes which are inside the ext folder (jre\lib).
-3. Application ClassLoader –Responsible for loading Application Level Classpath, path mentioned Environment Variable, etc.
-
-The above ClassLoaders will follow Delegation Hierarchy Algorithm while loading the class files.
 
 **Linking**
 
@@ -277,18 +273,34 @@ call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and 
 
 ## Loading
 
-Loads the class with the specified binary name. The default implementation of this method searches for classes in the
-following order:
+
+Loading involves taking the binary representation (bytecode) of a class or interface with a particular name, and generating the original class or interface from that.
+
+There are three built-in class loaders available in Java:
+
+1. BootStrap ClassLoader – This is the root class loader. It is the superclass of Extension Class Loader and loads the standard Java packages like java.lang, java.net, java.util, java.io, and so on.
+   These packages are present inside the rt.jar file and other core libraries present in the $JAVA_HOME/jre/lib directory.
+2. Extension ClassLoader – This is the subclass of the Bootstrap Class Loader and the superclass of the Application Class Loader. This loads the extensions of standard Java libraries which are present in the $JAVA_HOME/jre/lib/ext directory.
+3. Application ClassLoader – This is the final class loader and the subclass of Extension Class Loader. It loads the files present on the classpath.
+   By default, the classpath is set to the current directory of the application. The classpath can also be modified by adding the -classpath or -cp command line option.
+
+The above ClassLoaders will follow Delegation Hierarchy Algorithm while loading the class files.
+
+The JVM uses the ClassLoader.loadClass() method for loading the class into memory. It tries to load the class based on a fully qualified name.
+The default implementation of this method searches for classes in the following order:
 
 1. Invoke findLoadedClass(String) to check if the class has already been loaded.
 2. Invoke the loadClass method on the parent class loader. If the parent is null the class loader built-in to the
    virtual machine is used, instead.
 3. Invoke the findClass(String) method to find the class.
 
-If the class was found using the above steps, and the resolve flag is true, this method will then invoke the
-resolveClass(Class) method on the resulting Class object. Subclasses of ClassLoader are encouraged to override
-findClass(String), rather than this method. Unless overridden, this method synchronizes on the result of
-getClassLoadingLock method during the entire class loading process.
+If a parent class loader is unable to find a class, it delegates the work to a child class loader. If the last child class loader isn't able to load the class either, it throws NoClassDefFoundError or ClassNotFoundException.
+
+
+
+If the class was found using the above steps, and the resolve flag is true, this method will then invoke the resolveClass(Class) method on the resulting Class object. 
+Subclasses of ClassLoader are encouraged to override findClass(String), rather than this method. 
+Unless overridden, this method synchronizes on the result of getClassLoadingLock method during the entire class loading process.
 
 ```java
 public abstract class ClassLoader {
@@ -841,6 +853,15 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
 ```
 
 ## Linking
+
+After a class is loaded into memory, it undergoes the linking process. Linking a class or interface involves combining the different elements and dependencies of the program together.
+
+Linking includes the following steps:
+
+- Verification: This phase checks the structural correctness of the .class file by checking it against a set of constraints or rules. If verification fails for some reason, we get a VerifyException.
+- Preparation: In this phase, the JVM allocates memory for the static fields of a class or interface, and initializes them with default values.
+- Resolution: In this phase, symbolic references are replaced with direct references present in the runtime constant pool.
+  For example, if you have references to other classes or constant variables present in other classes, they are resolved in this phase and replaced with their actual references.
 
 Linking a class or interface involves verifying and preparing that class or interface, its direct superclass, its direct superinterfaces, and its element type (if it is an array type), if necessary.
 Linking also involves resolution of symbolic references in the class or interface, though not necessarily at the same time as the class or interface is verified and prepared.
@@ -1500,6 +1521,9 @@ Resolution is the process of dynamically determining one or more concrete values
 Lazy linked, loading other classes can be done after Initiailzation. It will run with no error when link a Error Class which not used.
 
 ## Initialization
+
+Initialization involves executing the initialization method of the class or interface (known as <clinit>). This can include calling the class's constructor, executing the static block, and assigning values to all the static variables. 
+This is the final stage of class loading.
 
 *Initialization* of a class or interface consists of executing its class or interface initialization method.
 

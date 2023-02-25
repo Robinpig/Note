@@ -15,7 +15,7 @@ Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree
 
 ```
 hotspot
-    |--- cpu       
+    |--- cpu   
     |--- os
     |--- os_cpu
     |--- share
@@ -83,7 +83,7 @@ As shown in the above architecture diagram, the JVM is divided into three main s
 2. Runtime Data Area
 3. Execution Engine
 
-### The class File Format
+Before
 
 - [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
 - [Javac](/docs/CS/Java/JDK/JVM/Javac.md)
@@ -114,7 +114,7 @@ Other data areas are per thread. Per-thread data areas are created when a thread
 
 The Runtime Data Area is divided into five major components:
 
-1. **Method Area** – All the class-level data will be stored here, including static variables. There is only one method area per JVM, and it is a shared resource.
+1. **Method Area** – All the class level data such as the run-time constant pool, field, and method data, and the code for methods and constructors, are stored here. There is only one method area per JVM, and it is a shared resource.
 2. **Heap Area** – All the Objects and their corresponding instance variables and arrays will be stored here. There is also one Heap Area per JVM. Since the Method and Heap areas share memory for multiple threads, the data stored is not thread-safe.
 3. **Stack Area** – For every thread, a separate runtime stack will be created. For every method call, one entry will be made in the stack memory which is called Stack Frame. All local variables will be created in the stack memory. The stack area is thread-safe since it is not a shared resource. The Stack Frame is divided into three subentities:
    1. **Local Variable Array** – Related to the method how many local variables are involved and the corresponding values will be stored here.
@@ -125,15 +125,15 @@ The Runtime Data Area is divided into five major components:
 
 ### Execution Engine
 
-The bytecode, which is assigned to the **Runtime Data Area,** will be executed by the Execution Engine. The Execution Engine reads the bytecode and executes it piece by piece.
+The bytecode, which is assigned to the **Runtime Data Area,** will be executed by the [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md). The Execution Engine reads the bytecode and executes it piece by piece.
 
 1. **Interpreter** – The interpreter interprets the bytecode faster but executes slowly. The disadvantage of the interpreter is that when one method is called multiple times, every time a new interpretation is required.
 2. **JIT Compiler** – The JIT Compiler neutralizes the disadvantage of the interpreter. The Execution Engine will be using the help of the interpreter in converting byte code, but when it finds repeated code it uses the JIT compiler, which compiles the entire bytecode and changes it to native code. This native code will be used directly for repeated method calls, which improve the performance of the system.
-3. **Intermediate Code Generator** – Produces intermediate code
-4. **Code Optimizer** – Responsible for optimizing the intermediate code generated above
-5. **Target Code Generator** – Responsible for Generating Machine Code or Native Code
-6. **Profiler** – A special component, responsible for finding hotspots, i.e. whether the method is called multiple times or not.
-7. **Garbage Collector** : Collects and removes unreferenced objects. Garbage Collection can be triggered by calling `System.gc()`, but the execution is not guaranteed. Garbage collection of the JVM collects the objects that are created.
+   1. **Intermediate Code Generator** – Produces intermediate code
+   2. **Code Optimizer** – Responsible for optimizing the intermediate code generated above
+   3. **Target Code Generator** – Responsible for Generating Machine Code or Native Code
+   4. **Profiler** – A special component, responsible for finding hotspots, i.e. whether the method is called multiple times or not.
+3. **Garbage Collector** : Collects and removes unreferenced objects. Garbage Collection can be triggered by calling `System.gc()`, but the execution is not guaranteed. Garbage collection of the JVM collects the objects that are created.
 
 Early VM’s were interpreter−only. Later VM’s were interpreter plus template generated code, and finally interpreter plus optimized code.
 
@@ -171,11 +171,19 @@ Instead the compiler generates an uncommon trap, a trampoline back to interprete
 The compiled code is then deoptimized and it is flagged as being unusable.
 Threads entering the method are interpreted until its recompilation is finished. As a side effect, field offsets are always known so short−form addressing modes can be used without backpatching.
 
-### JNI
+### Java Native Interface
+At times, it is necessary to use native (non-Java) code (for example, C/C++).
+This can be in cases where we need to interact with hardware, or to overcome the memory management and performance constraints in Java. 
+Java supports the execution of native code via the Java Native Interface (JNI).
 
-Java Native Interface (JNI): JNI will be interacting with the Native Method Libraries and provides the Native Libraries required for the Execution Engine.
+JNI acts as a bridge for permitting the supporting packages for other programming languages such as C, C++, and so on. 
+This is especially helpful in cases where you need to write code that is not entirely supported by Java, like some platform specific features that can only be written in C.
 
-Native Method Libraries: This is a collection of the Native Libraries, which is required for the Execution Engine.
+You can use the native keyword to indicate that the method implementation will be provided by a native library. 
+You will also need to invoke System.loadLibrary() to load the shared native library into memory, and make its functions available to Java.
+### Native Method Libraries
+
+Native Method Libraries are libraries that are written in other programming languages, such as C, C++, and assembly. These libraries are usually present in the form of .dll or .so files. These native libraries can be loaded through JNI.
 
 ## Runtime
 
@@ -1274,42 +1282,7 @@ class Universe: AllStatic {
 ![](../img/CollectorPolicy.svg)
 
 ```cpp
-// share/gc/shared/collectorPolicy.hpp
-class CollectorPolicy : public CHeapObj<mtGC> {
- protected:
-  virtual void initialize_alignments() = 0;
-  virtual void initialize_flags();
-  virtual void initialize_size_info();
-
-  DEBUG_ONLY(virtual void assert_flags();)
-  DEBUG_ONLY(virtual void assert_size_info();)
-
-  size_t _initial_heap_byte_size;
-  size_t _max_heap_byte_size;
-  size_t _min_heap_byte_size;
-
-  size_t _space_alignment;
-  size_t _heap_alignment;
-
-  CollectorPolicy();
-
- public:
-  void initialize_all() {
-    initialize_alignments();
-    initialize_flags();
-    initialize_size_info();
-  }
-
-  // Return maximum heap alignment that may be imposed by the policy.
-  static size_t compute_heap_alignment();
-
-  size_t space_alignment()        { return _space_alignment; }
-  size_t heap_alignment()         { return _heap_alignment; }
-
-  size_t initial_heap_byte_size() { return _initial_heap_byte_size; }
-  size_t max_heap_byte_size()     { return _max_heap_byte_size; }
-  size_t min_heap_byte_size()     { return _min_heap_byte_size; }
-};
+span
 ```
 
 ### universe_init
