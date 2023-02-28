@@ -15,3 +15,13 @@ Fig.1. VM.
 
 A single physical machine can run multiple virtual machines, each with their own operating system and applications.
 These virtual machines are isolated from each other.
+
+
+## Links
+
+- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+
+
+
+## References
+
