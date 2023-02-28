@@ -1,6 +1,6 @@
 ## Introduction
 
-JVM is the core of the Java ecosystem, and makes it possible for Java-based software programs to follow the "write once, run anywhere" approach.
+JVM is the core of the [Java ecosystem](/docs/CS/Java/JDK/JDK.md), and makes it possible for Java-based software programs to follow the "write once, run anywhere" approach.
 JVM was initially designed to support only Java.
 However, over the time, many other languages such as Scala, Kotlin and Groovy were adopted on the Java platform.
 All of these languages are collectively known as JVM languages.
@@ -9,7 +9,8 @@ Before we jump into the JVM, let's revisit the concept of a [Virtual Machine (VM
 Similar to virtual machines, the JVM creates an isolated space on a host machine.
 This space can be used to execute Java programs irrespective of the platform or operating system of the machine.
 
-### Directories
+<!-- tabs:start -->
+##### **Directories**
 
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
 
@@ -44,6 +45,9 @@ hotspot
         |--- services           # HeapDump, MXBean, jcmd, jinfo
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
+
+
+<!-- tabs:end -->
 
 ### heap object
 

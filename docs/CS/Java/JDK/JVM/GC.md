@@ -1,6 +1,6 @@
 ## Introduction
 
-Java Garbage Collection is the process by which Java programs perform automatic memory management.
+Java Garbage Collection is the process by which Java programs perform [automatic memory management](/docs/CS/memory/GC.md).
 
 The garbage collection implementation lives in the JVM. Each JVM can implement its own version of garbage collection. 
 However, it should meet the standard JVM specification of working with the objects present in the heap memory, marking or identifying the unreachable objects, and destroying them with compaction.

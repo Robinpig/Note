@@ -18,6 +18,7 @@ In one book I read that it was “completely wrong to say that Java supports pas
 And everything is actually pass by value. <br>
 **So you’re not passing by reference, you’re “passing an object reference by value.”** 
 
+## Basics
 
 [Basics of Java](/docs/CS/Java/JDK/Basic/Basic.md)
 
@@ -37,6 +38,13 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 
 ## Projects
 
+A Project is a collaborative effort to produce a specific artifact, which may be a body of code, or documentation, or some other material. 
+A Project must be sponsored by one or more Groups. 
+A Project may have web content, one or more file repositories, and one or more mailing lists.
+
+- [Project Valhalla](/docs/CS/Java/JDK/Valhalla.md) plans to augment the Java object model with value objects and user-defined primitives, combining the abstractions of object-oriented programming with the performance characteristics of simple primitives.
+  These features will be complemented with changes to Java’s generics to preserve performance gains through generic APIs.
+- [Project Loom](/docs/CS/Java/JDK/Loom.md)'s mission is to make it easier to write, debug, profile and maintain concurrent applications meeting today's requirements.
 - Amber
 - Coin
 - Graal
@@ -48,14 +56,8 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 - Tsan
 - ZGC
 
-### Valhalla
 
-[Project Valhalla](/docs/CS/Java/JDK/Valhalla.md) plans to augment the Java object model with value objects and user-defined primitives, combining the abstractions of object-oriented programming with the performance characteristics of simple primitives.
-These features will be complemented with changes to Java’s generics to preserve performance gains through generic APIs.
 
-### Loom
-
-[Project Loom](/docs/CS/Java/JDK/Loom.md)'s mission is to make it easier to write, debug, profile and maintain concurrent applications meeting today's requirements.
 
 ## Performance
 
