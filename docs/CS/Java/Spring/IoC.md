@@ -54,11 +54,13 @@ It adds:
 In short, the BeanFactory provides the configuration framework and basic functionality, and the ApplicationContext adds more enterprise-specific functionality.
 This is why we use ApplicationContext as the default Spring container.
 
-In Spring, the objects that form the backbone of your application and that are managed by the Spring IoC container are called beans.
-In Spring, a bean is an object that the Spring container instantiates, assembles, and manages.
-Beans, and the dependencies among them, are reflected in the configuration metadata used by a container.
+In Spring, the objects that form the backbone of your application and that are managed by the Spring IoC container are called `beans`.
+**In Spring, a bean is an object that the Spring container instantiates, assembles, and manages.
+Beans, and the dependencies among them, are reflected in the configuration metadata used by a container.**
 
-Typically, we define service layer objects, data access objects (DAOs), presentation objects such as Struts `Action` instances, infrastructure objects such as Hibernate `SessionFactories`, JMS `Queues`, and so forth.
+> ![Note]
+> 
+> Typically, we define service layer objects, data access objects (DAOs), presentation objects such as Struts `Action` instances, infrastructure objects such as Hibernate `SessionFactories`, JMS `Queues`, and so forth.
 Typically, one does not configure fine-grained domain objects in the container, because it is usually the responsibility of DAOs and business logic to create and load domain objects.
 
 ### BeanFactory
