@@ -2,28 +2,34 @@
 
 ## Data Structures
 
+Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.
+A data structure is a special format for organizing and storing data. General data structure types include arrays, files, linked lists, stacks, queues, trees, graphs and so on.
+<br>
+Depending on the organization of the elements, data structures are classified into two types:
+
+1) Linear data structures: Elements are accessed in a sequential order but it is not compulsory to store all elements sequentially (say, Linked Lists).
+   Examples: Linked Lists, Stacks and Queues.
+2) Non – linear data structures: Elements of this data structure are stored / accessed in a non-linear order. Examples: Trees and graphs.
+
 An abstract data type (ADT) is a set of operations.
 Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.
 This can be viewed as an extension of modular design.
+
+Commonly used ADTs include: Linked Lists, Stacks, Queues, Priority Queues, Binary Trees, Dictionaries, Disjoint Sets (Union and Find), Hash Tables, Graphs, and many others.
+For example, stack uses a LIFO (Last-In-First-Out) mechanism while storing the data in data structures.
+The last element inserted into the stack is the first element that gets deleted.
+Common operations are: creating the stack, pushing an element onto the stack, popping an element from the stack, finding the current top of the stack, finding the number of elements in the stack, etc.
+
+While defining the ADTs do not worry about the implementation details.
+They come into the picture only when we want to use them.
+Different kinds of ADTs are suited to different kinds of applications, and some are highly specialized to specific tasks.
+We will go through many of them and you will be in a position to relate the data structures to the kind of problems they solve.
 
 ### Lists, Stacks, and Queues
 
 [Lists](/docs/CS/Algorithms/list.md), [stacks](/docs/CS/Algorithms/stack.md), and [queues](/docs/CS/Algorithms/queue.md) are perhaps the three fundamental data structures in all of computer science.
 
-
-| Parameter                       | Linked List          | Array                                                   | Dynamic Array                                              |
-| --------------------------------- | ---------------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
-| Indexing                        | $O(n)$               | $O(1)$                                                  | $O(1)$                                                     |
-| Inserting/deletion at beginning | $O(1)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Insertion at ending             | $O(n)$               | $O(1)$, if array is not full                            | $O(1)$, if array is not full<br />$O(n)$, if array is full |
-| Deletion at ending              | $O(n)$               | $O(1)$                                                  | $O(n)$                                                     |
-| Insertion in middle             | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Deletion in middle              | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                     |
-| Wasted space                    | $O(n)$(for pointers) | 0                                                       | $O(n)$                                                     |
-
-array
-
-- [Linked List](/docs/CS/Algorithms/linked-list.md)
+[Arrays and Linked Lists](/docs/CS/Algorithms/linked-list.md)
 
 One of the basic rules concerning programming is that no routine should ever exceed a page.
 This is accomplished by breaking the program down into modules. Each module is a logical unit and does a specific job.
@@ -37,15 +43,16 @@ For instance, if output needs to be written in a certain format, it is certainly
 If printing statements are scattered throughout the program, it will take considerably longer to make modifications.
 The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
 
+We introduce [hash tables](/docs/CS/Algorithms/hash.md), a widely used data structure supporting the dictionary operations INSERT, DELETE, and SEARCH.
+In the worst case, hash tables require Θ(n) time to perform a SEARCH operation, but the expected time for hash-table operations is $O(1)$.
+We rely on probability to analyze hash-table operations, but you can understand how the operations work even without probability.
+
 ### Tree
 
 [Trees](/docs/CS/Algorithms/tree.md) in general are very useful abstractions in computer science.
 
 - [Trie](/docs/CS/Algorithms/Trie.md)
-- [BinaryTree](/docs/CS/Algorithms/BinaryTree.md)
 - [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)
-
-A [hash](/docs/CS/Algorithms/hash.md) is a mathematical function that converts an input of arbitrary length into an encrypted output of a fixed length.
 
 > [!NOTE]
 >
@@ -115,7 +122,6 @@ Big O notation, Big-omega notation and Big-theta notation are used to this end.
 
 An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
 
-
 > An algorithm is efficient if its running time is polynomial.
 
 ### Computation Model
@@ -131,6 +137,10 @@ Euclid's algorithm is for computing the greatest common divisor.
 The greatest common divisor (gcd) of two integers is the largest integer that divides both.
 
 ### Advanced Design and Analysis Techniques
+
+Text-editing programs frequently need to find all occurrences of a pattern in the text.
+Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.
+Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/KMP.md)”—can greatly aid the responsiveness of the text-editing program.
 
 - [Dynamic Programming](/docs/CS/Algorithms/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
@@ -155,6 +165,10 @@ Raft
 
 Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
 Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes $O(N^2)$ time complexity where N is the number of people involved.
+
+The subject called the [“NP-complete” problems](/docs/CS/Algorithms/NP.md), whose status is unknown.
+No polynomial-time algorithm has yet been discovered for an NP-complete problem, nor has anyone yet been able to prove that no polynomial-time algorithm can exist for any one of them.
+This so-called $P != NP$ question has been one of the deepest, most perplexing open research problems in theoretical computer science since it was first posed in 1971.
 
 ## Links
 

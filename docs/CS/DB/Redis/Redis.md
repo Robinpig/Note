@@ -48,9 +48,12 @@ ServerCron:
 
 ### Slowlog
 
-The Redis Slow Log is a system to log queries that exceeded a specified execution time. The execution time does not include the I/O operations like talking with the client, sending the reply and so forth, but just the time needed to actually execute the command (this is the only stage of command execution where the thread is blocked and can not serve other requests in the meantime).
+The Redis Slow Log is a system to log queries that exceeded a specified execution time. 
+The execution time does not include the I/O operations like talking with the client, sending the reply and so forth, but just the time needed to actually execute the command
+(this is the only stage of command execution where the thread is blocked and can not serve other requests in the meantime).
 
-You can configure the slow log with two parameters: one tells Redis what is the execution time, in microseconds, to exceed in order for the command to get logged, and the other parameter is the length of the slow log. When a new command is logged the oldest one is removed from the queue of logged commands.
+You can configure the slow log with two parameters: one tells Redis what is the execution time, in microseconds, to exceed in order for the command to get logged, and the other parameter is the length of the slow log.
+When a new command is logged the oldest one is removed from the queue of logged commands.
 
 slowlog len can set to 1000
 

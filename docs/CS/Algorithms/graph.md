@@ -41,10 +41,6 @@ If the graph is  *sparse* , a better solution is an *adjacency list* representat
 
 ### Kruskal's Algorithm
 
-
-
-
-
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)

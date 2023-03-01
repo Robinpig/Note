@@ -1,6 +1,6 @@
 ## Introduction
 
-[The Apache Tomcat® software](https://tomcat.apache.org/) is an open source implementation of the Jakarta [Servlet](/docs/CS/Java/Tomcat/Servlet.md), Jakarta Server Pages, Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications. These specifications are part of the Jakarta EE platform.
+[The Apache Tomcat® software](https://tomcat.apache.org/) is an open source implementation of the Jakarta [Servlet](/docs/CS/Java/JDK/Servlet.md), Jakarta Server Pages, Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications. These specifications are part of the Jakarta EE platform.
 
 > [Apache Tomcat Versions](https://tomcat.apache.org/whichversion.html)
 
@@ -8,7 +8,7 @@ Different versions of Apache Tomcat are available for different versions of the 
 
 
 | **Servlet Spec** | **JSP Spec** | **EL Spec** | **WebSocket Spec** | **Authentication (JASPIC) Spec** | **Apache Tomcat Version** | **Latest Released Version** | **Supported Java Versions**                 |
-| ------------------ | -------------- | ------------- | -------------------- | ---------------------------------- | --------------------------- | ----------------------------- | --------------------------------------------- |
+| ---------------- | ------------ | ----------- | ------------------ | -------------------------------- | ------------------------- | --------------------------- | ------------------------------------------- |
 | 6.0              | 3.1          | 5.0         | 2.1                | 3.0                              | 10.1.x                    | 10.1.1                      | 11 and later                                |
 | 5.0              | 3.0          | 4.0         | 2.0                | 2.0                              | 10.0.x (superseded)       | 10.0.27 (superseded)        | 8 and later                                 |
 | 4.0              | 2.3          | 3.0         | 1.1                | 1.1                              | 9.0.x                     | 9.0.68                      | 8 and later                                 |
@@ -22,7 +22,12 @@ Different versions of Apache Tomcat are available for different versions of the 
 
 ### Debug Tomcat
 
-1. git clone git@github.com:apache/tomcat.git
+1. clone
+
+```shell
+git clone git@github.com:apache/tomcat.git
+```
+
 2. add pom.xml
 
 ```xml
@@ -127,8 +132,6 @@ context.addServletContainerInitializer(new JasperInitializer(), null);
 
 ## Architecture
 
-
-
 ```plantuml
 @startuml
 
@@ -162,48 +165,48 @@ class StandardWrapper
 interface Valve << interface >>
 interface Wrapper << interface >>
 
-AbstractProtocol       "1" *-[#595959,plain]-> "endpoint\n1" AbstractEndpoint       
-AbstractProtocol       "1" *-[#595959,plain]-> "adapter\n1" Adapter                
-AbstractProtocol       "1" *-[#595959,plain]-> "waitingProcessors\n*" Processor              
-AbstractProtocol        -[#008200,dashed]-^  ProtocolHandler        
-ApplicationFilterChain "1" *-[#595959,plain]-> "servlet\n1" Servlet                
-Catalina               "1" *-[#595959,plain]-> "server\n1" Server                 
-Connector              "1" *-[#595959,plain]-> "adapter\n1" Adapter                
+AbstractProtocol       "1" *-[#595959,plain]-> "endpoint\n1" AbstractEndpoint   
+AbstractProtocol       "1" *-[#595959,plain]-> "adapter\n1" Adapter            
+AbstractProtocol       "1" *-[#595959,plain]-> "waitingProcessors\n*" Processor          
+AbstractProtocol        -[#008200,dashed]-^  ProtocolHandler    
+ApplicationFilterChain "1" *-[#595959,plain]-> "servlet\n1" Servlet            
+Catalina               "1" *-[#595959,plain]-> "server\n1" Server             
+Connector              "1" *-[#595959,plain]-> "adapter\n1" Adapter            
 Connector               -[#595959,dashed]->  CoyoteAdapter          : "«create»"
-Connector               -[#008200,dashed]-^  Lifecycle              
-Connector              "1" *-[#595959,plain]-> "protocolHandler\n1" ProtocolHandler        
-Connector              "1" *-[#595959,plain]-> "service\n1" Service                
-Container               -[#008200,plain]-^  Lifecycle              
-Context                 -[#008200,plain]-^  Container              
-CoyoteAdapter           -[#008200,dashed]-^  Adapter                
-CoyoteAdapter          "1" *-[#595959,plain]-> "connector\n1" Connector              
-Engine                  -[#008200,plain]-^  Container              
-Executor                -[#008200,plain]-^  Lifecycle              
-Host                    -[#008200,plain]-^  Container              
+Connector               -[#008200,dashed]-^  Lifecycle          
+Connector              "1" *-[#595959,plain]-> "protocolHandler\n1" ProtocolHandler    
+Connector              "1" *-[#595959,plain]-> "service\n1" Service            
+Container               -[#008200,plain]-^  Lifecycle          
+Context                 -[#008200,plain]-^  Container          
+CoyoteAdapter           -[#008200,dashed]-^  Adapter            
+CoyoteAdapter          "1" *-[#595959,plain]-> "connector\n1" Connector          
+Engine                  -[#008200,plain]-^  Container          
+Executor                -[#008200,plain]-^  Lifecycle          
+Host                    -[#008200,plain]-^  Container          
 Mapper                  -[#595959,dashed]->  Context                : "«create»"
-Mapper                 "1" *-[#595959,plain]-> "contextObjectToContextVersionMap\n*" Context                
-MapperListener          -[#008200,dashed]-^  Lifecycle              
-MapperListener         "1" *-[#595959,plain]-> "mapper\n1" Mapper                 
-MapperListener         "1" *-[#595959,plain]-> "service\n1" Service                
-Server                  -[#008200,plain]-^  Lifecycle              
-Service                 -[#008200,plain]-^  Lifecycle              
-StandardPipeline       "1" *-[#595959,plain]-> "container\n1" Container              
-StandardPipeline        -[#008200,dashed]-^  Lifecycle              
-StandardPipeline        -[#008200,dashed]-^  Pipeline               
+Mapper                 "1" *-[#595959,plain]-> "contextObjectToContextVersionMap\n*" Context            
+MapperListener          -[#008200,dashed]-^  Lifecycle          
+MapperListener         "1" *-[#595959,plain]-> "mapper\n1" Mapper             
+MapperListener         "1" *-[#595959,plain]-> "service\n1" Service            
+Server                  -[#008200,plain]-^  Lifecycle          
+Service                 -[#008200,plain]-^  Lifecycle          
+StandardPipeline       "1" *-[#595959,plain]-> "container\n1" Container          
+StandardPipeline        -[#008200,dashed]-^  Lifecycle          
+StandardPipeline        -[#008200,dashed]-^  Pipeline           
 StandardPipeline        -[#595959,dashed]->  Valve                  : "«create»"
-StandardPipeline       "1" *-[#595959,plain]-> "basic\n1" Valve                  
-StandardWrapper         -[#008200,dashed]-^  Container              
-StandardWrapper         -[#008200,dashed]-^  Lifecycle              
-StandardWrapper        "1" *-[#595959,plain]-> "instance\n1" Servlet                
-StandardWrapper         -[#008200,dashed]-^  Wrapper                
-Wrapper                 -[#008200,plain]-^  Container              
+StandardPipeline       "1" *-[#595959,plain]-> "basic\n1" Valve              
+StandardWrapper         -[#008200,dashed]-^  Container          
+StandardWrapper         -[#008200,dashed]-^  Lifecycle          
+StandardWrapper        "1" *-[#595959,plain]-> "instance\n1" Servlet            
+StandardWrapper         -[#008200,dashed]-^  Wrapper            
+Wrapper                 -[#008200,plain]-^  Container          
 @enduml
 
 ```
 
-
-Catalina is a very sophisticated piece of software, which was elegantly designed and developed. It is also modular too.
-Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the container.。
+Catalina is a very sophisticated piece of software, which was elegantly designed and developed.
+It is also modular too.<br>
+Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the [container](/docs/CS/Java/Tomcat/Tomcat.md?id=Container).
 
 ```plantuml
 @startuml
@@ -253,10 +256,10 @@ autosize=false;
   
     subgraph cluster_Service {
         label="Serice"
-        
+    
         Mapper;
         Mapper2[style=invis];
-        
+    
             {rank="same"; Mapper2;Mapper;}
         subgraph cluster_Connector {
             label="Connector"
@@ -281,15 +284,15 @@ autosize=false;
             Processor -> Adapter;
             Adapter -> Mapper;
             Adapter -> Processor;
-            
+        
             Processor -> SocketWrapper;
-    
+  
         }
 
         subgraph cluster_Engine {
             label="Engine"
             Engine_Valve [label="Valve"];
-            
+        
               subgraph cluster_Engine_Pipeline {
                 label="Pipeline"
                 StanardEngineValve[label="Stanard\nEngineValve"]
@@ -317,7 +320,7 @@ autosize=false;
                     Context_Valve [label="Valve"];
                     subgraph cluster_Wrapper_1 {
                         label="Wrapper"
-                        
+                    
                         subgraph cluster_Host_Pipeline {
                           label="Pipeline"
                           StandardWrapperValve[label="Standard\nWrapperValve"]
@@ -326,12 +329,12 @@ autosize=false;
                         Wrapper_Valve_1 [label="Valve"];
                         StandardWrapperValve;
                         Servlet_1[label="Servlet"];
-                
+            
                         StandardWrapperValve -> Servlet_1 [headlabel="FilterChain"];
                     }
-                    
+                
                 }
-    
+  
             }
         }
     }
@@ -383,9 +386,9 @@ Host             -[#008200,plain]-^  Container
 StandardContext  -[#000082,plain]-^  ContainerBase   
 StandardContext  -[#008200,dashed]-^  Context   
 StandardEngine   -[#000082,plain]-^  ContainerBase   
-StandardEngine   -[#008200,dashed]-^  Engine    
+StandardEngine   -[#008200,dashed]-^  Engine  
 StandardHost     -[#000082,plain]-^  ContainerBase   
-StandardHost     -[#008200,dashed]-^  Host      
+StandardHost     -[#008200,dashed]-^  Host  
 StandardWrapper  -[#000082,plain]-^  ContainerBase   
 StandardWrapper  -[#008200,dashed]-^  Wrapper   
 Wrapper          -[#008200,plain]-^  Container   
@@ -419,7 +422,6 @@ setManager, getRealm and setRealm, and getResources and setResources.
 More interestingly, the Container interface has been designed in such a way that at the time of deployment a Tomcat administrator can determine what a container performs by editing the configuration file (server.xml).
 This is achieved by introducing a pipeline and a set of valves in a container.
 
-
 #### Engine
 
 An Engine is a Container that represents the entire Catalina servlet engine. It is useful in the following types of scenarios:
@@ -448,13 +450,12 @@ The parent Container attached to a Wrapper will generally be an implementation o
 Since a wrapper is the lowest level of container, you must not add a child to it.
 Child Containers are not allowed on Wrapper implementations, so the addChild() method should throw an IllegalArgumentException.
 
-
 ### Server and Service
 
-A Server element represents the entire Catalina servlet container. Its attributes represent the characteristics of the servlet container as a whole. 
+A Server element represents the entire Catalina servlet container. Its attributes represent the characteristics of the servlet container as a whole.
 A Server may contain one or more Services, and the top level set of naming resources.
 Normally, an implementation of this interface will also implement Lifecycle, such that when the start() and stop() methods are called, all of the defined Services are also started or stopped.
-In between, the implementation must open a server socket on the port number specified by the port property. When a connection is accepted, the first line is read and compared with the specified shutdown command. 
+In between, the implementation must open a server socket on the port number specified by the port property. When a connection is accepted, the first line is read and compared with the specified shutdown command.
 If the command matches, shutdown of the server is initiated.
 
 - JreMemoryLeakPreventionListener Provide a workaround for known places where the Java Runtime environment can cause a memory leak or lock files.
@@ -462,8 +463,6 @@ If the command matches, shutdown of the server is initiated.
   Locked files usually occur when a resource inside a JAR is accessed without first disabling Jar URL connection caching. The workaround is to disable this caching by default.
 - ThreadLocalLeakPreventionListener A LifecycleListener that triggers the renewal of threads in Executor pools when a Context is being stopped to avoid thread-local related memory leaks.
   Note : active threads will be renewed one by one when they come back to the pool after executing their task, see ThreadPoolExecutor.afterExecute().
-
-
 
 A service component encapsulates a container and one or many connectors.
 
@@ -486,6 +485,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
     private Engine engine = null;
 }
 ```
+
 ### Pipeline
 
 A pipeline contains tasks that the container will invoke.
@@ -526,7 +526,7 @@ public class CoyoteAdapter implements Adapter {
 }
 ```
 
-## reload
+## BackgroundProcess
 
 Private runnable class to invoke the backgroundProcess method of this container and its children after a fixed delay.
 
@@ -585,6 +585,7 @@ public class StandardContext extends ContainerBase implements Context, Notificat
     }
 }
 ```
+
 Execute a periodic task, such as reloading, etc. This method will be invoked inside the classloading context of this container. Unexpected throwables will be caught and logged.
 
 ```java
@@ -606,11 +607,13 @@ public class WebappLoader extends LifecycleMBeanBase implements Loader {
     }
 }
 ```
-### StandardContext#reload
+
+### reload
+
 Reload this web application, if reloading is supported.
-**This method is designed to deal with reloads required by changes to classes in the underlying repositories of our class loader and changes to the web.xml file.** 
-It does not handle changes to any context.xml file. 
-If the context.xml has changed, you should stop this Context and create (and start) a new Context instance instead. 
+**This method is designed to deal with reloads required by changes to classes in the underlying repositories of our class loader and changes to the web.xml file.**
+It does not handle changes to any context.xml file.
+If the context.xml has changed, you should stop this Context and create (and start) a new Context instance instead.
 Note that there is additional code in CoyoteAdapter#postParseRequest() to handle mapping requests to paused Contexts.
 
 ```java
@@ -634,136 +637,143 @@ public class StandardContext extends ContainerBase implements Context, Notificat
 
 ## Log
 
+## DefaultServlet
 
+The default resource-serving servlet for most web applications, used to serve static resources such as HTML pages and images.
 
-## Websocket
+This servlet is intended to be mapped to /e.g.:
 
-Registers an interest in any class that is annotated with ServerEndpoint so that Endpoint can be published via the WebSocket server.
+```xml
+<servlet-mapping>
+    <servlet-name>default</servlet-name>
+    <url-pattern>/</url-pattern>
+</servlet-mapping>
+```
+
+input output buffer
 
 ```java
-@HandlesTypes({ServerEndpoint.class, ServerApplicationConfig.class, Endpoint.class})
-public class WsSci implements ServletContainerInitializer {
-
-  @Override
-  public void onStartup(Set<Class<?>> clazzes, ServletContext ctx)
-          throws ServletException {
-
-    WsServerContainer sc = init(ctx, true);
-
-    // Group the discovered classes by type
-    Set<ServerApplicationConfig> serverApplicationConfigs = new HashSet<>();
-    Set<Class<? extends Endpoint>> scannedEndpointClazzes = new HashSet<>();
-    Set<Class<?>> scannedPojoEndpoints = new HashSet<>();
-
-    try {
-      // wsPackage is "jakarta.websocket."
-      String wsPackage = ContainerProvider.class.getName();
-      wsPackage = wsPackage.substring(0, wsPackage.lastIndexOf('.') + 1);
-      for (Class<?> clazz : clazzes) {
-        int modifiers = clazz.getModifiers();
-        if (!Modifier.isPublic(modifiers) ||
-                Modifier.isAbstract(modifiers) ||
-                Modifier.isInterface(modifiers) ||
-                !isExported(clazz)) {
-          // Non-public, abstract, interface or not in an exported
-          // package - skip it.
-          continue;
-        }
-        // Protect against scanning the WebSocket API JARs
-        if (clazz.getName().startsWith(wsPackage)) {
-          continue;
-        }
-        if (ServerApplicationConfig.class.isAssignableFrom(clazz)) {
-          serverApplicationConfigs.add(
-                  (ServerApplicationConfig) clazz.getConstructor().newInstance());
-        }
-        if (Endpoint.class.isAssignableFrom(clazz)) {
-          @SuppressWarnings("unchecked")
-          Class<? extends Endpoint> endpoint =
-                  (Class<? extends Endpoint>) clazz;
-          scannedEndpointClazzes.add(endpoint);
-        }
-        if (clazz.isAnnotationPresent(ServerEndpoint.class)) {
-          scannedPojoEndpoints.add(clazz);
+    protected void serveResource(HttpServletRequest request,
+                               HttpServletResponse response,
+                               boolean content,
+                               String inputEncoding)
+          throws IOException, ServletException {
+      // ... 
+      // Check if the conditions specified in the optional If headers are
+      // satisfied.
+      if (resource.isFile()) {
+        // Checking If headers
+        included = (request.getAttribute(
+                RequestDispatcher.INCLUDE_CONTEXT_PATH) != null);
+        if (!included && !isError && !checkIfHeaders(request, response, resource)) {
+          return;
         }
       }
-    } catch (ReflectiveOperationException e) {
-      throw new ServletException(e);
+    }
+```
+
+checkIfHeaders
+
+- Etag : If-None-Match
+- Last-Modified : If-Modified-Since
+
+```java
+public class DefaultServlet {
+  protected boolean checkIfHeaders(HttpServletRequest request,
+                                   HttpServletResponse response,
+                                   WebResource resource)
+          throws IOException {
+
+    return checkIfMatch(request, response, resource)
+            && checkIfModifiedSince(request, response, resource)
+            && checkIfNoneMatch(request, response, resource)
+            && checkIfUnmodifiedSince(request, response, resource);
+
+  }
+
+  protected boolean checkIfNoneMatch(HttpServletRequest request, HttpServletResponse response, WebResource resource)
+          throws IOException {
+
+    String headerValue = request.getHeader("If-None-Match");
+    if (headerValue != null) {
+
+      boolean conditionSatisfied;
+
+      String resourceETag = generateETag(resource);
+      if (!headerValue.equals("*")) {
+        if (resourceETag == null) {
+          conditionSatisfied = false;
+        } else {
+          // RFC 7232 requires weak comparison for If-None-Match headers
+          Boolean matched = EntityTag.compareEntityTag(new StringReader(headerValue), true, resourceETag);
+          if (matched == null) {
+            if (debug > 10) {
+              log("DefaultServlet.checkIfNoneMatch:  Invalid header value [" + headerValue + "]");
+            }
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST);
+            return false;
+          }
+          conditionSatisfied = matched.booleanValue();
+        }
+      } else {
+        conditionSatisfied = true;
+      }
+
+      if (conditionSatisfied) {
+        // For GET and HEAD, we should respond with
+        // 304 Not Modified.
+        // For every other method, 412 Precondition Failed is sent
+        // back.
+        if ("GET".equals(request.getMethod()) || "HEAD".equals(request.getMethod())) {
+          response.setStatus(HttpServletResponse.SC_NOT_MODIFIED);
+          response.setHeader("ETag", resourceETag);
+        } else {
+          response.sendError(HttpServletResponse.SC_PRECONDITION_FAILED);
+        }
+        return false;
+      }
+    }
+    return true;
+  }
+}
+```
+
+CacheResource
+
+If the `cachingAllowed` flag is true, the cache for static resources will be used.
+If not specified, the default value of the flag is true.
+This value may be changed while the web application is running (e.g. via JMX).
+When the cache is disabled any resources currently in the cache are cleared from the cache.
+
+The maximum size of the static resource cache in kilobytes.
+If `cacheMaxSize` not specified, the default value is 10240(10 megabytes).
+This value may be changed while the web application is running (e.g. via JMX).
+If the cache is using more memory than the new limit the cache will attempt to reduce in size over time to meet the new limit.
+If necessary, cacheObjectMaxSize will be reduced to ensure that it is no larger than cacheMaxSize/20.
+
+The amount of time in milliseconds between the revalidation of cache entries.
+If `cacheTtl` not specified, the default value is 5000 (5 seconds).
+This value may be changed while the web application is running(e.g. via JMX).
+When a resource is cached it will inherit the TTL in force at the time it was cached and retain that TTL until the resource is evicted from the cache regardless of any subsequent changes that may be made to this attribute.
+
+```java
+public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot {
+  protected WebResource getResource(String path, boolean validate,
+                                    boolean useClassLoaderResources) {
+    if (validate) {
+      path = validate(path);
     }
 
-    // Filter the results
-    Set<ServerEndpointConfig> filteredEndpointConfigs = new HashSet<>();
-    Set<Class<?>> filteredPojoEndpoints = new HashSet<>();
-
-    if (serverApplicationConfigs.isEmpty()) {
-      filteredPojoEndpoints.addAll(scannedPojoEndpoints);
+    if (isCachingAllowed()) {
+      return cache.getResource(path, useClassLoaderResources);
     } else {
-      for (ServerApplicationConfig config : serverApplicationConfigs) {
-        Set<ServerEndpointConfig> configFilteredEndpoints =
-                config.getEndpointConfigs(scannedEndpointClazzes);
-        if (configFilteredEndpoints != null) {
-          filteredEndpointConfigs.addAll(configFilteredEndpoints);
-        }
-        Set<Class<?>> configFilteredPojos =
-                config.getAnnotatedEndpointClasses(
-                        scannedPojoEndpoints);
-        if (configFilteredPojos != null) {
-          filteredPojoEndpoints.addAll(configFilteredPojos);
-        }
-      }
-    }
-
-    try {
-      // Deploy endpoints
-      for (ServerEndpointConfig config : filteredEndpointConfigs) {
-        sc.addEndpoint(config);
-      }
-      // Deploy POJOs
-      for (Class<?> clazz : filteredPojoEndpoints) {
-        sc.addEndpoint(clazz, true);
-      }
-    } catch (DeploymentException e) {
-      throw new ServletException(e);
+      return getResourceInternal(path, useClassLoaderResources);
     }
   }
 }
 ```
-
-WsFilter
-
-
-
-```java
-public class UpgradeProcessorInternal extends UpgradeProcessorBase {
-    
-  private final InternalHttpUpgradeHandler internalHttpUpgradeHandler;
-
-  public UpgradeProcessorInternal(SocketWrapperBase<?> wrapper, UpgradeToken upgradeToken,
-                                  UpgradeGroupInfo upgradeGroupInfo) {
-    super(upgradeToken);
-    this.internalHttpUpgradeHandler = (InternalHttpUpgradeHandler) upgradeToken.getHttpUpgradeHandler();
-    /*
-     * Leave timeouts in the hands of the upgraded protocol.
-     */
-    wrapper.setReadTimeout(INFINITE_TIMEOUT);
-    wrapper.setWriteTimeout(INFINITE_TIMEOUT);
-
-    internalHttpUpgradeHandler.setSocketWrapper(wrapper);
-
-    // HTTP/2 uses RequestInfo objects so does not provide upgradeInfo
-    UpgradeInfo upgradeInfo = internalHttpUpgradeHandler.getUpgradeInfo();
-    if (upgradeInfo != null && upgradeGroupInfo != null) {
-      upgradeInfo.setGroupInfo(upgradeGroupInfo);
-    }
-  }
-}
-```
-
-
 
 ## Links
-
-
 
 ## References
 

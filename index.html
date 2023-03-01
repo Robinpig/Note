@@ -6,11 +6,12 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width,user-scalable=no,  initial-scale=1.0, minimum-scale=1.0">
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/lib/themes/vue.css" />
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/style.min.css">
+  <link rel="stylesheet" href="//unpkg.com/docsify-darklight-theme@latest/dist/style.min.css">
+  <script src="//unpkg.com/docsify-darklight-theme@latest/dist/index.min.js"></script>
+  <link rel="stylesheet" href="//unpkg.com/docsify/lib/themes/vue.css" />
 
 <!--  see https://jhildenbiddle.github.io/docsify-themeable/#/-->
-<!--  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css">-->
+<!--  <link rel="stylesheet" href="https://unpkg.com/docsify-themeable@0/dist/css/theme-simple.css">-->
 
   <style>
     .markdown-section code {
@@ -75,6 +76,7 @@
       '/.*/_sidebar.md': '/_sidebar.md'
     },
     maxLevel: 4,
+    externalLinkTarget: '_blank',
     sidebarDisplayLevel: 4,
     loadNavbar: false,
     mergeNavbar: true,
@@ -102,7 +104,6 @@
     'flexible-alerts': {
       style: 'flat'
     },
-
     copyCode: {
       buttonText : 'Copy to clipboard',
       errorText  : 'Error',
@@ -115,6 +116,33 @@
       tabComments: true,      // default
       tabHeadings: true       // default
     },
+    toc: {
+      scope: '.markdown-section',
+      headings: 'h1, h2, h3',
+      title: 'Table of Contents',
+    },
+    share: {
+      reddit: true,
+      linkedin: true,
+      facebook: true,
+      twitter: true,
+      whatsapp: true,
+      telegram: true,
+    },
+    progress: {
+      position: "top",
+      color: "var(--theme-color,#42b983)",
+      height: "3px",
+    },
+    footer: {
+      copy: '',
+      auth: 'Robin',
+      pre: '<hr>',
+      style:'text-align: center;'
+    },
+    remoteMarkdown: {
+      tag: 'md',
+    }
   }
 </script>
 
@@ -123,58 +151,73 @@
 <!--    disqus: 'shortname'-->
 <!--  }-->
 <!--</script>-->
-<!--<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/disqus.min.js"></script>-->
+<!--<script src="//unpkg.com/docsify/lib/plugins/disqus.min.js"></script>-->
 
 <!-- Docsify v4 -->
 
 
-<script defer src="//cdn.jsdelivr.net/npm/katex@0.10.0/dist/katex.min.js" integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-katex@latest/dist/docsify-katex.js"></script>
-<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.css"/>
 
+<script defer src="//unpkg.com/katex@0.10.0/dist/katex.min.js" integrity="sha384-K3vbOmF2BtaVai+Qk37uypf7VrgBubhQreNQe9aGsz9lB63dIFiQVlJbr92dw2Lx" crossorigin="anonymous"></script>
+<script src="//unpkg.com/docsify-katex@latest/dist/docsify-katex.js"></script>
+<link rel="stylesheet" href="//unpkg.com/katex@latest/dist/katex.min.css"/>
 
-<script src="//cdn.jsdelivr.net/npm/viz.js@1.8.0/viz.js"></script>
+<script src="//unpkg.com/viz.js@1.8.0/viz.js"></script>
 
 <script src="//unpkg.com/docsify-puml/dist/docsify-puml.min.js"></script>
 <script src="//unpkg.com/docsify-plantuml/dist/docsify-plantuml.min.js"></script>
 
 
-<script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-flow.min.js"></script>
+<script src="//unpkg.com/prismjs@1/components/prism-flow.min.js"></script>
 
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.js"></script>
+<script src="//unpkg.com/docsify/lib/docsify.min.js"></script>
+<script src="//unpkg.com/docsify/lib/plugins/emoji.js"></script>
 
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-java.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-c.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-go.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-scala.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-python.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-cpp.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-ruby.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-yaml.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-bash.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-markdown.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-nginx.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-http.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-sql.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-java.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-c.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-go.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-scala.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-python.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-cpp.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-ruby.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-yaml.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-bash.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-markdown.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-nginx.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-http.min.js"></script>
+<script src="//unpkg.com/prismjs/components/prism-sql.min.js"></script>
 
+<script src="http://cdn.staticfile.org/docsify/4.13.0/plugins/external-script.min.js"></script>
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/zoom-image.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-copy-code"></script>
+<script src="//unpkg.com/docsify/lib/plugins/search.min.js"></script>
+<script src="//unpkg.com/docsify/lib/plugins/zoom-image.min.js"></script>
 <script src="//unpkg.com/docsify-count/dist/countable.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/index.min.js"></script>
+<script src="//unpkg.com/docsify-pagination/dist/docsify-pagination.min.js"></script>
 
 <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
 
+<script src="https://unpkg.com/docsify-remote-markdown/dist/docsify-remote-markdown.min.js"></script>
+
+<script src="//unpkg.com/docsify-share/build/index.min.js"></script>
+<script src="https://unpkg.com/docsify-progress@1.0.3/dist/progress.js"></script>
+
+
+<script src="https://unpkg.com/docsify-toc@1.0.0/dist/toc.js"></script>
+
+<script src="https://unpkg.com/docsify-footer-enh/dist/docsify-footer-enh.min.js"></script>
 
 <!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<script src="https://cdn.jsdelivr.net/npm/docsify-example-panels"></script>
+<script src="https://unpkg.com/docsify-example-panels"></script>
 
 <!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<script src="https://cdn.jsdelivr.net/npm/docsify-tabs@1"></script>
+<script src="https://unpkg.com/docsify-tabs@1"></script>
+
+<script src="//unpkg.com/docsify-slides/dist/docsify-slides.min.js"></script>
+
+
+<script src="https://unpkg.com/docsify-sidebar-collapse@1.3.5/src/index.js"></script>
+
+<script src="https://unpkg.com/docsify-link-preview@0.1.1/src/index.js"></script>
 
 
 <script src="https://unpkg.com/docsify-copy-code"></script>

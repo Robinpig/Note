@@ -19,6 +19,10 @@ Annotations applied to java code:
 - @Deprecated – Marks the function as obsolete. Causes a compile warning if the function is used.
 - @SuppressWarnings – Instructs the compiler to suppress the compile time warnings specified in the annotation parameters.
 
+
+Repeating Annotations provide the ability to apply the same annotation type more than once to the same declaration or type use.
+Type Annotations provide the ability to apply an annotation anywhere a type is used, not just on a declaration. Used with a pluggable type system, this feature enables improved type checking of your code.
+
 Annotations applied to other annotations:
 
 - @Retention – Specifies how the marked annotation is stored—Whether in code only, compiled into the class, or available at runtime through reflection.

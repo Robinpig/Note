@@ -1,4 +1,29 @@
-## Overview
+## Introduction
+
+Once the bytecode has been loaded into the main memory, and details are available in the runtime data area, the next step is to run the program. The Execution Engine handles this by executing the code present in each class.
+
+However, before executing the program, the bytecode needs to be converted into machine language instructions. The JVM can use an interpreter or a JIT compiler for the execution engine.
+
+Interpreter
+
+The interpreter reads and executes the bytecode instructions line by line. Due to the line by line execution, the interpreter is comparatively slower.
+Another disadvantage of the interpreter is that when a method is called multiple times, every time a new interpretation is required.
+
+
+JIT Compiler
+
+The JIT Compiler overcomes the disadvantage of the interpreter. 
+The Execution Engine first uses the interpreter to execute the byte code, but when it finds some repeated code, it uses the JIT compiler.
+
+The JIT compiler then compiles the entire bytecode and changes it to native machine code.
+This native machine code is used directly for repeated method calls, which improves the performance of the system.
+
+The JIT Compiler has the following components:
+
+- Intermediate Code Generator - generates intermediate code
+- Code Optimizer - optimizes the intermediate code for better performance
+- Target Code Generator - converts intermediate code to native machine code
+- Profiler - finds the hotspots (code that is executed repeatedly)
 
 ```
 -Xint only interceptor
@@ -6,11 +31,11 @@
 -Xmixed default
 ```
 
-
 On Stack Replacement
 
 - Invocation Counter -- for call method
 - Back Edge Counter -- for code in loop
+
 ```
 CompileThreshold                          = 10000
 BackEdgeThreshold                         = 100000
@@ -18,11 +43,13 @@ OnStackReplacePercentage                  = 140
 ```
 
 count will decr by time
+
 ```
 UseCounterDecay                           = true
 ```
 
 compile hot code async
+
 ```
 BackgroundCompilation                     = true
 ```
@@ -70,7 +97,7 @@ Code
 
 Code Cache
 
-CodeCacheExpansionSize                    = 65536  
+CodeCacheExpansionSize                    = 65536
 CodeCacheMinimumFreeSpace                 = 512000
 InitialCodeCacheSize                      = 2555904
 PrintCodeCache                            = false
@@ -78,11 +105,11 @@ PrintCodeCacheOnCompilation               = false
 ReservedCodeCacheSize                     = 251658240
 UseCodeCacheFlushing                      = true
 
-
 JIT
+
 1. c1
 2. opto(c2)
 
-
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

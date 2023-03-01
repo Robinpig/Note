@@ -145,3 +145,4 @@ Now [gRPC](/docs/CS/Distributed/RPC/grpc.md) and Finagle support to build stream
 1. [Remote Procedure Call](https://christophermeiklejohn.com/pl/2016/04/12/rpc.html)
 2. [A Critique of the Remote Procedure Call Paradigm](https://www.win.tue.nl/~johanl/educ/2II45/2010/Lit/Tanenbaum%20RPC%2088.pdf)
 3. [Procedure Call Protocol Documents，Version 2]()
+4. [RFC 1057 - RPC: Remote Procedure Call Protocol Specification Version 2](https://datatracker.ietf.org/doc/rfc1057/)

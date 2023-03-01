@@ -4,7 +4,9 @@ OS
 
 - Kernel
 - Shell
+
 ### Implementation Strategies
+
 Currently, there are two main paradigms on which the implementation of operating systems is based:
 
 1. Microkernels — In these, only the most elementary functions are implemented directly in a central kernel — the microkernel.
@@ -150,6 +152,10 @@ As long as there is no need for per-core concurrency, they are probably a good c
 ## Linux
 
 [Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
+
+## MacOS
+
+[MacOS](/docs/CS/OS/mac/mac.md)
 
 ## Links
 

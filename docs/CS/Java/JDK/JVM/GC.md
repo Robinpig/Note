@@ -1,16 +1,13 @@
 ## Introduction
 
-Generational garbage collectors need to keep track of references from older to younger generations so that younger generations can be garbage-collected without inspecting every object in the older generation(s).
-The set of locations potentially containing pointers to newer objects is often called the `remembered set`.
+Java Garbage Collection is the process by which Java programs perform [automatic memory management](/docs/CS/memory/GC.md).
 
-At every store, the system must ensure that the updated location is added to the `remembered set` if the store creates a reference from an older to a newer object.
-This mechanism is usually referred to as a `write barrier` or `store check`.
+The garbage collection implementation lives in the JVM. Each JVM can implement its own version of garbage collection. 
+However, it should meet the standard JVM specification of working with the objects present in the heap memory, marking or identifying the unreachable objects, and destroying them with compaction.
 
-1. Card Marking
-2. Two-Instruction
+**What are Garbage Collection Roots in Java?**
 
-**GC Roots:**
-
+Garbage collectors work on the concept of Garbage Collection Roots (GC Roots) to identify live and dead objects.
 Examples of such Garbage Collection roots are:
 
 - Classes loaded by system class loader (not custom class loaders) `ClassLoaderDataGraph::roots_cld_do`
@@ -21,6 +18,21 @@ Examples of such Garbage Collection roots are:
 - Objects used as a monitor for synchronization
 - Objects held from garbage collection by JVM for its purposes
 - CodeCache `CodeCache::blobs_do`
+
+The garbage collector traverses the whole object graph in memory, starting from those Garbage Collection Roots and following references from the roots to other objects.
+
+## Generation
+
+Generational garbage collectors need to keep track of references from older to younger generations so that younger generations can be garbage-collected without inspecting every object in the older generation(s).
+The set of locations potentially containing pointers to newer objects is often called the `remembered set`.
+
+At every store, the system must ensure that the updated location is added to the `remembered set` if the store creates a reference from an older to a newer object.
+This mechanism is usually referred to as a `write barrier` or `store check`.
+
+1. Card Marking
+2. Two-Instruction
+
+
 
 See [G1 Roots](/docs/CS/Java/JDK/JVM/G1.md?id=roots)
 
@@ -304,9 +316,9 @@ Because at least one processor is used for garbage collection during the concurr
 
 ### G1
 
-Low-Latency Garbage Collector
+[G1GC](/docs/CS/Java/JDK/JVM/G1.md) was intended as a replacement for CMS and was designed for multi-threaded applications that have a large heap size available (more than 4GB). 
+It is parallel and concurrent like CMS, but it works quite differently under the hood compared to the older garbage collectors.
 
-Low-Pause-Time garbage Collector
 
 ### Shenandoah
 
@@ -336,6 +348,18 @@ ZGC is available as an experimental feature, starting with JDK 11 and has been i
 The primary goals of ZGC are low latency, scalability, and ease of use. To achieve this, ZGC allows a Java application to continue running while it performs all garbage collection operations. By default, ZGC uncommits unused memory and returns it to the operating system.
 
 The JVM argument to use the Epsilon Garbage Collector is `-XX:+UnlockExperimentalVMOptions -XX:+UseZGC`.
+
+### How to Select the Right Garbage Collector
+
+
+Most of the time, the default settings should work just fine.
+If necessary, you can adjust the heap size to improve performance. 
+If the performance still doesn't meet your goals, you can modify the collector as per your application requirements:
+
+- Serial - If the application has a small data set (up to approximately 100 MB) and/or it will be run on a single processor with no pause-time requirements
+- Parallel - If peak application performance is the priority and there are no pause-time requirements or pauses of one second or longer are acceptable
+- CMS/G1 - If response time is more important than overall throughput and garbage collection pauses must be kept shorter than approximately one second
+- ZGC - If response time is a high priority, and/or you are using a very large heap
 
 ## Links
 

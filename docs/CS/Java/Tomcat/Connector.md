@@ -1,51 +1,6 @@
 ## Introduction
 
-## start
-
-
-Here are the difference between different embed Tomcat version.
-
-See [Tomcat start](/docs/CS/Java/Tomcat/Start.md). And we will use 10.0.8.
-```java
-// 10.0.8 need to setConnector manually
-public void start() throws LifecycleException {
-    this.getServer();
-    this.server.start();
-}
-
-// 8.5.32 auto create Connector
-public void start() throws LifecycleException {
-    this.getServer();
-    this.getConnector();
-    this.server.start();
-}
-```
-
-Dependency:
-
-```xml
-<dependency>
-    <groupId>org.apache.tomcat.embed</groupId>
-    <artifactId>tomcat-embed-core</artifactId>
-    <version>10.0.8</version>
-</dependency>
-```
-
-Main:
-```java
-public static void main(String[] args) throws LifecycleException {
-    Tomcat tomcat = new Tomcat();
-    Connector connector = new Connector();
-    connector.setPort(8080);
-    tomcat.setConnector(connector);
-    tomcat.start();
-    tomcat.getServer().await();
-}
-```
-
-
-
-### Create
+## ProtocolHandler
 
 Create a new ProtocolHandler for the given protocol.
 
@@ -61,9 +16,10 @@ public Connector(String protocol) {
 }
 ```
 
-#### ProtocolHandler
+
 
 Combine IO and protocol
+
 - org.apache.coyote.http11.Http11NioProtocol
 - org.apache.coyote.http11.Http11Nio2Protocol
 - org.apache.coyote.ajp.AjpNioProtocol
@@ -98,64 +54,7 @@ public Http11NioProtocol() {
 ```
 
 
-
-### initInternal
-
-Connector.initInternal() -> AbstractProtocol.init() -> AbstractEndpoint.init()
-
-```java
-public class Connector extends LifecycleMBeanBase {
-    @Override
-    protected void initInternal() throws LifecycleException {
-        super.initInternal();
-        
-        try {
-            protocolHandler.init(); // default AbstractHttp11Protocol
-        } catch (Exception e) {
-            throw new LifecycleException();
-        }
-    }
-}
-```
-
-### startInternal
-
-Connector.initInternal() ->  AbstractProtocol.start() -> AbstractEndpoint.bindWithCleanup()
-
-```java
-public class Connector extends LifecycleMBeanBase {
-    @Override
-    protected void startInternal() throws LifecycleException {
-        setState(LifecycleState.STARTING);
-
-        try {
-            protocolHandler.start();
-        } catch (Exception e) {
-            throw new LifecycleException();
-        }
-    }
-}
-```
-
-#### bindWithCleanup
-
-
-```java
-private void bindWithCleanup() throws Exception {
-  try {
-    bind();
-  } catch (Throwable t) {
-    // Ensure open sockets etc. are cleaned up if something goes
-    // wrong during bind
-    ExceptionUtils.handleThrowable(t);
-    unbind();
-    throw t;
-  }
-}
-```
-
-
-#### NioEndPoint
+### NioEndPoint
 
 NIO tailored thread pool, providing the following services:
 
@@ -164,10 +63,7 @@ NIO tailored thread pool, providing the following services:
 3. Worker threads pool call SocketProcessor.run(), default 10
 4. LimitLatch maxConnection = 10000
 
-
-
 Start the NIO endpoint, creating acceptor, poller threads and [executor](/docs/CS/Java/Tomcat/threads.md?id=ThreadPoolExecutor).
-
 
 ```java
 public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {
@@ -221,7 +117,6 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> 
 }
 ```
 
-
 ##### bind
 
 ```java
@@ -255,21 +150,13 @@ public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> 
 }
 ```
 
-
-
-
-
-
-
-
 #### LimitLatch
 
 LimitLatch like [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md) extends [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 
-
 ```java
 public abstract class AbstractEndpoint<S,U> {
-    
+  
     public void setMaxConnections(int maxCon) {
         this.maxConnections = maxCon;
         LimitLatch latch = this.connectionLimitLatch;
@@ -284,7 +171,7 @@ public abstract class AbstractEndpoint<S,U> {
             initializeConnectionLatch();
         }
     }
-    
+  
     protected LimitLatch initializeConnectionLatch() {
         if (maxConnections == -1) {
             return null;
@@ -309,10 +196,11 @@ public class LimitLatch {
     }
 }
 ```
+
 Sync extends AQS
 
-
 countUpOrAwait
+
 ```java
 protected void countUpOrAwaitConnection() throws InterruptedException {
     if (maxConnections==-1) {
@@ -342,8 +230,8 @@ protected int tryAcquireShared(int ignored) {
 }
 ```
 
-
 ##### countDownConnection
+
 ```java
 protected long countDownConnection() {
         if (maxConnections==-1) {
@@ -370,16 +258,13 @@ protected boolean tryReleaseShared(int arg) {
 }
 ```
 
-
-
-## Acceptor
+### Acceptor
 
 call in Endpoint
 
 - if we have reached max connections, wait
 - Accept the next incoming connection from the server socket
 - [setSocketOptions()](/docs/CS/Java/Tomcat/Connector.md?id=setSocketOptions) will hand the socket off to an appropriate processor if successful
-
 
 ```java
 package org.apache.tomcat.util.net;
@@ -472,8 +357,8 @@ public class Acceptor<U> implements Runnable {
 }
 ```
 
-
 ### setSocketOptions
+
 Process the specified connection.
 
 call [register](/docs/CS/Java/Tomcat/Connector.md?id=register)
@@ -533,17 +418,18 @@ protected boolean setSocketOptions(SocketChannel socket) {
 }
 ```
 
-
 ### register
+
 Registers a newly created socket with the poller.
 
 events is a SynchronizedQueue
+
 ```java
 public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {
 
     private final SynchronizedQueue<PollerEvent> events =
             new SynchronizedQueue<>();
-    
+  
     public void register(final NioSocketWrapper socketWrapper) {
         socketWrapper.interestOps(SelectionKey.OP_READ);//this is what OP_REGISTER turns into.
         PollerEvent event = null;
@@ -654,10 +540,10 @@ public class SynchronizedQueue<T> {
 }
 ```
 
-
-
 ## Poller
+
 call in NioEndpoint
+
 ```java
 public class Poller implements Runnable {
 
@@ -678,9 +564,10 @@ public class Poller implements Runnable {
     }
 }
 ```
+
 ### run
 
-The background thread that adds sockets to the Poller, 
+The background thread that adds sockets to the Poller,
 checks the poller for triggered events and hands the associated socket off to an appropriate [processor](/docs/CS/Java/Tomcat/Connector.md?id=SocketProcessor) as events occur.
 
 ```java
@@ -747,7 +634,6 @@ public class Poller implements Runnable {
     }
 }
 ```
-
 
 #### events
 
@@ -869,10 +755,11 @@ protected void processKey(SelectionKey sk, NioSocketWrapper socketWrapper) {
 }
 ```
 
-
 #### processSocket
-Process the given SocketWrapper with the given status. 
+
+Process the given SocketWrapper with the given status.
 Used to trigger processing as if the Poller (for those endpoints that have one) selected the socket.
+
 ```java
 public abstract class AbstractEndpoint<S,U> {
     public boolean processSocket(SocketWrapperBase<S> socketWrapper,
@@ -887,14 +774,18 @@ public abstract class AbstractEndpoint<S,U> {
             }
             if (sc == null) {
 ```
+
 create SocketProcessor
+
 ```java
                 sc = createSocketProcessor(socketWrapper, event);
             } else {
                 sc.reset(socketWrapper, event);
             }
 ```
+
 execute SocketProcessor in workers
+
 ```java
             Executor executor = getExecutor();
             if (dispatch && executor != null) {
@@ -920,6 +811,7 @@ execute SocketProcessor in workers
 #### SocketProcessor
 
 `SocketProcessor` is the equivalent of the Worker, but will simply use in an external Executor thread pool.
+
 ```java
 protected class SocketProcessor extends SocketProcessorBase<NioChannel> {
 
@@ -972,7 +864,9 @@ protected class SocketProcessor extends SocketProcessorBase<NioChannel> {
             if (handshake == 0) {
                 SocketState state = SocketState.OPEN;
 ```
+
 Process the request from this socket, call `AbstractProtocol.process()` -> [Processor.process()](/docs/CS/Java/Tomcat/Connector.md?id=Processor)
+
 ```java
                 if (event == null) {
                     state = getHandler().process(socketWrapper, SocketEvent.OPEN_READ);
@@ -1009,24 +903,21 @@ Process the request from this socket, call `AbstractProtocol.process()` -> [Proc
 }
 ```
 
-
 ## process
-
-
 
 ### Processor
 
 Adapters for transform request/response
 
-
 AbstractProcessorLight is a light-weight abstract processor implementation that is intended as a basis for all Processor implementations from the light-weight upgrade processors to the HTTP/AJP processors.
 
-`AbstractProcessorLight.process()` 
+`AbstractProcessorLight.process()`
 -> [Http11Processor.service()](/docs/CS/Java/Tomcat/Connector.md?id=Http11Processor)
 -> [CoyoteAdapter.service()](/docs/CS/Java/Tomcat/Connector.md?id=CoyoteAdapter)
 -> [StandardWrapperValve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke)
 
 #### Http11Processor
+
 ```java
 
 public class Http11Processor extends AbstractProcessor {
@@ -1169,7 +1060,9 @@ public class Http11Processor extends AbstractProcessor {
                 keepAlive = false;
             }
 ```
+
 Process the request in the [adapter](/docs/CS/Java/Tomcat/Connector.md?id=CoyoteAdapter)
+
 ```java
             if (getErrorState().isIoAllowed()) {
                 try {
@@ -1274,7 +1167,9 @@ Process the request in the [adapter](/docs/CS/Java/Tomcat/Connector.md?id=Coyote
 ```
 
 #### CoyoteAdapter
+
 get Valve by getPipeline().getFirst(), then Value.invoke()
+
 ```java
 public class CoyoteAdapter implements Adapter {
     @Override
@@ -1321,8 +1216,10 @@ public class CoyoteAdapter implements Adapter {
                 request.setAsyncSupported(
                         connector.getService().getContainer().getPipeline().isAsyncSupported());
 ```
+
 Call the first [Valve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke) of Pipeline
-```java            
+
+```java
                 connector.getService().getContainer().getPipeline().getFirst().invoke(
                         request, response);
             }
@@ -1410,12 +1307,16 @@ Call the first [Valve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke) of 
     }
 }
 ```
+
 ### Pipeline-Valve
+
 #### invoke
 
 Below StandardWrapperValve does:
+
 1. Create the [filter chain](/docs/CS/Java/Tomcat/Connector.md?id=createFilterChain) for this request
 2. Invoke the servlet we are managing in [doFilter](/docs/CS/Java/Tomcat/Connector.md?id=doFilter), respecting the rules regarding servlet lifecycle and SingleThreadModel support.
+
 ```java
 final class StandardWrapperValve extends ValveBase {
     public final void invoke(Request request, Response response)
@@ -1630,7 +1531,9 @@ final class StandardWrapperValve extends ValveBase {
 ```
 
 #### createFilterChain
+
 Construct a FilterChain implementation that will wrap the execution of the specified servlet instance.
+
 ```java
 public final class ApplicationFilterFactory {
     public static ApplicationFilterChain createFilterChain(ServletRequest request,
@@ -1714,9 +1617,9 @@ public final class ApplicationFilterFactory {
 }
 ```
 
-
 #### doFilter
-Invoke the next filter in this chain, passing the specified request and response. 
+
+Invoke the next filter in this chain, passing the specified request and response.
 If there are no more filters in this chain, invoke the [service()](/docs/CS/Java/Tomcat/Connector.md?id=service) method of the servlet itself.
 
 ```java
@@ -1753,7 +1656,8 @@ public final class ApplicationFilterChain implements FilterChain {
         filter.doFilter(request, response, this);
 ```
 
-We fell off the end of the chain -- call the [servlet.service()](/docs/CS/Java/Tomcat/Servlet.md?id=service) instance ignore try block
+We fell off the end of the chain -- call the [servlet.service()](/docs/CS/Java/JDK/Servlet.md?id=service) instance ignore try block
+
 ```java
         servlet.service(request, response);
     }
@@ -1763,7 +1667,6 @@ We fell off the end of the chain -- call the [servlet.service()](/docs/CS/Java/T
 ## Links
 
 - [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
-
 
 ## References
 
