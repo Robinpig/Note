@@ -10,6 +10,7 @@ Similar to virtual machines, the JVM creates an isolated space on a host machine
 This space can be used to execute Java programs irrespective of the platform or operating system of the machine.
 
 <!-- tabs:start -->
+
 ##### **Directories**
 
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
@@ -45,7 +46,6 @@ hotspot
         |--- services           # HeapDump, MXBean, jcmd, jinfo
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
-
 
 <!-- tabs:end -->
 
@@ -99,7 +99,7 @@ It loads, links. and initializes the class file when it refers to a class for th
 
 <div style="text-align: center;">
 
-![Fig.2. ClassLoader](./img/ClassLoader.png)
+![Fig.2. ClassLoader](./img/ClassLoader.svg)
 
 </div>
 
@@ -176,15 +176,17 @@ The compiled code is then deoptimized and it is flagged as being unusable.
 Threads entering the method are interpreted until its recompilation is finished. As a side effect, field offsets are always known so short−form addressing modes can be used without backpatching.
 
 ### Java Native Interface
+
 At times, it is necessary to use native (non-Java) code (for example, C/C++).
-This can be in cases where we need to interact with hardware, or to overcome the memory management and performance constraints in Java. 
+This can be in cases where we need to interact with hardware, or to overcome the memory management and performance constraints in Java.
 Java supports the execution of native code via the Java Native Interface (JNI).
 
-JNI acts as a bridge for permitting the supporting packages for other programming languages such as C, C++, and so on. 
+JNI acts as a bridge for permitting the supporting packages for other programming languages such as C, C++, and so on.
 This is especially helpful in cases where you need to write code that is not entirely supported by Java, like some platform specific features that can only be written in C.
 
-You can use the native keyword to indicate that the method implementation will be provided by a native library. 
+You can use the native keyword to indicate that the method implementation will be provided by a native library.
 You will also need to invoke System.loadLibrary() to load the shared native library into memory, and make its functions available to Java.
+
 ### Native Method Libraries
 
 Native Method Libraries are libraries that are written in other programming languages, such as C, C++, and assembly. These libraries are usually present in the form of .dll or .so files. These native libraries can be loaded through JNI.

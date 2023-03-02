@@ -7,9 +7,10 @@ The first class to be loaded into memory is usually the class that contains the 
 
 There are three phases in the class loading process: loading, linking, and initialization.
 
+
 <div style="text-align: center;">
 
-![Fig.1. ClassLoader](./img/ClassLoader.png)
+![Fig.1. ClassLoader](./img/ClassLoader.svg)
 
 </div>
 
