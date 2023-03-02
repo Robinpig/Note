@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Algorithms</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<style type="text/css">
+html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp, small, strike, strong, sub, sup, tt, var, b, u, i, center, dl, dt, dd, ol, ul, li, fieldset, form, label, legend, table, caption, tbody, tfoot, thead, tr, th, td, article, aside, canvas, details, embed, figure, figcaption, footer, header, hgroup, menu, nav, output, ruby, section, summary, time, mark, audio, video {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+body {
+    font-family: Helvetica, arial, freesans, clean, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    background-color: #fff;
+    padding: 20px;
+    max-width: 960px;
+    margin: 0 auto;
+}
+
+body>*:first-child {
+    margin-top: 0 !important;
+}
+
+body>*:last-child {
+    margin-bottom: 0 !important;
+}
+
+p, blockquote, ul, ol, dl, table, pre {
+    margin: 15px 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin: 20px 0 10px;
+    padding: 0;
+    font-weight: bold;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1 tt, h1 code, h2 tt, h2 code, h3 tt, h3 code, h4 tt, h4 code, h5 tt, h5 code, h6 tt, h6 code {
+    font-size: inherit;
+}
+
+h1 {
+    font-size: 28px;
+    color: #000;
+}
+
+h2 {
+    font-size: 24px;
+    border-bottom: 1px solid #ccc;
+    color: #000;
+}
+
+h3 {
+    font-size: 18px;
+}
+
+h4 {
+    font-size: 16px;
+}
+
+h5 {
+    font-size: 14px;
+}
+
+h6 {
+    color: #777;
+    font-size: 14px;
+}
+
+body>h2:first-child, body>h1:first-child, body>h1:first-child+h2, body>h3:first-child, body>h4:first-child, body>h5:first-child, body>h6:first-child {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+a:first-child h1, a:first-child h2, a:first-child h3, a:first-child h4, a:first-child h5, a:first-child h6 {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+h1+p, h2+p, h3+p, h4+p, h5+p, h6+p {
+    margin-top: 10px;
+}
+
+a {
+    color: #4183C4;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+ul, ol {
+    padding-left: 30px;
+}
+
+ul li > :first-child,
+ol li > :first-child,
+ul li ul:first-of-type,
+ol li ol:first-of-type,
+ul li ol:first-of-type,
+ol li ul:first-of-type {
+    margin-top: 0px;
+}
+
+ul ul, ul ol, ol ol, ol ul {
+    margin-bottom: 0;
+}
+
+dl {
+    padding: 0;
+}
+
+dl dt {
+    font-size: 14px;
+    font-weight: bold;
+    font-style: italic;
+    padding: 0;
+    margin: 15px 0 5px;
+}
+
+dl dt:first-child {
+    padding: 0;
+}
+
+dl dt>:first-child {
+    margin-top: 0px;
+}
+
+dl dt>:last-child {
+    margin-bottom: 0px;
+}
+
+dl dd {
+    margin: 0 0 15px;
+    padding: 0 15px;
+}
+
+dl dd>:first-child {
+    margin-top: 0px;
+}
+
+dl dd>:last-child {
+    margin-bottom: 0px;
+}
+
+pre, code, tt {
+    font-size: 12px;
+    font-family: Consolas, "Liberation Mono", Courier, monospace;
+}
+
+code, tt {
+    margin: 0 0px;
+    padding: 5px 5px;
+    white-space: nowrap;
+    border: 1px solid #eaeaea;
+    background-color: #f8f8f8;
+    border-radius: 3px;
+}
+
+pre>code {
+    margin: 0;
+    padding: 0;
+    white-space: pre;
+    border: none;
+    background: transparent;
+}
+
+pre {
+    background-color: #f8f8f8;
+    border: 1px solid #ccc;
+    font-size: 13px;
+    line-height: 19px;
+    overflow: auto;
+    padding: 6px 10px;
+    border-radius: 3px;
+}
+
+pre code, pre tt {
+    background-color: transparent;
+    border: none;
+}
+
+kbd {
+    -moz-border-bottom-colors: none;
+    -moz-border-left-colors: none;
+    -moz-border-right-colors: none;
+    -moz-border-top-colors: none;
+    background-color: #DDDDDD;
+    background-image: linear-gradient(#F1F1F1, #DDDDDD);
+    background-repeat: repeat-x;
+    border-color: #DDDDDD #CCCCCC #CCCCCC #DDDDDD;
+    border-image: none;
+    border-radius: 2px 2px 2px 2px;
+    border-style: solid;
+    border-width: 1px;
+    font-family: "Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height: 10px;
+    padding: 1px 4px;
+}
+
+blockquote {
+    border-left: 4px solid #DDD;
+    padding: 0 15px;
+    color: #777;
+}
+
+blockquote>:first-child {
+    margin-top: 0px;
+}
+
+blockquote>:last-child {
+    margin-bottom: 0px;
+}
+
+hr {
+    clear: both;
+    margin: 15px 0;
+    height: 0px;
+    overflow: hidden;
+    border: none;
+    background: transparent;
+    border-bottom: 4px solid #ddd;
+    padding: 0;
+}
+
+table th {
+    font-weight: bold;
+}
+
+table th, table td {
+    border: 1px solid #ccc;
+    padding: 6px 13px;
+}
+
+table tr {
+    border-top: 1px solid #ccc;
+    background-color: #fff;
+}
+
+table tr:nth-child(2n) {
+    background-color: #f8f8f8;
+}
+
+img {
+    max-width: 100%
+}
+
+.task-list-item {
+	list-style-type: none
+}
+
+.task-list-item label {
+	font-weight: 400
+}
+
+.task-list-item.enabled label {
+	cursor: pointer
+}
+
+.task-list-item+.task-list-item {
+	margin-top: 3px
+}
+
+.task-list-item .handle {
+	display: none
+}
+
+.task-list-item-checkbox {
+	margin: 0 1em 0.25em -1.6em;
+	vertical-align: middle
+}
+
+/*
+ * github-gist.css
+ */
+
+.hljs {
+  display: block;
+  padding: 0.5em;
+  color: #333333;
+  overflow-x: auto;
+}
+
+.hljs-comment,
+.hljs-meta {
+  color: #969896;
+}
+
+.hljs-string,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-strong,
+.hljs-emphasis,
+.hljs-quote {
+  color: #df5000;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-type {
+  color: #a71d5d;
+}
+
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-attribute {
+  color: #0086b3;
+}
+
+.hljs-section,
+.hljs-name {
+  color: #63a35c;
+}
+
+.hljs-tag {
+  color: #333333;
+}
+
+.hljs-title,
+.hljs-attr,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: #795da3;
+}
+
+.hljs-addition {
+  color: #55a532;
+  background-color: #eaffea;
+}
+
+.hljs-deletion {
+  color: #bd2c00;
+  background-color: #ffecec;
+}
+
+.hljs-link {
+  text-decoration: underline;
+}
+</style>
+<base href='file:///storage/emulated/0/Note/docs/CS/Algorithms/'/>
+<script defer src='file:///android_asset/anchor.js' type='text/javascript'></script>
+<script defer src='file:///android_asset/highlight.js' type='text/javascript'></script>
+<script defer src='file:///android_asset/highlight-init.js' type='text/javascript'></script>
+</head>
+<body>
+<!-- From: M Note -->
+<!-- Author: HJQ -->
+<!-- email: 880634@qq.com --><h2	id="Introduction">Introduction</h2/>
+<h2	id="Data Structures">Data Structures</h2/>
+<p>Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.</p>
+<p>A data structure is a special format for organizing and storing data. General data structure types include arrays, files, linked lists, stacks, queues, trees, graphs and so on.</p>
+<br>
+<p>Depending on the organization of the elements, data structures are classified into two types:</p>
+<p>1) Linear data structures: Elements are accessed in a sequential order but it is not compulsory to store all elements sequentially (say, Linked Lists).</p>
+<p>   Examples: Linked Lists, Stacks and Queues.</p>
+<p>2) Non – linear data structures: Elements of this data structure are stored / accessed in a non-linear order. Examples: Trees and graphs.</p>
+<p>An abstract data type (ADT) is a set of operations.</p>
+<p>Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.</p>
+<p>This can be viewed as an extension of modular design.</p>
+<p>Commonly used ADTs include: Linked Lists, Stacks, Queues, Priority Queues, Binary Trees, Dictionaries, Disjoint Sets (Union and Find), Hash Tables, Graphs, and many others.</p>
+<p>For example, stack uses a LIFO (Last-In-First-Out) mechanism while storing the data in data structures.</p>
+<p>The last element inserted into the stack is the first element that gets deleted.</p>
+<p>Common operations are: creating the stack, pushing an element onto the stack, popping an element from the stack, finding the current top of the stack, finding the number of elements in the stack, etc.</p>
+<p>While defining the ADTs do not worry about the implementation details.</p>
+<p>They come into the picture only when we want to use them.</p>
+<p>Different kinds of ADTs are suited to different kinds of applications, and some are highly specialized to specific tasks.</p>
+<p>We will go through many of them and you will be in a position to relate the data structures to the kind of problems they solve.</p>
+<h3	id="Lists, Stacks, and Queues">Lists, Stacks, and Queues</h3/>
+<p><a href="/docs/CS/Algorithms/list.md">Lists</a>, <a href="/docs/CS/Algorithms/stack.md">stacks</a>, and <a href="/docs/CS/Algorithms/queue.md">queues</a> are perhaps the three fundamental data structures in all of computer science.</p>
+<p><a href="/docs/CS/Algorithms/linked-list.md">Arrays and Linked Lists</a></p>
+<p>One of the basic rules concerning programming is that no routine should ever exceed a page.</p>
+<p>This is accomplished by breaking the program down into modules. Each module is a logical unit and does a specific job.</p>
+<p>Its size is kept small by calling other modules. Modularity has several advantages.</p>
+<ul>
+<li>
+<p>First, it is much easier to debug small routines than large routines.</p>
+</li>
+<li>
+<p>Second, it is easier for several people to work on a modular program simultaneously.</p>
+</li>
+<li>
+<p>Third, a well-written modular program places certain dependencies in only one routine, making changes easier.</p>
+</li>
+</ul>
+<p>For instance, if output needs to be written in a certain format, it is certainly important to have one routine to do this.</p>
+<p>If printing statements are scattered throughout the program, it will take considerably longer to make modifications.</p>
+<p>The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.</p>
+<p>We introduce <a href="/docs/CS/Algorithms/hash.md">hash tables</a>, a widely used data structure supporting the dictionary operations INSERT, DELETE, and SEARCH.</p>
+<p>In the worst case, hash tables require Θ(n) time to perform a SEARCH operation, but the expected time for hash-table operations is $O(1)$.</p>
+<p>We rely on probability to analyze hash-table operations, but you can understand how the operations work even without probability.</p>
+<h3	id="Tree">Tree</h3/>
+<p><a href="/docs/CS/Algorithms/tree.md">Trees</a> in general are very useful abstractions in computer science.</p>
+<ul>
+<li>
+<p><a href="/docs/CS/Algorithms/Trie.md">Trie</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/Algorithms/Red-Black-Tree.md">Red-Black Tree</a></p>
+</li>
+</ul>
+<blockquote>
+<p>[!NOTE]</p>
+</blockquote>
+<p>></p>
+<blockquote>
+<p><strong>Definition</strong>.</p>
+<p>A symbol table is a data structure for key-value pairs that supports two operations: insert (put) a new pair into the table and search for (get) the value associated with a given key.</p>
+</blockquote>
+<h3	id="Heap">Heap</h3/>
+<p><a href="/docs/CS/Algorithms/heap.md">heaps</a></p>
+<h3	id="Graph">Graph</h3/>
+<p><a href="/docs/CS/Algorithms/graph.md">Graph</a></p>
+<h3	id="Page Replacement Algorithms">Page Replacement Algorithms</h3/>
+<ul>
+<li>
+<p><a href="/docs/CS/Algorithms/LRU.md">LRU</a></p>
+</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>算法规则</th>
+<th>优缺点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OPT</td>
+<td>优先淘汰最长时间内不会被访问的页面	缺页率最小，性能最好;但无法实现</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td>FIFO</td>
+<td>优先淘汰最先进入内存的页面	实现简单;但性能很差，可能出现Belady异常</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td>LRU</td>
+<td>优先淘汰最近最久没访问的页面	性能很好;但需要硬件支持，算法开销大</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td>CLOCK (NRU)</td>
+<td>循环扫描各页面 第一轮淘汰访问位=0的，并将扫描过的页面访问位改为1。若第-轮没选中，则进行第二轮扫描。	实现简单，算法开销小;但未考虑页面是否被修改过。</td>
+</tr>
+</tbody>
+<tbody>
+<tr>
+<td>改进型CLOCK (改进型NRU)</td>
+<td>若用(访问位，修改位)的形式表述，则 第一轮:淘汰(0,0) 第二轮:淘汰(O,1)，并将扫描过的页面访问位都置为0 第三轮:淘汰(O, 0) 第四轮:淘汰(0, 1)	算法开销较小，性能也不错 PDF文档下载方式</td>
+</tr>
+</tbody>
+</table>
+<h3	id="Pattern Matching">Pattern Matching</h3/>
+<p><a href="/docs/CS/Algorithms/KMP.md">Substring Search</a></p>
+<h2	id="Algorithm Analysis">Algorithm Analysis</h2/>
+<p>An <em>algorithm</em> is a finite set of instructions that, if followed, accomplishes a particular task.</p>
+<p>In addition, all algorithms must satisfy the following criteria:</p>
+<ol>
+<li>
+<p><strong>Input</strong>. There are zero or more quantities that are externally supplied.</p>
+</li>
+<li>
+<p><strong>Output</strong>. At least one quantity is produced.</p>
+</li>
+<li>
+<p><strong>Definiteness</strong>. Each instruction is clear and unambiguous.</p>
+</li>
+<li>
+<p><strong>Finiteness</strong>. If we trace out the instructions of an algorithm, then for all cases, the algorithm terminates after a finite number of steps.</p>
+</li>
+<li>
+<p><strong>Effectiveness</strong>. Every instruction must be basic enough to be carried out, in principle, by a person using only pencil and paper. It is not enough that each operation be definite as in 3; it also must be feasible.</p>
+</li>
+</ol>
+<h3	id="Complexity">Complexity</h3/>
+<p>Algorithms can be evaluated by a variety of criteria.</p>
+<p>Most often we shall be interested in the rate of growth of the time or space required to solve larger and larger instances of a problem.</p>
+<p>We would like to associate with a problem an integer. called the size of the problem, which is a measure of the quantity of input data.</p>
+<p>The time needed by an algorithm expressed as a function of the size of a problem is called the <em>time complexity</em> of the algorithm.</p>
+<p>The limiting behavior of the compiexity as size increases is called the <em>asymptotic time complexity</em>.</p>
+<p>Analogous definitions can be made for <em>space complexity</em> and <em>asymptotic space complexity</em>.</p>
+<p>The asymptotic complexity of an algorithm is an important measure of the goodness of an algorithm, one that promises to become even more important with future increases in computing speed.</p>
+<p>Despite our concentration on order-of-magnitude performance, we should realize that an algorithm with a rapid growth rate might have a smaller constant of proportionality than one with a lower growth rate.</p>
+<p>In that case. the rapidly growing algorithm might be superior for small problems. possibly even for all problems of a size that would interest us.</p>
+<p>If for a given size the complexity is taken as the maximum complexity over all inputs of that size, then the complexity is called the <em>worst-case complexity</em>.</p>
+<p>If the complexity is taken as the "average" complexity over all inputs of given size. then the complexity is called the <em>expected complexity</em>.</p>
+<p>The expected complexity of an algorithm is usually more difficult to ascertain than the worst-case complexity.</p>
+<p>One must make some assumption about the distribution of inputs, and realistic assumptions are often not mathematically tractable.</p>
+<p>We shall emphasize the worst case, since it is more tractable and has a universal applicability.</p>
+<p>However. it should be borne in mind that the algorithm with the best worst-case complexity does not necessarily have the best expected complexity.</p>
+<p>In theoretical analysis of algorithms it is common to estimate their complexity in the asymptotic sense, i.e., to estimate the complexity function for arbitrarily large input.</p>
+<p>Big O notation, Big-omega notation and Big-theta notation are used to this end.</p>
+<p>An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.</p>
+<blockquote>
+<p>An algorithm is efficient if its running time is polynomial.</p>
+</blockquote>
+<h3	id="Computation Model">Computation Model</h3/>
+<p>Exact (not asymptotic) measures of efficiency can sometimes be computed but they usually require certain assumptions concerning the particular implementation of the algorithm, called model of computation.</p>
+<p>A model of computation may be defined in terms of an abstract computer, e.g., Turing machine, and/or by postulating that certain operations are executed in unit time.</p>
+<p>This model clearly has some weaknesses. Obviously, in real life, not all operations take exactly the same time.</p>
+<p>In particular, in our model one disk read counts the same as an addition, even though the addition is typically several orders of magnitude faster.</p>
+<p>Also, by assuming infinite memory, we never worry about page faulting, which can be a real</p>
+<p>Euclid's algorithm is for computing the greatest common divisor.</p>
+<p>The greatest common divisor (gcd) of two integers is the largest integer that divides both.</p>
+<h3	id="Advanced Design and Analysis Techniques">Advanced Design and Analysis Techniques</h3/>
+<p>Text-editing programs frequently need to find all occurrences of a pattern in the text.</p>
+<p>Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.</p>
+<p>Efficient algorithms for this problem—called “<a href="/docs/CS/Algorithms/KMP.md">string matching</a>”—can greatly aid the responsiveness of the text-editing program.</p>
+<ul>
+<li>
+<p><a href="/docs/CS/Algorithms/DP.md">Dynamic Programming</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/Algorithms/Greedy.md">Greedy Programming</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/Algorithms/Amortized.md">Amortized Analysis</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/Algorithms/Randomized.md">Randomized</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/Algorithms/Backtracking.md">Backtracking</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/Algorithms/Divide-and-Conquer.md">Divide and Conquer</a></p>
+</li>
+</ul>
+<h2	id="Sorting and Order Statistics">Sorting and Order Statistics</h2/>
+<ul>
+<li>
+<p><a href="/docs/CS/Algorithms/Sort.md">Sort</a></p>
+</li>
+</ul>
+<h3	id="Consensus Algorithm">Consensus Algorithm</h3/>
+<p>Paxos</p>
+<p>Raft</p>
+<h3	id="Compression Algorithms">Compression Algorithms</h3/>
+<h3	id=""></h3/>
+<p>Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).</p>
+<p>Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes $O(N^2)$ time complexity where N is the number of people involved.</p>
+<p>The subject called the <a href="/docs/CS/Algorithms/NP.md">“NP-complete” problems</a>, whose status is unknown.</p>
+<p>No polynomial-time algorithm has yet been discovered for an NP-complete problem, nor has anyone yet been able to prove that no polynomial-time algorithm can exist for any one of them.</p>
+<p>This so-called $P != NP$ question has been one of the deepest, most perplexing open research problems in theoretical computer science since it was first posed in 1971.</p>
+<h2	id="Links">Links</h2/>
+<ul>
+<li>
+<p><a href="/docs/CS/CO/CO.md">Computer Organization</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/OS/OS.md">Operating Systems</a></p>
+</li>
+<li>
+<p><a href="/docs/CS/CN/CN.md">Computer Network</a></p>
+</li>
+</ul>
+<h2	id="References">References</h2/>
+<ol>
+<li>
+<p>Introduction to Algorithms Third Edition</p>
+</li>
+<li>
+<p>Introduction to The Design and Analysis of Algorithms Third Edition</p>
+</li>
+<li>
+<p>Algorithms Fourth Edition</p>
+</li>
+<li>
+<p>Data Structures and Algorithm Analysis in C</p>
+</li>
+<li>
+<p>The Design and Analysis of Computer Algorithms</p>
+</li>
+</ol>
+
+</body>
+</html>
