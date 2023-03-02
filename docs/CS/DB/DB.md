@@ -22,13 +22,13 @@ Fig.1. Architecture of a database management system
 Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it.
 Later, access control checks are performed, as they can be done fully only after the query is interpreted.
 ### optimizer
-“The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, 
+The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, 
 and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer).
 The optimizer handles both relational operations required for query resolution, usually presented as a dependency tree, and optimizations, such as index ordering, cardinality estimation, and choosing access methods.
 
-“The query is usually presented in the form of an execution plan (or query plan): a sequence of operations that have to be carried out for its results to be considered complete.”
+The query is usually presented in the form of an execution plan (or query plan): a sequence of operations that have to be carried out for its results to be considered complete.
 
-“Since the same query can be satisfied using different execution plans that can vary in efficiency, the optimizer picks the best available plan.
+Since the same query can be satisfied using different execution plans that can vary in efficiency, the optimizer picks the best available plan.
 
 One of the long-standing advantages of relational databases has been that data is requested with little or no thought for the way in which the data is to be accessed.
 This decision is made by a component of the DBMS called the optimizer. 
