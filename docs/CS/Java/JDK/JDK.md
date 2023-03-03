@@ -9,7 +9,7 @@
 
 Every programming language manipulates elements in memory. 
 Sometimes the programmer must be constantly aware of that manipulation.
-Do you manipulate the element directly, or use an indirect representation that requires special syntax (for example, pointers in C or C++)?
+Do you manipulate the element directly, or use an indirect representation that requires special syntax (for example, pointers in [C](/docs/CS/C/C.md) or [C++](/docs/CS/C++/C++.md))?
 
 Java simplifies the issue by [considering everything an object](/docs/CS/Java/JDK/Basic/Object.md), using a single consistent syntax. 
 Although you treat everything as an object, the identifier you manipulate is actually a “reference” to an object.
@@ -55,6 +55,7 @@ A Project may have web content, one or more file repositories, and one or more m
 - Sumatra
 - Tsan
 - ZGC
+- Lilliput
 
 
 

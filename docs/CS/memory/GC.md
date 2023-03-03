@@ -553,13 +553,13 @@ this needs to be done with real data sets. Synthetic and toy benchmarks are like
 ### A unified theory of garbage collection
 
 In the preceding chapters, we considered two styles ofcollection: direct, reference counting
-and indirect, tracing collection. Bacon et al [2004] show that these collectors share remarkable similarities. Their abstract framework allows us to express a wide variety of different
+and indirect, tracing collection. Bacon et al show that these collectors share remarkable similarities. Their abstract framework allows us to express a wide variety of different
 collectors in a way that highlights precisely where they are similar and where they differ.
 
 Abstract garbage collection
 In place of concrete data structures, the following abstract framework makes use of simple abstract data structures whose implementations can vary. We start by observing that
 garbage collection can be expressed as a fixed-point computation that assigns reference
-counts p(n ) to nodes n E Node s . Reference counts include contributions from the root
+counts p(n) to nodes n E Node s . Reference counts include contributions from the root
 set and incoming edges from nodes with non-zero reference counts:
 
 $$
@@ -576,34 +576,25 @@ source for each reference.
 
 #### Tracing garbage collection
 
-The abstraction casts tracing collection as a form of reference counting. Abstract tracing
-collection is illustrated by Algorithm 6.1, which starts with the reference counts of all nodes
-being zero. At the end of each collection cycle sweepT r a c i ng resets the count of all nodes
-to zero, and New initialises new nodes with a zero reference count. The col lect T r a c ing
-procedure accumulates all non-null root pointers using root s T r a c i ng and passes them
-to s canTracing as the work list W.
-Collection proceeds as we would expect by tracing the object graph to discover all
-the nodes reachable from the roots. The procedure s canT r a c i n g accomplishes this by
-tracing elements from the work list, reconstructing the reference count of each node, by
-incrementing its reference count each time it is encountered (recall how we suggested in
-Section 5.6 that a tracing collector could be used to correct sticky reference counts). When
-a reachable node s rc is discovered for the first time (when p( s r c ) is set to 1, line 10), the
-collector recurses through all the out-edges of s r c by scanning its fields and adding the
-(pointers to) child nodes found in those fields to the work list W.
+The abstraction casts tracing collection as a form of reference counting. Abstract tracing collection is illustrated by Algorithm 6.1, which starts with the reference counts of all nodes being zero.
+At the end of each collection cycle sweep Tracing resets the count of all nodes to zero, and New initialises new nodes with a zero reference count. 
+The col lect Tracing procedure accumulates all non-null root pointers using root s Tracing and passes them to s canTracing as the work list W.
 
-Termination of the while loop yields all the live nodes, each of which has a non-zero
-reference count equal to the number of its in-edges. The sweepT r a c i ng procedure then
-frees unused nodes, and resets the reference counts for the next round of collection. Note
-that a practical implementation of tracing can use a single-bit value for each node's reference count, in other words a mark-bit rather than a full-sized reference count, to record
-whether the node has already been visited. The mark-bit is thus a coarse approximation of
-the true reference count.
+Collection proceeds as we would expect by tracing the object graph to discover all the nodes reachable from the roots. 
+The procedure s can Tracing accomplishes this by tracing elements from the work list, reconstructing the reference count of each node,
+by incrementing its reference count each time it is encountered (recall how we suggested in Section 5.6 that a tracing collector could be used to correct sticky reference counts). 
+When a reachable node s rc is discovered for the first time (when p(src) is set to 1, line 10), the collector recurses through all the out-edges of s r c by scanning its fields and adding the(pointers to) child nodes found in those fields to the work list W.
+
+Termination of the while loop yields all the live nodes, each of which has a non-zero reference count equal to the number of its in-edges.
+The sweep Tracing procedure then frees unused nodes, and resets the reference counts for the next round of collection. 
+Note that a practical implementation of tracing can use a single-bit value for each node's reference count, in other words a mark-bit rather than a full-sized reference count, to record whether the node has already been visited.
+The mark-bit is thus a coarse approximation of the true reference count.
+
 The tracing collector computes the least fixed-point solution to Equation 6.1: the reference counts on the nodes are the lowest counts that satisfy it.
-We can interpret garbage collection algorithms in terms of the tricolour abstraction
-discussed in Section 2.2. In Algorithm 6.1, nodes with reference count 0 are white, while
-nodes with non-zero reference count are black. The transition of a node from white via
-grey to black occurs as that node is first traced and then scanned. Thus, we can re-cast the
-abstract tracing algorithm as partitioning the nodes into two sets, black being reachable
-and white being garbage.
+We can interpret garbage collection algorithms in terms of the tricolour abstraction discussed in Section 2.2.
+In Algorithm 6.1, nodes with reference count 0 are white, while nodes with non-zero reference count are black. 
+The transition of a node from white via grey to black occurs as that node is first traced and then scanned.
+Thus, we can re-cast the abstract tracing algorithm as partitioning the nodes into two sets, black being reachable and white being garbage.
 
 #### Reference counting garbage collection
 
