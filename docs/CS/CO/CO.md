@@ -1,5 +1,13 @@
 ## Introduction
 
+Computer Organization and Architecture comprehensively covers processor and computer design fundamentals.
+
+- Basic Computer Instructions
+- Instruction Design and Format
+- Computer Arithmetic
+- Microprogrammed Control
+- Memory Organization
+
 ## ISA
 
 Instruction Set Architectures
