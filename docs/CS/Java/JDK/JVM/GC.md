@@ -5,6 +5,10 @@ Java Garbage Collection is the process by which Java programs perform [automatic
 The garbage collection implementation lives in the JVM. Each JVM can implement its own version of garbage collection. 
 However, it should meet the standard JVM specification of working with the objects present in the heap memory, marking or identifying the unreachable objects, and destroying them with compaction.
 
+## GC Algorithms
+
+Recall the [gc algorithms](/docs/CS/memory/GC.md?id=Tracing-garbage-collection), the JVM using tracing.
+
 **What are Garbage Collection Roots in Java?**
 
 Garbage collectors work on the concept of Garbage Collection Roots (GC Roots) to identify live and dead objects.

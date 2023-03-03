@@ -2,10 +2,12 @@
 
 When you compile a .java source file, it is converted into byte code as a .class file. 
 When you try to use this class in your program, the class loader loads it into the main memory.
-
 The first class to be loaded into memory is usually the class that contains the `main()` method.
 
-There are three phases in the class loading process: loading, linking, and initialization.
+It is mainly responsible for three activities.
+- Loading is the process of finding the binary representation of a class or interface type with a particular name and creating a class or interface from that binary representation.
+- Linking is the process of taking a class or interface and combining it into the run-time state of the Java Virtual Machine so that it can be executed.
+- Initialization of a class or interface consists of executing the class or interface initialization method `<clinit>`.
 
 
 <div style="text-align: center;">
@@ -18,11 +20,7 @@ There are three phases in the class loading process: loading, linking, and initi
 Fig.1. ClassLoader.
 </p>
 
-It is mainly responsible for three activities.
 
-- Loading
-- Linking
-- Initialization
 
 
 
@@ -41,13 +39,15 @@ The JVM uses a class loader to load classes.
 The class loader normally searches some core Java libraries and all directories included in the CLASSPATH environment variable.
 If it does not find the required class, it throws a `java.lang.ClassNotFoundException`.
 
-The Java Virtual Machine dynamically loads, links and initializes classes and interfaces.
 
-- Loading is the process of finding the binary representation of a class or interface type with a particular name and creating a class or interface from that binary representation.
-- Linking is the process of taking a class or interface and combining it into the run-time state of the Java Virtual Machine so that it can be executed.
-- Initialization of a class or interface consists of executing the class or interface initialization method `<clinit>`.
+## Delegation model
 
-A class in the system is identified by the classloader used to load it as well as the fully qualified class name (which includes the package name).
+The ClassLoader class uses a **delegation model** to search for classes and resources.
+**Each instance of ClassLoader has an associated parent class loader.**
+When requested to find a class or resource, a ClassLoader instance will delegate the search for the class or resource to its parent class loader **before attempting to find the class or resource itself**.
+The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent but may serve as the parent of a ClassLoader instance.
+
+> The delegation model is very important for security.
 
 
 | ClassLoader            | Languages | Load path           | Parent(Composition)     | JDK11                                                     |
@@ -61,16 +61,8 @@ Here are ClassLoaders in **JDK17**:
 
 ![](../img/ClassLoader.png)
 
-### Delegation model
 
-The ClassLoader class uses a **delegation model** to search for classes and resources.
-**Each instance of ClassLoader has an associated parent class loader.**
-When requested to find a class or resource, a ClassLoader instance will delegate the search for the class or resource to its parent class loader before attempting to find the class or resource itself.
-The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent but may serve as the parent of a ClassLoader instance.
-
-> The delegation model is very important for security.
-
-#### Parallel
+### Parallel
 
 Class loaders that support concurrent loading of classes are known as parallel capable class loaders and are required to register themselves at their class initialization time by invoking the ClassLoader.registerAsParallelCapable method.
 Note that the ClassLoader class is registered as parallel capable by default.
@@ -90,43 +82,42 @@ Subclasses of ClassLoader are encouraged to override `findClass(String)`, rather
 Unless overridden, this method synchronizes on the result of getClassLoadingLock method during the entire class loading process.
 
 ```java
-protected Class<?> loadClass(String name,boolean resolve)
-        throws ClassNotFoundException
-        {
-synchronized (getClassLoadingLock(name)){
-        // First, check if the class has already been loaded
-        Class<?> c=findLoadedClass(name);
-        if(c==null){
-        long t0=System.nanoTime();
-        try{
-        if(parent!=null){
-        c=parent.loadClass(name,false);
-        }else{
-        c=findBootstrapClassOrNull(name);
-        }
-        }catch(ClassNotFoundException e){
-        // ClassNotFoundException thrown if class not found
-        // from the non-null parent class loader
-        }
+    protected Class<?> loadClass(String name, boolean resolve)
+            throws ClassNotFoundException {
+        synchronized (getClassLoadingLock(name)) {
+            // First, check if the class has already been loaded
+            Class<?> c = findLoadedClass(name);
+            if (c == null) {
+                long t0 = System.nanoTime();
+                try {
+                    if (parent != null) {
+                        c = parent.loadClass(name, false);
+                    } else {
+                        c = findBootstrapClassOrNull(name);
+                    }
+                } catch (ClassNotFoundException e) {
+                    // ClassNotFoundException thrown if class not found
+                    // from the non-null parent class loader
+                }
 
-        if(c==null){
-        // If still not found, then invoke findClass in order
-        // to find the class.
-        long t1=System.nanoTime();
-        c=findClass(name);
+                if (c == null) {
+                    // If still not found, then invoke findClass in order
+                    // to find the class.
+                    long t1 = System.nanoTime();
+                    c = findClass(name);
 
-        // this is the defining class loader; record the stats
-        sun.misc.PerfCounter.getParentDelegationTime().addTime(t1-t0);
-        sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
-        sun.misc.PerfCounter.getFindClasses().increment();
+                    // this is the defining class loader; record the stats
+                    sun.misc.PerfCounter.getParentDelegationTime().addTime(t1 - t0);
+                    sun.misc.PerfCounter.getFindClassTime().addElapsedTimeFrom(t1);
+                    sun.misc.PerfCounter.getFindClasses().increment();
+                }
+            }
+            if (resolve) {
+                resolveClass(c);
+            }
+            return c;
         }
-        }
-        if(resolve){
-        resolveClass(c);
-        }
-        return c;
-        }
-        }
+    }
 ```
 
 Returns the lock object for class loading operations. For backward compatibility, the default implementation of this
@@ -137,26 +128,24 @@ method behaves as follows.
 2. Otherwise, the method returns **this ClassLoader object**.
 
 ```java
-protected Object getClassLoadingLock(String className){
-        Object lock=this;
-        if(parallelLockMap!=null){
-        Object newLock=new Object();
-        lock=parallelLockMap.putIfAbsent(className,newLock);
-        if(lock==null){
-        lock=newLock;
-        }
+    protected Object getClassLoadingLock(String className) {
+        Object lock = this;
+        if (parallelLockMap != null) {
+            Object newLock = new Object();
+            lock = parallelLockMap.putIfAbsent(className, newLock);
+            if (lock == null) {
+                lock = newLock;
+            }
         }
         return lock;
-        }
+    }
 
-// Maps class name to the corresponding lock object when the current
-// class loader is parallel capable.
-// Note: VM also uses this field to decide if the current class loader
-// is parallel capable and the appropriate lock object for class loading.
-private final ConcurrentHashMap<String, Object> parallelLockMap;
+    // Maps class name to the corresponding lock object when the current class loader is parallel capable.
+    // Note: VM also uses this field to decide if the current class loader is parallel capable and the appropriate lock object for class loading.
+    private final ConcurrentHashMap<String, Object> parallelLockMap;
 ```
 
-#### Destroy delegate model
+### Destroy delegate model
 
 1. override loadClass(), not findClass()
 2. SPI, JDBC JNDI,use contextClassLoader(most be ApplicationClassLoader)
@@ -176,7 +165,7 @@ To determine the class(es) referred to, the Java virtual machine invokes the loa
 
 For example, an application could create a network class loader to download class files from a server. Sample code might look like:
 
-```java
+```
      ClassLoader loader=new NetworkClassLoader(host,port);
         Object main=loader.loadClass("Main",true).newInstance();
         ...
@@ -345,8 +334,7 @@ public abstract class ClassLoader {
 ```
 
 *Links the specified class. This (misleadingly named) method may be used by a class loader to link a class. If the class
-c has already been linked, then this method simply returns. Otherwise, the class is linked as described in the "
-Execution" chapter of The Java™ Language Specification.*
+c has already been linked, then this method simply returns. Otherwise, the class is linked as described below.
 
 ```java
 protected final void resolveClass(Class<?> c){
@@ -1523,7 +1511,7 @@ Lazy linked, loading other classes can be done after Initiailzation. It will run
 
 ## Initialization
 
-Initialization involves executing the initialization method of the class or interface (known as <clinit>). This can include calling the class's constructor, executing the static block, and assigning values to all the static variables. 
+Initialization involves executing the initialization method of the class or interface (known as `<clinit>`). This can include calling the class's constructor, executing the static block, and assigning values to all the static variables. 
 This is the final stage of class loading.
 
 *Initialization* of a class or interface consists of executing its class or interface initialization method.

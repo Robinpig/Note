@@ -27,8 +27,11 @@ We should note that the Graal JIT compiler is also available since Java 10, as a
 
 ### On-stack Replacement
 
-On-stack replacement (OSR) is a programming language implementation technique that allows a running program to switch to a different version of code.
+On-stack replacement (OSR) is essential technology for adaptive optimization, allowing changes to code actively executing in a managed runtime.
 
+OSR embodiments have to ensure that, whenever control is transferred from a currently running function version to another one, execution can transparently continue without altering the intended program semantics. 
+In the adaptive optimization practice, optimizing OSR transitions typically happen at places where state realignment is simple, i.e., at a method or loop entry. 
+The placement of deoptimizing OSR points is determined by the runtime: it can emit them for all instructions that might deoptimize, or group them and resume execution from the last instruction in the deoptimized code that causes outside-visible effects.
 
 ### Tiered Compilation
 The C2 compiler often takes more time and consumes more memory to compile the same methods. However, it generates better-optimized native code than that produced by C1.

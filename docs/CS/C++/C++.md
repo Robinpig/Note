@@ -3,7 +3,7 @@
 
 C++ blends the C language with support for object-oriented programming and for generic programming.
 
-## Type
+## Types
 
 ### 基本的内置类型
 
