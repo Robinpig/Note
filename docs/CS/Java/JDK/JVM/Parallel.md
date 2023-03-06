@@ -628,3 +628,7 @@ bool PSScavenge::invoke_no_policy() {
 ```
 
 ## References
+
+1. [Optimizing best-of-2 work stealing queue selection](https://bugs.openjdk.org/browse/JDK-8205921)
+2. [Characterizing and Optimizing Hotspot Parallel Garbage Collection on Multicore Systems](https://ranger.uta.edu/~jrao/papers/EuroSys18.pdf)
+3. [Understanding and improving JVM GC work stealing at the data center scale](https://dl.acm.org/doi/pdf/10.1145/3241624.2926706)
