@@ -2,7 +2,8 @@
 
 One reason for the oop/klass dichotomy in the implementation is that we don't want a C++ vtbl pointer in every object.
 Thus, normal oops don't have any virtual functions.
-Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type. (See `oop.inline.hpp` for some of the forwarding code.)
+<br/>
+Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type.
 
 ## oop
 
@@ -45,7 +46,7 @@ typedef class     typeArrayOopDesc*            typeArrayOop;
 
 
 | Type         | Java  |
-| -------------- | ------- |
+| ------------ | ----- |
 | instanceOop  | Obj   |
 | objArrayOop  | Obj[] |
 | typeArrayOop | []    |
@@ -521,24 +522,73 @@ The klass hierarchy is separate from the oop hierarchy.
 
 ![](../img/Klass.svg)
 
+
+| Type                     | Java Level                |
+| ------------------------ | ------------------------- |
+|                          |                           |
+| InstanceMirrorKlass      | `java.lang.CLass`         |
+| InstanceRefKlass         | `java.lang.ref.Reference` |
+| InstanceClassLoaderKlass | `java.lang.ClassLoader`   |
+
+
+
 ```cpp
-class Klass;
-class   InstanceKlass;
-class     InstanceMirrorKlass;
-class     InstanceClassLoaderKlass;
-class     InstanceRefKlass;
-class   ArrayKlass;
-class     ObjArrayKlass;
-class     TypeArrayKlass;
+class Klass : public Metadata {
+
+protected:
+  enum { _primary_super_limit = 8 };
+  
+  jint        _layout_helper;
+
+  const KlassID _id;
+
+  int _vtable_len;
+  
+  juint       _super_check_offset;
+  Symbol*     _name;
+  Klass*      _secondary_super_cache;
+  Array<Klass*>* _secondary_supers;
+  Klass*      _primary_supers[_primary_super_limit];
+  
+  OopHandle   _java_mirror;     // java/lang/Class instance mirroring this class
+  Klass*      _super;
+  Klass* volatile _subklass;
+  Klass* volatile _next_sibling;
+  Klass*      _next_link;       // All klasses loaded by a class loader are chained through these links
+
+  // The VM's representation of the ClassLoader used to load this class.
+  // Provide access the corresponding instance java.lang.ClassLoader.
+  ClassLoaderData* _class_loader_data;
+
+  jint        _modifier_flags;  // Processed access flags, for use by Class.getModifiers.
+  AccessFlags _access_flags;    // Access flags. The class/interface distinction is stored here.
+
+  // Biased locking implementation and statistics
+  // (the 64-bit chunk goes first, to avoid some fragmentation)
+  jlong    _last_biased_lock_bulk_revocation_time;
+  markWord _prototype_header;   // Used when biased locking is both enabled and disabled for this type
+  jint     _biased_lock_revocation_count;
+}
 ```
 
+### ArrayKlass
 
-| Type                     | Java Level                |  |
-| -------------------------- | --------------------------- | -- |
-|                          |                           |  |
-| InstanceMirrorKlass      | `java.lang.CLass`         |  |
-| InstanceRefKlass         | `java.lang.ref.Reference` |  |
-| InstanceClassLoaderKlass | `java.lang.ClassLoader`   |  |
+
+
+```dot
+digraph g{
+    rankdir="LR"
+    Obj[label="InstanceKlass", shape=box]
+    One[label="ObjArrayKlass \n (1 dimension)", shape=box]
+    Two[label="ObjArrayKlass \n (2 dimension)", shape=box]
+    One->Obj[label="_element_klass \n _bottom_klass"]
+    Two->Obj[label="_bottom_klass"]
+    Two->One[label="_element_klass"]
+    Obj->One[label="_array_klass"]
+    One->Two[label="_array_klass"]
+}
+```
+
 
 ### follow_object
 
@@ -800,7 +850,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   WeakHandle<vm_class_loader_data> _holder; // The oop that determines lifetime of this class loader
   OopHandle _class_loader;    // The instance of java/lang/ClassLoader associated with
                               // this ClassLoaderData
-         
+     
   ClassLoaderMetaspace * volatile _metaspace;  // Meta-space where meta-data defined by the
                                     // classes in the class loader are allocated.
   Mutex* _metaspace_lock;  // Locks the metaspace for allocations and setup.
@@ -817,7 +867,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
                            // Used for unsafe anonymous classes and the boot class
                            // loader. _keep_alive does not need to be volatile or
                            // atomic since there is one unique CLD per unsafe anonymous class.
-                                           
+                                       
   // Support for walking class loader data objects
   ClassLoaderData* _next; /// Next loader_datas created
   
