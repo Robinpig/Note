@@ -11,8 +11,20 @@ Instead, they forward all "virtual" functions to their klass, which does have a 
 
 The klass hierarchy is separate from the oop hierarchy.
 
+<div style="text-align: center;">
+
 ![](../img/Klass.svg)
 
+</div>
+
+
+<p style="text-align: center;">
+Fig.1. Klass hierarchy.
+</p>
+
+
+
+<div class="center">
 
 | Type                     | Java Level                |
 | ------------------------ | ------------------------- |
@@ -20,6 +32,12 @@ The klass hierarchy is separate from the oop hierarchy.
 | InstanceMirrorKlass      | `java.lang.CLass`         |
 | InstanceRefKlass         | `java.lang.ref.Reference` |
 | InstanceClassLoaderKlass | `java.lang.ClassLoader`   |
+
+
+</div>
+
+
+
 
 ### Klass Struct
 
@@ -462,6 +480,8 @@ oopDesc is abstract, and no virtual functions allowed.
 This hierarchy is a representation hierarchy, i.e.
 if A is a superclass of B, A's representation is a prefix of B's representation.
 
+<div style="text-align: center;">
+
 ```dot
 strict digraph {
     oopDesc [shape="polygon" ]
@@ -475,14 +495,23 @@ strict digraph {
     arrayOopDesc -> typeArrayOopDesc
 }
 ```
+</div>
 
 
+<p style="text-align: center;">
+Fig.2. Oop hierarchy.
+</p>
+
+
+<div class="center">
 
 | Type         | Java  |
 | ------------ | ----- |
 | instanceOop  | Obj   |
 | objArrayOop  | Obj[] |
 | typeArrayOop | []    |
+
+</div>
 
 ### Oop struct
 
