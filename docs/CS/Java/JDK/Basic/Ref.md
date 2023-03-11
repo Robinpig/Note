@@ -1,17 +1,21 @@
 ## Introduction
 
-
-
 ### Ref Hierarchy
 
-
-```java
+```
 -XX:+PrintReferenceGC
 -XX:+TraceReferenceGC
-
 ```
 
+<div style="text-align: center;">
+
 ![java.lang.ref](../img/Ref.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Reference hierarchy.
+</p>
 
 ### Abstract Reference
 
@@ -55,14 +59,10 @@ public abstract class Reference<T> {
 }
 ```
 
-
-
 ## ReferenceHandler
 
 1. from PendingList to ReferenceQueue in a loop.
 2. if instanceof Cleaner , `invoke Cleaner.clean()` like DirectByteBuffer is free by [Cleaner](/docs/CS/Java/JDK/Basic/Direct_Buffer.md?id=cleaner).
-
-
 
 Create Reference Object
 
@@ -164,12 +164,10 @@ static boolean tryHandlePending(boolean waitForNotify) {
 }
 ```
 
-
-
 ## StrongReference
+
 Strong references provide direct access to the target object.
 Will not be recycled.
-
 
 ## SoftReference
 
@@ -208,13 +206,11 @@ public class SoftReference<T> extends Reference<T> {
 }
 ```
 
-
-
 `ReferenceProcessor::process_discovered_references`
 
- -> `process_soft_ref_reconsider `
+-> `process_soft_ref_reconsider `
 
- -> `process_soft_ref_reconsider_work`
+-> `process_soft_ref_reconsider_work`
 
 (SoftReferences only) **Traverse the list and remove any SoftReferences whose referents are not alive**, but that should be kept alive for policy reasons. Keep alive the transitive closure of all such referents.
 
@@ -248,15 +244,12 @@ size_t ReferenceProcessor::process_soft_ref_reconsider_work(DiscoveredList&    r
 }
 ```
 
-
-
 ### referencePolicy
 
 referencePolicy is used to determine when soft reference objects should be cleared.
 
-1. Server compiler mode **LRUMaxHeapPolicy** 
+1. Server compiler mode **LRUMaxHeapPolicy**
 2. Else **LRUCurrentHeapPolicy**
-
 
 ```java
 // referencePolicy.hpp
@@ -299,8 +292,6 @@ class LRUMaxHeapPolicy : public ReferencePolicy {
 };
 ```
 
-
-
 ```java
 // referenceProcessor.cpp
 void ReferenceProcessor::init_statics() {
@@ -327,8 +318,6 @@ void ReferenceProcessor::init_statics() {
             "Unrecognized RefDiscoveryPolicy");
 }
 ```
-
-
 
 ## WeakReference
 
@@ -374,8 +363,6 @@ public class WeakReference<T> extends Reference<T> {
 
 }
 ```
-
-
 
 Traverse the list and remove any Refs whose referents are alive, or NULL if discovery is not atomic. Enqueue and clear the reference for others if do_enqueue_and_clear is set.
 
@@ -424,8 +411,6 @@ size_t ReferenceProcessor::process_soft_weak_final_refs_work(DiscoveredList&    
 
 ## Phantom Reference
 
-
-
 ```java
 public class PhantomReference<T> extends Reference<T> {
     public T get() {
@@ -438,8 +423,6 @@ public class PhantomReference<T> extends Reference<T> {
 
 }
 ```
-
-
 
 **TODO in JDK12 will clear referent while JDk1.8 not**
 
@@ -475,8 +458,6 @@ size_t ReferenceProcessor::process_phantom_refs_work(DiscoveredList&    refs_lis
 }
 ```
 
-
-
 ```cpp
 void DiscoveredListIterator::complete_enqueue() {
   if (_prev_discovered != NULL) {
@@ -488,8 +469,6 @@ void DiscoveredListIterator::complete_enqueue() {
   }
 }
 ```
-
-
 
 ## FinalReference
 
@@ -508,8 +487,6 @@ class FinalReference<T> extends Reference<T> {
     }
 }
 ```
-
-
 
 **Keep alive followers of referents for FinalReferences.** Must only be called for those.
 
@@ -539,11 +516,12 @@ size_t ReferenceProcessor::process_final_keep_alive_work(DiscoveredList& refs_li
 }
 ```
 
-## Finalizer
+### Finalizer
 
 Package-private; must be in same package as the Reference class
 
 register invoked by VM
+
 ```java
 final class Finalizer extends FinalReference<Object> {
 
@@ -645,9 +623,7 @@ final class Finalizer extends FinalReference<Object> {
     }
 ```
 
-### register
-
-
+#### register
 
 ```cpp
 
@@ -666,6 +642,7 @@ product(bool, RegisterFinalizersAtInit, true,                             \
 ```
 
 call `Finalizer#register()` after  [allocation](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=allocate_instance)
+
 ```cpp
 // instanceKlass.cpp
 instanceOop InstanceKlass::allocate_instance(TRAPS) {
@@ -682,13 +659,13 @@ instanceOop InstanceKlass::allocate_instance(TRAPS) {
 }
 ```
 
-
 rewrite _return to _return_register_finalizer in [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_Object_init) when Linking Class
 
-### runFinalizer
+#### runFinalizer
 
 use `JavaLangAccess#invokeFinalize()` run `finalize` method
 **after invoke finalize method, the reference set null so can't run finalize method twice**
+
 ```java
  private void runFinalizer(JavaLangAccess jla) {
         synchronized (lock) {
@@ -718,7 +695,7 @@ use `JavaLangAccess#invokeFinalize()` run `finalize` method
     }
 ```
 
-### FinalizerThread
+#### FinalizerThread
 
 ```java
 private static class FinalizerThread extends Thread {
@@ -754,9 +731,6 @@ private static class FinalizerThread extends Thread {
         }
     }
 ```
-
-
-
 
 ## Cleaner
 
@@ -853,36 +827,37 @@ public class Cleaner
 }
 ```
 
-
 ## ReferenceProcessor
 
 ### discover_reference
+
 We mention two of several possible choices here:
 0: if the reference object is not in the "originating generation"
-   (or part of the heap being collected, indicated by our "span")
-   we don't treat it specially (i.e. we scan it as we would
-   a normal oop, treating its references as strong references).
-   This means that references can't be discovered unless their
-   referent is also in the same span. This is the simplest,
-   most "local" and most conservative approach, albeit one
-   that may cause weak references to be enqueued least promptly.
-   We call this choice the "ReferenceBasedDiscovery" policy.
+(or part of the heap being collected, indicated by our "span")
+we don't treat it specially (i.e. we scan it as we would
+a normal oop, treating its references as strong references).
+This means that references can't be discovered unless their
+referent is also in the same span. This is the simplest,
+most "local" and most conservative approach, albeit one
+that may cause weak references to be enqueued least promptly.
+We call this choice the "ReferenceBasedDiscovery" policy.
 1: the reference object may be in any generation (span), but if
-   the referent is in the generation (span) being currently collected
-   then we can discover the reference object, provided
-   the object has not already been discovered by
-   a different concurrently running discoverer (as may be the
-   case, for instance, if the reference object is in G1 old gen and
-   the referent in G1 young gen), and provided the processing
-   of this reference object by the current collector will
-   appear atomically to every other discoverer in the system.
-   (Thus, for instance, a concurrent discoverer may not
-   discover references in other generations even if the
-   referent is in its own generation). This policy may,
-   in certain cases, enqueue references somewhat sooner than
-   might Policy #0 above, but at marginally increased cost
-   and complexity in processing these references.
-   We call this choice the "ReferentBasedDiscovery" policy.
+the referent is in the generation (span) being currently collected
+then we can discover the reference object, provided
+the object has not already been discovered by
+a different concurrently running discoverer (as may be the
+case, for instance, if the reference object is in G1 old gen and
+the referent in G1 young gen), and provided the processing
+of this reference object by the current collector will
+appear atomically to every other discoverer in the system.
+(Thus, for instance, a concurrent discoverer may not
+discover references in other generations even if the
+referent is in its own generation). This policy may,
+in certain cases, enqueue references somewhat sooner than
+might Policy #0 above, but at marginally increased cost
+and complexity in processing these references.
+We call this choice the "ReferentBasedDiscovery" policy.
+
 ```cpp
 
 bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
@@ -981,7 +956,6 @@ bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
 }
 ```
 
-
 ### process_discovered_references
 
 ```cpp
@@ -1033,17 +1007,17 @@ ReferenceProcessorStats ReferenceProcessor::process_discovered_references(RefPro
 
 ## Summary
 
-|      | Soft            | Weak               | Phantom                | Final |
-| ---- | --------------- | ------------------ | ---------------------- | ----- |
-|      | clean by Policy | clean all the time | use to trace collector |       |
-|      |                 |                    |                        |       |
-|      |                 |                    |                        |       |
 
+|  | Soft            | Weak               | Phantom                | Final |
+| - | --------------- | ------------------ | ---------------------- | ----- |
+|  | clean by Policy | clean all the time | use to trace collector |       |
+|  |                 |                    |                        |       |
+|  |                 |                    |                        |       |
 
 ## Links
+
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
 ## References
 
 1. [Java引用类型原理剖析](https://github.com/farmerjohngit/myblog/issues/10)
-
