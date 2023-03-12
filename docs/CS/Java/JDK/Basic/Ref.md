@@ -568,77 +568,29 @@ final class Finalizer extends FinalReference<Object> {
     static ReferenceQueue<Object> getQueue() {
         return queue;
     }
-    ...
 }
 ```
 
-```java
-    //Called by Runtime.runFinalization()
-    static void runFinalization() {
-        if (VM.initLevel() == 0) {
-            return;
-        }
+#### register_finalizer
 
-        forkSecondaryFinalizer(new Runnable() {
-            private volatile boolean running;
-            public void run() {
-                // in case of recursive call to run()
-                if (running)
-                    return;
-                final JavaLangAccess jla = SharedSecrets.getJavaLangAccess();
-                running = true;
-                for (Finalizer f; (f = (Finalizer)queue.poll()) != null; )
-                    f.runFinalizer(jla);
-            }
-        });
-    }
 
-    /* Create a privileged secondary finalizer thread in the system thread
-     * group for the given Runnable, and wait for it to complete.
-     *
-     * This method is used by runFinalization.
-     *
-     * It could have been implemented by offloading the work to the
-     * regular finalizer thread and waiting for that thread to finish.
-     * The advantage of creating a fresh thread, however, is that it insulates
-     * invokers of that method from a stalled or deadlocked finalizer thread.
-     */
-    private static void forkSecondaryFinalizer(final Runnable proc) {
-        AccessController.doPrivileged(
-            new PrivilegedAction<>() {
-                public Void run() {
-                    ThreadGroup tg = Thread.currentThread().getThreadGroup();
-                    for (ThreadGroup tgn = tg;
-                         tgn != null;
-                         tg = tgn, tgn = tg.getParent());
-                    Thread sft = new Thread(tg, proc, "Secondary finalizer", 0, false);
-                    sft.start();
-                    try {
-                        sft.join();
-                    } catch (InterruptedException x) {
-                        Thread.currentThread().interrupt();
-                    }
-                    return null;
-                }});
-    }
-```
+rewrite _return to _return_register_finalizer while [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_Object_init).
 
-#### register
 
 ```cpp
 
 IRT_ENTRY(void, InterpreterRuntime::register_finalizer(JavaThread* thread, oopDesc* obj))
-  assert(oopDesc::is_oop(obj), "must be a valid oop");
-  assert(obj->klass()->has_finalizer(), "shouldn't be here otherwise");
   InstanceKlass::register_finalizer(instanceOop(obj), CHECK);
 IRT_END
 ```
 
-```cpp
-// globals.hpp
-product(bool, RegisterFinalizersAtInit, true,                             \
-"Register finalizable objects at end of Object.<init> or "        \
-"after allocation")
+Register finalizable objects at end of
+
+- Object.<init> (default)
+- or after allocation
+
+```
+-XX:+/-RegisterFinalizersAtInit
 ```
 
 call `Finalizer#register()` after  [allocation](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=allocate_instance)
@@ -659,43 +611,20 @@ instanceOop InstanceKlass::allocate_instance(TRAPS) {
 }
 ```
 
-rewrite _return to _return_register_finalizer in [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_Object_init) when Linking Class
-
-#### runFinalizer
-
-use `JavaLangAccess#invokeFinalize()` run `finalize` method
-**after invoke finalize method, the reference set null so can't run finalize method twice**
-
-```java
- private void runFinalizer(JavaLangAccess jla) {
-        synchronized (lock) {
-            if (this.next == this)      // already finalized
-                return;
-            // unlink from unfinalized
-            if (unfinalized == this)
-                unfinalized = this.next;
-            else
-                this.prev.next = this.next;
-            if (this.next != null)
-                this.next.prev = this.prev;
-            this.prev = null;
-            this.next = this;           // mark as finalized
-        }
-
-        try {
-            Object finalizee = this.get();
-            if (finalizee != null && !(finalizee instanceof java.lang.Enum)) {
-                jla.invokeFinalize(finalizee); // Invokes the finalize method of the given object.
-
-                // Clear stack slot containing this variable, to decrease the chances of false retention with a conservative GC
-                finalizee = null;
-            }
-        } catch (Throwable x) { }
-        super.clear();
-    }
+call `Finalizer.register()`
+```cpp
+instanceOop InstanceKlass::register_finalizer(instanceOop i, TRAPS) {
+  instanceHandle h_i(THREAD, i);
+  // Pass the handle as argument, JavaCalls::call expects oop as jobjects
+  JavaValue result(T_VOID);
+  JavaCallArguments args(h_i);
+  methodHandle mh (THREAD, Universe::finalizer_register_method());
+  JavaCalls::call(&result, mh, &args, CHECK_NULL);
+  return h_i();
+}
 ```
 
-#### FinalizerThread
+### FinalizerThread
 
 ```java
 private static class FinalizerThread extends Thread {
@@ -731,6 +660,43 @@ private static class FinalizerThread extends Thread {
         }
     }
 ```
+
+#### runFinalizer
+
+use `JavaLangAccess#invokeFinalize()` run `finalize` method **after invoke finalize method, the reference set null so can't run finalize method twice**
+
+```java
+final class Finalizer extends FinalReference<Object> {
+    private void runFinalizer(JavaLangAccess jla) {
+        synchronized (lock) {
+            if (this.next == this)      // already finalized
+                return;
+            // unlink from unfinalized
+            if (unfinalized == this)
+                unfinalized = this.next;
+            else
+                this.prev.next = this.next;
+            if (this.next != null)
+                this.next.prev = this.prev;
+            this.prev = null;
+            this.next = this;           // mark as finalized
+        }
+
+        try {
+            Object finalizee = this.get();
+            if (finalizee != null && !(finalizee instanceof java.lang.Enum)) {
+                jla.invokeFinalize(finalizee); // Invokes the finalize method of the given object.
+
+                // Clear stack slot containing this variable, to decrease the chances of false retention with a conservative GC
+                finalizee = null;
+            }
+        } catch (Throwable x) {
+        }
+        super.clear();
+    }
+}
+```
+
 
 ## Cleaner
 
