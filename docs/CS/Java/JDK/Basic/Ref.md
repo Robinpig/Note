@@ -59,6 +59,28 @@ public abstract class Reference<T> {
 }
 ```
 
+### Reference State
+
+The state of a Reference object is characterized by two attributes.
+It may be either "active", "pending", or "inactive".It may also be either "registered", "enqueued", "dequeued", or "unregistered".
+
+- **Active:** Subject to special treatment by the garbage collector.
+  Some time after the collector detects that the reachability of the referent has changed to the appropriate state, the collector "notifies" the reference, changing the state to either "pending" or "inactive".
+  <br/>referent != null; discovered = null, or in GC discovered list.
+- **Pending:** An element of the pending-Reference list, waiting to be processed by the ReferenceHandler thread.
+  The pending-Reference list is linked through the discovered fields of references in the list.
+  <br/>referent = null; discovered = next element in pending-Reference list.
+- **Inactive:** Neither Active nor Pending.
+  <br/>referent = null.
+- **Registered:** Associated with a queue when created, and not yet added to the queue.
+  <br/>queue = the associated queue.
+- **Enqueued:** Added to the associated queue, and not yet removed.
+  <br/>queue = ReferenceQueue.ENQUEUE; next = next entry in list, or this to indicate end of list.
+- **Dequeued:** Added to the associated queue and then removed.
+  <br/>queue = ReferenceQueue.NULL; next = this.
+- **Unregistered:** Not associated with a queue when created.
+  <br/>queue = ReferenceQueue.NULL.
+
 ## ReferenceHandler
 
 1. from PendingList to ReferenceQueue in a loop.
@@ -172,38 +194,7 @@ Will not be recycled.
 ## SoftReference
 
 ```java
-public class SoftReference<T> extends Reference<T> {
-
-    // Timestamp clock, updated by the garbage collector
-    static private long clock;
-
-    /**
-     * Timestamp updated by each invocation of the get method.  The VM may use
-     * this field when selecting soft references to be cleared, but it is not
-     * required to do so.
-     */
-    private long timestamp;
-
-    // Creates a new soft reference that refers to the given object and is
-    // registered with the given queue.
-    public SoftReference(T referent, ReferenceQueue<? super T> q) {
-        super(referent, q);
-        this.timestamp = clock;
-    }
-
-    /**
-     * Returns this reference object's referent.  If this reference object has
-     * been cleared, either by the program or by the garbage collector, then
-     * this method returns <code>null</code>.
-     */
-    public T get() {
-        T o = super.get();
-        if (o != null && this.timestamp != clock)
-            this.timestamp = clock;
-        return o;
-    }
-
-}
+span
 ```
 
 `ReferenceProcessor::process_discovered_references`
@@ -573,9 +564,7 @@ final class Finalizer extends FinalReference<Object> {
 
 #### register_finalizer
 
-
 rewrite _return to _return_register_finalizer while [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_Object_init).
-
 
 ```cpp
 
@@ -612,6 +601,7 @@ instanceOop InstanceKlass::allocate_instance(TRAPS) {
 ```
 
 call `Finalizer.register()`
+
 ```cpp
 instanceOop InstanceKlass::register_finalizer(instanceOop i, TRAPS) {
   instanceHandle h_i(THREAD, i);
@@ -696,7 +686,6 @@ final class Finalizer extends FinalReference<Object> {
     }
 }
 ```
-
 
 ## Cleaner
 
