@@ -19,6 +19,9 @@ Fig.1. Reference hierarchy.
 
 ### Abstract Reference
 
+Abstract base class for reference objects. This class defines the operations common to all reference objects.
+Because reference objects are implemented in close cooperation with the [garbage collector](/docs/CS/Java/JDK/JVM/GC.md), this class may not be subclassed directly.
+
 ```java
 public abstract class Reference<T> {
 
@@ -81,6 +84,116 @@ It may be either "active", "pending", or "inactive".It may also be either "regis
 - **Unregistered:** Not associated with a queue when created.
   <br/>queue = ReferenceQueue.NULL.
 
+The collector only needs to examine the referent field and the discovered field to determine whether a (non-FinalReference) Reference object needs special treatment.
+If the referent is non-null and not known to be live, then it may need to be discovered for possible later notification.
+But if the discovered field is non-null, then it has already been discovered.
+
+FinalReference (which exists to support finalization) differs from other references, because a FinalReference is not cleared when notified.
+The referent being null or not cannot be used to distinguish between the active state and pending or inactive states.
+However, FinalReferences do not support enqueue().
+Instead, the next field of a FinalReference object is set to "this" when it is added to the pending-Reference list.
+The use of "this" as the value of next in the enqueued and dequeued states maintains the non-active state.
+An additional check that the next field is null is required to determine that a FinalReference object is active.
+
+```
+    /**
+     * Initial states:
+     *   [active/registered]
+     *   [active/unregistered] [1]
+     *
+     * Transitions:
+     *                            clear [2]
+     *   [active/registered]     ------->   [inactive/registered]
+     *          |                                 |
+     *          |                                 | enqueue
+     *          | GC              enqueue [2]     |
+     *          |                -----------------|
+     *          |                                 |
+     *          v                                 |
+     *   [pending/registered]    ---              v
+     *          |                   | ReferenceHandler
+     *          | enqueue [2]       |--->   [inactive/enqueued]
+     *          v                   |             |
+     *   [pending/enqueued]      ---              |
+     *          |                                 | poll/remove
+     *          | poll/remove                     | + clear [4]
+     *          |                                 |
+     *          v            ReferenceHandler     v
+     *   [pending/dequeued]      ------>    [inactive/dequeued]
+     *
+     *
+     *                           clear/enqueue/GC [3]
+     *   [active/unregistered]   ------
+     *          |                      |
+     *          | GC                   |
+     *          |                      |--> [inactive/unregistered]
+     *          v                      |
+     *   [pending/unregistered]  ------
+     *                           ReferenceHandler
+     *
+     * Terminal states:
+     *   [inactive/dequeued]
+     *   [inactive/unregistered]
+     *
+     * Unreachable states (because enqueue also clears):
+     *   [active/enqeued]
+     *   [active/dequeued]
+     *
+     * [1] Unregistered is not permitted for FinalReferences.
+     *
+     * [2] These transitions are not possible for FinalReferences, making
+     * [pending/enqueued], [pending/dequeued], and [inactive/registered]
+     * unreachable.
+     *
+     * [3] The garbage collector may directly transition a Reference
+     * from [active/unregistered] to [inactive/unregistered],
+     * bypassing the pending-Reference list.
+     *
+     * [4] The queue handler for FinalReferences also clears the reference.
+     */
+```
+
+### processPendingReferences
+
+```java
+public abstract class Reference<T> {
+  private static void processPendingReferences() {
+    // Only the singleton reference processing thread calls
+    // waitForReferencePendingList() and getAndClearReferencePendingList().
+    // These are separate operations to avoid a race with other threads
+    // that are calling waitForReferenceProcessing().
+    waitForReferencePendingList();
+    Reference<?> pendingList;
+    synchronized (processPendingLock) {
+      pendingList = getAndClearReferencePendingList();
+      processPendingActive = true;
+    }
+    while (pendingList != null) {
+      Reference<?> ref = pendingList;
+      pendingList = ref.discovered;
+      ref.discovered = null;
+
+      if (ref instanceof Cleaner) {
+        ((Cleaner) ref).clean();
+        // Notify any waiters that progress has been made.
+        // This improves latency for nio.Bits waiters, which
+        // are the only important ones.
+        synchronized (processPendingLock) {
+          processPendingLock.notifyAll();
+        }
+      } else {
+        ref.enqueueFromPending();
+      }
+    }
+    // Notify any waiters of completion of current round.
+    synchronized (processPendingLock) {
+      processPendingActive = false;
+      processPendingLock.notifyAll();
+    }
+  }
+}
+```
+
 ## ReferenceHandler
 
 1. from PendingList to ReferenceQueue in a loop.
@@ -99,90 +212,74 @@ add pending to ReferenceQueue by ReferenceHandler
 remove from referenceQueue
 
 ```java
-/* High-priority thread to enqueue pending References
- */
 private static class ReferenceHandler extends Thread {
 
-    private static void ensureClassInitialized(Class<?> clazz) {
-        try {
-            Class.forName(clazz.getName(), true, clazz.getClassLoader());
-        } catch (ClassNotFoundException e) {
-            throw (Error) new NoClassDefFoundError(e.getMessage()).initCause(e);
-        }
+  private static void ensureClassInitialized(Class<?> clazz) {
+    try {
+      Class.forName(clazz.getName(), true, clazz.getClassLoader());
+    } catch (ClassNotFoundException e) {
+      throw (Error) new NoClassDefFoundError(e.getMessage()).initCause(e);
     }
+  }
 
-    static {
-        // pre-load and initialize InterruptedException and Cleaner classes
-        // so that we don't get into trouble later in the run loop if there's
-        // memory shortage while loading/initializing them lazily.
-        ensureClassInitialized(InterruptedException.class);
-        ensureClassInitialized(Cleaner.class);
+  static {
+    // pre-load and initialize Cleaner class so that we don't
+    // get into trouble later in the run loop if there's
+    // memory shortage while loading/initializing it lazily.
+    ensureClassInitialized(Cleaner.class);
+  }
+
+  ReferenceHandler(ThreadGroup g, String name) {
+    super(g, null, name, 0, false);
+  }
+
+  public void run() {
+    while (true) {
+      processPendingReferences();
     }
-
-    ReferenceHandler(ThreadGroup g, String name) {
-        super(g, name);
-    }
-
-    public void run() {
-        while (true) {
-            tryHandlePending(true);
-        }
-    }
-
+  }
 }
 ```
 
+### processPendingReferences
+
 ```java
-/**
- * Try handle pending Reference if there is one.
- * Return true} as a hint that there might be another Reference pending or false} when there are no more pending References at the moment and the program can do some other
- * useful work instead of looping.
- */
-static boolean tryHandlePending(boolean waitForNotify) {
-    Reference<Object> r;
-    Cleaner c;
-    try {
-        synchronized (lock) {
-            if (pending != null) {
-                r = pending;
-                // 'instanceof' might throw OutOfMemoryError sometimes
-                // so do this before un-linking 'r' from the 'pending' chain...
-                c = r instanceof Cleaner ? (Cleaner) r : null;
-                // unlink 'r' from 'pending' chain
-                pending = r.discovered;
-                r.discovered = null;
-            } else {
-                // The waiting on the lock may cause an OutOfMemoryError
-                // because it may try to allocate exception objects.
-                if (waitForNotify) {
-                    lock.wait();
-                }
-                // retry if waited
-                return waitForNotify;
-            }
+public abstract class Reference<T> {
+
+  private static void processPendingReferences() {
+    // Only the singleton reference processing thread calls
+    // waitForReferencePendingList() and getAndClearReferencePendingList().
+    // These are separate operations to avoid a race with other threads
+    // that are calling waitForReferenceProcessing().
+    waitForReferencePendingList();
+    Reference<?> pendingList;
+    synchronized (processPendingLock) {
+      pendingList = getAndClearReferencePendingList();
+      processPendingActive = true;
+    }
+    while (pendingList != null) {
+      Reference<?> ref = pendingList;
+      pendingList = ref.discovered;
+      ref.discovered = null;
+
+      if (ref instanceof Cleaner) {
+        ((Cleaner) ref).clean();
+        // Notify any waiters that progress has been made.
+        // This improves latency for nio.Bits waiters, which
+        // are the only important ones.
+        synchronized (processPendingLock) {
+          processPendingLock.notifyAll();
         }
-    } catch (OutOfMemoryError x) {
-        // Give other threads CPU time so they hopefully drop some live references
-        // and GC reclaims some space.
-        // Also prevent CPU intensive spinning in case 'r instanceof Cleaner' above
-        // persistently throws OOME for some time...
-        Thread.yield();
-        // retry
-        return true;
-    } catch (InterruptedException x) {
-        // retry
-        return true;
+      } else {
+        ref.enqueueFromPending();
+      }
     }
-
-    // Fast path for cleaners
-    if (c != null) {
-        c.clean();
-        return true;
+    // Notify any waiters of completion of current round.
+    synchronized (processPendingLock) {
+      processPendingActive = false;
+      processPendingLock.notifyAll();
     }
-
-    ReferenceQueue<? super Object> q = r.queue;
-    if (q != ReferenceQueue.NULL) q.enqueue(r); // enq ReferenceQueue
-    return true;
+  }
 }
 ```
 
@@ -193,8 +290,53 @@ Will not be recycled.
 
 ## SoftReference
 
+Soft reference objects, which are cleared at the discretion of the garbage collector in response to memory demand. Soft references are most often used to implement memory-sensitive caches.
+
+Suppose that the garbage collector determines at a certain point in time that an object is softly reachable.
+At that time it may choose to clear atomically all soft references to that object and all soft references to any other softly-reachable objects from which that object is reachable through a chain of strong references.
+At the same time or at some later time it will enqueue those newly-cleared soft references that are registered with reference queues.
+
+All soft references to softly-reachable objects are guaranteed to have been cleared before the virtual machine throws an OutOfMemoryError.
+Otherwise no constraints are placed upon the time at which a soft reference will be cleared or the order in which a set of such references to different objects will be cleared.
+Virtual machine implementations are, however, encouraged to bias against clearing recently-created or recently-used soft references.
+
+Direct instances of this class may be used to implement simple caches; this class or derived subclasses may also be used in larger data structures to implement more sophisticated caches.
+As long as the referent of a soft reference is strongly reachable, that is, is actually in use, the soft reference will not be cleared.
+Thus a sophisticated cache can, for example, prevent its most recently used entries from being discarded by keeping strong referents to those entries, leaving the remaining entries to be discarded at the discretion of the garbage collector.
+
 ```java
-span
+public class SoftReference<T> extends Reference<T> {
+
+    // Timestamp clock, updated by the garbage collector
+    static private long clock;
+
+    /**
+     * Timestamp updated by each invocation of the get method.  The VM may use
+     * this field when selecting soft references to be cleared, but it is not
+     * required to do so.
+     */
+    private long timestamp;
+
+    // Creates a new soft reference that refers to the given object and is
+    // registered with the given queue.
+    public SoftReference(T referent, ReferenceQueue<? super T> q) {
+        super(referent, q);
+        this.timestamp = clock;
+    }
+
+    /**
+     * Returns this reference object's referent.  If this reference object has
+     * been cleared, either by the program or by the garbage collector, then
+     * this method returns <code>null</code>.
+     */
+    public T get() {
+        T o = super.get();
+        if (o != null && this.timestamp != clock)
+            this.timestamp = clock;
+        return o;
+    }
+
+}
 ```
 
 `ReferenceProcessor::process_discovered_references`
@@ -205,7 +347,7 @@ span
 
 (SoftReferences only) **Traverse the list and remove any SoftReferences whose referents are not alive**, but that should be kept alive for policy reasons. Keep alive the transitive closure of all such referents.
 
-```java
+```cpp
 // referenceProcessor.cpp
 size_t ReferenceProcessor::process_soft_ref_reconsider_work(DiscoveredList&    refs_list,
                                                             ReferencePolicy*   policy,
@@ -242,7 +384,7 @@ referencePolicy is used to determine when soft reference objects should be clear
 1. Server compiler mode **LRUMaxHeapPolicy**
 2. Else **LRUCurrentHeapPolicy**
 
-```java
+```cpp
 // referencePolicy.hpp
 class NeverClearPolicy : public ReferencePolicy {
  public:
@@ -283,7 +425,9 @@ class LRUMaxHeapPolicy : public ReferencePolicy {
 };
 ```
 
-```java
+init_statics
+
+```cpp
 // referenceProcessor.cpp
 void ReferenceProcessor::init_statics() {
   // We need a monotonically non-decreasing time in ms but
@@ -312,42 +456,21 @@ void ReferenceProcessor::init_statics() {
 
 ## WeakReference
 
+Weak reference objects, which do not prevent their referents from being made finalizable, finalized, and then reclaimed.
+Weak references are most often used to implement canonicalizing mappings.
+
+Suppose that the garbage collector determines at a certain point in time that an object is weakly reachable.
+At that time it will atomically clear all weak references to that object and all weak references to any other weakly-reachable objects from which that object is reachable through a chain of strong and soft references.
+At the same time it will declare all of the formerly weakly-reachable objects to be finalizable.
+At the same time or at some later time it will enqueue those newly-cleared weak references that are registered with reference queues.
+
 ```java
-/**
- * Weak reference objects, which do not prevent their referents from being
- * made finalizable, finalized, and then reclaimed.  Weak references are most
- * often used to implement canonicalizing mappings.
- *
- * <p> Suppose that the garbage collector determines at a certain point in time
- * that an object is <a href="package-summary.html#reachability">weakly
- * reachable</a>.  At that time it will atomically clear all weak references to
- * that object and all weak references to any other weakly-reachable objects
- * from which that object is reachable through a chain of strong and soft
- * references.  At the same time it will declare all of the formerly
- * weakly-reachable objects to be finalizable.  At the same time or at some
- * later time it will enqueue those newly-cleared weak references that are
- * registered with reference queues.
- */
 public class WeakReference<T> extends Reference<T> {
 
-    /**
-     * Creates a new weak reference that refers to the given object.  The new
-     * reference is not registered with any queue.
-     *
-     * @param referent object the new weak reference will refer to
-     */
     public WeakReference(T referent) {
         super(referent);
     }
 
-    /**
-     * Creates a new weak reference that refers to the given object and is
-     * registered with the given queue.
-     *
-     * @param referent object the new weak reference will refer to
-     * @param q the queue with which the reference is to be registered,
-     *          or <tt>null</tt> if registration is not required
-     */
     public WeakReference(T referent, ReferenceQueue<? super T> q) {
         super(referent, q);
     }
@@ -355,7 +478,8 @@ public class WeakReference<T> extends Reference<T> {
 }
 ```
 
-Traverse the list and remove any Refs whose referents are alive, or NULL if discovery is not atomic. Enqueue and clear the reference for others if do_enqueue_and_clear is set.
+Traverse the list and remove any Refs whose referents are alive, or NULL if discovery is not atomic.
+Enqueue and clear the reference for others if do_enqueue_and_clear is set.
 
 ```cpp
 size_t ReferenceProcessor::process_soft_weak_final_refs_work(DiscoveredList&    refs_list,
