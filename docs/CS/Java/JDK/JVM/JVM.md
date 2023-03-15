@@ -11,6 +11,28 @@ This space can be used to execute Java programs irrespective of the platform or 
 
 <!-- tabs:start -->
 
+##### **Building the JDK**
+
+> Ref [building.md](https://github.com/openjdk/jdk/blob/master/doc/building.md)
+
+Get the complete source code:
+
+```shell
+git clone https://git.openjdk.org/jdk/
+```
+
+Run configure:
+
+```shell
+bash configure
+```
+
+Run make:
+
+```shell
+make images
+```
+
 ##### **Directories**
 
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
