@@ -377,7 +377,6 @@ SystemDictionary::resolve_instance_class_or_null
 -> SystemDictionary::load_instance_class 
 -> SystemDictionary::load_instance_class_impl 
 -> ClassLoader::load_class
--> KlassFactory::create_from_stream
 ```
 
 > call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
@@ -386,7 +385,6 @@ SystemDictionary::resolve_instance_class_or_null
 //classLoader.cpp
 // Called by the boot classloader to load classes
 InstanceKlass* ClassLoader::load_class(Symbol* name, bool search_append_only, TRAPS) {
-	...
 
   InstanceKlass* result = KlassFactory::create_from_stream(stream, name,
                                                            loader_data, cl_info, CHECK_NULL);
@@ -596,7 +594,7 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
 1. set minor/major version
 2. Initialize itable offset tables
 3. fill_oop_maps
-4. create_mirror and initialize static fields
+4. [create_mirror](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_mirror) and initialize static fields
 5. generate_default_methods
 
 ```cpp
@@ -712,12 +710,9 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
 
   // Obtain java.lang.Module
   Handle module_handle(THREAD, module_entry->module());
-```
 
-Allocate mirror and initialize static fields
-The create_mirror() call will also call compute_modifiers()
-
-```cpp
+  // Allocate mirror and initialize static fields
+  // The create_mirror() call will also call compute_modifiers()
   java_lang_Class::create_mirror(ik,
                                  Handle(THREAD, _loader_data->class_loader()),
                                  module_handle,
@@ -811,7 +806,7 @@ void ClassLoaderData::init_null_class_loader_data() {
 
 ```
 
-##### create_mirror
+#### create_mirror
 
 create java.lang.Class instance
 
