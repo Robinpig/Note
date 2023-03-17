@@ -21,10 +21,18 @@ Get the complete source code:
 git clone https://git.openjdk.org/jdk/
 ```
 
+Prepare tools:
+```shell
+brew install autoconf
+brew install ccache
+brew install freetype
+
+```
+
 Run configure:
 
 ```shell
-bash configure
+bash configure --with-debug-level=slowdebug
 ```
 
 Run make:
