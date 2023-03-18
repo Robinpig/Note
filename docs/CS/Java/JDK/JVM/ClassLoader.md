@@ -1,14 +1,14 @@
 ## Introduction
 
-When you compile a .java source file, it is converted into byte code as a .class file. 
+When you compile a .java source file, it is converted into byte code as a .class file.
 When you try to use this class in your program, the class loader loads it into the main memory.
 The first class to be loaded into memory is usually the class that contains the `main()` method.
 
 It is mainly responsible for three activities.
+
 - Loading is the process of finding the binary representation of a class or interface type with a particular name and creating a class or interface from that binary representation.
 - Linking is the process of taking a class or interface and combining it into the run-time state of the Java Virtual Machine so that it can be executed.
 - Initialization of a class or interface consists of executing the class or interface initialization method `<clinit>`.
-
 
 <div style="text-align: center;">
 
@@ -19,10 +19,6 @@ It is mainly responsible for three activities.
 <p style="text-align: center;">
 Fig.1. ClassLoader.
 </p>
-
-
-
-
 
 **Linking**
 
@@ -39,28 +35,37 @@ The JVM uses a class loader to load classes.
 The class loader normally searches some core Java libraries and all directories included in the CLASSPATH environment variable.
 If it does not find the required class, it throws a `java.lang.ClassNotFoundException`.
 
-
 ## Delegation model
 
 The ClassLoader class uses a **delegation model** to search for classes and resources.
 **Each instance of ClassLoader has an associated parent class loader.**
 When requested to find a class or resource, a ClassLoader instance will delegate the search for the class or resource to its parent class loader **before attempting to find the class or resource itself**.
-The virtual machine's built-in class loader, called the "bootstrap class loader", does not itself have a parent but may serve as the parent of a ClassLoader instance.
+
+The Java run-time has the following built-in class loaders:
+
+- Bootstrap class loader. It is the virtual machine's built-in class loader, typically represented as null, and does not have a parent.
+- Platform class loader. All platform classes are visible to the platform class loader that can be used as the parent of a ClassLoader instance.
+  Platform classes include Java SE platform APIs, their implementation classes and JDK-specific run-time classes that are defined by the platform class loader or its ancestors.<br/>
+  To allow for upgrading/overriding of modules defined to the platform class loader, and where upgraded modules read modules defined to class loaders other than the platform class loader and its ancestors,
+  then the platform class loader may have to delegate to other class loaders, the application class loader for example.
+  In other words, classes in named modules defined to class loaders other than the platform class loader and its ancestors may be visible to the platform class loader.
+- System class loader. It is also known as application class loader and is distinct from the platform class loader.
+  The system class loader is typically used to define classes on the application class path, module path, and JDK-specific tools.
+  The platform class loader is a parent or an ancestor of the system class loader that all platform classes are visible to it.
 
 > The delegation model is very important for security.
 
-
-| ClassLoader            | Languages | Load path           | Parent(Composition)     | JDK11                                                     |
-| ---------------------- | --------- | ------------------- | ----------------------- | --------------------------------------------------------- |
-| `BootstrapClassLoader` | C++       | <JAVA_HOME>/lib     |                         |                                                           |
-| `ExtensionClassLoader` | Java      | <JAVA_HOME>/lib/ext | `BootstrapClassLoader`  | rename to PlatformClassLoader, not extends URLClassLoader |
-| `AppClassLoader`       | Java      | classpath/          | `ExtensionClassLoader`  | not extends URLClassLoader                                |
-| `User ClassLoader`     | Java      | all                 | default`AppClassLoader` |                                                           |
-
 Here are ClassLoaders in **JDK17**:
 
-![](../img/ClassLoader.png)
+<div style="text-align: center;">
 
+![ClassLoader hierarchy](./img/ClassLoader-Hierarchy.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.2. ClassLoader hierarchy.
+</p>
 
 ### Parallel
 
@@ -82,6 +87,7 @@ Subclasses of ClassLoader are encouraged to override `findClass(String)`, rather
 Unless overridden, this method synchronizes on the result of getClassLoadingLock method during the entire class loading process.
 
 ```java
+public abstract class ClassLoader {
     protected Class<?> loadClass(String name, boolean resolve)
             throws ClassNotFoundException {
         synchronized (getClassLoadingLock(name)) {
@@ -118,13 +124,12 @@ Unless overridden, this method synchronizes on the result of getClassLoadingLock
             return c;
         }
     }
+}
 ```
 
-Returns the lock object for class loading operations. For backward compatibility, the default implementation of this
-method behaves as follows.
+Returns the lock object for class loading operations. For backward compatibility, the default implementation of this method behaves as follows.
 
-1. If this ClassLoader object is registered as parallel capable, the method returns **a dedicated object associated with
-   the specified class name**.
+1. If this ClassLoader object is registered as parallel capable, the method returns **a dedicated object associated with the specified class name**.
 2. Otherwise, the method returns **this ClassLoader object**.
 
 ```java
@@ -144,6 +149,8 @@ method behaves as follows.
     // Note: VM also uses this field to decide if the current class loader is parallel capable and the appropriate lock object for class loading.
     private final ConcurrentHashMap<String, Object> parallelLockMap;
 ```
+
+findBootstrapClassOrNull
 
 ### Destroy delegate model
 
@@ -263,7 +270,6 @@ call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and 
 
 ## Loading
 
-
 Loading involves taking the binary representation (bytecode) of a class or interface with a particular name, and generating the original class or interface from that.
 
 There are three built-in class loaders available in Java:
@@ -286,10 +292,8 @@ The default implementation of this method searches for classes in the following 
 
 If a parent class loader is unable to find a class, it delegates the work to a child class loader. If the last child class loader isn't able to load the class either, it throws NoClassDefFoundError or ClassNotFoundException.
 
-
-
-If the class was found using the above steps, and the resolve flag is true, this method will then invoke the resolveClass(Class) method on the resulting Class object. 
-Subclasses of ClassLoader are encouraged to override findClass(String), rather than this method. 
+If the class was found using the above steps, and the resolve flag is true, this method will then invoke the resolveClass(Class) method on the resulting Class object.
+Subclasses of ClassLoader are encouraged to override findClass(String), rather than this method.
 Unless overridden, this method synchronizes on the result of getClassLoadingLock method during the entire class loading process.
 
 ```java
@@ -373,7 +377,6 @@ SystemDictionary::resolve_instance_class_or_null
 -> SystemDictionary::load_instance_class 
 -> SystemDictionary::load_instance_class_impl 
 -> ClassLoader::load_class
--> KlassFactory::create_from_stream
 ```
 
 > call [KlassFactory::create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
@@ -382,7 +385,6 @@ SystemDictionary::resolve_instance_class_or_null
 //classLoader.cpp
 // Called by the boot classloader to load classes
 InstanceKlass* ClassLoader::load_class(Symbol* name, bool search_append_only, TRAPS) {
-	...
 
   InstanceKlass* result = KlassFactory::create_from_stream(stream, name,
                                                            loader_data, cl_info, CHECK_NULL);
@@ -592,7 +594,7 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
 1. set minor/major version
 2. Initialize itable offset tables
 3. fill_oop_maps
-4. create_mirror and initialize static fields
+4. [create_mirror](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_mirror) and initialize static fields
 5. generate_default_methods
 
 ```cpp
@@ -708,20 +710,14 @@ void ClassFileParser::fill_instance_klass(InstanceKlass* ik, bool changed_by_loa
 
   // Obtain java.lang.Module
   Handle module_handle(THREAD, module_entry->module());
-```
 
-Allocate mirror and initialize static fields
-The create_mirror() call will also call compute_modifiers()
-
-```cpp
+  // Allocate mirror and initialize static fields
+  // The create_mirror() call will also call compute_modifiers()
   java_lang_Class::create_mirror(ik,
                                  Handle(THREAD, _loader_data->class_loader()),
                                  module_handle,
                                  _protection_domain,
                                  CHECK);
-
-  assert(_all_mirandas != NULL, "invariant");
-
   // Generate any default methods - default methods are public interface methods
   // that have a default implementation.  This is new with Java 8.
   if (_has_nonstatic_concrete_methods) {
@@ -752,8 +748,6 @@ The create_mirror() call will also call compute_modifiers()
         ik->major_version() != JAVA_MIN_SUPPORTED_VERSION &&
         log_is_enabled(Info, class, preview)) {
       ResourceMark rm;
-      log_info(class, preview)("Loading class %s that depends on preview features (class file version %d.65535)",
-                               ik->external_name(), ik->major_version());
     }
 
     if (log_is_enabled(Debug, class, resolve))  {
@@ -772,7 +766,6 @@ The create_mirror() call will also call compute_modifiers()
         for (int i = 0; i < length; i++) {
           const InstanceKlass* const k = local_interfaces->at(i);
           const char * to = k->external_name();
-          log_debug(class, resolve)("%s %s (interface)", from, to);
         }
       }
     }
@@ -813,16 +806,73 @@ void ClassLoaderData::init_null_class_loader_data() {
 
 ```
 
-##### create_mirror
+#### create_mirror
+
+create java.lang.Class instance
 
 ```cpp
 // javaClasses.cpp
 void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
-                                    Handle module, Handle protection_domain, TRAPS) {
-   
-  	initialize_mirror_fields(k, mirror, protection_domain, THREAD);
+                                    Handle module, Handle protection_domain,
+                                    Handle classData, TRAPS) {
+  assert(k != NULL, "Use create_basic_type_mirror for primitive types");
+  assert(k->java_mirror() == NULL, "should only assign mirror once");
+
+  // Use this moment of initialization to cache modifier_flags also,
+  // to support Class.getModifiers().  Instance classes recalculate
+  // the cached flags after the class file is parsed, but before the
+  // class is put into the system dictionary.
+  int computed_modifiers = k->compute_modifier_flags(CHECK);
+  k->set_modifier_flags(computed_modifiers);
+  // Class_klass has to be loaded because it is used to allocate the mirror.
+  if (vmClasses::Class_klass_loaded()) {
+    // Allocate mirror (java.lang.Class instance)
+    oop mirror_oop = InstanceMirrorKlass::cast(vmClasses::Class_klass())->allocate_instance(k, CHECK);
+    Handle mirror(THREAD, mirror_oop);
+    Handle comp_mirror;
+
+    // Setup indirection from mirror->klass
+    java_lang_Class::set_klass(mirror(), k);
+
+    InstanceMirrorKlass* mk = InstanceMirrorKlass::cast(mirror->klass());
+    assert(oop_size(mirror()) == mk->instance_size(k), "should have been set");
+
+    java_lang_Class::set_static_oop_field_count(mirror(), mk->compute_static_oop_field_count(mirror()));
+
+    // It might also have a component mirror.  This mirror must already exist.
+    if (k->is_array_klass()) {
+      if (k->is_typeArray_klass()) {
+        BasicType type = TypeArrayKlass::cast(k)->element_type();
+        comp_mirror = Handle(THREAD, Universe::java_mirror(type));
+      } else {
+        assert(k->is_objArray_klass(), "Must be");
+        Klass* element_klass = ObjArrayKlass::cast(k)->element_klass();
+        assert(element_klass != NULL, "Must have an element klass");
+        comp_mirror = Handle(THREAD, element_klass->java_mirror());
+      }
+      assert(comp_mirror() != NULL, "must have a mirror");
+
+      // Two-way link between the array klass and its component mirror:
+      // (array_klass) k -> mirror -> component_mirror -> array_klass -> k
+      set_component_mirror(mirror(), comp_mirror());
+      // See below for ordering dependencies between field array_klass in component mirror
+      // and java_mirror in this klass.
+    } else {
+      assert(k->is_instance_klass(), "Must be");
+
+      initialize_mirror_fields(k, mirror, protection_domain, classData, THREAD);
+      if (HAS_PENDING_EXCEPTION) {
+        // If any of the fields throws an exception like OOM remove the klass field
+        // from the mirror so GC doesn't follow it after the klass has been deallocated.
+        // This mirror looks like a primitive type, which logically it is because it
+        // it represents no class.
+        java_lang_Class::set_klass(mirror(), NULL);
+        return;
+      }
+    }
 
     // set the classLoader field in the java_lang_Class instance
+    assert(class_loader() == k->class_loader(), "should be same");
     set_class_loader(mirror(), class_loader());
 
     // Setup indirection from klass->mirror
@@ -838,6 +888,10 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
       // concurrently doesn't expect a k to have a null java_mirror.
       release_set_array_klass(comp_mirror(), k);
     }
+  } else {
+    assert(fixup_mirror_list() != NULL, "fixup_mirror_list not initialized");
+    fixup_mirror_list()->push(k);
+  }
 }
 ```
 
@@ -1511,7 +1565,7 @@ Lazy linked, loading other classes can be done after Initiailzation. It will run
 
 ## Initialization
 
-Initialization involves executing the initialization method of the class or interface (known as `<clinit>`). This can include calling the class's constructor, executing the static block, and assigning values to all the static variables. 
+Initialization involves executing the initialization method of the class or interface (known as `<clinit>`). This can include calling the class's constructor, executing the static block, and assigning values to all the static variables.
 This is the final stage of class loading.
 
 *Initialization* of a class or interface consists of executing its class or interface initialization method.

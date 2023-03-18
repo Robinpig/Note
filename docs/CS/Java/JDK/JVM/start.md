@@ -1,5 +1,7 @@
+## Introduction
 
 ## build
+
 [Building the JDK](https://github.com/openjdk/jdk/blob/master/doc/building.md)
 
 write a Hello.java and compile it
@@ -12,17 +14,22 @@ gdb -args java Hello
 gdb> b java.c:JavaMain
 ```
 
-
 regression test jtreg
 based on JDK12
 
 ## Entry
 
 > [!TIP]
-> 
-> Both  [main](/docs/CS/Java/JDK/JVM/start.md?id=main) and [launcher](/docs/CS/Java/JDK/JVM/start.md?id=launcher) call [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+>
+> Both  [main()](/docs/CS/Java/JDK/JVM/start.md?id=main) and [launcher](/docs/CS/Java/JDK/JVM/start.md?id=launcher)
+>
+> - [create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+> - Invoke main method
+> - [DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
 
-### main
+<!-- tabs:start -->
+
+##### **main**
 
 > main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain)
 
@@ -31,7 +38,6 @@ based on JDK12
 JNIEXPORT int
 main(int argc, char **argv)
 {
-    ...
     return JLI_Launch(margc, ...);
 }
 
@@ -40,7 +46,6 @@ main(int argc, char **argv)
 JNIEXPORT int JNICALL
 JLI_Launch(int argc, char ** argv, ...)
 {
-    ...
     return JVMInit(&ifn, threadStackSize, argc, argv, mode, what, ret);
 }
 
@@ -48,7 +53,6 @@ JLI_Launch(int argc, char ** argv, ...)
 // java_md_macosx.m
 // MacOSX we may continue in the same thread
 int JVMInit(InvocationFunctions* ifn, jlong threadStackSize, ...) {
-   ...
    return ContinueInNewThread(ifn, threadStackSize, argc, argv, mode, what, ret);
 }
 
@@ -57,34 +61,34 @@ int JVMInit(InvocationFunctions* ifn, jlong threadStackSize, ...) {
 int
 ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize, ...)
 {
-    ...
     return ContinueInNewThread0(JavaMain, threadStackSize, (void*)&args);
 }
 ```
 
-#### JavaMain
+**JavaMain**
+
+InitializeJVM  -> JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
 
 ```cpp
 // java.c
 int
 JavaMain(void* _args)
 {
-    ...
-```
-InitializeJVM  -> JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
-```
     if (!InitializeJVM(&vm, &env, &ifn)) {
-        JLI_ReportErrorMessage(JVM_ERROR1);
         exit(1);
     }
 ```
+
 Invoke main method
+
 ```cpp
     mainClass = LoadMainClass(env, mode, what);
     mainID = (*env)->GetStaticMethodID(env, mainClass, "main",
     (*env)->CallStaticVoidMethod(env, mainClass, mainID, mainArgs);
 ```
+
 [DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
+
 ```cpp
     LEAVE();
 
@@ -101,41 +105,34 @@ Invoke main method
     } while (JNI_FALSE)
 ```
 
-
-### launcher
+##### **launcher**
 
 > launcher -> JNI_CreateJavaVM -> [createVM](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
-
 
 ```cpp
 // launcher.c
 void *JNU_FindCreateJavaVM(char *vmlibpath) {
     void *libVM = dlopen(vmlibpath, RTLD_LAZY);
-    if (libVM == NULL) {
-        return NULL;
-    }
     return dlsym(libVM, "JNI_CreateJavaVM");
 }
 
 int main(int argc, char**argv) {
-    ...
-    
+  
      create_vm = (create_vm_func)JNU_FindCreateJavaVM(argv[1]);
-     if (create_vm == NULL) {
-        fprintf(stderr, "can't get address of JNI_CreateJavaVM\n");
-        return -1;
-     }
-
      res = (*create_vm)(&jvm, (void**)&env, &vm_args);
 ```
+
 Invoke main method
+
 ```cpp
      cls = (*env)->FindClass(env, argv[3]);
      mid = (*env)->GetStaticMethodID(env, cls, "main",
                                      "([Ljava/lang/String;)V");
      (*env)->CallStaticVoidMethod(env, cls, mid, args);
 ```
+
 [DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
+
 ```cpp
  destroy:
      (*jvm)->DestroyJavaVM(jvm);
@@ -143,7 +140,10 @@ Invoke main method
 }
 ```
 
+<!-- tabs:end -->
+
 ## create_vm
+
 1. Initialize library-based TLS
 2. Initialize the output stream module
 3. Initialize the os module
@@ -277,7 +277,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
     }
   #endif // INCLUDE_JVMCI
 ```
+
 Attach the main thread to this os thread
+
 ```cpp
   JavaThread* main_thread = new JavaThread();
   main_thread->set_thread_state(_thread_in_vm);
@@ -295,9 +297,11 @@ Attach the main thread to this os thread
     return JNI_ENOMEM;
   }
 ```
+
 Enable guard page *after* os::create_main_thread(), otherwise it would crash Linux VM, see notes in `os_linux.cpp`. (Allows throw SOF and still running)
 
 see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.net/jeps/270)
+
 ```cpp
   main_thread->create_stack_guard_pages();
 
@@ -327,7 +331,9 @@ see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.n
   // real raw monitor. VM is setup enough here for raw monitor enter.
   JvmtiExport::transition_pending_onload_raw_monitors();
 ```
+
 Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
+
 ```cpp
   { 
     VMThread::create();
@@ -337,7 +343,9 @@ Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
       vm_exit_during_initialization("Cannot create VM thread. Out of system resources.");
     }
 ```
+
 Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag.
+
 ```cpp
     {
       MutexLocker ml(Notify_lock);
@@ -413,18 +421,24 @@ Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JV
 
     Chunk::start_chunk_pool_cleaner_task();
 ```
+
 [Start the service thread](/docs/CS/Java/JDK/JVM/Thread.md?id=ServiceThreadinitialize)
 
-The service thread enqueues JVMTI deferred events and does various hashtable and other cleanups.  
+The service thread enqueues JVMTI deferred events and does various hashtable and other cleanups.
 Needs to start before the compilers start posting events.
+
 ```cpp
   ServiceThread::initialize();
 ```
+
 [Start the monitor deflation thread](/docs/CS/Java/JDK/JVM/Thread.md?id=MonitorDeflationThreadinitialize):
+
 ```
   MonitorDeflationThread::initialize();
 ```
+
 initialize compiler(s) with [compilation_init_phase1](/docs/CS/Java/JDK/JVM/Thread.md?id=compilation_init_phase1)
+
 ```cpp
 #if defined(COMPILER1) || COMPILER2_OR_JVMCI
 #if INCLUDE_JVMCI
@@ -471,7 +485,9 @@ initialize compiler(s) with [compilation_init_phase1](/docs/CS/Java/JDK/JVM/Thre
   // Final system initialization including security manager and system class loader
   call_initPhase3(CHECK_JNI_ERR);
 ```
+
 cache the [system and platform class loaders](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=init)
+
 ```cpp
   SystemDictionary::compute_java_loaders(CHECK_JNI_ERR);
 
@@ -534,7 +550,9 @@ cache the [system and platform class loaders](/docs/CS/Java/JDK/JVM/ClassLoader.
   {
     MutexLocker ml(PeriodicTask_lock);
 ```
+
 Make sure the WatcherThread can be started by [WatcherThread::start()](/docs/CS/Java/JDK/JVM/Thread.md?id=WatcherThreadstart) or by dynamic enrollment.
+
 ```cpp
     WatcherThread::make_startable();
     // Start up the WatcherThread if there are any periodic tasks
@@ -561,6 +579,7 @@ Make sure the WatcherThread can be started by [WatcherThread::start()](/docs/CS/
 ```
 
 ### init
+
 ```cpp
 // init.cpp
 void vm_init_globals() {
@@ -576,6 +595,7 @@ void vm_init_globals() {
 ```
 
 ### init_globals
+
 ```cpp
 jint init_globals() {
   HandleMark hm;
@@ -584,13 +604,17 @@ jint init_globals() {
   classLoader_init1();
   compilationPolicy_init();
 ```
+
 init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
+
 ```cpp
   codeCache_init();
   VM_Version_init();
   os_init_globals();
 ```
+
 init [stub](/docs/CS/Java/JDK/JVM/Stub.md?id=init)
+
 ```cpp
   stubRoutines_init1();
   jint status = universe_init();  // dependent on codeCache_init and
@@ -600,7 +624,9 @@ init [stub](/docs/CS/Java/JDK/JVM/Stub.md?id=init)
 
   gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
 ```
+
 interpreter_init_stub before methods get loaded
+
 ```cpp
   interpreter_init_stub();
   accessFlags_init();
@@ -610,7 +636,9 @@ interpreter_init_stub before methods get loaded
   universe2_init();  // dependent on codeCache_init and stubRoutines_init1
   javaClasses_init();// must happen after vtable initialization, before referenceProcessor_init
 ```
+
 interpreter_init_code after javaClasses_init and before any method gets linked
+
 ```cpp
   interpreter_init_code();
   referenceProcessor_init();
@@ -650,6 +678,7 @@ interpreter_init_code after javaClasses_init and before any method gets linked
   return JNI_OK;
 }
 ```
+
 #### universe_post_init
 
 Init_globals -> universe_post_init
@@ -774,9 +803,10 @@ bool universe_post_init() {
 ```
 
 #### init classloader
+
 Initialize the class loader's access to methods in libzip.  Parse and process the boot classpath into a list ClassPathEntry objects.  Once this list has been created, it must not change order (see class PackageInfo) it can be appended to and is by jvmti and the kernel vm.
 
-
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Destroy JVM](/docs/CS/Java/JDK/JVM/destroy.md)

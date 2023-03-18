@@ -2135,3 +2135,5 @@ This also reduces dependencies on a specific JVM offering or version, making ong
 ## References
 
 1. [The Garbage Collection Handbook: The Art of Automatic Memory Management](http://gchandbook.org/)
+2. [Garbage Collection in a Large Lisp System](https://dl.acm.org/doi/pdf/10.1145/800055.802040)
+3. [Improving Locality with Parallel Hierarchical Copying GC](http://hirzels.com/martin/papers/ismm06-hierarchical.pdf)
