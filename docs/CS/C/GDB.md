@@ -19,6 +19,10 @@ long ptrace(enum __ptrace_request request, pid_t pid,
 ```
 
 
+```shell
+gdb -tui
+```
+
 
 
 

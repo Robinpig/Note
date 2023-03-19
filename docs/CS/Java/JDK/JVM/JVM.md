@@ -15,24 +15,29 @@ This space can be used to execute Java programs irrespective of the platform or 
 
 > Ref [building.md](https://github.com/openjdk/jdk/blob/master/doc/building.md)
 
+
+Prepare tools:
+```shell
+sudo apt-get install autoconf
+sudo apt-get install libffi-dev
+sudo apt-get install build-essential 
+sudo apt-get install libasound2-dev 
+sudo apt-get install libcups2-dev 
+sudo apt-get install libfontconfig1-dev 
+sudo apt-get install libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxt-dev 
+```
+
 Get the complete source code:
 
 ```shell
 git clone https://git.openjdk.org/jdk/
 ```
 
-Prepare tools:
-```shell
-brew install autoconf
-brew install ccache
-brew install freetype
-
-```
 
 Run configure:
 
 ```shell
-bash configure --with-debug-level=slowdebug
+bash configure --with-debug-level=slowdebug --with-jvm-variants=server
 ```
 
 Run make:
@@ -40,6 +45,8 @@ Run make:
 ```shell
 make images
 ```
+
+Debug with [GDB](/docs/CS/C/GDB.md) or [Visual Studio Code]().
 
 ##### **Directories**
 
