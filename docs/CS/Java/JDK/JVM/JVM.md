@@ -48,6 +48,8 @@ make images
 
 Debug with [GDB](/docs/CS/C/GDB.md) or [Visual Studio Code]().
 
+[segmentation fault in the jvm](https://mail.openjdk.org/pipermail/jdk7-dev/2011-March/001983.html)
+
 ##### **Directories**
 
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
