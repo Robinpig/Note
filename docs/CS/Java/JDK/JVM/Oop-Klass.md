@@ -565,35 +565,19 @@ narrowOop:32 unused:24 cms_free:1 unused:4 promo_bits:3 ----->| (COOPs && CMS pr
 unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS free block)
 ```
 
-- hash contains the identity hash value: largest value is
-  31 bits, see os::random().  Also, 64-bit vm's require
-  a hash value no bigger than 32 bits because they will not
-  properly generate a mask larger than that: see library_call.cpp
-  and c1_CodePatterns_sparc.cpp.(see [HashCode](/docs/CS/Java/JDK/Basic/Object.md?id=hashCode))
-- the biased lock pattern is used to bias a lock toward a given
-  thread. When this pattern is set in the low three bits, the lock
-  is either biased toward a given thread or "anonymously" biased,
-  indicating that it is possible for it to be biased. When the
-  lock is biased toward a given thread, locking and unlocking can
-  be performed by that thread without using atomic operations.
-  When a lock's bias is revoked, it reverts back to the normal
-  locking scheme described below.
+- hash contains the identity hash value: largest value is 31 bits, see os::random().  
+  Also, 64-bit vm's require a hash value no bigger than 32 bits because they will not properly generate a mask larger than that: see library_call.cpp and c1_CodePatterns_sparc.cpp.(see [HashCode](/docs/CS/Java/JDK/Basic/Object.md?id=hashCode))
+- the biased lock pattern is used to bias a lock toward a given thread.
+  When this pattern is set in the low three bits, the lock is either biased toward a given thread or "anonymously" biased, indicating that it is possible for it to be biased. 
+  When the lock is biased toward a given thread, locking and unlocking can be performed by that thread without using atomic operations.
+  When a lock's bias is revoked, it reverts back to the normal locking scheme described below.
 
-  Note that we are overloading the meaning of the "unlocked" state
-  of the header. Because we steal a bit from the age we can
-  guarantee that the bias pattern will never be seen for a truly
-  unlocked object.
+Note that we are overloading the meaning of the "unlocked" state of the header.
+Because we steal a bit from the age we can guarantee that the bias pattern will never be seen for a truly unlocked object.
 
-  Note also that the biased state contains the age bits normally
-  contained in the object header. Large increases in scavenge
-  times were seen when these bits were absent and an arbitrary age
-  assigned to all biased objects, because they tended to consume a
-  significant fraction of the eden semispaces and were not
-  promoted promptly, causing an increase in the amount of copying
-  performed. The runtime system aligns all JavaThread* pointers to
-  a very large value (currently 128 bytes (32bVM) or 256 bytes (64bVM))
-  to make room for the age bits & the epoch bits (used in support of
-  biased locking), and for the CMS "freeness" bit in the 64bVM (+COOPs).
+Note also that the biased state contains the age bits normally contained in the object header.
+Large increases in scavenge times were seen when these bits were absent and an arbitrary age assigned to all biased objects, because they tended to consume a significant fraction of the eden semispaces and were not promoted promptly, causing an increase in the amount of copying performed.
+The runtime system aligns all JavaThread* pointers to a very large value (currently 128 bytes (32bVM) or 256 bytes (64bVM)) to make room for the age bits & the epoch bits (used in support of biased locking), and for the CMS "freeness" bit in the 64bVM (+COOPs).
 
 ```
   [JavaThread* | epoch | age | 1 | 01]       lock is biased toward given thread
@@ -642,10 +626,6 @@ class markWord {
 -XX:+UseCompressedOops
 ```
 
-由于使用了8字节对齐后每个对象的地址偏移量后3位必定为0，所以在存储的时候可以将后3位0抹除（转化为bit是抹除了最后24位）
-在此基础上再去掉最高位，就完成了指针从8字节到4字节的压缩。而在实际使用时，在压缩后的指针后加3位0，就能够实现向真实地址的映射。
-指针的32位中的每一个bit，都可以代表8个字节，这样就相当于使原有的内存地址得到了8倍的扩容。所以在8字节对齐的情况下，32位最大能表示2^32*8=32GB内存
-由于能够表示的最大内存是32GB，所以如果配置的最大的堆内存超过这个数值时，那么指针压缩将会失效。
 
 ```hpp
 // globals.hpp
@@ -685,7 +665,7 @@ if UseCompressedOops in 64-bit VM
 
 access object use direct-pointer or handle
 
-#### Example
+#### JOL
 
 add JOL dependency.
 
@@ -746,6 +726,12 @@ Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 ```
 
 
+
+#### jhsdb
+
+
+
+
 ## allocate_instance
 
 called by `java.lang.reflect.Constructor` or `new Klass(args ...)` or etc.
@@ -765,7 +751,7 @@ instanceOop InstanceKlass::allocate_instance(TRAPS) {
 }
 ```
 
-[Allocate](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Allocate) and [Initialize](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Initialize) Oop.
+[Allocate](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Allocate) memory and set header(MarkWord).
 
 ```cpp
 // collectedHeap.cpp

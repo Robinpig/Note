@@ -9,48 +9,7 @@ Before we jump into the JVM, let's revisit the concept of a [Virtual Machine (VM
 Similar to virtual machines, the JVM creates an isolated space on a host machine.
 This space can be used to execute Java programs irrespective of the platform or operating system of the machine.
 
-<!-- tabs:start -->
-
-##### **Building the JDK**
-
-> Ref [building.md](https://github.com/openjdk/jdk/blob/master/doc/building.md)
-
-
-Prepare tools:
-```shell
-sudo apt-get install autoconf
-sudo apt-get install libffi-dev
-sudo apt-get install build-essential 
-sudo apt-get install libasound2-dev 
-sudo apt-get install libcups2-dev 
-sudo apt-get install libfontconfig1-dev 
-sudo apt-get install libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxt-dev 
-```
-
-Get the complete source code:
-
-```shell
-git clone https://git.openjdk.org/jdk/
-```
-
-
-Run configure:
-
-```shell
-bash configure --with-debug-level=slowdebug --with-jvm-variants=server
-```
-
-Run make:
-
-```shell
-make images
-```
-
-Debug with [GDB](/docs/CS/C/GDB.md) or [Visual Studio Code]().
-
-[segmentation fault in the jvm](https://mail.openjdk.org/pipermail/jdk7-dev/2011-March/001983.html)
-
-##### **Directories**
+### Directories
 
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
 
@@ -85,8 +44,6 @@ hotspot
         |--- services           # HeapDump, MXBean, jcmd, jinfo
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
-
-<!-- tabs:end -->
 
 ### heap object
 

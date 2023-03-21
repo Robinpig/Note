@@ -5,24 +5,20 @@
 >
 > -- by James Gosling
 
-
-
-Every programming language manipulates elements in memory. 
+Every programming language manipulates elements in memory.
 Sometimes the programmer must be constantly aware of that manipulation.
 Do you manipulate the element directly, or use an indirect representation that requires special syntax (for example, pointers in [C](/docs/CS/C/C.md) or [C++](/docs/CS/C++/C++.md))?
 
-Java simplifies the issue by [considering everything an object](/docs/CS/Java/JDK/Basic/Object.md), using a single consistent syntax. 
+Java simplifies the issue by [considering everything an object](/docs/CS/Java/JDK/Basic/Object.md), using a single consistent syntax.
 Although you treat everything as an object, the identifier you manipulate is actually a “reference” to an object.
 
 In one book I read that it was “completely wrong to say that Java supports pass by reference,” because Java object identifiers(according to that author) are actually “object references.”
 And everything is actually pass by value. <br>
-**So you’re not passing by reference, you’re “passing an object reference by value.”** 
+**So you’re not passing by reference, you’re “passing an object reference by value.”**
 
 ## Basics
 
 [Basics of Java](/docs/CS/Java/JDK/Basic/Basic.md)
-
-
 
 ## Collection
 
@@ -38,8 +34,8 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 
 ## Projects
 
-A Project is a collaborative effort to produce a specific artifact, which may be a body of code, or documentation, or some other material. 
-A Project must be sponsored by one or more Groups. 
+A Project is a collaborative effort to produce a specific artifact, which may be a body of code, or documentation, or some other material.
+A Project must be sponsored by one or more Groups.
 A Project may have web content, one or more file repositories, and one or more mailing lists.
 
 - [Project Valhalla](/docs/CS/Java/JDK/Valhalla.md) plans to augment the Java object model with value objects and user-defined primitives, combining the abstractions of object-oriented programming with the performance characteristics of simple primitives.
@@ -56,9 +52,6 @@ A Project may have web content, one or more file repositories, and one or more m
 - Tsan
 - ZGC
 - Lilliput
-
-
-
 
 ## Performance
 
@@ -105,6 +98,46 @@ For example, if the change in load causes some part of the system to switch to a
 then the overall effect can be to reduce latency, even though more requests are being received.
 
 `performance elbow`
+
+## Building the JDK
+
+> Ref [building.md](https://github.com/openjdk/jdk/blob/master/doc/building.md)
+
+Prepare environment:
+
+<!-- tabs:start -->
+
+##### **Ubuntu**
+
+```shell
+sudo apt-get install autoconf
+sudo apt-get install libffi-dev
+sudo apt-get install build-essential 
+sudo apt-get install libasound2-dev 
+sudo apt-get install libcups2-dev 
+sudo apt-get install libfontconfig1-dev 
+sudo apt-get install libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxt-dev 
+```
+
+##### **MacOS**
+
+```shell
+brew install ccache
+brew install freetype
+```
+
+<!-- tabs:end -->
+
+1. Get the complete source code:<br/>
+   `git clone https://git.openjdk.org/jdk/`
+2. Run configure:<br/>
+   `bash configure --with-debug-level=slowdebug --with-jvm-variants=server`
+3. Run make:<br/>
+   `make images`
+
+Debug with [GDB](/docs/CS/C/GDB.md) or [Visual Studio Code]().
+
+[segmentation fault in the jvm](https://mail.openjdk.org/pipermail/jdk7-dev/2011-March/001983.html)
 
 ## References
 

@@ -1188,7 +1188,7 @@ Rewriter::Rewriter(InstanceKlass* klass, const constantPoolHandle& cpool, Array<
   }
 }
 ```
-
+rewrite_bytecodes
 ```cpp
 
 void Rewriter::rewrite_bytecodes(TRAPS) {
@@ -1281,7 +1281,7 @@ rewrite if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Object.md?id=fin
 
 ### link_methods
 
-Now relocate and link method entry points after class is rewritten.
+Now relocate and [link method entry points](/docs/CS/Java/JDK/Basic/Method.md?id=link_method) after class is rewritten.
 This is outside is_rewritten flag. In case of an exception, it can be executed more than once.
 
 ```cpp

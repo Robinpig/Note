@@ -1,15 +1,29 @@
 ## Introduction
 
-
-
 Linux provide drivers and protocols
 driver：drivers/net/ethernet
 protocol: kernel & net
 
 
 
-## init
+The high level path a packet takes from arrival to socket receive buffer is as follows:
 
+1. Driver is loaded and initialized.
+2. Packet arrives at the NIC from the network.
+3. Packet is copied (via DMA) to a ring buffer in kernel memory.
+4. Hardware interrupt is generated to let the system know a packet is in memory.
+5. Driver calls into [NAPI](http://www.linuxfoundation.org/collaborate/workgroups/networking/napi) to start a poll loop if one was not running already.
+6. `ksoftirqd` processes run on each CPU on the system. They are registered at boot time. The  processes pull packets off the ring buffer by calling the NAPI  function that the device driver registered during initialization.`ksoftirqd``poll`
+7. Memory regions in the ring buffer that have had network data written to them are unmapped.
+8. Data that was DMA’d into memory is passed up the networking layer as an ‘skb’ for more processing.
+9. Incoming network data frames are distributed among multiple CPUs if packet steering is enabled or if the NIC has multiple receive queues.
+10. Network data frames are handed to the protocol layers from the queues.
+11. Protocol layers process data.
+12. Data is added to receive buffers attached to sockets by protocol layers.
+
+
+
+## init
 
 ### init net dev
 
@@ -91,9 +105,12 @@ static int __init net_dev_init(void)
 	if (register_pernet_device(&default_device_ops))
 		goto out;
 ```
+
 register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+
 - [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action) for receive
 - [net_tx_action](/docs/CS/OS/Linux/network.md?id=net_tx_action) for send
+
 ```c
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
 	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
@@ -107,8 +124,6 @@ out:
 }
 
 ```
-
-
 
 #### process_backlog
 
@@ -137,6 +152,7 @@ static int process_backlog(struct napi_struct *napi, int quota)
 ```
 
 register [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) func.
+
 ```c
 			__netif_receive_skb(skb);
 			rcu_read_unlock();
@@ -171,8 +187,7 @@ register [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) 
 }
 ```
 
-
-### init inet 
+### init inet
 
 ```c
 fs_initcall(inet_init);
@@ -203,7 +218,7 @@ static int __init inet_init(void)
 #endif
 
 	...
-	
+
 	arp_init();
 
 	ip_init();
@@ -217,7 +232,7 @@ static int __init inet_init(void)
 	raw_init();
 
 	ping_init();
-    
+  
   `dev_add_pack(&ip_packet_type);
 }
 
@@ -247,8 +262,6 @@ struct net_protocol {
                             icmp_strict_tag_validation:1;
 };
 ```
-
-
 
 ip_packet_type net protocols
 
@@ -302,8 +315,6 @@ int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 }
 ```
 
-
-
 ```c
 // net/core/dev.c
 
@@ -356,24 +367,16 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 }
 ```
 
-
-
 ### init driver
-
-
-
-
-
-
 
 ## process
 
-Network Interface Controller 
--> Network Driver DMA into Memory RingBuffer and send a interrupt to CPU 
--> CPU set soft interrupt and release CPU 
--> ksoftirqd thread check soft interrupt, 
-disable hard interrupts  and call `poll` get packet, 
-then send to TCP/IP stack`(ip_rcv`) 
+Network Interface Controller
+-> Network Driver DMA into Memory RingBuffer and send a interrupt to CPU
+-> CPU set soft interrupt and release CPU
+-> ksoftirqd thread check soft interrupt,
+disable hard interrupts  and call `poll` get packet,
+then send to TCP/IP stack`(ip_rcv`)
 -> `tcp_rcv` or `udp_rcv`
 
 like UDP will add into socket accept queue
@@ -381,8 +384,6 @@ like UDP will add into socket accept queue
 TODO: [tcp-rcv](https://www.processon.com/diagraming/6195c8be07912906e6ab82c8)
 
 ### driver process
-
-
 
 AMD
 
@@ -420,8 +421,6 @@ static irqreturn_t xgbe_dma_isr(int irq, void *data)
 
 `__napi_schedule_irqoff` call `____napi_schedule`
 
-
-
 ```c
 // net/core/net.c
 /* Called with irq disabled */
@@ -429,19 +428,24 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 				     struct napi_struct *napi)
 {
 	...
-    
+  
 	list_add_tail(&napi->poll_list, &sd->poll_list);
 ```
+
 call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to invoke [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action)
+
 ```c
 	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 }
 ```
+
 #### netif_rx
+
 netif_rx	-	post buffer to the network code
 
-This function receives a packet from a device driver and queues it for the upper (protocol) levels to process.  
+This function receives a packet from a device driver and queues it for the upper (protocol) levels to process.
 It always succeeds. The buffer may be dropped during processing for congestion control or by the protocol layers.
+
 ```c
 int netif_rx(struct sk_buff *skb)
 {
@@ -455,7 +459,6 @@ int netif_rx(struct sk_buff *skb)
 	return ret;
 }
 ```
-
 
 ### net_rx_action
 
@@ -508,11 +511,11 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 	net_rps_action_and_irq_enable(sd);
 }
 ```
+
 xgbe_one_poll ->
 xgbe_tx_poll ->
 xgbe_rx_poll ->
 napi_gro_receive
-
 
 ```c
 // net/core/dev.c
@@ -538,21 +541,21 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 }
 ```
 
-napi_gro_receive -> napi_skb_finish -> gro_normal_one 
+napi_gro_receive -> napi_skb_finish -> gro_normal_one
 -> gro_normal_list -> netif_receive_skb_list_internal
 -> __netif_receive_skb_list -> deliver_skb
-
 
 #### netif_receive_skb
 
 call deliver_skb
+
 ```c
 
 static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 				    struct packet_type **ppt_prev)
 {
 	...
-    
+  
 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
 		if (pt_prev)
 			ret = deliver_skb(skb, pt_prev, orig_dev);
@@ -564,7 +567,7 @@ static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 		pt_prev = ptype;
 	}
-	
+
   ...
 }
 ```
@@ -583,10 +586,8 @@ static inline int deliver_skb(struct sk_buff *skb,
 }
 ```
 
-
-
-
 ### ip_rcv
+
 ```c
 
 /*
@@ -606,7 +607,6 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
 		       ip_rcv_finish);
 }
 ```
-
 
 #### ip_rcv_finish
 
@@ -630,8 +630,6 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	return ret;
 }
 ```
-
-
 
 ```c
 /* Input packet from network to transport.  */
@@ -669,13 +667,11 @@ int ip_local_deliver(struct sk_buff *skb)
 
 `ip_local_deliver_finish` ->`ip_protocol_deliver_rcu` -> `tcp_v4_rcv` or `udp_rcv` etc.
 
-
-
 ```c
 void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 {
 	...
-    
+  
 	ipprot = rcu_dereference(inet_protos[protocol]);
 	if (ipprot) {
 		...
@@ -685,10 +681,10 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 	}
   
 ```
+
 }
+
 ## Optimization
-
-
 
 ### Limits
 
@@ -710,10 +706,6 @@ root soft nofile 65535
 root hard nofile 65535
 ```
 
-
-
-
-
 ```shell
 > sysctl -a |grep rmem
 net.core.rmem_default = 212992
@@ -721,10 +713,6 @@ net.core.rmem_max = 212992
 net.ipv4.tcp_rmem = 4096        87380   6291456
 net.ipv4.udp_rmem_min = 4096
 ```
-
-
-
-
 
 ```shell
 > sysctl -a |grep wmem
@@ -735,23 +723,14 @@ net.ipv4.udp_wmem_min = 4096
 vm.lowmem_reserve_ratio = 256   256     32      0       0
 ```
 
-
-
 ```shell
 > sysctl -a |grep range
 net.ipv4.ip_local_port_range = 32768    60999
 ```
 
-
-
-
-
 empty establish : 3.3KB
 
-
 strace
-
-
 
 ```shell
 # 
@@ -761,14 +740,10 @@ strace
 > watch 'netstat -s |grep overflowed'
 ```
 
-
-
 ```shell
 > cat  /proc/sys/net/ipv4/tcp_max_syn_backlog 
 1024
 ```
-
-
 
 ```shell
 
@@ -782,14 +757,11 @@ check network
 ss -nlt
 ```
 
-
 [TCP RESET/RST Reasons](https://iponwire.com/tcp-reset-rst-reasons/)
-
 
 ### GSO
 
 Generic Segmentation Offload
-
 
 TCP Segmentation Offload
 
@@ -799,7 +771,7 @@ OS split segmentation to n * MSS, and let device to split MSS
 
 - Network Flow Affinity
 - Asynchronous Lower Copy with DMA
-- Optimize Packet 
+- Optimize Packet
 
 ## Links
 
