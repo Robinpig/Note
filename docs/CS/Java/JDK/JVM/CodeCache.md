@@ -1,10 +1,9 @@
 ## Introduction
 
-
-
-
 CodeBlob Types
+
 Used in the CodeCache to assign CodeBlobs to different CodeHeaps
+
 ```cpp
 // 
 struct CodeBlobType {
@@ -19,6 +18,7 @@ struct CodeBlobType {
 ```
 
 ## CodeBlob
+
 CodeBlob - superclass for all entries in the CodeCache.
 
 ```
@@ -47,8 +47,8 @@ Layout : continuous in the CodeCache
   - data space
 ```
 
-
 ## init
+
 init when [start vm](/docs/CS/Java/JDK/JVM/start.md?id=init_globals)
 
 ```cpp
@@ -95,7 +95,6 @@ The advantages are better control of the memory footprint, reduced code fragment
 }
 ```
 
-
 ```cpp
 // For init.cpp
 void icache_init() {
@@ -103,8 +102,8 @@ void icache_init() {
 }
 ```
 
-Interface for updating the instruction cache.  
-Whenever the VM modifies code, part of the processor instruction cache potentially has to be flushed.  
+Interface for updating the instruction cache.
+Whenever the VM modifies code, part of the processor instruction cache potentially has to be flushed.
 This implementation is empty: Zero never deals with code.
 
 ```
@@ -126,7 +125,9 @@ void AbstractICache::initialize() {
   }
   CodeBuffer c(b);
 ```
+
 generate_icache_flush implemented by different arch `ICacheStubGenerator::generate_icache_flush()`
+
 ```
   ICacheStubGenerator g(&c);
   g.generate_icache_flush(&_flush_icache_stub);
@@ -286,7 +287,6 @@ void CodeCache::initialize_heaps() {
 }
 ```
 
-
 ```cpp
 
 // For init.cpp
@@ -317,7 +317,50 @@ void AbstractICache::initialize() {
   // checked in invalidate_range.
 }
 ```
+#### generate_icache_flush
+x86
+```cpp
+void ICacheStubGenerator::generate_icache_flush(ICache::flush_icache_stub_t* flush_icache_stub) {
+  StubCodeMark mark(this, "ICache", "flush_icache_stub");
 
+  address start = __ pc();
+#ifdef AMD64
+
+  const Register addr  = c_rarg0;
+  const Register lines = c_rarg1;
+  const Register magic = c_rarg2;
+
+  Label flush_line, done;
+
+  __ testl(lines, lines);
+  __ jcc(Assembler::zero, done);
+
+  // Force ordering wrt cflush.
+  // Other fence and sync instructions won't do the job.
+  __ mfence();
+
+  __ bind(flush_line);
+  __ clflush(Address(addr, 0));
+  __ addptr(addr, ICache::line_size);
+  __ decrementl(lines);
+  __ jcc(Assembler::notZero, flush_line);
+
+  __ mfence();
+
+  __ bind(done);
+
+#else
+  const Address magic(rsp, 3*wordSize);
+  __ lock(); __ addl(Address(rsp, 0), 0);
+#endif // AMD64
+  __ movptr(rax, magic); // Handshake with caller to make sure it happened!
+  __ ret(0);
+
+  // Must be set here so StubCodeMark destructor can call the flush stub.
+  *flush_icache_stub = (ICache::flush_icache_stub_t)start;
+}
+```
 
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

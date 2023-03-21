@@ -125,15 +125,21 @@ The Runtime Data Area is divided into five major components:
 
 ### Execution Engine
 
-The bytecode, which is assigned to the **Runtime Data Area,** will be executed by the [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md). The Execution Engine reads the bytecode and executes it piece by piece.
+The bytecode, which is assigned to the **Runtime Data Area,** will be executed by the [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md).
+The Execution Engine reads the bytecode and executes it piece by piece.
 
-1. **Interpreter** – The interpreter interprets the bytecode faster but executes slowly. The disadvantage of the interpreter is that when one method is called multiple times, every time a new interpretation is required.
-2. **JIT Compiler** – The JIT Compiler neutralizes the disadvantage of the interpreter. The Execution Engine will be using the help of the interpreter in converting byte code, but when it finds repeated code it uses the JIT compiler, which compiles the entire bytecode and changes it to native code. This native code will be used directly for repeated method calls, which improve the performance of the system.
+1. **Interpreter** – The interpreter interprets the bytecode faster but executes slowly.
+   The disadvantage of the interpreter is that when one method is called multiple times, every time a new interpretation is required.
+2. **JIT Compiler** – The JIT Compiler neutralizes the disadvantage of the interpreter. 
+   The Execution Engine will be using the help of the interpreter in converting byte code, but when it finds repeated code it uses the JIT compiler, 
+   which compiles the entire bytecode and changes it to native code. 
+   This native code will be used directly for repeated method calls, which improve the performance of the system.
    1. **Intermediate Code Generator** – Produces intermediate code
    2. **Code Optimizer** – Responsible for optimizing the intermediate code generated above
    3. **Target Code Generator** – Responsible for Generating Machine Code or Native Code
    4. **Profiler** – A special component, responsible for finding hotspots, i.e. whether the method is called multiple times or not.
-3. [**Garbage Collector**](/docs/CS/Java/JDK/JVM/GC.md) : Collects and removes unreferenced objects. Garbage Collection can be triggered by calling `System.gc()`, but the execution is not guaranteed. Garbage collection of the JVM collects the objects that are created.
+3. [**Garbage Collector**](/docs/CS/Java/JDK/JVM/GC.md) - Collects and removes unreferenced objects. 
+   Garbage Collection can be triggered by calling `System.gc()`, but the execution is not guaranteed. Garbage collection of the JVM collects the objects that are created.
 
 Early VM’s were interpreter−only. Later VM’s were interpreter plus template generated code, and finally interpreter plus optimized code.
 
@@ -185,7 +191,8 @@ You will also need to invoke System.loadLibrary() to load the shared native libr
 
 ### Native Method Libraries
 
-Native Method Libraries are libraries that are written in other programming languages, such as C, C++, and assembly. These libraries are usually present in the form of .dll or .so files. These native libraries can be loaded through JNI.
+Native Method Libraries are libraries that are written in other programming languages, such as C, C++, and assembly. 
+These libraries are usually present in the form of .dll or .so files. These native libraries can be loaded through JNI.
 
 ## Runtime
 

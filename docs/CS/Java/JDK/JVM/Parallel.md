@@ -56,232 +56,8 @@ void PSParallelCompact::invoke(bool maximum_heap_compaction) {
 }
 ```
 
-#### invoke_no_policy
 
-This method contains no policy. You should probably be calling invoke() instead.
-
-```cpp
-bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
-  assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
-  assert(ref_processor() != NULL, "Sanity");
-
-  if (GCLocker::check_active_before_gc()) {
-    return false;
-  }
-
-  ParallelScavengeHeap* heap = ParallelScavengeHeap::heap();
-
-  GCIdMark gc_id_mark;
-  _gc_timer.register_gc_start();
-  _gc_tracer.report_gc_start(heap->gc_cause(), _gc_timer.gc_start());
-
-  TimeStamp marking_start;
-  TimeStamp compaction_start;
-  TimeStamp collection_exit;
-
-  GCCause::Cause gc_cause = heap->gc_cause();
-  PSYoungGen* young_gen = heap->young_gen();
-  PSOldGen* old_gen = heap->old_gen();
-  PSAdaptiveSizePolicy* size_policy = heap->size_policy();
-
-  // The scope of casr should end after code that can change
-  // SoftRefPolicy::_should_clear_all_soft_refs.
-  ClearedAllSoftRefs casr(maximum_heap_compaction,
-                          heap->soft_ref_policy());
-
-  if (ZapUnusedHeapArea) {
-    // Save information needed to minimize mangling
-    heap->record_gen_tops_before_GC();
-  }
-
-  // Make sure data structures are sane, make the heap parsable, and do other
-  // miscellaneous bookkeeping.
-  pre_compact();
-
-  const PreGenGCValues pre_gc_values = heap->get_pre_gc_values();
-
-  // Get the compaction manager reserved for the VM thread.
-  ParCompactionManager* const vmthread_cm = ParCompactionManager::get_vmthread_cm();
-
-  {
-    const uint active_workers =
-      WorkerPolicy::calc_active_workers(ParallelScavengeHeap::heap()->workers().max_workers(),
-                                        ParallelScavengeHeap::heap()->workers().active_workers(),
-                                        Threads::number_of_non_daemon_threads());
-    ParallelScavengeHeap::heap()->workers().set_active_workers(active_workers);
-
-    GCTraceCPUTime tcpu;
-    GCTraceTime(Info, gc) tm("Pause Full", NULL, gc_cause, true);
-
-    heap->pre_full_gc_dump(&_gc_timer);
-
-    TraceCollectorStats tcs(counters());
-    TraceMemoryManagerStats tms(heap->old_gc_manager(), gc_cause);
-
-    if (log_is_enabled(Debug, gc, heap, exit)) {
-      accumulated_time()->start();
-    }
-
-    // Let the size policy know we're starting
-    size_policy->major_collection_begin();
-
-    #if COMPILER2_OR_JVMCI
-    DerivedPointerTable::clear();
-    #endif
-
-    ref_processor()->start_discovery(maximum_heap_compaction);
-
-    marking_start.update();
-    marking_phase(vmthread_cm, &_gc_tracer);
-
-    bool max_on_system_gc = UseMaximumCompactionOnSystemGC
-      && GCCause::is_user_requested_gc(gc_cause);
-    summary_phase(vmthread_cm, maximum_heap_compaction || max_on_system_gc);
-
-    #if COMPILER2_OR_JVMCI
-    assert(DerivedPointerTable::is_active(), "Sanity");
-    DerivedPointerTable::set_active(false);
-    #endif
-
-    // adjust_roots() updates Universe::_intArrayKlassObj which is
-    // needed by the compaction for filling holes in the dense prefix.
-    adjust_roots();
-
-    compaction_start.update();
-    compact();
-
-    ParCompactionManager::verify_all_region_stack_empty();
-
-    // Reset the mark bitmap, summary data, and do other bookkeeping.  Must be
-    // done before resizing.
-    post_compact();
-
-    // Let the size policy know we're done
-    size_policy->major_collection_end(old_gen->used_in_bytes(), gc_cause);
-
-    if (UseAdaptiveSizePolicy) {
-      log_debug(gc, ergo)("AdaptiveSizeStart: collection: %d ", heap->total_collections());
-      log_trace(gc, ergo)("old_gen_capacity: " SIZE_FORMAT " young_gen_capacity: " SIZE_FORMAT,
-                          old_gen->capacity_in_bytes(), young_gen->capacity_in_bytes());
-
-      // Don't check if the size_policy is ready here.  Let
-      // the size_policy check that internally.
-      if (UseAdaptiveGenerationSizePolicyAtMajorCollection &&
-          AdaptiveSizePolicy::should_update_promo_stats(gc_cause)) {
-        // Swap the survivor spaces if from_space is empty. The
-        // resize_young_gen() called below is normally used after
-        // a successful young GC and swapping of survivor spaces;
-        // otherwise, it will fail to resize the young gen with
-        // the current implementation.
-        if (young_gen->from_space()->is_empty()) {
-          young_gen->from_space()->clear(SpaceDecorator::Mangle);
-          young_gen->swap_spaces();
-        }
-
-        // Calculate optimal free space amounts
-        assert(young_gen->max_gen_size() >
-          young_gen->from_space()->capacity_in_bytes() +
-          young_gen->to_space()->capacity_in_bytes(),
-          "Sizes of space in young gen are out-of-bounds");
-
-        size_t young_live = young_gen->used_in_bytes();
-        size_t eden_live = young_gen->eden_space()->used_in_bytes();
-        size_t old_live = old_gen->used_in_bytes();
-        size_t cur_eden = young_gen->eden_space()->capacity_in_bytes();
-        size_t max_old_gen_size = old_gen->max_gen_size();
-        size_t max_eden_size = young_gen->max_gen_size() -
-          young_gen->from_space()->capacity_in_bytes() -
-          young_gen->to_space()->capacity_in_bytes();
-
-        // Used for diagnostics
-        size_policy->clear_generation_free_space_flags();
-
-        size_policy->compute_generations_free_space(young_live,
-                                                    eden_live,
-                                                    old_live,
-                                                    cur_eden,
-                                                    max_old_gen_size,
-                                                    max_eden_size,
-                                                    true /* full gc*/);
-
-        size_policy->check_gc_overhead_limit(eden_live,
-                                             max_old_gen_size,
-                                             max_eden_size,
-                                             true /* full gc*/,
-                                             gc_cause,
-                                             heap->soft_ref_policy());
-
-        size_policy->decay_supplemental_growth(true /* full gc*/);
-
-        heap->resize_old_gen(
-          size_policy->calculated_old_free_size_in_bytes());
-
-        heap->resize_young_gen(size_policy->calculated_eden_size_in_bytes(),
-                               size_policy->calculated_survivor_size_in_bytes());
-      }
-
-      log_debug(gc, ergo)("AdaptiveSizeStop: collection: %d ", heap->total_collections());
-    }
-
-    if (UsePerfData) {
-      PSGCAdaptivePolicyCounters* const counters = heap->gc_policy_counters();
-      counters->update_counters();
-      counters->update_old_capacity(old_gen->capacity_in_bytes());
-      counters->update_young_capacity(young_gen->capacity_in_bytes());
-    }
-
-    heap->resize_all_tlabs();
-
-    // Resize the metaspace capacity after a collection
-    MetaspaceGC::compute_new_size();
-
-    if (log_is_enabled(Debug, gc, heap, exit)) {
-      accumulated_time()->stop();
-    }
-
-    heap->print_heap_change(pre_gc_values);
-
-    // Track memory usage and detect low memory
-    MemoryService::track_memory_usage();
-    heap->update_counters();
-
-    heap->post_full_gc_dump(&_gc_timer);
-  }
-
-  if (VerifyAfterGC && heap->total_collections() >= VerifyGCStartAt) {
-    Universe::verify("After GC");
-  }
-
-  // Re-verify object start arrays
-  if (VerifyObjectStartArray &&
-      VerifyAfterGC) {
-    old_gen->verify_object_start_array();
-  }
-
-  if (ZapUnusedHeapArea) {
-    old_gen->object_space()->check_mangled_unused_area_complete();
-  }
-
-  collection_exit.update();
-
-  heap->print_heap_after_gc();
-  heap->trace_heap_after_gc(&_gc_tracer);
-
-  log_debug(gc, task, time)("VM-Thread " JLONG_FORMAT " " JLONG_FORMAT " " JLONG_FORMAT,
-                         marking_start.ticks(), compaction_start.ticks(),
-                         collection_exit.ticks());
-
-  AdaptiveSizePolicyOutput::print(size_policy, heap->total_collections());
-
-  _gc_timer.register_gc_end();
-
-  _gc_tracer.report_dense_prefix(dense_prefix(old_space_id));
-  _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
-
-  return true;
-}
-```
-
+#### PSScavenge invoke_no_policy
 ```cpp
 
 // This method contains no policy. You should probably
@@ -627,6 +403,232 @@ bool PSScavenge::invoke_no_policy() {
 }
 ```
 
+
+#### PSParallelCompact invoke_no_policy
+
+This method contains no policy. You should probably be calling invoke() instead.
+
+```cpp
+bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
+  assert(SafepointSynchronize::is_at_safepoint(), "must be at a safepoint");
+  assert(ref_processor() != NULL, "Sanity");
+
+  if (GCLocker::check_active_before_gc()) {
+    return false;
+  }
+
+  ParallelScavengeHeap* heap = ParallelScavengeHeap::heap();
+
+  GCIdMark gc_id_mark;
+  _gc_timer.register_gc_start();
+  _gc_tracer.report_gc_start(heap->gc_cause(), _gc_timer.gc_start());
+
+  TimeStamp marking_start;
+  TimeStamp compaction_start;
+  TimeStamp collection_exit;
+
+  GCCause::Cause gc_cause = heap->gc_cause();
+  PSYoungGen* young_gen = heap->young_gen();
+  PSOldGen* old_gen = heap->old_gen();
+  PSAdaptiveSizePolicy* size_policy = heap->size_policy();
+
+  // The scope of casr should end after code that can change
+  // SoftRefPolicy::_should_clear_all_soft_refs.
+  ClearedAllSoftRefs casr(maximum_heap_compaction,
+                          heap->soft_ref_policy());
+
+  if (ZapUnusedHeapArea) {
+    // Save information needed to minimize mangling
+    heap->record_gen_tops_before_GC();
+  }
+
+  // Make sure data structures are sane, make the heap parsable, and do other
+  // miscellaneous bookkeeping.
+  pre_compact();
+
+  const PreGenGCValues pre_gc_values = heap->get_pre_gc_values();
+
+  // Get the compaction manager reserved for the VM thread.
+  ParCompactionManager* const vmthread_cm = ParCompactionManager::get_vmthread_cm();
+
+  {
+    const uint active_workers =
+      WorkerPolicy::calc_active_workers(ParallelScavengeHeap::heap()->workers().max_workers(),
+                                        ParallelScavengeHeap::heap()->workers().active_workers(),
+                                        Threads::number_of_non_daemon_threads());
+    ParallelScavengeHeap::heap()->workers().set_active_workers(active_workers);
+
+    GCTraceCPUTime tcpu;
+    GCTraceTime(Info, gc) tm("Pause Full", NULL, gc_cause, true);
+
+    heap->pre_full_gc_dump(&_gc_timer);
+
+    TraceCollectorStats tcs(counters());
+    TraceMemoryManagerStats tms(heap->old_gc_manager(), gc_cause);
+
+    if (log_is_enabled(Debug, gc, heap, exit)) {
+      accumulated_time()->start();
+    }
+
+    // Let the size policy know we're starting
+    size_policy->major_collection_begin();
+
+    #if COMPILER2_OR_JVMCI
+    DerivedPointerTable::clear();
+    #endif
+
+    ref_processor()->start_discovery(maximum_heap_compaction);
+
+    marking_start.update();
+    marking_phase(vmthread_cm, &_gc_tracer);
+
+    bool max_on_system_gc = UseMaximumCompactionOnSystemGC
+      && GCCause::is_user_requested_gc(gc_cause);
+    summary_phase(vmthread_cm, maximum_heap_compaction || max_on_system_gc);
+
+    #if COMPILER2_OR_JVMCI
+    assert(DerivedPointerTable::is_active(), "Sanity");
+    DerivedPointerTable::set_active(false);
+    #endif
+
+    // adjust_roots() updates Universe::_intArrayKlassObj which is
+    // needed by the compaction for filling holes in the dense prefix.
+    adjust_roots();
+
+    compaction_start.update();
+    compact();
+
+    ParCompactionManager::verify_all_region_stack_empty();
+
+    // Reset the mark bitmap, summary data, and do other bookkeeping.  Must be
+    // done before resizing.
+    post_compact();
+
+    // Let the size policy know we're done
+    size_policy->major_collection_end(old_gen->used_in_bytes(), gc_cause);
+
+    if (UseAdaptiveSizePolicy) {
+      log_debug(gc, ergo)("AdaptiveSizeStart: collection: %d ", heap->total_collections());
+      log_trace(gc, ergo)("old_gen_capacity: " SIZE_FORMAT " young_gen_capacity: " SIZE_FORMAT,
+                          old_gen->capacity_in_bytes(), young_gen->capacity_in_bytes());
+
+      // Don't check if the size_policy is ready here.  Let
+      // the size_policy check that internally.
+      if (UseAdaptiveGenerationSizePolicyAtMajorCollection &&
+          AdaptiveSizePolicy::should_update_promo_stats(gc_cause)) {
+        // Swap the survivor spaces if from_space is empty. The
+        // resize_young_gen() called below is normally used after
+        // a successful young GC and swapping of survivor spaces;
+        // otherwise, it will fail to resize the young gen with
+        // the current implementation.
+        if (young_gen->from_space()->is_empty()) {
+          young_gen->from_space()->clear(SpaceDecorator::Mangle);
+          young_gen->swap_spaces();
+        }
+
+        // Calculate optimal free space amounts
+        assert(young_gen->max_gen_size() >
+          young_gen->from_space()->capacity_in_bytes() +
+          young_gen->to_space()->capacity_in_bytes(),
+          "Sizes of space in young gen are out-of-bounds");
+
+        size_t young_live = young_gen->used_in_bytes();
+        size_t eden_live = young_gen->eden_space()->used_in_bytes();
+        size_t old_live = old_gen->used_in_bytes();
+        size_t cur_eden = young_gen->eden_space()->capacity_in_bytes();
+        size_t max_old_gen_size = old_gen->max_gen_size();
+        size_t max_eden_size = young_gen->max_gen_size() -
+          young_gen->from_space()->capacity_in_bytes() -
+          young_gen->to_space()->capacity_in_bytes();
+
+        // Used for diagnostics
+        size_policy->clear_generation_free_space_flags();
+
+        size_policy->compute_generations_free_space(young_live,
+                                                    eden_live,
+                                                    old_live,
+                                                    cur_eden,
+                                                    max_old_gen_size,
+                                                    max_eden_size,
+                                                    true /* full gc*/);
+
+        size_policy->check_gc_overhead_limit(eden_live,
+                                             max_old_gen_size,
+                                             max_eden_size,
+                                             true /* full gc*/,
+                                             gc_cause,
+                                             heap->soft_ref_policy());
+
+        size_policy->decay_supplemental_growth(true /* full gc*/);
+
+        heap->resize_old_gen(
+          size_policy->calculated_old_free_size_in_bytes());
+
+        heap->resize_young_gen(size_policy->calculated_eden_size_in_bytes(),
+                               size_policy->calculated_survivor_size_in_bytes());
+      }
+
+      log_debug(gc, ergo)("AdaptiveSizeStop: collection: %d ", heap->total_collections());
+    }
+
+    if (UsePerfData) {
+      PSGCAdaptivePolicyCounters* const counters = heap->gc_policy_counters();
+      counters->update_counters();
+      counters->update_old_capacity(old_gen->capacity_in_bytes());
+      counters->update_young_capacity(young_gen->capacity_in_bytes());
+    }
+
+    heap->resize_all_tlabs();
+
+    // Resize the metaspace capacity after a collection
+    MetaspaceGC::compute_new_size();
+
+    if (log_is_enabled(Debug, gc, heap, exit)) {
+      accumulated_time()->stop();
+    }
+
+    heap->print_heap_change(pre_gc_values);
+
+    // Track memory usage and detect low memory
+    MemoryService::track_memory_usage();
+    heap->update_counters();
+
+    heap->post_full_gc_dump(&_gc_timer);
+  }
+
+  if (VerifyAfterGC && heap->total_collections() >= VerifyGCStartAt) {
+    Universe::verify("After GC");
+  }
+
+  // Re-verify object start arrays
+  if (VerifyObjectStartArray &&
+      VerifyAfterGC) {
+    old_gen->verify_object_start_array();
+  }
+
+  if (ZapUnusedHeapArea) {
+    old_gen->object_space()->check_mangled_unused_area_complete();
+  }
+
+  collection_exit.update();
+
+  heap->print_heap_after_gc();
+  heap->trace_heap_after_gc(&_gc_tracer);
+
+  log_debug(gc, task, time)("VM-Thread " JLONG_FORMAT " " JLONG_FORMAT " " JLONG_FORMAT,
+                         marking_start.ticks(), compaction_start.ticks(),
+                         collection_exit.ticks());
+
+  AdaptiveSizePolicyOutput::print(size_policy, heap->total_collections());
+
+  _gc_timer.register_gc_end();
+
+  _gc_tracer.report_dense_prefix(dense_prefix(old_space_id));
+  _gc_tracer.report_gc_end(_gc_timer.gc_end(), _gc_timer.time_partitions());
+
+  return true;
+}
+```
 ## References
 
 1. [Optimizing best-of-2 work stealing queue selection](https://bugs.openjdk.org/browse/JDK-8205921)

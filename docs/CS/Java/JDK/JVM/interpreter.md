@@ -2,19 +2,18 @@
 
 TemplateInterpreter
 
-
 ## AbstractInterpreter
 
-
-The basic behavior of the JVM interpreter can be thought of as essentially “`a switch inside a while loop`” — processing each opcode of the program independently of the last, 
+The basic behavior of the JVM interpreter can be thought of as essentially “`a switch inside a while loop`” — processing each opcode of the program independently of the last,
 using the evaluation stack to hold intermediate values.
 
 This file contains the platform-independent parts of the **abstract interpreter** and the **abstract interpreter generator**.
 
-Organization of the interpreter(s). 
-There exists two different interpreters in hotpot an assembly language version (aka [template interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=TemplateInterpreter) and a high level language version(aka [c++ interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=CppInterpreter)). 
-                                                
+Organization of the interpreter(s).
+There exists two different interpreters in hotpot an assembly language version (aka [template interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=TemplateInterpreter) and a high level language version(aka [c++ interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=CppInterpreter)).
+
 The interpreter code in [StubQueue](/docs/CS/Java/JDK/JVM/interpreter.md?id=StubQueue)
+
 ```cpp
 
 class AbstractInterpreter: AllStatic {
@@ -43,8 +42,9 @@ class AbstractInterpreter: AllStatic {
 ### StubQueue
 
 A StubQueue maintains a queue of stubs. And BufferBlob store in [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md).
+
 > [!NOTE]
-> 
+>
 > All sizes (spaces) are given in bytes.
 
 ```cpp
@@ -78,20 +78,22 @@ class StubQueue: public CHeapObj<mtCode> {
 }
 ```
 
-
 #### Implementation of StubQueue
 
-Standard wrap-around queue implementation; the queue dimensions are specified by the _queue_begin & _queue_end indices. 
+Standard wrap-around queue implementation; the queue dimensions are specified by the _queue_begin & _queue_end indices.
 The queue can be in two states (transparent to the outside):
 
 a) contiguous state: all queue entries in one block (or empty)
+
 ```
 Queue: |...|XXXXXXX|...............|
        ^0  ^begin  ^end            ^size = limit
            |_______|
            one block
 ```
+
 b) non-contiguous state: queue entries in two blocks
+
 ```
 Queue: |XXX|.......|XXXXXXX|.......|
        ^0  ^end    ^begin  ^limit  ^size
@@ -100,7 +102,7 @@ Queue: |XXX|.......|XXXXXXX|.......|
 ```
 
 In the non-contiguous state, the wrap-around point is indicated via the _buffer_limit index since the last queue entry may not fill up the queue completely in
-which case we need to know where the 2nd block's end is to do the proper wrap-around. 
+which case we need to know where the 2nd block's end is to do the proper wrap-around.
 When removing the last entry of the 2nd block, _buffer_limit is reset to _buffer_size.
 
 ```cpp
@@ -121,18 +123,13 @@ _number_of_stubs = 0;
 }
 ```
 
-
 ## TemplateInterpreter
-
-
-
 
 Th division of labor is as follows:
 
 - Template Interpreter          Zero Interpreter       Functionality
 - templateTable*                bytecodeInterpreter*   actual interpretation of bytecodes
 - templateInterpreter*          zeroInterpreter*       generation of assembly code that creates and manages interpreter runtime frames.
-
 
 ```cpp
 // share/interpreter/templateInterpreter.hpp
@@ -151,9 +148,7 @@ class TemplateInterpreter: public AbstractInterpreter {
   static address    _remove_activation_entry;                   // continuation address if an exception is not handled by current frame
   static address    _remove_activation_preserving_args_entry;   // continuation address when current frame is being popped
 
-#ifndef PRODUCT
   static EntryPoint _trace_code;
-#endif // !PRODUCT
   static EntryPoint _return_entry[number_of_return_entries];    // entry points to return to from a call
   static EntryPoint _earlyret_entry;                            // entry point to return early from a call
   static EntryPoint _deopt_entry[number_of_deopt_entries];      // entry points to return to from a deoptimization
@@ -171,7 +166,6 @@ class TemplateInterpreter: public AbstractInterpreter {
 }
 ```
 
-
 ```cpp
 TemplateInterpreterGenerator::TemplateInterpreterGenerator(StubQueue* _code): AbstractInterpreterGenerator(_code) {
   _unimplemented_bytecode    = NULL;
@@ -182,24 +176,26 @@ TemplateInterpreterGenerator::TemplateInterpreterGenerator(StubQueue* _code): Ab
 
 ## init
 
-The reason that interpreter initialization is split into two parts is that the first part needs to run before methods are loaded (which with CDS implies linked also), 
-and the other part needs to run after. 
-The reason is that when methods are loaded (with CDS) or linked(without CDS), 
+The reason that interpreter initialization is split into two parts is that the first part needs to run before methods are loaded (which with CDS implies linked also),
+and the other part needs to run after.
+The reason is that when methods are loaded (with CDS) or linked(without CDS),
 the i2c adapters are generated that assert we are currently in the interpreter.
 
-Asserting that requires knowledge about where the interpreter is in memory. 
-Therefore, establishing the interpreter address must be done before methods are loaded. 
-However, we would like to actually generate the interpreter after methods are loaded. 
-That allows us to remove otherwise hardcoded offsets regarding fields that are needed in the interpreter code. 
+Asserting that requires knowledge about where the interpreter is in memory.
+Therefore, establishing the interpreter address must be done before methods are loaded.
+However, we would like to actually generate the interpreter after methods are loaded.
+That allows us to remove otherwise hardcoded offsets regarding fields that are needed in the interpreter code.
 
 This leads to a split like:
+
 1. reserving the memory for the interpreter
 2. loading methods
 3. generating the interpreter
 
-
 ### init_stub
+
 allocate interpreter and new StubQueue
+
 ```cpp
 void interpreter_init_stub() {
   Interpreter::initialize_stub();
@@ -245,7 +241,6 @@ void interpreter_init_code() {
 }
 ```
 
-
 ```cpp
 
 void TemplateInterpreter::initialize_code() {
@@ -257,7 +252,8 @@ void TemplateInterpreter::initialize_code() {
 TemplateInterpreterGenerator::generate_all -> TemplateInterpreterGenerator::generate_method_entry -> generate_native_entry/generate_normal_entry(different arch)
 
 - [generate_native_entry](/docs/CS/Java/JDK/JVM/interpreter.md?id=generate_native_entry) -- need to unlock manually after call native method
-- [generate_normal_entry](/docs/CS/Java/JDK/JVM/interpreter.md?id=generate_normal_entry) -- using dispatch_next(), some bytecode(`return`,`athrow`) will unlock 
+- [generate_normal_entry](/docs/CS/Java/JDK/JVM/interpreter.md?id=generate_normal_entry) -- using dispatch_next(), some bytecode(`return`,`athrow`) will unlock
+
 ```cpp
   { ResourceMark rm;
     TraceTime timer("Interpreter generation", TRACETIME_LOG(Info, startuptime));
@@ -276,12 +272,12 @@ TemplateInterpreterGenerator::generate_all -> TemplateInterpreterGenerator::gene
 }
 ```
 
-
 ### generate_normal_entry
 
 Generic interpreted method entry to (asm) interpreter
- 
+
 Such as x86
+
 ```cpp
 // cpu/x86/templateInterpreterGenerator_x86.cpp
 address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
@@ -337,7 +333,9 @@ address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
     __ bind(exit);
   }
 ```
+
 initialize fixed part of activation frame
+
 ```cpp
   generate_fixed_frame(false);
 
@@ -358,7 +356,9 @@ initialize fixed part of activation frame
 
   __ profile_parameters_type(rax, rcx, rdx);
 ```
+
 increment invocation count & check for overflow
+
 ```cpp
   Label invocation_counter_overflow;
   if (inc_counter) {
@@ -375,12 +375,16 @@ increment invocation count & check for overflow
   NOT_LP64(__ get_thread(thread));
   __ movbool(do_not_unlock_if_synchronized, false);
 ```
+
 check for synchronized methods
 Must happen AFTER invocation_counter check and stack overflow check, so method is not locked if overflows.
+
 ```cpp
   if (synchronized) {
 ```
+
 Allocate monitor and [lock method](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_method)
+
 ```cpp
     lock_method();
   } else {
@@ -395,7 +399,9 @@ Allocate monitor and [lock method](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_
 
   __ dispatch_next(vtos);
 ```
+
 invocation counter overflow
+
 ```cpp
   if (inc_counter) {
     // Handle overflow of counter and compile method
@@ -441,7 +447,9 @@ void InterpreterMacroAssembler::dispatch_base(TosState state,
     interp_verify_oop(rax, state);
   }
 ```
+
 Check if need [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md) then jump into safepoint_table.
+
 ```cpp
   address* const safepoint_table = Interpreter::safept_table(state);
 
@@ -455,7 +463,9 @@ Check if need [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md) then jump into saf
     jmpb(dispatch);
   }
 ```
+
 Or else jump into normal table.
+
 ```cpp
   bind(no_safepoint);
   lea(rscratch1, ExternalAddress((address)table));
@@ -464,11 +474,12 @@ Or else jump into normal table.
 }
 ```
 
-
 #### lock_method
+
 Allocate monitor and lock method (asm interpreter) , see [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md).
 
 Args:
+
 - rbx: Method*
 - r14/rdi: locals
 - Kills:
@@ -507,7 +518,9 @@ void TemplateInterpreterGenerator::lock_method() {
   const Register lockreg = NOT_LP64(rdx) LP64_ONLY(c_rarg1);
   __ movptr(lockreg, rsp); // object address
 ```
+
 lock object
+
 ```cpp
   __ lock_object(lockreg);
 }
@@ -516,10 +529,10 @@ lock object
 ##### lock_object
 
 Args:
-     rdx, c_rarg1: BasicObjectLock to be used for locking
+rdx, c_rarg1: BasicObjectLock to be used for locking
 
 Kills:
-     rax, rbx
+rax, rbx
 
 ```cpp
 // interp_masm_x86.cpp
@@ -546,6 +559,7 @@ void InterpreterMacroAssembler::lock_object(Register lock_reg) {
 ```
 
 Load object pointer into obj_reg
+
 ```cpp
     movptr(obj_reg, Address(lock_reg, obj_offset));
 
@@ -560,6 +574,7 @@ Load object pointer into obj_reg
     movl(swap_reg, (int32_t)1);
 
 ```
+
 1. Load (object->mark() | 1) into swap_reg %rax
 2. Save (object->mark() | 1) into BasicLock's displaced header
 
@@ -572,6 +587,7 @@ Load object pointer into obj_reg
 
     const int zero_bits = LP64_ONLY(7) NOT_LP64(3);
 ```
+
 Fast check for recursive lock.
 
 Can apply the optimization only if this is a stack lock
@@ -579,8 +595,9 @@ allocated in this thread. For efficiency, we can focus on
 recently allocated stack locks (instead of reading the stack
 base and checking whether 'mark' points inside the current
 thread stack):
- 1) (mark & zero_bits) == 0, and
- 2) rsp <= mark < mark + os::pagesize()
+
+1) (mark & zero_bits) == 0, and
+2) rsp <= mark < mark + os::pagesize()
 
 Warning: rsp + os::pagesize can overflow the stack base. We must
 neither apply the optimization for an inflated lock allocated
@@ -604,14 +621,18 @@ NOTE: the mark is in swap_reg %rax as the result of cmpxchg
     subptr(swap_reg, rsp);
     andptr(swap_reg, zero_bits - os::vm_page_size());
 ```
+
 Save the test result, for recursive case, the result is zero
+
 ```cpp
     movptr(Address(lock_reg, mark_offset), swap_reg);
     jcc(Assembler::zero, done);
 
     bind(slow_case);
 ```
+
 Call the runtime routine for slow case
+
 ```cpp
     call_VM(noreg,
             CAST_FROM_FN_PTR(address, InterpreterRuntime::monitorenter),
@@ -622,10 +643,11 @@ Call the runtime routine for slow case
 }
 ```
 
-
 ### generate_native_entry
+
 Interpreter stub for calling a native method. (asm interpreter)
 This sets up a somewhat different looking stack for calling the native method than the typical interpreter frame setup.
+
 ```c
 // 
 address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
@@ -647,12 +669,15 @@ address TemplateInterpreterGenerator::generate_native_entry(bool synchronized) {
   __ movptr(rcx, constMethod);
   __ load_unsigned_short(rcx, size_of_parameters);
 ```
+
 native calls don't need the stack size check since they have no
-expression stack and the arguments are already on the stack 
+expression stack and the arguments are already on the stack
 and we only add a handful of words to the stack
+
 - rbx: Method*
 - rcx: size of parameters
 - rbcp: sender sp
+
 ```cpp
   __ pop(rax);                                       // get return address
 
@@ -836,7 +861,9 @@ and we only add a handful of words to the stack
   __ movl(Address(thread, JavaThread::thread_state_offset()),
           _thread_in_native);
 ```
+
 Call the native method.
+
 ```cpp
   __ call(rax);
   // 32: result potentially in rdx:rax or ST0
@@ -1094,6 +1121,7 @@ Call the native method.
 ## code
 
 Method Counter and backedge counter are using profiling.
+
 ### branch
 
 ```cpp
@@ -1110,7 +1138,9 @@ void TemplateTable::if_icmp(Condition cc) {
   __ profile_not_taken_branch(rax);
 }
 ```
+
 branch
+
 ```cpp
 
 void TemplateTable::branch(bool is_jsr, bool is_wide) {
@@ -1224,7 +1254,9 @@ void TemplateTable::branch(bool is_jsr, bool is_wide) {
   // r13: target bcp
   __ dispatch_only(vtos, true);
 ```
+
 invocation counter overflow if enable loop counter and OSR
+
 ```
   if (UseLoopCounter) {
     if (UseOnStackReplacement) {
@@ -1249,9 +1281,11 @@ invocation counter overflow if enable loop counter and OSR
       __ cmpb(Address(rax, nmethod::state_offset()), nmethod::in_use);
       __ jcc(Assembler::notEqual, dispatch);
 ```
+
 We have the address of an on stack replacement routine in rax.
 In preparation of invoking it, first we must migrate the locals and monitors from off the interpreter frame on the stack.
 Ensure to save the osr nmethod over the migration call, it will be preserved in rbx.
+
 ```cpp
       __ mov(rbx, rax);
 
@@ -1283,7 +1317,9 @@ Ensure to save the osr nmethod over the migration call, it will be preserved in 
       // push the return address
       __ push(retaddr);
 ```
+
 begin the OSR nmethod
+
 ```cpp
       __ jmp(Address(rbx, nmethod::osr_entry_point_offset()));
     }
@@ -1301,7 +1337,9 @@ void TemplateTable::_return(TosState state) {
   assert(_desc->calls_vm(),
          "inconsistent calls_vm information"); // call in remove_activation
 ```
+
 register finalizer if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Object.md?id=finalize)
+
 ```cpp
   if (_desc->bytecode() == Bytecodes::_return_register_finalizer) {
     assert(state == vtos, "only valid state");
@@ -1321,7 +1359,9 @@ register finalizer if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Objec
 
   if (_desc->bytecode() != Bytecodes::_return_register_finalizer) {
 ```
+
 check [InterpreterRuntime::at_safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md?id=at_safepoint) if need goto [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
+
 ```cpp
     Label no_safepoint;
     NOT_PRODUCT(__ block_comment("Thread-local Safepoint poll"));
@@ -1378,7 +1418,9 @@ void TemplateTable::putfield_or_static(int byte_no, bool is_static, RewriteContr
   __ shrl(rdx, ConstantPoolCacheEntry::is_volatile_shift);
   __ andl(rdx, 0x1);
 ```
+
 Check for volatile store
+
 ```
   __ testl(rdx, rdx);
   __ jcc(Assembler::zero, notVolatile);
@@ -1388,7 +1430,9 @@ Check for volatile store
                                                Assembler::StoreStore));
   __ jmp(Done);
 ```
+
 notVolatile
+
 ```
   __ bind(notVolatile);
   putfield_or_static_helper(byte_no, is_static, rc, obj, off, flags);
@@ -1398,6 +1442,7 @@ notVolatile
 ```
 
 putfield_or_static_helper
+
 ```cpp
 void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, RewriteControl rc,
                                               Register obj, Register off, Register flags) {
@@ -1568,35 +1613,38 @@ void TemplateTable::putfield_or_static_helper(int byte_no, bool is_static, Rewri
 ```
 
 #### volatile_barrier
+
 Volatile variables demand their effects be made known to all CPU's
-in order.  
-Store buffers on most chips allow reads & writes to reorder; 
+in order.
+Store buffers on most chips allow reads & writes to reorder;
 the JMM's ReadAfterWrite.java test fails in -Xint mode
 without some kind of memory barrier (i.e., it's not sufficient that
 the interpreter does not reorder volatile references, the hardware
 also must not reorder them).
 
 According to the new Java Memory Model (JMM):
+
 1. All volatiles are serialized wrt to each other.  ALSO reads &
-writes act as aquire & release, so:
+   writes act as aquire & release, so:
 2. A read cannot let unrelated NON-volatile memory refs that
-happen after the read float up to before the read.  It's OK for
-non-volatile memory refs that happen before the volatile read to
-float down below it.
+   happen after the read float up to before the read.  It's OK for
+   non-volatile memory refs that happen before the volatile read to
+   float down below it.
 3. Similar a volatile write cannot let unrelated NON-volatile
-memory refs that happen BEFORE the write float down to after the
-write.  It's OK for non-volatile memory refs that happen after the
-volatile write to float up before it.
+   memory refs that happen BEFORE the write float down to after the
+   write.  It's OK for non-volatile memory refs that happen after the
+   volatile write to float up before it.
 
 We only put in barriers around volatile refs (they are expensive),
 not _between_ memory refs (that would require us to track the
 flavor of the previous memory refs).  Requirements 2 and 3
 require some barriers before volatile stores and after volatile
 loads.  These nearly cover requirement 1 but miss the
-volatile-store-volatile-load case.  
+volatile-store-volatile-load case.
 This final case is placed after
 volatile-stores although it could just as well go before
 volatile-loads.
+
 ```cpp
 // 
 void TemplateTable::volatile_barrier(Assembler::Membar_mask_bits order_constraint ) {
@@ -1623,12 +1671,13 @@ dependencies with other things on below SP (callee-saves, for
 example). Without a clear way to figure out the minimal safe
 distance from SP, it makes sense to step back the complete
 cache line, as this will also avoid possible second-order effects
-with locked ops against the cache line. 
+with locked ops against the cache line.
 Our choice of offset is bounded by x86 operand encoding, which should stay within [-128; +127] to have the 8-byte displacement encoding.
 
 Any change to this code may need to revisit other places in
 the code where this idiom is used, in particular the
 orderAccess code.
+
 ```
 void Assembler::membar(Membar_mask_bits order_constraint) {
   if (order_constraint & StoreLoad) {
@@ -1638,7 +1687,9 @@ void Assembler::membar(Membar_mask_bits order_constraint) {
     }
 
 ```
+
 Do you remember `lock addl` in [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)?
+
 ```cpp
     lock();
     addl(Address(rsp, offset), 0);// Assert the lock# signal here
@@ -1646,13 +1697,10 @@ Do you remember `lock addl` in [volatile](/docs/CS/Java/JDK/Concurrency/volatile
 }
 ```
 
-
 ## CppInterpreter
 
 BytecodeInterpreter
 
-
-
-
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

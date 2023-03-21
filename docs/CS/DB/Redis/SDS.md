@@ -216,10 +216,9 @@ robj *tryObjectEncoding(robj *o) {
 }
 ```
 
-
-
-Optimize the SDS string inside the string object to require little space, in case there is more than 10% of free space at the end of the SDS string. 
+Optimize the SDS string inside the string object to require little space, in case there is more than 10% of free space at the end of the SDS string.
 This happens because SDS strings tend to overallocate to avoid wasting too much time in allocations when appending to the string.
+
 ```c
 void trimStringObjectIfNeeded(robj *o) {
     if (o->encoding == OBJ_ENCODING_RAW &&
@@ -642,7 +641,7 @@ void sdsclear(sds s) {
 
 ## Summary
 
-- O(1) getLen
+- $O(1)$ getLen
 - **packed** and always append '\0'
 - expand pow of 2 when len < 1M, or else expand 1M util 512M
 - use sdsclear rather than sdsfree

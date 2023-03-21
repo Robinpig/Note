@@ -310,6 +310,46 @@ static bool G1StringDedup::is_candidate_from_mark(oop java_string) {
          StringDedup::is_below_threshold_age(java_string->age());
 }
 ```
+### deduplicate
+
+```cpp
+
+void StringDedup::Table::deduplicate(oop java_string) {
+  assert(java_lang_String::is_instance(java_string), "precondition");
+  _cur_stat.inc_inspected();
+  if ((StringTable::shared_entry_count() > 0) &&
+      try_deduplicate_shared(java_string)) {
+    return;                     // Done if deduplicated against shared StringTable.
+  }
+  typeArrayOop value = java_lang_String::value(java_string);
+  uint hash_code = compute_hash(value);
+  TableValue tv = find(value, hash_code);
+  if (tv.is_empty()) {
+    // Not in table.  Create a new table entry.
+    install(value, hash_code);
+  } else {
+    _cur_stat.inc_known();
+    typeArrayOop found = cast_from_oop<typeArrayOop>(tv.resolve());
+    assert(found != nullptr, "invariant");
+    // Deduplicate if value array differs from what's in the table.
+    if (found != value) {
+      if (deduplicate_if_permitted(java_string, found)) {
+        _cur_stat.inc_deduped(found->size() * HeapWordSize);
+      } else {
+        // If string marked deduplication_forbidden then we can't update its
+        // value.  Instead, replace the array in the table with the new one,
+        // as java_string is probably in the StringTable.  That makes it a
+        // good target for future deduplications as it is probably intended
+        // to live for some time.
+        tv.replace(value);
+        _cur_stat.inc_replaced();
+      }
+    }
+  }
+}
+```
+
+
 ### Example
 
 ```java

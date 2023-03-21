@@ -1,9 +1,6 @@
 ## Introduction
 
-
 Java Native Interface
-
-
 
 ## native call Java
 
@@ -11,28 +8,19 @@ Java Native Interface
 #include<jni.h>
 ```
 
-
-
-Pointer of JVM 
+Pointer of JVM
 
 Pointer of JNIEnv : *env
 
 JNI_createJavaVM
 
-
-
 JNI_DestroyJavaVM
-
-
-
-
 
 for example
 
 java -jar spring-application.jar  using Java Launcher   - -   JNI - - > libjvm.so
 
 ## register
-
 
 ```cpp
 
@@ -50,8 +38,8 @@ Java_java_lang_Class_registerNatives(JNIEnv *env, jclass cls)
 }
 ```
 
-
 ### set_native_function
+
 ```cpp
 
 void Method::set_native_function(address function, bool post_event_flag) {
@@ -88,6 +76,7 @@ void Method::set_native_function(address function, bool post_event_flag) {
 ## Call
 
 ### prepare_native_call
+
 ```cpp
 
 JRT_ENTRY(void, InterpreterRuntime::prepare_native_call(JavaThread* current, Method* method))
@@ -107,9 +96,12 @@ JRT_END
 ```
 
 ### lookup
+
 if !has_native_function:
+
 1. lookup -> `os::dll_lookup`(`dlsym` in Linux)
 2. set_native_function
+
 ```cpp
 
 address NativeLookup::lookup(const methodHandle& method, TRAPS) {
@@ -129,27 +121,17 @@ address NativeLookup::lookup(const methodHandle& method, TRAPS) {
 }
 ```
 
-
-
 ## Thread
-
-
 
 state in native is RUNNABLE
 
-
-
 ## JNI and safepoint
-
-
 
 ## JNI and GC
 
-
-
 ## Links
-- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
 ## References
 

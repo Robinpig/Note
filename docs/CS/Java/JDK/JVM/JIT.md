@@ -58,9 +58,10 @@ final not optimize
 
 Since Java 9, the JVM segments the code cache into three areas:
 
-The non-method segment – JVM internal related code (around 5 MB, configurable via -XX:NonNMethodCodeHeapSize)
-The profiled-code segment – C1 compiled code with potentially short lifetimes (around 122 MB by default, configurable via -XX:ProfiledCodeHeapSize)
-The non-profiled segment – C2 compiled code with potentially long lifetimes (similarly 122 MB by default, configurable via -XX:NonProfiledCodeHeapSize)
+- The non-method segment – JVM internal related code (around 5 MB, configurable via -XX:NonNMethodCodeHeapSize)
+- The profiled-code segment – C1 compiled code with potentially short lifetimes (around 122 MB by default, configurable via -XX:ProfiledCodeHeapSize)
+- The non-profiled segment – C2 compiled code with potentially long lifetimes (similarly 122 MB by default, configurable via -XX:NonProfiledCodeHeapSize)
+
 Segmented code cache helps to improve code locality and reduces memory fragmentation. Thus, it improves overall performance.
 
 ### Deoptimization
