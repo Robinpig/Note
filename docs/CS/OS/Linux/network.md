@@ -4,7 +4,24 @@ Linux provide drivers and protocols
 driver：drivers/net/ethernet
 protocol: kernel & net
 
+The high-level path network data takes from a user program to a network device is as follows:
 
+1. Data is written using a system call (like `sendto`, `sendmsg`, et. al.).
+2. Data passes through the socket subsystem on to the socket’s protocol family’s system (in our case, `AF_INET`).
+3. The protocol family passes data through the protocol layers which (in many cases) arrange the data into packets.
+4. The data passes through the routing layer, populating the destination and neighbour caches along the way (if they are cold). This can generate ARP traffic if an ethernet address needs to be looked up.
+5. After passing through the protocol layers, packets reach the device agnostic layer.
+6. The output queue is chosen using XPS (if enabled) or a hash function.
+7. The device driver’s transmit function is called.
+8. The data is then passed on to the queue discipline (qdisc) attached to the output device.
+9. The qdisc will either transmit the data directly if it can, or queue it up to be sent during the `NET_TX` softirq.
+10. Eventually the data is handed down to the driver from the qdisc.
+11. The driver creates the needed DMA mappings so the device can read the data from RAM.
+12. The driver signals the device that the data is ready to be transmit.
+13. The device fetches the data from RAM and transmits it.
+14. Once transmission is complete, the device raises an interrupt to signal transmit completion.
+15. The driver’s registered IRQ handler for transmit completion runs. For many devices, this handler simply triggers the NAPI poll loop to start running via the `NET_RX` softirq.
+16. The poll function runs via a softIRQ and calls down into the driver to unmap DMA regions and free packet data.
 
 The high level path a packet takes from arrival to socket receive buffer is as follows:
 
@@ -23,7 +40,104 @@ The high level path a packet takes from arrival to socket receive buffer is as f
 
 
 
+### Ingress - they're coming
+
+1. Packets arrive at the NIC
+2. NIC will verify `MAC` (if not on promiscuous mode) and `FCS` and decide to drop or to continue
+3. NIC will [DMA packets at RAM](https://en.wikipedia.org/wiki/Direct_memory_access), in a region previously prepared (mapped) by the driver
+4. NIC will enqueue references to the packets at receive [ring buffer](https://en.wikipedia.org/wiki/Circular_buffer) queue `rx` until `rx-usecs` timeout or `rx-frames`
+5. NIC will raise a `hard IRQ`
+6. CPU will run the `IRQ handler` that runs the driver's code
+7. Driver will `schedule a NAPI`, clear the `hard IRQ` and return
+8. Driver raise a `soft IRQ (NET_RX_SOFTIRQ)`
+9. NAPI will poll data from the receive ring buffer until `netdev_budget_usecs` timeout or `netdev_budget` and `dev_weight` packets
+10. Linux will also allocate memory to `sk_buff`
+11. Linux fills the metadata: protocol, interface, setmacheader, removes ethernet
+12. Linux will pass the skb to the kernel stack (`netif_receive_skb`)
+13. It will set the network header, clone `skb` to taps (i.e. tcpdump) and pass it to tc ingress
+14. Packets are handled to a qdisc sized `netdev_max_backlog` with its algorithm defined by `default_qdisc`
+15. It calls `ip_rcv` and packets are handled to IP
+16. It calls netfilter (`PREROUTING`)
+17. It looks at the routing table, if forwarding or local
+18. If it's local it calls netfilter (`LOCAL_IN`)
+19. It calls the L4 protocol (for instance `tcp_v4_rcv`)
+20. It finds the right socket
+21. It goes to the tcp finite state machine
+22. Enqueue the packet to the receive buffer and sized as `tcp_rmem` rules
+    1. If `tcp_moderate_rcvbuf` is enabled kernel will auto-tune the receive buffer
+23. Kernel will signalize that there is data available to apps (epoll or any polling system)
+24. Application wakes up and reads the data
+
+### Egress - they're leaving
+
+1. Application sends message (`sendmsg` or other)
+2. TCP send message allocates skb_buff
+3. It enqueues skb to the socket write buffer of `tcp_wmem` size
+4. Builds the TCP header (src and dst port, checksum)
+5. Calls L3 handler (in this case `ipv4` on `tcp_write_xmit` and `tcp_transmit_skb`)
+6. L3 (`ip_queue_xmit`) does its work: build ip header and call netfilter (`LOCAL_OUT`)
+7. Calls output route action
+8. Calls netfilter (`POST_ROUTING`)
+9. Fragment the packet (`ip_output`)
+10. Calls L2 send function (`dev_queue_xmit`)
+11. Feeds the output (QDisc) queue of `txqueuelen` length with its algorithm `default_qdisc`
+12. The driver code enqueue the packets at the `ring buffer tx`
+13. The driver will do a `soft IRQ (NET_TX_SOFTIRQ)` after `tx-usecs` timeout or `tx-frames`
+14. Re-enable hard IRQ to NIC
+15. Driver will map all the packets (to be sent) to some DMA'ed region
+16. NIC fetches the packets (via DMA) from RAM to transmit
+17. After the transmission NIC will raise a `hard IRQ` to signal its completion
+18. The driver will handle this IRQ (turn it off)
+19. And schedule (`soft IRQ`) the NAPI poll system
+20. NAPI will handle the receive packets signaling and free the RAM
+
+
 ## init
+
+Network Device Driver Initialization
+
+A driver registers an initialization function which is called by the kernel when the driver is loaded. This function is registered by using the module_init macro.
+
+The igb initialization function (igb_init_module) and its registration with module_init can be found in `drivers/net/ethernet/intel/igb/igb_main.c`.
+
+The bulk of the work to initialize the device happens with the call to pci_register_driver
+
+PCI initialization
+
+The Intel I350 network card is a PCI express device.
+
+PCI devices identify themselves with a series of registers in the PCI Configuration Space.
+
+When a device driver is compiled, a macro named MODULE_DEVICE_TABLE (from include/module.h) is used to export a table of PCI device IDs identifying devices that the device driver can control. The table is also registered as part of a structure, as we’ll see shortly.
+
+The kernel uses this table to determine which device driver to load to control the device.
+
+That’s how the OS can figure out which devices are connected to the system and which driver should be used to talk to the device.
+
+##### PCI probe
+
+Once a device has been identified by its PCI IDs, the kernel can then select the proper driver to use to control the device. Each PCI driver registers a probe function with the PCI system in the kernel. The kernel calls this function for devices which have not yet been claimed by a device driver. Once a device is claimed, other drivers will not be asked about the device. Most drivers have a lot of code that runs to get the device ready for use. The exact things done vary from driver to driver.
+
+Some typical operations to perform include:
+
+1. Enabling the PCI device.
+2. Requesting memory ranges and [IO ports](http://wiki.osdev.org/I/O_Ports).
+3. Setting the [DMA](https://en.wikipedia.org/wiki/Direct_memory_access) mask.
+4. The ethtool (described more below) functions the driver supports are registered.
+5. Any watchdog tasks needed (for example, e1000e has a watchdog task to check if the hardware is hung).
+6. Other device specific stuff like workarounds or dealing with hardware specific quirks or similar.
+7. The creation, initialization, and registration of a `struct net_device_ops` structure. This structure contains function pointers to the various functions needed for opening the device, sending data to the network, setting the MAC address, and more.
+8. The creation, initialization, and registration of a high level `struct net_device` which represents a network device.
+
+#### Network device initialization
+
+The `igb_probe` function does some important network device initialization. In addition to the PCI specific work, it will do more general networking and network device work:
+
+1. The `struct net_device_ops` is registered.
+2. `ethtool` operations are registered.
+3. The default MAC address is obtained from the NIC.
+4. `net_device` feature flags are set.
+5. And lots more.
 
 ### init net dev
 
@@ -34,7 +148,8 @@ initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 subsys_initcall(net_dev_init);
 ```
 
-Initialize the DEV module. At boot time this walks the device list and unhooks any devices that fail to initialise (normally hardware not present) and leaves us with a valid list of present and active devices.
+Initialize the DEV module.
+At boot time this walks the device list and unhooks any devices that fail to initialise (normally hardware not present) and leaves us with a valid list of present and active devices.
 
 This is called single threaded during boot, so no need to take the rtnl semaphore.
 

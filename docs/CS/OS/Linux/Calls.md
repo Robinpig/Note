@@ -770,6 +770,39 @@ bool inet_ehash_nolisten(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 
 ### accept queue
 
+The Accept Queue contains fully established connections: ready to be picked up by the application.
+When a process calls , the sockets are de-queued and passed to the application.accept()
+
+This is a rather simplified view of SYN packet handling on Linux.
+With socket toggles like TCP_DEFER_ACCEPT[2] and things work slightly differently.TCP_FASTOPEN
+
+Queue size limits
+
+The maximum allowed length of both the Accept and SYN Queues is taken from the parameter passed to the syscall by the application.
+For example, this sets the Accept and SYN Queue sizes to 1,024:backloglisten(2)
+
+Note: In kernels before 4.3 the SYN Queue length was counted differently.
+
+This SYN Queue cap used to be configured by the toggle, but this isn't the case anymore. Nowadays caps both queue sizes. On our servers we set it to 16k:net.ipv4.tcp_max_syn_backlognet.core.somaxconn
+```shell
+$ sysctl net.core.somaxconn
+net.core.somaxconn = 16384
+```
+
+Perfect backlog value
+Knowing all that, we might ask the question - what is the ideal parameter value?backlog
+
+The answer is: it depends. For the majority of trivial TCP Servers it doesn't really matter. For example, before version 1.11 Golang famously didn't support customizing backlog value. There are valid reasons to increase this value though:
+
+When the rate of incoming connections is really large, even with a performant application, the inbound SYN Queue may need a larger number of slots.
+The value controls the SYN Queue size. This effectively can be read as "ACK packets in flight". The larger the average round trip time to the client, the more slots are going to be used. In the case of many clients far away from the server, hundreds of milliseconds away, it makes sense to increase the backlog value.backlog
+The option causes sockets to remain in the SYN-RECV state longer and contribute to the queue limits.TCP_DEFER_ACCEPT
+Overshooting the is bad as well:backlog
+
+Each slot in SYN Queue uses some memory. During a SYN Flood it makes no sense to waste resources on storing attack packets. Each entry in SYN Queue takes 256 bytes of memory on kernel 4.14.struct inet_request_sock
+To peek into the SYN Queue on Linux we can use the command and look for sockets. For example, on one of Cloudflare's servers we can see 119 slots used in tcp/80 SYN Queue and 78 on tcp/443.ssSYN-RECV
+
+
 ```c
 // include/net/sock.h
 static inline void sk_acceptq_removed(struct sock *sk)
@@ -900,6 +933,20 @@ struct request_sock_queue {
 ```
 
 ### SYN queue
+
+The SYN Queue stores inbound SYN packets[1] (specifically: struct inet_request_sock). 
+It's responsible for sending out SYN+ACK packets and retrying them on timeout. 
+<br/>
+On Linux the number of retries is configured with:
+```shell
+$ sysctl net.ipv4.tcp_synack_retries
+net.ipv4.tcp_synack_retries = 5
+```
+
+After transmitting the SYN+ACK, the SYN Queue waits for an ACK packet from the client - the last packet in the three-way-handshake. 
+All received ACK packets must first be matched against the fully established connection table, and only then against data in the relevant SYN Queue. 
+On SYN Queue match, the kernel removes the item from the SYN Queue, happily creates a fully fledged connection (specifically: struct inet_sock), and adds it to the Accept Queue.
+
 
 SYN queue - logic queue
 see [qlen and max_syn_backlog](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
@@ -2220,4 +2267,5 @@ struct pollfd {
 
 ## References
 
-1. [打破砂锅挖到底—— Epoll 多路复用是如何转起来的？](https://mp.weixin.qq.com/s/Py2TE9CdQ92fGLpg-SEj_g)`
+1. [打破砂锅挖到底—— Epoll 多路复用是如何转起来的？](https://mp.weixin.qq.com/s/Py2TE9CdQ92fGLpg-SEj_g)
+2. [SYN packet handling in the wild](https://blog.cloudflare.com/syn-packet-handling-in-the-wild/#queuesizelimits)
