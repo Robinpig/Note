@@ -1,8 +1,15 @@
 ## Introduction
 
-The Concurrent Mark Sweep (CMS) collector is designed for applications that **prefer shorter garbage collection pauses** and that can afford to **share processor resources with the garbage collector while the application is running**. Typically applications that have a relatively large set of long-lived data (a large tenured generation) and run on machines with two or more processors tend to benefit from the use of this collector. However, this collector should be considered for any application with a low pause time requirement. The CMS collector is enabled with the command-line option `-XX:+UseConcMarkSweepGC`.
+The Concurrent Mark Sweep (CMS) collector is designed for applications that **prefer shorter garbage collection pauses** and that can afford to **share processor resources with the garbage collector while the application is running**. 
+Typically applications that have a relatively large set of long-lived data (a large tenured generation) and run on machines with two or more processors tend to benefit from the use of this collector. 
+However, this collector should be considered for any application with a low pause time requirement. The CMS collector is enabled with the command-line option `-XX:+UseConcMarkSweepGC`.
 
-Similar to the other available collectors, the CMS collector is generational; thus both minor and major collections occur. The CMS collector attempts to reduce pause times due to major collections by using separate garbage collector threads to trace the reachable objects concurrently with the execution of the application threads. During each major collection cycle, the CMS collector pauses all the application threads for a brief period at the beginning of the collection and again toward the middle of the collection. The second pause tends to be the longer of the two pauses. Multiple threads are used to do the collection work during both pauses. The remainder of the collection (including most of the tracing of live objects and sweeping of unreachable objects is done with one or more garbage collector threads that run concurrently with the application. Minor collections can interleave with an ongoing major cycle, and are done in a manner similar to the parallel collector (in particular, the application threads are stopped during minor collections).
+Similar to the other available collectors, the CMS collector is generational; thus both minor and major collections occur.
+The CMS collector attempts to reduce pause times due to major collections by using separate garbage collector threads to trace the reachable objects concurrently with the execution of the application threads.
+During each major collection cycle, the CMS collector pauses all the application threads for a brief period at the beginning of the collection and again toward the middle of the collection. 
+The second pause tends to be the longer of the two pauses. Multiple threads are used to do the collection work during both pauses. 
+The remainder of the collection (including most of the tracing of live objects and sweeping of unreachable objects is done with one or more garbage collector threads that run concurrently with the application.
+Minor collections can interleave with an ongoing major cycle, and are done in a manner similar to the parallel collector (in particular, the application threads are stopped during minor collections).
 
 Before CMS, Serial, Parallel all STW.
 
@@ -20,6 +27,8 @@ UseConcMarkSweepGC                       := true
 UseParNewGC                              := true
 ```
 
+
+UseCMSBestFit
 
 
 #### Concurrent Mode Failure

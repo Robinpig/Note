@@ -203,7 +203,7 @@ A program may have more than one mutator thread, but the threads together can us
 be thought of as a single actor over the heap. Equally, there may be one or more collector
 threads.
 
-- [CMS](/docs/CS/Java/JDK/JVM/CMS.md)
+- [CMS](/docs/CS/Java/JDK/JVM/CMS.md)(removed since JDK14)
 - [G1](/docs/CS/Java/JDK/JVM/G1.md)
 - [Shenandoah](/docs/CS/Java/JDK/JVM/Shenandoah.md)
 - [ZGC](/docs/CS/Java/JDK/JVM/ZGC.md)
@@ -364,6 +364,26 @@ If the performance still doesn't meet your goals, you can modify the collector a
 - Parallel - If peak application performance is the priority and there are no pause-time requirements or pauses of one second or longer are acceptable
 - CMS/G1 - If response time is more important than overall throughput and garbage collection pauses must be kept shorter than approximately one second
 - ZGC - If response time is a high priority, and/or you are using a very large heap
+
+### Collector tuning
+
+Parameters:
+
+- ParallelGCThreads
+- ConcGCThreads
+
+UseAdaptiveSizePolicy
+
+MaxGCPauseMillis
+
+GCTimeRatio
+
+- MaxHeapSize/Xmx
+- MinHeapSize/Xms
+- NewSize/Xmn
+
+- TLABSize
+- YoungPLABSize/OldOLABSize
 
 ## Links
 
