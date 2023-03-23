@@ -1,6 +1,6 @@
 ## Introduction
 
-
+> [Ubuntu Releases](https://mirrors.tuna.tsinghua.edu.cn/ubuntu-releases/)
 
 
 ## Software

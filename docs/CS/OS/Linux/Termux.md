@@ -16,6 +16,15 @@ apt get upgrade
 apt get install nodejs
 ```
 
+```shell
+
+apt install net-tools
+
+apt install dnsutils
+apt install nmap
+
+```
+
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
