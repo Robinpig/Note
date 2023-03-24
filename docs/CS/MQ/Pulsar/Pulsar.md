@@ -31,11 +31,70 @@ PartitionedTopic
 Persistent
 
 ```java
+package org.apache.pulsar.broker.service;
+
+public class ServerCnx extends PulsarHandler implements TransportCnx {
+  @Override
+  protected void handleLookup(CommandLookupTopic lookup) {
+    final long requestId = lookup.getRequestId();
+    final boolean authoritative = lookup.isAuthoritative();
+
+    // use the connection-specific listener name by default.
+    final String advertisedListenerName =
+            lookup.hasAdvertisedListenerName() && StringUtils.isNotBlank(lookup.getAdvertisedListenerName())
+                    ? lookup.getAdvertisedListenerName() : this.listenerName;
+
+    TopicName topicName = validateTopicName(lookup.getTopic(), requestId, lookup);
+    if (topicName == null) {
+      return;
+    }
+
+    final Semaphore lookupSemaphore = service.getLookupRequestSemaphore();
+    if (lookupSemaphore.tryAcquire()) {
+      isTopicOperationAllowed(topicName, TopicOperation.LOOKUP, authenticationData, originalAuthData).thenApply(
+              isAuthorized -> {
+                if (isAuthorized) {
+                  lookupTopicAsync(getBrokerService().pulsar(), topicName, authoritative,
+                          getPrincipal(), getAuthenticationData(),
+                          requestId, advertisedListenerName).handle((lookupResponse, ex) -> {
+                    if (ex == null) {
+                      ctx.writeAndFlush(lookupResponse);
+                    } else {
+                      // it should never happen
+                      log.warn("[{}] lookup failed with error {}, {}", remoteAddress, topicName,
+                              ex.getMessage(), ex);
+                      ctx.writeAndFlush(newLookupErrorResponse(ServerError.ServiceNotReady,
+                              ex.getMessage(), requestId));
+                    }
+                    lookupSemaphore.release();
+                    return null;
+                  });
+                } else {
+                  final String msg = "Proxy Client is not authorized to Lookup";
+                  log.warn("[{}] {} with role {} on topic {}", remoteAddress, msg, getPrincipal(), topicName);
+                  ctx.writeAndFlush(newLookupErrorResponse(ServerError.AuthorizationError, msg, requestId));
+                  lookupSemaphore.release();
+                }
+                return null;
+              }).exceptionally(ex -> {
+        logAuthException(remoteAddress, "lookup", getPrincipal(), Optional.of(topicName), ex);
+        final String msg = "Exception occurred while trying to authorize lookup";
+        ctx.writeAndFlush(newLookupErrorResponse(ServerError.AuthorizationError, msg, requestId));
+        lookupSemaphore.release();
+        return null;
+      });
+    } else {
+      ctx.writeAndFlush(newLookupErrorResponse(ServerError.TooManyRequests,
+              "Failed due to too many pending lookup requests", requestId));
+    }
+  }
+}
+```
+
+
+```java
 public class LookupProxyHandler {
     public void handleLookup(CommandLookupTopic lookup) {
-        if (log.isDebugEnabled()) {
-            log.debug("Received Lookup from {}", clientAddress);
-        }
         long clientRequestId = lookup.getRequestId();
         if (lookupRequestSemaphore.tryAcquire()) {
             try {
@@ -49,10 +108,6 @@ public class LookupProxyHandler {
             }
         } else {
             rejectedLookupRequests.inc();
-            if (log.isDebugEnabled()) {
-                log.debug("Lookup Request ID {} from {} rejected - {}.", clientRequestId, clientAddress,
-                        throttlingErrorMessage);
-            }
             proxyConnection.ctx().writeAndFlush(Commands.newLookupErrorResponse(ServerError.ServiceNotReady,
                     throttlingErrorMessage, clientRequestId));
         }
@@ -77,10 +132,6 @@ public class LookupProxyHandler {
         }
 
         InetSocketAddress addr = InetSocketAddress.createUnresolved(brokerURI.getHost(), brokerURI.getPort());
-        if (log.isDebugEnabled()) {
-            log.debug("Getting connections to '{}' for Looking up topic '{}' with clientReq Id '{}'", addr, topic,
-                    clientRequestId);
-        }
         proxyConnection.getConnectionPool().getConnection(addr).thenAccept(clientCnx -> {
             // Connected to backend broker
             long requestId = proxyConnection.newRequestId();
@@ -105,11 +156,6 @@ public class LookupProxyHandler {
                         // client
                         // to use the appropriate target broker (and port) when it
                         // will connect back.
-                        if (log.isDebugEnabled()) {
-                            log.debug(
-                                    "Successfully perform lookup '{}' for topic '{}' with clientReq Id '{}' and lookup-broker {}",
-                                    addr, topic, clientRequestId, brokerUrl);
-                        }
                         proxyConnection.ctx().writeAndFlush(Commands.newLookupResponse(brokerUrl, brokerUrl, true,
                                 LookupType.Connect, clientRequestId, true /* this is coming from proxy */));
                     }

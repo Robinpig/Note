@@ -324,9 +324,6 @@ protected void pushConnection(PooledConnection conn) throws SQLException {
         newConn.setCreatedTimestamp(conn.getCreatedTimestamp());
         newConn.setLastUsedTimestamp(conn.getLastUsedTimestamp());
         conn.invalidate();
-        if (log.isDebugEnabled()) {
-          log.debug("Returned connection " + newConn.getRealHashCode() + " to pool.");
-        }
         state.notifyAll();
       } else {
         state.accumulatedCheckoutTime += conn.getCheckoutTime();
@@ -334,15 +331,9 @@ protected void pushConnection(PooledConnection conn) throws SQLException {
           conn.getRealConnection().rollback();
         }
         conn.getRealConnection().close();
-        if (log.isDebugEnabled()) {
-          log.debug("Closed connection " + conn.getRealHashCode() + ".");
-        }
         conn.invalidate();
       }
     } else {
-      if (log.isDebugEnabled()) {
-        log.debug("A bad connection (" + conn.getRealHashCode() + ") attempted to return to the pool, discarding connection.");
-      }
       state.badConnectionCount++;
     }
   }
@@ -403,18 +394,12 @@ private PooledConnection popConnection(String username, String password) throws 
             conn.setCreatedTimestamp(oldestActiveConnection.getCreatedTimestamp());
             conn.setLastUsedTimestamp(oldestActiveConnection.getLastUsedTimestamp());
             oldestActiveConnection.invalidate();
-            if (log.isDebugEnabled()) {
-              log.debug("Claimed overdue connection " + conn.getRealHashCode() + ".");
-            }
           } else {
             // Must wait
             try {
               if (!countedWait) {
                 state.hadToWaitCount++;
                 countedWait = true;
-              }
-              if (log.isDebugEnabled()) {
-                log.debug("Waiting as long as " + poolTimeToWait + " milliseconds for connection.");
               }
               long wt = System.currentTimeMillis();
               state.wait(poolTimeToWait);
@@ -438,16 +423,10 @@ private PooledConnection popConnection(String username, String password) throws 
           state.requestCount++;
           state.accumulatedRequestTime += System.currentTimeMillis() - t;
         } else {
-          if (log.isDebugEnabled()) {
-            log.debug("A bad connection (" + conn.getRealHashCode() + ") was returned from the pool, getting another connection.");
-          }
           state.badConnectionCount++;
           localBadConnectionCount++;
           conn = null;
           if (localBadConnectionCount > (poolMaximumIdleConnections + poolMaximumLocalBadConnectionTolerance)) {
-            if (log.isDebugEnabled()) {
-              log.debug("PooledDataSource: Could not get a good connection to the database.");
-            }
             throw new SQLException("PooledDataSource: Could not get a good connection to the database.");
           }
         }
@@ -457,9 +436,6 @@ private PooledConnection popConnection(String username, String password) throws 
   }
 
   if (conn == null) {
-    if (log.isDebugEnabled()) {
-      log.debug("PooledDataSource: Unknown severe error condition.  The connection pool returned a null connection.");
-    }
     throw new SQLException("PooledDataSource: Unknown severe error condition.  The connection pool returned a null connection.");
   }
 
@@ -485,18 +461,12 @@ protected boolean pingConnection(PooledConnection conn) {
   try {
     result = !conn.getRealConnection().isClosed();
   } catch (SQLException e) {
-    if (log.isDebugEnabled()) {
-      log.debug("Connection " + conn.getRealHashCode() + " is BAD: " + e.getMessage());
-    }
     result = false;
   }
 
   if (result && poolPingEnabled && poolPingConnectionsNotUsedFor >= 0
       && conn.getTimeElapsedSinceLastUse() > poolPingConnectionsNotUsedFor) {
     try {
-      if (log.isDebugEnabled()) {
-        log.debug("Testing connection " + conn.getRealHashCode() + " ...");
-      }
       Connection realConn = conn.getRealConnection();
       try (Statement statement = realConn.createStatement()) {
         statement.executeQuery(poolPingQuery).close();
@@ -505,9 +475,6 @@ protected boolean pingConnection(PooledConnection conn) {
         realConn.rollback();
       }
       result = true;
-      if (log.isDebugEnabled()) {
-        log.debug("Connection " + conn.getRealHashCode() + " is GOOD!");
-      }
     } catch (Exception e) {
       log.warn("Execution of ping query '" + poolPingQuery + "' failed: " + e.getMessage());
       try {
@@ -516,9 +483,6 @@ protected boolean pingConnection(PooledConnection conn) {
         // ignore
       }
       result = false;
-      if (log.isDebugEnabled()) {
-        log.debug("Connection " + conn.getRealHashCode() + " is BAD: " + e.getMessage());
-      }
     }
   }
   return result;
@@ -581,9 +545,6 @@ public void forceCloseAll() {
       }
     }
   }
-  if (log.isDebugEnabled()) {
-    log.debug("PooledDataSource forcefully closed/removed all connections.");
-  }
 }
 ```
 
@@ -600,18 +561,12 @@ protected boolean pingConnection(PooledConnection conn) {
   try {
     result = !conn.getRealConnection().isClosed();
   } catch (SQLException e) {
-    if (log.isDebugEnabled()) {
-      log.debug("Connection " + conn.getRealHashCode() + " is BAD: " + e.getMessage());
-    }
     result = false;
   }
 
   if (result && poolPingEnabled && poolPingConnectionsNotUsedFor >= 0
       && conn.getTimeElapsedSinceLastUse() > poolPingConnectionsNotUsedFor) {
     try {
-      if (log.isDebugEnabled()) {
-        log.debug("Testing connection " + conn.getRealHashCode() + " ...");
-      }
       Connection realConn = conn.getRealConnection();
       try (Statement statement = realConn.createStatement()) {
         statement.executeQuery(poolPingQuery).close();

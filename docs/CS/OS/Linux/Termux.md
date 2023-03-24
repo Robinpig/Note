@@ -5,7 +5,10 @@
 A minimal base system is installed automatically - additional packages are available using the APT package manager.
 
 
-
+Change Repo:
+```shell
+termux-change-repo
+```
 
 ```shell
 apt get update
@@ -23,6 +26,7 @@ apt install net-tools
 apt install dnsutils
 apt install nmap
 
+pkg 
 ```
 
 ## Links
