@@ -354,17 +354,11 @@ private PooledConnection popConnection(String username, String password) throws 
       if (!state.idleConnections.isEmpty()) {
         // Pool has available connection
         conn = state.idleConnections.remove(0);
-        if (log.isDebugEnabled()) {
-          log.debug("Checked out connection " + conn.getRealHashCode() + " from pool.");
-        }
       } else {
         // Pool does not have available connection
         if (state.activeConnections.size() < poolMaximumActiveConnections) {
           // Can create new connection
           conn = new PooledConnection(dataSource.getConnection(), this);
-          if (log.isDebugEnabled()) {
-            log.debug("Created connection " + conn.getRealHashCode() + ".");
-          }
         } else {
           // Cannot create new connection
           PooledConnection oldestActiveConnection = state.activeConnections.get(0);
@@ -575,9 +569,6 @@ protected boolean pingConnection(PooledConnection conn) {
         realConn.rollback();
       }
       result = true;
-      if (log.isDebugEnabled()) {
-        log.debug("Connection " + conn.getRealHashCode() + " is GOOD!");
-      }
     } catch (Exception e) {
       log.warn("Execution of ping query '" + poolPingQuery + "' failed: " + e.getMessage());
       try {
@@ -586,9 +577,6 @@ protected boolean pingConnection(PooledConnection conn) {
         // ignore
       }
       result = false;
-      if (log.isDebugEnabled()) {
-        log.debug("Connection " + conn.getRealHashCode() + " is BAD: " + e.getMessage());
-      }
     }
   }
   return result;
@@ -752,9 +740,6 @@ public class JdbcTransaction implements Transaction {
   @Override
   public void commit() throws SQLException {
     if (connection != null && !connection.getAutoCommit()) {
-      if (log.isDebugEnabled()) {
-        log.debug("Committing JDBC Connection [" + connection + "]");
-      }
       connection.commit();
     }
   }
@@ -762,9 +747,6 @@ public class JdbcTransaction implements Transaction {
   @Override
   public void rollback() throws SQLException {
     if (connection != null && !connection.getAutoCommit()) {
-      if (log.isDebugEnabled()) {
-        log.debug("Rolling back JDBC Connection [" + connection + "]");
-      }
       connection.rollback();
     }
   }
@@ -773,9 +755,6 @@ public class JdbcTransaction implements Transaction {
   public void close() throws SQLException {
     if (connection != null) {
       resetAutoCommit();
-      if (log.isDebugEnabled()) {
-        log.debug("Closing JDBC Connection [" + connection + "]");
-      }
       connection.close();
     }
   }
@@ -783,9 +762,6 @@ public class JdbcTransaction implements Transaction {
   protected void setDesiredAutoCommit(boolean desiredAutoCommit) {
     try {
       if (connection.getAutoCommit() != desiredAutoCommit) {
-        if (log.isDebugEnabled()) {
-          log.debug("Setting autocommit to " + desiredAutoCommit + " on JDBC Connection [" + connection + "]");
-        }
         connection.setAutoCommit(desiredAutoCommit);
       }
     } catch (SQLException e) {
@@ -805,23 +781,13 @@ public class JdbcTransaction implements Transaction {
         // and they mandate a commit/rollback before closing the connection.
         // A workaround is setting the autocommit to true before closing the connection.
         // Sybase throws an exception here.
-        if (log.isDebugEnabled()) {
-          log.debug("Resetting autocommit to true on JDBC Connection [" + connection + "]");
-        }
         connection.setAutoCommit(true);
       }
     } catch (SQLException e) {
-      if (log.isDebugEnabled()) {
-        log.debug("Error resetting autocommit to true "
-            + "before closing the connection.  Cause: " + e);
-      }
     }
   }
 
   protected void openConnection() throws SQLException {
-    if (log.isDebugEnabled()) {
-      log.debug("Opening JDBC Connection");
-    }
     connection = dataSource.getConnection();
     if (level != null) {
       connection.setTransactionIsolation(level.getLevel());
@@ -906,17 +872,11 @@ public class ManagedTransaction implements Transaction {
   @Override
   public void close() throws SQLException {
     if (this.closeConnection && this.connection != null) {
-      if (log.isDebugEnabled()) {
-        log.debug("Closing JDBC Connection [" + this.connection + "]");
-      }
       this.connection.close();
     }
   }
 
   protected void openConnection() throws SQLException {
-    if (log.isDebugEnabled()) {
-      log.debug("Opening JDBC Connection");
-    }
     this.connection = this.dataSource.getConnection();
     if (this.level != null) {
       this.connection.setTransactionIsolation(this.level.getLevel());

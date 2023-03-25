@@ -2139,9 +2139,6 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
                     if (invoker != null) {
                         try {
                             invoker.destroy();
-                            if (logger.isDebugEnabled()) {
-                                logger.debug("destroy invoker[" + invoker.getUrl() + "] success. ");
-                            }
                         } catch (Exception e) {
                             logger.warn("destroy invoker[" + invoker.getUrl() + "] failed. " + e.getMessage(), e);
                         }

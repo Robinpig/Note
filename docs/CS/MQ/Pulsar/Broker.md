@@ -565,9 +565,6 @@ public class ManagedLedgerImpl implements ManagedLedger, CreateCallback {
           OpenCallback opencb = (rc, lh, ctx1) -> {
             executor.executeOrdered(name, safeRun(() -> {
               mbean.endDataLedgerOpenOp();
-              if (log.isDebugEnabled()) {
-                log.debug("[{}] Opened ledger {}: {}", name, id, BKException.getMessage(rc));
-              }
               if (rc == BKException.Code.OK) {
                 LedgerInfo info = LedgerInfo.newBuilder().setLedgerId(id)
                         .setEntries(lh.getLastAddConfirmed() + 1).setSize(lh.getLength())
@@ -596,9 +593,6 @@ public class ManagedLedgerImpl implements ManagedLedger, CreateCallback {
             }));
           };
 
-          if (log.isDebugEnabled()) {
-            log.debug("[{}] Opening ledger {}", name, id);
-          }
           mbean.startDataLedgerOpenOp();
           bookKeeper.asyncOpenLedger(id, digestType, config.getPassword(), opencb, null);
         } else {
@@ -625,10 +619,6 @@ initializeBookKeeper
 ```java
 
     private synchronized void initializeBookKeeper(final ManagedLedgerInitializeLedgerCallback callback) {
-        if (log.isDebugEnabled()) {
-            log.debug("[{}] initializing bookkeeper; ledgers {}", name, ledgers);
-        }
-
         // Calculate total entries and size
         Iterator<LedgerInfo> iterator = ledgers.values().iterator();
         while (iterator.hasNext()) {
@@ -639,9 +629,6 @@ initializeBookKeeper
             } else {
                 iterator.remove();
                 bookKeeper.asyncDeleteLedger(li.getLedgerId(), (rc, ctx) -> {
-                    if (log.isDebugEnabled()) {
-                        log.debug("[{}] Deleted empty ledger ledgerId={} rc={}", name, li.getLedgerId(), rc);
-                    }
                 }, null);
             }
         }
@@ -818,9 +805,6 @@ findBrokerServiceUrl -> searchForCandidateBroker
                 // Load manager decided that the local broker should try to become the owner
                 ownershipCache.tryAcquiringOwnership(bundle).thenAccept(ownerInfo -> {
                     if (ownerInfo.isDisabled()) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Namespace bundle {} is currently being unloaded", bundle);
-                        }
                         lookupFuture.completeExceptionally(new IllegalStateException(
                                 String.format("Namespace bundle %s is currently being unloaded", bundle)));
                     } else {
@@ -862,10 +846,6 @@ findBrokerServiceUrl -> searchForCandidateBroker
 
             } else {
                 // Load managed decider some other broker should try to acquire ownership
-
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Redirecting to broker {} to acquire ownership of bundle {}", candidateBroker, bundle);
-                }
 
                 // Now setting the redirect url
                 createLookupResult(candidateBrokerAdvertisedAddr == null ? candidateBroker
@@ -945,9 +925,6 @@ As the leader broker, find a suitable broker for the assignment of the given bun
 
                 // Choose a broker among the potentially smaller filtered list, when possible
                 Optional<String> broker = placementStrategy.selectBroker(brokerCandidateCache, data, loadData, conf);
-                if (log.isDebugEnabled()) {
-                    log.debug("Selected broker {} from candidate brokers {}", broker, brokerCandidateCache);
-                }
 
                 if (!broker.isPresent()) {
                     // No brokers available
@@ -1115,9 +1092,6 @@ public class ServerCnx extends PulsarHandler implements TransportCnx {
         }
 
         Producer producer = producerFuture.getNow(null);
-        if (log.isDebugEnabled()) {
-            printSendCommandDebug(send, headersAndPayload);
-        }
 
         if (producer.isNonPersistentTopic()) {
             // avoid processing non-persist message if reached max concurrent-message limit
@@ -1263,9 +1237,6 @@ public class ManagedLedgerImpl implements ManagedLedger, CreateCallback {
     if (state == State.ClosingLedger || state == State.CreatingLedger) {
       // We don't have a ready ledger to write into
       // We are waiting for a new ledger to be created
-      if (log.isDebugEnabled()) {
-        log.debug("[{}] Queue addEntry request", name);
-      }
       if (State.CreatingLedger == state) {
         long elapsedMs = System.currentTimeMillis() - this.lastLedgerCreationInitiationTimestamp;
         if (elapsedMs > TimeUnit.SECONDS.toMillis(2 * config.getMetadataOperationsTimeoutSeconds())) {
@@ -1292,15 +1263,8 @@ public class ManagedLedgerImpl implements ManagedLedger, CreateCallback {
       ++currentLedgerEntries;
       currentLedgerSize += addOperation.data.readableBytes();
 
-      if (log.isDebugEnabled()) {
-        log.debug("[{}] Write into current ledger lh={} entries={}", name, currentLedger.getId(),
-                currentLedgerEntries);
-      }
 
       if (currentLedgerIsFull()) {
-        if (log.isDebugEnabled()) {
-          log.debug("[{}] Closing current ledger lh={}", name, currentLedger.getId());
-        }
         // This entry will be the last added to current ledger
         addOperation.setCloseWhenDone(true);
         STATE_UPDATER.set(this, State.ClosingLedger);
@@ -1412,13 +1376,7 @@ public class ManagedLedgerImpl implements ManagedLedger, CreateCallback {
     }
     scheduledExecutor.schedule(() -> {
       if (!ledgerCreated.get()) {
-        if (log.isDebugEnabled()) {
-          log.debug("[{}] Timeout creating ledger", name);
-        }
       } else {
-        if (log.isDebugEnabled()) {
-          log.debug("[{}] Ledger already created when timeout task is triggered", name);
-        }
       }
       cb.createComplete(BKException.Code.TimeoutException, null, ledgerCreated);
     }, config.getMetadataOperationsTimeoutSeconds(), TimeUnit.SECONDS);
@@ -1574,10 +1532,6 @@ public class EntryCacheImpl implements EntryCache {
     final PositionImpl firstPosition = PositionImpl.get(lh.getId(), firstEntry);
     final PositionImpl lastPosition = PositionImpl.get(lh.getId(), lastEntry);
 
-    if (log.isDebugEnabled()) {
-      log.debug("[{}] Reading entries range ledger {}: {} to {}", ml.getName(), ledgerId, firstEntry, lastEntry);
-    }
-
     Collection<EntryImpl> cachedEntries = entries.getRange(firstPosition, lastPosition);
 
     if (cachedEntries.size() == entriesToRead) {
@@ -1651,10 +1605,6 @@ public class Consumer {
     this.lastConsumedTimestamp = System.currentTimeMillis();
 
     if (entries.isEmpty() || totalMessages == 0) {
-      if (log.isDebugEnabled()) {
-        log.debug("[{}-{}] List of messages is empty, triggering write future immediately for consumerId {}",
-                topicName, subscription, consumerId);
-      }
       batchSizes.recyle();
       if (batchIndexesAcks != null) {
         batchIndexesAcks.recycle();
@@ -1681,12 +1631,6 @@ public class Consumer {
             unackedMessages -= (batchSize - BitSet.valueOf(ackSet).cardinality());
           }
           pendingAcks.put(entry.getLedgerId(), entry.getEntryId(), batchSize, stickyKeyHash);
-          if (log.isDebugEnabled()) {
-            log.debug("[{}-{}] Added {}:{} ledger entry with batchSize of {} to pendingAcks in"
-                            + " broker.service.Consumer for consumerId: {}",
-                    topicName, subscription, entry.getLedgerId(), entry.getEntryId(), batchSize,
-                    consumerId);
-          }
         }
       }
     }
@@ -1703,11 +1647,6 @@ public class Consumer {
     // reduce permit and increment unackedMsg count with total number of messages in batch-msgs
     int ackedCount = batchIndexesAcks == null ? 0 : batchIndexesAcks.getTotalAckedIndexCount();
     MESSAGE_PERMITS_UPDATER.addAndGet(this, ackedCount - totalMessages);
-    if (log.isDebugEnabled()) {
-      log.debug("[{}-{}] Added {} minus {} messages to MESSAGE_PERMITS_UPDATER in broker.service.Consumer"
-                      + " for consumerId: {}; avgMessagesPerEntry is {}",
-              topicName, subscription, ackedCount, totalMessages, consumerId, avgMessagesPerEntry.get());
-    }
     incrementUnackedMessages(unackedMessages);
     msgOut.recordMultipleEvents(totalMessages, totalBytes);
     msgOutCounter.add(totalMessages);

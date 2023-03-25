@@ -257,10 +257,6 @@ public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, Conne
                 cnx.ctx().channel().eventLoop().execute(WriteInEventLoopCallback.create(this, cnx, op));
                 stats.updateNumMsgsSent(op.numMessagesInBatch, op.batchSizeByte);
             } else {
-                if (log.isDebugEnabled()) {
-                    log.debug("[{}] [{}] Connection is not ready -- sequenceId {}", topic, producerName,
-                        op.sequenceId);
-                }
             }
         } catch (Throwable t) {
             releaseSemaphoreForSendOp(op);
