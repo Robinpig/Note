@@ -88,7 +88,8 @@ We usually use long or int to replace String in order to reduce network transmis
 Returns a hash code for this string. The hash code for a String object is computed as:
 
 $$
-   *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
+*s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
+
 $$
 
 Using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)
@@ -159,6 +160,7 @@ public void setLength(int newLength) {
     count = newLength;
 }
 ```
+
 ```java
 public AbstractStringBuilder delete(int start, int end) {
     if (start < 0)
@@ -175,6 +177,7 @@ public AbstractStringBuilder delete(int start, int end) {
     return this;
 }
 ```
+
 ## StringTable
 
 HashTable size:
@@ -186,9 +189,11 @@ HashTable size:
 -XX:+PrintStringTableStatistics
 -XX:StringTableSize=N
 ```
+
 ```shell
 jcmd <pid> VM.stringtable
 ```
+
 ### intern
 
 ```cpp
@@ -229,6 +234,7 @@ oop StringTable::intern(Handle string_or_null_h, const jchar* name, int len, TRA
                                              hash, CHECK_NULL);
 }
 ```
+
 #### do_intern
 
 ```cpp
@@ -243,6 +249,7 @@ oop StringTable::do_intern(Handle string_or_null_h, const jchar* name,
     string_h = java_lang_String::create_from_unicode(name, len, CHECK_NULL);
   }
 ```
+
 **Deduplicate the string before it is interned.**
 Note that we should never deduplicate a string after it has been interned.
 Doing so will counteract compiler optimizations done on e.g. interned string literals.
@@ -272,6 +279,7 @@ Doing so will counteract compiler optimizations done on e.g. interned string lit
   } while(true);
 }
 ```
+
 ## String Deduplication
 
 [JEP 192: String Deduplication in G1](http://openjdk.java.net/jeps/192)
@@ -298,6 +306,7 @@ Candidate selection policy for young/mixed GC.
             StringDedup::is_below_threshold_age(age));
   }
 ```
+
 `G1FullGCMarker::mark_object()` -> `G1StringDedup::is_candidate_from_mark()`
 
 Candidate if string is being evacuated from young to old but has not reached the deduplication age threshold,
@@ -310,6 +319,7 @@ static bool G1StringDedup::is_candidate_from_mark(oop java_string) {
          StringDedup::is_below_threshold_age(java_string->age());
 }
 ```
+
 ### deduplicate
 
 ```cpp
@@ -349,7 +359,6 @@ void StringDedup::Table::deduplicate(oop java_string) {
 }
 ```
 
-
 ### Example
 
 ```java
@@ -377,6 +386,7 @@ public class Main {
   }
 }
 ```
+
 String#intern() cache String instances
 
 Deduplication remove char/byte array from String instances cache
