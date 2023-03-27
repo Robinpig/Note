@@ -1,11 +1,10 @@
 ## introduction
 
-
-[Termux](https://termux.dev/en/) is an Android terminal emulator and [Linux](/docs/CS/OS/Linux/Linux.md) environment app that works directly with no rooting or setup required. 
+[Termux](https://termux.dev/en/) is an Android terminal emulator and [Linux](/docs/CS/OS/Linux/Linux.md) environment app that works directly with no rooting or setup required.
 A minimal base system is installed automatically - additional packages are available using the APT package manager.
 
-
 Change Repo:
+
 ```shell
 termux-change-repo
 ```
