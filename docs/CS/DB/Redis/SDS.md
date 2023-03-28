@@ -9,6 +9,22 @@ cache (shared sessions)
 
 ## Type
 
+Note that this version of SDS may be a slower with certain workloads, but uses less memory compared to V1 since header size is dynamic and depends to the string to alloc
+  
+  
+  
+This is achieved using an alternative design in which instead of using a C structure to represent a string, we use a binary prefix that is stored before the actual pointer to the string that is returned by SDS to the user.
+
++--------+-------------------------------+-----------+
+| Header | Binary safe C alike string... | Null term |
++--------+-------------------------------+-----------+
+         |
+         `-> Pointer returned to the user.
+         
+         
+
+  
+
 
 | Type         | len | alloc | flag                             | buf |
 | -------------- | ----- | ------- | ---------------------------------- | ----- |
