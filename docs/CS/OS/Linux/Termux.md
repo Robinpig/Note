@@ -18,6 +18,8 @@ apt get upgrade
 apt get install nodejs
 ```
 
+Network tools:
+
 ```shell
 
 apt install net-tools
@@ -25,7 +27,12 @@ apt install net-tools
 apt install dnsutils
 apt install nmap
 
-pkg 
+pkg install traceroute
+pkg install whois
+pkg install netcat-openbsd
+
+pkg install root-repo
+pkg install tcpdump
 ```
 
 ## Links
