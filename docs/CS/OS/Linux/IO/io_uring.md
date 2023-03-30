@@ -1,12 +1,27 @@
 ## Introduction
 
+Shared application/kernel submission and completion ring pairs, for supporting fast/efficient IO.
 
+A note on the read/write ordering memory barriers that are matched between the application and kernel side.
+
+After the application reads the CQ ring tail, it must use an appropriate smp_rmb() to pair with the smp_wmb() the kernel uses before writing the tail (using smp_load_acquire to read the tail will do).
+It also needs a smp_mb() before updating CQ head (ordering the entry load(s) with the head store), pairing with an implicit barrier through a control-dependency in io_get_cqe (smp_store_release to store head will do).
+Failure to do so could lead to reading invalid CQ entries.
+
+Likewise, the application must use an appropriate smp_wmb() before writing the SQ tail (ordering SQ entry stores with the tail store), which pairs with smp_load_acquire in io_get_sqring (smp_store_release to store the tail will do).
+And it needs a barrier ordering the SQ head load before writing new SQ entries (smp_load_acquire to read head will do).
+
+When using the SQ poll thread (IORING_SETUP_SQPOLL), the application needs to check the SQ flags for IORING_SQ_NEED_WAKEUP *after* updating the SQ tail; a full memory barrier smp_mb() is needed between.
+
+Also see the examples in the liburing library:
+
+git://git.kernel.dk/liburing
+io_uring also uses READ/WRITE_ONCE() for _any_ store or load that happens from data shared between the kernel and application.
+This is done both for ordering purposes, but also to ensure that once a value is loaded from data that the application could potentially modify, it remains stable.
 
 SQ and CQ both of them are one-Producer-one-Consumer queue which shared in user space and kernel space.
 
 app consume CQ don't need change to kernel space
-
-
 
 Three modes:
 
@@ -14,8 +29,8 @@ Three modes:
 2. polled
 3. kernel polled
 
-
 ### io_ring_ctx
+
 ```c
 
 struct io_ring_ctx {
@@ -114,17 +129,11 @@ struct io_ring_ctx {
 		bool			poll_multi_queue;
 	} ____cacheline_aligned_in_smp;
 ```
-
 ### io_uring_init
 
 ```c
 __initcall(io_uring_init);
 ```
-
-
-
-
-
 ```c
 static int __init io_uring_init(void)
 {
@@ -186,12 +195,10 @@ static int __init io_uring_init(void)
        return 0;
 };
 ```
-
-
-
 ### io_uring_setup
 
 #### io_uring_params
+
 Passed in for io_uring_setup(2). Copied back with updated info on success
 
 ```c
@@ -208,7 +215,6 @@ struct io_uring_params {
 	struct io_cqring_offsets cq_off;
 };
 ```
-
 Sets up an aio uring context, and returns the fd. Applications asks for a ring size, we return the actual sq/cq ring sizes (among other things) in the params structure passed in.
 
 ```cpp
@@ -233,7 +239,6 @@ static long io_uring_setup(u32 entries, struct io_uring_params __user *params)
 	}
 
 ```
-
 ```c
 	if (p.flags & ~(IORING_SETUP_IOPOLL | IORING_SETUP_SQPOLL |
 			IORING_SETUP_SQ_AFF | IORING_SETUP_CQSIZE |
@@ -245,9 +250,6 @@ static long io_uring_setup(u32 entries, struct io_uring_params __user *params)
 }
 
 ```
-
-
-
 #### io_uring_create
 
 ```c
@@ -272,6 +274,7 @@ since the sqes are only used at submission time. This allows for
 some flexibility in overcommitting a bit. If the application has
 set IORING_SETUP_CQSIZE, it will have passed in the desired number
 of CQ ring entries manually.
+
 ```c
        p->sq_entries = roundup_pow_of_two(entries);
        if (p->flags & IORING_SETUP_CQSIZE) {
@@ -362,6 +365,7 @@ of CQ ring entries manually.
        /*
 ```
 Install ring fd as the very last thing, so we don't risk someone having closed it before we finish setup
+
 ```c
        ret = io_uring_install_fd(ctx, file);
        if (ret < 0) {
@@ -377,9 +381,8 @@ err:
        return ret;
 }
 ```
-
-
 #### io_sq_thread
+
 ```c
 
 static int io_sq_thread(void *data)
@@ -469,7 +472,6 @@ static int io_sq_thread(void *data)
 }
 
 ```
-
 ### io_uring_enter
 
 ```c
@@ -506,10 +508,9 @@ SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
               goto out;
 
 ```
-
 For SQ polling, the thread will do all submissions and completions.
 Just return the requested submit count, and wake the thread if we were asked to.
-     
+
 ```c
        ret = 0;
        if (ctx->flags & IORING_SETUP_SQPOLL) {
@@ -548,9 +549,9 @@ Just return the requested submit count, and wake the thread if we were asked to.
 
               min_complete = min(min_complete, ctx->cq_entries);
 ```
-
 When SETUP_IOPOLL and SETUP_SQPOLL are both enabled, user space applications don't need to do io completion events
 polling again, they can rely on io_sq_thread to do polling work, which can reduce cpu usage and uring_lock contention.
+
 ```c
               if (ctx->flags & IORING_SETUP_IOPOLL &&
                   !(ctx->flags & IORING_SETUP_SQPOLL)) {
@@ -567,9 +568,6 @@ out_fput:
        return submitted ? submitted : ret;
 }
 ```
-
-
-
 ### io_uring_register
 
 ```c
@@ -602,9 +600,6 @@ out_fput:
        return ret;
 }
 ```
-
-
-
 ```c
 static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
                             void __user *arg, unsigned nr_args)
@@ -748,11 +743,6 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
        return ret;
 }
 ```
-
-
-
-
-
 ### io_uring_submit
 
 Submit sqes acquired from io_uring_get_sqe() to the kernel.
@@ -826,11 +816,6 @@ submit:
        return ret;
 }
 ```
-
-
-
-
-
 ## References
 
 1. [An Introduction to the io_uring Asynchronous I/O Framework](https://blogs.oracle.com/site/linux/post/an-introduction-to-the-io-uring-asynchronous-io-framework)
