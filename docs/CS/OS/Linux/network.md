@@ -308,7 +308,7 @@ register [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) 
 fs_initcall(inet_init);
 ```
 
-Registe protocols:
+Register protocols into `inet_protos` and `ptype_base`:
 
 1. ICMP
 2. UDP
@@ -319,7 +319,7 @@ Registe protocols:
 ```c
 static int __init inet_init(void)
 {
-	...
+    ......
 	/* Add all the base protocols. 	*/
 	if (inet_add_protocol(&icmp_protocol, IPPROTO_ICMP) < 0)
 		pr_crit("%s: Cannot add ICMP protocol\n", __func__);
@@ -331,21 +331,14 @@ static int __init inet_init(void)
 	if (inet_add_protocol(&igmp_protocol, IPPROTO_IGMP) < 0)
 		pr_crit("%s: Cannot add IGMP protocol\n", __func__);
 #endif
-
-	...
+    ......
 
 	arp_init();
-
 	ip_init();
-
 	tcp_init();
-
 	udp_init();
-
 	udplite4_register();
-
 	raw_init();
-
 	ping_init();
   
   `dev_add_pack(&ip_packet_type);
@@ -483,6 +476,249 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 ```
 
 ### init driver
+
+
+```c
+//  igb_main.c
+static struct pci_driver igb_driver = {
+	.name     = igb_driver_name,
+	.id_table = igb_pci_tbl,
+	.probe    = igb_probe,
+	.remove   = igb_remove,
+#ifdef CONFIG_PM
+	.driver.pm = &igb_pm_ops,
+#endif
+	.shutdown = igb_shutdown,
+	.sriov_configure = igb_pci_sriov_configure,
+	.err_handler = &igb_err_handler
+};
+
+
+/**
+ *  igb_init_module - Driver Registration Routine
+ *
+ *  igb_init_module is the first routine called when the driver is
+ *  loaded. All it does is register with the PCI subsystem.
+ **/
+static int __init igb_init_module(void)
+{
+	int ret;
+
+	pr_info("%s\n", igb_driver_string);
+	pr_info("%s\n", igb_copyright);
+
+#ifdef CONFIG_IGB_DCA
+	dca_register_notify(&dca_notifier);
+#endif
+	ret = pci_register_driver(&igb_driver);
+	return ret;
+}
+
+module_init(igb_init_module);
+```
+
+The probe function is quite basic, and only needs to perform a device's early init, and then register our network device with the kernel.
+
+In other words, the probe function has to:
+
+1. Allocate the network device along with its private data using the alloc_etherdev() function (helped by netdev_priv()).
+2. Initialize private data fields (mutexes, spinlock, work_queue, and so on). You should use work queues (and mutexes) if the device sits on a bus whose access functions may sleep (SPI, for example). 
+   In this case, the hwirq just has to acknowledge the kernel code, and schedule the job that will perform operations on the device. An alternative solution is to use threaded IRQs. 
+   If the device is MMIO, you can use spinlock to protect ...
+
+
+igb_probe:
+1. get MAC address from Adapter
+2. init DMA
+3. register ethtool function
+4. register net_device_ops
+5. init NAPI, register poll function
+
+
+```c
+
+static const struct net_device_ops igb_netdev_ops = {
+	.ndo_open		= igb_open,
+	.ndo_stop		= igb_close,
+	.ndo_start_xmit		= igb_xmit_frame,
+	.ndo_get_stats64	= igb_get_stats64,
+	.ndo_set_rx_mode	= igb_set_rx_mode,
+	.ndo_set_mac_address	= igb_set_mac,
+	.ndo_change_mtu		= igb_change_mtu,
+	.ndo_eth_ioctl		= igb_ioctl,
+	.ndo_tx_timeout		= igb_tx_timeout,
+	.ndo_validate_addr	= eth_validate_addr,
+	.ndo_vlan_rx_add_vid	= igb_vlan_rx_add_vid,
+	.ndo_vlan_rx_kill_vid	= igb_vlan_rx_kill_vid,
+	.ndo_set_vf_mac		= igb_ndo_set_vf_mac,
+	.ndo_set_vf_vlan	= igb_ndo_set_vf_vlan,
+	.ndo_set_vf_rate	= igb_ndo_set_vf_bw,
+	.ndo_set_vf_spoofchk	= igb_ndo_set_vf_spoofchk,
+	.ndo_set_vf_trust	= igb_ndo_set_vf_trust,
+	.ndo_get_vf_config	= igb_ndo_get_vf_config,
+	.ndo_fix_features	= igb_fix_features,
+	.ndo_set_features	= igb_set_features,
+	.ndo_fdb_add		= igb_ndo_fdb_add,
+	.ndo_features_check	= igb_features_check,
+	.ndo_setup_tc		= igb_setup_tc,
+	.ndo_bpf		= igb_xdp,
+	.ndo_xdp_xmit		= igb_xdp_xmit,
+};
+```
+
+### open network interface
+
+call open function -> allocate RX TX memory
+
+
+
+__igb_open - Called when a network interface is made active
+
+The open entry point is called when a network interface is made active by the system (IFF_UP). 
+At this point all resources needed for transmit and receive operations are allocated, the interrupt handler is registered with the OS, the watchdog timer is started, and the stack is notified that the interface is ready.
+
+```c
+static int __igb_open(struct net_device *netdev, bool resuming)
+{
+	struct igb_adapter *adapter = netdev_priv(netdev);
+	struct e1000_hw *hw = &adapter->hw;
+	struct pci_dev *pdev = adapter->pdev;
+	int err;
+	int i;
+
+	/* disallow open during test */
+	if (test_bit(__IGB_TESTING, &adapter->state)) {
+		WARN_ON(resuming);
+		return -EBUSY;
+	}
+
+	if (!resuming)
+		pm_runtime_get_sync(&pdev->dev);
+
+	netif_carrier_off(netdev);
+
+	/* allocate transmit descriptors */
+	err = igb_setup_all_tx_resources(adapter);
+	if (err)
+		goto err_setup_tx;
+
+	/* allocate receive descriptors */
+	err = igb_setup_all_rx_resources(adapter);
+	if (err)
+		goto err_setup_rx;
+
+	igb_power_up_link(adapter);
+
+	/* before we allocate an interrupt, we must be ready to handle it.
+	 * Setting DEBUG_SHIRQ in the kernel makes it fire an interrupt
+	 * as soon as we call pci_request_irq, so we have to setup our
+	 * clean_rx handler before we do so.
+	 */
+	igb_configure(adapter);
+
+	err = igb_request_irq(adapter);
+	if (err)
+		goto err_req_irq;
+
+	/* Notify the stack of the actual queue counts. */
+	err = netif_set_real_num_tx_queues(adapter->netdev,
+					   adapter->num_tx_queues);
+	if (err)
+		goto err_set_queues;
+
+	err = netif_set_real_num_rx_queues(adapter->netdev,
+					   adapter->num_rx_queues);
+	if (err)
+		goto err_set_queues;
+
+	/* From here on the code is the same as igb_up() */
+	clear_bit(__IGB_DOWN, &adapter->state);
+
+	for (i = 0; i < adapter->num_q_vectors; i++)
+		napi_enable(&(adapter->q_vector[i]->napi));
+
+	/* Clear any pending interrupts. */
+	rd32(E1000_TSICR);
+	rd32(E1000_ICR);
+
+	igb_irq_enable(adapter);
+
+	/* notify VFs that reset has been completed */
+	if (adapter->vfs_allocated_count) {
+		u32 reg_data = rd32(E1000_CTRL_EXT);
+
+		reg_data |= E1000_CTRL_EXT_PFRSTD;
+		wr32(E1000_CTRL_EXT, reg_data);
+	}
+
+	netif_tx_start_all_queues(netdev);
+
+	if (!resuming)
+		pm_runtime_put(&pdev->dev);
+
+	/* start the watchdog. */
+	hw->mac.get_link_status = 1;
+	schedule_work(&adapter->watchdog_task);
+
+	return 0;
+
+err_set_queues:
+	igb_free_irq(adapter);
+err_req_irq:
+	igb_release_hw_control(adapter);
+	igb_power_down_link(adapter);
+	igb_free_all_rx_resources(adapter);
+err_setup_rx:
+	igb_free_all_tx_resources(adapter);
+err_setup_tx:
+	igb_reset(adapter);
+	if (!resuming)
+		pm_runtime_put(&pdev->dev);
+
+	return err;
+}
+```
+
+
+
+
+```c
+static int igb_setup_all_tx_resources(struct igb_adapter *adapter)
+{
+	struct pci_dev *pdev = adapter->pdev;
+	int i, err = 0;
+
+	for (i = 0; i < adapter->num_tx_queues; i++) {
+		err = igb_setup_tx_resources(adapter->tx_ring[i]);
+		......
+	}
+	return err;
+}
+
+
+
+int igb_setup_tx_resources(struct igb_ring *tx_ring)
+{
+	struct device *dev = tx_ring->dev;
+	int size;
+
+	size = sizeof(struct igb_tx_buffer) * tx_ring->count;
+
+	tx_ring->tx_buffer_info = vmalloc(size);
+
+	/* round up to nearest 4K */
+	tx_ring->size = tx_ring->count * sizeof(union e1000_adv_tx_desc);
+	tx_ring->size = ALIGN(tx_ring->size, 4096);
+
+	tx_ring->desc = dma_alloc_coherent(dev, tx_ring->size,
+					   &tx_ring->dma, GFP_KERNEL);
+
+	tx_ring->next_to_use = 0;
+	tx_ring->next_to_clean = 0;
+
+	return 0;
+}
+```
 
 ## process
 
