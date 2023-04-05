@@ -38,8 +38,6 @@ The high level path a packet takes from arrival to socket receive buffer is as f
 11. Protocol layers process data.
 12. Data is added to receive buffers attached to sockets by protocol layers.
 
-
-
 ### Ingress - they're coming
 
 1. Packets arrive at the NIC
@@ -91,53 +89,7 @@ The high level path a packet takes from arrival to socket receive buffer is as f
 19. And schedule (`soft IRQ`) the NAPI poll system
 20. NAPI will handle the receive packets signaling and free the RAM
 
-
 ## init
-
-Network Device Driver Initialization
-
-A driver registers an initialization function which is called by the kernel when the driver is loaded. This function is registered by using the module_init macro.
-
-The igb initialization function (igb_init_module) and its registration with module_init can be found in `drivers/net/ethernet/intel/igb/igb_main.c`.
-
-The bulk of the work to initialize the device happens with the call to pci_register_driver
-
-PCI initialization
-
-The Intel I350 network card is a PCI express device.
-
-PCI devices identify themselves with a series of registers in the PCI Configuration Space.
-
-When a device driver is compiled, a macro named MODULE_DEVICE_TABLE (from include/module.h) is used to export a table of PCI device IDs identifying devices that the device driver can control. The table is also registered as part of a structure, as we’ll see shortly.
-
-The kernel uses this table to determine which device driver to load to control the device.
-
-That’s how the OS can figure out which devices are connected to the system and which driver should be used to talk to the device.
-
-##### PCI probe
-
-Once a device has been identified by its PCI IDs, the kernel can then select the proper driver to use to control the device. Each PCI driver registers a probe function with the PCI system in the kernel. The kernel calls this function for devices which have not yet been claimed by a device driver. Once a device is claimed, other drivers will not be asked about the device. Most drivers have a lot of code that runs to get the device ready for use. The exact things done vary from driver to driver.
-
-Some typical operations to perform include:
-
-1. Enabling the PCI device.
-2. Requesting memory ranges and [IO ports](http://wiki.osdev.org/I/O_Ports).
-3. Setting the [DMA](https://en.wikipedia.org/wiki/Direct_memory_access) mask.
-4. The ethtool (described more below) functions the driver supports are registered.
-5. Any watchdog tasks needed (for example, e1000e has a watchdog task to check if the hardware is hung).
-6. Other device specific stuff like workarounds or dealing with hardware specific quirks or similar.
-7. The creation, initialization, and registration of a `struct net_device_ops` structure. This structure contains function pointers to the various functions needed for opening the device, sending data to the network, setting the MAC address, and more.
-8. The creation, initialization, and registration of a high level `struct net_device` which represents a network device.
-
-#### Network device initialization
-
-The `igb_probe` function does some important network device initialization. In addition to the PCI specific work, it will do more general networking and network device work:
-
-1. The `struct net_device_ops` is registered.
-2. `ethtool` operations are registered.
-3. The default MAC address is obtained from the NIC.
-4. `net_device` feature flags are set.
-5. And lots more.
 
 ### init net dev
 
@@ -477,6 +429,13 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 
 ### init driver
 
+Network Device Driver Initialization
+
+A driver registers an initialization function which is called by the kernel when the driver is loaded.
+This function is registered by using the module_init macro.
+The igb initialization function (igb_init_module) and its registration with module_init can be found in `drivers/net/ethernet/intel/igb/igb_main.c`.
+
+The bulk of the work to initialize the device happens with the call to pci_register_driver.
 
 ```c
 //  igb_main.c
@@ -522,18 +481,18 @@ The probe function is quite basic, and only needs to perform a device's early in
 In other words, the probe function has to:
 
 1. Allocate the network device along with its private data using the alloc_etherdev() function (helped by netdev_priv()).
-2. Initialize private data fields (mutexes, spinlock, work_queue, and so on). You should use work queues (and mutexes) if the device sits on a bus whose access functions may sleep (SPI, for example). 
-   In this case, the hwirq just has to acknowledge the kernel code, and schedule the job that will perform operations on the device. An alternative solution is to use threaded IRQs. 
+2. Initialize private data fields (mutexes, spinlock, work_queue, and so on). You should use work queues (and mutexes) if the device sits on a bus whose access functions may sleep (SPI, for example).
+   In this case, the hwirq just has to acknowledge the kernel code, and schedule the job that will perform operations on the device. An alternative solution is to use threaded IRQs.
    If the device is MMIO, you can use spinlock to protect ...
 
+The `igb_probe` function does some important network device initialization.
+In addition to the PCI specific work, it will do more general networking and network device work:
 
-igb_probe:
-1. get MAC address from Adapter
-2. init DMA
-3. register ethtool function
-4. register net_device_ops
-5. init NAPI, register poll function
-
+1. The `struct net_device_ops` is registered.
+2. `ethtool` operations are registered.
+3. The default MAC address is obtained from the NIC.
+4. `net_device` feature flags are set.
+5. And lots more.
 
 ```c
 
@@ -570,11 +529,9 @@ static const struct net_device_ops igb_netdev_ops = {
 
 call open function -> allocate RX TX memory
 
-
-
 __igb_open - Called when a network interface is made active
 
-The open entry point is called when a network interface is made active by the system (IFF_UP). 
+The open entry point is called when a network interface is made active by the system (IFF_UP).
 At this point all resources needed for transmit and receive operations are allocated, the interrupt handler is registered with the OS, the watchdog timer is started, and the stack is notified that the interface is ready.
 
 ```c
@@ -679,8 +636,8 @@ err_setup_tx:
 }
 ```
 
-
-
+- igb_tx_buffer array
+- e1000_adv_tx_desc DMA array
 
 ```c
 static int igb_setup_all_tx_resources(struct igb_adapter *adapter)
@@ -694,8 +651,6 @@ static int igb_setup_all_tx_resources(struct igb_adapter *adapter)
 	}
 	return err;
 }
-
-
 
 int igb_setup_tx_resources(struct igb_ring *tx_ring)
 {
@@ -720,6 +675,105 @@ int igb_setup_tx_resources(struct igb_ring *tx_ring)
 }
 ```
 
+initialize interrupts
+
+```c
+static int igb_request_irq(struct igb_adapter *adapter)
+{
+	struct net_device *netdev = adapter->netdev;
+	struct pci_dev *pdev = adapter->pdev;
+	int err = 0;
+
+	if (adapter->flags & IGB_FLAG_HAS_MSIX) {
+		err = igb_request_msix(adapter);
+		if (!err)
+			goto request_done;
+		/* fall back to MSI */
+		igb_free_all_tx_resources(adapter);
+		igb_free_all_rx_resources(adapter);
+
+		igb_clear_interrupt_scheme(adapter);
+		err = igb_init_interrupt_scheme(adapter, false);
+		if (err)
+			goto request_done;
+
+		igb_setup_all_tx_resources(adapter);
+		igb_setup_all_rx_resources(adapter);
+		igb_configure(adapter);
+	}
+
+	igb_assign_vector(adapter->q_vector[0], 0);
+
+	if (adapter->flags & IGB_FLAG_HAS_MSI) {
+		err = request_irq(pdev->irq, igb_intr_msi, 0,
+				  netdev->name, adapter);
+		if (!err)
+			goto request_done;
+
+		/* fall back to legacy interrupts */
+		igb_reset_interrupt_capability(adapter);
+		adapter->flags &= ~IGB_FLAG_HAS_MSI;
+	}
+
+	err = request_irq(pdev->irq, igb_intr, IRQF_SHARED,
+			  netdev->name, adapter);
+
+request_done:
+	return err;
+}
+
+
+static int igb_request_msix(struct igb_adapter *adapter)
+{
+	unsigned int num_q_vectors = adapter->num_q_vectors;
+	struct net_device *netdev = adapter->netdev;
+	int i, err = 0, vector = 0, free_vector = 0;
+
+	err = request_irq(adapter->msix_entries[vector].vector,
+			  igb_msix_other, 0, netdev->name, adapter);
+	if (err)
+		goto err_out;
+
+	if (num_q_vectors > MAX_Q_VECTORS) {
+		num_q_vectors = MAX_Q_VECTORS;
+		dev_warn(&adapter->pdev->dev,
+			 "The number of queue vectors (%d) is higher than max allowed (%d)\n",
+			 adapter->num_q_vectors, MAX_Q_VECTORS);
+	}
+	for (i = 0; i < num_q_vectors; i++) {
+		struct igb_q_vector *q_vector = adapter->q_vector[i];
+
+		vector++;
+
+		q_vector->itr_register = adapter->io_addr + E1000_EITR(vector);
+
+		if (q_vector->rx.ring && q_vector->tx.ring)
+			sprintf(q_vector->name, "%s-TxRx-%u", netdev->name,
+				q_vector->rx.ring->queue_index);
+		else if (q_vector->tx.ring)
+			sprintf(q_vector->name, "%s-tx-%u", netdev->name,
+				q_vector->tx.ring->queue_index);
+		else if (q_vector->rx.ring)
+			sprintf(q_vector->name, "%s-rx-%u", netdev->name,
+				q_vector->rx.ring->queue_index);
+		else
+			sprintf(q_vector->name, "%s-unused", netdev->name);
+
+		err = request_irq(adapter->msix_entries[vector].vector,
+				  igb_msix_ring, 0, q_vector->name,
+				  q_vector);
+		if (err)
+			goto err_free;
+	}
+
+	igb_configure_msix(adapter);
+	return 0;
+}
+```
+
+
+
+
 ## process
 
 Network Interface Controller
@@ -736,35 +790,18 @@ TODO: [tcp-rcv](https://www.processon.com/diagraming/6195c8be07912906e6ab82c8)
 
 ### driver process
 
-AMD
+
+Hard interrupt
 
 ```c
-// drivers/net/ethernet/amd/xgbe/xgbe-drv.c
-static irqreturn_t xgbe_dma_isr(int irq, void *data)
+static irqreturn_t igb_msix_ring(int irq, void *data)
 {
-	struct xgbe_channel *channel = data;
-	struct xgbe_prv_data *pdata = channel->pdata;
-	unsigned int dma_status;
+	struct igb_q_vector *q_vector = data;
 
-	/* Per channel DMA interrupts are enabled, so we use the per
-	 * channel napi structure and not the private data napi structure
-	 */
-	if (napi_schedule_prep(&channel->napi)) {
-		/* Disable Tx and Rx interrupts */
-		if (pdata->channel_irq_mode)
-			xgbe_disable_rx_tx_int(pdata, channel);
-		else
-			disable_irq_nosync(channel->dma_irq);
+	/* Write the ITR value calculated from the previous interrupt. */
+	igb_write_itr(q_vector);
 
-		/* Turn on polling */
-		__napi_schedule_irqoff(&channel->napi);
-	}
-
-	/* Clear Tx/Rx signals */
-	dma_status = 0;
-	XGMAC_SET_BITS(dma_status, DMA_CH_SR, TI, 1);
-	XGMAC_SET_BITS(dma_status, DMA_CH_SR, RI, 1);
-	XGMAC_DMA_IOWRITE(channel, DMA_CH_SR, dma_status);
+	napi_schedule(&q_vector->napi);
 
 	return IRQ_HANDLED;
 }
@@ -790,26 +827,7 @@ call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to 
 }
 ```
 
-#### netif_rx
 
-netif_rx	-	post buffer to the network code
-
-This function receives a packet from a device driver and queues it for the upper (protocol) levels to process.
-It always succeeds. The buffer may be dropped during processing for congestion control or by the protocol layers.
-
-```c
-int netif_rx(struct sk_buff *skb)
-{
-	int ret;
-
-	trace_netif_rx_entry(skb);
-
-	ret = netif_rx_internal(skb);
-	trace_netif_rx_exit(ret);
-
-	return ret;
-}
-```
 
 ### net_rx_action
 
@@ -836,7 +854,9 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 				return;
 			break;
 		}
-
+```
+call napi_poll function
+```
 		n = list_first_entry(&list, struct napi_struct, poll_list);
 		budget -= napi_poll(n, &repoll);
 
@@ -851,6 +871,11 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 		}
 	}
 
+
+```
+irq disabled and enabled around.
+
+```c
 	local_irq_disable();
 
 	list_splice_tail_init(&sd->poll_list, &list);
@@ -863,10 +888,207 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 }
 ```
 
-xgbe_one_poll ->
-xgbe_tx_poll ->
-xgbe_rx_poll ->
+napi_poll function
+
+```c
+static int igb_poll(struct napi_struct *napi, int budget)
+{
+	struct igb_q_vector *q_vector = container_of(napi,
+						     struct igb_q_vector,
+						     napi);
+	bool clean_complete = true;
+	int work_done = 0;
+
+#ifdef CONFIG_IGB_DCA
+	if (q_vector->adapter->flags & IGB_FLAG_DCA_ENABLED)
+		igb_update_dca(q_vector);
+#endif
+	if (q_vector->tx.ring)
+		clean_complete = igb_clean_tx_irq(q_vector, budget);
+
+	if (q_vector->rx.ring) {
+		int cleaned = igb_clean_rx_irq(q_vector, budget);
+
+		work_done += cleaned;
+		if (cleaned >= budget)
+			clean_complete = false;
+	}
+
+	/* If all work not completed, return budget and keep polling */
+	if (!clean_complete)
+		return budget;
+
+	/* Exit the polling mode, but don't re-enable interrupts if stack might
+	 * poll us due to busy-polling
+	 */
+	if (likely(napi_complete_done(napi, work_done)))
+		igb_ring_irq_enable(q_vector);
+
+	return work_done;
+}
+```
+
+
+
+igb_get_rx_buffer 
+
+```c
+
+static int igb_clean_rx_irq(struct igb_q_vector *q_vector, const int budget)
+{
+	struct igb_adapter *adapter = q_vector->adapter;
+	struct igb_ring *rx_ring = q_vector->rx.ring;
+	struct sk_buff *skb = rx_ring->skb;
+	unsigned int total_bytes = 0, total_packets = 0;
+	u16 cleaned_count = igb_desc_unused(rx_ring);
+	unsigned int xdp_xmit = 0;
+	struct xdp_buff xdp;
+	u32 frame_sz = 0;
+	int rx_buf_pgcnt;
+
+	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
+#if (PAGE_SIZE < 8192)
+	frame_sz = igb_rx_frame_truesize(rx_ring, 0);
+#endif
+	xdp_init_buff(&xdp, frame_sz, &rx_ring->xdp_rxq);
+
+	while (likely(total_packets < budget)) {
+		union e1000_adv_rx_desc *rx_desc;
+		struct igb_rx_buffer *rx_buffer;
+		ktime_t timestamp = 0;
+		int pkt_offset = 0;
+		unsigned int size;
+		void *pktbuf;
+
+
+		/* return some buffers to hardware, one at a time is too slow */
+		if (cleaned_count >= IGB_RX_BUFFER_WRITE) {
+			igb_alloc_rx_buffers(rx_ring, cleaned_count);
+			cleaned_count = 0;
+		}
+
+		rx_desc = IGB_RX_DESC(rx_ring, rx_ring->next_to_clean);
+		size = le16_to_cpu(rx_desc->wb.upper.length);
+		if (!size)
+			break;
+
+		/* This memory barrier is needed to keep us from reading
+		 * any other fields out of the rx_desc until we know the
+		 * descriptor has been written back
+		 */
+		dma_rmb();
+
+		rx_buffer = igb_get_rx_buffer(rx_ring, size, &rx_buf_pgcnt);
+		pktbuf = page_address(rx_buffer->page) + rx_buffer->page_offset;
+
+		/* pull rx packet timestamp if available and valid */
+		if (igb_test_staterr(rx_desc, E1000_RXDADV_STAT_TSIP)) {
+			int ts_hdr_len;
+
+			ts_hdr_len = igb_ptp_rx_pktstamp(rx_ring->q_vector,
+							 pktbuf, &timestamp);
+
+			pkt_offset += ts_hdr_len;
+			size -= ts_hdr_len;
+		}
+
+		/* retrieve a buffer from the ring */
+		if (!skb) {
+			unsigned char *hard_start = pktbuf - igb_rx_offset(rx_ring);
+			unsigned int offset = pkt_offset + igb_rx_offset(rx_ring);
+
+			xdp_prepare_buff(&xdp, hard_start, offset, size, true);
+			xdp_buff_clear_frags_flag(&xdp);
+#if (PAGE_SIZE > 4096)
+			/* At larger PAGE_SIZE, frame_sz depend on len size */
+			xdp.frame_sz = igb_rx_frame_truesize(rx_ring, size);
+#endif
+			skb = igb_run_xdp(adapter, rx_ring, &xdp);
+		}
+
+		if (IS_ERR(skb)) {
+			unsigned int xdp_res = -PTR_ERR(skb);
+
+			if (xdp_res & (IGB_XDP_TX | IGB_XDP_REDIR)) {
+				xdp_xmit |= xdp_res;
+				igb_rx_buffer_flip(rx_ring, rx_buffer, size);
+			} else {
+				rx_buffer->pagecnt_bias++;
+			}
+			total_packets++;
+			total_bytes += size;
+		} else if (skb)
+			igb_add_rx_frag(rx_ring, rx_buffer, skb, size);
+		else if (ring_uses_build_skb(rx_ring))
+			skb = igb_build_skb(rx_ring, rx_buffer, &xdp,
+					    timestamp);
+		else
+			skb = igb_construct_skb(rx_ring, rx_buffer,
+						&xdp, timestamp);
+
+		/* exit if we failed to retrieve a buffer */
+		if (!skb) {
+			rx_ring->rx_stats.alloc_failed++;
+			rx_buffer->pagecnt_bias++;
+			break;
+		}
+
+		igb_put_rx_buffer(rx_ring, rx_buffer, rx_buf_pgcnt);
+		cleaned_count++;
+
+		/* fetch next buffer in frame if non-eop */
+		if (igb_is_non_eop(rx_ring, rx_desc))
+			continue;
+
+		/* verify the packet layout is correct */
+		if (igb_cleanup_headers(rx_ring, rx_desc, skb)) {
+			skb = NULL;
+			continue;
+		}
+
+		/* probably a little skewed due to removing CRC */
+		total_bytes += skb->len;
+
+		/* populate checksum, timestamp, VLAN, and protocol */
+		igb_process_skb_fields(rx_ring, rx_desc, skb);
+```
 napi_gro_receive
+```
+		napi_gro_receive(&q_vector->napi, skb);
+
+		/* reset skb pointer */
+		skb = NULL;
+
+		/* update budget accounting */
+		total_packets++;
+	}
+
+	/* place incomplete frames back on ring for completion */
+	rx_ring->skb = skb;
+
+	if (xdp_xmit & IGB_XDP_REDIR)
+		xdp_do_flush();
+
+	if (xdp_xmit & IGB_XDP_TX) {
+		struct igb_ring *tx_ring = igb_xdp_tx_queue_mapping(adapter);
+
+		igb_xdp_ring_update_tail(tx_ring);
+	}
+
+	u64_stats_update_begin(&rx_ring->rx_syncp);
+	rx_ring->rx_stats.packets += total_packets;
+	rx_ring->rx_stats.bytes += total_bytes;
+	u64_stats_update_end(&rx_ring->rx_syncp);
+	q_vector->rx.total_packets += total_packets;
+	q_vector->rx.total_bytes += total_bytes;
+
+	if (cleaned_count)
+		igb_alloc_rx_buffers(rx_ring, cleaned_count);
+
+	return total_packets;
+}
+```
+
 
 ```c
 // net/core/dev.c
@@ -894,7 +1116,12 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 
 napi_gro_receive -> napi_skb_finish -> gro_normal_one
 -> gro_normal_list -> netif_receive_skb_list_internal
--> __netif_receive_skb_list -> deliver_skb
+-> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core(contains tcpdump) -> deliver_skb
+
+> TCPDUMP Add a protocol handler to the networking stack.
+> 
+> packet_create -> register_prot_hook -> dev_add_pack
+
 
 #### netif_receive_skb
 
@@ -938,20 +1165,18 @@ static inline int deliver_skb(struct sk_buff *skb,
 ```
 
 ### ip_rcv
+IP receive entry point
+
+
+execute ip_rcv_finish after NF_HOOK  iptables netfliter
 
 ```c
-
-/*
- * IP receive entry point
- */
 int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
 	   struct net_device *orig_dev)
 {
 	struct net *net = dev_net(dev);
 
 	skb = ip_rcv_core(skb, net);
-	if (skb == NULL)
-		return NET_RX_DROP;
 
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
 		       net, NULL, skb, dev, NULL,
