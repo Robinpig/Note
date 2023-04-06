@@ -1205,9 +1205,8 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 		ret = dst_input(skb);
 	return ret;
 }
-```
 
-```c
+
 /* Input packet from network to transport.  */
 static inline int dst_input(struct sk_buff *skb)
 {
