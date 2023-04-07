@@ -27,6 +27,9 @@ SETBIT key offset value
 
 
 
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=hashes)
 
 
 
