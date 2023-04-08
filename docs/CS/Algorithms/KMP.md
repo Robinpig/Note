@@ -237,3 +237,7 @@ This substring also occurs at positions substr-rank[2].index = 4 and substr-rank
 ## Links
 
 - [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+
+## References
+
+- [Fast Pattern Matching in Strings](https://www.cs.jhu.edu/~misha/ReadingSeminar/Papers/Knuth77.pdf)

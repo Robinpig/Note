@@ -77,7 +77,9 @@ asmlinkage __visible void __init i386_start_kernel(void)
 }
 ```
 
-The code scanning for EFI embedded-firmware runs near the end of start_kernel(), just before calling rest_init(). For normal drivers and subsystems using subsys_initcall() to register themselves this does not matter. This means that code running earlier cannot use EFI embedded-firmware.
+The code scanning for EFI embedded-firmware runs near the end of start_kernel(), just before calling rest_init(). 
+For normal drivers and subsystems using subsys_initcall() to register themselves this does not matter. 
+This means that code running earlier cannot use EFI embedded-firmware.
 
 ## start_kernel
 
