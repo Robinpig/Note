@@ -648,10 +648,10 @@ static int igb_request_msix(struct igb_adapter *adapter)
 10. Linux will also allocate memory to `sk_buff`
 11. Linux fills the metadata: protocol, interface, setmacheader, removes ethernet
 12. Linux will pass the skb to the kernel stack (`netif_receive_skb`)
-13. It will set the network header, clone `skb` to taps (i.e. tcpdump) and pass it to tc ingress
+13. It will set the network header, clone `skb` to taps (i.e. [tcpdump](/docs/CS/CN/Tools/tcpdump.md)) and pass it to tc ingress
 14. Packets are handled to a qdisc sized `netdev_max_backlog` with its algorithm defined by `default_qdisc`
 15. It calls `ip_rcv` and packets are handled to IP
-16. It calls netfilter (`PREROUTING`)
+16. It calls [netfilter](/docs/CS/CN/Tools/netfilter.md) (`PREROUTING`)
 17. It looks at the routing table, if forwarding or local
 18. If it's local it calls netfilter (`LOCAL_IN`)
 19. It calls the L4 protocol (for instance `tcp_v4_rcv`)
@@ -662,13 +662,7 @@ static int igb_request_msix(struct igb_adapter *adapter)
 23. Kernel will signalize that there is data available to apps (epoll or any polling system)
 24. Application wakes up and reads the data
 
-Network Interface Controller
--> Network Driver DMA into Memory RingBuffer and send a interrupt to CPU
--> CPU set soft interrupt and release CPU
--> ksoftirqd thread check soft interrupt,
-disable hard interrupts  and call `poll` get packet,
-then send to TCP/IP stack`(ip_rcv`)
--> `tcp_rcv` or `udp_rcv`
+
 
 like UDP will add into socket accept queue
 
@@ -1052,7 +1046,7 @@ static inline int deliver_skb(struct sk_buff *skb,
 
 IP receive entry point
 
-execute ip_rcv_finish after NF_HOOK  iptables netfliter
+execute ip_rcv_finish after NF_HOOK iptables [netfilter](/docs/CS/CN/Tools/netfilter.md)
 
 ```c
 int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
@@ -1241,6 +1235,24 @@ ss -nlt
 ```
 
 [TCP RESET/RST Reasons](https://iponwire.com/tcp-reset-rst-reasons/)
+
+
+
+check RingBuffer
+```shell
+ethtool -g eth0
+```
+
+
+NIC queue
+```shell
+ls /sys/class/net/eth0/queues
+
+```
+
+
+
+
 
 ### GSO
 
