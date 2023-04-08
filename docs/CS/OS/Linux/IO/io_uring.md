@@ -816,13 +816,6 @@ submit:
        return ret;
 }
 ```
-
-
-## Links
-
-- [IO](/docs/CS/OS/Linux/IO/IO.md)
-
-
 ## References
 
 1. [An Introduction to the io_uring Asynchronous I/O Framework](https://blogs.oracle.com/site/linux/post/an-introduction-to-the-io-uring-asynchronous-io-framework)
