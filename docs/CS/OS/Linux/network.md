@@ -995,11 +995,8 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 
 napi_gro_receive -> napi_skb_finish -> gro_normal_one
 -> gro_normal_list -> netif_receive_skb_list_internal
--> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core(contains tcpdump) -> deliver_skb
+-> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core(contains [tcpdump](/docs/CS/CN/Tools/tcpdump.md)) -> deliver_skb
 
-> TCPDUMP Add a protocol handler to the networking stack.
->
-> packet_create -> register_prot_hook -> dev_add_pack
 
 #### netif_receive_skb
 
