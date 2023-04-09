@@ -1584,43 +1584,17 @@ int __sys_socket(int family, int type, int protocol)
 	struct socket *sock;
 	int flags;
 
-	/* Check the SOCK_* constants for consistency.  */
-	BUILD_BUG_ON(SOCK_CLOEXEC != O_CLOEXEC);
-	BUILD_BUG_ON((SOCK_MAX | SOCK_TYPE_MASK) != SOCK_TYPE_MASK);
-	BUILD_BUG_ON(SOCK_CLOEXEC & SOCK_TYPE_MASK);
-	BUILD_BUG_ON(SOCK_NONBLOCK & SOCK_TYPE_MASK);
-
-	flags = type & ~SOCK_TYPE_MASK;
-	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
-		return -EINVAL;
-	type &= SOCK_TYPE_MASK;
-
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
 		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
 	retval = sock_create(family, type, protocol, &sock);
-	if (retval < 0)
-		return retval;
-
+	
 	return sock_map_fd(sock, flags & (O_CLOEXEC | O_NONBLOCK));
 }
-
 ```
 
 ### sock_create
 
-A wrapper around __sock_create().
-- family: protocol family (AF_INET, ...)
-- type: communication type (SOCK_STREAM, SOCK_DGRAM, ...)
-- protocol: protocol (0, ...)
-- res: new socket
-```c
-// net/socket.c
-int sock_create(int family, int type, int protocol, struct socket **res)
-{
-	return __sock_create(current->nsproxy->net_ns, family, type, protocol, res, 0);
-}
-```
 
 Creates a new socket and assigns it to res, passing through LSM.
 Returns 0 or an error. On failure @res is set to %NULL. @kern must
@@ -1646,8 +1620,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	const struct net_proto_family *pf;
 ```
 Compatibility.
-This uglymoron is moved from INET layer to here to avoid
-deadlock in module load.
+This uglymoron is moved from INET layer to here to avoid deadlock in module load.
 ```c
 	if (family == PF_INET && type == SOCK_PACKET) {
 		family = PF_PACKET;
@@ -1684,7 +1657,8 @@ static const struct net_proto_family inet_family_ops = {
 
 #### sock_alloc
 
-Allocate a new inode and socket object. The two are bound together and initialised. The socket is then returned. If we are out of inodes NULL is returned. This functions uses GFP_KERNEL internally.
+Allocate a new inode and socket object. The two are bound together and initialised.
+The socket is then returned. If we are out of inodes NULL is returned. This functions uses GFP_KERNEL internally.
 
 ```c
 // net/socket.c
