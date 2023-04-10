@@ -1,25 +1,18 @@
 ## Introduction
 
-
-
-`tcpdump`, a powerful command-line packet analyzer; 
+`tcpdump`, a powerful command-line packet analyzer;
 
 *libpcap*, a portable C/C++ library for network traffic capture.
 
-
-
-
+tcpdump before ip_rcv or arp_rcv
 
 ## lookup
-
 
 pcap-npf.c has its own pcap_lookupdev(), for compatibility reasons, as it actually returns the names of all interfaces, with a NUL separator between them; some callers may depend on that.
 
 MS-DOS has its own pcap_lookupdev(), but that might be useful only as an optimization.
 
 In all other cases, we just use pcap_findalldevs() to get a list of devices, and pick from that list.
-
-
 
 ```c
 #if !defined(HAVE_PACKET32) && !defined(MSDOS)
@@ -100,19 +93,17 @@ pcap_lookupdev(char *errbuf)
 #endif /* !defined(HAVE_PACKET32) && !defined(MSDOS) */
 ```
 
-
-
 ## pcap
 
 ### pcap_findalldevs
 
-```c
 /*
  * Get a list of all capture sources that are up and that we can open.
  * Returns -1 on error, 0 otherwise.
  * The list, as returned through "alldevsp", may be null if no interfaces
  * were up and could be opened.
  */
+```c
 int
 pcap_findalldevs(pcap_if_t **alldevsp, char *errbuf)
 {
@@ -160,9 +151,6 @@ pcap_findalldevs(pcap_if_t **alldevsp, char *errbuf)
 }
 ```
 
-
-
-
 ```c
 // net/packet/af_packet.c
 static const struct net_proto_family packet_family_ops = {
@@ -172,17 +160,11 @@ static const struct net_proto_family packet_family_ops = {
 };
 ```
 
-
-
-
-
 ## trace
 
 ```shell
 strace tcpdump port 80
 ```
-
-
 
 call [create socket](/docs/CS/OS/Linux/socket.md?id=create)
 
@@ -192,8 +174,6 @@ call [create socket](/docs/CS/OS/Linux/socket.md?id=create)
 // Documentation/networking/filter.rst
 socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL))
 ```
-
-
 
 ### create
 
@@ -304,8 +284,8 @@ static void __register_prot_hook(struct sock *sk)
 
 #### packet_rcv
 
-This function makes lazy skb cloning in hope that most of packets are discarded by BPF. 
-Note tricky part: we DO mangle shared skb! skb->data, skb->len and skb->cb are mangled. 
+This function makes lazy skb cloning in hope that most of packets are discarded by BPF.
+Note tricky part: we DO mangle shared skb! skb->data, skb->len and skb->cb are mangled.
 It works because (and until) packets falling here are owned by current CPU. Output packets are cloned by dev_queue_xmit_nit(), input packets are processed by net_bh sequentially, so that if we return skb to original state on exit,
 we will not harm anyone.
 
@@ -426,10 +406,6 @@ drop:
        return 0;
 }
 ```
-
-
-
-
 
 #### packet_recvmsg
 
@@ -582,8 +558,6 @@ out:
 }
 ```
 
-
-
 ## filter
 
 ### run_filter
@@ -591,6 +565,7 @@ out:
 ## Summary
 
 ## Links
+
 - [BPF](/docs/CS/OS/Linux/Tools/BPF.md)
 
 ## References

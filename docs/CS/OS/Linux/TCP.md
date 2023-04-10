@@ -1986,7 +1986,7 @@ void tcp_data_ready(struct sock *sk)
 }
 ```
 
-`sk_data_ready` = `sock_def_readable` , see [Socket]()
+`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/socket.md?id=sock_init_data)
 
 ```c
 void sock_def_readable(struct sock *sk)

@@ -834,9 +834,16 @@ out_mput:
 ## softirq
 
 Signals are software interrupts.
-
 The simplest interface to the signal features of the UNIX System is the signal function.
 
+```shell
+cat /proc/softirqs
+
+
+cat /proc/interrupts
+cat /proc/irq/<number>/smp_affinity
+
+```
 
 PLEASE, avoid to allocate new softirqs, if you need not _really_ high frequency threaded job scheduling. 
 For almost all the purposes tasklets are more than enough. F.e. all serial device BHs et al. should be converted to tasklets, not to softirqs.

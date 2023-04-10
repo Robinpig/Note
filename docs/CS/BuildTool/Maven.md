@@ -1,6 +1,4 @@
-# Maven
-
-
+## Introduction
 
 ## Dependency Manager
 
@@ -11,16 +9,12 @@
 - 短路径优先
 - 先声明优先
 
-
-
 可选依赖不会传递
-
-
 
 依赖范围
 
 - compiler(default)
-- provider 
+- provider
 - runtime
 - test
 - system
@@ -28,12 +22,14 @@
 ## use
 
 ### clean
+
 pre-clean
 clean
 清理上一次构建生成的文件
 post-clean
 
 ### default：构建项目
+
 validate
 
 compile
@@ -54,7 +50,13 @@ deploy
 
 ### site：建立项目站点
 
-## Plugin
+## Plugins
+
+## Links
+
+- [Build Tools](/docs/CS/BuildTool/BuildTools.md)
+- [Gradle](/docs/CS/BuildTool/Gradle.md)
 
 ## References
+
 1. [Calendar Versioning](https://calver.org/)
