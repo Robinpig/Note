@@ -6,6 +6,8 @@ LevelDB supports range queries, snapshots, and other features that are useful in
 
 ## Architecture
 
+The overall architecture of LevelDB is shown in Figure 1.
+
 <div style="text-align: center;">
 
 ![Fig.1. LevelDB architecture](./img/Architecture.png)
@@ -18,7 +20,6 @@ Fig.1. LevelDB architecture.
 For LevelDB, inserting a key-value pair goes through many steps: (1) the log file; (2) the memtable; (3) the immutable memtable; (4) a SSTable in L0; (5) compacted to further levels.
 </p>
 
-The overall architecture of LevelDB is shown in Figure 1.
 The main data structures in LevelDB are an ondisk log file, two in-memory sorted skiplists (memtable and immutable memtable), and seven levels (L0 to L6) of on-disk Sorted String Table (SSTable) files.
 LevelDB initially stores inserted key-value pairs in a log file and the in-memory memtable. Once the memtable is full, LevelDB switches to a new memtable and log file to handle further inserts from the user.
 In the background, the previous memtable is converted into an immutable memtable, and a compaction thread then flushes it to the disk, generating a new SSTable file (about 2 MB usually) at level 0 (L0); the previous log file is discarded.
