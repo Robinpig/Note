@@ -21,7 +21,7 @@ ProtoBuf
 > 
 > - serial order
 > - null fields
-> - serial allow more fields
+> - serial allow unexpected fields
 > - Big Endian or Little Endian
 
 ```java
