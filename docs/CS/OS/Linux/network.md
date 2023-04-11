@@ -1081,8 +1081,21 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	return ret;
 }
 
+```
 
-/* Input packet from network to transport.  */
+ip_rcv_finish_core
+
+
+
+
+
+
+
+
+
+Input packet from network to transport.
+
+```c
 static inline int dst_input(struct sk_buff *skb)
 {
 	return INDIRECT_CALL_INET(skb_dst(skb)->input,
