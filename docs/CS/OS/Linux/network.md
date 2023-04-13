@@ -156,7 +156,7 @@ Register protocols into `inet_protos` and `ptype_base`:
 
 1. ICMP
 2. UDP
-3. TCP
+3. [TCP](/docs/CS/OS/Linux/TCP.md?id=tcp_init)
 4. IGMP
 5. ...
 

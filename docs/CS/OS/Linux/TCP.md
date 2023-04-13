@@ -4,11 +4,10 @@
 
 TCP sockets are an example of *stream sockets*.
 
-## init
+## tcp_init
 
 call tcp_init by [inet_init](/docs/CS/OS/Linux/network.md?id=init-inet)
 
-### tcp_init
 
 ```c
 

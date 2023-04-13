@@ -1,7 +1,6 @@
 ## Introduction
 
 
-[man - epoll - I/O event notification facility](https://man7.org/linux/man-pages/man7/epoll.7.html)
 ```shell
 #include <sys/epoll.h>
 ```
@@ -72,18 +71,14 @@ static int do_epoll_create(int flags)
 
 ### eventpoll
 
-rdlist : storage ready file descriptors
-rbr root of rb
+This structure is stored inside the "private_data" member of the file structure and represents the main data structure for the eventpoll interface.
 
-*ovflist : This is a single linked list that chains all the "struct epitem" that happened while transferring ready events to userspace w/out holding ->lock.
+- rdlist : storage ready file descriptors
+- rbr root of rb
+- *ovflist : This is a single linked list that chains all the "struct epitem" that happened while transferring ready events to userspace w/out holding ->lock.
 
 
 ```c
-/*
- * This structure is stored inside the "private_data" member of the file
- * structure and represents the main data structure for the eventpoll
- * interface.
- */
 struct eventpoll {
 	/*
 	 * This mutex is used to ensure that files are not removed
@@ -1433,4 +1428,5 @@ bugs, and the latest version of this page, can be found at https://www.kernel.or
 
 
 ## References
-1. [epoll(7) — Linux manual page](https://man7.org/linux/man-pages/man7/epoll.7.html)
+
+1. [man - epoll - I/O event notification facility](https://man7.org/linux/man-pages/man7/epoll.7.html)
