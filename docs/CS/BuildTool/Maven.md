@@ -50,6 +50,34 @@ deploy
 
 ### site：建立项目站点
 
+## Mirrors
+
+add mirror into `<mirrors></mirrors>` of `~/.m2/settings.xml`
+
+```xml
+<mirror>
+    <id>aliyunmaven</id>
+    <mirrorOf>*</mirrorOf>
+    <name>阿里云公共仓库</name>
+    <url>https://maven.aliyun.com/repository/public</url>
+</mirror>
+```
+
+other proxy repos into `<repositories></repositories>` of `~/.m2/settings.xml`:
+
+```xml
+<repository>
+    <id>spring</id>
+    <url>https://maven.aliyun.com/repository/spring</url>
+    <releases>
+        <enabled>true</enabled>
+    </releases>
+    <snapshots>
+        <enabled>true</enabled>
+    </snapshots>
+</repository>
+```
+
 ## Plugins
 
 ## Links
@@ -60,3 +88,4 @@ deploy
 ## References
 
 1. [Calendar Versioning](https://calver.org/)
+2. [Aliyun Maven Mirror](https://developer.aliyun.com/mirror/maven)

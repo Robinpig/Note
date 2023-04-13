@@ -1,16 +1,15 @@
 ## Introduction
 
-
-
-
 > See [TCP](/docs/CS/CN/TCP.md)
-
 
 TCP sockets are an example of *stream sockets*.
 
 ## init
+
 call tcp_init by [inet_init](/docs/CS/OS/Linux/network.md?id=init-inet)
+
 ### tcp_init
+
 ```c
 
 void __init tcp_init(void)
@@ -105,6 +104,7 @@ void __init tcp_init(void)
 ```
 
 set [tasklet](/docs/CS/OS/Linux/Interrupt.md?id=tasklet)
+
 ```c
 void __init tcp_tasklet_init(void)
 {
@@ -120,9 +120,6 @@ void __init tcp_tasklet_init(void)
 ```
 
 ## Usages
-
-
-
 
 Interface for multiple protocols
 
@@ -175,15 +172,16 @@ struct proto tcp_prot = {
 };
 ```
 
-
 ## Send
 
 see [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) and call tcp_sendmsg
 
 ### tcp_sendmsg
+
 called by inet_sendmsg
 
 write to internet by [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
+
 ```c
 // net/ipv4/tcp.c
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
@@ -225,7 +223,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 		if (!zc)
 			uarg->zerocopy = 0;
 	}
-	
+
   /** fastopen */
 	if (unlikely(flags & MSG_FASTOPEN || inet_sk(sk)->defer_connect) &&
 	    !tp->repair) {
@@ -407,7 +405,9 @@ new_segment:
 			__tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
 		} else if (skb == tcp_send_head(sk))
 ```
+
 call tcp_push_one
+
 ```c
 			tcp_push_one(sk, mss_now);
 		continue;
@@ -453,10 +453,10 @@ out_err:
 }
 ```
 
-
-
 #### FastOpen
+
 tcp_sendmsg_fastopen
+
 ```c
 static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
                             int *copied, size_t size,
@@ -519,8 +519,8 @@ static inline bool forced_push(const struct tcp_sock *tp)
 }
 ```
 
-
 ##### mark_push
+
 ```c
 static inline void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb)
 {
@@ -530,7 +530,9 @@ static inline void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb)
 ```
 
 ##### tcp_push
+
 tcp_push call __tcp_push_pending_frames
+
 ```c
 void tcp_push(struct sock *sk, int flags, int mss_now,
              int nonagle, int size_goal)
@@ -567,7 +569,6 @@ void tcp_push(struct sock *sk, int flags, int mss_now,
 }
 ```
 
-
 ##### tcp_push_one
 
 Send _single_ skb sitting at the send head. This function requires true push pending frames to setup probe timer etc.
@@ -582,7 +583,6 @@ void tcp_push_one(struct sock *sk, unsigned int mss_now)
        tcp_write_xmit(sk, mss_now, TCP_NAGLE_PUSH, 1, sk->sk_allocation);
 }
 ```
-
 
 __tcp_push_pending_frames
 
@@ -710,7 +710,9 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
               if (TCP_SKB_CB(skb)->end_seq == TCP_SKB_CB(skb)->seq)
                      break;
 ```
+
 call [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
+
 ```c
               if (unlikely(tcp_transmit_skb(sk, skb, 1, gfp)))
                      break;
@@ -934,7 +936,9 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	tcp_add_tx_delay(skb, tp);
 
 ```
+
 call [ip_queue_xmit](/docs/CS/OS/Linux/IP.md?id=ip_queue_xmit)
+
 ```
 	err = INDIRECT_CALL_INET(icsk->icsk_af_ops->queue_xmit,
 				 inet6_csk_xmit, ip_queue_xmit,
@@ -952,7 +956,6 @@ call [ip_queue_xmit](/docs/CS/OS/Linux/IP.md?id=ip_queue_xmit)
 }
 ```
 
-
 Enter CWR state. Disable cwnd undo since congestion is proven with ECN
 
 ```c
@@ -969,11 +972,11 @@ void tcp_enter_cwr(struct sock *sk)
 }
 ```
 
-
-
 #### select window
-Chose a new window to advertise, update state in tcp_sock for the socket, and return result with RFC1323 scaling applied.  
+
+Chose a new window to advertise, update state in tcp_sock for the socket, and return result with RFC1323 scaling applied.
 The return value can be stuffed directly into th->window for an outgoing frame.
+
 ```c
 static u16 tcp_select_window(struct sock *sk)
 {
@@ -1025,14 +1028,13 @@ static u16 tcp_select_window(struct sock *sk)
 }
 ```
 
-
 ##### __tcp_select_window
 
 This function returns the amount that we can raise the
 usable window based on the following constraints
+
 1. The window can never be shrunk once it is offered (RFC 793)
 2. We limit memory per socket
-   
 
 RFC 1122:
 "the suggested [SWS] avoidance algorithm for the receiver is to keep
@@ -1076,6 +1078,7 @@ a multiple of the mss when it is feasible to do so.
 
 Note, we don't "adjust" for TIMESTAMP or SACK option bytes.
 Regular options like TIMESTAMP are taken into account.
+
 ```c
 u32 __tcp_select_window(struct sock *sk)
 {
@@ -1160,20 +1163,16 @@ u32 __tcp_select_window(struct sock *sk)
 }
 ```
 
-
-
 ## Recv
-
 
 from dev
 
 `ip_rcv` -> ip_rcv_finish -> dst_input -> ip_local_deliver -> [tcp_v4_rcv](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_rcv)
-                                       -> ip_forward -> ip_forward_finish -> [ip_output](/docs/CS/OS/Linux/IP.md?id=ip_output)
+-> ip_forward -> ip_forward_finish -> [ip_output](/docs/CS/OS/Linux/IP.md?id=ip_output)
 
 from applications
 
 recv/recvfrom -> sys_recvfrom -> sock_recvmsg -> inet_recvmsg -> [tcp_recvmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_recvmsg)
-
 
 Receive a frame from the socket and optionally record the address of the
 sender. We verify the buffers are writable and if needed move the
@@ -1192,7 +1191,7 @@ int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
 	struct msghdr msg;
 	struct sockaddr_storage address;
 	...
-	
+
 	err = sock_recvmsg(sock, &msg, flags);
 
 	if (err >= 0 && addr != NULL) {
@@ -1204,6 +1203,7 @@ int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
 ```
 
 Receives msg from sock, passing through LSM. Returns the total number of bytes received, or an error.
+
 ```c
 // 
 int sock_recvmsg(struct socket *sock, struct msghdr *msg, int flags)
@@ -1212,7 +1212,9 @@ int sock_recvmsg(struct socket *sock, struct msghdr *msg, int flags)
 	return err ?: sock_recvmsg_nosec(sock, msg, flags);
 }
 ```
+
 call inet_recvmsg or inet6_recvmsg
+
 ```c
 static inline int sock_recvmsg_nosec(struct socket *sock, struct msghdr *msg,
 				     int flags)
@@ -1222,9 +1224,12 @@ static inline int sock_recvmsg_nosec(struct socket *sock, struct msghdr *msg,
 				  flags);
 }
 ```
+
 inet_recvmsg calls:
+
 1. tcp_recvmsg
 2. udp_recvmsg
+
 ```c
 // net/ipv4/af_inet.c
 int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
@@ -1242,9 +1247,12 @@ int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 	return err;
 }
 ```
+
 inet6_recvmsg calls:
+
 1. tcp_recvmsg
 2. udpv6_recvmsg
+
 ```c
 // net/ipv6/af_inet6.c
 int inet6_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
@@ -1263,10 +1271,8 @@ int inet6_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 }
 ```
 
-
-
-
 ### tcp_v4_rcv
+
 1. not PACKET_HOST, discard
 2. copy to skb
 3. get tcp header and valid it
@@ -1279,9 +1285,6 @@ int inet6_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
    - not: tcp_v4_do_rcv
    - else: tcp_add_backlog
 10. unlock sock
-
-
-
 
 ```c
 
@@ -1510,8 +1513,6 @@ do_time_wait:
 
 ```
 
-
-
 #### inet_lookup
 
 ```c
@@ -1558,8 +1559,8 @@ static inline struct sock *__inet_lookup(struct net *net,
 }
 ```
 
-
 ##### inet_lookup_established
+
 ```c
 // net/ipv4/inet_hashtables.c
 struct sock *__inet_lookup_established(struct net *net,
@@ -1611,6 +1612,7 @@ found:
 ```
 
 ##### inet_lookup_listener
+
 ```c
 
 struct sock *__inet_lookup_listener(struct net *net,
@@ -1666,10 +1668,6 @@ done:
 	 net_eq(sock_net(__sk), (__net)))
 #endif /* 64-bit arch */
 ```
-
-
-
-
 
 #### tcp_v4_do_rcv
 
@@ -1747,8 +1745,9 @@ csum_err:
 TCP receive function for the ESTABLISHED state.
 It is split into a fast path and a slow path. The fast path is
 disabled when:
+
 - A zero window was announced from us - zero window probing
-      is only handled properly in the slow path.
+  is only handled properly in the slow path.
 - Out of order segments arrived.
 - Urgent data is expected.
 - There is no buffer space left
@@ -1950,8 +1949,6 @@ discard:
 }
 ```
 
-
-
 #### tcp_queue_rcv
 
 ```c
@@ -1973,8 +1970,6 @@ static int __must_check tcp_queue_rcv(struct sock *sk, struct sk_buff *skb,
 	return eaten;
 }
 ```
-
-
 
 #### tcp_data_ready
 
@@ -2005,9 +2000,8 @@ void sock_def_readable(struct sock *sk)
 
 `wake_up_interruptible_sync_poll` see Thundering Hred
 
-
-
 ### tcp_check_req
+
 Process an incoming packet for SYN_RECV sockets represented as a
 request_sock. Normally sk is the listener socket but for TFO it
 points to the child socket.
@@ -2015,6 +2009,7 @@ points to the child socket.
 XXX (TFO) - The current impl contains a special check for ack
 validation and inside tcp_v4_reqsk_send_ack(). Can we do better?
 We don't need to initialize tmp_opt.sack_ok as we don't use the results
+
 ```c
 
 struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
@@ -2237,6 +2232,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 ```
 
 tcp_abort_on_overflow
+
 ```c
 listen_overflow:
 	if (!sock_net(sk)->ipv4.sysctl_tcp_abort_on_overflow) {
@@ -2245,7 +2241,6 @@ listen_overflow:
 	}
 
 ```
-
 
 ```c
 embryonic_reset:
@@ -2271,8 +2266,8 @@ embryonic_reset:
 }
 ```
 
-
 #### tcp_rtx_synack
+
 ```c
 int inet_rtx_syn_ack(const struct sock *parent, struct request_sock *req)
 {
@@ -2318,7 +2313,9 @@ int tcp_rtx_synack(const struct sock *sk, struct request_sock *req)
 ```
 
 #### inet_csk_complete_hashdance
+
 call `inet_csk_reqsk_queue_add` add into accept queue
+
 ```c
 
 struct sock *inet_csk_complete_hashdance(struct sock *sk, struct sock *child,
@@ -2336,7 +2333,6 @@ struct sock *inet_csk_complete_hashdance(struct sock *sk, struct sock *child,
 	return NULL;
 }
 ```
-
 
 ### tcp_recvmsg
 
@@ -2610,6 +2606,7 @@ recv_sndq:
 	goto out;
 }
 ```
+
 #### sk_wait_data
 
 wait for data to arrive at sk_receive_queue
@@ -2623,24 +2620,20 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 	add_wait_queue(sk_sleep(sk), &wait);
 	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
 	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);
-	
+
   sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
 	remove_wait_queue(sk_sleep(sk), &wait);
 	return rc;
 }
 ```
 
-
-
-
-
-
 ## Client Connect
 
 ### send SYN
-#### tcp_v4_connect
-This will initiate an outgoing connection.
 
+#### tcp_v4_connect
+
+This will initiate an outgoing connection.
 
 - rcu_dereference_protected
 - ip_route_connect
@@ -2786,6 +2779,7 @@ failure:
 ```
 
 #### tcp_connect
+
 Build a SYN and send it off.
 
 - tcp_connect_init
@@ -2917,9 +2911,7 @@ drop:
 }
 ```
 
-
 ### rcv SYNACK
-
 
 #### tcp_rcv_synsent_state_process
 
@@ -2970,22 +2962,23 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 Now ACK is acceptable.
 
 "If the RST bit is set If the ACK was acceptable then signal the user "error: connection reset", drop the segment, enter CLOSED state, delete TCB, and return."
+
 ```c
 		if (th->rst) {
 			tcp_reset(sk, skb);
 			goto discard;
 		}
 ```
+
 rfc793:
 
 "fifth, if neither of the SYN or RST bits is set then drop the segment and return."
 See note below!     --ANK(990513)
+
 ```c
 		if (!th->syn)
 			goto discard_and_undo;
 ```
-
-
 
 ```c
 		/* rfc793:
@@ -3092,6 +3085,7 @@ discard:
 ```
 
 PAWS check
+
 ```c
 	if (tp->rx_opt.ts_recent_stamp && tp->rx_opt.saw_tstamp &&
 	    tcp_paws_reject(&tp->rx_opt, 0))
@@ -3099,6 +3093,7 @@ PAWS check
 ```
 
 SYN without ACK
+
 ```c
 	if (th->syn) {
 		/* We see SYN without ACK. It is attempt of
@@ -3172,7 +3167,9 @@ reset_and_undo:
 ### send ACK
 
 #### tcp_send_ack
+
 This routine sends an ack and also updates the window.
+
 1. return if TCP_CLOSE
 2. alloc_skb
 3. skb_reserve
@@ -3224,15 +3221,14 @@ void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
 
 ```
 
-
-
 ## Server accept
 
 ### rcv SYN
+
 see tcp_v4_do_rcv
 
-
 #### tcp_rcv_state_process
+
 This function implements the receiving procedure of RFC 793 for all states except ESTABLISHED and TIME_WAIT.
 
 It's called from both tcp_v4_rcv and tcp_v6_rcv and should be address independent.
@@ -3253,7 +3249,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 	case TCP_CLOSE:
 		goto discard;
 ```
-ack when LISTEN, 
+
+ack when LISTEN,
+
 ```c
 	case TCP_LISTEN:
 		if (th->ack)
@@ -3263,7 +3261,9 @@ ack when LISTEN,
 			goto discard;
 
 ```
+
 syn when LISTEN, call [tcp_conn_request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
+
 ```c
 		if (th->syn) {
 			if (th->fin)
@@ -3286,6 +3286,7 @@ syn when LISTEN, call [tcp_conn_request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_re
 ```
 
 rcv syn+ack
+
 ```c
 
 	case TCP_SYN_SENT:
@@ -3432,6 +3433,7 @@ rcv syn+ack
 ```
 
 goto [tcp_time_wait](/docs/CS/OS/Linux/TCP.md?id=tcp_time_wait) when concurrent close
+
 ```c
 	case TCP_CLOSING:
 		if (tp->snd_una == tp->write_seq) {
@@ -3442,6 +3444,7 @@ goto [tcp_time_wait](/docs/CS/OS/Linux/TCP.md?id=tcp_time_wait) when concurrent 
 ```
 
 rcv ACK
+
 ```c
 	case TCP_LAST_ACK:
 		if (tp->snd_una == tp->write_seq) {
@@ -3452,7 +3455,6 @@ rcv ACK
 		break;
 	}
 ```
-
 
 ```c
 	/* step 6: check the URG bit */
@@ -3504,8 +3506,8 @@ discard:
 }
 ```
 
-
 #### tcp_v4_cookie_check
+
 ```c
 
 static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb)
@@ -3539,6 +3541,7 @@ int __cookie_v4_check(const struct iphdr *iph, const struct tcphdr *th,
 #### tcp_conn_request
 
 tcp_conn_request for syn
+
 ```c
 
 int tcp_conn_request(struct request_sock_ops *rsk_ops,
@@ -3564,6 +3567,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 ```
 
 tcp_syncookies == 2, skip check if check [reqsk queue is full]()
+
 ```c
 	if ((net->ipv4.sysctl_tcp_syncookies == 2 ||
 	     inet_csk_reqsk_queue_is_full(sk)) && !isn) {
@@ -3573,7 +3577,9 @@ tcp_syncookies == 2, skip check if check [reqsk queue is full]()
 	}
 
 ```
+
 check if [accept queue is full]()
+
 ```c
 	if (sk_acceptq_is_full(sk)) {
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_LISTENOVERFLOWS);
@@ -3619,6 +3625,7 @@ check if [accept queue is full]()
 ```
 
 drop if `qlen` > (`max_syn_backlog` >> 2)
+
 ```c
 	if (!want_cookie && !isn) {
 		/* Kill the following clause, if you dislike this way. */
@@ -3642,7 +3649,6 @@ drop if `qlen` > (`max_syn_backlog` >> 2)
 	}
 ```
 
-
 ```c
 	tcp_ecn_create_request(req, skb, sk, dst);
 
@@ -3665,7 +3671,9 @@ drop if `qlen` > (`max_syn_backlog` >> 2)
 		af_ops->send_synack(fastopen_sk, dst, &fl, req,
 				    &foc, TCP_SYNACK_FASTOPEN, skb);
 ```
+
 call [inet_csk_reqsk_queue_add](/docs/CS/OS/Linux/Calls.md?id=inet_csk_reqsk_queue_add)
+
 ```c
 		/* Add the child socket directly into the accept queue */
 		if (!inet_csk_reqsk_queue_add(sk, req, fastopen_sk)) {
@@ -3706,8 +3714,8 @@ drop:
 	return 0;
 }
 ```
-##### queue is full
 
+##### queue is full
 
 ```c
 
@@ -3717,10 +3725,10 @@ static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
 }
 ```
 
-
 > Note: If you think the test should be:
 > return READ_ONCE(sk->sk_ack_backlog) >= READ_ONCE(sk->sk_max_ack_backlog);
 > Then please take a look at commit 64a146513f8f ("[NET]: Revert incorrect accept queue backlog changes.")
+
 ```c
 // 
 static inline bool sk_acceptq_is_full(const struct sock *sk)
@@ -3730,8 +3738,10 @@ static inline bool sk_acceptq_is_full(const struct sock *sk)
 ```
 
 ##### inet_csk_reqsk_queue_hash_add
+
 1. reqsk_queue_hash_req
 2. [accept queue added](/docs/CS/OS/Linux/Calls.md?id=accept-queue) inc young and `qlen`
+
 ```c
 
 void inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_sock *req,
@@ -3757,12 +3767,15 @@ static void reqsk_queue_hash_req(struct request_sock *req,
 	refcount_set(&req->rsk_refcnt, 2 + 1);
 }
 ```
+
 ##### inet_ehash_insert
+
 Insert a socket into ehash, and eventually remove another one
 (The another one can be a `SYN_RECV` or `TIMEWAIT`)
 
 If an existing socket already exists, socket sk is not inserted,
 and sets `found_dup_sk` parameter to true.
+
 ```c
 // net/ipv4/inet_hashtables.c
 bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
@@ -3799,11 +3812,10 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 }
 ```
 
-
-
 ### send SYNACK
 
 #### tcp_send_synack
+
 ```c
 
 /* Send a crossed SYN-ACK during socket establishment.
@@ -3847,6 +3859,7 @@ int tcp_send_synack(struct sock *sk)
 }
 
 ```
+
 #### tcp_v4_send_synack
 
 tcp_v4_send_synack
@@ -3854,6 +3867,7 @@ tcp_v4_send_synack
 Send a SYN-ACK after having received a SYN.
 
 This still operates on a request_sock only, not on a big socket.
+
 ```c
 
 
@@ -3906,8 +3920,10 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 }
 ```
 
-#### tcp_make_synack 
+#### tcp_make_synack
+
 Allocate one skb and build a SYNACK packet.
+
 ```c
 struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 				struct request_sock *req,
@@ -4018,14 +4034,16 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 }
 ```
 
-
 ### rcv ACK
+
 see tcp_v4_do-rcv
 
 #### tcp_child_process
+
 Queue segment on the new socket if the new socket is active, otherwise we just shortcircuit this and continue with the new socket.
 
 For the vast majority of cases child->sk_state will be TCP_SYN_RECV when entering. But other states are possible due to a race condition where after __inet_lookup_established() fails but before the listener locked is obtained, other packets cause the same connection to be created.
+
 ```c
 
 
@@ -4059,10 +4077,7 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 }
 ```
 
-
-
 ## retry
-
 
 ```c
 void tcp_retransmit_timer(struct sock *sk)
@@ -4218,45 +4233,46 @@ static unsigned int tcp_model_timeout(struct sock *sk,
 }
 ```
 
-
 `tcp_retries1` 失败后通知IP层进行MTU探测、刷新路由等流程而不是关闭连接
 
 同样受timeout限制
 
-
 ## Congestion Control
-Congestion control is essentially ”feedback-control”
-- If senders get acknowledgment of receipt of packets
-    - They know if packets are dropped or not
-- Based on this, senders can infer the following
-    - If packets are not dropped 
-      − sender is sending at rate lower than the capacity
-    - If packets are dropped 
-      − sender is sending at rate higher than capacity
-    - Use drops of packets as “signal of congestion”
-    - Change rate as a reaction to packet drop so as to achieve “fair-share”
 
+Congestion control is essentially ”feedback-control”
+
+- If senders get acknowledgment of receipt of packets
+  - They know if packets are dropped or not
+- Based on this, senders can infer the following
+  - If packets are not dropped
+    − sender is sending at rate lower than the capacity
+  - If packets are dropped
+    − sender is sending at rate higher than capacity
+  - Use drops of packets as “signal of congestion”
+  - Change rate as a reaction to packet drop so as to achieve “fair-share”
 
 Drop Detection and Rate-Control are key ideas behind current congestion control protocols.
 
 Current TCP:
+
 - Packet conservation: inject new packet when old packet wave has
-reached destination
+  reached destination
 - Slow-start: search for capacity starting from zero
 - Rate-control: control rate via packet drop feedback, and be “good user"
-  
 
 Sender Algorithm
+
 - Slow Start
 - Sliding Window
 
 Receiver Algorithm
+
 - Packet-loss Detection
 
-
-
 ### State
+
 #### tcp_ca_state
+
 ```c
 
 /*
@@ -4301,7 +4317,9 @@ enum tcp_ca_state {
 ```
 
 #### CWR
+
 Enter CWR state. Disable cwnd undo since congestion is proven with ECN
+
 ```c
 
 void tcp_enter_cwr(struct sock *sk)
@@ -4318,6 +4336,7 @@ void tcp_enter_cwr(struct sock *sk)
 ```
 
 #### Loss
+
 ```c
 
 void tcp_enter_loss(struct sock *sk)
@@ -4398,7 +4417,9 @@ static inline int IP_ECN_set_ce(struct iphdr *iph)
 	return 1;
 }
 ```
+
 #### tcp_fastretrans_alert
+
 Process an event, which can update packets-in-flight not trivially.
 
 Main goal of this function is to calculate new estimate for left_out, taking into account both packets sitting in receiver's buffer and packets lost by network.
@@ -4406,6 +4427,7 @@ Main goal of this function is to calculate new estimate for left_out, taking int
 Besides that it updates the congestion state when packet loss or ECN is detected. But it does not reduce the cwnd, it is done by the congestion control later.
 
 It does _not_ decide what to send, it is made in function tcp_xmit_retransmit_queue().
+
 ```c
 
 static void tcp_fastretrans_alert(struct sock *sk, const u32 prior_snd_una,
@@ -4525,7 +4547,6 @@ static void tcp_fastretrans_alert(struct sock *sk, const u32 prior_snd_una,
 
 ### Congestion cControl Interface
 
-
 ```c
 
 struct tcp_congestion_ops {
@@ -4583,6 +4604,7 @@ struct tcp_congestion_ops {
 ```
 
 Events passed to congestion control interface
+
 ```c
 
 enum tcp_ca_event {
@@ -4594,7 +4616,9 @@ enum tcp_ca_event {
 	CA_EVENT_ECN_IS_CE,	/* received CE marked IP packet */
 };
 ```
+
 Information about inbound ACK, passed to cong_ops->in_ack_event()
+
 ```c
 
 enum tcp_ca_ack_event_flags {
@@ -4603,7 +4627,6 @@ enum tcp_ca_ack_event_flags {
 	CA_ACK_ECE		= (1 << 2),	/* ECE bit is set on ack */
 };
 ```
-
 
 Attach new congestion control algorithm to the list of available options.
 
@@ -4636,6 +4659,7 @@ int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 	return ret;
 }
 ```
+
 Remove congestion control algorithm, called from the module's remove function.  Module ref counts are used to ensure that this can't be done till all sockets using that method are closed.
 
 ```c
@@ -4655,8 +4679,8 @@ void tcp_unregister_congestion_control(struct tcp_congestion_ops *ca)
 	synchronize_rcu();
 }
 ```
-### CUBIC
 
+### CUBIC
 
 ```c
 
@@ -4696,7 +4720,6 @@ static int __init cubictcp_register(void)
 }
 ```
 
-
 ```c
 static struct tcp_congestion_ops cubictcp __read_mostly = {
 	.init		= cubictcp_init,
@@ -4710,7 +4733,9 @@ static struct tcp_congestion_ops cubictcp __read_mostly = {
 	.name		= "cubic",
 };
 ```
+
 cubictcp_init
+
 ```c
 
 static void cubictcp_init(struct sock *sk)
@@ -4726,7 +4751,9 @@ static void cubictcp_init(struct sock *sk)
 		tcp_sk(sk)->snd_ssthresh = initial_ssthresh;
 }
 ```
+
 cubictcp_cong_avoid
+
 ```c
 static void cubictcp_cong_avoid(struct sock *sk, u32 ack, u32 acked)
 {
@@ -4747,7 +4774,9 @@ struct bictcp *ca = inet_csk_ca(sk);
 	tcp_cong_avoid_ai(tp, ca->cnt, acked);
 }
 ```
+
 Compute congestion window to use.
+
 ```c
 
 static inline void bictcp_update(struct bictcp *ca, u32 cwnd, u32 acked)
@@ -4864,7 +4893,9 @@ tcp_friendliness:
 ## Shutdown
 
 ### tcp_shutdown
+
 Shutdown the sending side of a connection. Much like close except that we don't receive shut down or sock_set_flag(sk, SOCK_DEAD).
+
 ```c
 
 void tcp_shutdown(struct sock *sk, int how)
@@ -4888,8 +4919,11 @@ void tcp_shutdown(struct sock *sk, int how)
 ```
 
 ## Active Close
+
 ### send FIN
+
 #### tcp_close
+
 ```c
 
 void tcp_close(struct sock *sk, long timeout)
@@ -5074,11 +5108,12 @@ out:
 
 ```
 
-
 #### tcp_send_fin
+
 Send a FIN. The caller locks the socket for us.
 
 We should try to send a FIN packet really hard, but eventually give up.
+
 ```c
 
 void tcp_send_fin(struct sock *sk)
@@ -5126,14 +5161,14 @@ void tcp_send_fin(struct sock *sk)
 }
 ```
 
-
 ### rcv ACK
+
 see [tcp_rcv_state_process](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_state_process)
 
-
-
 #### tcp_time_wait
+
 Move a socket to time-wait or dead fin-wait-2 state.
+
 ```c
 
 void tcp_time_wait(struct sock *sk, int state, int timeo)
@@ -5228,6 +5263,7 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 ```
 
 ### rcv FIN
+
 #### tcp_timewait_state_process
 
 Main purpose of TIME-WAIT state is to close connection gracefully,
@@ -5328,8 +5364,6 @@ tcp_timewait_state_process(struct inet_timewait_sock *tw, struct sk_buff *skb,
 	}
 ```
 
-
-
 Now real TIME-WAIT state.
 
 RFC 1122:
@@ -5338,14 +5372,14 @@ RFC 1122:
 reopen the connection directly, if it:
 
 1. assigns its initial sequence number for the new
-connection to be larger than the largest sequence
-number it used on the previous connection incarnation,
-and
+   connection to be larger than the largest sequence
+   number it used on the previous connection incarnation,
+   and
 2. returns to TIME-WAIT state if the SYN turns out
-to be an old duplicate".
-
+   to be an old duplicate".
 
 if sysctl_tcp_rfc1337 enable, ignore RST
+
 ```c
 	if (!paws_reject &&
 	    (TCP_SKB_CB(skb)->seq == tcptw->tw_rcv_nxt &&
@@ -5424,13 +5458,12 @@ kill:
 }
 ```
 
-
 ### send ACK
-
 
 #### tcp_v4_timewait_ack
 
 call tcp_v4_send_ack
+
 ```c
 
 static void tcp_v4_timewait_ack(struct sock *sk, struct sk_buff *skb)
@@ -5454,7 +5487,9 @@ static void tcp_v4_timewait_ack(struct sock *sk, struct sk_buff *skb)
 ```
 
 #### tcp_v4_send_ack
-The code following below sending ACKs in SYN-RECV and TIME-WAIT states outside socket context. 
+
+The code following below sending ACKs in SYN-RECV and TIME-WAIT states outside socket context.
+
 ```c
 
 static void tcp_v4_send_ack(const struct sock *sk,
@@ -5533,7 +5568,9 @@ static void tcp_v4_send_ack(const struct sock *sk,
 			   inet_twsk(sk)->tw_priority : sk->sk_priority;
 	transmit_time = tcp_transmit_time(sk);
 ```
+
 call ip_send_unicast_reply -> ip_push_pending_frames
+
 ```c
 	ip_send_unicast_reply(ctl_sk,
 			      skb, &TCP_SKB_CB(skb)->header.h4.opt,
@@ -5547,19 +5584,18 @@ call ip_send_unicast_reply -> ip_push_pending_frames
 }
 ```
 
-
-
-
-
 ## Passive Close
 
 ### rcv FIN
 
 #### tcp_fin
+
 Process the FIN bit. This now behaves as it is supposed to work and the FIN takes effect when it is validly part of sequence space. Not before when we get holes.
+
 - If we are TCP_SYN_RECV or ESTABLISHED, a received fin moves us to CLOSE-WAIT(and thence onto LAST-ACK and finally, CLOSE, we never enter TIME-WAIT)
 - If we are in FINWAIT-1, a received FIN indicates simultaneous close and we go into CLOSING (and later onto TIME-WAIT)
 - If we are in FINWAIT-2, a received FIN moves us to TIME-WAIT.
+
 ```c
 void tcp_fin(struct sock *sk)
 {
@@ -5639,10 +5675,10 @@ close decrement ref, when ref=0, close both sides.
 
 shutdown could close one side
 
-
-
 like [send FIN in Active Close](/docs/CS/OS/Linux/TCP.md?id=send-FIN)
+
 ### rcv ACK
+
 see [tcp_rcv_state_process](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_state_process)
 
 TIME_WAIT 60s
@@ -5652,12 +5688,13 @@ TIME_WAIT 60s
                               * state, about 60 seconds    */
 ```
 
-
 ## Others
 
 #### tcp_fin_time
-call by 
+
+call by
 timout >= 7/2 RTO
+
 ```c
 
 static inline int tcp_fin_time(const struct sock *sk)
@@ -5672,10 +5709,7 @@ static inline int tcp_fin_time(const struct sock *sk)
 }
 ```
 
-
-
 ### keepalive
-
 
 ### test
 
@@ -5695,5 +5729,6 @@ SO_REUSEADDR vs. tw_reuse
 - [TCP](/docs/CS/CN/TCP.md)
 
 ## References
+
 1. [Analysis_TCP_in_Linux](https://github.com/fzyz999/Analysis_TCP_in_Linux)
 2. [Congestion Control - MIT6.976](https://web.mit.edu/6.976/www/notes/Notes3.pdf)

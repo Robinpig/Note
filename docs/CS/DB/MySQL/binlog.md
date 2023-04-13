@@ -39,3 +39,5 @@ In this case, this binary log is not correct and replication should be restarted
 
 
 ## Links
+
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
