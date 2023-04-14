@@ -9,6 +9,7 @@ TCP sockets are an example of *stream sockets*.
 call tcp_init by [inet_init](/docs/CS/OS/Linux/network.md?id=init-inet)
 
 
+Size and allocate the main established and bind bucket hash tables.
 ```c
 
 void __init tcp_init(void)
@@ -37,11 +38,6 @@ void __init tcp_init(void)
 				  SLAB_ACCOUNT,
 				  NULL);
 
-	/* Size and allocate the main established and bind bucket
-	 * hash tables.
-	 *
-	 * The methodology is similar to that of the buffer cache.
-	 */
 	tcp_hashinfo.ehash =
 		alloc_large_system_hash("TCP established",
 					sizeof(struct inet_ehash_bucket),

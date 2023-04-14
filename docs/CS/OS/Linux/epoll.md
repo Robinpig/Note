@@ -655,43 +655,11 @@ SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
                           ep_timeout_to_timespec(&to, timeout));
 }
 
-/*
- * Implement the event wait interface for the eventpoll file. It is the kernel
- * part of the user space epoll_wait(2).
- */
 static int do_epoll_wait(int epfd, struct epoll_event __user *events,
                       int maxevents, struct timespec64 *to)
 {
        int error;
-       struct fd f;
        struct eventpoll *ep;
-
-       /* The maximum number of event must be greater than zero */
-       if (maxevents <= 0 || maxevents > EP_MAX_EVENTS)
-              return -EINVAL;
-
-       /* Verify that the area passed by the user is writeable */
-       if (!access_ok(events, maxevents * sizeof(struct epoll_event)))
-              return -EFAULT;
-
-       /* Get the "struct file *" for the eventpoll file */
-       f = fdget(epfd);
-       if (!f.file)
-              return -EBADF;
-
-       /*
-        * We have to check that the file structure underneath the fd
-        * the user passed to us _is_ an eventpoll file.
-        */
-       error = -EINVAL;
-       if (!is_file_epoll(f.file))
-              goto error_fput;
-
-       /*
-        * At this point it is safe to assume that the "private_data" contains
-        * our own data structure.
-        */
-       ep = f.file->private_data;
 
        /* Time to fish for events ... */
        error = ep_poll(ep, events, maxevents, to);
@@ -701,6 +669,8 @@ static int do_epoll_wait(int epfd, struct epoll_event __user *events,
 ### ep_poll
 
 Retrieves ready events, and delivers them to the caller-supplied event buffer.
+- if ep_events_available, send
+- else wait 
 ```c
 
 static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
@@ -800,6 +770,26 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
 
 
 
+#### ep_events_available
+
+Checks if ready events might be available.
+
+This call is racy: We may or may not see events that are being added to the ready list under the lock (e.g., in IRQ callbacks). 
+- For cases with a non-zero timeout, this thread will check the ready list under lock and will add to the wait queue. 
+- For cases with a zero timeout, the user by definition should not care and will have to recheck again.
+
+```c
+
+static inline int ep_events_available(struct eventpoll *ep)
+{
+	return !list_empty_careful(&ep->rdllist) ||
+		READ_ONCE(ep->ovflist) != EP_UNACTIVE_PTR;
+}
+```
+
+
+
+
 #### init_wait
 
 Internally init_wait() uses `default_wake_function()`, thus wait entry is removed from the wait queue on each wakeup. Why it is important? In case of several waiters each new wakeup will hit the next waiter, giving it the chance to harvest new event. 
@@ -846,23 +836,6 @@ int default_wake_function(wait_queue_entry_t *curr, unsigned mode, int wake_flag
 ```
 
 
-
-
-
-#### ep_events_available
-
-Checks if ready events might be available.
-
-This call is racy: We may or may not see events that are being added to the ready list under the lock (e.g., in IRQ callbacks). For cases with a non-zero timeout, this thread will check the ready list under lock and will add to the wait queue.  For cases with a zero timeout, the user by definition should not care and will have to recheck again.
-
-```c
-
-static inline int ep_events_available(struct eventpoll *ep)
-{
-	return !list_empty_careful(&ep->rdllist) ||
-		READ_ONCE(ep->ovflist) != EP_UNACTIVE_PTR;
-}
-```
 
 
 
