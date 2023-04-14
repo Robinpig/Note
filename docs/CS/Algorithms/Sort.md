@@ -7,7 +7,9 @@ The sorting algorithms divide into two basic types:
 those that sort in place and use no extra memory except perhaps for a small functioncall stack or a constant number of instance variables,
 and those that need enough extra memory to hold another copy of the array to be sorted.
 
-After considering the classic selection sort, insertion sort, shellsort, mergesort, quicksort, and heapsort algorithms, we will consider practical issues and applications.
+After considering the classic [selection sort](/docs/CS/Algorithms/Sort.md?id=Selection-Sort) [insertion sort](/docs/CS/Algorithms/Sort.md?id=Insertion-Sort),
+[shellsort](/docs/CS/Algorithms/Sort.md?id=Shell-Sort), [mergesort](/docs/CS/Algorithms/Sort.md?id=Merge-Sort), 
+[quicksort](/docs/CS/Algorithms/Sort.md?id=Quick-Sort), and [heapsort](/docs/CS/Algorithms/Sort.md?id=Heap-Sort) algorithms, we will consider practical issues and applications.
 
 Suppose you have a group of n numbers and would like to determine the kth largest. This is known as the _selection problem_.
 
@@ -27,9 +29,11 @@ Sorting algorithms are generally categorized based on the following parameters.
 
 **By Number of Comparisons**
 
-In this method, sorting algorithms are classified based on the number of comparisons. For comparison based sorting algorithms, best case behavior is O(nlogn) and worst case behavior is $O(n^2)$.
+In this method, sorting algorithms are classified based on the number of comparisons.
+For comparison based sorting algorithms, best case behavior is O(nlogn) and worst case behavior is $O(n^2)$.
 Comparison-based sorting algorithms evaluate the elements of the list by key comparison operation and need at least O(nlogn) comparisons for most inputs.
-Later in this chapter we will discuss a few non – comparison (linear) sorting algorithms like Counting sort, Bucket sort, Radix sort, etc. Linear Sorting algorithms impose few restrictions on the inputs to improve the complexity
+Later in this chapter we will discuss a few non – comparison (linear) sorting algorithms like Counting sort, Bucket sort, Radix sort, etc.
+Linear Sorting algorithms impose few restrictions on the inputs to improve the complexity
 
 **By Number of Swaps**
 
@@ -41,15 +45,18 @@ Some sorting algorithms are “in place” and they need O(1) or O(logn) memory 
 
 **By Recursion**
 
-Sorting algorithms are either recursive [quick sort] or non-recursive [selection sort, and insertion sort], and there are some algorithms which use both (merge sort).
+Sorting algorithms are either recursive quick sort or non-recursive selection sort, and insertion sort, and there are some algorithms which use both (merge sort).
 
 **By Stability**
 
-Sorting algorithm is stable if for all indices i and j such that the key A[i] equals key A[j], if record R[i] precedes record R[j] in the original file, record R[i] precedes record R[j] in the sorted list. Few sorting algorithms maintain the relative order of elements with equal keys (equivalent elements retain their relative positions even after sorting).
+Sorting algorithm is stable if for all indices i and j such that the key A[i] equals key A[j], if record R[i] precedes record R[j] in the original file,
+record R[i] precedes record R[j] in the sorted list. 
+Few sorting algorithms maintain the relative order of elements with equal keys (equivalent elements retain their relative positions even after sorting).
 
 **By Adaptability**
 
-With a few sorting algorithms, the complexity changes based on pre-sortedness [quick sort]: pre- sortedness of the input affects the running time. Algorithms that take this into account are known to be adaptive.
+With a few sorting algorithms, the complexity changes based on pre-sortedness quick sort: pre- sortedness of the input affects the running time. 
+Algorithms that take this into account are known to be adaptive.
 
 Another method of classifying sorting algorithms is:
 
@@ -81,7 +88,7 @@ Generally, insertion sort has better performance than bubble sort.
 Some researchers suggest that we should not teach bubble sort because of its simplicity and high time complexity.
 The only significant advantage that bubble sort has over other implementations is that it can detect whether the input list is already sorted or not.
 
-```java
+```
 public static void swap (int[] A, int i, int j) {
 	A[i] ^= A[j];
 	A[j] ^= A[i];
@@ -150,18 +157,19 @@ So, the last step of shell sort is effectively the insertion sort algorithm.
 It improves insertion sort by allowing the comparison and exchange of elements that are far away.
 This is the first algorithm which got less than quadratic complexity among comparison sort algorithms.
 
-## Heapsort
+## Heap Sort
 
 Time complexity: As we remove the elements from the heap, the values become sorted (since maximum elements are always root only).
-Since the time complexity of both the insertion algorithm and deletion algorithm is $O(logn)$ (where n is the number of items in the heap), the time complexity of the heap sort algorithm is $O(nlogn)$.
+Since the time complexity of both the insertion algorithm and deletion algorithm is $O(logn)$ (where n is the number of items in the heap), 
+the time complexity of the heap sort algorithm is $O(nlogn)$.
 
 ## Merge Sort
 
 > [!NOTE]
 >
-> Top-down mergesort uses between ½NlgN and NlgN compares to sort any array of length N.
+> Top-down mergesort uses between $½NlgN$ and $NlgN$ compares to sort any array of length N.
 >
-> Top-down mergesort uses at most 6NlgN array accesses to sort an array of length N.
+> Top-down mergesort uses at most $6NlgN$ array accesses to sort an array of length N.
 
 ```java
 public class Merge {
@@ -190,7 +198,7 @@ Bottom-up mergesort
 
 No compare-based sorting algorithm can guarantee to sort N items with fewer than lg(N!) ~ NlgN compares.
 
-## QuickSort
+## Quick Sort
 
 Like Merge Sort, QuickSort is a Divide and Conquer algorithm.
 It picks an element as a pivot and partitions the given array around the picked pivot.
@@ -202,7 +210,8 @@ There are many different versions of quickSort that pick pivot in different ways
 - Pick median as the pivot.
 
 The key process in quickSort is a partition().
-The target of partitions is, given an array and an element x of an array as the pivot, put x at its correct position in a sorted array and put all smaller elements (smaller than x) before x, and put all greater elements (greater than x) after x.
+The target of partitions is, given an array and an element x of an array as the pivot, 
+put x at its correct position in a sorted array and put all smaller elements (smaller than x) before x, and put all greater elements (greater than x) after x.
 All this should be done in linear time.
 
 Partition Algorithm:
@@ -353,4 +362,6 @@ The Pancake Flipping problem is NP-hard.(see [Pancake Flipping is Hard](https://
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
-[AlphaSort: A RISC Machine Sort](https://courses.cs.washington.edu/courses/cse590q/05wi/paper/p233-nyberg.pdf)
+## References
+
+1. [AlphaSort: A RISC Machine Sort](https://courses.cs.washington.edu/courses/cse590q/05wi/paper/p233-nyberg.pdf)
