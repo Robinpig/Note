@@ -1,13 +1,12 @@
 ## Introduction
 
-[UDP](/docs/CS/CN/UDP.md) is a simple transport-layer protocol. 
+[UDP](/docs/CS/CN/UDP.md) is a simple transport-layer protocol.
 
-only need bind 
+only need bind
 
-
-
-sendto 
+sendto
 recvfrom
+
 ### udp_rcv
 
 ```c
@@ -18,8 +17,8 @@ int udp_rcv(struct sk_buff *skb)
 }
 ```
 
-
 __udp4_lib_rcv
+
 ```c
 /*
  *	All we need to do is get the socket, and then do a checksum.
@@ -123,9 +122,6 @@ drop:
 	return 0;
 }
 ```
-
-
-
 
 ### udp_sendmsg
 
@@ -372,6 +368,7 @@ back_from_confirm:
 ```
 
 call [ip_append_data](/docs/CS/OS/Linux/IP.md?id=ip_append_data)
+
 ```c
 do_append_data:
 	up->len += ulen;
@@ -382,13 +379,16 @@ do_append_data:
 		udp_flush_pending_frames(sk);
 	else if (!corkreq)
 ```
+
 call  udp_push_pending_frames
+
 ```c
 		err = udp_push_pending_frames(sk);
 	else if (unlikely(skb_queue_empty(&sk->sk_write_queue)))
 		up->pending = 0;
 	release_sock(sk);
 ```
+
 ```c
 out:
 	ip_rt_put(rt);
@@ -420,10 +420,11 @@ do_confirm:
 }
 ```
 
-
 #### udp_push_pending_frames
+
 Push out all pending data as one UDP datagram. Socket is locked.udp_push_pending_frames
 call udp_send_skb
+
 ```c
 
 int udp_push_pending_frames(struct sock *sk)
@@ -447,7 +448,6 @@ out:
 }
 ```
 
-
 ```c
 
 static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
@@ -464,7 +464,9 @@ static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
 	__wsum csum = 0;
 
 ```
+
 Create a UDP header
+
 ```c
 	uh = udp_hdr(skb);
 	uh->source = inet->inet_sport;
@@ -526,7 +528,9 @@ csum_partial:
 	if (uh->check == 0)
 		uh->check = CSUM_MANGLED_0;
 ```
+
 call [ip_send_skb](/docs/CS/OS/Linux/IP.md?id=ip_send_skb)
+
 ```c
 send:
 	err = ip_send_skb(sock_net(sk), skb);
