@@ -3,9 +3,9 @@
 
 TCP connection involves a client and server side setup for the two ends to communicate.
 
-The client has to make two systemcalls, socket() and connect(), to connect to the server. 
-The server has to make arrangements to create a listening socket so that the client can generate request to connect to this socket. 
-To make such an arrangement, the server has to make four systemcalls: socket(), bind(), listen(), and accept().
+- The client has to make two systemcalls, socket() and connect(), to connect to the server. 
+- The server has to make arrangements to create a listening socket so that the client can generate request to connect to this socket. 
+  To make such an arrangement, the server has to make four systemcalls: socket(), bind(), listen(), and accept().
 
 We will study the implementation of each systemcall in the kernel.
 
@@ -25,7 +25,7 @@ We will also see how the open connection request is moved from the SYN queue to 
 Finally, we will see how the established connections are taken off the accept queue by making accept() call. 
 Similarly, we will see how the client generates a connection request to the server (sends SYN segment to the listening server). 
 
-In this chapter we will not cover the IP and link layer details (which will be discussed in later chapters) but will surely cover everything that is associated with the client – server connection setup in the kernel.
+We will not cover the IP and link layer details but will surely cover everything that is associated with the client – server connection setup in the kernel.
 
 
 
@@ -88,3 +88,4 @@ send(...,&server_address,...);
 
 ## Links
 
+- [docs/CS/OS/Linux/TCP](/docs)
