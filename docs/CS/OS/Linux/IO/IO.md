@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 unbuffered I/O
 
 open read write lseek close
@@ -9,8 +7,7 @@ open read write lseek close
 Most file I/O on a UNIX system can be performed using only five functions: open, read, write, lseek, and close.
 These functions are often referred to as unbuffered I/O.
 
-
-Historically, a buffer_head was used to map a single block within a page, and of course as the unit of I/O through the filesystem and block layers.  
+Historically, a buffer_head was used to map a single block within a page, and of course as the unit of I/O through the filesystem and block layers.
 Nowadays the basic I/O unit is the bio, and buffer_heads are used for extracting block mappings (via a get_block_t call), for tracking state within a page (via a page_mapping) and for wrapping bio submission for backward compatibility reasons (e.g. submit_bh).
 
 ```c
@@ -35,6 +32,7 @@ struct buffer_head {
 					 * buffers in the page */
 };
 ```
+
 main unit of I/O for the block layer and lower layers (ie drivers and stacking drivers)
 
 ```c
@@ -105,13 +103,11 @@ struct bio {
 
 ## DirectIO
 
-
-
 __generic_file_write_iter - write data to a file
 @iocb:	IO state structure (file, offset, etc.)
 @from:	iov_iter with data to write
 
-This function does all the work needed for actually writing data to a file. 
+This function does all the work needed for actually writing data to a file.
 It does all basic checks, removes SUID from the file, updates modification times and calls proper subroutines depending on whether we do direct IO or a standard buffered write.
 
 It expects i_mutex to be grabbed unless we work on a block device or similar object which does not need locking at all.
@@ -120,9 +116,9 @@ This function does *not* take care of syncing data in case of O_SYNC write.
 A caller has to handle it. This is mainly due to the fact that we want to avoid syncing under i_mutex.
 
 Return:
+
 * number of bytes written, even for truncated writes
 * negative error code if no data has been written at all
-
 
 ```c
 ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
@@ -199,7 +195,6 @@ out:
 	return written ? written : err;
 }
 ```
-
 
 ```c
 // mm/filemap.c
@@ -286,30 +281,17 @@ out:
 }
 ```
 
-
-
-
-
-
 ## BIO
 
 Blocking system calls
 
 Read/write
 
-
-
 ## NIO
-
-
 
 select/poll/epoll
 
-
-
 only support network sockets and pipes
-
-
 
 Databases  **`O_DIRECT`**
 
@@ -317,25 +299,16 @@ Direct IO, don't use os page cache
 
 Zero-Copy IO
 
-
-
-
-
-
-
 ## AIO
+
 Native IO
+
 [Design Notes on Asynchronous I/O (aio) for Linux](http://lse.sourceforge.net/io/aionotes.txt)
 
 libaio
 
 - ony support Direct IO
 
-
-
-
-
 Io_uring
-
 
 bypass IO

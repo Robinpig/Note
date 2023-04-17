@@ -5,24 +5,27 @@
 #include <sys/epoll.h>
 ```
 
-The  epoll  API  performs  a similar task to `poll`: monitoring multiple file descriptors to see if I/O is possible on any of them.  The epoll API can be used either as an edge-triggered or a level-triggered interface and scales well to  large  numbers of watched file descriptors.  The following system calls are provided to create and manage an epoll instance:
+The  epoll  API  performs  a similar task to `poll`: monitoring multiple file descriptors to see if I/O is possible on any of them. 
+The epoll API can be used either as an edge-triggered or a level-triggered interface and scales well to large numbers of watched file descriptors. 
+The following system calls are provided to create and manage an epoll instance:
 
-* epoll_create(2)  creates  a  new epoll instance and returns a file descriptor referring to that instance.  (The more recent
-  epoll_create1(2) extends the functionality of epoll_create(2).)
-* Interest in particular file descriptors is then registered via epoll_ctl(2).  The set of file descriptors currently  regis‐
-  tered on an epoll instance is sometimes called an epoll set.
+* epoll_create(2)  creates  a  new epoll instance and returns a file descriptor referring to that instance.  
+  (The more recent epoll_create1(2) extends the functionality of epoll_create(2).)
+* Interest in particular file descriptors is then registered via epoll_ctl(2).  
+  The set of file descriptors currently  registered on an epoll instance is sometimes called an epoll set.
 * epoll_wait(2) waits for I/O events, blocking the calling thread if no events are currently available.
 
 
 ```c
 int main(){
-listen(lfd, ...);
-cfd1 = accept(...);
-cfd2 = accept(...);
-efd = epoll_create(...);
-epoll_ctl(efd, EPOLL_CTL_ADD, cfd1, ...);
-epoll_ctl(efd, EPOLL_CTL_ADD, cfd2, ...);
-epoll_wait(efd, ...)
+  listen(lfd, ...);
+  cfd1 = accept(...);
+  cfd2 = accept(...);
+  
+  efd = epoll_create(...);
+  epoll_ctl(efd, EPOLL_CTL_ADD, cfd1, ...);
+  epoll_ctl(efd, EPOLL_CTL_ADD, cfd2, ...);
+  epoll_wait(efd, ...)
 }
 ```
 
@@ -40,17 +43,12 @@ SYSCALL_DEFINE1(epoll_create1, int, flags)
 	return do_epoll_create(flags);
 }
 
-/*
- * Open an eventpoll file descriptor.
- */
 static int do_epoll_create(int flags)
 {
 	int error, fd;
 	struct eventpoll *ep = NULL;
 	struct file *file;
 
-	
-	/* Create the internal data structure ("struct eventpoll"). */
 	error = ep_alloc(&ep);
 	
 	/*
@@ -136,14 +134,12 @@ struct eventpoll {
 
 ### epitem
 
-```c
 
-/*
- * Each file descriptor added to the eventpoll interface will
- * have an entry of this type linked to the "rbr" RB tree.
- * Avoid increasing the size of this struct, there can be many thousands
- * of these on a server and we do not want this to take another cache line.
- */
+
+Each file descriptor added to the eventpoll interface will have an entry of this type linked to the "rbr" RB tree.
+Avoid increasing the size of this struct, there can be many thousands of these on a server and we do not want this to take another cache line.
+
+```c
 struct epitem {
 	union {
 		/* RB tree node links this structure to the eventpoll RB tree */
@@ -806,12 +802,6 @@ Otherwise wakeup can be lost. This is also good performance-wise, because on nor
 		(wait)->flags = 0;						\
 	} while (0)
 
-```
-
-
-
-```c
-// kernel/sched/wait.c
 int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key)
 {
 	int ret = default_wake_function(wq_entry, mode, sync, key);
@@ -1067,6 +1057,9 @@ single wait queue is serialized by wq.lock, but the case when multiple wait queu
 2. add event to ready list
 3. Wake up ( if active ) both the eventpoll wait list and the ->poll() wait list.
 
+ep_pol_callback ->`ep_poll_safewake`->[wake_up_poll](/docs/CS/OS/Linux/thundering_herd.md?id=wake_up_poll)
+
+
 ```c
 //
 static int ep_poll_callback(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
@@ -1179,7 +1172,8 @@ out_unlock:
 
 
 Level-triggered and edge-triggered
-The epoll event distribution interface is able to behave both as edge-triggered (ET) and as level-triggered (LT).  The difference between the two mechanisms can be described as follows.  
+The epoll event distribution interface is able to behave both as edge-triggered (ET) and as level-triggered (LT).
+The difference between the two mechanisms can be described as follows.  
 Suppose that this scenario happens:
 1. The file descriptor that represents the read side of a pipe (rfd) is registered on the epoll instance.
 2. A pipe writer writes 2 kB of data on the write side of the pipe.
@@ -1189,9 +1183,14 @@ Suppose that this scenario happens:
 
 If the rfd file descriptor has been added to the epoll  interface  using  the  EPOLLET  (edge-triggered)  flag,  the  call  to
 epoll_wait(2)  done  in step 5 will probably hang despite the available data still present in the file input buffer; meanwhile
-the remote peer might be expecting a response based on the data it already sent.  The reason for this is  that  edge-triggered mode  delivers events only when changes occur on the monitored file descriptor.  So, in step 5 the caller might end up waiting for some data that is already present inside the input buffer.  In the above example,  an  event  on  rfd  will  be  generated because  of the write done in 2 and the event is consumed in 3.  Since the read operation done in 4 does not consume the whole buffer data, the call to epoll_wait(2) done in step 5 might block indefinitely.
+the remote peer might be expecting a response based on the data it already sent. 
+The reason for this is  that  edge-triggered mode  delivers events only when changes occur on the monitored file descriptor.  
+So, in step 5 the caller might end up waiting for some data that is already present inside the input buffer. 
+In the above example,  an  event  on  rfd  will  be  generated because  of the write done in 2 and the event is consumed in 3.
+Since the read operation done in 4 does not consume the whole buffer data, the call to epoll_wait(2) done in step 5 might block indefinitely.
 
-An application that employs the EPOLLET flag should use nonblocking file descriptors to avoid having a blocking read or  write starve  a  task  that  is  handling  multiple file descriptors.  The suggested way to use epoll as an edge-triggered (EPOLLET) interface is as follows:
+An application that employs the EPOLLET flag should use nonblocking file descriptors to avoid having a blocking read or  write starve  a  task  that  is  handling  multiple file descriptors. 
+The suggested way to use epoll as an edge-triggered (EPOLLET) interface is as follows:
 
 1.  with nonblocking file descriptors; and
 2.  by waiting for an event only after read(2) or write(2) return EAGAIN.
@@ -1200,18 +1199,25 @@ An application that employs the EPOLLET flag should use nonblocking file descrip
 
 By contrast, when used as a level-triggered interface (the default, when EPOLLET is not specified), epoll is simply  a  faster poll(2), and can be used wherever the latter is used since it shares the same semantics.
     
-Since even with edge-triggered epoll, multiple events can be generated upon receipt of multiple chunks of data, the caller has the option to specify the EPOLLONESHOT flag, to tell epoll to disable the associated file descriptor after the receipt  of  an event  with  epoll_wait(2).   When  the  EPOLLONESHOT  flag  is specified, it is the caller's responsibility to rearm the file descriptor using epoll_ctl(2) with EPOLL_CTL_MOD.
+Since even with edge-triggered epoll, multiple events can be generated upon receipt of multiple chunks of data, the caller has the option to specify the EPOLLONESHOT flag, 
+to tell epoll to disable the associated file descriptor after the receipt  of  an event  with  epoll_wait(2).   
+When  the  EPOLLONESHOT  flag  is specified, it is the caller's responsibility to rearm the file descriptor using epoll_ctl(2) with EPOLL_CTL_MOD.
 
 Interaction with autosleep
-If the system is in autosleep mode via /sys/power/autosleep and an event happens which wakes the device from sleep, the device driver  will  keep  the  device awake only until that event is queued.  To keep the device awake until the event has been processed, it is necessary to use the epoll_ctl(2) EPOLLWAKEUP flag.
+If the system is in autosleep mode via /sys/power/autosleep and an event happens which wakes the device from sleep, the device driver  will  keep  the  device awake only until that event is queued.  
+To keep the device awake until the event has been processed, it is necessary to use the epoll_ctl(2) EPOLLWAKEUP flag.
 
-When the EPOLLWAKEUP flag is set in the events field for a struct epoll_event, the system will be kept awake from  the  moment the  event  is queued, through the epoll_wait(2) call which returns the event until the subsequent epoll_wait(2) call.  If the event should keep the system awake beyond that time, then a separate wake_lock should be taken before the second epoll_wait(2)
+When the EPOLLWAKEUP flag is set in the events field for a struct epoll_event, the system will be kept awake from  the  moment the  event  is queued, through the epoll_wait(2) call which returns the event until the subsequent epoll_wait(2) call. 
+If the event should keep the system awake beyond that time, then a separate wake_lock should be taken before the second epoll_wait(2)
 call.
 
 /proc interfaces
 The following interfaces can be used to limit the amount of kernel memory consumed by epoll:
 /proc/sys/fs/epoll/max_user_watches (since Linux 2.6.28)
-This  specifies  a limit on the total number of file descriptors that a user can register across all epoll instances on the system.  The limit is per real user ID.  Each registered file descriptor costs roughly 90 bytes on a 32-bit kernel, and roughly 160 bytes on a 64-bit kernel.  Currently, the default value for max_user_watches is 1/25 (4%) of the available low memory, divided by the registration cost in bytes.
+This  specifies  a limit on the total number of file descriptors that a user can register across all epoll instances on the system. 
+The limit is per real user ID. 
+Each registered file descriptor costs roughly 90 bytes on a 32-bit kernel, and roughly 160 bytes on a 64-bit kernel. 
+Currently, the default value for max_user_watches is 1/25 (4%) of the available low memory, divided by the registration cost in bytes.
 
 
 
@@ -1220,7 +1226,8 @@ This  specifies  a limit on the total number of file descriptors that a user can
 While the usage of epoll when employed as a level-triggered interface does have the same semantics as poll(2), the  edge-triggered  usage  requires  more clarification to avoid stalls in the application event loop.  
 In this example, listener is a non‐ blocking socket on which listen(2) has been called.  
 The function do_use_fd() uses the new ready file descriptor until  EAGAIN is  returned  by  either read(2) or write(2).  
-An event-driven state machine application should, after having received EAGAIN, record its current state so that at the next call to do_use_fd() it will continue to read(2) or write(2) from where it stopped before.
+An event-driven state machine application should, after having received EAGAIN, 
+record its current state so that at the next call to do_use_fd() it will continue to read(2) or write(2) from where it stopped before.
 
 ```c
 #define MAX_EVENTS 10
@@ -1399,6 +1406,10 @@ bugs, and the latest version of this page, can be found at https://www.kernel.or
 2. epitem add to ready list
 3. Wake up process from wq
 
+
+## Links
+
+- [IO](/docs/CS/OS/IO.md)
 
 ## References
 

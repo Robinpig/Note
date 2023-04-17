@@ -8,8 +8,8 @@ TCP sockets are an example of *stream sockets*.
 
 call tcp_init by [inet_init](/docs/CS/OS/Linux/network.md?id=init-inet)
 
-
 Size and allocate the main established and bind bucket hash tables.
+
 ```c
 
 void __init tcp_init(void)
@@ -169,11 +169,9 @@ struct proto tcp_prot = {
 
 ## Send
 
-see [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) and call tcp_sendmsg
+[systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) with TCP protocol
 
-### tcp_sendmsg
-
-called by inet_sendmsg
+tcp_sendmsg
 
 write to internet by [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
 
@@ -182,15 +180,11 @@ write to internet by [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 {
        int ret;
-
        lock_sock(sk);
        ret = tcp_sendmsg_locked(sk, msg, size);
        release_sock(sk);
-
        return ret;
 }
-
-
 
 int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
@@ -206,13 +200,10 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 
 	flags = msg->msg_flags;
 
+    // get tail skb
 	if (flags & MSG_ZEROCOPY && size && sock_flag(sk, SOCK_ZEROCOPY)) {
 		skb = tcp_write_queue_tail(sk);
 		uarg = msg_zerocopy_realloc(sk, size, skb_zcopy(skb));
-		if (!uarg) {
-			err = -ENOBUFS;
-			goto out_err;
-		}
 
 		zc = sk->sk_route_caps & NETIF_F_SG;
 		if (!zc)
@@ -395,15 +386,18 @@ new_segment:
 		if (skb->len < size_goal || (flags & MSG_OOB) || unlikely(tp->repair))
 			continue;
 
+```
+
+push:
+
+- force push when `data size > max_window >> 1`
+- or skb == tcp_send_head(sk)
+
+```c
 		if (forced_push(tp)) {
 			tcp_mark_push(tp, skb);
 			__tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
 		} else if (skb == tcp_send_head(sk))
-```
-
-call tcp_push_one
-
-```c
 			tcp_push_one(sk, mss_now);
 		continue;
 
@@ -503,68 +497,13 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 
 ### push
 
-##### forced_push
+tcp_push -> __tcp_push_pending_frames
 
-force push when `data size > max_window >> 1`
+Both `tcp_push_one` and `tcp_push_pending_frames` call tcp_write_xmit
 
-```c
-static inline bool forced_push(const struct tcp_sock *tp)
-{
-       return after(tp->write_seq, tp->pushed_seq + (tp->max_window >> 1));
-}
-```
+<!-- tabs:start -->
 
-##### mark_push
-
-```c
-static inline void tcp_mark_push(struct tcp_sock *tp, struct sk_buff *skb)
-{
-       TCP_SKB_CB(skb)->tcp_flags |= TCPHDR_PSH;
-       tp->pushed_seq = tp->write_seq;
-}
-```
-
-##### tcp_push
-
-tcp_push call __tcp_push_pending_frames
-
-```c
-void tcp_push(struct sock *sk, int flags, int mss_now,
-             int nonagle, int size_goal)
-{
-       struct tcp_sock *tp = tcp_sk(sk);
-       struct sk_buff *skb;
-
-       skb = tcp_write_queue_tail(sk);
-       if (!skb)
-              return;
-       if (!(flags & MSG_MORE) || forced_push(tp))
-              tcp_mark_push(tp, skb);
-
-       tcp_mark_urg(tp, flags);
-
-       if (tcp_should_autocork(sk, skb, size_goal)) {
-
-              /* avoid atomic op if TSQ_THROTTLED bit is already set */
-              if (!test_bit(TSQ_THROTTLED, &sk->sk_tsq_flags)) {
-                     NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPAUTOCORKING);
-                     set_bit(TSQ_THROTTLED, &sk->sk_tsq_flags);
-              }
-              /* It is possible TX completion already happened
-               * before we set TSQ_THROTTLED.
-               */
-              if (refcount_read(&sk->sk_wmem_alloc) > skb->truesize)
-                     return;
-       }
-
-       if (flags & MSG_MORE)
-              nonagle = TCP_NAGLE_CORK;
-
-       __tcp_push_pending_frames(sk, mss_now, nonagle);
-}
-```
-
-##### tcp_push_one
+##### **tcp_push_one**
 
 Send _single_ skb sitting at the send head. This function requires true push pending frames to setup probe timer etc.
 
@@ -579,36 +518,32 @@ void tcp_push_one(struct sock *sk, unsigned int mss_now)
 }
 ```
 
-__tcp_push_pending_frames
+##### **__tcp_push_pending_frames**
 
-Push out any pending frames which were held back due to TCP_CORK or attempt at coalescing tiny packets. The socket must be locked by the caller.
+Push out any pending frames which were held back due to TCP_CORK or attempt at coalescing tiny packets.
+The socket must be locked by the caller.
 
 ```c
 void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
                             int nonagle)
 {
-       /* If we are closed, the bytes will have to remain here.
-        * In time closedown will finish, we empty the write queue and
-        * all will be happy.
-        */
-       if (unlikely(sk->sk_state == TCP_CLOSE))
-              return;
-
        if (tcp_write_xmit(sk, cur_mss, nonagle, 0,
                         sk_gfp_mask(sk, GFP_ATOMIC)))
               tcp_check_probe_timer(sk);
 }
 ```
 
-### write to internet
+<!-- tabs:end -->
 
-#### tcp_write_xmit
+### tcp_write_xmit
 
-This routine writes packets to the network.  It advances the send_head.  This happens as incoming acks open up the remote window for us.
+This routine writes packets to the network.  
+It advances the send_head.  This happens as incoming acks open up the remote window for us.
 
 LARGESEND note: !tcp_urg_mode is overkill, only frames between snd_up-64k-mss .. snd_up cannot be large. However, taking into account rare use of URG, this is not a big flaw.
 
-Send at most one packet when push_one > 0. Temporarily ignore cwnd limit to force at most one packet out when push_one == 2.
+Send at most one packet when push_one > 0.
+Temporarily ignore cwnd limit to force at most one packet out when push_one == 2.
 
 Returns true, if no segments are in flight and we have queued segments, but cannot send anything now because of SWS or another problem.
 
@@ -749,9 +684,11 @@ repair:
 
 #### tcp_transmit_skb
 
-This routine actually transmits TCP packets queued in by tcp_do_sendmsg().  This is used by both the initial transmission and possible later retransmissions.
+This routine actually transmits TCP packets queued in by tcp_do_sendmsg().  
+This is used by both the initial transmission and possible later retransmissions.
 
-All SKB's seen here are completely headerless.  It is our job to **build the TCP header**, and **pass the packet down to IP** so it can do the same plus pass the packet off to the device.
+All SKB's seen here are completely headerless. 
+It is our job to **build the TCP header**, and **pass the packet down to IP** so it can do the same plus pass the packet off to the device.
 
 We are working here with either a clone of the original SKB, or a fresh unique copy made by the retransmit engine.
 
@@ -887,14 +824,6 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	tcp_options_write((__be32 *)(th + 1), tp, &opts);
 
-#ifdef CONFIG_TCP_MD5SIG
-	/* Calculate the MD5 hash, as we have all we need now */
-	if (md5) {
-		sk_nocaps_add(sk, NETIF_F_GSO_MASK);
-		tp->af_specific->calc_md5_hash(opts.hash_location,
-					       md5, sk, skb);
-	}
-#endif
 
 	/* BPF prog is the last one writing header option */
 	bpf_skops_write_hdr_opt(sk, skb, NULL, NULL, 0, &opts);

@@ -269,7 +269,12 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
  *
  * Return: %true if @p->state changes (an actual wakeup was done),
  *        %false otherwise.
- */
+ */ 
+```
+
+
+
+```c
 static int
 try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
@@ -1170,39 +1175,10 @@ static void __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int 
 
 ## epoll
 
-### wait
+See [epoll wait](/docs/CS/OS/Linux/epoll.md?id=add_wait_queue) and [wake up](/docs/CS/OS/Linux/epoll.md?id=ep_poll_callback)
 
-[ep_poll] call `__add_wait_queue_exclusive`
 
-#### __add_wait_queue_exclusive
 
-```c
-// wait.h
-// Used for wake-one threads:
-static inline void
-__add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
-{
-       wq_entry->flags |= WQ_FLAG_EXCLUSIVE;
-       __add_wait_queue(wq_head, wq_entry);
-}
-
-static inline void __add_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
-{
-       struct list_head *head = &wq_head->head;
-       struct wait_queue_entry *wq;
-
-       list_for_each_entry(wq, &wq_head->head, entry) {
-              if (!(wq->flags & WQ_FLAG_PRIORITY))
-                     break;
-              head = &wq->entry;
-       }
-       list_add(&wq_entry->entry, head);
-}
-```
-
-### wake
-
-[ep_pol_callback]->`ep_poll_safewake`->`wake_up_poll`
 
 
 
