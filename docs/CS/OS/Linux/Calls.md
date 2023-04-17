@@ -784,6 +784,7 @@ For example, this sets the Accept and SYN Queue sizes to 1,024:backloglisten(2)
 Note: In kernels before 4.3 the SYN Queue length was counted differently.
 
 This SYN Queue cap used to be configured by the toggle, but this isn't the case anymore. Nowadays caps both queue sizes. On our servers we set it to 16k:net.ipv4.tcp_max_syn_backlognet.core.somaxconn
+
 ```shell
 $ sysctl net.core.somaxconn
 net.core.somaxconn = 16384
@@ -801,7 +802,6 @@ Overshooting the is bad as well:backlog
 
 Each slot in SYN Queue uses some memory. During a SYN Flood it makes no sense to waste resources on storing attack packets. Each entry in SYN Queue takes 256 bytes of memory on kernel 4.14.struct inet_request_sock
 To peek into the SYN Queue on Linux we can use the command and look for sockets. For example, on one of Cloudflare's servers we can see 119 slots used in tcp/80 SYN Queue and 78 on tcp/443.ssSYN-RECV
-
 
 ```c
 // include/net/sock.h
@@ -934,19 +934,19 @@ struct request_sock_queue {
 
 ### SYN queue
 
-The SYN Queue stores inbound SYN packets[1] (specifically: struct inet_request_sock). 
-It's responsible for sending out SYN+ACK packets and retrying them on timeout. 
+The SYN Queue stores inbound SYN packets[1] (specifically: struct inet_request_sock).
+It's responsible for sending out SYN+ACK packets and retrying them on timeout.
 <br/>
 On Linux the number of retries is configured with:
+
 ```shell
 $ sysctl net.ipv4.tcp_synack_retries
 net.ipv4.tcp_synack_retries = 5
 ```
 
-After transmitting the SYN+ACK, the SYN Queue waits for an ACK packet from the client - the last packet in the three-way-handshake. 
-All received ACK packets must first be matched against the fully established connection table, and only then against data in the relevant SYN Queue. 
+After transmitting the SYN+ACK, the SYN Queue waits for an ACK packet from the client - the last packet in the three-way-handshake.
+All received ACK packets must first be matched against the fully established connection table, and only then against data in the relevant SYN Queue.
 On SYN Queue match, the kernel removes the item from the SYN Queue, happily creates a fully fledged connection (specifically: struct inet_sock), and adds it to the Accept Queue.
-
 
 SYN queue - logic queue
 see [qlen and max_syn_backlog](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
@@ -1490,7 +1490,8 @@ SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
 }
 ```
 
-Send a datagram to a given address. We move the address into kernel space and check the user space data area is readable before invoking the protocol.
+Send a datagram to a given address.
+We move the address into kernel space and check the user space data area is readable before invoking the protocol.
 
 ```c
 // net/socket.c
@@ -1505,58 +1506,29 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
 	int fput_needed;
 
 	err = import_single_range(WRITE, buff, len, &iov, &msg.msg_iter);
-	if (unlikely(err))
-		return err;
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
-	if (!sock)
-		goto out;
 
-	msg.msg_name = NULL;
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_namelen = 0;
-	if (addr) {
-		err = move_addr_to_kernel(addr, addr_len, &address);
-		if (err < 0)
-			goto out_put;
-		msg.msg_name = (struct sockaddr *)&address;
-		msg.msg_namelen = addr_len;
-	}
-	if (sock->file->f_flags & O_NONBLOCK)
-		flags |= MSG_DONTWAIT;
 	msg.msg_flags = flags;
-```
 
-call sock_sendmsg
-
-```c
 	err = sock_sendmsg(sock, &msg);
-
-out_put:
-	fput_light(sock->file, fput_needed);
-out:
-	return err;
 }
 ```
 
-sock_sendmsg -> inet_sendmsg
+### inet_sendmsg
+
+sock_sendmsg -> sock_sendmsg_nosec -> inet_sendmsg ->
+
+- [udp_sendmsg](/docs/CS/OS/Linux/UDP.md?id=udp_sendmsg)
+- or [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=send)
 
 ```c
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
 	struct sock *sk = sock->sk;
-
-	if (unlikely(inet_send_prepare(sk)))
-		return -EAGAIN;
-
 	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
 			       sk, msg, size);
 }
 ```
-
-> inet_sendmsg -> [udp_sendmsg](/docs/CS/OS/Linux/UDP.md?id=udp_sendmsg)
->
-> inet_sendmsg -> [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_sendmsg)
 
 ## recv
 
