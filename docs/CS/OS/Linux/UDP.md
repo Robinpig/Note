@@ -4,8 +4,8 @@
 
 only need bind
 
-sendto
-recvfrom
+
+## Rcv
 
 ### udp_rcv
 
@@ -122,6 +122,8 @@ drop:
 	return 0;
 }
 ```
+
+## transmit
 
 ### udp_sendmsg
 
@@ -420,130 +422,34 @@ do_confirm:
 }
 ```
 
-#### udp_push_pending_frames
+### udp_push_pending_frames
 
-Push out all pending data as one UDP datagram. Socket is locked.udp_push_pending_frames
-call udp_send_skb
+Push out all pending data as one UDP datagram. 
+Socket is locked.udp_push_pending_frames
 
 ```c
 
 int udp_push_pending_frames(struct sock *sk)
 {
-	struct udp_sock  *up = udp_sk(sk);
-	struct inet_sock *inet = inet_sk(sk);
-	struct flowi4 *fl4 = &inet->cork.fl.u.ip4;
-	struct sk_buff *skb;
-	int err = 0;
-
 	skb = ip_finish_skb(sk, fl4);
-	if (!skb)
-		goto out;
 
-	err = udp_send_skb(skb, fl4, &inet->cork.base);
-
-out:
-	up->len = 0;
-	up->pending = 0;
-	return err;
+	udp_send_skb(skb, fl4, &inet->cork.base);
 }
 ```
 
+call [ip_send_skb](/docs/CS/OS/Linux/IP.md?id=ip_send_skb)
 ```c
 
 static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
 			struct inet_cork *cork)
 {
-	struct sock *sk = skb->sk;
-	struct inet_sock *inet = inet_sk(sk);
-	struct udphdr *uh;
-	int err;
-	int is_udplite = IS_UDPLITE(sk);
-	int offset = skb_transport_offset(skb);
-	int len = skb->len - offset;
-	int datalen = len - sizeof(*uh);
-	__wsum csum = 0;
-
-```
-
-Create a UDP header
-
-```c
 	uh = udp_hdr(skb);
 	uh->source = inet->inet_sport;
 	uh->dest = fl4->fl4_dport;
 	uh->len = htons(len);
 	uh->check = 0;
 
-	if (cork->gso_size) {
-		const int hlen = skb_network_header_len(skb) +
-				 sizeof(struct udphdr);
-
-		if (hlen + cork->gso_size > cork->fragsize) {
-			kfree_skb(skb);
-			return -EINVAL;
-		}
-		if (skb->len > cork->gso_size * UDP_MAX_SEGMENTS) {
-			kfree_skb(skb);
-			return -EINVAL;
-		}
-		if (sk->sk_no_check_tx) {
-			kfree_skb(skb);
-			return -EINVAL;
-		}
-		if (skb->ip_summed != CHECKSUM_PARTIAL || is_udplite ||
-		    dst_xfrm(skb_dst(skb))) {
-			kfree_skb(skb);
-			return -EIO;
-		}
-
-		if (datalen > cork->gso_size) {
-			skb_shinfo(skb)->gso_size = cork->gso_size;
-			skb_shinfo(skb)->gso_type = SKB_GSO_UDP_L4;
-			skb_shinfo(skb)->gso_segs = DIV_ROUND_UP(datalen,
-								 cork->gso_size);
-		}
-		goto csum_partial;
-	}
-
-	if (is_udplite)  				 /*     UDP-Lite      */
-		csum = udplite_csum(skb);
-
-	else if (sk->sk_no_check_tx) {			 /* UDP csum off */
-
-		skb->ip_summed = CHECKSUM_NONE;
-		goto send;
-
-	} else if (skb->ip_summed == CHECKSUM_PARTIAL) { /* UDP hardware csum */
-csum_partial:
-
-		udp4_hwcsum(skb, fl4->saddr, fl4->daddr);
-		goto send;
-
-	} else
-		csum = udp_csum(skb);
-
-	/* add protocol-dependent pseudo-header */
-	uh->check = csum_tcpudp_magic(fl4->saddr, fl4->daddr, len,
-				      sk->sk_protocol, csum);
-	if (uh->check == 0)
-		uh->check = CSUM_MANGLED_0;
-```
-
-call [ip_send_skb](/docs/CS/OS/Linux/IP.md?id=ip_send_skb)
-
-```c
-send:
-	err = ip_send_skb(sock_net(sk), skb);
-	if (err) {
-		if (err == -ENOBUFS && !inet->recverr) {
-			UDP_INC_STATS(sock_net(sk),
-				      UDP_MIB_SNDBUFERRORS, is_udplite);
-			err = 0;
-		}
-	} else
-		UDP_INC_STATS(sock_net(sk),
-			      UDP_MIB_OUTDATAGRAMS, is_udplite);
-	return err;
+	ip_send_skb(sock_net(sk), skb);
 }
 ```
 
