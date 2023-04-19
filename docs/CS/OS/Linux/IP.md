@@ -13,31 +13,7 @@ this interface potentially.
 LATER: length must be adjusted by pad at tail, when it is required.
 
 ```c
-int ip_append_data(struct sock *sk, struct flowi4 *fl4,
-		   int getfrag(void *from, char *to, int offset, int len,
-			       int odd, struct sk_buff *skb),
-		   void *from, int length, int transhdrlen,
-		   struct ipcm_cookie *ipc, struct rtable **rtp,
-		   unsigned int flags)
-{
-	struct inet_sock *inet = inet_sk(sk);
-	int err;
-
-	if (flags&MSG_PROBE)
-		return 0;
-
-	if (skb_queue_empty(&sk->sk_write_queue)) {
-		err = ip_setup_cork(sk, &inet->cork.base, ipc, rtp);
-		if (err)
-			return err;
-	} else {
-		transhdrlen = 0;
-	}
-
-	return __ip_append_data(sk, fl4, &sk->sk_write_queue, &inet->cork.base,
-				sk_page_frag(sk), getfrag,
-				from, length, transhdrlen, flags);
-}
+span
 ```
 
 ```c
@@ -323,16 +299,16 @@ error:
 	return err;
 }
 ```
+
 ## transmit
 
-
 Both `ip_queue_xmit` and `ip_send_skb` call [ip_local_out](/docs/CS/OS/Linux/IP.md?id=ip_local_out)
+
 <!-- tabs:start -->
 
 ##### **ip_queue_xmit**
 
 Called by [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
-
 
 Note: skb->sk can be different from sk, in case of tunnels
 
@@ -347,7 +323,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	inet_opt = rcu_dereference(inet->inet_opt);
 	fl4 = &fl->u.ip4;
 	rt = skb_rtable(skb);
-	
+
 	/* OK, we know where to send it, allocate and build IP header. */
 	skb_reset_network_header(skb);
 	iph = ip_hdr(skb);
@@ -364,7 +340,6 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 
 Called by [UDP](/docs/CS/OS/Linux/UDP.md?id=transmit)
 
-
 ```c
 
 int ip_send_skb(struct net *net, struct sk_buff *skb)
@@ -373,15 +348,12 @@ int ip_send_skb(struct net *net, struct sk_buff *skb)
 	dst_output(net, sk, skb);
 ```
 
-
 <!-- tabs:end -->
 
 ### ip_local_out
 
-
 ip_local_out -> dst_output -> ip_output -> ip_finish_output2 -> neigh_hh_output
 -> dev_queue_xmit -> qdisc_run -> qdisc_restart -> sch_direct_xmit -> dev_hard_start_xmit
-
 
 ```c
 // net/ipv4/ip_output.c
@@ -435,7 +407,7 @@ static int __ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *
 {
 	unsigned int mtu;
 	mtu = ip_skb_dst_mtu(sk, skb);
-	
+
 	if (skb->len > mtu || IPCB(skb)->frag_max_size)
 		return ip_fragment(net, sk, skb, mtu, ip_finish_output2);
 
@@ -462,8 +434,8 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 Send by device
 
 __dev_queue_xmit - transmit a buffer
- @skb: buffer to transmit
- @sb_dev: suboordinate device used for L2 forwarding offload
+@skb: buffer to transmit
+@sb_dev: suboordinate device used for L2 forwarding offload
 
 Queue a buffer for transmission to a network device. The caller must
 have set the device and priority and built the buffer before calling
@@ -483,9 +455,6 @@ before sending to hold a reference for retry if you are careful.)
 
 When calling this method, interrupts MUST be enabled.  This is because
 the BH enable code must have IRQs enabled so that it will not deadlock.
-
-
-
 
 ```c
 // net/core/dev.c
@@ -511,7 +480,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 	if (q->flags & TCQ_F_NOLOCK) {
 		if (q->flags & TCQ_F_CAN_BYPASS && nolock_qdisc_is_empty(q) &&
 		    qdisc_run_begin(q)) {
-			
+		
 			if (sch_direct_xmit(skb, q, dev, txq, NULL, true) &&
 			    !nolock_qdisc_is_empty(q))
 				__qdisc_run(q);
@@ -522,12 +491,14 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 
 		rc = dev_qdisc_enqueue(skb, q, &to_free, txq);
 		qdisc_run(q);
-        
+      
         ...
 }
 ```
+
 #### qdisc_run
-raise NET_TX softirq if quota <= 0
+
+raise NET_TX_SOFTIRQ if quota <= 0 in order to execute net_tx_action and recall `qdisc_run` func
 
 ```c
 void __qdisc_run(struct Qdisc *q)
@@ -544,6 +515,46 @@ void __qdisc_run(struct Qdisc *q)
 				__netif_schedule(q);
 
 			break;
+		}
+	}
+}
+```
+
+#### net_tx_action
+
+
+```c
+
+static void __netif_reschedule(struct Qdisc *q)
+{
+	raise_softirq_irqoff(NET_TX_SOFTIRQ);
+}
+```
+
+
+
+```c
+static __latent_entropy void net_tx_action(struct softirq_action *h)
+{
+	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
+
+	...
+
+	if (sd->output_queue) {
+		struct Qdisc *head;
+
+		head = sd->output_queue;
+		sd->output_queue = NULL;
+		sd->output_queue_tailp = &sd->output_queue;
+
+
+		while (head) {
+			struct Qdisc *q = head;
+			spinlock_t *root_lock = NULL;
+
+			head = head->next_sched;
+
+			qdisc_run(q);
 		}
 	}
 }

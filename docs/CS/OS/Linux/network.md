@@ -79,7 +79,7 @@ Initialise the packet receive queues for each cpu.
 register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
 
 - [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action) receive func
-- [net_tx_action](/docs/CS/OS/Linux/network.md?id=net_tx_action) transmit func
+- [net_tx_action](/docs/CS/OS/Linux/IP.md?id=net_tx_action) transmit func
 
 ```c
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
@@ -706,36 +706,28 @@ call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to 
 }
 ```
 
+
+
 ### net_rx_action
 
 ```c
 // net/core/dev.c
+
 static __latent_entropy void net_rx_action(struct softirq_action *h)
 {
 	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
-	unsigned long time_limit = jiffies +
-		usecs_to_jiffies(netdev_budget_usecs);
-	int budget = netdev_budget;
-	LIST_HEAD(list);
-	LIST_HEAD(repoll);
-
-	local_irq_disable();
-	list_splice_init(&sd->poll_list, &list);
-	local_irq_enable();
-
+	
 	for (;;) {
 		struct napi_struct *n;
 
+		skb_defer_free_flush(sd);
+
 		if (list_empty(&list)) {
 			if (!sd_has_rps_ipi_waiting(sd) && list_empty(&repoll))
-				return;
+				goto end;
 			break;
 		}
-```
 
-call napi_poll function
-
-```
 		n = list_first_entry(&list, struct napi_struct, poll_list);
 		budget -= napi_poll(n, &repoll);
 
@@ -750,12 +742,6 @@ call napi_poll function
 		}
 	}
 
-
-```
-
-irq disabled and enabled around.
-
-```c
 	local_irq_disable();
 
 	list_splice_tail_init(&sd->poll_list, &list);
@@ -765,8 +751,10 @@ irq disabled and enabled around.
 		__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 
 	net_rps_action_and_irq_enable(sd);
+end:;
 }
 ```
+
 
 napi_poll function
 

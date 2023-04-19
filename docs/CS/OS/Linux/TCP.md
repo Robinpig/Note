@@ -313,7 +313,9 @@ This is used by both the initial transmission and possible later retransmissions
 All SKB's seen here are completely headerless. 
 It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/IP.md?id=transmit)** so it can do the same plus pass the packet off to the device.
 
-We are working here with either a clone of the original SKB, or a fresh unique copy made by the retransmit engine.
+> [!NOTE]
+> 
+> We are working here with either a clone of the original SKB, or a fresh unique copy made by the retransmit engine.
 
 ```c
 static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
