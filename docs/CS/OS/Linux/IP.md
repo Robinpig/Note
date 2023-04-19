@@ -562,6 +562,8 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 
 #### dev_hard_start_xmit
 
+finally call [ndo_start_xmit](/docs/CS/OS/Linux/IP.md?id=ndo_start_xmit) by different adapters.
+
 ```c
 static inline bool qdisc_restart(struct Qdisc *q, int *packets)
 {
@@ -585,56 +587,104 @@ struct sk_buff *dev_hard_start_xmit(struct sk_buff *first, struct net_device *de
 				    struct netdev_queue *txq, int *ret)
 {
 	struct sk_buff *skb = first;
-	int rc = NETDEV_TX_OK;
 
 	while (skb) {
 		struct sk_buff *next = skb->next;
-
-		skb_mark_not_on_list(skb);
 		rc = xmit_one(skb, dev, txq, next != NULL);
-		if (unlikely(!dev_xmit_complete(rc))) {
-			skb->next = next;
-			goto out;
-		}
-
-		skb = next;
-		if (netif_tx_queue_stopped(txq) && skb) {
-			rc = NETDEV_TX_BUSY;
-			break;
-		}
+		...
 	}
-
-out:
-	*ret = rc;
-	return skb;
 }
-```
-
-```c
 
 static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 		    struct netdev_queue *txq, bool more)
 {
-	unsigned int len;
-	int rc;
-
-	if (dev_nit_active(dev))
-		dev_queue_xmit_nit(skb, dev);
-
-	len = skb->len;
-	PRANDOM_ADD_NOISE(skb, dev, txq, len + jiffies);
-	trace_net_dev_start_xmit(skb, dev);
-```
-
-call netdev_start_xmit send to network adapter controller
-
-```c
 	rc = netdev_start_xmit(skb, dev, txq, more);
-	trace_net_dev_xmit(skb, rc, dev, len);
+}
 
-	return rc;
+static inline netdev_tx_t netdev_start_xmit(struct sk_buff *skb, struct net_device *dev,
+					    struct netdev_queue *txq, bool more)
+{
+	rc = __netdev_start_xmit(ops, skb, dev, more);
+}
+
+static inline netdev_tx_t __netdev_start_xmit(const struct net_device_ops *ops,
+					      struct sk_buff *skb, struct net_device *dev,
+					      bool more)
+{
+	return ops->ndo_start_xmit(skb, dev);
 }
 ```
+
+### ndo_start_xmit
+
+```c
+// igb_main.c
+static const struct net_device_ops igb_netdev_ops = {
+	.ndo_start_xmit		= igb_xmit_frame,
+    ...
+}	
+
+
+static netdev_tx_t igb_xmit_frame(struct sk_buff *skb,
+				  struct net_device *netdev)
+{
+	struct igb_adapter *adapter = netdev_priv(netdev);
+
+	return igb_xmit_frame_ring(skb, igb_tx_queue_mapping(adapter, skb));
+}
+
+
+
+netdev_tx_t igb_xmit_frame_ring(struct sk_buff *skb,
+				struct igb_ring *tx_ring)
+{
+	struct igb_tx_buffer *first;
+
+	/* record the location of the first descriptor for this packet */
+	first = &tx_ring->tx_buffer_info[tx_ring->next_to_use];
+	first->type = IGB_TYPE_SKB;
+	first->skb = skb;
+	first->bytecount = skb->len;
+	first->gso_segs = 1;
+
+    ...
+    
+	igb_tx_map(tx_ring, first, hdr_len);
+}
+```
+
+#### igb_tx_map
+
+```c
+
+static int igb_tx_map(struct igb_ring *tx_ring,
+		      struct igb_tx_buffer *first,
+		      const u8 hdr_len)
+{
+	tx_desc = IGB_TX_DESC(tx_ring, i);
+
+	dma = dma_map_single(tx_ring->dev, skb->data, size, DMA_TO_DEVICE);
+
+	for (frag = &skb_shinfo(skb)->frags[0];; frag++) {
+		tx_desc->read.buffer_addr = cpu_to_le64(dma);
+
+		while (unlikely(size > IGB_MAX_DATA_PER_TXD)) {
+			tx_desc->read.cmd_type_len =
+				cpu_to_le32(cmd_type ^ IGB_MAX_DATA_PER_TXD);
+            ...
+            
+			tx_desc->read.olinfo_status = 0;
+		}
+
+	    ...
+	}
+
+	tx_desc->read.cmd_type_len = cpu_to_le32(cmd_type);
+    ...
+}
+```
+
+
 
 ## Links
 
