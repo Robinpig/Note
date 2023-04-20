@@ -380,6 +380,48 @@ static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
 ```
 
 
+#### tcp_rtx_synack
+inet_csk_reqsk_queue_hash_add -> reqsk_queue_hash_req -> reqsk_timer_handler -> inet_rtx_syn_ack
+```c
+int inet_rtx_syn_ack(const struct sock *parent, struct request_sock *req)
+{
+	int err = req->rsk_ops->rtx_syn_ack(parent, req);
+}
+
+struct request_sock_ops tcp_request_sock_ops __read_mostly = {
+	.family		=	PF_INET,
+	.obj_size	=	sizeof(struct tcp_request_sock),
+	.rtx_syn_ack	=	tcp_rtx_synack,
+	.send_ack	=	tcp_v4_reqsk_send_ack,
+	.destructor	=	tcp_v4_reqsk_destructor,
+	.send_reset	=	tcp_v4_send_reset,
+	.syn_ack_timeout =	tcp_syn_ack_timeout,
+};
+```
+
+```c
+
+int tcp_rtx_synack(const struct sock *sk, struct request_sock *req)
+{
+	const struct tcp_request_sock_ops *af_ops = tcp_rsk(req)->af_specific;
+	struct flowi fl;
+	int res;
+
+	tcp_rsk(req)->txhash = net_tx_rndhash();
+	res = af_ops->send_synack(sk, NULL, &fl, req, NULL, TCP_SYNACK_NORMAL,
+				  NULL);
+	if (!res) {
+		__TCP_INC_STATS(sock_net(sk), TCP_MIB_RETRANSSEGS);
+		__NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPSYNRETRANS);
+		if (unlikely(tcp_passive_fastopen(sk)))
+			tcp_sk(sk)->total_retrans++;
+		trace_tcp_retransmit_synack(sk, req);
+	}
+	return res;
+}
+```
+
+
 ### tcp_v4_send_synack
 
 
@@ -509,8 +551,301 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 
 ## Rcv SYNACK
 
+```c
+int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
+{
+	switch (sk->sk_state) {
+        case TCP_SYN_SENT:
+		queued = tcp_rcv_synsent_state_process(sk, skb, th);
+		if (queued >= 0)
+			return queued;
+
+		tcp_data_snd_check(sk);
+	}
+}	
+```
+
+
+```c
+int tcp_v4_rcv(struct sk_buff *skb)
+{
+  if (sk->sk_state == TCP_NEW_SYN_RECV) {
+		struct request_sock *req = inet_reqsk(sk);
+		bool req_stolen = false;
+		struct sock *nsk;
+
+		sk = req->rsk_listener;
+		if (unlikely(tcp_v4_inbound_md5_hash(sk, skb, dif, sdif))) {
+			sk_drops_add(sk, skb);
+			reqsk_put(req);
+			goto discard_it;
+		}
+		if (tcp_checksum_complete(skb)) {
+			reqsk_put(req);
+			goto csum_error;
+		}
+		if (unlikely(sk->sk_state != TCP_LISTEN)) {
+			inet_csk_reqsk_queue_drop_and_put(sk, req);
+			goto lookup;
+		}
+		/* We own a reference on the listener, increase it again
+		 * as we might lose it too soon.
+		 */
+		sock_hold(sk);
+		refcounted = true;
+		nsk = NULL;
+		if (!tcp_filter(sk, skb)) {
+			th = (const struct tcphdr *)skb->data;
+			iph = ip_hdr(skb);
+			tcp_v4_fill_cb(skb, iph, th);
+			nsk = tcp_check_req(sk, skb, req, false, &req_stolen);
+		}
+		if (!nsk) {
+			reqsk_put(req);
+			if (req_stolen) {
+				/* Another cpu got exclusive access to req
+				 * and created a full blown socket.
+				 * Try to feed this packet to this socket
+				 * instead of discarding it.
+				 */
+				tcp_v4_restore_cb(skb);
+				sock_put(sk);
+				goto lookup;
+			}
+			goto discard_and_relse;
+		}
+		if (nsk == sk) {
+			reqsk_put(req);
+			tcp_v4_restore_cb(skb);
+		} else if (tcp_child_process(sk, nsk, skb)) {
+			tcp_v4_send_reset(nsk, skb);
+			goto discard_and_relse;
+		} else {
+			sock_put(sk);
+			return 0;
+		}
+	}
+}	
+```
+
+
+### tcp_check_req
+
+Process an incoming packet for SYN_RECV sockets represented as a request_sock. 
+Normally sk is the listener socket but for TFO it points to the child socket.
+
+XXX (TFO) - The current impl contains a special check for ack validation and inside tcp_v4_reqsk_send_ack(). 
+Can we do better?
+We don't need to initialize tmp_opt.sack_ok as we don't use the results
+
+```c
+struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
+			   struct request_sock *req,
+			   bool fastopen, bool *req_stolen)
+{
+    if (paws_reject || !tcp_in_window(TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
+					  tcp_rsk(req)->rcv_nxt, tcp_rsk(req)->rcv_nxt + req->rsk_rcv_wnd)) {
+		/* Out of window: send ACK and drop. */
+		if (!(flg & TCP_FLAG_RST) &&
+		    !tcp_oow_rate_limited(sock_net(sk), skb,
+					  LINUX_MIB_TCPACKSKIPPEDSYNRECV,
+					  &tcp_rsk(req)->last_oow_ack_time))
+			req->rsk_ops->send_ack(sk, skb, req);
+		if (paws_reject)
+			__NET_INC_STATS(sock_net(sk), LINUX_MIB_PAWSESTABREJECTED);
+		return NULL;
+	}
+	
+	/** The three way handshake has completed - we got a valid synack - now create the new socket. **/
+	child = inet_csk(sk)->icsk_af_ops->syn_recv_sock(sk, skb, req, NULL,
+							 req, &own_req);
+
+	if (own_req && rsk_drop_req(req)) {
+		reqsk_queue_removed(&inet_csk(sk)->icsk_accept_queue, req);
+		inet_csk_reqsk_queue_drop_and_put(sk, req);
+		return child;
+	}
+
+	sock_rps_save_rxhash(child, skb);
+	tcp_synack_rtt_meas(child, req);
+	*req_stolen = !own_req;
+	return inet_csk_complete_hashdance(sk, child, req, own_req);
+}
+```
+
+
+#### tcp_v4_send_ack
+
+The code following below sending ACKs in SYN-RECV and TIME-WAIT states outside socket context.
+
+```c
+
+static void tcp_v4_send_ack(const struct sock *sk,
+			    struct sk_buff *skb, u32 seq, u32 ack,
+			    u32 win, u32 tsval, u32 tsecr, int oif,
+			    struct tcp_md5sig_key *key,
+			    int reply_flags, u8 tos)
+{
+	const struct tcphdr *th = tcp_hdr(skb);
+	struct {
+		struct tcphdr th;
+		__be32 opt[(TCPOLEN_TSTAMP_ALIGNED >> 2)
+#ifdef CONFIG_TCP_MD5SIG
+			   + (TCPOLEN_MD5SIG_ALIGNED >> 2)
+#endif
+			];
+	} rep;
+	struct net *net = sock_net(sk);
+	struct ip_reply_arg arg;
+	struct sock *ctl_sk;
+	u64 transmit_time;
+
+	memset(&rep.th, 0, sizeof(struct tcphdr));
+	memset(&arg, 0, sizeof(arg));
+
+	arg.iov[0].iov_base = (unsigned char *)&rep;
+	arg.iov[0].iov_len  = sizeof(rep.th);
+	if (tsecr) {
+		rep.opt[0] = htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |
+				   (TCPOPT_TIMESTAMP << 8) |
+				   TCPOLEN_TIMESTAMP);
+		rep.opt[1] = htonl(tsval);
+		rep.opt[2] = htonl(tsecr);
+		arg.iov[0].iov_len += TCPOLEN_TSTAMP_ALIGNED;
+	}
+
+	/* Swap the send and the receive. */
+	rep.th.dest    = th->source;
+	rep.th.source  = th->dest;
+	rep.th.doff    = arg.iov[0].iov_len / 4;
+	rep.th.seq     = htonl(seq);
+	rep.th.ack_seq = htonl(ack);
+	rep.th.ack     = 1;
+	rep.th.window  = htons(win);
+
+	arg.flags = reply_flags;
+	arg.csum = csum_tcpudp_nofold(ip_hdr(skb)->daddr,
+				      ip_hdr(skb)->saddr, /* XXX */
+				      arg.iov[0].iov_len, IPPROTO_TCP, 0);
+	arg.csumoffset = offsetof(struct tcphdr, check) / 2;
+	if (oif)
+		arg.bound_dev_if = oif;
+	arg.tos = tos;
+	arg.uid = sock_net_uid(net, sk_fullsock(sk) ? sk : NULL);
+	local_bh_disable();
+	ctl_sk = this_cpu_read(*net->ipv4.tcp_sk);
+	ctl_sk->sk_mark = (sk->sk_state == TCP_TIME_WAIT) ?
+			   inet_twsk(sk)->tw_mark : sk->sk_mark;
+	ctl_sk->sk_priority = (sk->sk_state == TCP_TIME_WAIT) ?
+			   inet_twsk(sk)->tw_priority : sk->sk_priority;
+	transmit_time = tcp_transmit_time(sk);
+```
+
+call ip_send_unicast_reply -> ip_push_pending_frames
+
+```c
+	ip_send_unicast_reply(ctl_sk,
+			      skb, &TCP_SKB_CB(skb)->header.h4.opt,
+			      ip_hdr(skb)->saddr, ip_hdr(skb)->daddr,
+			      &arg, arg.iov[0].iov_len,
+			      transmit_time);
+
+	ctl_sk->sk_mark = 0;
+	__TCP_INC_STATS(net, TCP_MIB_OUTSEGS);
+	local_bh_enable();
+}
+```
+
+#### inet_csk_complete_hashdance
+
+call `inet_csk_reqsk_queue_add` add into accept queue
+
+```c
+
+struct sock *inet_csk_complete_hashdance(struct sock *sk, struct sock *child,
+					 struct request_sock *req, bool own_req)
+{
+	if (own_req) {
+		inet_csk_reqsk_queue_drop(sk, req);
+		reqsk_queue_removed(&inet_csk(sk)->icsk_accept_queue, req);
+		if (inet_csk_reqsk_queue_add(sk, req, child))
+			return child;
+	}
+	/* Too bad, another child took ownership of the request, undo. */
+	bh_unlock_sock(child);
+	sock_put(child);
+	return NULL;
+}
+```
+
+```c
+
+static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
+				  struct request_sock *req)
+{
+	/* sk->sk_state == TCP_LISTEN -> for regular TCP_SYN_RECV
+	 * sk->sk_state == TCP_SYN_RECV -> for Fast Open.
+	 */
+	u32 seq = (sk->sk_state == TCP_LISTEN) ? tcp_rsk(req)->snt_isn + 1 :
+					     tcp_sk(sk)->snd_nxt;
+
+
+	tcp_v4_send_ack(sk, skb, seq, ...);
+}
+```
 ## Rcv ACK
 
+```c
+int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
+{
+    if (sk->sk_state == TCP_LISTEN) {
+              if (nsk != sk) {
+                     if (tcp_child_process(sk, nsk, skb)) {
+                            rsk = nsk;
+                     }
+              }
+    }              
+}              
+```
+
+### tcp_child_process
+
+Queue segment on the new socket if the new socket is active, otherwise we just shortcircuit this and continue with the new socket.
+
+For the vast majority of cases child->sk_state will be TCP_SYN_RECV when entering. But other states are possible due to a race condition where after __inet_lookup_established() fails but before the listener locked is obtained, other packets cause the same connection to be created.
+
+```c
+
+
+int tcp_child_process(struct sock *parent, struct sock *child,
+		      struct sk_buff *skb)
+	__releases(&((child)->sk_lock.slock))
+{
+	int ret = 0;
+	int state = child->sk_state;
+
+	/* record NAPI ID of child */
+	sk_mark_napi_id(child, skb);
+
+	tcp_segs_in(tcp_sk(child), skb);
+	if (!sock_owned_by_user(child)) {
+		ret = tcp_rcv_state_process(child, skb);
+		/* Wakeup parent, send SIGIO */
+		if (state == TCP_SYN_RECV && child->sk_state != state)
+			parent->sk_data_ready(parent);
+	} else {
+		/* Alas, it is possible again, because we do lookup
+		 * in main socket hash table and lock on listening
+		 * socket does not protect us more.
+		 */
+		__sk_add_backlog(child, skb);
+	}
+
+	bh_unlock_sock(child);
+	sock_put(child);
+	return ret;
+}
+```
 
 
 ## Links
