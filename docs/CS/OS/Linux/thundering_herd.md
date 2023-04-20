@@ -443,8 +443,7 @@ out:
 
 
 
-## 
-
+### autoremove_wake_function
 
 
 ```c
@@ -468,7 +467,6 @@ out:
 	} while (0)
 ```
 
-#### autoremove_wake_function
 
 ```c
 // wait.c
@@ -1154,14 +1152,6 @@ EXPORT_SYMBOL_GPL(__wake_up_sync_key);
 static void __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int mode,
                      int nr_exclusive, int wake_flags, void *key)
 {
-       unsigned long flags;
-       wait_queue_entry_t bookmark;
-
-       bookmark.flags = 0;
-       bookmark.private = NULL;
-       bookmark.func = NULL;
-       INIT_LIST_HEAD(&bookmark.entry);
-
        do {
               spin_lock_irqsave(&wq_head->lock, flags);
               nr_exclusive = __wake_up_common(wq_head, mode, nr_exclusive,
@@ -1218,4 +1208,9 @@ EXPORT_SYMBOL(__wake_up);
 multiple process 
 
 `ngx_event_accept` default disable
+
+## Links
+
+- [processes](/docs/CS/OS/Linux/process.md)
+- [network](/docs/CS/OS/Linux/network.md)
 

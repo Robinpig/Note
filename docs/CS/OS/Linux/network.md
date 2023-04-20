@@ -38,7 +38,6 @@ The high level path a packet takes from arrival to socket receive buffer is as f
 11. Protocol layers process data.
 12. Data is added to receive buffers attached to sockets by protocol layers.
 
-
 ## init
 
 ### init net dev
@@ -50,15 +49,14 @@ At boot time this walks the device list and unhooks any devices that fail to ini
 
 This is called single threaded during boot, so no need to take the rtnl semaphore.
 
+Initialise the packet receive queues for each cpu.
+
 ```c
 // net/core/dev.c
 subsys_initcall(net_dev_init);
 
 static int __init net_dev_init(void)
 {
-```
-Initialise the packet receive queues for each cpu.
-```c
 	for_each_possible_cpu(i) {
 		struct work_struct *flush = per_cpu_ptr(&flush_works, i);
 		struct softnet_data *sd = &per_cpu(softnet_data, i);
@@ -150,7 +148,6 @@ register [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) 
 ```
 
 ### init inet
-
 
 Register protocols into `inet_protos` and `ptype_base`:
 
@@ -260,7 +257,6 @@ static const struct net_protocol icmp_protocol = {
 
 Add a protocol handler to the networking stack.
 The passed &packet_type is linked into kernel lists and may not be freed until it has been removed from the kernel lists.
-
 
 ```c
 // net/ipv4/protocol.c
@@ -496,10 +492,10 @@ err_setup_tx:
 - e1000_adv_tx_desc DMA array
 
 check RX/TX overruns:
+
 ```shell
 ifconfig | grep overruns
 ```
-
 
 ```c
 static int igb_setup_all_tx_resources(struct igb_adapter *adapter)
@@ -633,6 +629,499 @@ static int igb_request_msix(struct igb_adapter *adapter)
 }
 ```
 
+## Egress
+
+1. Application sends message (`sendmsg` or send)
+2. TCP send message allocates skb_buff
+3. It enqueues skb to the socket write buffer of `tcp_wmem` size
+4. Builds the TCP header (src and dst port, checksum)
+5. Calls L3 handler (in this case `ipv4` on `tcp_write_xmit` and `tcp_transmit_skb`)
+6. L3 (`ip_queue_xmit`) does its work: build ip header and call netfilter (`LOCAL_OUT`)
+7. Calls output route action
+8. Calls netfilter (`POST_ROUTING`)
+9. Fragment the packet (`ip_output`)
+10. Calls L2 send function (`dev_queue_xmit`)
+11. Feeds the output (QDisc) queue of `txqueuelen` length with its algorithm `default_qdisc`
+12. The driver code enqueue the packets at the `ring buffer tx`
+13. The driver will do a `soft IRQ (NET_TX_SOFTIRQ)` after `tx-usecs` timeout or `tx-frames`
+14. Re-enable hard IRQ to NIC
+15. Driver will map all the packets (to be sent) to some DMA'ed region
+16. NIC fetches the packets (via DMA) from RAM to transmit
+17. After the transmission NIC will raise a `hard IRQ` to signal its completion
+18.
+
+### send
+
+```c
+/**
+ *    send 	---+--- 	sendto
+ *                |
+ * 			  \|/
+ *			sys_sendto ---> sock_sendmsg ---> inet_sendmsg
+ *                                                     |
+ *											        \|/
+ *					            tcp_sendmsg      ----+----      udp_sendmsg
+ */
+```
+
+Send a datagram down a socket.
+
+```c
+// net/socket.c
+SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags, struct sockaddr __user *, addr,
+		int, addr_len)
+{
+	return __sys_sendto(fd, buff, len, flags, addr, addr_len);
+}
+
+SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags)
+{
+	return __sys_sendto(fd, buff, len, flags, NULL, 0);
+}
+```
+
+Send a datagram to a given address.
+We move the address into kernel space and check the user space data area is readable before invoking the protocol.
+
+```c
+// net/socket.c
+int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
+		 struct sockaddr __user *addr,  int addr_len)
+{
+	struct socket *sock;
+	struct sockaddr_storage address;
+	int err;
+	struct msghdr msg;
+	struct iovec iov;
+	int fput_needed;
+
+	err = import_single_range(WRITE, buff, len, &iov, &msg.msg_iter);
+	sock = sockfd_lookup_light(fd, &err, &fput_needed);
+
+	msg.msg_flags = flags;
+
+	err = sock_sendmsg(sock, &msg);
+}
+```
+
+### inet_sendmsg
+
+sock_sendmsg -> sock_sendmsg_nosec -> inet_sendmsg ->
+
+- [udp_sendmsg](/docs/CS/OS/Linux/UDP.md?id=udp_sendmsg)
+- or [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=send)
+
+```c
+int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
+{
+	struct sock *sk = sock->sk;
+	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
+			       sk, msg, size);
+}
+```
+
+### ip_queue_xmit
+
+Both `ip_queue_xmit` and `ip_send_skb` call [ip_local_out](/docs/CS/OS/Linux/IP.md?id=ip_local_out)
+
+<!-- tabs:start -->
+
+##### **ip_queue_xmit**
+
+Called by [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
+
+Note: skb->sk can be different from sk, in case of tunnels
+
+```c
+int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
+		    __u8 tos)
+{
+    ...
+	res = ip_local_out(net, sk, skb);
+}
+```
+
+##### **ip_send_skb**
+
+Called by [UDP](/docs/CS/OS/Linux/UDP.md?id=transmit)
+
+```c
+
+int ip_send_skb(struct net *net, struct sk_buff *skb)
+{
+	ip_local_out(net, skb->sk, skb);
+}
+```
+
+<!-- tabs:end -->
+
+#### ip_local_out
+
+ip_local_out -> dst_output -> ip_output -> ip_finish_output2 -> neigh_hh_output -> dev_queue_xmit
+
+```c
+// net/ipv4/ip_output.c
+int __ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+	struct iphdr *iph = ip_hdr(skb);
+
+	iph->tot_len = htons(skb->len);
+	ip_send_check(iph);
+
+	skb->protocol = htons(ETH_P_IP);
+	return nf_hook(NFPROTO_IPV4, NF_INET_LOCAL_OUT,
+		       net, sk, skb, NULL, skb_dst(skb)->dev,
+		       dst_output);
+}
+
+// include/net/dst.h
+static inline int dst_output(struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+	return INDIRECT_CALL_INET(skb_dst(skb)->output,
+				  ip6_output, ip_output,
+				  net, sk, skb);
+}
+
+int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
+			    net, sk, skb, indev, dev,
+			    ip_finish_output,
+			    !(IPCB(skb)->flags & IPSKB_REROUTED));
+}
+
+static int __ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *skb)
+{
+	unsigned int mtu;
+	mtu = ip_skb_dst_mtu(sk, skb);
+
+	if (skb->len > mtu || IPCB(skb)->frag_max_size)
+		return ip_fragment(net, sk, skb, mtu, ip_finish_output2);
+
+	return ip_finish_output2(net, sk, skb);
+}
+```
+
+#### neigh_hh_output
+
+ip_finish_output2 -> neigh_output -> neigh_hh_output
+
+call dev_queue_xmit
+
+```c
+// include/net/neighbour.h
+static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb)
+{
+    ...
+	__skb_push(skb, hh_len);
+	return dev_queue_xmit(skb);
+}
+```
+
+### dev_queue_xmit
+
+Send by device
+
+__dev_queue_xmit - transmit a buffer
+@skb: buffer to transmit
+@sb_dev: suboordinate device used for L2 forwarding offload
+
+Queue a buffer for transmission to a network device. The caller must
+have set the device and priority and built the buffer before calling
+this function. The function can be called from an interrupt.
+
+A negative errno code is returned on a failure. A success does not
+guarantee the frame will be transmitted as it may be dropped due
+to congestion or traffic shaping.
+
+I notice this method can also return errors from the queue disciplines,
+including NET_XMIT_DROP, which is a positive value.  So, errors can also
+be positive.
+
+Regardless of the return value, the skb is consumed, so it is currently
+difficult to retry a send to this method.  (You can bump the ref count
+before sending to hold a reference for retry if you are careful.)
+
+When calling this method, interrupts MUST be enabled.  This is because
+the BH enable code must have IRQs enabled so that it will not deadlock.
+
+```c
+// net/core/dev.c
+static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
+{
+	txq = netdev_core_pick_tx(dev, skb, sb_dev);
+	q = rcu_dereference_bh(txq->qdisc);
+
+	trace_net_dev_queue(skb);
+	if (q->enqueue) {
+		rc = __dev_xmit_skb(skb, q, dev, txq);
+		goto out;
+	}
+	...
+}
+
+
+
+static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
+				 struct net_device *dev,
+				 struct netdev_queue *txq)
+{
+	if (q->flags & TCQ_F_NOLOCK) {
+		if (q->flags & TCQ_F_CAN_BYPASS && nolock_qdisc_is_empty(q) &&
+		    qdisc_run_begin(q)) {
+
+			if (sch_direct_xmit(skb, q, dev, txq, NULL, true) &&
+			    !nolock_qdisc_is_empty(q))
+				__qdisc_run(q);
+
+			qdisc_run_end(q);
+			return NET_XMIT_SUCCESS;
+		}
+
+		rc = dev_qdisc_enqueue(skb, q, &to_free, txq);
+		qdisc_run(q);
+  
+        ...
+}
+```
+
+#### qdisc_run
+
+raise NET_TX_SOFTIRQ if quota <= 0 in order to execute net_tx_action and recall `qdisc_run` func
+
+```c
+void __qdisc_run(struct Qdisc *q)
+{
+	int quota = READ_ONCE(dev_tx_weight);
+	int packets;
+
+	while (qdisc_restart(q, &packets)) {
+		quota -= packets;
+		if (quota <= 0) {
+			if (q->flags & TCQ_F_NOLOCK)
+				set_bit(__QDISC_STATE_MISSED, &q->state);
+			else
+				__netif_schedule(q);
+
+			break;
+		}
+	}
+}
+```
+
+#### net_tx_action
+
+```c
+
+static void __netif_reschedule(struct Qdisc *q)
+{
+	raise_softirq_irqoff(NET_TX_SOFTIRQ);
+}
+```
+
+```c
+static __latent_entropy void net_tx_action(struct softirq_action *h)
+{
+	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
+
+	...
+
+	if (sd->output_queue) {
+		struct Qdisc *head;
+
+		head = sd->output_queue;
+		sd->output_queue = NULL;
+		sd->output_queue_tailp = &sd->output_queue;
+
+
+		while (head) {
+			struct Qdisc *q = head;
+			spinlock_t *root_lock = NULL;
+
+			head = head->next_sched;
+
+			qdisc_run(q);
+		}
+	}
+}
+```
+
+#### dev_hard_start_xmit
+
+finally call [ndo_start_xmit](/docs/CS/OS/Linux/IP.md?id=ndo_start_xmit) by different adapters.
+
+```c
+static inline bool qdisc_restart(struct Qdisc *q, int *packets)
+{
+	skb = dequeue_skb(q, &validate, packets);
+
+	return sch_direct_xmit(skb, q, dev, txq, root_lock, validate);
+}
+
+bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
+		     struct net_device *dev, struct netdev_queue *txq,
+		     spinlock_t *root_lock, bool validate)
+{
+    skb = dev_hard_start_xmit(skb, dev, txq, &ret);
+    ...
+	return true;
+}
+
+
+// net/core/dev.c
+struct sk_buff *dev_hard_start_xmit(struct sk_buff *first, struct net_device *dev,
+				    struct netdev_queue *txq, int *ret)
+{
+	struct sk_buff *skb = first;
+
+	while (skb) {
+		struct sk_buff *next = skb->next;
+		rc = xmit_one(skb, dev, txq, next != NULL);
+		...
+	}
+}
+
+static int xmit_one(struct sk_buff *skb, struct net_device *dev,
+		    struct netdev_queue *txq, bool more)
+{
+	rc = netdev_start_xmit(skb, dev, txq, more);
+}
+
+static inline netdev_tx_t netdev_start_xmit(struct sk_buff *skb, struct net_device *dev,
+					    struct netdev_queue *txq, bool more)
+{
+	rc = __netdev_start_xmit(ops, skb, dev, more);
+}
+
+static inline netdev_tx_t __netdev_start_xmit(const struct net_device_ops *ops,
+					      struct sk_buff *skb, struct net_device *dev,
+					      bool more)
+{
+	return ops->ndo_start_xmit(skb, dev);
+}
+```
+
+### ndo_start_xmit
+
+```c
+// igb_main.c
+static const struct net_device_ops igb_netdev_ops = {
+	.ndo_start_xmit		= igb_xmit_frame,
+    ...
+}
+
+
+static netdev_tx_t igb_xmit_frame(struct sk_buff *skb,
+				  struct net_device *netdev)
+{
+	struct igb_adapter *adapter = netdev_priv(netdev);
+
+	return igb_xmit_frame_ring(skb, igb_tx_queue_mapping(adapter, skb));
+}
+
+
+
+netdev_tx_t igb_xmit_frame_ring(struct sk_buff *skb,
+				struct igb_ring *tx_ring)
+{
+	struct igb_tx_buffer *first;
+
+	/* record the location of the first descriptor for this packet */
+	first = &tx_ring->tx_buffer_info[tx_ring->next_to_use];
+	first->type = IGB_TYPE_SKB;
+	first->skb = skb;
+	first->bytecount = skb->len;
+	first->gso_segs = 1;
+
+    ...
+  
+	igb_tx_map(tx_ring, first, hdr_len);
+}
+```
+
+#### igb_tx_map
+
+```c
+
+static int igb_tx_map(struct igb_ring *tx_ring,
+		      struct igb_tx_buffer *first,
+		      const u8 hdr_len)
+{
+	tx_desc = IGB_TX_DESC(tx_ring, i);
+
+	dma = dma_map_single(tx_ring->dev, skb->data, size, DMA_TO_DEVICE);
+
+	for (frag = &skb_shinfo(skb)->frags[0];; frag++) {
+		tx_desc->read.buffer_addr = cpu_to_le64(dma);
+
+		while (unlikely(size > IGB_MAX_DATA_PER_TXD)) {
+			tx_desc->read.cmd_type_len =
+				cpu_to_le32(cmd_type ^ IGB_MAX_DATA_PER_TXD);
+            ...
+			tx_desc->read.olinfo_status = 0;
+		}
+	    ...
+	}
+
+	tx_desc->read.cmd_type_len = cpu_to_le32(cmd_type);
+    ...
+}
+```
+
+### transmission completion
+
+After the transmission NIC will raise a `hard IRQ` to signal its completion.
+The driver will handle this IRQ (turn it off) and schedule (`soft IRQ`) the NAPI poll system.
+NAPI will handle the receive packets signaling and free the RAM.
+
+Reclaim resources after transmit completes
+
+```c
+static int igb_poll(struct napi_struct *napi, int budget)
+{
+	if (q_vector->tx.ring)
+		clean_complete = igb_clean_tx_irq(q_vector, budget);
+    ...
+}
+
+static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
+{
+	tx_buffer = &tx_ring->tx_buffer_info[i];
+	tx_desc = IGB_TX_DESC(tx_ring, i);
+
+	do {
+		union e1000_adv_tx_desc *eop_desc = tx_buffer->next_to_watch;
+
+		/* clear next_to_watch to prevent false hangs */
+		tx_buffer->next_to_watch = NULL;
+
+		/* free the skb */
+		if (tx_buffer->type == IGB_TYPE_SKB)
+			napi_consume_skb(tx_buffer->skb, napi_budget);
+		else
+			xdp_return_frame(tx_buffer->xdpf);
+
+		/* unmap skb header data */
+		dma_unmap_single(tx_ring->dev,
+				 dma_unmap_addr(tx_buffer, dma),
+				 dma_unmap_len(tx_buffer, len),
+				 DMA_TO_DEVICE);
+
+		/* clear tx_buffer data */
+		dma_unmap_len_set(tx_buffer, len, 0);
+
+		/* clear last DMA location and unmap remaining buffers */
+		while (tx_desc != eop_desc) {
+            ...
+		}
+
+		...
+	} while (likely(budget));
+    ...
+}
+```
 
 ## Ingress
 
@@ -662,8 +1151,6 @@ static int igb_request_msix(struct igb_adapter *adapter)
 23. Kernel will signalize that there is data available to apps (epoll or any polling system)
 24. Application wakes up and reads the data
 
-
-
 like UDP will add into socket accept queue
 
 TODO: [tcp-rcv](https://www.processon.com/diagraming/6195c8be07912906e6ab82c8)
@@ -686,7 +1173,9 @@ static irqreturn_t igb_msix_ring(int irq, void *data)
 }
 ```
 
-`__napi_schedule_irqoff` call `____napi_schedule`
+#### napi_schedule
+
+call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to invoke [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action)
 
 ```c
 // net/core/net.c
@@ -695,66 +1184,28 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 				     struct napi_struct *napi)
 {
 	...
-  
 	list_add_tail(&napi->poll_list, &sd->poll_list);
-```
 
-call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to invoke [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action)
-
-```c
 	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 }
 ```
-
-
 
 ### net_rx_action
 
 ```c
 // net/core/dev.c
-
 static __latent_entropy void net_rx_action(struct softirq_action *h)
 {
 	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
-	
+
 	for (;;) {
 		struct napi_struct *n;
-
-		skb_defer_free_flush(sd);
-
-		if (list_empty(&list)) {
-			if (!sd_has_rps_ipi_waiting(sd) && list_empty(&repoll))
-				goto end;
-			break;
-		}
-
+		...
 		n = list_first_entry(&list, struct napi_struct, poll_list);
 		budget -= napi_poll(n, &repoll);
-
-		/* If softirq window is exhausted then punt.
-		 * Allow this to run for 2 jiffies since which will allow
-		 * an average latency of 1.5/HZ.
-		 */
-		if (unlikely(budget <= 0 ||
-			     time_after_eq(jiffies, time_limit))) {
-			sd->time_squeeze++;
-			break;
-		}
 	}
-
-	local_irq_disable();
-
-	list_splice_tail_init(&sd->poll_list, &list);
-	list_splice_tail(&repoll, &list);
-	list_splice(&list, &sd->poll_list);
-	if (!list_empty(&sd->poll_list))
-		__raise_softirq_irqoff(NET_RX_SOFTIRQ);
-
-	net_rps_action_and_irq_enable(sd);
-end:;
 }
 ```
-
 
 napi_poll function
 
@@ -767,10 +1218,6 @@ static int igb_poll(struct napi_struct *napi, int budget)
 	bool clean_complete = true;
 	int work_done = 0;
 
-#ifdef CONFIG_IGB_DCA
-	if (q_vector->adapter->flags & IGB_FLAG_DCA_ENABLED)
-		igb_update_dca(q_vector);
-#endif
 	if (q_vector->tx.ring)
 		clean_complete = igb_clean_tx_irq(q_vector, budget);
 
@@ -985,7 +1432,6 @@ napi_gro_receive -> napi_skb_finish -> gro_normal_one
 -> gro_normal_list -> netif_receive_skb_list_internal
 -> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core(contains [tcpdump](/docs/CS/CN/Tools/tcpdump.md)) -> deliver_skb
 
-
 #### netif_receive_skb
 
 call deliver_skb
@@ -1073,14 +1519,6 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 ip_rcv_finish_core
 
-
-
-
-
-
-
-
-
 Input packet from network to transport.
 
 ```c
@@ -1093,16 +1531,11 @@ static inline int dst_input(struct sk_buff *skb)
 
 #### ip_local_deliver
 
-```c
+Deliver IP Packets to the higher protocol layers.
 
-/*
- * 	Deliver IP Packets to the higher protocol layers.
- */
+```c
 int ip_local_deliver(struct sk_buff *skb)
 {
-	/*
-	 *	Reassemble IP fragments.
-	 */
 	struct net *net = dev_net(skb->dev);
 
 	if (ip_is_fragment(ip_hdr(skb))) {
@@ -1116,13 +1549,14 @@ int ip_local_deliver(struct sk_buff *skb)
 }
 ```
 
-`ip_local_deliver_finish` ->`ip_protocol_deliver_rcu` -> `tcp_v4_rcv` or `udp_rcv` etc.
+`ip_local_deliver_finish` ->`ip_protocol_deliver_rcu`
+
+It calls the L4 protocol(`tcp_v4_rcv` or `udp_rcv`)
 
 ```c
 void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 {
 	...
-  
 	ipprot = rcu_dereference(inet_protos[protocol]);
 	if (ipprot) {
 		...
@@ -1133,31 +1567,169 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 }
 ```
 
+### l4 rcv
+
+tail skb queue and invoke func `sk_data_ready`([sock_def_readable](/docs/CS/OS/Linux/thundering_herd.md?id=sock_def_readable)) to wake up 1 process.
+
+<!-- tabs:start -->
+
+##### **tcp_v4_rcv**
+
+```c
+int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
+{
+       if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
+              ...
+              tcp_rcv_established(sk, skb);
+       }
+}
+
+void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
+{
+    ...
+    eaten = tcp_queue_rcv(sk, skb, &fragstolen);
+    tcp_data_ready(sk);
+    ...
+}
+
+void tcp_data_ready(struct sock *sk)
+{
+	if (tcp_epollin_ready(sk, sk->sk_rcvlowat) || sock_flag(sk, SOCK_DONE))
+		sk->sk_data_ready(sk);
+}   
+```
+
+##### **udp_rcv**
+
+```c
+
+int udp_rcv(struct sk_buff *skb)
+{
+	return __udp4_lib_rcv(skb, &udp_table, IPPROTO_UDP);
+}
+
+int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable, int proto)
+{
+    ...
+	udp_unicast_rcv_skb(sk, skb, uh);
+    ...
+}
+
+static int udp_unicast_rcv_skb(struct sock *sk, struct sk_buff *skb, struct udphdr *uh)
+{
+	ret = udp_queue_rcv_skb(sk, skb);
+}
+
+static int __udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
+{
+	rc = __udp_enqueue_schedule_skb(sk, skb);
+}
+
+int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
+{
+	__skb_queue_tail(list, skb);
+    sk->sk_data_ready(sk);
+}
+```
+
+<!-- tabs:end -->
+
+## Native IO
+
+> [!NOTE]
+> 
+> Native IO without hard irq.
+
+### Native Egress
+
+Recall the [egress flow](/docs/CS/OS/Linux/network.md?id=ndo_start_xmit), the loopback driver register `net_device_ops`:
+
+```c
+
+static const struct net_device_ops loopback_ops = {
+	.ndo_start_xmit  = loopback_xmit,
+};
+
+atic netdev_tx_t loopback_xmit(struct sk_buff *skb,
+				 struct net_device *dev)
+{
+	skb_orphan(skb);
+
+	__netif_rx(skb);
+}
+
+```
+
+#### __netif_rx
 
 
-## Egress
+tail input_pkt_queue with skb
 
-1. Application sends message (`sendmsg` or other)
-2. TCP send message allocates skb_buff
-3. It enqueues skb to the socket write buffer of `tcp_wmem` size
-4. Builds the TCP header (src and dst port, checksum)
-5. Calls L3 handler (in this case `ipv4` on `tcp_write_xmit` and `tcp_transmit_skb`)
-6. L3 (`ip_queue_xmit`) does its work: build ip header and call netfilter (`LOCAL_OUT`)
-7. Calls output route action
-8. Calls netfilter (`POST_ROUTING`)
-9. Fragment the packet (`ip_output`)
-10. Calls L2 send function (`dev_queue_xmit`)
-11. Feeds the output (QDisc) queue of `txqueuelen` length with its algorithm `default_qdisc`
-12. The driver code enqueue the packets at the `ring buffer tx`
-13. The driver will do a `soft IRQ (NET_TX_SOFTIRQ)` after `tx-usecs` timeout or `tx-frames`
-14. Re-enable hard IRQ to NIC
-15. Driver will map all the packets (to be sent) to some DMA'ed region
-16. NIC fetches the packets (via DMA) from RAM to transmit
-17. After the transmission NIC will raise a `hard IRQ` to signal its completion
-18. The driver will handle this IRQ (turn it off)
-19. And schedule (`soft IRQ`) the NAPI poll system
-20. NAPI will handle the receive packets signaling and free the RAM
+[Schedule NAPI](/docs/CS/OS/Linux/network.md?id=napi_schedule) for backlog device
 
+```c
+int __netif_rx(struct sk_buff *skb)
+{
+	ret = netif_rx_internal(skb);
+}
+
+static int netif_rx_internal(struct sk_buff *skb)
+{
+    ret = enqueue_to_backlog(skb, smp_processor_id(), &qtail);
+}
+
+static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
+			      unsigned int *qtail)
+{
+	sd = &per_cpu(softnet_data, cpu);
+    ...
+    __skb_queue_tail(&sd->input_pkt_queue, skb);
+    input_queue_tail_incr_save(sd, qtail);
+  
+    napi_schedule_rps(sd);
+}
+```
+
+## Native Ingress
+
+Recall the dev init func, the default backlog poll func is `process_backlog`.
+
+```c
+static int __init net_dev_init(void)
+{
+	for_each_possible_cpu(i) {
+	    ...
+		sd->backlog.poll = process_backlog;
+	}
+```
+
+#### process_backlog
+
+tail process_queue with input_pkt_queue 
+
+call [__netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) with process_queue
+
+```c
+
+static int process_backlog(struct napi_struct *napi, int quota)
+{
+	struct softnet_data *sd = container_of(napi, struct softnet_data, backlog);
+
+	while (again) {
+		struct sk_buff *skb;
+		while ((skb = __skb_dequeue(&sd->process_queue))) {
+			__netif_receive_skb(skb);
+		}
+	
+		if (skb_queue_empty(&sd->input_pkt_queue)) {
+			napi->state = 0;
+			again = false;
+		} else {
+			skb_queue_splice_tail_init(&sd->input_pkt_queue, &sd->process_queue);
+		}
+	}
+}
+```
 
 ## Optimization
 
@@ -1234,23 +1806,18 @@ ss -nlt
 
 [TCP RESET/RST Reasons](https://iponwire.com/tcp-reset-rst-reasons/)
 
-
-
 check RingBuffer
+
 ```shell
 ethtool -g eth0
 ```
 
-
 NIC queue
+
 ```shell
 ls /sys/class/net/eth0/queues
 
 ```
-
-
-
-
 
 ### GSO
 

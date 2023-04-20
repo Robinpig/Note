@@ -20,19 +20,11 @@ int udp_rcv(struct sk_buff *skb)
 __udp4_lib_rcv
 
 ```c
-/*
- *	All we need to do is get the socket, and then do a checksum.
- */
+
 int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		   int proto)
 {
-	struct sock *sk;
-	struct udphdr *uh;
-	unsigned short ulen;
-	struct rtable *rt = skb_rtable(skb);
-	__be32 saddr, daddr;
-	struct net *net = dev_net(skb->dev);
-	bool refcounted;
+
 
 	/*
 	 *  Validate the packet.

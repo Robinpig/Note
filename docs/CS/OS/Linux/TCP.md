@@ -311,7 +311,7 @@ This routine actually transmits TCP packets queued in by tcp_do_sendmsg().
 This is used by both the initial transmission and possible later retransmissions.
 
 All SKB's seen here are completely headerless. 
-It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/IP.md?id=transmit)** so it can do the same plus pass the packet off to the device.
+It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/IP.md?id=ip_queue_xmit)** so it can do the same plus pass the packet off to the device.
 
 > [!NOTE]
 > 
@@ -873,80 +873,6 @@ process:
 	bh_unlock_sock(sk);
 	if (skb_to_free)
 		__kfree_skb(skb_to_free);
-
-put_and_return:
-	if (refcounted)
-		sock_put(sk);
-
-	return ret;
-
-no_tcp_socket:
-	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
-		goto discard_it;
-
-	tcp_v4_fill_cb(skb, iph, th);
-
-	if (tcp_checksum_complete(skb)) {
-csum_error:
-		__TCP_INC_STATS(net, TCP_MIB_CSUMERRORS);
-bad_packet:
-		__TCP_INC_STATS(net, TCP_MIB_INERRS);
-	} else {
-		tcp_v4_send_reset(NULL, skb);
-	}
-
-discard_it:
-	/* Discard frame. */
-	kfree_skb(skb);
-	return 0;
-
-discard_and_relse:
-	sk_drops_add(sk, skb);
-	if (refcounted)
-		sock_put(sk);
-	goto discard_it;
-
-do_time_wait:
-	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
-		inet_twsk_put(inet_twsk(sk));
-		goto discard_it;
-	}
-
-	tcp_v4_fill_cb(skb, iph, th);
-
-	if (tcp_checksum_complete(skb)) {
-		inet_twsk_put(inet_twsk(sk));
-		goto csum_error;
-	}
-	switch (tcp_timewait_state_process(inet_twsk(sk), skb, th)) {
-	case TCP_TW_SYN: {
-		struct sock *sk2 = inet_lookup_listener(dev_net(skb->dev),
-							&tcp_hashinfo, skb,
-							__tcp_hdrlen(th),
-							iph->saddr, th->source,
-							iph->daddr, th->dest,
-							inet_iif(skb),
-							sdif);
-		if (sk2) {
-			inet_twsk_deschedule_put(inet_twsk(sk));
-			sk = sk2;
-			tcp_v4_restore_cb(skb);
-			refcounted = false;
-			goto process;
-		}
-	}
-		/* to ACK */
-		fallthrough;
-	case TCP_TW_ACK:
-		tcp_v4_timewait_ack(sk, skb);
-		break;
-	case TCP_TW_RST:
-		tcp_v4_send_reset(sk, skb);
-		inet_twsk_deschedule_put(inet_twsk(sk));
-		goto discard_it;
-	case TCP_TW_SUCCESS:;
-	}
-	goto discard_it;
 }
 
 ```
