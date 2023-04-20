@@ -441,7 +441,7 @@ The preferred solution is to use IP_BIND_ADDRESS_NO_PORT and this option should 
 
 Default: 0
 
-## Listen
+## listen
 
 > -- [listen(2) — Linux manual page](https://man7.org/linux/man-pages/man2/listen.2.html)
 >
@@ -473,6 +473,8 @@ Perform a listen. Basically, we allow the protocol to do anything necessary for 
 2. set backlog
 3. call inet_listen/sock_no_listen
 
+get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(backlog, net.core.somaxconn)`
+
 ```c
 // socket.c
 SYSCALL_DEFINE2(listen, int, fd, int, backlog)
@@ -482,26 +484,13 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 
 int __sys_listen(int fd, int backlog)
 {
-       struct socket *sock;
-       int err, fput_needed;
-       int somaxconn;
-
        sock = sockfd_lookup_light(fd, &err, &fput_needed);
        if (sock) {
-```
-
-get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(backlog, net.core.somaxconn)`
-
-```c
               somaxconn = sock_net(sock->sk)->core.sysctl_somaxconn;
               if ((unsigned int)backlog > somaxconn)
                      backlog = somaxconn;
 
-              err = security_socket_listen(sock, backlog); /** do nothing */
-              if (!err)
-                     err = sock->ops->listen(sock, backlog);
-
-              fput_light(sock->file, fput_needed);
+             err = sock->ops->listen(sock, backlog);
        }
        return err;
 }
@@ -520,82 +509,23 @@ const struct proto_ops inet_stream_ops = {
        .listen                  = inet_listen
 				...
 }
-
-const struct proto_ops inet_dgram_ops = {
-       .family                  = PF_INET,
-       .listen                  = sock_no_listen,
-       ...
-};
 ```
 
 #### inet_listen
 
 Move a socket into listening state.
 
-sk_max_ack_backlog = backlog
+set sk_max_ack_backlog = backlog
 
 ```c
 // af_inet.c
 int inet_listen(struct socket *sock, int backlog)
 {
-       struct sock *sk = sock->sk;
-       unsigned char old_state;
-       int err, tcp_fastopen;
-
-       lock_sock(sk);
-
-       err = -EINVAL;
-```
-
-must unconnected to any socket and type must be `SOCK_STREAM`
-
-```c
-       if (sock->state != SS_UNCONNECTED || sock->type != SOCK_STREAM)
-              goto out;
-```
-
-old_state must be `TCPF_CLOSE` or `TCPF_LISTEN`
-
-```c
-       old_state = sk->sk_state;
-       if (!((1 << old_state) & (TCPF_CLOSE | TCPF_LISTEN)))
-              goto out;
-```
-
-```
-       WRITE_ONCE(sk->sk_max_ack_backlog, backlog); /** set max ack backlog */
-       /* Really, if the socket is already in listen state
-        * we can only allow the backlog to be adjusted.
-        */
+       WRITE_ONCE(sk->sk_max_ack_backlog, backlog);
+      
        if (old_state != TCP_LISTEN) {
-              /* Enable TFO w/o requiring TCP_FASTOPEN socket option.
-               * Note that only TCP sockets (SOCK_STREAM) will reach here.
-               * Also fastopen backlog may already been set via the option
-               * because the socket was in TCP_LISTEN state previously but
-               * was shutdown() rather than close().
-               */
-              tcp_fastopen = sock_net(sk)->ipv4.sysctl_tcp_fastopen;
-              if ((tcp_fastopen & TFO_SERVER_WO_SOCKOPT1) &&
-                  (tcp_fastopen & TFO_SERVER_ENABLE) &&
-                  !inet_csk(sk)->icsk_accept_queue.fastopenq.max_qlen) {
-                     fastopen_queue_tune(sk, backlog);
-                     tcp_fastopen_init_key_once(sock_net(sk));
-              }
-```
-
-call inet_csk_listen_start
-
-```c
               err = inet_csk_listen_start(sk, backlog);
-              if (err)
-                     goto out;
-              tcp_call_bpf(sk, BPF_SOCK_OPS_TCP_LISTEN_CB, 0, NULL);
        }
-       err = 0;
-
-out:
-       release_sock(sk);
-       return err;
 }
 ```
 
@@ -880,16 +810,11 @@ static inline struct request_sock *reqsk_queue_remove(struct request_sock_queue 
 Maximum number of SYN_RECV sockets in queue per LISTEN socket.
 One SYN_RECV socket costs about 80bytes on a 32bit machine.
 
-It would be better to replace it with a global counter for all sockets
-but then some measure against one socket starving all other sockets
-would be needed.
+It would be better to replace it with a global counter for all sockets but then some measure against one socket starving all other sockets would be needed.
 
-The minimum value of it is 128. Experiments with real servers show that
-it is absolutely not enough even at 100conn/sec. 256 cures most
-of problems.
+The minimum value of it is 128. Experiments with real servers show that it is absolutely not enough even at 100conn/sec. 256 cures most of problems.
 
-This value is adjusted to 128 for low memory machines,
-and it will increase in proportion to the memory of machine.
+This value is adjusted to 128 for low memory machines, and it will increase in proportion to the memory of machine.
 
 Note : Dont forget somaxconn that may limit backlog too.
 
@@ -909,8 +834,6 @@ void reqsk_queue_alloc(struct request_sock_queue *queue)
 ```
 
 #### request_sock_queue
-
-struct request_sock_queue -  queue of request_socks
 
 ```c
 // request_sock.h 
@@ -1299,9 +1222,6 @@ void fd_install(unsigned int fd, struct file *file)
 
 ```c
 // net/ipv4/af_inet.c
-/*
- *	Accept a pending connection. The TCP layer now gives BSD semantics.
- */
 int inet_accept(struct socket *sock, struct socket *newsock, int flags,
 		bool kern)
 {
@@ -1437,26 +1357,6 @@ out_err:
 }
 ```
 
-## connect
-
-```
-connect()  // connect to 127.0.0.1:1234
-  -> syscall -> connect
-    -> soconnect(struct socket *so, struct mbuf *nam)
-      so->so_proto->pr_usrreq(so, PRU_CONNECT, NULL, nam, NULL) -> tcp_usrreq(so, PRU_CONNECT, ...)
-        if (inp->inp_lport == 0) in_pcbbind(inp, NULL)  // common unless bind() already
-        -> in_pcbconnect(inp, nam)
-          -> rtalloc
-        tp->t_template = tcp_template(tp)
-        soisconnecting(so)
-        tp->t_state = TCPS_SYN_SENT;
-        -> tcp_sendseqinit(tp)
-        -> tcp_output(tp)  // send SYN
-          -> in_cksum()
-          -> ip_output()
-            -> in_cksum()
-            -> ifp->if_output() -> looutput()
-```
 
 
 ## recv
