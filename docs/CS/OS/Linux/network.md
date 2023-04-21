@@ -40,6 +40,8 @@ The high level path a packet takes from arrival to socket receive buffer is as f
 
 ## init
 
+Ceate ksoftirqd for each cpu.
+
 ### init net dev
 
 initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
@@ -58,10 +60,7 @@ subsys_initcall(net_dev_init);
 static int __init net_dev_init(void)
 {
 	for_each_possible_cpu(i) {
-		struct work_struct *flush = per_cpu_ptr(&flush_works, i);
 		struct softnet_data *sd = &per_cpu(softnet_data, i);
-
-		INIT_WORK(flush, flush_backlog);
 
 		skb_queue_head_init(&sd->input_pkt_queue);
 		skb_queue_head_init(&sd->process_queue);
@@ -85,67 +84,6 @@ register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
 }
 ```
 
-#### process_backlog
-
-```c
-// net/core/dev.c
-static int process_backlog(struct napi_struct *napi, int quota)
-{
-	struct softnet_data *sd = container_of(napi, struct softnet_data, backlog);
-	bool again = true;
-	int work = 0;
-
-	/* Check if we have pending ipi, its better to send them now,
-	 * not waiting net_rx_action() end.
-	 */
-	if (sd_has_rps_ipi_waiting(sd)) {
-		local_irq_disable();
-		net_rps_action_and_irq_enable(sd);
-	}
-
-	napi->weight = dev_rx_weight;
-	while (again) {
-		struct sk_buff *skb;
-
-		while ((skb = __skb_dequeue(&sd->process_queue))) {
-			rcu_read_lock();
-```
-
-register [netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) func.
-
-```c
-			__netif_receive_skb(skb);
-			rcu_read_unlock();
-			input_queue_head_incr(sd);
-			if (++work >= quota)
-				return work;
-
-		}
-
-		local_irq_disable();
-		rps_lock(sd);
-		if (skb_queue_empty(&sd->input_pkt_queue)) {
-			/*
-			 * Inline a custom version of __napi_complete().
-			 * only current cpu owns and manipulates this napi,
-			 * and NAPI_STATE_SCHED is the only possible flag set
-			 * on backlog.
-			 * We can use a plain write instead of clear_bit(),
-			 * and we dont need an smp_mb() memory barrier.
-			 */
-			napi->state = 0;
-			again = false;
-		} else {
-			skb_queue_splice_tail_init(&sd->input_pkt_queue,
-						   &sd->process_queue);
-		}
-		rps_unlock(sd);
-		local_irq_enable();
-	}
-
-	return work;
-}
-```
 
 ### init inet
 
@@ -159,7 +97,6 @@ Register protocols into `inet_protos` and `ptype_base`:
 
 ```c
 fs_initcall(inet_init);
-
 static int __init inet_init(void)
 {
     ......
@@ -270,10 +207,6 @@ int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 void dev_add_pack(struct packet_type *pt)
 {
 	struct list_head *head = ptype_head(pt);
-
-	spin_lock(&ptype_lock);
-	list_add_rcu(&pt->list, head);
-	spin_unlock(&ptype_lock);
 }
 
 static inline struct list_head *ptype_head(const struct packet_type *pt)
@@ -313,16 +246,7 @@ static struct pci_driver igb_driver = {
 
 static int __init igb_init_module(void)
 {
-	int ret;
-
-	pr_info("%s\n", igb_driver_string);
-	pr_info("%s\n", igb_copyright);
-
-#ifdef CONFIG_IGB_DCA
-	dca_register_notify(&dca_notifier);
-#endif
-	ret = pci_register_driver(&igb_driver);
-	return ret;
+    pci_register_driver(&igb_driver);
 }
 
 module_init(igb_init_module);
@@ -377,7 +301,9 @@ static const struct net_device_ops igb_netdev_ops = {
 };
 ```
 
-### open network interface
+Init NAPI
+
+### open NIC
 
 call open function -> allocate RX TX memory
 
