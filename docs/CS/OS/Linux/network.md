@@ -1,57 +1,23 @@
 ## Introduction
 
-Linux provide drivers and protocols
-driver：drivers/net/ethernet
-protocol: kernel & net
-
-The high-level path network data takes from a user program to a network device is as follows:
-
-1. Data is written using a system call (like `sendto`, `sendmsg`, et. al.).
-2. Data passes through the socket subsystem on to the socket’s protocol family’s system (in our case, `AF_INET`).
-3. The protocol family passes data through the protocol layers which (in many cases) arrange the data into packets.
-4. The data passes through the routing layer, populating the destination and neighbour caches along the way (if they are cold). This can generate ARP traffic if an ethernet address needs to be looked up.
-5. After passing through the protocol layers, packets reach the device agnostic layer.
-6. The output queue is chosen using XPS (if enabled) or a hash function.
-7. The device driver’s transmit function is called.
-8. The data is then passed on to the queue discipline (qdisc) attached to the output device.
-9. The qdisc will either transmit the data directly if it can, or queue it up to be sent during the `NET_TX` softirq.
-10. Eventually the data is handed down to the driver from the qdisc.
-11. The driver creates the needed DMA mappings so the device can read the data from RAM.
-12. The driver signals the device that the data is ready to be transmit.
-13. The device fetches the data from RAM and transmits it.
-14. Once transmission is complete, the device raises an interrupt to signal transmit completion.
-15. The driver’s registered IRQ handler for transmit completion runs. For many devices, this handler simply triggers the NAPI poll loop to start running via the `NET_RX` softirq.
-16. The poll function runs via a softIRQ and calls down into the driver to unmap DMA regions and free packet data.
-
-The high level path a packet takes from arrival to socket receive buffer is as follows:
-
-1. Driver is loaded and initialized.
-2. Packet arrives at the NIC from the network.
-3. Packet is copied (via DMA) to a ring buffer in kernel memory.
-4. Hardware interrupt is generated to let the system know a packet is in memory.
-5. Driver calls into [NAPI](http://www.linuxfoundation.org/collaborate/workgroups/networking/napi) to start a poll loop if one was not running already.
-6. `ksoftirqd` processes run on each CPU on the system. They are registered at boot time. The  processes pull packets off the ring buffer by calling the NAPI  function that the device driver registered during initialization.`ksoftirqd``poll`
-7. Memory regions in the ring buffer that have had network data written to them are unmapped.
-8. Data that was DMA’d into memory is passed up the networking layer as an ‘skb’ for more processing.
-9. Incoming network data frames are distributed among multiple CPUs if packet steering is enabled or if the NIC has multiple receive queues.
-10. Network data frames are handed to the protocol layers from the queues.
-11. Protocol layers process data.
-12. Data is added to receive buffers attached to sockets by protocol layers.
-
 ## init
 
-Ceate ksoftirqd for each cpu.
+Create [ksoftirqd](/docs/CS/OS/Linux/Interrupt.md?id=init_softirq) for each cpu.
 
 ### init net dev
 
-initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
+> initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 
 Initialize the DEV module.
+<br/>
 At boot time this walks the device list and unhooks any devices that fail to initialise (normally hardware not present) and leaves us with a valid list of present and active devices.
-
+<br/>
 This is called single threaded during boot, so no need to take the rtnl semaphore.
 
-Initialise the packet receive queues for each cpu.
+1. Initialise the packet receive queues for each cpu.
+2. register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+   - [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action) receive func
+   - [net_tx_action](/docs/CS/OS/Linux/network.md?id=net_tx_action) transmit func
 
 ```c
 // net/core/dev.c
@@ -71,29 +37,20 @@ static int __init net_dev_init(void)
 		sd->backlog.poll = process_backlog;
 		sd->backlog.weight = weight_p;
 	}
-```
 
-register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
-
-- [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action) receive func
-- [net_tx_action](/docs/CS/OS/Linux/IP.md?id=net_tx_action) transmit func
-
-```c
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
 	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
 }
 ```
 
-
 ### init inet
 
 Register protocols into `inet_protos` and `ptype_base`:
 
-1. ICMP
+1. IP
 2. [UDP](/docs/CS/OS/Linux/UDP.md)
 3. [TCP](/docs/CS/OS/Linux/TCP.md?id=tcp_init)
-4. IGMP
-5. ...
+4. ...
 
 ```c
 fs_initcall(inet_init);
@@ -107,87 +64,15 @@ static int __init inet_init(void)
 		pr_crit("%s: Cannot add UDP protocol\n", __func__);
 	if (inet_add_protocol(&tcp_protocol, IPPROTO_TCP) < 0)
 		pr_crit("%s: Cannot add TCP protocol\n", __func__);
-#ifdef CONFIG_IP_MULTICAST
-	if (inet_add_protocol(&igmp_protocol, IPPROTO_IGMP) < 0)
-		pr_crit("%s: Cannot add IGMP protocol\n", __func__);
-#endif
     ......
 
 	arp_init();
 	ip_init();
 	tcp_init();
 	udp_init();
-	udplite4_register();
-	raw_init();
-	ping_init();
-  
+    ...
     dev_add_pack(&ip_packet_type);
 }
-```
-
-#### net_protocol
-
-This is used to register protocols.
-
-```c
-// include/net/protocol.h
-struct net_protocol {
-       int                  (*early_demux)(struct sk_buff *skb);
-       int                  (*early_demux_handler)(struct sk_buff *skb);
-       int                  (*handler)(struct sk_buff *skb);
-
-       /* This returns an error if we weren't able to handle the error. */
-       int                  (*err_handler)(struct sk_buff *skb, u32 info);
-
-       unsigned int          no_policy:1,
-                            netns_ok:1,
-                            /* does the protocol do more stringent
-                             * icmp tag validation than simple
-                             * socket lookup?
-                             */
-                            icmp_strict_tag_validation:1;
-};
-```
-
-ip_packet_type net protocols
-
-```c
-// net/ipv4/af_inet.c
-static struct packet_type ip_packet_type __read_mostly = {
-	.type = cpu_to_be16(ETH_P_IP),
-	.func = ip_rcv,
-	.list_func = ip_list_rcv,
-};
-
-
-/* thinking of making this const? Don't.
- * early_demux can change based on sysctl.
- */
-static struct net_protocol tcp_protocol = {
-	.early_demux	=	tcp_v4_early_demux,
-	.early_demux_handler =  tcp_v4_early_demux,
-	.handler	=	tcp_v4_rcv,
-	.err_handler	=	tcp_v4_err,
-	.no_policy	=	1,
-	.icmp_strict_tag_validation = 1,
-};
-
-/* thinking of making this const? Don't.
- * early_demux can change based on sysctl.
- */
-static struct net_protocol udp_protocol = {
-	.early_demux =	udp_v4_early_demux,
-	.early_demux_handler =	udp_v4_early_demux,
-	.handler =	udp_rcv,
-	.err_handler =	udp_err,
-	.no_policy =	1,
-};
-
-static const struct net_protocol icmp_protocol = {
-	.handler =	icmp_rcv,
-	.err_handler =	icmp_err,
-	.no_policy =	1,
-};
 ```
 
 #### inet_add_protocol
@@ -202,7 +87,31 @@ int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 	return !cmpxchg((const struct net_protocol **)&inet_protos[protocol],
 			NULL, prot) ? 0 : -1;
 }
+```
 
+#### dev_add_pack
+
+ip_packet_type
+
+```c
+// net/ipv4/af_inet.c
+static struct packet_type ip_packet_type __read_mostly = {
+	.func = ip_rcv,
+};
+
+static struct net_protocol tcp_protocol = {
+	.handler	=	tcp_v4_rcv,
+};
+
+static struct net_protocol udp_protocol = {
+	.handler =	udp_rcv,
+};
+
+```
+
+dev_add_pack
+
+```c
 // net/core/dev.c
 void dev_add_pack(struct packet_type *pt)
 {
@@ -221,45 +130,57 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 
 ### init driver
 
-Network Device Driver Initialization
 
 A driver registers an initialization function which is called by the kernel when the driver is loaded.
 This function is registered by using the module_init macro.
+<br/>
 The igb initialization function (igb_init_module) and its registration with module_init can be found in `drivers/net/ethernet/intel/igb/igb_main.c`.
 
-The bulk of the work to initialize the device happens with the call to pci_register_driver.
+The bulk of the work to initialize the device happens with the call to `pci_register_driver`.
 
 ```c
 //  igb_main.c
 static struct pci_driver igb_driver = {
-	.name     = igb_driver_name,
-	.id_table = igb_pci_tbl,
 	.probe    = igb_probe,
-	.remove   = igb_remove,
-#ifdef CONFIG_PM
-	.driver.pm = &igb_pm_ops,
-#endif
-	.shutdown = igb_shutdown,
-	.sriov_configure = igb_pci_sriov_configure,
-	.err_handler = &igb_err_handler
 };
 
 static int __init igb_init_module(void)
 {
     pci_register_driver(&igb_driver);
 }
-
 module_init(igb_init_module);
 ```
 
+register a new pci driver
+
+```c
+#define pci_register_driver(driver)		\
+	__pci_register_driver(driver, THIS_MODULE, KBUILD_MODNAME)
+
+int __pci_register_driver(struct pci_driver *drv, struct module *owner, const char *mod_name)
+{
+	/* initialize common driver fields */
+
+	/* register with core */
+	return driver_register(&drv->driver);
+}
+EXPORT_SYMBOL(__pci_register_driver);
+
+int driver_register(struct device_driver *drv)
+{
+	if ((drv->bus->probe && drv->probe) ||
+	    (drv->bus->remove && drv->remove) ||
+	    (drv->bus->shutdown && drv->shutdown))
+		pr_warn("Driver '%s' needs updating - please use "
+			"bus_type methods\n", drv->name);
+
+	deferred_probe_extend_timeout();
+}
+```
+
+#### probe
+
 The probe function is quite basic, and only needs to perform a device's early init, and then register our network device with the kernel.
-
-In other words, the probe function has to:
-
-1. Allocate the network device along with its private data using the alloc_etherdev() function (helped by netdev_priv()).
-2. Initialize private data fields (mutexes, spinlock, work_queue, and so on). You should use work queues (and mutexes) if the device sits on a bus whose access functions may sleep (SPI, for example).
-   In this case, the hwirq just has to acknowledge the kernel code, and schedule the job that will perform operations on the device. An alternative solution is to use threaded IRQs.
-   If the device is MMIO, you can use spinlock to protect ...
 
 The `igb_probe` function does some important network device initialization.
 In addition to the PCI specific work, it will do more general networking and network device work:
@@ -270,38 +191,14 @@ In addition to the PCI specific work, it will do more general networking and net
 4. `net_device` feature flags are set.
 5. And lots more.
 
-```c
+ndo_open func.
 
+```c
 static const struct net_device_ops igb_netdev_ops = {
 	.ndo_open		= igb_open,
-	.ndo_stop		= igb_close,
-	.ndo_start_xmit		= igb_xmit_frame,
-	.ndo_get_stats64	= igb_get_stats64,
-	.ndo_set_rx_mode	= igb_set_rx_mode,
-	.ndo_set_mac_address	= igb_set_mac,
-	.ndo_change_mtu		= igb_change_mtu,
-	.ndo_eth_ioctl		= igb_ioctl,
-	.ndo_tx_timeout		= igb_tx_timeout,
-	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_vlan_rx_add_vid	= igb_vlan_rx_add_vid,
-	.ndo_vlan_rx_kill_vid	= igb_vlan_rx_kill_vid,
-	.ndo_set_vf_mac		= igb_ndo_set_vf_mac,
-	.ndo_set_vf_vlan	= igb_ndo_set_vf_vlan,
-	.ndo_set_vf_rate	= igb_ndo_set_vf_bw,
-	.ndo_set_vf_spoofchk	= igb_ndo_set_vf_spoofchk,
-	.ndo_set_vf_trust	= igb_ndo_set_vf_trust,
-	.ndo_get_vf_config	= igb_ndo_get_vf_config,
-	.ndo_fix_features	= igb_fix_features,
-	.ndo_set_features	= igb_set_features,
-	.ndo_fdb_add		= igb_ndo_fdb_add,
-	.ndo_features_check	= igb_features_check,
-	.ndo_setup_tc		= igb_setup_tc,
-	.ndo_bpf		= igb_xdp,
-	.ndo_xdp_xmit		= igb_xdp_xmit,
+	...
 };
 ```
-
-Init NAPI
 
 ### open NIC
 
@@ -315,104 +212,38 @@ At this point all resources needed for transmit and receive operations are alloc
 ```c
 static int __igb_open(struct net_device *netdev, bool resuming)
 {
-	struct igb_adapter *adapter = netdev_priv(netdev);
-	struct e1000_hw *hw = &adapter->hw;
-	struct pci_dev *pdev = adapter->pdev;
-	int err;
-	int i;
-
-	/* disallow open during test */
-	if (test_bit(__IGB_TESTING, &adapter->state)) {
-		WARN_ON(resuming);
-		return -EBUSY;
-	}
-
-	if (!resuming)
-		pm_runtime_get_sync(&pdev->dev);
-
-	netif_carrier_off(netdev);
 
 	/* allocate transmit descriptors */
-	err = igb_setup_all_tx_resources(adapter);
-	if (err)
-		goto err_setup_tx;
-
+	igb_setup_all_tx_resources(adapter);
 	/* allocate receive descriptors */
-	err = igb_setup_all_rx_resources(adapter);
-	if (err)
-		goto err_setup_rx;
+	igb_setup_all_rx_resources(adapter);
 
 	igb_power_up_link(adapter);
 
-	/* before we allocate an interrupt, we must be ready to handle it.
-	 * Setting DEBUG_SHIRQ in the kernel makes it fire an interrupt
-	 * as soon as we call pci_request_irq, so we have to setup our
-	 * clean_rx handler before we do so.
-	 */
-	igb_configure(adapter);
-
-	err = igb_request_irq(adapter);
-	if (err)
-		goto err_req_irq;
+	igb_request_irq(adapter);
 
 	/* Notify the stack of the actual queue counts. */
-	err = netif_set_real_num_tx_queues(adapter->netdev,
+	netif_set_real_num_tx_queues(adapter->netdev,
 					   adapter->num_tx_queues);
-	if (err)
-		goto err_set_queues;
 
-	err = netif_set_real_num_rx_queues(adapter->netdev,
+	netif_set_real_num_rx_queues(adapter->netdev,
 					   adapter->num_rx_queues);
-	if (err)
-		goto err_set_queues;
-
-	/* From here on the code is the same as igb_up() */
-	clear_bit(__IGB_DOWN, &adapter->state);
 
 	for (i = 0; i < adapter->num_q_vectors; i++)
 		napi_enable(&(adapter->q_vector[i]->napi));
 
-	/* Clear any pending interrupts. */
-	rd32(E1000_TSICR);
-	rd32(E1000_ICR);
-
 	igb_irq_enable(adapter);
-
-	/* notify VFs that reset has been completed */
-	if (adapter->vfs_allocated_count) {
-		u32 reg_data = rd32(E1000_CTRL_EXT);
-
-		reg_data |= E1000_CTRL_EXT_PFRSTD;
-		wr32(E1000_CTRL_EXT, reg_data);
 	}
 
 	netif_tx_start_all_queues(netdev);
 
-	if (!resuming)
-		pm_runtime_put(&pdev->dev);
-
 	/* start the watchdog. */
 	hw->mac.get_link_status = 1;
 	schedule_work(&adapter->watchdog_task);
-
-	return 0;
-
-err_set_queues:
-	igb_free_irq(adapter);
-err_req_irq:
-	igb_release_hw_control(adapter);
-	igb_power_down_link(adapter);
-	igb_free_all_rx_resources(adapter);
-err_setup_rx:
-	igb_free_all_tx_resources(adapter);
-err_setup_tx:
-	igb_reset(adapter);
-	if (!resuming)
-		pm_runtime_put(&pdev->dev);
-
-	return err;
 }
 ```
+
+#### setup descriptors
 
 - igb_tx_buffer array
 - e1000_adv_tx_desc DMA array
@@ -459,27 +290,19 @@ int igb_setup_tx_resources(struct igb_ring *tx_ring)
 }
 ```
 
-register irq
+#### register_irq
 
 ```c
 static int igb_request_irq(struct igb_adapter *adapter)
 {
-	struct net_device *netdev = adapter->netdev;
-	struct pci_dev *pdev = adapter->pdev;
-	int err = 0;
-
 	if (adapter->flags & IGB_FLAG_HAS_MSIX) {
 		err = igb_request_msix(adapter);
-		if (!err)
-			goto request_done;
 		/* fall back to MSI */
 		igb_free_all_tx_resources(adapter);
 		igb_free_all_rx_resources(adapter);
 
 		igb_clear_interrupt_scheme(adapter);
 		err = igb_init_interrupt_scheme(adapter, false);
-		if (err)
-			goto request_done;
 
 		igb_setup_all_tx_resources(adapter);
 		igb_setup_all_rx_resources(adapter);
@@ -488,25 +311,32 @@ static int igb_request_irq(struct igb_adapter *adapter)
 
 	igb_assign_vector(adapter->q_vector[0], 0);
 
-	if (adapter->flags & IGB_FLAG_HAS_MSI) {
-		err = request_irq(pdev->irq, igb_intr_msi, 0,
-				  netdev->name, adapter);
-		if (!err)
-			goto request_done;
-
-		/* fall back to legacy interrupts */
-		igb_reset_interrupt_capability(adapter);
-		adapter->flags &= ~IGB_FLAG_HAS_MSI;
-	}
-
-	err = request_irq(pdev->irq, igb_intr, IRQF_SHARED,
+	request_irq(pdev->irq, igb_intr, IRQF_SHARED,
 			  netdev->name, adapter);
 
-request_done:
-	return err;
 }
 
+```
 
+igb_init_interrupt_scheme -> igb_alloc_q_vector
+
+initialize NAPI with `igb_poll`
+
+```c
+static int igb_alloc_q_vector(struct igb_adapter *adapter,
+			      int v_count, int v_idx,
+			      int txr_count, int txr_idx,
+			      int rxr_count, int rxr_idx)
+{
+    ...
+	/* initialize NAPI */
+	netif_napi_add(adapter->netdev, &q_vector->napi, igb_poll);
+}
+```
+
+igb_request_msix
+
+```c
 static int igb_request_msix(struct igb_adapter *adapter)
 {
 	unsigned int num_q_vectors = adapter->num_q_vectors;
@@ -557,27 +387,6 @@ static int igb_request_msix(struct igb_adapter *adapter)
 
 ## Egress
 
-1. Application sends message (`sendmsg` or send)
-2. TCP send message allocates skb_buff
-3. It enqueues skb to the socket write buffer of `tcp_wmem` size
-4. Builds the TCP header (src and dst port, checksum)
-5. Calls L3 handler (in this case `ipv4` on `tcp_write_xmit` and `tcp_transmit_skb`)
-6. L3 (`ip_queue_xmit`) does its work: build ip header and call netfilter (`LOCAL_OUT`)
-7. Calls output route action
-8. Calls netfilter (`POST_ROUTING`)
-9. Fragment the packet (`ip_output`)
-10. Calls L2 send function (`dev_queue_xmit`)
-11. Feeds the output (QDisc) queue of `txqueuelen` length with its algorithm `default_qdisc`
-12. The driver code enqueue the packets at the `ring buffer tx`
-13. The driver will do a `soft IRQ (NET_TX_SOFTIRQ)` after `tx-usecs` timeout or `tx-frames`
-14. Re-enable hard IRQ to NIC
-15. Driver will map all the packets (to be sent) to some DMA'ed region
-16. NIC fetches the packets (via DMA) from RAM to transmit
-17. After the transmission NIC will raise a `hard IRQ` to signal its completion
-18.
-
-### send
-
 ```c
 /**
  *    send 	---+--- 	sendto
@@ -589,6 +398,9 @@ static int igb_request_msix(struct igb_adapter *adapter)
  *					            tcp_sendmsg      ----+----      udp_sendmsg
  */
 ```
+
+### send
+
 
 Send a datagram down a socket.
 
@@ -606,28 +418,11 @@ SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
 {
 	return __sys_sendto(fd, buff, len, flags, NULL, 0);
 }
-```
 
-Send a datagram to a given address.
-We move the address into kernel space and check the user space data area is readable before invoking the protocol.
-
-```c
 // net/socket.c
 int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
 		 struct sockaddr __user *addr,  int addr_len)
 {
-	struct socket *sock;
-	struct sockaddr_storage address;
-	int err;
-	struct msghdr msg;
-	struct iovec iov;
-	int fput_needed;
-
-	err = import_single_range(WRITE, buff, len, &iov, &msg.msg_iter);
-	sock = sockfd_lookup_light(fd, &err, &fput_needed);
-
-	msg.msg_flags = flags;
-
 	err = sock_sendmsg(sock, &msg);
 }
 ```
@@ -814,6 +609,8 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 ```
 
 #### qdisc_run
+
+The qdisc will either transmit the data directly if it can, or queue it up to be sent during the NET_TX softirq.
 
 raise NET_TX_SOFTIRQ if quota <= 0 in order to execute net_tx_action and recall `qdisc_run` func
 
@@ -1132,6 +929,8 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 	}
 }
 ```
+
+#### poll
 
 napi_poll function
 
@@ -1495,6 +1294,8 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 
 ### l4 rcv
 
+Data is added to receive buffers attached to sockets by protocol layers.
+
 tail skb queue and invoke func `sk_data_ready`([sock_def_readable](/docs/CS/OS/Linux/thundering_herd.md?id=sock_def_readable)) to wake up 1 process.
 
 <!-- tabs:start -->
@@ -1563,7 +1364,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 ## Native IO
 
 > [!NOTE]
-> 
+>
 > Native IO without hard irq.
 
 ### Native Egress
@@ -1587,7 +1388,6 @@ atic netdev_tx_t loopback_xmit(struct sk_buff *skb,
 ```
 
 #### __netif_rx
-
 
 tail input_pkt_queue with skb
 
@@ -1631,7 +1431,7 @@ static int __init net_dev_init(void)
 
 #### process_backlog
 
-tail process_queue with input_pkt_queue 
+tail process_queue with input_pkt_queue
 
 call [__netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) with process_queue
 
@@ -1646,7 +1446,7 @@ static int process_backlog(struct napi_struct *napi, int quota)
 		while ((skb = __skb_dequeue(&sd->process_queue))) {
 			__netif_receive_skb(skb);
 		}
-	
+
 		if (skb_queue_empty(&sd->input_pkt_queue)) {
 			napi->state = 0;
 			again = false;
