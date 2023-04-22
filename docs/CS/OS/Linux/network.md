@@ -387,18 +387,6 @@ static int igb_request_msix(struct igb_adapter *adapter)
 
 ## Egress
 
-```c
-/**
- *    send 	---+--- 	sendto
- *                |
- * 			  \|/
- *			sys_sendto ---> sock_sendmsg ---> inet_sendmsg
- *                                                     |
- *											        \|/
- *					            tcp_sendmsg      ----+----      udp_sendmsg
- */
-```
-
 ### send
 
 
@@ -543,30 +531,23 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 
 ### dev_queue_xmit
 
-Send by device
+transmit a buffer
 
-__dev_queue_xmit - transmit a buffer
-@skb: buffer to transmit
-@sb_dev: suboordinate device used for L2 forwarding offload
+Queue a buffer for transmission to a network device. 
+The caller must have set the device and priority and built the buffer before calling this function.
+The function can be called from an interrupt.
 
-Queue a buffer for transmission to a network device. The caller must
-have set the device and priority and built the buffer before calling
-this function. The function can be called from an interrupt.
+A negative errno code is returned on a failure. 
+A success does not guarantee the frame will be transmitted as it may be dropped due to congestion or traffic shaping.
 
-A negative errno code is returned on a failure. A success does not
-guarantee the frame will be transmitted as it may be dropped due
-to congestion or traffic shaping.
+I notice this method can also return errors from the queue disciplines, including NET_XMIT_DROP, which is a positive value.  
+So, errors can also be positive.
 
-I notice this method can also return errors from the queue disciplines,
-including NET_XMIT_DROP, which is a positive value.  So, errors can also
-be positive.
+Regardless of the return value, the skb is consumed, so it is currently difficult to retry a send to this method.
+(You can bump the ref count before sending to hold a reference for retry if you are careful.)
 
-Regardless of the return value, the skb is consumed, so it is currently
-difficult to retry a send to this method.  (You can bump the ref count
-before sending to hold a reference for retry if you are careful.)
-
-When calling this method, interrupts MUST be enabled.  This is because
-the BH enable code must have IRQs enabled so that it will not deadlock.
+When calling this method, interrupts MUST be enabled.  
+This is because the BH enable code must have IRQs enabled so that it will not deadlock.
 
 ```c
 // net/core/dev.c
