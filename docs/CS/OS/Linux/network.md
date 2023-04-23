@@ -334,7 +334,9 @@ static int igb_alloc_q_vector(struct igb_adapter *adapter,
 }
 ```
 
-igb_request_msix
+##### igb_request_msix
+
+register [igb_msix_ring](/docs/CS/OS/Linux/network.md?id=igb_msix_ring)
 
 ```c
 static int igb_request_msix(struct igb_adapter *adapter)
@@ -855,13 +857,14 @@ static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
 23. Kernel will signalize that there is data available to apps (epoll or any polling system)
 24. Application wakes up and reads the data
 
-like UDP will add into socket accept queue
-
 TODO: [tcp-rcv](https://www.processon.com/diagraming/6195c8be07912906e6ab82c8)
 
 ### driver process
 
+#### igb_msix_ring
 Hard interrupt
+
+Driver will `schedule a NAPI`(raise a `soft IRQ (NET_RX_SOFTIRQ)`).
 
 ```c
 static irqreturn_t igb_msix_ring(int irq, void *data)
@@ -918,98 +921,25 @@ napi_poll function
 ```c
 static int igb_poll(struct napi_struct *napi, int budget)
 {
-	struct igb_q_vector *q_vector = container_of(napi,
-						     struct igb_q_vector,
-						     napi);
-	bool clean_complete = true;
-	int work_done = 0;
-
 	if (q_vector->tx.ring)
 		clean_complete = igb_clean_tx_irq(q_vector, budget);
 
 	if (q_vector->rx.ring) {
 		int cleaned = igb_clean_rx_irq(q_vector, budget);
-
-		work_done += cleaned;
-		if (cleaned >= budget)
-			clean_complete = false;
 	}
-
-	/* If all work not completed, return budget and keep polling */
-	if (!clean_complete)
-		return budget;
-
-	/* Exit the polling mode, but don't re-enable interrupts if stack might
-	 * poll us due to busy-polling
-	 */
-	if (likely(napi_complete_done(napi, work_done)))
-		igb_ring_irq_enable(q_vector);
-
-	return work_done;
+    ...
 }
 ```
 
-igb_get_rx_buffer
+igb_clean_rx_irq
 
 ```c
 
 static int igb_clean_rx_irq(struct igb_q_vector *q_vector, const int budget)
 {
-	struct igb_adapter *adapter = q_vector->adapter;
-	struct igb_ring *rx_ring = q_vector->rx.ring;
-	struct sk_buff *skb = rx_ring->skb;
-	unsigned int total_bytes = 0, total_packets = 0;
-	u16 cleaned_count = igb_desc_unused(rx_ring);
-	unsigned int xdp_xmit = 0;
-	struct xdp_buff xdp;
-	u32 frame_sz = 0;
-	int rx_buf_pgcnt;
-
-	/* Frame size depend on rx_ring setup when PAGE_SIZE=4K */
-#if (PAGE_SIZE < 8192)
-	frame_sz = igb_rx_frame_truesize(rx_ring, 0);
-#endif
-	xdp_init_buff(&xdp, frame_sz, &rx_ring->xdp_rxq);
-
 	while (likely(total_packets < budget)) {
 		union e1000_adv_rx_desc *rx_desc;
 		struct igb_rx_buffer *rx_buffer;
-		ktime_t timestamp = 0;
-		int pkt_offset = 0;
-		unsigned int size;
-		void *pktbuf;
-
-
-		/* return some buffers to hardware, one at a time is too slow */
-		if (cleaned_count >= IGB_RX_BUFFER_WRITE) {
-			igb_alloc_rx_buffers(rx_ring, cleaned_count);
-			cleaned_count = 0;
-		}
-
-		rx_desc = IGB_RX_DESC(rx_ring, rx_ring->next_to_clean);
-		size = le16_to_cpu(rx_desc->wb.upper.length);
-		if (!size)
-			break;
-
-		/* This memory barrier is needed to keep us from reading
-		 * any other fields out of the rx_desc until we know the
-		 * descriptor has been written back
-		 */
-		dma_rmb();
-
-		rx_buffer = igb_get_rx_buffer(rx_ring, size, &rx_buf_pgcnt);
-		pktbuf = page_address(rx_buffer->page) + rx_buffer->page_offset;
-
-		/* pull rx packet timestamp if available and valid */
-		if (igb_test_staterr(rx_desc, E1000_RXDADV_STAT_TSIP)) {
-			int ts_hdr_len;
-
-			ts_hdr_len = igb_ptp_rx_pktstamp(rx_ring->q_vector,
-							 pktbuf, &timestamp);
-
-			pkt_offset += ts_hdr_len;
-			size -= ts_hdr_len;
-		}
 
 		/* retrieve a buffer from the ring */
 		if (!skb) {
@@ -1018,42 +948,10 @@ static int igb_clean_rx_irq(struct igb_q_vector *q_vector, const int budget)
 
 			xdp_prepare_buff(&xdp, hard_start, offset, size, true);
 			xdp_buff_clear_frags_flag(&xdp);
-#if (PAGE_SIZE > 4096)
-			/* At larger PAGE_SIZE, frame_sz depend on len size */
-			xdp.frame_sz = igb_rx_frame_truesize(rx_ring, size);
-#endif
 			skb = igb_run_xdp(adapter, rx_ring, &xdp);
 		}
 
-		if (IS_ERR(skb)) {
-			unsigned int xdp_res = -PTR_ERR(skb);
-
-			if (xdp_res & (IGB_XDP_TX | IGB_XDP_REDIR)) {
-				xdp_xmit |= xdp_res;
-				igb_rx_buffer_flip(rx_ring, rx_buffer, size);
-			} else {
-				rx_buffer->pagecnt_bias++;
-			}
-			total_packets++;
-			total_bytes += size;
-		} else if (skb)
-			igb_add_rx_frag(rx_ring, rx_buffer, skb, size);
-		else if (ring_uses_build_skb(rx_ring))
-			skb = igb_build_skb(rx_ring, rx_buffer, &xdp,
-					    timestamp);
-		else
-			skb = igb_construct_skb(rx_ring, rx_buffer,
-						&xdp, timestamp);
-
-		/* exit if we failed to retrieve a buffer */
-		if (!skb) {
-			rx_ring->rx_stats.alloc_failed++;
-			rx_buffer->pagecnt_bias++;
-			break;
-		}
-
 		igb_put_rx_buffer(rx_ring, rx_buffer, rx_buf_pgcnt);
-		cleaned_count++;
 
 		/* fetch next buffer in frame if non-eop */
 		if (igb_is_non_eop(rx_ring, rx_desc))
@@ -1065,52 +963,14 @@ static int igb_clean_rx_irq(struct igb_q_vector *q_vector, const int budget)
 			continue;
 		}
 
-		/* probably a little skewed due to removing CRC */
-		total_bytes += skb->len;
-
 		/* populate checksum, timestamp, VLAN, and protocol */
 		igb_process_skb_fields(rx_ring, rx_desc, skb);
-```
 
-napi_gro_receive
-
-```
 		napi_gro_receive(&q_vector->napi, skb);
-
-		/* reset skb pointer */
-		skb = NULL;
-
-		/* update budget accounting */
-		total_packets++;
 	}
-
-	/* place incomplete frames back on ring for completion */
-	rx_ring->skb = skb;
-
-	if (xdp_xmit & IGB_XDP_REDIR)
-		xdp_do_flush();
-
-	if (xdp_xmit & IGB_XDP_TX) {
-		struct igb_ring *tx_ring = igb_xdp_tx_queue_mapping(adapter);
-
-		igb_xdp_ring_update_tail(tx_ring);
-	}
-
-	u64_stats_update_begin(&rx_ring->rx_syncp);
-	rx_ring->rx_stats.packets += total_packets;
-	rx_ring->rx_stats.bytes += total_bytes;
-	u64_stats_update_end(&rx_ring->rx_syncp);
-	q_vector->rx.total_packets += total_packets;
-	q_vector->rx.total_bytes += total_bytes;
-
-	if (cleaned_count)
-		igb_alloc_rx_buffers(rx_ring, cleaned_count);
-
-	return total_packets;
+    ...
 }
-```
 
-```c
 // net/core/dev.c
 gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
@@ -1136,7 +996,7 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 
 napi_gro_receive -> napi_skb_finish -> gro_normal_one
 -> gro_normal_list -> netif_receive_skb_list_internal
--> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core(contains [tcpdump](/docs/CS/CN/Tools/tcpdump.md)) -> deliver_skb
+-> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core(contains [tcpdump](/docs/CS/CN/Tools/tcpdump.md))
 
 #### netif_receive_skb
 

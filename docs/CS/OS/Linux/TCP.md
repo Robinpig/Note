@@ -603,530 +603,92 @@ u32 __tcp_select_window(struct sock *sk)
 
 ## Recv
 
+### tcp_recvmsg
+
+`recvfrom` -> `inet_recvmsg` -> `tcp_recvmsg`
+
+process sk_receive_queue or sk_wait_data
+
+```c
+int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
+              int flags, int *addr_len)
+{
+       ret = tcp_recvmsg_locked(sk, msg, len, nonblock, flags, &tss,
+                             &cmsg_flags);
+}
+
+static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len, ...)
+{
+	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
+
+	do {
+        ...
+		skb_queue_walk(&sk->sk_receive_queue, skb);
+        ...
+
+            if (copied >= target) {
+                /* Do not sleep, just process backlog. */
+                release_sock(sk);
+                lock_sock(sk);
+            } else { /* Wait if none enough data */
+                sk_wait_data(sk, &timeo, last);
+            }
+		}
+		...
+}
+```
+
+#### sk_wait_data
+
+wait for data to arrive at sk_receive_queue
+
+```c
+int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
+{
+    DEFINE_WAIT_FUNC(wait, woken_wake_function);
+
+	add_wait_queue(sk_sleep(sk), &wait);
+	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);
+	sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+	remove_wait_queue(sk_sleep(sk), &wait);
+}
+```
+
 from dev
 
 `ip_rcv` -> ip_rcv_finish -> dst_input -> ip_local_deliver -> [tcp_v4_rcv](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_rcv)
 -> ip_forward -> ip_forward_finish -> [ip_output](/docs/CS/OS/Linux/IP.md?id=ip_output)
 
-from applications
+### tcp_rcv_established
 
-recv/recvfrom -> sys_recvfrom -> sock_recvmsg -> inet_recvmsg -> [tcp_recvmsg](/docs/CS/OS/Linux/TCP.md?id=tcp_recvmsg)
-
-Receive a frame from the socket and optionally record the address of the
-sender. We verify the buffers are writable and if needed move the
-sender address from kernel to user space.
-
-1. sock_recvmsg
-2. move_addr_to_user
-
-```c
-//
-int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
-		   struct sockaddr __user *addr, int __user *addr_len)
-{
-	struct socket *sock;
-	struct iovec iov;
-	struct msghdr msg;
-	struct sockaddr_storage address;
-	...
-
-	err = sock_recvmsg(sock, &msg, flags);
-
-	if (err >= 0 && addr != NULL) {
-		err2 = move_addr_to_user(&address,
-					 msg.msg_namelen, addr, addr_len);
-	}
-	return err;
-}
-```
-
-Receives msg from sock, passing through LSM. Returns the total number of bytes received, or an error.
-
-```c
-// 
-int sock_recvmsg(struct socket *sock, struct msghdr *msg, int flags)
-{
-	int err = security_socket_recvmsg(sock, msg, msg_data_left(msg), flags);
-	return err ?: sock_recvmsg_nosec(sock, msg, flags);
-}
-```
-
-call inet_recvmsg or inet6_recvmsg
-
-```c
-static inline int sock_recvmsg_nosec(struct socket *sock, struct msghdr *msg,
-				     int flags)
-{
-	return INDIRECT_CALL_INET(sock->ops->recvmsg, inet6_recvmsg,
-				  inet_recvmsg, sock, msg, msg_data_left(msg),
-				  flags);
-}
-```
-
-inet_recvmsg calls:
-
-1. tcp_recvmsg
-2. udp_recvmsg
-
-```c
-// net/ipv4/af_inet.c
-int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
-		 int flags)
-{
-	struct sock *sk = sock->sk;
-	int addr_len = 0;
-	int err;
-
-	err = INDIRECT_CALL_2(sk->sk_prot->recvmsg, tcp_recvmsg, udp_recvmsg,
-			      sk, msg, size, flags & MSG_DONTWAIT,
-			      flags & ~MSG_DONTWAIT, &addr_len);
-	if (err >= 0)
-		msg->msg_namelen = addr_len;
-	return err;
-}
-```
-
-inet6_recvmsg calls:
-
-1. tcp_recvmsg
-2. udpv6_recvmsg
-
-```c
-// net/ipv6/af_inet6.c
-int inet6_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
-		  int flags)
-{
-	struct sock *sk = sock->sk;
-	int addr_len = 0;
-	int err;
-
-	err = INDIRECT_CALL_2(sk->sk_prot->recvmsg, tcp_recvmsg, udpv6_recvmsg,
-			      sk, msg, size, flags & MSG_DONTWAIT,
-			      flags & ~MSG_DONTWAIT, &addr_len);
-	if (err >= 0)
-		msg->msg_namelen = addr_len;
-	return err;
-}
-```
-
-### tcp_v4_rcv
-
-1. not PACKET_HOST, discard
-2. copy to skb
-3. get tcp header and valid it
-4. inet lookup: check if in ehash or bhash
-5. do time wait if sk_state == TCP_TIME_WAIT
-6. do if sk_state == TCP_NEW_SYN_RECV
-7. do tcp_v4_do_rcv if sk_state == TCP_LISTEN
-8. lock sock
-9. if user own sock
-   - not: tcp_v4_do_rcv
-   - else: tcp_add_backlog
-10. unlock sock
 
 ```c
 
 int tcp_v4_rcv(struct sk_buff *skb)
 {
-	struct net *net = dev_net(skb->dev);
-	struct sk_buff *skb_to_free;
-	int sdif = inet_sdif(skb);
-	int dif = inet_iif(skb);
-	const struct iphdr *iph;
-	const struct tcphdr *th;
-	bool refcounted;
-	struct sock *sk;
-	int ret;
-
-	if (skb->pkt_type != PACKET_HOST)
-		goto discard_it;
-
-	/* Count it even if it's bad */
-	__TCP_INC_STATS(net, TCP_MIB_INSEGS);
-
-	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
-		goto discard_it;
-
-	th = (const struct tcphdr *)skb->data;
-
-	if (unlikely(th->doff < sizeof(struct tcphdr) / 4))
-		goto bad_packet;
-	if (!pskb_may_pull(skb, th->doff * 4))
-		goto discard_it;
-
-	/* An explanation is required here, I think.
-	 * Packet length and doff are validated by header prediction,
-	 * provided case of th->doff==0 is eliminated.
-	 * So, we defer the checks. */
-
-	if (skb_checksum_init(skb, IPPROTO_TCP, inet_compute_pseudo))
-		goto csum_error;
-
-	th = (const struct tcphdr *)skb->data;
-	iph = ip_hdr(skb);
-lookup:
-	sk = __inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th), th->source,
+    ...
+	__inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th), th->source,
 			       th->dest, sdif, &refcounted);
-	if (!sk)
-		goto no_tcp_socket;
-
-process:
-	if (sk->sk_state == TCP_TIME_WAIT)
-		goto do_time_wait;
-
-	if (sk->sk_state == TCP_NEW_SYN_RECV) {
-		struct request_sock *req = inet_reqsk(sk);
-		bool req_stolen = false;
-		struct sock *nsk;
-
-		sk = req->rsk_listener;
-		if (unlikely(tcp_v4_inbound_md5_hash(sk, skb, dif, sdif))) {
-			sk_drops_add(sk, skb);
-			reqsk_put(req);
-			goto discard_it;
-		}
-		if (tcp_checksum_complete(skb)) {
-			reqsk_put(req);
-			goto csum_error;
-		}
-		if (unlikely(sk->sk_state != TCP_LISTEN)) {
-			inet_csk_reqsk_queue_drop_and_put(sk, req);
-			goto lookup;
-		}
-		/* We own a reference on the listener, increase it again
-		 * as we might lose it too soon.
-		 */
-		sock_hold(sk);
-		refcounted = true;
-		nsk = NULL;
-		if (!tcp_filter(sk, skb)) {
-			th = (const struct tcphdr *)skb->data;
-			iph = ip_hdr(skb);
-			tcp_v4_fill_cb(skb, iph, th);
-			nsk = tcp_check_req(sk, skb, req, false, &req_stolen);
-		}
-		if (!nsk) {
-			reqsk_put(req);
-			if (req_stolen) {
-				/* Another cpu got exclusive access to req
-				 * and created a full blown socket.
-				 * Try to feed this packet to this socket
-				 * instead of discarding it.
-				 */
-				tcp_v4_restore_cb(skb);
-				sock_put(sk);
-				goto lookup;
-			}
-			goto discard_and_relse;
-		}
-		if (nsk == sk) {
-			reqsk_put(req);
-			tcp_v4_restore_cb(skb);
-		} else if (tcp_child_process(sk, nsk, skb)) {
-			tcp_v4_send_reset(nsk, skb);
-			goto discard_and_relse;
-		} else {
-			sock_put(sk);
-			return 0;
-		}
-	}
-	if (unlikely(iph->ttl < inet_sk(sk)->min_ttl)) {
-		__NET_INC_STATS(net, LINUX_MIB_TCPMINTTLDROP);
-		goto discard_and_relse;
-	}
-
-	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
-		goto discard_and_relse;
-
-	if (tcp_v4_inbound_md5_hash(sk, skb, dif, sdif))
-		goto discard_and_relse;
-
-	nf_reset_ct(skb);
-
-	if (tcp_filter(sk, skb))
-		goto discard_and_relse;
-	th = (const struct tcphdr *)skb->data;
-	iph = ip_hdr(skb);
-	tcp_v4_fill_cb(skb, iph, th);
-
-	skb->dev = NULL;
-
-	if (sk->sk_state == TCP_LISTEN) {
-		ret = tcp_v4_do_rcv(sk, skb);
-		goto put_and_return;
-	}
-
-	sk_incoming_cpu_update(sk);
-
-	bh_lock_sock_nested(sk);
-	tcp_segs_in(tcp_sk(sk), skb);
-	ret = 0;
+	...
 	if (!sock_owned_by_user(sk)) {
-		skb_to_free = sk->sk_rx_skb_cache;
-		sk->sk_rx_skb_cache = NULL;
 		ret = tcp_v4_do_rcv(sk, skb);
-	} else {
-		if (tcp_add_backlog(sk, skb))
-			goto discard_and_relse;
-		skb_to_free = NULL;
 	}
-	bh_unlock_sock(sk);
-	if (skb_to_free)
-		__kfree_skb(skb_to_free);
+	...
 }
 
-```
-
-#### inet_lookup
-
-```c
-// include/net/inet_hashtables.h
-static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
-					     struct sk_buff *skb,
-					     int doff,
-					     const __be16 sport,
-					     const __be16 dport,
-					     const int sdif,
-					     bool *refcounted)
-{
-	struct sock *sk = skb_steal_sock(skb, refcounted);
-	const struct iphdr *iph = ip_hdr(skb);
-
-	if (sk)
-		return sk;
-
-	return __inet_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
-			     doff, iph->saddr, sport,
-			     iph->daddr, dport, inet_iif(skb), sdif,
-			     refcounted);
-}
-
-static inline struct sock *__inet_lookup(struct net *net,
-					 struct inet_hashinfo *hashinfo,
-					 struct sk_buff *skb, int doff,
-					 const __be32 saddr, const __be16 sport,
-					 const __be32 daddr, const __be16 dport,
-					 const int dif, const int sdif,
-					 bool *refcounted)
-{
-	u16 hnum = ntohs(dport);
-	struct sock *sk;
-
-	sk = __inet_lookup_established(net, hashinfo, saddr, sport,
-				       daddr, hnum, dif, sdif);
-	*refcounted = true;
-	if (sk)
-		return sk;
-	*refcounted = false;
-	return __inet_lookup_listener(net, hashinfo, skb, doff, saddr,
-				      sport, daddr, hnum, dif, sdif);
-}
-```
-
-##### inet_lookup_established
-
-```c
-// net/ipv4/inet_hashtables.c
-struct sock *__inet_lookup_established(struct net *net,
-				  struct inet_hashinfo *hashinfo,
-				  const __be32 saddr, const __be16 sport,
-				  const __be32 daddr, const u16 hnum,
-				  const int dif, const int sdif)
-{
-	INET_ADDR_COOKIE(acookie, saddr, daddr);
-	const __portpair ports = INET_COMBINED_PORTS(sport, hnum);
-	struct sock *sk;
-	const struct hlist_nulls_node *node;
-	/* Optimize here for direct hit, only listening connections can
-	 * have wildcards anyways.
-	 */
-	unsigned int hash = inet_ehashfn(net, daddr, hnum, saddr, sport);
-	unsigned int slot = hash & hashinfo->ehash_mask;
-	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];
-
-begin:
-	sk_nulls_for_each_rcu(sk, node, &head->chain) {
-		if (sk->sk_hash != hash)
-			continue;
-		if (likely(INET_MATCH(sk, net, acookie,
-				      saddr, daddr, ports, dif, sdif))) {
-			if (unlikely(!refcount_inc_not_zero(&sk->sk_refcnt)))
-				goto out;
-			if (unlikely(!INET_MATCH(sk, net, acookie,
-						 saddr, daddr, ports,
-						 dif, sdif))) {
-				sock_gen_put(sk);
-				goto begin;
-			}
-			goto found;
-		}
-	}
-	/*
-	 * if the nulls value we got at the end of this lookup is
-	 * not the expected one, we must restart lookup.
-	 * We probably met an item that was moved to another chain.
-	 */
-	if (get_nulls_value(node) != slot)
-		goto begin;
-out:
-	sk = NULL;
-found:
-	return sk;
-}
-```
-
-##### inet_lookup_listener
-
-```c
-
-struct sock *__inet_lookup_listener(struct net *net,
-				    struct inet_hashinfo *hashinfo,
-				    struct sk_buff *skb, int doff,
-				    const __be32 saddr, __be16 sport,
-				    const __be32 daddr, const unsigned short hnum,
-				    const int dif, const int sdif)
-{
-	struct inet_listen_hashbucket *ilb2;
-	struct sock *result = NULL;
-	unsigned int hash2;
-
-	/* Lookup redirect from BPF */
-	if (static_branch_unlikely(&bpf_sk_lookup_enabled)) {
-		result = inet_lookup_run_bpf(net, hashinfo, skb, doff,
-					     saddr, sport, daddr, hnum);
-		if (result)
-			goto done;
-	}
-
-	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
-	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
-
-	result = inet_lhash2_lookup(net, ilb2, skb, doff,
-				    saddr, sport, daddr, hnum,
-				    dif, sdif);
-	if (result)
-		goto done;
-
-	/* Lookup lhash2 with INADDR_ANY */
-	hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
-	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
-
-	result = inet_lhash2_lookup(net, ilb2, skb, doff,
-				    saddr, sport, htonl(INADDR_ANY), hnum,
-				    dif, sdif);
-done:
-	if (IS_ERR(result))
-		return NULL;
-	return result;
-}
-```
-
-```c
-// include/net/inet_hashtables.h
-#define INET_MATCH(__sk, __net, __cookie, __saddr, __daddr, __ports, __dif, __sdif) \
-	(((__sk)->sk_portpair == (__ports))		&&		\
-	 ((__sk)->sk_daddr	== (__saddr))		&&		\
-	 ((__sk)->sk_rcv_saddr	== (__daddr))		&&		\
-	 (((__sk)->sk_bound_dev_if == (__dif))		||		\
-	  ((__sk)->sk_bound_dev_if == (__sdif)))	&&		\
-	 net_eq(sock_net(__sk), (__net)))
-#endif /* 64-bit arch */
-```
-
-#### tcp_v4_do_rcv
-
-The socket must have it's spinlock held when we get here, unless it is a TCP_LISTEN socket.
-
-We have a potential double-lock case here, so even when doing backlog processing we use the BH locking scheme. This is because we cannot sleep with the original spinlock held.
-
-```c
 // 
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 {
-       struct sock *rsk;
-
-       if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
-              struct dst_entry *dst = sk->sk_rx_dst;
-
-              sock_rps_save_rxhash(sk, skb);
-              sk_mark_napi_id(sk, skb);
-              if (dst) {
-                     if (inet_sk(sk)->rx_dst_ifindex != skb->skb_iif ||
-                         !INDIRECT_CALL_1(dst->ops->check, ipv4_dst_check,
-                                        dst, 0)) {
-                            dst_release(dst);
-                            sk->sk_rx_dst = NULL;
-                     }
-              }
-              tcp_rcv_established(sk, skb);
-              return 0;
-       }
-
-       if (tcp_checksum_complete(skb))
-              goto csum_err;
-
-       if (sk->sk_state == TCP_LISTEN) {
-              struct sock *nsk = tcp_v4_cookie_check(sk, skb);
-
-              if (!nsk)
-                     goto discard;
-              if (nsk != sk) {
-                     if (tcp_child_process(sk, nsk, skb)) {
-                            rsk = nsk;
-                            goto reset;
-                     }
-                     return 0;
-              }
-       } else
-              sock_rps_save_rxhash(sk, skb);
-
-       if (tcp_rcv_state_process(sk, skb)) {
-              rsk = sk;
-              goto reset;
-       }
-       return 0;
-
-reset:
-       tcp_v4_send_reset(rsk, skb);
-discard:
-       kfree_skb(skb);
-       /* Be careful here. If this function gets more complicated and
-        * gcc suffers from register pressure on the x86, sk (in %ebx)
-        * might be destroyed here. This current version compiles correctly,
-        * but you have been warned.
-        */
-       return 0;
-
-csum_err:
-       TCP_INC_STATS(sock_net(sk), TCP_MIB_CSUMERRORS);
-       TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
-       goto discard;
+    if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
+        tcp_rcv_established(sk, skb);
+    }
+    ...
 }
 ```
 
-### tcp_rcv_established
 
 TCP receive function for the ESTABLISHED state.
-It is split into a fast path and a slow path. The fast path is
-disabled when:
-
-- A zero window was announced from us - zero window probing
-  is only handled properly in the slow path.
-- Out of order segments arrived.
-- Urgent data is expected.
-- There is no buffer space left
-- Unexpected TCP flags/window values/header lengths are received
-  (detected by checking the TCP header against pred_flags)
-- Data is sent in both directions. Fast path only supports pure senders
-  or pure receivers (this means either the sequence number or the ack
-  value must stay constant)
-- Unexpected TCP option.
-
-When these conditions are not satisfied it drops into a standard
-receive procedure patterned after RFC793 to handle all cases.
-The first three cases are guaranteed by proper pred_flags setting,
-the rest is checked inline. Fast processing is turned on in
-tcp_data_queue when everything is OK.
 
 1. `tcp_queue_rcv`
 2. `tcp_data_ready`
@@ -1135,181 +697,13 @@ tcp_data_queue when everything is OK.
 // net/ipv4/tcp_input.c
 void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 {
-	const struct tcphdr *th = (const struct tcphdr *)skb->data;
-	struct tcp_sock *tp = tcp_sk(sk);
-	unsigned int len = skb->len;
+    ...
+    /* Bulk data transfer: receiver */
+    __skb_pull(skb, tcp_header_len);
+    tcp_queue_rcv(sk, skb, &fragstolen);
 
-	/* TCP congestion window tracking */
-	trace_tcp_probe(sk, skb);
-
-	tcp_mstamp_refresh(tp);
-	if (unlikely(!sk->sk_rx_dst))
-		inet_csk(sk)->icsk_af_ops->sk_rx_dst_set(sk, skb);
-	/*
-	 *	Header prediction.
-	 *	The code loosely follows the one in the famous
-	 *	"30 instruction TCP receive" Van Jacobson mail.
-	 *
-	 *	Van's trick is to deposit buffers into socket queue
-	 *	on a device interrupt, to call tcp_recv function
-	 *	on the receive process context and checksum and copy
-	 *	the buffer to user space. smart...
-	 *
-	 *	Our current scheme is not silly either but we take the
-	 *	extra cost of the net_bh soft interrupt processing...
-	 *	We do checksum and copy also but from device to kernel.
-	 */
-
-	tp->rx_opt.saw_tstamp = 0;
-
-	/*	pred_flags is 0xS?10 << 16 + snd_wnd
-	 *	if header_prediction is to be made
-	 *	'S' will always be tp->tcp_header_len >> 2
-	 *	'?' will be 0 for the fast path, otherwise pred_flags is 0 to
-	 *  turn it off	(when there are holes in the receive
-	 *	 space for instance)
-	 *	PSH flag is ignored.
-	 */
-
-	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags &&
-	    TCP_SKB_CB(skb)->seq == tp->rcv_nxt &&
-	    !after(TCP_SKB_CB(skb)->ack_seq, tp->snd_nxt)) {
-		int tcp_header_len = tp->tcp_header_len;
-
-		/* Timestamp header prediction: tcp_header_len
-		 * is automatically equal to th->doff*4 due to pred_flags
-		 * match.
-		 */
-
-		/* Check timestamp */
-		if (tcp_header_len == sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) {
-			/* No? Slow path! */
-			if (!tcp_parse_aligned_timestamp(tp, th))
-				goto slow_path;
-
-			/* If PAWS failed, check it more carefully in slow path */
-			if ((s32)(tp->rx_opt.rcv_tsval - tp->rx_opt.ts_recent) < 0)
-				goto slow_path;
-
-			/* DO NOT update ts_recent here, if checksum fails
-			 * and timestamp was corrupted part, it will result
-			 * in a hung connection since we will drop all
-			 * future packets due to the PAWS test.
-			 */
-		}
-
-		if (len <= tcp_header_len) {
-			/* Bulk data transfer: sender */
-			if (len == tcp_header_len) {
-				/* Predicted packet is in window by definition.
-				 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
-				 * Hence, check seq<=rcv_wup reduces to:
-				 */
-				if (tcp_header_len ==
-				    (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) &&
-				    tp->rcv_nxt == tp->rcv_wup)
-					tcp_store_ts_recent(tp);
-
-				/* We know that such packets are checksummed
-				 * on entry.
-				 */
-				tcp_ack(sk, skb, 0);
-				__kfree_skb(skb);
-				tcp_data_snd_check(sk);
-				/* When receiving pure ack in fast path, update
-				 * last ts ecr directly instead of calling
-				 * tcp_rcv_rtt_measure_ts()
-				 */
-				tp->rcv_rtt_last_tsecr = tp->rx_opt.rcv_tsecr;
-				return;
-			} else { /* Header too small */
-				TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
-				goto discard;
-			}
-		} else {
-			int eaten = 0;
-			bool fragstolen = false;
-
-			if (tcp_checksum_complete(skb))
-				goto csum_error;
-
-			if ((int)skb->truesize > sk->sk_forward_alloc)
-				goto step5;
-
-			/* Predicted packet is in window by definition.
-			 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
-			 * Hence, check seq<=rcv_wup reduces to:
-			 */
-			if (tcp_header_len ==
-			    (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) &&
-			    tp->rcv_nxt == tp->rcv_wup)
-				tcp_store_ts_recent(tp);
-
-			tcp_rcv_rtt_measure_ts(sk, skb);
-
-			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPHPHITS);
-
-			/* Bulk data transfer: receiver */
-			__skb_pull(skb, tcp_header_len);
-			eaten = tcp_queue_rcv(sk, skb, &fragstolen);
-
-			tcp_event_data_recv(sk, skb);
-
-			if (TCP_SKB_CB(skb)->ack_seq != tp->snd_una) {
-				/* Well, only one small jumplet in fast path... */
-				tcp_ack(sk, skb, FLAG_DATA);
-				tcp_data_snd_check(sk);
-				if (!inet_csk_ack_scheduled(sk))
-					goto no_ack;
-			} else {
-				tcp_update_wl(tp, TCP_SKB_CB(skb)->seq);
-			}
-
-			__tcp_ack_snd_check(sk, 0);
-no_ack:
-			if (eaten)
-				kfree_skb_partial(skb, fragstolen);
-			tcp_data_ready(sk);
-			return;
-		}
-	}
-
-slow_path:
-	if (len < (th->doff << 2) || tcp_checksum_complete(skb))
-		goto csum_error;
-
-	if (!th->ack && !th->rst && !th->syn)
-		goto discard;
-
-	/*
-	 *	Standard slow path.
-	 */
-	if (!tcp_validate_incoming(sk, skb, th, 1))
-		return;
-
-step5:
-	if (tcp_ack(sk, skb, FLAG_SLOWPATH | FLAG_UPDATE_TS_RECENT) < 0)
-		goto discard;
-
-	tcp_rcv_rtt_measure_ts(sk, skb);
-
-	/* Process urgent data. */
-	tcp_urg(sk, skb, th);
-
-	/* step 7: process the segment text */
-	tcp_data_queue(sk, skb);
-
-	tcp_data_snd_check(sk);
-	tcp_ack_snd_check(sk);
-	return;
-
-csum_error:
-	trace_tcp_bad_csum(skb);
-	TCP_INC_STATS(sock_net(sk), TCP_MIB_CSUMERRORS);
-	TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
-
-discard:
-	tcp_drop(sk, skb);
+    tcp_event_data_recv(sk, skb);
+    ...
 }
 ```
 
@@ -1320,13 +714,7 @@ discard:
 static int __must_check tcp_queue_rcv(struct sock *sk, struct sk_buff *skb,
 				      bool *fragstolen)
 {
-	int eaten;
-	struct sk_buff *tail = skb_peek_tail(&sk->sk_receive_queue);
-
-	eaten = (tail &&
-		 tcp_try_coalesce(sk, tail,
-				  skb, fragstolen)) ? 1 : 0;
-	tcp_rcv_nxt_update(tcp_sk(sk), TCP_SKB_CB(skb)->end_seq);
+	...
 	if (!eaten) {
 		__skb_queue_tail(&sk->sk_receive_queue, skb);
 		skb_set_owner_r(skb, sk);
@@ -1363,281 +751,6 @@ void sock_def_readable(struct sock *sk)
 ```
 
 `wake_up_interruptible_sync_poll` see Thundering Herd
-
-### tcp_recvmsg
-
-`recvfrom` -> `inet_recvmsg` -> `tcp_recvmsg`
-
-```c
-int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
-              int flags, int *addr_len)
-{
-       ret = tcp_recvmsg_locked(sk, msg, len, nonblock, flags, &tss,
-                             &cmsg_flags);
-}
-
-static int tcp_recvmsg_locked(struct sock *sk, struct msghdr *msg, size_t len,
-			      int nonblock, int flags,
-			      struct scm_timestamping_internal *tss,
-			      int *cmsg_flags)
-{
-	struct tcp_sock *tp = tcp_sk(sk);
-	int copied = 0;
-	u32 peek_seq;
-	u32 *seq;
-	unsigned long used;
-	int err;
-	int target;		/* Read at least this many bytes */
-	long timeo;
-	struct sk_buff *skb, *last;
-	u32 urg_hole = 0;
-
-	err = -ENOTCONN;
-	if (sk->sk_state == TCP_LISTEN)
-		goto out;
-
-	if (tp->recvmsg_inq)
-		*cmsg_flags = TCP_CMSG_INQ;
-	timeo = sock_rcvtimeo(sk, nonblock);
-
-	/* Urgent data needs to be handled specially. */
-	if (flags & MSG_OOB)
-		goto recv_urg;
-
-	if (unlikely(tp->repair)) {
-		err = -EPERM;
-		if (!(flags & MSG_PEEK))
-			goto out;
-
-		if (tp->repair_queue == TCP_SEND_QUEUE)
-			goto recv_sndq;
-
-		err = -EINVAL;
-		if (tp->repair_queue == TCP_NO_QUEUE)
-			goto out;
-
-		/* 'common' recv queue MSG_PEEK-ing */
-	}
-
-	seq = &tp->copied_seq;
-	if (flags & MSG_PEEK) {
-		peek_seq = tp->copied_seq;
-		seq = &peek_seq;
-	}
-
-	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
-
-	do {
-		u32 offset;
-
-		/* Are we at urgent data? Stop if we have read anything or have SIGURG pending. */
-		if (tp->urg_data && tp->urg_seq == *seq) {
-			if (copied)
-				break;
-			if (signal_pending(current)) {
-				copied = timeo ? sock_intr_errno(timeo) : -EAGAIN;
-				break;
-			}
-		}
-
-		/* Next get a buffer. */
-
-		last = skb_peek_tail(&sk->sk_receive_queue);
-		skb_queue_walk(&sk->sk_receive_queue, skb) {
-			last = skb;
-			/* Now that we have two receive queues this
-			 * shouldn't happen.
-			 */
-			if (WARN(before(*seq, TCP_SKB_CB(skb)->seq),
-				 "TCP recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
-				 *seq, TCP_SKB_CB(skb)->seq, tp->rcv_nxt,
-				 flags))
-				break;
-
-			offset = *seq - TCP_SKB_CB(skb)->seq;
-			if (unlikely(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
-				pr_err_once("%s: found a SYN, please report !\n", __func__);
-				offset--;
-			}
-			if (offset < skb->len)
-				goto found_ok_skb;
-			if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
-				goto found_fin_ok;
-			WARN(!(flags & MSG_PEEK),
-			     "TCP recvmsg seq # bug 2: copied %X, seq %X, rcvnxt %X, fl %X\n",
-			     *seq, TCP_SKB_CB(skb)->seq, tp->rcv_nxt, flags);
-		}
-
-		/* Well, if we have backlog, try to process it now yet. */
-
-		if (copied >= target && !READ_ONCE(sk->sk_backlog.tail))
-			break;
-
-		if (copied) {
-			if (sk->sk_err ||
-			    sk->sk_state == TCP_CLOSE ||
-			    (sk->sk_shutdown & RCV_SHUTDOWN) ||
-			    !timeo ||
-			    signal_pending(current))
-				break;
-		} else {
-			if (sock_flag(sk, SOCK_DONE))
-				break;
-
-			if (sk->sk_err) {
-				copied = sock_error(sk);
-				break;
-			}
-
-			if (sk->sk_shutdown & RCV_SHUTDOWN)
-				break;
-
-			if (sk->sk_state == TCP_CLOSE) {
-				/* This occurs when user tries to read
-				 * from never connected socket.
-				 */
-				copied = -ENOTCONN;
-				break;
-			}
-
-			if (!timeo) {
-				copied = -EAGAIN;
-				break;
-			}
-
-			if (signal_pending(current)) {
-				copied = sock_intr_errno(timeo);
-				break;
-			}
-		}
-
-		tcp_cleanup_rbuf(sk, copied);
-
-		if (copied >= target) {
-			/* Do not sleep, just process backlog. */
-			release_sock(sk);
-			lock_sock(sk);
-		} else { /* Wait if none enough data */
-			sk_wait_data(sk, &timeo, last);
-		}
-
-		if ((flags & MSG_PEEK) &&
-		    (peek_seq - copied - urg_hole != tp->copied_seq)) {
-			net_dbg_ratelimited("TCP(%s:%d): Application bug, race in MSG_PEEK\n",
-					    current->comm,
-					    task_pid_nr(current));
-			peek_seq = tp->copied_seq;
-		}
-		continue;
-
-found_ok_skb:
-		/* Ok so how much can we use? */
-		used = skb->len - offset;
-		if (len < used)
-			used = len;
-
-		/* Do we have urgent data here? */
-		if (tp->urg_data) {
-			u32 urg_offset = tp->urg_seq - *seq;
-			if (urg_offset < used) {
-				if (!urg_offset) {
-					if (!sock_flag(sk, SOCK_URGINLINE)) {
-						WRITE_ONCE(*seq, *seq + 1);
-						urg_hole++;
-						offset++;
-						used--;
-						if (!used)
-							goto skip_copy;
-					}
-				} else
-					used = urg_offset;
-			}
-		}
-
-		if (!(flags & MSG_TRUNC)) {
-			err = skb_copy_datagram_msg(skb, offset, msg, used);
-			if (err) {
-				/* Exception. Bailout! */
-				if (!copied)
-					copied = -EFAULT;
-				break;
-			}
-		}
-
-		WRITE_ONCE(*seq, *seq + used);
-		copied += used;
-		len -= used;
-
-		tcp_rcv_space_adjust(sk);
-
-skip_copy:
-		if (tp->urg_data && after(tp->copied_seq, tp->urg_seq)) {
-			tp->urg_data = 0;
-			tcp_fast_path_check(sk);
-		}
-
-		if (TCP_SKB_CB(skb)->has_rxtstamp) {
-			tcp_update_recv_tstamps(skb, tss);
-			*cmsg_flags |= TCP_CMSG_TS;
-		}
-
-		if (used + offset < skb->len)
-			continue;
-
-		if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
-			goto found_fin_ok;
-		if (!(flags & MSG_PEEK))
-			sk_eat_skb(sk, skb);
-		continue;
-
-found_fin_ok:
-		/* Process the FIN. */
-		WRITE_ONCE(*seq, *seq + 1);
-		if (!(flags & MSG_PEEK))
-			sk_eat_skb(sk, skb);
-		break;
-	} while (len > 0);
-
-	/* According to UNIX98, msg_name/msg_namelen are ignored
-	 * on connected socket. I was just happy when found this 8) --ANK
-	 */
-
-	/* Clean up data we have read: This will do ACK frames. */
-	tcp_cleanup_rbuf(sk, copied);
-	return copied;
-
-out:
-	return err;
-
-recv_urg:
-	err = tcp_recv_urg(sk, msg, len, flags);
-	goto out;
-
-recv_sndq:
-	err = tcp_peek_sndq(sk, msg, len);
-	goto out;
-}
-```
-
-#### sk_wait_data
-
-wait for data to arrive at sk_receive_queue
-
-```c
-int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
-{
-	DEFINE_WAIT_FUNC(wait, woken_wake_function);
-	int rc;
-
-	add_wait_queue(sk_sleep(sk), &wait);
-	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);
-
-  sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
-	remove_wait_queue(sk_sleep(sk), &wait);
-	return rc;
-}
-```
 
 ## Client Connect
 
