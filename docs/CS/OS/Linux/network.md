@@ -130,7 +130,6 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 
 ### init driver
 
-
 A driver registers an initialization function which is called by the kernel when the driver is loaded.
 This function is registered by using the module_init macro.
 <br/>
@@ -391,7 +390,6 @@ static int igb_request_msix(struct igb_adapter *adapter)
 
 ### send
 
-
 Send a datagram down a socket.
 
 ```c
@@ -535,20 +533,20 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 
 transmit a buffer
 
-Queue a buffer for transmission to a network device. 
+Queue a buffer for transmission to a network device.
 The caller must have set the device and priority and built the buffer before calling this function.
 The function can be called from an interrupt.
 
-A negative errno code is returned on a failure. 
+A negative errno code is returned on a failure.
 A success does not guarantee the frame will be transmitted as it may be dropped due to congestion or traffic shaping.
 
-I notice this method can also return errors from the queue disciplines, including NET_XMIT_DROP, which is a positive value.  
+I notice this method can also return errors from the queue disciplines, including NET_XMIT_DROP, which is a positive value.
 So, errors can also be positive.
 
 Regardless of the return value, the skb is consumed, so it is currently difficult to retry a send to this method.
 (You can bump the ref count before sending to hold a reference for retry if you are careful.)
 
-When calling this method, interrupts MUST be enabled.  
+When calling this method, interrupts MUST be enabled.
 This is because the BH enable code must have IRQs enabled so that it will not deadlock.
 
 ```c
@@ -862,6 +860,7 @@ TODO: [tcp-rcv](https://www.processon.com/diagraming/6195c8be07912906e6ab82c8)
 ### driver process
 
 #### igb_msix_ring
+
 Hard interrupt
 
 Driver will `schedule a NAPI`(raise a `soft IRQ (NET_RX_SOFTIRQ)`).
@@ -1142,6 +1141,8 @@ tail skb queue and invoke func `sk_data_ready`([sock_def_readable](/docs/CS/OS/L
 <!-- tabs:start -->
 
 ##### **tcp_v4_rcv**
+
+tcp_queue_rcv and sk_data_ready in [tcp_rcv_established](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_established)
 
 ```c
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)

@@ -171,7 +171,6 @@ struct proto tcp_prot = {
 
 [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) with TCP protocol -> tcp_sendmsg
 
-
 ```c
 // net/ipv4/tcp.c
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
@@ -195,7 +194,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 
 		if (copy <= 0 || !tcp_skb_can_collapse_to(skb)) {
         ...
-        
+      
 			skb = sk_stream_alloc_skb(sk, 0, sk->sk_allocation,
 						  first_skb);
 			process_backlog++;
@@ -264,7 +263,7 @@ void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
 
 #### tcp_write_xmit
 
-This routine writes packets to the network.  
+This routine writes packets to the network.
 It advances the send_head.  This happens as incoming acks open up the remote window for us.
 
 LARGESEND note: !tcp_urg_mode is overkill, only frames between snd_up-64k-mss .. snd_up cannot be large. However, taking into account rare use of URG, this is not a big flaw.
@@ -280,10 +279,10 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
                         int push_one, gfp_t gfp)
 {
        ...
-       
+     
        while ((skb = tcp_send_head(sk))) {
               cwnd_quota = tcp_cwnd_test(tp, skb);
-             
+           
               tcp_snd_wnd_test(tp, skb, mss_now);
 
               tcp_mss_split_point(sk, skb, mss_now,
@@ -307,14 +306,14 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 
 #### tcp_transmit_skb
 
-This routine actually transmits TCP packets queued in by tcp_do_sendmsg().  
+This routine actually transmits TCP packets queued in by tcp_do_sendmsg().
 This is used by both the initial transmission and possible later retransmissions.
 
-All SKB's seen here are completely headerless. 
+All SKB's seen here are completely headerless.
 It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/IP.md?id=ip_queue_xmit)** so it can do the same plus pass the packet off to the device.
 
 > [!NOTE]
-> 
+>
 > We are working here with either a clone of the original SKB, or a fresh unique copy made by the retransmit engine.
 
 ```c
@@ -353,8 +352,6 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 				 sk, skb, &inet->cork.fl);
 }
 ```
-
-
 
 ### FastOpen
 
@@ -410,6 +407,7 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 ```
 
 ### Window
+
 #### select window
 
 Chose a new window to advertise, update state in tcp_sock for the socket, and return result with RFC1323 scaling applied.
@@ -655,13 +653,9 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 }
 ```
 
-from dev
-
-`ip_rcv` -> ip_rcv_finish -> dst_input -> ip_local_deliver -> [tcp_v4_rcv](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_rcv)
--> ip_forward -> ip_forward_finish -> [ip_output](/docs/CS/OS/Linux/IP.md?id=ip_output)
-
 ### tcp_rcv_established
 
+From dev [ip_local_deliver](/docs/CS/OS/Linux/network.md?id=ip_local_deliver)
 
 ```c
 
@@ -686,7 +680,6 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
     ...
 }
 ```
-
 
 TCP receive function for the ESTABLISHED state.
 
@@ -810,7 +803,6 @@ void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
 }
 
 ```
-
 
 ## retry
 
