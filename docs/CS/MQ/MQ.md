@@ -305,7 +305,7 @@ sendfile
 - Tailing Read
 - Catch-up Read
 
-### High Avaliability
+### High Availability
 
 RabbitMQ
 
