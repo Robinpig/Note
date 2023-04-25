@@ -718,6 +718,8 @@ static int __must_check tcp_queue_rcv(struct sock *sk, struct sk_buff *skb,
 
 #### tcp_data_ready
 
+Call [sk_data_ready](/docs/CS/OS/Linux/network.md?id=sk_data_ready)
+
 ```c
 void tcp_data_ready(struct sock *sk)
 {
@@ -726,24 +728,6 @@ void tcp_data_ready(struct sock *sk)
 }
 ```
 
-`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/socket.md?id=sock_init_data)
-
-```c
-void sock_def_readable(struct sock *sk)
-{
-	struct socket_wq *wq;
-
-	rcu_read_lock();
-	wq = rcu_dereference(sk->sk_wq);
-	if (skwq_has_sleeper(wq))
-		wake_up_interruptible_sync_poll(&wq->wait, EPOLLIN | EPOLLPRI |
-						EPOLLRDNORM | EPOLLRDBAND);
-	sk_wake_async(sk, SOCK_WAKE_WAITD, POLL_IN);
-	rcu_read_unlock();
-}
-```
-
-`wake_up_interruptible_sync_poll` see Thundering Herd
 
 ## Client Connect
 

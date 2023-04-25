@@ -2,8 +2,6 @@
 
 thundering herd
 
-
-
 ## Common
 
 ### wait
@@ -28,8 +26,6 @@ prepare_to_wait_exclusive(struct wait_queue_head *wq_head, struct wait_queue_ent
 EXPORT_SYMBOL(prepare_to_wait_exclusive);
 ```
 
-
-
 ```c
 /* wait_queue_entry::flags */
 #define WQ_FLAG_EXCLUSIVE      0x01
@@ -41,8 +37,6 @@ EXPORT_SYMBOL(prepare_to_wait_exclusive);
 ```
 
 ### wake
-
-
 
 ```c
 /**
@@ -84,17 +78,17 @@ void __wake_up(struct wait_queue_head *wq_head, unsigned int mode,
 }
 ```
 
-
-
 #### wake_up_common
 
-The core wakeup function. Non-exclusive wakeups (nr_exclusive == 0) just wake everything up. If it's an exclusive wakeup (nr_exclusive == small +ve number) then we wake that number of exclusive tasks, and potentially all the non-exclusive tasks. Normally, exclusive tasks will be at the end of the list and any non-exclusive tasks will be woken first. A priority task may be at the head of the list, and can consume the event without any other tasks being woken.
+The core wakeup function.
+Non-exclusive wakeups (nr_exclusive == 0) just wake everything up.
+If it's an exclusive wakeup (nr_exclusive == small +ve number) then we wake that number of exclusive tasks, and potentially all the non-exclusive tasks.
+Normally, exclusive tasks will be at the end of the list and any non-exclusive tasks will be woken first.
+A priority task may be at the head of the list, and can consume the event without any other tasks being woken.
 
 There are circumstances in which we can try to wake a task which has already started to run but is not in state TASK_RUNNING. `try_to_wake_up()` returns zero in this (rare) case, and we handle it by continuing to scan the queue.
 
-call func:
-
-- if use [epoll](), callback is `ep_poll_callback`
+call `wait_queue_entry.func`:
 
 ```c
 // wait.c
@@ -105,7 +99,6 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
        wait_queue_entry_t *curr, *next;
        int cnt = 0;
 
-       lockdep_assert_held(&wq_head->lock);
 
        if (bookmark && (bookmark->flags & WQ_FLAG_BOOKMARK)) {
               curr = list_next_entry(bookmark, entry);
@@ -142,10 +135,6 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
        return nr_exclusive;
 }
 ```
-
-
-
-
 
 #### try_to_wake_up
 
@@ -271,8 +260,6 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
  *        %false otherwise.
  */ 
 ```
-
-
 
 ```c
 static int
@@ -441,10 +428,7 @@ out:
 }
 ```
 
-
-
 ### autoremove_wake_function
-
 
 ```c
 // wait.h
@@ -467,7 +451,6 @@ out:
 	} while (0)
 ```
 
-
 ```c
 // wait.c
 int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key)
@@ -482,8 +465,6 @@ int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, i
 EXPORT_SYMBOL(autoremove_wake_function);
 ```
 
-
-
 ```c
 // core.c
 int default_wake_function(wait_queue_entry_t *curr, unsigned mode, int wake_flags,
@@ -494,8 +475,6 @@ int default_wake_function(wait_queue_entry_t *curr, unsigned mode, int wake_flag
 }
 EXPORT_SYMBOL(default_wake_function);
 ```
-
-
 
 ## accept
 
@@ -590,8 +569,6 @@ out_err:
 EXPORT_SYMBOL(inet_csk_accept);
 ```
 
-
-
 #### inet_csk_wait_for_connect
 
 call prepare_to_wait_exclusive
@@ -646,8 +623,6 @@ static int inet_csk_wait_for_connect(struct sock *sk, long timeo)
        return err;
 }
 ```
-
-
 
 ### wake
 
@@ -880,8 +855,6 @@ do_time_wait:
 }
 ```
 
-
-
 tcp_v4_do_rcv
 
 ```c
@@ -958,8 +931,6 @@ csum_err:
 EXPORT_SYMBOL(tcp_v4_do_rcv);
 ```
 
-
-
 tcp_child_process
 
 ```c
@@ -1006,120 +977,13 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 EXPORT_SYMBOL(
 ```
 
-##### sock_init_data
-
-sk->sk_data_ready      =      sock_def_readable;
-
-```c
-void sock_init_data(struct socket *sock, struct sock *sk)
-{
-       sk_init_common(sk);
-       sk->sk_send_head       =      NULL;
-
-       timer_setup(&sk->sk_timer, NULL, 0);
-
-       sk->sk_allocation      =      GFP_KERNEL;
-       sk->sk_rcvbuf         =      sysctl_rmem_default;
-       sk->sk_sndbuf         =      sysctl_wmem_default;
-       sk->sk_state          =      TCP_CLOSE;
-       sk_set_socket(sk, sock);
-
-       sock_set_flag(sk, SOCK_ZAPPED);
-
-       if (sock) {
-              sk->sk_type    =      sock->type;
-              RCU_INIT_POINTER(sk->sk_wq, &sock->wq);
-              sock->sk       =      sk;
-              sk->sk_uid     =      SOCK_INODE(sock)->i_uid;
-       } else {
-              RCU_INIT_POINTER(sk->sk_wq, NULL);
-              sk->sk_uid     =      make_kuid(sock_net(sk)->user_ns, 0);
-       }
-
-       rwlock_init(&sk->sk_callback_lock);
-       if (sk->sk_kern_sock)
-              lockdep_set_class_and_name(
-                     &sk->sk_callback_lock,
-                     af_kern_callback_keys + sk->sk_family,
-                     af_family_kern_clock_key_strings[sk->sk_family]);
-       else
-              lockdep_set_class_and_name(
-                     &sk->sk_callback_lock,
-                     af_callback_keys + sk->sk_family,
-                     af_family_clock_key_strings[sk->sk_family]);
-
-       sk->sk_state_change    =      sock_def_wakeup;
-       sk->sk_data_ready      =      sock_def_readable;
-       sk->sk_write_space     =      sock_def_write_space;
-       sk->sk_error_report    =      sock_def_error_report;
-       sk->sk_destruct               =      sock_def_destruct;
-
-       sk->sk_frag.page       =      NULL;
-       sk->sk_frag.offset     =      0;
-       sk->sk_peek_off               =      -1;
-
-       sk->sk_peer_pid        =      NULL;
-       sk->sk_peer_cred       =      NULL;
-       sk->sk_write_pending   =      0;
-       sk->sk_rcvlowat               =      1;
-       sk->sk_rcvtimeo               =      MAX_SCHEDULE_TIMEOUT;
-       sk->sk_sndtimeo               =      MAX_SCHEDULE_TIMEOUT;
-
-       sk->sk_stamp = SK_DEFAULT_STAMP;
-#if BITS_PER_LONG==32
-       seqlock_init(&sk->sk_stamp_seq);
-#endif
-       atomic_set(&sk->sk_zckey, 0);
-
-#ifdef CONFIG_NET_RX_BUSY_POLL
-       sk->sk_napi_id        =      0;
-       sk->sk_ll_usec        =      sysctl_net_busy_read;
-#endif
-
-       sk->sk_max_pacing_rate = ~0UL;
-       sk->sk_pacing_rate = ~0UL;
-       WRITE_ONCE(sk->sk_pacing_shift, 10);
-       sk->sk_incoming_cpu = -1;
-
-       sk_rx_queue_clear(sk);
-       /*
-        * Before updating sk_refcnt, we must commit prior changes to memory
-        * (Documentation/RCU/rculist_nulls.rst for details)
-        */
-       smp_wmb();
-       refcount_set(&sk->sk_refcnt, 1);
-       atomic_set(&sk->sk_drops, 0);
-}
-EXPORT_SYMBOL(sock_init_data);
-```
-
-
-
-##### sock_def_readable
-
-```c
-void sock_def_readable(struct sock *sk)
-{
-       struct socket_wq *wq;
-
-       rcu_read_lock();
-       wq = rcu_dereference(sk->sk_wq);
-       if (skwq_has_sleeper(wq))
-              wake_up_interruptible_sync_poll(&wq->wait, EPOLLIN | EPOLLPRI |
-                                          EPOLLRDNORM | EPOLLRDBAND);
-       sk_wake_async(sk, SOCK_WAKE_WAITD, POLL_IN);
-       rcu_read_unlock();
-}
-```
-
 #### wake up
+
 ```c
 // wait.h
 #define wake_up_interruptible_sync_poll(x, m)                               \
        __wake_up_sync_key((x), TASK_INTERRUPTIBLE, poll_to_key(m))
 ```
-
-
 
 ```c
 // wait.c
@@ -1161,16 +1025,9 @@ static void __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int 
 }
 ```
 
-
-
 ## epoll
 
 See [epoll wait](/docs/CS/OS/Linux/epoll.md?id=add_wait_queue) and [wake up](/docs/CS/OS/Linux/epoll.md?id=ep_poll_callback)
-
-
-
-
-
 
 #### wake_up_poll
 
@@ -1201,11 +1058,9 @@ void __wake_up(struct wait_queue_head *wq_head, unsigned int mode,
 EXPORT_SYMBOL(__wake_up);
 ```
 
-
-
 ## Nginx
 
-multiple process 
+multiple process
 
 `ngx_event_accept` default disable
 
@@ -1213,4 +1068,3 @@ multiple process
 
 - [processes](/docs/CS/OS/Linux/process.md)
 - [network](/docs/CS/OS/Linux/network.md)
-
