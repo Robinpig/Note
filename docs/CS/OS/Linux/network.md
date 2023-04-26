@@ -394,22 +394,17 @@ Send a datagram down a socket.
 
 ```c
 // net/socket.c
-SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
-		unsigned int, flags, struct sockaddr __user *, addr,
-		int, addr_len)
+SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len, ...)
 {
 	return __sys_sendto(fd, buff, len, flags, addr, addr_len);
 }
 
-SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
-		unsigned int, flags)
+SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len, ...)
 {
 	return __sys_sendto(fd, buff, len, flags, NULL, 0);
 }
 
-// net/socket.c
-int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
-		 struct sockaddr __user *addr,  int addr_len)
+int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags, ...)
 {
 	err = sock_sendmsg(sock, &msg);
 }

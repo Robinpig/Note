@@ -500,7 +500,7 @@ We call the protocol - specifi c listen function finally.
 This is `sock->ops->listen()`. For the *PF_INET* protocol family, `sock->ops` is set to `inet_stream_ops`.
 So, we are calling `listen()` function from `inet_stream_ops`, *[inet_listen()](/docs/CS/OS/Linux/Calls.md?id=inet_listen)*.
 
-call [inet_listen]
+call `inet_listen`
 
 ```c
 // net/ipv4/af_inet.c

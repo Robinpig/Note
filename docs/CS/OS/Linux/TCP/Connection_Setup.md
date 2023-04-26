@@ -99,7 +99,6 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr, int, addr
 int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
 {
     __sys_connect_file(f.file, &address, addrlen, 0);
-
 }   
 
 int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
@@ -225,7 +224,7 @@ not_unique:
 
 
 #### tcp_connect
-
+send SYN
 ```c
 int tcp_connect(struct sock *sk)
 {
@@ -236,7 +235,6 @@ int tcp_connect(struct sock *sk)
 	/* Send off SYN; include data in Fast Open. */
 	err = tp->fastopen_req ? tcp_send_syn_data(sk, buff) :
 	      tcp_transmit_skb(sk, buff, 1, sk->sk_allocation);
-    
     ...
 	/* Timer for repeating the SYN until an answer. */
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
@@ -565,6 +563,58 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 }	
 ```
 
+```c
+
+static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
+					 const struct tcphdr *th)
+{
+	if (th->ack) {
+		tcp_ack(sk, skb, FLAG_SLOWPATH);
+
+		tcp_finish_connect(sk, skb);
+
+		if (sk->sk_write_pending ||
+		    icsk->icsk_accept_queue.rskq_defer_accept ||
+		    inet_csk_in_pingpong_mode(sk)) {
+			/* Save one ACK. Data will be ready after several ticks, if write_pending is set. */
+			...
+		}
+		tcp_send_ack(sk);
+	}
+}
+```
+### tcp_finish_connect
+```c
+
+void tcp_finish_connect(struct sock *sk, struct sk_buff *skb)
+{
+	tcp_set_state(sk, TCP_ESTABLISHED);
+	icsk->icsk_ack.lrcvtime = tcp_jiffies32;
+
+	if (sock_flag(sk, SOCK_KEEPOPEN))
+		inet_csk_reset_keepalive_timer(sk, keepalive_time_when(tp));
+}
+```
+### tcp_send_ack
+
+```c
+void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
+{
+	struct sk_buff *buff;
+
+	/* We are not putting this on the write queue, so
+	 * tcp_transmit_skb() will set the ownership to this
+	 * sock.
+	 */
+	buff = alloc_skb(MAX_TCP_HEADER,
+			 sk_gfp_mask(sk, GFP_ATOMIC | __GFP_NOWARN));
+
+	/* Send it off, this clears delayed acks for us. */
+	__tcp_transmit_skb(sk, buff, 0, (__force gfp_t)0, rcv_nxt);
+}
+```
+
+## Rcv ACK
 
 ```c
 int tcp_v4_rcv(struct sk_buff *skb)
@@ -791,59 +841,6 @@ static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 
 
 	tcp_v4_send_ack(sk, skb, seq, ...);
-}
-```
-## Rcv ACK
-
-```c
-int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
-{
-    if (sk->sk_state == TCP_LISTEN) {
-              if (nsk != sk) {
-                     if (tcp_child_process(sk, nsk, skb)) {
-                            rsk = nsk;
-                     }
-              }
-    }              
-}              
-```
-
-### tcp_child_process
-
-Queue segment on the new socket if the new socket is active, otherwise we just shortcircuit this and continue with the new socket.
-
-For the vast majority of cases child->sk_state will be TCP_SYN_RECV when entering. But other states are possible due to a race condition where after __inet_lookup_established() fails but before the listener locked is obtained, other packets cause the same connection to be created.
-
-```c
-
-
-int tcp_child_process(struct sock *parent, struct sock *child,
-		      struct sk_buff *skb)
-	__releases(&((child)->sk_lock.slock))
-{
-	int ret = 0;
-	int state = child->sk_state;
-
-	/* record NAPI ID of child */
-	sk_mark_napi_id(child, skb);
-
-	tcp_segs_in(tcp_sk(child), skb);
-	if (!sock_owned_by_user(child)) {
-		ret = tcp_rcv_state_process(child, skb);
-		/* Wakeup parent, send SIGIO */
-		if (state == TCP_SYN_RECV && child->sk_state != state)
-			parent->sk_data_ready(parent);
-	} else {
-		/* Alas, it is possible again, because we do lookup
-		 * in main socket hash table and lock on listening
-		 * socket does not protect us more.
-		 */
-		__sk_add_backlog(child, skb);
-	}
-
-	bh_unlock_sock(child);
-	sock_put(child);
-	return ret;
 }
 ```
 

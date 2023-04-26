@@ -171,6 +171,12 @@ struct proto tcp_prot = {
 
 [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) with TCP protocol -> tcp_sendmsg
 
+push:
+
+- force push when `data size > max_window >> 1`
+- or skb == tcp_send_head(sk)
+
+
 ```c
 // net/ipv4/tcp.c
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
@@ -180,52 +186,16 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 
 int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
-
-    // get tail skb
-	if (flags & MSG_ZEROCOPY && size && sock_flag(sk, SOCK_ZEROCOPY)) {
-		skb = tcp_write_queue_tail(sk);
-		uarg = msg_zerocopy_realloc(sk, size, skb_zcopy(skb));
-	}
-
-	while (msg_data_left(msg)) {
-		int copy = 0;
-
-		skb = tcp_write_queue_tail(sk);
-
-		if (copy <= 0 || !tcp_skb_can_collapse_to(skb)) {
-        ...
-      
-			skb = sk_stream_alloc_skb(sk, 0, sk->sk_allocation,
-						  first_skb);
-			process_backlog++;
-
-			skb_entail(sk, skb);
-		}
-
-		if (skb_availroom(skb) > 0 && !zc) {
-			copy = min_t(int, copy, skb_availroom(skb));
-			err = skb_add_data_nocache(sk, skb, &msg->msg_iter, copy);
-		} 
-```
-
-push:
-
-- force push when `data size > max_window >> 1`
-- or skb == tcp_send_head(sk)
-
-```c
-		if (forced_push(tp)) {
-			tcp_mark_push(tp, skb);
-			__tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
-		} else if (skb == tcp_send_head(sk))
-			tcp_push_one(sk, mss_now);
-		continue;
+    ...
+    if (forced_push(tp)) {
+        __tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
+    } else if (skb == tcp_send_head(sk))
+        tcp_push_one(sk, mss_now);
+    continue;
 }
 ```
 
 ### push
-
-tcp_push -> __tcp_push_pending_frames
 
 Both `tcp_push_one` and `tcp_push_pending_frames` call tcp_write_xmit
 
@@ -275,16 +245,12 @@ Returns true, if no segments are in flight and we have queued segments, but cann
 
 ```c
 // net/ipv4/tcp_output.c
-static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
-                        int push_one, gfp_t gfp)
+static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle, ...)
 {
        ...
-     
        while ((skb = tcp_send_head(sk))) {
               cwnd_quota = tcp_cwnd_test(tp, skb);
-           
               tcp_snd_wnd_test(tp, skb, mss_now);
-
               tcp_mss_split_point(sk, skb, mss_now,
                                               min_t(unsigned int,
                                                    cwnd_quota,
@@ -294,11 +260,6 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
               tso_fragment(sk, skb, limit, mss_now, gfp);
 
               tcp_transmit_skb(sk, skb, 1, gfp);
-
-              sent_pkts += tcp_skb_pcount(skb);
-
-              if (push_one)
-                     break;
        }
        ...
 }
@@ -317,15 +278,13 @@ It is our job to **build the TCP header**, and **pass the packet down to [IP](/d
 > We are working here with either a clone of the original SKB, or a fresh unique copy made by the retransmit engine.
 
 ```c
-static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
-                         gfp_t gfp_mask)
+static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it, gfp_t gfp_mask)
 {
        return __tcp_transmit_skb(sk, skb, clone_it, gfp_mask,
                               tcp_sk(sk)->rcv_nxt);
 }
 
-static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
-			      int clone_it, gfp_t gfp_mask, u32 rcv_nxt)
+static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, ...)
 {
 	if (clone_it) {
 		TCP_SKB_CB(skb)->tx.in_flight = TCP_SKB_CB(skb)->end_seq
