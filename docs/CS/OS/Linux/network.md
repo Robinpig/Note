@@ -824,13 +824,11 @@ static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
 
 ## Ingress
 
-
 ### driver process
 
 #### igb_msix_ring
 
 This function is registered when the [NIC is active](/docs/CS/OS/Linux/network.md?id=open-NIC), in order to handle hard interrupts
-
 
 Driver will `schedule a NAPI`(raise a `soft IRQ (NET_RX_SOFTIRQ)`).
 

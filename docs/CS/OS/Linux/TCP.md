@@ -176,7 +176,6 @@ push:
 - force push when `data size > max_window >> 1`
 - or skb == tcp_send_head(sk)
 
-
 ```c
 // net/ipv4/tcp.c
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
@@ -686,7 +685,6 @@ void tcp_data_ready(struct sock *sk)
 		sk->sk_data_ready(sk);
 }
 ```
-
 
 ## Client Connect
 
