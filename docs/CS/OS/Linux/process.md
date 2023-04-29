@@ -6,16 +6,13 @@ Linux employs a hierarchical scheme in which each process depends on a parent pr
 The kernel starts the init program as the first process that is responsible for further system initialization actions and display of the login prompt or (in more widespread use today) display of a graphical login interface.
 init is therefore the root from which all processes originate, more or less directly, as shown graphically by the pstree program. init is the top of a tree structure whose branches spread further and further down.
 ```shell
-[root@master-node ~]# pstree
-systemd─┬─AliSecGuard───6*[{AliSecGuard}]
-        ├─AliYunDun───9*[{AliYunDun}]
-        ├─AliYunDunMonito───25*[{AliYunDunMonito}]
-        ├─AliYunDunUpdate───5*[{AliYunDunUpdate}]
-        ├─2*[agetty]
-        ├─aliyun-service───6*[{aliyun-service}]
-        ├─assist_daemon───7*[{assist_daemon}]
-        ├─atd
+pstree
 
+```
+
+kthread
+```shell
+ps -fax
 ```
 
 
