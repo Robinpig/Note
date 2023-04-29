@@ -371,10 +371,8 @@ __schedule() is the main scheduler function.
 
 The main means of driving the scheduler and thus entering this function are:
 1. Explicit blocking: mutex, semaphore, waitqueue, etc.
-2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return
-   paths. For example, see arch/x86/entry_64.S.
-   To drive preemption between tasks, the scheduler sets the flag in timer
-   interrupt handler scheduler_tick().
+2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return paths. For example, see arch/x86/entry_64.S.
+   To drive preemption between tasks, the scheduler sets the flag in timer interrupt handler scheduler_tick().
 3. Wakeups don't really cause entry into schedule(). They add a
    task to the run-queue and that's it.
 
@@ -416,9 +414,7 @@ static void __sched notrace __schedule(bool preempt)
 
 	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
 		hrtick_clear(rq);
-```
-note context switch
-```c
+
 	local_irq_disable();
 	rcu_note_context_switch(preempt);
 
