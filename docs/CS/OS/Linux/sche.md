@@ -1,6 +1,3 @@
-
-
-
 ```dot
 strict digraph {
 
@@ -94,13 +91,11 @@ struct sched_class {
 };
 ```
 
-
 extern const struct sched_class stop_sched_class;
 extern const struct sched_class dl_sched_class;
 extern const struct sched_class rt_sched_class;
 extern const struct sched_class fair_sched_class;
 extern const struct sched_class idle_sched_class;
-
 
 ### run queue
 
@@ -109,14 +104,17 @@ This is the main, per-CPU runqueue data structure.
 Locking rule: those places that want to lock multiple runqueues
 (such as the load balancing or the thread migration code), lock
 acquire operations must be ordered by ascending &runqueue.
+
 ```c
 // 
 struct rq {
 	/* runqueue lock: */
 	raw_spinlock_t		__lock;
 ```
+
 nr_running and cpu_load should be in the same cacheline because
 remote CPUs use both these fields when doing load calculation.
+
 ```c
 	unsigned int		nr_running;
 ```
@@ -149,7 +147,9 @@ remote CPUs use both these fields when doing load calculation.
 #define UCLAMP_FLAG_IDLE 0x01
 #endif
 ```
+
 cfs rt and dl
+
 ```c
 	struct cfs_rq		cfs;
 	struct rt_rq		rt;
@@ -171,7 +171,9 @@ cfs rt and dl
 	 */
 	unsigned int		nr_uninterruptible;
 ```
+
 task structs
+
 ```c
 	struct task_struct __rcu	*curr;
 	struct task_struct	*idle;
@@ -316,7 +318,6 @@ task structs
 };
 ```
 
-
 ## schedule
 
 ```c
@@ -327,7 +328,7 @@ static void __sched notrace preempt_schedule_common(void)
 
 Because the function tracer can trace preempt_count_sub() and it also uses preempt_enable/disable_notrace(), if NEED_RESCHED is set, the preempt_enable_notrace() called by the function tracer will call this function again and cause infinite recursion.
 
-Preemption must be disabled here before the function tracer can trace. Break up preempt_disable() into two calls. One to disable preemption without fear of being traced. 
+Preemption must be disabled here before the function tracer can trace. Break up preempt_disable() into two calls. One to disable preemption without fear of being traced.
 The other to still record the preemption latency, which can also be traced by the function tracer.
 
 ```
@@ -370,6 +371,7 @@ EXPORT_SYMBOL(schedule);
 __schedule() is the main scheduler function.
 
 The main means of driving the scheduler and thus entering this function are:
+
 1. Explicit blocking: mutex, semaphore, waitqueue, etc.
 2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return paths. For example, see arch/x86/entry_64.S.
    To drive preemption between tasks, the scheduler sets the flag in timer interrupt handler scheduler_tick().
@@ -379,21 +381,21 @@ The main means of driving the scheduler and thus entering this function are:
 Now, if the new task added to the run-queue preempts the current
 task, then the wakeup sets TIF_NEED_RESCHED and schedule() gets
 called on the nearest possible occasion:
+
 - If the kernel is preemptible (CONFIG_PREEMPTION=y):
-    - in syscall or exception context, at the next outmost
-      preempt_enable(). (this might be as soon as the wake_up()'s
-      spin_unlock()!)
-    - in IRQ context, return from interrupt-handler to
-      preemptible context
+  - in syscall or exception context, at the next outmost
+    preempt_enable(). (this might be as soon as the wake_up()'s
+    spin_unlock()!)
+  - in IRQ context, return from interrupt-handler to
+    preemptible context
 - If the kernel is not preemptible (CONFIG_PREEMPTION is not set)
   then at the next:
-    - cond_resched() call
-    - explicit schedule() call
-    - return from syscall or exception to user-space
-    - return from interrupt-handler to user-space
+  - cond_resched() call
+  - explicit schedule() call
+  - return from syscall or exception to user-space
+  - return from interrupt-handler to user-space
 
 WARNING: must be called with preemption disabled!
-
 
 ```c
 // kernel/sched/core.c
@@ -436,7 +438,9 @@ static void __sched notrace __schedule(bool preempt)
 	rq_lock(rq, &rf);
 	smp_mb__after_spinlock();
 ```
+
 Promote REQ to ACT
+
 ```c
 	rq->clock_update_flags <<= 1;
 	update_rq_clock(rq);
@@ -486,6 +490,7 @@ Promote REQ to ACT
 ```
 
 pick next task
+
 ```c
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
@@ -517,16 +522,20 @@ pick next task
 		 */
 		++*switch_count;
 ```
+
 prev queued
+
 ```c
 		migrate_disable_switch(rq, prev);
 		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
 		trace_sched_switch(preempt, prev, next);
 ```
+
 Context Switch
 
 Also unlocks the rq:
+
 ```c
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
@@ -589,6 +598,7 @@ restart:
 ```
 
 #### pick_next_task_fair
+
 ```c
 // kernel/sched/fair.c
 struct task_struct *
@@ -736,7 +746,6 @@ idle:
 }
 ```
 
-
 ```c
 // kernel/sched/idle.c
 struct task_struct *pick_next_task_idle(struct rq *rq)
@@ -813,7 +822,9 @@ context_switch(struct rq *rq, struct task_struct *prev,
 
 	prepare_lock_switch(rq, next, rf);
 ```
+
 Here we just switch the register state and the stack.
+
 ```
 	switch_to(prev, next, prev);
 	barrier();
@@ -822,10 +833,7 @@ Here we just switch the register state and the stack.
 }
 ```
 
-
-
 ## affinity
-
 
 ### set affinity
 
@@ -876,6 +884,7 @@ long sched_setaffinity(pid_t pid, const struct cpumask *in_mask)
 		goto out_free_new_mask;
 
 ```
+
 set cpus_allowed
 
 ```c
