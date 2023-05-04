@@ -228,6 +228,7 @@ Connection: keep-Alive
 ### 2
 
 HTTP/2 standard was based on SPDY with some improvements.
+http2 is a binary protocol.
 
 #### HTTP Frames
 
