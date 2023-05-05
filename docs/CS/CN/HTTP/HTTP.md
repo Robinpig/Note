@@ -10,7 +10,7 @@ such as name servers and distributed object management systems, through extensio
 >
 > See [HTTPS](/docs/CS/CN/TLS.md)
 
-1. 明文传输，不检查内容是否被窃听
+1. plain text
 2. Stateless
 3. 不确定报文是否正常，未被篡改
 4. 性能不算高
