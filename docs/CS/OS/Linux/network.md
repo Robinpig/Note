@@ -130,7 +130,6 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 
 ### init driver
 
-
 A driver registers an initialization function which is called by the kernel when the driver is loaded.
 This function is registered by using the module_init macro.
 <br/>
@@ -391,27 +390,21 @@ static int igb_request_msix(struct igb_adapter *adapter)
 
 ### send
 
-
 Send a datagram down a socket.
 
 ```c
 // net/socket.c
-SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
-		unsigned int, flags, struct sockaddr __user *, addr,
-		int, addr_len)
+SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len, ...)
 {
 	return __sys_sendto(fd, buff, len, flags, addr, addr_len);
 }
 
-SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
-		unsigned int, flags)
+SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len, ...)
 {
 	return __sys_sendto(fd, buff, len, flags, NULL, 0);
 }
 
-// net/socket.c
-int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
-		 struct sockaddr __user *addr,  int addr_len)
+int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags, ...)
 {
 	err = sock_sendmsg(sock, &msg);
 }
@@ -535,20 +528,20 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 
 transmit a buffer
 
-Queue a buffer for transmission to a network device. 
+Queue a buffer for transmission to a network device.
 The caller must have set the device and priority and built the buffer before calling this function.
 The function can be called from an interrupt.
 
-A negative errno code is returned on a failure. 
+A negative errno code is returned on a failure.
 A success does not guarantee the frame will be transmitted as it may be dropped due to congestion or traffic shaping.
 
-I notice this method can also return errors from the queue disciplines, including NET_XMIT_DROP, which is a positive value.  
+I notice this method can also return errors from the queue disciplines, including NET_XMIT_DROP, which is a positive value.
 So, errors can also be positive.
 
 Regardless of the return value, the skb is consumed, so it is currently difficult to retry a send to this method.
 (You can bump the ref count before sending to hold a reference for retry if you are careful.)
 
-When calling this method, interrupts MUST be enabled.  
+When calling this method, interrupts MUST be enabled.
 This is because the BH enable code must have IRQs enabled so that it will not deadlock.
 
 ```c
@@ -831,38 +824,11 @@ static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
 
 ## Ingress
 
-1. Packets arrive at the NIC
-2. NIC will verify `MAC` (if not on promiscuous mode) and `FCS` and decide to drop or to continue
-3. NIC will [DMA packets at RAM](https://en.wikipedia.org/wiki/Direct_memory_access), in a region previously prepared (mapped) by the driver
-4. NIC will enqueue references to the packets at receive [ring buffer](https://en.wikipedia.org/wiki/Circular_buffer) queue `rx` until `rx-usecs` timeout or `rx-frames`
-5. NIC will raise a `hard IRQ`
-6. CPU will run the `IRQ handler` that runs the driver's code
-7. Driver will `schedule a NAPI`, clear the `hard IRQ` and return
-8. Driver raise a `soft IRQ (NET_RX_SOFTIRQ)`
-9. NAPI will poll data from the receive ring buffer until `netdev_budget_usecs` timeout or `netdev_budget` and `dev_weight` packets
-10. Linux will also allocate memory to `sk_buff`
-11. Linux fills the metadata: protocol, interface, setmacheader, removes ethernet
-12. Linux will pass the skb to the kernel stack (`netif_receive_skb`)
-13. It will set the network header, clone `skb` to taps (i.e. [tcpdump](/docs/CS/CN/Tools/tcpdump.md)) and pass it to tc ingress
-14. Packets are handled to a qdisc sized `netdev_max_backlog` with its algorithm defined by `default_qdisc`
-15. It calls `ip_rcv` and packets are handled to IP
-16. It calls [netfilter](/docs/CS/CN/Tools/netfilter.md) (`PREROUTING`)
-17. It looks at the routing table, if forwarding or local
-18. If it's local it calls netfilter (`LOCAL_IN`)
-19. It calls the L4 protocol (for instance `tcp_v4_rcv`)
-20. It finds the right socket
-21. It goes to the tcp finite state machine
-22. Enqueue the packet to the receive buffer and sized as `tcp_rmem` rules
-    1. If `tcp_moderate_rcvbuf` is enabled kernel will auto-tune the receive buffer
-23. Kernel will signalize that there is data available to apps (epoll or any polling system)
-24. Application wakes up and reads the data
-
-TODO: [tcp-rcv](https://www.processon.com/diagraming/6195c8be07912906e6ab82c8)
-
 ### driver process
 
 #### igb_msix_ring
-Hard interrupt
+
+This function is registered when the [NIC is active](/docs/CS/OS/Linux/network.md?id=open-NIC), in order to handle hard interrupts
 
 Driver will `schedule a NAPI`(raise a `soft IRQ (NET_RX_SOFTIRQ)`).
 
@@ -1137,11 +1103,13 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 
 Data is added to receive buffers attached to sockets by protocol layers.
 
-tail skb queue and invoke func `sk_data_ready`([sock_def_readable](/docs/CS/OS/Linux/thundering_herd.md?id=sock_def_readable)) to wake up 1 process.
+tail skb queue and invoke func `sk_data_ready` to wake up 1 process.
 
 <!-- tabs:start -->
 
 ##### **tcp_v4_rcv**
+
+tcp_queue_rcv and sk_data_ready in [tcp_rcv_established](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_established)
 
 ```c
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
@@ -1201,6 +1169,24 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 ```
 
 <!-- tabs:end -->
+
+#### sk_data_ready
+
+`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/socket.md?id=sock_init_data)
+
+```c
+void sock_def_readable(struct sock *sk)
+{
+	struct socket_wq *wq;
+	wq = rcu_dereference(sk->sk_wq);
+	if (skwq_has_sleeper(wq))   // check if there are any waiting processes
+		wake_up_interruptible_sync_poll(&wq->wait, EPOLLIN | EPOLLPRI |
+						EPOLLRDNORM | EPOLLRDBAND);
+	sk_wake_async(sk, SOCK_WAKE_WAITD, POLL_IN);
+}
+```
+
+[wake_up_interruptible_sync_poll](/docs/CS/OS/Linux/thundering_herd.md?id=wake-up), wake up and invoke callback func
 
 ## Native IO
 

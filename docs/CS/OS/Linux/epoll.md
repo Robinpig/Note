@@ -45,24 +45,7 @@ SYSCALL_DEFINE1(epoll_create1, int, flags)
 
 static int do_epoll_create(int flags)
 {
-	int error, fd;
-	struct eventpoll *ep = NULL;
-	struct file *file;
-
-	error = ep_alloc(&ep);
-	
-	/*
-	 * Creates all the items needed to setup an eventpoll file. That is,
-	 * a file structure and a free file descriptor.
-	 */
-	fd = get_unused_fd_flags(O_RDWR | (flags & O_CLOEXEC));
-
-  file = anon_inode_getfile("[eventpoll]", &eventpoll_fops, ep,
-				 O_RDWR | (flags & O_CLOEXEC));
-
-	ep->file = file;
-	fd_install(fd, file);
-	return fd;
+	ep_alloc(&ep);
 
 }
 ```
@@ -78,14 +61,6 @@ This structure is stored inside the "private_data" member of the file structure 
 
 ```c
 struct eventpoll {
-	/*
-	 * This mutex is used to ensure that files are not removed
-	 * while epoll is using them. This is held during the event
-	 * collection loop, the file cleanup path, the epoll file exit
-	 * code and the ctl operations.
-	 */
-	struct mutex mtx;
-
 	/* Wait queue used by sys_epoll_wait() */
 	wait_queue_head_t wq;
 
@@ -94,9 +69,6 @@ struct eventpoll {
 
 	/* List of ready file descriptors */
 	struct list_head rdllist;
-
-	/* Lock which protects rdllist and ovflist */
-	rwlock_t lock;
 
 	/* RB tree root used to store monitored fd structs */
 	struct rb_root_cached rbr;
@@ -107,98 +79,7 @@ struct eventpoll {
 	 * holding ->lock.
 	 */
 	struct epitem *ovflist;
-
-	/* wakeup_source used when ep_scan_ready_list is running */
-	struct wakeup_source *ws;
-
-	/* The user that created the eventpoll descriptor */
-	struct user_struct *user;
-
-	struct file *file;
-
-	/* used to optimize loop detection check */
-	u64 gen;
-	struct hlist_head refs;
-
-#ifdef CONFIG_NET_RX_BUSY_POLL
-	/* used to track busy poll napi_id */
-	unsigned int napi_id;
-#endif
-
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
-	/* tracks wakeup nests for lockdep validation */
-	u8 nests;
-#endif
 };
-```
-
-### epitem
-
-
-
-Each file descriptor added to the eventpoll interface will have an entry of this type linked to the "rbr" RB tree.
-Avoid increasing the size of this struct, there can be many thousands of these on a server and we do not want this to take another cache line.
-
-```c
-struct epitem {
-	union {
-		/* RB tree node links this structure to the eventpoll RB tree */
-		struct rb_node rbn;
-		/* Used to free the struct epitem */
-		struct rcu_head rcu;
-	};
-
-	/* List header used to link this structure to the eventpoll ready list */
-	struct list_head rdllink;
-
-	/*
-	 * Works together "struct eventpoll"->ovflist in keeping the
-	 * single linked chain of items.
-	 */
-	struct epitem *next;
-
-	/* The file descriptor information this item refers to */
-	struct epoll_filefd ffd;
-
-	/* List containing poll wait queues */
-	struct eppoll_entry *pwqlist;
-
-	/* The "container" of this item */
-	struct eventpoll *ep;
-
-	/* List header used to link this item to the "struct file" items list */
-	struct hlist_node fllink;
-
-	/* wakeup_source used when EPOLLWAKEUP is set */
-	struct wakeup_source __rcu *ws;
-
-	/* The structure that describe the interested events and the source fd */
-	struct epoll_event event;
-};
-```
-
-### event
-
-```c
-// include/uapi/linux/eventpoll.h
-struct epoll_event {
-	__poll_t events;
-	__u64 data;
-} EPOLL_PACKED;
-
-/* Epoll event masks */
-#define EPOLLIN		(__force __poll_t)0x00000001
-#define EPOLLPRI	(__force __poll_t)0x00000002
-#define EPOLLOUT	(__force __poll_t)0x00000004
-#define EPOLLERR	(__force __poll_t)0x00000008
-#define EPOLLHUP	(__force __poll_t)0x00000010
-#define EPOLLNVAL	(__force __poll_t)0x00000020
-#define EPOLLRDNORM	(__force __poll_t)0x00000040
-#define EPOLLRDBAND	(__force __poll_t)0x00000080
-#define EPOLLWRNORM	(__force __poll_t)0x00000100
-#define EPOLLWRBAND	(__force __poll_t)0x00000200
-#define EPOLLMSG	(__force __poll_t)0x00000400
-#define EPOLLRDHUP	(__force __poll_t)0x00002000
 ```
 
 
@@ -211,14 +92,7 @@ struct epoll_event {
 // fs/eventpoll.c
 static int ep_alloc(struct eventpoll **pep)
 {
-	int error;
-	struct user_struct *user;
-	struct eventpoll *ep;
-
-	user = get_current_user();
-
-  ep = kzalloc(sizeof(*ep), GFP_KERNEL);
-
+    ep = kzalloc(sizeof(*ep), GFP_KERNEL);
 	...
     
 	init_waitqueue_head(&ep->wq);
@@ -226,11 +100,6 @@ static int ep_alloc(struct eventpoll **pep)
 	INIT_LIST_HEAD(&ep->rdllist);
 	ep->rbr = RB_ROOT_CACHED;
 	ep->ovflist = EP_UNACTIVE_PTR;
-	ep->user = user;
-
-	*pep = ep;
-
-	return 0;
 }
 ```
 
@@ -247,20 +116,12 @@ The following function implements the controller interface for the eventpoll fil
 SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 		struct epoll_event __user *, event)
 {
-	struct epoll_event epds;
-
-	if (ep_op_has_event(op) &&
-	    copy_from_user(&epds, event, sizeof(struct epoll_event)))
-		return -EFAULT;
-
 	return do_epoll_ctl(epfd, op, fd, &epds, false);
 }
 
 int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
                bool nonblock)
 {
-       int error;
-       int full_check = 0;
        struct fd f, tf;
        struct eventpoll *ep;
        struct epitem *epi;
@@ -270,24 +131,6 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
 
        /* Get the "struct file *" for the target file */
        tf = fdget(fd);
-
-       /* The target file descriptor must support poll */
-       error = -EPERM;
-       if (!file_can_poll(tf.file))
-              goto error_tgt_fput;
-
-       /* Check if EPOLLWAKEUP is allowed */
-       if (ep_op_has_event(op))
-              ep_take_care_of_epollwakeup(epds);
-
-       /*
-        * We have to check that the file structure underneath the file descriptor
-        * the user passed to us _is_ an eventpoll file. And also we do not permit
-        * adding an epoll file descriptor inside itself.
-        */
-       error = -EINVAL;
-       if (f.file == tf.file || !is_file_epoll(f.file))
-              goto error_tgt_fput;
 
        /*
         * epoll adds to the wakeup queue at EPOLL_CTL_ADD time only,
@@ -308,43 +151,7 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
         */
        ep = f.file->private_data;
 
-       /*
-        * When we insert an epoll file descriptor inside another epoll file
-        * descriptor, there is the chance of creating closed loops, which are
-        * better be handled here, than in more critical paths. While we are
-        * checking for loops we also determine the list of files reachable
-        * and hang them on the tfile_check_list, so we can check that we
-        * haven't created too many possible wakeup paths.
-        *
-        * We do not need to take the global 'epumutex' on EPOLL_CTL_ADD when
-        * the epoll file descriptor is attaching directly to a wakeup source,
-        * unless the epoll file descriptor is nested. The purpose of taking the
-        * 'epmutex' on add is to prevent complex toplogies such as loops and
-        * deep wakeup paths from forming in parallel through multiple
-        * EPOLL_CTL_ADD operations.
-        */
-       error = epoll_mutex_lock(&ep->mtx, 0, nonblock);
-       if (op == EPOLL_CTL_ADD) {
-              if (READ_ONCE(f.file->f_ep) || ep->gen == loop_check_gen ||
-                  is_file_epoll(tf.file)) {
-                     mutex_unlock(&ep->mtx);
-                     error = epoll_mutex_lock(&epmutex, 0, nonblock);
-                     if (error)
-                            goto error_tgt_fput;
-                     loop_check_gen++;
-                     full_check = 1;
-                     if (is_file_epoll(tf.file)) {
-                            tep = tf.file->private_data;
-                            error = -ELOOP;
-                            if (ep_loop_check(ep, tep) != 0)
-                                   goto error_tgt_fput;
-                     }
-                     error = epoll_mutex_lock(&ep->mtx, 0, nonblock);
-                     if (error)
-                            goto error_tgt_fput;
-              }
-       }
-
+      
        /*
         * Try to lookup the file inside our RB tree. Since we grabbed "mtx"
         * above, we can be sure to be able to use the item looked up by
@@ -360,24 +167,8 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
               } else
                      error = -EEXIST;
               break;
-       case EPOLL_CTL_DEL:
-              if (epi)
-                     error = ep_remove(ep, epi);
-              else
-                     error = -ENOENT;
-              break;
-       case EPOLL_CTL_MOD:
-              if (epi) {
-                     if (!(epi->event.events & EPOLLEXCLUSIVE)) {
-                            epds->events |= EPOLLERR | EPOLLHUP;
-                            error = ep_modify(ep, epi, epds);
-                     }
-              } else
-                     error = -ENOENT;
-              break;
+       ...
        }
-       mutex_unlock(&ep->mtx);
-
 }
 ```
 
@@ -395,19 +186,11 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
 static int ep_insert(struct eventpoll *ep, const struct epoll_event *event,
 		     struct file *tfile, int fd, int full_check)
 {
-	int error, pwake = 0;
 	__poll_t revents;
-	long user_watches;
 	struct epitem *epi;
 	struct ep_pqueue epq;
 	struct eventpoll *tep = NULL;
 
-	if (is_file_epoll(tfile))
-		tep = tfile->private_data;
-
-	user_watches = atomic_long_read(&ep->user->epoll_watches);
-	if (unlikely(user_watches >= max_user_watches))
-		return -ENOSPC;
 	if (!(epi = kmem_cache_zalloc(epi_cache, GFP_KERNEL)))
 		return -ENOMEM;
 
@@ -418,121 +201,63 @@ static int ep_insert(struct eventpoll *ep, const struct epoll_event *event,
 	epi->event = *event;
 	epi->next = EP_UNACTIVE_PTR;
 
-	if (tep)
-		mutex_lock_nested(&tep->mtx, 1);
-	/* Add the current item to the list of active epoll hook for this file */
-	if (unlikely(attach_epitem(tfile, epi) < 0)) {
-		kmem_cache_free(epi_cache, epi);
-		if (tep)
-			mutex_unlock(&tep->mtx);
-		return -ENOMEM;
-	}
-
-	if (full_check && !tep)
-		list_file(tfile);
-
-	atomic_long_inc(&ep->user->epoll_watches);
-
-	/*
-	 * Add the current item to the RB tree. All RB tree operations are
-	 * protected by "mtx", and ep_insert() is called with "mtx" held.
-	 */
 	ep_rbtree_insert(ep, epi);
-	if (tep)
-		mutex_unlock(&tep->mtx);
-
-	/* now check if we've created too many backpaths */
-	if (unlikely(full_check && reverse_path_check())) {
-		ep_remove(ep, epi);
-		return -EINVAL;
-	}
-
-	if (epi->event.events & EPOLLWAKEUP) {
-		error = ep_create_wakeup_source(epi);
-		if (error) {
-			ep_remove(ep, epi);
-			return error;
-		}
-	}
-
+	
 	/* Initialize the poll table using the queue callback */
 	epq.epi = epi;
 	init_poll_funcptr(&epq.pt, ep_ptable_queue_proc);
 
-	/*
-	 * Attach the item to the poll hooks and get current event bits.
-	 * We can safely use the file* here because its usage count has
-	 * been increased by the caller of this function. Note that after
-	 * this operation completes, the poll callback can start hitting
-	 * the new item.
-	 */
+
 	revents = ep_item_poll(epi, &epq.pt, 1);
-
-	/*
-	 * We have to check if something went wrong during the poll wait queue
-	 * install process. Namely an allocation for a wait queue failed due
-	 * high memory pressure.
-	 */
-	if (unlikely(!epq.epi)) {
-		ep_remove(ep, epi);
-		return -ENOMEM;
-	}
-
-	/* We have to drop the new item inside our item list to keep track of it */
-	write_lock_irq(&ep->lock);
 
 	/* record NAPI ID of new item if present */
 	ep_set_busy_poll_napi_id(epi);
-
-	/* If the file is already "ready" we drop it inside the ready list */
-	if (revents && !ep_is_linked(epi)) {
-		list_add_tail(&epi->rdllink, &ep->rdllist);
-		ep_pm_stay_awake(epi);
-
-		/* Notify waiting tasks that events are available */
-		if (waitqueue_active(&ep->wq))
-			wake_up(&ep->wq);
-		if (waitqueue_active(&ep->poll_wait))
-			pwake++;
-	}
-
-	write_unlock_irq(&ep->lock);
-
-	/* We have to call this outside the lock */
-	if (pwake)
-		ep_poll_safewake(ep, NULL);
-
-	return 0;
 }
+```
+
+
+#### epitem
+
+
+
+Each file descriptor added to the eventpoll interface will have an entry of this type linked to the "rbr" RB tree.
+Avoid increasing the size of this struct, there can be many thousands of these on a server and we do not want this to take another cache line.
+
+```c
+struct epitem {
+	/* List header used to link this structure to the eventpoll ready list */
+	struct list_head rdllink;
+
+	struct epitem *next;
+
+	struct epoll_filefd ffd;
+
+	/* List containing poll wait queues */
+	struct eppoll_entry *pwqlist;
+
+	struct eventpoll *ep;
+
+	/* The structure that describe the interested events and the source fd */
+	struct epoll_event event;
+};
 ```
 
 #### ep_ptable_queue_proc
 
-Initialize the poll table using the queue callback = `ep_poll_callback`
+Initialize the poll table using the queue callback = `ep_poll_callback` which will be invoked at [sk_data_ready](/docs/CS/OS/Linux/network.md?id=sk_data_ready).
 
+This is the callback that is used to add our wait queue to the target file wakeup lists.
 ```c
-
-/*
- * This is the callback that is used to add our wait queue to the
- * target file wakeup lists.
- */
 static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
 				 poll_table *pt)
 {
-
 	pwq = kmem_cache_alloc(pwq_cache, GFP_KERNEL);
-	
-
-	init_waitqueue_func_entry(&pwq->wait, ep_poll_callback);
-	
-  if (epi->event.events & EPOLLEXCLUSIVE)
-		add_wait_queue_exclusive(whead, &pwq->wait);
-	else
-		add_wait_queue(whead, &pwq->wait);
+	init_waitqueue_func_entry(&pwq->wait, ep_poll_callback);	
+    add_wait_queue(whead, &pwq->wait);
 }
 ```
 
-
+set func for each socket in order to call by [sock_def_readable](/docs/CS/OS/Linux/TCP.md?id=tcp_data_ready)
 
 ```c
 // include/linux/wait.h
@@ -645,121 +370,49 @@ static __poll_t __ep_eventpoll_poll(struct file *file, poll_table *wait, int dep
 SYSCALL_DEFINE4(epoll_wait, int, epfd, struct epoll_event __user *, events,
               int, maxevents, int, timeout)
 {
-       struct timespec64 to;
-
-       return do_epoll_wait(epfd, events, maxevents,
-                          ep_timeout_to_timespec(&to, timeout));
+       return do_epoll_wait(epfd, events, maxevents, ...);
 }
 
 static int do_epoll_wait(int epfd, struct epoll_event __user *events,
                       int maxevents, struct timespec64 *to)
 {
-       int error;
-       struct eventpoll *ep;
-
-       /* Time to fish for events ... */
-       error = ep_poll(ep, events, maxevents, to);
+       ep_poll(ep, events, maxevents, to);
 }
 ```
 
 ### ep_poll
 
 Retrieves ready events, and delivers them to the caller-supplied event buffer.
-- if ep_events_available, send
+- if ep_events_available, ep_send_events
 - else wait 
-```c
 
+
+
+Do the final check under the lock. ep_scan_ready_list() plays with two lists (->rdllist and ->ovflist) and there is always a race when both lists are empty for short period of time although events are pending, so lock is important.
+
+```c
 static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
                  int maxevents, struct timespec64 *timeout)
 {
        int res, eavail, timed_out = 0;
-       u64 slack = 0;
        wait_queue_entry_t wait;
-       ktime_t expires, *to = NULL;
-
-       lockdep_assert_irqs_enabled();
-
-       if (timeout && (timeout->tv_sec | timeout->tv_nsec)) {
-              slack = select_estimate_accuracy(timeout);
-              to = &expires;
-              *to = timespec64_to_ktime(*timeout);
-       } else if (timeout) {
-              /*
-               * Avoid the unnecessary trip to the wait queue loop, if the
-               * caller specified a non blocking operation.
-               */
-              timed_out = 1;
-       }
 
        eavail = ep_events_available(ep);
-
        while (1) {
               if (eavail) {
                      res = ep_send_events(ep, events, maxevents);
-                     if (res)
-                            return res;
               }
 
-              if (timed_out)
-                     return 0;
-
-              eavail = ep_busy_loop(ep, timed_out);
-              if (eavail)
-                     continue;
-
-              if (signal_pending(current))
-                     return -EINTR;
-
-          
               init_wait(&wait);
-
-              write_lock_irq(&ep->lock);
-              /*
-               * Barrierless variant, waitqueue_active() is called under
-               * the same lock on wakeup ep_poll_callback() side, so it
-               * is safe to avoid an explicit barrier.
-               */
               __set_current_state(TASK_INTERRUPTIBLE);
 
-              /*
-               * Do the final check under the lock. ep_scan_ready_list()
-               * plays with two lists (->rdllist and ->ovflist) and there
-               * is always a race when both lists are empty for short
-               * period of time although events are pending, so lock is
-               * important.
-               */
               eavail = ep_events_available(ep);
               if (!eavail)
                      __add_wait_queue_exclusive(&ep->wq, &wait);
 
-              write_unlock_irq(&ep->lock);
-
-              if (!eavail)
-                     timed_out = !schedule_hrtimeout_range(to, slack,
+              timed_out = !schedule_hrtimeout_range(to, slack,
                                                        HRTIMER_MODE_ABS);
               __set_current_state(TASK_RUNNING);
-
-              /*
-               * We were woken up, thus go and try to harvest some events.
-               * If timed out and still on the wait queue, recheck eavail
-               * carefully under lock, below.
-               */
-              eavail = 1;
-
-              if (!list_empty_careful(&wait.entry)) {
-                     write_lock_irq(&ep->lock);
-                     /*
-                      * If the thread timed out and is not on the wait queue,
-                      * it means that the thread was woken up after its
-                      * timeout expired before it could reacquire the lock.
-                      * Thus, when wait.entry is empty, it needs to harvest
-                      * events.
-                      */
-                     if (timed_out)
-                            eavail = list_empty(&wait.entry);
-                     __remove_wait_queue(&ep->wq, &wait);
-                     write_unlock_irq(&ep->lock);
-              }
        }
 }
 ```

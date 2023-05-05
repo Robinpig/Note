@@ -927,7 +927,17 @@ ngx_conf_parse
 ngx_conf_handler
 
 
+## Tuning
 
+enable coredump
+```config
+worker_rlimit_core 500m
+worker_directory /tmp
+```
+
+```shell
+gdb /usr/sbin/nginx <core file>
+```
 
 ## Links
 

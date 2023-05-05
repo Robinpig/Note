@@ -171,6 +171,10 @@ struct proto tcp_prot = {
 
 [systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) with TCP protocol -> tcp_sendmsg
 
+push:
+
+- force push when `data size > max_window >> 1`
+- or skb == tcp_send_head(sk)
 
 ```c
 // net/ipv4/tcp.c
@@ -181,52 +185,16 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 
 int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
-
-    // get tail skb
-	if (flags & MSG_ZEROCOPY && size && sock_flag(sk, SOCK_ZEROCOPY)) {
-		skb = tcp_write_queue_tail(sk);
-		uarg = msg_zerocopy_realloc(sk, size, skb_zcopy(skb));
-	}
-
-	while (msg_data_left(msg)) {
-		int copy = 0;
-
-		skb = tcp_write_queue_tail(sk);
-
-		if (copy <= 0 || !tcp_skb_can_collapse_to(skb)) {
-        ...
-        
-			skb = sk_stream_alloc_skb(sk, 0, sk->sk_allocation,
-						  first_skb);
-			process_backlog++;
-
-			skb_entail(sk, skb);
-		}
-
-		if (skb_availroom(skb) > 0 && !zc) {
-			copy = min_t(int, copy, skb_availroom(skb));
-			err = skb_add_data_nocache(sk, skb, &msg->msg_iter, copy);
-		} 
-```
-
-push:
-
-- force push when `data size > max_window >> 1`
-- or skb == tcp_send_head(sk)
-
-```c
-		if (forced_push(tp)) {
-			tcp_mark_push(tp, skb);
-			__tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
-		} else if (skb == tcp_send_head(sk))
-			tcp_push_one(sk, mss_now);
-		continue;
+    ...
+    if (forced_push(tp)) {
+        __tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);
+    } else if (skb == tcp_send_head(sk))
+        tcp_push_one(sk, mss_now);
+    continue;
 }
 ```
 
 ### push
-
-tcp_push -> __tcp_push_pending_frames
 
 Both `tcp_push_one` and `tcp_push_pending_frames` call tcp_write_xmit
 
@@ -264,7 +232,7 @@ void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
 
 #### tcp_write_xmit
 
-This routine writes packets to the network.  
+This routine writes packets to the network.
 It advances the send_head.  This happens as incoming acks open up the remote window for us.
 
 LARGESEND note: !tcp_urg_mode is overkill, only frames between snd_up-64k-mss .. snd_up cannot be large. However, taking into account rare use of URG, this is not a big flaw.
@@ -276,16 +244,12 @@ Returns true, if no segments are in flight and we have queued segments, but cann
 
 ```c
 // net/ipv4/tcp_output.c
-static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
-                        int push_one, gfp_t gfp)
+static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle, ...)
 {
        ...
-       
        while ((skb = tcp_send_head(sk))) {
               cwnd_quota = tcp_cwnd_test(tp, skb);
-             
               tcp_snd_wnd_test(tp, skb, mss_now);
-
               tcp_mss_split_point(sk, skb, mss_now,
                                               min_t(unsigned int,
                                                    cwnd_quota,
@@ -295,11 +259,6 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
               tso_fragment(sk, skb, limit, mss_now, gfp);
 
               tcp_transmit_skb(sk, skb, 1, gfp);
-
-              sent_pkts += tcp_skb_pcount(skb);
-
-              if (push_one)
-                     break;
        }
        ...
 }
@@ -307,26 +266,24 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 
 #### tcp_transmit_skb
 
-This routine actually transmits TCP packets queued in by tcp_do_sendmsg().  
+This routine actually transmits TCP packets queued in by tcp_do_sendmsg().
 This is used by both the initial transmission and possible later retransmissions.
 
-All SKB's seen here are completely headerless. 
+All SKB's seen here are completely headerless.
 It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/IP.md?id=ip_queue_xmit)** so it can do the same plus pass the packet off to the device.
 
 > [!NOTE]
-> 
+>
 > We are working here with either a clone of the original SKB, or a fresh unique copy made by the retransmit engine.
 
 ```c
-static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
-                         gfp_t gfp_mask)
+static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it, gfp_t gfp_mask)
 {
        return __tcp_transmit_skb(sk, skb, clone_it, gfp_mask,
                               tcp_sk(sk)->rcv_nxt);
 }
 
-static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
-			      int clone_it, gfp_t gfp_mask, u32 rcv_nxt)
+static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, ...)
 {
 	if (clone_it) {
 		TCP_SKB_CB(skb)->tx.in_flight = TCP_SKB_CB(skb)->end_seq
@@ -353,8 +310,6 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 				 sk, skb, &inet->cork.fl);
 }
 ```
-
-
 
 ### FastOpen
 
@@ -410,6 +365,7 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 ```
 
 ### Window
+
 #### select window
 
 Chose a new window to advertise, update state in tcp_sock for the socket, and return result with RFC1323 scaling applied.
@@ -655,13 +611,9 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 }
 ```
 
-from dev
-
-`ip_rcv` -> ip_rcv_finish -> dst_input -> ip_local_deliver -> [tcp_v4_rcv](/docs/CS/OS/Linux/TCP.md?id=tcp_v4_rcv)
--> ip_forward -> ip_forward_finish -> [ip_output](/docs/CS/OS/Linux/IP.md?id=ip_output)
-
 ### tcp_rcv_established
 
+From dev [ip_local_deliver](/docs/CS/OS/Linux/network.md?id=ip_local_deliver)
 
 ```c
 
@@ -686,7 +638,6 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
     ...
 }
 ```
-
 
 TCP receive function for the ESTABLISHED state.
 
@@ -725,6 +676,8 @@ static int __must_check tcp_queue_rcv(struct sock *sk, struct sk_buff *skb,
 
 #### tcp_data_ready
 
+Call [sk_data_ready](/docs/CS/OS/Linux/network.md?id=sk_data_ready)
+
 ```c
 void tcp_data_ready(struct sock *sk)
 {
@@ -732,25 +685,6 @@ void tcp_data_ready(struct sock *sk)
 		sk->sk_data_ready(sk);
 }
 ```
-
-`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/socket.md?id=sock_init_data)
-
-```c
-void sock_def_readable(struct sock *sk)
-{
-	struct socket_wq *wq;
-
-	rcu_read_lock();
-	wq = rcu_dereference(sk->sk_wq);
-	if (skwq_has_sleeper(wq))
-		wake_up_interruptible_sync_poll(&wq->wait, EPOLLIN | EPOLLPRI |
-						EPOLLRDNORM | EPOLLRDBAND);
-	sk_wake_async(sk, SOCK_WAKE_WAITD, POLL_IN);
-	rcu_read_unlock();
-}
-```
-
-`wake_up_interruptible_sync_poll` see Thundering Herd
 
 ## Client Connect
 
@@ -810,7 +744,6 @@ void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
 }
 
 ```
-
 
 ## retry
 

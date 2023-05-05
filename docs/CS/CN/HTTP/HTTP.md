@@ -3,8 +3,8 @@
 The [Hypertext Transfer Protocol](https://www.w3.org/Protocols/) (HTTP) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
 
 It is a generic, stateless, protocol which can be used for many tasks beyond its use for hypertext,
-such as name servers and distributed object management systems, through extension of its request methods, error codes and headers. A feature of HTTP is the typing and negotiation of data representation, allowing systems to be built independently of the data being transferred.
-
+such as name servers and distributed object management systems, through extension of its request methods, error codes and headers. 
+A feature of HTTP is the typing and negotiation of data representation, allowing systems to be built independently of the data being transferred.
 
 > [!NOTE]
 >
@@ -23,7 +23,6 @@ such as name servers and distributed object management systems, through extensio
   - header
 - CR+LF
 - Content
-
 
 大容量数据使用 Chunked Transfer Coding
 
@@ -193,7 +192,7 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 
 
 | HTTP 方法 | 幂等性 | 安全性 |
-| ----------- | -------- | -------- |
+| --------- | ------ | ------ |
 | OPTIONS   | yes    | yes    |
 | GET       | yes    | yes    |
 | HEAD      | yes    | yes    |
@@ -208,11 +207,7 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 
 ### HTTP Status Code
 
-
-
 [HTTP Code](https://zh.wikipedia.org/wiki/HTTP%E7%8A%B6%E6%80%81%E7%A0%81)
-
-
 
 ## Version
 
@@ -233,6 +228,7 @@ Connection: keep-Alive
 ### 2
 
 HTTP/2 standard was based on SPDY with some improvements.
+http2 is a binary protocol.
 
 #### HTTP Frames
 
@@ -257,14 +253,14 @@ HTTP/2 also allows compressing request headers in addition to the request body, 
 
 #### HTTP2 over TLS
 
-Next Protocol Negotiation (NPN) is the protocol used to negotiate SPDY with TLS servers. 
-As it wasn't a proper standard, it was taken through the IETF and the result was ALPN: Application Layer Protocol Negotiation. 
+Next Protocol Negotiation (NPN) is the protocol used to negotiate SPDY with TLS servers.
+As it wasn't a proper standard, it was taken through the IETF and the result was ALPN: Application Layer Protocol Negotiation.
 ALPN is being promoted for use by http2, while SPDY clients and servers still use NPN.
 
-The fact that NPN existed first and ALPN has taken a while to go through standardization has led to many early http2 clients and http2 servers implementing and using both these extensions when negotiating http2. 
+The fact that NPN existed first and ALPN has taken a while to go through standardization has led to many early http2 clients and http2 servers implementing and using both these extensions when negotiating http2.
 Also, NPN is what's used for SPDY and many servers offer both SPDY and http2, so supporting both NPN and ALPN on those servers makes perfect sense.
 
-ALPN differs from NPN primarily in who decides what protocol to speak. 
+ALPN differs from NPN primarily in who decides what protocol to speak.
 With ALPN, the client gives the server a list of protocols in its order of preference and the server picks the one it wants, while with NPN the client makes the final choice.
 
 #### Binary Message
@@ -273,9 +269,8 @@ HTTP/2 also enables more efficient processing of messages through use of binary 
 
 #### HPACK
 
-[HPACK](https://www.rfc-editor.org/rfc/rfc7541.txt) was designed to make it difficult for a conforming implementation to leak information, to make encoding and decoding very fast/cheap, 
+[HPACK](https://www.rfc-editor.org/rfc/rfc7541.txt) was designed to make it difficult for a conforming implementation to leak information, to make encoding and decoding very fast/cheap,
 to provide for receiver control over compression context size, to allow for proxy re-indexing (i.e., shared state between frontend and backend within a proxy), and for quick comparisons of Huffman-encoded strings.
-
 
 #### Reset
 
@@ -291,7 +286,6 @@ Server push is something a client must explicitly allow the server to do. Even t
 
 Each individual http2 stream has its own advertised flow window that the other end is allowed to send data for. If you happen to know how SSH works, this is very similar in style and spirit.
 For every stream, both ends have to tell the peer that it has enough room to handle incoming data, and the other end is only allowed to send that much data until the window is extended. Only DATA frames are flow controlled.
-
 
 ### 3
 
@@ -313,27 +307,25 @@ HTTP is stateless.
 
 To overcome the stateless nature of HTTP requests, we could use either a session or a token.
 
-
 ### Cookies
 
 It is often desirable for a Web site to identify users, either because the server wishes to restrict user access or because it wants to serve content as a function of the user identity.
 For these purposes, HTTP uses cookies.
 [RFC 6265](https://datatracker.ietf.org/doc/rfc6265/) defines the HTTP Cookie and Set-Cookie header fields.
-These header fields can be used by HTTP servers to store state(called cookies) at HTTP user agents, letting the servers maintain a stateful session over the mostly stateless HTTP protocol.  
+These header fields can be used by HTTP servers to store state(called cookies) at HTTP user agents, letting the servers maintain a stateful session over the mostly stateless HTTP protocol.
 Although cookies have many historical infelicities that degrade their security and privacy, the Cookie and Set-Cookie header fields are widely used on the Internet.
 
-
-To store state, the origin server includes a Set-Cookie header in an HTTP response.  
-In subsequent requests, the user agent returns a Cookie request header to the origin server.  
-The Cookie header contains cookies the user agent received in previous Set-Cookie headers.  
+To store state, the origin server includes a Set-Cookie header in an HTTP response.
+In subsequent requests, the user agent returns a Cookie request header to the origin server.
+The Cookie header contains cookies the user agent received in previous Set-Cookie headers.
 The origin server is free to ignore the Cookie header or use its contents for an application-defined purpose.
 
-Origin servers MAY send a Set-Cookie response header with any response.  
-User agents MAY ignore Set-Cookie headers contained in responses with 100-level status codes but MUST process Set-Cookie headers contained in other responses (including responses with 400- and 500-level status codes).  
-An origin server can include multiple Set-Cookie header fields in a single response.  
+Origin servers MAY send a Set-Cookie response header with any response.
+User agents MAY ignore Set-Cookie headers contained in responses with 100-level status codes but MUST process Set-Cookie headers contained in other responses (including responses with 400- and 500-level status codes).
+An origin server can include multiple Set-Cookie header fields in a single response.
 The presence of a Cookie or a Set-Cookie header field does not preclude HTTP caches from storing and reusing a response.
 
-Origin servers SHOULD NOT fold multiple Set-Cookie header fields into a single header field.  
+Origin servers SHOULD NOT fold multiple Set-Cookie header fields into a single header field.
 The usual mechanism for folding HTTP headers fields might change the semantics of the Set-Cookie header field because the %x2C (",") character is used by Set-Cookie in a way that conflicts with such folding.
 
 Cookie technology has four components:
@@ -347,20 +339,19 @@ Cookie technology has four components:
 
 Cookies have a number of security pitfalls.  This section overviews a few of the more salient issues.
 
-In particular, cookies encourage developers to rely on ambient authority for authentication, often becoming vulnerable to attacks such as cross-site request forgery [CSRF].  
+In particular, cookies encourage developers to rely on ambient authority for authentication, often becoming vulnerable to attacks such as cross-site request forgery [CSRF].
 Also, when storing session identifiers in cookies, developers often create session fixation vulnerabilities.
 
-Transport-layer encryption, such as that employed in HTTPS, is insufficient to prevent a network attacker from obtaining or altering a victim's cookies because the cookie protocol itself has various vulnerabilities (see "Weak Confidentiality" and "Weak Integrity", below).  
+Transport-layer encryption, such as that employed in HTTPS, is insufficient to prevent a network attacker from obtaining or altering a victim's cookies because the cookie protocol itself has various vulnerabilities (see "Weak Confidentiality" and "Weak Integrity", below).
 In addition, by default, cookies do not provide confidentiality or integrity from network attackers, even when used in conjunction with HTTPS.
 
 Unless sent over a secure channel (such as TLS), the information in the Cookie and Set-Cookie headers is transmitted in the clear.
 
-1.  All sensitive information conveyed in these headers is exposed to an eavesdropper.
-2.  A malicious intermediary could alter the headers as they travel in either direction, with unpredictable results.
-3.  A malicious client could alter the Cookie header before transmission, with unpredictable results.
+1. All sensitive information conveyed in these headers is exposed to an eavesdropper.
+2. A malicious intermediary could alter the headers as they travel in either direction, with unpredictable results.
+3. A malicious client could alter the Cookie header before transmission, with unpredictable results.
 
-
-Instead of storing session information directly in a cookie (where it might be exposed to or replayed by an attacker), servers commonly store a nonce (or "session identifier") in a cookie.  
+Instead of storing session information directly in a cookie (where it might be exposed to or replayed by an attacker), servers commonly store a nonce (or "session identifier") in a cookie.
 When the server receives an HTTP request with a nonce, the server can look up state information associated with the cookie using the nonce as a key.
 
 ##### Weak Confidentiality and Weak Integrity
@@ -370,33 +361,25 @@ When the server receives an HTTP request with a nonce, the server can look up st
 - Cookies do not always provide isolation by path.
 - Cookies do not provide integrity guarantees for sibling domains (and their subdomains).
 
-
 ### Json Web Token
 
-JSON Web Token (JWT) is a compact claims representation format intended for space constrained environments such as HTTP Authorization headers and URI query parameters.  
-JWTs encode claims to be transmitted as a JSON object that is used as the payload of a JSON Web Signature (JWS) structure or as the plaintext of a JSON Web Encryption (JWE) structure, 
-enabling the claims to be digitally signed or integrity protected with a Message Authentication Code (MAC) and/or encrypted.  
+JSON Web Token (JWT) is a compact claims representation format intended for space constrained environments such as HTTP Authorization headers and URI query parameters.
+JWTs encode claims to be transmitted as a JSON object that is used as the payload of a JSON Web Signature (JWS) structure or as the plaintext of a JSON Web Encryption (JWE) structure,
+enabling the claims to be digitally signed or integrity protected with a Message Authentication Code (MAC) and/or encrypted.
 JWTs are always represented using the JWS Compact Serialization or the JWE Compact Serialization.
 
 Here are some scenarios where JSON Web Tokens are useful:
 
-- **Authorization**: This is the most common scenario for using JWT. 
-  Once the user is logged in, each subsequent request will include the JWT, allowing the user to access routes, services, and resources that are permitted with that token. 
+- **Authorization**: This is the most common scenario for using JWT.
+  Once the user is logged in, each subsequent request will include the JWT, allowing the user to access routes, services, and resources that are permitted with that token.
   Single Sign On is a feature that widely uses JWT nowadays, because of its small overhead and its ability to be easily used across different domains.
-- **Information Exchange**: JSON Web Tokens are a good way of securely transmitting information between parties. 
-  Because JWTs can be signed—for example, using public/private key pairs—you can be sure the senders are who they say they are. 
+- **Information Exchange**: JSON Web Tokens are a good way of securely transmitting information between parties.
+  Because JWTs can be signed—for example, using public/private key pairs—you can be sure the senders are who they say they are.
   Additionally, as the signature is calculated using the header and the payload, you can also verify that the content hasn't been tampered with.
-
-
-
-
 
 > [RFC 7519 - JSON Web Token (JWT)](https://datatracker.ietf.org/doc/rfc7519/)
 > [RFC 7797 - JSON Web Signature (JWS) Unencoded Payload Option](https://datatracker.ietf.org/doc/rfc7797/)
 > [RFC 8725 - JSON Web Token Best Current Practices](https://datatracker.ietf.org/doc/rfc8725/)
-
-
-
 
 #### Structure
 
@@ -418,31 +401,30 @@ Payload
   "iat": 1516239022
 }
 ```
+
 Signature
 
 See [JWT.IO](https://jwt.io/).
 
-
-
-In authentication, when the user successfully logs in using their credentials, a JSON Web Token will be returned. 
+In authentication, when the user successfully logs in using their credentials, a JSON Web Token will be returned.
 Since tokens are credentials, great care must be taken to prevent security issues. In general, you should not keep tokens longer than required.
 
 You also should not store sensitive session data in browser storage due to lack of security.
 
-Whenever the user wants to access a protected route or resource, the user agent should send the JWT, typically in the Authorization header using the Bearer schema. 
+Whenever the user wants to access a protected route or resource, the user agent should send the JWT, typically in the Authorization header using the Bearer schema.
 The content of the header should look like the following:
 
 ```http
 Authorization: Bearer <token>
 ```
 
-This can be, in certain cases, a stateless authorization mechanism. 
-The server's protected routes will check for a valid JWT in the Authorization header, and if it's present, the user will be allowed to access protected resources. 
+This can be, in certain cases, a stateless authorization mechanism.
+The server's protected routes will check for a valid JWT in the Authorization header, and if it's present, the user will be allowed to access protected resources.
 If the JWT contains the necessary data, the need to query the database for certain operations may be reduced, though this may not always be the case.
 
 If the token is sent in the Authorization header, Cross-Origin Resource Sharing (CORS) won't be an issue as it doesn't use cookies.
 
-Do note that with signed tokens, all the information contained within the token is exposed to users or other parties, even though they are unable to change it. 
+Do note that with signed tokens, all the information contained within the token is exposed to users or other parties, even though they are unable to change it.
 This means you should not put secret information within the token.
 
 ## Security
@@ -454,6 +436,40 @@ This means you should not put secret information within the token.
 [WebPageTest](https://www.webpagetest.org)
 
 [H2O](https://h2o.examp1e.net/)
+
+### Things done to overcome latency pains
+#### Spriting
+
+Spriting is the term often used to describe combining multiple small images to form a single larger image.
+Then, using JavaScript or CSS, you “cut out” pieces of that big image to show smaller individual ones.
+
+A site would use this trick for speed. Getting a single big image in HTTP 1.1 is much faster than getting 100 smaller individual ones.
+}
+Of course, this has its downsides for the pages of the site that only want to show one or two of the small pictures. 
+Spriting also causes all images to be removed simultaneously when the cache is cleared instead of possibly letting the most commonly used ones remain.
+#### Inlining
+Inlining is another trick used to avoid sending individual images, and this is done by using data URLs embedded in the CSS file. 
+This has similar benefits and drawbacks as the spriting case.
+#### Concatenation
+A big site can end up with a lot of different JavaScript files. 
+Developers can use front-end tools to concatenate, or combine, multiple scripts so that the browser will get a single big file instead of dozens of smaller ones. 
+Too much data is sent when only little is needed and, likewise, too much data needs to be reloaded when a change is made.
+#### Sharding
+The final performance trick I'll mention is often referred to as “sharding.” 
+It basically means serving aspects of your service on as many different hosts as possible. 
+At first glance this seems strange, but there is sound reasoning behind it.
+
+Initially, the HTTP 1.1 specification stated that a client was allowed to use a maximum of two TCP connections for each host. 
+So, in order to not violate the spec, clever sites simply invented new host names and – voilà – you could get more connections to your site and decreased page load times.
+
+Over time that limitation was removed, and today clients easily use six to eight connections per host name. 
+But they still have a limit, so sites continue to use this technique to bump up the number of connections. 
+As the number of objects requested over HTTP is ever-increasing – as I showed before – the large number of connections is then used to make sure HTTP performs well and allow your site to load quickly. 
+It is not unusual for sites to use well over 50 or even up to 100 or more connections now for a single site using this technique.
+Recent stats from httparchive.org show that the top 300K URLs in the world need, on average, 40(!) TCP connections to display the site, and the trend says this is still increasing slowly over time.
+
+Another reason for sharding is to put images or similar resources on a separate host name that doesn't use any cookies, as the size of cookies these days can be quite significant. 
+By using cookie-free image hosts, you can sometimes increase performance simply by allowing much smaller HTTP requests!
 
 ## Links
 

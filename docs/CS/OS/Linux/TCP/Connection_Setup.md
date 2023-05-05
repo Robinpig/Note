@@ -1,33 +1,30 @@
 ## Introduction
 
-
 TCP connection involves a client and server side setup for the two ends to communicate.
 
-- The client has to make two systemcalls, socket() and connect(), to connect to the server. 
-- The server has to make arrangements to create a listening socket so that the client can generate request to connect to this socket. 
+- The client has to make two systemcalls, socket() and connect(), to connect to the server.
+- The server has to make arrangements to create a listening socket so that the client can generate request to connect to this socket.
   To make such an arrangement, the server has to make four systemcalls: socket(), bind(), listen(), and accept().
 
 We will study the implementation of each systemcall in the kernel.
 
-We saw what happens when we make a socket systemcall. 
-We pass protocol family and type to socket(), and this does all the initial setup that involves initializing BSD and protocol socket operations. This involves initializing socket and sock structures. 
+We saw what happens when we make a socket systemcall.
+We pass protocol family and type to socket(), and this does all the initial setup that involves initializing BSD and protocol socket operations. This involves initializing socket and sock structures.
 
 Now we need to do the rest of the work on the socket, which is already initialized by a call to socket() for client and server in different ways.
 
 Now we will study the details of the kernel data structures associated with TCP connection setup on both client and server side.
 
-The details of port allocation by the server when we call bind(). 
-This also details how the conflicts are resolved when the server generates a request for specific port allocation. 
-We will study the SYN queue design where the open connection request for the listening socket fi rst sits until the connection is completely established (three-way handshake is over). 
+The details of port allocation by the server when we call bind().
+This also details how the conflicts are resolved when the server generates a request for specific port allocation.
+We will study the SYN queue design where the open connection request for the listening socket fi rst sits until the connection is completely established (three-way handshake is over).
 
 We will also see how the open connection request is moved from the SYN queue to the accept queue when the TCP connection is established.
 
-Finally, we will see how the established connections are taken off the accept queue by making accept() call. 
-Similarly, we will see how the client generates a connection request to the server (sends SYN segment to the listening server). 
+Finally, we will see how the established connections are taken off the accept queue by making accept() call.
+Similarly, we will see how the client generates a connection request to the server (sends SYN segment to the listening server).
 
 We will not cover the IP and link layer details but will surely cover everything that is associated with the client – server connection setup in the kernel.
-
-
 
 ```dot
 digraph {
@@ -39,7 +36,7 @@ digraph {
    read[shape=record, label="read/write"];
    read2[shape=record, label="read/write"];
     {rank="same"; read;read2;}
-    
+  
    connect -> read;
    accept -> read2;
    close;
@@ -51,15 +48,18 @@ digraph {
 ```
 
 see system calls:
+
 1. [socket](/docs/CS/OS/Linux/socket.md?id=create)
 2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
 3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
-5. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
-6. [send](/docs/CS/OS/Linux/TCP.md?id=send)
-7. [recv](/docs/CS/OS/Linux/TCP.md?id=recv)
+4. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
+5. [send](/docs/CS/OS/Linux/TCP.md?id=send)
+6. [recv](/docs/CS/OS/Linux/TCP.md?id=recv)
 
 <!-- tabs:start -->
+
 #### **Server**
+
 ```c
 socket(...,SOCK_STREAM,0);
 bind(...,&server_address, ...);
@@ -76,6 +76,7 @@ socket(...,SOCK_STREAM,0);
 connect();
 send(...,&server_address,...);
 ```
+
 <!-- tabs:end -->
 
 ## Server Side Setup
@@ -84,7 +85,6 @@ send(...,&server_address,...);
 - [bind()](/docs/CS/OS/Linux/Calls.md?id=bind) systemcall creates an identity for the socket and is the next step to create the server application
 - Listen
 - Accept
-
 
 ## send SYN
 
@@ -99,24 +99,23 @@ SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr, int, addr
 int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
 {
     __sys_connect_file(f.file, &address, addrlen, 0);
-
 }   
 
 int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 		       int addrlen, int file_flags)
 {
 	err = sock->ops->connect(sock, (struct sockaddr *)address, addrlen, sock->file->f_flags | file_flags);
-}     
+}   
 ```
+
 ### tcp_v4_connect
 
 1. set state = TCP_SYN_SENT
 2. inet_hash_connect
-2. Build a SYN and send it off
-
+3. Build a SYN and send it off
 
 ```c
-          
+        
 struct proto tcp_prot = {
 	.name			= "TCP",
 	.owner			= THIS_MODULE,
@@ -137,6 +136,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 ```
 
 #### inet_hash_connect
+
 Bind a port for a connect operation and hash it.
 
 ```c
@@ -151,7 +151,6 @@ int inet_hash_connect(struct inet_timewait_death_row *death_row,
 				   __inet_check_established);
 }
 ```
-
 
 ```c
 #define	EADDRNOTAVAIL	99	/* Cannot assign requested address */
@@ -223,8 +222,9 @@ not_unique:
 }
 ```
 
-
 #### tcp_connect
+
+send SYN
 
 ```c
 int tcp_connect(struct sock *sk)
@@ -236,14 +236,12 @@ int tcp_connect(struct sock *sk)
 	/* Send off SYN; include data in Fast Open. */
 	err = tp->fastopen_req ? tcp_send_syn_data(sk, buff) :
 	      tcp_transmit_skb(sk, buff, 1, sk->sk_allocation);
-    
     ...
 	/* Timer for repeating the SYN until an answer. */
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
 				  inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 }
 ```
-
 
 ## rcv SYN
 
@@ -256,7 +254,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		if (th->syn) {
 			acceptable = icsk->icsk_af_ops->conn_request(sk, skb) >= 0;
 		}
-}		
+}	
 
 const struct inet_connection_sock_af_ops ipv4_specific = {
 	.conn_request	   = tcp_v4_conn_request,
@@ -271,7 +269,6 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 ```
 
 ### tcp_conn_request
-
 
 ```c
 int tcp_conn_request(struct request_sock_ops *rsk_ops,
@@ -369,8 +366,8 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 }
 ```
 
-
 SYN queue full
+
 ```c
 // qlen >= sk_max_ack_backlog
 static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
@@ -379,9 +376,10 @@ static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)
 }
 ```
 
-
 #### tcp_rtx_synack
+
 inet_csk_reqsk_queue_hash_add -> reqsk_queue_hash_req -> reqsk_timer_handler -> inet_rtx_syn_ack
+
 ```c
 int inet_rtx_syn_ack(const struct sock *parent, struct request_sock *req)
 {
@@ -421,10 +419,7 @@ int tcp_rtx_synack(const struct sock *sk, struct request_sock *req)
 }
 ```
 
-
 ### tcp_v4_send_synack
-
-
 
 Send a SYN-ACK after having received a SYN.
 
@@ -547,8 +542,6 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 }
 ```
 
-
-
 ## Rcv SYNACK
 
 ```c
@@ -562,9 +555,64 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 
 		tcp_data_snd_check(sk);
 	}
-}	
+}
 ```
 
+```c
+
+static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
+					 const struct tcphdr *th)
+{
+	if (th->ack) {
+		tcp_ack(sk, skb, FLAG_SLOWPATH);
+
+		tcp_finish_connect(sk, skb);
+
+		if (sk->sk_write_pending ||
+		    icsk->icsk_accept_queue.rskq_defer_accept ||
+		    inet_csk_in_pingpong_mode(sk)) {
+			/* Save one ACK. Data will be ready after several ticks, if write_pending is set. */
+			...
+		}
+		tcp_send_ack(sk);
+	}
+}
+```
+
+### tcp_finish_connect
+
+```c
+
+void tcp_finish_connect(struct sock *sk, struct sk_buff *skb)
+{
+	tcp_set_state(sk, TCP_ESTABLISHED);
+	icsk->icsk_ack.lrcvtime = tcp_jiffies32;
+
+	if (sock_flag(sk, SOCK_KEEPOPEN))
+		inet_csk_reset_keepalive_timer(sk, keepalive_time_when(tp));
+}
+```
+
+### tcp_send_ack
+
+```c
+void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
+{
+	struct sk_buff *buff;
+
+	/* We are not putting this on the write queue, so
+	 * tcp_transmit_skb() will set the ownership to this
+	 * sock.
+	 */
+	buff = alloc_skb(MAX_TCP_HEADER,
+			 sk_gfp_mask(sk, GFP_ATOMIC | __GFP_NOWARN));
+
+	/* Send it off, this clears delayed acks for us. */
+	__tcp_transmit_skb(sk, buff, 0, (__force gfp_t)0, rcv_nxt);
+}
+```
+
+## Rcv ACK
 
 ```c
 int tcp_v4_rcv(struct sk_buff *skb)
@@ -625,16 +673,15 @@ int tcp_v4_rcv(struct sk_buff *skb)
 			return 0;
 		}
 	}
-}	
+}
 ```
-
 
 ### tcp_check_req
 
-Process an incoming packet for SYN_RECV sockets represented as a request_sock. 
+Process an incoming packet for SYN_RECV sockets represented as a request_sock.
 Normally sk is the listener socket but for TFO it points to the child socket.
 
-XXX (TFO) - The current impl contains a special check for ack validation and inside tcp_v4_reqsk_send_ack(). 
+XXX (TFO) - The current impl contains a special check for ack validation and inside tcp_v4_reqsk_send_ack().
 Can we do better?
 We don't need to initialize tmp_opt.sack_ok as we don't use the results
 
@@ -655,7 +702,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 			__NET_INC_STATS(sock_net(sk), LINUX_MIB_PAWSESTABREJECTED);
 		return NULL;
 	}
-	
+
 	/** The three way handshake has completed - we got a valid synack - now create the new socket. **/
 	child = inet_csk(sk)->icsk_af_ops->syn_recv_sock(sk, skb, req, NULL,
 							 req, &own_req);
@@ -672,7 +719,6 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	return inet_csk_complete_hashdance(sk, child, req, own_req);
 }
 ```
-
 
 #### tcp_v4_send_ack
 
@@ -793,60 +839,6 @@ static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 	tcp_v4_send_ack(sk, skb, seq, ...);
 }
 ```
-## Rcv ACK
-
-```c
-int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
-{
-    if (sk->sk_state == TCP_LISTEN) {
-              if (nsk != sk) {
-                     if (tcp_child_process(sk, nsk, skb)) {
-                            rsk = nsk;
-                     }
-              }
-    }              
-}              
-```
-
-### tcp_child_process
-
-Queue segment on the new socket if the new socket is active, otherwise we just shortcircuit this and continue with the new socket.
-
-For the vast majority of cases child->sk_state will be TCP_SYN_RECV when entering. But other states are possible due to a race condition where after __inet_lookup_established() fails but before the listener locked is obtained, other packets cause the same connection to be created.
-
-```c
-
-
-int tcp_child_process(struct sock *parent, struct sock *child,
-		      struct sk_buff *skb)
-	__releases(&((child)->sk_lock.slock))
-{
-	int ret = 0;
-	int state = child->sk_state;
-
-	/* record NAPI ID of child */
-	sk_mark_napi_id(child, skb);
-
-	tcp_segs_in(tcp_sk(child), skb);
-	if (!sock_owned_by_user(child)) {
-		ret = tcp_rcv_state_process(child, skb);
-		/* Wakeup parent, send SIGIO */
-		if (state == TCP_SYN_RECV && child->sk_state != state)
-			parent->sk_data_ready(parent);
-	} else {
-		/* Alas, it is possible again, because we do lookup
-		 * in main socket hash table and lock on listening
-		 * socket does not protect us more.
-		 */
-		__sk_add_backlog(child, skb);
-	}
-
-	bh_unlock_sock(child);
-	sock_put(child);
-	return ret;
-}
-```
-
 
 ## Links
 
