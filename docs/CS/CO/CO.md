@@ -8,6 +8,12 @@ Computer Organization and Architecture comprehensively covers processor and comp
 - Microprogrammed Control
 - Memory Organization
 
+
+
+SouthBridge
+NorthBridge
+
+
 ## ISA
 
 Instruction Set Architectures
