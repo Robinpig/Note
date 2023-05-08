@@ -2,12 +2,10 @@
 
 ## Hardware
 
-
 - task gate
 - interrupt gate
 - trap gate
 - call gate
-
 
 ## init
 
@@ -34,7 +32,6 @@ void __init trap_init(void)
 }
 ```
 
-
 ### init_IRQ
 
 ```c
@@ -59,8 +56,6 @@ void __init init_IRQ(void)
 	x86_init.irqs.intr_init();
 }
 ```
-
-
 
 ```c
 struct x86_init_ops x86_init __initdata = {
@@ -119,7 +114,6 @@ void __init init_ISA_irqs(void)
 
 ## irq
 
-
 Bit masks for desc->core_internal_state__do_not_mess_with_it
 
 - IRQS_AUTODETECT		- autodetection in progress
@@ -132,6 +126,7 @@ Bit masks for desc->core_internal_state__do_not_mess_with_it
 - IRQS_PENDING			- irq is pending and replayed later
 - IRQS_SUSPENDED		- irq is suspended
 - IRQS_NMI			- irq line is used to deliver NMIs
+
 ```c
 // kernal/irq/internals.h
 enum {
@@ -151,6 +146,7 @@ enum {
 ### request_irq
 
 request_irq - Add a handler for an interrupt line
+
 - irq:	The interrupt line to allocate
 - handler:	Function to be called when the IRQ occurs. Primary handler for threaded interrupts If NULL, the default primary handler is installed
 - flags:	Handling flags
@@ -158,6 +154,7 @@ request_irq - Add a handler for an interrupt line
 - dev:	A cookie passed to the handler function
 
 This call allocates an interrupt and establishes a handler; see the documentation for request_threaded_irq() for details.
+
 ```c
 // include/linux/interrupt.h
 static inline int __must_check
@@ -239,7 +236,9 @@ int retval;
 		return retval;
 	}
 ```
+
 call __setup_irq
+
 ```c
 	retval = __setup_irq(irq, desc, action);
 
@@ -275,7 +274,9 @@ call __setup_irq
 ```
 
 ### free
+
 free_irq - free an interrupt allocated with request_irq
+
 - irq: Interrupt line to free
 - dev_id: Device identity to free
 
@@ -288,6 +289,7 @@ have completed.
 
 This function must not be called from interrupt context.
 Returns the devname argument passed to request_irq.
+
 ```c
 // kernel/irq/manage.c
 const void *free_irq(unsigned int irq, void *dev_id)
@@ -316,8 +318,6 @@ const void *free_irq(unsigned int irq, void *dev_id)
 ```
 
 ### handle
-
-
 
 common_interrupt() handles all normal device IRQ's (the special SMP cross-CPU interrupts have their own entry points).
 
@@ -366,7 +366,6 @@ irqreturn_t handle_irq_event(struct irq_desc *desc)
 	return ret;
 }
 ```
-
 
 #### handle_irq_event_percpu
 
@@ -443,10 +442,12 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags
 ```
 
 ### setup_irq
+
 Internal function to register an irqaction - typically used to
 allocate special interrupts that are part of the architecture.
 
 Locking rules:
+
 - desc->request_mutex	Provides serialization against a concurrent free_irq()
 - chip_bus_lock	Provides serialization for slow bus operations
 - desc->lock	Provides serialization against hard interrupts
@@ -454,6 +455,7 @@ Locking rules:
 chip_bus_lock and desc->lock are sufficient for all other management and
 interrupt related functions. desc->request_mutex solely serializes
 request/free_irq().
+
 ```c
 // kernel/irq/manage.c
 static int
@@ -845,7 +847,7 @@ cat /proc/irq/<number>/smp_affinity
 
 ```
 
-PLEASE, avoid to allocate new softirqs, if you need not _really_ high frequency threaded job scheduling. 
+PLEASE, avoid to allocate new softirqs, if you need not _really_ high frequency threaded job scheduling.
 For almost all the purposes tasklets are more than enough. F.e. all serial device BHs et al. should be converted to tasklets, not to softirqs.
 
 ```c
@@ -865,11 +867,11 @@ enum
 	NR_SOFTIRQS
 };
 ```
+
 ### init_softirq
 
-
-
 called by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
+
 ```c
 // 
 void __init softirq_init(void)
@@ -888,10 +890,6 @@ void __init softirq_init(void)
 }
 ```
 
-
-
-
-
 #### open_softirq
 
 ```c
@@ -902,8 +900,8 @@ void open_softirq(int nr, void (*action)(struct softirq_action *))
 }
 ```
 
-
 ### run_ksoftirqd
+
 ```c
 
 static void run_ksoftirqd(unsigned int cpu)
@@ -923,8 +921,8 @@ static void run_ksoftirqd(unsigned int cpu)
 }
 ```
 
-
 #### do_softirq
+
 ```c
 
 asmlinkage __visible void __softirq_entry __do_softirq(void)
@@ -1004,10 +1002,6 @@ restart:
 }
 ```
 
-
-
-
-
 #### spawn_ksoftirqd
 
 ```c
@@ -1020,12 +1014,6 @@ struct cpuinfo_ia64 {
  ... 
 }
 ```
-
-
-
-
-
-
 
 ```c
 /**
@@ -1058,7 +1046,6 @@ out:
 }
 ```
 
-
 ```c
 
 static struct smp_hotplug_thread softirq_threads = {
@@ -1080,6 +1067,7 @@ early_initcall(spawn_ksoftirqd);
 ```
 
 ### raise_softirq
+
 ```c
 
 // kernel/softirq.c
@@ -1097,8 +1085,6 @@ static int ksoftirqd_should_run(unsigned int cpu)
 }
 ```
 
-
-
 ```c
 // include/linux/interrupt.h
 #ifndef local_softirq_pending_ref
@@ -1109,9 +1095,6 @@ static int ksoftirqd_should_run(unsigned int cpu)
 #define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
 #define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
 ```
-
-
-
 
 ### tasklet
 
@@ -1194,6 +1177,7 @@ static void tasklet_action_common(struct softirq_action *a,
 		*tl_head->tail = t;
 		tl_head->tail = &t->next;
 ```
+
 call raise_softirq
 
 ```c
@@ -1202,7 +1186,6 @@ call raise_softirq
 	}
 }
 ```
-
 
 #### tasklet_schedule
 
