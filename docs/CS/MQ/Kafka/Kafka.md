@@ -107,6 +107,10 @@ Rebalance
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
 
+## Architecture
+
+
+
 ## Efficiency
 
 The small I/O problem happens both between the client and the server and in the server's own persistent operations.
@@ -645,6 +649,18 @@ Return buffers to the pool. If they are of the poolable size add them to the fre
         }
     }
 ```
+
+## Implementation
+
+### Network Layer
+
+The network layer is a fairly straight-forward [NIO](/docs/CS/Java/JDK/IO/NIO.md) server, and will not be described in great detail. 
+The sendfile implementation is done by giving the MessageSet interface a writeTo method. 
+This allows the file-backed message set to use the more efficient transferTo implementation instead of an in-process buffered write.
+The threading model is a single acceptor thread and N processor threads which handle a fixed number of connections each. 
+This design has been pretty thoroughly tested elsewhere and found to be simple to implement and fast. 
+The protocol is kept quite simple to allow for future implementation of clients in other languages.
+
 
 ## Performance
 

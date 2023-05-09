@@ -2,7 +2,8 @@
 
 Load balancing
 
-The client controls which partition it publishes messages to. This can be done at random, implementing a kind of random load balancing, or it can be done by some semantic partitioning function.
+The client controls which partition it publishes messages to. 
+This can be done at random, implementing a kind of random load balancing, or it can be done by some semantic partitioning function.
 
 Asynchronous send
 Batching is one of the big drivers of efficiency, and to enable batching the Kafka producer will attempt to accumulate data in memory and to send out larger batches in a single request.
