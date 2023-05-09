@@ -6,6 +6,7 @@ The client controls which partition it publishes messages to.
 This can be done at random, implementing a kind of random load balancing, or it can be done by some semantic partitioning function.
 
 Asynchronous send
+
 Batching is one of the big drivers of efficiency, and to enable batching the Kafka producer will attempt to accumulate data in memory and to send out larger batches in a single request.
 The batching can be configured to accumulate no more than a fixed number of messages and to wait no longer than some fixed latency bound (say 64k or 10 ms).
 This allows the accumulation of more bytes to send, and few larger I/O operations on the servers.

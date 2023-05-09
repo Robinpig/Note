@@ -4,6 +4,19 @@
 Kafka is a distributed system consisting of servers and clients that communicate via a high-performance [TCP network protocol](/docs/CS/CN/TCP.md).
 It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
 
+
+
+<div style="text-align: center;">
+
+![Fig.1. Kafka Architecture](./img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Kafka Architecture.
+</p>
+
+
 ### Event Streaming
 
 Event streaming is the digital equivalent of the human body's central nervous system.
