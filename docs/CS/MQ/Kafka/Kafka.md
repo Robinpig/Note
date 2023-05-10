@@ -667,7 +667,7 @@ Return buffers to the pool. If they are of the poolable size add them to the fre
 
 ### Network Layer
 
-The network layer is a fairly straight-forward [NIO](/docs/CS/Java/JDK/IO/NIO.md) server, and will not be described in great detail. 
+The network layer is a fairly straight-forward [NIO](/docs/CS/Java/JDK/IO/NIO.md) server. 
 The sendfile implementation is done by giving the MessageSet interface a writeTo method. 
 This allows the file-backed message set to use the more efficient transferTo implementation instead of an in-process buffered write.
 The threading model is a single acceptor thread and N processor threads which handle a fixed number of connections each. 
