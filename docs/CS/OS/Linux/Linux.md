@@ -39,24 +39,6 @@ Directory
 | tools     |                                                                                                                                                                                                           |  |
 | block     |                                                                                                                                                                                                           |  |
 
-### Spurious wakeup
-
-A spurious wakeup happens when a thread wakes up from waiting on a condition variable that's been signaled, only to discover that the condition it was waiting for isn't satisfied.
-
-It's called spurious because the thread has seemingly been awakened for no reason. But spurious wakeups don't happen for no reason:
-
-- they usually happen because, in between the time when the condition variable was signaled and when the waiting thread finally ran, another thread ran and changed the condition.
-  There was a race condition between the threads, with the typical result that sometimes, the thread waking up on the condition variable runs first, winning the race, and sometimes it runs second, losing the race.
-- On many systems, especially multiprocessor systems, the problem of spurious wakeups is exacerbated because if there are several threads waiting on the condition variable when it's signaled, the system may decide to wake them all up, treating every signal() to wake one thread as a broadcast( ) to wake all of them, thus breaking any possibly expected 1:1 relationship between signals and wakeups.
-  If there are ten threads waiting, only one will win and the other nine will experience spurious wakeups.
-- To allow for implementation flexibility in dealing with error conditions and races inside the operating system, condition variables may also be allowed to return from a wait even if not signaled,
-though it is not clear how many implementations actually do that.
-  In the Solaris implementation of condition variables, a spurious wakeup may occur without the condition being signaled if the process is signaled; the wait system call aborts and returns EINTR.
-  The Linux pthread implementation of condition variables guarantees it will not do that.
-
-Because spurious wakeups can happen whenever there's a race and possibly even in the absence of a race or a signal, when a thread wakes on a condition variable, it should always check that the condition it sought is satisfied.
-If it's not, it should go back to sleeping on the condition variable, waiting for another opportunity.
-
 ```shell
 usr/src/kernels/
 ```
@@ -80,7 +62,54 @@ Here, there are two problem areas:
 2. The kernel must also decide how CPU time is shared between the existing processes. Important processes are given a larger share of CPU time, less important processes a smaller share.
    The decision as to which process runs for how long is known as [scheduling](/docs/CS/OS/Linux/sche.md).
 
-- [thundering herd](/docs/CS/OS/Linux/thundering_herd.md)
+### Spurious wakeup
+
+A spurious wakeup happens when a thread wakes up from waiting on a condition variable that's been signaled, only to discover that the condition it was waiting for isn't satisfied.
+
+It's called spurious because the thread has seemingly been awakened for no reason. But spurious wakeups don't happen for no reason:
+
+- they usually happen because, in between the time when the condition variable was signaled and when the waiting thread finally ran, another thread ran and changed the condition.
+  There was a race condition between the threads, with the typical result that sometimes, the thread waking up on the condition variable runs first, winning the race, and sometimes it runs second, losing the race.
+- On many systems, especially multiprocessor systems, the problem of spurious wakeups is exacerbated because if there are several threads waiting on the condition variable when it's signaled,
+  the system may decide to wake them all up, treating every signal() to wake one thread as a broadcast( ) to wake all of them, thus breaking any possibly expected 1:1 relationship between signals and wakeups.
+  If there are ten threads waiting, only one will win and the other nine will experience spurious wakeups.
+- To allow for implementation flexibility in dealing with error conditions and races inside the operating system, condition variables may also be allowed to return from a wait even if not signaled, though it is not clear how many implementations actually do that.
+  In the Solaris implementation of condition variables, a spurious wakeup may occur without the condition being signaled if the process is signaled; the wait system call aborts and returns EINTR.
+  **The Linux pthread implementation of condition variables guarantees it will not do that.**
+
+
+Much more compelling reason for introducing concept of spurious wakeups is provided in [this answer at SO](https://stackoverflow.com/a/1051816/839601) that is based on additional details provided in an (older version) of that very article:
+
+> The Wikipedia article on spurious wakeups has this tidbit:
+>
+> The function in Linux is implemented using the system call.
+> Each blocking system call on Linux returns abruptly with when the process receives a signal.
+> ... can't restart the waiting because it may miss a real wakeup in the little time it was outside the system call
+> ...pthread_cond_wait() futex EINTR pthread_cond_wait() futex
+
+Just think of it... like any code, thread scheduler may experience temporary blackout due to something abnormal happening in underlying hardware / software.
+Of course, care should be taken for this to happen as rare as possible,
+but since there's no such thing as 100% robust software it is reasonable to assume this can happen and take care on the graceful recovery in case if scheduler detects this (eg by observing missing heartbeats).
+
+Now, how could scheduler recover, taking into account that during blackout it could miss some signals intended to notify waiting threads?
+If scheduler does nothing, mentioned "unlucky" threads will just hang, waiting forever - to avoid this, scheduler would simply send a signal to all the waiting threads.
+
+This makes it necessary to establish a "contract" that waiting thread can be notified without a reason.
+To be precise, there would be a reason - scheduler blackout - but since thread is designed (for a good reason) to be oblivious to scheduler internal implementation details, this reason is likely better to present as "spurious".
+
+From thread perspective, this somewhat resembles a Postel's law (aka robustness principle),
+
+> be conservative in what you do, be liberal in what you accept from others
+
+Assumption of spurious wakeups forces thread to be conservative in what it does: set condition when notifying other threads, and liberal in what it accepts:
+check the condition upon any return from wait and repeat wait if it's not there yet.
+
+Because spurious wakeups can happen whenever there's a race and possibly even in the absence of a race or a signal, when a thread wakes on a condition variable, it should always check that the condition it sought is satisfied.
+If it's not, it should go back to sleeping on the condition variable, waiting for another opportunity.
+
+### thundering herd
+
+[thundering herd](/docs/CS/OS/Linux/thundering_herd.md)
 
 ## Interrupt
 
@@ -115,3 +144,7 @@ Here, there are two problem areas:
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
+
+## References
+
+1. [Experience with Processes and Monitors in Mesa](https://people.eecs.berkeley.edu/~brewer/cs262/Mesa.pdf)
