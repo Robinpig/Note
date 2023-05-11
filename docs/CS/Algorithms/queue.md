@@ -90,3 +90,8 @@ The maximum size of the queue must be defined as prior and cannot be changed. Tr
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [list](/docs/CS/Algorithms/list.md)
 - [stack](/docs/CS/Algorithms/stack.md)
+
+
+## References
+
+1. [Dynamic Circular Work-Stealing Deque](http://www.dre.vanderbilt.edu/~schmidt/PDF/work-stealing-dequeue.pdf)

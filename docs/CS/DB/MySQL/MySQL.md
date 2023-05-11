@@ -4,6 +4,18 @@
 
 ## [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
+
+with docker
+```shell
+docker pull mysql:5.7
+
+docker image ls
+
+docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql:5.7
+
+```
+
+
 ```shell
 cat /etc/sysconfig/selinux
 
