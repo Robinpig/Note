@@ -5,17 +5,16 @@ Kafka is a distributed system consisting of servers and clients that communicate
 It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
 
 
-
-<div style="text-align: center;">
-
-![Fig.1. Kafka Architecture](./img/Architecture.png)
-
-</div>
-
-<p style="text-align: center;">
-Fig.1. Kafka Architecture.
-</p>
-
+> [Kafka Design](https://kafka.apache.org/documentation/#design)
+> We designed Kafka to be able to act as a unified platform for handling all the real-time data feeds a large company might have. To do this we had to think through a fairly broad set of use cases.
+> 
+> - It would have to have high-throughput to support high volume event streams such as real-time log aggregation.
+> - It would need to deal gracefully with large data backlogs to be able to support periodic data loads from offline systems.
+> - It also meant the system would have to handle low-latency delivery to handle more traditional messaging use-cases.
+> - We wanted to support partitioned, distributed, real-time processing of these feeds to create new, derived feeds. This motivated our partitioning and consumer model.
+> - Finally in cases where the stream is fed into other data systems for serving, we knew the system would have to be able to guarantee fault-tolerance in the presence of machine failures.
+> 
+> Supporting these uses led us to a design with a number of unique elements, more akin to a database log than a traditional messaging system.
 
 ### Event Streaming
 
@@ -32,10 +31,24 @@ Kafka combines three key capabilities so you can implement your use cases for ev
 - To store streams of events durably and reliably for as long as you want.
 - To process streams of events as they occur or retrospectively.
 
-### Main Concepts and Terminology
+
+## Architecture
+
+
+
+<div style="text-align: center;">
+
+![Fig.1. Kafka Architecture](./img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Kafka Architecture.
+</p>
 
 An **event** records the fact that "something happened" in the world or in your business. It is also called record or message in the documentation.
-When you read or write data to Kafka, you do this in the form of events. Conceptually, an event has a key, value, timestamp, and optional metadata headers.
+When you read or write data to Kafka, you do this in the form of events. 
+Conceptually, an event has a key, value, timestamp, and optional metadata headers.
 
 Messages consist of a variable-length header, a variable-length opaque key byte array and a variable-length opaque value byte array.
 
@@ -69,8 +82,10 @@ Events with the same key (denoted by their color in the figure) are written to t
 Note that both producers can write to the same partition if appropriate.
 </p>
 
-To make your data fault-tolerant and highly-available, every topic can be  **replicated** , even across geo-regions or datacenters, so that there are always multiple brokers that have a copy of the data just in case things go wrong, you want to do maintenance on the brokers, and so on.
-A common production setting is a replication factor of 3, i.e., there will always be three copies of your data. This replication is performed at the level of topic-partitions.
+To make your data fault-tolerant and highly-available, every topic can be  **replicated** , even across geo-regions or datacenters, 
+so that there are always multiple brokers that have a copy of the data just in case things go wrong, you want to do maintenance on the brokers, and so on.
+A common production setting is a replication factor of 3, i.e., there will always be three copies of your data. 
+This replication is performed at the level of topic-partitions.
 
 ### Message Delivery Semantics
 
@@ -119,9 +134,6 @@ Rebalance
 - [Producer](/docs/CS/MQ/Kafka/Producer.md)
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
-
-## Architecture
-
 
 
 ## Efficiency

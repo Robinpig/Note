@@ -157,6 +157,42 @@ See KIP-794 for more info. The partitioning strategy:
 
 ## poll
 
+Fetch data for the topics or partitions specified using one of the subscribe/assign APIs. It is an error to not have subscribed to any topics or partitions before polling for data.
+
+On each poll, consumer will try to use the last consumed offset as the starting offset and fetch sequentially. 
+The last consumed offset can be manually set through seek(TopicPartition, long) or automatically set as the last committed offset for the subscribed list of partitions
+
+This method returns immediately if there are records available or if the position advances past control records or aborted transactions when isolation.level=read_committed. 
+Otherwise, it will await the passed timeout. If the timeout expires, an empty record set will be returned. 
+Note that this method may block beyond the timeout in order to execute custom ConsumerRebalanceListener callbacks.
+
+
+```java
+public class KafkaConsumer<K, V> implements Consumer<K, V> {
+  private ConsumerRecords<K, V> poll(final Timer timer, final boolean includeMetadataInTimeout) {
+    try {
+      do {
+        final Fetch<K, V> fetch = pollForFetches(timer);
+        if (!fetch.isEmpty()) {
+          // before returning the fetched records, we can send off the next round of fetches
+          // and avoid block waiting for their responses to enable pipelining while the user
+          // is handling the fetched records.
+          //
+          // NOTE: since the consumed position has already been updated, we must not allow
+          // wakeups or any other errors to be triggered prior to returning the fetched records.
+          if (fetcher.sendFetches() > 0 || client.hasPendingRequests()) {
+            client.transmitSends();
+          }
+
+          return this.interceptors.onConsume(new ConsumerRecords<>(fetch.records()));
+        }
+      } while (timer.notExpired());
+      return ConsumerRecords.empty();
+    }
+  }
+}
+```
+
 ### pollForFetches
 
 ```java
@@ -377,7 +413,8 @@ public class ConsumerNetworkClient implements Closeable {
 2. Topics
 3. Consumers
 
-All consumers stop and wait until rebalanced finished.
+>
+> All consumers stop and wait until rebalanced finished.
 
 Coordinator
 
@@ -385,8 +422,8 @@ partitionId=Math.abs(groupId.hashCode() % offsetsTopicPartitionCount)
 
 - session.timeout.ms = 6s。
 - heartbeat.interval.ms = 2s
-  max.poll.interval.ms
-  Full GC STW
+- max.poll.interval.ms
+- Full GC STW
 
 Choose a leader of consumers and let leader selects strategy.
 
@@ -462,83 +499,33 @@ This also handles periodic offset commits if they are enabled.
 Returns early if the timeout expires or if waiting on rejoin is not required
 
 
-[KafkaConsumer#poll](/docs/CS/MQ/Kafka/Consumer.md?id=poll) -> updateAssignmentMetadataIfNeeded -> ConsumerCoordinator#poll
+DistributedHerder
+
 ```java
-public final class ConsumerCoordinator extends AbstractCoordinator {
-  public boolean poll(Timer timer, boolean waitForJoinGroup) {
-    maybeUpdateSubscriptionMetadata();
+public class WorkerCoordinator extends AbstractCoordinator implements Closeable {
+  public void poll(long timeout) {
+    // poll for io until the timeout expires
+    final long start = time.milliseconds();
+    long now = start;
+    long remaining;
 
-    invokeCompletedOffsetCommitCallbacks();
-
-    if (subscriptions.hasAutoAssignedPartitions()) {
-      if (protocol == null) {
-        throw new IllegalStateException("User configured " + ConsumerConfig.PARTITION_ASSIGNMENT_STRATEGY_CONFIG +
-                " to empty while trying to subscribe for group protocol to auto assign partitions");
-      }
-      // Always update the heartbeat last poll time so that the heartbeat thread does not leave the
-      // group proactively due to application inactivity even if (say) the coordinator cannot be found.
-      pollHeartbeat(timer.currentTimeMs());
-      if (coordinatorUnknownAndUnreadySync(timer)) {
-        return false;
-      }
-
+    do {
       if (rejoinNeededOrPending()) {
-        // due to a race condition between the initial metadata fetch and the initial rebalance,
-        // we need to ensure that the metadata is fresh before joining initially. This ensures
-        // that we have matched the pattern against the cluster's topics at least once before joining.
-        if (subscriptions.hasPatternSubscription()) {
-          // For consumer group that uses pattern-based subscription, after a topic is created,
-          // any consumer that discovers the topic after metadata refresh can trigger rebalance
-          // across the entire consumer group. Multiple rebalances can be triggered after one topic
-          // creation if consumers refresh metadata at vastly different times. We can significantly
-          // reduce the number of rebalances caused by single topic creation by asking consumer to
-          // refresh metadata before re-joining the group as long as the refresh backoff time has
-          // passed.
-          if (this.metadata.timeToAllowUpdate(timer.currentTimeMs()) == 0) {
-            this.metadata.requestUpdate();
-          }
-
-          if (!client.ensureFreshMetadata(timer)) {
-            return false;
-          }
-
-          maybeUpdateSubscriptionMetadata();
-        }
-
-        // if not wait for join group, we would just use a timer of 0
-        if (!ensureActiveGroup(waitForJoinGroup ? timer : time.timer(0L))) {
-          // since we may use a different timer in the callee, we'd still need
-          // to update the original timer's current time after the call
-          timer.update(time.milliseconds());
-
-          return false;
-        }
-      }
-    } else {
-      // For manually assigned partitions, we do not try to pro-actively lookup coordinator;
-      // instead we only try to refresh metadata when necessary.
-      // If connections to all nodes fail, wakeups triggered while attempting to send fetch
-      // requests result in polls returning immediately, causing a tight loop of polls. Without
-      // the wakeup, poll() with no channels would block for the timeout, delaying re-connection.
-      // awaitMetadataUpdate() in ensureCoordinatorReady initiates new connections with configured backoff and avoids the busy loop.
-      if (metadata.updateRequested() && !client.hasReadyNodes(timer.currentTimeMs())) {
-        client.awaitMetadataUpdate(timer);
+        ensureActiveGroup();
       }
 
-      // if there is pending coordinator requests, ensure they have a chance to be transmitted.
-      client.pollNoWakeup();
-    }
+      long elapsed = now - start;
+      remaining = timeout - elapsed;
 
-    maybeAutoCommitOffsetsAsync(timer.currentTimeMs());
-    return true;
+      long pollTimeout = Math.min(Math.max(0, remaining), timeToNextHeartbeat(now));
+      client.poll(time.timer(pollTimeout));
+
+      now = time.milliseconds();
+      elapsed = now - start;
+      remaining = timeout - elapsed;
+    } while (remaining > 0);
   }
-}
-```
 
-ensureActiveGroup
-
-```java
-public abstract class AbstractCoordinator implements Closeable {
   boolean ensureActiveGroup(final Timer timer) {
     // always ensure that the coordinator is ready because we may have been disconnected
     // when sending heartbeats and does not necessarily require us to rejoin the group.
@@ -551,6 +538,7 @@ public abstract class AbstractCoordinator implements Closeable {
   }
 }
 ```
+
 
 ### joinGroupIfNeeded
 
@@ -590,7 +578,8 @@ public abstract class AbstractCoordinator implements Closeable {
       // call onJoinPrepare if needed. We set a flag to make sure that we do not call it a second
       // time if the client is woken up before a pending rebalance completes. This must be called
       // on each iteration of the loop because an event requiring a rebalance (such as a metadata
-      // refresh which changes the matched subscription set) can occur while another rebalance is still in progress.
+      // refresh which changes the matched subscription set) can occur while another rebalance is
+      // still in progress.
       if (needsJoinPrepare) {
         // need to set the flag before calling onJoinPrepare since the user callback may throw
         // exception, in which case upon retry we should not retry onJoinPrepare either.
@@ -630,8 +619,8 @@ public abstract class AbstractCoordinator implements Closeable {
           onJoinComplete(generationSnapshot.generationId, generationSnapshot.memberId, generationSnapshot.protocolName, memberAssignment);
 
           // Generally speaking we should always resetJoinGroupFuture once the future is done, but here
-          // we can only reset the join group future after the completion callback returns. 
-          // This ensures that if the callback is woken up, we will retry it on the next joinGroupIfNeeded.
+          // we can only reset the join group future after the completion callback returns. This ensures
+          // that if the callback is woken up, we will retry it on the next joinGroupIfNeeded.
           // And because of that we should explicitly trigger resetJoinGroupFuture in other conditions below.
           resetJoinGroupFuture();
           needsJoinPrepare = true;
@@ -656,7 +645,10 @@ public abstract class AbstractCoordinator implements Closeable {
           requestRejoin(shortReason, fullReason);
         }
 
-        if (exception instanceof UnknownMemberIdException)
+        if (exception instanceof UnknownMemberIdException ||
+                exception instanceof IllegalGenerationException ||
+                exception instanceof RebalanceInProgressException ||
+                exception instanceof MemberIdRequiredException)
           continue;
         else if (!future.isRetriable())
           throw exception;
@@ -673,7 +665,7 @@ public abstract class AbstractCoordinator implements Closeable {
 
 #### initiateJoinGroup
 
-sending JoinGroupRequest
+sending PREPARING_REBALANCE JoinGroupRequest
 
 ```java
 public abstract class AbstractCoordinator implements Closeable {
@@ -688,22 +680,6 @@ public abstract class AbstractCoordinator implements Closeable {
       if (lastRebalanceStartMs == -1L)
         lastRebalanceStartMs = time.milliseconds();
       joinFuture = sendJoinGroupRequest();
-      joinFuture.addListener(new RequestFutureListener<ByteBuffer>() {
-        @Override
-        public void onSuccess(ByteBuffer value) {
-          // do nothing since all the handler logic are in SyncGroupResponseHandler already
-        }
-
-        @Override
-        public void onFailure(RuntimeException e) {
-          // we handle failures below after the request finishes. if the join completes
-          // after having been woken up, the exception is ignored and we will rejoin;
-          // this can be triggered when either join or sync request failed
-          synchronized (AbstractCoordinator.this) {
-            sensors.failedRebalanceSensor.record();
-          }
-        }
-      });
     }
     return joinFuture;
   }
@@ -764,25 +740,7 @@ KafkaApis
 
 ```scala
   
-  def handleJoinGroup(groupId: String,
-                      memberId: String,
-                      groupInstanceId: Option[String],
-                      requireKnownMemberId: Boolean,
-                      supportSkippingAssignment: Boolean,
-                      clientId: String,
-                      clientHost: String,
-                      rebalanceTimeoutMs: Int,
-                      sessionTimeoutMs: Int,
-                      protocolType: String,
-                      protocols: List[(String, Array[Byte])],
-                      responseCallback: JoinCallback,
-                      reason: Option[String] = None,
-                      requestLocal: RequestLocal = RequestLocal.NoCaching): Unit = {
-    validateGroupStatus(groupId, ApiKeys.JOIN_GROUP).foreach { error =>
-      responseCallback(JoinGroupResult(memberId, error))
-      return
-    }
-
+  def handleJoinGroup(groupId: String): Unit = {
     if (sessionTimeoutMs < groupConfig.groupMinSessionTimeoutMs ||
       sessionTimeoutMs > groupConfig.groupMaxSessionTimeoutMs) {
       responseCallback(JoinGroupResult(memberId, Errors.INVALID_SESSION_TIMEOUT))
@@ -800,35 +758,9 @@ KafkaApis
               group.remove(memberId)
               responseCallback(JoinGroupResult(JoinGroupRequest.UNKNOWN_MEMBER_ID, Errors.GROUP_MAX_SIZE_REACHED))
             } else if (isUnknownMember) {
-              doNewMemberJoinGroup(
-                group,
-                groupInstanceId,
-                requireKnownMemberId,
-                supportSkippingAssignment,
-                clientId,
-                clientHost,
-                rebalanceTimeoutMs,
-                sessionTimeoutMs,
-                protocolType,
-                protocols,
-                responseCallback,
-                requestLocal,
-                joinReason
-              )
+              doNewMemberJoinGroup(group)
             } else {
-              doCurrentMemberJoinGroup(
-                group,
-                memberId,
-                groupInstanceId,
-                clientId,
-                clientHost,
-                rebalanceTimeoutMs,
-                sessionTimeoutMs,
-                protocolType,
-                protocols,
-                responseCallback,
-                joinReason
-              )
+              doCurrentMemberJoinGroup(group)
             }
 
             // attempt to complete JoinGroup
