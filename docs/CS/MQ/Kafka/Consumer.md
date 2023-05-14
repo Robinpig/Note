@@ -159,13 +159,12 @@ See KIP-794 for more info. The partitioning strategy:
 
 Fetch data for the topics or partitions specified using one of the subscribe/assign APIs. It is an error to not have subscribed to any topics or partitions before polling for data.
 
-On each poll, consumer will try to use the last consumed offset as the starting offset and fetch sequentially. 
+On each poll, consumer will try to use the last consumed offset as the starting offset and fetch sequentially.
 The last consumed offset can be manually set through seek(TopicPartition, long) or automatically set as the last committed offset for the subscribed list of partitions
 
-This method returns immediately if there are records available or if the position advances past control records or aborted transactions when isolation.level=read_committed. 
-Otherwise, it will await the passed timeout. If the timeout expires, an empty record set will be returned. 
+This method returns immediately if there are records available or if the position advances past control records or aborted transactions when isolation.level=read_committed.
+Otherwise, it will await the passed timeout. If the timeout expires, an empty record set will be returned.
 Note that this method may block beyond the timeout in order to execute custom ConsumerRebalanceListener callbacks.
-
 
 ```java
 public class KafkaConsumer<K, V> implements Consumer<K, V> {
@@ -346,6 +345,7 @@ public class Fetcher<K, V> implements Closeable {
 ```
 
 #### ConsumerNetworkClient#poll
+
 ```java
 public class ConsumerNetworkClient implements Closeable {
   public void poll(Timer timer, PollCondition pollCondition, boolean disableWakeup) {
@@ -413,7 +413,6 @@ public class ConsumerNetworkClient implements Closeable {
 2. Topics
 3. Consumers
 
->
 > All consumers stop and wait until rebalanced finished.
 
 Coordinator
@@ -435,8 +434,8 @@ Choose a leader of consumers and let leader selects strategy.
 
 JOIN_GROUP -> SYNC_GROUP
 
-
 new Consumer1 subscribes and the Coordinator sends REBALANCE_IN_PROGRESS through Heartbeat
+
 ```dot
 digraph g{
     Coordinator
@@ -456,6 +455,7 @@ digraph g{
     Consumer3 -> Coordinator [label="JoinGroup: suscribe"]
 }
 ```
+
 choose a leader
 
 ```dot
@@ -466,7 +466,6 @@ digraph g{
     Coordinator -> Consumer3 [label="null"]
 }
 ```
-
 
 syncGroup
 
@@ -492,12 +491,10 @@ digraph g{
 
 ### ConsumerCoordinator#poll
 
-
-Poll for coordinator events. 
-This ensures that the coordinator is known and that the consumer has joined the group (if it is using group management). 
+Poll for coordinator events.
+This ensures that the coordinator is known and that the consumer has joined the group (if it is using group management).
 This also handles periodic offset commits if they are enabled.
 Returns early if the timeout expires or if waiting on rejoin is not required
-
 
 DistributedHerder
 
@@ -539,33 +536,29 @@ public class WorkerCoordinator extends AbstractCoordinator implements Closeable 
 }
 ```
 
-
 ### joinGroupIfNeeded
 
-
-
-AbstractCoordinator implements group management for a single group member by interacting with a designated Kafka broker (the coordinator). 
-Group semantics are provided by extending this class. See ConsumerCoordinator for example usage. 
+AbstractCoordinator implements group management for a single group member by interacting with a designated Kafka broker (the coordinator).
+Group semantics are provided by extending this class. See ConsumerCoordinator for example usage.
 From a high level, Kafka's group management protocol consists of the following sequence of actions:
-1. Group Registration: Group members register with the coordinator providing their own metadata (such as the set of topics they are interested in). 
-2. Group/Leader Selection: The coordinator select the members of the group and chooses one member as the leader. 
-3. State Assignment: The leader collects the metadata from all the members of the group and assigns state. 
+
+1. Group Registration: Group members register with the coordinator providing their own metadata (such as the set of topics they are interested in).
+2. Group/Leader Selection: The coordinator select the members of the group and chooses one member as the leader.
+3. State Assignment: The leader collects the metadata from all the members of the group and assigns state.
 4. Group Stabilization: Each member receives the state assigned by the leader and begins processing.
 
-To leverage this protocol, an implementation must define the format of metadata provided by each member for group registration in metadata() and 
-the format of the state assignment provided by the leader in onLeaderElected(String, String, List, boolean) and becomes available to members in onJoinComplete(int, String, String, ByteBuffer). 
-Note on locking: this class shares state between the caller and a background thread which is used for sending heartbeats after the client has joined the group. 
-All mutable state as well as state transitions are protected with the class's monitor. 
+To leverage this protocol, an implementation must define the format of metadata provided by each member for group registration in metadata() and
+the format of the state assignment provided by the leader in onLeaderElected(String, String, List, boolean) and becomes available to members in onJoinComplete(int, String, String, ByteBuffer).
+Note on locking: this class shares state between the caller and a background thread which is used for sending heartbeats after the client has joined the group.
+All mutable state as well as state transitions are protected with the class's monitor.
 Generally this means acquiring the lock before reading or writing the state of the group (e.g. generation, memberId) and holding the lock when sending a request that affects the state of the group (e.g. JoinGroup, LeaveGroup).
 
+Joins the group without starting the heartbeat thread. If this function returns true, the state must always be in STABLE and heartbeat enabled.
+If this function returns false, the state can be in one of the following:
 
-Joins the group without starting the heartbeat thread. If this function returns true, the state must always be in STABLE and heartbeat enabled. 
-If this function returns false, the state can be in one of the following: 
-* UNJOINED: got error response but times out before being able to re-join, heartbeat disabled 
-* PREPARING_REBALANCE: not yet received join-group response before timeout, heartbeat disabled 
+* UNJOINED: got error response but times out before being able to re-join, heartbeat disabled
+* PREPARING_REBALANCE: not yet received join-group response before timeout, heartbeat disabled
 * COMPLETING_REBALANCE: not yet received sync-group response before timeout, heartbeat enabled Visible for testing.
-
-
 
 ```java
 public abstract class AbstractCoordinator implements Closeable {
@@ -661,8 +654,6 @@ public abstract class AbstractCoordinator implements Closeable {
 }
 ```
 
-
-
 #### initiateJoinGroup
 
 sending PREPARING_REBALANCE JoinGroupRequest
@@ -687,6 +678,7 @@ public abstract class AbstractCoordinator implements Closeable {
 ```
 
 ### getCoordinator
+
 KafkaApis
 
 ```scala
@@ -956,8 +948,6 @@ onCompleteJoin
     }
   }
 ```
-
-
 
 ### Consumer Offset
 
