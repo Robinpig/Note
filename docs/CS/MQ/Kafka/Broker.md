@@ -1832,7 +1832,6 @@ The future associated with each operation will not be completed until the result
 3. load Balance
 
 ```scala
-  
   private def elect(): Unit = {
     activeControllerId = zkClient.getControllerId.getOrElse(-1)
     /*
@@ -1841,33 +1840,15 @@ The future associated with each operation will not be completed until the result
      * createEphemeralPath method from getting into an infinite loop if this broker is already the controller.
      */
     if (activeControllerId != -1) {
-      debug(s"Broker $activeControllerId has been elected as the controller, so stopping the election process.")
       return
     }
 
-    try {
-      val (epoch, epochZkVersion) = zkClient.registerControllerAndIncrementControllerEpoch(config.brokerId)
-      controllerContext.epoch = epoch
-      controllerContext.epochZkVersion = epochZkVersion
-      activeControllerId = config.brokerId
+    val (epoch, epochZkVersion) = zkClient.registerControllerAndIncrementControllerEpoch(config.brokerId)
+    controllerContext.epoch = epoch
+    controllerContext.epochZkVersion = epochZkVersion
+    activeControllerId = config.brokerId
 
-      info(s"${config.brokerId} successfully elected as the controller. Epoch incremented to ${controllerContext.epoch} " +
-        s"and epoch zk version is now ${controllerContext.epochZkVersion}")
-
-      onControllerFailover()
-    } catch {
-      case e: ControllerMovedException =>
-        maybeResign()
-
-        if (activeControllerId != -1)
-          debug(s"Broker $activeControllerId was elected as controller instead of broker ${config.brokerId}", e)
-        else
-          warn("A controller has been elected but just resigned, this will result in another round of election", e)
-      case t: Throwable =>
-        error(s"Error while electing or becoming controller on broker ${config.brokerId}. " +
-          s"Trigger controller movement immediately", t)
-        triggerControllerMove()
-    }
+    onControllerFailover()
   }
 ```
 
