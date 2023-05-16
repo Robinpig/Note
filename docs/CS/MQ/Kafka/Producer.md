@@ -12,7 +12,6 @@ The batching can be configured to accumulate no more than a fixed number of mess
 This allows the accumulation of more bytes to send, and few larger I/O operations on the servers.
 This buffering is configurable and gives a mechanism to trade off a small amount of additional latency for better throughput.
 
-A Kafka client that publishes records to the Kafka cluster.
 The producer is **thread safe** and sharing a **single producer instance** across threads will generally be faster than having multiple instances.
 
 Here is a simple example of using the producer to send records with strings containing sequential numbers as the key/value pairs.
@@ -37,6 +36,55 @@ Failure to close the producer after use will leak these resources.
 acks
 
 
+new KafkaThread with Sender
+```java
+public class KafkaProducer<K, V> implements Producer<K, V> {
+
+   KafkaProducer(ProducerConfig config) {
+      try {
+         this.producerConfig = config;
+         this.clientId = config.getString(ProducerConfig.CLIENT_ID_CONFIG);
+
+         this.partitioner = config.getConfiguredInstance(
+                 ProducerConfig.PARTITIONER_CLASS_CONFIG,
+                 Partitioner.class,
+                 Collections.singletonMap(ProducerConfig.CLIENT_ID_CONFIG, clientId));
+         this.partitionerIgnoreKeys = config.getBoolean(ProducerConfig.PARTITIONER_IGNORE_KEYS_CONFIG);
+         this.keySerializer = keySerializer;
+         this.valueSerializer = valueSerializer;
+         this.interceptors = interceptors;
+
+         // As per Kafka producer configuration documentation batch.size may be set to 0 to explicitly disable
+         // batching which in practice actually means using a batch size of 1.
+         int batchSize = Math.max(1, config.getInt(ProducerConfig.BATCH_SIZE_CONFIG));
+         this.accumulator = new RecordAccumulator(logContext,
+                 batchSize,
+                 this.compressionType,
+                 lingerMs(config),
+                 retryBackoffMs,
+                 deliveryTimeoutMs,
+                 partitionerConfig,
+                 metrics,
+                 PRODUCER_METRIC_GROUP_NAME,
+                 time,
+                 apiVersions,
+                 transactionManager,
+                 new BufferPool(this.totalMemorySize, batchSize, metrics, time, PRODUCER_METRIC_GROUP_NAME));
+
+         this.metadata = metadata;
+
+         this.sender = newSender(logContext, kafkaClient, this.metadata);
+         String ioThreadName = NETWORK_THREAD_PREFIX + " | " + clientId;
+         this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
+         this.ioThread.start();
+
+         AppInfoParser.registerAppInfo(JMX_PREFIX, clientId, metrics, time.milliseconds());
+      } catch (Throwable t) {
+         throw new KafkaException("Failed to construct kafka producer", t);
+      }
+   }
+}
+```
 
 
 ## send
@@ -78,42 +126,7 @@ The `send()` method is asynchronous.
 When called, it adds the record to a buffer of pending record sends and immediately returns.
 This allows the producer to batch together individual records for efficiency.
 
-```java
-public class KafkaProducer<K, V> implements Producer<K, V> {
-    @Override
-    public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
-        // intercept the record, which can be potentially modified; this method does not throw exceptions
-        ProducerRecord<K, V> interceptedRecord = this.interceptors.onSend(record);
-        return doSend(interceptedRecord, callback);
-    }
-}
-```
 
-### ProducerInterceptor
-
-A container that holds the list ProducerInterceptor and wraps calls to the chain of custom interceptors.
-
-A plugin interface that allows you to intercept (and possibly mutate) the records received by the producer before they are published to the Kafka cluster.
-This class will get producer config properties via configure() method, including clientId assigned by KafkaProducer if not specified in the producer config. The interceptor implementation needs to be aware that it will be sharing producer config namespace with other interceptors and serializers, and ensure that there are no conflicts.
-
-**Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.** 
-As a result, if the user configures the interceptor with the wrong key and value type parameters, the producer will not throw an exception, just log the errors.
-ProducerInterceptor callbacks may be called from multiple threads. Interceptor implementation must ensure thread-safety, if needed.
-
-Implement org.apache.kafka.common.ClusterResourceListener to receive cluster metadata once it's available. Please see the class documentation for ClusterResourceListener for more information.
-
-```java
-public interface ProducerInterceptor<K, V> extends Configurable, AutoCloseable {
-  
-    ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
-  
-    void onAcknowledgement(RecordMetadata metadata, Exception exception);
-
-    void close();
-}
-```
-### doSend
-doSend():
 
 1. make sure the metadata for the topic is available
 2. serializedKey and value
@@ -125,50 +138,53 @@ doSend():
 
 ```java
 public class KafkaProducer<K, V> implements Producer<K, V> {
-    private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
-        TopicPartition tp = null;
-        try {
-            throwIfProducerClosed();
-  
-            // first make sure the metadata for the topic is available
-            ClusterAndWaitTime clusterAndWaitTime;
-            clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
-            long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
-            Cluster cluster = clusterAndWaitTime.cluster;
-  
-            byte[] serializedKey;
-            serializedKey = keySerializer.serialize(record.topic(), record.headers(), record.key());
-            byte[] serializedValue;
-            serializedValue = valueSerializer.serialize(record.topic(), record.headers(), record.value());
-   
-            int partition = partition(record, serializedKey, serializedValue, cluster);
-            tp = new TopicPartition(record.topic(), partition);
+   @Override
+   public Future<RecordMetadata> send(ProducerRecord<K, V> record, Callback callback) {
+      // intercept the record, which can be potentially modified; this method does not throw exceptions
+      ProducerRecord<K, V> interceptedRecord = this.interceptors.onSend(record);
+      return doSend(interceptedRecord, callback);
+   }
 
-            setReadOnly(record.headers());
-            Header[] headers = record.headers().toArray();
+   private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
+      TopicPartition tp = null;
+      try {
+         // first make sure the metadata for the topic is available
+         ClusterAndWaitTime clusterAndWaitTime;
+         clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
+         long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
+         Cluster cluster = clusterAndWaitTime.cluster;
 
-            int serializedSize = AbstractRecords.estimateSizeInBytesUpperBound(apiVersions.maxUsableProduceMagic(),
-                    compressionType, serializedKey, serializedValue, headers);
-            ensureValidRecordSize(serializedSize);
-            long timestamp = record.timestamp() == null ? time.milliseconds() : record.timestamp();
-            // producer callback will make sure to call both 'callback' and interceptor callback
-            Callback interceptCallback = new InterceptorCallback<>(callback, this.interceptors, tp);
+         byte[] serializedKey = keySerializer.serialize(record.topic(), record.headers(), record.key());
+         byte[] serializedValue = valueSerializer.serialize(record.topic(), record.headers(), record.value());
 
-            if (transactionManager != null && transactionManager.isTransactional())
-                transactionManager.maybeAddPartitionToTransaction(tp);
+         int partition = partition(record, serializedKey, serializedValue, cluster);
+         tp = new TopicPartition(record.topic(), partition);
 
-            RecordAccumulator.RecordAppendResult result = accumulator.append(tp, timestamp, serializedKey,
-                    serializedValue, headers, interceptCallback, remainingWaitMs);
-            if (result.batchIsFull || result.newBatchCreated) {
-                this.sender.wakeup();
-            }
-            return result.future;
-        } catch (Exception e) {
-            // we notify interceptor about all exceptions, since onSend is called before anything else in this method
-            this.interceptors.onSendError(record, tp, e);
-            throw e;
-        }
-    }
+         setReadOnly(record.headers());
+         Header[] headers = record.headers().toArray();
+
+         int serializedSize = AbstractRecords.estimateSizeInBytesUpperBound(apiVersions.maxUsableProduceMagic(),
+                 compressionType, serializedKey, serializedValue, headers);
+         ensureValidRecordSize(serializedSize);
+         long timestamp = record.timestamp() == null ? time.milliseconds() : record.timestamp();
+         // producer callback will make sure to call both 'callback' and interceptor callback
+         Callback interceptCallback = new InterceptorCallback<>(callback, this.interceptors, tp);
+
+         if (transactionManager != null && transactionManager.isTransactional())
+            transactionManager.maybeAddPartitionToTransaction(tp);
+
+         RecordAccumulator.RecordAppendResult result = accumulator.append(tp, timestamp, serializedKey,
+                 serializedValue, headers, interceptCallback, remainingWaitMs);
+         if (result.batchIsFull || result.newBatchCreated) {
+            this.sender.wakeup();
+         }
+         return result.future;
+      } catch (Exception e) {
+         // we notify interceptor about all exceptions, since onSend is called before anything else in this method
+         this.interceptors.onSendError(record, tp, e);
+         throw e;
+      }
+   }
 }
 ```
 
@@ -283,6 +299,45 @@ public RecordAppendResult append(String topic,
             appendsInProgress.decrementAndGet();
         }
     }
+
+private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers,
+        Callback callback, Deque<ProducerBatch> deque, long nowMs) {
+        if (closed)
+        throw new KafkaException("Producer closed while send in progress");
+        ProducerBatch last = deque.peekLast();
+        if (last != null) {
+        int initialBytes = last.estimatedSizeInBytes();
+        FutureRecordMetadata future = last.tryAppend(timestamp, key, value, headers, callback, nowMs);
+        if (future == null) {
+        last.closeForRecordAppends();
+        } else {
+        int appendedBytes = last.estimatedSizeInBytes() - initialBytes;
+        return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false, false, appendedBytes);
+        }
+        }
+        return null;
+        }
+
+public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers, Callback callback, long now) {
+        if (!recordsBuilder.hasRoomFor(timestamp, key, value, headers)) {
+        return null;
+        } else {
+        this.recordsBuilder.append(timestamp, key, value, headers);
+        this.maxRecordSize = Math.max(this.maxRecordSize, AbstractRecords.estimateSizeInBytesUpperBound(magic(),
+        recordsBuilder.compressionType(), key, value, headers));
+        this.lastAppendTime = now;
+        FutureRecordMetadata future = new FutureRecordMetadata(this.produceFuture, this.recordCount,
+        timestamp,
+        key == null ? -1 : key.length,
+        value == null ? -1 : value.length,
+        Time.SYSTEM);
+        // we have to keep every future returned to the users in case the batch needs to be
+        // split to several new batches and resent.
+        thunks.add(new Thunk(callback, future));
+        this.recordCount++;
+        return future;
+        }
+        }
 ```
 
 #### ready
@@ -323,7 +378,7 @@ TODO:
 
 
 
-## Sender
+### Sender
 
 
 
@@ -431,6 +486,29 @@ delay
 
 
 
+### ProducerInterceptor
+
+A container that holds the list ProducerInterceptor and wraps calls to the chain of custom interceptors.
+
+A plugin interface that allows you to intercept (and possibly mutate) the records received by the producer before they are published to the Kafka cluster.
+This class will get producer config properties via configure() method, including clientId assigned by KafkaProducer if not specified in the producer config. The interceptor implementation needs to be aware that it will be sharing producer config namespace with other interceptors and serializers, and ensure that there are no conflicts.
+
+**Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.** 
+As a result, if the user configures the interceptor with the wrong key and value type parameters, the producer will not throw an exception, just log the errors.
+ProducerInterceptor callbacks may be called from multiple threads. Interceptor implementation must ensure thread-safety, if needed.
+
+Implement org.apache.kafka.common.ClusterResourceListener to receive cluster metadata once it's available. Please see the class documentation for ClusterResourceListener for more information.
+
+```java
+public interface ProducerInterceptor<K, V> extends Configurable, AutoCloseable {
+  
+    ProducerRecord<K, V> onSend(ProducerRecord<K, V> record);
+  
+    void onAcknowledgement(RecordMetadata metadata, Exception exception);
+
+    void close();
+}
+```
 
 ## Idempotence
 
