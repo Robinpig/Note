@@ -89,34 +89,39 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 ## send
 
 ```plantuml
-participant Actor
+actor Actor
 Actor -> KafkaProducer : send
 activate KafkaProducer
+participant ProducerInterceptors
+participant RecordAccumulator
+Sender -> Sender : loop(runOnce)
+activate Sender
 KafkaProducer -> ProducerInterceptors : onSend
 activate ProducerInterceptors
 ProducerInterceptors --> KafkaProducer: ProducerRecord
 deactivate ProducerInterceptors
 KafkaProducer -> KafkaProducer : doSend
-activate KafkaProducer
 KafkaProducer -> KafkaProducer : waitOnMetadata
-activate KafkaProducer
-deactivate KafkaProducer
-KafkaProducer -> Serializer : serialize key and value
-activate Serializer
-Serializer --> KafkaProducer
-deactivate Serializer
+KafkaProducer -> KafkaProducer : serialize key and value
 KafkaProducer -> KafkaProducer : partition
-activate KafkaProducer
-deactivate KafkaProducer
 KafkaProducer -> RecordAccumulator : append
 activate RecordAccumulator
 RecordAccumulator --> KafkaProducer
 deactivate RecordAccumulator
-KafkaProducer -> Sender : wakeup if batchIsFull or newBatchCreated
-activate Sender
+KafkaProducer -> Sender : wakeup
 Sender --> KafkaProducer
-deactivate Sender
 deactivate KafkaProducer
+Sender -> NetworkClient : client.poll()
+activate NetworkClient
+NetworkClient -> NetworkClient : maybeUpdateMetadata
+NetworkClient -> KSelector : selector.poll()
+activate KSelector
+KSelector -> KSelector : clear()
+KSelector -> Selector : select()
+KSelector -> Selector : pollSelectionKeys()
+KSelector -> KSelector : addToCompletedReceives()
+NetworkClient -> NetworkClient : process completed actions
+deactivate Sender
 return
 ```
 
@@ -501,7 +506,7 @@ public class RecordAccumulator {
          updateDrainIndex(node.idString(), drainIndex);
          drainIndex = (drainIndex + 1) % parts.size();
          // Only proceed if the partition has no in-flight batches.
-      
+    
 
          Deque<ProducerBatch> deque = getDeque(tp);
          final ProducerBatch batch;
