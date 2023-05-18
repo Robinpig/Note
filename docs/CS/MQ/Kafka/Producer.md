@@ -2,7 +2,7 @@
 
 Load balancing
 
-The client controls which partition it publishes messages to. 
+The client controls which partition it publishes messages to.
 This can be done at random, implementing a kind of random load balancing, or it can be done by some semantic partitioning function.
 
 Asynchronous send
@@ -16,7 +16,7 @@ The producer is **thread safe** and sharing a **single producer instance** acros
 
 Here is a simple example of using the producer to send records with strings containing sequential numbers as the key/value pairs.
 
-```java
+```
  Properties props = new Properties();
  props.put("bootstrap.servers", "localhost:9092");
  props.put("linger.ms", 1);
@@ -35,8 +35,8 @@ Failure to close the producer after use will leak these resources.
 
 acks
 
-
 new KafkaThread with Sender
+
 ```java
 public class KafkaProducer<K, V> implements Producer<K, V> {
 
@@ -86,47 +86,48 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
-
 ## send
 
-
 ```plantuml
-participant Actor
+actor Actor
 Actor -> KafkaProducer : send
 activate KafkaProducer
+participant ProducerInterceptors
+participant RecordAccumulator
+Sender -> Sender : loop(runOnce)
+activate Sender
 KafkaProducer -> ProducerInterceptors : onSend
 activate ProducerInterceptors
 ProducerInterceptors --> KafkaProducer: ProducerRecord
 deactivate ProducerInterceptors
 KafkaProducer -> KafkaProducer : doSend
-activate KafkaProducer
 KafkaProducer -> KafkaProducer : waitOnMetadata
-activate KafkaProducer
-deactivate KafkaProducer
-KafkaProducer -> Serializer : serialize key and value
-activate Serializer
-Serializer --> KafkaProducer
-deactivate Serializer
+KafkaProducer -> KafkaProducer : serialize key and value
 KafkaProducer -> KafkaProducer : partition
-activate KafkaProducer
-deactivate KafkaProducer
 KafkaProducer -> RecordAccumulator : append
 activate RecordAccumulator
 RecordAccumulator --> KafkaProducer
 deactivate RecordAccumulator
-KafkaProducer -> Sender : wakeup if batchIsFull or newBatchCreated
-activate Sender
+KafkaProducer -> Sender : wakeup
 Sender --> KafkaProducer
-deactivate Sender
 deactivate KafkaProducer
+Sender -> NetworkClient : client.poll()
+activate NetworkClient
+NetworkClient -> NetworkClient : maybeUpdateMetadata
+NetworkClient -> KSelector : selector.poll()
+activate KSelector
+KSelector -> KSelector : clear()
+KSelector -> Selector : select()
+KSelector -> Selector : pollSelectionKeys()
+KSelector -> KSelector : addToCompletedReceives()
+NetworkClient -> NetworkClient : process completed actions
+deactivate Sender
 return
 ```
 
 The `send()` method is asynchronous.
 When called, it adds the record to a buffer of pending record sends and immediately returns.
 This allows the producer to batch together individual records for efficiency.
-
-
 
 1. make sure the metadata for the topic is available
 2. serializedKey and value
@@ -180,7 +181,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
          }
          return result.future;
       } catch (Exception e) {
-         // we notify interceptor about all exceptions, since onSend is called before anything else in this method
          this.interceptors.onSendError(record, tp, e);
          throw e;
       }
@@ -188,7 +188,9 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
-#### append
+partition with RoundRobin and stickyPartitionCache
+
+### append
 
 The acks config controls the criteria under which requests are considered complete.
 The default setting "all" will result in blocking on the full commit of the record, the slowest but most durable setting.
@@ -207,117 +209,103 @@ Add a record to the accumulator, return the append result
 The append result will contain the future metadata, and flag for whether the appended batch is full or a new batch is created
 
 ```java
-public RecordAppendResult append(String topic,
-                                     int partition,
-                                     long timestamp,
-                                     byte[] key,
-                                     byte[] value,
-                                     Header[] headers,
-                                     AppendCallbacks callbacks,
-                                     long maxTimeToBlock,
-                                     boolean abortOnNewBatch,
-                                     long nowMs,
-                                     Cluster cluster) throws InterruptedException {
-        TopicInfo topicInfo = topicInfoMap.computeIfAbsent(topic, k -> new TopicInfo(logContext, k, batchSize));
+public class RecordAccumulator {
+   public RecordAppendResult append(String topic, int partition) throws InterruptedException {
+      TopicInfo topicInfo = topicInfoMap.computeIfAbsent(topic, k -> new TopicInfo(logContext, k, batchSize));
 
-        // We keep track of the number of appending thread to make sure we do not miss batches in
-        // abortIncompleteBatches().
-        appendsInProgress.incrementAndGet();
-        ByteBuffer buffer = null;
-        if (headers == null) headers = Record.EMPTY_HEADERS;
-        try {
-            // Loop to retry in case we encounter partitioner's race conditions.
-            while (true) {
-                // If the message doesn't have any partition affinity, so we pick a partition based on the broker
-                // availability and performance.  Note, that here we peek current partition before we hold the
-                // deque lock, so we'll need to make sure that it's not changed while we were waiting for the
-                // deque lock.
-                final BuiltInPartitioner.StickyPartitionInfo partitionInfo;
-                final int effectivePartition;
-                if (partition == RecordMetadata.UNKNOWN_PARTITION) {
-                    partitionInfo = topicInfo.builtInPartitioner.peekCurrentPartitionInfo(cluster);
-                    effectivePartition = partitionInfo.partition();
-                } else {
-                    partitionInfo = null;
-                    effectivePartition = partition;
-                }
-
-                // Now that we know the effective partition, let the caller know.
-                setPartition(callbacks, effectivePartition);
-
-                // check if we have an in-progress batch
-                Deque<ProducerBatch> dq = topicInfo.batches.computeIfAbsent(effectivePartition, k -> new ArrayDeque<>());
-                synchronized (dq) {
-                    // After taking the lock, validate that the partition hasn't changed and retry.
-                    if (partitionChanged(topic, topicInfo, partitionInfo, dq, nowMs, cluster))
-                        continue;
-
-                    RecordAppendResult appendResult = tryAppend(timestamp, key, value, headers, callbacks, dq, nowMs);
-                    if (appendResult != null) {
-                        // If queue has incomplete batches we disable switch (see comments in updatePartitionInfo).
-                        boolean enableSwitch = allBatchesFull(dq);
-                        topicInfo.builtInPartitioner.updatePartitionInfo(partitionInfo, appendResult.appendedBytes, cluster, enableSwitch);
-                        return appendResult;
-                    }
-                }
-
-                // we don't have an in-progress record batch try to allocate a new batch
-                if (abortOnNewBatch) {
-                    // Return a result that will cause another call to append.
-                    return new RecordAppendResult(null, false, false, true, 0);
-                }
-
-                if (buffer == null) {
-                    byte maxUsableMagic = apiVersions.maxUsableProduceMagic();
-                    int size = Math.max(this.batchSize, AbstractRecords.estimateSizeInBytesUpperBound(maxUsableMagic, compression, key, value, headers));
-                    log.trace("Allocating a new {} byte message buffer for topic {} partition {} with remaining timeout {}ms", size, topic, partition, maxTimeToBlock);
-                    // This call may block if we exhausted buffer space.
-                    buffer = free.allocate(size, maxTimeToBlock);
-                    // Update the current time in case the buffer allocation blocked above.
-                    // NOTE: getting time may be expensive, so calling it under a lock
-                    // should be avoided.
-                    nowMs = time.milliseconds();
-                }
-
-                synchronized (dq) {
-                    // After taking the lock, validate that the partition hasn't changed and retry.
-                    if (partitionChanged(topic, topicInfo, partitionInfo, dq, nowMs, cluster))
-                        continue;
-
-                    RecordAppendResult appendResult = appendNewBatch(topic, effectivePartition, dq, timestamp, key, value, headers, callbacks, buffer, nowMs);
-                    // Set buffer to null, so that deallocate doesn't return it back to free pool, since it's used in the batch.
-                    if (appendResult.newBatchCreated)
-                        buffer = null;
-                    // If queue has incomplete batches we disable switch (see comments in updatePartitionInfo).
-                    boolean enableSwitch = allBatchesFull(dq);
-                    topicInfo.builtInPartitioner.updatePartitionInfo(partitionInfo, appendResult.appendedBytes, cluster, enableSwitch);
-                    return appendResult;
-                }
+      // We keep track of the number of appending thread to make sure we do not miss batches in
+      // abortIncompleteBatches().
+      appendsInProgress.incrementAndGet();
+      ByteBuffer buffer = null;
+      if (headers == null) headers = Record.EMPTY_HEADERS;
+      try {
+         // Loop to retry in case we encounter partitioner's race conditions.
+         while (true) {
+            // If the message doesn't have any partition affinity, so we pick a partition based on the broker
+            // availability and performance.  Note, that here we peek current partition before we hold the
+            // deque lock, so we'll need to make sure that it's not changed while we were waiting for the
+            // deque lock.
+            final BuiltInPartitioner.StickyPartitionInfo partitionInfo;
+            final int effectivePartition;
+            if (partition == RecordMetadata.UNKNOWN_PARTITION) {
+               partitionInfo = topicInfo.builtInPartitioner.peekCurrentPartitionInfo(cluster);
+               effectivePartition = partitionInfo.partition();
+            } else {
+               partitionInfo = null;
+               effectivePartition = partition;
             }
-        } finally {
-            free.deallocate(buffer);
-            appendsInProgress.decrementAndGet();
-        }
-    }
 
-private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers,
-        Callback callback, Deque<ProducerBatch> deque, long nowMs) {
-        if (closed)
-        throw new KafkaException("Producer closed while send in progress");
-        ProducerBatch last = deque.peekLast();
-        if (last != null) {
-        int initialBytes = last.estimatedSizeInBytes();
-        FutureRecordMetadata future = last.tryAppend(timestamp, key, value, headers, callback, nowMs);
-        if (future == null) {
-        last.closeForRecordAppends();
-        } else {
-        int appendedBytes = last.estimatedSizeInBytes() - initialBytes;
-        return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false, false, appendedBytes);
-        }
-        }
-        return null;
-        }
+            // Now that we know the effective partition, let the caller know.
+            setPartition(callbacks, effectivePartition);
 
+            // check if we have an in-progress batch
+            Deque<ProducerBatch> dq = topicInfo.batches.computeIfAbsent(effectivePartition, k -> new ArrayDeque<>());
+            synchronized (dq) {
+               // After taking the lock, validate that the partition hasn't changed and retry.
+               if (partitionChanged(topic, topicInfo, partitionInfo, dq, nowMs, cluster))
+                  continue;
+
+               RecordAppendResult appendResult = tryAppend(timestamp, key, value, headers, callbacks, dq, nowMs);
+               if (appendResult != null) {
+                  // If queue has incomplete batches we disable switch (see comments in updatePartitionInfo).
+                  boolean enableSwitch = allBatchesFull(dq);
+                  topicInfo.builtInPartitioner.updatePartitionInfo(partitionInfo, appendResult.appendedBytes, cluster, enableSwitch);
+                  return appendResult;
+               }
+            }
+
+            synchronized (dq) {
+               RecordAppendResult appendResult = appendNewBatch(topic, effectivePartition, dq, timestamp, key, value, headers, callbacks, buffer, nowMs);
+               // Set buffer to null, so that deallocate doesn't return it back to free pool, since it's used in the batch.
+               if (appendResult.newBatchCreated)
+                  buffer = null;
+               // If queue has incomplete batches we disable switch (see comments in updatePartitionInfo).
+               boolean enableSwitch = allBatchesFull(dq);
+               topicInfo.builtInPartitioner.updatePartitionInfo(partitionInfo, appendResult.appendedBytes, cluster, enableSwitch);
+               return appendResult;
+            }
+         }
+      } finally {
+         free.deallocate(buffer);
+         appendsInProgress.decrementAndGet();
+      }
+   }
+
+   private RecordAppendResult tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers,
+                                        Callback callback, Deque<ProducerBatch> deque, long nowMs) {
+      ProducerBatch last = deque.peekLast();
+      if (last != null) {
+         int initialBytes = last.estimatedSizeInBytes();
+         FutureRecordMetadata future = last.tryAppend(timestamp, key, value, headers, callback, nowMs);
+         if (future != null) {
+            int appendedBytes = last.estimatedSizeInBytes() - initialBytes;
+            return new RecordAppendResult(future, deque.size() > 1 || last.isFull(), false, false, appendedBytes);
+         }
+      }
+      return null;
+   }
+
+   private RecordAppendResult appendNewBatch(String topic, int partition) {
+      RecordAppendResult appendResult = tryAppend(timestamp, key, value, headers, callbacks, dq, nowMs);
+      if (appendResult != null) {
+         // Somebody else found us a batch, return the one we waited for! Hopefully this doesn't happen often...
+         return appendResult;
+      }
+
+      MemoryRecordsBuilder recordsBuilder = recordsBuilder(buffer, apiVersions.maxUsableProduceMagic());
+      ProducerBatch batch = new ProducerBatch(new TopicPartition(topic, partition), recordsBuilder, nowMs);
+      FutureRecordMetadata future = Objects.requireNonNull(batch.tryAppend(timestamp, key, value, headers,
+              callbacks, nowMs));
+
+      dq.addLast(batch);
+      incomplete.add(batch);
+
+      return new RecordAppendResult(future, dq.size() > 1 || batch.isFull(), true, false, batch.estimatedSizeInBytes());
+   }
+}
+```
+
+```
 public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers, Callback callback, long now) {
         if (!recordsBuilder.hasRoomFor(timestamp, key, value, headers)) {
         return null;
@@ -355,18 +343,20 @@ A destination node is ready to send data if:
    - The accumulator has been closed
 
 ```java
-public ReadyCheckResult ready(Cluster cluster, long nowMs) {
-        Set<Node> readyNodes = new HashSet<>();
-        long nextReadyCheckDelayMs = Long.MAX_VALUE;
-        Set<String> unknownLeaderTopics = new HashSet<>();
-        // Go topic by topic so that we can get queue sizes for partitions in a topic and calculate
-        // cumulative frequency table (used in partitioner).
-        for (Map.Entry<String, TopicInfo> topicInfoEntry : this.topicInfoMap.entrySet()) {
-            final String topic = topicInfoEntry.getKey();
-            nextReadyCheckDelayMs = partitionReady(cluster, nowMs, topic, topicInfoEntry.getValue(), nextReadyCheckDelayMs, readyNodes, unknownLeaderTopics);
-        }
-        return new ReadyCheckResult(readyNodes, nextReadyCheckDelayMs, unknownLeaderTopics);
-    }
+public class RecordAccumulator {
+   public ReadyCheckResult ready(Cluster cluster, long nowMs) {
+      Set<Node> readyNodes = new HashSet<>();
+      long nextReadyCheckDelayMs = Long.MAX_VALUE;
+      Set<String> unknownLeaderTopics = new HashSet<>();
+      // Go topic by topic so that we can get queue sizes for partitions in a topic and calculate
+      // cumulative frequency table (used in partitioner).
+      for (Map.Entry<String, TopicInfo> topicInfoEntry : this.topicInfoMap.entrySet()) {
+         final String topic = topicInfoEntry.getKey();
+         nextReadyCheckDelayMs = partitionReady(cluster, nowMs, topic, topicInfoEntry.getValue(), nextReadyCheckDelayMs, readyNodes, unknownLeaderTopics);
+      }
+      return new ReadyCheckResult(readyNodes, nextReadyCheckDelayMs, unknownLeaderTopics);
+   }
+}
 ```
 
 TODO:
@@ -376,115 +366,190 @@ TODO:
    - Kafka will close idle timeout connection if clients set `connections.max.idle.ms!=-1`.
    - Otherwise, clients don't explicit close() and will keep CLOSE_WAIT until it send again.
 
-
-
-### Sender
-
-
-
-The main run loop for the sender thread
-```java
-public class Sender implements Runnable {
-    public void run() {
-
-        // main loop, runs until close is called
-        while (running) {
-            try {
-                runOnce();
-            } catch (Exception e) {
-                log.error("Uncaught error in kafka producer I/O thread: ", e);
-            }
-        }
-
-        // okay we stopped accepting requests but there may still be
-        // requests in the transaction manager, accumulator or waiting for acknowledgment,
-        // wait until these are completed.
-        while (!forceClose && ((this.accumulator.hasUndrained() || this.client.inFlightRequestCount() > 0) || hasPendingTransactionalRequests())) {
-            try {
-                runOnce();
-            } catch (Exception e) {
-            }
-        }
-
-        // Abort the transaction if any commit or abort didn't go through the transaction manager's queue
-        while (!forceClose && transactionManager != null && transactionManager.hasOngoingTransaction()) {
-            if (!transactionManager.isCompleting()) {
-                transactionManager.beginAbort();
-            }
-            try {
-                runOnce();
-            } catch (Exception e) {
-            }
-        }
-
-        if (forceClose) {
-            // We need to fail all the incomplete transactional requests and batches and wake up the threads waiting on
-            // the futures.
-            if (transactionManager != null) {
-                transactionManager.close();
-            }
-            this.accumulator.abortIncompleteBatches();
-        }
-        try {
-            this.client.close();
-        } catch (Exception e) {
-        }
-    }
-}
-```
+## Sender
 
 runOnce():
+
 1. Transaction Management
 2. sendProducerData
 3. [KafkaClient.poll()](/docs/CS/MQ/Kafka/Network.md?id=poll)
 
 ```java
 public class Sender implements Runnable {
-    void runOnce() {
-        if (transactionManager != null) {
-            try {
-                transactionManager.maybeResolveSequences();
+   public void run() {
+      // main loop, runs until close is called
+      while (running) {
+         runOnce();
+      }
 
-                // do not continue sending if the transaction manager is in a failed state
-                if (transactionManager.hasFatalError()) {
-                    RuntimeException lastError = transactionManager.lastError();
-                    if (lastError != null)
-                        maybeAbortBatches(lastError);
-                    client.poll(retryBackoffMs, time.milliseconds());
-                    return;
-                }
+      // okay we stopped accepting requests but there may still be
+      // requests in the transaction manager, accumulator or waiting for acknowledgment, wait until these are completed.
+      while (!forceClose && ((this.accumulator.hasUndrained() || this.client.inFlightRequestCount() > 0) || hasPendingTransactionalRequests())) {
+         runOnce();
+      }
 
-                // Check whether we need a new producerId. If so, we will enqueue an InitProducerId
-                // request which will be sent below
-                transactionManager.bumpIdempotentEpochAndResetIdIfNeeded();
+      // Abort the transaction if any commit or abort didn't go through the transaction manager's queue
 
-                if (maybeSendAndPollTransactionalRequest()) {
-                    return;
-                }
-            } catch (AuthenticationException e) {
-                // This is already logged as error, but propagated here to perform any clean ups.
-                transactionManager.authenticationFailed(e);
+      // We need to fail all the incomplete transactional requests and batches and wake up the threads waiting on the futures.
+      if (forceClose) {
+         if (transactionManager != null) {
+            transactionManager.close();
+         }
+         this.accumulator.abortIncompleteBatches();
+      }
+
+      this.client.close();
+   }
+
+   void runOnce() {
+      // transactionManager
+
+      long currentTimeMs = time.milliseconds();
+      long pollTimeout = sendProducerData(currentTimeMs);
+      client.poll(pollTimeout, currentTimeMs);
+   }
+}
+```
+
+### sendProducerData
+
+1. get the list of partitions with data ready to send
+2. if there are any partitions whose leaders are not known yet, force metadata update
+3. remove any nodes we aren't ready to send to
+4. create produce requests
+5. Reset the producer id if an expired batch has previously been sent to the broker
+6. Transfer the record batches into a list of produce requests on a per-node basis
+
+```java
+public class Sender implements Runnable {
+   private long sendProducerData(long now) {
+      Cluster cluster = metadata.fetch();
+      // get the list of partitions with data ready to send
+      RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
+
+      // if there are any partitions whose leaders are not known yet, force metadata update
+      if (!result.unknownLeaderTopics.isEmpty()) {
+         for (String topic : result.unknownLeaderTopics)
+            this.metadata.add(topic, now);
+         this.metadata.requestUpdate();
+      }
+
+      // remove any nodes we aren't ready to send to
+
+      // create produce requests
+      Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes, this.maxRequestSize, now);
+      addToInflightBatches(batches);
+      if (guaranteeMessageOrder) {
+         for (List<ProducerBatch> batchList : batches.values()) {
+            for (ProducerBatch batch : batchList)
+               this.accumulator.mutePartition(batch.topicPartition);
+         }
+      }
+
+      accumulator.resetNextBatchExpiryTime();
+      List<ProducerBatch> expiredInflightBatches = getExpiredInflightBatches(now);
+      List<ProducerBatch> expiredBatches = this.accumulator.expiredBatches(now);
+      expiredBatches.addAll(expiredInflightBatches);
+
+      // Reset the producer id if an expired batch has previously been sent to the broker.
+      for (ProducerBatch expiredBatch : expiredBatches) {
+         failBatch(expiredBatch, new TimeoutException(errorMessage), false);
+      }
+
+      long pollTimeout = Math.min(result.nextReadyCheckDelayMs, notReadyTimeout);
+      pollTimeout = Math.min(pollTimeout, this.accumulator.nextExpiryTimeMs() - now);
+      pollTimeout = Math.max(pollTimeout, 0);
+   
+      sendProduceRequests(batches, now);
+      return pollTimeout;
+   }
+
+   private void sendProduceRequest(long now, int destination, short acks, int timeout, List<ProducerBatch> batches) {
+      final Map<TopicPartition, ProducerBatch> recordsByPartition = new HashMap<>(batches.size());
+
+      // find the minimum magic version used when creating the record sets
+      // down convert if necessary to the minimum magic used. 
+
+      RequestCompletionHandler callback = response -> handleProduceResponse(response, recordsByPartition, time.milliseconds());
+
+      String nodeId = Integer.toString(destination);
+      ClientRequest clientRequest = client.newClientRequest(nodeId, requestBuilder, now, acks != 0,
+              requestTimeoutMs, callback);
+      client.send(clientRequest, now);
+   }
+}
+```
+
+drain
+
+```java
+public class RecordAccumulator {
+   public Map<Integer, List<ProducerBatch>> drain(Cluster cluster, Set<Node> nodes, int maxSize, long now) {
+      Map<Integer, List<ProducerBatch>> batches = new HashMap<>();
+      for (Node node : nodes) {
+         List<ProducerBatch> ready = drainBatchesForOneNode(cluster, node, maxSize, now);
+         batches.put(node.id(), ready);
+      }
+      return batches;
+   }
+
+   private List<ProducerBatch> drainBatchesForOneNode(Cluster cluster, Node node, int maxSize, long now) {
+      int size = 0;
+      List<PartitionInfo> parts = cluster.partitionsForNode(node.id());
+      List<ProducerBatch> ready = new ArrayList<>();
+      /* to make starvation less likely each node has it's own drainIndex */
+      int drainIndex = getDrainIndex(node.idString());
+      int start = drainIndex = drainIndex % parts.size();
+      do {
+         PartitionInfo part = parts.get(drainIndex);
+         TopicPartition tp = new TopicPartition(part.topic(), part.partition());
+         updateDrainIndex(node.idString(), drainIndex);
+         drainIndex = (drainIndex + 1) % parts.size();
+         // Only proceed if the partition has no in-flight batches.
+    
+
+         Deque<ProducerBatch> deque = getDeque(tp);
+         final ProducerBatch batch;
+         synchronized (deque) {
+            // invariant: !isMuted(tp,now) && deque != null
+            ProducerBatch first = deque.peekFirst();
+            // first != null
+            boolean backoff = first.attempts() > 0 && first.waitedTimeMs(now) < retryBackoffMs;
+            // Only drain the batch if it is not during backoff period.
+
+               // there is a rare case that a single batch size is larger than the request size due to
+               // compression; in this case we will still eventually send this batch in a single request
+
+            batch = deque.pollFirst();
+
+            if (producerIdAndEpoch != null && !batch.hasSequence()) {
+               transactionManager.maybeUpdateProducerIdAndEpoch(batch.topicPartition);
+
+               batch.setProducerState(producerIdAndEpoch, transactionManager.sequenceNumber(batch.topicPartition), isTransactional);
+               transactionManager.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+
+               transactionManager.addInFlightBatch(batch);
             }
-        }
+         }
 
-        long currentTimeMs = time.milliseconds();
-        long pollTimeout = sendProducerData(currentTimeMs);
-        client.poll(pollTimeout, currentTimeMs);
-    }
+         batch.close();
+         size += batch.records().sizeInBytes();
+         ready.add(batch);
+
+         batch.drained(now);
+      } while (start != drainIndex);
+      return ready;
+   }
 }
 ```
 
 ### batch
 
-
 5 max uncompleted batches batch.size
 
 buffer size
 
-
 delay
-
-
 
 ### ProducerInterceptor
 
@@ -493,7 +558,7 @@ A container that holds the list ProducerInterceptor and wraps calls to the chain
 A plugin interface that allows you to intercept (and possibly mutate) the records received by the producer before they are published to the Kafka cluster.
 This class will get producer config properties via configure() method, including clientId assigned by KafkaProducer if not specified in the producer config. The interceptor implementation needs to be aware that it will be sharing producer config namespace with other interceptors and serializers, and ensure that there are no conflicts.
 
-**Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.** 
+**Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.**
 As a result, if the user configures the interceptor with the wrong key and value type parameters, the producer will not throw an exception, just log the errors.
 ProducerInterceptor callbacks may be called from multiple threads. Interceptor implementation must ensure thread-safety, if needed.
 
@@ -518,7 +583,7 @@ single partition, single session
 
 all partitions, all sessions
 
-```java
+```
 producer.initTransactions();
 try {
             producer.beginTransaction();
