@@ -46,11 +46,20 @@ Kafka combines three key capabilities so you can implement your use cases for ev
 Fig.1. Kafka Architecture.
 </p>
 
-An **event** records the fact that "something happened" in the world or in your business. It is also called record or message in the documentation.
+An **event** records the fact that "something happened" in the world or in your business.
+It is also called record or message in the documentation.
 When you read or write data to Kafka, you do this in the form of events. 
 Conceptually, an event has a key, value, timestamp, and optional metadata headers.
 
+The unit of data within Kafka is called a message.
 Messages consist of a variable-length header, a variable-length opaque key byte array and a variable-length opaque value byte array.
+
+For efficiency, messages are written into Kafka in batches.
+A batch is just a collection of messages, all of which are being produced to the same topic and partition. 
+An individual roundtrip across the network for each message would result in excessive overhead, and collecting messages together into a batch reduces this. 
+Of course, this is a tradeoff between latency and throughput: the larger the batches, the more messages that can be handled per unit of time, but the longer it takes an individual message to propagate.
+Batches are also typically compressed, providing more efficient data transfer and storage at the cost of some processing power.
+
 
 **Producers** are those client applications that publish (write) events to Kafka, and **consumers** are those that subscribe to (read and process) these events.
 In Kafka, producers and consumers are fully decoupled and agnostic of each other, which is a key design element to achieve the high scalability that Kafka is known for.
@@ -61,6 +70,9 @@ Topics in Kafka are always multi-producer and multi-subscriber: a topic can have
 **Events in a topic can be read as often as needed—unlike traditional messaging systems, events are not deleted after consumption.**
 Instead, you define for how long Kafka should retain your events through a per-topic configuration setting, after which old events will be discarded.
 Kafka's performance is effectively constant with respect to data size, so storing data for a long time is perfectly fine.
+
+
+
 
 Topics are  **partitioned** , meaning a topic is spread over a number of "buckets" located on different Kafka brokers.
 This distributed placement of your data is very important for scalability because it allows client applications to both read and write the data from/to many brokers at the same time.
