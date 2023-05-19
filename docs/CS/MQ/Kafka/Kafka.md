@@ -65,14 +65,15 @@ Batches are also typically compressed, providing more efficient data transfer an
 In Kafka, producers and consumers are fully decoupled and agnostic of each other, which is a key design element to achieve the high scalability that Kafka is known for.
 For example, producers never need to wait for consumers. Kafka provides various guarantees such as the ability to process events exactly-once.
 
-Events are organized and durably stored in  **topics** . Very simplified, a topic is similar to a folder in a filesystem, and the events are the files in that folder.
+Events are organized and durably stored in  **topics** . 
+Very simplified, a topic is similar to a folder in a filesystem, and the events are the files in that folder.
 Topics in Kafka are always multi-producer and multi-subscriber: a topic can have zero, one, or many producers that write events to it, as well as zero, one, or many consumers that subscribe to these events.
 **Events in a topic can be read as often as needed—unlike traditional messaging systems, events are not deleted after consumption.**
 Instead, you define for how long Kafka should retain your events through a per-topic configuration setting, after which old events will be discarded.
 Kafka's performance is effectively constant with respect to data size, so storing data for a long time is perfectly fine.
 
 
-
+### Topics and partition
 
 Topics are  **partitioned** , meaning a topic is spread over a number of "buckets" located on different Kafka brokers.
 This distributed placement of your data is very important for scalability because it allows client applications to both read and write the data from/to many brokers at the same time.
@@ -147,6 +148,13 @@ Rebalance
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
 
+
+A key feature of Apache Kafka is that of retention, which is the durable storage of messages for some period of time.
+Kafka brokers are configured with a default retention setting for topics, either retaining messages for some period of time (e.g., 7 days) or until the topic reaches a certain size in bytes (e.g., 1 GB). 
+Once these limits are reached, messages are expired and deleted so that the retention configuration is a minimum amount of data available at any time. Individual topics can also be configured with their own retention settings so that messages are stored for only as long as they are useful. 
+For example, a tracking topic might be retained for several days, whereas application metrics might be retained for only a few hours. 
+Topics can also be configured as log compacted, which means that Kafka will retain only the last message produced with a specific key. 
+This can be useful for changelog-type data, where only the last update is interesting.
 
 ## Efficiency
 
