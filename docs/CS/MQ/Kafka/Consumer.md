@@ -1,5 +1,19 @@
 ## Introduction
 
+
+Consumers read messages. In other publish/subscribe systems, these clients may be called subscribers or readers. 
+The consumer subscribes to one or more topics and reads the messages in the order in which they were produced. 
+The consumer keeps track of which messages it has already consumed by keeping track of the offset of messages.
+The offset is another bit of metadata—an integer value that continually increases—that Kafka adds to each message as it is produced. Each message in a given partition has a unique offset.
+By storing the offset of the last consumed message for each partition, either in Zookeeper or in Kafka itself, a consumer can stop and restart without losing its place.
+
+Consumers work as part of a consumer group, which is one or more consumers that work together to consume a topic. The group assures that each partition is only consumed by one member.
+The mapping of a consumer to a partition is often called ownership of the partition by the consumer.”
+
+In this way, consumers can horizontally scale to consume topics with a large number of messages.
+Additionally, if a single consumer fails, the remaining members of the group will rebalance the partitions being consumed to take over for the missing member. 
+
+
 **The Kafka consumer is NOT thread-safe.**
 All network I/O happens in the thread of the application making the call.
 It is the responsibility of the user to ensure that multi-threaded access is properly synchronized.
