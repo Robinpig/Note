@@ -1,11 +1,17 @@
 ## Introduction
 
+There are many reasons an application might need to write messages to Kafka: recording user activities for auditing or analysis, recording metrics, storing log mes‐ sages, recording information from smart appliances, communicating asynchronously with other applications, buffering information before writing to a database, and much more.
+
+Those diverse use cases also imply diverse requirements: is every message critical, or can we tolerate loss of messages? Are we OK with accidentally duplicating messages? Are there any strict latency or throughput requirements we need to support?
+
 Load balancing
 
 The client controls which partition it publishes messages to.
 This can be done at random, implementing a kind of random load balancing, or it can be done by some semantic partitioning function.
 
-Asynchronous send
+Asynchronous 
+
+
 
 Batching is one of the big drivers of efficiency, and to enable batching the Kafka producer will attempt to accumulate data in memory and to send out larger batches in a single request.
 The batching can be configured to accumulate no more than a fixed number of messages and to wait no longer than some fixed latency bound (say 64k or 10 ms).
@@ -87,6 +93,23 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 ```
 
 ## send
+
+We start producing messages to Kafka by creating a ProducerRecord, which must include the topic we want to send the record to and a value. 
+Optionally, we can also specify a key and/or a partition. 
+Once we send the ProducerRecord, the first thing the producer will do is serialize the key and value objects to ByteArrays so they can be sent over the network.
+
+Next, the data is sent to a partitioner.
+If we specified a partition in the ProducerRecord, the partitioner doesn’t do anything and simply returns the partition we specified. 
+If we didn’t, the partitioner will choose a partition for us, usually based on the ProducerRecord key. 
+Once a partition is selected, the producer knows which topic and partition the record will go to. 
+It then adds the record to a batch of records that will also be sent to the same topic and partition. 
+A separate thread is responsible for sending those batches of records to the appropriate Kafka brokers.
+
+When the broker receives the messages, it sends back a response.
+If the messages were successfully written to Kafka, it will return a RecordMetadata object with the topic, partition, and the offset of the record within the partition.
+If the broker failed to write the messages, it will return an error. 
+When the producer receives an error, it may retry sending the message a few more times before giving up and returning an error.
+
 
 ```plantuml
 actor Actor
