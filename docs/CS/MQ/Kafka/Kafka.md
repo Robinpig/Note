@@ -156,6 +156,22 @@ For example, a tracking topic might be retained for several days, whereas applic
 Topics can also be configured as log compacted, which means that Kafka will retain only the last message produced with a specific key. 
 This can be useful for changelog-type data, where only the last update is interesting.
 
+### Multiple Clusters
+
+As Kafka deployments grow, it is often advantageous to have multiple clusters. There are several reasons why this can be useful:
+- Segregation of types of data
+- Isolation for security requirements
+- Multiple datacenters (disaster recovery)
+
+When working with multiple datacenters in particular, it is often required that messages be copied between them. In this way, online applications can have access to user activity at both sites.  
+For example, if a user changes public information in their profile, that change will need to be visible regardless of the datacenter in which search results are displayed. 
+Or, monitoring data can be collected from many sites into a single central location where the analysis and alerting systems are hosted. 
+The replication mechanisms within the Kafka clusters are designed only to work within a single cluster, not between multiple clusters.
+
+The Kafka project includes a tool called MirrorMaker, used for this purpose. 
+At its core, MirrorMaker is simply a Kafka consumer and producer, linked together with a queue. 
+Messages are consumed from one Kafka cluster and produced for another.
+
 ## Efficiency
 
 The small I/O problem happens both between the client and the server and in the server's own persistent operations.
