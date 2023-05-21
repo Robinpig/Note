@@ -28,30 +28,59 @@ Create Connections
 - connect Coordinator
 - consume records
 
+
+The first step to start consuming records is to create a `KafkaConsumer` instance. 
+Creating a `KafkaConsumer` is very similar to creating a `KafkaProducer`—you create a Java `Properties` instance with the properties you want to pass to the consumer.
 ```
-public static void main(String[]args){
-    Properties props = new Properties();
+Properties props = new Properties();
     props.setProperty("bootstrap.servers", "localhost:9092");
     props.setProperty("group.id", "aaa");
     props.setProperty("enable.auto.commit", "true");
     props.setProperty("auto.commit.interval.ms", "1000");
     props.setProperty("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
     props.setProperty("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
-    try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
-        consumer.subscribe(Arrays.asList("quickstart-events", "bar"), new NoOpConsumerRebalanceListener());
-        while (true) {
-            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
-            for (TopicPartition partition : records.partitions()) {
-                List<ConsumerRecord<String, String>> partitionRecords = records.records(partition);
-                for (ConsumerRecord<String, String> record : partitionRecords)
-                    System.out.printf("offset = %d, key = %s, value = %s%n", record.offset(), record.key(), record.value());
-                long lastOffset = partitionRecords.get(partitionRecords.size() - 1).offset();
-                consumer.commitSync(Collections.singletonMap(partition, new OffsetAndMetadata(lastOffset + 1)));
-            }
-        }
-    }
+    KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
+```
+
+Once we create a consumer, the next step is to subscribe to one or more topics. The `subcribe()` method takes a list of topics as a parameter.
+```
+consumer.subscribe(Arrays.asList("quickstart-events", "bar"), new NoOpConsumerRebalanceListener());
+```
+
+At the heart of the consumer API is a simple loop for polling the server for more data. Once the consumer subscribes to topics, the poll loop handles all details of coordina‐ tion, partition rebalances, heartbeats, and data fetching, leaving the developer with a clean API that simply returns available data from the assigned partitions. <br/>
+The main body of a consumer will look as follows:
+
+
+```
+try {
+  while (true) {
+      ConsumerRecords<String, String> records = consumer.poll(100);
+      for (ConsumerRecord<String, String> record : records)
+      {
+          log.debug("topic = %s, partition = %s, offset = %d, customer = %s,
+             country = %s\n",
+             record.topic(), record.partition(), record.offset(),
+             record.key(), record.value());
+
+          int updatedCount = 1;
+          if (custCountryMap.countainsValue(record.value())) {
+              updatedCount = custCountryMap.get(record.value()) + 1;
+          }
+          custCountryMap.put(record.value(), updatedCount)
+
+          JSONObject json = new JSONObject(custCountryMap);
+          System.out.println(json.toString(4))
+      }
+  }
+} finally {
+  consumer.close();
 }
 ```
+The poll loop does a lot more than just get data. 
+The first time you call poll() with a new consumer, it is responsible for finding the `GroupCoordinator`, joining the con‐ sumer group, and receiving a partition assignment. If a rebalance is triggered, it will be handled inside the poll loop as well. 
+And of course the heartbeats that keep con‐ sumers alive are sent from within the poll loop.
+For this reason, we try to make sure that whatever processing we do between iterations is fast and efficient.
+ 
 
 ### Consumer Group
 
