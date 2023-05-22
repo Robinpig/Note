@@ -14,7 +14,12 @@ In this way, consumers can horizontally scale to consume topics with a large num
 Additionally, if a single consumer fails, the remaining members of the group will rebalance the partitions being consumed to take over for the missing member. 
 
 
-**The Kafka consumer is NOT thread-safe.**
+
+> [!WARNING]
+> 
+> **The Kafka consumer is NOT thread-safe.**
+ You can’t have multiple consumers that belong to the same group in one thread and you can’t have multiple threads safely use the same consumer. One consumer per thread is the rule. To run mul‐ tiple consumers in the same group in one application, you will need to run each in its own thread. It is useful to wrap the con‐ sumer logic in its own object and then use Java’s ExecutorService to start multiple threads each with its own consumer.
+
 All network I/O happens in the thread of the application making the call.
 It is the responsibility of the user to ensure that multi-threaded access is properly synchronized.
 Un-synchronized access will result in ConcurrentModificationException.
@@ -199,6 +204,29 @@ See KIP-794 for more info. The partitioning strategy:
   Records with the same key are not guaranteed to be sent to the same partition. See KIP-480 for details about sticky partitioning.
 
 ## poll
+
+- fetch.min.bytes This property allows a consumer to specify the minimum amount of data that it wants to receive from the broker when fetching records.
+- fetch.max.wait.ms lets you control how long to wait.
+
+### Commit
+The easiest way to commit offsets is to allow the consumer to do it for you. If you configure enable.auto.commit=true, then every five seconds the consumer will commit the largest offset your client received from poll(). The five-second interval is the default and is controlled by setting auto.commit.interval.ms. Just like every‐ thing else in the consumer, the automatic commits are driven by the poll loop. When‐ ever you poll, the consumer checks if it is time to commit, and if it is, it will commit the offsets it returned in the last poll.
+
+With autocommit enabled, a call to poll will always commit the last offset returned by the previous poll. It doesn’t know which events were actually processed, so it is critical to always process all the events returned by poll() before calling poll() again. (Just like poll(), close() also commits offsets automatically.) This is usually not an issue, but pay attention when you handle exceptions or exit the poll loop prematurely.
+
+Automatic commits are convenient, but they don’t give developers enough control to avoid duplicate messages.
+
+Most developers exercise more control over the time at which offsets are committed —both to eliminate the possibility of missing messages and to reduce the number of messages duplicated during rebalancing. The consumer API has the option of com‐ mitting the current offset at a point that makes sense to the application developer rather than based on a timer.
+
+By setting `auto.commit.offset=false`, offsets will only be committed when the application explicitly chooses to do so. The simplest and most reliable of the commit APIs is commitSync(). This API will commit the latest offset returned by poll() and return once the offset is committed, throwing an exception if commit fails for some reason.
+
+One drawback of manual commit is that the application is blocked until the broker responds to the commit request. This will limit the throughput of the application. Throughput can be improved by committing less frequently, but then we are increas‐ ing the number of potential duplicates that a rebalance will create.
+
+> [!NOTE]
+> 
+> A simple pattern to get commit order right for asynchronous retries is to use a monotonically increasing sequence number. Increase the sequence number every time you commit and add the sequence number at the time of the commit to the commitAsync callback. When you’re getting ready to send a retry, check if the commit sequence number the callback got is equal to the instance variable; if it is, there was no newer commit and it is safe to retry. If the instance sequence number is higher, don’t retry because a newer commit was already sent.
+
+
+
 
 Fetch data for the topics or partitions specified using one of the subscribe/assign APIs. It is an error to not have subscribed to any topics or partitions before polling for data.
 
