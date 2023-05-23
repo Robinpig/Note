@@ -89,6 +89,8 @@ For this reason, we try to make sure that whatever processing we do between iter
 
 ### Consumer Group
 
+Consumers label themselves with a consumer group name,and each record published to a topic is delivered to one consumer instance within each subscribing consumer group.
+
 The consumer group state.
 
 ```java
@@ -153,6 +155,14 @@ The coordinator also caches the offsets in an in-memory table in order to serve 
 When the coordinator receives an offset fetch request, it simply returns the last committed offset vector from the offsets cache.
 In case coordinator was just started or if it just became the coordinator for a new set of consumer groups (by becoming a leader for a partition of the offsets topic), it may need to load the offsets topic partition into the cache.
 In this case, the offset fetch will fail with an CoordinatorLoadInProgressException and the consumer may retry the OffsetFetchRequest after backing off.
+
+
+```properties
+group.id+topic+partitionId=offset
+```
+
+Deafult 50 files.
+
 
 ```java
 
