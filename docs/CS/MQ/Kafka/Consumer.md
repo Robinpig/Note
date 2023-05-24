@@ -161,7 +161,7 @@ In this case, the offset fetch will fail with an CoordinatorLoadInProgressExcept
 group.id+topic+partitionId=offset
 ```
 
-Deafult 50 files.
+Deafult 50 log filles.
 
 
 ```java
