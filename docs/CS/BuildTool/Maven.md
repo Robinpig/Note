@@ -78,6 +78,15 @@ other proxy repos into `<repositories></repositories>` of `~/.m2/settings.xml`:
 </repository>
 ```
 
+
+## Test
+
+debug test
+
+```shell
+mvn test -Dmaven.surefire.debug
+```
+
 ## Plugins
 
 ## Links

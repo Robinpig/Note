@@ -2820,6 +2820,18 @@ group the segments and clean the groups
 ## Membership
 
 ### ZooKeeper
+Connect to Zookeeper through `bin/zookeeper-shell.sh 127.0.0.1:2181`
+- admin, 
+- brokers, 
+- cluster, 
+- config, 
+- consumers, 
+- controller, 
+- controller_epoch, 
+- feature, 
+- isr_change_notification, 
+- latest_producer_id_block, 
+- log_dir_event_notification
 
 ### KRaft
 
