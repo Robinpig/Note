@@ -82,6 +82,13 @@ JavaThread* java_lang_Thread::thread(oop java_thread) {
 
 ## vmOperations
 
+Operations in the VM that can be requested by Java threads, but which must be executed, in serial fashion by a specific thread known as the VM thread. 
+These operations are often synchronous, in that the requester will block until the VM thread has completed the operation. 
+Many of these operations also require that the VM be brought to a safepoint before the operation can be performed - a garbage collection request is a simple example.
+
+A list of common operations is below.
+
+
 ```cpp
 // vmOperations.hpp
 class VM_Operation: public CHeapObj<mtInternal> {

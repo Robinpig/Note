@@ -1,8 +1,52 @@
 ## Introduction
+A _safepoint_ is a point in program execution where the state of the program is known and can be examined. Things like registers, memory, etc.
+For the JVM to completely pause and run tasks (such as GC), **all threads** must come to a safepoint.
+
+For example, to retrieve a stack trace on a thread we must come to a safepoint. This also means tools like `jstack` require that all threads of the program be able to reach a safepoint.
+
+> A point during program execution at which all GC roots are known and all heap object contents are consistent. From a global point of view, all threads must block at a safepoint before the GC can run. (As a special case, threads running JNI code can continue to run, because they use only handles. During a safepoint they must block instead of loading the contents of the handle.) From a local point of view, a safepoint is a distinguished point in a block of code where the executing thread may block for the GC. Most call sites qualify as safepoints. There are strong invariants which hold true at every safepoint, which may be disregarded at non-safepoints. Both compiled Java code and C/C++ code be optimized between safepoints, but less so across safepoints. The JIT compiler emits a GC map at each safepoint. C/C++ code in the VM uses stylized macro-based conventions (e.g., TRAPS) to mark potential safepoints.
+
+
+While GC is one of the most common safepoint operations, there are many VM operations[2](https://blanco.io/blog/jvm-safepoint-pauses/#fn:2) that are run while threads are at safepoints. Some may be invoked externally by connecting to the HotSpot JVM (i.e. `jstack`, `jcmd`) while others are internal to the JVM operation (monitor deflation, code deoptimization). A list of common operations is below.
+
+-   User Invoked:
+    -   Deadlock detection
+    -   JVMTI
+    -   Thread Dumps
+-   Run at regular intervals (see `-XX:GuaranteedSafepointInterval`[3](https://blanco.io/blog/jvm-safepoint-pauses/#fn:opt_ref))
+    -   Monitor Deflation
+    -   Inline Cache Cleaning
+    -   Invocation Counter Delay
+    -   Compiled Code Marking
+-   Other:
+    -   Revoking [Biased Locks](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
+    -   Compiled method Deoptimization
+    -   GC
+
+All these operations force the JVM to come to a safepoint in order to run some kind of VM operation. Now we can decompose a safepoint operation times into two categories
 
 **Only VM thread may execute a safepoint.**
 
 **Safepoint is actually a page of memory.**
+
+![](./img/pause-time-diagram.png)
+-   Time taken from initiating the safepoint request until all threads reach a safepoint
+-   Time taken to perform safepoint operation.
+
+
+So, if applications are not responding, it may be because
+
+1.  The JVM is trying to reach a safepoint and most threads have already stopped except maybe one or two, or
+2.  The JVM has reached a safepoint and is running some internal operations. May it be GC, lock bias revocation, cache line invalidation, etc.
+
+The issue is that we need to figure out exactly what is triggering the pause in the first place if anything, and then investigate which part of the pause is taking a long time; the time to get to the safepoint (TTSP), or the time spent performing the VM operation.
+
+To do that more logging is required. The flags that need to be added to the JVM are `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1`. Adding these two arguments will print to stdout or the configured log file every time a safepoint operation occurs.
+
+
+It’s important to reiterate that the spin, block, and sync times represent portions of the TTSP. So, if TTSP is large it can mean that one thread might be attempting to finish its work, while the rest of the JVM threads are paused waiting for it to reach a safepoint. This is why the total pause time of a JVM must be considered TTSP + cleanup + vmop.
+
+With this information we can handily take any JVM logs and figure out which operations were running. It’s critical to consider both the safepoint logs and GC logs. Otherwise it’s possible to miss information about TTSP mentioned above.
 
 ## Example
 ### Preemptive Suspension
@@ -725,6 +769,31 @@ JRT_ENTRY(void, InterpreterRuntime::at_safepoint(JavaThread* current))
   }
 JRT_END
 ```
+
+## Analyzing Safepoint Pauses
+Now that we know all about safepoints and how to get their statistics, we need to know what can prevent Java threads from coming to a safepoint. Some of those causes are:
+
+-   Large object initialization
+    -   i.e. initializing a 10GB array. (Single threaded, zeroing the array)
+-   Array copying
+-   JNI Handle Allocation
+-   JNI Critical Regions
+-   [Counted Loops](https://psy-lob-saw.blogspot.com/2015/12/safepoints.html)
+-   NIO Mapped Byte Buffers
+    -   Memory mapped portion of a file
+
+
+Usually, if a program is taking a long time to reach a safepoint there is a systemic issue in the code where it performs one or more of the operations above for extended periods of time without allowing the JVM to come to a safepoint.
+
+Fortunately, there are even more options that can be added to the JVM in order to enable logging when it takes a longer than expected time to reach a safepoint.
+
+```
+-XX:+SafepointTimeout -XX:SafepointTimeoutDelay=<timeout in ms>
+```
+These two options print to the VM log / stdout all threads which have failed to reach a safepoint after the specified time period. This can help developers troubleshoot which threads might be causing extended pauses of the JVM and whether the root cause is the VM operation or the TTSP.
+
+
+
 
 ## Links
 
