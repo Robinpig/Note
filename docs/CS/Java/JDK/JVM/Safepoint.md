@@ -793,6 +793,9 @@ Fortunately, there are even more options that can be added to the JVM in order t
 ```
 These two options print to the VM log / stdout all threads which have failed to reach a safepoint after the specified time period. This can help developers troubleshoot which threads might be causing extended pauses of the JVM and whether the root cause is the VM operation or the TTSP.
 
+```
+Xlog:safepoint
+```
 
 
 
@@ -807,6 +810,8 @@ These two options print to the VM log / stdout all threads which have failed to 
 ## References
 
 1. [真是绝了！这段被JVM动了手脚的代码！](https://mp.weixin.qq.com/s/KDUccdLALWdjNBrFjVR74Q)
-2. [StackOverFlow](https://stackoverflow.com/questions/67068057/the-main-thread-exceeds-the-set-sleep-time)
+2. [The main thread exceeds the set sleep time](https://stackoverflow.com/questions/67068057/the-main-thread-exceeds-the-set-sleep-time)
 3. [JVM internals basics - Stop-the-world phase (safepoints) - how it works?](https://krzysztofslusarski.github.io/2020/11/13/stw.html)
+4. [JDK-8223051 support loops with long (64b) trip counts](https://bugs.openjdk.org/browse/JDK-8223051)
+5. [Analyzing gc logs](https://stackoverflow.com/questions/29666057/analyzing-gc-logs)
 
