@@ -144,9 +144,18 @@ Notes:
 
 Rebalance
 
-- [Producer](/docs/CS/MQ/Kafka/Producer.md)
+Comparsion [Producer](/docs/CS/MQ/Kafka/Producer.md) and [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 
+| Client | Producer | Consumer |
+| -- | -- | -- |
+| Network | NetworkClient | NetworkClient |
+| Background Task | Sender(start at newInstance) | Fetcher |
+| | | |
+| | | |
+
+
+
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
-- [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
+
 
 
 A key feature of Apache Kafka is that of retention, which is the durable storage of messages for some period of time.
@@ -343,6 +352,14 @@ RecordAccumulator
 
 This class acts as a queue that accumulates records into MemoryRecords instances to be sent to the server.
 The accumulator uses a bounded amount of memory and append calls will block when that memory is exhausted, unless this behavior is explicitly disabled.
+
+
+## Message
+
+timestamp
+
+RecordBatch
+
 
 ## shutdown
 
