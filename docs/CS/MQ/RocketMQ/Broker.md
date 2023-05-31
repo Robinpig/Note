@@ -803,6 +803,10 @@ checkpoint
 - recover consumeQueue file to find max offset
 - check and compare the commitLog file offset and sync the offset
 
+
+
+
+
 ## Links
 
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
