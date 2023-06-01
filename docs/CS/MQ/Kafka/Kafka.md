@@ -145,12 +145,12 @@ Notes:
 Rebalance
 
 Comparsion [Producer](/docs/CS/MQ/Kafka/Producer.md) and [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 
+
 | Client | Producer | Consumer |
 | -- | -- | -- |
 | Network | NetworkClient | NetworkClient |
 | Background Task | Sender(start at newInstance) | Fetcher |
-| | | |
-| | | |
+
 
 
 
