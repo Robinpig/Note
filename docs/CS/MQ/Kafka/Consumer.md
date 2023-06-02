@@ -488,6 +488,109 @@ public class ConsumerNetworkClient implements Closeable {
 }
 ```
 
+
+## Heartbeat
+
+HeartbeatThread
+```
+boolean ensureActiveGroup(final Timer timer) {  
+    // always ensure that the coordinator is ready because we may have been disconnected  
+    // when sending heartbeats and does not necessarily require us to rejoin the group.    if (!ensureCoordinatorReady(timer)) {  
+        return false;  
+    }  
+  
+    startHeartbeatThreadIfNeeded();  
+    return joinGroupIfNeeded(timer);  
+}
+```
+
+
+```
+private class HeartbeatThread extends KafkaThread implements AutoCloseable {
+	@Override  
+	public void run() {  
+	    try {  
+	        while (true) {  
+	            synchronized (AbstractCoordinator.this) {  
+	                if (closed)  
+	                    return;  
+	  
+	                if (!enabled) {  
+	                    AbstractCoordinator.this.wait();  
+	                    continue;                }  
+	  
+	                // we do not need to heartbeat we are not part of a group yet;  
+	                // also if we already have fatal error, the client will be                // crashed soon, hence we do not need to continue heartbeating either                if (state.hasNotJoinedGroup() || hasFailed()) {  
+	                    disable();  
+	                    continue;                }  
+	  
+	                client.pollNoWakeup();  
+	                long now = time.milliseconds();  
+	  
+	                if (coordinatorUnknown()) {  
+	                    if (findCoordinatorFuture != null) {  
+	                        // clear the future so that after the backoff, if the hb still sees coordinator unknown in  
+	                        // the next iteration it will try to re-discover the coordinator in case the main thread cannot                        clearFindCoordinatorFuture();  
+	  
+	                        // backoff properly  
+	                        AbstractCoordinator.this.wait(rebalanceConfig.retryBackoffMs);  
+	                    } else {  
+	                        lookupCoordinator();  
+	                    }  
+	                } else if (heartbeat.sessionTimeoutExpired(now)) {  
+	                    // the session timeout has expired without seeing a successful heartbeat, so we should  
+	                    // probably make sure the coordinator is still healthy.                    markCoordinatorUnknown("session timed out without receiving a "  
+	                            + "heartbeat response");  
+	                } else if (heartbeat.pollTimeoutExpired(now)) {  
+	                    // the poll timeout has expired, which means that the foreground thread has stalled  
+	                    // in between calls to poll().                    log.warn("consumer poll timeout has expired. This means the time between subsequent calls to poll() " +  
+	                        "was longer than the configured max.poll.interval.ms, which typically implies that " +  
+	                        "the poll loop is spending too much time processing messages. You can address this " +  
+	                        "either by increasing max.poll.interval.ms or by reducing the maximum size of batches " +  
+	                        "returned in poll() with max.poll.records.");  
+	  
+	                    maybeLeaveGroup("consumer poll timeout has expired.");  
+	                } else if (!heartbeat.shouldHeartbeat(now)) {  
+	                    // poll again after waiting for the retry backoff in case the heartbeat failed or the  
+	                    // coordinator disconnected                    AbstractCoordinator.this.wait(rebalanceConfig.retryBackoffMs);  
+	                } else {  
+	                    heartbeat.sentHeartbeat(now);  
+	                    final RequestFuture<Void> heartbeatFuture = sendHeartbeatRequest();  
+	                    heartbeatFuture.addListener(new RequestFutureListener<Void>() {  
+	                        @Override  
+	                        public void onSuccess(Void value) {  
+	                            synchronized (AbstractCoordinator.this) {  
+	                                heartbeat.receiveHeartbeat();  
+	                            }  
+	                        }  
+	  
+	                        @Override  
+	                        public void onFailure(RuntimeException e) {  
+	                            synchronized (AbstractCoordinator.this) {  
+	                                if (e instanceof RebalanceInProgressException) {  
+	                                    // it is valid to continue heartbeating while the group is rebalancing. This  
+	                                    // ensures that the coordinator keeps the member in the group for as long                                    // as the duration of the rebalance timeout. If we stop sending heartbeats,                                    // however, then the session timeout may expire before we can rejoin.                                    heartbeat.receiveHeartbeat();  
+	                                } else if (e instanceof FencedInstanceIdException) {  
+	                                    log.error("Caught fenced group.instance.id {} error in heartbeat thread", rebalanceConfig.groupInstanceId);  
+	                                    heartbeatThread.failed.set(e);  
+	                                } else {  
+	                                    heartbeat.failHeartbeat();  
+	                                    // wake up the thread if it's sleeping to reschedule the heartbeat  
+	                                    AbstractCoordinator.this.notify();  
+	                                }  
+	                            }  
+	                        }  
+	                    });  
+	                }  
+	            }  
+	        }  
+	    } catch (Throwable e) { 
+	        this.failed.set(new Exception(e));  
+	    } 
+	}
+}
+```
+
 ## Rebalance
 
 Moving partition ownership from one consumer to another is called a rebalance. Rebalances are important because they provide the consumer group with high availa‐ bility and scalability (allowing us to easily and safely add and remove consumers), but in the normal course of events they are fairly undesirable. 
@@ -585,6 +688,12 @@ digraph g{
     Coordinator -> Consumer3 [label="suscribe info"]
 }
 ```
+
+
+sendFindCoordinatorRequest
+
+
+
 ### Static membership
 
 On client side, we add a new config called `group.instance.id` in ConsumerConfig. On consumer service init, if the `group.instance.id` config is set, we will put it in the initial join group request to identify itself as a static member. Note that it is user's responsibility to assign unique `group.instance.id` for each consumers. This could be in service discovery hostname, unique IP address, etc. We also have logic handling duplicate `group.instance.id` in case client configuration contains duplicates.

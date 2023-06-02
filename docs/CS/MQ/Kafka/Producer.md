@@ -94,22 +94,18 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 
 ## send
 
-We start producing messages to Kafka by creating a ProducerRecord, which must include the topic we want to send the record to and a value. 
-Optionally, we can also specify a key and/or a partition. 
-Once we send the ProducerRecord, the first thing the producer will do is serialize the key and value objects to ByteArrays so they can be sent over the network.
 
-Next, the data is sent to a partitioner.
-If we specified a partition in the ProducerRecord, the partitioner doesn’t do anything and simply returns the partition we specified. 
-If we didn’t, the partitioner will choose a partition for us, usually based on the ProducerRecord key. 
-Once a partition is selected, the producer knows which topic and partition the record will go to. 
-It then adds the record to a batch of records that will also be sent to the same topic and partition. 
-A separate thread is responsible for sending those batches of records to the appropriate Kafka brokers.
+The `send()` method is asynchronous.
+When called, it adds the record to a buffer of pending record sends and immediately returns.
+This allows the producer to batch together individual records for efficiency.
 
-When the broker receives the messages, it sends back a response.
-If the messages were successfully written to Kafka, it will return a RecordMetadata object with the topic, partition, and the offset of the record within the partition.
-If the broker failed to write the messages, it will return an error. 
-When the producer receives an error, it may retry sending the message a few more times before giving up and returning an error.
-
+1. make sure the metadata for the topic is available
+2. serialize the key and value objects to ByteArrays so they can be sent over the network
+3. get partition
+4. ensureValidRecordSize
+5. new interceptCallback
+6. append into buffer
+7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Network.md?id=Sender) which is responsible for sending those batches of records to the appropriate Kafka brokers.
 
 ```plantuml
 actor Actor
@@ -117,8 +113,6 @@ Actor -> KafkaProducer : send
 activate KafkaProducer
 participant ProducerInterceptors
 participant RecordAccumulator
-Sender -> Sender : loop(runOnce)
-activate Sender
 KafkaProducer -> ProducerInterceptors : onSend
 activate ProducerInterceptors
 ProducerInterceptors --> KafkaProducer: ProducerRecord
@@ -132,33 +126,12 @@ activate RecordAccumulator
 RecordAccumulator --> KafkaProducer
 deactivate RecordAccumulator
 KafkaProducer -> Sender : wakeup
+activate Sender
 Sender --> KafkaProducer
-deactivate KafkaProducer
-Sender -> NetworkClient : client.poll()
-activate NetworkClient
-NetworkClient -> NetworkClient : maybeUpdateMetadata
-NetworkClient -> KSelector : selector.poll()
-activate KSelector
-KSelector -> KSelector : clear()
-KSelector -> Selector : select()
-KSelector -> Selector : pollSelectionKeys()
-KSelector -> KSelector : addToCompletedReceives()
-NetworkClient -> NetworkClient : process completed actions
 deactivate Sender
-return
+deactivate KafkaProducer
 ```
 
-The `send()` method is asynchronous.
-When called, it adds the record to a buffer of pending record sends and immediately returns.
-This allows the producer to batch together individual records for efficiency.
-
-1. make sure the metadata for the topic is available
-2. serializedKey and value
-3. get partition
-4. ensureValidRecordSize
-5. new interceptCallback
-6. append into buffer
-7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Network.md?id=Sender)(actually wakeup the Selector in KafkaClient).
 
 ```java
 public class KafkaProducer<K, V> implements Producer<K, V> {
@@ -390,6 +363,26 @@ TODO:
    - Otherwise, clients don't explicit close() and will keep CLOSE_WAIT until it send again.
 
 ## Sender
+
+
+
+```plantuml
+Sender ->  RecordAccumulator :ready
+RecordAccumulator -->  Sender :readyCheckResults
+Sender -> NetworkClient : client.poll()
+activate NetworkClient
+NetworkClient -> NetworkClient : maybeUpdateMetadata
+NetworkClient -> KSelector : selector.poll()
+activate KSelector
+KSelector -> KSelector : clear()
+KSelector -> Selector : select()
+KSelector -> Selector : pollSelectionKeys()
+KSelector -> KSelector : addToCompletedReceives()
+NetworkClient -> NetworkClient : process completed actions
+deactivate Sender
+return
+```
+
 
 runOnce():
 
