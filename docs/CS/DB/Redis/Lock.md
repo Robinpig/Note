@@ -38,6 +38,28 @@ The time we use as the key time to live, is called the “lock validity time”.
 
 So now we have a good way to acquire and release the lock. The system, reasoning about a non-distributed system composed of a single, always available, instance, is safe. Let’s extend the concept to a distributed system where we don’t have such guarantees.
 
+
+```
+uuid = getUUID(); 
+
+//lock 
+lockResut = redisClient.eval(addLockLuaScript,keys,values);
+
+if(!lockResult){ 
+	return; 
+} 
+
+// schedule a keepalive task 
+new Scheduler(key,time,uuid,scheduleTime);
+
+try{ 
+	// do something
+} finally{ 
+	redisClient.eval(delLuaScript,keys,values) 
+	cancelScheduler(uuid); 
+}
+```
+
 ### The Redlock algorithm
 
 In the distributed version of the algorithm we assume we have N Redis masters. Those nodes are totally independent, so we don’t use replication or any other implicit coordination system. We already described how to acquire and release the lock safely in a single instance. We take for granted that the algorithm will use this method to acquire and release the lock in a single instance. In our examples we set N=5, which is a reasonable value, so we need to run 5 Redis masters on different computers or virtual machines in order to ensure that they’ll fail in a mostly independent way.
