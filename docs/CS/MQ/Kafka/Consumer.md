@@ -963,7 +963,7 @@ KafkaApis
 
 ```
 
-#### handleJoinGroup
+### handleJoinGroup
 
 ```scala
   
@@ -1000,7 +1000,190 @@ KafkaApis
   }
 ```
 
-prepareRebalance
+
+```scala
+private def doNewMemberJoinGroup(  
+  group: GroupMetadata,  
+  groupInstanceId: Option[String],  
+  requireKnownMemberId: Boolean,  
+  supportSkippingAssignment: Boolean,  
+  clientId: String,  
+  clientHost: String,  
+  rebalanceTimeoutMs: Int,  
+  sessionTimeoutMs: Int,  
+  protocolType: String,  
+  protocols: List[(String, Array[Byte])],  
+  responseCallback: JoinCallback,  
+  requestLocal: RequestLocal,  
+  reason: String  
+): Unit = {  
+  group.inLock {  
+    if (group.is(Dead)) {  
+      // if the group is marked as dead, it means some other thread has just removed the group  
+      // from the coordinator metadata; it is likely that the group has migrated to some other      // coordinator OR the group is in a transient unstable phase. Let the member retry      // finding the correct coordinator and rejoin.      responseCallback(JoinGroupResult(JoinGroupRequest.UNKNOWN_MEMBER_ID, Errors.COORDINATOR_NOT_AVAILABLE))  
+    } else if (!group.supportsProtocols(protocolType, MemberMetadata.plainProtocolSet(protocols))) {  
+      responseCallback(JoinGroupResult(JoinGroupRequest.UNKNOWN_MEMBER_ID, Errors.INCONSISTENT_GROUP_PROTOCOL))  
+    } else {  
+      val newMemberId = group.generateMemberId(clientId, groupInstanceId)  
+      groupInstanceId match {  
+        case Some(instanceId) =>  
+          doStaticNewMemberJoinGroup(  
+            group,  
+            instanceId,  
+            newMemberId,  
+            clientId,  
+            clientHost,  
+            supportSkippingAssignment,  
+            rebalanceTimeoutMs,  
+            sessionTimeoutMs,  
+            protocolType,  
+            protocols,  
+            responseCallback,  
+            requestLocal,  
+            reason  
+          )  
+        case None =>  
+          doDynamicNewMemberJoinGroup(  
+            group,  
+            requireKnownMemberId,  
+            newMemberId,  
+            clientId,  
+            clientHost,  
+            rebalanceTimeoutMs,  
+            sessionTimeoutMs,  
+            protocolType,  
+            protocols,  
+            responseCallback,  
+            reason  
+          )  
+      }  
+    }  
+  }  
+}
+```
+doStaticNewMemberJoinGroup
+
+```scala
+private def doStaticNewMemberJoinGroup(  
+  group: GroupMetadata,  
+  groupInstanceId: String,  
+  newMemberId: String,  
+  clientId: String,  
+  clientHost: String,  
+  supportSkippingAssignment: Boolean,  
+  rebalanceTimeoutMs: Int,  
+  sessionTimeoutMs: Int,  
+  protocolType: String,  
+  protocols: List[(String, Array[Byte])],  
+  responseCallback: JoinCallback,  
+  requestLocal: RequestLocal,  
+  reason: String  
+): Unit = {  
+  group.currentStaticMemberId(groupInstanceId) match {  
+    case Some(oldMemberId) =>  
+      info(s"Static member with groupInstanceId=$groupInstanceId and unknown member id joins " +  
+        s"group ${group.groupId} in ${group.currentState} state. Replacing previously mapped " +  
+        s"member $oldMemberId with this groupInstanceId.")  
+      updateStaticMemberAndRebalance(  
+        group,  
+        oldMemberId,  
+        newMemberId,  
+        groupInstanceId,  
+        protocols,  
+        rebalanceTimeoutMs,  
+        sessionTimeoutMs,  
+        responseCallback,  
+        requestLocal,  
+        reason,  
+        supportSkippingAssignment  
+      )  
+  
+    case None =>  
+      info(s"Static member with groupInstanceId=$groupInstanceId and unknown member id joins " +  
+        s"group ${group.groupId} in ${group.currentState} state. Created a new member id $newMemberId " +  
+        s"for this member and add to the group.")  
+      addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, newMemberId, Some(groupInstanceId),  
+        clientId, clientHost, protocolType, protocols, group, responseCallback, reason)  
+  }  
+}
+```
+doDynamicNewMemberJoinGroup
+
+
+```scala
+  
+private def doDynamicNewMemberJoinGroup(  
+  group: GroupMetadata,  
+  requireKnownMemberId: Boolean,  
+  newMemberId: String,  
+  clientId: String,  
+  clientHost: String,  
+  rebalanceTimeoutMs: Int,  
+  sessionTimeoutMs: Int,  
+  protocolType: String,  
+  protocols: List[(String, Array[Byte])],  
+  responseCallback: JoinCallback,  
+  reason: String  
+): Unit = {  
+  if (requireKnownMemberId) {  
+    // If member id required, register the member in the pending member list and send  
+    // back a response to call for another join group request with allocated member id.    info(s"Dynamic member with unknown member id joins group ${group.groupId} in " +  
+      s"${group.currentState} state. Created a new member id $newMemberId and request the " +  
+      s"member to rejoin with this id.")  
+    group.addPendingMember(newMemberId)  
+    addPendingMemberExpiration(group, newMemberId, sessionTimeoutMs)  
+    responseCallback(JoinGroupResult(newMemberId, Errors.MEMBER_ID_REQUIRED))  
+  } else {  
+    info(s"Dynamic Member with unknown member id joins group ${group.groupId} in " +  
+      s"${group.currentState} state. Created a new member id $newMemberId for this member " +  
+      s"and add to the group.")  
+    addMemberAndRebalance(rebalanceTimeoutMs, sessionTimeoutMs, newMemberId, None,  
+      clientId, clientHost, protocolType, protocols, group, responseCallback, reason)  
+  }  
+}
+```
+
+
+addMemberAndRebalance
+```scala
+  
+private def addMemberAndRebalance(rebalanceTimeoutMs: Int,  
+                                  sessionTimeoutMs: Int,  
+                                  memberId: String,  
+                                  groupInstanceId: Option[String],  
+                                  clientId: String,  
+                                  clientHost: String,  
+                                  protocolType: String,  
+                                  protocols: List[(String, Array[Byte])],  
+                                  group: GroupMetadata,  
+                                  callback: JoinCallback,  
+                                  reason: String): Unit = {  
+  val member = new MemberMetadata(memberId, groupInstanceId, clientId, clientHost,  
+    rebalanceTimeoutMs, sessionTimeoutMs, protocolType, protocols)  
+  
+  member.isNew = true  
+  
+  // update the newMemberAdded flag to indicate that the join group can be further delayed  
+  if (group.is(PreparingRebalance) && group.generationId == 0)  
+    group.newMemberAdded = true  
+  
+  group.add(member, callback)  
+  
+  // The session timeout does not affect new members since they do not have their memberId and  
+  // cannot send heartbeats. Furthermore, we cannot detect disconnects because sockets are muted  // while the JoinGroup is in purgatory. If the client does disconnect (e.g. because of a request  // timeout during a long rebalance), they may simply retry which will lead to a lot of defunct  // members in the rebalance. To prevent this going on indefinitely, we timeout JoinGroup requests  // for new members. If the new member is still there, we expect it to retry.  completeAndScheduleNextExpiration(group, member, NewMemberJoinTimeoutMs)  
+  
+  maybePrepareRebalance(group, s"Adding new member $memberId with group instance id $groupInstanceId; client reason: $reason")  
+}
+
+private def maybePrepareRebalance(group: GroupMetadata, reason: String): Unit = {  
+  group.inLock {  
+    if (group.canRebalance)  
+      prepareRebalance(group, reason)  
+  }  
+}
+```
+
+#### prepareRebalance
 
 ```scala
   private[group] def prepareRebalance(group: GroupMetadata, reason: String): Unit = {
@@ -1105,7 +1288,7 @@ onCompleteJoin
   }
 ```
 
-#### handleSyncGroupRequest
+### handleSyncGroupRequest
 
 ```scala
   
@@ -1193,6 +1376,81 @@ K: Topic, Partition, GroupId
 offsets.topic.num.partitions
 
 Compact commmitted ack
+### handleCommitOffsets
+
+```scala
+def handleCommitOffsets(groupId: String,  
+                        memberId: String,  
+                        groupInstanceId: Option[String],  
+                        generationId: Int,  
+                        offsetMetadata: immutable.Map[TopicPartition, OffsetAndMetadata],  
+                        responseCallback: immutable.Map[TopicPartition, Errors] => Unit,  
+                        requestLocal: RequestLocal = RequestLocal.NoCaching): Unit = {  
+  validateGroupStatus(groupId, ApiKeys.OFFSET_COMMIT) match {  
+    case Some(error) => responseCallback(offsetMetadata.map { case (k, _) => k -> error })  
+    case None =>  
+      groupManager.getGroup(groupId) match {  
+        case None =>  
+          if (generationId < 0) {  
+            // the group is not relying on Kafka for group management, so allow the commit  
+            val group = groupManager.addGroup(new GroupMetadata(groupId, Empty, time))  
+            doCommitOffsets(group, memberId, groupInstanceId, generationId, offsetMetadata,  
+              responseCallback, requestLocal)  
+          } else {  
+            // or this is a request coming from an older generation. either way, reject the commit  
+            responseCallback(offsetMetadata.map { case (k, _) => k -> Errors.ILLEGAL_GENERATION })  
+          }  
+  
+        case Some(group) =>  
+          doCommitOffsets(group, memberId, groupInstanceId, generationId, offsetMetadata,  
+            responseCallback, requestLocal)  
+      }  
+  }  
+}
+```
+
+
+```scala
+private def doCommitOffsets(group: GroupMetadata,  
+                            memberId: String,  
+                            groupInstanceId: Option[String],  
+                            generationId: Int,  
+                            offsetMetadata: immutable.Map[TopicPartition, OffsetAndMetadata],  
+                            responseCallback: immutable.Map[TopicPartition, Errors] => Unit,  
+                            requestLocal: RequestLocal): Unit = {  
+  group.inLock {  
+    val validationErrorOpt = validateOffsetCommit(  
+      group,  
+      generationId,  
+      memberId,  
+      groupInstanceId,  
+      isTransactional = false  
+    )  
+  
+    if (validationErrorOpt.isDefined) {  
+      responseCallback(offsetMetadata.map { case (k, _) => k -> validationErrorOpt.get })  
+    } else {  
+      group.currentState match {  
+        case Empty =>  
+          groupManager.storeOffsets(group, memberId, offsetMetadata, responseCallback)  
+  
+        case Stable | PreparingRebalance =>  
+          // During PreparingRebalance phase, we still allow a commit request since we rely  
+          // on heartbeat response to eventually notify the rebalance in progress signal to the consumer          val member = group.get(memberId)  
+          completeAndScheduleNextHeartbeatExpiration(group, member)  
+          groupManager.storeOffsets(group, memberId, offsetMetadata, responseCallback, requestLocal = requestLocal)  
+  
+        case CompletingRebalance =>  
+          // We should not receive a commit request if the group has not completed rebalance;  
+          // but since the consumer's member.id and generation is valid, it means it has received          // the latest group generation information from the JoinResponse.          // So let's return a REBALANCE_IN_PROGRESS to let consumer handle it gracefully.          responseCallback(offsetMetadata.map { case (k, _) => k -> Errors.REBALANCE_IN_PROGRESS })  
+  
+        case _ =>  
+          throw new RuntimeException(s"Logic error: unexpected group state ${group.currentState}")  
+      }  
+    }  
+  }  
+}
+```
 
 #### listener
 

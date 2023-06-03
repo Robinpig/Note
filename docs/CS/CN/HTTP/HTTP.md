@@ -233,6 +233,7 @@ HTTP/2 standard was based on SPDY with some improvements.
 #### HTTP Frames
 
 HTTP/2 solved the head-of-the-line blocking problem by multiplexing the HTTP requests over a single open TCP connection.
+
 HTTP/2 solves this quite elegantly by prepending small control messages, called **frames**, before the resource chunks.
 By “framing” individual messages HTTP/2 is thus much more flexible than HTTP/1.1.
 It allows for many resources to be sent multiplexed on a single TCP connection by interleaving their chunks.
