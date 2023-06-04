@@ -19,6 +19,7 @@ A feature of HTTP is the typing and negotiation of data representation, allowing
 
 ## HTTP Message
 
+Message Structure:
 - Header
   - start line
   - header
@@ -89,6 +90,8 @@ with an HTTP response message.
 > [!NOTE]
 >
 > Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF
+
+For example:
 
 ```http
 HTTP/1.1 304 Not Modified
@@ -183,11 +186,9 @@ Note that a server might reject traffic that it deems abusive or characteristic 
 - TRACE
 - CONNECT
 
-在HTTP/1.1规范中幂等性的定义是：
+**idempotence** in HTTP/1.1：
 
 > Methods can also have the property of "idempotence" in that (aside from error or expiration issues) the side-effects of N > 0 identical requests is the same as for a single request.
-
-从定义上看，HTTP 方法的幂等性是指一次和多次请求某一个资源应该具有同样的副作用。幂等性属于语义范畴，正如编译器只能帮助检查语法错误一样，HTTP 规范也没有办法通过消息格式等语法手段来定义它，这可能是它不太受到重视的原因之一。但实际上，幂等性是分布式系统设计中十分重要的概念，而 HTTP 的分布式本质也决定了它在 HTTP 中具有重要地位。
 
 HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只是可读的。所以只有 OPTIONS、GET、HEAD 是安全的，其他都是不安全的。
 
