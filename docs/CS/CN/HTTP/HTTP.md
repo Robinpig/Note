@@ -177,23 +177,13 @@ Note that a server might reject traffic that it deems abusive or characteristic 
 
 ### Method Definitions
 
-- GET
-- POST
-- PUT
-- DELETE
-- HEAD
-- OPTIONS
-- TRACE
-- CONNECT
 
 **idempotence** in HTTP/1.1：
 
 > Methods can also have the property of "idempotence" in that (aside from error or expiration issues) the side-effects of N > 0 identical requests is the same as for a single request.
 
-HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只是可读的。所以只有 OPTIONS、GET、HEAD 是安全的，其他都是不安全的。
 
-
-| HTTP 方法 | 幂等性 | 安全性 |
+| Method | Idempotence | Safety(Read only) |
 | --------- | ------ | ------ |
 | OPTIONS   | yes    | yes    |
 | GET       | yes    | yes    |
@@ -203,9 +193,6 @@ HTTP 方法的安全性指的是不会改变服务器状态，也就是说它只
 | POST      | no     | no     |
 | PATCH     | no     | no     |
 
-**POST 和 PATCH 这两个不是幂等性的**。
-两次相同的POST请求会在服务器端创建两份资源，它们具有不同的URI。
-对同一URI进行多次PUT的副作用和一次PUT是相同的。
 
 ### HTTP Status Code
 
