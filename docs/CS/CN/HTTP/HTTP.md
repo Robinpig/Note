@@ -214,9 +214,10 @@ Connection: keep-Alive
 
 [Pipelining](/docs/CS/CN/HTTP/HTTP.mdTP.md?id=pipelining)
 
-### 2
+### HTTP/2
 
 HTTP/2 standard was based on SPDY with some improvements.
+HTTP/2 enables more efficient processing of messages through use of **binary message framing**.
 
 #### HTTP Frames
 
@@ -252,9 +253,6 @@ Also, NPN is what's used for SPDY and many servers offer both SPDY and http2, so
 ALPN differs from NPN primarily in who decides what protocol to speak.
 With ALPN, the client gives the server a list of protocols in its order of preference and the server picks the one it wants, while with NPN the client makes the final choice.
 
-#### Binary Message
-
-HTTP/2 also enables more efficient processing of messages through use of binary message framing.
 
 #### HPACK
 
@@ -276,7 +274,7 @@ Server push is something a client must explicitly allow the server to do. Even t
 Each individual http2 stream has its own advertised flow window that the other end is allowed to send data for. If you happen to know how SSH works, this is very similar in style and spirit.
 For every stream, both ends have to tell the peer that it has enough room to handle incoming data, and the other end is only allowed to send that much data until the window is extended. Only DATA frames are flow controlled.
 
-### 3
+### HTTP/3
 
 HTTP over [QUIC](/docs/CS/CN/HTTP/QUIC.md)
 
