@@ -1,15 +1,33 @@
 ## Introduction
 
+Database management systems can serve different purposes: some are used primarily for temporary hot data, some serve as a long-lived cold storage, some allow complex analytical queries, some only allow accessing values by the key, some are optimized to store time-series data, and some store large blobs efficiently. 
+
 
 
 > Knowledge Base of Relational and NoSQL Database Management Systems in [DB-Engines](https://db-engines.com/en/ranking)
+
+
+Every database system has strengths and weaknesses. To reduce the risk of an expensive migration, you can invest some time before you decide on a specific database to build confidence in its ability to meet your application’s needs.
+
+To compare databases, it’s helpful to understand the use case in great detail and define the current and anticipated variables, such as:
+- Schema and record sizes
+- Number of clients
+- Types of queries and access patterns
+- Rates of the read and write queries
+- Expected changes in any of these variables
+
+
+
 
 ## Architecture
 
 Database management systems use a client/server model, where database system instances (nodes) take the role of servers, and application instances take the role of clients.
 
-Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language.
-The transport subsystem is also responsible for communication with other nodes in the database cluster.
+Databases are modular systems and consist of multiple parts: a transport layer accepting requests, a query processor determining the most efficient way to run queries, an execution engine carrying out the operations, and a storage engine.
+
+
+
+
 
 <div style="text-align: center;">
 
@@ -21,16 +39,53 @@ The transport subsystem is also responsible for communication with other nodes i
 Fig.1. Architecture of a database management system
 </p>
 
+
+Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language.
+The transport subsystem is also responsible for communication with other nodes in the database cluster.
+
 Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it.
 Later, access control checks are performed, as they can be done fully only after the query is interpreted.
-### optimizer
+
 The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, 
 and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer).
 The optimizer handles both relational operations required for query resolution, usually presented as a dependency tree, and optimizations, such as index ordering, cardinality estimation, and choosing access methods.
 
 The query is usually presented in the form of an execution plan (or query plan): a sequence of operations that have to be carried out for its results to be considered complete.
-
 Since the same query can be satisfied using different execution plans that can vary in efficiency, the optimizer picks the best available plan.
+
+The execution plan is handled by the execution engine, which collects the results of the execution of local and remote operations. Remote execution can involve writing and reading data to and from other nodes in the cluster, and replication.
+
+Local queries (coming directly from clients or from other nodes) are executed by the storage engine.
+
+###  storage engine
+
+
+
+The storage engine (or database engine) is a software component of a database management system responsible for storing, retrieving, and managing data in memory and on disk, designed to capture a persistent, long-term memory of each node. While databases can respond to complex queries, storage engines look at the data more granularly and offer a simple data manipulation API, allowing users to create, update, delete, and retrieve records. One way to look at this is that database management systems are applications built on top of storage engines, offering a schema, a query language, indexing, transactions, and many other useful features.
+
+For flexibility, both keys and values can be arbitrary sequences of bytes with no prescribed form. Their sorting and representation semantics are defined in higher-level subsystems. For example, you can use int32 (32-bit integer) as a key in one of the tables, and ascii (ASCII string) in the other; from the storage engine perspective both keys are just serialized entries.
+
+Storage engines such as BerkeleyDB, LevelDB and its descendant RocksDB, LMDB and its descendant libmdbx, Sophia, HaloDB, and many others were developed independently from the database management systems they’re now embedded into. Using pluggable storage engines has enabled database developers to bootstrap database systems using existing storage engines, and concentrate on the other subsystems.
+
+At the same time, clear separation between database system components opens up an opportunity to switch between different engines, potentially better suited for particular use cases. 
+
+
+The storage engine has several components with dedicated responsibilities:
+- Transaction manager<br/>
+  This manager schedules transactions and ensures they cannot leave the database in a logically inconsistent state.
+- Lock manager<br/>
+  This manager locks on the database objects for the running transactions, ensuring that concurrent operations do not violate physical data integrity.
+- Access methods (storage structures)<br/>
+  These manage access and organizing data on disk. Access methods include heap files and storage structures such as B-Trees or LSM Trees.
+- Buffer manager<br/>
+  This manager caches data pages in memory.
+-  Recovery manager<br/>
+   This manager maintains the operation log and restoring the system state in case of a failure.
+
+Together, transaction and lock managers are responsible for concurrency control: they guarantee logical and physical data integrity while ensuring that concurrent operations are executed as efficiently as possible.
+
+### optimizer
+
 
 One of the long-standing advantages of relational databases has been that data is requested with little or no thought for the way in which the data is to be accessed.
 This decision is made by a component of the DBMS called the optimizer. 
