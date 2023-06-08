@@ -17,6 +17,76 @@ To compare databases, it’s helpful to understand the use case in great detail 
 - Expected changes in any of these variables
 
 
+### Memory- Versus Disk-Based
+
+Database systems store data in memory and on disk. In-memory database management systems (sometimes called main memory DBMS) store data primarily in memory and use the disk for recovery and logging. 
+Disk-based DBMS hold most of the data on disk and use memory for caching disk contents or as a temporary storage. 
+Both types of systems use the disk to a certain extent, but main memory databases store their contents almost exclusively in RAM.
+
+Main memory database systems are different from their disk-based counterparts not only in terms of a primary storage medium, but also in which data structures, organization, and optimization techniques they use.
+
+Databases using memory as a primary data store do this mainly because of performance, comparatively low access costs, and access granularity. 
+Programming for main memory is also significantly simpler than doing so for the disk. 
+Operating systems abstract memory management and allow us to think in terms of allocating and freeing arbitrarily sized memory chunks.
+On disk, we have to manage data references, serialization formats, freed memory, and fragmentation manually.
+
+The main limiting factors on the growth of in-memory databases are RAM volatility (in other words, lack of durability) and costs. 
+Since RAM contents are not persistent, software errors, crashes, hardware failures, and power outages can result in data loss. 
+There are ways to ensure durability, such as uninterrupted power supplies and battery-backed RAM, but they require additional hardware resources and operational expertise. In practice, it all comes down to the fact that disks are easier to maintain and have significantly lower prices.
+
+The situation is likely to change as the availability and popularity of Non-Volatile Memory (NVM) technologies grow. 
+NVM storage reduces or completely eliminates (depending on the exact technology) asymmetry between read and write latencies, further improves read and write performance, and allows byte-addressable access.
+
+
+In-memory database systems maintain backups on disk to provide durability and prevent loss of the volatile data. Some databases store data exclusively in memory, without any durability guarantees, but we do not discuss them in the scope of this book.
+
+Before the operation can be considered complete, its results have to be written to a sequential log file. 
+To avoid replaying complete log contents during startup or after a crash, in-memory stores maintain a backup copy. 
+The backup copy is maintained as a sorted disk-based structure, and modifications to this structure are often asynchronous (decoupled from client requests) and applied in batches to reduce the number of I/O operations. 
+During recovery, database contents can be restored from the backup and logs.
+
+Log records are usually applied to backup in batches. After the batch of log records is processed, backup holds a database snapshot for a specific point in time, and log contents up to this point can be discarded. 
+This process is called checkpointing. 
+It reduces recovery times by keeping the disk-resident database most up-to-date with log entries without requiring clients to block until the backup is updated.
+
+Disk-based databases use specialized storage structures, optimized for disk access. In memory, pointers can be followed comparatively quickly, and random memory access is significantly faster than the random disk access.
+Disk-based storage structures often have a form of wide and short trees, while memory-based implementations can choose from a larger pool of data structures and perform optimizations that would otherwise be impossible or difficult to implement on disk. 
+Similarly, handling variable-size data on disk requires special attention, while in memory it’s often a matter of referencing the value with a pointer.
+
+For some use cases, it is reasonable to assume that an entire dataset is going to fit in memory.
+Some datasets are bounded by their real-world representations, such as student records for schools, customer records for corporations, or inventory in an online store. Each record takes up not more than a few Kb, and their number is limited.
+
+### Column- Versus Row-Oriented
+
+
+One of the ways to classify databases is by how the data is stored on disk: row- or column-wise. 
+Tables can be partitioned either horizontally (storing values belonging to the same row together), or vertically (storing values belonging to the same column together). 
+Figure 2 depicts this distinction: (a) shows the values partitioned column-wise, and (b) shows the values partitioned row-wise.
+
+
+
+
+
+<div style="text-align: center;">
+
+![Data layout in column- and row-oriented stores](./img/Column-Versus-Row.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Data layout in column- and row-oriented stores
+</p>
+
+Row-oriented database management systems store data in records or rows. Their layout is quite close to the tabular data representation, where every row has the same set of fields.
+Since row-oriented stores are most useful in scenarios when we have to access data by row, storing entire rows together improves spatial locality.
+
+Column-oriented database management systems partition data vertically (i.e., by column) instead of storing it in rows. Here, values for the same column are stored contiguously on disk.
+Column-oriented stores are a good fit for analytical workloads that compute aggregates, such as finding trends, computing average values, etc. Processing complex aggregates can be used in cases when logical records have multiple fields, but some of them have different importance and are often consumed together.
+Storing values that have the same data type together (e.g., numbers with other numbers, strings with other strings) offers a better compression ratio.
+
+#### Wide Column Stores
+
+Column-oriented databases should not be mixed up with wide column stores, such as BigTable or HBase, where data is represented as a multidimensional map, columns are grouped into column families (usually storing data of the same type), and inside each column family, data is stored row-wise. This layout is best for storing data retrieved by a key or a sequence of keys.
 
 
 ## Architecture
@@ -71,18 +141,26 @@ At the same time, clear separation between database system components opens up a
 
 
 The storage engine has several components with dedicated responsibilities:
-- Transaction manager<br/>
+- Transaction manager<br>
   This manager schedules transactions and ensures they cannot leave the database in a logically inconsistent state.
-- Lock manager<br/>
+- Lock manager<br>
   This manager locks on the database objects for the running transactions, ensuring that concurrent operations do not violate physical data integrity.
-- Access methods (storage structures)<br/>
+- Access methods (storage structures)<br>
   These manage access and organizing data on disk. Access methods include heap files and storage structures such as B-Trees or LSM Trees.
-- Buffer manager<br/>
+- Buffer manager<br>
   This manager caches data pages in memory.
--  Recovery manager<br/>
+-  Recovery manager<br>
    This manager maintains the operation log and restoring the system state in case of a failure.
 
 Together, transaction and lock managers are responsible for concurrency control: they guarantee logical and physical data integrity while ensuring that concurrent operations are executed as efficiently as possible.
+
+
+A storage engine is based on some data structure. However, these structures do not describe the semantics of caching, recovery, transactionality, and other things that storage engines add on top of them.
+
+
+
+
+
 
 ### optimizer
 
@@ -219,6 +297,107 @@ A version of the tree that would be better suited for disk implementation has to
 >
 > Fanout and height are inversely correlated: the higher the fanout, the lower the height.
 > If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
+
+## store
+
+Database systems do use files for storing the data, but instead of relying on filesystem hierarchies of directories and files for locating records, they compose files using implementation-specific formats. The main reasons to use specialized file organization over flat files are:
+
+- Storage efficiency<br>
+   Files are organized in a way that minimizes storage overhead per stored data record.
+- Access efficiency<br>
+   Records can be located in the smallest possible number of steps.
+- Update efficiency<br>
+   Record updates are performed in a way that minimizes the number of changes on disk.
+
+Database systems store data records, consisting of multiple fields, in tables, where each table is usually represented as a separate file. Each record in the table can be looked up using a search key. To locate a record, database systems use indexes: auxiliary data structures that allow it to efficiently locate data records without scanning an entire table on every access. Indexes are built using a subset of fields identifying the record.
+
+A database system usually separates data files and index files: data files store data records, while index files store record metadata and use it to locate records in data files. 
+Index files are typically smaller than the data files. 
+Files are partitioned into pages, which typically have the size of a single or multiple disk blocks.
+Pages can be organized as sequences of records or as a slotted pages.
+
+New records (insertions) and updates to the existing records are represented by key/value pairs. 
+Most modern storage systems do not delete data from pages explicitly. Instead, they use deletion markers (also called tombstones), which contain deletion metadata, such as a key and a timestamp. 
+Space occupied by the records shadowed by their updates or deletion markers is reclaimed during garbage collection, which reads the pages, writes the live (i.e., nonshadowed) records to the new place, and discards the shadowed ones.
+
+### Data Files
+
+Data files (sometimes called *primary files*) can be implemented as *index-organized tables* (IOT), *heap-organized tables* (heap files), or *hash-organized tables* (hashed files).
+
+- Records in heap files are not required to follow any particular order, and most of the time they are placed in a write order. This way, no additional work or file reorganization is required when new pages are appended. Heap files require additional index structures, pointing to the locations where data records are stored, to make them searchable.
+- In hashed files, records are stored in buckets, and the hash value of the key determines which bucket a record belongs to. Records in the bucket can be stored in append order or sorted by key to improve lookup speed.
+- Index-organized tables (IOTs) store data records in the index itself. Since records are stored in key order, range scans in IOTs can be implemented by sequentially scanning its contents.<br>
+  Storing data records in the index allows us to reduce the number of disk seeks by at least one, since after traversing the index and locating the searched key, we do not have to address a separate file to find the associated data record.
+
+When records are stored in a separate file, index files hold data entries, uniquely identifying data records and containing enough information to locate them in the data file. For example, we can store file offsets (sometimes called row locators), locations of data records in the data file, or bucket IDs in the case of hash files. In index-organized tables, data entries hold actual data records.
+
+### Index Files
+
+An index is a structure that organizes data records on disk in a way that facilitates efficient retrieval operations. Index files are organized as specialized structures that map keys to locations in data files where the records identified by these keys (in the case of heap files) or primary keys (in the case of index-organized tables) are stored.
+
+An index on a primary (data) file is called the primary index. However, in most cases we can also assume that the primary index is built over a primary key or a set of keys identified as primary. All other indexes are called secondary.
+
+Secondary indexes can point directly to the data record, or simply store its primary key. A pointer to a data record can hold an offset to a heap file or an index-organized table. Multiple secondary indexes can point to the same record, allowing a single data record to be identified by different fields and located through different indexes. While primary index files hold a unique entry per search key, secondary indexes may hold several entries per search key.
+
+If the order of data records follows the search key order, this index is called clustered (also known as clustering). Data records in the clustered case are usually stored in the same file or in a clustered file, where the key order is preserved. If the data is stored in a separate file, and its order does not follow the key order, the index is called nonclustered (sometimes called unclustered).
+
+Figure 3 shows the difference between the two approaches:
+- a) Two indexes reference data entries directly from secondary index files.
+- b) A secondary index goes through the indirection layer of a primary index to locate the data entries.
+
+
+
+
+
+<div style="text-align: center;">
+
+![Index-Organized-Table-Versus-Index-File](./img/Index-Organized-Table-Versus-Index-File.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.3. Storing data records in an index file versus storing offsets to the data file (index segments shown in white; segments holding data records shown in gray).
+</p>
+
+> [!TIP]
+> Index-organized tables store information in index order and are clustered by definition. <br>
+> Primary indexes are most often clustered. Secondary indexes are nonclustered by definition, since they’re used to facilitate access by keys other than the primary one. <br>
+> Clustered indexes can be both index-organized or have separate index and data files.
+
+Many database systems have an inherent and explicit primary key, a set of columns that uniquely identify the database record. In cases when the primary key is not specified, the storage engine can create an implicit primary key (for example, MySQL InnoDB adds a new auto-increment column and fills in its values automatically).
+
+
+#### Primary Index as an Indirection
+
+By referencing data directly, we can reduce the number of disk seeks, but have to pay a cost of updating the pointers whenever the record is updated or relocated during a maintenance process. Using indirection in the form of a primary index allows us to reduce the cost of pointer updates, but has a higher cost on a read path.
+
+Updating just a couple of indexes might work if the workload mostly consists of reads, but this approach does not work well for write-heavy workloads with multiple indexes. To reduce the costs of pointer updates, instead of payload offsets, some implementations use primary keys for indirection. For example, MySQL InnoDB uses a primary index and performs two lookups: one in the secondary index, and one in a primary index when performing a query.
+This adds an overhead of a primary index lookup instead of following the offset directly from the secondary index.
+
+Figure 6 shows how the two approaches are different:
+
+- a) Two indexes reference data entries directly from secondary index files.
+- b) A secondary index goes through the indirection layer of a primary index to locate the data entries.
+
+
+
+
+
+
+
+<div style="text-align: center;">
+
+![Referencing-Directly-Versus-Primary-Key-Indirection](./img/Referencing-Directly-Versus-Primary-Key-Indirection.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.6. Referencing data tuples directly (a) versus using a primary index as indirection (b).
+</p>
+
+It is also possible to use a hybrid approach and store both data file offsets and primary keys. First, you check if the data offset is still valid and pay the extra cost of going through the primary key index if it has changed, updating the index file after finding a new offset.
+
+
 
 
 ## OLAP
