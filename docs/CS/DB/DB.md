@@ -157,10 +157,27 @@ Together, transaction and lock managers are responsible for concurrency control:
 
 A storage engine is based on some data structure. However, these structures do not describe the semantics of caching, recovery, transactionality, and other things that storage engines add on top of them.
 
+Storage structures have three common variables: they use *buffering* (or avoid using it), use *immutable* (or mutable) files, and store values in *order* (or out of order). 
 
-
-
-
+- **Buffering**<br>
+  This defines whether or not the storage structure chooses to collect a certain amount of data in memory before putting it on disk. <br>
+  Of course, every on-disk structure has to use buffering to some degree, since the smallest unit of data transfer to and from the disk is a block, and it is desirable to write full blocks. <br>
+  Here, we’re talking about avoidable buffering, something storage engine implementers choose to do. <br>
+  One of the first optimizations we discuss in this book is adding in-memory buffers to B-Tree nodes to amortize I/O costs.
+  However, this is not the only way we can apply buffering. <br>
+  For example, two-component LSM Trees, despite their similarities with B-Trees, use buffering in an entirely different way, and combine buffering with immutability.
+- **Mutability** (or immutability)<br>
+  This defines whether or not the storage structure reads parts of the file, updates them, and writes the updated results at the same location in the file. <br>
+  Immutable structures are append-only: once written, file contents are not modified. Instead, modifications are appended to the end of the file. 
+  There are other ways to implement immutability. <br>
+  One of them is copy-on-write, where the modified page, holding the updated version of the record, is written to the new location in the file, instead of its original location. <br>
+  Often the distinction between LSM and B-Trees is drawn as immutable against in-place update storage, but there are structures (for example, “Bw-Trees”) that are inspired by B-Trees but are immutable.
+- **Ordering**<br>
+  This is defined as whether or not the data records are stored in the key order in the pages on disk.
+   In other words, the keys that sort closely are stored in contiguous segments on disk. <br>
+  Ordering often defines whether or not we can efficiently scan the range of records, not only locate the individual data records. <br>
+  Storing data out of order (most often, in insertion order) opens up for some write-time optimizations. 
+  For example, Bitcask and WiscKey store data records directly in append-only files.
 
 ### optimizer
 
