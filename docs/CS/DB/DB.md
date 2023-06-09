@@ -179,6 +179,19 @@ Storage structures have three common variables: they use *buffering* (or avoid u
   Storing data out of order (most often, in insertion order) opens up for some write-time optimizations. 
   For example, Bitcask and WiscKey store data records directly in append-only files.
 
+
+
+We separated storage structures in two groups: mutable and immutable ones, and identified immutability as one of the core concepts influencing their design and implementation. Most of the mutable storage structures use an in-place update mechanism. During insert, delete, or update operations, data records are updated directly in their locations in the target file.
+
+Storage engines often allow multiple versions of the same data record to be present in the database; for example, when using multiversion concurrency control (see “Multiversion Concurrency Control”) or slotted page organization (see “Slotted Pages”). For the sake of simplicity, for now we assume that each key is associated only with one data record, which has a unique location.
+
+One of the most popular storage structures is a B-Tree. Many open source database systems are B-Tree based, and over the years they’ve proven to cover the majority of use cases.
+
+
+
+
+
+
 ### optimizer
 
 

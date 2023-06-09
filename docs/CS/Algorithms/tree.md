@@ -266,6 +266,44 @@ Level-order traversal differs from the other traversals in that it is not done r
 
 ## B-Trees
 
+As previously mentioned, unbalanced trees have a worst-case complexity of O(N). Balanced trees give us an average O(log2 N). At the same time, due to low fanout (fanout is the maximum allowed number of children per node), we have to perform balancing, relocate nodes, and update pointers rather frequently. Increased maintenance costs make BSTs impractical as on-disk data structures.
+
+If we wanted to maintain a BST on disk, we’d face several problems. One problem is locality: since elements are added in random order, there’s no guarantee that a newly created node is written close to its parent, which means that node child pointers may span across several disk pages. We can improve the situation to a certain extent by modifying the tree layout and using paged binary trees.
+
+Another problem, closely related to the cost of following child pointers, is tree height. Since binary trees have a fanout of just two, height is a binary logarithm of the number of the elements in the tree, and we have to perform $O(log2 N)$ seeks to locate the searched element and, subsequently, perform the same number of disk transfers. 2-3-Trees and other low-fanout trees have a similar limitation: while they are useful as in-memory data structures, small node size makes them impractical for external storage.
+
+A naive on-disk BST implementation would require as many disk seeks as comparisons, since there’s no built-in concept of locality. 
+This sets us on a course to look for a data structure that would exhibit this property.
+
+Considering these factors, a version of the tree that would be better suited for disk implementation has to exhibit the following properties:
+
+- *High fanout* to improve locality of the neighboring keys.
+- *Low height* to reduce the number of seeks during traversal.
+
+> [!TIP]
+> Fanout and height are inversely correlated: the higher the fanout, the lower the height. If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
+
+
+B-Trees build upon the foundation of balanced search trees and are different in that they have higher fanout (have more child nodes) and smaller height.
+
+In most of the literature, binary tree nodes are drawn as circles. Since each node is responsible just for one key and splits the range into two parts, this level of detail is sufficient and intuitive. At the same time, B-Tree nodes are often drawn as rectangles, and pointer blocks are also shown explicitly to highlight the relationship between child nodes and separator keys. 
+Figure 7 shows binary tree, 2-3-Tree, and B-Tree nodes side by side, which helps to understand the similarities and differences between them.
+
+
+
+
+
+<div style="text-align: center;">
+
+![Binary tree, 2-3-Tree, and B-Tree nodes side by side](./img/B-Tree.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.7. Binary tree, 2-3-Tree, and B-Tree nodes side by side.
+</p>
+
+
 A [B-tree](/docs/CS/Algorithms/B-tree.md) of order m is a tree with the following structural properties:
 
 - The root is either a leaf or has between 2 and m children.

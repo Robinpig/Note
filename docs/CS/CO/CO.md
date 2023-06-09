@@ -63,6 +63,53 @@ Structure Hazard
 
 #### Dynamic Branch Prediction
 
+## Disk
+
+On spinning disks, seeks increase costs of random reads because they require disk rotation and mechanical head movements to position the read/write head to the desired location. However, once the expensive part is done, reading or writing contiguous bytes (i.e., sequential operations) is relatively cheap.
+
+The smallest transfer unit of a spinning drive is a sector, so when some operation is performed, at least an entire sector can be read or written. Sector sizes typically range from 512 bytes to 4 Kb.
+
+Head positioning is the most expensive part of an operation on the HDD. This is one of the reasons we often hear about the positive effects of sequential I/O: reading and writing contiguous memory segments from disk.
+
+
+
+
+### Solid State Drives
+Solid state drives (SSDs) do not have moving parts: there’s no disk that spins, or head that has to be positioned for the read. A typical SSD is built of memory cells, connected into strings (typically 32 to 64 cells per string), strings are combined into arrays, arrays are combined into pages, and pages are combined into blocks.
+
+Depending on the exact technology used, a cell can hold one or multiple bits of data. Pages vary in size between devices, but typically their sizes range from 2 to 16 Kb. Blocks typically contain 64 to 512 pages. Blocks are organized into planes and, finally, planes are placed on a die. SSDs can have one or more dies. Figure 2-5 shows this hierarchy.
+
+
+
+<div style="text-align: center;">
+
+![Fig.1. SSD organization schematics](img/SSD-Organization-Schematics.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. SSD organization schematics
+</p>
+
+
+The smallest unit that can be written (programmed) or read is a page. However, we can only make changes to the empty memory cells (i.e., to ones that have been erased before the write). 
+The smallest erase entity is not a page, but a block that holds multiple pages, which is why it is often called an erase block. Pages in an empty block have to be written sequentially.
+
+The part of a flash memory controller responsible for mapping page IDs to their physical locations, tracking empty, written, and discarded pages, is called the Flash Translation Layer (FTL). 
+It is also responsible for garbage collection, during which FTL finds blocks it can safely erase. Some blocks might still contain live pages. 
+In this case, it relocates live pages from these blocks to new locations and remaps page IDs to point there. 
+After this, it erases the now-unused blocks, making them available for writes.
+
+Since in both device types (HDDs and SSDs) we are addressing chunks of memory rather than individual bytes (i.e., accessing data block-wise), most operating systems have a block device abstraction. 
+It hides an internal disk structure and buffers I/O operations internally, so when we’re reading a single word from a block device, the whole block containing it is read. 
+This is a constraint we cannot ignore and should always take into account when working with disk-resident data structures.
+
+In SSDs, we don’t have a strong emphasis on random versus sequential I/O, as in HDDs, because the difference in latencies between random and sequential reads is not as large. There is still some difference caused by prefetching, reading contiguous pages, and internal parallelism.
+
+Even though garbage collection is usually a background operation, its effects may negatively impact write performance, especially in cases of random and unaligned write workloads.
+
+Writing only full blocks, and combining subsequent writes to the same block, can help to reduce the number of required I/O operations. 
+
 ## Cache
 
 L1
