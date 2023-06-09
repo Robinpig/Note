@@ -49,7 +49,7 @@ Atomicity simplifies this problem: if a transaction was aborted, the application
 #### Consistency
 
 this idea of consistency depends on the application’s notion of invariants, and it’s the application’s responsibility to define its transactions correctly so that they preserve consistency.
-This is not something that the database can guarantee: if you write bad data that violates your invariants, the database can’t stop you.
+**This is not something that the database can guarantee: if you write bad data that violates your invariants, the database can’t stop you.**
 (Some specific kinds of invariants can be checked by the database, for example using foreign key constraints or uniqueness constraints.
 However, in general, the application defines what data is valid or invalid—the database only stores it.)
 
