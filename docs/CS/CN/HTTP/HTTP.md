@@ -14,6 +14,7 @@ A feature of HTTP is the typing and negotiation of data representation, allowing
 
 1. plain text
 2. HTTP is a stateless protocol, meaning that the server does not keep any data (state) between two requests.
+    But while the core of HTTP itself is stateless, HTTP cookies allow the use of stateful sessions. Using header extensibility, HTTP Cookies are added to the workflow, allowing session creation on each HTTP request to share the same context, or the same state.
 3. 不确定报文是否正常，未被篡改
 4. 性能不算高
 
@@ -177,10 +178,25 @@ Note that a server might reject traffic that it deems abusive or characteristic 
 
 ### Method Definitions
 
+An HTTP method is **idempotent** if the intended effect on the server of making a single request is the same as the effect of making several identical requests.
 
-**idempotence** in HTTP/1.1：
+This does not necessarily mean that the request does not have _any_ unique side effects: for example, the server may log every request with the time it was received. Idempotency only applies to effects intended by the client: for example, a POST request intends to send data to the server, or a DELETE request intends to delete a resource on the server.
 
-> Methods can also have the property of "idempotence" in that (aside from error or expiration issues) the side-effects of N > 0 identical requests is the same as for a single request.
+
+To be idempotent, only the state of the server is considered. The response returned by each request may differ: for example, the first call of a [`DELETE`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/DELETE) will likely return a [`200`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/200), while successive ones will likely return a [`404`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404). Another implication of [`DELETE`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/DELETE) being idempotent is that developers should not implement RESTful APIs with a _delete last entry_ functionality using the `DELETE` method.
+
+
+An HTTP method is **safe** if it doesn't alter the state of the server. In other words, a method is safe if it leads to a read-only operation.
+All safe methods are also [idempotent](https://developer.mozilla.org/en-US/docs/Glossary/Idempotent), but not all idempotent methods are safe.
+
+Even if safe methods have a read-only semantic, servers can alter their state: e.g. they can log or keep statistics. What is important here is that by calling a safe method, the client doesn't request any server change itself, and therefore won't create an unnecessary load or burden for the server. Browsers can call safe methods without fearing to cause any harm to the server; this allows them to perform activities like pre-fetching without risk. Web crawlers also rely on calling safe methods.
+
+Safe methods don't need to serve static files only; a server can generate an answer to a safe method on-the-fly, as long as the generating script guarantees safety: it should not trigger external effects, like triggering an order in an e-commerce website.
+
+
+It is the responsibility of the application on the server to implement the safe semantic correctly, the web server itself, being Apache, Nginx or IIS, can't enforce it by itself. In particular, an application should not allow [`GET`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods/GET) requests to alter its state.
+
+
 
 
 | Method | Idempotence | Safety(Read only) |
