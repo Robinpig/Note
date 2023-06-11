@@ -13,6 +13,9 @@ This design brings a number of advantages, including superior write performance,
 These advantages have enabled LSM-trees to serve a large variety of workloads.
 However, indexed finds requiring immediate response will lose I/O efficiency in some cases, so the LSM-tree is most useful in applications where index inserts are more common than finds that retrieve the entries.
 
+> [!NOTE]
+> LSM Trees write immutable files and merge them together over time. These files usually contain an index of their own to help readers efficiently locate data. Even though LSM Trees are often presented as an alternative to B-Trees, it is common for B-Trees to be used as the internal indexing structure for an LSM Tree’s immutable files.
+
 ## Basics
 
 In general, an index structure can choose one of two strategies to handle updates, that is, *in-place updates* and *out-of-place updates*.
