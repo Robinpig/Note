@@ -22,7 +22,7 @@
 
 [Rust](https://github.com/Robinpig/Note/blob/master/CS/Rust/Rust.md)
 
-[Scala](https://github.com/Robinpig/Note/blob/master/CS/Scala/Scala.md)
+[Scala](/docs/CS/Scala/Scala.md)
 
 
 
@@ -30,7 +30,7 @@
 
 
 
-[Refactoring](https://github.com/Robinpig/Note/blob/master/CS/Refactoring.md)
+[Refactoring](/docs/CS/Refactoring.md)
 
 
 

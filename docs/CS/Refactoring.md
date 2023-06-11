@@ -5,6 +5,33 @@ Refactoring is a systematic process of improving code without creating new funct
 
 
 
+## Bad Smells
+
+- Mysterious Name
+- Duplicated Code
+- Long Function
+- Long Parameter List
+- Global Data
+- Mutable Data
+- Divergent Change
+- Shotgun Surgery
+- Feature Envy
+- Data Clumps
+- Pimitive Obsession
+- Repeated Switches
+- Loops
+- Lazy Elment
+- Speculative Generality
+- Temporary Field
+- Message Chains
+- Middle Man
+- Inside Trading
+- Large Class
+- Alternative Classes with Different Interfaces
+- Data Classes
+- Refused Bequest
+- Comments
+
 ## References
 
 1. [Refactoring Guru](https://refactoring.guru/refactoring)
