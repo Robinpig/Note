@@ -198,6 +198,17 @@ We use B-Trees as a typical example of mutable structure and Log-Structured Merg
 In-place update storage structures are optimized for read performance: after locating data on disk, the record can be returned to the client. This comes at the expense of write performance: to update the data record in place, it first has to be located on disk. On the other hand, append-only storage is optimized for write performance. Writes do not have to locate records on disk to overwrite them. However, this is done at the expense of reads, which have to retrieve multiple data record versions and reconcile them.
 
 
+One of the big disputes in the database community is whether B-Trees or LSM Trees have lower write amplification. It is extremely important to understand the source of write amplification in both cases. In B-Trees, it comes from writeback operations and subsequent updates to the same node. In LSM Trees, write amplification is caused by migrating data from one file to the other during compaction. Comparing the two directly may lead to incorrect assumptions.
+
+In summary, when storing data on disk in an immutable fashion, we face three problems:
+
+- Read amplification<br>
+   Resulting from a need to address multiple tables to retrieve data.
+- Write amplification<br>
+   Caused by continuous rewrites by the compaction process.
+- Space amplification<br>
+   Arising from storing multiple records associated with the same key.
+
 
 
 
