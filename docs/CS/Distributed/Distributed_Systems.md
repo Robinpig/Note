@@ -226,9 +226,22 @@ There is some similarity between distributed consistency models and the hierarch
 But while there is some overlap, they are mostly independent concerns: transaction isolation is primarily about avoiding race conditions due to concurrently executing transactions,
 whereas distributed consistency is mostly about coordinating the state of replicas in the face of delays and faults.
 
+### Consistency models
+
+ What happens if multiple clients read or modify different copies of data simultaneously or within a short period. There’s no single right answer to that question, since these semantics are different depending on the application, but they are well studied in the context of consistency models.
+
+*Consistency models* provide different semantics and guarantees. You can think of a consistency model as a contract between the participants: what each replica has to do to satisfy the required semantics, and what users can expect when issuing read and write operations.
+
+
+Consistency models describe what expectations clients might have in terms of possible returned values despite the existence of multiple copies of data and concurrent accesses to it.
+
 A consistency model is a set of histories.
 
 > link [Jepsen Consistency Models](https://jepsen.io/consistency)
+
+
+
+
 
 [Highly Available Transactions: Virtues and Limitations](http://www.vldb.org/pvldb/vol7/p181-bailis.pdf)
 
