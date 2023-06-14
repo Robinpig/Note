@@ -239,9 +239,16 @@ A consistency model is a set of histories.
 
 > link [Jepsen Consistency Models](https://jepsen.io/consistency)
 
+#### Strict Consistency
 
+*Strict consistency* is the equivalent of complete replication transparency: any write by any process is instantly available for the subsequent reads by any process. It involves the concept of a global clock and, if there was a write(x, 1) at instant t1, any read(x) will return a newly written value 1 at any instant t2 > t1.
 
+Unfortunately, this is just a theoretical model, and it’s impossible to implement, as the laws of physics and the way distributed systems work set limits on how fast things may happen.
 
+#### Linearizability
+
+*Linearizability* is the strongest single-object, single-operation consistency model.
+Under this model, effects of the write become visible to all readers exactly once at some point in time between its start and end, and no client can observe state transitions or side effects of partial (i.e., unfinished, still in-flight) or incomplete (i.e., interrupted before completion) write operations.
 
 [Highly Available Transactions: Virtues and Limitations](http://www.vldb.org/pvldb/vol7/p181-bailis.pdf)
 
