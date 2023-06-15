@@ -847,6 +847,15 @@ However, SSI is probably less sensitive to slow transactions than two-phase lock
 
 ## Atomic Commit
 
+We will discuss two atomic commitment algorithms: two- and three-phase commits. 
+The big advantage of these algorithms is that they’re easy to understand and implement, but have several shortcomings. 
+In 2PC, a coordinator (or at least its substitute) has to be alive for the length of the commitment process, which significantly reduces availability. 
+3PC lifts this requirement for some cases, but is prone to split brain in case of network partition.
+
+Distributed transactions in modern database systems are often implemented using consensus algorithms.
+Consensus algorithms are more involved than atomic commit ones, but have much better fault-tolerance properties,
+and decouple decisions from their initiators and allow participants to decide on a value rather than on whether or not to accept the value.
+
 ### Two-Phase Commit
 
 A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.

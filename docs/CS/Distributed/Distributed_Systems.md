@@ -228,9 +228,11 @@ whereas distributed consistency is mostly about coordinating the state of replic
 
 ### Consistency models
 
- What happens if multiple clients read or modify different copies of data simultaneously or within a short period. There’s no single right answer to that question, since these semantics are different depending on the application, but they are well studied in the context of consistency models.
+ What happens if multiple clients read or modify different copies of data simultaneously or within a short period. 
+ There’s no single right answer to that question, since these semantics are different depending on the application, but they are well studied in the context of consistency models.
 
-*Consistency models* provide different semantics and guarantees. You can think of a consistency model as a contract between the participants: what each replica has to do to satisfy the required semantics, and what users can expect when issuing read and write operations.
+*Consistency models* provide different semantics and guarantees. 
+You can think of a consistency model as a contract between the participants: what each replica has to do to satisfy the required semantics, and what users can expect when issuing read and write operations.
 
 
 Consistency models describe what expectations clients might have in terms of possible returned values despite the existence of multiple copies of data and concurrent accesses to it.
@@ -241,7 +243,8 @@ A consistency model is a set of histories.
 
 #### Strict Consistency
 
-*Strict consistency* is the equivalent of complete replication transparency: any write by any process is instantly available for the subsequent reads by any process. It involves the concept of a global clock and, if there was a write(x, 1) at instant t1, any read(x) will return a newly written value 1 at any instant t2 > t1.
+*Strict consistency* is the equivalent of complete replication transparency: any write by any process is instantly available for the subsequent reads by any process. 
+It involves the concept of a global clock and, if there was a write(x, 1) at instant t1, any read(x) will return a newly written value 1 at any instant t2 > t1.
 
 Unfortunately, this is just a theoretical model, and it’s impossible to implement, as the laws of physics and the way distributed systems work set limits on how fast things may happen.
 
@@ -310,7 +313,7 @@ However, they are two quite different guarantees, and it is important to disting
   It guarantees that transactions behave the same as if they had executed in some serial order (each transaction running to completion before the next transaction starts).
   It is okay for that serial order to be different from the order in which transactions were actually run.
 - Linearizability is a recency guarantee on reads and writes of a register (an individual object).
-  It doesn’t group operations together into transactions, so it does not prevent problems such as write skew (see “Write Skew and Phantoms” on page 246), unless you take additional measures such as materializing conflicts.
+  It doesn’t group operations together into transactions, so it does not prevent problems such as write skew, unless you take additional measures such as materializing conflicts.
 
 A database may provide both serializability and linearizability, and this combination is known as strict serializability or strong one-copy serializability (strong-1SR).
 Implementations of serializability based on two-phase locking or actual serial execution are typically linearizable.
@@ -382,7 +385,8 @@ This problem arises because there are two different communication channels betwe
 Without the recency guarantee of linearizability, race conditions between these two channels are possible. 
 
 Linearizability is not the only way of avoiding this race condition, but it’s the simplest to understand.
-If you control the additional communication channel (like in the case of the message queue, but not in the case of Alice and Bob), you can use alternative approaches similar to what we discussed in “[Reading Your Own Writes](/docs/CS/Distributed/Replica.md?id=Read-after-write)”, at the cost of additional complexity
+If you control the additional communication channel (like in the case of the message queue, but not in the case of Alice and Bob), 
+you can use alternative approaches similar to what we discussed in “[Reading Your Own Writes](/docs/CS/Distributed/Replica.md?id=Read-after-write)”, at the cost of additional complexity
 
 
 
