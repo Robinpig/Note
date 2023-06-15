@@ -40,6 +40,15 @@ Our goal is to design a distributed system with the characteristics listed above
 
 ### Faults and Partial Failures
 
+In a distributed system, there may well be some parts of the system that are broken in some unpredictable way, even though other parts of the system are working fine. This is known as a *partial failure*.
+The difficulty is that partial failures are *nondeterministic*: if you try to do anything involving multiple nodes and the network, it may sometimes work and sometimes unpredictably fail.
+As we shall see, you may not even know whether something succeeded or not, as the time it takes for a message to travel across a network is also nondeterministic!
+
+This nondeterminism and possibility of partial failures is what makes distributed systems hard to work with.
+
+If we want to make distributed systems work, we must accept the possibility of partial failure and build fault-tolerance mechanisms into the software. 
+In other words, **we need to build a reliable system from unreliable components.** 
+
 ### Unreliable Networks
 
 Everyone, when they first build a distributed system, makes the following eight assumptions.
@@ -617,7 +626,7 @@ Using gossip for propagating system states increases the number of messages in t
 ### Reversing Failure Detection Problem Statement
 
 Since propagating the information about failures is not always possible, and propagating it by notifying every member might be expensive, one of the approaches,
-called FUSE (failure notification service) [DUNAGAN04], focuses on reliable and cheap failure propagation that works even in cases of network partitions.
+called FUSE (failure notification service), focuses on reliable and cheap failure propagation that works even in cases of network partitions.
 
 To detect process failures, this approach arranges all active processes in groups. If one of the groups becomes unavailable, all participants detect the failure.
 In other words, every time a single process failure is detected, it is converted and propagated as a group failure. This allows detecting failures in the presence of any pattern of disconnects, partitions, and node failures.
