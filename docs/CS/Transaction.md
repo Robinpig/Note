@@ -49,7 +49,7 @@ Atomicity simplifies this problem: if a transaction was aborted, the application
 #### Consistency
 
 this idea of consistency depends on the application’s notion of invariants, and it’s the application’s responsibility to define its transactions correctly so that they preserve consistency.
-This is not something that the database can guarantee: if you write bad data that violates your invariants, the database can’t stop you.
+**This is not something that the database can guarantee: if you write bad data that violates your invariants, the database can’t stop you.**
 (Some specific kinds of invariants can be checked by the database, for example using foreign key constraints or uniqueness constraints.
 However, in general, the application defines what data is valid or invalid—the database only stores it.)
 
@@ -846,6 +846,15 @@ However, SSI is probably less sensitive to slow transactions than two-phase lock
 - A fully ACID database is the perfect fit for use cases where data reliability and consistency are essential.
 
 ## Atomic Commit
+
+We will discuss two atomic commitment algorithms: two- and three-phase commits. 
+The big advantage of these algorithms is that they’re easy to understand and implement, but have several shortcomings. 
+In 2PC, a coordinator (or at least its substitute) has to be alive for the length of the commitment process, which significantly reduces availability. 
+3PC lifts this requirement for some cases, but is prone to split brain in case of network partition.
+
+Distributed transactions in modern database systems are often implemented using consensus algorithms.
+Consensus algorithms are more involved than atomic commit ones, but have much better fault-tolerance properties,
+and decouple decisions from their initiators and allow participants to decide on a value rather than on whether or not to accept the value.
 
 ### Two-Phase Commit
 

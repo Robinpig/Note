@@ -188,6 +188,27 @@ Storage engines often allow multiple versions of the same data record to be pres
 One of the most popular storage structures is a B-Tree. Many open source database systems are B-Tree based, and over the years they’ve proven to cover the majority of use cases.
 
 
+Immutable data structures are often used in functional programming languages and are getting more popular because of their safety characteristics: once created, an immutable structure doesn’t change, all of its references can be accessed concurrently, and its integrity is guaranteed by the fact that it cannot be modified.
+
+On a high level, there is a strict distinction between how data is treated inside a storage structure and outside of it. Internally, immutable files can hold multiple copies, more recent ones overwriting the older ones, while mutable files generally hold only the most recent value instead. When accessed, immutable files are processed, redundant copies are reconciled, and the most recent ones are returned to the client.
+
+We use B-Trees as a typical example of mutable structure and Log-Structured Merge Trees (LSM Trees) as an example of an immutable structure. Immutable LSM Trees use append-only storage and merge reconciliation, and B-Trees locate data records on disk and update pages at their original offsets in the file.
+
+
+In-place update storage structures are optimized for read performance: after locating data on disk, the record can be returned to the client. This comes at the expense of write performance: to update the data record in place, it first has to be located on disk. On the other hand, append-only storage is optimized for write performance. Writes do not have to locate records on disk to overwrite them. However, this is done at the expense of reads, which have to retrieve multiple data record versions and reconcile them.
+
+
+One of the big disputes in the database community is whether B-Trees or LSM Trees have lower write amplification. It is extremely important to understand the source of write amplification in both cases. In B-Trees, it comes from writeback operations and subsequent updates to the same node. In LSM Trees, write amplification is caused by migrating data from one file to the other during compaction. Comparing the two directly may lead to incorrect assumptions.
+
+In summary, when storing data on disk in an immutable fashion, we face three problems:
+
+- Read amplification<br>
+   Resulting from a need to address multiple tables to retrieve data.
+- Write amplification<br>
+   Caused by continuous rewrites by the compaction process.
+- Space amplification<br>
+   Arising from storing multiple records associated with the same key.
+
 
 
 
@@ -289,7 +310,7 @@ This manager locks on the database objects for the running transactions, ensurin
 
 Access methods (storage structures)
 
-These manage access and organizing data on disk. Access methods include heap files and storage structures such as B-Trees (see “Ubiquitous B-Trees”) or LSM Trees (see “LSM Trees”).
+These manage access and organizing data on disk. Access methods include heap files and storage structures such as B-Trees or LSM Trees.
 
 Buffer manager
 
@@ -327,6 +348,81 @@ A version of the tree that would be better suited for disk implementation has to
 >
 > Fanout and height are inversely correlated: the higher the fanout, the lower the height.
 > If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
+
+#### Buffer Management
+
+Most databases are built using a two-level memory hierarchy: slower persistent storage (disk) and faster main memory (RAM). To reduce the number of accesses to persistent storage, pages are cached in memory. When the page is requested again by the storage layer, its cached copy is returned.
+
+Cached pages available in memory can be reused under the assumption that no other process has modified the data on disk. This approach is sometimes referenced as virtual disk [BAYER72]. A virtual disk read accesses physical storage only if no copy of the page is already available in memory. A more common name for the same concept is page cache or buffer pool. The page cache is responsible for caching pages read from disk in memory. In case of a database system crash or unorderly shutdown, cached contents are lost.
+
+The problem of caching pages is not limited in scope to databases. Operating systems have the concept of a page cache, too. Operating systems utilize unused memory segments to transparently cache disk contents to improve performance of I/O syscalls.
+
+Uncached pages are said to be paged in when they’re loaded from disk. If any changes are made to the cached page, it is said to be dirty, until these changes are flushed back on disk.
+
+Since the memory region where cached pages are held is usually substantially smaller than an entire dataset, the page cache eventually fills up and, in order to page in a new page, one of the cached pages has to be evicted.
+
+The primary functions of a page cache can be summarized as:
+
+- It keeps cached page contents in memory.
+- It allows modifications to on-disk pages to be buffered together and performed against their cached versions.
+- When a requested page isn’t present in memory and there’s enough space available for it, it is paged in by the page cache, and its cached version is returned.
+- If an already cached page is requested, its cached version is returned.
+- If there’s not enough space available for the new page, some other page is evicted and its contents are flushed to disk.
+
+> [!NOTE]
+> Many database systems open files using O_DIRECT flag. This flag allows I/O system calls to bypass the kernel page cache, access the disk directly, and use database-specific buffer management. This is sometimes frowned upon by the operating systems folks.
+> Linus Torvalds has criticized usage of O_DIRECT since it’s not asynchronous and has no readahead or other means for instructing the kernel about access patterns. However, until operating systems start offering better mechanisms, O_DIRECT is still going to be useful.
+> We can gain some control over how the kernel evicts pages from its cache is by using fadvise, but this only allows us to ask the kernel to consider our opinion and does not guarantee it will actually happen. To avoid syscalls when performing I/O, we can use memory mapping, but then we lose control over caching.
+
+##### Caching Semantics
+
+All changes made to buffers are kept in memory until they are eventually written back to disk. As no other process is allowed to make changes to the backing file, this synchronization is a one-way process: from memory to disk, and not vice versa. The page cache allows the database to have more control over memory management and disk accesses. You can think of it as an application-specific equivalent of the kernel page cache: it accesses the block device directly, implements similar functionality, and serves a similar purpose. It abstracts disk accesses and decouples logical write operations from the physical ones.
+
+Caching pages helps to keep the tree partially in memory without making additional changes to the algorithm and materializing objects in memory. All we have to do is replace disk accesses by the calls to the page cache.
+
+When the storage engine accesses (in other words, requests) the page, we first check if its contents are already cached, in which case the cached page contents are returned. If the page contents are not yet cached, the cache translates the logical page address or page number to its physical address, loads its contents in memory, and returns its cached version to the storage engine. Once returned, the buffer with cached page contents is said to be referenced, and the storage engine has to hand it back to the page cache or dereference it once it’s done. The page cache can be instructed to avoid evicting pages by pinning them.
+
+If the page is modified (for example, a cell was appended to it), it is marked as dirty. A dirty flag set on the page indicates that its contents are out of sync with the disk and have to be flushed for durability.
+
+
+##### Cache Eviction
+
+Keeping caches populated is good: we can serve more reads without going to persistent storage, and more same-page writes can be buffered together. However, the page cache has a limited capacity and, sooner or later, to serve the new contents, old pages have to be evicted. If page contents are in sync with the disk (i.e., were already flushed or were never modified) and the page is not pinned or referenced, it can be evicted right away. Dirty pages have to be flushed before they can be evicted. Referenced pages should not be evicted while some other thread is using them.
+
+Since triggering a flush on every eviction might be bad for performance, some databases use a separate background process that cycles through the dirty pages that are likely to be evicted, updating their disk versions. For example, PostgreSQL has a background flush writer that does just that.
+
+Another important property to keep in mind is durability: if the database has crashed, all data that was not flushed is lost. To make sure that all changes are persisted, flushes are coordinated by the checkpoint process. The checkpoint process controls the write-ahead log (WAL) and page cache, and ensures that they work in lockstep. Only log records associated with operations applied to cached pages that were flushed can be discarded from the WAL. Dirty pages cannot be evicted until this process completes.
+
+
+This means there is always a trade-off between several objectives:
+- Postpone flushes to reduce the number of disk accesses
+- Preemptively flush pages to allow quick eviction
+- Pick pages for eviction and flush in the optimal order
+- Keep cache size within its memory bounds
+- Avoid losing the data as it is not persisted to the primary storage
+
+
+##### Locking Pages in Cache
+
+Having to perform disk I/O on each read or write is impractical: subsequent reads may request the same page, just as subsequent writes may modify the same page. Since B-Tree gets “narrower” toward the top, higher-level nodes (ones that are closer to the root) are hit for most of the reads. Splits and merges also eventually propagate to the higher-level nodes. This means there’s always at least a part of a tree that can significantly benefit from being cached.
+
+We can “lock” pages that have a high probability of being used in the nearest time. Locking pages in the cache is called pinning. Pinned pages are kept in memory for a longer time, which helps to reduce the number of disk accesses and improve performance.
+
+
+Since each lower B-Tree node level has exponentially more nodes than the higher one, and higher-level nodes represent just a small fraction of the tree, this part of the tree can reside in memory permanently, and other parts can be paged in on demand. 
+This means that, in order to perform a query, we won’t have to make h disk accesses (as discussed in “B-Tree Lookup Complexity”, h is the height of the tree), but only hit the disk for the lower levels, for which pages are not cached.
+
+Operations performed against a subtree may result in structural changes that contradict each other—for example, multiple delete operations causing merges followed by writes causing splits, or vice versa. 
+Likewise for structural changes that propagate from different subtrees (structural changes occurring close to each other in time, in different parts of the tree, propagating up). 
+These operations can be buffered together by applying changes only in memory, which can reduce the number of disk writes and amortize the operation costs, since only one write can be performed instead of multiple writes.
+
+
+> The page cache also allows the storage engine to have fine-grained control over prefetching and eviction. It can be instructed to load pages ahead of time, before they are accessed. For example, when the leaf nodes are traversed in a range scan, the next leaves can be preloaded. Similarly, if a maintenance process loads the page, it can be evicted immediately after the process finishes, since it’s unlikely to be useful for the in-flight queries. Some databases, for example, PostgreSQL, use a circular buffer (in other words, FIFO page replacement policy) for large sequential scans.
+
+
+
+
+
 
 ## store
 
@@ -472,12 +568,91 @@ However, the internals of the systems can look quite different, because they are
 Many database vendors now focus on supporting either transaction processing or analytics workloads, but not both.
 Some databases, such as Microsoft SQL Server and SAP HANA, have support for transaction processing and data warehousing in the same product. However, they are increasingly becoming two separate storage and query engines, which happen to be accessible through a common SQL interface.
 
+## Transaction
+
+### Recovery
+
+A *write-ahead log* (WAL for short, also known as a commit log) is an append-only auxiliary disk-resident structure used for crash and transaction recovery. The page cache allows buffering changes to page contents in memory. Until the cached contents are flushed back to disk, the only disk-resident copy preserving the operation history is stored in the WAL. Many database systems use append-only write-ahead logs; for example, PostgreSQL and MySQL.
+
+The main functionality of a write-ahead log can be summarized as:
+
+- Allow the page cache to buffer updates to disk-resident pages while ensuring durability semantics in the larger context of a database system.
+- Persist all operations on disk until the cached copies of pages affected by these operations are synchronized on disk. Every operation that modifies the database state has to be logged on disk before the contents of the associated pages can be modified.
+- Allow lost in-memory changes to be reconstructed from the operation log in case of a crash.
 
 
 
-## Concurrency Control
+In addition to this functionality, the write-ahead log plays an important role in transaction processing. It is hard to overstate the importance of the WAL as it ensures that data makes it to the persistent storage and is available in case of a crash, as uncommitted data is replayed from the log and the pre-crash database state is fully restored.
 
-### Why is concurrency control needed?
+
+The write-ahead log is append-only and its written contents are immutable, so all writes to the log are sequential. Since the WAL is an immutable, append-only data structure, readers can safely access its contents up to the latest write threshold while the writer continues appending data to the log tail.
+
+The WAL consists of log records. Every record has a unique, monotonically increasing log sequence number (LSN). Usually, the LSN is represented by an internal counter or a timestamp. Since log records do not necessarily occupy an entire disk block, their contents are cached in the log buffer and are flushed on disk in a force operation. Forces happen as the log buffers fill up, and can be requested by the transaction manager or a page cache. All log records have to be flushed on disk in LSN order.
+
+Besides individual operation records, the WAL holds records indicating transaction completion. A transaction can’t be considered committed until the log is forced up to the LSN of its commit record.
+
+To make sure the system can continue functioning correctly after a crash during rollback or recovery, some systems use compensation log records (CLR) during undo and store them in the log.
+
+The WAL is usually coupled with a primary storage structure by the interface that allows trimming it whenever a checkpoint is reached. Logging is one of the most critical correctness aspects of the database, which is somewhat tricky to get right: even the slightest disagreements between log trimming and ensuring that the data has made it to the primary storage structure may cause data loss.
+
+Checkpoints are a way for a log to know that log records up to a certain mark are fully persisted and aren’t required anymore, which significantly reduces the amount of work required during the database startup. A process that forces all dirty pages to be flushed on disk is generally called a sync checkpoint, as it fully synchronizes the primary storage structure.
+
+Flushing the entire contents on disk is rather impractical and would require pausing all running operations until the checkpoint is done, so most database systems implement fuzzy checkpoints. In this case, the last_checkpoint pointer stored in the log header contains the information about the last successful checkpoint. A fuzzy checkpoint begins with a special begin_checkpoint log record specifying its start, and ends with end_checkpoint log record, containing information about the dirty pages, and the contents of a transaction table. Until all the pages specified by this record are flushed, the checkpoint is considered to be incomplete. Pages are flushed asynchronously and, once this is done, the last_checkpoint record is updated with the LSN of the begin_checkpoint record and, in case of a crash, the recovery process will start from there.
+
+#### Operation Versus Data Log
+
+Some database systems, for example System R [CHAMBERLIN81], use shadow paging: a copy-on-write technique ensuring data durability and transaction atomicity. New contents are placed into the new unpublished shadow page and made visible with a pointer flip, from the old page to the one holding updated contents.
+
+Any state change can be represented by a before-image and an after-image or by corresponding redo and undo operations. Applying a redo operation to a before-image produces an after-image. Similarly, applying an undo operation to an after-image produces a before-image.
+
+We can use a physical log (that stores complete page state or byte-wise changes to it) or a logical log (that stores operations that have to be performed against the current state) to move records or pages from one state to the other, both backward and forward in time. It is important to track the exact state of the pages that physical and logical log records can be applied to.
+
+Physical logging records before and after images, requiring entire pages affected by the operation to be logged. A logical log specifies which operations have to be applied to the page, such as "insert a data record X for key Y", and a corresponding undo operation, such as "remove the value associated with Y".
+
+In practice, many database systems use a combination of these two approaches, using logical logging to perform an undo (for concurrency and performance) and physical logging to perform a redo (to improve recovery time).
+
+#### Steal and Force Policies
+
+To determine when the changes made in memory have to be flushed on disk, database management systems define steal/no-steal and force/no-force policies.
+These policies are mostly applicable to the page cache, but they’re better discussed in the context of recovery, since they have a significant impact on which recovery approaches can be used in combination with them.
+
+A recovery method that allows flushing a page modified by the transaction even before the transaction has committed is called a steal policy. 
+A no-steal policy does not allow flushing any uncommitted transaction contents on disk. 
+To steal a dirty page here means flushing its in-memory contents to disk and loading a different page from disk in its place.
+
+A force policy requires all pages modified by the transactions to be flushed on disk before the transaction commits. 
+On the other hand, a no-force policy allows a transaction to commit even if some pages modified during this transaction were not yet flushed on disk. 
+To force a dirty page here means to flush it on disk before the commit.
+
+Steal and force policies are important to understand, since they have implications for transaction undo and redo.
+Undo rolls back updates to forced pages for committed transactions, while redo applies changes performed by committed transactions on disk.
+
+Using the no-steal policy allows implementing recovery using only redo entries: old copy is contained in the page on disk and modification is stored in the log. 
+With no-force, we potentially can buffer several updates to pages by deferring them. Since page contents have to be cached in memory for that time, a larger page cache may be needed.
+
+When the force policy is used, crash recovery doesn’t need any additional work to reconstruct the results of committed transactions, since pages modified by these transactions are already flushed. 
+A major drawback of using this approach is that transactions take longer to commit due to the necessary I/O.
+
+More generally, until the transaction commits, we need to have enough information to undo its results. 
+If any pages touched by the transaction are flushed, we need to keep undo information in the log until it commits to be able to roll it back. 
+Otherwise, we have to keep redo records in the log until it commits. In both cases, transaction cannot commit until either undo or redo records are written to the logfile.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Concurrency Control
+
+#### Why is concurrency control needed?
 
 If transactions are executed *serially*, i.e., sequentially with no overlap in time, no transaction concurrency exists. However, if concurrent transactions with interleaving operations are allowed in an uncontrolled manner, some unexpected, undesirable results may occur, such as:
 
@@ -487,7 +662,7 @@ If transactions are executed *serially*, i.e., sequentially with no overlap in t
 
 Most high-performance transactional systems need to run transactions concurrently to meet their performance requirements. Thus, without concurrency control such systems can neither provide correct results nor maintain their databases consistently.
 
-### Concurrency control mechanisms
+#### Concurrency control mechanisms
 
 #### Categories
 
@@ -520,13 +695,13 @@ Other major concurrency control types that are utilized in conjunction with the 
 
 The most common mechanism type in database systems since their early days in the 1970s has been *[Strong strict Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)* (SS2PL; also called *Rigorous scheduling* or *Rigorous 2PL*) which is a special case (variant) of both [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking) (2PL) and [Commitment ordering](https://en.wikipedia.org/wiki/Commitment_ordering) (CO). It is pessimistic. In spite of its long name (for historical reasons) the idea of the **SS2PL** mechanism is simple: "Release all locks applied by a transaction only after the transaction has ended." SS2PL (or Rigorousness) is also the name of the set of all schedules that can be generated by this mechanism, i.e., these are SS2PL (or Rigorous) schedules, have the SS2PL (or Rigorousness) property.
 
-### Optimistic concurrency control
+#### Optimistic concurrency control
 
 **Optimistic concurrency control** (**OCC**) is a [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) method applied to transactional systems such as [relational database management systems](https://en.wikipedia.org/wiki/Relational_database_management_systems) and [software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory). OCC assumes that multiple transactions can frequently complete without interfering with each other. While running, transactions use data resources without acquiring locks on those resources. Before committing, each transaction verifies that no other transaction has modified the data it has read. If the check reveals conflicting modifications, the committing transaction rolls back and can be restarted.[[1\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-1) Optimistic concurrency control was first proposed by [H. T. Kung](https://en.wikipedia.org/wiki/H._T._Kung) and John T. Robinson.[[2\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-KungRobinson1981-2)
 
 OCC is generally used in environments with low [data contention](https://en.wikipedia.org/wiki/Block_contention). When conflicts are rare, transactions can complete without the expense of managing locks and without having transactions wait for other transactions' locks to clear, leading to higher throughput than other concurrency control methods. However, if contention for data resources is frequent, the cost of repeatedly restarting transactions hurts performance significantly, in which case other [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) methods may be better suited. However, locking-based ("pessimistic") methods also can deliver poor performance because locking can drastically limit effective concurrency even when deadlocks are avoided.
 
-#### Phases of optimistic concurrency control
+##### Phases of optimistic concurrency control
 
 Optimistic concurrency control transactions involve these phases:
 

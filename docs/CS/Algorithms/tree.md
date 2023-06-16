@@ -283,7 +283,6 @@ Considering these factors, a version of the tree that would be better suited for
 > [!TIP]
 > Fanout and height are inversely correlated: the higher the fanout, the lower the height. If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
 
-
 B-Trees build upon the foundation of balanced search trees and are different in that they have higher fanout (have more child nodes) and smaller height.
 
 In most of the literature, binary tree nodes are drawn as circles. Since each node is responsible just for one key and splits the range into two parts, this level of detail is sufficient and intuitive. At the same time, B-Tree nodes are often drawn as rectangles, and pointer blocks are also shown explicitly to highlight the relationship between child nodes and separator keys. 
@@ -303,40 +302,6 @@ Figure 7 shows binary tree, 2-3-Tree, and B-Tree nodes side by side, which help
 Fig.7. Binary tree, 2-3-Tree, and B-Tree nodes side by side.
 </p>
 
-
-A [B-tree](/docs/CS/Algorithms/B-tree.md) of order m is a tree with the following structural properties:
-
-- The root is either a leaf or has between 2 and m children.
-- All nonleaf nodes (except the root) have between m/2 and m children.
-- All leaves are at the same depth.
-
-All data is stored at the leaves.
-Contained in each interior node are pointers p1, p2, . . . , pm to the children, and values k1, k2, . . . , km - 1, representing the smallest key found in the subtrees p2, p3, . . . , pm respectively.
-Of course, some of these pointers might be NULL, and the corresponding ki would then be undefined. For every node, all the keys in subtree p1 are smaller than the keys in subtree p2, and so on.
-The leaves contain all the actual data, which is either the keys themselves or pointers to records containing the keys. We will assume the former to keep our examples simple.
-There are various definitions of B-trees that change this structure in mostly minor ways, but this definition is one of the popular forms.
-We will also insist (for now) that the number of keys in a leaf is also between m/2 and m.
-
-A B-tree of order 4 is more popularly known as a 2-3-4 tree, and a B-tree of order 3 is known as a 2-3 tree.
-
-With general B-trees of order m, when a key is inserted, the only difficulty arises when the node that is to accept the key already has m keys.
-This key gives the node m + 1 keys, which we can split into two nodes with  (m + 1) / 2  and  (m + 1) / 2  keys respectively.
-As this gives the parent an extra node, we have to check whether this node can be accepted by the parent and split the parent if it already has m children.
-We repeat this until we find a parent with less than m children. If we split the root, we create a new root with two children.
-
-The depth of a B-tree is at most $\log_{[M/2]}{N}$.
-
-The real use of B-trees lies in database systems, where the tree is kept on a physical disk instead of main memory.
-Accessing a disk is typically several orders of magnitude slower than any main memory operation.
-If we use a B-tree of order m, then the number of disk accesses is O(logm n).
-Although each disk access carries the overhead of O(log m) to determine the direction to branch, the time to perform this computation is typically much smaller than the time to read a block of memory and can thus be considered inconsequential (as long as m is chosen reasonably).
-Even if updates are performed and O(m) computing time is required at each node, this too is generally not significant.
-The value of m is then chosen to be the largest value that still allows an interior node to fit into one disk block, and is typically in the range 32  m  256.
-The maximum number of elements that are stored in a leaf is chosen so that if the leaf is full, it fits in one block.
-This means that a record can always be found in very few disk accesses, since a typical B-tree will have a depth of only 2 or 3, and the root (and possibly the first level) can be kept in main memory.
-
-Analysis suggests that a B-tree will be ln 2 = 69 percent full.
-Better space utilization can be obtained if, instead of always splitting a node when the tree obtains its (m + 1)th entry, the routine searches for a sibling that can take the extra child.
 
 ## LSM-trees
 
