@@ -33,9 +33,18 @@ The types of failures that can occur in a distributed system:
   For example, clocks on different computers which are used to coordinate processes are not synchronized; when a message is delayed longer than a threshold period, etc.
 - Byzantine failures: This captures several types of faulty behaviors including data corruption or loss, failures caused by malicious programs, etc.
 
-Our goal is to design a distributed system with the characteristics listed above (faulttolerant, highly available, recoverable, etc.), which means we must design for failure.
+Our goal is to design a distributed system with the characteristics listed above (fault tolerance, highly available, recoverable, etc.), which means we must design for failure.
 
 ### Faults and Partial Failures
+
+In a distributed system, there may well be some parts of the system that are broken in some unpredictable way, even though other parts of the system are working fine. This is known as a *partial failure*.
+The difficulty is that partial failures are *nondeterministic*: if you try to do anything involving multiple nodes and the network, it may sometimes work and sometimes unpredictably fail.
+As we shall see, you may not even know whether something succeeded or not, as the time it takes for a message to travel across a network is also nondeterministic!
+
+This nondeterminism and possibility of partial failures is what makes distributed systems hard to work with.
+
+If we want to make distributed systems work, we must accept the possibility of partial failure and build fault-tolerance mechanisms into the software.
+In other words, **we need to build a reliable system from unreliable components.**
 
 ### Unreliable Networks
 
@@ -144,15 +153,15 @@ We do this by defining a system model, which is an abstraction that describes wh
 
 With regard to timing assumptions, three system models are in common use:
 
-- Synchronous model
+- *Synchronous model*<br>
   The synchronous model assumes bounded network delay, bounded process pauses, and bounded clock error.
   This does not imply exactly synchronized clocks or zero network delay; it just means you know that network delay, pauses, and clock drift will never exceed some fixed upper bound.
   The synchronous model is not a realistic model of most practical systems, because unbounded delays and pauses do occur.
-- Partially synchronous model
+- *Partially synchronous model*<br>
   Partial synchrony means that a system behaves like a synchronous system most of the time, but it sometimes exceeds the bounds for network delay, process pauses, and clock drift.
   This is a realistic model of many systems: most of the time, networks and processes are quite well behaved—otherwise we would never be able to get anything done—but we have to reckon with the fact that any timing assumptions may be shattered occasionally.
   When this happens, network delay, pauses, and clock error may become arbitrarily large.
-- Asynchronous model
+- *Asynchronous model*<br>
   In this model, an algorithm is not allowed to make any timing assumptions—in fact, it does not even have a clock (so it cannot use timeouts).
   Some algorithms can be designed for the asynchronous model, but it is very restrictive.
 
@@ -207,17 +216,15 @@ That is, even if all nodes crash, or the entire network fails, the algorithm mus
 However, with liveness properties we are allowed to make caveats: for example, we could say that a request needs to receive a response only if a majority of nodes have not crashed, and only if the network eventually recovers from an outage.
 The definition of the partially synchronous model requires that eventually the system returns to a synchronous state—that is, any period of network interruption lasts only for a finite duration and is then repaired.
 
-
 ## Consistency and Consensus
 
-The best way of building fault-tolerant systems is to find some general-purpose
-abstractions with useful guarantees, implement them once, and then let applications
-rely on those guarantees. This is the same approach as we used with [transactions](/docs/CS/Transaction.md): by using a transaction, the application can pretend that there are no crashes (atomicity), that nobody else is concurrently accessing the database (isolation), and that storage devices are perfectly reliable (durability).
+The best way of building fault-tolerant systems is to find some general-purpose abstractions with useful guarantees, implement them once, 
+and then let applications rely on those guarantees. This is the same approach as we used with [transactions](/docs/CS/Transaction.md): 
+by using a transaction, the application can pretend that there are no crashes (atomicity), that nobody else is concurrently accessing the database (isolation), and that storage devices are perfectly reliable (durability).
 Even though crashes, race conditions, and disk failures do occur, the transaction abstraction hides those problems so that the application doesn’t need to worry about them.
 
-We will now continue along the same lines, and seek abstractions that can allow an application to ignore some of the problems with distributed systems. 
+We will now continue along the same lines, and seek abstractions that can allow an application to ignore some of the problems with distributed systems.
 For example, one of the most important abstractions for distributed systems is *consensus*: that is, getting all of the nodes to agree on something.
-
 
 There is some similarity between distributed consistency models and the hierarchy of [transaction isolation levels](/docs/CS/Transaction.md?id=Isolation-Levels).
 But while there is some overlap, they are mostly independent concerns: transaction isolation is primarily about avoiding race conditions due to concurrently executing transactions,
@@ -225,12 +232,11 @@ whereas distributed consistency is mostly about coordinating the state of replic
 
 ### Consistency models
 
- What happens if multiple clients read or modify different copies of data simultaneously or within a short period. 
- There’s no single right answer to that question, since these semantics are different depending on the application, but they are well studied in the context of consistency models.
+What happens if multiple clients read or modify different copies of data simultaneously or within a short period.
+There’s no single right answer to that question, since these semantics are different depending on the application, but they are well studied in the context of consistency models.
 
-*Consistency models* provide different semantics and guarantees. 
+*Consistency models* provide different semantics and guarantees.
 You can think of a consistency model as a contract between the participants: what each replica has to do to satisfy the required semantics, and what users can expect when issuing read and write operations.
-
 
 Consistency models describe what expectations clients might have in terms of possible returned values despite the existence of multiple copies of data and concurrent accesses to it.
 
@@ -240,7 +246,7 @@ A consistency model is a set of histories.
 
 #### Strict Consistency
 
-*Strict consistency* is the equivalent of complete replication transparency: any write by any process is instantly available for the subsequent reads by any process. 
+*Strict consistency* is the equivalent of complete replication transparency: any write by any process is instantly available for the subsequent reads by any process.
 It involves the concept of a global clock and, if there was a write(x, 1) at instant t1, any read(x) will return a newly written value 1 at any instant t2 > t1.
 
 Unfortunately, this is just a theoretical model, and it’s impossible to implement, as the laws of physics and the way distributed systems work set limits on how fast things may happen.
@@ -248,29 +254,73 @@ Unfortunately, this is just a theoretical model, and it’s impossible to implem
 #### Linearizability
 
 *Linearizability* is the strongest single-object, single-operation consistency model.
-Under this model, effects of the write become visible to all readers exactly once at some point in time between its start and end, and no client can observe state transitions or side effects of partial (i.e., unfinished, still in-flight) or incomplete (i.e., interrupted before completion) write operations.
+Under this model, effects of the write become visible to all readers exactly once at some point in time between its start and end, 
+and no client can observe state transitions or side effects of partial (i.e., unfinished, still in-flight) or incomplete (i.e., interrupted before completion) write operations.
 
-[Highly Available Transactions: Virtues and Limitations](http://www.vldb.org/pvldb/vol7/p181-bailis.pdf)
+“Concurrent operations are represented as one of the possible sequential histories for which visibility properties hold. 
+There is some indeterminism in linearizability, as there may exist more than one way in which the events can be ordered.
 
-[Consistency in Non-Transactional Distributed Storage Systems](https://arxiv.org/pdf/1512.00168.pdf)
+If two operations overlap, they may take effect in any order. All read operations that occur after write operation completion can observe the effects of this operation. 
+As soon as a single read operation returns a particular value, all reads that come after it return the value at least as recent as the one it returns.
 
-### Eventual Consistency
+There is some flexibility in terms of the order in which concurrent events occur in a global history, but they cannot be reordered arbitrarily. 
+Operation results should not become effective before the operation starts as that would require an oracle able to predict future operations. 
+At the same time, results have to take effect before completion, since otherwise, we cannot define a linearization point.
 
-[Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
+Linearizability respects both sequential process-local operation order and the order of operations running in parallel relative to other processes, and defines a total order of the events.
 
-In “[Replication Lag](/docs/CS/Transaction.md?id=Replication-Lag)” we looked at some timing issues that occur in a replicated database.
-If you look at two database nodes at the same moment in time, you’re likely to see different data on the two nodes, because write requests arrive on different nodes at different times.
-These inconsistencies occur no matter what replication method the database uses (single-leader, multi-leader, or leaderless replication).
+This order should be consistent, which means that every read of the shared value should return the latest value written to this shared variable preceding this read, or the value of a write that overlaps with this read. 
+Linearizable write access to a shared variable also implies mutual exclusion: between the two concurrent writes, only one can go first.
 
-Most replicated databases provide at least eventual consistency, which means that if you stop writing to the database and wait for some unspecified length of time, then eventually all read requests will return the same value.
-In other words, the inconsistency is temporary, and it eventually resolves itself (assuming that any faults in the network are also eventually repaired).
-A better name for eventual consistency may be convergence, as we expect all replicas to eventually converge to the same value.
+Even though operations are concurrent and have some overlap, their effects become visible in a way that makes them appear sequential. No operation happens instantaneously, but still appears to be atomic.
 
-However, this is a very weak guarantee—it doesn’t say anything about when the replicas will converge.
-Until the time of convergence, reads could return anything or nothing.
-For example, if you write a value and then immediately read it again, there is no guarantee that you will see the value you just wrote, because the read may be routed to a different replica.
+Let’s consider the following history:
+```
+Process 1:      Process 2:     Process 3:
+write(x, 1)     write(x, 2)    read(x)
+read(x)
+read(x)
+```
 
-### Linearizability
+In Figure 11-2, we have three processes, two of which perform write operations on the register x, which has an initial value of ∅. 
+Read operations can observe these writes in one of the following ways:
+
+
+
+- a) The first read operation can return 1, 2, or ∅ (the initial value, a state before both writes), since both writes are still in-flight. 
+  The first read can get ordered before both writes, between the first and second writes, and after both writes.
+- b) The second read operation can return only 1 and 2, since the first write has completed, but the second write didn’t return yet.
+- c) The third read can only return 2, since the second write is ordered after the first.
+
+##### Linearization point
+
+One of the most important traits of linearizability is visibility: once the operation is complete, everyone must see it, and the system can’t “travel back in time,” reverting it or making it invisible for some participants. 
+In other words, linearization prohibits stale reads and requires reads to be monotonic.
+
+This consistency model is best explained in terms of atomic (i.e., uninterruptible, indivisible) operations. 
+Operations do not have to be instantaneous (also because there’s no such thing), but their effects have to become visible at some point in time, making an illusion that they were instantaneous.
+This moment is called a linearization point.
+
+Past the linearization point of the write operation (in other words, when the value becomes visible for other processes) every process has to see either the value this operation wrote or some later value,
+if some additional write operations are ordered after it. A visible value should remain stable until the next one becomes visible after it, and the register should not alternate between the two recent states.
+
+
+> [!NOTE]
+> 
+> Most of the programming languages these days offer atomic primitives that allow atomic write and compare-and-swap (CAS) operations. 
+> Atomic write operations do not consider current register values, unlike CAS, that move from one value to the next only when the previous value is unchanged.
+> Reading the value, modifying it, and then writing it with CAS is more complex than simply checking and setting the value, because of the possible ABA problem: 
+> if CAS expects the value A to be present in the register, it will be installed even if the value B was set and then switched back to A by the other two concurrent write operations.
+> In other words, the presence of the value A alone does not guarantee that the value hasn’t been changed since the last read.
+
+
+The linearization point serves as a cutoff, after which operation effects become visible.
+We can implement it by using locks to guard a critical section, atomic read/write, or read-modify-write primitives.
+
+Figure 11-3 shows that linearizability assumes hard time bounds and the clock is real time, so the operation effects have to become visible between t1, 
+when the operation request was issued, and t2, when the process received a response.
+
+
 
 In an eventually consistent database, if you ask two different replicas the same question at the same time, you may get two different answers. That’s confusing.
 Wouldn’t it be a lot simpler if the database could give the illusion that there is only one replica (i.e., only one copy of the data)?
@@ -301,7 +351,7 @@ if operation A completes before operation B begins, then B should logically take
 
 [Faster linearizability checking via P-compositionality](https://arxiv.org/pdf/1504.00204.pdf)
 
-#### Linearizability Versus Serializability
+##### Linearizability Versus Serializability
 
 Linearizability is easily confused with [serializability](/docs/CS/Transaction.md?id=Serializability), as both words seem to mean something like “can be arranged in a sequential order.”
 However, they are two quite different guarantees, and it is important to distinguish between them:
@@ -317,14 +367,14 @@ Implementations of serializability based on two-phase locking or actual serial e
 However, serializable snapshot isolation is not linearizable: by design, it makes reads from a consistent snapshot, to avoid lock contention between readers and writers.
 The whole point of a consistent snapshot is that it does not include writes that are more recent than the snapshot, and thus reads from the snapshot are not linearizable.
 
-#### Relying on Linearizability
+##### Relying on Linearizability
 
 ##### Locking and leader election
 
 A system that uses single-leader replication needs to ensure that there is indeed only one leader, not several (split brain).
 One way of electing a leader is to use a lock: every node that starts up tries to acquire the lock, and the one that succeeds becomes the leader.
 No matter how this lock is implemented, it must be linearizable: all nodes must agree which node owns the lock; otherwise it is useless.
-Coordination services like Apache ZooKeeper and etcd are often used to implement distributed locks and leader election. 
+Coordination services like Apache ZooKeeper and etcd are often used to implement distributed locks and leader election.
 They use consensus algorithms to implement linearizable operations in a fault-tolerant way.
 
 There are still many subtle details to implementing locks and leader election correctly, and libraries like Apache Curator help by providing higher-level recipes on top of ZooKeeper.
@@ -333,21 +383,21 @@ However, a linearizable storage service is the basic foundation for these coordi
 > **Strictly speaking, ZooKeeper and etcd provide linearizable writes, but reads may be stale, since by default they can be served by any one of the replicas.**
 > You can optionally request a linearizable read: etcd calls this a quorum read, and in ZooKeeper you need to call sync() before the read.
 
-Distributed locking is also used at a much more granular level in some distributed databases, such as Oracle Real Application Clusters (RAC). 
-RAC uses a lock per disk page, with multiple nodes sharing access to the same disk storage system. 
+Distributed locking is also used at a much more granular level in some distributed databases, such as Oracle Real Application Clusters (RAC).
+RAC uses a lock per disk page, with multiple nodes sharing access to the same disk storage system.
 Since these linearizable locks are on the critical path of transaction execution, RAC deployments usually have a dedicated cluster interconnect network for communication between database nodes.
 
 ##### Constraints and uniqueness guarantees
 
-Uniqueness constraints are common in databases: for example, a username or email address must uniquely identify one user, and in a file storage service there cannot be two files with the same path and filename. 
+Uniqueness constraints are common in databases: for example, a username or email address must uniquely identify one user, and in a file storage service there cannot be two files with the same path and filename.
 If you want to enforce this constraint as the data is written (such that if two people try to concurrently create a user or a file with the same name, one of them will be returned an error), you need linearizability.
 
-This situation is actually similar to a lock: when a user registers for your service, you can think of them acquiring a “lock” on their chosen username. 
+This situation is actually similar to a lock: when a user registers for your service, you can think of them acquiring a “lock” on their chosen username.
 The operation is also very similar to an atomic compare-and-set, setting the username to the ID of the user who claimed it, provided that the username is not already taken.
-Similar issues arise if you want to ensure that a bank account balance never goes negative, or that you don’t sell more items than you have in stock in the warehouse, or that two people don’t concurrently book the same seat on a flight or in a theater. 
+Similar issues arise if you want to ensure that a bank account balance never goes negative, or that you don’t sell more items than you have in stock in the warehouse, or that two people don’t concurrently book the same seat on a flight or in a theater.
 These constraints all require there to be a single up-to-date value (the account balance, the stock level, the seat occupancy) that all nodes agree on.
 
-In real applications, it is sometimes acceptable to treat such constraints loosely (for example, if a flight is overbooked, you can move customers to a different flight and offer them compensation for the inconvenience). 
+In real applications, it is sometimes acceptable to treat such constraints loosely (for example, if a flight is overbooked, you can move customers to a different flight and offer them compensation for the inconvenience).
 In such cases, linearizability may not be needed.
 
 However, a hard uniqueness constraint, such as the one you typically find in relational databases, requires linearizability.
@@ -355,13 +405,11 @@ Other kinds of constraints, such as foreign key or attribute constraints, can be
 
 ##### Cross-channel timing dependencies
 
-For example, say you have a website where users can upload a photo, and a background process resizes the photos to lower resolution for faster download (thumbnails). 
+For example, say you have a website where users can upload a photo, and a background process resizes the photos to lower resolution for faster download (thumbnails).
 The architecture and dataflow of this system is illustrated in Figure 9-5.
 The image resizer needs to be explicitly instructed to perform a resizing job, and this instruction is sent from the web server to the resizer via a message queue.
 The web server doesn’t place the entire photo on the queue, since most message brokers are designed for small messages, and a photo may be several megabytes in size.
 Instead, the photo is first written to a file storage service, and once the write is complete, the instruction to the resizer is placed on the queue.
-
-
 
 <div style="text-align: center;">
 
@@ -373,22 +421,18 @@ Instead, the photo is first written to a file storage service, and once the writ
 Fig.4. The web server and image resizer communicate both through file storage and a message queue, opening the potential for race conditions.
 </p>
 
-
-If the file storage service is linearizable, then this system should work fine. 
-If it is not linearizable, there is the risk of a race condition: the message queue (steps 3 and 4 in Figure 4) might be faster than the internal replication inside the storage service. 
-In this case, when the resizer fetches the image (step 5), it might see an old version of the image, or nothing at all. 
+If the file storage service is linearizable, then this system should work fine.
+If it is not linearizable, there is the risk of a race condition: the message queue (steps 3 and 4 in Figure 4) might be faster than the internal replication inside the storage service.
+In this case, when the resizer fetches the image (step 5), it might see an old version of the image, or nothing at all.
 If it processes an old version of the image, the full-size and resized images in the file storage become permanently inconsistent.
-This problem arises because there are two different communication channels between the web server and the resizer: the file storage and the message queue. 
-Without the recency guarantee of linearizability, race conditions between these two channels are possible. 
+This problem arises because there are two different communication channels between the web server and the resizer: the file storage and the message queue.
+Without the recency guarantee of linearizability, race conditions between these two channels are possible.
 
 Linearizability is not the only way of avoiding this race condition, but it’s the simplest to understand.
-If you control the additional communication channel (like in the case of the message queue, but not in the case of Alice and Bob), 
+If you control the additional communication channel (like in the case of the message queue, but not in the case of Alice and Bob),
 you can use alternative approaches similar to what we discussed in “[Reading Your Own Writes](/docs/CS/Distributed/Replica.md?id=Read-after-write)”, at the cost of additional complexity
 
-
-
-
-#### Implementing Linearizable Systems
+##### Implementing Linearizable Systems
 
 Let’s think about how we might implement a system that offers linearizable semantics.
 Since linearizability essentially means “behave as though there is only a single copy of the data, and all operations on it are atomic,” the simplest answer would be to really only use a single copy of the data.
@@ -396,10 +440,11 @@ However, that approach would not be able to tolerate faults: if the node holding
 
 The most common approach to making a system fault-tolerant is to use [replication](/docs/CS/Distributed/Replica.md).
 Let’s revisit the replication methods, and compare whether they can be made linearizable:
+
 - Single-leader replication (potentially linearizable)
-  In a system with single-leader replication, the leader has the primary copy of the data that is used for writes, and the followers maintain backup copies of the data on other nodes. 
+  In a system with single-leader replication, the leader has the primary copy of the data that is used for writes, and the followers maintain backup copies of the data on other nodes.
   If you make reads from the leader, or from synchronously updated followers, they have the potential to be linearizable.
-  Partitioning (sharding) a single-leader database, so that there is a separate leader per partition, does not affect linearizability, since it is only a single-object guarantee. 
+  Partitioning (sharding) a single-leader database, so that there is a separate leader per partition, does not affect linearizability, since it is only a single-object guarantee.
   Cross-partition transactions are a different matter (see “Distributed Transactions and Consensus”).
   However, not every single-leader database is actually linearizable, either by design (e.g., because it uses snapshot isolation) or due to concurrency bugs.
   Using the leader for reads relies on the assumption that you know for sure who the leader is.
@@ -407,29 +452,26 @@ Let’s revisit the replication methods, and compare whether they can be made li
   With asynchronous replication, failover may even lose committed writes, which violates both durability and linearizability.
 - Consensus algorithms (linearizable)
   Some consensus algorithms bear a resemblance to single-leader replication.
-  However, consensus protocols contain measures to prevent split brain and stale replicas. 
+  However, consensus protocols contain measures to prevent split brain and stale replicas.
   Thanks to these details, consensus algorithms can implement linearizable storage safely.
   This is how ZooKeeper and etcd work, for example.
 - Multi-leader replication (not linearizable)
   Systems with multi-leader replication are generally not linearizable, because they concurrently process writes on multiple nodes and asynchronously replicate them to other nodes.
-  For this reason, they can produce conflicting writes that require resolution. 
+  For this reason, they can produce conflicting writes that require resolution.
   Such conflicts are an artifact of the lack of a single copy of the data.
 - Leaderless replication (probably not linearizable)
   For systems with leaderless replication, people sometimes claim that you can obtain “strong consistency” by requiring quorum reads and writes (w + r > n).
   Depending on the exact configuration of the quorums, and depending on how you define strong consistency, this is not quite true.
-  “Last write wins” conflict resolution methods based on time-of-day clocks are almost certainly nonlinearizable, because clock timestamps cannot be guaranteed to be consistent with actual event ordering due to clock skew. 
-  Sloppy quorums also ruin any chance of linearizability. 
+  “Last write wins” conflict resolution methods based on time-of-day clocks are almost certainly nonlinearizable, because clock timestamps cannot be guaranteed to be consistent with actual event ordering due to clock skew.
+  Sloppy quorums also ruin any chance of linearizability.
   Even with strict quorums, nonlinearizable behavior is possible, as demonstrated in the next section
 
-
-Intuitively, it seems as though strict quorum reads and writes should be linearizable in a Dynamo-style model. 
+Intuitively, it seems as though strict quorum reads and writes should be linearizable in a Dynamo-style model.
 However, when we have variable network delays, it is possible to have race conditions.
 
 It is safest to assume that a leaderless system with Dynamo-style replication does not provide linearizability.
 
-
-#### The Cost of Linearizability
-
+##### The Cost of Linearizability
 
 Consider what happens if there is a network interruption between the two datacenters.
 Let’s assume that the network within each datacenter is working, and clients can reach the datacenters, but the datacenters cannot connect to each other.
@@ -437,28 +479,60 @@ With a multi-leader database, each datacenter can continue operating normally: s
 
 On the other hand, if single-leader replication is used, then the leader must be in one of the datacenters.
 Any writes and any linearizable reads must be sent to the leader—thus, for any clients connected to a follower datacenter, those read and write requests must be sent synchronously over the network to the leader datacenter.
-If the network between datacenters is interrupted in a single-leader setup, clients connected to follower datacenters cannot contact the leader, so they cannot make any writes to the database, nor any linearizable reads. 
-They can still make reads from the follower, but they might be stale (nonlinearizable). 
+If the network between datacenters is interrupted in a single-leader setup, clients connected to follower datacenters cannot contact the leader, so they cannot make any writes to the database, nor any linearizable reads.
+They can still make reads from the follower, but they might be stale (nonlinearizable).
 If the application requires linearizable reads and writes, the network interruption causes the application to become unavailable in the datacenters that cannot contact the leader.
 
-If clients can connect directly to the leader datacenter, this is not a problem, since the application continues to work normally there. 
+If clients can connect directly to the leader datacenter, this is not a problem, since the application continues to work normally there.
 But clients that can only reach a follower datacenter will experience an outage until the network link is repaired.
 
-This issue is not just a consequence of single-leader and multi-leader replication: any linearizable database has this problem, no matter how it is implemented. 
-The issue also isn’t specific to multi-datacenter deployments, but can occur on any unreliable network, even within one datacenter. 
+This issue is not just a consequence of single-leader and multi-leader replication: any linearizable database has this problem, no matter how it is implemented.
+The issue also isn’t specific to multi-datacenter deployments, but can occur on any unreliable network, even within one datacenter.
 <br>
 The trade-off is as follows:
+
 - If your application requires linearizability, and some replicas are disconnected from the other replicas due to a network problem, then some replicas cannot process requests while they are disconnected:
   they must either wait until the network problem is fixed, or return an error (either way, they become unavailable).
 - If your application does not require linearizability, then it can be written in a way that each replica can process requests independently, even if it is disconnected from other replicas (e.g., multi-leader).
   In this case, the application can remain available in the face of a network problem, but its behavior is not linearizable.
 
-
-Thus, applications that don’t require linearizability can be more tolerant of network problems. 
+Thus, applications that don’t require linearizability can be more tolerant of network problems.
 This insight is popularly known as the [CAP theorem](/docs/CS/Distributed/CAP.md).
 
 
-### Sequential Consistency
+
+
+Many systems avoid implementing linearizability today. Even CPUs do not offer linearizability when accessing main memory by default. 
+This has happened because synchronization instructions are expensive, slow, and involve cross-node CPU traffic and cache invalidations.
+However, it is possible to implement linearizability using low-level primitives.
+
+In concurrent programming, you can use compare-and-swap operations to introduce linearizability. 
+Many algorithms work by preparing results and then using CAS for swapping pointers and publishing them. 
+For example, we can implement a concurrent queue by creating a linked list node and then atomically appending it to the tail of the list.
+
+In distributed systems, linearizability requires coordination and ordering. 
+It can be implemented using consensus: clients interact with a replicated store using messages, and the consensus module is responsible for ensuring that applied operations are consistent and identical across the cluster. 
+Each write operation will appear instantaneously, exactly once at some point between its invocation and completion events.
+
+Interestingly, linearizability in its traditional understanding is regarded as a local property and implies composition of independently implemented and verified elements. 
+Combining linearizable histories produces a history that is also linearizable. 
+In other words, a system in which all objects are linearizable, is also linearizable.
+This is a very useful property, but we should remember that its scope is limited to a single object and,
+even though operations on two independent objects are linearizable, operations that involve both objects have to rely on additional synchronization means.
+
+
+
+
+
+
+
+
+[Highly Available Transactions: Virtues and Limitations](http://www.vldb.org/pvldb/vol7/p181-bailis.pdf)
+
+[Consistency in Non-Transactional Distributed Storage Systems](https://arxiv.org/pdf/1512.00168.pdf)
+
+
+#### Sequential Consistency
 
 Viotti and Vukolić decompose sequential consistency into three properties:
 
@@ -466,7 +540,40 @@ Viotti and Vukolić decompose sequential consistency into three properties:
 - PRAM
 - RVal (the order must be consistent with the semantics of the datatype)
 
-### Causal consistency
+
+“Achieving linearizability might be too expensive, but it is possible to relax the model, while still providing rather strong consistency guarantees. Sequential consistency allows ordering operations as if they were executed in some sequential order, while requiring operations of each individual process to be executed in the same order they were performed by the process.
+
+Processes can observe operations executed by other participants in the order consistent with their own history, but this view can be arbitrarily stale from the global perspective [KINGSBURY18a]. Order of execution between processes is undefined, as there’s no shared notion of time.”
+
+“Sequential consistency was initially introduced in the context of concurrency, describing it as a way to execute multiprocessor programs correctly. The original description required memory requests to the same cell to be ordered in the queue (FIFO, arrival order), did not impose global ordering on the overlapping writes to independent memory cells, and allowed reads to fetch the value from the memory cell, or the latest value from the queue if the queue was nonempty [LAMPORT79]. This example helps to understand the semantics of sequential consistency. Operations can be ordered in different ways (depending on the arrival order, or even arbitrarily in case two writes arrive simultaneously), but all processes observe the operations in the same order.
+
+Each process can issue read and write requests in an order specified by its own program, which is very intuitive. Any nonconcurrent, single-threaded program executes its steps this way: one after another. All write operations propagating from the same process appear in the order they were submitted by this process. Operations propagating from different sources may be ordered arbitrarily, but this order will be consistent from the readers’ perspective.”
+
+
+
+> [!NOTE]
+> 
+> Sequential consistency is often confused with linearizability since both have similar semantics. Sequential consistency, just as linearizability, requires operations to be globally ordered, but linearizability requires the local order of each process and global order to be consistent. In other words, linearizability respects a real-time operation order. Under sequential consistency, ordering holds only for the same-origin writes [VIOTTI16]. Another important distinction is composition: we can combine linearizable histories and still expect results to be linearizable, while sequentially consistent schedules are not composable [ATTIYA94].”
+
+
+Figure 11-5 shows how write(x,1) and write(x,2) can become visible to P3 and P4. 
+Even though in wall-clock terms, 1 was written before 2, it can get ordered after 2. At the same time, while P3 already reads the value 1, P4 can still read 2. 
+However, both orders, 1 → 2 and 2 → 1, are valid, as long as they’re consistent for different readers. What’s important here is that both P3 and P4 have observed values in the same order: first 2, and then 1.
+
+
+Stale reads can be explained, for example, by replica divergence: even though writes propagate to different replicas in the same order, they can arrive there at different times.
+
+The main difference with linearizability is the absence of globally enforced time bounds. Under linearizability, an operation has to become effective within its wall-clock time bounds. 
+By the time the write W₁ operation completes, its results have to be applied, and every reader should be able to see the value at least as recent as one written by W₁. Similarly, after a read operation R₁ returns, any read operation that happens after it should return the value that R₁ has seen or a later value (which, of course, has to follow the same rule).
+
+Sequential consistency relaxes this requirement: an operation’s results can become visible after its completion, as long as the order is consistent from the individual processors’ perspective. Same-origin writes can’t “jump” over each other: their program order, relative to their own executing process, has to be preserved. The other restriction is that the order in which operations have appeared must be consistent for all readers.
+
+Similar to linearizability, modern CPUs do not guarantee sequential consistency by default and, since the processor can reorder instructions,
+we should use memory barriers (also called fences) to make sure that writes become visible to concurrently running threads in order.
+
+
+
+#### Causal consistency
 
 [Causal memory: definitions, implementation, and programming](https://www.cs.tau.ac.il/~orilahav/seminar18/causal.pdf)
 
@@ -477,6 +584,154 @@ If you need total availability, you’ll have to give up causal (and read-your-w
 NFS
 
 Network File System
+
+
+“Even though having a global operation order is often unnecessary, it might be necessary to establish order between some operations. Under the causal consistency model,
+all processes have to see causally related operations in the same order. Concurrent writes with no causal relationship can be observed in a different order by different processors.
+
+First, let’s take a look at why we need causality and how writes that have no causal relationship can propagate. In Figure 11-6, processes P1 and P2 make writes that aren’t causally ordered. 
+The results of these operations can propagate to readers at different times and out of order. Process P3 will see the value 1 before it sees 2, while P4 will first see 2, and then 1.
+
+
+“Figure 11-7 shows an example of causally related writes. 
+In addition to a written value, we now have to specify a logical clock value that would establish a causal order between operations.
+P1 starts with a write operation write(x,∅,1)→t1, which starts from the initial value ∅. P2 performs another write operation, write(x, t1, 2), and specifies that it is logically ordered after t1,
+requiring operations to propagate only in the order established by the logical clock.”
+
+“This establishes a causal order between these operations. 
+Even if the latter write propagates faster than the former one, it isn’t made visible until all of its dependencies arrive, and the event order is reconstructed from their logical timestamps. 
+In other words, a happened-before relationship is established logically, without using physical clocks, and all processes agree on this order.
+
+Figure 11-8 shows processes P1 and P2 making causally related writes, which propagate to P3 and P4 in their logical order. 
+This prevents us from the situation shown in Figure 11-6; you can compare histories of P3 and P4 in both figures.
+
+“You can think of this in terms of communication on some online forum: you post something online, someone sees your post and responds to it, and a third person sees this response and continues the conversation thread. 
+It is possible for conversation threads to diverge: you can choose to respond to one of the conversations in the thread and continue the chain of events,
+but some threads will have only a few messages in common, so there might be no single history for all the messages.
+
+In a causally consistent system, we get session guarantees for the application, ensuring the view of the database is consistent with its own actions, even if it executes read and write requests against different,
+potentially inconsistent, servers.
+These guarantees are: monotonic reads, monotonic writes, read-your-writes, writes-follow-reads. You can find more information on these [session models](/docs/CS/Distributed/Distributed_Systems.md?id=Session-Models).
+
+Causal consistency can be implemented using logical clocks and sending context metadata with every message, summarizing which operations logically precede the current one.
+When the update is received from the server, it contains the latest version of the context. Any operation can be processed only if all operations preceding it have already been applied.
+Messages for which contexts do not match are buffered on the server as it is too early to deliver them.
+
+
+The two prominent and frequently cited projects implementing causal consistency are Clusters of Order-Preserving Servers (COPS) and Eiger.
+Both projects implement causality through a library (implemented as a frontend server that users connect to) and track dependencies to ensure consistency. 
+COPS tracks dependencies through key versions, while Eiger establishes operation order instead (operations in Eiger can depend on operations executed on the other nodes; for example, in the case of multipartition transactions). 
+Both projects do not expose out-of-order operations like eventually consistent stores might do.
+Instead, they detect and handle conflicts: in COPS, this is done by checking the key order and using application-specific functions, while Eiger implements the last-write-wins rule.
+
+
+
+
+
+
+#### Eventual Consistency
+
+[Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
+
+In “[Replication Lag](/docs/CS/Transaction.md?id=Replication-Lag)” we looked at some timing issues that occur in a replicated database.
+If you look at two database nodes at the same moment in time, you’re likely to see different data on the two nodes, because write requests arrive on different nodes at different times.
+These inconsistencies occur no matter what replication method the database uses (single-leader, multi-leader, or leaderless replication).
+
+Most replicated databases provide at least eventual consistency, which means that if you stop writing to the database and wait for some unspecified length of time, then eventually all read requests will return the same value.
+In other words, the inconsistency is temporary, and it eventually resolves itself (assuming that any faults in the network are also eventually repaired).
+A better name for eventual consistency may be convergence, as we expect all replicas to eventually converge to the same value.
+
+However, this is a very weak guarantee—it doesn’t say anything about when the replicas will converge.
+Until the time of convergence, reads could return anything or nothing.
+For example, if you write a value and then immediately read it again, there is no guarantee that you will see the value you just wrote, because the read may be routed to a different replica.
+
+Synchronization is expensive, both in multiprocessor programming and in distributed systems.
+As we discussed in “Consistency Models”, we can relax consistency guarantees and use models that allow some divergence between the nodes.
+For example, sequential consistency allows reads to be propagated at different speeds.
+
+Under eventual consistency, updates propagate through the system asynchronously. 
+Formally, it states that if there are no additional updates performed against the data item, eventually all accesses return the latest written value.
+In case of a conflict, the notion of latest value might change, as the values from diverged replicas are reconciled using a conflict resolution strategy, such as last-write-wins or using vector clocks.
+
+Eventually is an interesting term to describe value propagation, since it specifies no hard time bound in which it has to happen. 
+If the delivery service provides nothing more than an “eventually” guarantee, it doesn’t sound like it can be relied upon. 
+However, in practice, this works well, and many databases these days are described as eventually consistent.
+
+#### Strong Eventual Consistency and CRDTs
+
+We’ve discussed several strong consistency models, such as linearizability and serializability, and a form of weak consistency: eventual consistency. 
+A possible middle ground between the two, offering some benefits of both models, is strong eventual consistency.
+Under this model, updates are allowed to propagate to servers late or out of order, but when all updates finally propagate to target nodes, 
+conflicts between them can be resolved and they can be merged to produce the same valid state.
+
+Under some conditions, we can relax our consistency requirements by allowing operations to preserve additional state that allows the diverged states to be reconciled (in other words, merged) after execution.
+One of the most prominent examples of such an approach is Conflict-Free Replicated Data Types (CRDTs) implemented, for example, in Redis.
+
+
+CRDTs are specialized data structures that preclude the existence of conflict and allow operations on these data types to be applied in any order without changing the result. 
+This property can be extremely useful in a distributed system. 
+For example, in a multinode system that uses conflict-free replicated counters, we can increment counter values on each node independently, even if they cannot communicate with one another due to a network partition.
+As soon as communication is restored, results from all nodes can be reconciled, and none of the operations applied during the partition will be lost.
+
+This makes CRDTs useful in eventually consistent systems, since replica states in such systems are allowed to temporarily diverge. 
+Replicas can execute operations locally, without prior synchronization with other nodes, and operations eventually propagate to all other replicas, potentially out of order.
+CRDTs allow us to reconstruct the complete system state from local individual states or operation sequences.
+
+The simplest example of CRDTs is operation-based Commutative Replicated Data Types (CmRDTs).
+For CmRDTs to work, we need the allowed operations to be:
+
+- Side-effect free<br>
+  Their application does not change the system state.
+- Commutative<br>
+  Argument order does not matter: x • y = y • x. In other words, it doesn’t matter whether x is merged with y, or y is merged with x.
+- Causally ordered<br>
+  Their successful delivery depends on the precondition, which ensures that the system has reached the state the operation can be applied to.
+
+
+
+For example, we could implement a grow-only counter. 
+Each server can hold a state vector consisting of last known counter updates from all other participants, initialized with zeros.
+Each server is only allowed to modify its own value in the vector. When updates are propagated, the function merge(state1, state2) merges the states from the two servers.
+
+### Session Models
+
+Session models (also called client-centric consistency models) help to reason about the state of the distributed system from the client perspective:
+how each client observes the state of the system while issuing read and write operations.
+
+If other consistency models we discussed so far focus on explaining operation ordering in the presence of concurrent clients, client-centric consistency focuses on how a single client interacts with the system.
+We still assume that each client’s operations are sequential: it has to finish one operation before it can start executing the next one. 
+If the client crashes or loses connection to the server before its operation completes, we do not make any assumptions about the state of incomplete operations.
+
+In a distributed system, clients often can connect to any available replica and, if the results of the recent write against one replica did not propagate to the other one, 
+the client might not be able to observe the state change it has made.
+
+One of the reasonable expectations is that every write issued by the client is visible to it. 
+This assumption holds under the read-own-writes consistency model, which states that every read operation following the write on the same or the other replica has to observe the updated value.
+For example, read(x) that was executed immediately after write(x,V) will return the value V.
+
+The monotonic reads model restricts the value visibility and states that if the read(x) has observed the value V, the following reads have to observe a value at least as recent as V or some later value.
+
+The monotonic writes model assumes that values originating from the same client appear in the order this client has executed them.
+If, according to the client session order, write(x,V2) was made after write(x,V1), their effects have to become visible in the same order (i.e., V1 first, and then V2) to all other processes. 
+Without this assumption, old data can be “resurrected,” resulting in data loss.
+
+Writes-follow-reads (sometimes referred as session causality) ensures that writes are ordered after writes that were observed by previous read operations. 
+For example, if write(x,V2) is ordered after read(x) that has returned V1, write(x,V2) will be ordered after write(x,V1).
+
+> [!WARNING]
+> 
+> Session models make no assumptions about operations made by different processes (clients) or from the different logical session.
+> These models describe operation ordering from the point of view of a single process.
+> However, the same guarantees have to hold for every process in the system. 
+> In other words, if P1 can read its own writes, P2 should be able to read its own writes, too.
+
+
+Combining monotonic reads, monotonic writes, and read-own-writes gives Pipelined RAM (PRAM) consistency, also known as FIFO consistency. 
+PRAM guarantees that write operations originating from one process will propagate in the order they were executed by this process.
+Unlike under sequential consistency, writes from different processes can be observed in different order.
+
+The properties described by client-centric consistency models are desirable and, in the majority of cases, are used by distributed systems developers to validate their systems and simplify their usage.
+
 
 
 ## Time
@@ -509,7 +764,8 @@ Terms such as dead, failed, and crashed are usually used to describe a process t
 Terms such as unresponsive, faulty, and slow are used to describe suspected processes, which may actually be dead.
 
 Failures may occur on the link level (messages between processes are lost or delivered slowly), or on the process level (the process crashes or is running slowly), and slowness may not always be distinguishable from failure.
-This means there’s always a trade-off between wrongly suspecting alive processes as dead (producing false-positives), and delaying marking an unresponsive process as dead, giving it the benefit of doubt and expecting it to respond eventually (producing false-negatives).
+This means there’s always a trade-off between wrongly suspecting alive processes as dead (producing false-positives), and delaying marking an unresponsive process as dead,
+giving it the benefit of doubt and expecting it to respond eventually (producing false-negatives).
 
 A failure detector is a local subsystem responsible for identifying failed or unreachable processes to exclude them from the algorithm and guarantee liveness while preserving safety.
 
@@ -549,7 +805,7 @@ We will cover several algorithms for failure detection, each using a different a
 some use broadcast or gossip for spreading the information around, and some opt out by using quiescence (in other words, absence of communication) as a means of propagation.
 We now know that we can use heartbeats or pings, hard deadlines, or continuous scales. Each one of these approaches has its own upsides: simplicity, accuracy, or precision.
 
-### Heartbeats and Pings
+#### Heartbeats and Pings
 
 We can query the state of remote processes by triggering one of two periodic processes:
 
@@ -565,18 +821,18 @@ For example, Akka, a popular framework for building distributed systems, has an 
 
 This approach has several potential downsides: its precision relies on the careful selection of ping frequency and timeout, and it does not capture process visibility from the perspective of other processes (see “Outsourced Heartbeats”).
 
-#### Timeout-Free Failure Detector
+##### Timeout-Free Failure Detector
 
 Some algorithms avoid relying on timeouts for detecting failures.
 For example, Heartbeat, a timeout-free failure detector, is an algorithm that only counts heartbeats and allows the application to detect process failures based on the data in the heartbeat counter vectors.
 Since this algorithm is timeout-free, it operates under asynchronous system assumptions.”
 
-#### Outsourced Heartbeats
+##### Outsourced Heartbeats
 
 An alternative approach, used by the Scalable Weakly Consistent Infection-style Process Group Membership Protocol (SWIM) is to use outsourced heartbeats to improve reliability using information about the process liveness from the perspective of its neighbors.
 This approach does not require processes to be aware of all other processes in the network, only a subset of connected peers.”
 
-### Phi-Accural Failure Detector
+#### Phi-Accural Failure Detector
 
 Instead of treating node failure as a binary problem, where the process can be only in two states: up or down, a phi-accrual (φ-accrual) failure detector has a continuous scale, capturing the probability of the monitored process’s crash.
 It works by maintaining a sliding window, collecting arrival times of the most recent heartbeats from the peer processes.
@@ -595,9 +851,9 @@ From the architecture perspective, a phi-accrual failure detector can be viewed 
 - Action
   A callback executed whenever the process is marked as suspected.
 
-### Gossip and Failure Detection
+#### Gossip and Failure Detection
 
-Another approach that avoids relying on a single-node view to make a decision is a gossip-style failure detection service, which uses gossip (see “Gossip Dissemination”) to collect and distribute states of neighboring processes.
+Another approach that avoids relying on a single-node view to make a decision is a gossip-style failure detection service, which uses [gossip]() to collect and distribute states of neighboring processes.
 
 Each member maintains a list of other members, their heartbeat counters, and timestamps, specifying when the heartbeat counter was incremented for the last time.
 Periodically, each member increments its heartbeat counter and distributes its list to a random neighbor.
@@ -611,10 +867,10 @@ This way, we can detect crashed nodes, as well as the nodes that are unreachable
 If there’s a link failure between the two hosts, heartbeats can still propagate through other processes.
 Using gossip for propagating system states increases the number of messages in the system, but allows information to spread more reliably.
 
-### Reversing Failure Detection Problem Statement
+#### Reversing Failure Detection Problem Statement
 
 Since propagating the information about failures is not always possible, and propagating it by notifying every member might be expensive, one of the approaches,
-called FUSE (failure notification service) [DUNAGAN04], focuses on reliable and cheap failure propagation that works even in cases of network partitions.
+called FUSE (failure notification service), focuses on reliable and cheap failure propagation that works even in cases of network partitions.
 
 To detect process failures, this approach arranges all active processes in groups. If one of the groups becomes unavailable, all participants detect the failure.
 In other words, every time a single process failure is detected, it is converted and propagated as a group failure. This allows detecting failures in the presence of any pattern of disconnects, partitions, and node failures.
@@ -744,6 +1000,156 @@ similar to the failure-detection algorithm described in “Timeout-Free Failure 
 
 [A Response to Cheriton and Skeen’s Criticism of Causal and Totally Ordered Communication](https://www.cs.princeton.edu/courses/archive/fall07/cos518/papers/catocs-limits-response.pdf)
 
+## Anti-Entropy and Dissemination
+
+
+To reliably propagate data records throughout the system, we need the propagating node to be available and able to reach the other nodes, but even then the throughput is limited to a single machine.
+
+Quick and reliable propagation may be less applicable to data records and more important for the cluster-wide metadata, such as membership information (joining and leaving nodes), node states, failures, schema changes, etc.
+Messages containing this information are generally infrequent and small, but have to be propagated as quickly and reliably as possible.
+
+Such updates can generally be propagated to all nodes in the cluster using one of the three broad groups of approaches; schematic depictions of these communication patterns are shown in Figure 12-1:
+
+- a) Notification broadcast from one process to all others.
+- b) Periodic peer-to-peer information exchange. Peers connect pairwise and exchange messages.
+- c) Cooperative broadcast, where message recipients become broadcasters and help to spread the information quicker and more reliably.
+
+
+
+<div style="text-align: center;">
+
+![Dissemination](img/Dissemination.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig5. Broadcast (a), anti-entropy (b), and gossip (c)
+</p>
+
+Broadcasting the message to all other processes is the most straightforward approach that works well when the number of nodes in the cluster is small,
+but in large clusters it can get expensive because of the number of nodes, and unreliable because of overdependence on a single process. 
+Individual processes may not always know about the existence of all other processes in the network.
+Moreover, there has to be some overlap in time during which both the broadcasting process and each one of its recipients are up, which might be difficult to achieve in some cases.
+
+To relax these constraints, we can assume that some updates may fail to propagate. 
+The coordinator will do its best and deliver the messages to all available participants, and then anti-entropy mechanisms will bring nodes back in sync in case there were any failures. 
+This way, the responsibility for delivering messages is shared by all nodes in the system, and is split into two steps: primary delivery and periodic sync.
+
+Entropy is a property that represents the measure of disorder in the system. In a distributed system, entropy represents a degree of state divergence between the nodes. 
+Since this property is undesired and its amount should be kept to a minimum, there are many techniques that help to deal with entropy.
+
+Anti-entropy is usually used to bring the nodes back up-to-date in case the primary delivery mechanism has failed. 
+The system can continue functioning correctly even if the coordinator fails at some point, since the other nodes will continue spreading the information. 
+In other words, anti-entropy is used to lower the convergence time bounds in eventually consistent systems.
+
+
+To keep nodes in sync, anti-entropy triggers a background or a foreground process that compares and reconciles missing or conflicting records. 
+Background anti-entropy processes use auxiliary structures such as Merkle trees and update logs to identify divergence.
+Foreground anti-entropy processes piggyback read or write requests: hinted handoff, read repairs, etc.
+
+If replicas diverge in a replicated system, to restore consistency and bring them back in sync, we have to find and repair missing records by comparing replica states pairwise. 
+For large datasets, this can be very costly: we have to read the whole dataset on both nodes and notify replicas about more recent state changes that weren’t yet propagated.
+To reduce this cost, we can consider ways in which replicas can get out-of-date and patterns in which data is accessed.
+
+
+
+### Gossip
+
+To involve other nodes, and propagate updates with the reach of a broadcast and the reliability of anti-entropy, we can use gossip protocols.
+
+Gossip protocols are probabilistic communication procedures based on how rumors are spread in human society or how diseases propagate in the population. 
+Rumors and epidemics provide rather illustrative ways “to describe how these protocols work: rumors spread while the population still has an interest in hearing them; 
+diseases propagate until there are no more susceptible members in the population.
+
+The main objective of gossip protocols is to use cooperative propagation to disseminate information from one process to the rest of the cluster. 
+Just as a virus spreads through the human population by being passed from one individual to another, potentially increasing in scope with each step,
+information is relayed through the system, getting more processes involved.”
+
+A process that holds a record that has to be spread around is said to be infective. Any process that hasn’t received the update yet is then susceptible. 
+Infective processes not willing to propagate the new state after a period of active dissemination are said to be removed. 
+All processes start in a susceptible state. 
+Whenever an update for some data record arrives, a process that received it moves to the infective state and starts disseminating the update to other random neighboring processes,
+infecting them. As soon as the infective processes become certain that the update was propagated, they move to the removed state.
+
+To avoid explicit coordination and maintaining a global list of recipients and requiring a single coordinator to broadcast messages to each other participant in the system,
+this class of algorithms models completeness using the loss of interest function. 
+The protocol efficiency is then determined by how quickly it can infect as many nodes as possible, while keeping overhead caused by redundant messages to a minimum.
+
+Gossip can be used for asynchronous message delivery in homogeneous decentralized systems, where nodes may not have long-term membership or be organized in any topology.
+Since gossip protocols generally do not require explicit coordination, they can be useful in systems with flexible membership (where nodes are joining and leaving frequently) or mesh networks.
+
+Gossip protocols are very robust and help to achieve high reliability in the presence of failures inherent to distributed systems.
+Since messages are relayed in a randomized manner, they still can be delivered even if some communication components between them fail, just through the different paths. 
+It can be said that the system adapts to failures.
+
+#### Gossip Mechanics
+
+Processes periodically select f peers at random (where f is a configurable parameter, called fanout) and exchange currently “hot” information with them.
+Whenever the process learns about a new piece of information from its peers, it will attempt to pass it on further.
+Because peers are selected probabilistically, there will always be some overlap, and messages will get delivered repeatedly and may continue circulating for some time.
+Message redundancy is a metric that captures the overhead incurred by repeated delivery. Redundancy is an important property, and it is crucial to how gossip works.
+
+The amount of time the system requires to reach convergence is called latency.
+There’s a slight difference between reaching convergence (stopping the gossip process) and delivering the message to all peers, 
+since there might be a short period during which all peers are notified, but gossip continues. 
+Fanout and latency depend on the system size: in a larger system, we either have to increase the fanout to keep latency stable, or allow higher latency.
+
+Over time, as the nodes notice they’ve been receiving the same information again and again, the message will start losing importance and nodes will have to eventually stop relaying it.
+Interest loss can be computed either probabilistically (the probability of propagation stop is computed for each process on every step) 
+or using a threshold (the number of received duplicates is counted, and propagation is stopped when this number is too high). 
+Both approaches have to take the cluster size and fanout into consideration. 
+Counting duplicates to measure convergence can improve latency and reduce redundancy.
+
+In terms of consistency, gossip protocols offer convergent consistency: nodes have a higher probability to have the same view of the events that occurred further in the past.
+
+
+
+
+
+#### Overlay Networks
+
+Even though gossip protocols are important and useful, they’re usually applied for a narrow set of problems. 
+Nonepidemic approaches can distribute the message with nonprobabilistic certainty, less redundancy, and generally in a more optimal way.
+Gossip algorithms are often praised for their scalability and the fact it is possible to distribute a message within log N message rounds (where N is the size of the cluster), 
+but it’s important to keep the number of redundant messages generated during gossip rounds in mind as well.
+To achieve reliability, gossip-based protocols produce some duplicate message deliveries.
+
+Selecting nodes at random greatly improves system robustness: if there is a network partition, messages will be delivered eventually if there are links that indirectly connect two processes. 
+The obvious downside of this approach is that it is not message-optimal: to guarantee robustness, we have to maintain redundant connections between the peers and send redundant messages.
+
+A middle ground between the two approaches is to construct a temporary fixed topology in a gossip system. 
+This can be achieved by creating an overlay network of peers: nodes can sample their peers and select the best contact points based on proximity (usually measured by the latency).
+
+Nodes in the system can form spanning trees: unidirected, loop-free graphs with distinct edges, covering the whole network. Having such a graph, messages can be distributed in a fixed number of steps.
+
+Figure 12-4 shows an example of a spanning tree:1
+
+- a) We achieve full connectivity between the points without using all the edges.
+- b) We can lose connectivity to the entire subtree if just a single link is broken.
+
+
+
+
+One of the potential downsides of this approach is that it might lead to forming interconnected “islands” of peers having strong preferences toward each other.
+
+To keep the number of messages low, while allowing quick recovery in case of a connectivity loss, we can mix both approaches—fixed topologies and tree-based broadcast—when the system is in a stable state,
+and fall back to gossip for failover and system recovery.
+
+
+#### Hybrid Gossip
+
+Push/lazy-push multicast trees (Plumtrees) make a trade-off between epidemic and tree-based broadcast primitives.
+Plumtrees work by creating a spanning tree overlay of nodes to actively distribute messages with the smallest overhead.
+Under normal conditions, nodes send full messages to just a small subset of peers provided by the peer sampling service.
+
+Each node sends the full message to the small subset of nodes, and for the rest of the nodes, it lazily forwards only the message ID. 
+If the node receives the identifier of a message it has never seen, it can query its peers to get it. This lazy-push step ensures high reliability and provides a way to quickly heal the broadcast tree. 
+In case of failures, protocol falls back to the gossip approach through lazy-push steps, broadcasting the message and repairing the overlay.
+
+
+
+
+
 ## Chain Replication
 
 [Chain Replication for Supporting High Throughput and Availability](https://www.cs.cornell.edu/home/rvr/papers/OSDI04.pdf)
@@ -819,3 +1225,4 @@ A distributed system consists of a finite set of processes and a finite set of c
 16. [Reaching Agreement in the Presence of Faults](https://lamport.azurewebsites.net/pubs/reaching.pdf)
 17. [The 5 Minute Rule for Trading Memory for Disc Accesses and the 5 Byte Rule for Trading Memory for CPU Time](https://dsf.berkeley.edu/cs286/papers/fiveminute-tr1986.pdf)
 18. [A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
+19. [Gossip Algorithms](https://devavrat.mit.edu/wp-content/uploads/2017/08/Gossip-Algorithms.pdf)
