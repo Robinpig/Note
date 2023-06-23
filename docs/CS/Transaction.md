@@ -170,7 +170,7 @@ Even many popular relational database systems (which are usually considered “A
 
 
 | Isolation level  | Dirty Read         | Non-Repeatable Read | Phantom Read       |
-| ------------------ | -------------------- | --------------------- | -------------------- |
+| ---------------- | ------------------ | ------------------- | ------------------ |
 | READ-UNCOMMITTED | :white_check_mark: | :white_check_mark:  | :white_check_mark: |
 | READ-COMMITTED   | :x:                | :white_check_mark:  | :white_check_mark: |
 | REPEATABLE-READ  | :x:                | :x:                 | :white_check_mark: |
@@ -848,31 +848,29 @@ However, SSI is probably less sensitive to slow transactions than two-phase lock
 ## Atomic Commit
 
 To make multiple operations appear atomic, especially if some of them are remote, we need to use a class of algorithms called atomic commitment.
-Atomic commitment doesn’t allow disagreements between the participants: a transaction will not commit if even one of the participants votes against it. 
-At the same time, this means that failed processes have to reach the same conclusion as the rest of the cohort. 
-Another important implication of this fact is that atomic commitment algorithms do not work in the presence of Byzantine failures: 
+Atomic commitment doesn’t allow disagreements between the participants: a transaction will not commit if even one of the participants votes against it.
+At the same time, this means that failed processes have to reach the same conclusion as the rest of the cohort.
+Another important implication of this fact is that atomic commitment algorithms do not work in the presence of Byzantine failures:
 when the process lies about its state or decides on an arbitrary value, since it contradicts unanimity.
 
 The problem that atomic commitment is trying to solve is reaching an agreement on whether or not to execute the proposed transaction.
 Cohorts cannot choose, influence, or change the proposed transaction or propose any alternative: they can only give their vote on whether or not they are willing to execute it.
 
-Atomic commitment algorithms do not set strict requirements for the semantics of transaction prepare, commit, or rollback operations. 
+Atomic commitment algorithms do not set strict requirements for the semantics of transaction prepare, commit, or rollback operations.
 Database implementers have to decide on:
 
 - When the data is considered ready to commit, and they’re just a pointer swap away from making the changes public.
 - How to perform the commit itself to make transaction results visible in the shortest timeframe possible.
 - How to roll back the changes made by the transaction if the algorithm decides not to commit.
 
-
-In databases, distributed transactions are executed by the component commonly known as a transaction manager. 
-The transaction manager is a subsystem responsible for scheduling, coordinating, executing, and tracking transactions. 
+In databases, distributed transactions are executed by the component commonly known as a transaction manager.
+The transaction manager is a subsystem responsible for scheduling, coordinating, executing, and tracking transactions.
 In a distributed environment, the transaction manager is responsible for ensuring that node-local visibility guarantees are consistent with the visibility prescribed by distributed atomic operations.
 In other words, transactions commit in all partitions, and for all replicas.
 
-
-We will discuss two atomic commitment algorithms: two- and three-phase commits. 
-The big advantage of these algorithms is that they’re easy to understand and implement, but have several shortcomings. 
-In 2PC, a coordinator (or at least its substitute) has to be alive for the length of the commitment process, which significantly reduces availability. 
+We will discuss two atomic commitment algorithms: two- and three-phase commits.
+The big advantage of these algorithms is that they’re easy to understand and implement, but have several shortcomings.
+In 2PC, a coordinator (or at least its substitute) has to be alive for the length of the commitment process, which significantly reduces availability.
 3PC lifts this requirement for some cases, but is prone to split brain in case of network partition.
 
 Distributed transactions in modern database systems are often implemented using consensus algorithms.
@@ -886,35 +884,31 @@ A two-phase commit protocol is an algorithm that lets all clients in a distribut
 TiDB
 
 Let’s start with the most straightforward protocol for a distributed commit that allows multipartition atomic updates.
-Two-phase commit (2PC) is usually discussed in the context of database transactions. 2PC executes in two phases. 
+Two-phase commit (2PC) is usually discussed in the context of database transactions. 2PC executes in two phases.
 During the first phase, the decided value is distributed, and votes are collected. During the second phase, nodes just flip the switch, making the results of the first phase visible.
 
-2PC assumes the presence of a leader (or coordinator) that holds the state, collects votes, and is a primary point of reference for the agreement round. 
-The rest of the nodes are called cohorts. Cohorts, in this case, are usually partitions that operate over disjoint datasets, against which transactions are performed. 
-The coordinator and every cohort keep local operation logs for each executed step. Participants vote to accept or reject some value, proposed by the coordinator. 
+2PC assumes the presence of a leader (or coordinator) that holds the state, collects votes, and is a primary point of reference for the agreement round.
+The rest of the nodes are called cohorts. Cohorts, in this case, are usually partitions that operate over disjoint datasets, against which transactions are performed.
+The coordinator and every cohort keep local operation logs for each executed step. Participants vote to accept or reject some value, proposed by the coordinator.
 Most often, this value is an identifier of the distributed transaction that has to be executed, but 2PC can be used in other contexts as well.
 
-The coordinator can be a node that received a request to execute the transaction, or it can be picked at random, using a leader-election algorithm, 
-assigned manually, or even fixed throughout the lifetime of the system. 
+The coordinator can be a node that received a request to execute the transaction, or it can be picked at random, using a leader-election algorithm,
+assigned manually, or even fixed throughout the lifetime of the system.
 The protocol does not place restrictions on the coordinator role, and the role can be transferred to another participant for reliability or performance.
 
 As the name suggests, a two-phase commit is executed in two steps:
 
 - Prepare<br>
-  The coordinator notifies cohorts about the new transaction by sending a Propose message. 
-  Cohorts make a decision on whether or not they can commit the part of the transaction that applies to them. 
+  The coordinator notifies cohorts about the new transaction by sending a Propose message.
+  Cohorts make a decision on whether or not they can commit the part of the transaction that applies to them.
   If a cohort decides that it can commit, it notifies the coordinator about the positive vote. Otherwise, it responds to the coordinator, asking it to abort the transaction.
   All decisions taken by cohorts are persisted in the coordinator log, and each cohort keeps a copy of its decision locally.
 - Commit/abort<br>
-  Operations within a transaction can change state across different partitions (each represented by a cohort). 
+  Operations within a transaction can change state across different partitions (each represented by a cohort).
   If even one of the cohorts votes to abort the transaction, the coordinator sends the Abort message to all of them.
   Only if all cohorts have voted positively does the coordinator send them a final Commit message.
 
-
-
 This process is shown in Figure 13-1.
-
-
 
 <div style="text-align: center;">
 
@@ -929,22 +923,19 @@ Fig5. Two-phase commit protocol. <br>During the first phase, cohorts are notifie
 During the prepare phase, the coordinator distributes the proposed value and collects votes from the participants on whether or not this proposed value should be committed.
 Cohorts may choose to reject the coordinator’s proposal if, for example, another conflicting transaction has already committed a different value.
 
-
-After the coordinator has collected the votes, it can make a decision on whether to commit the transaction or abort it. 
+After the coordinator has collected the votes, it can make a decision on whether to commit the transaction or abort it.
 If all cohorts have voted positively, it decides to commit and notifies them by sending a Commit message.
-Otherwise, the coordinator sends an Abort message to all cohorts and the transaction gets rolled back. 
+Otherwise, the coordinator sends an Abort message to all cohorts and the transaction gets rolled back.
 In other words, if one node rejects the proposal, the whole round is aborted.
 
-During each step the coordinator and cohorts have to write the results of each operation to durable storage to be able to reconstruct the state and recover in case of local failures, 
+During each step the coordinator and cohorts have to write the results of each operation to durable storage to be able to reconstruct the state and recover in case of local failures,
 and be able to forward and replay results for other participants.
 
 In the context of database systems, each 2PC round is usually responsible for a single transaction.
 During the prepare phase, transaction contents (operations, identifiers, and other metadata) are transferred from the coordinator to the cohorts.
 The transaction is executed by the cohorts locally and is left in a partially committed state (sometimes called precommitted),
-making it ready for the coordinator to finalize execution during the next phase by either committing or aborting it. 
+making it ready for the coordinator to finalize execution during the next phase by either committing or aborting it.
 By the time the transaction commits, its contents are already stored durably on all other nodes.
-
-
 
 #### Cohort Failures in 2PC
 
@@ -956,32 +947,26 @@ If one of the cohorts has failed after accepting the proposal, it has to learn a
 
 Since the protocol has multiple spots where processes are waiting for the other participants (when the coordinator collects votes, or when the cohort is waiting for the commit/abort phase), link failures might lead to message loss, and this wait will continue indefinitely. If the coordinator does not receive a response from the replica during the propose phase, it can trigger a timeout and abort the transaction.”
 
-
-
 ### Coordinator Failures in 2PC
 
 If one of the cohorts does not receive a commit or abort command from the coordinator during the second phase, as shown in Figure 13-3,
 it should attempt to find out which decision was made by the coordinator.
-The coordinator might have decided upon the value but wasn’t able to communicate it to the particular replica. 
+The coordinator might have decided upon the value but wasn’t able to communicate it to the particular replica.
 In such cases, information about the decision can be replicated from the peers’ transaction logs or from the backup coordinator.
 Replicating commit decisions is safe since it’s always unanimous: the whole point of 2PC is to either commit or abort on all sites, and commit on one cohort implies that all other cohorts have to commit.
 
 During the first phase, the coordinator collects votes and, subsequently, promises from cohorts, that they will wait for its explicit commit or abort command.
-If the coordinator fails after collecting the votes, but before broadcasting vote results, the cohorts end up in a state of uncertainty. 
+If the coordinator fails after collecting the votes, but before broadcasting vote results, the cohorts end up in a state of uncertainty.
 This is shown in Figure 13-4. Cohorts do not know what precisely the coordinator has decided, and whether or not any of the participants (potentially also unreachable) might have been notified about the transaction results.
 
-
-
-Inability of the coordinator to proceed with a commit or abort leaves the cluster in an undecided state. 
+Inability of the coordinator to proceed with a commit or abort leaves the cluster in an undecided state.
 This means that cohorts will not be able to learn about the final decision in case of a permanent coordinator failure.
-Because of this property, we say that 2PC is a blocking atomic commitment algorithm. 
+Because of this property, we say that 2PC is a blocking atomic commitment algorithm.
 If the coordinator never recovers, its replacement has to collect votes for a given transaction again, and proceed with a final decision.
 
-Many databases use 2PC: MySQL, PostgreSQL, MongoDB,2 and others. 
-Two-phase commit is often used to implement distributed transactions because of its simplicity (it is easy to reason about, implement, and debug) and low overhead (message complexity and the number of round-trips of the protocol are low). 
+Many databases use 2PC: MySQL, PostgreSQL, MongoDB,2 and others.
+Two-phase commit is often used to implement distributed transactions because of its simplicity (it is easy to reason about, implement, and debug) and low overhead (message complexity and the number of round-trips of the protocol are low).
 It is important to implement proper recovery mechanisms and have backup coordinator nodes to reduce the chance of the failures just described.
-
-
 
 <div style="text-align: center;">
 
@@ -993,7 +978,6 @@ It is important to implement proper recovery mechanisms and have backup coordina
 Fig5. Three-phase commit
 </p>
 
-
 During the propose step, similar to 2PC, the coordinator distributes the proposed value and collects votes from cohorts, as shown in Figure 13-5.
 If the coordinator crashes during this phase and the operation times out, or if one of the cohorts votes negatively, the transaction will be aborted.
 
@@ -1002,42 +986,31 @@ If the coordinator decides to proceed with a transaction, it issues a Prepare co
 It may happen that the coordinator cannot distribute prepare messages to all cohorts or it fails to receive their acknowledgments.
 In this case, cohorts may abort the transaction after timeout, since the algorithm hasn’t moved all the way to the prepared state.
 
-As soon as all the cohorts successfully move into the prepared state and the coordinator has received their prepare acknowledgments, 
+As soon as all the cohorts successfully move into the prepared state and the coordinator has received their prepare acknowledgments,
 the transaction will be committed if either side fails. This can be done since all participants at this stage have the same view of the state.
-
 
 #### Coordinator Failures in 3PC
 
-All state transitions are coordinated, and cohorts can’t move on to the next phase until everyone is done with the previous one: the coordinator has to wait for the replicas to continue. 
+All state transitions are coordinated, and cohorts can’t move on to the next phase until everyone is done with the previous one: the coordinator has to wait for the replicas to continue.
 Cohorts can eventually abort the transaction if they do not hear from the coordinator before the timeout, if they didn’t move past the prepare phase.
 
 As we discussed previously, 2PC cannot recover from coordinator failures, and cohorts may get stuck in a nondeterministic state until the coordinator comes back.
 3PC avoids blocking the processes in this case and allows cohorts to proceed with a deterministic decision.
 
-The worst-case scenario for the 3PC is a network partition, shown in Figure 13-6. Some nodes successfully move to the prepared state, and now can proceed with commit after the timeout. 
-Some can’t communicate with the coordinator, and will abort after the timeout. 
+The worst-case scenario for the 3PC is a network partition, shown in Figure 13-6. Some nodes successfully move to the prepared state, and now can proceed with commit after the timeout.
+Some can’t communicate with the coordinator, and will abort after the timeout.
 This results in a split brain: some nodes proceed with a commit and some abort, all according to the protocol, leaving participants in an inconsistent and contradictory state.
 
 While in theory 3PC does, to a degree, solve the problem with 2PC blocking, it has a larger message overhead, introduces potential contradictions, and does not work well in the presence of network partitions.
 This might be the primary reason 3PC is not widely used in practice.
 
-
-
-
-
-
-
-
-
-
-
 ### Three-Phase Commit
 
-To make an atomic commitment protocol robust against coordinator failures and avoid undecided states, the three-phase commit (3PC) protocol adds an extra step, 
-and timeouts on both sides that can allow cohorts to proceed with either commit or abort in the event of coordinator failure, depending on the system state. 
+To make an atomic commitment protocol robust against coordinator failures and avoid undecided states, the three-phase commit (3PC) protocol adds an extra step,
+and timeouts on both sides that can allow cohorts to proceed with either commit or abort in the event of coordinator failure, depending on the system state.
 3PC assumes a synchronous model and that communication failures are not possible.
 
-3PC adds a prepare phase before the commit/abort step, which communicates cohort states collected by the coordinator during the propose phase, 
+3PC adds a prepare phase before the commit/abort step, which communicates cohort states collected by the coordinator during the propose phase,
 allowing the protocol to carry on even if the coordinator fails.
 All other properties of 3PC and a requirement to have a coordinator for the round are similar to its two-phase sibling.
 Another useful addition to 3PC is timeouts on the cohort side. Depending on which step the process is currently executing, either a commit or abort decision is forced on timeout.
@@ -1047,15 +1020,10 @@ As Figure 13-5 shows, the three-phase commit round consists of three steps:
 - Propose<br>
   The coordinator sends out a proposed value and collects the votes.
 - Prepare<br>
-  The coordinator notifies cohorts about the vote results. 
+  The coordinator notifies cohorts about the vote results.
   If the vote has passed and all cohorts have decided to commit, the coordinator sends a Prepare message, instructing them to prepare to commit. Otherwise, an Abort message is sent and the round completes.
 - Commit<br>
   Cohorts are notified by the coordinator to commit the transaction.
-
-
-
-
-
 
 ### TCC
 
