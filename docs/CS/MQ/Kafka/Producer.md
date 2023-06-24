@@ -1,8 +1,10 @@
 ## Introduction
 
-There are many reasons an application might need to write messages to Kafka: recording user activities for auditing or analysis, recording metrics, storing log mes‐ sages, recording information from smart appliances, communicating asynchronously with other applications, buffering information before writing to a database, and much more.
+There are many reasons an application might need to write messages to Kafka: recording user activities for auditing or analysis, recording metrics, storing log messages, 
+recording information from smart appliances, communicating asynchronously with other applications, buffering information before writing to a database, and much more.
 
-Those diverse use cases also imply diverse requirements: is every message critical, or can we tolerate loss of messages? Are we OK with accidentally duplicating messages? Are there any strict latency or throughput requirements we need to support?
+Those diverse use cases also imply diverse requirements: is every message critical, or can we tolerate loss of messages? Are we OK with accidentally duplicating messages? 
+Are there any strict latency or throughput requirements we need to support?
 
 Load balancing
 
