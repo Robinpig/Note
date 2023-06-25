@@ -1,14 +1,8 @@
-
-
 ## Introduction
-
-
 
 ### Queue Hierarchy
 
 ![queue](../img/Queue.png)
-
-
 
 A collection designed for holding elements prior to processing. Besides basic Collection operations, queues provide
 additional insertion, extraction, and inspection operations.
@@ -19,13 +13,12 @@ value (either null or false, depending on the operation).
 The latter form of the insert operation is designed specifically for use with capacity-restricted Queue implementations;
 in most implementations, insert operations cannot fail. Summary of Queue methods
 
+
 |         | Throws exception | Returns special value |
 | ------- | ---------------- | --------------------- |
 | Insert  | `add(e)`         | `offer(e)`            |
 | Remove  | `remove()`       | `poll()`              |
 | Examine | `element()`      | `peek()`              |
-
-
 
 Queues **typically, but do not necessarily**, order elements in a `FIFO (first-in-first-out)` manner. Among the
 exceptions are priority queues, which order elements according to a supplied comparator, or the elements' natural
@@ -122,43 +115,34 @@ public interface Queue<E> extends Collection<E> {
     </tbody>
 </table>
 
-
 #### Queue Method Equivalent Deque Method
 
 
-
-| Queue Method  | Equivalent Deque Method |
-| --------------------- | ---------------- |
-| add(e) | addLast(e) |
-| offer(e) | offerLast(e) |
-| remove() | removeFirst() |
-| poll() | pollFirst() |
-| element() | getFirst() |
-| peek() | peekFirst() |
-
-
+| Queue Method | Equivalent Deque Method |
+| ------------ | ----------------------- |
+| add(e)       | addLast(e)              |
+| offer(e)     | offerLast(e)            |
+| remove()     | removeFirst()           |
+| poll()       | pollFirst()             |
+| element()    | getFirst()              |
+| peek()       | peekFirst()             |
 
 #### Comparison of Stack and Deque methods
 
-Deques can also be used as LIFO (Last-In-First-Out) stacks. This interface should be used in preference to the legacy `Stack` class. 
-When a deque is used as a stack, elements are pushed and popped from the beginning of the deque. 
+Deques can also be used as LIFO (Last-In-First-Out) stacks. This interface should be used in preference to the legacy `Stack` class.
+When a deque is used as a stack, elements are pushed and popped from the beginning of the deque.
 Stack methods are precisely equivalent to Deque methods as indicated in the table below:
 
+
 | Stack Method | Equivalent Deque Method |
-| --------------------- | ---------------- |
-| push(e) | addFirst(e) |
-| pop() | removeFirst() |
-| peek() | peekFirst() |
-
-
-
-
+| ------------ | ----------------------- |
+| push(e)      | addFirst(e)             |
+| pop()        | removeFirst()           |
+| peek()       | peekFirst()             |
 
 ### ArrayDeque
 
-
-
-Resizable-array implementation of the Deque interface. Array deques have no capacity restrictions; they grow as necessary to support usage. 
+Resizable-array implementation of the Deque interface. Array deques have no capacity restrictions; they grow as necessary to support usage.
 They are not thread-safe; in the absence of external synchronization, they do not support concurrent access by multiple threads. Null elements are prohibited. This class is likely to be faster than Stack when used as a stack, and faster than LinkedList when used as a queue.
 
 Most ArrayDeque operations run in amortized constant time. Exceptions include remove, removeFirstOccurrence, removeLastOccurrence, contains, iterator.remove(), and the bulk operations, all of which run in linear time.
@@ -168,8 +152,6 @@ The iterators returned by this class's iterator method are fail-fast: If the deq
 Note that the fail-fast behavior of an iterator cannot be guaranteed as it is, generally speaking, impossible to make any hard guarantees in the presence of unsynchronized concurrent modification. Fail-fast iterators throw ConcurrentModificationException on a best-effort basis. Therefore, it would be wrong to write a program that depended on this exception for its correctness: the fail-fast behavior of iterators should be used only to detect bugs.
 
 This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces.
-
-
 
 ```java
     /*
@@ -216,11 +198,11 @@ This class and its iterator implement all of the optional methods of the Collect
     private static final int MAX_ARRAY_SIZE = Integer.MAX_VALUE - 8;
 ```
 
-
 ## ConcurrentLinkedQueue
 
 unbounded queue
 head tail volatile
+
 ```java
 
 private static class Node<E> {
@@ -282,9 +264,8 @@ private static class Node<E> {
 
 cas
 
-
-
 ## PriorityQueue
+
 
 |             |              |        |
 | ----------- | ------------ | ------ |
@@ -292,8 +273,6 @@ cas
 | Left index  | 2i+1         | 2i     |
 | Right index | 2i+2         | 2i+1   |
 | Get parent  | (i - 1) >>>1 | i >>>1 |
-
-
 
 ### siftUp
 
@@ -343,8 +322,6 @@ private static <T> void siftUpUsingComparator(
     es[k] = x;
 }
 ```
-
-
 
 ### siftDown
 
@@ -402,8 +379,6 @@ private static <T> void siftDownUsingComparator(
 }
 ```
 
-
-
 ## BlockingQueue
 
 A Queue that additionally supports operations that:
@@ -411,17 +386,16 @@ A Queue that additionally supports operations that:
 1. wait for the queue to become non-empty when retrieving an element
 2. wait for space to become available in the queue when storing an element.
 
-BlockingQueue methods come in four forms, with different ways of handling operations that cannot be satisfied immediately, but may be satisfied at some point in the future: one throws an exception, the second returns a special value (either null or false, depending on the operation), the third blocks the current thread indefinitely until the operation can succeed, and the fourth blocks for only a given maximum time limit before giving up. 
+BlockingQueue methods come in four forms, with different ways of handling operations that cannot be satisfied immediately, but may be satisfied at some point in the future: one throws an exception, the second returns a special value (either null or false, depending on the operation), the third blocks the current thread indefinitely until the operation can succeed, and the fourth blocks for only a given maximum time limit before giving up.
 
 These methods are summarized in the following table:
 
-|         | Throws exception | Special value | Blocks | Times out            |
-| ------- | ---------------- | ------------- | ------ | -------------------- |
-| **Insert** | add(e)           | offer(e)      | put(e) | offer(e, time, unit) |
-| **Remove** |      remove()            |     poll()          |    take()    |           poll(time, unit)           |
-| **Examine** |        element()          |   peek()            |     not applicable   |             not applicable         |
 
-
+|             | Throws exception | Special value | Blocks         | Times out            |
+| ----------- | ---------------- | ------------- | -------------- | -------------------- |
+| **Insert**  | add(e)           | offer(e)      | put(e)         | offer(e, time, unit) |
+| **Remove**  | remove()         | poll()        | take()         | poll(time, unit)     |
+| **Examine** | element()        | peek()        | not applicable | not applicable       |
 
 A BlockingQueue **does not accept null elements**. Implementations throw **NullPointerException** on attempts to add, put or offer a null. A null is used as a sentinel value to indicate failure of *poll* operations.
 
@@ -434,10 +408,6 @@ BlockingQueue implementations are thread-safe. All queuing methods achieve their
 A BlockingQueue does not intrinsically support any kind of "close" or "shutdown" operation to indicate that no more items will be added. The needs and usage of such features tend to be implementation-dependent. For example, a common tactic is for producers to insert special end-of-stream or poison objects, that are interpreted accordingly when taken by consumers.
 
 Usage example, based on a typical producer-consumer scenario. Note that a BlockingQueue can safely be used with multiple producers and multiple consumers.
-
-
-
-
 
 ### Example
 
@@ -477,11 +447,8 @@ class Producer implements Runnable {
  }
 ```
 
-
-
 **Memory consistency effects**: As with other concurrent collections, actions in a thread prior to placing an object into a BlockingQueue happen-before actions subsequent to the access or removal of that element from the BlockingQueue in another thread.
 This interface is a member of the Java Collections Framework.
-
 
 
 | Blocking Queue Name   | Description      |
@@ -510,8 +477,6 @@ private final Condition notEmpty;
 @SuppressWarnings("serial")  // Classes implementing Condition may be serializable.
 private final Condition notFull;
 ```
-
-
 
 ```java
 public ArrayBlockingQueue(int capacity) {
@@ -556,8 +521,6 @@ public ArrayBlockingQueue(int capacity, boolean fair,
 }
 ```
 
-
-
 ### LinkedBlockingQueue
 
 takeLock and putLock
@@ -577,8 +540,6 @@ private final ReentrantLock putLock = new ReentrantLock();
 @SuppressWarnings("serial") // Classes implementing Condition may be serializable.
 private final Condition notFull = putLock.newCondition();
 ```
-
-
 
 ```java
 public void put(E e) throws InterruptedException {
@@ -612,17 +573,12 @@ public void put(E e) throws InterruptedException {
 }
 ```
 
-
-
 ### DelayQueue
-
-
-
-
 
 ### SynchronousQueue
 
-*A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**. A synchronous queue **does not have any internal capacity, not even a capacity of one**.*
+*A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**.
+A synchronous queue **does not have any internal capacity, not even a capacity of one**.*
 
 *you cannot insert an element (using any method) unless another thread is trying to remove it;*
 
@@ -644,8 +600,6 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
         implements BlockingQueue<E>, java.io.Serializable {
 }
 ```
-
-
 
 ```java
 private ReentrantLock qlock;
@@ -671,8 +625,6 @@ public SynchronousQueue(boolean fair) { // default false
   transferer = fair ? new TransferQueue<E>() : new TransferStack<E>();
 }
 ```
-
-
 
 `You cannot peek at a synchronous queue because an element is only present when you try to remove it.`
 
@@ -702,8 +654,6 @@ public int remainingCapacity(){
         }
 ```
 
-
-
 #### transfer
 
 both of them call *transfer()*, and *put* send a param
@@ -728,13 +678,10 @@ public E take() throws InterruptedException {
 }
 ```
 
-
-
-
-
-#### TransferStack 
+#### TransferStack
 
 Basic algorithm is to loop trying one of three actions:
+
 1. If apparently empty or already containing nodes of same mode, try to push node on stack and wait for a match, returning it, or null if cancelled.
 2. If apparently containing node of complementary mode, try to push a fulfilling node on to stack, match with corresponding waiting node, pop both from stack, and return matched item. The matching or unlinking might not actually be necessary because of other threads performing action 3:
 3. If top of stack already holds another fulfilling node, help it out by doing its match and/or pop
@@ -802,10 +749,6 @@ E transfer(E e, boolean timed, long nanos) {
 }
 ```
 
-
-
-
-
 ```java
 static final class SNode {
     volatile SNode next;        // next node in stack
@@ -827,6 +770,7 @@ static final class SNode {
 
 Basic algorithm is to loop trying to take either of
 two actions:
+
 1. If queue apparently empty or holding same-mode nodes, try to add node to queue of waiters, wait to be fulfilled (or cancelled) and return matching item.
 2. If queue apparently contains waiting items, and this call is of complementary mode, try to fulfill by CAS'ing item field of waiting node and dequeuing it, and then returning matching item.
 
@@ -900,10 +844,6 @@ E transfer(E e, boolean timed, long nanos) {
 }
 ```
 
-
-
-
-
 ```java
 static final class QNode {
     volatile QNode next;          // next node in queue
@@ -918,11 +858,7 @@ static final class QNode {
 }
 ```
 
-
-
 ### PriorityBlockingQueue
-
-
 
 ```java
 /**
@@ -957,9 +893,8 @@ private final Condition notEmpty = lock.newCondition();
 private transient volatile int allocationSpinLock;
 ```
 
-
-
 ## Summary
+
 
 | Queue                 | Boundary           | Lock     | Struct     |
 | --------------------- | ------------------ | -------- | ---------- |
@@ -970,7 +905,6 @@ private transient volatile int allocationSpinLock;
 | PriorityBlockingQueue | unbounded          | lock     | heap       |
 | DealyQueue            | unbounded          | lock     | heap       |
 
-
-
 ## Links
+
 - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
