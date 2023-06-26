@@ -85,6 +85,42 @@ PullMessageProcessor of broker
 
 write into direct buffer and async to pagecache
 
+
+
+## Topic
+
+
+
+
+#### autoCreate
+
+autoCreateTopicEnable = true
+
+
+```java
+public class TopicConfigManager extends ConfigManager {
+    public TopicConfigManager(BrokerController brokerController) {
+        {
+            if (this.brokerController.getBrokerConfig().isAutoCreateTopicEnable()) {
+                String topic = TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC;
+                TopicConfig topicConfig = new TopicConfig(topic);
+                TopicValidator.addSystemTopic(topic);
+                topicConfig.setReadQueueNums(this.brokerController.getBrokerConfig().getDefaultTopicQueueNums());
+                topicConfig.setWriteQueueNums(this.brokerController.getBrokerConfig().getDefaultTopicQueueNums());
+                int perm = PermName.PERM_INHERIT | PermName.PERM_READ | PermName.PERM_WRITE;
+                topicConfig.setPerm(perm);
+                this.topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
+            }
+        }
+    }
+}
+```
+
+Broker create topic when the first message comes in. 
+If the another broker never received any message, the NameServer's topic configs doesn't have it though it's heartbeat.
+And then the topic configs cache in producer will be overwrite by heartbeat between producer and NameServer. 
+
+
 ## storage
 
 Files
