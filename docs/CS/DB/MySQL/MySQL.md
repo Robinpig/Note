@@ -4,8 +4,8 @@
 
 ## [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
-
 with docker
+
 ```shell
 docker pull mysql:5.7
 
@@ -15,25 +15,24 @@ docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql
 
 ```
 
-
 ```shell
 cat /etc/sysconfig/selinux
 
 ```
 
-
 ## databases
+
 information_schema
+
 - tables
 - processlist
 - global_status
 - global_variables
 - partitions
-innodb
+  innodb
 - innodb_trx
 - innodb_locks
 - innodb_lock_waits
-
 
 innodb shutdown handler
 innodb purge coordinator
@@ -49,17 +48,14 @@ innodb_write_io_threads 4
 innodb_read_io_threads 4
 innodb_undo_logs 128
 
-
 innodb_adaptive_hash_index_parts 8
 innodb_adaptive_hash_index ON
-
 
 innodb_old_blocks_pct 37  -- 3/8
 innodb_old_blocks_time	1000
 
-
-
 ### Threads
+
 Master
 
 ```
@@ -106,6 +102,7 @@ void srv_master_thread() {
 ```
 
 #### main loop
+
 ```cpp
 
 /** Executes the main loop of the master thread.
@@ -162,21 +159,22 @@ static void srv_master_main_loop(srv_slot_t *slot) {
 ```
 
 #### srv_master_do_idle_tasks
+
 per 10 seconds
+
 - flush log buffer
 - merge max 5 change buffer
 - flush max 100 buffer pool pages(might)
 - purge unused undo log
 
 #### srv_master_do_active_tasks
+
 per second
 
 - flush log buffer
 - merge change buffer(might)
 - flush max 100 buffer pool pages(might)
 - jump into background loop
-
-
 
 ```cpp
 
@@ -332,7 +330,6 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
   
 ```
 
-
 ## Files
 
 ### [Server Log](/docs/CS/DB/MySQL/serverlog.md)
@@ -343,22 +340,16 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
 
 ### [File](/docs/CS/DB/MySQL/file.md)
 
-
-
 redo log prepare -> binlog write -> redo log commit
 
 ## Server
 
-
-
-
 - Connector 身份认证 权限管理 连接不断 即使修改了权限 此连接不受影响
 - 查询缓存 8.0后移除 缓存select语句及结果集 因在频繁更新情况下经常失效
 - 分析器 无命中缓存进入 词法分析 提出关键字段 语法分析 检验语句是否正确
-- 优化器 内部实现 执行计划 选择索引 
+- 优化器 内部实现 执行计划 选择索引
 - 执行器 检验有权限后调用引擎接口 返回执行结果
 - 日志模块 binlog公有 redolog只InnoDB有
-
 
 wait_timeout 8h
 
@@ -380,28 +371,29 @@ Storage engines are MySQL components that handle the SQL operations for differen
 
 ### [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
 
-
-
-
 ### InnoDB memcached Plugin
 
 ## Master-Slave
+
+MySQL is designed for accepting writes on one node at any given time. 
+This has advantages in managing consistency but leads to trade-offs when you need the data written in multiple servers or multiple locations. 
+MySQL offers a native way to dis‐ tribute writes that one node takes to additional nodes. This is referred to as replication. 
+In MySQL, the source node has a thread per replica that is logged in as a replication client that wakes up when a write occurs, sending new data.
+
 ### replication
 
 master write to binary log
 slaves get binary log events by I/O threads and write to relay log
 slaves SQL threads replay SQL from relay log
 
-
 Notes:
+
 - same OS version
 - same DB version
 - same data
 - same server id
 
 ## [Optimization](/docs/CS/DB/MySQL/Optimization.md)
-
-
 
 ## Links
 
