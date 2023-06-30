@@ -85,17 +85,11 @@ PullMessageProcessor of broker
 
 write into direct buffer and async to pagecache
 
-
-
 ## Topic
-
-
-
 
 #### autoCreate
 
 autoCreateTopicEnable = true
-
 
 ```java
 public class TopicConfigManager extends ConfigManager {
@@ -116,10 +110,9 @@ public class TopicConfigManager extends ConfigManager {
 }
 ```
 
-Broker create topic when the first message comes in. 
+Broker create topic when the first message comes in.
 If the another broker never received any message, the NameServer's topic configs doesn't have it though it's heartbeat.
-And then the topic configs cache in producer will be overwrite by heartbeat between producer and NameServer. 
-
+And then the topic configs cache in producer will be overwrite by heartbeat between producer and NameServer.
 
 ## storage
 
@@ -838,10 +831,6 @@ checkpoint
 
 - recover consumeQueue file to find max offset
 - check and compare the commitLog file offset and sync the offset
-
-
-
-
 
 ## Links
 
