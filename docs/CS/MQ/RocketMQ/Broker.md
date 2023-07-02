@@ -114,6 +114,14 @@ Broker create topic when the first message comes in.
 If the another broker never received any message, the NameServer's topic configs doesn't have it though it's heartbeat.
 And then the topic configs cache in producer will be overwrite by heartbeat between producer and NameServer.
 
+
+## process
+
+therad pool per NettyRequestProcessor
+
+
+
+
 ## storage
 
 Files
