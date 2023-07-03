@@ -360,10 +360,23 @@ mysql_reset_connection
 MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations. The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
 
 ## Storage Engine
+The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements. The MySQL server architecture isolates the application programmer and DBA from all of the low-level implementation details at the storage level, providing a consistent and easy application model and API. Thus, although there are different capabilities across different storage engines, the application is shielded from these differences.
 
-**MySQL Architecture with Pluggable Storage Engines**
+The MySQL pluggable storage engine architecture is shown in figure.
 
-![MySQL architecture diagram showing connectors, interfaces, pluggable storage engines, the file system with files and logs.](https://dev.mysql.com/doc/refman/8.0/en/images/mysql-architecture.png)
+
+
+<div style="text-align: center;">
+
+![Fig.1. MySQL Architecture with Pluggable Storage Engines](img/Storage-Engine.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. MySQL Architecture with Pluggable Storage Engines.
+</p>
+
+
 
 Storage engines are MySQL components that handle the SQL operations for different table types. `InnoDB` is the default and most general-purpose storage engine.
 
