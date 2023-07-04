@@ -98,6 +98,306 @@ InnoDB has a variety of internal optimizations. These include predictive read-ah
 - [Doublewrite Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
 
 
+
+
+
+innodb shutdown handler
+innodb purge coordinator
+innodb purge worker * 3
+
+max_delayed_threads 20
+thread_stack 299008
+
+thread_pool_idle_timeout 60
+thread_pool_max_threads 65536
+innodb_purge_threads 4
+innodb_write_io_threads 4
+innodb_read_io_threads 4
+innodb_undo_logs 128
+
+innodb_adaptive_hash_index_parts 8
+innodb_adaptive_hash_index ON
+
+innodb_old_blocks_pct 37  — 3/8
+innodb_old_blocks_time	1000
+
+## Thread Model
+
+Master
+
+```
+// using SHOW ENGINE INNODB STATUS;
+srv_master_thread loops: 177 srv_active, 0 srv_shutdown, 2772864 srv_idle
+srv_master_thread log flush and writes: 2773038
+```
+
+```cpp
+// srv0srv.cc
+/** The master thread controlling the server. */
+void srv_master_thread() {
+
+  srv_slot_t *slot;
+
+  THD *thd = create_thd(false, true, true, 0);
+
+  ut_ad(!srv_read_only_mode);
+
+  srv_main_thread_process_no = os_proc_get_number();
+  srv_main_thread_id = std::this_thread::get_id();
+
+  slot = srv_reserve_slot(SRV_MASTER);
+  ut_a(slot == srv_sys->sys_threads);
+
+  srv_master_main_loop(slot);
+
+  srv_master_pre_dd_shutdown_loop();
+
+  os_event_set(srv_threads.m_master_ready_for_dd_shutdown);
+
+  /* This is just for test scenarios. */
+  srv_thread_delay_cleanup_if_needed(true);
+
+  while (srv_shutdown_state.load() < SRV_SHUTDOWN_MASTER_STOP) {
+    srv_master_wait(slot);
+  }
+
+  srv_master_shutdown_loop();
+
+  srv_main_thread_op_info = “exiting”;
+  destroy_thd(thd);
+}
+```
+
+#### main loop
+
+```cpp
+
+/** Executes the main loop of the master thread.
+@param[in]   slot     slot reserved as SRV_MASTER */
+static void srv_master_main_loop(srv_slot_t *slot) {
+  if (srv_force_recovery >= SRV_FORCE_NO_BACKGROUND) {
+    /* When innodb_force_recovery is at least SRV_FORCE_NO_BACKGROUND,
+    we avoid performing active/idle master’s tasks. However, we still
+    need to ensure that:
+      srv_shutdown_state >= SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS,
+    after we exited srv_master_main_loop(). Keep waiting until that
+    is satisfied and then exit. */
+    while (srv_shutdown_state.load() <
+           SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+      srv_master_wait(slot);
+    }
+    return;
+  }
+
+  ulint old_activity_count = srv_get_activity_count();
+
+  while (srv_shutdown_state.load() <
+         SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    srv_master_sleep();
+
+    MONITOR_INC(MONITOR_MASTER_THREAD_SLEEP);
+
+    /* Just in case - if there is not much free space in redo,
+    try to avoid asking for troubles because of extra work
+    performed in such background thread. */
+    srv_main_thread_op_info = “checking free log space”;
+    log_free_check();
+
+    if (srv_check_activity(old_activity_count)) {
+      old_activity_count = srv_get_activity_count();
+      srv_master_do_active_tasks();
+    } else {
+      srv_master_do_idle_tasks();
+    }
+
+    /* Let clone wait when redo/undo log encryption is set. If clone is already
+    in progress we skip the check and come back later. */
+    if (!clone_mark_wait()) {
+      continue;
+    }
+
+    /* Allow any blocking clone to progress. */
+    clone_mark_free();
+
+    /* Purge any deleted tablespace pages. */
+    fil_purge();
+  }
+}
+```
+
+#### srv_master_do_idle_tasks
+
+per 10 seconds
+
+- flush log buffer
+- merge max 5 change buffer
+- flush max 100 buffer pool pages(might)
+- purge unused undo log
+
+#### srv_master_do_active_tasks
+
+per second
+
+- flush log buffer
+- merge change buffer(might)
+- flush max 100 buffer pool pages(might)
+- jump into background loop
+
+```cpp
+
+/** Perform the tasks that the master thread is supposed to do when the
+ server is active. There are two types of tasks. The first category is
+ of such tasks which are performed at each inovcation of this function.
+ We assume that this function is called roughly every second when the
+ server is active. The second category is of such tasks which are
+ performed at some interval e.g.: purge, dict_LRU cleanup etc. */
+static void srv_master_do_active_tasks(void) {
+  const auto cur_time = ut_time_monotonic();
+  auto counter_time = ut_time_monotonic_us();
+
+  /* First do the tasks that we are suppose to do at each
+  invocation of this function. */
+
+  ++srv_main_active_loops;
+
+  MONITOR_INC(MONITOR_MASTER_ACTIVE_LOOPS);
+
+  /* ALTER TABLE in MySQL requires on Unix that the table handler
+  can drop tables lazily after there no longer are SELECT
+  queries to them. */
+  srv_main_thread_op_info = “doing background drop tables”;
+  row_drop_tables_for_mysql_in_background();
+  MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_BACKGROUND_DROP_TABLE_MICROSECOND,
+                                 counter_time);
+
+  ut_d(srv_master_do_disabled_loop());
+
+  if (srv_shutdown_state.load() >=
+      SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    return;
+  }
+
+  /* Do an ibuf merge */
+  srv_main_thread_op_info = “doing insert buffer merge”;
+  counter_time = ut_time_monotonic_us();
+  ibuf_merge_in_background(false);
+  MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_IBUF_MERGE_MICROSECOND,
+                                 counter_time);
+
+  /* Flush logs if needed */
+  log_buffer_sync_in_background();
+
+  /* Now see if various tasks that are performed at defined
+  intervals need to be performed. */
+
+  if (srv_shutdown_state.load() >=
+      SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
+    return;
+  }
+
+  srv_update_cpu_usage();
+
+  if (trx_sys->rseg_history_len.load() > 0) {
+    srv_wake_purge_thread_if_not_active();
+  }
+
+  if (cur_time % SRV_MASTER_DICT_LRU_INTERVAL == 0) {
+    srv_main_thread_op_info = “enforcing dict cache limit”;
+    ulint n_evicted = srv_master_evict_from_table_cache(50);
+    if (n_evicted != 0) {
+      MONITOR_INC_VALUE(MONITOR_SRV_DICT_LRU_EVICT_COUNT, n_evicted);
+    }
+    MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_DICT_LRU_MICROSECOND,
+                                   counter_time);
+  }
+}
+```
+
+#### purge
+
+```
+innodb_purge_batch_size	300
+innodb_purge_rseg_truncate_frequency	128
+innodb_purge_threads	4
+```
+
+```cpp
+
+void fil_purge() { fil_system->purge(); }
+
+/** Clean up the shards. */
+void purge() {
+  for (auto shard : m_shards) {
+    shard->purge();
+  }
+}
+
+
+/** Purge entries from m_deleted_spaces that are no longer referenced by a
+buffer pool page. This is no longer required to be done during checkpoint -
+this is done here for historical reasons - it has to be done periodically
+somewhere. */
+void purge() {
+  /* Avoid cleaning up old undo files while this is on. */
+  DBUG_EXECUTE_IF(“ib_undo_trunc_checkpoint_off”, return;);
+
+  mutex_acquire();
+  for (auto it = m_deleted_spaces.begin(); it != m_deleted_spaces.end();) {
+    auto space = it->second;
+
+    if (space->has_no_references()) {
+      ut_a(space->files.front().n_pending == 0);
+
+      space_free_low(space);
+
+      it = m_deleted_spaces.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  mutex_release();
+}  
+  
+  
+/** Free a tablespace object on which fil_space_detach() was invoked.
+There must not be any pending I/O’s or flushes on the files.
+@param[in,out]	space		tablespace */
+void Fil_shard::space_free_low(fil_space_t *&space) {
+#ifndef UNIV_HOTBACKUP
+  {
+    /* Temporary and undo tablespaces IDs are assigned from a large but
+    fixed size pool of reserved IDs. Therefore we must ensure that a
+    fil_space_t instance can’t be dropped until all the pages that point
+    to it are also purged from the buffer pool. */
+
+    ut_a(srv_shutdown_state.load() == SRV_SHUTDOWN_LAST_PHASE ||
+         space->has_no_references());
+  }
+#endif /* !UNIV_HOTBACKUP */
+
+  for (auto &file : space->files) {
+    ut_d(space->size -= file.size);
+
+    os_event_destroy(file.sync_event);
+
+    ut_free(file.name);
+  }
+
+  call_destructor(&space->files);
+
+  ut_ad(space->size == 0);
+
+  rw_lock_free(&space->latch);
+  ut_free(space->name);
+  ut_free(space);
+
+  space = nullptr;
+}
+  
+```
+
+
 ## Links
 - [MySQL Server](/docs/CS/DB/MySQL/MySQL.md)
 
