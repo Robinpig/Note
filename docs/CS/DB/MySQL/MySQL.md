@@ -2,7 +2,7 @@
 
 [MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
 
-## [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
+### [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
 with docker
 
@@ -342,24 +342,12 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
 
 redo log prepare -> binlog write -> redo log commit
 
-## Server
-
-- Connector 身份认证 权限管理 连接不断 即使修改了权限 此连接不受影响
-- 查询缓存 8.0后移除 缓存select语句及结果集 因在频繁更新情况下经常失效
-- 分析器 无命中缓存进入 词法分析 提出关键字段 语法分析 检验语句是否正确
-- 优化器 内部实现 执行计划 选择索引
-- 执行器 检验有权限后调用引擎接口 返回执行结果
-- 日志模块 binlog公有 redolog只InnoDB有
-
-wait_timeout 8h
-
-mysql_reset_connection
 
 ## Character Sets, Collations, Unicode
 
 MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations. The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
 
-## Storage Engine
+## Architecture
 The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements. The MySQL server architecture isolates the application programmer and DBA from all of the low-level implementation details at the storage level, providing a consistent and easy application model and API. Thus, although there are different capabilities across different storage engines, the application is shielded from these differences.
 
 The MySQL pluggable storage engine architecture is shown in figure.
@@ -378,13 +366,27 @@ Fig.1. MySQL Architecture with Pluggable Storage Engines.
 
 
 
-Storage engines are MySQL components that handle the SQL operations for different table types. `InnoDB` is the default and most general-purpose storage engine.
+### Server
 
-### [The InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- Connector 身份认证 权限管理 连接不断 即使修改了权限 此连接不受影响
+- 查询缓存 8.0后移除 缓存select语句及结果集 因在频繁更新情况下经常失效
+- 分析器 无命中缓存进入 词法分析 提出关键字段 语法分析 检验语句是否正确
+- 优化器 内部实现 执行计划 选择索引
+- 执行器 检验有权限后调用引擎接口 返回执行结果
+- 日志模块 binlog公有 redolog只InnoDB有
 
-### [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
+wait_timeout 8h
 
-### InnoDB memcached Plugin
+mysql_reset_connection
+
+### Storage Engine
+
+Storage engines are MySQL components that handle the SQL operations for different table types. [InnoDB](/docs/CS/DB/MySQL/InnoDB.md) is the default and most general-purpose storage engine.
+
+
+[Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
+
+
 
 ## Master-Slave
 
