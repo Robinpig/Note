@@ -2,7 +2,6 @@
 
 [MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
 
-
 **Installing MySQL**
 
 <!-- tabs:start -->
@@ -24,10 +23,14 @@ docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql
 
 <!-- tabs:end -->
 
+### schema
 
+Default schemas:
 
-
-## schema
+- mysql
+- sys
+- information_schema
+- performance_schema
 
 ## Files
 
@@ -48,8 +51,8 @@ The default MySQL server character set and collation are `latin1` and `latin1_sw
 
 ## Architecture
 
-The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements. 
-The MySQL server architecture isolates the application programmer and DBA from all of the low-level implementation details at the storage level, providing a consistent and easy application model and API. 
+The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements.
+The MySQL server architecture isolates the application programmer and DBA from all of the low-level implementation details at the storage level, providing a consistent and easy application model and API.
 Thus, although there are different capabilities across different storage engines, the application is shielded from these differences.
 
 The MySQL pluggable storage engine architecture is shown in figure.
@@ -64,14 +67,14 @@ The MySQL pluggable storage engine architecture is shown in figure.
 Fig.1. MySQL Architecture with Pluggable Storage Engines.
 </p>
 
-### Server
 
-- Connector 身份认证 权限管理 连接不断 即使修改了权限 此连接不受影响
-- 查询缓存 8.0后移除 缓存select语句及结果集 因在频繁更新情况下经常失效
-- 分析器 无命中缓存进入 词法分析 提出关键字段 语法分析 检验语句是否正确
-- 优化器 内部实现 执行计划 选择索引
-- 执行器 检验有权限后调用引擎接口 返回执行结果
-- 日志模块 binlog公有 redolog只InnoDB有
+
+### Server Process
+
+- Caches
+- Parser
+- Optimizer
+- SQL Interface
 
 wait_timeout 8h
 
@@ -82,16 +85,29 @@ mysql_reset_connection
 Storage engines are MySQL components that handle the SQL operations for different table types. [InnoDB](/docs/CS/DB/MySQL/InnoDB.md) is the default and most general-purpose storage engine.
 
 ```sql
-Show engines
+SELECT VERSION(); -- 5.7.42
 
+SHOW ENGINES;
 ```
 
-[Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
 
-MyISAM vs InnoDB
+| Engine             | Support | Comment                                                        | Transactions | XA  | Savepoints |
+| ------------------ | ------- | -------------------------------------------------------------- | ------------ | --- | ---------- |
+| InnoDB             | DEFAULT | Supports transactions, row-level locking, and foreign keys     | YES          | YES | YES        |
+| MRG_MYISAM         | YES     | Collection of identical MyISAM tables                          | NO           | NO  | NO         |
+| MEMORY             | YES     | Hash based, stored in memory, useful for temporary tables      | NO           | NO  | NO         |
+| BLACKHOLE          | YES     | /dev/null storage engine (anything you write to it disappears) | NO           | NO  | NO         |
+| MyISAM             | YES     | MyISAM storage engine                                          | NO           | NO  | NO         |
+| CSV                | YES     | CSV storage engine                                             | NO           | NO  | NO         |
+| ARCHIVE            | YES     | Archive storage engine                                         | NO           | NO  | NO         |
+| PERFORMANCE_SCHEMA | YES     | Performance Schema                                             | NO           | NO  | NO         |
+| FEDERATED          | NO      | Federated MySQL storage engine                                 |              |     |            |
 
-| Feature | MyISAM Support | InnoDB Support                                                                    |
-| --- | --- |-----------------------------------------------------------------------------------|
+**MyISAM vs InnoDB**
+
+
+| Feature                      | MyISAM Support | InnoDB Support                                                                    |
+| ---------------------------- | -------------- | --------------------------------------------------------------------------------- |
 | **B-tree indexes**           | Yes            | Yes                                                                               |
 | **Cluster database support** | No             | Yes                                                                               |
 | **Clustered indexes**        | No             | Yes                                                                               |
@@ -104,6 +120,12 @@ MyISAM vs InnoDB
 | **MVCC**                     | No             | Yes                                                                               |
 | **Storage limits**           | 256TB          | 64TB                                                                              |
 | **Transactions**             | No             | Yes                                                                               |
+
+
+
+[Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
+
+
 
 ## Master-Slave
 
