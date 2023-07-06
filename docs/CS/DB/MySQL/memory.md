@@ -1,13 +1,29 @@
 ## Buffer Pool
 
-The buffer pool is an area in main memory where InnoDB caches table and index data as it is accessed. The buffer pool permits frequently used data to be accessed directly from memory, which speeds up processing. On dedicated servers, up to 80% of physical memory is often assigned to the buffer pool.
+The buffer pool is an area in main memory where InnoDB caches table and index data as it is accessed. 
+The buffer pool permits frequently used data to be accessed directly from memory, which speeds up processing. 
+On dedicated servers, up to 80% of physical memory is often assigned to the buffer pool.
 
-For efficiency of high-volume read operations, the buffer pool is divided into pages that can potentially hold multiple rows. For efficiency of cache management, the buffer pool is implemented as a linked list of pages; data that is rarely used is aged out of the cache using a variation of the least recently used (LRU) algorithm.
+For efficiency of high-volume read operations, the buffer pool is divided into pages that can potentially hold multiple rows. 
+For efficiency of cache management, the buffer pool is implemented as a linked list of pages; data that is rarely used is aged out of the cache using a variation of the least recently used (LRU) algorithm.
 
 Knowing how to take advantage of the buffer pool to keep frequently accessed data in memory is an important aspect of MySQL tuning.
 
-```mysql
-mysql> SELECT * FROM information_schema.INNODB_BUFFER_POOL_STATS;
+```sql
+mysql>SHOW VARIABLES LIKE 'innodb_buffer%';
+-- innodb_buffer_pool_chunk_size,134217728
+-- innodb_buffer_pool_dump_at_shutdown,ON
+-- innodb_buffer_pool_dump_now,OFF
+-- innodb_buffer_pool_dump_pct,25
+-- innodb_buffer_pool_filename,ib_buffer_pool
+-- innodb_buffer_pool_in_core_file,ON
+-- innodb_buffer_pool_instances,1
+-- innodb_buffer_pool_load_abort,OFF
+-- innodb_buffer_pool_load_at_startup,ON
+-- innodb_buffer_pool_load_now,OFF
+-- innodb_buffer_pool_size,134217728
+
+information_schema> SELECT * FROM INNODB_BUFFER_POOL_STATS;
 ```
 
 ### Buffer Pool LRU Algorithm

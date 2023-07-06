@@ -46,7 +46,8 @@ Unless you have configured a different default storage engine, issuing a `CREATE
 [InnoDB Locking and Transaction Model](/docs/CS/DB/MySQL/Transaction.md)
 
 ```sql
-SHOW VARIABLES LIKE 'innodb_version'; --5.7.42
+mysql>SHOW VARIABLES LIKE 'innodb_version'; --8.0.33
+mysql>SHOW ENGINE INNODB STATUS;
 ```
 
 ## Architecture
@@ -319,15 +320,35 @@ static void srv_master_do_active_tasks(void) {
 
 ### IO Thread
 
-- innodb_read_io_threads	4
-- innodb_write_io_threads	4
+```sql
+mysql>SHOW VARIABLES LIKE 'innodb_%_io_threads';
+-- innodb_read_io_threads	4
+-- innodb_write_io_threads	4
+
+mysql>SHOW ENGINE INNODB STATUS;
+-- --------
+-- FILE I/O
+-- --------
+-- I/O thread 0 state: waiting for i/o request ((null))
+-- I/O thread 1 state: waiting for i/o request (insert buffer thread)
+-- I/O thread 2 state: waiting for i/o request (read thread)
+-- I/O thread 3 state: waiting for i/o request (read thread)
+-- I/O thread 4 state: waiting for i/o request (read thread)
+-- I/O thread 5 state: waiting for i/o request (read thread)
+-- I/O thread 6 state: waiting for i/o request (write thread)
+-- I/O thread 7 state: waiting for i/o request (write thread)
+-- I/O thread 8 state: waiting for i/o request (write thread)
+```
 
 ### Purge Thread
 
-```
+
+
+```sql
+mysql>SHOW VARIABLES LIKE 'innodb_purge_threads';
+-- innodb_purge_threads	4
 innodb_purge_batch_size	300
 innodb_purge_rseg_truncate_frequency	128
-innodb_purge_threads	4
 ```
 
 ```cpp
