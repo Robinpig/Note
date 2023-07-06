@@ -45,7 +45,11 @@ Unless you have configured a different default storage engine, issuing a `CREATE
 
 [InnoDB Locking and Transaction Model](/docs/CS/DB/MySQL/Transaction.md)
 
-## InnoDB Architecture
+```sql
+SHOW VARIABLES LIKE 'innodb_version'; --5.7.42
+```
+
+## Architecture
 
 The following diagram shows in-memory and on-disk structures that comprise the `InnoDB` storage engine architecture. 
 
@@ -123,7 +127,7 @@ innodb_old_blocks_time	1000
 
 ## Thread Model
 
-Master
+### Master Thread
 
 ```
 // using SHOW ENGINE INNODB STATUS;
@@ -313,7 +317,12 @@ static void srv_master_do_active_tasks(void) {
 }
 ```
 
-#### purge
+### IO Thread
+
+- innodb_read_io_threads	4
+- innodb_write_io_threads	4
+
+### Purge Thread
 
 ```
 innodb_purge_batch_size	300
