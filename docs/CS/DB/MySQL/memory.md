@@ -113,6 +113,14 @@ class buf_page_t
 
 ### checkpoint
 
+InnoDB implements a checkpoint mechanism known as fuzzy checkpointing. 
+InnoDB flushes modified database pages from the buffer pool in small batches. 
+There is no need to flush the buffer pool in one single batch, which would disrupt processing of user SQL statements during the checkpointing process.
+
+During crash recovery, InnoDB looks for a checkpoint label written to the log files.
+It knows that all modifications to the database before the label are present in the disk image of the database.
+Then InnoDB scans the log files forward from the checkpoint, applying the logged modifications to the database.
+
 - Fuzzy Checkpoint
   - Master
   - Flush_lru_list
@@ -188,9 +196,17 @@ Support for 32KB and 64KB `InnoDB` page sizes was added in MySQL 5.7.6. For a 32
 
 The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes) pages when those pages are not in the **buffer pool**.
 The buffered changes, which may result from `INSERT`, `UPDATE`, or `DELETE` operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
+The set of features involving the change buffer is known collectively as *change buffering*, consisting of *insert buffering*, *delete buffering*, and *purge buffering*.
 
 The change buffer only supports `secondary indexes`. Clustered indexes, full-text indexes, and spatial indexes are not supported. Full-text indexes have their own caching mechanism.
 Change buffering is not supported for a secondary index if the index contains a descending index column or if the primary key includes a descending index column.
+
+When the relevant index page is brought into the buffer pool while associated changes are still in the change buffer, the changes for that page are applied in the buffer pool (merged) using the data from the change buffer. Periodically, the purge operation that runs during times when the system is mostly idle, or during a slow shutdown, writes the new index pages to disk. The purge operation can write the disk blocks for a series of index values more efficiently than if each value were written to disk immediately.
+
+Physically, the change buffer is part of the system tablespace, so that the index changes remain buffered across database restarts. The changes are only applied (merged) when the pages are brought into the buffer pool due to some other read operation.
+
+Insert buffering is not used if the secondary index is unique, because the uniqueness of new values cannot be verified before the new entries are written out. Other kinds of change buffering do work for unique indexes.
+
 
 ![Content is described in the surrounding text.](https://dev.mysql.com/doc/refman/8.0/en/images/innodb-change-buffer.png)
 
