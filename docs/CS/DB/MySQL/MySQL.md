@@ -34,11 +34,6 @@ Default schemas:
 
 ## Files
 
-### [Server Log](/docs/CS/DB/MySQL/serverlog.md)
-
-### [Redo Log](/docs/CS/DB/MySQL/redolog.md)
-
-### [undo Log](/docs/CS/DB/MySQL/undolog.md)
 
 ### [File](/docs/CS/DB/MySQL/file.md)
 
