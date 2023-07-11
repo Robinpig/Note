@@ -55,7 +55,7 @@ The optimization that keeps the buffer pool from being churned by read-ahead can
 
 LRU list
 
-```mysql
+```sql
 mysql> SELECT TABLE_NAME,PAGE_NUMBER,PAGE_TYPE,INDEX_NAME,SPACE FROM information_schema.INNODB_BUFFER_PAGE_LRU WHERE SPACE = 1;
 ```
 
@@ -67,7 +67,7 @@ Checkpoint
 
 dirty pages
 
-```mysql
+```sql
 mysql> SELECT COUNT(*) FROM information_schema.INNODB_BUFFER_PAGE_LRU  WHERE OLDEST_MODIFICATION > 0;
 ```
 
@@ -111,14 +111,21 @@ class buf_page_t
 };
 ```
 
-### checkpoint
+## Checkpoints
 
-- Fuzzy Checkpoint
+### Fuzzy Checkpoint
+
+InnoDB implements a checkpoint mechanism known as fuzzy checkpointing. 
+InnoDB flushes modified database pages from the buffer pool in small batches. 
+There is no need to flush the buffer pool in one single batch, which would disrupt processing of user SQL statements during the checkpointing process.
+
+
   - Master
   - Flush_lru_list
   - Async/Sync Flush
   - Dirty Page too much
-- Sharp Checkpoint
+
+
 
 Page Cleaner Thread
 
@@ -147,7 +154,16 @@ innodb_flush_neighbors default 0 only itself
 better for HHD
 worse for SSD
 
-### Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
+
+### Sharp Checkpoint
+
+
+During crash recovery, InnoDB looks for a checkpoint label written to the log files.
+It knows that all modifications to the database before the label are present in the disk image of the database.
+Then InnoDB scans the log files forward from the checkpoint, applying the logged modifications to the database.
+
+
+## Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
 
 A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages. 
 The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extend). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
@@ -188,9 +204,17 @@ Support for 32KB and 64KB `InnoDB` page sizes was added in MySQL 5.7.6. For a 32
 
 The change buffer is a special data structure that caches changes to [secondary index](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes) pages when those pages are not in the **buffer pool**.
 The buffered changes, which may result from `INSERT`, `UPDATE`, or `DELETE` operations (DML), are merged later when the pages are loaded into the buffer pool by other read operations.
+The set of features involving the change buffer is known collectively as *change buffering*, consisting of *insert buffering*, *delete buffering*, and *purge buffering*.
 
 The change buffer only supports `secondary indexes`. Clustered indexes, full-text indexes, and spatial indexes are not supported. Full-text indexes have their own caching mechanism.
 Change buffering is not supported for a secondary index if the index contains a descending index column or if the primary key includes a descending index column.
+
+When the relevant index page is brought into the buffer pool while associated changes are still in the change buffer, the changes for that page are applied in the buffer pool (merged) using the data from the change buffer. Periodically, the purge operation that runs during times when the system is mostly idle, or during a slow shutdown, writes the new index pages to disk. The purge operation can write the disk blocks for a series of index values more efficiently than if each value were written to disk immediately.
+
+Physically, the change buffer is part of the system tablespace, so that the index changes remain buffered across database restarts. The changes are only applied (merged) when the pages are brought into the buffer pool due to some other read operation.
+
+Insert buffering is not used if the secondary index is unique, because the uniqueness of new values cannot be verified before the new entries are written out. Other kinds of change buffering do work for unique indexes.
+
 
 ![Content is described in the surrounding text.](https://dev.mysql.com/doc/refman/8.0/en/images/innodb-change-buffer.png)
 
@@ -269,33 +293,69 @@ When is the change buffer flushed?
 
 Updated pages are flushed by the same flushing mechanism that flushes the other pages that occupy the buffer pool.
 
-## [Adaptive Hash Index](/docs/CS/DB/MySQL/Index.md?id=Adaptive_Hash_Index)
+
+## Adaptive Hash Index
+
+An optimization for InnoDB tables that can speed up lookups using `=` and `IN` operators, by constructing a **hash index** in memory.
+MySQL monitors index searches for InnoDB tables, and if queries could benefit from a hash index, it builds one automatically for index **pages** that are frequently accessed.
+In a sense, the adaptive hash index configures MySQL at runtime to take advantage of ample main memory, coming closer to the architecture of main-memory databases.
+This feature is controlled by the `innodb_adaptive_hash_index` configuration option.
+Because this feature benefits some workloads and not others, and the memory used for the hash index is reserved in the **buffer pool**, typically you should benchmark with this feature both enabled and disabled.
+
+The hash index is always built based on an existing **B-tree** index on the table.
+MySQL can build a hash index on a prefix of any length of the key defined for the B-tree, depending on the pattern of searches against the index.
+A hash index can be partial; the whole B-tree index does not need to be cached in the buffer pool.
+
+In MySQL 5.6 and higher, another way to take advantage of fast single-value lookups with InnoDB tables is to use the InnoDB **memcached** plugin.
+
+```c
+// btr0sea.h
+/** The global limit for consecutive potentially successful hash searches, before hash index building is started */
+#define BTR_SEARCH_BUILD_LIMIT 100
+
+
+/** The search info struct in an index */
+struct btr_search_t {
+  /*!< TRUE if the last search would have succeeded, or did succeed, using the hash index; NOTE that the value here is not exact:
+  it is not calculated for every search, and the calculation itself is not always accurate! */
+   ibool last_hash_succ;    
+
+  /*!< when this exceeds BTR_SEARCH_HASH_ANALYSIS, the hash analysis starts; this is reset if no success noticed  17 */
+  ulint hash_analysis;     
+             
+  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */        
+  ulint n_hash_potential;    
+}
+```
+
+innodb_adaptive_hash_index_parts： default 8
+
+
+
 
 ## Log Buffer
 
 The log buffer is the memory area that holds data to be written to the log files on disk.
 
-A large log buffer enables large transactions to run without the need to write [redo log](/docs/CS/DB/MySQL/redolog.md) data to disk before the transactions commit. Thus, if you have transactions that update, insert, or delete many rows, increasing the size of the log buffer saves disk I/O.
+A large log buffer enables large transactions to run without the need to write [redo log](/docs/CS/DB/MySQL/redolog.md) data to disk before the transactions commit.
+Thus, if you have transactions that update, insert, or delete many rows, increasing the size of the log buffer saves disk I/O.
 
 Log buffer size is defined by the `innodb_log_buffer_size` variable. The default size is **16MB**. The contents of the log buffer are periodically flushed to disk.
 
-```mysql
-mysql> show variables like 'innodb_log_buffer_size';
-innodb_log_buffer_size	16777216 -- 16M
+```sql
+mysql> show variables like 'innodb_log_buffer_size'; -- 16777216
 ```
 
 The `innodb_flush_log_at_trx_commit` variable controls how the contents of the log buffer are written and flushed to disk.
 
-```mysql
-mysql> show variables like 'innodb_flush_log_at_trx_commit';
-innodb_flush_log_at_trx_commit	1
+```sql
+mysql> show variables like 'innodb_flush_log_at_trx_commit'; -- 1
 ```
 
 The `innodb_flush_log_at_timeout` variable controls log flushing frequency.
 
-```mysql
-mysql> show variables like 'innodb_flush_log_at_timeout';
-innodb_flush_log_at_timeout	1
+```sql
+mysql> show variables like 'innodb_flush_log_at_timeout'; -- 1
 ```
 
 ## Page

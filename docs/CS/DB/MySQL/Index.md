@@ -18,52 +18,16 @@ Although a B-tree index is the most common, a different kind of data structure i
 > 
 > Exceptions: Indexes on spatial data types use `R-trees`; `MEMORY` tables also support `hash indexes`; InnoDB uses inverted lists for `FULLTEXT` indexes.
 
-### Adaptive Hash Index
 
-An optimization for InnoDB tables that can speed up lookups using `=` and `IN` operators, by constructing a **hash index** in memory. 
-MySQL monitors index searches for InnoDB tables, and if queries could benefit from a hash index, it builds one automatically for index **pages** that are frequently accessed. 
-In a sense, the adaptive hash index configures MySQL at runtime to take advantage of ample main memory, coming closer to the architecture of main-memory databases. 
-This feature is controlled by the `innodb_adaptive_hash_index` configuration option. 
-Because this feature benefits some workloads and not others, and the memory used for the hash index is reserved in the **buffer pool**, typically you should benchmark with this feature both enabled and disabled.
+### covering index
 
-The hash index is always built based on an existing **B-tree** index on the table. 
-MySQL can build a hash index on a prefix of any length of the key defined for the B-tree, depending on the pattern of searches against the index. 
-A hash index can be partial; the whole B-tree index does not need to be cached in the buffer pool.
-
-In MySQL 5.6 and higher, another way to take advantage of fast single-value lookups with InnoDB tables is to use the InnoDB **memcached** plugin. 
-
-```c
-// btr0sea.h
-/** The global limit for consecutive potentially successful hash searches, before hash index building is started */
-#define BTR_SEARCH_BUILD_LIMIT 100
-
-
-/** The search info struct in an index */
-struct btr_search_t {
-  /*!< TRUE if the last search would have succeeded, or did succeed, using the hash index; NOTE that the value here is not exact:
-  it is not calculated for every search, and the calculation itself is not always accurate! */
-   ibool last_hash_succ;    
-
-  /*!< when this exceeds BTR_SEARCH_HASH_ANALYSIS, the hash analysis starts; this is reset if no success noticed  17 */
-  ulint hash_analysis;     
-             
-  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */        
-  ulint n_hash_potential;    
-}
-```
-
-innodb_adaptive_hash_index_parts： default 8
-
-
-#### covering index
-
-An **index** that includes all the columns retrieved by a query. 
-Instead of using the index values as pointers to find the full table rows, the query returns values from the index structure, saving disk I/O. 
-InnoDB can apply this optimization technique to more indexes than MyISAM can, because InnoDB **secondary indexes** also include the **primary key** columns. 
+An **index** that includes all the columns retrieved by a query.
+Instead of using the index values as pointers to find the full table rows, the query returns values from the index structure, saving disk I/O.
+InnoDB can apply this optimization technique to more indexes than MyISAM can, because InnoDB **secondary indexes** also include the **primary key** columns.
 InnoDB cannot apply this technique for queries against tables modified by a transaction, until that transaction ends.
 
-Any **column index** or **composite index** could act as a covering index, given the right query. Design your indexes and queries to take advantage of this optimization technique wherever possible.
-
+Any **column index** or **composite index** could act as a covering index, given the right query. 
+Design your indexes and queries to take advantage of this optimization technique wherever possible.
 
 
 ### Clustered and Secondary Indexes
