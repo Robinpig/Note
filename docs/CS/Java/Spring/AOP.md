@@ -8,7 +8,7 @@ Aspect Oriented Programming
 
 ### AOP Hierarchy
 
-![](./images/AOP.png)
+![](img/AOP.png)
 
 ## start
 
@@ -229,7 +229,7 @@ public List<Advisor> findAdvisorBeans() {
 
 ## Create Proxy
 
-![](./images/AnnotationAwareAspectJAutoProxyCreator.png)
+![](img/AnnotationAwareAspectJAutoProxyCreator.png)
 
 
 

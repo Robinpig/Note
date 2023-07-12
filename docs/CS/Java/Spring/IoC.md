@@ -39,7 +39,7 @@ Spring doesn't support constructor injection in an abstract class.
 
 ## BeanFactory Hierarchy
 
-![Beanfactory ](./images/BeanFactory.png)
+![Beanfactory ](img/BeanFactory.png)
 
 **The interfaces *BeanFactory* and *ApplicationContext* represent the Spring IoC container**.
 BeanFactory is the root interface for accessing the Spring container. It provides basic functionalities for managing beans.

@@ -191,7 +191,7 @@ public ListenableFuture<ClientHttpResponse> intercept(final HttpRequest request,
 
 ## LoadBalancer
 
-![ILoadBalancer](./images/ILoadBalancer.png)
+![ILoadBalancer](img/ILoadBalancer.png)
 
 
 
@@ -228,7 +228,7 @@ public class RibbonClientConfiguration {
 default `RoundRobinRule`
 
 ## IRule
-![IRule](./images/IRule.png)
+![IRule](img/IRule.png)
 
 
 ## ServerListUpdater

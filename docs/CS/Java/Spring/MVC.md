@@ -175,7 +175,7 @@ protected void configureAndRefreshWebApplicationContext(ConfigurableWebApplicati
 }
 ```
 
-![](./images/DispatcherServlet.png)
+![](img/DispatcherServlet.png)
 
 org.springframework.web.servlet
 

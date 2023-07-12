@@ -8,7 +8,7 @@
 
 ## Architecture
 
-![packages.png](./images/packages.png)
+![packages.png](img/packages.png)
 
 **Convention Over Configuration**
 
