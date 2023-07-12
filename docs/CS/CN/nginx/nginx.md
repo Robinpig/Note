@@ -21,7 +21,7 @@ Src packages:
 
 <div style="text-align: center;">
 
-![nginx's architecture](https://www.aosabook.org/images/nginx/architecture.png)
+![nginx's architecture](./img/architecture.png)
 
 </div>
 
@@ -844,21 +844,9 @@ ngx_worker_process_cycle(ngx_cycle_t *cycle, void *data)
 #### process_events_and_timers
 
 ```c
-// 
 void
 ngx_process_events_and_timers(ngx_cycle_t *cycle)
 {
-    ngx_uint_t  flags;
-    ngx_msec_t  timer, delta;
-
-    if (ngx_timer_resolution) {
-        timer = NGX_TIMER_INFINITE;
-        flags = 0;
-
-    } else {
-        timer = ngx_event_find_timer();
-        flags = NGX_UPDATE_TIME;
-    }
 
     if (ngx_use_accept_mutex) {
         if (ngx_accept_disabled > 0) {
