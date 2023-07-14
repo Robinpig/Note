@@ -90,6 +90,54 @@ SpringProperties
 
 `SpringProperties.setProperty(String key, String value)`
 
+## Deploy
+
+### Dockerfile
+```dockerfile
+FROM openjdk:11.0.12-jre
+ARG JAR_FILE=target/*.jar
+COPY ${JAR_FILE} app.jar
+ENTRYPOINT ["java","-jar","/app.jar"]
+```
+
+### K8s
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taco-cloud-deploy
+  labels:
+    app: taco-cloud
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: taco-cloud
+  template:
+    metadata:
+      labels:
+        app: taco-cloud
+  spec:
+    containers:
+    - name: taco-cloud-container
+      image: tacocloud/tacocloud:latest
+```
+
+server:
+  shutdown: graceful
+
+
+### war
+
+```java
+public class IngredientServiceServletInitializer extends SpringBootServletInitializer {
+  @Override
+  protected SpringApplicationBuilder configure(
+                    SpringApplicationBuilder builder) {
+    return builder.sources(IngredientServiceApplication.class);
+  }
+}
+```
 ## Links
 
 - [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
