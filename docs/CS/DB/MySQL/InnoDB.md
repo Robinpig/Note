@@ -71,13 +71,18 @@ By default, InnoDB stores its data in a series of datafiles that are collectivel
 A tablespace is essentially a black box that InnoDB manages all by itself.
 
 
-InnoDB uses MVCC to achieve high concurrency, and it implements all four SQL standard isolation levels. It defaults to the REPEATABLE READ isolation level, and it has a next-key locking strategy that prevents phantom reads in this isolation level: rather than locking only the rows you’ve touched in a query, InnoDB locks gaps in the index structure as well, preventing phantoms from being inserted.
+InnoDB uses MVCC to achieve high concurrency, and it implements all four SQL standard isolation levels. 
+It defaults to the REPEATABLE READ isolation level, and it has a next-key locking strategy that prevents phantom reads in this isolation level: 
+rather than locking only the rows you’ve touched in a query, InnoDB locks gaps in the index structure as well, preventing phantoms from being inserted.
 
-InnoDB tables are built on a clustered index, which we will cover in detail in Chap‐ ter 8 when we discuss schema design. InnoDB’s index structures are very different from those of most other MySQL storage engines. 
+InnoDB tables are built on a clustered index, which we will cover in detail in Chap‐ ter 8 when we discuss schema design. 
+InnoDB’s index structures are very different from those of most other MySQL storage engines. 
 As a result, it provides very fast primary key lookups.
-However, secondary indexes (indexes that aren’t the primary key) contain the primary key columns, so if your primary key is large, other indexes will also be large. You should strive for a small primary key if you’ll have many indexes on a table.
+However, secondary indexes (indexes that aren’t the primary key) contain the primary key columns, so if your primary key is large, other indexes will also be large. 
+You should strive for a small primary key if you’ll have many indexes on a table.
 
-InnoDB has a variety of internal optimizations. These include predictive read-ahead for prefetching data from disk, an adaptive hash index that automatically builds hash indexes in memory for very fast lookups, and an insert buffer to speed inserts.
+InnoDB has a variety of internal optimizations.
+These include predictive read-ahead for prefetching data from disk, an adaptive hash index that automatically builds hash indexes in memory for very fast lookups, and an insert buffer to speed inserts.
 
 
 
