@@ -32,7 +32,7 @@ The optimizer might not always choose the best plan, for many reasons:
 - The optimizer doesn’t take into account the cost of operations not under its con‐ trol, such as executing stored functions or user-defined functions.
 - As we’ll see later, the optimizer can’t always estimate every possible execution plan, so it might miss an optimal plan.
 
-```mysql
+```sql
 SHOW VARIABLES LIKE 'optimizer_switch';
 
 

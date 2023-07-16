@@ -1,14 +1,10 @@
 ## Server
 
-
-
 ## Config File
 
 ```shell
 mysql --help | grep my.cnf
 ```
-
-
 
 ## Log Files
 
@@ -17,46 +13,16 @@ mysql --help | grep my.cnf
 - [General Query Log](/docs/CS/DB/MySQL/serverlog.md?id=General-Query-Log)
 - [binlog](/docs/CS/DB/MySQL/serverlog.md?id=binary-log)
 
-### [Redo Log](/docs/CS/DB/MySQL/redolog.md)
+Only InnoDB:
 
-### [undo Log](/docs/CS/DB/MySQL/undolog.md)
-
-
-## Socket
-
-
-
-
-
-## pid
-
-
-
-## Table
-
-
-
-.frm
-
-
-
-## Data
-
-
+- [Redo Log](/docs/CS/DB/MySQL/redolog.md)
+- [undo Log](/docs/CS/DB/MySQL/undolog.md)
 
 ## InnoDB
-
-
 
 tablespace file : `ibdata`
 
 
+## Links
 
-
-
-
-
-
-
-
-
+- [MySQL](/docs/CS/DB/MySQL/MySQL.md)
