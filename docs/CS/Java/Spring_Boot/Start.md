@@ -1,4 +1,3 @@
-
 ## Entrance
 
 ```java
@@ -12,18 +11,13 @@ public class Application {
 }
 ```
 
+SpringApplication.run()
 
-
-1. new SpringApplication instance
-2. SpringApplication.run()
-
-```java
+```
 public static ConfigurableApplicationContext run(Class<?>[] primarySources, String[] args) {
    return new SpringApplication(primarySources).run(args);
 }
 ```
-
-
 
 ## Prepare
 
@@ -64,8 +58,6 @@ public @interface SpringBootConfiguration {}
 @Import(AutoConfigurationImportSelector.class)
 public @interface EnableAutoConfiguration {}
 ```
-
-
 
 In class AutoConfigurationImportSelector, **getAutoConfigurationEntry** load configurations.
 
@@ -144,6 +136,7 @@ private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoad
 ```
 
 ## new SpringApplication instance
+
 Create a new SpringApplication instance. The application context will load beans from the specified primary sources (see class-level documentation for details. The instance can be customized before calling run(String...).
 
 1. deduceFromClasspath
@@ -180,9 +173,7 @@ static WebApplicationType deduceFromClasspath() {
 }
 ```
 
-
-
-## run 
+## run
 
 1. getRunListeners and starting
 2. prepareEnvironment
@@ -196,9 +187,6 @@ static WebApplicationType deduceFromClasspath() {
 10. listeners running
 
 ```java
-/**
- * Run the Spring application, creating and refreshing a new
- */
 public ConfigurableApplicationContext run(String... args) {
    StopWatch stopWatch = new StopWatch();
    stopWatch.start();
@@ -219,12 +207,12 @@ public ConfigurableApplicationContext run(String... args) {
       prepareContext(context, environment, listeners, applicationArguments, printedBanner);
       refreshContext(context);
       afterRefresh(context, applicationArguments);
-     
+   
       stopWatch.stop();
       if (this.logStartupInfo) {
          new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), stopWatch);
       }
-     
+   
       listeners.started(context);
       callRunners(context, applicationArguments);
    }
@@ -244,20 +232,16 @@ public ConfigurableApplicationContext run(String... args) {
 }
 ```
 
-
-
 ### getRunListeners
 
-**createSpringFactoriesInstances**
 
 - `SpringFactoriesLoader.loadFactoryNames(type, classLoader)`
-  -  `Load the fully qualified class names of factory implementations of the given type from {@value #FACTORIES_RESOURCE_LOCATION}, using the given class loader.`
+  - `Load the fully qualified class names of factory implementations of the given type from {@value #FACTORIES_RESOURCE_LOCATION}, using the given class loader.`
 - `AnnotationAwareOrderComparator.sort(instances)`
   - `Sort the given list with a default AnnotationAwareOrderComparator. Optimized to skip sorting for lists with size 0 or 1, in order to avoid unnecessary array extraction.`
 
 **AnnotationAwareOrderComparator**
 *AnnotationAwareOrderComparator* is an extension of *OrderComparator* that supports Spring's org.springframework.core.Ordered interface as well as the @Order and @Priority annotations, with an order value provided by an Ordered instance overriding a statically defined annotation value (if any).
-
 
 ```java
 private SpringApplicationRunListeners getRunListeners(String[] args) {
@@ -265,7 +249,11 @@ private SpringApplicationRunListeners getRunListeners(String[] args) {
    return new SpringApplicationRunListeners(logger,
          getSpringFactoriesInstances(SpringApplicationRunListener.class, types, this, args));
 }
+```
 
+
+**createSpringFactoriesInstances**
+```
 private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes, Object... args) {
 		ClassLoader classLoader = getClassLoader();
 		// Use names and ensure unique to protect against duplicates
@@ -295,13 +283,9 @@ private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] 
 	}
 ```
 
-
-
 ### listeners.starting
 
 `new ApplicationStartingEvent() and invoke the given listener with the given event.`
-
-
 
 ### prepareEnvironment
 
@@ -334,13 +318,9 @@ private void configureIgnoreBeanInfo(ConfigurableEnvironment environment) {
 }
 ```
 
-
-
-
 ### createApplicationContext
 
 Strategy method used to create the *ApplicationContext*. By default this method will respect any explicitly set application context or application context class before falling back to a suitable default.
-
 
 ```java
 protected ConfigurableApplicationContext createApplicationContext() {
@@ -367,7 +347,6 @@ protected ConfigurableApplicationContext createApplicationContext() {
 }
 ```
 
-
 ```java
 /**
  * Sets the type of Spring {@link ApplicationContext} that will be created. If not
@@ -391,8 +370,6 @@ static WebApplicationType deduceFromApplicationContext(Class<?> applicationConte
 		return WebApplicationType.NONE;
 	}
 ```
-
-
 
 ### prepareContext
 
@@ -491,18 +468,13 @@ protected void load(ApplicationContext context, Object[] sources) {
 }
 ```
 
-
-
 ### listeners.contextLoaded
 
-`Add ApplicationListeners that will be notified on context events such as context refresh and context shutdown.
-Note that any ApplicationListener registered here will be applied on refresh if the context is not active yet, or on the fly with the current event multicaster in case of a context that is already active.`
-
-
+`Add ApplicationListeners that will be notified on context events such as context refresh and context shutdown. Note that any ApplicationListener registered here will be applied on refresh if the context is not active yet, or on the fly with the current event multicaster in case of a context that is already active.`
 
 ### refreshContext
 
-see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md?id=refresh), 
+see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md?id=refresh),
 
 create webServer in `onRefresh`
 
@@ -520,8 +492,6 @@ protected void onRefresh() {
 }
 ```
 
-
-
 Start webServer in `finishRefresh`
 
 ```java
@@ -537,13 +507,7 @@ class WebServerStartStopLifecycle implements SmartLifecycle {
 }
 ```
 
-
-
 `org.springframework.boot.web.server.WebServer` is a simple interface that represents a fully configured web server (for example Tomcat, Jetty, Netty). Allows the server to be started and stopped.
-
-
-
-
 
 ### afterRefresh
 
