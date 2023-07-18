@@ -1912,19 +1912,19 @@ protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBea
 
 
 ```java
-// AbstractApplicationContext#refresh()
-public void refresh() throws BeansException, IllegalStateException {
-    synchronized (this.startupShutdownMonitor) {
-        // Prepare this context for refreshing.
-        prepareRefresh();
+public class AbstractApplicationContext {
+   public void refresh() throws BeansException, IllegalStateException {
+      synchronized (this.startupShutdownMonitor) {
+         // Prepare this context for refreshing.
+         prepareRefresh();
 
-        // Tell the subclass to refresh the internal bean factory.
-        ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+         // Tell the subclass to refresh the internal bean factory.
+         ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
 
-        // Prepare the bean factory for use in this context.
-        prepareBeanFactory(beanFactory);
+         // Prepare the bean factory for use in this context.
+         prepareBeanFactory(beanFactory);
 
-        try {
+         try {
             // Allows post-processing of the bean factory in context subclasses.
             postProcessBeanFactory(beanFactory);
 
@@ -1951,9 +1951,7 @@ public void refresh() throws BeansException, IllegalStateException {
 
             // Last step: publish corresponding event.
             finishRefresh();
-        }
-
-        catch (BeansException ex) {
+         } catch (BeansException ex) {
 
             // Destroy already created singletons to avoid dangling resources.
             destroyBeans();
@@ -1963,14 +1961,13 @@ public void refresh() throws BeansException, IllegalStateException {
 
             // Propagate exception to caller.
             throw ex;
-        }
-
-        finally {
+         } finally {
             // Reset common introspection caches in Spring's core, since we
             // might not ever need metadata for singleton beans anymore...
             resetCommonCaches();
-        }
-    }
+         }
+      }
+   }
 }
 ```
 
@@ -2012,11 +2009,11 @@ protected void prepareRefresh() {
 
 Tell the subclass to refresh and return the internal bean factory.
 
-```java
+```
 protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
-		refreshBeanFactory();
-		return getBeanFactory();
-	}
+	refreshBeanFactory();
+	return getBeanFactory();
+}
 ```
 
 Subclasses must implement this method to perform the actual configuration load. The method is invoked by refresh() before any other initialization work.
@@ -2024,7 +2021,7 @@ Subclasses must implement this method to perform the actual configuration load. 
 A subclass will either create a new bean factory and hold a reference to it, or return a single BeanFactory instance that it holds. 
 In the latter case, it will usually throw an IllegalStateException if refreshing the context more than once.
 
-```java
+```
 // AbstractRefreshableApplicationContext::refreshBeanFactory()
 @Override
 protected final void refreshBeanFactory() throws BeansException {
@@ -2048,11 +2045,10 @@ protected final void refreshBeanFactory() throws BeansException {
 #### customizeBeanFactory
 
 Customize the internal bean factory used by this context. Called for each refresh() attempt.
-The default implementation applies this context's "*allowBeanDefinitionOverriding*" and "*allowCircularReferences*" settings, if specified. Can be overridden in subclasses to customize any of DefaultListableBeanFactory's settings.
+The default implementation applies this context's "*allowBeanDefinitionOverriding*" and "*allowCircularReferences*" settings, if specified. 
+Can be overridden in subclasses to customize any of DefaultListableBeanFactory's settings.
 
 #### loadBeanDefinitions
-
-##### BeanDefintion
 
 A *BeanDefinition* describes a bean instance, which has property values, constructor argument values, and further information supplied by concrete implementations.
 This is just a minimal interface: The main intention is to allow a `BeanFactoryPostProcessor` to introspect and modify property values and other bean metadata.
@@ -2064,160 +2060,58 @@ public interface BeanDefinition extends AttributeAccessor, BeanMetadataElement {
 
    String SCOPE_PROTOTYPE = ConfigurableBeanFactory.SCOPE_PROTOTYPE;
 
-   int ROLE_APPLICATION = 0;
-
-   int ROLE_SUPPORT = 1;
-
-   int ROLE_INFRASTRUCTURE = 2;
-
-
-   // Modifiable attributes
-
-   void setParentName(@Nullable String parentName);
-
-   @Nullable
-   String getParentName();
-
-   void setBeanClassName(@Nullable String beanClassName);
-
-   @Nullable
-   String getBeanClassName();
-
-   void setScope(@Nullable String scope);
-
-   @Nullable
-   String getScope();
-
-  
-   void setLazyInit(boolean lazyInit);
-
-   boolean isLazyInit();
-
-   void setDependsOn(@Nullable String... dependsOn);
-
-   @Nullable
-   String[] getDependsOn();
-
-   void setAutowireCandidate(boolean autowireCandidate);
-
-   boolean isAutowireCandidate();
-
-   void setPrimary(boolean primary);
-
-   boolean isPrimary();
-
-   void setFactoryBeanName(@Nullable String factoryBeanName);
-
-   @Nullable
-   String getFactoryBeanName();
-
-   void setFactoryMethodName(@Nullable String factoryMethodName);
-
-   /**
-    * Return a factory method, if any.
-    */
-   @Nullable
-   String getFactoryMethodName();
-
-   /**
-    * Return the constructor argument values for this bean.
-    * <p>The returned instance can be modified during bean factory post-processing.
-    * @return the ConstructorArgumentValues object (never {@code null})
-    */
-   ConstructorArgumentValues getConstructorArgumentValues();
-
-   default boolean hasConstructorArgumentValues() {
-      return !getConstructorArgumentValues().isEmpty();
-   }
-
-   MutablePropertyValues getPropertyValues();
-
-   default boolean hasPropertyValues() {
-      return !getPropertyValues().isEmpty();
-   }
-
-   void setInitMethodName(@Nullable String initMethodName);
-
-   @Nullable
-   String getInitMethodName();
-
-   void setDestroyMethodName(@Nullable String destroyMethodName);
-
-   @Nullable
-   String getDestroyMethodName();
-
-   void setRole(int role);
-
-   int getRole();
-
-   void setDescription(@Nullable String description);
-
-   @Nullable
-   String getDescription();
-
-
-   // Read-only attributes
-
-   ResolvableType getResolvableType();
-
    boolean isSingleton();
 
    boolean isPrototype();
 
    boolean isAbstract();
-
-   @Nullable
-   String getResourceDescription();
-
-   @Nullable
-   BeanDefinition getOriginatingBeanDefinition();
-
+   //...
 }
 ```
 
-**loadBeanDefinitions**
+
+Loads the bean definitions via an XmlBeanDefinitionReader.
 
 ```java
-// AbstractXmlApplicationContext
-// Loads the bean definitions via an XmlBeanDefinitionReader.
-@Override
-protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throws BeansException, IOException {
-   // Create a new XmlBeanDefinitionReader for the given BeanFactory.
-   XmlBeanDefinitionReader beanDefinitionReader = new XmlBeanDefinitionReader(beanFactory);
+public abstract class AbstractXmlApplicationContext extends AbstractRefreshableConfigApplicationContext {
+   @Override
+   protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throws BeansException, IOException {
+      XmlBeanDefinitionReader beanDefinitionReader = new XmlBeanDefinitionReader(beanFactory);
 
-   // Configure the bean definition reader with this context's
-   // resource loading environment.
-   beanDefinitionReader.setEnvironment(this.getEnvironment());
-   beanDefinitionReader.setResourceLoader(this);
-   beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
+      // Configure the bean definition reader with this context's resource loading environment.
+      beanDefinitionReader.setEnvironment(this.getEnvironment());
+      beanDefinitionReader.setResourceLoader(this);
+      beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
 
-   // Allow a subclass to provide custom initialization of the reader,
-   // then proceed with actually loading the bean definitions.
-   initBeanDefinitionReader(beanDefinitionReader);
-   loadBeanDefinitions(beanDefinitionReader);
-}
-
-protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws IOException {
-		String[] configLocations = getConfigLocations();
-		if (configLocations != null) {
-			for (String configLocation : configLocations) {
-				reader.loadBeanDefinitions(configLocation);
-			}
-		}
-	}
-```
-
-```java
-// AbstractBeanDefinitionReader
-@Override
-public int loadBeanDefinitions(Resource... resources) throws BeanDefinitionStoreException {
-   int count = 0;
-   for (Resource resource : resources) {
-      count += loadBeanDefinitions(resource);
+      // Allow a subclass to provide custom initialization of the reader, then proceed with actually loading the bean definitions.
+      initBeanDefinitionReader(beanDefinitionReader);
+      loadBeanDefinitions(beanDefinitionReader);
    }
-   return count;
-}
 
+   protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws IOException {
+      String[] configLocations = getConfigLocations();
+      if (configLocations != null) {
+         for (String configLocation : configLocations) {
+            reader.loadBeanDefinitions(configLocation);
+         }
+      }
+   }
+
+   protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws BeansException, IOException {
+      Resource[] configResources = getConfigResources();
+      if (configResources != null) {
+         reader.loadBeanDefinitions(configResources);
+      }
+      String[] configLocations = getConfigLocations();
+      if (configLocations != null) {
+         reader.loadBeanDefinitions(configLocations);
+      }
+   }
+}
+```
+##### doLoadBeanDefinitions
+
+```
 // XmlBeanDefinitionReader
 public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
 		Set<EncodedResource> currentResources = this.resourcesCurrentlyBeingLoaded.get();
@@ -2245,7 +2139,7 @@ public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefin
 	}
 ```
 
-```java
+```
 // XmlBeanDefinitionReader
 protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
   throws BeanDefinitionStoreException {
@@ -2270,10 +2164,10 @@ public void registerBeanDefinitions(Document doc, XmlReaderContext readerContext
 }
 ```
 
-```java
-/** BeanDefinitionReaderUtils#registerBeanDefinition
- * Register the given bean definition with the given bean factory.
- */
+BeanDefinitionReaderUtils#registerBeanDefinition
+Register the given bean definition with the given bean factory.
+
+```
 public static void registerBeanDefinition(
       BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
       throws BeanDefinitionStoreException {
@@ -2292,7 +2186,7 @@ public static void registerBeanDefinition(
 }
 ```
 
-```java
+```
 // DefaultListableBeanFactory
 @Override
 public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
@@ -2355,7 +2249,7 @@ public void registerBeanDefinition(String beanName, BeanDefinition beanDefinitio
 
 Configure the factory's standard context characteristics, such as the context's ClassLoader and post-processors.
 
-```java
+```
 protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
    // Tell the internal bean factory to use the context's class loader etc.
    beanFactory.setBeanClassLoader(getClassLoader());
