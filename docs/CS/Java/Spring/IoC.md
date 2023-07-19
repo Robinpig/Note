@@ -2109,138 +2109,141 @@ public abstract class AbstractXmlApplicationContext extends AbstractRefreshableC
    }
 }
 ```
-##### doLoadBeanDefinitions
+doLoadBeanDefinitions
 
-```
-// XmlBeanDefinitionReader
-public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
-		Set<EncodedResource> currentResources = this.resourcesCurrentlyBeingLoaded.get();
+```java
+public class XmlBeanDefinitionReader extends AbstractBeanDefinitionReader {
+   public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
+      Set<EncodedResource> currentResources = this.resourcesCurrentlyBeingLoaded.get();
 
-		if (!currentResources.add(encodedResource)) {
-			throw new BeanDefinitionStoreException(""");
-		}
-
-		try (InputStream inputStream = encodedResource.getResource().getInputStream()) {
-			InputSource inputSource = new InputSource(inputStream);
-			if (encodedResource.getEncoding() != null) {
-				inputSource.setEncoding(encodedResource.getEncoding());
-			}
-			return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
-		}
-		catch (IOException ex) {
-			throw new BeanDefinitionStoreException("");
-		}
-		finally {
-			currentResources.remove(encodedResource);
-			if (currentResources.isEmpty()) {
-				this.resourcesCurrentlyBeingLoaded.remove();
-			}
-		}
-	}
-```
-
-```
-// XmlBeanDefinitionReader
-protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
-  throws BeanDefinitionStoreException {
-  Document doc = doLoadDocument(inputSource, resource);
-  int count = registerBeanDefinitions(doc, resource);
-  return count;
-}
-
-public int registerBeanDefinitions(Document doc, Resource resource) throws BeanDefinitionStoreException {
-		BeanDefinitionDocumentReader documentReader = createBeanDefinitionDocumentReader();
-		int countBefore = getRegistry().getBeanDefinitionCount();
-		documentReader.registerBeanDefinitions(doc, createReaderContext(resource));
-		return getRegistry().getBeanDefinitionCount() - countBefore;
-	}
-
-// DefaultBeanDefinitionDocumentReader
-// Register each bean definition within the given root <beans/> element.
-@Override
-public void registerBeanDefinitions(Document doc, XmlReaderContext readerContext) {
-  this.readerContext = readerContext;
-  doRegisterBeanDefinitions(doc.getDocumentElement());
-}
-```
-
-BeanDefinitionReaderUtils#registerBeanDefinition
-Register the given bean definition with the given bean factory.
-
-```
-public static void registerBeanDefinition(
-      BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
-      throws BeanDefinitionStoreException {
-
-   // Register bean definition under primary name.
-   String beanName = definitionHolder.getBeanName();
-   registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
-
-   // Register aliases for bean name, if any.
-   String[] aliases = definitionHolder.getAliases();
-   if (aliases != null) {
-      for (String alias : aliases) {
-         registry.registerAlias(beanName, alias);
-      }
-   }
-}
-```
-
-```
-// DefaultListableBeanFactory
-@Override
-public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
-      throws BeanDefinitionStoreException {
-   if (beanDefinition instanceof AbstractBeanDefinition) {
-      try {
-         ((AbstractBeanDefinition) beanDefinition).validate();
-      }
-      catch (BeanDefinitionValidationException ex) {
-         throw new BeanDefinitionStoreException(beanDefinition.getResourceDescription(), beanName,
-               "Validation of bean definition failed", ex);
-      }
-   }
-
-   BeanDefinition existingDefinition = this.beanDefinitionMap.get(beanName);
-   if (existingDefinition != null) {
-      if (!isAllowBeanDefinitionOverriding()) {
-         throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
-      }
-      else if (existingDefinition.getRole() < beanDefinition.getRole()) {
-         // e.g. was ROLE_APPLICATION, now overriding with ROLE_SUPPORT or ROLE_INFRASTRUCTURE
-      }
-      else if (!beanDefinition.equals(existingDefinition)) {
-      }
-      else {
-      }
-      this.beanDefinitionMap.put(beanName, beanDefinition);
-   }
-   else {
-      if (hasBeanCreationStarted()) {
-         // Cannot modify startup-time collection elements anymore (for stable iteration)
-         synchronized (this.beanDefinitionMap) {
-            this.beanDefinitionMap.put(beanName, beanDefinition);
-            List<String> updatedDefinitions = new ArrayList<>(this.beanDefinitionNames.size() + 1);
-            updatedDefinitions.addAll(this.beanDefinitionNames);
-            updatedDefinitions.add(beanName);
-            this.beanDefinitionNames = updatedDefinitions;
-            removeManualSingletonName(beanName);
+      try (InputStream inputStream = encodedResource.getResource().getInputStream()) {
+         InputSource inputSource = new InputSource(inputStream);
+         if (encodedResource.getEncoding() != null) {
+            inputSource.setEncoding(encodedResource.getEncoding());
+         }
+         return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
+      } catch (IOException ex) {
+         throw new BeanDefinitionStoreException("");
+      } finally {
+         currentResources.remove(encodedResource);
+         if (currentResources.isEmpty()) {
+            this.resourcesCurrentlyBeingLoaded.remove();
          }
       }
-      else {
-         // Still in startup registration phase
-         this.beanDefinitionMap.put(beanName, beanDefinition);
-         this.beanDefinitionNames.add(beanName);
-         removeManualSingletonName(beanName);
-      }
-      this.frozenBeanDefinitionNames = null;
    }
 
-   if (existingDefinition != null || containsSingleton(beanName)) {
-      resetBeanDefinition(beanName);
+   protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
+           throws BeanDefinitionStoreException {
+      Document doc = doLoadDocument(inputSource, resource);
+      int count = registerBeanDefinitions(doc, resource);
+      return count;
    }
-   else if (isConfigurationFrozen()) {
-      clearByTypeCache();
+}
+```
+##### registerBeanDefinitions
+```java
+public class XmlBeanDefinitionReader extends AbstractBeanDefinitionReader {
+   public int registerBeanDefinitions(Document doc, Resource resource) throws BeanDefinitionStoreException {
+      BeanDefinitionDocumentReader documentReader = createBeanDefinitionDocumentReader();
+      int countBefore = getRegistry().getBeanDefinitionCount();
+      documentReader.registerBeanDefinitions(doc, createReaderContext(resource));
+      return getRegistry().getBeanDefinitionCount() - countBefore;
+   }
+}
+```
+
+DefaultBeanDefinitionDocumentReader#doRegisterBeanDefinitions -> parseBeanDefinitions -> parseDefaultElement -> processBeanDefinition ->
+BeanDefinitionReaderUtils#registerBeanDefinition
+
+```java
+public class DefaultBeanDefinitionDocumentReader implements BeanDefinitionDocumentReader {
+   protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
+      BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);
+      if (bdHolder != null) {
+         bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);
+         try {
+            // Register the final decorated instance.
+            BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());
+         }
+         catch (BeanDefinitionStoreException ex) {
+            getReaderContext().error("Failed to register bean definition with name '" + bdHolder.getBeanName() + "'", ele, ex);
+         }
+         // Send registration event.
+         getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
+      }
+   }
+}
+
+public abstract class BeanDefinitionReaderUtils {
+   public static void registerBeanDefinition(
+           BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
+           throws BeanDefinitionStoreException {
+
+      // Register bean definition under primary name.
+      String beanName = definitionHolder.getBeanName();
+      registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
+
+      // Register aliases for bean name, if any.
+      String[] aliases = definitionHolder.getAliases();
+      if (aliases != null) {
+         for (String alias : aliases) {
+            registry.registerAlias(beanName, alias);
+         }
+      }
+   }
+}
+```
+DefaultListableBeanFactory implement BeanDefinitionRegistry
+
+```java
+public class DefaultListableBeanFactory {
+
+   private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>(256);
+
+   private volatile List<String> beanDefinitionNames = new ArrayList<>(256);
+   
+   @Override
+   public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
+           throws BeanDefinitionStoreException {
+      if (beanDefinition instanceof AbstractBeanDefinition) {
+         try {
+            ((AbstractBeanDefinition) beanDefinition).validate();
+         } catch (BeanDefinitionValidationException ex) {
+//            throw new BeanDefinitionStoreException(beanDefinition.getResourceDescription(), beanName, "Validation of bean definition failed", ex);
+         }
+      }
+
+      BeanDefinition existingDefinition = this.beanDefinitionMap.get(beanName);
+      if (existingDefinition != null) {
+         if (!isAllowBeanDefinitionOverriding()) {
+            throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
+         }
+         this.beanDefinitionMap.put(beanName, beanDefinition);
+      } else {
+         if (hasBeanCreationStarted()) {
+            // Cannot modify startup-time collection elements anymore (for stable iteration)
+            synchronized (this.beanDefinitionMap) {
+               this.beanDefinitionMap.put(beanName, beanDefinition);
+               List<String> updatedDefinitions = new ArrayList<>(this.beanDefinitionNames.size() + 1);
+               updatedDefinitions.addAll(this.beanDefinitionNames);
+               updatedDefinitions.add(beanName);
+               this.beanDefinitionNames = updatedDefinitions;
+               removeManualSingletonName(beanName);
+            }
+         } else {
+            // Still in startup registration phase
+            this.beanDefinitionMap.put(beanName, beanDefinition);
+            this.beanDefinitionNames.add(beanName);
+            removeManualSingletonName(beanName);
+         }
+         this.frozenBeanDefinitionNames = null;
+      }
+
+      if (existingDefinition != null || containsSingleton(beanName)) {
+         resetBeanDefinition(beanName);
+      } else if (isConfigurationFrozen()) {
+         clearByTypeCache();
+      }
    }
 }
 ```
