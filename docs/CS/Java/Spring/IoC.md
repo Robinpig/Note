@@ -29,7 +29,7 @@ The table below summarizes our discussion.
 
 
 | Scenario                                                                 | @Resource | @Inject | @Autowired |
-| :------------------------------------------------------------------------- | ----------- | --------- | ------------ |
+| :----------------------------------------------------------------------- | --------- | ------- | ---------- |
 | Application-wide use of singletons through polymorphism                  | ✗        | ✔      | ✔         |
 | Fine-grained application behavior configuration through polymorphism     | ✔        | ✗      | ✗         |
 | Dependency injection should be handled solely by the Jakarta EE platform | ✔        | ✔      | ✗         |
@@ -59,9 +59,9 @@ In Spring, the objects that form the backbone of your application and that are m
 Beans, and the dependencies among them, are reflected in the configuration metadata used by a container.**
 
 > ![Note]
-> 
+>
 > Typically, we define service layer objects, data access objects (DAOs), presentation objects such as Struts `Action` instances, infrastructure objects such as Hibernate `SessionFactories`, JMS `Queues`, and so forth.
-Typically, one does not configure fine-grained domain objects in the container, because it is usually the responsibility of DAOs and business logic to create and load domain objects.
+> Typically, one does not configure fine-grained domain objects in the container, because it is usually the responsibility of DAOs and business logic to create and load domain objects.
 
 ### BeanFactory
 
@@ -178,6 +178,759 @@ public interface FactoryBean<T> {
 }
 
 ```
+
+## refresh
+
+```java
+public class AbstractApplicationContext {
+   public void refresh() throws BeansException, IllegalStateException {
+      synchronized (this.startupShutdownMonitor) {
+         // Prepare this context for refreshing.
+         prepareRefresh();
+
+         // Tell the subclass to refresh the internal bean factory.
+         ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
+
+         // Prepare the bean factory for use in this context.
+         prepareBeanFactory(beanFactory);
+
+         try {
+            // Allows post-processing of the bean factory in context subclasses.
+            postProcessBeanFactory(beanFactory);
+
+            // Invoke factory processors registered as beans in the context.
+            invokeBeanFactoryPostProcessors(beanFactory);
+
+            // Register bean processors that intercept bean creation.
+            registerBeanPostProcessors(beanFactory);
+
+            // Initialize message source for this context.
+            initMessageSource();
+
+            // Initialize event multicaster for this context.
+            initApplicationEventMulticaster();
+
+            // Initialize other special beans in specific context subclasses.
+            onRefresh();
+
+            // Check for listener beans and register them.
+            registerListeners();
+
+            // Instantiate all remaining (non-lazy-init) singletons.
+            finishBeanFactoryInitialization(beanFactory);
+
+            // Last step: publish corresponding event.
+            finishRefresh();
+         } catch (BeansException ex) {
+
+            // Destroy already created singletons to avoid dangling resources.
+            destroyBeans();
+
+            // Reset 'active' flag.
+            cancelRefresh(ex);
+
+            // Propagate exception to caller.
+            throw ex;
+         } finally {
+            // Reset common introspection caches in Spring's core, since we
+            // might not ever need metadata for singleton beans anymore...
+            resetCommonCaches();
+         }
+      }
+   }
+}
+```
+
+### prepareRefresh
+
+Prepare this context for refreshing, setting its startup date and active flag as well as performing any initialization of property sources.
+
+```java
+protected void prepareRefresh() {
+   // Switch to active.
+   this.startupDate = System.currentTimeMillis();
+   this.closed.set(false);
+   this.active.set(true);
+
+   // Initialize any placeholder property sources in the context environment.
+   initPropertySources();
+
+   // Validate that all properties marked as required are resolvable:
+   // see ConfigurablePropertyResolver#setRequiredProperties
+   getEnvironment().validateRequiredProperties();
+
+   // Store pre-refresh ApplicationListeners...
+   if (this.earlyApplicationListeners == null) {
+      this.earlyApplicationListeners = new LinkedHashSet<>(this.applicationListeners);
+   }
+   else {
+      // Reset local application listeners to pre-refresh state.
+      this.applicationListeners.clear();
+      this.applicationListeners.addAll(this.earlyApplicationListeners);
+   }
+
+   // Allow for the collection of early ApplicationEvents,
+   // to be published once the multicaster is available...
+   this.earlyApplicationEvents = new LinkedHashSet<>();
+}
+```
+
+### obtainFreshBeanFactory
+
+Tell the subclass to refresh and return the internal bean factory.
+
+```
+protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
+	refreshBeanFactory();
+	return getBeanFactory();
+}
+```
+
+Subclasses must implement this method to perform the actual configuration load. The method is invoked by refresh() before any other initialization work.
+
+A subclass will either create a new bean factory and hold a reference to it, or return a single BeanFactory instance that it holds.
+In the latter case, it will usually throw an IllegalStateException if refreshing the context more than once.
+
+```
+// AbstractRefreshableApplicationContext::refreshBeanFactory()
+@Override
+protected final void refreshBeanFactory() throws BeansException {
+   if (hasBeanFactory()) {
+      destroyBeans();
+      closeBeanFactory();
+   }
+   try {
+      DefaultListableBeanFactory beanFactory = createBeanFactory();
+      beanFactory.setSerializationId(getId());
+      customizeBeanFactory(beanFactory);
+      loadBeanDefinitions(beanFactory);
+      this.beanFactory = beanFactory;
+   }
+   catch (IOException ex) {
+      throw new ApplicationContextException("");
+   }
+}
+```
+
+#### customizeBeanFactory
+
+Customize the internal bean factory used by this context. Called for each refresh() attempt.
+The default implementation applies this context's "*allowBeanDefinitionOverriding*" and "*allowCircularReferences*" settings, if specified.
+Can be overridden in subclasses to customize any of DefaultListableBeanFactory's settings.
+
+#### loadBeanDefinitions
+
+A *BeanDefinition* describes a bean instance, which has property values, constructor argument values, and further information supplied by concrete implementations.
+This is just a minimal interface: The main intention is to allow a `BeanFactoryPostProcessor` to introspect and modify property values and other bean metadata.
+
+```java
+public interface BeanDefinition extends AttributeAccessor, BeanMetadataElement {
+
+   String SCOPE_SINGLETON = ConfigurableBeanFactory.SCOPE_SINGLETON;
+
+   String SCOPE_PROTOTYPE = ConfigurableBeanFactory.SCOPE_PROTOTYPE;
+
+   boolean isSingleton();
+
+   boolean isPrototype();
+
+   boolean isAbstract();
+   //...
+}
+```
+
+Loads the bean definitions via an XmlBeanDefinitionReader.
+
+```java
+public abstract class AbstractXmlApplicationContext extends AbstractRefreshableConfigApplicationContext {
+   @Override
+   protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throws BeansException, IOException {
+      XmlBeanDefinitionReader beanDefinitionReader = new XmlBeanDefinitionReader(beanFactory);
+
+      // Configure the bean definition reader with this context's resource loading environment.
+      beanDefinitionReader.setEnvironment(this.getEnvironment());
+      beanDefinitionReader.setResourceLoader(this);
+      beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
+
+      // Allow a subclass to provide custom initialization of the reader, then proceed with actually loading the bean definitions.
+      initBeanDefinitionReader(beanDefinitionReader);
+      loadBeanDefinitions(beanDefinitionReader);
+   }
+
+   protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws IOException {
+      String[] configLocations = getConfigLocations();
+      if (configLocations != null) {
+         for (String configLocation : configLocations) {
+            reader.loadBeanDefinitions(configLocation);
+         }
+      }
+   }
+
+   protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws BeansException, IOException {
+      Resource[] configResources = getConfigResources();
+      if (configResources != null) {
+         reader.loadBeanDefinitions(configResources);
+      }
+      String[] configLocations = getConfigLocations();
+      if (configLocations != null) {
+         reader.loadBeanDefinitions(configLocations);
+      }
+   }
+}
+```
+
+doLoadBeanDefinitions
+
+```java
+public class XmlBeanDefinitionReader extends AbstractBeanDefinitionReader {
+   public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
+      Set<EncodedResource> currentResources = this.resourcesCurrentlyBeingLoaded.get();
+
+      try (InputStream inputStream = encodedResource.getResource().getInputStream()) {
+         InputSource inputSource = new InputSource(inputStream);
+         if (encodedResource.getEncoding() != null) {
+            inputSource.setEncoding(encodedResource.getEncoding());
+         }
+         return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
+      } catch (IOException ex) {
+         throw new BeanDefinitionStoreException("");
+      } finally {
+         currentResources.remove(encodedResource);
+         if (currentResources.isEmpty()) {
+            this.resourcesCurrentlyBeingLoaded.remove();
+         }
+      }
+   }
+
+   protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
+           throws BeanDefinitionStoreException {
+      Document doc = doLoadDocument(inputSource, resource);
+      int count = registerBeanDefinitions(doc, resource);
+      return count;
+   }
+}
+```
+
+##### registerBeanDefinitions
+
+```java
+public class XmlBeanDefinitionReader extends AbstractBeanDefinitionReader {
+   public int registerBeanDefinitions(Document doc, Resource resource) throws BeanDefinitionStoreException {
+      BeanDefinitionDocumentReader documentReader = createBeanDefinitionDocumentReader();
+      int countBefore = getRegistry().getBeanDefinitionCount();
+      documentReader.registerBeanDefinitions(doc, createReaderContext(resource));
+      return getRegistry().getBeanDefinitionCount() - countBefore;
+   }
+}
+```
+
+DefaultBeanDefinitionDocumentReader#doRegisterBeanDefinitions -> parseBeanDefinitions -> parseDefaultElement -> processBeanDefinition ->
+BeanDefinitionReaderUtils#registerBeanDefinition
+
+```java
+public class DefaultBeanDefinitionDocumentReader implements BeanDefinitionDocumentReader {
+   protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
+      BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);
+      if (bdHolder != null) {
+         bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);
+         try {
+            // Register the final decorated instance.
+            BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());
+         }
+         catch (BeanDefinitionStoreException ex) {
+            getReaderContext().error("Failed to register bean definition with name '" + bdHolder.getBeanName() + "'", ele, ex);
+         }
+         // Send registration event.
+         getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
+      }
+   }
+}
+
+public abstract class BeanDefinitionReaderUtils {
+   public static void registerBeanDefinition(
+           BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
+           throws BeanDefinitionStoreException {
+
+      // Register bean definition under primary name.
+      String beanName = definitionHolder.getBeanName();
+      registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
+
+      // Register aliases for bean name, if any.
+      String[] aliases = definitionHolder.getAliases();
+      if (aliases != null) {
+         for (String alias : aliases) {
+            registry.registerAlias(beanName, alias);
+         }
+      }
+   }
+}
+```
+
+DefaultListableBeanFactory implement BeanDefinitionRegistry
+
+```java
+public class DefaultListableBeanFactory {
+
+   private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>(256);
+
+   private volatile List<String> beanDefinitionNames = new ArrayList<>(256);
+   
+   @Override
+   public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
+           throws BeanDefinitionStoreException {
+      if (beanDefinition instanceof AbstractBeanDefinition) {
+         try {
+            ((AbstractBeanDefinition) beanDefinition).validate();
+         } catch (BeanDefinitionValidationException ex) {
+//            throw new BeanDefinitionStoreException(beanDefinition.getResourceDescription(), beanName, "Validation of bean definition failed", ex);
+         }
+      }
+
+      BeanDefinition existingDefinition = this.beanDefinitionMap.get(beanName);
+      if (existingDefinition != null) {
+         if (!isAllowBeanDefinitionOverriding()) {
+            throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
+         }
+         this.beanDefinitionMap.put(beanName, beanDefinition);
+      } else {
+         if (hasBeanCreationStarted()) {
+            // Cannot modify startup-time collection elements anymore (for stable iteration)
+            synchronized (this.beanDefinitionMap) {
+               this.beanDefinitionMap.put(beanName, beanDefinition);
+               List<String> updatedDefinitions = new ArrayList<>(this.beanDefinitionNames.size() + 1);
+               updatedDefinitions.addAll(this.beanDefinitionNames);
+               updatedDefinitions.add(beanName);
+               this.beanDefinitionNames = updatedDefinitions;
+               removeManualSingletonName(beanName);
+            }
+         } else {
+            // Still in startup registration phase
+            this.beanDefinitionMap.put(beanName, beanDefinition);
+            this.beanDefinitionNames.add(beanName);
+            removeManualSingletonName(beanName);
+         }
+         this.frozenBeanDefinitionNames = null;
+      }
+
+      if (existingDefinition != null || containsSingleton(beanName)) {
+         resetBeanDefinition(beanName);
+      } else if (isConfigurationFrozen()) {
+         clearByTypeCache();
+      }
+   }
+}
+```
+
+### prepareBeanFactory
+
+Configure the factory's standard context characteristics, such as the context's ClassLoader and post-processors.
+
+```
+protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
+   // Tell the internal bean factory to use the context's class loader etc.
+   beanFactory.setBeanClassLoader(getClassLoader());
+   if (!shouldIgnoreSpel) {
+      beanFactory.setBeanExpressionResolver(new StandardBeanExpressionResolver(beanFactory.getBeanClassLoader()));
+   }
+   beanFactory.addPropertyEditorRegistrar(new ResourceEditorRegistrar(this, getEnvironment()));
+
+   // Configure the bean factory with context callbacks.
+   beanFactory.addBeanPostProcessor(new ApplicationContextAwareProcessor(this));
+   beanFactory.ignoreDependencyInterface(EnvironmentAware.class);
+   beanFactory.ignoreDependencyInterface(EmbeddedValueResolverAware.class);
+   beanFactory.ignoreDependencyInterface(ResourceLoaderAware.class);
+   beanFactory.ignoreDependencyInterface(ApplicationEventPublisherAware.class);
+   beanFactory.ignoreDependencyInterface(MessageSourceAware.class);
+   beanFactory.ignoreDependencyInterface(ApplicationContextAware.class);
+   beanFactory.ignoreDependencyInterface(ApplicationStartupAware.class);
+
+   // BeanFactory interface not registered as resolvable type in a plain factory.
+   // MessageSource registered (and found for autowiring) as a bean.
+   beanFactory.registerResolvableDependency(BeanFactory.class, beanFactory);
+   beanFactory.registerResolvableDependency(ResourceLoader.class, this);
+   beanFactory.registerResolvableDependency(ApplicationEventPublisher.class, this);
+   beanFactory.registerResolvableDependency(ApplicationContext.class, this);
+
+   // Register early post-processor for detecting inner beans as ApplicationListeners.
+   beanFactory.addBeanPostProcessor(new ApplicationListenerDetector(this));
+
+   // Detect a LoadTimeWeaver and prepare for weaving, if found.
+   if (!NativeDetector.inNativeImage() && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
+      beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
+      // Set a temporary ClassLoader for type matching.
+      beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
+   }
+
+   // Register default environment beans.
+   if (!beanFactory.containsLocalBean(ENVIRONMENT_BEAN_NAME)) {
+      beanFactory.registerSingleton(ENVIRONMENT_BEAN_NAME, getEnvironment());
+   }
+   if (!beanFactory.containsLocalBean(SYSTEM_PROPERTIES_BEAN_NAME)) {
+      beanFactory.registerSingleton(SYSTEM_PROPERTIES_BEAN_NAME, getEnvironment().getSystemProperties());
+   }
+   if (!beanFactory.containsLocalBean(SYSTEM_ENVIRONMENT_BEAN_NAME)) {
+      beanFactory.registerSingleton(SYSTEM_ENVIRONMENT_BEAN_NAME, getEnvironment().getSystemEnvironment());
+   }
+   if (!beanFactory.containsLocalBean(APPLICATION_STARTUP_BEAN_NAME)) {
+      beanFactory.registerSingleton(APPLICATION_STARTUP_BEAN_NAME, getApplicationStartup());
+   }
+}
+```
+
+### BeanFactoryPostProcessor
+
+```
+// AbstractApplicationContext
+protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
+		PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors());
+
+		// Detect a LoadTimeWeaver and prepare for weaving, if found in the meantime
+		// (e.g. through an @Bean method registered by ConfigurationClassPostProcessor)
+		if (beanFactory.getTempClassLoader() == null && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
+			beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
+			beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
+		}
+	}
+```
+
+Implementations of BeanDefinitionRegistryPostProcessor:
+
+- ConfigurationClassPostProcessor
+- DubboAutoConfiguration
+- MyBatis MapperScannerConfigurer
+
+```java
+
+	public static void invokeBeanFactoryPostProcessors(
+			ConfigurableListableBeanFactory beanFactory, List<BeanFactoryPostProcessor> beanFactoryPostProcessors) {
+
+		// Invoke BeanDefinitionRegistryPostProcessors first, if any.
+		Set<String> processedBeans = new HashSet<>();
+
+		if (beanFactory instanceof BeanDefinitionRegistry) {
+			BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
+			List<BeanFactoryPostProcessor> regularPostProcessors = new ArrayList<>();
+			List<BeanDefinitionRegistryPostProcessor> registryProcessors = new ArrayList<>();
+
+			for (BeanFactoryPostProcessor postProcessor : beanFactoryPostProcessors) {
+				if (postProcessor instanceof BeanDefinitionRegistryPostProcessor) {
+					BeanDefinitionRegistryPostProcessor registryProcessor =
+							(BeanDefinitionRegistryPostProcessor) postProcessor;
+					registryProcessor.postProcessBeanDefinitionRegistry(registry);
+					registryProcessors.add(registryProcessor);
+				}
+				else {
+					regularPostProcessors.add(postProcessor);
+				}
+			}
+
+			// Do not initialize FactoryBeans here: We need to leave all regular beans
+			// uninitialized to let the bean factory post-processors apply to them!
+			// Separate between BeanDefinitionRegistryPostProcessors that implement
+			// PriorityOrdered, Ordered, and the rest.
+			List<BeanDefinitionRegistryPostProcessor> currentRegistryProcessors = new ArrayList<>();
+
+			// First, invoke the BeanDefinitionRegistryPostProcessors that implement PriorityOrdered.
+			String[] postProcessorNames =
+					beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+			for (String ppName : postProcessorNames) {
+				if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
+					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+					processedBeans.add(ppName);
+				}
+			}
+			sortPostProcessors(currentRegistryProcessors, beanFactory);
+			registryProcessors.addAll(currentRegistryProcessors);
+			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+			currentRegistryProcessors.clear();
+
+			// Next, invoke the BeanDefinitionRegistryPostProcessors that implement Ordered.
+			postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+			for (String ppName : postProcessorNames) {
+				if (!processedBeans.contains(ppName) && beanFactory.isTypeMatch(ppName, Ordered.class)) {
+					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+					processedBeans.add(ppName);
+				}
+			}
+			sortPostProcessors(currentRegistryProcessors, beanFactory);
+			registryProcessors.addAll(currentRegistryProcessors);
+			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+			currentRegistryProcessors.clear();
+
+			// Finally, invoke all other BeanDefinitionRegistryPostProcessors until no further ones appear.
+			boolean reiterate = true;
+			while (reiterate) {
+				reiterate = false;
+				postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+				for (String ppName : postProcessorNames) {
+					if (!processedBeans.contains(ppName)) {
+						currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+						processedBeans.add(ppName);
+						reiterate = true;
+					}
+				}
+				sortPostProcessors(currentRegistryProcessors, beanFactory);
+				registryProcessors.addAll(currentRegistryProcessors);
+				invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+				currentRegistryProcessors.clear();
+			}
+
+			// Now, invoke the postProcessBeanFactory callback of all processors handled so far.
+			invokeBeanFactoryPostProcessors(registryProcessors, beanFactory);
+			invokeBeanFactoryPostProcessors(regularPostProcessors, beanFactory);
+		}
+
+		else {
+			// Invoke factory processors registered with the context instance.
+			invokeBeanFactoryPostProcessors(beanFactoryPostProcessors, beanFactory);
+		}
+
+		// Do not initialize FactoryBeans here: We need to leave all regular beans
+		// uninitialized to let the bean factory post-processors apply to them!
+		String[] postProcessorNames =
+				beanFactory.getBeanNamesForType(BeanFactoryPostProcessor.class, true, false);
+
+		// Separate between BeanFactoryPostProcessors that implement PriorityOrdered,
+		// Ordered, and the rest.
+		List<BeanFactoryPostProcessor> priorityOrderedPostProcessors = new ArrayList<>();
+		List<String> orderedPostProcessorNames = new ArrayList<>();
+		List<String> nonOrderedPostProcessorNames = new ArrayList<>();
+		for (String ppName : postProcessorNames) {
+			if (processedBeans.contains(ppName)) {
+				// skip - already processed in first phase above
+			}
+			else if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
+				priorityOrderedPostProcessors.add(beanFactory.getBean(ppName, BeanFactoryPostProcessor.class));
+			}
+			else if (beanFactory.isTypeMatch(ppName, Ordered.class)) {
+				orderedPostProcessorNames.add(ppName);
+			}
+			else {
+				nonOrderedPostProcessorNames.add(ppName);
+			}
+		}
+
+		// First, invoke the BeanFactoryPostProcessors that implement PriorityOrdered.
+		sortPostProcessors(priorityOrderedPostProcessors, beanFactory);
+		invokeBeanFactoryPostProcessors(priorityOrderedPostProcessors, beanFactory);
+
+		// Next, invoke the BeanFactoryPostProcessors that implement Ordered.
+		List<BeanFactoryPostProcessor> orderedPostProcessors = new ArrayList<>(orderedPostProcessorNames.size());
+		for (String postProcessorName : orderedPostProcessorNames) {
+			orderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
+		}
+		sortPostProcessors(orderedPostProcessors, beanFactory);
+		invokeBeanFactoryPostProcessors(orderedPostProcessors, beanFactory);
+
+		// Finally, invoke all other BeanFactoryPostProcessors.
+		List<BeanFactoryPostProcessor> nonOrderedPostProcessors = new ArrayList<>(nonOrderedPostProcessorNames.size());
+		for (String postProcessorName : nonOrderedPostProcessorNames) {
+			nonOrderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
+		}
+		invokeBeanFactoryPostProcessors(nonOrderedPostProcessors, beanFactory);
+
+		// Clear cached merged bean definitions since the post-processors might have
+		// modified the original metadata, e.g. replacing placeholders in values...
+		beanFactory.clearMetadataCache();
+	}
+```
+
+```java
+@FunctionalInterface
+public interface BeanFactoryPostProcessor {
+
+	void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException;
+
+}
+```
+
+### onRefresh
+
+### finishBeanFactoryInitialization
+
+lazy-init false in refresh()->finishBeanFactoryInitialization
+
+```
+protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
+   // Initialize conversion service for this context.
+   if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
+         beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
+      beanFactory.setConversionService(
+            beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
+   }
+
+   if (!beanFactory.hasEmbeddedValueResolver()) {
+      beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
+   }
+
+   // Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
+   String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
+   for (String weaverAwareName : weaverAwareNames) {
+      getBean(weaverAwareName);
+   }
+
+   // Stop using the temporary ClassLoader for type matching.
+   beanFactory.setTempClassLoader(null);
+
+   // Allow for caching all bean definition metadata, not expecting further changes.
+   beanFactory.freezeConfiguration();
+
+   // Instantiate all remaining (non-lazy-init) singletons.
+   beanFactory.preInstantiateSingletons();
+}
+```
+
+### finishRefresh
+
+Finish the refresh of this context, invoking the LifecycleProcessor's `onRefresh()` method and publishing the `ContextRefreshedEvent`.
+
+```java
+protected void finishRefresh() {
+		// Clear context-level resource caches (such as ASM metadata from scanning).
+		clearResourceCaches();
+
+		// Initialize lifecycle processor for this context.
+		initLifecycleProcessor();
+
+		// Propagate refresh to lifecycle processor first.
+		getLifecycleProcessor().onRefresh();
+
+		// Publish the final event.
+		publishEvent(new ContextRefreshedEvent(this));
+
+		// Participate in LiveBeansView MBean, if active.
+		LiveBeansView.registerApplicationContext(this);
+	}
+```
+
+#### publishEvent
+
+Multicasts all events to all registered listeners, leaving it up to the listeners to ignore events that they are not interested in.
+Listeners will usually perform corresponding instanceof checks on the passed-in event object.
+
+**By default, all listeners are invoked in the calling thread.**
+This allows the danger of a rogue listener blocking the entire application, but adds minimal overhead.
+Specify an alternative task executor to have listeners executed in different threads, for example from a thread pool.
+
+```java
+public class SimpleApplicationEventMulticaster extends AbstractApplicationEventMulticaster {
+    public void multicastEvent(final ApplicationEvent event, @Nullable ResolvableType eventType) {
+        ResolvableType type = (eventType != null ? eventType : resolveDefaultEventType(event));
+        Executor executor = getTaskExecutor();
+        for (ApplicationListener<?> listener : getApplicationListeners(event, type)) {
+            if (executor != null) {
+                executor.execute(() -> invokeListener(listener, event));
+            } else {
+                invokeListener(listener, event);
+            }
+        }
+    }
+
+    private void doInvokeListener(ApplicationListener listener, ApplicationEvent event) {
+        try {
+            listener.onApplicationEvent(event);
+        }
+        catch (ClassCastException ex) {
+            String msg = ex.getMessage();
+            if (msg == null || matchesClassCastMessage(msg, event.getClass())) {
+                // Possibly a lambda-defined listener which we could not resolve the generic event type for
+                // -> let's suppress the exception and just log a debug message.
+                Log logger = LogFactory.getLog(getClass());
+                if (logger.isTraceEnabled()) {
+                    logger.trace("Non-matching event type for listener: " + listener, ex);
+                }
+            }
+            else {
+                throw ex;
+            }
+        }
+    }
+}
+```
+
+## Close
+
+Register a shutdown hook named SpringContextShutdownHook with the JVM runtime, closing this context on [JVM shutdown](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) unless it has already been closed at that time.
+
+Delegates to doClose() for the actual closing procedure.
+
+```java
+public abstract class AbstractApplicationContext extends DefaultResourceLoader implements ConfigurableApplicationContext {
+    @Override
+    public void registerShutdownHook() {
+        if (this.shutdownHook == null) {
+            // No shutdown hook registered yet.
+            this.shutdownHook = new Thread(SHUTDOWN_HOOK_THREAD_NAME) {
+                @Override
+                public void run() {
+                    synchronized (startupShutdownMonitor) {
+                        doClose();
+                    }
+                }
+            };
+            Runtime.getRuntime().addShutdownHook(this.shutdownHook);
+        }
+    }
+  
+    protected void doClose() {
+        // Check whether an actual close attempt is necessary...
+        if (this.active.get() && this.closed.compareAndSet(false, true)) {
+            LiveBeansView.unregisterApplicationContext(this);
+
+            try {
+                // Publish shutdown event.
+                publishEvent(new ContextClosedEvent(this));
+            } catch (Throwable ex) {
+                logger.warn("Exception thrown from ApplicationListener handling ContextClosedEvent", ex);
+            }
+
+            // Stop all Lifecycle beans, to avoid delays during individual destruction.
+            if (this.lifecycleProcessor != null) {
+                try {
+                    this.lifecycleProcessor.onClose();
+                } catch (Throwable ex) {
+                    logger.warn("Exception thrown from LifecycleProcessor on context close", ex);
+                }
+            }
+
+            // Destroy all cached singletons in the context's BeanFactory.
+            destroyBeans();
+
+            // Close the state of this context itself.
+            closeBeanFactory();
+
+            // Let subclasses do some final clean-up if they wish...
+            onClose();
+
+            // Reset local application listeners to pre-refresh state.
+            if (this.earlyApplicationListeners != null) {
+                this.applicationListeners.clear();
+                this.applicationListeners.addAll(this.earlyApplicationListeners);
+            }
+
+            // Switch to inactive.
+            this.active.set(false);
+        }
+    }
+}
+```
+
+## Bean Lifecycle
+
+- create
+- populate
+- init
+- using
+- destroy
+
+用户可声明Bean的init-method和destroy-method
+
+在调用Bean的初始化方法之前 会调用一系列的aware接口实现 把相关的BeanName BeanClassLoader  以及BeanFactoy注入到Bean中去
+
+对invokeInitMethods的调用   启动afterPropertiesSet需要Bean实现InitializingBean的接口  对应的初始化处理可以在InitializingBean接口的afterPropertiesSet方法中实现 这里同样是对Bean的一个回调
+
+Bean的销毁过程 首先对postProcessBeforeDestruction进行调用 然后调用Bean的destroy方法 最后是对Bean的自定义销毁方法的调用
+![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019114800284.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
 
 ## getBean
 
@@ -393,7 +1146,7 @@ See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
 2. allowCircularReferences
 3. isSingletonCurrentlyInCreation
 
-```java
+```
 // DefaultSingletonBeanRegistry is superClass of AbstractBeanFactory
  protected void addSingletonFactory(String beanName, ObjectFactory<?> singletonFactory) {
      Assert.notNull(singletonFactory, "Singleton factory must not be null");
@@ -409,13 +1162,13 @@ See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
 
 Obtain a reference for early access to the specified bean, typically for the purpose of resolving a circular reference.
 
-This callback gives post-processors a chance to expose a wrapper early - that is, before the target bean instance is fully initialized. 
-The exposed object should be equivalent to the what postProcessBeforeInitialization / postProcessAfterInitialization would expose otherwise. 
-Note that the object returned by this method will be used as bean reference unless the post-processor returns a different wrapper from said post-process callbacks. 
-In other words: Those post-process callbacks may either eventually expose the same reference or alternatively return the raw bean instance from those subsequent callbacks 
+This callback gives post-processors a chance to expose a wrapper early - that is, before the target bean instance is fully initialized.
+The exposed object should be equivalent to the what postProcessBeforeInitialization / postProcessAfterInitialization would expose otherwise.
+Note that the object returned by this method will be used as bean reference unless the post-processor returns a different wrapper from said post-process callbacks.
+In other words: Those post-process callbacks may either eventually expose the same reference or alternatively return the raw bean instance from those subsequent callbacks
 (if the wrapper for the affected bean has been built for a call to this method already, it will be exposes as final bean reference by default).
 
-```java
+```
 protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
 		Object exposedObject = bean;
 		if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
@@ -429,9 +1182,6 @@ protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, 
 		return exposedObject;
 	}
 ```
-
-
-
 
 proxy instance circular reference
 by checking different instance
@@ -457,11 +1207,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
          if (beanInstance instanceof NullBean) {
             return beanInstance;
          }
-       
+     
          if (!(beanInstance instanceof FactoryBean)) {
             throw new BeanIsNotAFactoryException(beanName, beanInstance.getClass());
          }
-       
+     
          return beanInstance;
       }
 
@@ -475,7 +1225,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
       } else {
          object = getCachedObjectForFactoryBean(beanName);
       }
-    
+  
       if (object == null) {
          // Return bean instance from factory.
          FactoryBean<?> factory = (FactoryBean<?>) beanInstance;
@@ -546,65 +1296,54 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 }
 ```
 
-##### SingletonCreation
-
-register the singleton as currently in creation.
-
-```java
-protected void beforeSingletonCreation(String beanName) {
-   if (!this.inCreationCheckExclusions.contains(beanName) && !this.singletonsCurrentlyInCreation.add(beanName)) {
-      throw new BeanCurrentlyInCreationException(beanName);
-   }
-}
-```
-
-marks the singleton as not in creation anymore.
-
-```java
-protected void afterSingletonCreation(String beanName) {
-   if (!this.inCreationCheckExclusions.contains(beanName) && !this.singletonsCurrentlyInCreation.remove(beanName)) {
-      throw new IllegalStateException("Singleton '" + beanName + "' isn't currently in creation");
-   }
-}
-```
-
 ##### postProcessObjectFromFactoryBean
 
 Post-process the given object that has been obtained from the FactoryBean.
 The resulting object will get exposed for bean references.
 
-The default implementation simply returns the given object as-is.
-Subclasses may override this, for example, to apply [post-processors](/docs/CS/Java/Spring/IoC.md?id=PostBean).
+- The default implementation simply returns the given object as-is.
+- Subclasses may override this, for example, to apply [post-processors](/docs/CS/Java/Spring/IoC.md?id=PostBean).
+
+<!-- tabs:start -->
+
+##### **applyBeanPostProcessors**
 
 ```java
-@Override
-protected Object postProcessObjectFromFactoryBean(Object object, String beanName) {
-   return applyBeanPostProcessorsAfterInitialization(object, beanName);
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
+   @Override
+   protected Object postProcessObjectFromFactoryBean(Object object, String beanName) {
+      return applyBeanPostProcessorsAfterInitialization(object, beanName);
+   }
+
+   @Override
+   public Object applyBeanPostProcessorsAfterInitialization(Object existingBean, String beanName) throws BeansException {
+
+      Object result = existingBean;
+      for (BeanPostProcessor processor : getBeanPostProcessors()) {
+         Object current = processor.postProcessAfterInitialization(result, beanName);
+         if (current == null) {
+            return result;
+         }
+         result = current;
+      }
+      return result;
+   }
 }
 ```
 
-#### postBean
+##### **default**
 
 ```java
-public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory
-        implements AutowireCapableBeanFactory {
-  
-  @Override
-  public Object applyBeanPostProcessorsAfterInitialization(Object existingBean, String beanName)
-          throws BeansException {
- 
-   Object result = existingBean;
-   for (BeanPostProcessor processor : getBeanPostProcessors()) {
-    Object current = processor.postProcessAfterInitialization(result, beanName);
-    if (current == null) {
-     return result;
-    }
-    result = current;
+public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanRegistry {
+   protected Object postProcessObjectFromFactoryBean(Object object, String beanName) throws BeansException {
+      return object;
    }
-   return result;
-  }
- }
+}
 ```
+
+<!-- tabs:end -->
+
+#### postBean
 
 ##### BeanPostProcessor
 
@@ -770,9 +1509,9 @@ public boolean isSingleton(String name) throws NoSuchBeanDefinitionException {
 
 1. createBeanInstance
 2. BeanDefinition PostProcessors
-2. Eagerly cache singletons to be able to resolve [circular references](/docs/CS/Java/Spring/IoC.md?id=circular-references)
-3. populateBean
-4. initializeBean
+3. Eagerly cache singletons to be able to resolve [circular references](/docs/CS/Java/Spring/IoC.md?id=circular-references)
+4. populateBean
+5. initializeBean
 
 ```java
 public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
@@ -859,7 +1598,6 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 1. resolveBeanClass
 2. obtainFromSupplier
 
-
 ```java
 protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd, @Nullable Object[] args) {
 		// Make sure bean class is actually resolved at this point.
@@ -941,6 +1679,8 @@ protected BeanWrapper instantiateBean(String beanName, RootBeanDefinition mbd) {
 	}
 ```
 
+Class
+
 ```java
 // SimpleInstantiationStrategy
 	@Override
@@ -978,6 +1718,8 @@ protected BeanWrapper instantiateBean(String beanName, RootBeanDefinition mbd) {
 		}
 	}
 ```
+
+Cglib
 
 ```java
 // CglibSubclassingInstantiationStrategy
@@ -1310,8 +2052,8 @@ private boolean isDependent(String beanName, String dependentBeanName, @Nullable
 
 Populate the bean instance in the given BeanWrapper with the property values from the bean definition.
 
-autowireByName
-autowireByType
+- autowireByName
+- autowireByType
 
 ```java
 public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
@@ -1868,7 +2610,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 ##### invokeInitMethods
 
-Give a bean a chance to react now all its properties are set, and a chance to know about its owning bean factory (this object). 
+Give a bean a chance to react now all its properties are set, and a chance to know about its owning bean factory (this object).
 This means checking whether the bean implements InitializingBean or defines a custom init method, and invoking the necessary callback(s) if it does.
 
 ```java
@@ -1904,768 +2646,6 @@ protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBea
 		}
 	}
 ```
-
-
-
-## refresh
-
-
-
-```java
-public class AbstractApplicationContext {
-   public void refresh() throws BeansException, IllegalStateException {
-      synchronized (this.startupShutdownMonitor) {
-         // Prepare this context for refreshing.
-         prepareRefresh();
-
-         // Tell the subclass to refresh the internal bean factory.
-         ConfigurableListableBeanFactory beanFactory = obtainFreshBeanFactory();
-
-         // Prepare the bean factory for use in this context.
-         prepareBeanFactory(beanFactory);
-
-         try {
-            // Allows post-processing of the bean factory in context subclasses.
-            postProcessBeanFactory(beanFactory);
-
-            // Invoke factory processors registered as beans in the context.
-            invokeBeanFactoryPostProcessors(beanFactory);
-
-            // Register bean processors that intercept bean creation.
-            registerBeanPostProcessors(beanFactory);
-
-            // Initialize message source for this context.
-            initMessageSource();
-
-            // Initialize event multicaster for this context.
-            initApplicationEventMulticaster();
-
-            // Initialize other special beans in specific context subclasses.
-            onRefresh();
-
-            // Check for listener beans and register them.
-            registerListeners();
-
-            // Instantiate all remaining (non-lazy-init) singletons.
-            finishBeanFactoryInitialization(beanFactory);
-
-            // Last step: publish corresponding event.
-            finishRefresh();
-         } catch (BeansException ex) {
-
-            // Destroy already created singletons to avoid dangling resources.
-            destroyBeans();
-
-            // Reset 'active' flag.
-            cancelRefresh(ex);
-
-            // Propagate exception to caller.
-            throw ex;
-         } finally {
-            // Reset common introspection caches in Spring's core, since we
-            // might not ever need metadata for singleton beans anymore...
-            resetCommonCaches();
-         }
-      }
-   }
-}
-```
-
-### prepareRefresh
-
-Prepare this context for refreshing, setting its startup date and active flag as well as performing any initialization of property sources.
-
-```java
-protected void prepareRefresh() {
-   // Switch to active.
-   this.startupDate = System.currentTimeMillis();
-   this.closed.set(false);
-   this.active.set(true);
-
-   // Initialize any placeholder property sources in the context environment.
-   initPropertySources();
-
-   // Validate that all properties marked as required are resolvable:
-   // see ConfigurablePropertyResolver#setRequiredProperties
-   getEnvironment().validateRequiredProperties();
-
-   // Store pre-refresh ApplicationListeners...
-   if (this.earlyApplicationListeners == null) {
-      this.earlyApplicationListeners = new LinkedHashSet<>(this.applicationListeners);
-   }
-   else {
-      // Reset local application listeners to pre-refresh state.
-      this.applicationListeners.clear();
-      this.applicationListeners.addAll(this.earlyApplicationListeners);
-   }
-
-   // Allow for the collection of early ApplicationEvents,
-   // to be published once the multicaster is available...
-   this.earlyApplicationEvents = new LinkedHashSet<>();
-}
-```
-
-### obtainFreshBeanFactory
-
-Tell the subclass to refresh and return the internal bean factory.
-
-```
-protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
-	refreshBeanFactory();
-	return getBeanFactory();
-}
-```
-
-Subclasses must implement this method to perform the actual configuration load. The method is invoked by refresh() before any other initialization work.
-
-A subclass will either create a new bean factory and hold a reference to it, or return a single BeanFactory instance that it holds. 
-In the latter case, it will usually throw an IllegalStateException if refreshing the context more than once.
-
-```
-// AbstractRefreshableApplicationContext::refreshBeanFactory()
-@Override
-protected final void refreshBeanFactory() throws BeansException {
-   if (hasBeanFactory()) {
-      destroyBeans();
-      closeBeanFactory();
-   }
-   try {
-      DefaultListableBeanFactory beanFactory = createBeanFactory();
-      beanFactory.setSerializationId(getId());
-      customizeBeanFactory(beanFactory);
-      loadBeanDefinitions(beanFactory);
-      this.beanFactory = beanFactory;
-   }
-   catch (IOException ex) {
-      throw new ApplicationContextException("");
-   }
-}
-```
-
-#### customizeBeanFactory
-
-Customize the internal bean factory used by this context. Called for each refresh() attempt.
-The default implementation applies this context's "*allowBeanDefinitionOverriding*" and "*allowCircularReferences*" settings, if specified. 
-Can be overridden in subclasses to customize any of DefaultListableBeanFactory's settings.
-
-#### loadBeanDefinitions
-
-A *BeanDefinition* describes a bean instance, which has property values, constructor argument values, and further information supplied by concrete implementations.
-This is just a minimal interface: The main intention is to allow a `BeanFactoryPostProcessor` to introspect and modify property values and other bean metadata.
-
-```java
-public interface BeanDefinition extends AttributeAccessor, BeanMetadataElement {
-
-   String SCOPE_SINGLETON = ConfigurableBeanFactory.SCOPE_SINGLETON;
-
-   String SCOPE_PROTOTYPE = ConfigurableBeanFactory.SCOPE_PROTOTYPE;
-
-   boolean isSingleton();
-
-   boolean isPrototype();
-
-   boolean isAbstract();
-   //...
-}
-```
-
-
-Loads the bean definitions via an XmlBeanDefinitionReader.
-
-```java
-public abstract class AbstractXmlApplicationContext extends AbstractRefreshableConfigApplicationContext {
-   @Override
-   protected void loadBeanDefinitions(DefaultListableBeanFactory beanFactory) throws BeansException, IOException {
-      XmlBeanDefinitionReader beanDefinitionReader = new XmlBeanDefinitionReader(beanFactory);
-
-      // Configure the bean definition reader with this context's resource loading environment.
-      beanDefinitionReader.setEnvironment(this.getEnvironment());
-      beanDefinitionReader.setResourceLoader(this);
-      beanDefinitionReader.setEntityResolver(new ResourceEntityResolver(this));
-
-      // Allow a subclass to provide custom initialization of the reader, then proceed with actually loading the bean definitions.
-      initBeanDefinitionReader(beanDefinitionReader);
-      loadBeanDefinitions(beanDefinitionReader);
-   }
-
-   protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws IOException {
-      String[] configLocations = getConfigLocations();
-      if (configLocations != null) {
-         for (String configLocation : configLocations) {
-            reader.loadBeanDefinitions(configLocation);
-         }
-      }
-   }
-
-   protected void loadBeanDefinitions(XmlBeanDefinitionReader reader) throws BeansException, IOException {
-      Resource[] configResources = getConfigResources();
-      if (configResources != null) {
-         reader.loadBeanDefinitions(configResources);
-      }
-      String[] configLocations = getConfigLocations();
-      if (configLocations != null) {
-         reader.loadBeanDefinitions(configLocations);
-      }
-   }
-}
-```
-doLoadBeanDefinitions
-
-```java
-public class XmlBeanDefinitionReader extends AbstractBeanDefinitionReader {
-   public int loadBeanDefinitions(EncodedResource encodedResource) throws BeanDefinitionStoreException {
-      Set<EncodedResource> currentResources = this.resourcesCurrentlyBeingLoaded.get();
-
-      try (InputStream inputStream = encodedResource.getResource().getInputStream()) {
-         InputSource inputSource = new InputSource(inputStream);
-         if (encodedResource.getEncoding() != null) {
-            inputSource.setEncoding(encodedResource.getEncoding());
-         }
-         return doLoadBeanDefinitions(inputSource, encodedResource.getResource());
-      } catch (IOException ex) {
-         throw new BeanDefinitionStoreException("");
-      } finally {
-         currentResources.remove(encodedResource);
-         if (currentResources.isEmpty()) {
-            this.resourcesCurrentlyBeingLoaded.remove();
-         }
-      }
-   }
-
-   protected int doLoadBeanDefinitions(InputSource inputSource, Resource resource)
-           throws BeanDefinitionStoreException {
-      Document doc = doLoadDocument(inputSource, resource);
-      int count = registerBeanDefinitions(doc, resource);
-      return count;
-   }
-}
-```
-##### registerBeanDefinitions
-```java
-public class XmlBeanDefinitionReader extends AbstractBeanDefinitionReader {
-   public int registerBeanDefinitions(Document doc, Resource resource) throws BeanDefinitionStoreException {
-      BeanDefinitionDocumentReader documentReader = createBeanDefinitionDocumentReader();
-      int countBefore = getRegistry().getBeanDefinitionCount();
-      documentReader.registerBeanDefinitions(doc, createReaderContext(resource));
-      return getRegistry().getBeanDefinitionCount() - countBefore;
-   }
-}
-```
-
-DefaultBeanDefinitionDocumentReader#doRegisterBeanDefinitions -> parseBeanDefinitions -> parseDefaultElement -> processBeanDefinition ->
-BeanDefinitionReaderUtils#registerBeanDefinition
-
-```java
-public class DefaultBeanDefinitionDocumentReader implements BeanDefinitionDocumentReader {
-   protected void processBeanDefinition(Element ele, BeanDefinitionParserDelegate delegate) {
-      BeanDefinitionHolder bdHolder = delegate.parseBeanDefinitionElement(ele);
-      if (bdHolder != null) {
-         bdHolder = delegate.decorateBeanDefinitionIfRequired(ele, bdHolder);
-         try {
-            // Register the final decorated instance.
-            BeanDefinitionReaderUtils.registerBeanDefinition(bdHolder, getReaderContext().getRegistry());
-         }
-         catch (BeanDefinitionStoreException ex) {
-            getReaderContext().error("Failed to register bean definition with name '" + bdHolder.getBeanName() + "'", ele, ex);
-         }
-         // Send registration event.
-         getReaderContext().fireComponentRegistered(new BeanComponentDefinition(bdHolder));
-      }
-   }
-}
-
-public abstract class BeanDefinitionReaderUtils {
-   public static void registerBeanDefinition(
-           BeanDefinitionHolder definitionHolder, BeanDefinitionRegistry registry)
-           throws BeanDefinitionStoreException {
-
-      // Register bean definition under primary name.
-      String beanName = definitionHolder.getBeanName();
-      registry.registerBeanDefinition(beanName, definitionHolder.getBeanDefinition());
-
-      // Register aliases for bean name, if any.
-      String[] aliases = definitionHolder.getAliases();
-      if (aliases != null) {
-         for (String alias : aliases) {
-            registry.registerAlias(beanName, alias);
-         }
-      }
-   }
-}
-```
-DefaultListableBeanFactory implement BeanDefinitionRegistry
-
-```java
-public class DefaultListableBeanFactory {
-
-   private final Map<String, BeanDefinition> beanDefinitionMap = new ConcurrentHashMap<>(256);
-
-   private volatile List<String> beanDefinitionNames = new ArrayList<>(256);
-   
-   @Override
-   public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition)
-           throws BeanDefinitionStoreException {
-      if (beanDefinition instanceof AbstractBeanDefinition) {
-         try {
-            ((AbstractBeanDefinition) beanDefinition).validate();
-         } catch (BeanDefinitionValidationException ex) {
-//            throw new BeanDefinitionStoreException(beanDefinition.getResourceDescription(), beanName, "Validation of bean definition failed", ex);
-         }
-      }
-
-      BeanDefinition existingDefinition = this.beanDefinitionMap.get(beanName);
-      if (existingDefinition != null) {
-         if (!isAllowBeanDefinitionOverriding()) {
-            throw new BeanDefinitionOverrideException(beanName, beanDefinition, existingDefinition);
-         }
-         this.beanDefinitionMap.put(beanName, beanDefinition);
-      } else {
-         if (hasBeanCreationStarted()) {
-            // Cannot modify startup-time collection elements anymore (for stable iteration)
-            synchronized (this.beanDefinitionMap) {
-               this.beanDefinitionMap.put(beanName, beanDefinition);
-               List<String> updatedDefinitions = new ArrayList<>(this.beanDefinitionNames.size() + 1);
-               updatedDefinitions.addAll(this.beanDefinitionNames);
-               updatedDefinitions.add(beanName);
-               this.beanDefinitionNames = updatedDefinitions;
-               removeManualSingletonName(beanName);
-            }
-         } else {
-            // Still in startup registration phase
-            this.beanDefinitionMap.put(beanName, beanDefinition);
-            this.beanDefinitionNames.add(beanName);
-            removeManualSingletonName(beanName);
-         }
-         this.frozenBeanDefinitionNames = null;
-      }
-
-      if (existingDefinition != null || containsSingleton(beanName)) {
-         resetBeanDefinition(beanName);
-      } else if (isConfigurationFrozen()) {
-         clearByTypeCache();
-      }
-   }
-}
-```
-
-### prepareBeanFactory
-
-Configure the factory's standard context characteristics, such as the context's ClassLoader and post-processors.
-
-```
-protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
-   // Tell the internal bean factory to use the context's class loader etc.
-   beanFactory.setBeanClassLoader(getClassLoader());
-   if (!shouldIgnoreSpel) {
-      beanFactory.setBeanExpressionResolver(new StandardBeanExpressionResolver(beanFactory.getBeanClassLoader()));
-   }
-   beanFactory.addPropertyEditorRegistrar(new ResourceEditorRegistrar(this, getEnvironment()));
-
-   // Configure the bean factory with context callbacks.
-   beanFactory.addBeanPostProcessor(new ApplicationContextAwareProcessor(this));
-   beanFactory.ignoreDependencyInterface(EnvironmentAware.class);
-   beanFactory.ignoreDependencyInterface(EmbeddedValueResolverAware.class);
-   beanFactory.ignoreDependencyInterface(ResourceLoaderAware.class);
-   beanFactory.ignoreDependencyInterface(ApplicationEventPublisherAware.class);
-   beanFactory.ignoreDependencyInterface(MessageSourceAware.class);
-   beanFactory.ignoreDependencyInterface(ApplicationContextAware.class);
-   beanFactory.ignoreDependencyInterface(ApplicationStartupAware.class);
-
-   // BeanFactory interface not registered as resolvable type in a plain factory.
-   // MessageSource registered (and found for autowiring) as a bean.
-   beanFactory.registerResolvableDependency(BeanFactory.class, beanFactory);
-   beanFactory.registerResolvableDependency(ResourceLoader.class, this);
-   beanFactory.registerResolvableDependency(ApplicationEventPublisher.class, this);
-   beanFactory.registerResolvableDependency(ApplicationContext.class, this);
-
-   // Register early post-processor for detecting inner beans as ApplicationListeners.
-   beanFactory.addBeanPostProcessor(new ApplicationListenerDetector(this));
-
-   // Detect a LoadTimeWeaver and prepare for weaving, if found.
-   if (!NativeDetector.inNativeImage() && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
-      beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
-      // Set a temporary ClassLoader for type matching.
-      beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
-   }
-
-   // Register default environment beans.
-   if (!beanFactory.containsLocalBean(ENVIRONMENT_BEAN_NAME)) {
-      beanFactory.registerSingleton(ENVIRONMENT_BEAN_NAME, getEnvironment());
-   }
-   if (!beanFactory.containsLocalBean(SYSTEM_PROPERTIES_BEAN_NAME)) {
-      beanFactory.registerSingleton(SYSTEM_PROPERTIES_BEAN_NAME, getEnvironment().getSystemProperties());
-   }
-   if (!beanFactory.containsLocalBean(SYSTEM_ENVIRONMENT_BEAN_NAME)) {
-      beanFactory.registerSingleton(SYSTEM_ENVIRONMENT_BEAN_NAME, getEnvironment().getSystemEnvironment());
-   }
-   if (!beanFactory.containsLocalBean(APPLICATION_STARTUP_BEAN_NAME)) {
-      beanFactory.registerSingleton(APPLICATION_STARTUP_BEAN_NAME, getApplicationStartup());
-   }
-}
-```
-
-### BeanFactoryPostProcessor
-
-```java
-// AbstractApplicationContext
-protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
-		PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors());
-
-		// Detect a LoadTimeWeaver and prepare for weaving, if found in the meantime
-		// (e.g. through an @Bean method registered by ConfigurationClassPostProcessor)
-		if (beanFactory.getTempClassLoader() == null && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
-			beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
-			beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
-		}
-	}
-```
-
-Implementations of BeanDefinitionRegistryPostProcessor:
-
-- ConfigurationClassPostProcessor
-- DubboAutoConfiguration
-- MyBatis MapperScannerConfigurer
-
-```java
-
-	public static void invokeBeanFactoryPostProcessors(
-			ConfigurableListableBeanFactory beanFactory, List<BeanFactoryPostProcessor> beanFactoryPostProcessors) {
-
-		// Invoke BeanDefinitionRegistryPostProcessors first, if any.
-		Set<String> processedBeans = new HashSet<>();
-
-		if (beanFactory instanceof BeanDefinitionRegistry) {
-			BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
-			List<BeanFactoryPostProcessor> regularPostProcessors = new ArrayList<>();
-			List<BeanDefinitionRegistryPostProcessor> registryProcessors = new ArrayList<>();
-
-			for (BeanFactoryPostProcessor postProcessor : beanFactoryPostProcessors) {
-				if (postProcessor instanceof BeanDefinitionRegistryPostProcessor) {
-					BeanDefinitionRegistryPostProcessor registryProcessor =
-							(BeanDefinitionRegistryPostProcessor) postProcessor;
-					registryProcessor.postProcessBeanDefinitionRegistry(registry);
-					registryProcessors.add(registryProcessor);
-				}
-				else {
-					regularPostProcessors.add(postProcessor);
-				}
-			}
-
-			// Do not initialize FactoryBeans here: We need to leave all regular beans
-			// uninitialized to let the bean factory post-processors apply to them!
-			// Separate between BeanDefinitionRegistryPostProcessors that implement
-			// PriorityOrdered, Ordered, and the rest.
-			List<BeanDefinitionRegistryPostProcessor> currentRegistryProcessors = new ArrayList<>();
-
-			// First, invoke the BeanDefinitionRegistryPostProcessors that implement PriorityOrdered.
-			String[] postProcessorNames =
-					beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
-			for (String ppName : postProcessorNames) {
-				if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
-					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
-					processedBeans.add(ppName);
-				}
-			}
-			sortPostProcessors(currentRegistryProcessors, beanFactory);
-			registryProcessors.addAll(currentRegistryProcessors);
-			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
-			currentRegistryProcessors.clear();
-
-			// Next, invoke the BeanDefinitionRegistryPostProcessors that implement Ordered.
-			postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
-			for (String ppName : postProcessorNames) {
-				if (!processedBeans.contains(ppName) && beanFactory.isTypeMatch(ppName, Ordered.class)) {
-					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
-					processedBeans.add(ppName);
-				}
-			}
-			sortPostProcessors(currentRegistryProcessors, beanFactory);
-			registryProcessors.addAll(currentRegistryProcessors);
-			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
-			currentRegistryProcessors.clear();
-
-			// Finally, invoke all other BeanDefinitionRegistryPostProcessors until no further ones appear.
-			boolean reiterate = true;
-			while (reiterate) {
-				reiterate = false;
-				postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
-				for (String ppName : postProcessorNames) {
-					if (!processedBeans.contains(ppName)) {
-						currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
-						processedBeans.add(ppName);
-						reiterate = true;
-					}
-				}
-				sortPostProcessors(currentRegistryProcessors, beanFactory);
-				registryProcessors.addAll(currentRegistryProcessors);
-				invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
-				currentRegistryProcessors.clear();
-			}
-
-			// Now, invoke the postProcessBeanFactory callback of all processors handled so far.
-			invokeBeanFactoryPostProcessors(registryProcessors, beanFactory);
-			invokeBeanFactoryPostProcessors(regularPostProcessors, beanFactory);
-		}
-
-		else {
-			// Invoke factory processors registered with the context instance.
-			invokeBeanFactoryPostProcessors(beanFactoryPostProcessors, beanFactory);
-		}
-
-		// Do not initialize FactoryBeans here: We need to leave all regular beans
-		// uninitialized to let the bean factory post-processors apply to them!
-		String[] postProcessorNames =
-				beanFactory.getBeanNamesForType(BeanFactoryPostProcessor.class, true, false);
-
-		// Separate between BeanFactoryPostProcessors that implement PriorityOrdered,
-		// Ordered, and the rest.
-		List<BeanFactoryPostProcessor> priorityOrderedPostProcessors = new ArrayList<>();
-		List<String> orderedPostProcessorNames = new ArrayList<>();
-		List<String> nonOrderedPostProcessorNames = new ArrayList<>();
-		for (String ppName : postProcessorNames) {
-			if (processedBeans.contains(ppName)) {
-				// skip - already processed in first phase above
-			}
-			else if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
-				priorityOrderedPostProcessors.add(beanFactory.getBean(ppName, BeanFactoryPostProcessor.class));
-			}
-			else if (beanFactory.isTypeMatch(ppName, Ordered.class)) {
-				orderedPostProcessorNames.add(ppName);
-			}
-			else {
-				nonOrderedPostProcessorNames.add(ppName);
-			}
-		}
-
-		// First, invoke the BeanFactoryPostProcessors that implement PriorityOrdered.
-		sortPostProcessors(priorityOrderedPostProcessors, beanFactory);
-		invokeBeanFactoryPostProcessors(priorityOrderedPostProcessors, beanFactory);
-
-		// Next, invoke the BeanFactoryPostProcessors that implement Ordered.
-		List<BeanFactoryPostProcessor> orderedPostProcessors = new ArrayList<>(orderedPostProcessorNames.size());
-		for (String postProcessorName : orderedPostProcessorNames) {
-			orderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
-		}
-		sortPostProcessors(orderedPostProcessors, beanFactory);
-		invokeBeanFactoryPostProcessors(orderedPostProcessors, beanFactory);
-
-		// Finally, invoke all other BeanFactoryPostProcessors.
-		List<BeanFactoryPostProcessor> nonOrderedPostProcessors = new ArrayList<>(nonOrderedPostProcessorNames.size());
-		for (String postProcessorName : nonOrderedPostProcessorNames) {
-			nonOrderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
-		}
-		invokeBeanFactoryPostProcessors(nonOrderedPostProcessors, beanFactory);
-
-		// Clear cached merged bean definitions since the post-processors might have
-		// modified the original metadata, e.g. replacing placeholders in values...
-		beanFactory.clearMetadataCache();
-	}
-```
-
-
-```java
-@FunctionalInterface
-public interface BeanFactoryPostProcessor {
-
-	void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException;
-
-}
-```
-
-### onRefresh
-
-### finishBeanFactoryInitialization
-
-lazy-init false in refresh()->finishBeanFactoryInitialization
-
-```java
-/**
- * Finish the initialization of this context's bean factory,
- * initializing all remaining singleton beans.
- */
-protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
-   // Initialize conversion service for this context.
-   if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
-         beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
-      beanFactory.setConversionService(
-            beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
-   }
-
-   // Register a default embedded value resolver if no BeanFactoryPostProcessor
-   // (such as a PropertySourcesPlaceholderConfigurer bean) registered any before:
-   // at this point, primarily for resolution in annotation attribute values.
-   if (!beanFactory.hasEmbeddedValueResolver()) {
-      beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
-   }
-
-   // Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
-   String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
-   for (String weaverAwareName : weaverAwareNames) {
-      getBean(weaverAwareName);
-   }
-
-   // Stop using the temporary ClassLoader for type matching.
-   beanFactory.setTempClassLoader(null);
-
-   // Allow for caching all bean definition metadata, not expecting further changes.
-   beanFactory.freezeConfiguration();
-
-   // Instantiate all remaining (non-lazy-init) singletons.
-   beanFactory.preInstantiateSingletons();
-}
-```
-
-### finishRefresh
-
-Finish the refresh of this context, invoking the LifecycleProcessor's `onRefresh()` method and publishing the `ContextRefreshedEvent`.
-
-```java
-protected void finishRefresh() {
-		// Clear context-level resource caches (such as ASM metadata from scanning).
-		clearResourceCaches();
-
-		// Initialize lifecycle processor for this context.
-		initLifecycleProcessor();
-
-		// Propagate refresh to lifecycle processor first.
-		getLifecycleProcessor().onRefresh();
-
-		// Publish the final event.
-		publishEvent(new ContextRefreshedEvent(this));
-
-		// Participate in LiveBeansView MBean, if active.
-		LiveBeansView.registerApplicationContext(this);
-	}
-```
-
-#### publishEvent
-
-Multicasts all events to all registered listeners, leaving it up to the listeners to ignore events that they are not interested in.
-Listeners will usually perform corresponding instanceof checks on the passed-in event object.
-
-**By default, all listeners are invoked in the calling thread.**
-This allows the danger of a rogue listener blocking the entire application, but adds minimal overhead.
-Specify an alternative task executor to have listeners executed in different threads, for example from a thread pool.
-
-```java
-public class SimpleApplicationEventMulticaster extends AbstractApplicationEventMulticaster {
-    public void multicastEvent(final ApplicationEvent event, @Nullable ResolvableType eventType) {
-        ResolvableType type = (eventType != null ? eventType : resolveDefaultEventType(event));
-        Executor executor = getTaskExecutor();
-        for (ApplicationListener<?> listener : getApplicationListeners(event, type)) {
-            if (executor != null) {
-                executor.execute(() -> invokeListener(listener, event));
-            } else {
-                invokeListener(listener, event);
-            }
-        }
-    }
-
-    private void doInvokeListener(ApplicationListener listener, ApplicationEvent event) {
-        try {
-            listener.onApplicationEvent(event);
-        }
-        catch (ClassCastException ex) {
-            String msg = ex.getMessage();
-            if (msg == null || matchesClassCastMessage(msg, event.getClass())) {
-                // Possibly a lambda-defined listener which we could not resolve the generic event type for
-                // -> let's suppress the exception and just log a debug message.
-                Log logger = LogFactory.getLog(getClass());
-                if (logger.isTraceEnabled()) {
-                    logger.trace("Non-matching event type for listener: " + listener, ex);
-                }
-            }
-            else {
-                throw ex;
-            }
-        }
-    }
-}
-```
-
-## Close
-
-Register a shutdown hook named SpringContextShutdownHook with the JVM runtime, closing this context on [JVM shutdown](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) unless it has already been closed at that time.
-
-Delegates to doClose() for the actual closing procedure.
-
-```java
-public abstract class AbstractApplicationContext extends DefaultResourceLoader implements ConfigurableApplicationContext {
-    @Override
-    public void registerShutdownHook() {
-        if (this.shutdownHook == null) {
-            // No shutdown hook registered yet.
-            this.shutdownHook = new Thread(SHUTDOWN_HOOK_THREAD_NAME) {
-                @Override
-                public void run() {
-                    synchronized (startupShutdownMonitor) {
-                        doClose();
-                    }
-                }
-            };
-            Runtime.getRuntime().addShutdownHook(this.shutdownHook);
-        }
-    }
-  
-    protected void doClose() {
-        // Check whether an actual close attempt is necessary...
-        if (this.active.get() && this.closed.compareAndSet(false, true)) {
-            LiveBeansView.unregisterApplicationContext(this);
-
-            try {
-                // Publish shutdown event.
-                publishEvent(new ContextClosedEvent(this));
-            } catch (Throwable ex) {
-                logger.warn("Exception thrown from ApplicationListener handling ContextClosedEvent", ex);
-            }
-
-            // Stop all Lifecycle beans, to avoid delays during individual destruction.
-            if (this.lifecycleProcessor != null) {
-                try {
-                    this.lifecycleProcessor.onClose();
-                } catch (Throwable ex) {
-                    logger.warn("Exception thrown from LifecycleProcessor on context close", ex);
-                }
-            }
-
-            // Destroy all cached singletons in the context's BeanFactory.
-            destroyBeans();
-
-            // Close the state of this context itself.
-            closeBeanFactory();
-
-            // Let subclasses do some final clean-up if they wish...
-            onClose();
-
-            // Reset local application listeners to pre-refresh state.
-            if (this.earlyApplicationListeners != null) {
-                this.applicationListeners.clear();
-                this.applicationListeners.addAll(this.earlyApplicationListeners);
-            }
-
-            // Switch to inactive.
-            this.active.set(false);
-        }
-    }
-}
-```
-
-## Bean Lifecycle
-
-- create
-- populate
-- init
-- using
-- destroy
-
-用户可声明Bean的init-method和destroy-method
-
-在调用Bean的初始化方法之前 会调用一系列的aware接口实现 把相关的BeanName BeanClassLoader  以及BeanFactoy注入到Bean中去
-
-对invokeInitMethods的调用   启动afterPropertiesSet需要Bean实现InitializingBean的接口  对应的初始化处理可以在InitializingBean接口的afterPropertiesSet方法中实现 这里同样是对Bean的一个回调
-
-Bean的销毁过程 首先对postProcessBeforeDestruction进行调用 然后调用Bean的destroy方法 最后是对Bean的自定义销毁方法的调用
-![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019114800284.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
 
 ## EventListener
 
@@ -2745,7 +2725,7 @@ Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBund
 
 
 |                | BeanFactory | ApplicationContext |
-| :--------------: | :-----------: | :------------------: |
+| :------------: | :---------: | :----------------: |
 |                |      -      |                    |
 |     Event     |      -      |                    |
 | ResourceLoader |      -      | multiple Resources |
