@@ -1,9 +1,16 @@
 ## Introduction
 
+Aspect-Oriented Programming (AOP) complements Object-Oriented Programming (OOP) by providing another way of thinking about program structure. 
+The key unit of modularity in OOP is the class, whereas in AOP the unit of modularity is the aspect. 
+Aspects enable the modularization of concerns such as transaction management that cut across multiple types and objects. (Such concerns are often termed crosscutting concerns in AOP literature.)
 
+One of the key components of Spring is the AOP framework. 
+While the Spring IoC container does not depend on AOP, meaning you do not need to use AOP if you don't want to, AOP complements Spring IoC to provide a very capable middleware solution.
 
-Aspect Oriented Programming
+AOP is used in the Spring Framework to:
 
+- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is declarative transaction management.
+- allow users to implement custom aspects, complementing their use of OOP with AOP.
 
 
 ### AOP Hierarchy
@@ -31,7 +38,6 @@ public class AppConfig {
 }
 
  public class FooService {
-  
        // various methods
    }
    @Aspect
@@ -49,25 +55,13 @@ public class AppConfig {
 
 
 ```java
-Target(ElementType.TYPE)
+@Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
 @Import(AspectJAutoProxyRegistrar.class)
 public @interface EnableAspectJAutoProxy {
-
-   /**
-    * Indicate whether subclass-based (CGLIB) proxies are to be created as opposed
-    * to standard Java interface-based proxies. The default is {@code false}.
-    */
    boolean proxyTargetClass() default false;
-
-   /**
-    * Indicate that the proxy should be exposed by the AOP framework as a ThreadLocal
-    * for retrieval via the AopContext class.
-    * Off by default, i.e. no guarantees that {@code AopContext} access will work.
-    */
    boolean exposeProxy() default false;
-
 }
 ```
 
@@ -228,6 +222,10 @@ public List<Advisor> findAdvisorBeans() {
 
 
 ## Create Proxy
+
+Spring AOP uses either JDK dynamic proxies or CGLIB to create the proxy for a given target object. (JDK dynamic proxies are preferred whenever you have a choice).
+
+
 
 ![](img/AnnotationAwareAspectJAutoProxyCreator.png)
 
@@ -1074,4 +1072,4 @@ set `spring.objenesis.ignore = true`  to invoke the constructor of the class, bu
 
 
 ## References
-1. [Spring AOP APIs](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#aop-api)
+1. [Aspect Oriented Programming with Spring](https://docs.spring.io/spring-framework/reference/core/aop.html)
