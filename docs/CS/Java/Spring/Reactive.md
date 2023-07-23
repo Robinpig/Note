@@ -2,7 +2,7 @@
 
 ## Introduction
 
-*Systems built as Reactive Systems are more flexible, loosely-coupled and [scalable](https://www.reactivemanifesto.org/glossary#Scalability). 
+*Systems built as Reactive Systems are more flexible, loosely-coupled and [scalable](https://www.reactivemanifesto.org/glossary#Scalability).
 This makes them easier to develop and amenable to change.
 They are significantly more tolerant of failure and when [failure](https://www.reactivemanifesto.org/glossary#Failure) does occur they meet it with elegance rather than disaster.
 Reactive Systems are highly responsive, giving [users](https://www.reactivemanifesto.org/glossary#User) effective interactive feedback.*
@@ -15,9 +15,6 @@ Reactive Systems are:
 2. Resilient
 3. Elastic
 4. Message Driven
-
-
-
 
 ## Links
 
