@@ -48,13 +48,32 @@ Spring AOP includes the following types of advice:
 
 
 Around advice is the most general kind of advice. Since Spring AOP, like AspectJ, provides a full range of advice types, we recommend that you use the least powerful advice type that can implement the required behavior. 
-For example, if you need only to update a cache with the return value of a method, you are better off implementing an after returning advice than an around advice, although an around advice can accomplish the same thing. Using the most specific advice type provides a simpler programming model with less potential for errors. For example, you do not need to invoke the method on the used for around advice, and, hence, you cannot fail to invoke it.proceed()JoinPoint
+For example, if you need only to update a cache with the return value of a method, you are better off implementing an after returning advice than an around advice, although an around advice can accomplish the same thing. 
+Using the most specific advice type provides a simpler programming model with less potential for errors. 
+For example, you do not need to invoke the method on the used for around advice, and, hence, you cannot fail to invoke it.proceed()JoinPoint
 
 All advice parameters are statically typed so that you work with advice parameters of the appropriate type (e.g. the type of the return value from a method execution) rather than arrays.Object
 
-The concept of join points matched by pointcuts is the key to AOP, which distinguishes it from older technologies offering only interception. Pointcuts enable advice to be targeted independently of the object-oriented hierarchy. For example, you can apply an around advice providing declarative transaction management to a set of methods that span multiple objects (such as all business operations in the service layer).
+The concept of join points matched by pointcuts is the key to AOP, which distinguishes it from older technologies offering only interception. 
+Pointcuts enable advice to be targeted independently of the object-oriented hierarchy. 
+For example, you can apply an around advice providing declarative transaction management to a set of methods that span multiple objects (such as all business operations in the service layer).
+
+
+
+```java
+public interface Pointcut {
+	ClassFilter getClassFilter();
+
+	MethodMatcher getMethodMatcher();
+
+	Pointcut TRUE = TruePointcut.INSTANCE;
+}
+```
+
+
 
 ### AOP Hierarchy
+
 
 ![](img/AOP.png)
 
@@ -137,7 +156,7 @@ class AspectJAutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 
 #### AnnotationAwareAspectJAutoProxyCreator
 
-```java
+```
 // AnnotationAwareAspectJAutoProxyCreator
 @Nullable
 private List<Pattern> includePatterns;
@@ -172,7 +191,7 @@ Processing of Spring Advisors follows the rules established in `org.springframew
 #### findEligibleAdvisors
 Find all eligible Advisors for auto-proxying this class.
 
-```java
+```
 // AbstractAdvisorAutoProxyCreator
 protected List<Advisor> findEligibleAdvisors(Class<?> beanClass, String beanName) {
    List<Advisor> candidateAdvisors = findCandidateAdvisors();
@@ -262,6 +281,199 @@ public List<Advisor> findAdvisorBeans() {
 
 
 
+## ProxyFactoryBean
+
+ProxyFactoryBean is a FactoryBean implementation that builds an AOP proxy based on beans in Spring BeanFactory.
+
+MethodInterceptors and Advisors are identified by a list of bean names in the current bean factory, specified through the "interceptorNames" property.
+The last entry in the list can be the name of a target bean or a TargetSource; however, it is normally preferable to use the "targetName"/"target"/"targetSource" properties instead.
+
+Return a proxy. Invoked when clients obtain beans from this factory bean. Create an instance of the AOP proxy to be returned by this factory.
+The instance will be cached for a singleton, and create on each call to getObject() for a proxy.
+
+```
+public Object getObject() throws BeansException {
+   initializeAdvisorChain();
+   if (isSingleton()) {
+      return getSingletonInstance();
+   }
+   else {
+      return newPrototypeInstance();
+   }
+}
+```
+### initializeAdvisorChain
+Create the advisor (interceptor) chain. Advisors that are sourced from a BeanFactory will be refreshed each time a new prototype instance is added.
+Interceptors added programmatically through the factory API are unaffected by such changes.
+
+```java
+public class ProxyFactoryBean extends ProxyCreatorSupport implements FactoryBean<Object>, BeanClassLoaderAware, BeanFactoryAware {
+  private synchronized void initializeAdvisorChain() throws AopConfigException, BeansException {
+    // return if advisorChainInitialized   
+
+    for (String name : this.interceptorNames) {
+      if (name.endsWith(GLOBAL_SUFFIX)) {
+        addGlobalAdvisors((ListableBeanFactory) this.beanFactory, name.substring(0, name.length() - GLOBAL_SUFFIX.length()));
+      } else {
+        Object advice;
+        if (this.singleton || this.beanFactory.isSingleton(name)) {
+          advice = this.beanFactory.getBean(name);
+        } else {
+          advice = new PrototypePlaceholderAdvisor(name);
+        }
+        addAdvisorOnChainCreation(advice);
+      }
+    }
+    this.advisorChainInitialized = true;
+  }
+}
+```
+
+
+### getSingletonInstance
+
+
+```
+private synchronized Object getSingletonInstance() {
+   if (this.singletonInstance == null) {
+      this.targetSource = freshTargetSource();
+      if (this.autodetectInterfaces && getProxiedInterfaces().length == 0 && !isProxyTargetClass()) {
+         // Rely on AOP infrastructure to tell us what interfaces to proxy.
+         Class<?> targetClass = getTargetClass();
+         if (targetClass == null) {
+            throw new FactoryBeanNotInitializedException("Cannot determine target class for proxy");
+         }
+         setInterfaces(ClassUtils.getAllInterfacesForClass(targetClass, this.proxyClassLoader));
+      }
+      // Initialize the shared singleton instance.
+      super.setFrozen(this.freezeProxy);
+      this.singletonInstance = getProxy(createAopProxy());
+   }
+   return this.singletonInstance;
+}
+```
+
+
+
+### ProxyFactory
+
+Create a new proxy according to the settings in this factory.
+Can be called repeatedly. Effect will vary if we've added or removed interfaces. 
+Can add and remove interceptors.
+Uses the given class loader (if necessary for proxy creation).
+
+```java
+public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
+  @Override
+  public AopProxy createAopProxy(AdvisedSupport config) throws AopConfigException {
+    if (config.isOptimize() || config.isProxyTargetClass() || hasNoUserSuppliedProxyInterfaces(config)) {
+      Class<?> targetClass = config.getTargetClass();
+      if (targetClass.isInterface() || Proxy.isProxyClass(targetClass) || ClassUtils.isLambdaClass(targetClass)) {
+        return new JdkDynamicAopProxy(config);
+      }
+      return new ObjenesisCglibAopProxy(config);
+    } else {
+      return new JdkDynamicAopProxy(config);
+    }
+  }
+}
+```
+
+
+<!-- tabs:start -->
+
+##### **JdkDynamicAopProxy**
+
+
+```java
+final class JdkDynamicAopProxy implements AopProxy, InvocationHandler, Serializable {
+  @Override
+  public Object getProxy(@Nullable ClassLoader classLoader) {
+    return Proxy.newProxyInstance(determineClassLoader(classLoader), this.proxiedInterfaces, this);
+  }
+}
+```
+
+
+
+##### **CglibAopProxy**
+
+```java
+class CglibAopProxy implements AopProxy, Serializable {
+  @Override
+  public Object getProxy() {
+    return buildProxy(null, false);
+  }
+
+  private Object buildProxy(@Nullable ClassLoader classLoader, boolean classOnly) {
+    try {
+      Class<?> rootClass = this.advised.getTargetClass();
+      Assert.state(rootClass != null, "Target class must be available for creating a CGLIB proxy");
+
+      Class<?> proxySuperClass = rootClass;
+      if (rootClass.getName().contains(ClassUtils.CGLIB_CLASS_SEPARATOR)) {
+        proxySuperClass = rootClass.getSuperclass();
+        Class<?>[] additionalInterfaces = rootClass.getInterfaces();
+        for (Class<?> additionalInterface : additionalInterfaces) {
+          this.advised.addInterface(additionalInterface);
+        }
+      }
+
+      // Validate the class, writing log messages as necessary.
+      validateClassIfNecessary(proxySuperClass, classLoader);
+
+      // Configure CGLIB Enhancer...
+      Enhancer enhancer = createEnhancer();
+      if (classLoader != null) {
+        enhancer.setClassLoader(classLoader);
+        if (classLoader instanceof SmartClassLoader smartClassLoader &&
+                smartClassLoader.isClassReloadable(proxySuperClass)) {
+          enhancer.setUseCache(false);
+        }
+      }
+      enhancer.setSuperclass(proxySuperClass);
+      enhancer.setInterfaces(AopProxyUtils.completeProxiedInterfaces(this.advised));
+      enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
+      enhancer.setAttemptLoad(true);
+      enhancer.setStrategy(new ClassLoaderAwareGeneratorStrategy(classLoader));
+
+      Callback[] callbacks = getCallbacks(rootClass);
+      Class<?>[] types = new Class<?>[callbacks.length];
+      for (int x = 0; x < types.length; x++) {
+        types[x] = callbacks[x].getClass();
+      }
+      // fixedInterceptorMap only populated at this point, after getCallbacks call above
+      ProxyCallbackFilter filter = new ProxyCallbackFilter(
+              this.advised.getConfigurationOnlyCopy(), this.fixedInterceptorMap, this.fixedInterceptorOffset);
+      enhancer.setCallbackFilter(filter);
+      enhancer.setCallbackTypes(types);
+
+      // Generate the proxy class and create a proxy instance.
+      // ProxyCallbackFilter has method introspection capability with Advisor access.
+      try {
+        return (classOnly ? createProxyClass(enhancer) : createProxyClassAndInstance(enhancer, callbacks));
+      } finally {
+        // Reduce ProxyCallbackFilter to key-only state for its class cache role
+        // in the CGLIB$CALLBACK_FILTER field, not leaking any Advisor state...
+        filter.advised.reduceToAdvisorKey();
+      }
+    } catch (CodeGenerationException | IllegalArgumentException ex) {
+      throw new AopConfigException("Could not generate CGLIB subclass of " + this.advised.getTargetClass() +
+              ": Common causes of this problem include using a final class or a non-visible class",
+              ex);
+    } catch (Throwable ex) {
+      // TargetSource.getTarget() failed
+      throw new AopConfigException("Unexpected AOP exception", ex);
+    }
+  }
+}
+```
+
+<!-- tabs:end -->
+
+
+
+
 ## Create Proxy
 
 Spring AOP uses either JDK dynamic proxies or CGLIB to create the proxy for a given target object. (JDK dynamic proxies are preferred whenever you have a choice).
@@ -341,7 +553,7 @@ Return whether the given bean is to be proxied, what additional advices (e.g. AO
 
 Create a proxy with the configured interceptors if the bean is identified as one to proxy by the subclass.
 
-```java
+```
 @Override
 public Object postProcessAfterInitialization(@Nullable Object bean, String beanName) {
    if (bean != null) {
@@ -358,7 +570,7 @@ public Object postProcessAfterInitialization(@Nullable Object bean, String beanN
 
 Wrap the given bean if necessary, i.e. if it is eligible for being proxied.
 
-```java
+```
 protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) {
    if (StringUtils.hasLength(beanName) && this.targetSourcedBeans.contains(beanName)) {
       return bean;
@@ -390,7 +602,7 @@ protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) 
 ### createProxy
 Create an AOP proxy for the given bean.
 
-```java
+```
 protected Object createProxy(Class<?> beanClass, @Nullable String beanName,
       @Nullable Object[] specificInterceptors, TargetSource targetSource) {
 
@@ -431,7 +643,7 @@ protected Object createProxy(Class<?> beanClass, @Nullable String beanName,
 #### buildAdvisors
 Determine the advisors for the given bean, including the specific interceptors as well as the common interceptor, all adapted to the Advisor interface.
 
-```java
+```
 protected Advisor[] buildAdvisors(@Nullable String beanName, @Nullable Object[] specificInterceptors) {
 		// Handle prototypes correctly...
 		Advisor[] commonInterceptors = resolveInterceptorNames();
@@ -468,291 +680,9 @@ protected Advisor[] buildAdvisors(@Nullable String beanName, @Nullable Object[] 
 ```
 
 
-### ProxyFactory
-
-Create a new proxy according to the settings in this factory.
-Can be called repeatedly. Effect will vary if we've added or removed interfaces. Can add and remove interceptors.
-Uses the given class loader (if necessary for proxy creation).
-
-```java
-// ProxyFactory
-public Object getProxy(@Nullable ClassLoader classLoader) {
-   return createAopProxy().getProxy(classLoader);
-}
-
-// DefaultAopProxyFactory
-@Override
-public AopProxy createAopProxy(AdvisedSupport config) throws AopConfigException {
-  if (!NativeDetector.inNativeImage() &&
-      (config.isOptimize() || config.isProxyTargetClass() || hasNoUserSuppliedProxyInterfaces(config))) {
-    Class<?> targetClass = config.getTargetClass();
-    if (targetClass == null) {
-      throw new AopConfigException("TargetSource cannot determine target class: " +
-                                   "Either an interface or a target is required for proxy creation.");
-    }
-    if (targetClass.isInterface() || Proxy.isProxyClass(targetClass)) {
-      return new JdkDynamicAopProxy(config);
-    }
-    return new ObjenesisCglibAopProxy(config);
-  }
-  else {
-    return new JdkDynamicAopProxy(config);
-  }
-}
-```
-
-
-
-### CglibAopProxy
-
-```java
-// CglibAopProxy
-@Override
-public Object getProxy(@Nullable ClassLoader classLoader) {
-   try {
-      Class<?> rootClass = this.advised.getTargetClass();
-      Assert.state(rootClass != null, "Target class must be available for creating a CGLIB proxy");
-
-      Class<?> proxySuperClass = rootClass;
-      if (rootClass.getName().contains(ClassUtils.CGLIB_CLASS_SEPARATOR)) {
-         proxySuperClass = rootClass.getSuperclass();
-         Class<?>[] additionalInterfaces = rootClass.getInterfaces();
-         for (Class<?> additionalInterface : additionalInterfaces) {
-            this.advised.addInterface(additionalInterface);
-         }
-      }
-
-      // Validate the class, writing log messages as necessary.
-      validateClassIfNecessary(proxySuperClass, classLoader);
-
-      // Configure CGLIB Enhancer...
-      Enhancer enhancer = createEnhancer();
-      if (classLoader != null) {
-         enhancer.setClassLoader(classLoader);
-         if (classLoader instanceof SmartClassLoader &&
-               ((SmartClassLoader) classLoader).isClassReloadable(proxySuperClass)) {
-            enhancer.setUseCache(false);
-         }
-      }
-      enhancer.setSuperclass(proxySuperClass);
-      enhancer.setInterfaces(AopProxyUtils.completeProxiedInterfaces(this.advised));
-      enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
-      enhancer.setStrategy(new ClassLoaderAwareGeneratorStrategy(classLoader));
-
-      Callback[] callbacks = getCallbacks(rootClass);
-      Class<?>[] types = new Class<?>[callbacks.length];
-      for (int x = 0; x < types.length; x++) {
-         types[x] = callbacks[x].getClass();
-      }
-      // fixedInterceptorMap only populated at this point, after getCallbacks call above
-      enhancer.setCallbackFilter(new ProxyCallbackFilter(
-            this.advised.getConfigurationOnlyCopy(), this.fixedInterceptorMap, this.fixedInterceptorOffset));
-      enhancer.setCallbackTypes(types);
-
-      // Generate the proxy class and create a proxy instance.
-      return createProxyClassAndInstance(enhancer, callbacks);
-   }
-   catch (CodeGenerationException | IllegalArgumentException ex) {
-      throw new AopConfigException("");
-   }
-   catch (Throwable ex) {
-      // TargetSource.getTarget() failed
-      throw new AopConfigException("Unexpected AOP exception", ex);
-   }
-}
-
-```
-
-### JdkDynamicAopProxy
-
-
-```java
-// JdkDynamicAopProxy
-@Override
-public Object getProxy(@Nullable ClassLoader classLoader) {
-  return Proxy.newProxyInstance(classLoader, this.proxiedInterfaces, this);
-}
-
-/**
-	 * Implementation of {@code InvocationHandler.invoke}.
-	 * <p>Callers will see exactly the exception thrown by the target,
-	 * unless a hook method throws an exception.
-	 */
-	@Override
-	@Nullable
-	public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-		Object oldProxy = null;
-		boolean setProxyContext = false;
-
-		TargetSource targetSource = this.advised.targetSource;
-		Object target = null;
-
-		try {
-			if (!this.equalsDefined && AopUtils.isEqualsMethod(method)) {
-				// The target does not implement the equals(Object) method itself.
-				return equals(args[0]);
-			}
-			else if (!this.hashCodeDefined && AopUtils.isHashCodeMethod(method)) {
-				// The target does not implement the hashCode() method itself.
-				return hashCode();
-			}
-			else if (method.getDeclaringClass() == DecoratingProxy.class) {
-				// There is only getDecoratedClass() declared -> dispatch to proxy config.
-				return AopProxyUtils.ultimateTargetClass(this.advised);
-			}
-			else if (!this.advised.opaque && method.getDeclaringClass().isInterface() &&
-					method.getDeclaringClass().isAssignableFrom(Advised.class)) {
-				// Service invocations on ProxyConfig with the proxy config...
-				return AopUtils.invokeJoinpointUsingReflection(this.advised, method, args);
-			}
-
-			Object retVal;
-
-			if (this.advised.exposeProxy) {
-				// Make invocation available if necessary.
-				oldProxy = AopContext.setCurrentProxy(proxy);
-				setProxyContext = true;
-			}
-
-			// Get as late as possible to minimize the time we "own" the target,
-			// in case it comes from a pool.
-			target = targetSource.getTarget();
-			Class<?> targetClass = (target != null ? target.getClass() : null);
-
-			// Get the interception chain for this method.
-			List<Object> chain = this.advised.getInterceptorsAndDynamicInterceptionAdvice(method, targetClass);
-
-			// Check whether we have any advice. If we don't, we can fallback on direct
-			// reflective invocation of the target, and avoid creating a MethodInvocation.
-			if (chain.isEmpty()) {
-				// We can skip creating a MethodInvocation: just invoke the target directly
-				// Note that the final invoker must be an InvokerInterceptor so we know it does
-				// nothing but a reflective operation on the target, and no hot swapping or fancy proxying.
-				Object[] argsToUse = AopProxyUtils.adaptArgumentsIfNecessary(method, args);
-				retVal = AopUtils.invokeJoinpointUsingReflection(target, method, argsToUse);
-			}
-			else {
-				// We need to create a method invocation...
-				MethodInvocation invocation =
-						new ReflectiveMethodInvocation(proxy, target, method, args, targetClass, chain);
-				// Proceed to the joinpoint through the interceptor chain.
-				retVal = invocation.proceed();
-			}
-
-			// Massage return value if necessary.
-			Class<?> returnType = method.getReturnType();
-			if (retVal != null && retVal == target &&
-					returnType != Object.class && returnType.isInstance(proxy) &&
-					!RawTargetAccess.class.isAssignableFrom(method.getDeclaringClass())) {
-				// Special case: it returned "this" and the return type of the method
-				// is type-compatible. Note that we can't help if the target sets
-				// a reference to itself in another returned object.
-				retVal = proxy;
-			}
-			else if (retVal == null && returnType != Void.TYPE && returnType.isPrimitive()) {
-				throw new AopInvocationException(
-						"Null return value from advice does not match primitive return type for: " + method);
-			}
-			return retVal;
-		}
-		finally {
-			if (target != null && !targetSource.isStatic()) {
-				// Must have come from TargetSource.
-				targetSource.releaseTarget(target);
-			}
-			if (setProxyContext) {
-				// Restore old proxy.
-				AopContext.setCurrentProxy(oldProxy);
-			}
-		}
-	}
-
-```
-
-
-
-Determine a list of org.aopalliance.intercept.MethodInterceptor objects for the given method, based on this configuration.
-
-```java
-public List<Object> getInterceptorsAndDynamicInterceptionAdvice(Method method, @Nullable Class<?> targetClass) {
-   MethodCacheKey cacheKey = new MethodCacheKey(method);
-   List<Object> cached = this.methodCache.get(cacheKey);
-   if (cached == null) {
-      cached = this.advisorChainFactory.getInterceptorsAndDynamicInterceptionAdvice(
-            this, method, targetClass);
-      this.methodCache.put(cacheKey, cached);
-   }
-   return cached;
-}
-```
-
-
-
-```java
-// DefaultAdvisorChainFactory
-@Override
-public List<Object> getInterceptorsAndDynamicInterceptionAdvice(
-      Advised config, Method method, @Nullable Class<?> targetClass) {
-
-   // This is somewhat tricky... We have to process introductions first,
-   // but we need to preserve order in the ultimate list.
-   AdvisorAdapterRegistry registry = GlobalAdvisorAdapterRegistry.getInstance();
-   Advisor[] advisors = config.getAdvisors();
-   List<Object> interceptorList = new ArrayList<>(advisors.length);
-   Class<?> actualClass = (targetClass != null ? targetClass : method.getDeclaringClass());
-   Boolean hasIntroductions = null;
-
-   for (Advisor advisor : advisors) {
-      if (advisor instanceof PointcutAdvisor) {
-         // Add it conditionally.
-         PointcutAdvisor pointcutAdvisor = (PointcutAdvisor) advisor;
-         if (config.isPreFiltered() || pointcutAdvisor.getPointcut().getClassFilter().matches(actualClass)) {
-            MethodMatcher mm = pointcutAdvisor.getPointcut().getMethodMatcher();
-            boolean match;
-            if (mm instanceof IntroductionAwareMethodMatcher) {
-               if (hasIntroductions == null) {
-                  hasIntroductions = hasMatchingIntroductions(advisors, actualClass);
-               }
-               match = ((IntroductionAwareMethodMatcher) mm).matches(method, actualClass, hasIntroductions);
-            }
-            else {
-               match = mm.matches(method, actualClass);
-            }
-            if (match) {
-               MethodInterceptor[] interceptors = registry.getInterceptors(advisor);
-               if (mm.isRuntime()) {
-                  // Creating a new object instance in the getInterceptors() method
-                  // isn't a problem as we normally cache created chains.
-                  for (MethodInterceptor interceptor : interceptors) {
-                     interceptorList.add(new InterceptorAndDynamicMethodMatcher(interceptor, mm));
-                  }
-               }
-               else {
-                  interceptorList.addAll(Arrays.asList(interceptors));
-               }
-            }
-         }
-      }
-      else if (advisor instanceof IntroductionAdvisor) {
-         IntroductionAdvisor ia = (IntroductionAdvisor) advisor;
-         if (config.isPreFiltered() || ia.getClassFilter().matches(actualClass)) {
-            Interceptor[] interceptors = registry.getInterceptors(advisor);
-            interceptorList.addAll(Arrays.asList(interceptors));
-         }
-      }
-      else {
-         Interceptor[] interceptors = registry.getInterceptors(advisor);
-         interceptorList.addAll(Arrays.asList(interceptors));
-      }
-   }
-
-   return interceptorList;
-}
-```
-
 ### getAdvisors
 
-```java
+```
 
 	@Override
 	public List<Advisor> getAdvisors(MetadataAwareAspectInstanceFactory aspectInstanceFactory) {
@@ -815,160 +745,32 @@ private List<Method> getAdvisorMethods(Class<?> aspectClass) {
 Factory that can create Spring AOP Advisors given AspectJ classes from classes honoring AspectJ's annotation syntax, using reflection to invoke the corresponding advice methods.
 
 
-Note: although @After is ordered before @AfterReturning and @AfterThrowing, an @After advice method will actually be invoked after @AfterReturning and @AfterThrowing methods due to the fact that AspectJAfterAdvice.invoke(MethodInvocation) invokes proceed() in a `try` block and only invokes the @After advice method in a corresponding `finally` block.
+> [!Note]
+> 
+> Although @After is ordered before @AfterReturning and @AfterThrowing, an @After advice method will actually be invoked after @AfterReturning and @AfterThrowing methods
+> due to the fact that AspectJAfterAdvice.invoke(MethodInvocation) invokes proceed() in a `try` block and only invokes the @After advice method in a corresponding `finally` block.
 
 - Order: `Around` -> `Before` -> `After` -> `AfterReturning` -> `AfterThrowing`
 - Actual invoke: `Around` -> `Before` -> `AfterReturning` -> `AfterThrowing` -> `After`
 
-thenComparing by **method.getName()**
-
 ```java
-public class ReflectiveAspectJAdvisorFactory extends AbstractAspectJAdvisorFactory implements Serializable {
+public class AspectJAfterAdvice extends AbstractAspectJAdvice implements MethodInterceptor, AfterAdvice, Serializable {
 
-    // Exclude @Pointcut methods
-    private static final MethodFilter adviceMethodFilter = ReflectionUtils.USER_DECLARED_METHODS
-            .and(method -> (AnnotationUtils.getAnnotation(method, Pointcut.class) == null));
-
-    private static final Comparator<Method> adviceMethodComparator;
-
-
-    static {
-        Comparator<Method> adviceKindComparator = new ConvertingComparator<>(
-                new InstanceComparator<>(
-                        Around.class, Before.class, After.class, AfterReturning.class, AfterThrowing.class),
-                (Converter<Method, Annotation>) method -> {
-                    AspectJAnnotation<?> ann = AbstractAspectJAdvisorFactory.findAspectJAnnotationOnMethod(method);
-                    return (ann != null ? ann.getAnnotation() : null);
-                });
-        Comparator<Method> methodNameComparator = new ConvertingComparator<>(Method::getName);
-        adviceMethodComparator = adviceKindComparator.thenComparing(methodNameComparator);
+  @Override
+  @Nullable
+  public Object invoke(MethodInvocation mi) throws Throwable {
+    try {
+      return mi.proceed();
+    } finally {
+      invokeAdviceMethod(getJoinPointMatch(), null, null);
     }
+  }
 }
 ```
 
 
 
 
-## ProxyFactoryBean
-
-ProxyFactoryBean is a FactoryBean implementation that builds an AOP proxy based on beans in Spring BeanFactory.
-
-MethodInterceptors and Advisors are identified by a list of bean names in the current bean factory, specified through the "interceptorNames" property. The last entry in the list can be the name of a target bean or a TargetSource; however, it is normally preferable to use the "targetName"/"target"/"targetSource" properties instead.
-
-Return a proxy. Invoked when clients obtain beans from this factory bean. Create an instance of the AOP proxy to be returned by this factory. The instance will be cached for a singleton, and create on each call to getObject() for a proxy.
-
-```java
-public Object getObject() throws BeansException {
-   initializeAdvisorChain();
-   if (isSingleton()) {
-      return getSingletonInstance();
-   }
-   else {
-      return newPrototypeInstance();
-   }
-}
-```
-
-Create the advisor (interceptor) chain. Advisors that are sourced from a BeanFactory will be refreshed each time a new prototype instance is added. Interceptors added programmatically through the factory API are unaffected by such changes.
-
-```java
-private synchronized void initializeAdvisorChain() throws AopConfigException, BeansException {
-   if (this.advisorChainInitialized) {
-      return;
-   }
-
-   if (!ObjectUtils.isEmpty(this.interceptorNames)) {
-      if (this.beanFactory == null) {
-         throw new IllegalStateException("");
-      }
-
-      // Globals can't be last unless we specified a targetSource using the property...
-      if (this.interceptorNames[this.interceptorNames.length - 1].endsWith(GLOBAL_SUFFIX) &&
-            this.targetName == null && this.targetSource == EMPTY_TARGET_SOURCE) {
-         throw new AopConfigException("Target required after globals");
-      }
-
-      // Materialize interceptor chain from bean names.
-      for (String name : this.interceptorNames) {
-         if (name.endsWith(GLOBAL_SUFFIX)) {
-            if (!(this.beanFactory instanceof ListableBeanFactory)) {
-               throw new AopConfigException("");
-            }
-            addGlobalAdvisors((ListableBeanFactory) this.beanFactory,
-                  name.substring(0, name.length() - GLOBAL_SUFFIX.length()));
-         }
-
-         else {
-            // If we get here, we need to add a named interceptor.
-            // We must check if it's a singleton or prototype.
-            Object advice;
-            if (this.singleton || this.beanFactory.isSingleton(name)) {
-               // Add the real Advisor/Advice to the chain.
-               advice = this.beanFactory.getBean(name);
-            }
-            else {
-               // It's a prototype Advice or Advisor: replace with a prototype.
-               // Avoid unnecessary creation of prototype bean just for advisor chain initialization.
-               advice = new PrototypePlaceholderAdvisor(name);
-            }
-            addAdvisorOnChainCreation(advice);
-         }
-      }
-   }
-
-   this.advisorChainInitialized = true;
-}
-```
-
-
-
-
-
-```java
-private synchronized Object getSingletonInstance() {
-   if (this.singletonInstance == null) {
-      this.targetSource = freshTargetSource();
-      if (this.autodetectInterfaces && getProxiedInterfaces().length == 0 && !isProxyTargetClass()) {
-         // Rely on AOP infrastructure to tell us what interfaces to proxy.
-         Class<?> targetClass = getTargetClass();
-         if (targetClass == null) {
-            throw new FactoryBeanNotInitializedException("Cannot determine target class for proxy");
-         }
-         setInterfaces(ClassUtils.getAllInterfacesForClass(targetClass, this.proxyClassLoader));
-      }
-      // Initialize the shared singleton instance.
-      super.setFrozen(this.freezeProxy);
-      this.singletonInstance = getProxy(createAopProxy());
-   }
-   return this.singletonInstance;
-}
-```
-
-
-
-```java
-private synchronized Object newPrototypeInstance() {
-   // In the case of a prototype, we need to give the proxy
-   // an independent instance of the configuration.
-   // In this case, no proxy will have an instance of this object's configuration,
-   // but will have an independent copy.
-   ProxyCreatorSupport copy = new ProxyCreatorSupport(getAopProxyFactory());
-
-   // The copy needs a fresh advisor chain, and a fresh TargetSource.
-   TargetSource targetSource = freshTargetSource();
-   copy.copyConfigurationFrom(this, targetSource, freshAdvisorChain());
-   if (this.autodetectInterfaces && getProxiedInterfaces().length == 0 && !isProxyTargetClass()) {
-      // Rely on AOP infrastructure to tell us what interfaces to proxy.
-      Class<?> targetClass = targetSource.getTargetClass();
-      if (targetClass != null) {
-         copy.setInterfaces(ClassUtils.getAllInterfacesForClass(targetClass, this.proxyClassLoader));
-      }
-   }
-   copy.setFrozen(this.freezeProxy);
-
-   return getProxy(copy.createAopProxy());
-}
-```
 
 
 
