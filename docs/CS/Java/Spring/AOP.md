@@ -59,7 +59,7 @@ Pointcuts enable advice to be targeted independently of the object-oriented hier
 For example, you can apply an around advice providing declarative transaction management to a set of methods that span multiple objects (such as all business operations in the service layer).
 
 
-
+### Pointcut
 ```java
 public interface Pointcut {
 	ClassFilter getClassFilter();

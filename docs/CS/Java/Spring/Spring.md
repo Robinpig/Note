@@ -129,15 +129,6 @@ server:
 
 ### war
 
-```java
-public class IngredientServiceServletInitializer extends SpringBootServletInitializer {
-  @Override
-  protected SpringApplicationBuilder configure(
-                    SpringApplicationBuilder builder) {
-    return builder.sources(IngredientServiceApplication.class);
-  }
-}
-```
 ## Links
 
 - [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
