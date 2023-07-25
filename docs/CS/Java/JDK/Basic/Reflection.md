@@ -53,7 +53,20 @@ because they are sorted by memory not name for improve performance
 
 ## Proxy
 
+A dynamic proxy class is a class that implements a list of interfaces specified at runtime such that a method invocation through one of 
+the interfaces on an instance of the class will be encoded and dispatched to another object through a uniform interface. 
+Thus, a dynamic proxy class can be used to create a type-safe proxy object for a list of interfaces without requiring pre-generation of the proxy class, such as with compile-time tools.
+Method invocations on an instance of a dynamic proxy class are dispatched to a single method in the instance's invocation handler,
+and they are encoded with a java.lang.reflect.Method object identifying the method that was invoked and an array of type Object containing the arguments.
+
 Proxy InnvocationHandler
+
+Processes a method invocation on a proxy instance and returns the result. This method will be invoked on an invocation handler when a method is invoked on a proxy instance that it is associated with.
+```java
+public interface InvocationHandler { 
+    Object invoke(Object proxy, Method method, Object[] args) throws Throwable;
+}
+```
 
 MethodInterceptor Enhancer
 
