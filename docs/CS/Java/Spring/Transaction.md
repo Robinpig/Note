@@ -156,6 +156,8 @@ public interface TransactionDefinition {
 }
 ```
 
+## TransactionProxyFactoryBean
+
 ## TransactionManager
 
 Implementation by MyBatis, Hibernate, JTA.
