@@ -5,12 +5,80 @@ The formal name, “Spring Web MVC,” comes from the name of its source module 
 
 Parallel to Spring Web MVC, Spring Framework 5.0 introduced a reactive-stack web framework whose name, [“Spring WebFlux”](/docs/CS/Java/Spring/webflux.md) is also based on its source module (spring-webflux).
 
-Spring MVC, as many other web frameworks, is designed around the front controller pattern where a central Servlet, the [DispatcherServlet], provides a shared algorithm for request processing, while actual work is performed by configurable delegate components.
+### DispatcherServlet
+
+Spring MVC, as many other web frameworks, is designed around the front controller pattern where a central `Servlet`, the `DispatcherServlet`,
+provides a shared algorithm for request processing, while actual work is performed by configurable delegate components.
 This model is flexible and supports diverse workflows.
 
-### Context Hierarchy
+The DispatcherServlet, as any Servlet, needs to be declared and mapped according to the Servlet specification by using Java configuration or in web.xml.
+In turn, the DispatcherServlet uses Spring configuration to discover the delegate components it needs for request mapping, view resolution, exception handling, and more.
 
-DispatcherServlet expects a WebApplicationContext (an extension of a plain ApplicationContext) for its own configuration. WebApplicationContext has a link to the ServletContext and the Servlet with which it is associated.
+<!-- tabs:start -->
+
+##### **Java configuration**
+
+The following example of the Java configuration registers and initializes the DispatcherServlet, which is auto-detected by the Servlet container (see Servlet Config):
+
+```java
+public class MyWebApplicationInitializer implements WebApplicationInitializer {
+
+	@Override
+	public void onStartup(ServletContext servletContext) {
+
+		// Load Spring web application configuration
+		AnnotationConfigWebApplicationContext context = new AnnotationConfigWebApplicationContext();
+		context.register(AppConfig.class);
+
+		// Create and register the DispatcherServlet
+		DispatcherServlet servlet = new DispatcherServlet(context);
+		ServletRegistration.Dynamic registration = servletContext.addServlet("app", servlet);
+		registration.setLoadOnStartup(1);
+		registration.addMapping("/app/*");
+	}
+}
+```
+
+##### **web.xml**
+
+The following example of web.xml configuration registers and initializes the DispatcherServlet:
+
+```xml
+<web-app>
+
+	<listener>
+		<listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+	</listener>
+
+	<context-param>
+		<param-name>contextConfigLocation</param-name>
+		<param-value>/WEB-INF/app-context.xml</param-value>
+	</context-param>
+
+	<servlet>
+		<servlet-name>app</servlet-name>
+		<servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+		<init-param>
+			<param-name>contextConfigLocation</param-name>
+			<param-value></param-value>
+		</init-param>
+		<load-on-startup>1</load-on-startup>
+	</servlet>
+
+	<servlet-mapping>
+		<servlet-name>app</servlet-name>
+		<url-pattern>/app/*</url-pattern>
+	</servlet-mapping>
+
+</web-app>
+```
+
+<!-- tabs:end -->
+
+## Context Hierarchy
+
+DispatcherServlet expects a WebApplicationContext (an extension of a plain ApplicationContext) for its own configuration.
+WebApplicationContext has a link to the ServletContext and the Servlet with which it is associated.
 It is also bound to the ServletContext such that applications can use static methods on RequestContextUtils to look up the WebApplicationContext if they need access to it.
 
 The root WebApplicationContext typically contains infrastructure beans, such as data repositories and business services that need to be shared across multiple Servlet instances.
@@ -18,7 +86,15 @@ Those beans are effectively inherited and can be overridden (that is, re-declare
 
 The following image shows this relationship:
 
-![MVC Context](https://docs.spring.io/spring-framework/docs/current/reference/html/images/mvc-context-hierarchy.png)
+<div style="text-align: center;">
+
+![MVC Context Hierarchy](./img/MVC.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Context Hierarchy.
+</p>
 
 ## Init
 

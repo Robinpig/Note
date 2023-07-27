@@ -69,6 +69,15 @@ public interface Pointcut {
 	Pointcut TRUE = TruePointcut.INSTANCE;
 }
 ```
+Pointcut types:
+- StaticMethodMatcherPointcut
+- DynamicMethodMatcherPointcut
+- AnnotationMatchingPointcut
+- ExpressionPointcut
+- ControlFlowPointcut
+- ComposablePointcut
+- TruePointcut
+
 
 
 
