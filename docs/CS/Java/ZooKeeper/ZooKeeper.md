@@ -53,9 +53,15 @@ The only difference is that each node in the namespace can have data associated 
 It is like having a file system that allows a file to also be a directory.
 Paths to nodes are always expressed as canonical, absolute, slash-separated paths; there are no relative reference.
 
-ZooKeeper's Hierarchical Namespace
+<div style="text-align: center;">
 
-![ZooKeeper's Hierarchical Namespace](https://zookeeper.apache.org/doc/current/images/zknamespace.jpg)
+![Fig.1. ZooKeeper's Hierarchical Namespace](https://zookeeper.apache.org/doc/current/images/zknamespace.jpg)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. ZooKeeper's Hierarchical Namespace.
+</p>
 
 ### ZNodes
 
@@ -234,15 +240,13 @@ followers (a leader is also a follower) see and record proposals in order; propo
 a new leader has seen all committed proposals from the previous epoch since it has seen the highest zxid from a quorum of servers;
 any uncommitted proposals from a previous epoch seen by a new leader will be committed by that leader before it becomes active.
 
-
-Isn't this just Multi-Paxos? No, Multi-Paxos requires some way of assuring that there is only a single coordinator. 
+Isn't this just Multi-Paxos? No, Multi-Paxos requires some way of assuring that there is only a single coordinator.
 We do not count on such assurances. Instead we use the leader activation to recover from leadership change or old leaders believing they are still active.
 
-Isn't this just Paxos? 
-Your active messaging phase looks just like phase 2 of Paxos? Actually, to us active messaging looks just like 2 phase commit without the need to handle aborts. 
-Active messaging is different from both in the sense that it has cross proposal ordering requirements. If we do not maintain strict FIFO ordering of all packets, it all falls apart. 
+Isn't this just Paxos?
+Your active messaging phase looks just like phase 2 of Paxos? Actually, to us active messaging looks just like 2 phase commit without the need to handle aborts.
+Active messaging is different from both in the sense that it has cross proposal ordering requirements. If we do not maintain strict FIFO ordering of all packets, it all falls apart.
 Also, our leader activation phase is different from both of them. In particular, our use of epochs allows us to skip blocks of uncommitted proposals and to not worry about duplicate proposals for a given zxid.
-
 
 #### Leader Activation
 
@@ -303,20 +307,20 @@ Specifically the following operating constraints are observed:
 
 ### Quorums
 
-Atomic broadcast and leader election use the notion of quorum to guarantee a consistent view of the system. 
-By default, ZooKeeper uses majority quorums, which means that every voting that happens in one of these protocols requires a majority to vote on. One example is acknowledging a leader proposal: 
+Atomic broadcast and leader election use the notion of quorum to guarantee a consistent view of the system.
+By default, ZooKeeper uses majority quorums, which means that every voting that happens in one of these protocols requires a majority to vote on. One example is acknowledging a leader proposal:
 the leader can only commit once it receives an acknowledgement from a quorum of servers.
 
-If we extract the properties that we really need from our use of majorities, we have that we only need to guarantee that groups of processes used to validate an operation by voting (e.g., acknowledging a leader proposal) pairwise intersect in at least one server. 
-Using majorities guarantees such a property. However, there are other ways of constructing quorums different from majorities. 
-For example, we can assign weights to the votes of servers, and say that the votes of some servers are more important. 
+If we extract the properties that we really need from our use of majorities, we have that we only need to guarantee that groups of processes used to validate an operation by voting (e.g., acknowledging a leader proposal) pairwise intersect in at least one server.
+Using majorities guarantees such a property. However, there are other ways of constructing quorums different from majorities.
+For example, we can assign weights to the votes of servers, and say that the votes of some servers are more important.
 To obtain a quorum, we get enough votes so that the sum of weights of all votes is larger than half of the total sum of all weights.
 
-A different construction that uses weights and is useful in wide-area deployments (co-locations) is a hierarchical one. 
-With this construction, we split the servers into disjoint groups and assign weights to processes. 
-To form a quorum, we have to get a hold of enough servers from a majority of groups G, such that for each group g in G, the sum of votes from g is larger than half of the sum of weights in g. 
-Interestingly, this construction enables smaller quorums. If we have, for example, 9 servers, we split them into 3 groups, and assign a weight of 1 to each server, then we are able to form quorums of size 4. 
-Note that two subsets of processes composed each of a majority of servers from each of a majority of groups necessarily have a non-empty intersection. 
+A different construction that uses weights and is useful in wide-area deployments (co-locations) is a hierarchical one.
+With this construction, we split the servers into disjoint groups and assign weights to processes.
+To form a quorum, we have to get a hold of enough servers from a majority of groups G, such that for each group g in G, the sum of votes from g is larger than half of the sum of weights in g.
+Interestingly, this construction enables smaller quorums. If we have, for example, 9 servers, we split them into 3 groups, and assign a weight of 1 to each server, then we are able to form quorums of size 4.
+Note that two subsets of processes composed each of a majority of servers from each of a majority of groups necessarily have a non-empty intersection.
 It is reasonable to expect that a majority of co-locations will have a majority of servers available with high probability.
 
 With ZooKeeper, we provide a user with the ability of configuring servers to use majority quorums, weights, or a hierarchy of groups.
