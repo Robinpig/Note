@@ -23,27 +23,6 @@ docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql
 
 <!-- tabs:end -->
 
-### schema
-
-Default schemas:
-
-- mysql
-- sys
-- information_schema
-- performance_schema
-
-## Files
-
-
-### [File](/docs/CS/DB/MySQL/file.md)
-
-redo log prepare -> binlog write -> redo log commit
-
-## Character Sets, Collations, Unicode
-
-MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations.
-The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
-
 ## Architecture
 
 The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements.
@@ -74,6 +53,10 @@ Fig.1. MySQL Architecture with Pluggable Storage Engines.
 wait_timeout 8h
 
 mysql_reset_connection
+
+
+
+each thread per connection -> cache thread pool
 
 ### Storage Engine
 
@@ -120,6 +103,28 @@ SHOW ENGINES;
 
 [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
 
+
+
+### schema
+
+Default schemas:
+
+- mysql
+- sys
+- information_schema
+- performance_schema
+
+### Files
+
+
+### [File](/docs/CS/DB/MySQL/file.md)
+
+redo log prepare -> binlog write -> redo log commit
+
+## Character Sets, Collations, Unicode
+
+MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations.
+The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
 
 
 ## Master-Slave
