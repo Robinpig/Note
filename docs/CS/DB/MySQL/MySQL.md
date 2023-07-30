@@ -105,7 +105,7 @@ SHOW ENGINES;
 
 ### Charset
 
-```mysql
+```sql
 mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 ```
 
