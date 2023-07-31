@@ -109,6 +109,8 @@ SHOW ENGINES;
 mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 ```
 
+four levels:
+
 
 
 | Variable_name            | Value                        |
