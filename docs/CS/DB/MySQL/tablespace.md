@@ -1,8 +1,14 @@
 ## Introduction
 
 
+- COMPACT
+- REDUNDANT
+- DYNAMIC
+- COMPRESSED
 
-
+```sql
+CREATE TABLE XXX ROW_FORMAT=FORMAT;
+```
 
 ## Undo Tablespace
 

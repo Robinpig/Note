@@ -103,28 +103,6 @@ SHOW ENGINES;
 
 [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
 
-### Charset
-
-```sql
-mysql>SHOW VARIABLES LIKE '%CHARACTER%';
-```
-
-four levels:
-
-
-
-| Variable_name            | Value                        |
-| ------------------------ | ---------------------------- |
-| character_set_client     | utf8mb4                      |
-| character_set_connection | utf8mb4                      |
-| character_set_database   | utf8mb4                      |
-| character_set_filesystem | binary                       |
-| character_set_results    | utf8mb4                      |
-| character_set_server     | latin1                       |
-| character_set_system     | utf8                         |
-| character_sets_dir       | /usr/share/mariadb/charsets/ |
-
-
 
 ### schema
 
@@ -146,6 +124,26 @@ redo log prepare -> binlog write -> redo log commit
 
 MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations.
 The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
+
+
+```sql
+mysql>SHOW VARIABLES LIKE '%CHARACTER%';
+```
+
+
+
+| Variable_name            | Value                        |
+| ------------------------ | ---------------------------- |
+| character_set_client     | utf8mb4                      |
+| character_set_connection | utf8mb4                      |
+| character_set_database   | utf8mb4                      |
+| character_set_filesystem | binary                       |
+| character_set_results    | utf8mb4                      |
+| character_set_server     | latin1                       |
+| character_set_system     | utf8                         |
+| character_sets_dir       | /usr/share/mariadb/charsets/ |
+
+
 
 
 ## Master-Slave
