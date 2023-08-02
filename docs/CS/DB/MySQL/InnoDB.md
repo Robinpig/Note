@@ -407,6 +407,43 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
 
 ## Storage
 
+### Disk I/O
+
+InnoDB uses asynchronous disk I/O where possible, by creating a number of threads to handle I/O operations, while permitting other database operations to proceed while the I/O is still in progress. 
+On Linux and Windows platforms, InnoDB uses the available OS and library functions to perform “native” asynchronous I/O. 
+On other platforms, InnoDB still uses I/O threads, but the threads may actually wait for I/O requests to complete; this technique is known as “simulated” asynchronous I/O.
+
+
+
+### File Space Management
+
+Pages, Extents, Segments, and Tablespaces
+
+Each tablespace consists of database pages. Every tablespace in a MySQL instance has the same page size. 
+By default, all tablespaces have a page size of 16KB; you can reduce the page size to 8KB or 4KB by specifying the innodb_page_size option when you create the MySQL instance. 
+You can also increase the page size to 32KB or 64KB. For more information, refer to the innodb_page_size documentation.
+
+The pages are grouped into extents of size 1MB for pages up to 16KB in size (64 consecutive 16KB pages, or 128 8KB pages, or 256 4KB pages). 
+For a page size of 32KB, extent size is 2MB. 
+For page size of 64KB, extent size is 4MB. 
+The “files” inside a tablespace are called segments in InnoDB. 
+(These segments are different from the rollback segment, which actually contains many tablespace segments.)
+
+When a segment grows inside the tablespace, InnoDB allocates the first 32 pages to it one at a time. 
+After that, InnoDB starts to allocate whole extents to the segment. InnoDB can add up to 4 extents at a time to a large segment to ensure good sequentiality of data.
+
+Two segments are allocated for each index in InnoDB. One is for nonleaf nodes of the B-tree, the other is for the leaf nodes. 
+Keeping the leaf nodes contiguous on disk enables better sequential I/O operations, because these leaf nodes contain the actual table data.
+
+Some pages in the tablespace contain bitmaps of other pages, and therefore a few extents in an InnoDB tablespace cannot be allocated to segments as a whole, but only as individual pages.
+
+When you ask for available free space in the tablespace by issuing a SHOW TABLE STATUS statement, InnoDB reports the extents that are definitely free in the tablespace.
+InnoDB always reserves some extents for cleanup and other internal purposes; these reserved extents are not included in the free space.
+
+When you delete data from a table, contracts the corresponding B-tree indexes. 
+Whether the freed space becomes available for other users depends on whether the pattern of deletes frees individual pages or extents to the tablespace.
+Dropping a table or deleting all rows from it is guaranteed to release the space to other users, but remember that deleted rows are physically removed only by the purge operation, 
+which happens automatically some time after they are no longer needed for transaction rollbacks or consistent reads.
 
 
 ## Links
