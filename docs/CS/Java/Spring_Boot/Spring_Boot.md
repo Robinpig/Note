@@ -31,7 +31,9 @@ spring-boot-test
 
 ### Configuration properties
 
-The Spring environment abstraction is a one-stop shop for any configurable property. It abstracts the origins of properties so that beans needing those properties can con- sume them from Spring itself. The Spring environment pulls from several property sources, including the following:
+The Spring environment abstraction is a one-stop shop for any configurable property.
+It abstracts the origins of properties so that beans needing those properties can consume them from Spring itself. 
+The Spring environment pulls from several property sources, including the following:
 
 - JVM system properties
 - Operating system environment variables
@@ -53,19 +55,14 @@ Fig.4. The Spring environment pulls properties from property sources and makes t
 
 
 ```java
-package tacos.web;
-import org.springframework.boot.context.properties.
-                    ConfigurationProperties;
-import org.springframework.stereotype.Component;
-import lombok.Data;
-
-@Component
-@ConfigurationProperties(prefix="taco.orders")
-@Data
+@Configuration
 public class OrderProps {
 
-  private int pageSize = 20;
-
+    @Bean
+    @ConfigurationProperties(prefix = "taco.order.map")
+    public BidiMap<String, String> getTacoOrderMap() {
+        return new TreeBidiMap<>();
+    }
 }
 ```
 

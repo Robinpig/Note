@@ -543,7 +543,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport imp
 #### getAdvicesAndAdvisorsForBean
 
 Return whether the given bean is to be proxied, what additional advices (e.g. AOP Alliance interceptors) and advisors to apply.
-```java
+```
 @Override
 	@Nullable
 	protected Object[] getAdvicesAndAdvisorsForBean(
@@ -739,7 +739,8 @@ protected Advisor[] buildAdvisors(@Nullable String beanName, @Nullable Object[] 
 ```
 
 #### getAdvisorMethods
-```java
+
+```
 private List<Method> getAdvisorMethods(Class<?> aspectClass) {
 		List<Method> methods = new ArrayList<>();
 		ReflectionUtils.doWithMethods(aspectClass, methods::add, adviceMethodFilter);
@@ -788,7 +789,7 @@ public class AspectJAfterAdvice extends AbstractAspectJAdvice implements MethodI
 Proceed to the next interceptor in the chain.
 The implementation and the semantics of this method depends on the actual joinpoint type (see the children interfaces).
 
-```java
+```
 // ReflectiveMethodInvocation
 @Override
 @Nullable
@@ -827,7 +828,7 @@ public Object proceed() throws Throwable {
 
 `DefaultAdvisorAdapterRegistry#getInterceptors()`
 
-```java
+```
 /**
  * Create a new DefaultAdvisorAdapterRegistry, registering well-known adapters.
  */
@@ -836,9 +837,8 @@ public DefaultAdvisorAdapterRegistry() {
    registerAdvisorAdapter(new AfterReturningAdviceAdapter());
    registerAdvisorAdapter(new ThrowsAdviceAdapter());
 }
-```
 
-```java
+
 @Override
 public MethodInterceptor[] getInterceptors(Advisor advisor) throws UnknownAdviceTypeException {
    List<MethodInterceptor> interceptors = new ArrayList<>(3);
