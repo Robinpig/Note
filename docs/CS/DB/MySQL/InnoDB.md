@@ -417,6 +417,24 @@ On other platforms, InnoDB still uses I/O threads, but the threads may actually 
 
 ### File Space Management
 
+The data files that you define in the configuration file using the innodb_data_file_path configuration option form the InnoDB system tablespace. 
+The files are logically concatenated to form the system tablespace. There is no striping in use. 
+You cannot define where within the system tablespace your tables are allocated. In a newly created system tablespace, 
+InnoDB allocates space starting from the first data file.
+
+To avoid the issues that come with storing all tables and indexes inside the system tablespace, 
+you can enable the innodb_file_per_table configuration option (the default), which stores each newly created table in a separate tablespace file (with extension .ibd). 
+For tables stored this way, there is less fragmentation within the disk file, and when the table is truncated, 
+the space is returned to the operating system rather than still being reserved by InnoDB within the system tablespace.
+
+A file-per-table tablespace contains data and indexes for a single InnoDB table, and is stored on the file system in a single data file.
+
+You can also store tables in general tablespaces. General tablespaces are shared tablespaces created using CREATE TABLESPACE syntax. 
+They can be created outside of the MySQL data directory, are capable of holding multiple tables, and support tables of all row formats. 
+For more information, see Section 15.6.3.3, “General Tablespaces”.
+
+
+
 Pages, Extents, Segments, and Tablespaces
 
 Each tablespace consists of database pages. Every tablespace in a MySQL instance has the same page size. 
