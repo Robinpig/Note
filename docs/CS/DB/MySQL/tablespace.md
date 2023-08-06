@@ -1,6 +1,5 @@
 ## Introduction
 
-
 - COMPACT
 - REDUNDANT
 - DYNAMIC
