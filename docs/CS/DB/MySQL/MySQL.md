@@ -144,6 +144,10 @@ mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 | character_sets_dir       | /usr/share/mariadb/charsets/ |
 
 
+## Partitioning
+
+In MySQL 8.0, partitioning support is provided by the InnoDB and NDB storage engines.
+
 
 
 ## Master-Slave

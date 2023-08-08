@@ -364,7 +364,8 @@ The log buffer is the memory area that holds data to be written to the log files
 A large log buffer enables large transactions to run without the need to write [redo log](/docs/CS/DB/MySQL/redolog.md) data to disk before the transactions commit.
 Thus, if you have transactions that update, insert, or delete many rows, increasing the size of the log buffer saves disk I/O.
 
-Log buffer size is defined by the `innodb_log_buffer_size` variable. The default size is **16MB**. The contents of the log buffer are periodically flushed to disk.
+Log buffer size is defined by the `innodb_log_buffer_size` variable. 
+The default size is **16MB**. The contents of the log buffer are periodically flushed to disk.
 
 ```sql
 mysql> show variables like 'innodb_log_buffer_size'; -- 16777216

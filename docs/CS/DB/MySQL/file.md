@@ -18,6 +18,11 @@ Only InnoDB:
 - [Redo Log](/docs/CS/DB/MySQL/redolog.md)
 - [undo Log](/docs/CS/DB/MySQL/undolog.md)
 
+
+## Table file
+
+.frm
+
 ## InnoDB
 
 tablespace file : `ibdata`
