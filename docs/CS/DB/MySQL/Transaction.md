@@ -106,6 +106,8 @@ InnoDB handles locks automatically, according to your isolation level.
 
 ```mysql
 mysql> select * from information_schema.innodb_locks;
+mysql> select * from information_schema.innodb_lock_waits;
+mysql> select * from information_schema.innodb_trx;
 ```
 
 #### Shared and Exclusive Locks
@@ -126,7 +128,8 @@ Instead, transaction `T2` has to wait for transaction `T1` to release its lock o
 #### Intention Locks
 
 `InnoDB` supports *multiple granularity locking* which permits coexistence of row locks and table locks.
-For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table. To make locking at multiple granularity levels practical, `InnoDB` uses intention locks.
+For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table. 
+To make locking at multiple granularity levels practical, `InnoDB` uses intention locks.
 Intention locks are **table-level** locks that indicate which type of lock (shared or exclusive) a transaction requires later for a row in a table.
 There are two types of intention locks:
 
