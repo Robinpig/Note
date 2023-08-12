@@ -1,10 +1,10 @@
 ## Buffer Pool
 
-The buffer pool is an area in main memory where InnoDB caches table and index data as it is accessed. 
-The buffer pool permits frequently used data to be accessed directly from memory, which speeds up processing. 
+The buffer pool is an area in main memory where InnoDB caches table and index data as it is accessed.
+The buffer pool permits frequently used data to be accessed directly from memory, which speeds up processing.
 On dedicated servers, up to 80% of physical memory is often assigned to the buffer pool.
 
-For efficiency of high-volume read operations, the buffer pool is divided into pages that can potentially hold multiple rows. 
+For efficiency of high-volume read operations, the buffer pool is divided into pages that can potentially hold multiple rows.
 For efficiency of cache management, the buffer pool is implemented as a linked list of pages; data that is rarely used is aged out of the cache using a variation of the least recently used (LRU) algorithm.
 
 Knowing how to take advantage of the buffer pool to keep frequently accessed data in memory is an important aspect of MySQL tuning.
@@ -111,8 +111,6 @@ class buf_page_t
 };
 ```
 
-
-
 ### Read-Ahead
 
 A read-ahead request is an I/O request to prefetch multiple pages in the buffer pool asynchronously, in anticipation of impending need for these pages.
@@ -134,22 +132,18 @@ Random read-ahead is a technique that predicts when pages might be needed soon b
 If 13 consecutive pages from the same extent are found in the buffer pool, InnoDB asynchronously issues a request to prefetch the remaining pages of the extent.
 To enable this feature, set the configuration variable _innodb_random_read_ahead_ to ON.
 
-
 ## Checkpoints
 
 ### Fuzzy Checkpoint
 
-InnoDB implements a checkpoint mechanism known as fuzzy checkpointing. 
-InnoDB flushes modified database pages from the buffer pool in small batches. 
+InnoDB implements a checkpoint mechanism known as fuzzy checkpointing.
+InnoDB flushes modified database pages from the buffer pool in small batches.
 There is no need to flush the buffer pool in one single batch, which would disrupt processing of user SQL statements during the checkpointing process.
 
-
-  - Master
-  - Flush_lru_list
-  - Async/Sync Flush
-  - Dirty Page too much
-
-
+- Master
+- Flush_lru_list
+- Async/Sync Flush
+- Dirty Page too much
 
 Page Cleaner Thread
 
@@ -178,32 +172,29 @@ innodb_flush_neighbors default 0 only itself
 better for HHD
 worse for SSD
 
-
 ### Sharp Checkpoint
-
 
 During crash recovery, InnoDB looks for a checkpoint label written to the log files.
 It knows that all modifications to the database before the label are present in the disk image of the database.
 Then InnoDB scans the log files forward from the checkpoint, applying the logged modifications to the database.
 
-
 ## Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
 
-A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages. 
+A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages.
 The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extend). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
 
-**Linear** read-ahead is a technique that predicts what pages might be needed soon based on pages in the buffer pool being accessed sequentially. 
-You control when `InnoDB` performs a read-ahead operation by adjusting the number of sequential page accesses required to trigger an asynchronous read request, using the configuration parameter `innodb_read_ahead_threshold`. 
+**Linear** read-ahead is a technique that predicts what pages might be needed soon based on pages in the buffer pool being accessed sequentially.
+You control when `InnoDB` performs a read-ahead operation by adjusting the number of sequential page accesses required to trigger an asynchronous read request, using the configuration parameter `innodb_read_ahead_threshold`.
 Before this parameter was added, `InnoDB` would only calculate whether to issue an asynchronous prefetch request for the entire next extent when it read the last page of the current extent.
 
-The configuration parameter `innodb_read_ahead_threshold` controls how sensitive `InnoDB` is in detecting patterns of sequential page access. 
-If the number of pages read sequentially from an extent is greater than or equal to `innodb_read_ahead_threshold`, `InnoDB` initiates an asynchronous read-ahead operation of the entire following extent. 
+The configuration parameter `innodb_read_ahead_threshold` controls how sensitive `InnoDB` is in detecting patterns of sequential page access.
+If the number of pages read sequentially from an extent is greater than or equal to `innodb_read_ahead_threshold`, `InnoDB` initiates an asynchronous read-ahead operation of the entire following extent.
 `innodb_read_ahead_threshold` can be set to any value from 0-64. The default value is 56. The higher the value, the more strict the access pattern check.
-For example, if you set the value to 48, `InnoDB` triggers a linear read-ahead request only when 48 pages in the current extent have been accessed sequentially. 
+For example, if you set the value to 48, `InnoDB` triggers a linear read-ahead request only when 48 pages in the current extent have been accessed sequentially.
 If the value is 8, `InnoDB` triggers an asynchronous read-ahead even if as few as 8 pages in the extent are accessed sequentially.
 
-**Random** read-ahead is a technique that predicts when pages might be needed soon based on pages already in the buffer pool, regardless of the order in which those pages were read. 
-If 13 consecutive pages from the same extent are found in the buffer pool, `InnoDB` asynchronously issues a request to prefetch the remaining pages of the extent. 
+**Random** read-ahead is a technique that predicts when pages might be needed soon based on pages already in the buffer pool, regardless of the order in which those pages were read.
+If 13 consecutive pages from the same extent are found in the buffer pool, `InnoDB` asynchronously issues a request to prefetch the remaining pages of the extent.
 To enable this feature, set the configuration variable `innodb_random_read_ahead` to `ON`.
 
 The `SHOW ENGINE INNODB STATUS` command displays statistics to help you evaluate the effectiveness of the read-ahead algorithm. Statistics include counter information for the following global status variables:
@@ -217,7 +208,7 @@ This information can be useful when fine-tuning the `innodb_random_read_ahead` s
 #### extent
 
 A group of **pages** within a **tablespace**. For the default **page size** of 16KB, an extent contains 64 pages.
-In MySQL 5.6, the page size for an `InnoDB` instance can be 4KB, 8KB, or 16KB, controlled by the `innodb_page_size` configuration option. 
+In MySQL 5.6, the page size for an `InnoDB` instance can be 4KB, 8KB, or 16KB, controlled by the `innodb_page_size` configuration option.
 For 4KB, 8KB, and 16KB pages sizes, the extent size is always 1MB (or 1048576 bytes).
 
 Support for 32KB and 64KB `InnoDB` page sizes was added in MySQL 5.7.6. For a 32KB page size, the extent size is 2MB. For a 64KB page size, the extent size is 4MB.
@@ -239,7 +230,6 @@ Physically, the change buffer is part of the system tablespace, so that the inde
 
 Insert buffering is not used if the secondary index is unique, because the uniqueness of new values cannot be verified before the new entries are written out. Other kinds of change buffering do work for unique indexes.
 
-
 ![Content is described in the surrounding text.](https://dev.mysql.com/doc/refman/8.0/en/images/innodb-change-buffer.png)
 
 Unlike [clustered indexes](/docs/CS/DB/MySQL/Index.md?id=Clustered_and_Secondary_Indexes), secondary indexes are usually nonunique, and inserts into secondary indexes happen in a relatively random order.
@@ -257,7 +247,6 @@ Change buffer merging may also continue to occur after a transaction is committe
 In memory, the change buffer occupies part of the buffer pool.
 On disk, the change buffer is part of the system tablespace, where index changes are buffered when the database server is shut down.
 The type of data cached in the change buffer is governed by the `innodb_change_buffering` variable.
-
 
 ```
 // using SHOW ENGINE INNODB STATUS;
@@ -317,7 +306,6 @@ When is the change buffer flushed?
 
 Updated pages are flushed by the same flushing mechanism that flushes the other pages that occupy the buffer pool.
 
-
 ## Adaptive Hash Index
 
 An optimization for InnoDB tables that can speed up lookups using `=` and `IN` operators, by constructing a **hash index** in memory.
@@ -342,20 +330,17 @@ In MySQL 5.6 and higher, another way to take advantage of fast single-value look
 struct btr_search_t {
   /*!< TRUE if the last search would have succeeded, or did succeed, using the hash index; NOTE that the value here is not exact:
   it is not calculated for every search, and the calculation itself is not always accurate! */
-   ibool last_hash_succ;    
+   ibool last_hash_succ;  
 
   /*!< when this exceeds BTR_SEARCH_HASH_ANALYSIS, the hash analysis starts; this is reset if no success noticed  17 */
-  ulint hash_analysis;     
-             
-  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */        
-  ulint n_hash_potential;    
+  ulint hash_analysis;   
+           
+  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */      
+  ulint n_hash_potential;  
 }
 ```
 
 innodb_adaptive_hash_index_parts： default 8
-
-
-
 
 ## Log Buffer
 
@@ -364,7 +349,7 @@ The log buffer is the memory area that holds data to be written to the log files
 A large log buffer enables large transactions to run without the need to write [redo log](/docs/CS/DB/MySQL/redolog.md) data to disk before the transactions commit.
 Thus, if you have transactions that update, insert, or delete many rows, increasing the size of the log buffer saves disk I/O.
 
-Log buffer size is defined by the `innodb_log_buffer_size` variable. 
+Log buffer size is defined by the `innodb_log_buffer_size` variable.
 The default size is **16MB**. The contents of the log buffer are periodically flushed to disk.
 
 ```sql
@@ -402,7 +387,7 @@ Structure
 
 
 | col1         | col2 | col3 |
-| -------------- | ------ | ------ |
+| ------------ | ---- | ---- |
 | record_type  | 1bit |      |
 | next_record  |      |      |
 | delete_mask  | 1bit | 0/1  |
