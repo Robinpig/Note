@@ -334,8 +334,8 @@ struct btr_search_t {
 
   /*!< when this exceeds BTR_SEARCH_HASH_ANALYSIS, the hash analysis starts; this is reset if no success noticed  17 */
   ulint hash_analysis;   
-           
-  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */      
+         
+  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */    
   ulint n_hash_potential;  
 }
 ```
@@ -370,6 +370,8 @@ mysql> show variables like 'innodb_flush_log_at_timeout'; -- 1
 
 ## Page
 
+row format:
+
 - Compact
 - Redundant
 - Dynamic default
@@ -377,13 +379,16 @@ mysql> show variables like 'innodb_flush_log_at_timeout'; -- 1
 
 Structure
 
-- File Header 38Byte
-- Page Header 56Byte
-- Infimum + superemum 26Byte
-- User Records
-- Free Records
-- Page Directory
-- File Tailer 8Byte
+
+| Name                | Size   | Description |
+| ------------------- | ------ | ----------- |
+| File Header         | 38Byte |             |
+| Page Header         | 56Byte |             |
+| Infimum + superemum | 26Byte |             |
+| User Records        |        |             |
+| Free Spaces         |        |             |
+| Page Directory      |        |             |
+| File Tailer         | 8Byte  |             |
 
 
 | col1         | col2 | col3 |
