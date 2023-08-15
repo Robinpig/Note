@@ -95,6 +95,29 @@ In addition, all algorithms must satisfy the following criteria:
 4. **Finiteness**. If we trace out the instructions of an algorithm, then for all cases, the algorithm terminates after a finite number of steps.
 5. **Effectiveness**. Every instruction must be basic enough to be carried out, in principle, by a person using only pencil and paper. It is not enough that each operation be definite as in 3; it also must be feasible.
 
+
+Computer algorithms solve computational problems.
+We want two things from a computer algorithm: given an input to a problem, it should always produce a correct solution to the problem,
+and it should use computational resources efficiently while doing so. 
+Let’s examine these two desiderata in turn.
+
+For some problems, it might be difficult or even impossible to say whether an algorithm produces a correct solution.
+Sometimes we can accept that a computer algorithm might produce an incorrect answer, as long as we can control how often it does so.
+Correctness is a tricky issue with another class of algorithms, called approximation algorithms. 
+Approximation algorithms apply to optimization problems, in which we want to find the best solution according to some quantitative measure.
+Finding the fastest route, as a GPS does, is one example, where the quantitative measure is travel time.
+For some problems, we have no algorithm that finds an optimal solution in any reasonable amount of time, but we know of an approximation algorithm that,
+in a reasonable amount of time, can find a solution that is almost optimal. 
+
+What does it mean for an algorithm to use computational resources efficiently? 
+Indeed, time is the primary measure of efficiency that we use to evaluate an algorithm, once we have shown that the algorithm gives a correct solution.
+But it is not the only measure.
+We might be concerned with how much computer memory the algorithm requires (its “memory footprint”), since an algorithm has to run within the available memory.
+Other possible resources that an algorithm might use: network communication, random bits (because algorithms that make random choices need a source of random numbers),
+or disk operations (for algorithms that are designed to work with disk-resident data).”
+
+
+
 ### Complexity
 
 Algorithms can be evaluated by a variety of criteria.
