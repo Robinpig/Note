@@ -15,6 +15,9 @@ They include
 - Corrective maintenance
 
 
+Construction is mostly coding and debugging but also involves detailed design, construction planning, unit testing, integration, integration testing, and other activities.
+
+
 Here are some of the specific tasks involved in construction:
 - Verifying that the groundwork has been laid so that construction can proceed successfully
 - Determining how your code will be tested
