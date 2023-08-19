@@ -1,5 +1,6 @@
 ## Introduction
 
+
 - COMPACT
 - REDUNDANT
 - DYNAMIC
@@ -8,6 +9,9 @@
 ```sql
 CREATE TABLE XXX ROW_FORMAT=FORMAT;
 ```
+
+
+
 
 ## Undo Tablespace
 
