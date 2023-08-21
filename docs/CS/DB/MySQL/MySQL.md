@@ -41,8 +41,6 @@ The MySQL pluggable storage engine architecture is shown in figure.
 Fig.1. MySQL Architecture with Pluggable Storage Engines.
 </p>
 
-
-
 ### Server Process
 
 - Caches
@@ -53,8 +51,6 @@ Fig.1. MySQL Architecture with Pluggable Storage Engines.
 wait_timeout 8h
 
 mysql_reset_connection
-
-
 
 each thread per connection -> cache thread pool
 
@@ -99,10 +95,7 @@ SHOW ENGINES;
 | **Storage limits**           | 256TB          | 64TB                                                                              |
 | **Transactions**             | No             | Yes                                                                               |
 
-
-
 [Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
-
 
 ### schema
 
@@ -115,7 +108,6 @@ Default schemas:
 
 ### Files
 
-
 ### [File](/docs/CS/DB/MySQL/file.md)
 
 redo log prepare -> binlog write -> redo log commit
@@ -125,11 +117,9 @@ redo log prepare -> binlog write -> redo log commit
 MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations.
 The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
 
-
 ```sql
 mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 ```
-
 
 
 | Variable_name            | Value                        |
@@ -143,12 +133,9 @@ mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 | character_set_system     | utf8                         |
 | character_sets_dir       | /usr/share/mariadb/charsets/ |
 
-
 ## Partitioning
 
 In MySQL 8.0, partitioning support is provided by the InnoDB and NDB storage engines.
-
-
 
 ## Master-Slave
 
