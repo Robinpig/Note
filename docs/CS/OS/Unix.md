@@ -5,6 +5,10 @@ What is Unix?
 A generous definition: Those operating systems derived from or inspired by the Research Unix systems of the 1970s.
 Includes commercial Unix systems, Research Unix, NetBSD, OpenBSD, [Linux](/docs/CS/OS/Linux/Linux.md), even Plan 9 and others.
 
+> [!Note]
+> 
+> Those who do not understand Unix are condemned to reinvent it, poorly.    --Henny Spencer
+
 Today, Unix runs everywhere (except a few PCs).
 
 What makes Unix Unix ?
@@ -21,6 +25,10 @@ Something like the combination of:
 - security
 
 Not all these ideas originate in Unix, but their combination does.
+
+> [!TIP]
+> 
+> Keep It Simple, Stupid!
 
 To get to 2001, you need to add networking and graphics, but those are not definitive of Unix.
 Quite the opposite: these were added later and badly, with models taken largely from other systems.
