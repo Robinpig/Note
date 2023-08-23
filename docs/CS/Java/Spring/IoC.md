@@ -2648,6 +2648,14 @@ protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBea
 ```
 
 ## EventListener
+ApplicationEvent
+- ApplicationContextEvent
+  - ContextClosedEvent
+  - ContextRefreshedEvent
+  - ContextStartedEvent
+  - ContextStoppedEvent
+- RequestHandledEvent
+
 
 ### Example
 
