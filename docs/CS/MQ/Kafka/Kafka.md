@@ -4,16 +4,15 @@
 Kafka is a distributed system consisting of servers and clients that communicate via a high-performance [TCP network protocol](/docs/CS/CN/TCP.md).
 It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
 
-
 > [Kafka Design](https://kafka.apache.org/documentation/#design)
 > We designed Kafka to be able to act as a unified platform for handling all the real-time data feeds a large company might have. To do this we had to think through a fairly broad set of use cases.
-> 
+>
 > - It would have to have high-throughput to support high volume event streams such as real-time log aggregation.
 > - It would need to deal gracefully with large data backlogs to be able to support periodic data loads from offline systems.
 > - It also meant the system would have to handle low-latency delivery to handle more traditional messaging use-cases.
 > - We wanted to support partitioned, distributed, real-time processing of these feeds to create new, derived feeds. This motivated our partitioning and consumer model.
 > - Finally in cases where the stream is fed into other data systems for serving, we knew the system would have to be able to guarantee fault-tolerance in the presence of machine failures.
-> 
+>
 > Supporting these uses led us to a design with a number of unique elements, more akin to a database log than a traditional messaging system.
 
 ### Event Streaming
@@ -31,10 +30,7 @@ Kafka combines three key capabilities so you can implement your use cases for ev
 - To store streams of events durably and reliably for as long as you want.
 - To process streams of events as they occur or retrospectively.
 
-
 ## Architecture
-
-
 
 <div style="text-align: center;">
 
@@ -48,30 +44,28 @@ Fig.1. Kafka Architecture.
 
 An **event** records the fact that "something happened" in the world or in your business.
 It is also called record or message in the documentation.
-When you read or write data to Kafka, you do this in the form of events. 
+When you read or write data to Kafka, you do this in the form of events.
 Conceptually, an event has a key, value, timestamp, and optional metadata headers.
 
 The unit of data within Kafka is called a message.
 Messages consist of a variable-length header, a variable-length opaque key byte array and a variable-length opaque value byte array.
 
 For efficiency, messages are written into Kafka in batches.
-A batch is just a collection of messages, all of which are being produced to the same topic and partition. 
-An individual roundtrip across the network for each message would result in excessive overhead, and collecting messages together into a batch reduces this. 
+A batch is just a collection of messages, all of which are being produced to the same topic and partition.
+An individual roundtrip across the network for each message would result in excessive overhead, and collecting messages together into a batch reduces this.
 Of course, this is a tradeoff between latency and throughput: the larger the batches, the more messages that can be handled per unit of time, but the longer it takes an individual message to propagate.
 Batches are also typically compressed, providing more efficient data transfer and storage at the cost of some processing power.
-
 
 **Producers** are those client applications that publish (write) events to Kafka, and **consumers** are those that subscribe to (read and process) these events.
 In Kafka, producers and consumers are fully decoupled and agnostic of each other, which is a key design element to achieve the high scalability that Kafka is known for.
 For example, producers never need to wait for consumers. Kafka provides various guarantees such as the ability to process events exactly-once.
 
-Events are organized and durably stored in  **topics** . 
+Events are organized and durably stored in  **topics** .
 Very simplified, a topic is similar to a folder in a filesystem, and the events are the files in that folder.
 Topics in Kafka are always multi-producer and multi-subscriber: a topic can have zero, one, or many producers that write events to it, as well as zero, one, or many consumers that subscribe to these events.
 **Events in a topic can be read as often as needed—unlike traditional messaging systems, events are not deleted after consumption.**
 Instead, you define for how long Kafka should retain your events through a per-topic configuration setting, after which old events will be discarded.
 Kafka's performance is effectively constant with respect to data size, so storing data for a long time is perfectly fine.
-
 
 ### Topics and partition
 
@@ -95,9 +89,9 @@ Events with the same key (denoted by their color in the figure) are written to t
 Note that both producers can write to the same partition if appropriate.
 </p>
 
-To make your data fault-tolerant and highly-available, every topic can be  **replicated** , even across geo-regions or datacenters, 
+To make your data fault-tolerant and highly-available, every topic can be  **replicated** , even across geo-regions or datacenters,
 so that there are always multiple brokers that have a copy of the data just in case things go wrong, you want to do maintenance on the brokers, and so on.
-A common production setting is a replication factor of 3, i.e., there will always be three copies of your data. 
+A common production setting is a replication factor of 3, i.e., there will always be three copies of your data.
 This replication is performed at the level of topic-partitions.
 
 ### Message Delivery Semantics
@@ -144,41 +138,38 @@ Notes:
 
 Rebalance
 
-Comparsion [Producer](/docs/CS/MQ/Kafka/Producer.md) and [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 
-
-| Client | Producer | Consumer |
-| -- | -- | -- |
-| Network | NetworkClient | NetworkClient |
-| Background Task | Sender(start at newInstance) | Fetcher |
+Comparsion [Producer](/docs/CS/MQ/Kafka/Producer.md) and [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
 
 
-
+| Client          | Producer                     | Consumer      |
+| --------------- | ---------------------------- | ------------- |
+| Network         | NetworkClient                | NetworkClient |
+| Background Task | Sender(start at newInstance) | Fetcher       |
 
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 
-
-
 A key feature of Apache Kafka is that of retention, which is the durable storage of messages for some period of time.
-Kafka brokers are configured with a default retention setting for topics, either retaining messages for some period of time (e.g., 7 days) or until the topic reaches a certain size in bytes (e.g., 1 GB). 
-Once these limits are reached, messages are expired and deleted so that the retention configuration is a minimum amount of data available at any time. Individual topics can also be configured with their own retention settings so that messages are stored for only as long as they are useful. 
-For example, a tracking topic might be retained for several days, whereas application metrics might be retained for only a few hours. 
-Topics can also be configured as log compacted, which means that Kafka will retain only the last message produced with a specific key. 
+Kafka brokers are configured with a default retention setting for topics, either retaining messages for some period of time (e.g., 7 days) or until the topic reaches a certain size in bytes (e.g., 1 GB).
+Once these limits are reached, messages are expired and deleted so that the retention configuration is a minimum amount of data available at any time. Individual topics can also be configured with their own retention settings so that messages are stored for only as long as they are useful.
+For example, a tracking topic might be retained for several days, whereas application metrics might be retained for only a few hours.
+Topics can also be configured as log compacted, which means that Kafka will retain only the last message produced with a specific key.
 This can be useful for changelog-type data, where only the last update is interesting.
 
 ### Multiple Clusters
 
 As Kafka deployments grow, it is often advantageous to have multiple clusters. There are several reasons why this can be useful:
+
 - Segregation of types of data
 - Isolation for security requirements
 - Multiple datacenters (disaster recovery)
 
-When working with multiple datacenters in particular, it is often required that messages be copied between them. In this way, online applications can have access to user activity at both sites.  
-For example, if a user changes public information in their profile, that change will need to be visible regardless of the datacenter in which search results are displayed. 
-Or, monitoring data can be collected from many sites into a single central location where the analysis and alerting systems are hosted. 
+When working with multiple datacenters in particular, it is often required that messages be copied between them. In this way, online applications can have access to user activity at both sites.
+For example, if a user changes public information in their profile, that change will need to be visible regardless of the datacenter in which search results are displayed.
+Or, monitoring data can be collected from many sites into a single central location where the analysis and alerting systems are hosted.
 The replication mechanisms within the Kafka clusters are designed only to work within a single cluster, not between multiple clusters.
 
-The Kafka project includes a tool called MirrorMaker, used for this purpose. 
-At its core, MirrorMaker is simply a Kafka consumer and producer, linked together with a queue. 
+The Kafka project includes a tool called MirrorMaker, used for this purpose.
+At its core, MirrorMaker is simply a Kafka consumer and producer, linked together with a queue.
 Messages are consumed from one Kafka cluster and produced for another.
 
 ## Efficiency
@@ -353,13 +344,11 @@ RecordAccumulator
 This class acts as a queue that accumulates records into MemoryRecords instances to be sent to the server.
 The accumulator uses a bounded amount of memory and append calls will block when that memory is exhausted, unless this behavior is explicitly disabled.
 
-
 ## Message
 
 timestamp
 
 RecordBatch
-
 
 ## shutdown
 
@@ -732,13 +721,12 @@ Return buffers to the pool. If they are of the poolable size add them to the fre
 
 ### Network Layer
 
-The network layer is a fairly straight-forward [NIO](/docs/CS/Java/JDK/IO/NIO.md) server. 
-The sendfile implementation is done by giving the MessageSet interface a writeTo method. 
+The network layer is a fairly straight-forward [NIO](/docs/CS/Java/JDK/IO/NIO.md) server.
+The sendfile implementation is done by giving the MessageSet interface a writeTo method.
 This allows the file-backed message set to use the more efficient transferTo implementation instead of an in-process buffered write.
-The threading model is a single acceptor thread and N processor threads which handle a fixed number of connections each. 
-This design has been pretty thoroughly tested elsewhere and found to be simple to implement and fast. 
+The threading model is a single acceptor thread and N processor threads which handle a fixed number of connections each.
+This design has been pretty thoroughly tested elsewhere and found to be simple to implement and fast.
 The protocol is kept quite simple to allow for future implementation of clients in other languages.
-
 
 ## Performance
 
