@@ -1207,11 +1207,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
          if (beanInstance instanceof NullBean) {
             return beanInstance;
          }
-     
+   
          if (!(beanInstance instanceof FactoryBean)) {
             throw new BeanIsNotAFactoryException(beanName, beanInstance.getClass());
          }
-     
+   
          return beanInstance;
       }
 
@@ -2648,14 +2648,15 @@ protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBea
 ```
 
 ## EventListener
+
 ApplicationEvent
+
 - ApplicationContextEvent
   - ContextClosedEvent
   - ContextRefreshedEvent
   - ContextStartedEvent
   - ContextStoppedEvent
 - RequestHandledEvent
-
 
 ### Example
 
