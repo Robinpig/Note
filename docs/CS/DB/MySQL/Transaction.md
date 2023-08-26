@@ -110,6 +110,8 @@ mysql> select * from information_schema.innodb_lock_waits;
 mysql> select * from information_schema.innodb_trx;
 ```
 
+row-level locking only be implemented at server level.
+
 #### Shared and Exclusive Locks
 
 `InnoDB` implements standard **row-level locking** where there are two types of locks, shared (`S`) locks and exclusive (`X`) locks.
