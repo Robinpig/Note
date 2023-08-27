@@ -28,6 +28,11 @@ Only InnoDB:
 tablespace file : `ibdata`
 
 
+```sql
+SHOW VARIABLES LIKE 'datadir';
+-- /usr/local/mysql/data
+```
+
 ## Links
 
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)

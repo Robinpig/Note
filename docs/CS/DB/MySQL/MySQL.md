@@ -106,6 +106,8 @@ Default schemas:
 - information_schema
 - performance_schema
 
+Each database has its own directory except information_schema.
+
 ### Files
 
 ### [File](/docs/CS/DB/MySQL/file.md)

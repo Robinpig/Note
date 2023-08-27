@@ -93,6 +93,7 @@ SpringProperties
 ## Deploy
 
 ### Dockerfile
+
 ```dockerfile
 FROM openjdk:11.0.12-jre
 ARG JAR_FILE=target/*.jar
@@ -101,6 +102,7 @@ ENTRYPOINT ["java","-jar","/app.jar"]
 ```
 
 ### K8s
+
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
@@ -124,8 +126,7 @@ spec:
 ```
 
 server:
-  shutdown: graceful
-
+shutdown: graceful
 
 ### war
 
