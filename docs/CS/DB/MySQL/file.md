@@ -27,6 +27,11 @@ Only InnoDB:
 
 tablespace file : `ibdata`
 
+Since MySQL8, the frm file merge into ibd file.
+```shell
+/usr/local/mysql/bin/ibd2sdi --dump-file=a.txt a.ibd
+```
+
 
 ```sql
 SHOW VARIABLES LIKE 'datadir';
