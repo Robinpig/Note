@@ -10,6 +10,9 @@
 CREATE TABLE XXX ROW_FORMAT=FORMAT;
 ```
 
+system tablespace
+
+ibdata1
 
 
 
