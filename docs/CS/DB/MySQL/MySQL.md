@@ -135,6 +135,14 @@ mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 | character_set_system     | utf8                         |
 | character_sets_dir       | /usr/share/mariadb/charsets/ |
 
+
+```sql
+SHOW TABLE STATUS LIKE 'TABLE_NAME';
+```
+- Rows(approximate)
+- Data Length(Cluster)
+
+
 ## Partitioning
 
 In MySQL 8.0, partitioning support is provided by the InnoDB and NDB storage engines.
