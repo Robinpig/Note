@@ -35,7 +35,6 @@ checkpoint_lsn
 
 ## Format
 
-
 <div style="text-align: center;">
 
 ```dot
@@ -43,15 +42,13 @@ digraph g {
   node [shape = record,height=.1];
   node0[label = "<f0> type |<f1> space ID|<f2> page number|<f3> data "];
 } 
- ```
+```
 
 </div>
 
 <p style="text-align: center;">
 Fig.1. Redo log structure.
 </p>
-
-
 
 ### Group Commit for Redo Log Flushing
 
