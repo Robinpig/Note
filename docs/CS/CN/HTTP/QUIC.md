@@ -4,6 +4,17 @@
 
 > QUIC retains ordering within a single resource stream.
 
+
+<div style="text-align: center;">
+
+![Fig.1. HTTP/3](./img/HTTP3.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. HTTP/3 over QUIC stack overview.
+</p>
+
 ## Fast handshakes
 
 0-RTT

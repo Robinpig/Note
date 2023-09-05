@@ -503,6 +503,14 @@ The ability to inject packets into the Internet with a false source address is k
 
 ## Network Management
 
+The middle of the network typically does not move as fast as the edges, as the clients and the servers of the world.
+The network protocols that these boxes might want to inspect, and have ideas about what is okay and what is not then have this problem: 
+these boxes were deployed some time ago when the protocols had a feature set of that time. 
+Introducing new features or changes in behavior that were not known before risks ending up considered bad or illegal by such boxes.
+Such traffic may well just be dropped or delayed to the degree that users really do not want to use those features.
+This is called "**protocol ossification**".
+
+
 ## SNMP
 
 
