@@ -56,7 +56,7 @@ This provides **fail-fast** behavior, rather than non-deterministic behavior in 
 
 Use of this field by subclasses is optional. If a subclass wishes to provide fail-fast iterators (and list iterators), then it merely has to increment this field in its add(int, E) and remove(int) methods (and any other methods that it overrides that result in structural modifications to the list). A single call to add(int, E) or remove(int) must add no more than one to this field, or the iterators (and list iterators) will throw bogus *ConcurrentModificationExceptions*. If an implementation does not wish to provide fail-fast iterators, this field may be ignored.
 
-```java
+```
 protected transient int modCount = 0;
 
 private void checkForComodification(final int expectedModCount) {
@@ -68,7 +68,7 @@ private void checkForComodification(final int expectedModCount) {
 
 ## LinkedList
 
-**Deque**接口是双端队列的意思，代表LinkedList支持两端元素插入和移除。
+**Deque** means that the LinkedList supports insertion/deletion from head and tail.
 
 ```java
 public class LinkedList<E>
@@ -89,7 +89,7 @@ public class LinkedList<E>
 }
 ```
 
-### Node
+Each Node has prev and next Node.
 
 ```java
 private static class Node<E> {
@@ -107,20 +107,12 @@ private static class Node<E> {
 
 ### add
 
-```java
-/**
- * Appends the specified element to the end of this list.
- */
+```
 public boolean add(E e) {
     linkLast(e);
     return true;
 }
 
-/**
- * Inserts the specified element at the specified position in this list.
- * Shifts the element currently at that position (if any) and any
- * subsequent elements to the right (adds one to their indices).
- */
 public void add(int index, E element) {
     checkPositionIndex(index);
 
@@ -133,78 +125,49 @@ public void add(int index, E element) {
 
 ## ArrayList
 
-**RandomAccess**是一个标示性接口，代表ArrayList支持快速访问，而LinkedList不支持。
 
 ```java
 public class ArrayList<E> extends AbstractList<E>
-        implements List<E>, RandomAccess, Cloneable, java.io.Serializable {}
-```
+        implements List<E>, RandomAccess, Cloneable, java.io.Serializable {
 
-### Fields
+    private static final int DEFAULT_CAPACITY = 10;
 
-```java
-/**
- * Default initial capacity.
- */
-private static final int DEFAULT_CAPACITY = 10;
+    private static final Object[] EMPTY_ELEMENTDATA = {};
 
-/**
- * Shared empty array instance used for empty instances.
- */
-private static final Object[] EMPTY_ELEMENTDATA = {};
+    private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
 
-/**
- * Shared empty array instance used for default sized empty instances. We
- * distinguish this from EMPTY_ELEMENTDATA to know how much to inflate when
- * first element is added.
- */
-private static final Object[] DEFAULTCAPACITY_EMPTY_ELEMENTDATA = {};
+    transient Object[] elementData; // non-private to simplify nested class access
 
-/**
- * The array buffer into which the elements of the ArrayList are stored.
- * The capacity of the ArrayList is the length of this array buffer. Any
- * empty ArrayList with elementData == DEFAULTCAPACITY_EMPTY_ELEMENTDATA
- * will be expanded to DEFAULT_CAPACITY when the first element is added.
- */
-transient Object[] elementData; // non-private to simplify nested class access
+    private int size;
 
-private int size;
-
-// Constructs an empty list with the specified initial capacity.
-public ArrayList(int initialCapacity) {
-    if (initialCapacity > 0) {
-        this.elementData = new Object[initialCapacity];
-    } else if (initialCapacity == 0) {
-        this.elementData = EMPTY_ELEMENTDATA;
-    } else {
-        throw new IllegalArgumentException("Illegal Capacity: "+
-                                           initialCapacity);
+    // Constructs an empty list with the specified initial capacity.
+    public ArrayList(int initialCapacity) {
+        if (initialCapacity > 0) {
+            this.elementData = new Object[initialCapacity];
+        } else if (initialCapacity == 0) {
+            this.elementData = EMPTY_ELEMENTDATA;
+        } else {
+            throw new IllegalArgumentException("Illegal Capacity: " +
+                    initialCapacity);
+        }
     }
-}
 
-// Constructs an empty list with an initial capacity of ten.
-public ArrayList() {
-    this.elementData = DEFAULTCAPACITY_EMPTY_ELEMENTDATA;
+    // Constructs an empty list with an initial capacity of ten.
+    public ArrayList() {
+        this.elementData = DEFAULTCAPACITY_EMPTY_ELEMENTDATA;
+    }
 }
 ```
 
 ### add
 
 ```java
-/**
- * Appends the specified element to the end of this list.
- */
 public boolean add(E e) {
     ensureCapacityInternal(size + 1);  // Increments modCount!!
     elementData[size++] = e;
     return true;
 }
 
-/**
- * Inserts the specified element at the specified position in this
- * list. Shifts the element currently at that position (if any) and
- * any subsequent elements to the right (adds one to their indices).
- */
 public void add(int index, E element) {
     rangeCheckForAdd(index);
 
@@ -219,13 +182,6 @@ public void add(int index, E element) {
 JDK11 remove ensureCapacity and ensureCapacityInternal
 
 ```java
-/**
- * Increases the capacity of this <tt>ArrayList</tt> instance, if
- * necessary, to ensure that it can hold at least the number of elements
- * specified by the minimum capacity argument.
- *
- * @param   minCapacity   the desired minimum capacity
- */
 public void ensureCapacity(int minCapacity) {
     int minExpand = (elementData != DEFAULTCAPACITY_EMPTY_ELEMENTDATA)
         // any size if not default element table
@@ -329,11 +285,15 @@ private void grow(int minCapacity) {
 
 **Arrays.copyOf use System.arraycopy**
 
-*Copies an array from the specified source array, beginning at the specified position, to the specified position of the destination array. A subsequence of array components are copied from the source array referenced by src to the destination array referenced by dest. The number of components copied is equal to the length argument. The components at positions srcPos through srcPos+length-1 in the source array are copied into positions destPos through destPos+length-1, respectively, of the destination array.*
-*If the src and dest arguments refer to the same array object, then the copying is performed as if the components at positions srcPos through srcPos+length-1 were first copied to a temporary array with length components and then the contents of the temporary array were copied into positions destPos through destPos+length-1 of the destination array.*
-*If dest is null, then a NullPointerException is thrown.*
-*If src is null, then a NullPointerException is thrown and the destination array is not modified.*
-*Otherwise, if any of the following is true, an ArrayStoreException is thrown and the destination is not modified:*
+Copies an array from the specified source array, beginning at the specified position, to the specified position of the destination array. 
+A subsequence of array components are copied from the source array referenced by src to the destination array referenced by dest. 
+The number of components copied is equal to the length argument.
+The components at positions srcPos through srcPos+length-1 in the source array are copied into positions destPos through destPos+length-1, respectively, of the destination array.
+If the src and dest arguments refer to the same array object, then the copying is performed as if the components at positions srcPos through srcPos+length-1 
+were first copied to a temporary array with length components and then the contents of the temporary array were copied into positions destPos through destPos+length-1 of the destination array.
+If dest is null, then a NullPointerException is thrown.
+If src is null, then a NullPointerException is thrown and the destination array is not modified.
+Otherwise, if any of the following is true, an ArrayStoreException is thrown and the destination is not modified:
 
 1. *The src argument refers to an object that is not an array.*
 2. *The dest argument refers to an object that is not an array.*
@@ -341,7 +301,7 @@ private void grow(int minCapacity) {
 4. *The src argument refers to an array with a primitive component type and the dest argument refers to an array with a reference component type.*
 5. *The src argument refers to an array with a reference component type and the dest argument refers to an array with a primitive component type.*
 
-*Otherwise, if any of the following is true, an IndexOutOfBoundsException is thrown and the destination is not modified:*
+Otherwise, if any of the following is true, an IndexOutOfBoundsException is thrown and the destination is not modified:
 
 1. *The srcPos argument is negative.*
 2. *The destPos argument is negative.*
@@ -349,11 +309,15 @@ private void grow(int minCapacity) {
 4. *srcPos+length is greater than src.length, the length of the source array.*
 5. *destPos+length is greater than dest.length, the length of the destination array.*
 
-*Otherwise, if any actual component of the source array from position srcPos through srcPos+length-1 cannot be converted to the component type of the destination array by assignment conversion, an ArrayStoreException is thrown. In this case, let k be the smallest nonnegative integer less than length such that src[srcPos+k] cannot be converted to the component type of the destination array; when the exception is thrown, source array components from positions srcPos through srcPos+k-1 will already have been copied to destination array positions destPos through destPos+k-1 and no other positions of the destination array will have been modified. *
+Otherwise, if any actual component of the source array from position srcPos through srcPos+length-1 cannot be converted to the component type of the destination array by assignment conversion,
+an ArrayStoreException is thrown. 
+In this case, let k be the smallest nonnegative integer less than length such that src[srcPos+k] cannot be converted to the component type of the destination array; 
+when the exception is thrown, source array components from positions srcPos through srcPos+k-1 will already have been copied to destination array positions destPos 
+through destPos+k-1 and no other positions of the destination array will have been modified.
 
 ***(Because of the restrictions already itemized, this paragraph effectively applies only to the situation where both arrays have component types that are reference types.)***
 
-```java
+```
 public static native void arraycopy(Object src,  int  srcPos,
                                     Object dest, int destPos,
                                     int length);
