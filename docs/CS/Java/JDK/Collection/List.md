@@ -314,7 +314,7 @@ In this case, let k be the smallest nonnegative integer less than length such th
 when the exception is thrown, source array components from positions srcPos through srcPos+k-1 will already have been copied to destination array positions destPos
 through destPos+k-1 and no other positions of the destination array will have been modified.
 
-***(Because of the restrictions already itemized, this paragraph effectively applies only to the situation where both arrays have component types that are reference types.)***
+**(Because of the restrictions already itemized, this paragraph effectively applies only to the situation where both arrays have component types that are reference types.)**
 
 ```
 public static native void arraycopy(Object src,  int  srcPos,
