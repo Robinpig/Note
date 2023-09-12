@@ -243,9 +243,9 @@ public class AbstractApplicationContext {
 
 ### prepareRefresh
 
-Prepare this context for refreshing, setting its startup date and active flag as well as performing any initialization of property sources.
+Prepare this context for refreshing, setting its startup date and active flag as well as performing any initialization of **property sources**.
 
-```java
+```
 protected void prepareRefresh() {
    // Switch to active.
    this.startupDate = System.currentTimeMillis();
@@ -782,9 +782,9 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 ### finishRefresh
 
-Finish the refresh of this context, invoking the LifecycleProcessor's `onRefresh()` method and publishing the `ContextRefreshedEvent`.
+Finish the refresh of this context, invoking the LifecycleProcessor's `onRefresh()` method(start Web Application) and publishing the `ContextRefreshedEvent`.
 
-```java
+```
 protected void finishRefresh() {
 		// Clear context-level resource caches (such as ASM metadata from scanning).
 		clearResourceCaches();
