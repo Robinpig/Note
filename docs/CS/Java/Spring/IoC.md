@@ -39,7 +39,15 @@ Spring doesn't support constructor injection in an abstract class.
 
 ## BeanFactory Hierarchy
 
-![Beanfactory ](img/BeanFactory.png)
+<div style="text-align: center;">
+
+![Fig.1. BeanFactory](img/BeanFactory.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. BeanFactory Hierarchy.
+</p>
 
 **The interfaces *BeanFactory* and *ApplicationContext* represent the Spring IoC container**.
 BeanFactory is the root interface for accessing the Spring container. It provides basic functionalities for managing beans.
@@ -58,7 +66,7 @@ In Spring, the objects that form the backbone of your application and that are m
 **In Spring, a bean is an object that the Spring container instantiates, assembles, and manages.
 Beans, and the dependencies among them, are reflected in the configuration metadata used by a container.**
 
-> ![Note]
+> [!Note]
 >
 > Typically, we define service layer objects, data access objects (DAOs), presentation objects such as Struts `Action` instances, infrastructure objects such as Hibernate `SessionFactories`, JMS `Queues`, and so forth.
 > Typically, one does not configure fine-grained domain objects in the container, because it is usually the responsibility of DAOs and business logic to create and load domain objects.
@@ -134,6 +142,17 @@ On shutdown of a bean factory, the following lifecycle methods apply:
 
 The Spring framework provides several implementations of the ApplicationContext interface:
 `ClassPathXmlApplicationContext` and `FileSystemXmlApplicationContext` for standalone applications, and `WebApplicationContext` for web applications.
+
+
+<div style="text-align: center;">
+
+![Fig.1. ApplicationContext](img/ApplicationContext.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.2. ApplicationContext Hierarchy.
+</p>
 
 ### FactoryBean
 
@@ -232,8 +251,7 @@ public class AbstractApplicationContext {
             // Propagate exception to caller.
             throw ex;
          } finally {
-            // Reset common introspection caches in Spring's core, since we
-            // might not ever need metadata for singleton beans anymore...
+            // Reset common introspection caches in Spring's core, since we might not ever need metadata for singleton beans anymore...
             resetCommonCaches();
          }
       }
@@ -245,33 +263,33 @@ public class AbstractApplicationContext {
 
 Prepare this context for refreshing, setting its startup date and active flag as well as performing any initialization of **property sources**.
 
-```
-protected void prepareRefresh() {
-   // Switch to active.
-   this.startupDate = System.currentTimeMillis();
-   this.closed.set(false);
-   this.active.set(true);
+```java
+public abstract class AbstractApplicationContext {
+    protected void prepareRefresh() {
+        // Switch to active.
+        this.startupDate = System.currentTimeMillis();
+        this.closed.set(false);
+        this.active.set(true);
 
-   // Initialize any placeholder property sources in the context environment.
-   initPropertySources();
+        // Initialize any placeholder property sources in the context environment.
+        initPropertySources();
 
-   // Validate that all properties marked as required are resolvable:
-   // see ConfigurablePropertyResolver#setRequiredProperties
-   getEnvironment().validateRequiredProperties();
+        // Validate that all properties marked as required are resolvable: see ConfigurablePropertyResolver#setRequiredProperties
+        getEnvironment().validateRequiredProperties();
 
-   // Store pre-refresh ApplicationListeners...
-   if (this.earlyApplicationListeners == null) {
-      this.earlyApplicationListeners = new LinkedHashSet<>(this.applicationListeners);
-   }
-   else {
-      // Reset local application listeners to pre-refresh state.
-      this.applicationListeners.clear();
-      this.applicationListeners.addAll(this.earlyApplicationListeners);
-   }
+        // Store pre-refresh ApplicationListeners...
+        if (this.earlyApplicationListeners == null) {
+            this.earlyApplicationListeners = new LinkedHashSet<>(this.applicationListeners);
+        } else {
+            // Reset local application listeners to pre-refresh state.
+            this.applicationListeners.clear();
+            this.applicationListeners.addAll(this.earlyApplicationListeners);
+        }
 
-   // Allow for the collection of early ApplicationEvents,
-   // to be published once the multicaster is available...
-   this.earlyApplicationEvents = new LinkedHashSet<>();
+        // Allow for the collection of early ApplicationEvents,
+        // to be published once the multicaster is available...
+        this.earlyApplicationEvents = new LinkedHashSet<>();
+    }
 }
 ```
 
@@ -279,38 +297,80 @@ protected void prepareRefresh() {
 
 Tell the subclass to refresh and return the internal bean factory.
 
-```
-protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
-	refreshBeanFactory();
-	return getBeanFactory();
+```java
+public abstract class AbstractApplicationContext {
+    protected ConfigurableListableBeanFactory obtainFreshBeanFactory() {
+        refreshBeanFactory();
+        return getBeanFactory();
+    }
 }
 ```
 
-Subclasses must implement this method to perform the actual configuration load. The method is invoked by refresh() before any other initialization work.
-
-A subclass will either create a new bean factory and hold a reference to it, or return a single BeanFactory instance that it holds.
-In the latter case, it will usually throw an IllegalStateException if refreshing the context more than once.
-
+```dot
+digraph g{
+    subgraph cluster_Context {
+     label="ApplicationContext"
+     boj5 [style=invis shape=point]
+     subgraph cluster_Factory { 
+      label="DefaultListableBeanFactory"
+      boj [style=invis shape=point width=0 height=0]
+        }
+    }
+}
 ```
+
+
+<!-- tabs:start -->
+##### **GenericApplicationContext**
+```java
+public class GenericApplicationContext extends AbstractApplicationContext implements BeanDefinitionRegistry {
+
+    private final DefaultListableBeanFactory beanFactory;
+
+    @Override
+    public final ConfigurableListableBeanFactory getBeanFactory() {
+        return this.beanFactory;
+    }
+}
+```
+##### **AbstractRefreshableApplicationContext**
+```java
 // AbstractRefreshableApplicationContext::refreshBeanFactory()
-@Override
-protected final void refreshBeanFactory() throws BeansException {
-   if (hasBeanFactory()) {
-      destroyBeans();
-      closeBeanFactory();
-   }
-   try {
-      DefaultListableBeanFactory beanFactory = createBeanFactory();
-      beanFactory.setSerializationId(getId());
-      customizeBeanFactory(beanFactory);
-      loadBeanDefinitions(beanFactory);
-      this.beanFactory = beanFactory;
-   }
-   catch (IOException ex) {
-      throw new ApplicationContextException("");
-   }
+public abstract class AbstractRefreshableApplicationContext extends AbstractApplicationContext {
+
+    @Nullable
+    private volatile DefaultListableBeanFactory beanFactory;
+
+    /**
+     * This implementation performs an actual refresh of this context's underlying bean factory, 
+     * shutting down the previous bean factory (if any) and initializing a fresh bean factory for the next phase of the context's lifecycle.
+     */
+    @Override
+    protected final void refreshBeanFactory() throws BeansException {
+        if (hasBeanFactory()) {
+            destroyBeans();
+            closeBeanFactory();
+        }
+        try {
+            DefaultListableBeanFactory beanFactory = createBeanFactory();
+            beanFactory.setSerializationId(getId());
+            customizeBeanFactory(beanFactory);
+            loadBeanDefinitions(beanFactory);
+            this.beanFactory = beanFactory;
+        } catch (IOException ex) {
+            throw new ApplicationContextException("");
+        }
+    }
+
+    protected DefaultListableBeanFactory createBeanFactory() {
+        return new DefaultListableBeanFactory(getInternalParentBeanFactory());
+    }
 }
 ```
+
+
+<!-- tabs:end -->
+
 
 #### customizeBeanFactory
 
@@ -525,72 +585,75 @@ public class DefaultListableBeanFactory {
 
 Configure the factory's standard context characteristics, such as the context's ClassLoader and post-processors.
 
-```
-protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
-   // Tell the internal bean factory to use the context's class loader etc.
-   beanFactory.setBeanClassLoader(getClassLoader());
-   if (!shouldIgnoreSpel) {
-      beanFactory.setBeanExpressionResolver(new StandardBeanExpressionResolver(beanFactory.getBeanClassLoader()));
-   }
-   beanFactory.addPropertyEditorRegistrar(new ResourceEditorRegistrar(this, getEnvironment()));
+```java
+public abstract class AbstractApplicationContext {
+    protected void prepareBeanFactory(ConfigurableListableBeanFactory beanFactory) {
+        // Tell the internal bean factory to use the context's class loader etc.
+        beanFactory.setBeanClassLoader(getClassLoader());
+        if (!shouldIgnoreSpel) {
+            beanFactory.setBeanExpressionResolver(new StandardBeanExpressionResolver(beanFactory.getBeanClassLoader()));
+        }
+        beanFactory.addPropertyEditorRegistrar(new ResourceEditorRegistrar(this, getEnvironment()));
 
-   // Configure the bean factory with context callbacks.
-   beanFactory.addBeanPostProcessor(new ApplicationContextAwareProcessor(this));
-   beanFactory.ignoreDependencyInterface(EnvironmentAware.class);
-   beanFactory.ignoreDependencyInterface(EmbeddedValueResolverAware.class);
-   beanFactory.ignoreDependencyInterface(ResourceLoaderAware.class);
-   beanFactory.ignoreDependencyInterface(ApplicationEventPublisherAware.class);
-   beanFactory.ignoreDependencyInterface(MessageSourceAware.class);
-   beanFactory.ignoreDependencyInterface(ApplicationContextAware.class);
-   beanFactory.ignoreDependencyInterface(ApplicationStartupAware.class);
+        // Configure the bean factory with context callbacks.
+        beanFactory.addBeanPostProcessor(new ApplicationContextAwareProcessor(this));
+        beanFactory.ignoreDependencyInterface(EnvironmentAware.class);
+        beanFactory.ignoreDependencyInterface(EmbeddedValueResolverAware.class);
+        beanFactory.ignoreDependencyInterface(ResourceLoaderAware.class);
+        beanFactory.ignoreDependencyInterface(ApplicationEventPublisherAware.class);
+        beanFactory.ignoreDependencyInterface(MessageSourceAware.class);
+        beanFactory.ignoreDependencyInterface(ApplicationContextAware.class);
+        beanFactory.ignoreDependencyInterface(ApplicationStartupAware.class);
 
-   // BeanFactory interface not registered as resolvable type in a plain factory.
-   // MessageSource registered (and found for autowiring) as a bean.
-   beanFactory.registerResolvableDependency(BeanFactory.class, beanFactory);
-   beanFactory.registerResolvableDependency(ResourceLoader.class, this);
-   beanFactory.registerResolvableDependency(ApplicationEventPublisher.class, this);
-   beanFactory.registerResolvableDependency(ApplicationContext.class, this);
+        // BeanFactory interface not registered as resolvable type in a plain factory.
+        // MessageSource registered (and found for autowiring) as a bean.
+        beanFactory.registerResolvableDependency(BeanFactory.class, beanFactory);
+        beanFactory.registerResolvableDependency(ResourceLoader.class, this);
+        beanFactory.registerResolvableDependency(ApplicationEventPublisher.class, this);
+        beanFactory.registerResolvableDependency(ApplicationContext.class, this);
 
-   // Register early post-processor for detecting inner beans as ApplicationListeners.
-   beanFactory.addBeanPostProcessor(new ApplicationListenerDetector(this));
+        // Register early post-processor for detecting inner beans as ApplicationListeners.
+        beanFactory.addBeanPostProcessor(new ApplicationListenerDetector(this));
 
-   // Detect a LoadTimeWeaver and prepare for weaving, if found.
-   if (!NativeDetector.inNativeImage() && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
-      beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
-      // Set a temporary ClassLoader for type matching.
-      beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
-   }
+        // Detect a LoadTimeWeaver and prepare for weaving, if found.
+        if (!NativeDetector.inNativeImage() && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
+            beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
+            // Set a temporary ClassLoader for type matching.
+            beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
+        }
 
-   // Register default environment beans.
-   if (!beanFactory.containsLocalBean(ENVIRONMENT_BEAN_NAME)) {
-      beanFactory.registerSingleton(ENVIRONMENT_BEAN_NAME, getEnvironment());
-   }
-   if (!beanFactory.containsLocalBean(SYSTEM_PROPERTIES_BEAN_NAME)) {
-      beanFactory.registerSingleton(SYSTEM_PROPERTIES_BEAN_NAME, getEnvironment().getSystemProperties());
-   }
-   if (!beanFactory.containsLocalBean(SYSTEM_ENVIRONMENT_BEAN_NAME)) {
-      beanFactory.registerSingleton(SYSTEM_ENVIRONMENT_BEAN_NAME, getEnvironment().getSystemEnvironment());
-   }
-   if (!beanFactory.containsLocalBean(APPLICATION_STARTUP_BEAN_NAME)) {
-      beanFactory.registerSingleton(APPLICATION_STARTUP_BEAN_NAME, getApplicationStartup());
-   }
+        // Register default environment beans.
+        if (!beanFactory.containsLocalBean(ENVIRONMENT_BEAN_NAME)) {
+            beanFactory.registerSingleton(ENVIRONMENT_BEAN_NAME, getEnvironment());
+        }
+        if (!beanFactory.containsLocalBean(SYSTEM_PROPERTIES_BEAN_NAME)) {
+            beanFactory.registerSingleton(SYSTEM_PROPERTIES_BEAN_NAME, getEnvironment().getSystemProperties());
+        }
+        if (!beanFactory.containsLocalBean(SYSTEM_ENVIRONMENT_BEAN_NAME)) {
+            beanFactory.registerSingleton(SYSTEM_ENVIRONMENT_BEAN_NAME, getEnvironment().getSystemEnvironment());
+        }
+        if (!beanFactory.containsLocalBean(APPLICATION_STARTUP_BEAN_NAME)) {
+            beanFactory.registerSingleton(APPLICATION_STARTUP_BEAN_NAME, getApplicationStartup());
+        }
+    }
 }
 ```
 
 ### BeanFactoryPostProcessor
 
-```
-// AbstractApplicationContext
-protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
-		PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors());
+```java
+public abstract class AbstractApplicationContext {
+    protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {
+        PostProcessorRegistrationDelegate.invokeBeanFactoryPostProcessors(beanFactory, getBeanFactoryPostProcessors());
 
-		// Detect a LoadTimeWeaver and prepare for weaving, if found in the meantime
-		// (e.g. through an @Bean method registered by ConfigurationClassPostProcessor)
-		if (beanFactory.getTempClassLoader() == null && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
-			beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
-			beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
-		}
-	}
+        // Detect a LoadTimeWeaver and prepare for weaving, if found in the meantime
+        // (e.g. through an @Bean method registered by ConfigurationClassPostProcessor)
+        if (beanFactory.getTempClassLoader() == null && beanFactory.containsBean(LOAD_TIME_WEAVER_BEAN_NAME)) {
+            beanFactory.addBeanPostProcessor(new LoadTimeWeaverAwareProcessor(beanFactory));
+            beanFactory.setTempClassLoader(new ContextTypeMatchClassLoader(beanFactory.getBeanClassLoader()));
+        }
+    }
+}
 ```
 
 Implementations of BeanDefinitionRegistryPostProcessor:
@@ -600,139 +663,134 @@ Implementations of BeanDefinitionRegistryPostProcessor:
 - MyBatis MapperScannerConfigurer
 
 ```java
+public abstract class AbstractApplicationContext {
+    public static void invokeBeanFactoryPostProcessors(
+            ConfigurableListableBeanFactory beanFactory, List<BeanFactoryPostProcessor> beanFactoryPostProcessors) {
 
-	public static void invokeBeanFactoryPostProcessors(
-			ConfigurableListableBeanFactory beanFactory, List<BeanFactoryPostProcessor> beanFactoryPostProcessors) {
+        // Invoke BeanDefinitionRegistryPostProcessors first, if any.
+        Set<String> processedBeans = new HashSet<>();
 
-		// Invoke BeanDefinitionRegistryPostProcessors first, if any.
-		Set<String> processedBeans = new HashSet<>();
+        if (beanFactory instanceof BeanDefinitionRegistry) {
+            BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
+            List<BeanFactoryPostProcessor> regularPostProcessors = new ArrayList<>();
+            List<BeanDefinitionRegistryPostProcessor> registryProcessors = new ArrayList<>();
 
-		if (beanFactory instanceof BeanDefinitionRegistry) {
-			BeanDefinitionRegistry registry = (BeanDefinitionRegistry) beanFactory;
-			List<BeanFactoryPostProcessor> regularPostProcessors = new ArrayList<>();
-			List<BeanDefinitionRegistryPostProcessor> registryProcessors = new ArrayList<>();
+            for (BeanFactoryPostProcessor postProcessor : beanFactoryPostProcessors) {
+                if (postProcessor instanceof BeanDefinitionRegistryPostProcessor) {
+                    BeanDefinitionRegistryPostProcessor registryProcessor =
+                            (BeanDefinitionRegistryPostProcessor) postProcessor;
+                    registryProcessor.postProcessBeanDefinitionRegistry(registry);
+                    registryProcessors.add(registryProcessor);
+                } else {
+                    regularPostProcessors.add(postProcessor);
+                }
+            }
 
-			for (BeanFactoryPostProcessor postProcessor : beanFactoryPostProcessors) {
-				if (postProcessor instanceof BeanDefinitionRegistryPostProcessor) {
-					BeanDefinitionRegistryPostProcessor registryProcessor =
-							(BeanDefinitionRegistryPostProcessor) postProcessor;
-					registryProcessor.postProcessBeanDefinitionRegistry(registry);
-					registryProcessors.add(registryProcessor);
-				}
-				else {
-					regularPostProcessors.add(postProcessor);
-				}
-			}
+            // Do not initialize FactoryBeans here: We need to leave all regular beans
+            // uninitialized to let the bean factory post-processors apply to them!
+            // Separate between BeanDefinitionRegistryPostProcessors that implement
+            // PriorityOrdered, Ordered, and the rest.
+            List<BeanDefinitionRegistryPostProcessor> currentRegistryProcessors = new ArrayList<>();
 
-			// Do not initialize FactoryBeans here: We need to leave all regular beans
-			// uninitialized to let the bean factory post-processors apply to them!
-			// Separate between BeanDefinitionRegistryPostProcessors that implement
-			// PriorityOrdered, Ordered, and the rest.
-			List<BeanDefinitionRegistryPostProcessor> currentRegistryProcessors = new ArrayList<>();
+            // First, invoke the BeanDefinitionRegistryPostProcessors that implement PriorityOrdered.
+            String[] postProcessorNames =
+                    beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+            for (String ppName : postProcessorNames) {
+                if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
+                    currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+                    processedBeans.add(ppName);
+                }
+            }
+            sortPostProcessors(currentRegistryProcessors, beanFactory);
+            registryProcessors.addAll(currentRegistryProcessors);
+            invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+            currentRegistryProcessors.clear();
 
-			// First, invoke the BeanDefinitionRegistryPostProcessors that implement PriorityOrdered.
-			String[] postProcessorNames =
-					beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
-			for (String ppName : postProcessorNames) {
-				if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
-					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
-					processedBeans.add(ppName);
-				}
-			}
-			sortPostProcessors(currentRegistryProcessors, beanFactory);
-			registryProcessors.addAll(currentRegistryProcessors);
-			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
-			currentRegistryProcessors.clear();
+            // Next, invoke the BeanDefinitionRegistryPostProcessors that implement Ordered.
+            postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+            for (String ppName : postProcessorNames) {
+                if (!processedBeans.contains(ppName) && beanFactory.isTypeMatch(ppName, Ordered.class)) {
+                    currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+                    processedBeans.add(ppName);
+                }
+            }
+            sortPostProcessors(currentRegistryProcessors, beanFactory);
+            registryProcessors.addAll(currentRegistryProcessors);
+            invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+            currentRegistryProcessors.clear();
 
-			// Next, invoke the BeanDefinitionRegistryPostProcessors that implement Ordered.
-			postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
-			for (String ppName : postProcessorNames) {
-				if (!processedBeans.contains(ppName) && beanFactory.isTypeMatch(ppName, Ordered.class)) {
-					currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
-					processedBeans.add(ppName);
-				}
-			}
-			sortPostProcessors(currentRegistryProcessors, beanFactory);
-			registryProcessors.addAll(currentRegistryProcessors);
-			invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
-			currentRegistryProcessors.clear();
+            // Finally, invoke all other BeanDefinitionRegistryPostProcessors until no further ones appear.
+            boolean reiterate = true;
+            while (reiterate) {
+                reiterate = false;
+                postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
+                for (String ppName : postProcessorNames) {
+                    if (!processedBeans.contains(ppName)) {
+                        currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
+                        processedBeans.add(ppName);
+                        reiterate = true;
+                    }
+                }
+                sortPostProcessors(currentRegistryProcessors, beanFactory);
+                registryProcessors.addAll(currentRegistryProcessors);
+                invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
+                currentRegistryProcessors.clear();
+            }
 
-			// Finally, invoke all other BeanDefinitionRegistryPostProcessors until no further ones appear.
-			boolean reiterate = true;
-			while (reiterate) {
-				reiterate = false;
-				postProcessorNames = beanFactory.getBeanNamesForType(BeanDefinitionRegistryPostProcessor.class, true, false);
-				for (String ppName : postProcessorNames) {
-					if (!processedBeans.contains(ppName)) {
-						currentRegistryProcessors.add(beanFactory.getBean(ppName, BeanDefinitionRegistryPostProcessor.class));
-						processedBeans.add(ppName);
-						reiterate = true;
-					}
-				}
-				sortPostProcessors(currentRegistryProcessors, beanFactory);
-				registryProcessors.addAll(currentRegistryProcessors);
-				invokeBeanDefinitionRegistryPostProcessors(currentRegistryProcessors, registry);
-				currentRegistryProcessors.clear();
-			}
+            // Now, invoke the postProcessBeanFactory callback of all processors handled so far.
+            invokeBeanFactoryPostProcessors(registryProcessors, beanFactory);
+            invokeBeanFactoryPostProcessors(regularPostProcessors, beanFactory);
+        } else {
+            // Invoke factory processors registered with the context instance.
+            invokeBeanFactoryPostProcessors(beanFactoryPostProcessors, beanFactory);
+        }
 
-			// Now, invoke the postProcessBeanFactory callback of all processors handled so far.
-			invokeBeanFactoryPostProcessors(registryProcessors, beanFactory);
-			invokeBeanFactoryPostProcessors(regularPostProcessors, beanFactory);
-		}
+        // Do not initialize FactoryBeans here: We need to leave all regular beans
+        // uninitialized to let the bean factory post-processors apply to them!
+        String[] postProcessorNames =
+                beanFactory.getBeanNamesForType(BeanFactoryPostProcessor.class, true, false);
 
-		else {
-			// Invoke factory processors registered with the context instance.
-			invokeBeanFactoryPostProcessors(beanFactoryPostProcessors, beanFactory);
-		}
+        // Separate between BeanFactoryPostProcessors that implement PriorityOrdered,
+        // Ordered, and the rest.
+        List<BeanFactoryPostProcessor> priorityOrderedPostProcessors = new ArrayList<>();
+        List<String> orderedPostProcessorNames = new ArrayList<>();
+        List<String> nonOrderedPostProcessorNames = new ArrayList<>();
+        for (String ppName : postProcessorNames) {
+            if (processedBeans.contains(ppName)) {
+                // skip - already processed in first phase above
+            } else if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
+                priorityOrderedPostProcessors.add(beanFactory.getBean(ppName, BeanFactoryPostProcessor.class));
+            } else if (beanFactory.isTypeMatch(ppName, Ordered.class)) {
+                orderedPostProcessorNames.add(ppName);
+            } else {
+                nonOrderedPostProcessorNames.add(ppName);
+            }
+        }
 
-		// Do not initialize FactoryBeans here: We need to leave all regular beans
-		// uninitialized to let the bean factory post-processors apply to them!
-		String[] postProcessorNames =
-				beanFactory.getBeanNamesForType(BeanFactoryPostProcessor.class, true, false);
+        // First, invoke the BeanFactoryPostProcessors that implement PriorityOrdered.
+        sortPostProcessors(priorityOrderedPostProcessors, beanFactory);
+        invokeBeanFactoryPostProcessors(priorityOrderedPostProcessors, beanFactory);
 
-		// Separate between BeanFactoryPostProcessors that implement PriorityOrdered,
-		// Ordered, and the rest.
-		List<BeanFactoryPostProcessor> priorityOrderedPostProcessors = new ArrayList<>();
-		List<String> orderedPostProcessorNames = new ArrayList<>();
-		List<String> nonOrderedPostProcessorNames = new ArrayList<>();
-		for (String ppName : postProcessorNames) {
-			if (processedBeans.contains(ppName)) {
-				// skip - already processed in first phase above
-			}
-			else if (beanFactory.isTypeMatch(ppName, PriorityOrdered.class)) {
-				priorityOrderedPostProcessors.add(beanFactory.getBean(ppName, BeanFactoryPostProcessor.class));
-			}
-			else if (beanFactory.isTypeMatch(ppName, Ordered.class)) {
-				orderedPostProcessorNames.add(ppName);
-			}
-			else {
-				nonOrderedPostProcessorNames.add(ppName);
-			}
-		}
+        // Next, invoke the BeanFactoryPostProcessors that implement Ordered.
+        List<BeanFactoryPostProcessor> orderedPostProcessors = new ArrayList<>(orderedPostProcessorNames.size());
+        for (String postProcessorName : orderedPostProcessorNames) {
+            orderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
+        }
+        sortPostProcessors(orderedPostProcessors, beanFactory);
+        invokeBeanFactoryPostProcessors(orderedPostProcessors, beanFactory);
 
-		// First, invoke the BeanFactoryPostProcessors that implement PriorityOrdered.
-		sortPostProcessors(priorityOrderedPostProcessors, beanFactory);
-		invokeBeanFactoryPostProcessors(priorityOrderedPostProcessors, beanFactory);
+        // Finally, invoke all other BeanFactoryPostProcessors.
+        List<BeanFactoryPostProcessor> nonOrderedPostProcessors = new ArrayList<>(nonOrderedPostProcessorNames.size());
+        for (String postProcessorName : nonOrderedPostProcessorNames) {
+            nonOrderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
+        }
+        invokeBeanFactoryPostProcessors(nonOrderedPostProcessors, beanFactory);
 
-		// Next, invoke the BeanFactoryPostProcessors that implement Ordered.
-		List<BeanFactoryPostProcessor> orderedPostProcessors = new ArrayList<>(orderedPostProcessorNames.size());
-		for (String postProcessorName : orderedPostProcessorNames) {
-			orderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
-		}
-		sortPostProcessors(orderedPostProcessors, beanFactory);
-		invokeBeanFactoryPostProcessors(orderedPostProcessors, beanFactory);
-
-		// Finally, invoke all other BeanFactoryPostProcessors.
-		List<BeanFactoryPostProcessor> nonOrderedPostProcessors = new ArrayList<>(nonOrderedPostProcessorNames.size());
-		for (String postProcessorName : nonOrderedPostProcessorNames) {
-			nonOrderedPostProcessors.add(beanFactory.getBean(postProcessorName, BeanFactoryPostProcessor.class));
-		}
-		invokeBeanFactoryPostProcessors(nonOrderedPostProcessors, beanFactory);
-
-		// Clear cached merged bean definitions since the post-processors might have
-		// modified the original metadata, e.g. replacing placeholders in values...
-		beanFactory.clearMetadataCache();
-	}
+        // Clear cached merged bean definitions since the post-processors might have
+        // modified the original metadata, e.g. replacing placeholders in values...
+        beanFactory.clearMetadataCache();
+    }
+}
 ```
 
 ```java
@@ -750,33 +808,35 @@ public interface BeanFactoryPostProcessor {
 
 lazy-init false in refresh()->finishBeanFactoryInitialization
 
-```
-protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
-   // Initialize conversion service for this context.
-   if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
-         beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
-      beanFactory.setConversionService(
-            beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
-   }
+```java
+public abstract class AbstractApplicationContext {
+    protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory beanFactory) {
+        // Initialize conversion service for this context.
+        if (beanFactory.containsBean(CONVERSION_SERVICE_BEAN_NAME) &&
+                beanFactory.isTypeMatch(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class)) {
+            beanFactory.setConversionService(
+                    beanFactory.getBean(CONVERSION_SERVICE_BEAN_NAME, ConversionService.class));
+        }
 
-   if (!beanFactory.hasEmbeddedValueResolver()) {
-      beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
-   }
+        if (!beanFactory.hasEmbeddedValueResolver()) {
+            beanFactory.addEmbeddedValueResolver(strVal -> getEnvironment().resolvePlaceholders(strVal));
+        }
 
-   // Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
-   String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
-   for (String weaverAwareName : weaverAwareNames) {
-      getBean(weaverAwareName);
-   }
+        // Initialize LoadTimeWeaverAware beans early to allow for registering their transformers early.
+        String[] weaverAwareNames = beanFactory.getBeanNamesForType(LoadTimeWeaverAware.class, false, false);
+        for (String weaverAwareName : weaverAwareNames) {
+            getBean(weaverAwareName);
+        }
 
-   // Stop using the temporary ClassLoader for type matching.
-   beanFactory.setTempClassLoader(null);
+        // Stop using the temporary ClassLoader for type matching.
+        beanFactory.setTempClassLoader(null);
 
-   // Allow for caching all bean definition metadata, not expecting further changes.
-   beanFactory.freezeConfiguration();
+        // Allow for caching all bean definition metadata, not expecting further changes.
+        beanFactory.freezeConfiguration();
 
-   // Instantiate all remaining (non-lazy-init) singletons.
-   beanFactory.preInstantiateSingletons();
+        // Instantiate all remaining (non-lazy-init) singletons.
+        beanFactory.preInstantiateSingletons();
+    }
 }
 ```
 
@@ -784,23 +844,25 @@ protected void finishBeanFactoryInitialization(ConfigurableListableBeanFactory b
 
 Finish the refresh of this context, invoking the LifecycleProcessor's `onRefresh()` method(start Web Application) and publishing the `ContextRefreshedEvent`.
 
-```
-protected void finishRefresh() {
-		// Clear context-level resource caches (such as ASM metadata from scanning).
-		clearResourceCaches();
+```java
+public abstract class AbstractApplicationContext {
+    protected void finishRefresh() {
+        // Clear context-level resource caches (such as ASM metadata from scanning).
+        clearResourceCaches();
 
-		// Initialize lifecycle processor for this context.
-		initLifecycleProcessor();
+        // Initialize lifecycle processor for this context.
+        initLifecycleProcessor();
 
-		// Propagate refresh to lifecycle processor first.
-		getLifecycleProcessor().onRefresh();
+        // Propagate refresh to lifecycle processor first.
+        getLifecycleProcessor().onRefresh();
 
-		// Publish the final event.
-		publishEvent(new ContextRefreshedEvent(this));
+        // Publish the final event.
+        publishEvent(new ContextRefreshedEvent(this));
 
-		// Participate in LiveBeansView MBean, if active.
-		LiveBeansView.registerApplicationContext(this);
-	}
+        // Participate in LiveBeansView MBean, if active.
+        LiveBeansView.registerApplicationContext(this);
+    }
+}
 ```
 
 #### publishEvent
