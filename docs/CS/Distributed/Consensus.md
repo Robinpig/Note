@@ -371,6 +371,7 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 18. [On Optimal Probabilistic Asynchronous Byzantine Agreement](https://www.researchgate.net/publication/220725355_On_Optimal_Probabilistic_Asynchronous_Byzantine_Agreement)
 19. [The Problem of Distributed Consensus: A Survey](https://arxiv.org/pdf/2106.13591.pdf)
 20. [A Survey of Distributed Consensus Protocols for Blockchain Networks](https://arxiv.org/pdf/1904.04098.pdf)
+21. [Consensus in the Presence of Partial Synchrony](https://dl.acm.org/doi/pdf/10.1145/42282.42283)
 
 
 
