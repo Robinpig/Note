@@ -6,7 +6,7 @@
 
 `package org.apache.ibatis.cache`
 
-![Cache](./images/Cache.png)
+![Cache](img/Cache.png)
 
 
 

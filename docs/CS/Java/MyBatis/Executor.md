@@ -2,7 +2,7 @@
 
 ### Executor Hierarchy
 
-![](./images/Executor.png)
+![](img/Executor.png)
 
 `All SQLs are executed by Executor`
 

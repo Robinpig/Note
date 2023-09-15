@@ -2,7 +2,7 @@
 
 
 
-![](./images/ResultSetHandler.png)
+![](img/ResultSetHandler.png)
 
 ```java
 public interface ResultSetHandler {

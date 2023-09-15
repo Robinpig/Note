@@ -11,7 +11,7 @@ DefaultObjectFactory
 
 ### Reflector Hierarchy
 
-![Reflector](./images/Reflector.png)
+![Reflector](img/Reflector.png)
 
 ## Factory
 
