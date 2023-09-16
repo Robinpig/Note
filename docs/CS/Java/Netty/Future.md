@@ -2,7 +2,7 @@
 
 ### Future Hierarchy
 
-![Future](./images/Future.png)
+![Future](img/Future.png)
 
 
 

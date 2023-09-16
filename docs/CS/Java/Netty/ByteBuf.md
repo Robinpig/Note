@@ -13,7 +13,7 @@ This approach has significant advantages over using ByteBuffer. Netty's new buff
 
 ###  ByteBuf Hierarchy
 
-![ByteBuf](./images/ByteBuf.png)
+![ByteBuf](img/ByteBuf.png)
 
 
 

@@ -1,6 +1,6 @@
 ### Bootstrap Hierarchy
 
-![Bootstrap](./images/Bootstrap.png)
+![Bootstrap](img/Bootstrap.png)
 
 ## Create
 

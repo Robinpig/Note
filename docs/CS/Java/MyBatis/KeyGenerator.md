@@ -4,7 +4,7 @@
 
 ### KeyGenerator Hierarchy
 
-![](./images/KeyGenerator.png)
+![](img/KeyGenerator.png)
 
 
 

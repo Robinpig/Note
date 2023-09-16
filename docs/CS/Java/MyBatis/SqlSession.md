@@ -203,7 +203,7 @@ public class DefaultSqlSession implements SqlSession {
 
 `all of select method invoke Executor.query()`
 
-![DefaultSqlSession](./images/DefaultSqlSession-query.png)
+![DefaultSqlSession](img/DefaultSqlSession-query.png)
 
 
 ## Links

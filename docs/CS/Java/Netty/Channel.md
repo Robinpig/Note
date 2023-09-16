@@ -4,7 +4,7 @@
 
 ### Channel Hierarchy
 
-![Channel](./images/Channel.png)
+![Channel](img/Channel.png)
 
 
 
