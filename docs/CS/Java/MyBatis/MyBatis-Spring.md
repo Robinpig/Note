@@ -13,7 +13,23 @@ Fig.1. Transaction Organization.
 </p>
 
 ```java
-span
+public class SpringManagedTransactionFactory implements TransactionFactory {
+
+    @Override
+    public Transaction newTransaction(DataSource dataSource, TransactionIsolationLevel level, boolean autoCommit) {
+        return new SpringManagedTransaction(dataSource);
+    }
+    
+    @Override
+    public Transaction newTransaction(Connection conn) {
+        throw new UnsupportedOperationException("New Spring transactions require a DataSource");
+    }
+    
+    @Override
+    public void setProperties(Properties props) {
+        // not needed in this version
+    }
+}
 ```
 
 SpringManagedTransaction handles the lifecycle of a JDBC connection. It retrieves a connection from Spring's transaction manager and returns it back to it when it is no longer needed.
