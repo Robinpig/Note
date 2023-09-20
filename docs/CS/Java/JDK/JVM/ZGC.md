@@ -75,6 +75,43 @@ Young/Old Generation
 - Lower heap headroom
 - Lower CPU usage
 
+Applications running with Generational ZGC should enjoy
+
+- Lower risks of allocations stalls,
+- Lower required heap memory overhead, and
+- Lower garbage collection CPU overhead.
+
+In a future release we intend to make Generational ZGC the default, at which point `-XX:-ZGenerational` will select non-generational ZGC.
+
+```shell
+java -XX:+UseZGC -XX:+ZGenerational
+```
+
+Non-generational ZGC uses both colored pointers and load barriers.
+Generational ZGC also uses store barriers to efficiently keep track of references from objects in one generation to objects in another generation.
+
+A store barrier is a fragment of code injected by ZGC into the application wherever the application stores references into object fields.
+Generational ZGC adds new metadata bits to colored pointers so that store barriers can determine if the field being written has already been recorded as potentially containing an inter-generational pointer.
+Colored pointers make Generational ZGC's store barriers more efficient than traditional generational store barriers.
+The addition of store barriers allows Generational ZGC to move the work of marking reachable objects from load barriers to store barriers.
+That is, store barriers can use the metadata bits in colored pointers to efficiently determine if the object previously referred to by the field, prior to the store, needs to be marked.
+
+Moving marking out of load barriers makes it easier to optimize them, which is important because load barriers are often more frequently executed than store barriers.
+Now when a load barrier interprets a colored pointer it need only update the object address, if the object was relocated, and update the metadata to indicate that the address is known to be correct.
+Subsequent load barriers will interpret this metadata and not check again whether the object has been relocated.
+
+Generational ZGC uses distinct sets of marking and relocation metadata bits in colored pointers, so that the generations can be collected independently.
+
+The remaining sections describe important design concepts that distinguish Generational ZGC from non-generational ZGC, and from other garbage collectors:
+
+- No multi-mapped memory
+- Optimized barriers
+- Double-buffered remembered sets
+- Relocations without additional heap memory
+- Dense heap regions
+- Large objects
+- Full garbage collections
+
 ## References
 
 1. [ZGC - by RednaxelaFX](https://www.zhihu.com/question/287945354/answer/458761494)
