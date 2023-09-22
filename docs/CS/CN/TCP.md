@@ -146,7 +146,16 @@ TCP is a unicast *connection-oriented* protocol. Before either end can send data
 A TCP connection is defined to be a 4-tuple consisting of two IP addresses and two port numbers. More precisely, it is a pair of *endpoints* or *sockets* where each endpoint is identified by an (IP address, port number) pair.
 A connection typically goes through three phases: setup, data transfer (called established), and teardown (closing).
 
-![tcp_shakehand](./images/tcp_shake.png)
+
+<div style="text-align: center;">
+
+![Fig.4. TCP Shake](img/TCP_Shake.png)
+
+</div>
+
+<p style="text-align: center;">Fig.4. TCP Shake</p>
+
+
 
 ### Three-Way Handshake
 
@@ -252,7 +261,15 @@ and the fictional state CLOSED.CLOSED is fictional because it represents the sta
 - TIME-WAIT - represents waiting for enough time to pass to be sure the remote TCP received the acknowledgment of its connection termination request.
 - CLOSED - represents no connection state at all.
 
-![TCP State Transition Diagram](./images/TCP%20state%20transition%20diagram.png)
+
+<div style="text-align: center;">
+
+![Fig.5. TCP State Transition Diagram](img/TCP_State_Transition_Diagram.png)
+
+</div>
+
+<p style="text-align: center;">Fig.5. TCP State Transition Diagram</p>
+
 
 #### CLOSE_WAIT
 
@@ -774,7 +791,16 @@ Consider a client using delayed ACKs that sends a request to a server, and the s
 
 The interaction between the Nagle algorithm and delayed ACKs
 
-![The interaction between the Nagle algorithm and delayed ACKs](./images/Nagle.png)
+
+<div style="text-align: center;">
+
+![Fig.5. The interaction between the Nagle algorithm and delayed ACKs](img/Nagle.png)
+
+</div>
+
+<p style="text-align: center;">Fig.5. The interaction between the Nagle algorithm and delayed ACKs</p>
+
+
 
 Here we see that the client, after receiving two packets from the server, withholds an ACK, hoping that additional data headed toward the server can be piggybacked.
 Generally, TCP is required to provide an ACK for two received packets only if they are full-size, and they are not here.
@@ -1018,7 +1044,17 @@ The challenge is to determine exactly when and how TCP should slow down, and whe
 >
 > TCP congestion control is often referred to as an ***additive-increase***, ***multiplicative-decrease(AIMD)*** form of congestion control.
 
-![TCP congestion control FSM](./images/TCP%20congestion%20control%20FSM.png)
+
+
+<div style="text-align: center;">
+
+![Fig.5. TCP congestion control FSM](img/TCP_Congestion_Control_FSM.png)
+
+</div>
+
+<p style="text-align: center;">Fig.5. TCP congestion control FSM</p>
+
+
 
 ### Detection of Congestion
 

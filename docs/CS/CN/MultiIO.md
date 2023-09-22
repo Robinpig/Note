@@ -23,7 +23,15 @@ under Unix:
 
 Figure from UNP:
 
-![Comparison of the five I/O models](./images/Comparison%20of%20the%20five%20IO%20models.png)
+
+<div style="text-align: center;">
+
+![Fig.1. Comparison of the five I/O models](img/IO_Models.png)
+
+</div>
+
+<p style="text-align: center;">Fig.1. Comparison of the five I/O models</p>
+
 
 
 There are normally two distinct phases for an input operation:
