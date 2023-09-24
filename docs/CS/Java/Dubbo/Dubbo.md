@@ -13,10 +13,10 @@
 ## Design
 
 ### layers
-![Dubbo Framework](./images/Dubbo-framework.png)
+![Dubbo Framework](img/Dubbo-framework.png)
 
 ### packages
-![Dubbo-Packages](./images/Dubbo-Package.png)
+![Dubbo-Packages](img/Dubbo-Package.png)
 
 ### cluster
 

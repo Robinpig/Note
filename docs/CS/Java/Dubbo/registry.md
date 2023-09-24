@@ -6,7 +6,7 @@
 
 
 
-![](./images/registry.png)
+![](img/registry.png)
 
 
 
