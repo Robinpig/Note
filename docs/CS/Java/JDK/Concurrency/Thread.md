@@ -1614,6 +1614,8 @@ See [Loom](/docs/CS/Java/JDK/Loom.md).
 
 Preemptive Threads-Scheduling
 
+Virtual Thread
+
 ## Links
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 - [JVM Thread](/docs/CS/Java/JDK/JVM/Thread.md)
