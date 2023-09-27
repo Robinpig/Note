@@ -1263,7 +1263,7 @@ void* AllocateHeap(size_t size) {
 
 ### CollectedHeap
 
-![](../img/CollectedHeap.svg)
+![](../Collection/img/CollectedHeap.svg)
 
 ```cpp
 class CollectedHeap : public CHeapObj<mtInternal> {

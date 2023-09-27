@@ -44,7 +44,7 @@ They are serialized as specified on the Serialized Form page
 
 ### List Hierarchy
 
-![](../img/List.png)
+![](img/List.png)
 
 ## AbstractList
 
