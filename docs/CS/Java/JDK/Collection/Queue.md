@@ -2,7 +2,7 @@
 
 ### Queue Hierarchy
 
-![queue](../img/Queue.png)
+![queue](img/Queue.png)
 
 A collection designed for holding elements prior to processing. Besides basic Collection operations, queues provide
 additional insertion, extraction, and inspection operations.

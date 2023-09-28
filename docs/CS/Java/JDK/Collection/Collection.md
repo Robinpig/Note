@@ -1,26 +1,78 @@
 ## Introduction
 
-As is common with modern data structure libraries, the Java collection library separates interfaces and implementations. 
+As is common with modern data structure libraries, the Java collection library separates interfaces and implementations.
 
 
-![Collection](../img/Collection.png)
+<div style="text-align: center;">
+
+![Fig.1. Collection](img/Collection.png)
+
+</div>
+
+<p style="text-align: center;">Fig.1. Collection</p>
 
 - [List](/docs/CS/Java/JDK/Collection/List.md)
 - [Map](/docs/CS/Java/JDK/Collection/Map.md)
 - [Set](/docs/CS/Java/JDK/Collection/Set.md)
 - [Queue](/docs/CS/Java/JDK/Collection/Queue.md)
 
+## SequencedCollection
 
+A collection that has a well-defined *encounter order*, that supports operations at both ends, and that is reversible.
+The elements of a sequenced collection have an encounter order, where conceptually the elements have a linear arrangement from the first element to the last element.
+Given any two elements, one element is either before (closer to the first element) or after (closer to the last element) the other element.
+(**Note that this definition does not imply anything about physical positioning of elements, such as their locations in a computer's memory.**)
+
+<div style="text-align: center;">
+
+![Fig.2. SequencedCollection](img/SequencedCollection.png)
+
+</div>
+
+<p style="text-align: center;">Fig.2. SequencedCollection</p>
+
+```java
+public interface SequencedCollection<E> extends Collection<E> {
+
+    SequencedCollection<E> reversed();
+
+    default void addFirst(E e) {
+        throw new UnsupportedOperationException();
+    }
+
+    default void addLast(E e) {
+        throw new UnsupportedOperationException();
+    }
+
+    default E getFirst() {
+        return this.iterator().next();
+    }
+
+    default E getLast() {
+        return this.reversed().iterator().next();
+    }
+
+    default E removeFirst() {
+        var it = this.iterator();
+        E e = it.next();
+        it.remove();
+        return e;
+    }
+
+    default E removeLast() {
+        var it = this.reversed().iterator();
+        E e = it.next();
+        it.remove();
+        return e;
+    }
+}
+```
 
 ## Queue
 
 Let us look at that separation with a familiar data structure, the queue.
 
-
 A queue interface specifies that you can add elements at the tail end of the queue, remove them at the head, and find out how many elements are in the queue. You use a queue when you need to collect objects and retrieve them in a “first in, first out” fashion.
-
-
-
 
 ### Collection
 
@@ -85,12 +137,7 @@ public interface Collection<E> extends Iterable<E> {
     boolean equals(Object o);
 
     int hashCode();
-}
-```
-
-Since 1.8 add Stream API
-
-```java
+   
     // Creates a Spliterator over the elements in this collection.
 		@Override
     default Spliterator<E> spliterator() {
@@ -140,7 +187,7 @@ if (modCount != expectedModCount) {
 
 ### Fail-Safe
 
-For example CopyOnWriteArrayList.
+For example [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList).
 
 ConcurrentHashMap UNSAFE.getObjectVolatile
 
@@ -407,3 +454,7 @@ public interface ListIterator<E> extends Iterator<E> {
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
+
+## References
+
+1. [JEP 353: Sequenced Collections](https://openjdk.org/jeps/431)

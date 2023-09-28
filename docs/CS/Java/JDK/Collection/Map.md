@@ -1,6 +1,6 @@
 ### Map Hierarchy
 
-![Map](../img/Map.png)
+![Map](img/Map.png)
 
 ## Summary
 
@@ -301,7 +301,7 @@ public V put(K key, V value) {
 
 
 
-![put](../img/HashMap-put.png)
+![put](img/HashMap-put.png)
 
 
 
