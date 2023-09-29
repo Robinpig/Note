@@ -85,10 +85,10 @@ In order for the conditions for atomic broadcast to be satisfied, the participan
 Participants recovering from failure, after the other participants have "agreed" an order and started to receive the messages, must be able to learn and comply with the agreed order. 
 Such considerations indicate that in systems with crash failures, atomic broadcast and [consensus](/docs/CS/Distributed/Consensus.md) are equivalent problems.
 
-A value can be proposed by a process for consensus by atomically broadcasting it, and a process can decide a value by selecting the value of the first message which it atomically receives.
+- A value can be proposed by a process for consensus by atomically broadcasting it, and a process can decide a value by selecting the value of the first message which it atomically receives.
 Thus, consensus can be reduced to atomic broadcast.
 <br>
-Conversely, a group of participants can atomically broadcast messages by achieving consensus regarding the first message to be received, followed by achieving consensus on the next message, and so forth until all the messages have been received. 
+- Conversely, a group of participants can atomically broadcast messages by achieving consensus regarding the first message to be received, followed by achieving consensus on the next message, and so forth until all the messages have been received. 
 Thus, atomic broadcast reduces to consensus.
 
 
