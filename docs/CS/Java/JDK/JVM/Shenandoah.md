@@ -240,12 +240,13 @@ Final Mark:
 2. Drain the SATB buffers
 3. Finish work from SATB updates ← most heavy-weight
 
-## Future Work
-
-[JEP 404: Generational Shenandoah](https://bugs.openjdk.org/browse/JDK-8260865)
+## Generational Shenandoah
 
 ## Links
 
 ## References
 
 1. [Shenandoah GC in JDK 13, Part I: Load Reference Barriers](https://rkennke.wordpress.com/2019/05/15/shenandoah-gc-in-jdk13-part-i-load-reference-barriers/)
+2. [JEP 379: Shenandoah: A Low-Pause-Time Garbage Collector (Production)](https://openjdk.org/jeps/379)
+2. [JEP 404: Generational Shenandoah](https://bugs.openjdk.org/browse/JDK-8260865)
+

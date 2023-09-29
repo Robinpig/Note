@@ -1,51 +1,40 @@
 ## Introduction
 
-
-
-
-
 ## transaction
 
-![](./images/transaction.png)
+<div style="text-align: center;">
+
+![Fig.1. Transaction Organization](img/transaction.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Transaction Organization.
+</p>
 
 ```java
-
 public class SpringManagedTransactionFactory implements TransactionFactory {
 
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public Transaction newTransaction(DataSource dataSource, TransactionIsolationLevel level, boolean autoCommit) {
-    return new SpringManagedTransaction(dataSource);
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public Transaction newTransaction(Connection conn) {
-    throw new UnsupportedOperationException("New Spring transactions require a DataSource");
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public void setProperties(Properties props) {
-    // not needed in this version
-  }
-
+    @Override
+    public Transaction newTransaction(DataSource dataSource, TransactionIsolationLevel level, boolean autoCommit) {
+        return new SpringManagedTransaction(dataSource);
+    }
+    
+    @Override
+    public Transaction newTransaction(Connection conn) {
+        throw new UnsupportedOperationException("New Spring transactions require a DataSource");
+    }
+    
+    @Override
+    public void setProperties(Properties props) {
+        // not needed in this version
+    }
 }
 ```
-
-
 
 SpringManagedTransaction handles the lifecycle of a JDBC connection. It retrieves a connection from Spring's transaction manager and returns it back to it when it is no longer needed.
 If Spring's transaction handling is active it will no-op all commit/rollback/close calls assuming that the Spring transaction manager will do the job.
 If it is not it will behave like JdbcTransaction.
-
-
 
 ```java
 public class SpringManagedTransaction implements Transaction {
@@ -60,8 +49,6 @@ public class SpringManagedTransaction implements Transaction {
 ...
 }
 ```
-
-
 
 Helper class that provides static methods for obtaining JDBC Connections from a DataSource. Includes special support for Spring-managed transactional Connections, e.g. managed by DataSourceTransactionManager or org.springframework.transaction.jta.JtaTransactionManager.
 Used internally by Spring's org.springframework.jdbc.core.JdbcTemplate, Spring's JDBC operation objects and the JDBC DataSourceTransactionManager. Can also be used directly in application code.
@@ -114,10 +101,6 @@ public static Connection doGetConnection(DataSource dataSource) throws SQLExcept
 }
 ```
 
-
-
-
-
 ```java
 // TransactionSynchronizationManager
 
@@ -144,8 +127,6 @@ private static Object doGetResource(Object actualKey) {
    return value;
 }
 ```
-
-
 
 ### ConnectionHolder
 
@@ -176,12 +157,6 @@ public class ConnectionHolder extends ResourceHolderSupport {
   
 }
 ```
-
-
-
-
-
-
 
 ## wrap SqlSession
 
@@ -253,10 +228,6 @@ private class SqlSessionInterceptor implements InvocationHandler {
 }
 ```
 
-
-
-
-
 ```java
 // DaoSupport implements InitializingBean
 @Override
@@ -283,10 +254,6 @@ public abstract class SqlSessionDaoSupport extends DaoSupport {
 ...
 }
 ```
-
-
-
-
 
 BeanFactory that enables injection of MyBatis mapper interfaces. It can be set up with a SqlSessionFactory or a pre-configured SqlSessionTemplate.
 
@@ -322,14 +289,12 @@ protected void checkDaoConfig() {
 ```
 
 ### 1st cache invalid
-Because every call will new SqlSession, please use transaction.
 
+Because every call will new SqlSession, please use transaction.
 
 ## start
 
-![](./images/MapperScan.png)
-
-
+![](img/MapperScan.png)
 
 ### SpringBoot
 
@@ -343,8 +308,6 @@ Auto-Configuration for Mybatis. Contributes a **SqlSessionFactory** and a **SqlS
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
 public class MybatisAutoConfiguration implements InitializingBean {}
 ```
-
-
 
 ```java
 // MybatisAutoConfiguration
@@ -384,8 +347,6 @@ public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Excepti
 }
 ```
 
-
-
 ### use @MapperScan
 
 Use this annotation to register MyBatis mapper interfaces when using Java Config. It performs when same work as MapperScannerConfigurer via MapperScannerRegistrar.
@@ -403,12 +364,12 @@ Use this annotation to register MyBatis mapper interfaces when using Java Config
                 .addScript("schema.sql")
                 .build();
      }
-      
+  
      @Bean
      public DataSourceTransactionManager transactionManager() {
        return new DataSourceTransactionManager(dataSource());
      }
-      
+  
      @Bean
      public SqlSessionFactory sqlSessionFactory() throws Exception {
        SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
@@ -428,10 +389,6 @@ public @interface MapperScan {
 }
 ```
 
-
-
-
-
 ```java
 // MapperScannerRegistrar
 void registerBeanDefinitions(AnnotationAttributes annoAttrs, BeanDefinitionRegistry registry) {
@@ -448,7 +405,7 @@ void registerBeanDefinitions(AnnotationAttributes annoAttrs, BeanDefinitionRegis
 }
 ```
 
-#### processBeanDefinitions 
+#### processBeanDefinitions
 
 Calls the parent search that will search and register all the candidates. Then the registered objects are post processed to set them as **MapperFactoryBeans**
 
@@ -502,32 +459,24 @@ private void processBeanDefinitions(Set<BeanDefinitionHolder> beanDefinitions) {
 }
 ```
 
-
-
-
-
-
-
 ### MapperScannerConfigurer
 
-BeanDefinitionRegistryPostProcessor that searches recursively starting from a base package for interfaces and registers them as MapperFactoryBean. 
+BeanDefinitionRegistryPostProcessor that searches recursively starting from a base package for interfaces and registers them as MapperFactoryBean.
 Note that only interfaces with at least one method will be registered; concrete classes will be ignored.
 
-This class was a BeanFactoryPostProcessor until 1.0.1 version. It changed to BeanDefinitionRegistryPostProcessor in 1.0.2. 
+This class was a BeanFactoryPostProcessor until 1.0.1 version. It changed to BeanDefinitionRegistryPostProcessor in 1.0.2.
 See https://jira.springsource.org/browse/SPR-8269 for the details.
 
 The basePackage property can contain more than one package name, separated by either commas or semicolons.
-This class supports filtering the mappers created by either specifying a marker interface or an annotation. 
-The annotationClass property specifies an annotation to search for. 
-The markerInterface property specifies a parent interface to search for. 
-If both properties are specified, mappers are added for interfaces that match either criteria. 
+This class supports filtering the mappers created by either specifying a marker interface or an annotation.
+The annotationClass property specifies an annotation to search for.
+The markerInterface property specifies a parent interface to search for.
+If both properties are specified, mappers are added for interfaces that match either criteria.
 By default, these two properties are null, so all interfaces in the given basePackage are added as mappers.
-This configurer enables autowire for all the beans that it creates so that they are automatically autowired with the proper SqlSessionFactory or SqlSessionTemplate. 
-If there is more than one SqlSessionFactory in the application, however, autowiring cannot be used. 
-In this case you must explicitly specify either an SqlSessionFactory or an SqlSessionTemplate to use via the bean name properties. 
+This configurer enables autowire for all the beans that it creates so that they are automatically autowired with the proper SqlSessionFactory or SqlSessionTemplate.
+If there is more than one SqlSessionFactory in the application, however, autowiring cannot be used.
+In this case you must explicitly specify either an SqlSessionFactory or an SqlSessionTemplate to use via the bean name properties.
 Bean names are used rather than actual objects because Spring does not initialize property placeholders until after this class is processed.
-
-
 
 Call [ClassPathMapperScanner::processBeanDefinitions()](/docs/CS/Java/MyBatis/MyBatis-Spring.md?id=processBeanDefinitions)
 
@@ -556,8 +505,6 @@ public class MapperScannerConfigurer implements BeanDefinitionRegistryPostProces
 }
 ```
 
-
 ## Links
 
 - [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
-

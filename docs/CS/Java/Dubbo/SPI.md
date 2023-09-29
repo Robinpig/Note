@@ -24,7 +24,7 @@ When user configure to use mina, dubbo will complain the extension cannot be loa
 
 ### Packages
 
-![Dubbo-SPI](./images/Dubbo-SPI.png)
+![Dubbo-SPI](img/Dubbo-SPI.png)
 
 ```java
 @Documented
@@ -798,7 +798,7 @@ public String generate() {
 
 ## Compiler
 
-![Compiler](./images/Compiler.png)
+![Compiler](img/Compiler.png)
 
 ```java
 /**

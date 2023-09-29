@@ -2,11 +2,6 @@
 
 zero-sum finite deterministic game
 
-
-
-
-
-
 $\alpha-\beta$
 
 Principal Variation Search(PVS)
@@ -14,8 +9,6 @@ Principal Variation Search(PVS)
 Monte Carlo Tree Search
 
 Upper Confidence Bound Apply to Tree
-
-
 
 ## Links
 

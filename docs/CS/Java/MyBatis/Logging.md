@@ -19,7 +19,7 @@ If MyBatis finds none of the above implementations, then logging will be disable
 
 ## Package
 
-![Logging](./images/logging.png)
+![Logging](img/logging.png)
 
 
 
@@ -119,7 +119,7 @@ private static void setImplementation(Class<? extends Log> implClass) {
 
 ### Logger
 
-![Logger](./images/JdbcLogger.png)
+![Logger](img/JdbcLogger.png)
 
 
 

@@ -63,7 +63,7 @@ The four steps are:
 - DHCP ACK. 
   The server responds to the DHCP request message with a DHCP ACK message, confirming the requested parameters.
 
-![DHCP Operation](./images/DHCP.png)
+![DHCP Operation](img/DHCP.png)
 
 DHCP NAK
 

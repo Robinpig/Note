@@ -2,7 +2,7 @@
 
 
 
-![](./images/remoting.png)
+![](img/remoting.png)
 
 
 

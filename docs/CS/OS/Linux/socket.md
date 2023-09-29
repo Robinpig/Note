@@ -523,7 +523,7 @@ struct request_sock {
 
 List of sk_buff elements:
 
-![List of sk_buff elements](./images/sk_buff.png)
+![List of sk_buff elements](img/sk_buff.png)
 
 
 ##### sk_buff_head
@@ -788,7 +788,7 @@ Increase the headroom of an empty &sk_buff by reducing the tail room. This is on
 
 Buffer that is filled in while traversing the stack from the TCP layer down to the link layer:
 
-![](./images/sk_buff_down.png)
+![](img/sk_buff_down.png)
 
 When TCP is asked to transmit some data, it allocates a buffer following certain criteria (TCP Maximum Segment Size (mss), support for scatter gather I/O, etc.).
 TCP reserves (with skb_reserve) enough space at the head of the buffer to hold all the headers of all layers (TCP, IP, link layer). 

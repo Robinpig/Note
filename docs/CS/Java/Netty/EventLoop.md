@@ -2,7 +2,7 @@
 
 ### EventLoop Hierarchy
 
-![EventLoopGroup](./images/EventLoop.png)
+![EventLoopGroup](img/EventLoop.png)
 
 #### EventExecutorGroup
 

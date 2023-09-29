@@ -4,6 +4,17 @@
 
 > QUIC retains ordering within a single resource stream.
 
+
+<div style="text-align: center;">
+
+![Fig.1. HTTP/3](./img/HTTP3.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. HTTP/3 over QUIC stack overview.
+</p>
+
 ## Fast handshakes
 
 0-RTT
@@ -37,7 +48,7 @@ A sender can unilaterally choose a different algorithm to use, such as CUBIC .
 
 ### ECN
 
-If a path has been validated to support Explicit Congestion Notification (ECN) [RFC3168] [RFC8311], QUIC treats a Congestion Experienced (CE) codepoint in the IP header as a signal of congestion. 
+If a path has been validated to support Explicit Congestion Notification (ECN) [RFC3168], QUIC treats a Congestion Experienced (CE) codepoint in the IP header as a signal of congestion. 
 This document specifies an endpoint's response when the peer-reported ECN-CE count increases; see Section 13.4.2 of [QUIC-TRANSPORT].
 
 
