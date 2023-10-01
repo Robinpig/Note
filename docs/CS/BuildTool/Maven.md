@@ -11,7 +11,7 @@
 
 可选依赖不会传递
 
-依赖范围
+Dependency Scope
 
 - compiler(default)
 - provider
