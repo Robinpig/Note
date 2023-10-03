@@ -43,7 +43,16 @@ It is useful for implementing multi-way merge results and producerconsumer queue
 A GFS cluster consists of a single *master* and multiple *chunkservers* and is accessed by multiple *clients*, as shown in Figure 1.
 Each of these is typically a commodity Linux machine running a user-level server process.
 
-![GFS Architecture](img/GFS-Architecture.png)
+
+<div style="text-align: center;">
+
+![Fig.1. GFS Architecture](img/GFS-Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. GFS Architecture
+</p>
 
 Files are divided into fixed-size *chunks*.
 Each chunk is identified by an immutable and globally unique 64 bit chunk handle assigned by the master at the time of chunkcreation.
@@ -293,7 +302,18 @@ If a write by the application is large or straddles a chunk boundary, GFS client
 They all follow the control flow described above but may be interleaved with and overwritten by concurrent operations from other clients.
 Therefore, the shared file region may end up containing fragments from different clients, although the replicas will be identical because the individual operations are completed successfully in the same order on all replicas.
 
-![GFS Write Flow](img/GFS-Write-Flow.png)
+
+
+<div style="text-align: center;">
+
+![Fig.2. GFS Write Flow](img/GFS-Write-Flow.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.2. GFS Write Flow
+</p>
+
 
 ### Data Flow
 
