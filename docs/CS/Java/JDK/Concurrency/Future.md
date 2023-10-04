@@ -4,7 +4,7 @@
 
 ### Future Hierarchy
 
-![Future](../img/Future.png)
+![Future](img/Future.png)
 
 We could create a [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md) object with a **Runnable** target, also use **FutureTask** to get **Future**.
 

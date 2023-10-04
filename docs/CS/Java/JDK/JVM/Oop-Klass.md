@@ -13,7 +13,7 @@ The klass hierarchy is separate from the oop hierarchy.
 
 <div style="text-align: center;">
 
-![](../img/Klass.svg)
+![](img/Klass.svg)
 
 </div>
 

@@ -1288,7 +1288,7 @@ class Universe: AllStatic {
 
 ### CollectorPolicy
 
-![](../img/CollectorPolicy.svg)
+![](img/CollectorPolicy.svg)
 
 ```cpp
 span

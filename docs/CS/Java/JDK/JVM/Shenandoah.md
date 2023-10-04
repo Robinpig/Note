@@ -24,6 +24,18 @@ The trade off is that Shenandoah requires more space than other algorithms.
 The object layout for Shenandoah adds an additional word per object.
 This word is located directly preceding the object and is only allocated when using the Shenandoah collector.
 
+
+
+<div style="text-align: center;">
+
+![Fig.1. Shenandoah Object layout](img/GFS-Write-Flow.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Shenandoah Object layout
+</p>
+
 ![Shenandoah Object layout](../img/Shenandoah%20Object%20layout.png)
 
 ### Heap Layout

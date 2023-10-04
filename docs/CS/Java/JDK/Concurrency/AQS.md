@@ -12,7 +12,7 @@ Given these, the other methods in this class carry out all queuing and blocking 
 Subclasses can maintain other state fields, but only the atomically updated int value manipulated using methods getState, setState and compareAndSetState is tracked with respect to synchronization.
 
 
-![](../img/AQS.png)
+![](img/AQS.png)
 
 
 

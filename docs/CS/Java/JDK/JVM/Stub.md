@@ -354,7 +354,7 @@ call Java function, entry_point generate when [class linking](/docs/CS/Java/JDK/
 
 ## JavaCalls
 
-![](../img/JavaCalls.svg)
+![](img/JavaCalls.svg)
 
 Check if we need to wrap a potential OS exception handler around thread.
 This is used for e.g. Win32 structured exception handlers.

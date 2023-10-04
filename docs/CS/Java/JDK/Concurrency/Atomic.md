@@ -22,7 +22,7 @@ The memory effects for accesses and updates of atomics generally follow the rule
 5. weakCompareAndSet **atomically reads and conditionally writes a variable but does not create any happens-before orderings**, so provides no guarantees with respect to previous or subsequent reads and writes of any variables other than the target of the weakCompareAndSet.
 6. compareAndSet and all other read-and-update operations such as getAndIncrement **have the memory effects of both reading and writing volatile variables**.
 
-![Atomic](../img/Atomic.png)
+![Atomic](img/Atomic.png)
 
 Instances of classes **AtomicBoolean, AtomicInteger, AtomicLong, and AtomicReference each provide access and updates to a single variable of the corresponding type**.
 Each class also provides appropriate utility methods for that type. For example, classes AtomicLong and AtomicInteger provide atomic increment methods.
