@@ -71,16 +71,12 @@ private void checkForComodification(final int expectedModCount) {
 **Deque** means that the LinkedList supports insertion/deletion from head and tail.
 
 ```java
-public class LinkedList<E>
-    extends AbstractSequentialList<E>
-    implements List<E>, Deque<E>, Cloneable, java.io.Serializable
+public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>, Deque<E>, Cloneable, java.io.Serializable
 {
     transient int size = 0;
 
-    // Pointer to first node.
     transient Node<E> first;
 
-    //Pointer to last node.
     transient Node<E> last;
 
     /** Constructs an empty list. */
@@ -107,19 +103,31 @@ private static class Node<E> {
 
 ### add
 
-```
-public boolean add(E e) {
-    linkLast(e);
-    return true;
-}
+Find the (non-null) Node at the specified element index if not the first/last.
 
-public void add(int index, E element) {
-    checkPositionIndex(index);
+```java
+public class LinkedList<E> {
+    public void add(int index, E element) {
+        checkPositionIndex(index);
+        if (index == size)
+            linkLast(element);
+        else
+            linkBefore(element, node(index));
+    }
 
-    if (index == size)
-        linkLast(element);
-    else
-        linkBefore(element, node(index));
+    Node<E> node(int index) {
+        if (index < (size >> 1)) {
+            Node<E> x = first;
+            for (int i = 0; i < index; i++)
+                x = x.next;
+            return x;
+        } else {
+            Node<E> x = last;
+            for (int i = size - 1; i > index; i--)
+                x = x.prev;
+            return x;
+        }
+    }
 }
 ```
 
@@ -430,17 +438,14 @@ Stack vs ArrayDeque
 
 ## Summary
 
-`RA` = `RandomAccess`
 
-
-| Type        | ArrayList    | LinkedList             | CopyOnWriteArrayList | Vector       | Stack  |
-| ----------- | ------------ | ---------------------- | -------------------- | ------------ | ------ |
-| Super Class | AbstractList | AbstractSequentialList |                      | AbstractList | Vector |
-| Interface   | List&RA      | List&Deque             | List&RA              | List&RA      |        |
-| Satety      | unsafe       | unsafe                 | safe                 | safe         | safe   |
-| Resize      | 1.5          |                        |                      | 2            | 2      |
-|             |              |                        |                      |              |        |
-|             |              |                        |                      |              |        |
+| Type              | ArrayList          | LinkedList             | CopyOnWriteArrayList | Vector             | Stack              |
+| ----------------- | ------------------ | ---------------------- | -------------------- | ------------------ | ------------------ |
+| Super Class       | AbstractList       | AbstractSequentialList | Object               | AbstractList       | Vector             |
+| Satety            | unsafe             | unsafe                 | safe                 | safe               | safe               |
+| Size after expand | 1.5                |                        | 1.5                  | 2                  | 2                  |
+| RandomAccess      | :white_check_mark: | :x:                    | :white_check_mark:   | :white_check_mark: | :white_check_mark: |
+|                   |                    |                        |                      |                    |                    |
 
 ## Links
 

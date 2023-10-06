@@ -315,6 +315,12 @@ Using random expire timestamps(or never expire).
 Using cluster cache servers.
 
 
+
+
+httpClient retry 3
+
+
+
 ## Links
 
 

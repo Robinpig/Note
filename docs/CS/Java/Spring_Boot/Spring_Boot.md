@@ -3,7 +3,7 @@
 [Spring Boot](https://spring.io/projects/spring-boot) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
 - [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
-- [actuator](/docs/CS/Java/Spring_Boot/actuator.md)
+- [Actuator](Actuator.md)
 
 ## Architecture
 

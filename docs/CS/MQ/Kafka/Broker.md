@@ -149,15 +149,15 @@ class KafkaServer(
 
         if (preloadedBrokerMetadataCheckpoint.version != 0) {
           throw new RuntimeException(s"Found unexpected version in loaded `meta.properties`: " +
-            s"$preloadedBrokerMetadataCheckpoint. Zk-based brokers only support version 0 " +
-            "(which is implicit when the `version` field is missing).")
+                  s"$preloadedBrokerMetadataCheckpoint. Zk-based brokers only support version 0 " +
+                  "(which is implicit when the `version` field is missing).")
         }
 
         /* check cluster id */
         if (preloadedBrokerMetadataCheckpoint.clusterId.isDefined && preloadedBrokerMetadataCheckpoint.clusterId.get != clusterId)
           throw new InconsistentClusterIdException(
             s"The Cluster ID $clusterId doesn't match stored clusterId ${preloadedBrokerMetadataCheckpoint.clusterId} in meta.properties. " +
-              s"The broker is trying to join the wrong cluster. Configured zookeeper.connect may be wrong.")
+                    s"The broker is trying to join the wrong cluster. Configured zookeeper.connect may be wrong.")
 
         /* generate brokerId */
         config.brokerId = getOrGenerateBrokerId(preloadedBrokerMetadataCheckpoint)
@@ -237,6 +237,10 @@ class KafkaServer(
           brokerFeatures,
           metadataCache
         )
+      }
+    }
+  }
+}
 ```
 
 ### SocketServer
@@ -1518,11 +1522,10 @@ Append the given messages starting with the given offset. Add an entry to the in
         params = params,
         fetchInfos = interesting,
         quota = replicationQuota(fetchRequest),
-        responseCallback = processResponseCallback,
+        responseCallback = processResponseCallback
       )
     }
   }
-
 ```
 
 Fetch messages from a replica, and wait until enough data can be fetched and return; the callback function will be triggered either when timeout or required fetch info is satisfied.
@@ -1595,7 +1598,6 @@ Consumers may fetch from any replica, but followers can only fetch from the lead
       delayedFetchPurgatory.tryCompleteElseWatch(delayedFetch, delayedFetchKeys)
     }
   }
-
 ```
 
 ConsumerCoordinator#poll

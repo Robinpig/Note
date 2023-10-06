@@ -116,3 +116,8 @@ class SimpleCacheConfiguration {
 
 }
 ```
+
+
+## Links
+
+- [Spring Cache](/docs/CS/Java/Spring/Cache.md)

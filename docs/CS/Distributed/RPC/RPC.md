@@ -4,6 +4,9 @@ RPC is a communication mechanism between two parties, a *client* and a *server*.
 In distributed computing, a remote procedure call (RPC) is when a computer program causes a procedure (subroutine) to execute in a different address space (commonly on another computer on a shared network),
 which is coded as if it were a normal (local) procedure call, without the programmer explicitly coding the details for the remote interaction.
 
+
+When making a remote call, five pieces of program are involved: the user, the user-stub, the RPC communications package (known as RPCRuntime), the server-stub, and the server.
+
 When the main program calls the procedure, what actually happens is that a call is made to a special procedure called the *client stub* on the client’s machine.
 The client stub marshalls (collects) the parameters into a message, and then sends the message to the server machine where it is received by the *server stub*.
 The server stub unpacks the parameters from the message, and then calls the server procedure using the standard calling sequence.
@@ -136,13 +139,21 @@ If the operation of finding all the tuples is a time consuming one, the client m
 
 Now [gRPC](/docs/CS/Distributed/RPC/grpc.md) and Finagle support to build stream clients and servers.
 
+
+[Thrift](/docs/CS/Distributed/RPC/Thrift.md)
+
+[Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+
+
+
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
 
 ## References
-
-1. [Remote Procedure Call](https://christophermeiklejohn.com/pl/2016/04/12/rpc.html)
-2. [A Critique of the Remote Procedure Call Paradigm](https://www.win.tue.nl/~johanl/educ/2II45/2010/Lit/Tanenbaum%20RPC%2088.pdf)
-3. [Procedure Call Protocol Documents，Version 2]()
+1. [RFC 647 - Procedure Call Protocol Documents，Version 2](https://datatracker.ietf.org/doc/rfc647/)
+2. [Implementing Remote Procedure Calls](https://web.eecs.umich.edu/~mosharaf/Readings/RPC.pdf)
 4. [RFC 1057 - RPC: Remote Procedure Call Protocol Specification Version 2](https://datatracker.ietf.org/doc/rfc1057/)
+2. [A Critique of the Remote Procedure Call Paradigm](https://www.win.tue.nl/~johanl/educ/2II45/2010/Lit/Tanenbaum%20RPC%2088.pdf)
+5. [A Note on Distributed Computing](https://scholar.harvard.edu/files/waldo/files/waldo-94.pdf)
+1. [Remote Procedure Call](https://christophermeiklejohn.com/pl/2016/04/12/rpc.html)
