@@ -84,7 +84,7 @@ $$
 
 空间定向改变时，行列式为负数
 
-![image-20200302130934963](./images/determinant.png)
+![determinant](./images/determinant.png)
 
 ad-bc
 
@@ -96,7 +96,10 @@ X_{k+1} = X_k - \frac{f(X_k)}{f'(X_k)}, k=1,2,...
 $$
 
 
-## Pure Math
+## Pure Mathematics
+
+
+
 
 
 
