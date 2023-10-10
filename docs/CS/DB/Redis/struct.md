@@ -57,16 +57,54 @@ The following is the list of all the data structures supported by Redis, which w
   you can set and clear individual bits, count all the bits set to 1, find the first set or unset bit, and so forth.
 * HyperLogLogs: this is a probabilistic data structure which is used in order to estimate the cardinality of a set.
   Don't be scared, it is simpler than it seems... See later in the HyperLogLog section of this tutorial.
-* Streams: append-only collections of map-like entries that provide an abstract log data type.
+* [Streams](/docs/CS/DB/Redis/Stream.md): append-only collections of map-like entries that provide an abstract log data type.
+
+
+
+
+
+<!-- tabs:start -->
+
+##### **Object**
+```c
+// server.h
+/* The actual Redis Object */
+#define OBJ_STRING 0    /* String object. */
+#define OBJ_LIST 1      /* List object. */
+#define OBJ_SET 2       /* Set object. */
+#define OBJ_ZSET 3      /* Sorted set object. */
+#define OBJ_HASH 4      /* Hash object. */
+#define OBJ_MODULE 5    /* Module object. */
+#define OBJ_STREAM 6    /* Stream object. */
+```
+
+##### **Encoding**
+```c
+#define OBJ_ENCODING_RAW 0     /* Raw representation */
+#define OBJ_ENCODING_INT 1     /* Encoded as integer */
+#define OBJ_ENCODING_HT 2      /* Encoded as hash table */
+#define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
+#define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
+#define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
+#define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
+#define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
+#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
+#define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
+```
+
+<!-- tabs:end -->
+
+
+<div style="text-align: center;">
+
 
 ```dot
 strict digraph  {
 autosize=false;
 
-rankdir=LR;
 
   subgraph cluster_Type {
-        label="type"
+        label="object"
       
         {rank="same";stream;list;set;hash;zset;string;}
   }
@@ -100,62 +138,12 @@ rankdir=LR;
 ```
 
 
-object
 
-- [Stream](/docs/CS/DB/Redis/Stream.md)
-- [geo](/docs/CS/DB/Redis/geo.md)
+</div>
 
-```c
-// server.h
-/* A redis object, that is a type able to hold a string / list / set */
-
-/* The actual Redis Object */
-#define OBJ_STRING 0    /* String object. */
-#define OBJ_LIST 1      /* List object. */
-#define OBJ_SET 2       /* Set object. */
-#define OBJ_ZSET 3      /* Sorted set object. */
-#define OBJ_HASH 4      /* Hash object. */
-
-/* The "module" object type is a special one that signals that the object
- * is one directly managed by a Redis module. In this case the value points
- * to a moduleValue struct, which contains the object value (which is only
- * handled by the module itself) and the RedisModuleType struct which lists
- * function pointers in order to serialize, deserialize, AOF-rewrite and
- * free the object.
- *
- * Inside the RDB file, module types are encoded as OBJ_MODULE followed
- * by a 64 bit module type ID, which has a 54 bits module-specific signature
- * in order to dispatch the loading to the right module, plus a 10 bits
- * encoding version. */
-#define OBJ_MODULE 5    /* Module object. */
-#define OBJ_STREAM 6    /* Stream object. */
-```
-
-struct
-
-- [int embstr raw](/docs/CS/DB/Redis/SDS.md?id=type)
-- [hashtable](/docs/CS/DB/Redis/hash.md)
-- [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist)
-- [intset](/docs/CS/DB/Redis/set.md?id=intset)
-- [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist)
-- [ziplist](/docs/CS/DB/Redis/list.md?id=quciklist)
-- [Stream](/docs/CS/DB/Redis/Stream.md?id=rax)
-
-```c
-/* Objects encoding. Some kind of objects like Strings and Hashes can be
- * internally represented in multiple ways. The 'encoding' field of the object
- * is set to one of this fields for this object. */
-#define OBJ_ENCODING_RAW 0     /* Raw representation */
-#define OBJ_ENCODING_INT 1     /* Encoded as integer */
-#define OBJ_ENCODING_HT 2      /* Encoded as hash table */
-#define OBJ_ENCODING_ZIPMAP 3  /* Encoded as zipmap */
-#define OBJ_ENCODING_ZIPLIST 5 /* Encoded as ziplist */
-#define OBJ_ENCODING_INTSET 6  /* Encoded as intset */
-#define OBJ_ENCODING_SKIPLIST 7  /* Encoded as skiplist */
-#define OBJ_ENCODING_EMBSTR 8  /* Embedded sds string encoding */
-#define OBJ_ENCODING_QUICKLIST 9 /* Encoded as linked list of ziplists */
-#define OBJ_ENCODING_STREAM 10 /* Encoded as a radix tree of listpacks */
-```
+<p style="text-align: center;">
+Fig.1. Structs
+</p>
 
 ### Keys
 
