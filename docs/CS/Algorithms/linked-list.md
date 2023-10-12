@@ -39,8 +39,8 @@ Since these two operations take constant time, we can say the array access can b
 ### Dynamic Arrays
 
 Dynamic array (also called growable array, resizable array, dynamic table, or array list) is a random access, variable-size list data structure that allows elements to be added or removed.
-One simple way of implementing dynamic arrays is to initially start with some fixed size array. 
-As soon as that array becomes full, create the new array double the size of the original array. 
+One simple way of implementing dynamic arrays is to initially start with some fixed size array.
+As soon as that array becomes full, create the new array double the size of the original array.
 Similarly, reduce the array size to half if the elements in the array are less than half the size.
 
 Note: We will see the implementation for dynamic arrays in the Stacks, Queues and Hashing chapters.
@@ -95,6 +95,11 @@ Finally, linked lists waste memory in terms of extra reference points.
 
 ## Comparison of Linked Lists with Arrays
 
+<p style="text-align: center;">
+Tab.1 Comparison of Linked Lists with Arrays
+</p>
+
+<div style="text-align: center;">
 
 | Parameter                       | Linked List          | Array                                                   | Dynamic Array                                             |
 | ------------------------------- | -------------------- | ------------------------------------------------------- | --------------------------------------------------------- |
@@ -105,6 +110,8 @@ Finally, linked lists waste memory in terms of extra reference points.
 | Insertion in middle             | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                    |
 | Deletion in middle              | $O(n)$               | $O(n)$, if array is not full(for shifting the elements) | $O(n)$                                                    |
 | Wasted space                    | $O(n)$(for pointers) | 0                                                       | $O(n)$                                                    |
+
+</div>
 
 ## Singly Linked Lists
 
@@ -136,11 +143,11 @@ If it were possible to randomly permute the list of items to be inserted, trees 
 In most cases queries must be answered on-line, so randomly permuting the input is impractical.
 Balanced tree algorithms rearrange the tree as operations are performed to maintain certain balance conditions and assure good performance.
 
-Skip lists are a probabilistic alternative to balanced trees. 
+Skip lists are a probabilistic alternative to balanced trees.
 Skip list is a data structure that can be used as an alternative to [balanced binary trees](/docs/CS/Algorithms/tree.md).
 As compared to a binary tree, skip lists allow quick search, insertion and deletion of elements.
 This is achieved by using probabilistic balancing rather than strictly enforce balancing.
-It is basically a linked list with additional pointers such that intermediate nodes can be skipped. 
+It is basically a linked list with additional pointers such that intermediate nodes can be skipped.
 It uses a random number generator to make some decisions.
 
 In an ordinary sorted linked list, search, insert, and delete are in $O(n)$ because the list must be scanned node-by-node from the head to find the relevant node.
