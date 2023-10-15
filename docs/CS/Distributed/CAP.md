@@ -15,11 +15,11 @@ Allowing at least one node to update state will cause the nodes to become incons
 Likewise, if the choice is to preserve consistency, one side of the partition must act as if it is unavailable, thus forfeiting A.
 Only when nodes communicate is it possible to preserve both consistency and availability, thereby forfeiting P.
 The general belief is that for wide-area systems, designers cannot forfeit P and therefore have a difficult choice between C and A.
-In some sense, the NoSQL movement is about creating choices that focus on availability first and consistency second; databases that adhere to ACID properties (atomicity, consistency, isolation, and durability) do the opposite.
+In some sense, the NoSQL movement is about creating choices that focus on availability first and consistency second; 
+databases that adhere to ACID properties (atomicity, consistency, isolation, and durability) do the opposite.
 
 > The choice of availability over consistency is a business choice, not a technical one.    -- Coda Hale
 
-> [A plain english introduction to CAP Theorem](https://ksat.me/a-plain-english-introduction-to-cap-theorem)
 
 
 ## BASE
@@ -51,7 +51,7 @@ The four ACID properties are:
   In general, running ACID transactions on each side of a partition makes recovery easier and enables a framework for compensating transactions that can be used for recovery from a partition.
 
 Availability requirement is impossible to satisfy in an asynchronous system, and we cannot implement a system that simultaneously guarantees both availability and consistency in the presence of network partitions [GILBERT02].
-We can build systems that guarantee strong consistency while providing best effort availability, or guarantee availability while providing best effort consistency [GILBERT12].
+We can build systems that guarantee strong consistency while providing best effort availability, or guarantee availability while providing best effort consistency.
 Best effort here implies that if everything works, the system will not purposefully violate any guarantees, but guarantees are allowed to be weakened and violated in the case of network partitions.
 
 An example of a CP system is an implementation of a consensus algorithm, requiring a majority of nodes for progress: always consistent, but might be unavailable in the case of a network partition.
@@ -169,3 +169,5 @@ FLP: No deterministic 1-crash-robust consensus algorithm exists with asynchronou
 3. [CAP Theorem: Revisited](https://robertgreiner.com/cap-theorem-revisited/)
 4. [You Can’t Sacrifice Partition Tolerance](https://codahale.com/you-cant-sacrifice-partition-tolerance/)
 5. [Brewer’s Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web Services](https://www.comp.nus.edu.sg/~gilbert/pubs/BrewersConjecture-SigAct.pdf)
+6. [A plain english introduction to CAP Theorem](https://ksat.me/a-plain-english-introduction-to-cap-theorem)
+7. [Brewer’s Conjecture and the Feasibility of Consistent, Available, Partition-Tolerant Web](https://www.comp.nus.edu.sg/~gilbert/pubs/BrewersConjecture-SigAct.pdf)

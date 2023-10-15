@@ -19,7 +19,8 @@ This often requires coordinating processes to reach consensus, or agree on some 
 Example applications of consensus include agreeing on what transactions to commit to a database in which order, state machine replication, and atomic broadcasts.
 Real-world applications often requiring consensus include cloud computing, clock synchronization, PageRank, opinion formation, smart power grids, state estimation, control of UAVs (and multiple robots/agents in general), load balancing, blockchain, and others.
 
-There are a number of situations in which it is important for nodes to agree. For example:
+There are a number of situations in which it is important for nodes to agree. 
+For example:
 
 - Leader election
   In a database with single-leader replication, all nodes need to agree on which node is the leader.
@@ -328,6 +329,9 @@ So 3PC has potentially unsafe runs, as does 2PC, but will always make progress a
 The fact that 3PC will not block on single node failures makes it much more appealing for services where high availability is more important than low latencies.
 
 3PC in fact only works well in a synchronous network with crash-stop failures.
+
+## XA
+
 
 
 ### Paxos

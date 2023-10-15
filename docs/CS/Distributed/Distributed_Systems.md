@@ -142,7 +142,7 @@ The width of the interval depends, among other things, on how long it has been s
 
 [Byzantine Problem](/docs/CS/Distributed/Byzantine.md)
 
-### System Model and Reality
+## System Model and Reality
 
 Many algorithms have been designed to solve distributed systems problems.
 In order to be useful, these algorithms need to tolerate the various faults of distributed systems that we discussed.
@@ -199,7 +199,8 @@ If all nodes crash, or all network delays suddenly become infinitely long, then 
 
 To clarify the situation, it is worth distinguishing between two different kinds of properties: *safety* and *liveness* properties.
 In the example just given, *uniqueness* and *monotonic sequence* are safety properties, but *availability* is a liveness property.
-What distinguishes the two kinds of properties? A giveaway is that liveness properties often include the word “eventually” in their definition. (*eventual consistency* is a liveness property.)
+What distinguishes the two kinds of properties? 
+A giveaway is that liveness properties often include the word “eventually” in their definition. (*eventual consistency* is a liveness property.)
 
 Safety is often informally defined as nothing bad happens, and liveness as something good eventually happens.
 However, it’s best to not read too much into those informal definitions, because the meaning of good and bad is subjective.
@@ -537,15 +538,20 @@ Each process can issue read and write requests in an order specified by its own 
 > Sequential consistency is often confused with linearizability since both have similar semantics. Sequential consistency, just as linearizability, requires operations to be globally ordered, but linearizability requires the local order of each process and global order to be consistent. In other words, linearizability respects a real-time operation order. Under sequential consistency, ordering holds only for the same-origin writes [VIOTTI16]. Another important distinction is composition: we can combine linearizable histories and still expect results to be linearizable, while sequentially consistent schedules are not composable [ATTIYA94].”
 
 Figure 11-5 shows how write(x,1) and write(x,2) can become visible to P3 and P4.
-Even though in wall-clock terms, 1 was written before 2, it can get ordered after 2. At the same time, while P3 already reads the value 1, P4 can still read 2.
-However, both orders, 1 → 2 and 2 → 1, are valid, as long as they’re consistent for different readers. What’s important here is that both P3 and P4 have observed values in the same order: first 2, and then 1.
+Even though in wall-clock terms, 1 was written before 2, it can get ordered after 2.
+At the same time, while P3 already reads the value 1, P4 can still read 2.
+However, both orders, 1 → 2 and 2 → 1, are valid, as long as they’re consistent for different readers. 
+What’s important here is that both P3 and P4 have observed values in the same order: first 2, and then 1.
 
 Stale reads can be explained, for example, by replica divergence: even though writes propagate to different replicas in the same order, they can arrive there at different times.
 
-The main difference with linearizability is the absence of globally enforced time bounds. Under linearizability, an operation has to become effective within its wall-clock time bounds.
+The main difference with linearizability is the absence of globally enforced time bounds. 
+Under linearizability, an operation has to become effective within its wall-clock time bounds.
 By the time the write W₁ operation completes, its results have to be applied, and every reader should be able to see the value at least as recent as one written by W₁. Similarly, after a read operation R₁ returns, any read operation that happens after it should return the value that R₁ has seen or a later value (which, of course, has to follow the same rule).
 
-Sequential consistency relaxes this requirement: an operation’s results can become visible after its completion, as long as the order is consistent from the individual processors’ perspective. Same-origin writes can’t “jump” over each other: their program order, relative to their own executing process, has to be preserved. The other restriction is that the order in which operations have appeared must be consistent for all readers.
+Sequential consistency relaxes this requirement: an operation’s results can become visible after its completion, as long as the order is consistent from the individual processors’ perspective.
+Same-origin writes can’t “jump” over each other: their program order, relative to their own executing process, has to be preserved. 
+The other restriction is that the order in which operations have appeared must be consistent for all readers.
 
 Similar to linearizability, modern CPUs do not guarantee sequential consistency by default and, since the processor can reorder instructions,
 we should use memory barriers (also called fences) to make sure that writes become visible to concurrently running threads in order.
@@ -562,31 +568,34 @@ NFS
 
 Network File System
 
-“Even though having a global operation order is often unnecessary, it might be necessary to establish order between some operations. Under the causal consistency model,
+Even though having a global operation order is often unnecessary, it might be necessary to establish order between some operations. Under the causal consistency model,
 all processes have to see causally related operations in the same order. Concurrent writes with no causal relationship can be observed in a different order by different processors.
 
-First, let’s take a look at why we need causality and how writes that have no causal relationship can propagate. In Figure 11-6, processes P1 and P2 make writes that aren’t causally ordered.
+First, let’s take a look at why we need causality and how writes that have no causal relationship can propagate. 
+In Figure 11-6, processes P1 and P2 make writes that aren’t causally ordered.
 The results of these operations can propagate to readers at different times and out of order. Process P3 will see the value 1 before it sees 2, while P4 will first see 2, and then 1.
 
-“Figure 11-7 shows an example of causally related writes.
 In addition to a written value, we now have to specify a logical clock value that would establish a causal order between operations.
-P1 starts with a write operation write(x,∅,1)→t1, which starts from the initial value ∅. P2 performs another write operation, write(x, t1, 2), and specifies that it is logically ordered after t1,
+P1 starts with a write operation write(x,∅,1)→t1, which starts from the initial value ∅. 
+P2 performs another write operation, write(x, t1, 2), and specifies that it is logically ordered after t1,
 requiring operations to propagate only in the order established by the logical clock.”
 
-“This establishes a causal order between these operations.
+This establishes a causal order between these operations.
 Even if the latter write propagates faster than the former one, it isn’t made visible until all of its dependencies arrive, and the event order is reconstructed from their logical timestamps.
 In other words, a happened-before relationship is established logically, without using physical clocks, and all processes agree on this order.
 
 Figure 11-8 shows processes P1 and P2 making causally related writes, which propagate to P3 and P4 in their logical order.
 This prevents us from the situation shown in Figure 11-6; you can compare histories of P3 and P4 in both figures.
 
-“You can think of this in terms of communication on some online forum: you post something online, someone sees your post and responds to it, and a third person sees this response and continues the conversation thread.
+You can think of this in terms of communication on some online forum: you post something online, someone sees your post and responds to it, 
+and a third person sees this response and continues the conversation thread.
 It is possible for conversation threads to diverge: you can choose to respond to one of the conversations in the thread and continue the chain of events,
 but some threads will have only a few messages in common, so there might be no single history for all the messages.
 
 In a causally consistent system, we get session guarantees for the application, ensuring the view of the database is consistent with its own actions, even if it executes read and write requests against different,
 potentially inconsistent, servers.
-These guarantees are: monotonic reads, monotonic writes, read-your-writes, writes-follow-reads. You can find more information on these [session models](/docs/CS/Distributed/Distributed_Systems.md?id=Session-Models).
+These guarantees are: monotonic reads, monotonic writes, read-your-writes, writes-follow-reads. 
+You can find more information on these [session models](/docs/CS/Distributed/Distributed_Systems.md?id=Session-Models).
 
 Causal consistency can be implemented using logical clocks and sending context metadata with every message, summarizing which operations logically precede the current one.
 When the update is received from the server, it contains the latest version of the context. Any operation can be processed only if all operations preceding it have already been applied.
