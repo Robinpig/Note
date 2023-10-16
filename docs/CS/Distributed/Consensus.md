@@ -121,7 +121,8 @@ These results are approximate because there are special cases in which the bound
 For example, Approximate Theorem 1 does not hold in the case of three distinct processes: one process that is a proposer and an acceptor, one process that is an acceptor and a learner, and one process that is a proposer and a learner.
 In this case, there is an asynchronous consensus algorithm with N = 2, F = 1, and M = 0.
 
-The first theorem is fairly obvious when M = 0 and has been proved in several settings. For M = F, it was proved in the [original Byzantine agreement paper](https://lamport.azurewebsites.net/pubs/reaching.pdf).
+The first theorem is fairly obvious when M = 0 and has been proved in several settings.
+For M = F, it was proved in the [original Byzantine agreement paper](https://lamport.azurewebsites.net/pubs/reaching.pdf).
 
 ## Models of computation
 
@@ -169,12 +170,13 @@ If a correct process decides v, then v must have been proposed by some correct p
 The consensus problem may be considered in the case of asynchronous or synchronous systems.
 While real world communications are often inherently asynchronous, it is more practical and often easier to model synchronous systems, given that asynchronous systems naturally involve more issues than synchronous ones.
 
-In synchronous systems, it is assumed that all communications proceed in rounds. In one round, a process may send all the messages it requires, while receiving all messages from other processes.
+In synchronous systems, it is assumed that all communications proceed in rounds. 
+In one round, a process may send all the messages it requires, while receiving all messages from other processes.
 In this manner, no message from one round may influence any messages sent within the same round.
 
 ## FLP Impossibility
 
-Paper [Impossibility of Distributed Consensuswith One Faulty Process](https://dl.acm.org/doi/pdf/10.1145/3149.214121) assumes that processing is entirely asynchronous; there’s no shared notion of time between the processes.
+Assumes that processing is entirely asynchronous; there’s no shared notion of time between the processes.
 Algorithms in such systems cannot be based on timeouts, and there’s no way for a process to find out whether the other process has crashed or is simply running too slow.
 Given these assumptions, there exists no protocol that can guarantee consensus in a bounded time.
 No completely asynchronous consensus algorithm can tolerate the unannounced crash of even a single remote process.
@@ -185,7 +187,8 @@ In practice, systems exhibit at least some degree of synchrony, and the solution
 
 The FLP result is based on the asynchronous model, which is actually a class of models which exhibit certain properties of timing.
 The main characteristic of asynchronous models is that there is no upper bound on the amount of time processors may take to receive, process and respond to an incoming message.
-Therefore it is impossible to tell if a processor has failed, or is simply taking a long time to do its processing. The asynchronous model is a weak one, but not completely physically unrealistic.
+Therefore it is impossible to tell if a processor has failed, or is simply taking a long time to do its processing. 
+The asynchronous model is a weak one, but not completely physically unrealistic.
 We have all encountered web servers that seem to take an arbitrarily long time to serve us a page.
 Now that mobile ad-hoc networks are becoming more and more pervasive, we see that devices in those networks may power down during processing to save battery, only to reappear later and continue as though nothing had happened.
 This introduces an arbitrary delay which fits the asynchronous model.
