@@ -141,7 +141,6 @@ So a SDS max embstr string len is 64-16-3-1= **44 byte**.
 
 ```c
 // object.c
-
 #define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
 
 robj *createStringObject(const char *ptr, size_t len) {
