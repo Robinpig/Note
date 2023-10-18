@@ -27,7 +27,7 @@ LocalVariableTable
 
 1. invokevirtual：public, protected methods without static, final
 2. invokeinterface：like invokevirtual
-3. invokespecial：只用于调用私有方法，构造方法。跟多态机制无关。
-4. invokestatic：只用于调用静态方法。与多态机制无关。
+3. invokespecial：private or constructor
+4. invokestatic：static
 
 invokeinterface get a this object to get Klass
