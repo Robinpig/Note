@@ -15,7 +15,7 @@ In the event of leader failure, a replica with the most up-to-date log becomes t
 Raft defines not only how the group makes a decision, but also the protocol for adding new members and removing members from the group.
 This feature makes Raft a natural fit for managing topology changes in distributed systems.
 
-Raft decomposes the consensus problem into three relatively independent subproblems:
+Raft decomposes the consensus problem into three relatively independent sub-problems:
 
 - Leader election
 - Log replication
