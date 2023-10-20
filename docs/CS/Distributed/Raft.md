@@ -142,6 +142,8 @@ Invoked by leader to replicate log entries ; also used as heartbeat .
 | leaderCommit | leader’s commitIndex                                                                |
 
 
+
+
 | Results      | Descriptions                                                                               |
 | -------------- | -------------------------------------------------------------------------------------------- |
 | term         | currentTerm, for leader to update itself success true if follower contained entry matching |

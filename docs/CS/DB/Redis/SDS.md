@@ -9,11 +9,10 @@ cache (shared sessions)
 
 ## Type
 
-Note that this version of SDS may be a slower with certain workloads, but uses less memory compared to V1 since header size is dynamic and depends to the string to alloc
-  
-      
+Note that this version of SDS may be a slower with certain workloads, but uses less memory compared to V1 since header size is dynamic and depends to the string to alloc.
 
-  
+
+
 
 
 | Type         | len | alloc | flag                             | buf |

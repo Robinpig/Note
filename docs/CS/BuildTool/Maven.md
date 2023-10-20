@@ -142,7 +142,7 @@ clean
 清理上一次构建生成的文件
 post-clean
 
-### default：构建项目
+### default
 
 validate
 
