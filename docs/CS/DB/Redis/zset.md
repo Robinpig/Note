@@ -1,6 +1,6 @@
 ## Introduction
 
-Sorted sets are a data type which is similar to a mix between a Set and a Hash. 
+Sorted sets are a data type which is similar to a mix between a Set and a Hash.
 Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
 
 However while elements inside sets are not ordered, every element in a sorted set is associated with a floating point value, called *the score* (this is why the type is also similar to a hash, since every element is mapped to a value).
@@ -33,12 +33,12 @@ Let's start with a simple example, adding a few selected hackers names as sorted
 (integer) 1
 ```
 
-As you can see `ZADD` is similar to `SADD`, but takes one additional argument (placed before the element to be added) which is the score. 
+As you can see `ZADD` is similar to `SADD`, but takes one additional argument (placed before the element to be added) which is the score.
 `ZADD` is also variadic, so you are free to specify multiple score-value pairs, even if this is not used in the example above.
 
 With sorted sets it is trivial to return a list of hackers sorted by their birth year because actually *they are already sorted*.
 
-Implementation note: Sorted sets are implemented via a dual-ported data structure containing both a skip list and a hash table, so every time we add an element Redis performs an O(log(N)) operation. 
+Implementation note: Sorted sets are implemented via a dual-ported data structure containing both a skip list and a hash table, so every time we add an element Redis performs an O(log(N)) operation.
 That's good, but when we ask for sorted elements Redis does not have to do any work at all, it's already all sorted:
 
 ```
@@ -159,7 +159,7 @@ void zaddGenericCommand(client *c, int flags) {
             "XX and NX options at the same time are not compatible");
         return;
     }
-    
+  
     if ((gt && nx) || (lt && nx) || (gt && lt)) {
         addReplyError(c,
             "GT, LT, and/or NX options at the same time are not compatible");
@@ -244,8 +244,6 @@ typedef struct zset {
     zskiplist *zsl;
 } zset;
 ```
-
-
 
 ### zsetAdd
 
@@ -422,12 +420,10 @@ int zsetAdd(robj *zobj, double score, sds ele, int in_flags, int *out_flags, dou
 }
 ```
 
-
-
-
 ## zsetConvertToZiplistIfNeeded
 
 call by geo or ZUNION, ZINTER, ZDIFF, ZUNIONSTORE, ZINTERSTORE, ZDIFFSTORE
+
 ```c
 // t_zset.c
 /* Convert the sorted set object into a ziplist if it is not already a ziplist
@@ -443,8 +439,6 @@ void zsetConvertToZiplistIfNeeded(robj *zobj, size_t maxelelen) {
 }
 ```
 
-
-
 in redis conf
 
 zset default use ziplist.
@@ -459,35 +453,26 @@ zset-max-ziplist-entries 128
 zset-max-ziplist-value 64
 ```
 
-
-
-
-
 ## ziplist
 
-The ziplist is a specially encoded dually linked list that is designed to be very memory efficient. 
-It stores both strings and integer values, where **integers are encoded as actual integers instead of a series of characters**. 
-It allows push and pop operations on either side of the list in O(1) time. 
+The ziplist is a specially encoded dually linked list that is designed to be very memory efficient.
+It stores both strings and integer values, where **integers are encoded as actual integers instead of a series of characters**.
+It allows push and pop operations on either side of the list in O(1) time.
 However, because every operation requires a reallocation of the memory used by the ziplist, the actual complexity is related to the amount of memory used by the ziplist.
 
 Search $O(N)$
 
+The general layout of the ziplist is as follows:
 
-array
-```c
-/**
- * The general layout of the ziplist is as follows:
- *
- * <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
- */
- ```
-
+```
+ <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
+```
 
 [hash](/docs/CS/DB/Redis/hash.md) and [zset](/docs/CS/DB/Redis/zset.md) default use ziplist.
 
-[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/list.md?id=skiplist).
+[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/list.md?id=quicklist).
 
-Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a given threshold. 
+Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a given threshold.
 These thresholds can be configured using the following directives.
 
 ```
@@ -495,7 +480,6 @@ These thresholds can be configured using the following directives.
 hash-max-ziplist-entries 512
 hash-max-ziplist-value 64
 ```
-
 
 ```c
 // object.c
@@ -507,20 +491,22 @@ robj *createZiplistObject(void) {
 }
 ```
 
+The size of a ziplist header: two 32 bit integers for the total bytes count and last item offset. One 16 bit integer for the number of items field.
+
+**11bytes** except entries
 
 
-Struct:
 
-- Total count: 4bytes = 2^32 -1
-- last item offset: 4bytes
-- number of item fields; 16bits = 65535
-- end 1byte; always 255
-
-so init 4 + 4 + 2 + 1 = **11bytes**
+| Field   | Description                                                                         | 
+|---------|-------------------------------------------------------------------------------------| 
+| zlbytes | uint32_t,                                                                           | 
+| zltail  | uint32_t,                                                                           | 
+| zllen   | uint16_t, when len > 2^16 - 2, value=2^16 - 1, we should iterator to get actual len | 
+| entry   |                                                                                     | 
+| zlend   | uint8_t, value=255                                                                  | 
 
 ```c
 // ziplist.c
-/* Create a new empty ziplist. */
 unsigned char *ziplistNew(void) {
     unsigned int bytes = ZIPLIST_HEADER_SIZE+ZIPLIST_END_SIZE;
     unsigned char *zl = zmalloc(bytes);
@@ -531,22 +517,22 @@ unsigned char *ziplistNew(void) {
     return zl;
 }
 
-
-/* The size of a ziplist header: two 32 bit integers for the total
- * bytes count and last item offset. One 16 bit integer for the number
- * of items field. */
 #define ZIPLIST_HEADER_SIZE     (sizeof(uint32_t)*2+sizeof(uint16_t))
-
-/* Size of the "end of ziplist" entry. Just one byte. */
 #define ZIPLIST_END_SIZE        (sizeof(uint8_t))
+#define ZIP_END 255
+```
 
-#define ZIP_END 255         /* Special "end of ziplist" entry. */
+zlentry struct
+
+```
+<prevlen><len><encoding>
 ```
 
 prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/zset.md?id=cascadeUpdate)
 
 We use this function to receive information about a ziplist entry.
 Note that this is not how the data is actually encoded, is just what we get filled by a function in order to operate more easily.
+
 ```c
 typedef struct zlentry {
     unsigned int prevrawlensize; /* Bytes used to encode the previous entry len*/
@@ -568,12 +554,6 @@ typedef struct zlentry {
                                     is, this points to prev-entry-len field. */
 } zlentry;
 ```
-
-
-
-
-
-
 
 ```c
 /* Resize the ziplist. */
@@ -604,15 +584,11 @@ void memrev32(void *p) {
 }
 ```
 
-
-
 ### insert
 
 1. encode content
 2. Allocate memory
 3. memory copy
-
-
 
 ```c
 // ziplist.c
@@ -824,17 +800,16 @@ unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsigned int
 }
 ```
 
-
 ### cascadeUpdate
 
-When an entry is inserted, we need to set the **prevlen field** of the next entry to equal the length of the inserted entry. 
-It can occur that this length cannot be encoded in 1 byte and the next entry needs to be grow a bit larger to hold the 5-byte encoded prevlen. 
-This can be done for free, because this only happens when an entry is already being inserted (which causes a realloc and memmove). 
-However, encoding the prevlen may require that this entry is grown as well. 
+When an entry is inserted, we need to set the **prevlen field** of the next entry to equal the length of the inserted entry.
+It can occur that this length cannot be encoded in 1 byte and the next entry needs to be grow a bit larger to hold the 5-byte encoded prevlen.
+This can be done for free, because this only happens when an entry is already being inserted (which causes a realloc and memmove).
+However, encoding the prevlen may require that this entry is grown as well.
 This effect may cascade throughout the ziplist when there are consecutive entries with a size close to ZIP_BIG_PREVLEN, so we need to check that the prevlen can be encoded in every consecutive entry.
 
-Note that this effect can also happen in reverse, where the bytes required to encode the prevlen field can shrink. 
-This effect is deliberately ignored, because it can cause a "flapping" effect where a chain prevlen fields is first grown and then shrunk again after consecutive inserts. 
+Note that this effect can also happen in reverse, where the bytes required to encode the prevlen field can shrink.
+This effect is deliberately ignored, because it can cause a "flapping" effect where a chain prevlen fields is first grown and then shrunk again after consecutive inserts.
 **Rather, the field is allowed to stay larger than necessary, because a large prevlen field implies the ziplist is holding large entries anyway.**
 
 ```c
@@ -940,22 +915,19 @@ unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
 }
 ```
 
-
-
 ## skiplist
 
-
 Node:
+
 - ele is a [sds](/docs/CS/DB/Redis/SDS.md)
 - order by score, then ele
 - *backward
 - level[]
-    - *forward
-    - span
+  - *forward
+  - span
 
 ```c
 // server.h
-/* ZSETs use a specialized version of Skiplists */
 typedef struct zskiplistNode {
     sds ele;
     double score;
@@ -972,9 +944,6 @@ typedef struct zskiplist {
     int level;
 } zskiplist;
 ```
-
-
-
 
 ### create
 
@@ -1011,10 +980,6 @@ zskiplistNode *zslCreateNode(int level, double score, sds ele) {
     return zn;
 }
 ```
-
-
-
-
 
 ### insert
 
@@ -1085,8 +1050,6 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
 }
 ```
 
-
-
 #### randomLevel
 
 Returns a random level for the new skiplist node we are going to create.
@@ -1103,7 +1066,9 @@ int zslRandomLevel(void) {
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
 ```
+
 p = ZSKIPLIST_P, E = except level
+
 - E = 1 : 1 - p
 - E = 2 : p(1 - p)
 - E = 3 : p^2(1-p)
@@ -1115,12 +1080,6 @@ E = 1 \times (1-p) + 2\times p(1-p)+... \hspace{1cm}
 \\
 = 1/(1-p)
 ```
-
-
-
-
-
-
 
 ### delete
 
@@ -1214,13 +1173,10 @@ void zslFree(zskiplist *zsl) {
 ```
 
 ## Summary
+
 - zset compose hash table and skip list
 - zset default use ziplist, then skiplist and never convert back.
-
 - zset compare with score and ele(sds)
-
-
-
 
 ## Links
 

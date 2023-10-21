@@ -6,6 +6,34 @@ redis command table
 
 ## Structures
 
+
+final struct dict
+
+rehashing not in progress if rehashidx == -1
+
+```c
+// dict.c
+typedef struct dict {
+    dictType *type;
+    void *privdata;
+    dictht ht[2];
+    long rehashidx;
+    unsigned long iterators; /* number of iterators currently running */
+} dict;
+```
+
+
+This is our hash table structure. Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
+
+```c
+typedef struct dictht {
+    dictEntry **table;
+    unsigned long size;
+    unsigned long sizemask;// always size -1
+    unsigned long used;
+} dictht;
+```
+
 dictEntry:
 
 ```c
@@ -32,31 +60,7 @@ typedef struct dictType {
 } dictType;
 ```
 
-This is our hash table structure. Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
 
-```c
-typedef struct dictht {
-    dictEntry **table;
-    unsigned long size;
-    unsigned long sizemask;// always size -1
-    unsigned long used;
-} dictht;
-```
-
-final struct dict
-
-rehashing not in progress if rehashidx == -1
-
-```c
-// dict.c
-typedef struct dict {
-    dictType *type;
-    void *privdata;
-    dictht ht[2];
-    long rehashidx;
-    unsigned long iterators; /* number of iterators currently running */
-} dict;
-```
 
 ## Hash Function
 
