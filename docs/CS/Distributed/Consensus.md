@@ -335,7 +335,21 @@ The fact that 3PC will not block on single node failures makes it much more appe
 
 ## XA
 
+### Tunable consistency model - Quorum NWR
 
+Dynamo DB / Cassandra
+
+Quorum NWR Definition:
+- N: The number of replicas
+- W: A write quorum of size W. For a write operation to be considered as successful, write operation must be acknowledged from W replicas
+- R: A read quorum of size W. For a read operation to be considered as successful, read operation must be acknowledged from R replicas
+
+If W+R > N, could guarantee strong consistency because there must be at least one overlapping node that has the latest data to ensure consistency
+
+Typical setup:
+- If R = 1 and W = N, the system is optimized for a fast read
+- If R = N and W = 1, the system is optimized for a fast write
+- If W + R > N, strong consistency is guaranteed (Usually N = 3, W = R = 2)
 
 ### Paxos
 
