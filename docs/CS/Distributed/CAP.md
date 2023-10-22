@@ -2,7 +2,7 @@
 
 It is impossible for a distributed computer system to simultaneously provide all three of the following guarantees:
 
-- **Consistency**: all nodes see the same data at the same time
+- **Consistency**: all nodes see the same data at the same time(Actually means linearizability)
 - **Availability**: Node failures do not prevent other survivors from continuing to operate (a guarantee that every request receives a response about whether it succeeded or failed)
 - **Partition tolerance**: the system continues to operate despite arbitrary partitioning due to network failures (e.g., message loss)
 

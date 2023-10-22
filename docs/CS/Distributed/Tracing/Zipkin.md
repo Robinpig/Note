@@ -1,6 +1,8 @@
 ## Introduction
 
-[Zipkin](https://zipkin.io/) is a distributed tracing system. It helps gather timing data needed to troubleshoot latency problems in service architectures. Features include both the collection and lookup of this data.
+[Zipkin](https://zipkin.io/) is a distributed tracing system.
+It helps gather timing data needed to troubleshoot latency problems in service architectures.
+Features include both the collection and lookup of this data.
 
 
 
@@ -14,8 +16,17 @@ Trace instrumentation report spans asynchronously to prevent delays or failures 
 
 Here’s a diagram describing this flow from Zipkin homepage:
 
-![Architecture](https://zipkin.io/public/img/architecture-1.png)
 
+
+<div style="text-align: center;">
+
+![Fig.1. Architecture](https://zipkin.io/public/img/architecture-1.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Architecture
+</p>
 
 
 
@@ -234,4 +245,5 @@ Once the data is stored and indexed, we need a way to extract it. The query daem
 
 ## Links
 
+- [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
 - [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=sleuth)

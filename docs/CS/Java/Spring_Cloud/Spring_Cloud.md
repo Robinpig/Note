@@ -203,7 +203,7 @@ Specifically, Spring Cloud Sleuth
 - If `spring-cloud-sleuth-zipkin` is available then the app will generate and report Zipkin-compatible traces via HTTP. By default it sends them to a Zipkin collector service on localhost (port 9411). 
   Configure the location of the service using `spring.zipkin.baseUrl`.
 
-- [Zipkin](/docs/CS/Java/Spring_Cloud/zipkin.md)
+- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
 
 ## RPC
 
