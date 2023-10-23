@@ -4,6 +4,59 @@ Distributed tracing, also called distributed request tracing, is a method used t
 Distributed tracing helps pinpoint where failures occur and what causes poor performance.
 
 
+It is probably easier to start with what OpenTracing is NOT.
+
+- OpenTracing is not a download or a program. Distributed tracing requires that software developers add instrumentation to the code of an application, or to the frameworks used in the application.
+- OpenTracing is not a standard. The Cloud Native Computing Foundation (CNCF) is not an official standards body. 
+  The OpenTracing API project is working towards creating more standardized APIs and instrumentation for distributed tracing.
+
+OpenTracing is comprised of an API specification, frameworks and libraries that have implemented the specification, and documentation for the project. 
+OpenTracing allows developers to add instrumentation to their application code using APIs that do not lock them into any one particular product or vendor.
+
+
+## The OpenTracing Data Model
+
+Traces in OpenTracing are defined implicitly by their Spans. 
+In particular, a Trace can be thought of as a directed acyclic graph (DAG) of Spans, where the edges between Spans are called References.
+
+For example, the following is an example Trace made up of 8 Spans:
+
+```
+Causal relationships between Spans in a single Trace
+
+        [Span A]  ←←←(the root span)
+            |
+     +------+------+
+     |             |
+ [Span B]      [Span C] ←←←(Span C is a `ChildOf` Span A)
+     |             |
+ [Span D]      +---+-------+
+               |           |
+           [Span E]    [Span F] >>> [Span G] >>> [Span H]
+                                       ↑
+                                       ↑
+                                       ↑
+                         (Span G `FollowsFrom` Span F)
+```
+
+Each Span encapsulates the following state:
+
+- An operation name
+- A start timestamp
+- A finish timestamp
+- A set of zero or more key:value Span Tags. The keys must be strings. The values may be strings, bools, or numeric types.
+- A set of zero or more Span Logs, each of which is itself a key:value map paired with a timestamp. 
+  The keys must be strings, though the values may be of any type. Not all OpenTracing implementations must support every value type.
+- A SpanContext (see below)
+- References to zero or more causally-related Spans (via the SpanContext of those related Spans)
+
+Each SpanContext encapsulates the following state:
+
+- Any OpenTracing-implementation-dependent state (for example, trace and span ids) needed to refer to a distinct Span across a process boundary
+- Baggage Items, which are just key:value pairs that cross process boundaries
+
+
+
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
@@ -11,4 +64,4 @@ Distributed tracing helps pinpoint where failures occur and what causes poor per
 
 ## References
 
-1. [OpenTracing](https://opentracing.io/)
+1. [OpenTracing specification](https://opentracing.io/specification/)

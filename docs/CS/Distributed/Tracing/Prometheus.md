@@ -29,7 +29,9 @@ The metric name specifies the general feature of a system that is measured (e.g.
 
 Note: The colons are reserved for user defined recording rules. They should not be used by exporters or direct instrumentation.
 
+## Links
 
+- [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
 
 ## References
 
