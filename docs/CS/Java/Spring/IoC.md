@@ -1226,6 +1226,7 @@ Obtain a reference for early access to the specified bean, typically for the pur
 
 This callback gives post-processors a chance to expose a wrapper early - that is, before the target bean instance is fully initialized.
 The exposed object should be equivalent to the what postProcessBeforeInitialization / postProcessAfterInitialization would expose otherwise.
+
 Note that the object returned by this method will be used as bean reference unless the post-processor returns a different wrapper from said post-process callbacks.
 In other words: Those post-process callbacks may either eventually expose the same reference or alternatively return the raw bean instance from those subsequent callbacks
 (if the wrapper for the affected bean has been built for a call to this method already, it will be exposes as final bean reference by default).
@@ -1245,15 +1246,8 @@ protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, 
 	}
 ```
 
-proxy instance circular reference
-by checking different instance
 
-@DependsOn circular reference
-check isDependent in `doGetBean()`
 
-@Lazy
-@DependsOn
-change load bean order
 
 #### getObjectForBeanInstance
 

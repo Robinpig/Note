@@ -8,10 +8,12 @@ Features include both the collection and lookup of this data.
 
 ### Architecture
 
-Tracers live in your applications and record timing and metadata about operations that took place. They often instrument libraries, so that their use is transparent to users. 
+Tracers live in your applications and record timing and metadata about operations that took place. 
+They often instrument libraries, so that their use is transparent to users. 
 The trace data collected is called a Span.
 
-Instrumentation is written to be safe in production and have little overhead. For this reason, they only propagate IDs in-band, to tell the receiver there’s a trace in progress.
+Instrumentation is written to be safe in production and have little overhead. 
+For this reason, they only propagate IDs in-band, to tell the receiver there’s a trace in progress.
 Trace instrumentation report spans asynchronously to prevent delays or failures relating to the tracing system from delaying or breaking user code.
 
 Here’s a diagram describing this flow from Zipkin homepage:
@@ -33,7 +35,8 @@ Fig.1. Architecture
 
 ## Transport
 
-Spans sent by the instrumented library must be transported from the services being traced to Zipkin collectors. There are three primary transports: HTTP, Kafka and Scribe.
+Spans sent by the instrumented library must be transported from the services being traced to Zipkin collectors.
+There are three primary transports: HTTP, Kafka and Scribe.
 
 ### Reporter
 
@@ -236,11 +239,14 @@ Once the trace data arrives at the Zipkin collector daemon, it is validated, sto
 
 ## Storage
 
-Zipkin was initially built to store data on Cassandra since Cassandra is scalable, has a flexible schema, and is heavily used within Twitter. However, we made this component pluggable. In addition to Cassandra, we natively support ElasticSearch and MySQL. Other back-ends might be offered as third party extensions.
+Zipkin was initially built to store data on Cassandra since Cassandra is scalable, has a flexible schema, and is heavily used within Twitter.
+However, we made this component pluggable. In addition to Cassandra, we natively support ElasticSearch and MySQL. 
+Other back-ends might be offered as third party extensions.
 
 ## Query Service
 
-Once the data is stored and indexed, we need a way to extract it. The query daemon provides a simple JSON API for finding and retrieving traces. The primary consumer of this API is the Web UI.
+Once the data is stored and indexed, we need a way to extract it. The query daemon provides a simple JSON API for finding and retrieving traces.
+The primary consumer of this API is the Web UI.
 
 
 ## Links

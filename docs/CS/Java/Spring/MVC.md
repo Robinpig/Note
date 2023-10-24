@@ -341,6 +341,32 @@ public abstract class FrameworkServlet extends HttpServletBean implements Applic
 }
 ```
 
+
+Default load beans for current ApplicationContext.
+```java
+public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMapping implements InitializingBean {
+    @Override
+    public void afterPropertiesSet() {
+        initHandlerMethods();
+    }
+    protected void initHandlerMethods() {
+        for (String beanName : getCandidateBeanNames()) {
+            if (!beanName.startsWith(SCOPED_TARGET_NAME_PREFIX)) {
+                processCandidateBean(beanName);
+            }
+        }
+        handlerMethodsInitialized(getHandlerMethods());
+    }
+
+    protected String[] getCandidateBeanNames() {
+        return (this.detectHandlerMethodsInAncestorContexts ?
+                BeanFactoryUtils.beanNamesForTypeIncludingAncestors(obtainApplicationContext(), Object.class) :
+                obtainApplicationContext().getBeanNamesForType(Object.class));
+    }
+}
+```
+
+
 #### initStrategies
 
 ```java

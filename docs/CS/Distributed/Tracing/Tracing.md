@@ -4,6 +4,10 @@ Distributed tracing, also called distributed request tracing, is a method used t
 Distributed tracing helps pinpoint where failures occur and what causes poor performance.
 
 
+
+
+## OpenTracing
+
 It is probably easier to start with what OpenTracing is NOT.
 
 - OpenTracing is not a download or a program. Distributed tracing requires that software developers add instrumentation to the code of an application, or to the frameworks used in the application.
@@ -56,6 +60,20 @@ Each SpanContext encapsulates the following state:
 - Baggage Items, which are just key:value pairs that cross process boundaries
 
 
+## OpenTelemetry
+
+OpenTelemetry is an `Observability` framework and toolkit designed to create and manage _telemetry data_ such as `traces`, `metrics`, and `logs`. 
+Crucially, OpenTelemetry is vendor- and tool-agnostic, meaning that it can be used with a broad variety of Observability backends, 
+including open source tools like [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) and [Prometheus](/docs/CS/Distributed/Tracing/Prometheus.md), as well as commercial offerings. 
+OpenTelemetry is a Cloud Native Computing Foundation (CNCF) project.
+
+OpenTelemetry is not an observability back-end like Jaeger, Prometheus, or commercial vendors.
+OpenTelemetry is focused on the generation, collection, management, and export of telemetry data.
+The storage and visualization of that data is intentionally left to other tools.
+
+
+
+
 
 ## Links
 
@@ -64,4 +82,5 @@ Each SpanContext encapsulates the following state:
 
 ## References
 
-1. [OpenTracing specification](https://opentracing.io/specification/)
+1. [OpenTelemetry](https://opentelemetry.io/)
+2. [OpenTracing specification](https://opentracing.io/specification/)
