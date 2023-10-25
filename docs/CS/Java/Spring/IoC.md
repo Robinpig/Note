@@ -1247,7 +1247,56 @@ protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, 
 ```
 
 
+Circular References cannot be resolved.
 
+<!-- tabs:start -->
+
+##### **Constructor Circular References**
+
+```java
+@Service
+public class AService {
+    private BService bService;
+
+    public AService(BService bService) {
+        this.bService = bService;
+    }
+}
+
+@Service
+public class BService {
+    private AService aService;
+
+    public BService(AService aService) {
+        this.aService = aService;
+    }
+}
+```
+
+##### **Version Circular References**
+
+Bean with name 'AService' has been injected into other beans [BService] in its raw version as part of a circular reference, but has eventually been wrapped. 
+This means that said other beans do not use the final version of the bean. 
+This is often the result of over-eager type matching - consider using 'getBeanNamesForType' with the 'allowEagerInit' flag turned off.
+```java
+@Service
+public class AService {
+    @Autowired
+    private BService bService;
+
+    @Async
+    public void hello() {}
+
+}
+
+@Service
+public class BService {
+    @Autowired
+    private AService aService;
+}
+```
+
+<!-- tabs:end -->
 
 #### getObjectForBeanInstance
 
