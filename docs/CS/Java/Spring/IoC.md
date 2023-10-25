@@ -1273,7 +1273,7 @@ public class BService {
 }
 ```
 
-##### **Version Circular References**
+##### **Raw Version Circular References**
 
 Bean with name 'AService' has been injected into other beans [BService] in its raw version as part of a circular reference, but has eventually been wrapped. 
 This means that said other beans do not use the final version of the bean. 
@@ -1295,6 +1295,19 @@ public class BService {
     private AService aService;
 }
 ```
+
+1. We can annotate the @Lazy annotation on the fields of cyclic dependency injection.
+2. From the source code comment above, we can see that when allowRawInjectionDespiteWrapping is true, it won’t take that else if and won’t throw an exception, so we can solve the error problem by setting allowRawInjectionDespiteWrapping to true, the code is as follows.
+```java
+@Component
+public class MyBeanFactoryPostProcessor implements BeanFactoryPostProcessor {
+    @Override
+    public void postProcessBeanFactory(ConfigurableListableBeanFactory beanFactory) throws BeansException {
+        ((DefaultListableBeanFactory) beanFactory).setAllowRawInjectionDespiteWrapping(true);
+    }
+}
+```
+Although this setup solves the problem, it is not recommended because it allows the early injected objects to be different from the final created objects and may result in the final generated objects not being dynamically proxied.
 
 <!-- tabs:end -->
 
