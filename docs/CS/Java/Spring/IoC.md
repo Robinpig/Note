@@ -1198,6 +1198,7 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 
 #### circular references
 
+Default false. 
 ```properties
 spring.main.allow-circular-references=false
 ```
@@ -1225,7 +1226,7 @@ See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
 Obtain a reference for early access to the specified bean, typically for the purpose of resolving a circular reference.
 
 This callback gives post-processors a chance to expose a wrapper early - that is, before the target bean instance is fully initialized.
-The exposed object should be equivalent to the what postProcessBeforeInitialization / postProcessAfterInitialization would expose otherwise.
+The exposed object should be equivalent to the what `postProcessBeforeInitialization` / `postProcessAfterInitialization` would expose otherwise.
 
 Note that the object returned by this method will be used as bean reference unless the post-processor returns a different wrapper from said post-process callbacks.
 In other words: Those post-process callbacks may either eventually expose the same reference or alternatively return the raw bean instance from those subsequent callbacks
@@ -1252,7 +1253,7 @@ Circular References cannot be resolved.
 <!-- tabs:start -->
 
 ##### **Constructor Circular References**
-
+We can annotate the @Lazy annotation on the constructor parameters of cyclic dependency injection.
 ```java
 @Service
 public class AService {
@@ -1270,6 +1271,26 @@ public class BService {
     public BService(AService aService) {
         this.aService = aService;
     }
+}
+```
+
+##### **Prototype Circular References**
+
+Throw Exception when `getBean()` and crash with a dead loop.
+
+```java
+@Service
+@Scope("prototype")
+public class AService {
+    @Autowired
+    private BService bService;
+}
+
+@Service
+@Scope("prototype")
+public class BService {
+    @Autowired
+    private AService aService;
 }
 ```
 
@@ -1499,7 +1520,7 @@ public interface BeanPostProcessor {
 2. resolveBeforeInstantiation([AOP](/docs/CS/Java/Spring/AOP.md?id=Create-Proxy)) if bean not null
 3. doCreateBean
 
-```java
+```
 // AbstractAutowireCapableBeanFactory
 protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
 			throws BeanCreationException {
@@ -1557,7 +1578,7 @@ Apply before-instantiation post-processors, resolving whether there is a before-
 
 call [BeanPostProcessor](/docs/CS/Java/Spring/IoC.md?id=postBean) if bean != null.
 
-```java
+```
 @Nullable
 protected Object resolveBeforeInstantiation(String beanName, RootBeanDefinition mbd) {
    Object bean = null;
@@ -1674,11 +1695,11 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
       Object exposedObject = bean;
       try {
          populateBean(beanName, mbd, instanceWrapper);
-         exposedObject = initializeBean(beanName, exposedObject, mbd);
+         exposedObject = initializeBean(beanName, exposedObject, mbd);  // Some PostProcessors like @ASync/@Repository with return Proxy bean
       } catch (Throwable ex) {
          //throw
       }
-
+      // Verify circular reference beans
       if (earlySingletonExposure) {
          Object earlySingletonReference = getSingleton(beanName, false);
          if (earlySingletonReference != null) {
