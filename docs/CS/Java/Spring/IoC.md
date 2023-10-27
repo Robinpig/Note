@@ -1232,23 +1232,50 @@ Note that the object returned by this method will be used as bean reference unle
 In other words: Those post-process callbacks may either eventually expose the same reference or alternatively return the raw bean instance from those subsequent callbacks
 (if the wrapper for the affected bean has been built for a call to this method already, it will be exposes as final bean reference by default).
 
+```java
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory
+		implements AutowireCapableBeanFactory {
+    protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
+        Object exposedObject = bean;
+        if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
+            for (BeanPostProcessor bp : getBeanPostProcessors()) {
+                if (bp instanceof SmartInstantiationAwareBeanPostProcessor) {
+                    SmartInstantiationAwareBeanPostProcessor ibp = (SmartInstantiationAwareBeanPostProcessor) bp;
+                    exposedObject = ibp.getEarlyBeanReference(exposedObject, beanName);
+                }
+            }
+        }
+        return exposedObject;
+    }
+}
 ```
-protected Object getEarlyBeanReference(String beanName, RootBeanDefinition mbd, Object bean) {
-		Object exposedObject = bean;
-		if (!mbd.isSynthetic() && hasInstantiationAwareBeanPostProcessors()) {
-			for (BeanPostProcessor bp : getBeanPostProcessors()) {
-				if (bp instanceof SmartInstantiationAwareBeanPostProcessor) {
-					SmartInstantiationAwareBeanPostProcessor ibp = (SmartInstantiationAwareBeanPostProcessor) bp;
-					exposedObject = ibp.getEarlyBeanReference(exposedObject, beanName);
-				}
+The ProxyCreator and return it is after postInitialization if it has earlyProxyReferences
+
+```java	
+public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
+		implements SmartInstantiationAwareBeanPostProcessor, BeanFactoryAware {	
+	@Override
+	public Object getEarlyBeanReference(Object bean, String beanName) {
+		Object cacheKey = getCacheKey(bean.getClass(), beanName);
+		this.earlyProxyReferences.put(cacheKey, bean);
+		return wrapIfNecessary(bean, beanName, cacheKey);
+	}
+	
+	@Override
+	public Object postProcessAfterInitialization(@Nullable Object bean, String beanName) {
+		if (bean != null) {
+			Object cacheKey = getCacheKey(bean.getClass(), beanName);
+			if (this.earlyProxyReferences.remove(cacheKey) != bean) {
+				return wrapIfNecessary(bean, beanName, cacheKey);
 			}
 		}
-		return exposedObject;
+		return bean;
+	}
 	}
 ```
 
 
-Circular References cannot be resolved.
+Circular References Scenarios:
 
 <!-- tabs:start -->
 
@@ -1296,9 +1323,8 @@ public class BService {
 
 ##### **Raw Version Circular References**
 
-Bean with name 'AService' has been injected into other beans [BService] in its raw version as part of a circular reference, but has eventually been wrapped. 
-This means that said other beans do not use the final version of the bean. 
-This is often the result of over-eager type matching - consider using 'getBeanNamesForType' with the 'allowEagerInit' flag turned off.
+BeanPostProcessor by @Async or @Repository will return a proxy bean after initialization which will cause difference while circular references.
+
 ```java
 @Service
 public class AService {
@@ -1318,7 +1344,8 @@ public class BService {
 ```
 
 1. We can annotate the @Lazy annotation on the fields of cyclic dependency injection.
-2. From the source code comment above, we can see that when allowRawInjectionDespiteWrapping is true, it won’t take that else if and won’t throw an exception, so we can solve the error problem by setting allowRawInjectionDespiteWrapping to true, the code is as follows.
+2. From the source code comment above, we can see that when allowRawInjectionDespiteWrapping is true, 
+   it won’t take that else if and won’t throw an exception, so we can solve the error problem by setting allowRawInjectionDespiteWrapping to true, the code is as follows.
 ```java
 @Component
 public class MyBeanFactoryPostProcessor implements BeanFactoryPostProcessor {
