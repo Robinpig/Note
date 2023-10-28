@@ -152,7 +152,18 @@ Rehashing frees the programmer from worrying about the table size and is importa
 
 - [Redis rehash](/docs/CS/DB/Redis/hash.md?id=rehash)
 
-## Consistency Hash
+## Consistent Hash
+
+
+The Consistent Hash algorithm is designed to solve the migration cost of the Hash algorithm.
+Therefore, when using the consistent hash algorithm for hash addressing, you can reduce the impact of node downtime on the entire cluster 
+by increasing the number of nodes and the amount of data that needs to be migrated when recovering from a failure. 
+Later, when needed, you can increase the number of nodes to improve the disaster recovery capacity and efficiency of the system. 
+And when you do data migration, you only need to migrate some data to achieve cluster stability.
+
+We all know that the common hash algorithm is modulo for routing addressing, and similarly the consistent hash uses modulo operations,
+but unlike the hash algorithm, which modulo for the number of nodes, the consistent hash algorithm modulo for 2^32. 
+You can imagine that the consistent hash algorithm, the entire hash value space is organized into a virtual ring, that is, the hash ring.
 
 [Consistent Hashing and Random Trees: Distributed Caching Protocols for Relieving Hot Spots on the World Wide Web](https://www.cs.princeton.edu/courses/archive/fall09/cos518/papers/chash.pdf)
 
