@@ -1,6 +1,6 @@
 ## Introduction
 
-A distributed system is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
+A distributed system is one in which components located at networked computers communicate and coordinate their actions only by **passing messages**.
 This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
 
 The challenges arising from the construction of distributed systems are the heterogeneity of their components, openness (which allows components to be added or replaced),
@@ -23,7 +23,6 @@ To be truly reliable, a distributed system must have the following characteristi
 The types of failures that can occur in a distributed system:
 
 - Halting failures: A component simply stops. There is no way to detect the failure except by timeout: it either stops sending "I'm alive" (heartbeat) messages or fails to respond to requests.
-  Your computer freezing is a halting failure.
 - Fail-stop: A halting failure with some kind of notification to other components. A network file server telling its clients it is about to go down is a fail-stop.
 - Omission failures: Failure to send/receive messages primarily due to lack of buffering space, which causes a message to be discarded with no notification to either the sender or receiver.
   This can happen when routers become overloaded.
@@ -243,14 +242,20 @@ Consistency models describe what expectations clients might have in terms of pos
 
 A consistency model is a set of histories.
 
-> link [Jepsen Consistency Models](https://jepsen.io/consistency)
 
-#### Strict Consistency
+From [Jepsen Consistency Models](https://jepsen.io/consistency):
 
-*Strict consistency* is the equivalent of complete replication transparency: any write by any process is instantly available for the subsequent reads by any process.
-It involves the concept of a global clock and, if there was a write(x, 1) at instant t1, any read(x) will return a newly written value 1 at any instant t2 > t1.
 
-Unfortunately, this is just a theoretical model, and it’s impossible to implement, as the laws of physics and the way distributed systems work set limits on how fast things may happen.
+<div style="text-align: center;">
+
+![Fig.1. Consistency Models](./img/Consistency-Models.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Consistency Models
+</p>
+
 
 #### Linearizability
 
