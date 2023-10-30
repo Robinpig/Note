@@ -446,7 +446,7 @@ Let’s revisit the replication methods, and compare whether they can be made li
   In a system with single-leader replication, the leader has the primary copy of the data that is used for writes, and the followers maintain backup copies of the data on other nodes.
   If you make reads from the leader, or from synchronously updated followers, they have the potential to be linearizable.
   Partitioning (sharding) a single-leader database, so that there is a separate leader per partition, does not affect linearizability, since it is only a single-object guarantee.
-  Cross-partition transactions are a different matter (see “Distributed Transactions and Consensus”).
+  Cross-partition transactions are a different matter.
   However, not every single-leader database is actually linearizable, either by design (e.g., because it uses snapshot isolation) or due to concurrency bugs.
   Using the leader for reads relies on the assumption that you know for sure who the leader is.
   It is quite possible for a node to think that it is the leader, when in fact it is not—and if the delusional leader continues to serve requests, it is likely to violate linearizability.
@@ -796,7 +796,7 @@ If a process fails to respond to a ping message for a longer time, it is marked 
 Many failure-detection algorithms are based on heartbeats and timeouts.
 For example, Akka, a popular framework for building distributed systems, has an implementation of a deadline failure detector, which uses heartbeats and reports a process failure if it has failed to register within a fixed time interval.
 
-This approach has several potential downsides: its precision relies on the careful selection of ping frequency and timeout, and it does not capture process visibility from the perspective of other processes (see “Outsourced Heartbeats”).
+This approach has several potential downsides: its precision relies on the careful selection of ping frequency and timeout, and it does not capture process visibility from the perspective of other processes.
 
 ##### Timeout-Free Failure Detector
 
@@ -892,7 +892,8 @@ In contrast, the leader can remain in its role until it stops or crashes, and lo
 
 Having a stable leader in the system helps to avoid state synchronization between remote participants, reduce the number of exchanged messages, and drive execution from a single process instead of requiring peer-to-peer coordination.
 One of the potential problems in systems with a notion of leadership is that the leader can become a bottleneck.
-To overcome that, many systems partition data in non-intersecting independent replica sets (see “Database Partitioning”). Instead of having a single system-wide leader, each replica set has its own leader.
+To overcome that, many systems partition data in non-intersecting independent replica sets.
+Instead of having a single system-wide leader, each replica set has its own leader.
 One of the systems that uses this approach is [Spanner]().
 
 Because every leader process will eventually fail, failure has to be detected, reported, and reacted upon: a system has to elect another leader to replace the failed one.
