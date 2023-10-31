@@ -145,7 +145,7 @@ The following rules apply to fragmentation:
   For instance,"Extension data" may only be present at the beginning of the first fragment and apply to subsequent fragments, or there may be"Extension data" present in each of the fragments that applies only to that particular fragment.
   In the absence of "Extension data", the following example demonstrates how fragmentation works.<br>
   EXAMPLE: For a text message sent as three fragments, the first fragment would have an opcode of 0x1 and a FIN bit clear, the second fragment would have an opcode of 0x0 and a FIN bit clear, and the third fragment would have an opcode of 0x0 and a FIN bit that is set.
-- Control frames (see Section 5.5) MAY be injected in the middle of a fragmented message.  Control frames themselves MUST NOT be fragmented.
+- Control frames MAY be injected in the middle of a fragmented message.  Control frames themselves MUST NOT be fragmented.
 - Message fragments MUST be delivered to the recipient in the order sent by the sender.
 - The fragments of one message MUST NOT be interleaved between the fragments of another message unless an extension has been negotiated that can interpret the interleaving.
 - An endpoint MUST be capable of handling control frames in the middle of a fragmented message.

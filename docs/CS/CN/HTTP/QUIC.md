@@ -82,7 +82,7 @@ When an endpoint has no validated path on which to send packets, it MAY discard 
 An endpoint capable of connection migration MAY wait for a new path to become available before discarding connection state.
 
 This document limits migration of connections to new client addresses, except as described in Section 9.6.  Clients are responsible for initiating all migrations.
-Servers do not send non-probing packets (see Section 9.1) toward a client address until they see a non-probing packet from that address.  If a client receives packets from an unknown server address, the client MUST discard these packets.
+Servers do not send non-probing packets toward a client address until they see a non-probing packet from that address.  If a client receives packets from an unknown server address, the client MUST discard these packets.
 
 ### Classification of Connection Migration
 

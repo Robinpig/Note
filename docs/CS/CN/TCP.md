@@ -947,7 +947,7 @@ The PAWS algorithm requires the following processing to be performed on all inco
   - Send an acknowledgement in reply as specified in RFC-793 page 69 and drop the segment.
   - Note: it is necessary to send an ACK segment in order to retain TCP's mechanisms for detecting and recovering from half-open connections.  For example, see Figure 10 of RFC-793.
 - If the segment is outside the window, reject it (normal TCP processing)
-- If an arriving segment satisfies: SEG.SEQ <= Last.ACK.sent (see Section 3.4), then record its timestamp in TS.Recent.
+- If an arriving segment satisfies: SEG.SEQ <= Last.ACK.sent, then record its timestamp in TS.Recent.
 - If an arriving segment is in-sequence (i.e., at the left window edge), then accept it normally.
 - Otherwise, treat the segment as a normal in-window, out-of-sequence TCP segment (e.g., queue it for later delivery to the user).
 

@@ -149,7 +149,10 @@ To summarize, node splits are done in four steps:
 
 Deletions are also done by first locating the target leaf. When the leaf is located, the key and the value associated with it are removed.
 
-If neighboring nodes have too few values (i.e., their occupancy falls under a threshold), the sibling nodes are merged. This situation is called underflow. [BAYER72] describes two underflow scenarios: if two adjacent nodes have a common parent and their contents fit into a single node, their contents should be merged (concatenated); if their contents do not fit into a single node, keys are redistributed between them to restore balance (see “Rebalancing”). More precisely, two nodes are merged if the following conditions hold:
+If neighboring nodes have too few values (i.e., their occupancy falls under a threshold), the sibling nodes are merged. This situation is called underflow. 
+[BAYER72] describes two underflow scenarios: if two adjacent nodes have a common parent and their contents fit into a single node, their contents should be merged (concatenated); 
+if their contents do not fit into a single node, keys are redistributed between them to restore balance. 
+More precisely, two nodes are merged if the following conditions hold:
 
 
 - For leaf nodes: if a node can hold up to N key-value pairs, and a combined number of key-value pairs in two neighboring nodes is less than or equal to N.

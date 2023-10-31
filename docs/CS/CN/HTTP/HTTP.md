@@ -102,7 +102,7 @@ HTTP/1.1 304 Not Modified
 
 Zip
 
-- gzip (See Nginx `gzip on`)
+- gzip
 - br for html
 
 “Transfer-Encoding: chunked”和“Content-Length”这两个字段是互斥的

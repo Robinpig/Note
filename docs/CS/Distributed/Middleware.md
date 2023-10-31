@@ -33,7 +33,7 @@ These vary in terms of the programming abstractions they provide and the kinds o
 
 Distributed Tuples
 
-A distributed relational databases (see Distributed Databases) offers the abstraction of distributed tuples, and are the most widely deployed kind of middleware today.
+A distributed relational databases offers the abstraction of distributed tuples, and are the most widely deployed kind of middleware today.
 Its Structured Query Language (SQL) allows programmers to manipulate sets of these tuples (a database) in an English-like language yet with intuitive semantics and rigorous mathematical foundations based on set theory and predicate calculus.
 Distributed relational databases also offer the abstraction of a transaction.
 Distributed relational database products typically offer heterogeneity across programming languages, but most do not offer much, if any, heterogeneity across vendor implementations.

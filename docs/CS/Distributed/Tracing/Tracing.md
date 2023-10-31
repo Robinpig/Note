@@ -1,10 +1,40 @@
 ## Introduction
 
+The three pillars of observability are **Metrics**, **Tracing**, and **Logging**.
+Each pillar has a distinct role to play in infrastructure and application monitoring and is essential in gaining visibility into containerized or serverless applications.
+
+Working with these pillars individually, or using different tools for each one, does not guarantee observability. But by combining your metrics, traces, and logs into a single solution, you can create a successful observability approach.
+
+### Metrics
+
+Metrics are numeric values that represent and describe the overall behavior of a service or component measured over time. They include features like timestamp, name, and value. Metrics, unlike logs, are structured by default, making them easy to query and optimize for storage, so you can keep them for extended periods of time.
+
+
+With monitoring tools, you can visualize metrics you care about and configure alerts (especially with tools like [Prometheus](https://prometheus.io/)). Most metrics-based monitoring solutions allow you to combine data from a small number of labels, which can help you see which service is having an issue or on which machines it's happening. Metrics allow you to define what is normal and what is not.
+
+Let’s say you get a [PagerDuty](https://www.pagerduty.com/) alert that your database connections have exceeded the maximum threshold in one of your services (we’ll call it “Order service”). New connections could be timing out or requests could be queued, driving up latency—you don’t know yet. The metric that triggered the alert doesn’t tell you what customers are experiencing or why the system got to its current state. You need other pillars of observability to know more.
+
+
+### Tracing
+
+Tracing is used to understand how an application’s different services connect and how resources flow through them. Traces helps engineers analyze request flow and understand the entire lifecycle of a request in a distributed application. Every operation done on a request, also called a "span," is encoded with critical data related to the microservice conducting that operation as it passes through the host system. Tracking the path of a trace through a distributed system may help you find the reason for a bottleneck or breakdown.
+
+Using tracing tools, such as [Jaeger](https://www.jaegertracing.io/) and [Zipkin](https://zipkin.io/), you can look into individual system calls and figure out what's going on with your underlying components (which took the most or least time, whether or not specific underlying processes generated errors, etc.). Traces are also an excellent way to go deep into a metrics system alert.
+
+
 Distributed tracing, also called distributed request tracing, is a method used to profile and monitor applications, especially those built using a microservices architecture. 
 Distributed tracing helps pinpoint where failures occur and what causes poor performance.
 
 
 
+
+### Logging
+
+With metrics and tracing, it’s hard to understand how the system got to its current state. This is where logging comes into play. Logs are immutable records of discrete events that happened over some time within an application. They help uncover emergent and unpredictable behaviors exhibited by each component in a microservices architecture. Logs can also be seen as a text record of an event with a timestamp that indicates when it happened and a payload that offers context.
+
+There are three types of logs: plain text, structured, and binary. While logs in plain-text format are common, it’s better when they’re structured, include contextual data, and are quicker to access. As a rule of thumb, logs should be readable by humans and parsable by machines. When something goes wrong in a system, logs are the first place to look.
+
+Because every component of a cloud-native application emits logs, logs should be centralized so you can get the most out of them. [Elasticsearch](https://www.elastic.co/), [Fluentd](https://www.fluentd.org/), and [Kibana](https://www.elastic.co/kibana) (part of the EFK Stack that allows full-text and structured searches) are commonly used to centralize logs.
 
 ## OpenTracing
 

@@ -1,3 +1,6 @@
+## Introduction
+
+
 ### Random Hierarchy
 
 
@@ -8,17 +11,19 @@
 
 `java.util.Random`
 
-*An instance of this class is used to generate a stream of pseudorandom numbers. The class uses a **48-bit seed**, which is modified using a linear congruential formula. (See Donald Knuth, The Art of Computer Programming, Volume 2, Section 3.2.1.)*
-*If **two instances of Random are created with the same seed, and the same sequence of method calls is made for each, they will generate and return identical sequences of numbers**.* 
+An instance of this class is used to generate a stream of pseudorandom numbers. The class uses a **48-bit seed**, which is modified using a linear congruential formula.
+If **two instances of Random are created with the same seed, and the same sequence of method calls is made for each, they will generate and return identical sequences of numbers**.
 
-*In order to guarantee this property, particular algorithms are specified for the class Random. Java implementations must use all the algorithms shown here for the class Random, for the sake of absolute portability of Java code. However, subclasses of class Random are permitted to use other algorithms, so long as they adhere to the general contracts for all the methods.*
-*The algorithms implemented by class Random use a protected utility method that on each invocation can **supply up to 32 pseudorandomly generated bits**.*
+In order to guarantee this property, particular algorithms are specified for the class Random. Java implementations must use all the algorithms shown here for the class Random, for the sake of absolute portability of Java code. However, subclasses of class Random are permitted to use other algorithms, so long as they adhere to the general contracts for all the methods.*
+The algorithms implemented by class Random use a protected utility method that on each invocation can **supply up to 32 pseudorandomly generated bits**.
 
-*Many applications will find the method `Math.random` simpler to use.*
+Many applications will find the method `Math.random` simpler to use.
 
-*Instances of `java.util.Random` are **threadsafe**. However, **the concurrent use of the same Random instance across threads may encounter contention and consequent poor performance**. Consider instead using **java.util.concurrent.ThreadLocalRandom** in multithreaded designs.*
+Instances of `java.util.Random` are **threadsafe**. However, **the concurrent use of the same Random instance across threads may encounter contention and consequent poor performance**. 
+Consider instead using **java.util.concurrent.ThreadLocalRandom** in multithreaded designs.
 
-*Instances of java.util.Random are **not cryptographically secure**. Consider instead using **java.security.SecureRandom** to get a cryptographically secure pseudo-random number generator for use by security-sensitive applications.*
+Instances of java.util.Random are **not cryptographically secure**. 
+Consider instead using **java.security.SecureRandom** to get a cryptographically secure pseudo-random number generator for use by security-sensitive applications.
 
 ```java
 /**
@@ -48,22 +53,22 @@ public Random(long seed) {
         setSeed(seed);
     }
 }
+```
 
-/**
- * Generates the next pseudorandom number. Subclasses should
- * override this, as this is used by all other methods.
- *
- * The general contract of next} is that it returns an
- *  int value and if the argument bits is between
- * 1 and 32 (inclusive), then that many low-order
- * bits of the returned value will be (approximately) independently
- * chosen bit values, each of which is (approximately) equally
- * likely to be 0 or 1. The method next} is
- * implemented by class Random} by atomically updating the seed to
- *  (seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1)
- * and returning
- *  (int)(seed >>> (48 - bits))
- */
+Generates the next pseudorandom number. Subclasses should
+override this, as this is used by all other methods.
+The general contract of next} is that it returns an
+int value and if the argument bits is between
+1 and 32 (inclusive), then that many low-order
+bits of the returned value will be (approximately) independently
+chosen bit values, each of which is (approximately) equally
+likely to be 0 or 1. The method next} is
+implemented by class Random} by atomically updating the seed to
+(seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1)
+and returning
+(int)(seed >>> (48 - bits))
+
+```java
 protected int next(int bits) {
     long oldseed, nextseed;
     AtomicLong seed = this.seed;
@@ -81,7 +86,10 @@ protected int next(int bits) {
 
 
 
-*A **random number generator isolated to the current thread**. Like the global Random generator used by the Math class, a ThreadLocalRandom is initialized with an internally generated seed that may not otherwise be modified. When applicable, use of ThreadLocalRandom rather than shared Random objects in concurrent programs will typically encounter much less overhead and contention. **Use of ThreadLocalRandom is particularly appropriate when multiple tasks** (for example, each a **ForkJoinTask**) **use random numbers in parallel in thread pools**.*
+A **random number generator isolated to the current thread**.
+Like the global Random generator used by the Math class, a ThreadLocalRandom is initialized with an internally generated seed that may not otherwise be modified.
+When applicable, use of ThreadLocalRandom rather than shared Random objects in concurrent programs will typically encounter much less overhead and contention.
+**Use of ThreadLocalRandom is particularly appropriate when multiple tasks** (for example, each a **ForkJoinTask**) **use random numbers in parallel in thread pools**.
 
 
 
@@ -140,7 +148,8 @@ public static ThreadLocalRandom current() {
 
 ### Seed and Probe in Thread
 
-*The following three initially uninitialized fields are exclusively managed by class `java.util.concurrent.ThreadLocalRandom`. These fields are used to build the high-performance PRNGs in the  concurrent code, and we can not risk accidental false sharing.  Hence, the fields are isolated with [**@Contended**]().*
+The following three initially uninitialized fields are exclusively managed by class `java.util.concurrent.ThreadLocalRandom`. 
+These fields are used to build the high-performance PRNGs in the  concurrent code, and we can not risk accidental false sharing.  Hence, the fields are isolated with [**@Contended**]().
 
 ```java
 /** The current seed for a ThreadLocalRandom */
