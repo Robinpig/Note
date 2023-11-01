@@ -25,58 +25,54 @@ Consider instead using **java.util.concurrent.ThreadLocalRandom** in multithread
 Instances of java.util.Random are **not cryptographically secure**. 
 Consider instead using **java.security.SecureRandom** to get a cryptographically secure pseudo-random number generator for use by security-sensitive applications.
 
+
+
 ```java
-/**
- * The internal state associated with this pseudorandom number generator.
- * (The specs for the methods in this class describe the ongoing
- * computation of this value.)
- */
-private final AtomicLong seed;
-
-private static final long multiplier = 0x5DEECE66DL;
-private static final long addend = 0xBL;
-private static final long mask = (1L << 48) - 1;
-
-private static final double DOUBLE_UNIT = 0x1.0p-53; // 1.0 / (1L << 53)
-
-/**
- * Creates a new random number generator using a single long seed.
- * The seed is the initial value of the internal state of the pseudorandom
- * number generator which is maintained by method {@link #next}.
- */
-public Random(long seed) {
-    if (getClass() == Random.class)
-        this.seed = new AtomicLong(initialScramble(seed));
-    else {
-        // subclass might have overridden setSeed
-        this.seed = new AtomicLong();
-        setSeed(seed);
+public class Random implements RandomGenerator, java.io.Serializable {
+    public Random() {
+        this(seedUniquifier() ^ System.nanoTime());
     }
+
+    private static long seedUniquifier() {
+        // L'Ecuyer, "Tables of Linear Congruential Generators of
+        // Different Sizes and Good Lattice Structure", 1999
+        for (;;) {
+            long current = seedUniquifier.get();
+            long next = current * 1181783497276652981L;
+            if (seedUniquifier.compareAndSet(current, next))
+                return next;
+        }
+    }
+    
+    private final AtomicLong seed;
+
+    private static final long multiplier = 0x5DEECE66DL;
+    private static final long addend = 0xBL;
+    private static final long mask = (1L << 48) - 1;
+
+    private static final double DOUBLE_UNIT = 0x1.0p-53; // 1.0 / (1L << 53)
+
+    private static final AtomicLong seedUniquifier
+            = new AtomicLong(8682522807148012L);
 }
 ```
 
-Generates the next pseudorandom number. Subclasses should
-override this, as this is used by all other methods.
-The general contract of next} is that it returns an
-int value and if the argument bits is between
-1 and 32 (inclusive), then that many low-order
-bits of the returned value will be (approximately) independently
-chosen bit values, each of which is (approximately) equally
-likely to be 0 or 1. The method next} is
-implemented by class Random} by atomically updating the seed to
-(seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1)
-and returning
-(int)(seed >>> (48 - bits))
+Generates the next pseudorandom number. Subclasses should override this, as this is used by all other methods.
+The general contract of next} is that it returns an int value and if the argument bits is between 1 and 32 (inclusive), 
+then that many low-order bits of the returned value will be (approximately) independently chosen bit values, each of which is (approximately) equally likely to be 0 or 1. 
+The method next} is implemented by class Random} by atomically updating the seed to (seed * 0x5DEECE66DL + 0xBL) & ((1L << 48) - 1) and returning (int)(seed >>> (48 - bits))
 
 ```java
-protected int next(int bits) {
-    long oldseed, nextseed;
-    AtomicLong seed = this.seed;
-    do {
-        oldseed = seed.get();
-        nextseed = (oldseed * multiplier + addend) & mask;
-    } while (!seed.compareAndSet(oldseed, nextseed));
-    return (int)(nextseed >>> (48 - bits));
+public class Random implements RandomGenerator, java.io.Serializable {
+    protected int next(int bits) {
+        long oldseed, nextseed;
+        AtomicLong seed = this.seed;
+        do {
+            oldseed = seed.get();
+            nextseed = (oldseed * multiplier + addend) & mask;
+        } while (!seed.compareAndSet(oldseed, nextseed));
+        return (int) (nextseed >>> (48 - bits));
+    }
 }
 ```
 
@@ -86,10 +82,10 @@ protected int next(int bits) {
 
 
 
-A **random number generator isolated to the current thread**.
+A random number generator isolated to the current thread.<br/>
 Like the global Random generator used by the Math class, a ThreadLocalRandom is initialized with an internally generated seed that may not otherwise be modified.
 When applicable, use of ThreadLocalRandom rather than shared Random objects in concurrent programs will typically encounter much less overhead and contention.
-**Use of ThreadLocalRandom is particularly appropriate when multiple tasks** (for example, each a **ForkJoinTask**) **use random numbers in parallel in thread pools**.
+Use of ThreadLocalRandom is particularly appropriate when multiple tasks (for example, each a ForkJoinTask) use random numbers in parallel in thread pools.
 
 
 
@@ -99,7 +95,7 @@ Use `ThreadLocalRandom.current()` to get `static singleton`.
 
 Call `localInit( )` when `Thread.threadLocalRandomProbe` is zero.
 
-```java
+```
 /** Generates per-thread initialization/probe field */
 private static final AtomicInteger probeGenerator = new AtomicInteger();
 
@@ -118,13 +114,14 @@ private ThreadLocalRandom() {
     initialized = true; // false during super() call
 }
 
-/**
- * Initialize Thread fields for the current thread.  Called only
- * when Thread.threadLocalRandomProbe is zero, indicating that a
- * thread local seed value needs to be generated. Note that even
- * though the initialization is purely thread-local, we need to
- * rely on (static) atomic generators to initialize the values.
- */
+```
+
+
+Initialize Thread fields for the current thread. 
+Called only when Thread.threadLocalRandomProbe is zero, indicating that a thread local seed value needs to be generated. 
+Note that even though the initialization is purely thread-local, we need to rely on (static) atomic generators to initialize the values.
+
+```java
 static final void localInit() {
     int p = probeGenerator.addAndGet(PROBE_INCREMENT);
     int probe = (p == 0) ? 1 : p; // skip 0
@@ -132,15 +129,6 @@ static final void localInit() {
     Thread t = Thread.currentThread();
     U.putLong(t, SEED, seed);
     U.putInt(t, PROBE, probe);
-}
-
-/**
- * Returns the current thread's {@code ThreadLocalRandom}.
- */
-public static ThreadLocalRandom current() {
-    if (U.getInt(Thread.currentThread(), PROBE) == 0)
-        localInit();
-    return instance;
 }
 ```
 
@@ -151,7 +139,7 @@ public static ThreadLocalRandom current() {
 The following three initially uninitialized fields are exclusively managed by class `java.util.concurrent.ThreadLocalRandom`. 
 These fields are used to build the high-performance PRNGs in the  concurrent code, and we can not risk accidental false sharing.  Hence, the fields are isolated with [**@Contended**]().
 
-```java
+```
 /** The current seed for a ThreadLocalRandom */
 @jdk.internal.vm.annotation.Contended("tlr")
 long threadLocalRandomSeed;
