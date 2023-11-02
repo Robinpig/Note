@@ -830,7 +830,7 @@ From the architecture perspective, a phi-accrual failure detector can be viewed 
 
 #### Gossip and Failure Detection
 
-Another approach that avoids relying on a single-node view to make a decision is a gossip-style failure detection service, which uses [gossip]() to collect and distribute states of neighboring processes.
+Another approach that avoids relying on a single-node view to make a decision is a gossip-style failure detection service, which uses [gossip](/docs/CS/Distributed/Gossip.md) to collect and distribute states of neighboring processes.
 
 Each member maintains a list of other members, their heartbeat counters, and timestamps, specifying when the heartbeat counter was incremented for the last time.
 Periodically, each member increments its heartbeat counter and distributes its list to a random neighbor.
@@ -849,7 +849,8 @@ Using gossip for propagating system states increases the number of messages in t
 Since propagating the information about failures is not always possible, and propagating it by notifying every member might be expensive, one of the approaches,
 called FUSE (failure notification service), focuses on reliable and cheap failure propagation that works even in cases of network partitions.
 
-To detect process failures, this approach arranges all active processes in groups. If one of the groups becomes unavailable, all participants detect the failure.
+To detect process failures, this approach arranges all active processes in groups.
+If one of the groups becomes unavailable, all participants detect the failure.
 In other words, every time a single process failure is detected, it is converted and propagated as a group failure. This allows detecting failures in the presence of any pattern of disconnects, partitions, and node failures.
 
 Processes in the group periodically send ping messages to other members, querying whether they’re still alive.
@@ -865,15 +866,18 @@ Applications can use their own definitions of propagated failures to account for
 
 Synchronization can be quite costly: if each algorithm step involves contacting each other participant, we can end up with a significant communication overhead.
 This is particularly true in large and geographically distributed networks.
-To reduce synchronization overhead and the number of message round-trips required to reach a decision, some algorithms rely on the existence of the leader (sometimes called coordinator) process, responsible for executing or coordinating steps of a distributed algorithm.
+To reduce synchronization overhead and the number of message round-trips required to reach a decision, 
+some algorithms rely on the existence of the leader (sometimes called coordinator) process, responsible for executing or coordinating steps of a distributed algorithm.
 
 Generally, processes in distributed systems are uniform, and any process can take over the leadership role.
 Processes assume leadership for long periods of time, but this is not a permanent role. Usually, the process remains a leader until it crashes.
 After the crash, any other process can start a new election round, assume leadership, if it gets elected, and continue the failed leader’s work.
 
-The liveness of the election algorithm guarantees that most of the time there will be a leader, and the election will eventually complete (i.e., the system should not be in the election state indefinitely).
+The liveness of the election algorithm guarantees that most of the time there will be a leader, 
+and the election will eventually complete (i.e., the system should not be in the election state indefinitely).
 
-Ideally, we’d like to assume safety, too, and guarantee there may be at most one leader at a time, and completely eliminate the possibility of a split brain situation (when two leaders serving the same purpose are elected but unaware of each other).
+Ideally, we’d like to assume safety, too, and guarantee there may be at most one leader at a time,
+and completely eliminate the possibility of a split brain situation (when two leaders serving the same purpose are elected but unaware of each other).
 However, in practice, many leader election algorithms violate this agreement.
 
 Leader processes can be used, for example, to achieve a total order of messages in a broadcast.
@@ -883,22 +887,27 @@ It can also be used to coordinate system reorganization after the failure, durin
 Election is triggered when the system initializes, and the leader is elected for the first time, or when the previous leader crashes or fails to communicate.
 Election has to be deterministic: exactly one leader has to emerge from the process. This decision needs to be effective for all participants.
 
-Even though leader election and distributed locking (i.e., exclusive ownership over a shared resource) might look alike from a theoretical perspective, they are slightly different.
-If one process holds a lock for executing a critical section, it is unimportant for other processes to know who exactly is holding a lock right now, as long as the liveness property is satisfied (i.e., the lock will be eventually released, allowing others to acquire it).
-In contrast, the elected process has some special properties and has to be known to all other participants, so the newly elected leader has to notify its peers about its role.
+Even though leader election and distributed locking (i.e., exclusive ownership over a shared resource) might look alike from a theoretical perspective,
+they are slightly different.
+If one process holds a lock for executing a critical section, it is unimportant for other processes to know who exactly is holding a lock right now, 
+as long as the liveness property is satisfied (i.e., the lock will be eventually released, allowing others to acquire it).
+In contrast, the elected process has some special properties and has to be known to all other participants, 
+so the newly elected leader has to notify its peers about its role.
 
-If a distributed locking algorithm has any sort of preference toward some process or group of processes, it will eventually starve nonpreferred processes from the shared resource, which contradicts the liveness property.
+If a distributed locking algorithm has any sort of preference toward some process or group of processes,
+it will eventually starve nonpreferred processes from the shared resource, which contradicts the liveness property.
 In contrast, the leader can remain in its role until it stops or crashes, and long-lived leaders are preferred.
 
-Having a stable leader in the system helps to avoid state synchronization between remote participants, reduce the number of exchanged messages, and drive execution from a single process instead of requiring peer-to-peer coordination.
+Having a stable leader in the system helps to avoid state synchronization between remote participants, 
+reduce the number of exchanged messages, and drive execution from a single process instead of requiring peer-to-peer coordination.
 One of the potential problems in systems with a notion of leadership is that the leader can become a bottleneck.
 To overcome that, many systems partition data in non-intersecting independent replica sets.
 Instead of having a single system-wide leader, each replica set has its own leader.
-One of the systems that uses this approach is [Spanner]().
+One of the systems that uses this approach is [Spanner](/docs/CS/Distributed/Spanner.md).
 
 Because every leader process will eventually fail, failure has to be detected, reported, and reacted upon: a system has to elect another leader to replace the failed one.
 
-Some algorithms, such as [ZAB](), [Multi-Paxos](), or [Raft](), use temporary leaders to reduce the number of messages required to reach an agreement between the participants.
+Some algorithms, such as [ZAB](/docs/CS/Java/ZooKeeper/Zab.md), [Multi-Paxos](/docs/CS/Distributed/Paxos.md), or [Raft](/docs/CS/Distributed/Raft.md), use temporary leaders to reduce the number of messages required to reach an agreement between the participants.
 However, these algorithms use their own algorithm-specific means for leader election, failure detection, and resolving conflicts between the competing leader processes.
 
 ### Bully Algorithm
