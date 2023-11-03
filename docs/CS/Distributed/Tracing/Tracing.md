@@ -1,5 +1,8 @@
 ## Introduction
 
+The holy grail of observability is having a system that allows you to discover any previously unknown state without deploying additional code to diagnose it.
+Monitoring and observability are separate, but dependent. Namely, if a system is observable, it can be monitored.
+
 The three pillars of observability are **Metrics**, **Tracing**, and **Logging**.
 Each pillar has a distinct role to play in infrastructure and application monitoring and is essential in gaining visibility into containerized or serverless applications.
 
