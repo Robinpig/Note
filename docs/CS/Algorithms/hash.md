@@ -136,7 +136,7 @@ This is because at most half of the table can be used as alternate locations to 
 
 ## Rehashing
 
-*Rehashing* is obviously a very expensive operation -- the running time is O(n), since there are n elements to rehash and the table size is roughly 2n, but it is actually not all that bad, because it happens very infrequently.
+*Rehashing* is obviously a very expensive operation -- the running time is $O(n)$, since there are n elements to rehash and the table size is roughly 2n, but it is actually not all that bad, because it happens very infrequently.
 
 Rehashing can be implemented in several ways with quadratic probing.
 
