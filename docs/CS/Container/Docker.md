@@ -6,6 +6,45 @@ Containers are more portable and efficient.
 
 rootfs
 
+## Installing Docker
+
+
+Install Docker Desktop:
+<!-- tabs:start -->
+##### **Ubuntu**
+```shell
+
+```
+
+##### **Mac**
+
+```shell
+brew install --cask docker
+brew install docker
+
+#rm files if has installed docker
+brew uninstall  docker
+brew uninstall  --cask docker
+rm -rf /usr/local/bin/docker
+rm -rf /usr/local/etc/bash_completion.d/docker
+rm -rf /usr/local/share/zsh/site-functions/_docker
+rm -rf /usr/local/share/fish/vendor_completions.d/docker.fish
+```
+<!-- tabs:end -->
+
+After installed done, open Docker Desktop and set registry-mirrors:
+
+```json
+{
+  "registry-mirrors": [
+    "https://docker.mirrors.ustc.edu.cn",
+    "https://registry.docker-cn.com",
+    "http://hub-mirror.c.163.com",
+    "https://mirror.ccs.tencentyun.com"
+  ]
+}
+```
+
 ### 1.1 Docker 由来
 
 Docker 是基于 **Go** 语言开发的一个容器引擎，Docker是应用程序与系统之间的**隔离层**。通常应用程序对安装的系统环境会有各种严格要求，当服务器很多时部署时系统环境的配置工作是非常繁琐的。Docker让应用程序不必再关心主机环境，各个应用安装在Docker镜像里，Docker引擎负责运行包裹了应用程序的docker镜像。
