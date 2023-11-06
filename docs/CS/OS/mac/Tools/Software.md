@@ -2,7 +2,7 @@
 
 ## Install Tools
 
-### Homebrew
+## Homebrew
 
 <!-- tabs:start -->
 
@@ -25,6 +25,13 @@ Otherwise:
 
 ```shell
 /bin/zsh -c "$(curl -fsSL https://gitee.com/cunkai/HomebrewCN/raw/master/Homebrew.sh)"
+```
+
+
+##### **Uninstall**
+
+```shell
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/uninstall.sh)"
 ```
 
 <!-- tabs:end -->

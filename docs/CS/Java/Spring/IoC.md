@@ -1346,6 +1346,7 @@ public class BService {
 1. We can annotate the @Lazy annotation on the fields of cyclic dependency injection.
 2. From the source code comment above, we can see that when allowRawInjectionDespiteWrapping is true, 
    it won’t take that else if and won’t throw an exception, so we can solve the error problem by setting allowRawInjectionDespiteWrapping to true, the code is as follows.
+
 ```java
 @Component
 public class MyBeanFactoryPostProcessor implements BeanFactoryPostProcessor {
