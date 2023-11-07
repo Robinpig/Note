@@ -17,8 +17,12 @@ Additionally, if a single consumer fails, the remaining members of the group wil
 
 > [!WARNING]
 > 
-> **The Kafka consumer is NOT thread-safe.**
- You can’t have multiple consumers that belong to the same group in one thread and you can’t have multiple threads safely use the same consumer. One consumer per thread is the rule. To run mul‐ tiple consumers in the same group in one application, you will need to run each in its own thread. It is useful to wrap the con‐ sumer logic in its own object and then use Java’s ExecutorService to start multiple threads each with its own consumer.
+> **The Kafka consumer is NOT thread-safe.** 
+
+You can’t have multiple consumers that belong to the same group in one thread and you can’t have multiple threads safely use the same consumer. 
+One consumer per thread is the rule. 
+To run multiple consumers in the same group in one application, you will need to run each in its own thread. 
+It is useful to wrap the consumer logic in its own object and then use Java’s ExecutorService to start multiple threads each with its own consumer.
 
 All network I/O happens in the thread of the application making the call.
 It is the responsibility of the user to ensure that multi-threaded access is properly synchronized.
