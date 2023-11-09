@@ -13,7 +13,7 @@ Install Docker Desktop:
 <!-- tabs:start -->
 ##### **Ubuntu**
 ```shell
-
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
 ##### **Mac**
