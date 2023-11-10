@@ -36,7 +36,8 @@ Our goal is to design a distributed system with the characteristics listed above
 
 ### Faults and Partial Failures
 
-In a distributed system, there may well be some parts of the system that are broken in some unpredictable way, even though other parts of the system are working fine. This is known as a *partial failure*.
+In a distributed system, there may well be some parts of the system that are broken in some unpredictable way, even though other parts of the system are working fine. 
+This is known as a *partial failure*.
 The difficulty is that partial failures are *nondeterministic*: if you try to do anything involving multiple nodes and the network, it may sometimes work and sometimes unpredictably fail.
 As we shall see, you may not even know whether something succeeded or not, as the time it takes for a message to travel across a network is also nondeterministic!
 
@@ -96,7 +97,7 @@ Time-of-day clocks have also historically had quite a coarse-grained resolution,
 On recent systems, this is less of a problem.
 
 A monotonic clock is suitable for measuring a duration (time interval), such as a timeout or a service’s response time: `clock_gettime(CLOCK_MONOTONIC)` on Linux and `System.nanoTime()` in Java are monotonic clocks, for example.
-The name comes from the fact that they are guaranteed to always move forward (whereas a time-ofday clock may jump back in time).
+The name comes from the fact that they are guaranteed to always move forward (whereas a time-of-day clock may jump back in time).
 
 You can check the value of the monotonic clock at one point in time, do something, and then check the clock again at a later time. The difference between the two values tells you how much time elapsed between the two checks.
 However, the absolute value of the clock is meaningless: it might be the number of nanoseconds since the computer was started, or something similarly arbitrary.
