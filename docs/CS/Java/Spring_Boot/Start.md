@@ -1,3 +1,7 @@
+## Introduction
+
+We would like to talk about how Spring Boot startup.
+
 ## Entrance
 
 ```java
