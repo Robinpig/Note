@@ -29,8 +29,6 @@ base on infra container
 
 
 
-Cgroups and Namespace 
-
 ## Network Management
 
 ## Resource Management

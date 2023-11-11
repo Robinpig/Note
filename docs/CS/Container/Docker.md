@@ -45,82 +45,10 @@ After installed done, open Docker Desktop and set registry-mirrors:
 }
 ```
 
-### 1.1 Docker 由来
 
-Docker 是基于 **Go** 语言开发的一个容器引擎，Docker是应用程序与系统之间的**隔离层**。通常应用程序对安装的系统环境会有各种严格要求，当服务器很多时部署时系统环境的配置工作是非常繁琐的。Docker让应用程序不必再关心主机环境，各个应用安装在Docker镜像里，Docker引擎负责运行包裹了应用程序的docker镜像。
+Cgroups and Namespace
 
-Docker的理念是让开发人员可以简单地把应用程序及依赖装载到容器中，然后轻松地部署到任何地方，Docker具有如下特性。
 
-> 1. Docker容器是轻量级的虚拟技术，占用更少系统资源。
-> 2. 使用 Docker容器，不同团队（如开发、测试，运维）之间更容易合作。
-> 3. 可以在任何地方部署 Docker 容器，比如在任何物理和虚拟机上，甚至在云上。
-> 4. 由于Docker容器非常轻量级，因此可扩展性很强。
-
-### 1.2 Docker 基本组成
-
-![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e916e8eb138f427d98df2f213eccda23~tplv-k3u1fbpfcp-zoom-1.image)
-
-镜像（image）：
-
-> Docker 镜像就好比是一个目标，可以通过这个目标来创建容器服务，可以简单的理解为编程语言中的类。
-
-容器（container）:
-
-> Docker 利用容器技术，独立运行一个或者一组应用，容器是通过镜像来创建的，在容器中可执行启动、停止、删除等基本命令，最终服务运行或者项目运行就是在容器中的，可理解为是类的实例。
-
-仓库（repository）:
-
-> 仓库就是存放镜像的地方！仓库分为公有仓库和私有仓库，类似Git。一般我们用的时候都是用国内docker镜像来加速。
-
-### 1.3 VM 跟 Docker
-
-![img](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)****
-
-**虚拟机**：
-
-> 传统的虚拟机需要模拟整台机器包括硬件，每台虚拟机都需要有自己的操作系统，虚拟机一旦被开启，预分配给他的资源将全部被占用。每一个虚拟机包括应用，必要的二进制和库，以及一个完整的用户操作系统。
-
-**Docker**：
-
-> 容器技术是和我们的宿主机共享硬件资源及操作系统可以实现资源的动态分配。容器包含应用和其所有的依赖包，但是与其他容器**共享内核**。容器在宿主机操作系统中，在用户空间以分离的进程运行。
-
-| 比对项   | Container（容器）                       | VM（虚拟机）   |
-| -------- | --------------------------------------- | -------------- |
-| 启动速度 | 秒级                                    | 分钟级         |
-| 运行性能 | 接近原生                                | 有所损失       |
-| 磁盘占用 | MB                                      | GB             |
-| 数量     | 成百上千                                | 一般几十台     |
-| 隔离性   | 进程级别                                | 系统级别       |
-| 操作系统 | 只支持Linux                             | 几乎所有       |
-| 封装程度 | 只打包项目代码和依赖关系 共享宿主机内核 | 完整的操作系统 |
-
-### 1.4 Docker 跟 DevOps
-
-![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/d312d038a8774815904a38b87a019717~tplv-k3u1fbpfcp-zoom-1.image)**DevOps** 是一组过程、方法与系统的统称，用于促进开发（应用程序/软件工程）、技术运营和质量保障（QA）部门之间的沟通、协作与整合。
-
-> DevOps 是两个传统角色 Dev(Development) 和 Ops(Operations) 的结合，Dev 负责开发，Ops 负责部署上线，但 Ops 对 Dev 开发的应用缺少足够的了解，而 Dev 来负责上线，很多服务软件不知如何部署运行，二者中间有一道明显的鸿沟，DevOps 就是为了弥补这道鸿沟。DevOps 要做的事，是偏 Ops 的；但是做这个事的人，是偏 Dev 的, 说白了就是要有一个了解 Dev 的人能把 Ops 的事干了。而Docker 是适合 DevOps 的。
-
-### 1.5 Docker 跟 k8s
-
-**k8s** 的全称是 **kubernetes**，它是基于容器的集群管理平台，是管理应用的全生命周期的一个工具，从创建应用、应用的部署、应用提供服务、扩容缩容应用、应用更新、都非常的方便，而且可以做到故障自愈，例如一个服务器挂了，可以自动将这个服务器上的服务调度到另外一个主机上进行运行，无需进行人工干涉。k8s 依托于Google自家的强大实践应用，目前市场占有率已经超过Docker自带的Swarm了。
-
-**如果你有很多 Docker 容器要启动、维护、监控，那就上k8s吧**！
-
-### 1.6 hello world
-
-`docker run hello-world` 的大致流程图如下：![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/1adc2668ffd34fba8fb39a63604b230a~tplv-k3u1fbpfcp-zoom-1.image)
-
-# 2 Docker 常见指令
-
-**官方文档**：
-
-> https://docs.docker.com/engine/reference/commandline/build/
-
-![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4b08513737d74479b14edf3ab5c72979~tplv-k3u1fbpfcp-zoom-1.image)
-
-# 3 Docker 运行原理
-
-Docker 只提供一个运行环境，他跟 VM 不一样，是不需要运行一个独立的 OS，容器中的系统内核跟宿主机的内核是**公用**的。**docker容器本质上是宿主机的进程**。对 Docker 项目来说，它最核心的原理实际上就是为待创建的用户进程做如下操作：
 
 > 1. 启用 **Linux Namespace** 配置。
 > 2. 设置指定的 **Cgroups** 参数。
@@ -426,3 +354,7 @@ Sometimes Docker daemon accident
 container killed because of OOM
 
 Disable OOM_kill cause Host server down
+
+## Links
+
+- [Kubernetes](/docs/CS/Container/K8s.md)
