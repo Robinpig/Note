@@ -1,6 +1,6 @@
 ## Introduction
 
-[Kubernetes](https://kubernetes.io/), also known as K8s, is an open-source system for automating deployment, scaling, and management of containerized applications.
+[Kubernetes](https://kubernetes.io/), also known as K8s, is an open-source system for automating deployment, scaling, and management of [containerized](/docs/CS/Container/Container.md) applications.
 
 Kubernetes has the following characteristics:
 
@@ -30,6 +30,23 @@ base on infra container
 
 
 Cgroups and Namespace 
+
+
+
+Kubernetes supports container runtimes such as containerd, CRI-O, and any other implementation of the Kubernetes CRI (Container Runtime Interface).
+
+## CRI-O
+
+CRI-O is an implementation of the Kubernetes CRI (Container Runtime Interface) to enable using OCI (Open Container Initiative) compatible runtimes.
+It is a lightweight alternative to using [Docker](/docs/CS/Container/Docker.md) as the runtime for kubernetes. 
+It allows Kubernetes to use any OCI-compliant runtime as the container runtime for running pods. 
+Today it supports runc and Kata Containers as the container runtimes but any OCI-conformant runtime can be plugged in principle.
+
+CRI-O supports OCI container images and can pull from any container registry. 
+It is a lightweight alternative to using Docker, Moby or rkt as the runtime for Kubernetes.
+
+
+
 
 ## Network Management
 
