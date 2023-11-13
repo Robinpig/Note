@@ -1,19 +1,70 @@
 ## Introduction
 
-Containers and virtual machines have similar resource isolation and allocation benefits, but function differently because containers virtualize the operating system instead of hardware. 
-Containers are more portable and efficient.
+A Docker container image is a lightweight, standalone, executable package of software that includes everything needed to run an application: code, runtime, system tools, system libraries and settings.
+
+**Container images** become containers at runtime and in the case of **Docker containers** – images become containers when they run on Docker Engine.<br/> 
+Available for both Linux and Windows-based applications, containerized software will always run the same, regardless of the infrastructure.
+Containers isolate software from its environment and ensure that it works uniformly despite differences for instance between development and staging.
+
+Docker runs Linux software on most systems. 
+Docker for Mac and Docker for Windows integrate with common virtual machine (VM) technology to create portability with Windows and macOS. 
+But Docker can run native Windows applications on modern Windows server machines.
+
+Docker containers that run on Docker Engine:
+
+* **Standard:** Docker created the industry standard for containers, so they could be portable anywhere
+* **Lightweight:** Containers share the machine’s OS system kernel and therefore do not require an OS per application, driving higher server efficiencies and reducing server and licensing costs
+* **Secure:** Applications are safer in containers and Docker provides the strongest default isolation capabilities in the industry
 
 
-rootfs
 
 ## Installing Docker
 
-
 Install Docker Desktop:
+
 <!-- tabs:start -->
+
 ##### **Ubuntu**
+
 ```shell
+# Add Docker's official GPG key:
+sudo apt-get update
+sudo apt-get install ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# Add the repository to Apt sources:
+echo \
+  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
 sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+##### **Fedora**
+
+```shell
+# Uninstall old versions
+sudo dnf remove docker \
+                  docker-client \
+                  docker-client-latest \
+                  docker-common \
+                  docker-latest \
+                  docker-latest-logrotate \
+                  docker-logrotate \
+                  docker-selinux \
+                  docker-engine-selinux \
+                  docker-engine
+
+sudo dnf -y install dnf-plugins-core
+sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+
+sudo dnf install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+sudo systemctl start docker
 ```
 
 ##### **Mac**
@@ -30,6 +81,7 @@ rm -rf /usr/local/etc/bash_completion.d/docker
 rm -rf /usr/local/share/zsh/site-functions/_docker
 rm -rf /usr/local/share/fish/vendor_completions.d/docker.fish
 ```
+
 <!-- tabs:end -->
 
 After installed done, open Docker Desktop and set registry-mirrors:
@@ -45,82 +97,8 @@ After installed done, open Docker Desktop and set registry-mirrors:
 }
 ```
 
-### 1.1 Docker 由来
 
-Docker 是基于 **Go** 语言开发的一个容器引擎，Docker是应用程序与系统之间的**隔离层**。通常应用程序对安装的系统环境会有各种严格要求，当服务器很多时部署时系统环境的配置工作是非常繁琐的。Docker让应用程序不必再关心主机环境，各个应用安装在Docker镜像里，Docker引擎负责运行包裹了应用程序的docker镜像。
 
-Docker的理念是让开发人员可以简单地把应用程序及依赖装载到容器中，然后轻松地部署到任何地方，Docker具有如下特性。
-
-> 1. Docker容器是轻量级的虚拟技术，占用更少系统资源。
-> 2. 使用 Docker容器，不同团队（如开发、测试，运维）之间更容易合作。
-> 3. 可以在任何地方部署 Docker 容器，比如在任何物理和虚拟机上，甚至在云上。
-> 4. 由于Docker容器非常轻量级，因此可扩展性很强。
-
-### 1.2 Docker 基本组成
-
-![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/e916e8eb138f427d98df2f213eccda23~tplv-k3u1fbpfcp-zoom-1.image)
-
-镜像（image）：
-
-> Docker 镜像就好比是一个目标，可以通过这个目标来创建容器服务，可以简单的理解为编程语言中的类。
-
-容器（container）:
-
-> Docker 利用容器技术，独立运行一个或者一组应用，容器是通过镜像来创建的，在容器中可执行启动、停止、删除等基本命令，最终服务运行或者项目运行就是在容器中的，可理解为是类的实例。
-
-仓库（repository）:
-
-> 仓库就是存放镜像的地方！仓库分为公有仓库和私有仓库，类似Git。一般我们用的时候都是用国内docker镜像来加速。
-
-### 1.3 VM 跟 Docker
-
-![img](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)****
-
-**虚拟机**：
-
-> 传统的虚拟机需要模拟整台机器包括硬件，每台虚拟机都需要有自己的操作系统，虚拟机一旦被开启，预分配给他的资源将全部被占用。每一个虚拟机包括应用，必要的二进制和库，以及一个完整的用户操作系统。
-
-**Docker**：
-
-> 容器技术是和我们的宿主机共享硬件资源及操作系统可以实现资源的动态分配。容器包含应用和其所有的依赖包，但是与其他容器**共享内核**。容器在宿主机操作系统中，在用户空间以分离的进程运行。
-
-| 比对项   | Container（容器）                       | VM（虚拟机）   |
-| -------- | --------------------------------------- | -------------- |
-| 启动速度 | 秒级                                    | 分钟级         |
-| 运行性能 | 接近原生                                | 有所损失       |
-| 磁盘占用 | MB                                      | GB             |
-| 数量     | 成百上千                                | 一般几十台     |
-| 隔离性   | 进程级别                                | 系统级别       |
-| 操作系统 | 只支持Linux                             | 几乎所有       |
-| 封装程度 | 只打包项目代码和依赖关系 共享宿主机内核 | 完整的操作系统 |
-
-### 1.4 Docker 跟 DevOps
-
-![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/d312d038a8774815904a38b87a019717~tplv-k3u1fbpfcp-zoom-1.image)**DevOps** 是一组过程、方法与系统的统称，用于促进开发（应用程序/软件工程）、技术运营和质量保障（QA）部门之间的沟通、协作与整合。
-
-> DevOps 是两个传统角色 Dev(Development) 和 Ops(Operations) 的结合，Dev 负责开发，Ops 负责部署上线，但 Ops 对 Dev 开发的应用缺少足够的了解，而 Dev 来负责上线，很多服务软件不知如何部署运行，二者中间有一道明显的鸿沟，DevOps 就是为了弥补这道鸿沟。DevOps 要做的事，是偏 Ops 的；但是做这个事的人，是偏 Dev 的, 说白了就是要有一个了解 Dev 的人能把 Ops 的事干了。而Docker 是适合 DevOps 的。
-
-### 1.5 Docker 跟 k8s
-
-**k8s** 的全称是 **kubernetes**，它是基于容器的集群管理平台，是管理应用的全生命周期的一个工具，从创建应用、应用的部署、应用提供服务、扩容缩容应用、应用更新、都非常的方便，而且可以做到故障自愈，例如一个服务器挂了，可以自动将这个服务器上的服务调度到另外一个主机上进行运行，无需进行人工干涉。k8s 依托于Google自家的强大实践应用，目前市场占有率已经超过Docker自带的Swarm了。
-
-**如果你有很多 Docker 容器要启动、维护、监控，那就上k8s吧**！
-
-### 1.6 hello world
-
-`docker run hello-world` 的大致流程图如下：![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/1adc2668ffd34fba8fb39a63604b230a~tplv-k3u1fbpfcp-zoom-1.image)
-
-# 2 Docker 常见指令
-
-**官方文档**：
-
-> https://docs.docker.com/engine/reference/commandline/build/
-
-![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/4b08513737d74479b14edf3ab5c72979~tplv-k3u1fbpfcp-zoom-1.image)
-
-# 3 Docker 运行原理
-
-Docker 只提供一个运行环境，他跟 VM 不一样，是不需要运行一个独立的 OS，容器中的系统内核跟宿主机的内核是**公用**的。**docker容器本质上是宿主机的进程**。对 Docker 项目来说，它最核心的原理实际上就是为待创建的用户进程做如下操作：
 
 > 1. 启用 **Linux Namespace** 配置。
 > 2. 设置指定的 **Cgroups** 参数。
@@ -135,7 +113,7 @@ PS：**Linux** 内核提拱了6种 **namespace** 隔离的系统调用，如下�
 ### 3.2 CGroup 分配资源
 
 Docker 通过 **Cgroup** 来控制容器使用的资源配额，一旦超过这个配额就发出**OOM**。配额主要包括 CPU、内存、磁盘三大方面， 基本覆盖了常见的资源配额和使用量控制。
- ![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/d2dc4aca163144918e25d217c91496b3~tplv-k3u1fbpfcp-zoom-1.image)Cgroup 是 Control Groups 的缩写，是Linux `内核`提供的一种可以限制、记录、隔离进程组所使用的物理资源(如 CPU、内存、磁盘 IO 等等)的机制，被 LXC(Linux container)、Docker 等很多项目用于实现进程资源控制。Cgroup 本身是提供将进程进行分组化管理的功能和接口的基础结构，I/O 或内存的分配控制等具体的资源管理是通过该功能来实现的，这些具体的资源 管理功能称为 Cgroup 子系统。
+![img](https://p3-juejin.byteimg.com/tos-cn-i-k3u1fbpfcp/d2dc4aca163144918e25d217c91496b3~tplv-k3u1fbpfcp-zoom-1.image)Cgroup 是 Control Groups 的缩写，是Linux `内核`提供的一种可以限制、记录、隔离进程组所使用的物理资源(如 CPU、内存、磁盘 IO 等等)的机制，被 LXC(Linux container)、Docker 等很多项目用于实现进程资源控制。Cgroup 本身是提供将进程进行分组化管理的功能和接口的基础结构，I/O 或内存的分配控制等具体的资源管理是通过该功能来实现的，这些具体的资源 管理功能称为 Cgroup 子系统。
 
 ### 3.3  chroot 跟 pivot_root 文件系统
 
@@ -165,6 +143,10 @@ bin dev etc home lib lib64 mnt opt proc root run sbin sys tmp usr var
 > 无论在本地、云端，还是在一台任何地方的机器上，用户只需要解压打包好的容器镜像，那么这个应用运行所需要的完整的执行环境就被重现出来了。
 
 ### 3.5 UnionFS 联合文件系统
+```shell
+
+Docker Root Dir: /var/lib/docker
+```
 
 如何实现**rootfs**的高效可重复利用呢？Docker在镜像的设计中引入了层（**layer**）的概念。也就是说用户制作镜像的每一步操作都会生成一个层，也就是一个增量**rootfs**。介绍分层前我们先说个重要知识点，联合文件系统。
 
@@ -277,6 +259,30 @@ $ tree
 
 Docker 目前支持的联合文件系统包括 OverlayFS, AUFS, Btrfs, VFS, ZFS 和 Device Mapper。推荐使用 overlay2 存储驱动，overlay2 是目前 Docker 默认的存储驱动，以前则是 AUFS。
 
+
+By default all files created inside a container are stored on a writable container layer. 
+This means that:
+
+- The data doesn't persist when that container no longer exists, and it can be difficult to get the data out of the container if another process needs it.
+- A container's writable layer is tightly coupled to the host machine where the container is running. You can't easily move the data somewhere else.
+- Writing into a container's writable layer requires a storage driver to manage the filesystem. The storage driver provides a union filesystem, using the Linux kernel.
+  This extra abstraction reduces performance as compared to using data volumes, which write directly to the host filesystem.
+
+Docker has two options for containers to store files on the host machine, so that the files are persisted even after the container stops: volumes, and bind mounts.<br/>
+Docker also supports containers storing files in-memory on the host machine. Such files are not persisted.
+
+
+No matter which type of mount you choose to use, the data looks the same from within the container. 
+It is exposed as either a directory or an individual file in the container's filesystem.
+
+An easy way to visualize the difference among volumes, bind mounts, and `tmpfs` mounts is to think about where the data lives on the Docker host.
+
+- Volumes are stored in a part of the host filesystem which is managed by Docker (/var/lib/docker/volumes/ on Linux).
+  Non-Docker processes should not modify this part of the filesystem. Volumes are the best way to persist data in Docker.
+- Bind mounts may be stored anywhere on the host system. They may even be important system files or directories. 
+  Non-Docker processes on the Docker host or a Docker container can modify them at any time.
+- `tmpfs` mounts are stored in the host system's memory only, and are never written to the host system's filesystem.
+
 ##### 3.6.1 只读层
 
 我们以Ubuntu为例，当执行`docker image inspect ubuntu:latest` 会发现容器的**rootfs**最下面的四层，对应的正是ubuntu:latest镜像的四层。它们的挂载方式都是只读的(ro+wh)，都以增量的方式分别包含了Ubuntu操作系统的一部分，四层联合起来组成了一个成品。
@@ -311,6 +317,7 @@ NETWORK ID          NAME                DRIVER              SCOPE
 ```
 
 我们在使用docker run创建Docker容器时，可以用 --net 选项指定容器的网络模式，Docker可以有以下4种网络模式：
+
 
 | 网络模式  | 使用注意                             |
 | --------- | ------------------------------------ |
@@ -414,8 +421,6 @@ DockerUI基于Docker API，提供等同Docker命令行的大部分功能，支�
 ### 5.3 Shipyard
 
 Shipyard 是一个集成管理docker容器、镜像、Registries的系统,它可以简化对横跨多个主机的Docker容器集群进行管理. 通过Web用户界面，你可以大致浏览相关信息，比如你的容器在使用多少处理器和内存资源、在运行哪些容器，还可以检查所有集群上的事件日志。
-
-
 
 Issues
 
