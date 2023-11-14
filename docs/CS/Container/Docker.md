@@ -17,6 +17,12 @@ Docker containers that run on Docker Engine:
 * **Secure:** Applications are safer in containers and Docker provides the strongest default isolation capabilities in the industry
 
 
+### Moby
+
+Moby is an open framework created by Docker to assemble specialized container systems without reinventing the wheel. 
+It provides a “lego set” of dozens of standard components and a framework for assembling them into custom platforms.
+
+> [A new upstream project to break up Docker into independent components](https://github.com/moby/moby/pull/32691)
 
 ## Installing Docker
 
@@ -431,3 +437,7 @@ Sometimes Docker daemon accident
 container killed because of OOM
 
 Disable OOM_kill cause Host server down
+
+## References
+
+1. [Moby](https://github.com/moby/moby)
