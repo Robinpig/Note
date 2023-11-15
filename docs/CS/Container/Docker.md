@@ -104,6 +104,19 @@ After installed done, open Docker Desktop and set registry-mirrors:
 ```
 
 
+Docker builds containers using 10 major system features.
+The specific features are as follows:
+- PID namespace— Process identifiers and capabilities
+- UTS namespace— Host and domain name
+- MNT namespace— Filesystem access and structure
+- IPC namespace— Process communication over shared memory
+- NET namespace— Network access and structure
+- USR namespace— User names and identifiers
+- chroot syscall—Controls the location of the filesystem root
+- cgroups— Resource protection
+- CAP drop— Operating system feature restrictions
+- Security modules— Mandatory access controls
+         
 
 
 > 1. 启用 **Linux Namespace** 配置。
