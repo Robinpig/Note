@@ -118,6 +118,15 @@ The specific features are as follows:
 - Security modules— Mandatory access controls
          
 
+## Architecture
+
+- Docker Client
+- Docker daemon
+- Registry
+- Graph
+- Driver
+- libcontainer
+- Container
 
 > 1. 启用 **Linux Namespace** 配置。
 > 2. 设置指定的 **Cgroups** 参数。
