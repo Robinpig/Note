@@ -120,13 +120,33 @@ The specific features are as follows:
 
 ## Architecture
 
-- Docker Client
+
+Docker uses a client-server architecture.
+The Docker client talks to the Docker daemon, which does the heavy lifting of building, running, and distributing your Docker containers.
+The Docker client and daemon can run on the same system, or you can connect a Docker client to a remote Docker daemon.
+The Docker client and daemon communicate using a REST API, over UNIX sockets or a network interface.
+Another Docker client is Docker Compose, that lets you work with applications consisting of a set of containers.
+
+
+<div style="text-align: center;">
+
+![Fig.1. Docker Architecture](img/Docker-Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Docker Architecture
+</p>
+
+- Docker client
 - Docker daemon
 - Registry
 - Graph
 - Driver
 - libcontainer
 - Container
+
+
 
 > 1. 启用 **Linux Namespace** 配置。
 > 2. 设置指定的 **Cgroups** 参数。

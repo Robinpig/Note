@@ -36,5 +36,62 @@ The ecosystem is standardizing on containerd and other alternatives like CoreOS 
 but adopting and leveraging OCI specifications as these evolve will ensure that solutions are vendor-neutral, certified to run on multiple operating systems and usable in multiple environments.
 
 
+## LXC
+
+LXC is a userspace interface for the Linux kernel containment features. 
+Through a powerful API and simple tools, it lets Linux users easily create and manage system or application containers.
+
+Current LXC uses the following kernel features to contain processes:
+
+- Kernel namespaces (ipc, uts, mount, pid, network and user)
+- Apparmor and SELinux profiles
+- Seccomp policies
+- Chroots (using pivot_root)
+- Kernel capabilities
+- CGroups (control groups)
+
+We can simplify to create a container:
+
+```c
+pid = clone(fun, stack, flags, clone_arg);
+(flags: CLONE_NEWPID  | CLONE_NEWNS  |
+    CLONE_NEWUSER | CLONE_NEWNET |
+    CLONE_NEWIPC  | CLONE_NEWUTS |
+    ...)
+
+echo $pid > /sys/fs/cgroup/cpu/tasks
+echo $pid > /sys/fs/cgroup/cpuset/tasks
+echo $pid > /sys/fs/cgroup/blkio/tasks
+echo $pid > /sys/fs/cgroup/memory/tasks
+echo $pid > /sys/fs/cgroup/devices/tasks
+echo $pid > /sys/fs/cgroup/freezer/tasks
+
+fun()
+{
+    ...
+    pivot_root("path_of_rootfs/", path);
+    ...
+    exec("/bin/bash");
+    ...
+}
+```
+
+
+### cgroup
+
+cgroup is a mechanism to organize processes hierarchically and distribute system resources along the hierarchy in a controlled and configurable manner.
+
+cgroup is largely composed of two parts - the core and controllers. cgroup core is primarily responsible for hierarchically organizing processes. 
+A cgroup controller is usually responsible for distributing a specific type of system resource along the hierarchy although there are utility controllers which serve purposes other than resource distribution.
+
+cgroups form a tree structure and every process in the system belongs to one and only one cgroup.
+All threads of a process belong to the same cgroup. On creation, all processes are put in the cgroup that the parent process belongs to at the time.
+A process can be migrated to another cgroup. Migration of a process doesn't affect already existing descendant processes.
+
+Following certain structural constraints, controllers may be enabled or disabled selectively on a cgroup. 
+All controller behaviors are hierarchical - if a controller is enabled on a cgroup, it affects all processes which belong to the cgroups consisting the inclusive sub-hierarchy of the cgroup. 
+When a controller is enabled on a nested cgroup, it always restricts the resource distribution further.
+The restrictions set closer to the root in the hierarchy can not be overridden from further away.
+
 ## Links
 
