@@ -145,5 +145,23 @@ API includes the following system calls:
 - ioctl(2)<br/>
   Various ioctl(2) operations can be used to discover information about namespaces.  These operations are described in ioctl_ns(2).
 
+
+pivot_root() changes the root mount in the mount namespace of the
+calling process.  More precisely, it moves the root mount to the
+directory put_old and makes new_root the new root mount.  The
+calling process must have the CAP_SYS_ADMIN capability in the
+user namespace that owns the caller's mount namespace.
+
+pivot_root() changes the root directory and the current working
+directory of each process or thread in the same mount namespace
+to new_root if they point to the old root directory.  (See also
+NOTES.)  On the other hand, pivot_root() does not change the
+caller's current working directory (unless it is on the old root
+directory), and thus it should be followed by a chdir("/") call.
+
+
+
+
+
 ## Links
 

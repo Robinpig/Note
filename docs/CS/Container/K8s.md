@@ -23,13 +23,36 @@ A central manager exposes an API, a scheduler places the workloads on a set of n
 In Kubernetes, however, the persistence layer is implemented with etcd instead of Zookeeper for Mesos.
 
 
+
+
+<div style="text-align: center;">
+
+![Fig.1. Kubernetes cluster architecture](img/Kubernetes-Cluster-Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Kubernetes cluster architecture
+</p>
+
+Master
+
+Kubernetes runs your workload by placing containers into Pods to run on Nodes. 
+A node may be a virtual or physical machine, depending on the cluster.
+Each node is managed by the control plane and contains the services necessary to run Pods.
+
+Typically you have several nodes in a cluster; in a learning or resource-limited environment, you might have only one node.
+
+The components on a node include the kubelet, a container runtime, and the kube-proxy.
+
+
+
+
+
 Pod gang scheduling
 
 base on infra container
 
-
-
-Cgroups and Namespace 
 
 
 
