@@ -589,6 +589,7 @@ The most recent events are also kept in memory and available for continuous onli
 
 - [Google](/docs/CS/Distributed/Google.md)
 - [HDFS](/docs/CS/Distributed/HDFS.md)
+- 
 
 ## References
 
@@ -596,3 +597,4 @@ The most recent events are also kept in memory and available for continuous onli
 2. [The anatomy of a large-scale hypertextual Web search engine](https://snap.stanford.edu/class/cs224w-readings/Brin98Anatomy.pdf)
 3. [GFS: Evolution on Fast-forward](https://web.eecs.umich.edu/~mosharaf/Readings/GFS-ACMQueue-2012.pdf)
 4. [译文: The Google File System](https://github.com/Robinpig/Books/blob/main/Distributed/GFS.md)
+5. [GFS: Evolution on Fast-Forward](https://www.cse.unsw.edu.au/~cs9243/20t3/papers/gfs-case-study.pdf)
