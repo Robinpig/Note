@@ -27,7 +27,8 @@ Port 9418
 ## Command
 
 ### pull
-```git
+
+```shell
 git pull -a //
 ```
 
@@ -49,3 +50,6 @@ git branch -a
 # delete local branch
 git branch -d branchName
 ```
+
+## Links
+
