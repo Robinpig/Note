@@ -181,7 +181,7 @@ private static native AccessControlContext getStackAccessControlContext();
 
 
 
-### Future 
+## Future 
 
 
 
@@ -273,15 +273,19 @@ public interface RunnableFuture<V> extends Runnable, Future<V> {
 
 ## FutureTask
 
-**A cancellable asynchronous computation**. This class provides a base implementation of *Future*, with methods to start and cancel a computation, query to see if the computation is complete, and retrieve the result of the computation. 
+**A cancellable asynchronous computation**. 
+This class provides a base implementation of *Future*, with methods to start and cancel a computation, query to see if the computation is complete, and retrieve the result of the computation. 
 
-The result can only be retrieved when the computation has completed; the **get methods will block if the computation has not yet completed**. Once the computation has completed, the computation **cannot be restarted or cancelled (unless the computation is invoked using runAndReset)**.
+The result can only be retrieved when the computation has completed; the **get methods will block if the computation has not yet completed**. 
+Once the computation has completed, the computation **cannot be restarted or cancelled (unless the computation is invoked using runAndReset)**.
 
-A FutureTask can be used to wrap a *Callable* or *Runnable* object. Because FutureTask implements Runnable, a FutureTask can be submitted to an **Executor** for execution. For example, the above construction with submit could be replaced by:
+A FutureTask can be used to wrap a *Callable* or *Runnable* object. 
+Because FutureTask implements Runnable, a FutureTask can be submitted to an **Executor** for execution. 
+For example, the above construction with submit could be replaced by:
 
-```java
- FutureTask future = new FutureTask<>(task);
- executor.execute(future);
+```
+FutureTask future = new FutureTask<>(task);
+executor.execute(future);
 ```
 
 In addition to serving as a standalone class, this class provides protected functionality that may be useful when creating customized task classes.
@@ -289,6 +293,7 @@ In addition to serving as a standalone class, this class provides protected func
 
 
 see [Piggybacking on Synchronization - JMM](/docs/CS/Java/JDK/Concurrency/JMM.md?id=Piggybacking-on-Synchronization)
+
 ```java
 public class FutureTask<V> implements RunnableFuture<V> {
 
@@ -300,8 +305,6 @@ public class FutureTask<V> implements RunnableFuture<V> {
     private volatile Thread runner;
     /** Treiber stack of waiting threads */
     private volatile WaitNode waiters;
-
-...
 }
 ```
 
@@ -399,71 +402,56 @@ static final class RunnableAdapter<T> implements Callable<T> {
 
 ### run
 
- 
+
 
 ```java
-public void run() {
-    if (state != NEW ||
-        !RUNNER.compareAndSet(this, null, Thread.currentThread())) // CAS set runner
-        return;
-    try {
-        Callable<V> c = callable;
-        if (c != null && state == NEW) {
-            V result;
-            boolean ran;
-            try {
-                result = c.call();
-                ran = true;
-            } catch (Throwable ex) {
-                result = null;
-                ran = false;
-                setException(ex);
+public class FutureTask<V> implements RunnableFuture<V> {
+    public void run() {
+        if (state != NEW ||
+                !RUNNER.compareAndSet(this, null, Thread.currentThread())) // CAS set runner
+            return;
+        try {
+            Callable<V> c = callable;
+            if (c != null && state == NEW) {
+                V result;
+                boolean ran;
+                try {
+                    result = c.call();
+                    ran = true;
+                } catch (Throwable ex) {
+                    result = null;
+                    ran = false;
+                    setException(ex);
+                }
+                if (ran)
+                    set(result);
             }
-            if (ran)
-                set(result);
+        } finally {
+            // runner must be non-null until state is settled to
+            // prevent concurrent calls to run()
+            runner = null;
+            // state must be re-read after nulling runner to prevent leaked interrupts
+            int s = state;
+            if (s >= INTERRUPTING)
+                handlePossibleCancellationInterrupt(s);
         }
-    } finally {
-        // runner must be non-null until state is settled to
-        // prevent concurrent calls to run()
-        runner = null;
-        // state must be re-read after nulling runner to prevent leaked interrupts
-        int s = state;
-        if (s >= INTERRUPTING)
-            handlePossibleCancellationInterrupt(s);
     }
-}
 
+    protected void set(V v) {
+        if (STATE.compareAndSet(this, NEW, COMPLETING)) {
+            outcome = v;
+            STATE.setRelease(this, NORMAL); // final state
+            finishCompletion();
+        }
+    }
 
-/**
-  * Sets the result of this future to the given value unless
-  * this future has already been set or has been cancelled.
-  *
-  * <p>This method is invoked internally by the {@link #run} method
-  * upon successful completion of the computation.
-  */
-protected void set(V v) {
-  if (STATE.compareAndSet(this, NEW, COMPLETING)) {
-    outcome = v;
-    STATE.setRelease(this, NORMAL); // final state
-    finishCompletion();
-  }
-}
-
-
-/**
-  * Causes this future to report an {@link ExecutionException}
-  * with the given throwable as its cause, unless this future has
-  * already been set or has been cancelled.
-  *
-  * <p>This method is invoked internally by the {@link #run} method
-  * upon failure of the computation.
-  */
-protected void setException(Throwable t) {
-  if (STATE.compareAndSet(this, NEW, COMPLETING)) {
-    outcome = t;
-    STATE.setRelease(this, EXCEPTIONAL); // final state
-    finishCompletion();
-  }
+    protected void setException(Throwable t) {
+        if (STATE.compareAndSet(this, NEW, COMPLETING)) {
+            outcome = t;
+            STATE.setRelease(this, EXCEPTIONAL); // final state
+            finishCompletion();
+        }
+    }
 }
 ```
 
