@@ -22,14 +22,37 @@ At a high level, there is nothing different between Kubernetes and other cluster
 A central manager exposes an API, a scheduler places the workloads on a set of nodes, and the state of the cluster is stored in a persistent layer.
 In Kubernetes, however, the persistence layer is implemented with etcd instead of Zookeeper for Mesos.
 
-## Installation K8s
+## Installing K8s
+
+
+
+```shell
+swapoff -a
+
+# Add vm.swappiness = 0
+sudo vim /etc/sysctl.d/k8s.conf
+sudo sysctl -p /etc/sysctl.d/k8s.conf
+```
+
+
+### Installing kubeadm, kubelet and kubectl
+
+You will install these packages on all of your machines:
+
+- kubeadm: the command to bootstrap the cluster.
+- kubelet: the component that runs on all of the machines in your cluster and does things like starting pods and containers.
+- kubectl: the command line util to talk to your cluster.
 
 <!-- tabs:start -->
 
 ##### **CentOS**
 
 ```shell
-# Add yum mirror
+# Set SELinux in permissive mode (effectively disabling it)
+sudo setenforce 0
+sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+
+# This overwrites any existing configuration in /etc/yum.repos.d/kubernetes.repo
 cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
@@ -41,18 +64,40 @@ gpgkey=https://mirrors.aliyun.com/kubernetes/yum/doc/yum-key.gpg https://mirrors
 exclude=kube*
 EOF
 
-# Set SELinux in permissive mode (effectively disabling it)
-setenforce 0
-sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
+# Only for CentOS7
+cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
 
-yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
-
-systemctl enable kubelet
+sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+sudo systemctl enable --now kubelet
 ```
 
 ##### **Ubuntu**
 
+```shell
+sudo apt-get update
+# apt-transport-https may be a dummy package; if so, you can skip that package
+sudo apt-get install -y apt-transport-https ca-certificates curl gpg
+
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+# This overwrites any existing configuration in /etc/apt/sources.list.d/kubernetes.list
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+
+sudo apt-get update
+sudo apt-get install -y kubelet kubeadm kubectl
+sudo apt-mark hold kubelet kubeadm kubectl
+```
+
 <!-- tabs:end -->
+
+
+### Installing a container runtime
+
+
 
 ## Architecture
 
