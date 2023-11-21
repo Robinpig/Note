@@ -353,35 +353,30 @@ private static final int INTERRUPTED  = 6;
 
 
 
-### Constructor
+Constructor
 
 ```java
-public FutureTask(Callable<V> callable) {
-  if (callable == null)
-    throw new NullPointerException();
-  this.callable = callable;
-  this.state = NEW;       // ensure visibility of callable
+public class FutureTask<V> implements RunnableFuture<V> {
+    public FutureTask(Callable<V> callable) {
+        if (callable == null)
+            throw new NullPointerException();
+        this.callable = callable;
+        this.state = NEW;       // ensure visibility of callable
+    }
+
+    public FutureTask(Runnable runnable, V result) {
+        this.callable = Executors.callable(runnable, result); // Adapater pattern
+        this.state = NEW;       // ensure visibility of callable
+    }
+
+    // Executors#callable()
+    public static <T> Callable<T> callable(Runnable task, T result) {
+        if (task == null)
+            throw new NullPointerException();
+        return new RunnableAdapter<T>(task, result);
+    }
 }
 
-public FutureTask(Runnable runnable, V result) {
-  this.callable = Executors.callable(runnable, result); // Adapater pattern
-  this.state = NEW;       // ensure visibility of callable
-}
-
-// Executors#callable()
-public static <T> Callable<T> callable(Runnable task, T result) {
-  if (task == null)
-    throw new NullPointerException();
-  return new RunnableAdapter<T>(task, result);
-}
-```
-
-### RunnableAdapter
-
-```java
-/**
- * A callable that runs given task and returns given result
- */
 static final class RunnableAdapter<T> implements Callable<T> {
     final Runnable task;
     final T result;

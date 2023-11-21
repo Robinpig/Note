@@ -30,14 +30,16 @@ These classes employ a work-stealing scheduler that attains high throughput for 
 - Stability
   There is a limit on how many threads can be created.
 
-benefits：
+
+
 
 ![ThreadPoolExecutor](../img/ThreadPoolExecutor.png)
 
 ## Executor
 
-Thread pools offer the same benefit for thread management, and `java.util.concurrent` provides a flexible thread pool implementation as part of the Executor framework. The primary abstraction for task execution in the Java class libraries is not Thread, but `Executor`.
-
+Thread pools offer the same benefit for thread management, and `java.util.concurrent` provides a flexible thread pool implementation as part of the Executor framework. 
+The primary abstraction for task execution in the Java class libraries is not Thread, but `Executor`.
+This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.
 ```java
 public interface Executor {
    //The command may execute in a new thread, in a pooled thread, or in the calling thread
@@ -45,13 +47,8 @@ public interface Executor {
 }
 ```
 
-*An object that executes submitted **Runnable** tasks. This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.*
 
-The command may execute:
 
-1. in a new thread
-2. in a pooled thread,
-3. in the calling thread
 
 ### ExecutorService
 
@@ -97,21 +94,17 @@ public interface ExecutorService extends Executor {
 
 ### AbstractExecutorService
 
-1. Wrap to RunnableFuture
-2. execute and return Future
 
-```java
+Wrap and execute [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask) .
+
+```
 public <T> Future<T> submit(Runnable task, T result) {
     if (task == null) throw new NullPointerException();
     RunnableFuture<T> ftask = newTaskFor(task, result);
     execute(ftask);
     return ftask;
 }
-```
 
-wrap and return the task with [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask) .
-
-```java
 protected <T> RunnableFuture<T> newTaskFor(Runnable runnable, T value) {
     return new FutureTask<T>(runnable, value);
 }
@@ -121,7 +114,22 @@ protected <T> RunnableFuture<T> newTaskFor(Callable<T> callable) {
 }
 ```
 
-#### invokeAll
+#### Implementation
+
+cancelAll
+```
+private static <T> void cancelAll(ArrayList<Future<T>> futures) {
+        cancelAll(futures, 0);
+    }
+
+private static <T> void cancelAll(ArrayList<Future<T>> futures, int j) {
+    for (int size = futures.size(); j < size; j++)
+        futures.get(j).cancel(true);
+}
+```
+<!-- tabs:start -->
+
+##### **invokeAll**
 
 Executes the given tasks, returning a list of Futures holding their status and results when all complete.
 `Future.isDone` is true for each element of the returned list.
@@ -134,12 +142,11 @@ The results of this method are undefined if the given collection is modified whi
 If execute(f) normally, thread waiting at `Future.get()` until it returns or throws Exception.(DiscardPolicy-like is panic)
 
 ```java
-public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
-        throws InterruptedException {
+public abstract class AbstractExecutorService implements ExecutorService {
+    public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks) throws InterruptedException {
         if (tasks == null)
             throw new NullPointerException();
-        ArrayList<Future<T>> futures = new ArrayList<Future<T>>(tasks.size());
-        boolean done = false;
+        ArrayList<Future<T>> futures = new ArrayList<>(tasks.size());
         try {
             for (Callable<T> t : tasks) {
                 RunnableFuture<T> f = newTaskFor(t);
@@ -151,115 +158,112 @@ public <T> List<Future<T>> invokeAll(Collection<? extends Callable<T>> tasks)
                 if (!f.isDone()) {
                     try {
                         f.get();
-                    } catch (CancellationException ignore) {
-                    } catch (ExecutionException ignore) {
+                    } catch (CancellationException | ExecutionException ignore) {
                     }
                 }
             }
-            done = true;
             return futures;
+        } catch (Throwable t) {
+            cancelAll(futures);
+            throw t;
+        }
+    }
+}
+```
+
+
+
+##### **invokeAny**
+
+```java
+public abstract class AbstractExecutorService implements ExecutorService {
+    public <T> T invokeAny(Collection<? extends Callable<T>> tasks)
+            throws InterruptedException, ExecutionException {
+        try {
+            return doInvokeAny(tasks, false, 0);
+        } catch (TimeoutException cannotHappen) {
+            assert false;
+            return null;
+        }
+    }
+
+    // the main mechanics of invokeAny.
+    private <T> T doInvokeAny(Collection<? extends Callable<T>> tasks,
+                              boolean timed, long nanos)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        if (tasks == null)
+            throw new NullPointerException();
+        int ntasks = tasks.size();
+        if (ntasks == 0)
+            throw new IllegalArgumentException();
+        ArrayList<Future<T>> futures = new ArrayList<Future<T>>(ntasks);
+        /**
+         *Creates an ExecutorCompletionService using the supplied executor for base task 
+         *execution and a LinkedBlockingQueue as a completion queue.
+         */
+        ExecutorCompletionService<T> ecs =
+                new ExecutorCompletionService<T>(this);
+
+        // For efficiency, especially in executors with limited
+        // parallelism, check to see if previously submitted tasks are
+        // done before submitting more of them. This interleaving
+        // plus the exception mechanics account for messiness of main
+        // loop.
+
+        try {
+            // Record exceptions so that if we fail to obtain any
+            // result, we can throw the last exception we got.
+            ExecutionException ee = null;
+            final long deadline = timed ? System.nanoTime() + nanos : 0L;
+            Iterator<? extends Callable<T>> it = tasks.iterator();
+
+            // Start one task for sure; the rest incrementally
+            futures.add(ecs.submit(it.next()));
+            --ntasks;
+            int active = 1;
+
+            for (; ; ) {
+                Future<T> f = ecs.poll();
+                if (f == null) {
+                    if (ntasks > 0) {
+                        --ntasks;
+                        futures.add(ecs.submit(it.next()));
+                        ++active;
+                    } else if (active == 0)
+                        break;
+                    else if (timed) {
+                        f = ecs.poll(nanos, TimeUnit.NANOSECONDS);
+                        if (f == null)
+                            throw new TimeoutException();
+                        nanos = deadline - System.nanoTime();
+                    } else
+                        f = ecs.take();
+                }
+                if (f != null) {
+                    --active;
+                    try {
+                        return f.get();
+                    } catch (ExecutionException eex) {
+                        ee = eex;
+                    } catch (RuntimeException rex) {
+                        ee = new ExecutionException(rex);
+                    }
+                }
+            }
+
+            if (ee == null)
+                ee = new ExecutionException();
+            throw ee;
+
         } finally {
-            if (!done)
-                for (int i = 0, size = futures.size(); i < size; i++)
-                    futures.get(i).cancel(true);
+            for (int i = 0, size = futures.size(); i < size; i++)
+                futures.get(i).cancel(true);
         }
     }
-```
-
-#### ExecutorCompletionService
-
-Creates an ExecutorCompletionService using the supplied executor for base task execution and a *LinkedBlockingQueue* as a completion queue.
-
-```java
-public ExecutorCompletionService(Executor executor) {
-    if (executor == null)
-        throw new NullPointerException();
-    this.executor = executor;
-    this.aes = (executor instanceof AbstractExecutorService) ?
-        (AbstractExecutorService) executor : null;
-    this.completionQueue = new LinkedBlockingQueue<Future<V>>();
 }
 ```
 
-#### doInvokeAny
-
-```java
-// the main mechanics of invokeAny.
-private <T> T doInvokeAny(Collection<? extends Callable<T>> tasks,
-                          boolean timed, long nanos)
-    throws InterruptedException, ExecutionException, TimeoutException {
-    if (tasks == null)
-        throw new NullPointerException();
-    int ntasks = tasks.size();
-    if (ntasks == 0)
-        throw new IllegalArgumentException();
-    ArrayList<Future<T>> futures = new ArrayList<Future<T>>(ntasks);
-    /**
-     *Creates an ExecutorCompletionService using the supplied executor for base task 
-     *execution and a LinkedBlockingQueue as a completion queue.
-     */
-    ExecutorCompletionService<T> ecs =
-        new ExecutorCompletionService<T>(this);
-
-    // For efficiency, especially in executors with limited
-    // parallelism, check to see if previously submitted tasks are
-    // done before submitting more of them. This interleaving
-    // plus the exception mechanics account for messiness of main
-    // loop.
-
-    try {
-        // Record exceptions so that if we fail to obtain any
-        // result, we can throw the last exception we got.
-        ExecutionException ee = null;
-        final long deadline = timed ? System.nanoTime() + nanos : 0L;
-        Iterator<? extends Callable<T>> it = tasks.iterator();
-
-        // Start one task for sure; the rest incrementally
-        futures.add(ecs.submit(it.next()));
-        --ntasks;
-        int active = 1;
-
-        for (;;) {
-            Future<T> f = ecs.poll();
-            if (f == null) {
-                if (ntasks > 0) {
-                    --ntasks;
-                    futures.add(ecs.submit(it.next()));
-                    ++active;
-                }
-                else if (active == 0)
-                    break;
-                else if (timed) {
-                    f = ecs.poll(nanos, TimeUnit.NANOSECONDS);
-                    if (f == null)
-                        throw new TimeoutException();
-                    nanos = deadline - System.nanoTime();
-                }
-                else
-                    f = ecs.take();
-            }
-            if (f != null) {
-                --active;
-                try {
-                    return f.get();
-                } catch (ExecutionException eex) {
-                    ee = eex;
-                } catch (RuntimeException rex) {
-                    ee = new ExecutionException(rex);
-                }
-            }
-        }
-
-        if (ee == null)
-            ee = new ExecutionException();
-        throw ee;
-
-    } finally {
-        for (int i = 0, size = futures.size(); i < size; i++)
-            futures.get(i).cancel(true);
-    }
-}
-```
+<!-- tabs:end -->
 
 ### ScheduledExecutorService
 
@@ -273,9 +277,6 @@ public interface ScheduledExecutorService extends ExecutorService {
     public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit);
 
     public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit);
-
-  
-
 }
 ```
 
@@ -296,7 +297,7 @@ Submits a periodic action that becomes enabled first after the given initial del
 **If any execution of this task takes longer than its period, then subsequent executions may start late, but will not concurrently execute.**
 
 ```
-    public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit);
+public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit);
 ```
 
 ## CompletionService
@@ -417,7 +418,7 @@ The main pool control state, ctl, is an atomic integer packing two conceptual fi
 
 The workerCount is the number of workers that have been permitted to start and not permitted to stop. The value may be transiently different from the actual number of live threads, for example when a ThreadFactory fails to create a thread when asked, and when exiting threads are still performing bookkeeping before terminating. The user-visible pool size is reported as the current size of the workers set.
 
-```java
+```
 private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
 private static final int COUNT_BITS = Integer.SIZE - 3;
 private static final int COUNT_MASK = (1 << COUNT_BITS) - 1;
@@ -606,103 +607,105 @@ This method returns false:
 If the thread creation fails, either due to the thread factory returning null, or due to an exception (typically OutOfMemoryError in Thread.start()), we roll back cleanly.
 
 ```java
- /**
-  * Set containing all worker threads in pool. Accessed only when
-  * holding mainLock.
-  */
-private final HashSet<Worker> workers = new HashSet<Worker>();
- 
+public class ThreadPoolExecutor extends AbstractExecutorService {
+    /**
+     * Set containing all worker threads in pool. Accessed only when
+     * holding mainLock.
+     */
+    private final HashSet<Worker> workers = new HashSet<Worker>();
 
-private boolean addWorker(Runnable firstTask, boolean core) {
-    retry:
-    for (;;) {
-        int c = ctl.get();
-        int rs = runStateOf(c);
 
-        // Check if queue empty only if necessary.
-      	// when SHUTDOWN and firstTask == null and  !queue.isEmpty(), allow to addWorker
-        if (rs >= SHUTDOWN &&
-            ! (rs == SHUTDOWN &&
-               firstTask == null &&
-               ! workQueue.isEmpty()))
-            return false;
+    private boolean addWorker(Runnable firstTask, boolean core) {
+        retry:
+        for (; ; ) {
+            int c = ctl.get();
+            int rs = runStateOf(c);
 
-        for (;;) {
-            int wc = workerCountOf(c);
-            if (wc >= CAPACITY ||
-                wc >= (core ? corePoolSize : maximumPoolSize))
+            // Check if queue empty only if necessary.
+            // when SHUTDOWN and firstTask == null and  !queue.isEmpty(), allow to addWorker
+            if (rs >= SHUTDOWN &&
+                    !(rs == SHUTDOWN &&
+                            firstTask == null &&
+                            !workQueue.isEmpty()))
                 return false;
-            if (compareAndIncrementWorkerCount(c))
-                break retry;
-            c = ctl.get();  // Re-read ctl
-            if (runStateOf(c) != rs)
-                continue retry;
-            // else CAS failed due to workerCount change; retry inner loop
+
+            for (; ; ) {
+                int wc = workerCountOf(c);
+                if (wc >= CAPACITY ||
+                        wc >= (core ? corePoolSize : maximumPoolSize))
+                    return false;
+                if (compareAndIncrementWorkerCount(c))
+                    break retry;
+                c = ctl.get();  // Re-read ctl
+                if (runStateOf(c) != rs)
+                    continue retry;
+                // else CAS failed due to workerCount change; retry inner loop
+            }
         }
-    }
 
-    boolean workerStarted = false;
-    boolean workerAdded = false;
-    Worker w = null;
-    try {
-        w = new Worker(firstTask);
-        final Thread t = w.thread;
-        if (t != null) {
-            final ReentrantLock mainLock = this.mainLock; // need a mainLock
-            mainLock.lock();
-            try {
-                // Recheck while holding lock.
-                // Back out on ThreadFactory failure or if
-                // shut down before lock acquired.
-                int rs = runStateOf(ctl.get());
+        boolean workerStarted = false;
+        boolean workerAdded = false;
+        Worker w = null;
+        try {
+            w = new Worker(firstTask);
+            final Thread t = w.thread;
+            if (t != null) {
+                final ReentrantLock mainLock = this.mainLock; // need a mainLock
+                mainLock.lock();
+                try {
+                    // Recheck while holding lock.
+                    // Back out on ThreadFactory failure or if
+                    // shut down before lock acquired.
+                    int rs = runStateOf(ctl.get());
 
-                if (rs < SHUTDOWN ||
-                    (rs == SHUTDOWN && firstTask == null)) {
-                    if (t.isAlive()) // precheck that t is startable
-                        throw new IllegalThreadStateException();
-                    workers.add(w);
-                    int s = workers.size();
-                    if (s > largestPoolSize)
-                        largestPoolSize = s;
-                    workerAdded = true;
+                    if (rs < SHUTDOWN ||
+                            (rs == SHUTDOWN && firstTask == null)) {
+                        if (t.isAlive()) // precheck that t is startable
+                            throw new IllegalThreadStateException();
+                        workers.add(w);
+                        int s = workers.size();
+                        if (s > largestPoolSize)
+                            largestPoolSize = s;
+                        workerAdded = true;
+                    }
+                } finally {
+                    mainLock.unlock();
                 }
-            } finally {
-                mainLock.unlock();
+                if (workerAdded) {
+                    t.start();
+                    workerStarted = true;
+                }
             }
-            if (workerAdded) {
-                t.start();
-                workerStarted = true;
-            }
+        } finally {
+            if (!workerStarted)
+                addWorkerFailed(w);
         }
-    } finally {
-        if (! workerStarted)
-            addWorkerFailed(w);
+        return workerStarted;
     }
-    return workerStarted;
-}
 
-/**
- * Rolls back the worker thread creation.
- * - removes worker from workers, if present
- * - decrements worker count
- * - rechecks for termination, in case the existence of this
- *   worker was holding up termination
- */
-private void addWorkerFailed(Worker w) {
-    final ReentrantLock mainLock = this.mainLock;
-    mainLock.lock();
-    try {
-        if (w != null)
-            workers.remove(w);
-        decrementWorkerCount();
-        tryTerminate();
-    } finally {
-        mainLock.unlock();
+    /**
+     * Rolls back the worker thread creation.
+     * - removes worker from workers, if present
+     * - decrements worker count
+     * - rechecks for termination, in case the existence of this
+     *   worker was holding up termination
+     */
+    private void addWorkerFailed(Worker w) {
+        final ReentrantLock mainLock = this.mainLock;
+        mainLock.lock();
+        try {
+            if (w != null)
+                workers.remove(w);
+            decrementWorkerCount();
+            tryTerminate();
+        } finally {
+            mainLock.unlock();
+        }
     }
 }
 ```
 
-![ThreadPoolExecutor](../img/ThreadPoolExecutor-addWorker.png)
+![add Worker](../img/ThreadPoolExecutor-addWorker.png)
 
 #### Worker
 
