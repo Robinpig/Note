@@ -174,25 +174,11 @@ An easy way to visualize the difference among volumes, bind mounts, and `tmpfs` 
 - `tmpfs` mounts are stored in the host system's memory only, and are never written to the host system's filesystem.
 
 
-## Docker Image
+## Docker Images
 
-##### 3.6.1 只读层
 
-我们以Ubuntu为例，当执行`docker image inspect ubuntu:latest` 会发现容器的**rootfs**最下面的四层，对应的正是ubuntu:latest镜像的四层。它们的挂载方式都是只读的(ro+wh)，都以增量的方式分别包含了Ubuntu操作系统的一部分，四层联合起来组成了一个成品。
 
-##### 3.6.2 可读写层
 
-**rootfs** 最上层的操作权限为 **rw**， 在没有写入文件之前，这个目录是空的。而一旦在容器里做了写操作，你修改产生的内容就会以增量的方式出现在这个层中。如果你想删除只读层里的文件，咋办呢？这个问题上面已经讲解过了。
-
-最上面这个可读写层就是专门用来存放修改 **rootfs** 后产生的增量，无论是增、删、改，都发生在这里。而当我们使用完了这个被修改过的容器之后，还可以使用 docker commit 和 push 指令，保存这个被修改过的可读写层，并上传到 Docker Hub上，供其他人使用。并且原先的只读层里的内容则不会有任何变化，这就是**增量 rootfs** 的好处。
-
-##### 3.6.3 init 层
-
-它是一个以`-init`结尾的层，夹在只读层和读写层之间。Init层是Docker项目单独生成的一个内部层，专门用来存放 /etc/hosts 等信息。
-
-需要这样一层的原因是这些文件本来属于只读的Ubuntu镜像的一部分，但是用户往往需要在启动容器时写入一些指定的值比如 hostname，那就需要在可读写层对它们进行修改。可是，这些修改往往只对当前的容器有效，我们并不希望执行 docker commit 时，把 **init** 层的信息连同可读写层一起提交。
-
-最后这6层被组合起来形成了一个完整的 **Ubuntu** 操作系统供容器使用。![img](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
 
 ## Docker Network
 
