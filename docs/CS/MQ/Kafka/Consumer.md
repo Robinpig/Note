@@ -109,6 +109,12 @@ public enum ConsumerGroupState {
 
 Best Practice: Consumer Number == Partition Number
 
+The group is ignored for the manually assign partitions, but is still used to track offsets, if needed.
+Mutual exclusivity between consumers in a consumer group is lost due to more than 1 consumer is listening same partitions.
+You must use group management and let Kafka do the partition assignment for you, or assign the partitions manually for each instance.
+
+
+
 ## ConsumerPartitionAssignor
 
 This interface is used to define custom partition assignment for use in KafkaConsumer.

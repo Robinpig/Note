@@ -351,13 +351,15 @@ While Oracle and MySQL use the [undo log](/docs/CS/DB/MySQL/undolog.md) to captu
 
 ### InnoDB Multi-Versioning
 
-InnoDB implements MVCC by assigning a transaction ID for each transaction that starts. That ID is assigned the first time the transaction reads any data.
-When a record is modified within that transaction, an undo record that explains how to revert that change is written to the undo log, and the rollback pointer of the transaction is pointed at that undo log record. 
+InnoDB implements MVCC by assigning a transaction ID for each transaction that starts. 
+That ID is assigned the first time the transaction reads any data.
+When a record is modified within that transaction, an undo record that explains how to revert that change is written to the undo log, 
+and the rollback pointer of the transaction is pointed at that undo log record. 
 This is how the transaction can find the way to roll back if needed.
 
-
 When a different session reads a cluster key index record, InnoDB compares the record’s transaction ID versus the read view of that session. 
-If the record in its current state should not be visible (the transaction that altered it has not yet committed), the undo log record is followed and applied until the session reaches a transaction ID that is eligible to be visible. 
+If the record in its current state should not be visible (the transaction that altered it has not yet committed), 
+the undo log record is followed and applied until the session reaches a transaction ID that is eligible to be visible. 
 This process can loop all the way to an undo record that deletes this row entirely, signaling to the read view that this row does not exist.
 
 Records in a transaction are deleted by setting a “deleted” bit in the “info flags” of the record.
@@ -390,17 +392,41 @@ Internally, `InnoDB` adds three fields to each row stored in the database:
 - A 6-byte `DB_ROW_ID` field contains a row ID that increases monotonically as new rows are inserted. 
   If `InnoDB` generates a clustered index automatically, the index contains row ID values. Otherwise, the `DB_ROW_ID` column does not appear in any index.
 
-Undo logs in the rollback segment are divided into insert and update undo logs. Insert undo logs are needed only in transaction rollback and can be discarded as soon as the transaction commits. Update undo logs are used also in consistent reads, but they can be discarded only after there is no transaction present for which `InnoDB` has assigned a snapshot that in a consistent read could require the information in the update undo log to build an earlier version of a database row.
+Undo logs in the rollback segment are divided into insert and update undo logs. 
+Insert undo logs are needed only in transaction rollback and can be discarded as soon as the transaction commits. 
+Update undo logs are used also in consistent reads, but they can be discarded only after there is no transaction present for 
+which `InnoDB` has assigned a snapshot that in a consistent read could require the information in the update undo log to build an earlier version of a database row.
 
-It is recommend that you commit transactions regularly, including transactions that issue only consistent reads. Otherwise, `InnoDB` cannot discard data from the update undo logs, and the rollback segment may grow too big, filling up the undo tablespace in which it resides.
+It is recommend that you commit transactions regularly, including transactions that issue only consistent reads. Otherwise,
+`InnoDB` cannot discard data from the update undo logs, and the rollback segment may grow too big, filling up the undo tablespace in which it resides.
 
-The physical size of an undo log record in the rollback segment is typically smaller than the corresponding inserted or updated row. You can use this information to calculate the space needed for your rollback segment.
+The physical size of an undo log record in the rollback segment is typically smaller than the corresponding inserted or updated row. 
+You can use this information to calculate the space needed for your rollback segment.
 
-In the `InnoDB` multi-versioning scheme, a row is not physically removed from the database immediately when you delete it with an SQL statement. `InnoDB` only physically removes the corresponding row and its index records when it discards the update undo log record written for the deletion. This removal operation is called a purge, and it is quite fast, usually taking the same order of time as the SQL statement that did the deletion.
+In the `InnoDB` multi-versioning scheme, a row is not physically removed from the database immediately when you delete it with an SQL statement. 
+`InnoDB` only physically removes the corresponding row and its index records when it discards the update undo log record written for the deletion. 
+This removal operation is called a purge, and it is quite fast, usually taking the same order of time as the SQL statement that did the deletion.
 
-If you insert and delete rows in smallish batches at about the same rate in the table, the purge thread can start to lag behind and the table can grow bigger and bigger because of all the “dead” rows, making everything disk-bound and very slow. In such cases, throttle new row operations, and allocate more resources to the purge thread by tuning the [`innodb_max_purge_lag`](https://dev.mysql.com/doc/refman/8.0/en/innodb-parameters.html#sysvar_innodb_max_purge_lag) system variable.
+If you insert and delete rows in smallish batches at about the same rate in the table, 
+the purge thread can start to lag behind and the table can grow bigger and bigger because of all the “dead” rows, making everything disk-bound and very slow. 
+In such cases, throttle new row operations, and allocate more resources to the purge thread by tuning the `innodb_max_purge_lag` system variable.
 
+### Multi-Versioning and Secondary Indexes
 
+`InnoDB` multiversion concurrency control (MVCC) treats secondary indexes differently than clustered indexes.
+Records in a clustered index are updated in-place, and their hidden system columns point undo log entries from which earlier versions of records can be reconstructed. 
+Unlike clustered index records, secondary index records do not contain hidden system columns nor are they updated in-place.
+
+When a secondary index column is updated, old secondary index records are delete-marked, new records are inserted, and delete-marked records are eventually purged. 
+**When a secondary index record is delete-marked or the secondary index page is updated by a newer transaction, `InnoDB` looks up the database record in the clustered index.** 
+In the clustered index, the record's `DB_TRX_ID` is checked, and the correct version of the record is retrieved from the undo log if the record was modified after the reading transaction was initiated.
+
+- If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md?id=covering_index) technique is not used. 
+  Instead of returning values from the index structure, `InnoDB` looks up the record in the clustered index.
+- If the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index, 
+  the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index.
+  - If no matching records are found, the clustered index lookup is avoided.
+  - If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
 
 ### Locking Reads
 
@@ -423,17 +449,6 @@ Suppose that you are running in the default `REPEATABLE READ` isolation level. W
 **The snapshot of the database state applies to `SELECT` statements within a transaction, not necessarily to `DML` statements`**.
 
 If you insert or modify some rows and then commit that transaction, a `DELETE`or `UPDATE`statement issued from another concurrent `REPEATABLE READ` transaction **could affect those just-committed rows, even though the session could not query them**. If a transaction does update or delete rows committed by a different transaction, those changes do become visible to the current transaction.
-
-### Multi-Versioning and Secondary Indexes
-
-`InnoDB` multiversion concurrency control (MVCC) treats secondary indexes differently than clustered indexes. Records in a clustered index are updated in-place, and their hidden system columns point undo log entries from which earlier versions of records can be reconstructed. Unlike clustered index records, secondary index records do not contain hidden system columns nor are they updated in-place.
-
-When a secondary index column is updated, old secondary index records are delete-marked, new records are inserted, and delete-marked records are eventually purged. **When a secondary index record is delete-marked or the secondary index page is updated by a newer transaction, `InnoDB` looks up the database record in the clustered index.** In the clustered index, the record's `DB_TRX_ID` is checked, and the correct version of the record is retrieved from the undo log if the record was modified after the reading transaction was initiated.
-
-- If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md?id=covering_index) technique is not used. Instead of returning values from the index structure, `InnoDB` looks up the record in the clustered index.
-- If the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index, the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index. 
-    - If no matching records are found, the clustered index lookup is avoided.     
-    - If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
 
 ### Source Code
 
