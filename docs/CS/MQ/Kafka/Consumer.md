@@ -268,11 +268,59 @@ The fetch requests from the consumer to the Kafka broker can be controlled by th
 - `fetch.max.bytes`
   Maximum data returned for each fetch request. If you have available memory, try increasing fetch.max.bytes to allow the consumer to read more data in each request.
 - `max.poll.records`
-  This controls the maximum number of records that a single call to poll() will return. This is useful to help control the amount of data your application will receive in your processing loop.
-  This setting does not impact the underlying fetching behavior. The consumer will cache the records from each fetch request and returns them incrementally from each poll.
+  This controls the maximum number of records that a single call to poll() will return.
+  This is useful to help control the amount of data your application will receive in your processing loop.
+  This setting does not impact the underlying fetching behavior.
+  The consumer will cache the records from each fetch request and returns them incrementally from each poll.
 
 
 ### Commit
+
+A consumer is expected to read from a log continuously.
+
+Kafka consumers have a configuration for how to behave when they don’t have a previously committed offset.
+This can happen if the consumer application has a bug and it is down.
+For example, if Kafka has a retention of 7 days, and your consumer is down for more than 7 days, the offsets are "invalid" as they will be deleted.
+
+In this case, consumers have a choice to either start reading from the beginning of the partition or from the end of the partition.
+This is controlled by the consumer configuration - `auto.offset.reset`
+
+Three possible values:
+
+- latest (default) which means consumers will read messages from the tail of the partition
+- earliest which means reading from the oldest offset in the partition
+- none throw exception to the consumer if no previous offset is found for the consumer's group
+
+offset.retention.minutes
+
+The default retention period for message offsets in Kafka (version >= 2.0) is one week (7 days).
+It is a broker level setting. It is the offset retention period for the __consumer_offsets topic (in minutes).
+
+> This setting is particularly helpful to increase in case you expect your consumers to be down for more than 1 week (and therefore lose their committed offsets),
+> or if your topics are low-throughput topics and the consumer has not processed data for more than 1 week. 
+> In that case, if the consumer did lose its offset, the `auto.reset.offset` setting would kick in. 
+> If you would like to avoid that case, increase the value of `offset.retention.minutes` to something like 1 month.
+
+
+Replaying data 
+
+<!-- tabs:start -->
+
+##### **CLI**
+
+- Make sure all the consumers from a specific group down
+- Set offset with `--reset-offsets` option to what you want
+- Restart consumers
+
+##### **Java**
+
+The .seek() and .assign() API are also helpful to replay data from a specific offset.
+
+- Remove the group.id from the consumer properties (we don't use consumer groups anymore)
+- Remove the subscription to the topic
+- Use consumer assign() and seek() APIs
+
+<!-- tabs:end -->
 
 The easiest way to commit offsets is to allow the consumer to do it for you.
 If you configure enable.auto.commit=true, then every five seconds the consumer will commit the largest offset your client received from poll(). 
