@@ -625,9 +625,7 @@ When a consumer wants to join a group, it sends a JoinGroup request to the group
 2. Topics
 3. Consumers
 
-> All consumers stop and wait until rebalanced finished.
 
-Coordinator
 
 partitionId=Math.abs(groupId.hashCode() % offsetsTopicPartitionCount)
 
@@ -795,14 +793,13 @@ Generally this means acquiring the lock before reading or writing the state of t
 | UNJOINED             | the client is not part of a group                                             |
 | PREPARING_REBALANCE  | the client has sent the join group request, but have not received response    |
 | COMPLETING_REBALANCE | the client has received join group response, but have not received assignment |
-| STABLE               | the client has joined and is sending heartbeats                               |
 
 
-```graph
 
-```
 
-Joins the group without starting the heartbeat thread.
+
+
+Joins the group without starting the heartbeat thread.<br/>
 If this function returns true, the state must always be in STABLE and heartbeat enabled.
 If this function returns false, the state can be in one of the following:
 
