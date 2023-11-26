@@ -915,6 +915,7 @@ Generally this means acquiring the lock before reading or writing the state of t
 | UNJOINED             | the client is not part of a group                                             |
 | PREPARING_REBALANCE  | the client has sent the join group request, but have not received response    |
 | COMPLETING_REBALANCE | the client has received join group response, but have not received assignment |
+| STABLE               | the client has joined and is sending heartbeats                               |
 
 
 
