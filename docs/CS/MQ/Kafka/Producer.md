@@ -24,18 +24,22 @@ The producer is **thread safe** and sharing a **single producer instance** acros
 
 Here is a simple example of using the producer to send records with strings containing sequential numbers as the key/value pairs.
 
-```
- Properties props = new Properties();
- props.put("bootstrap.servers", "localhost:9092");
- props.put("linger.ms", 1);
- props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
- props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+```java
+public class ProducerDemo {
+    public static void main(String[] args) {
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "localhost:9092");
+        props.put("linger.ms", 1);
+        props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+        props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
 
- Producer<String, String> producer = new KafkaProducer<>(props);
- for (int i = 0; i < 100; i++)
-     producer.send(new ProducerRecord<String, String>("my-topic", Integer.toString(i), Integer.toString(i)));
-
- producer.close();
+        Producer<String, String> producer = new KafkaProducer<>(props);
+        for (int i = 0; i < 100; i++)
+            producer.send(new ProducerRecord<String, String>("my-topic", Integer.toString(i), Integer.toString(i)));
+       // flush and close producer
+        producer.close();
+    }
+}
 ```
 
 The producer consists of a pool of buffer space that holds records that haven't yet been transmitted to the server as well as a background I/O thread that is responsible for turning these records into requests and transmitting them to the cluster.
