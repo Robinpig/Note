@@ -6,13 +6,9 @@ recording information from smart appliances, communicating asynchronously with o
 Those diverse use cases also imply diverse requirements: is every message critical, or can we tolerate loss of messages? Are we OK with accidentally duplicating messages? 
 Are there any strict latency or throughput requirements we need to support?
 
-Load balancing
 
 The client controls which partition it publishes messages to.
 This can be done at random, implementing a kind of random load balancing, or it can be done by some semantic partitioning function.
-
-Asynchronous 
-
 
 
 Batching is one of the big drivers of efficiency, and to enable batching the Kafka producer will attempt to accumulate data in memory and to send out larger batches in a single request.
@@ -45,7 +41,7 @@ public class ProducerDemo {
 The producer consists of a pool of buffer space that holds records that haven't yet been transmitted to the server as well as a background I/O thread that is responsible for turning these records into requests and transmitting them to the cluster.
 Failure to close the producer after use will leak these resources.
 
-acks
+
 
 new KafkaThread with Sender
 
