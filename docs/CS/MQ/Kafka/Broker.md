@@ -1,6 +1,6 @@
 ## Introduction
 
-A single Kafka server is called a broker.
+A single Kafka server is called a `broker`.
 The broker receives messages from producers, assigns offsets to them, and commits the messages to storage on disk.
 It also services consumers, responding to fetch requests for partitions and responding with the messages that have been committed to disk.
 
@@ -9,7 +9,8 @@ Within a cluster of brokers, one broker will also function as the cluster contro
 The controller is responsible for administrative operations, including assigning partitions to brokers and monitoring for broker failures.
 A partition is owned by a single broker in the cluster, and that broker is called the leader of the partition.
 A partition may be assigned to multiple brokers, which will result in the partition being replicated.
-This provides redundancy of messages in the partition, such that another broker can take over leadership if there is a broker failure. However, all consumers and producers operating on that partition must connect to the leader.
+This provides redundancy of messages in the partition, such that another broker can take over leadership if there is a broker failure. 
+However, all consumers and producers operating on that partition must connect to the leader.
 
 ## Structure
 
