@@ -271,7 +271,8 @@ At its heart a Kafka partition is a replicated log. The replicated log is one of
 A replicated log can be used by other systems as a primitive for implementing other distributed systems in the state-machine style.
 
 A replicated log models the process of coming into consensus on the order of a series of values (generally numbering the log entries 0, 1, 2, ...).
-There are many ways to implement this, but the simplest and fastest is with a leader who chooses the ordering of values provided to it. As long as the leader remains alive, all followers need to only copy the values and ordering the leader chooses.
+There are many ways to implement this, but the simplest and fastest is with a leader who chooses the ordering of values provided to it.
+As long as the leader remains alive, all followers need to only copy the values and ordering the leader chooses.
 
 If you choose the number of acknowledgements required and the number of logs that must be compared to elect a leader such that there is guaranteed to be an overlap, then this is called a *Quorum*.
 
@@ -281,7 +282,8 @@ If f+1 replicas must receive a message prior to a commit being declared by the l
 then, with no more than f failures, the leader is guaranteed to have all committed messages.
 This is because among any f+1 replicas, there must be at least one replica that contains all committed messages.
 That replica's log will be the most complete and therefore will be selected as the new leader.
-There are many remaining details that each algorithm must handle (such as precisely defined what makes a log more complete, ensuring log consistency during leader failure or changing the set of servers in the replica set) but we will ignore these for now.
+There are many remaining details that each algorithm must handle (such as precisely defined what makes a log more complete,
+ensuring log consistency during leader failure or changing the set of servers in the replica set) but we will ignore these for now.
 
 This majority vote approach has a very nice property: the latency is dependent on only the fastest servers.
 That is, if the replication factor is three, the latency is determined by the faster follower not the slower one.
@@ -319,7 +321,8 @@ If you are unlucky enough to have this occur, it is important to consider what w
 1. Wait for a replica in the ISR to come back to life and choose this replica as the leader (hopefully it still has all its data).
 2. Choose the first replica (not necessarily in the ISR) that comes back to life as the leader.
 
-This is a simple tradeoff between availability and consistency. If we wait for replicas in the ISR, then we will remain unavailable as long as those replicas are down.
+This is a simple tradeoff between availability and consistency. 
+If we wait for replicas in the ISR, then we will remain unavailable as long as those replicas are down.
 If such replicas were destroyed or their data was lost, then we are permanently down.
 If, on the other hand, a non-in-sync replica comes back to life and we allow it to become leader, then its log becomes the source of truth even though it is not guaranteed to have every committed message.
 By default from version 0.11.0.0, Kafka chooses the first strategy and favor waiting for a consistent replica.
@@ -328,10 +331,18 @@ This behavior can be changed using configuration property unclean.leader.electio
 This dilemma is not specific to Kafka. It exists in any quorum-based scheme.
 For example in a majority voting scheme, if a majority of servers suffer a permanent failure, then you must either choose to lose 100% of your data or violate consistency by taking what remains on an existing server as your new source of truth.
 
-When writing to Kafka, producers can choose whether they wait for the message to be acknowledged by 0,1 or all (-1) replicas. Note that "acknowledgement by all replicas" does not guarantee that the full set of assigned replicas have received the message. By default, when acks=all, acknowledgement happens as soon as all the current in-sync replicas have received the message. For example, if a topic is configured with only two replicas and one fails (i.e., only one in sync replica remains), then writes that specify acks=all will succeed. However, these writes could be lost if the remaining replica also fails. Although this ensures maximum availability of the partition, this behavior may be undesirable to some users who prefer durability over availability. Therefore, we provide two topic-level configurations that can be used to prefer message durability over availability:
+When writing to Kafka, producers can choose whether they wait for the message to be acknowledged by 0,1 or all (-1) replicas. 
+Note that "acknowledgement by all replicas" does not guarantee that the full set of assigned replicas have received the message. 
+By default, when acks=all, acknowledgement happens as soon as all the current in-sync replicas have received the message. For example, if a topic is configured with only two replicas and one fails (i.e., only one in sync replica remains), then writes that specify acks=all will succeed. However, these writes could be lost if the remaining replica also fails. Although this ensures maximum availability of the partition, this behavior may be undesirable to some users who prefer durability over availability. Therefore, we provide two topic-level configurations that can be used to prefer message durability over availability:
 
-1. Disable unclean leader election - if all replicas become unavailable, then the partition will remain unavailable until the most recent leader becomes available again. This effectively prefers unavailability over the risk of message loss. See the previous section on Unclean Leader Election for clarification.
-2. Specify a minimum ISR size - the partition will only accept writes if the size of the ISR is above a certain minimum, in order to prevent the loss of messages that were written to just a single replica, which subsequently becomes unavailable. This setting only takes effect if the producer uses acks=all and guarantees that the message will be acknowledged by at least this many in-sync replicas. This setting offers a trade-off between consistency and availability. A higher setting for minimum ISR size guarantees better consistency since the message is guaranteed to be written to more replicas which reduces the probability that it will be lost. However, it reduces availability since the partition will be unavailable for writes if the number of in-sync replicas drops below the minimum threshold.
+1. Disable unclean leader election - if all replicas become unavailable, then the partition will remain unavailable until the most recent leader becomes available again. 
+   This effectively prefers unavailability over the risk of message loss.
+2. Specify a minimum ISR size - the partition will only accept writes if the size of the ISR is above a certain minimum, 
+   in order to prevent the loss of messages that were written to just a single replica, which subsequently becomes unavailable.
+   This setting only takes effect if the producer uses acks=all and guarantees that the message will be acknowledged by at least this many in-sync replicas.
+   This setting offers a trade-off between consistency and availability.
+   A higher setting for minimum ISR size guarantees better consistency since the message is guaranteed to be written to more replicas which reduces the probability that it will be lost.
+   However, it reduces availability since the partition will be unavailable for writes if the number of in-sync replicas drops below the minimum threshold.
 
 ## Interceptor
 
@@ -591,7 +602,7 @@ In particular it has the following properties:
 
 Allocate a buffer of the given size. This method blocks if there is not enough memory and the buffer pool is configured with blocking mode.
 
-```java
+```
 public ByteBuffer allocate(int size, long maxTimeToBlockMs) throws InterruptedException {
         if (size > this.totalMemory)
             throw new IllegalArgumentException("Attempt to allocate " + size
@@ -698,7 +709,7 @@ public ByteBuffer allocate(int size, long maxTimeToBlockMs) throws InterruptedEx
 
 Return buffers to the pool. If they are of the poolable size add them to the free list, otherwise just mark the memory as free.
 
-```java
+```
   public void deallocate(ByteBuffer buffer, int size) {
         lock.lock();
         try {
