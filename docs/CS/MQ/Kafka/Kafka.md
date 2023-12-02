@@ -39,8 +39,19 @@ Kafka combines three key capabilities so you can implement your use cases for ev
 </div>
 
 <p style="text-align: center;">
-Fig.1. Kafka Architecture.
+Fig.1. Apache Kafka Components.
 </p>
+
+We will learn all of the fundamentals and understand the various Apache Kafka components such as:
+
+- Kafka Topics
+- Kafka Producers
+- Kafka Consumers
+- Kafka Consumer Groups and Consumer Offsets
+- Kafka Brokers
+- Kafka Topic Replication
+- Zookeeper
+- KRaft Mode
 
 An **event** records the fact that "something happened" in the world or in your business.
 It is also called record or message in the documentation.
@@ -76,12 +87,12 @@ Events with the same event key (e.g., a customer or vehicle ID) are written to t
 
 <div style="text-align: center;">
 
-![Fig.1. Kafka](./img/Kafka.png)
+![Fig.2. Topic](./img/Topic.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. This example topic has four partitions P1–P4. 
+Fig.2. This example topic has four partitions P1–P4. 
 <br>
 Two different producer clients are publishing, independently from each other, new events to the topic by writing events over the network to the topic's partitions.
 <br>
@@ -93,6 +104,9 @@ To make your data fault-tolerant and highly-available, every topic can be  **rep
 so that there are always multiple brokers that have a copy of the data just in case things go wrong, you want to do maintenance on the brokers, and so on.
 A common production setting is a replication factor of 3, i.e., there will always be three copies of your data.
 This replication is performed at the level of topic-partitions.
+
+
+
 
 ### Message Delivery Semantics
 

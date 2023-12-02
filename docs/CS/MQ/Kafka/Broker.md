@@ -12,6 +12,23 @@ A partition may be assigned to multiple brokers, which will result in the partit
 This provides redundancy of messages in the partition, such that another broker can take over leadership if there is a broker failure. 
 However, all consumers and producers operating on that partition must connect to the leader.
 
+### ISR
+
+An ISR is a replica that is up to date with the leader broker for a partition. 
+Any replica that is not up to date with the leader is out of sync.
+
+
+### Consumers Replicas Fetching
+
+Kafka consumers read by default from the partition leader.
+But since Apache Kafka 2.4, it is possible to configure consumers to read from in-sync replicas instead (usually the closest).
+Reading from the closest in-sync replicas (ISR) may improve the request latency, and also decrease network costs, because in most cloud environments cross-data centers network requests incur charges.
+
+### Preferred leader
+The preferred leader is the designated leader broker for a partition at topic creation time (as opposed to being a replica).
+When the preferred leader goes down, any partition that is an ISR (in-sync replica) is eligible to become a new leader (but not a preferred leader). 
+Upon recovering the preferred leader broker and having its partition data back in sync, the preferred leader will regain leadership for that partition.
+
 ## Structure
 
 - kafkaScheduler
@@ -420,7 +437,7 @@ Note that we allow the use of KRaft mode controller APIs when forwarding is enab
 Processor#run
 
 ```scala
-  
+
   override def run(): Unit = {
     try {
       while (shouldRun.get()) {
@@ -2776,8 +2793,6 @@ group the segments and clean the groups
 ```scala
   
   private[log] def doClean(cleanable: LogToClean, currentTime: Long): (Long, CleanerStats) = {
-    info("Beginning cleaning of log %s".format(cleanable.log.name))
-
     // figure out the timestamp below which it is safe to remove delete tombstones
     // this position is defined to be a configurable time beneath the last modified time of the last clean segment
     // this timestamp is only used on the older message formats older than MAGIC_VALUE_V2
@@ -2791,7 +2806,6 @@ group the segments and clean the groups
     val stats = new CleanerStats()
 
     // build the offset map
-    info("Building offset map for %s...".format(cleanable.log.name))
     val upperBoundOffset = cleanable.firstUncleanableOffset
     buildOffsetMap(log, cleanable.firstDirtyOffset, upperBoundOffset, offsetMap, stats)
     val endOffset = offsetMap.latestOffset + 1
@@ -2802,7 +2816,6 @@ group the segments and clean the groups
     val cleanableHorizonMs = log.logSegments(0, cleanable.firstUncleanableOffset).lastOption.map(_.lastModified).getOrElse(0L)
 
     // group the segments and clean the groups
-    info("Cleaning log %s (cleaning prior to %s, discarding tombstones prior to upper bound deletion horizon %s)...".format(log.name, new Date(cleanableHorizonMs), new Date(legacyDeleteHorizonMs)))
     val transactionMetadata = new CleanedTransactionMetadata
 
     val groupedSegments = groupSegmentsBySize(log.logSegments(0, endOffset), log.config.segmentSize,
@@ -2828,6 +2841,13 @@ Delayed operation locking notes: Delayed operations in GroupCoordinator use grou
 
 ## Membership
 
+Zookeeper is used to track cluster state, membership, and leadership
+Zookeeper Being Eliminated from Kafka v4.x
+
+- Kafka 0.x, 1.x & 2.x must use Zookeeper
+- Kafka 3.x can work without Zookeeper (KIP-500) but is not production ready yet
+- Kafka 4.x will not have Zookeeper
+
 ### ZooKeeper
 
 Connect to Zookeeper through `bin/zookeeper-shell.sh 127.0.0.1:2181`
@@ -2848,13 +2868,30 @@ ZooKeeper adds an extra layer of management.
 
 ### KRaft
 
-Replacing ZooKeeper with a Metadata Quorum will enable us to manage metadata in a more scalable and robust way, enabling support for more partitions.  It will also simplify the deployment and configuration of Kafka.
+Replacing ZooKeeper with a Metadata Quorum will enable us to manage metadata in a more scalable and robust way, enabling support for more partitions.  
+It will also simplify the deployment and configuration of Kafka.
 
-We treat changes to metadata as isolated changes with no relationship to each other.  When the controller pushes out state change notifications (such as LeaderAndIsrRequest) to other brokers in the cluster, it is possible for brokers to get some of the changes, but not all.  Although the controller retries several times, it eventually give up.  This can leave brokers in a divergent state.
+We treat changes to metadata as isolated changes with no relationship to each other.  
+When the controller pushes out state change notifications (such as LeaderAndIsrRequest) to other brokers in the cluster, it is possible for brokers to get some of the changes, but not all.  
+Although the controller retries several times, it eventually give up.  
+This can leave brokers in a divergent state.
 
-Worse still, although ZooKeeper is the store of record, the state in ZooKeeper often doesn't match the state that is held in memory in the controller.  For example, when a partition leader changes its ISR in ZK, the controller will typically not learn about these changes for many seconds.  There is no generic way for the controller to follow the ZooKeeper event log.  Although the controller can set one-shot watches, the number of watches is limited for performance reasons.  When a watch triggers, it doesn't tell the controller the current state-- only that the state has changed.  By the time the controller re-reads the znode and sets up a new watch, the state may have changed from what it was when the watch originally fired.  If there is no watch set, the controller may not learn about the change at all.  In some cases, restarting the controller is the only way to resolve the discrepancy.
+Worse still, although ZooKeeper is the store of record, the state in ZooKeeper often doesn't match the state that is held in memory in the controller.  
+For example, when a partition leader changes its ISR in ZK, the controller will typically not learn about these changes for many seconds.  
+There is no generic way for the controller to follow the ZooKeeper event log.  
+Although the controller can set one-shot watches, the number of watches is limited for performance reasons.  
+When a watch triggers, it doesn't tell the controller the current state-- only that the state has changed.  
+By the time the controller re-reads the znode and sets up a new watch, the state may have changed from what it was when the watch originally fired.  
+If there is no watch set, the controller may not learn about the change at all.  
+In some cases, restarting the controller is the only way to resolve the discrepancy.
 
-Rather than being stored in a separate system, metadata should be stored in Kafka itself.  This will avoid all the problems associated with discrepancies between the controller state and the Zookeeper state.  Rather than pushing out notifications to brokers, brokers should simply consume metadata events from the event log.  This ensures that metadata changes will always arrive in the same order.  Brokers will be able to store metadata locally in a file.  When they start up, they will only need to read what has changed from the controller, not the full state.  This will let us support more partitions with less CPU consumption.
+Rather than being stored in a separate system, metadata should be stored in Kafka itself.  
+This will avoid all the problems associated with discrepancies between the controller state and the Zookeeper state.  
+Rather than pushing out notifications to brokers, brokers should simply consume metadata events from the event log.  
+This ensures that metadata changes will always arrive in the same order.  
+Brokers will be able to store metadata locally in a file.  
+When they start up, they will only need to read what has changed from the controller, not the full state.  
+This will let us support more partitions with less CPU consumption.
 
 ## Links
 

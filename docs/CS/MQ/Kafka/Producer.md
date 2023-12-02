@@ -1,5 +1,7 @@
 ## Introduction
 
+A Kafka producer sends messages to a topic, and messages are distributed to partitions according to a mechanism such as key hashing (more on it below).
+
 There are many reasons an application might need to write messages to Kafka: recording user activities for auditing or analysis, recording metrics, storing log messages, 
 recording information from smart appliances, communicating asynchronously with other applications, buffering information before writing to a database, and much more.
 

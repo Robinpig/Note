@@ -1,6 +1,19 @@
 ## Introduction
 
 
+If you opt to run Kafka using the new quorum controller,
+all metadata responsibilities previously undertaken by the Kafka controller and ZooKeeper are merged into this one new service, running inside the Kafka cluster itself. 
+The quorum controller can also run on dedicated hardware should you have a use case that demands it.
+
+<div style="text-align: center;">
+
+![Fig.1. Quorum Controller](./img/KRaft.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Quorum Controller
+</p>
 
 ```scala
   override def startup(): Unit = {

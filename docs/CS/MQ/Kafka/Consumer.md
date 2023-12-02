@@ -1,7 +1,8 @@
 ## Introduction
 
 
-Consumers read messages. In other publish/subscribe systems, these clients may be called subscribers or readers. 
+Consumers read messages. 
+In other publish/subscribe systems, these clients may be called subscribers or readers. 
 The consumer subscribes to one or more topics and reads the messages in the order in which they were produced. 
 The consumer keeps track of which messages it has already consumed by keeping track of the offset of messages.
 The offset is another bit of metadata—an integer value that continually increases—that Kafka adds to each message as it is produced. Each message in a given partition has a unique offset.
@@ -85,6 +86,7 @@ try {
   consumer.close();
 }
 ```
+
 The poll loop does a lot more than just get data. 
 The first time you call poll() with a new consumer, it is responsible for finding the `GroupCoordinator`, joining the con‐ sumer group, and receiving a partition assignment. If a rebalance is triggered, it will be handled inside the poll loop as well. 
 And of course the heartbeats that keep con‐ sumers alive are sent from within the poll loop.
@@ -92,6 +94,11 @@ For this reason, we try to make sure that whatever processing we do between iter
  
 
 ### Consumer Group
+
+In order for indicating to Kafka consumers that they are part of the same specific group , we must specify the consumer-side setting .group.id
+
+Kafka Consumers automatically use a and a to assign consumers to a partition and ensure the load balancing is achieved across all consumers in the same group.GroupCoordinatorConsumerCoordinator
+It is important to note that each topic partition is only assigned to one consumer within a consumer group, but a consumer from a consumer group can be assigned multiple partitions.
 
 Consumers label themselves with a consumer group name,and each record published to a topic is delivered to one consumer instance within each subscribing consumer group.
 
