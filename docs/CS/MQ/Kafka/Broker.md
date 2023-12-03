@@ -669,6 +669,24 @@ Create topic and optionally validate its parameters. Note that this method is us
 
 ## write
 
+Kafka brokers splits each partition into segments.
+Each segment is stored in a single data file on the disk attached to the broker. 
+By default, each segment contains either 1 GB of data or a week of data, whichever limit is attained first.
+When the Kafka broker receives data for a partition, as the segment limit is reached, it will close the file and start a new one:
+
+
+
+<div style="text-align: center;">
+
+![Fig.1. Segment](./img/Segment.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Topic Partitions & Segments
+</p>
+
+
 ### appendRecords
 
 ```scala

@@ -244,4 +244,4 @@ private void handleResponse(RaftResponse.Inbound response, long currentTimeMs) {
 
 ## References
 
-
+1. [Apache Kafka Made Simple: A First Glimpse of a Kafka Without ZooKeeper](https://www.confluent.io/blog/kafka-without-zookeeper-a-sneak-peek/)
