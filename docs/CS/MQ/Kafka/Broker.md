@@ -686,6 +686,43 @@ When the Kafka broker receives data for a partition, as the segment limit is rea
 Fig.1. Topic Partitions & Segments
 </p>
 
+Only one segment is ACTIVE at any point in time - the one data is being written to. 
+A segment can only be deleted if it has been closed beforehand. 
+The size of a segment is controlled by two Broker configurations (which can be modified at the topic level too)
+
+- log.segment.bytes: the max size of a single segment in bytes (default 1 GB)
+  - A smaller segment size means that files must be closed and allocated more often, which reduces the overall efficiency of disk writes.
+  - Once a segment has been closed, it can be considered for expiration. 
+    Adjusting the size of the segments can be important if topics have a low produce rate. 
+    Having a small segment size would mean Kafka has to keep a lot of files open which may lead to Too many open files error.
+- log.segment.ms: the time Kafka will wait before committing the segment if not full (default 1 week)
+  Kafka will close a segment either when the size limit is reached or when the time limit is reached, whichever comes first. log.segment.ms
+  - When using a time-based segment limit, it is important to consider the impact on disk performance when multiple segments are closed simultaneously.
+  - Decide if you want daily compaction instead of weekly
+
+A Kafka broker keeps an open file handle to every segment in every partition - even inactive segments.
+This leads to a usually high number of open file handles, and the OS must be tuned accordingly.
+
+
+Kafka allows consumers to start fetching messages from any available offset. In order to help brokers quickly locate the message for a given offset, Kafka maintains two indexes for each segment:
+
+- An offset to position index - It helps Kafka know what part of a segment to read to find a message
+- A timestamp to offset index - It allows Kafka to find messages with a specific timestamp
+
+
+
+<div style="text-align: center;">
+
+![Fig.2. Topic Segments and Indexes](./img/Indexes.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.2. Topic Segments and Indexes
+</p>
+
+Kafka stores all of its data in a directory on the broker disk. This directory is specified using the property log.dirs in the broker's configuration file.
+
 
 ### appendRecords
 
