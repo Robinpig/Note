@@ -18,6 +18,19 @@ An ISR is a replica that is up to date with the leader broker for a partition.
 Any replica that is not up to date with the leader is out of sync.
 
 
+
+
+When the leader for a partition is no longer available, one of the in-sync replicas (ISR) will be chosen as the new leader. This leader election is ”clean“ in the sense that it guarantees no loss of committed data - by definition, committed data exists on all ISRs.
+
+But what to do when no ISR exists except for the leader that just became unavailable?
+
+Wait for an ISR to come back online. This is the default behavior, and this makes you run the risk of the topic becoming unavailable.
+
+Enable unclean.leader.election.enable=true and start producing to non-ISR partitions. We are going to lose all messages that were written to the old leader while that replica was out of sync and also cause some inconsistencies in consumers.
+
+
+
+
 ### Consumers Replicas Fetching
 
 Kafka consumers read by default from the partition leader.
@@ -2723,6 +2736,19 @@ private[timer] class TimingWheel(tickMs: Long, wheelSize: Int, startMs: Long, ta
 ```
 
 ## Log
+
+
+
+time and purge messages older than the retention period. This expiration happens due to a policy called log.cleanup.policy. There are two cleanup policies:
+
+log.cleanup.policy=delete
+
+This is the default for all the user topics. With this policy configured for a topic, Kafka deletes events older than the configured retention time. The default retention period is a week. Log Cleanup Policy delete has already been discussed here.
+
+log.cleanup.policy=compact
+
+This policy is the default for Kafka‘s __consumer_offsets topic. With this policy on a topic, Kafka only stores the most recent value for each key in the topic. Setting the policy to compact only makes sense on topics for which applications produce events that contain both a key and a value.
+
 
 
 
