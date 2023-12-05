@@ -2475,20 +2475,10 @@ maybeFetch -> processFetchRequest
   }
 ```
 
-### quorum replace zookeeper
 
-why
 
-1. 强依赖 维护困难
-2. Zookeeper CP 影响性能
 
-[KIP-500: Replace ZooKeeper with a Self-Managed Metadata Quorum](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum)
-
-We would like to remove this dependency on ZooKeeper.
-This will enable us to manage metadata in a more scalable and robust way, enabling support for more partitions.
-It will also simplify the deployment and configuration of Kafka.
-
-#### Metadata as an Event Log
+## Metadata as an Event Log
 
 We often talk about the benefits of managing state as a stream of events.
 A single number, the offset, describes a consumer's position in the stream.
@@ -2733,6 +2723,9 @@ private[timer] class TimingWheel(tickMs: Long, wheelSize: Int, startMs: Long, ta
 ```
 
 ## Log
+
+
+
 
 ```scala
   private[log] def startupWithConfigOverrides(defaultConfig: LogConfig, topicConfigOverrides: Map[String, LogConfig]): Unit = {

@@ -96,6 +96,36 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
+We have learned about a Kafka producer configuration parameter called acks which is the number of brokers who need to acknowledge receiving the message before it is considered a successful write. We use another Kafka configuration min.insync.replicas along with this producer configuration.
+
+Kafka producers only write data to the current leader broker for a partition.
+
+Kafka producers must also specify a level of acknowledgment acks to specify if the message must be written to a minimum number of replicas before being considered a successful write.
+
+> [!NOTE]
+>
+> The default value of acks has changed with Kafka v3.0:
+> 
+> - if using Kafka < v3.0, acks=1
+> - if using Kafka >= v3.0, acks=all
+
+For a topic replication factor of 3, topic data durability can withstand 2 brokers loss. As a general rule, for a replication factor of N, you can permanently lose up to N-1 brokers and still recover your data.
+
+Regarding availability, it is a little bit more complicated... To illustrate, let’s consider a replication factor of 3:
+
+Reads: As long as one partition is up and considered an ISR, the topic will be available for reads
+
+Writers:
+
+- acks=0 & acks=1 : as long as one partition is up and considered an ISR, the topic will be available for writes.
+- acks=all: when acks=all with a replication.factor=N and min.insync.replicas=M we can tolerate N-M brokers going down for topic availability purposes.
+
+> [!TIP]
+>
+> acks=all and min.insync.replicas=2 is the most popular option for data durability and availability and allows you to withstand at most the loss of one Kafka broker
+
+
+
 ## send
 
 
