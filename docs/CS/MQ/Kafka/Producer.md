@@ -96,7 +96,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
-We have learned about a Kafka producer configuration parameter called acks which is the number of brokers who need to acknowledge receiving the message before it is considered a successful write. We use another Kafka configuration min.insync.replicas along with this producer configuration.
+### Producer acks setting
 
 Kafka producers only write data to the current leader broker for a partition.
 
@@ -109,42 +109,103 @@ Kafka producers must also specify a level of acknowledgment acks to specify if t
 > - if using Kafka < v3.0, acks=1
 > - if using Kafka >= v3.0, acks=all
 
-acks=0
 
-When acks=0 producers consider messages as ”written successfully“ the moment the message was sent without waiting for the broker to accept it at all.
+<!-- tabs:start -->
 
-If the broker goes offline or an exception happens, we won’t know and will lose data. This is useful for data where it’s okay to potentially lose messages, such as metrics collection, and produces the highest throughput setting because the network overhead is minimized.
+##### **acks=0**
 
-acks=1
-
-When acks=1 , producers consider messages as ”written successfully“ when the message was acknowledged by only the leader.
-
-Leader response is requested, but replication is not a guarantee as it happens in the background. If an ack is not received, the producer may retry the request. If the leader broker goes offline unexpectedly but replicas haven’t replicated the data yet, we have a data loss.
-
-acks = all
-
-When acks=all, producers consider messages as ”written successfully“ when the message is accepted by all in-sync replicas (ISR).
+When `acks=0` producers consider messages as ”written successfully“ the moment the message was sent without waiting for the broker to accept it at all.
 
 
+<div style="text-align: center;">
 
-The lead replica for a partition checks to see if there are enough in-sync replicas for safely writing the message (controlled by the broker setting min.insync.replicas). The request will be stored in a buffer until the leader observes that the follower replicas replicated the message, at which point a successful acknowledgement is sent back to the client.
+![Fig.1. Segment](./img/acks0.png)
 
-Themin.insync.replicas can be configured both at the topic and the broker-level. The data is considered committed when it is written to all in-sync replicas - min.insync.replicas. A value of 2 implies that at least 2 brokers that are ISR (including leader) must respond that they have the data.
+</div>
 
-If you would like to be sure that committed data is written to more than one replica, you need to set the minimum number of in-sync replicas to a higher value. If a topic has three replicas and you set min.insync.replicas to 2, then you can only write to a partition in the topic if at least two out of the three replicas are in-sync. When all three replicas are in-sync, everything proceeds normally. This is also true if one of the replicas becomes unavailable. However, if two out of three replicas are not available, the brokers will no longer accept produce requests. Instead, producers that attempt to send data will receive NotEnoughReplicasException.
+<p style="text-align: center;">
+Fig.1. acks = 0
+</p>
+
+If the broker goes offline or an exception happens, we won’t know and will lose data. 
+This is useful for data where it’s okay to potentially lose messages, such as metrics collection, 
+and produces the highest throughput setting because the network overhead is minimized.
+
+##### **acks=1**
+
+When `acks=1` , producers consider messages as ”written successfully“ when the message was acknowledged by only the leader.
+
+<div style="text-align: center;">
+
+![Fig.1. Segment](./img/acks1.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. acks = 1
+</p>
+Leader response is requested, but replication is not a guarantee as it happens in the background.
+If an ack is not received, the producer may retry the request. 
+If the leader broker goes offline unexpectedly but replicas haven’t replicated the data yet, we have a data loss.
+
+##### **acks = all**
+
+When `acks=all`, producers consider messages as ”written successfully“ when the message is accepted by all in-sync replicas (ISR).
+
+
+<div style="text-align: center;">
+
+![Fig.1. Segment](./img/acksall.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. acks = all
+</p>
+
+The lead replica for a partition checks to see if there are enough in-sync replicas for safely writing the message (controlled by the broker setting min.insync.replicas).
+The request will be stored in a buffer until the leader observes that the follower replicas replicated the message, 
+at which point a successful acknowledgement is sent back to the client.
+
+The `min.insync.replicas` can be configured both at the topic and the broker-level. 
+The data is considered committed when it is written to all in-sync replicas - `min.insync.replicas`. 
+A value of 2 implies that at least 2 brokers that are ISR (including leader) must respond that they have the data.
 
 
 
-For a topic replication factor of 3, topic data durability can withstand 2 brokers loss. As a general rule, for a replication factor of N, you can permanently lose up to N-1 brokers and still recover your data.
+<div style="text-align: center;">
 
-Regarding availability, it is a little bit more complicated... To illustrate, let’s consider a replication factor of 3:
+![Fig.1. Segment](./img/ISR.png)
 
-Reads: As long as one partition is up and considered an ISR, the topic will be available for reads
+</div>
 
-Writers:
+<p style="text-align: center;">
+Fig.1. Kafka Topic Replication, ISR & Message Safety
+</p>
 
-- acks=0 & acks=1 : as long as one partition is up and considered an ISR, the topic will be available for writes.
-- acks=all: when acks=all with a replication.factor=N and min.insync.replicas=M we can tolerate N-M brokers going down for topic availability purposes.
+
+If you would like to be sure that committed data is written to more than one replica, you need to set the minimum number of in-sync replicas to a higher value.
+If a topic has three replicas and you set `min.insync.replicas` to 2, then you can only write to a partition in the topic if at least two out of the three replicas are in-sync. 
+When all three replicas are in-sync, everything proceeds normally. 
+This is also true if one of the replicas becomes unavailable.
+However, if two out of three replicas are not available, the brokers will no longer accept produce requests.
+Instead, producers that attempt to send data will receive `NotEnoughReplicasException`.
+
+
+
+<!-- tabs:end -->
+
+#### Topic Durability & Availability
+
+For a topic replication factor of 3, topic data durability can withstand 2 brokers loss. 
+As a general rule, for a replication factor of N, you can permanently lose up to N-1 brokers and still recover your data.
+
+Regarding availability, let’s consider a replication factor of 3:
+
+- Reads: As long as one partition is up and considered an ISR, the topic will be available for reads
+- Writers:
+  - `acks=0` & `acks=1` : as long as one partition is up and considered an ISR, the topic will be available for writes.
+  - `acks=all`: when `acks=all` with a `replication.factor=N` and `min.insync.replicas=M` we can tolerate `N-M` brokers going down for topic availability purposes.
 
 > [!TIP]
 >
