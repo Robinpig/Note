@@ -2738,8 +2738,34 @@ private[timer] class TimingWheel(tickMs: Long, wheelSize: Int, startMs: Long, ta
 ## Log
 
 
+The most common configuration for how long Kafka will retain messages is by time. 
+The default is specified in the configuration file using the parameter `log.retention.hours`, and it is set to 168 hours, the equivalent of one week.
 
-time and purge messages older than the retention period. This expiration happens due to a policy called log.cleanup.policy. There are two cleanup policies:
+
+Setting it to a higher value will result in more disk space being used on brokers for that particular topic. 
+On the other hand, setting it to a very small value will make data available for less time.
+Consumers that are not available for a long time may miss the data.
+
+There are two other parameters allowed, `log.retention.minutes` and `log.retention.ms`.
+All three of these specify the same configuration - the amount of time after which messages may be deleted. 
+If more than one is specified, the smaller unit size will take precedence.
+
+Another way to expire messages is based on the total number of bytes of messages retained. 
+This value is set using the log.retention.bytes parameter, and it is applied per partition.
+
+The default is -1, meaning that there is no limit and only a time limit is applied. 
+This parameter is useful to set a to positive value if you want to keep the size of a log under a threshold.
+
+One can mix the retention in bytes and in hours to ensure the log is never older than a certain amount of time and never larger than a certain size. 
+This all depends on your use case and storage requirements.
+
+
+It is important to note these are minimum guarantees, not hard limits.
+The active segment does not count toward the Byte limit, and the Time limit can be much greater than expected if the segment is very big (few messages per day in a 1GB segment).
+
+
+time and purge messages older than the retention period. This expiration happens due to a policy called log.cleanup.policy.
+There are two cleanup policies:
 
 log.cleanup.policy=delete
 
