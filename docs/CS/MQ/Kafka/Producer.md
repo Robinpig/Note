@@ -213,6 +213,30 @@ Regarding availability, let’s consider a replication factor of 3:
 
 
 
+When the producer sends messages to a broker, the broker can return either a success or an error code.
+Those error codes belong to two categories.
+
+Retriable errors. Errors that can be resolved after retrying. 
+For example, if the broker returns the exception NotEnoughReplicasException, 
+the producer can try sending the message again - maybe replica brokers will come back online and the second attempt will succeed.
+
+Nonretriable error. Errors that won’t be resolved. 
+For example, if the broker returns an INVALID_CONFIG exception, 
+trying the same producer request again will not change the outcome of the request.
+
+It is desirable to enable retries in order to ensure that no messages are dropped when sent to Apache Kafka.
+Allowing retries without setting max.in.flight.requests.per.connection to 1 will potentially change the ordering of records because if two batches are sent to a single partition, and the first fails and is retried but the second succeeds, then the records in the second batch may appear first. If you rely on key-based ordering, that can be an issue. By limiting the number of in-flight requests to 1 (default being 5), i.e., max.in.flight.requests.per.connection = 1, we can guarantee that Kafka will preserve message order in the event that some messages will require multiple retries before they are successfully acknowledged.
+
+if we enable idempotence enable=idempotence=true, then it is required for max.in.flight.requests.per.connection to be less than or equal to 5 with message ordering preserved for any allowable value!!
+
+
+
+Retrying to send a failed message often includes a small risk that both messages were successfully written to the broker, leading to duplicates.
+
+Producer idempotence ensures that duplicates are not introduced due to unexpected retries.
+When enable.idempotence is set to true, each producer gets assigned a Producer Id (PID) and the PIDis included every time a producer sends messages to a broker. Additionally, each message gets a monotonically increasing sequence number (different from the offset - used only for protocol purposes). A separate sequence is maintained for each topic partition that a producer sends messages to. On the broker side, on a per partition basis, it keeps track of the largest PID-Sequence Number combination that is successfully written. When a lower sequence number is received, it is discarded.
+
+
 ## send
 
 
@@ -305,7 +329,20 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
-partition with RoundRobin and stickyPartitionCache
+
+When key=null, the producer has a default partitioner that varies: 
+
+- Round Robin: for Kafka 2.3 and below
+  This results in more batches and smaller batches. 
+  And this is a problem because smaller batches lead to more requests as well as higher latency.
+- Sticky Partitioner: for Kafka 2.4 and above
+  Sticky Partitioner improves the performance of the producer especially with high throughput.
+  “stick” to a partition until the batch is full or linger.ms has elapsed
+  After sending the batch, change the partition that is "sticky"
+  This will lead to larger batches and reduced latency (because we have larger requests, and the batch.size is more likely to be reached).
+  Over time, the records are still spread evenly across partitions, so the balance of the cluster is not affected.
+
+
 
 ### append
 

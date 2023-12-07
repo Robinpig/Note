@@ -9,16 +9,13 @@ Within a cluster of brokers, one broker will also function as the cluster contro
 The controller is responsible for administrative operations, including assigning partitions to brokers and monitoring for broker failures.
 A partition is owned by a single broker in the cluster, and that broker is called the leader of the partition.
 A partition may be assigned to multiple brokers, which will result in the partition being replicated.
-This provides redundancy of messages in the partition, such that another broker can take over leadership if there is a broker failure. 
+This provides redundancy of messages in the partition, such that another broker can take over leadership if there is a broker failure.
 However, all consumers and producers operating on that partition must connect to the leader.
 
 ### ISR
 
-An ISR is a replica that is up to date with the leader broker for a partition. 
+An ISR is a replica that is up to date with the leader broker for a partition.
 Any replica that is not up to date with the leader is out of sync.
-
-
-
 
 When the leader for a partition is no longer available, one of the in-sync replicas (ISR) will be chosen as the new leader. This leader election is ”clean“ in the sense that it guarantees no loss of committed data - by definition, committed data exists on all ISRs.
 
@@ -28,9 +25,6 @@ Wait for an ISR to come back online. This is the default behavior, and this make
 
 Enable unclean.leader.election.enable=true and start producing to non-ISR partitions. We are going to lose all messages that were written to the old leader while that replica was out of sync and also cause some inconsistencies in consumers.
 
-
-
-
 ### Consumers Replicas Fetching
 
 Kafka consumers read by default from the partition leader.
@@ -38,9 +32,28 @@ But since Apache Kafka 2.4, it is possible to configure consumers to read from i
 Reading from the closest in-sync replicas (ISR) may improve the request latency, and also decrease network costs, because in most cloud environments cross-data centers network requests incur charges.
 
 ### Preferred leader
+
 The preferred leader is the designated leader broker for a partition at topic creation time (as opposed to being a replica).
-When the preferred leader goes down, any partition that is an ISR (in-sync replica) is eligible to become a new leader (but not a preferred leader). 
+When the preferred leader goes down, any partition that is an ISR (in-sync replica) is eligible to become a new leader (but not a preferred leader).
 Upon recovering the preferred leader broker and having its partition data back in sync, the preferred leader will regain leadership for that partition.
+
+### Replication Factor and Partition Count
+
+When creating a topic, we have to provide a partition count and the replication factor. 
+These two are very important to set correctly as they impact the performance and durability in the system.
+
+
+
+The factors to consider while choosing replication factor are:
+
+It should be at least 2 and a maximum of 4. 
+The recommended number is 3 as it provides the right balance between performance and fault tolerance
+
+A Kafka cluster should have a maximum of 200,000 partitions across all brokers when managed by Zookeeper. The reason is that if brokers go down, Zookeeper needs to perform a lot of leader elections.
+Confluent still recommends up to 4,000 partitions per broker in your cluster.
+This problem should be solved by Kafka in a Zookeeper-less mode (Kafka KRaft)
+If you need more than 200,000 partitions in your cluster, follow the Netflix model and create more Kafka clusters
+
 
 ## Structure
 
@@ -683,11 +696,9 @@ Create topic and optionally validate its parameters. Note that this method is us
 ## write
 
 Kafka brokers splits each partition into segments.
-Each segment is stored in a single data file on the disk attached to the broker. 
+Each segment is stored in a single data file on the disk attached to the broker.
 By default, each segment contains either 1 GB of data or a week of data, whichever limit is attained first.
 When the Kafka broker receives data for a partition, as the segment limit is reached, it will close the file and start a new one:
-
-
 
 <div style="text-align: center;">
 
@@ -699,14 +710,14 @@ When the Kafka broker receives data for a partition, as the segment limit is rea
 Fig.1. Topic Partitions & Segments
 </p>
 
-Only one segment is ACTIVE at any point in time - the one data is being written to. 
-A segment can only be deleted if it has been closed beforehand. 
+Only one segment is ACTIVE at any point in time - the one data is being written to.
+A segment can only be deleted if it has been closed beforehand.
 The size of a segment is controlled by two Broker configurations (which can be modified at the topic level too)
 
 - log.segment.bytes: the max size of a single segment in bytes (default 1 GB)
   - A smaller segment size means that files must be closed and allocated more often, which reduces the overall efficiency of disk writes.
-  - Once a segment has been closed, it can be considered for expiration. 
-    Adjusting the size of the segments can be important if topics have a low produce rate. 
+  - Once a segment has been closed, it can be considered for expiration.
+    Adjusting the size of the segments can be important if topics have a low produce rate.
     Having a small segment size would mean Kafka has to keep a lot of files open which may lead to Too many open files error.
 - log.segment.ms: the time Kafka will wait before committing the segment if not full (default 1 week)
   Kafka will close a segment either when the size limit is reached or when the time limit is reached, whichever comes first. log.segment.ms
@@ -716,13 +727,10 @@ The size of a segment is controlled by two Broker configurations (which can be m
 A Kafka broker keeps an open file handle to every segment in every partition - even inactive segments.
 This leads to a usually high number of open file handles, and the OS must be tuned accordingly.
 
-
 Kafka allows consumers to start fetching messages from any available offset. In order to help brokers quickly locate the message for a given offset, Kafka maintains two indexes for each segment:
 
 - An offset to position index - It helps Kafka know what part of a segment to read to find a message
 - A timestamp to offset index - It allows Kafka to find messages with a specific timestamp
-
-
 
 <div style="text-align: center;">
 
@@ -735,7 +743,6 @@ Fig.2. Topic Segments and Indexes
 </p>
 
 Kafka stores all of its data in a directory on the broker disk. This directory is specified using the property log.dirs in the broker's configuration file.
-
 
 ### appendRecords
 
@@ -1013,22 +1020,6 @@ class ReplicaManager {
                   _: NotLeaderOrFollowerException |
                   _: RecordTooLargeException |
                   _: RecordBatchTooLargeException |
-                  _: CorruptRecordException |
-                  _: KafkaStorageException) =>
-            (topicPartition, LogAppendResult(LogAppendInfo.UnknownLogAppendInfo, Some(e)))
-          case rve: RecordValidationException =>
-            val logStartOffset = processFailedRecord(topicPartition, rve.invalidException)
-            val recordErrors = rve.recordErrors
-            (topicPartition, LogAppendResult(LogAppendInfo.unknownLogAppendInfoWithAdditionalInfo(
-              logStartOffset, recordErrors, rve.invalidException.getMessage), Some(rve.invalidException)))
-          case t: Throwable =>
-            val logStartOffset = processFailedRecord(topicPartition, t)
-            (topicPartition, LogAppendResult(LogAppendInfo.unknownLogAppendInfoWithLogStartOffset(logStartOffset), Some(t)))
-        }
-      }
-    }
-  }
-}
 ```
 
 #### appendRecordsToLeader
@@ -2488,9 +2479,6 @@ maybeFetch -> processFetchRequest
   }
 ```
 
-
-
-
 ## Metadata as an Event Log
 
 We often talk about the benefits of managing state as a stream of events.
@@ -2737,43 +2725,68 @@ private[timer] class TimingWheel(tickMs: Long, wheelSize: Int, startMs: Long, ta
 
 ## Log
 
-
-The most common configuration for how long Kafka will retain messages is by time. 
+The most common configuration for how long Kafka will retain messages is by time.
 The default is specified in the configuration file using the parameter `log.retention.hours`, and it is set to 168 hours, the equivalent of one week.
 
-
-Setting it to a higher value will result in more disk space being used on brokers for that particular topic. 
+Setting it to a higher value will result in more disk space being used on brokers for that particular topic.
 On the other hand, setting it to a very small value will make data available for less time.
 Consumers that are not available for a long time may miss the data.
 
 There are two other parameters allowed, `log.retention.minutes` and `log.retention.ms`.
-All three of these specify the same configuration - the amount of time after which messages may be deleted. 
+All three of these specify the same configuration - the amount of time after which messages may be deleted.
 If more than one is specified, the smaller unit size will take precedence.
 
-Another way to expire messages is based on the total number of bytes of messages retained. 
+Another way to expire messages is based on the total number of bytes of messages retained.
 This value is set using the log.retention.bytes parameter, and it is applied per partition.
 
-The default is -1, meaning that there is no limit and only a time limit is applied. 
+The default is -1, meaning that there is no limit and only a time limit is applied.
 This parameter is useful to set a to positive value if you want to keep the size of a log under a threshold.
 
-One can mix the retention in bytes and in hours to ensure the log is never older than a certain amount of time and never larger than a certain size. 
+One can mix the retention in bytes and in hours to ensure the log is never older than a certain amount of time and never larger than a certain size.
 This all depends on your use case and storage requirements.
-
 
 It is important to note these are minimum guarantees, not hard limits.
 The active segment does not count toward the Byte limit, and the Time limit can be much greater than expected if the segment is very big (few messages per day in a 1GB segment).
 
+### Log Cleanup Policies
 
-time and purge messages older than the retention period. This expiration happens due to a policy called log.cleanup.policy.
+Kafka stores messages for a set amount of time and purge messages older than the retention period.
+This expiration happens due to a policy called log.cleanup.policy.
 There are two cleanup policies:
 
-log.cleanup.policy=delete
+- `log.cleanup.policy=delete`<br/>
+  This is the default for all the user topics.
+  With this policy configured for a topic, Kafka deletes events older than the configured retention time.
+  The default retention period is a week. Log Cleanup Policy delete has already been discussed here.
+- `log.cleanup.policy=compact`<br/>
+  This policy is the default for Kafka‘s __consumer_offsets topic.
+  With this policy on a topic, Kafka only stores the most recent value for each key in the topic.
+  Setting the policy to compact only makes sense on topics for which applications produce events that contain both a key and a value.
 
-This is the default for all the user topics. With this policy configured for a topic, Kafka deletes events older than the configured retention time. The default retention period is a week. Log Cleanup Policy delete has already been discussed here.
+Cleanup should happen often enough to ensure the files are deleted, but not so often as to affect the broker and disk performance.
+Smaller log retention sizes might require more frequent checks.
 
-log.cleanup.policy=compact
 
-This policy is the default for Kafka‘s __consumer_offsets topic. With this policy on a topic, Kafka only stores the most recent value for each key in the topic. Setting the policy to compact only makes sense on topics for which applications produce events that contain both a key and a value.
+
+### Log Compaction Guarantees
+
+[](https://www.conduktor.io/kafka/kafka-topic-configuration-log-compaction/#Kafka-Log-Compaction-Guarantees-3)
+
+There are some important guarantees that Kafka provides for messages produced on the log-compacted topics.
+
+* Any consumer that is reading from the tail of a log, i.e., the most current data, will still see all the messages sent to the topic. It does not matter whether a topic is log-compacted or not, consumers subscribed to the topic will see messages as they are produced on the topic.
+* Ordering of messages at the key level and partition level is kept, log compaction only removes some messages, but does not re-order them. The offsets are kept, only some messages are deleted.
+* The offset of a message is immutable (it never changes). Offsets are just skipped if a message is missing
+* Deleted records can still be seen by consumers for a period of `log.cleaner.delete.retention.ms` (default is 24 hours). This gives some heads-up time for the consumers to catch up on the messages that will be deleted.
+
+
+If compaction is enabled when Kafka starts, each broker will start a compaction manager thread and a number of compaction threads. These are responsible for performing the compaction tasks.
+
+
+* Cleaner threads start with the oldest segment and check their contents. The active segments are left untouched by the cleaner threads.
+* If the message it has just read is still the latest for a key, it copies over the message to a replacement segment. Otherwise it omits the message because there is a message with an identical key but a newer value later in the partition.
+* Once the cleaner thread has copied over all the messages that still contain the latest value for their key, we swap the replacement segment for the original and move on to the next segment.
+* At the end of the process, we are left with one message per key - the one with the latest value.
 
 
 
@@ -2968,29 +2981,29 @@ ZooKeeper adds an extra layer of management.
 
 ### KRaft
 
-Replacing ZooKeeper with a Metadata Quorum will enable us to manage metadata in a more scalable and robust way, enabling support for more partitions.  
+Replacing ZooKeeper with a Metadata Quorum will enable us to manage metadata in a more scalable and robust way, enabling support for more partitions.
 It will also simplify the deployment and configuration of Kafka.
 
-We treat changes to metadata as isolated changes with no relationship to each other.  
-When the controller pushes out state change notifications (such as LeaderAndIsrRequest) to other brokers in the cluster, it is possible for brokers to get some of the changes, but not all.  
-Although the controller retries several times, it eventually give up.  
+We treat changes to metadata as isolated changes with no relationship to each other.
+When the controller pushes out state change notifications (such as LeaderAndIsrRequest) to other brokers in the cluster, it is possible for brokers to get some of the changes, but not all.
+Although the controller retries several times, it eventually give up.
 This can leave brokers in a divergent state.
 
-Worse still, although ZooKeeper is the store of record, the state in ZooKeeper often doesn't match the state that is held in memory in the controller.  
-For example, when a partition leader changes its ISR in ZK, the controller will typically not learn about these changes for many seconds.  
-There is no generic way for the controller to follow the ZooKeeper event log.  
-Although the controller can set one-shot watches, the number of watches is limited for performance reasons.  
-When a watch triggers, it doesn't tell the controller the current state-- only that the state has changed.  
-By the time the controller re-reads the znode and sets up a new watch, the state may have changed from what it was when the watch originally fired.  
-If there is no watch set, the controller may not learn about the change at all.  
+Worse still, although ZooKeeper is the store of record, the state in ZooKeeper often doesn't match the state that is held in memory in the controller.
+For example, when a partition leader changes its ISR in ZK, the controller will typically not learn about these changes for many seconds.
+There is no generic way for the controller to follow the ZooKeeper event log.
+Although the controller can set one-shot watches, the number of watches is limited for performance reasons.
+When a watch triggers, it doesn't tell the controller the current state-- only that the state has changed.
+By the time the controller re-reads the znode and sets up a new watch, the state may have changed from what it was when the watch originally fired.
+If there is no watch set, the controller may not learn about the change at all.
 In some cases, restarting the controller is the only way to resolve the discrepancy.
 
-Rather than being stored in a separate system, metadata should be stored in Kafka itself.  
-This will avoid all the problems associated with discrepancies between the controller state and the Zookeeper state.  
-Rather than pushing out notifications to brokers, brokers should simply consume metadata events from the event log.  
-This ensures that metadata changes will always arrive in the same order.  
-Brokers will be able to store metadata locally in a file.  
-When they start up, they will only need to read what has changed from the controller, not the full state.  
+Rather than being stored in a separate system, metadata should be stored in Kafka itself.
+This will avoid all the problems associated with discrepancies between the controller state and the Zookeeper state.
+Rather than pushing out notifications to brokers, brokers should simply consume metadata events from the event log.
+This ensures that metadata changes will always arrive in the same order.
+Brokers will be able to store metadata locally in a file.
+When they start up, they will only need to read what has changed from the controller, not the full state.
 This will let us support more partitions with less CPU consumption.
 
 ## Links
