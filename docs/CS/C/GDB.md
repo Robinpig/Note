@@ -19,9 +19,6 @@ long ptrace(enum __ptrace_request request, pid_t pid,
 ```
 
 
-```shell
-gdb -tui
-```
 
 follow process when fork
 ```shell
@@ -29,6 +26,21 @@ follow process when fork
 (gdb) set follow-fork-mode parent 
 (gdb) set follow-fork-mode ask 
 ```
+
+
+## gdbtui
+
+
+```shell
+gdb -tui
+gdbtui
+```
+
+
+
+
+## cgroup
+
 
 
 

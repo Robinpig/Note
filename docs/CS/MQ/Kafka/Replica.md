@@ -39,6 +39,8 @@ Here’s how that might play out:
    unclean leader was slightly behind (offset=4) at the time it was elected leader, 
    some messages (offsets 5–7) will get deleted after the first leader comes back online and rejoins the cluster as a replica/follower.
 
+
+
 ## Links
 
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)

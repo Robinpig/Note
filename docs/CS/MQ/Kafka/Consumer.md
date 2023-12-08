@@ -5,10 +5,12 @@ Consumers read messages.
 In other publish/subscribe systems, these clients may be called subscribers or readers. 
 The consumer subscribes to one or more topics and reads the messages in the order in which they were produced. 
 The consumer keeps track of which messages it has already consumed by keeping track of the offset of messages.
-The offset is another bit of metadata—an integer value that continually increases—that Kafka adds to each message as it is produced. Each message in a given partition has a unique offset.
+The offset is another bit of metadata—an integer value that continually increases—that Kafka adds to each message as it is produced.
+Each message in a given partition has a unique offset.
 By storing the offset of the last consumed message for each partition, either in Zookeeper or in Kafka itself, a consumer can stop and restart without losing its place.
 
-Consumers work as part of a consumer group, which is one or more consumers that work together to consume a topic. The group assures that each partition is only consumed by one member.
+Consumers work as part of a consumer group, which is one or more consumers that work together to consume a topic.
+The group assures that each partition is only consumed by one member.
 The mapping of a consumer to a partition is often called ownership of the partition by the consumer.”
 
 In this way, consumers can horizontally scale to consume topics with a large number of messages.
@@ -57,7 +59,9 @@ Once we create a consumer, the next step is to subscribe to one or more topics. 
 consumer.subscribe(Arrays.asList("quickstart-events", "bar"), new NoOpConsumerRebalanceListener());
 ```
 
-At the heart of the consumer API is a simple loop for polling the server for more data. Once the consumer subscribes to topics, the poll loop handles all details of coordina‐ tion, partition rebalances, heartbeats, and data fetching, leaving the developer with a clean API that simply returns available data from the assigned partitions. <br/>
+At the heart of the consumer API is a simple loop for polling the server for more data. Once the consumer subscribes to topics, 
+the poll loop handles all details of coordination, partition rebalances, heartbeats, and data fetching,
+leaving the developer with a clean API that simply returns available data from the assigned partitions.<br/>
 The main body of a consumer will look as follows:
 
 
@@ -88,7 +92,8 @@ try {
 ```
 
 The poll loop does a lot more than just get data. 
-The first time you call poll() with a new consumer, it is responsible for finding the `GroupCoordinator`, joining the con‐ sumer group, and receiving a partition assignment. If a rebalance is triggered, it will be handled inside the poll loop as well. 
+The first time you call poll() with a new consumer, it is responsible for finding the `GroupCoordinator`, joining the con‐ sumer group, and receiving a partition assignment. 
+If a rebalance is triggered, it will be handled inside the poll loop as well. 
 And of course the heartbeats that keep con‐ sumers alive are sent from within the poll loop.
 For this reason, we try to make sure that whatever processing we do between iterations is fast and efficient.
  
@@ -100,7 +105,7 @@ In order for indicating to Kafka consumers that they are part of the same specif
 Kafka Consumers automatically use a and a to assign consumers to a partition and ensure the load balancing is achieved across all consumers in the same group.GroupCoordinatorConsumerCoordinator
 It is important to note that each topic partition is only assigned to one consumer within a consumer group, but a consumer from a consumer group can be assigned multiple partitions.
 
-Consumers label themselves with a consumer group name,and each record published to a topic is delivered to one consumer instance within each subscribing consumer group.
+Consumers label themselves with a consumer group name, and each record published to a topic is delivered to one consumer instance within each subscribing consumer group.
 
 The consumer group state.
 
@@ -110,7 +115,7 @@ public enum ConsumerGroupState {
    COMPLETING_REBALANCE("CompletingRebalance"),
    STABLE("Stable"),
    DEAD("Dead"),
-   EMPTY("Empty");
+   EMPTY("Empty")
 }
 ```
 
@@ -181,25 +186,6 @@ group.id+topic+partitionId=offset
 Deafult 50 log filles.
 
 
-```java
-
- try{
-      while (true) {
-         ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(1));
-         process(records); // 处理消息
-         commitAysnc(); // 使用异步提交规避阻塞
-      }
-   } catch(Exception e){
-      handle(e); // 处理异常
-   } finally{
-      try {
-         consumer.commitSync(); // 最后一次提交使用同步阻塞式提交
-      } finally {
-         consumer.close();
-      }
-   }
-
-```
 
 Standalone consumer must use different groupId
 

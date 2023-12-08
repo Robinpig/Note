@@ -3,6 +3,17 @@
 
 C++ blends the C language with support for object-oriented programming and for generic programming.
 
+
+## Basic concepts
+
+
+Resource Acquisition Is Initialization or RAII, is a C++ programming technique which binds the life cycle of a resource that must be acquired before use 
+(allocated heap memory, thread of execution, open socket, open file, locked mutex, disk space, database connection—anything that exists in limited supply) 
+to the lifetime of an object.
+
+
+
+
 ## Types
 
 ### 基本的内置类型

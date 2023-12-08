@@ -119,12 +119,12 @@ When `acks=0` producers consider messages as ”written successfully“ the mome
 
 <div style="text-align: center;">
 
-![Fig.1. Segment](./img/acks0.png)
+![acks = 0](./img/acks0.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. acks = 0
+acks = 0
 </p>
 
 If the broker goes offline or an exception happens, we won’t know and will lose data. 
@@ -137,12 +137,12 @@ When `acks=1` , producers consider messages as ”written successfully“ when t
 
 <div style="text-align: center;">
 
-![Fig.1. Segment](./img/acks1.png)
+![acks = 1](./img/acks1.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. acks = 1
+acks = 1
 </p>
 Leader response is requested, but replication is not a guarantee as it happens in the background.
 If an ack is not received, the producer may retry the request. 
@@ -155,12 +155,12 @@ When `acks=all`, producers consider messages as ”written successfully“ when 
 
 <div style="text-align: center;">
 
-![Fig.1. Segment](./img/acksall.png)
+![acks = all](./img/acksall.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. acks = all
+acks = all
 </p>
 
 The lead replica for a partition checks to see if there are enough in-sync replicas for safely writing the message (controlled by the broker setting min.insync.replicas).
@@ -175,12 +175,12 @@ A value of 2 implies that at least 2 brokers that are ISR (including leader) mus
 
 <div style="text-align: center;">
 
-![Fig.1. Segment](./img/ISR.png)
+![Kafka Topic Replication, ISR & Message Safety](./img/ISR.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. Kafka Topic Replication, ISR & Message Safety
+Kafka Topic Replication, ISR & Message Safety
 </p>
 
 
