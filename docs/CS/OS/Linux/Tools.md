@@ -1,4 +1,4 @@
-# Tools
+## Introduction
 
 
 
@@ -168,9 +168,17 @@ iputils
 - rdisc
 
 net-tools
-- ipconfig
+- ifconfig
 - route
 - netstat
+
+
+```shell
+# up/down network adapter
+ifconfig en0 up/down
+```
+
+
 
 iproute2
 - ss
@@ -184,4 +192,9 @@ iproute2
 
 netlink see RFC 3549
 
+
+nc
+
+
+## Links
 
