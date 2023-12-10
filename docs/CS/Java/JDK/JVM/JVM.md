@@ -45,6 +45,27 @@ hotspot
         |--- utilities          # hashtable, JSON parser, elf, etc.
 ```
 
+log:
+
+```
+-Xlog:
+    codecache+sweep*=trace,
+    class+unload,
+    class+load,
+    os+thread,
+    safepoint,
+    gc*,
+    gc+stringdedup=debug,
+    gc+ergo=trace,
+    gc+age=trace,
+    gc+phases=trace,
+    gc+humongous=trace,
+    jit+compilation=debug
+:file=/path_to_logs/app.log
+:level,tags,time,uptime,pid
+:filesize=104857600,filecount=5
+```
+
 ### heap object
 
 CHeapObj

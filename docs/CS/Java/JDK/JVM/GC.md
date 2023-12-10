@@ -385,6 +385,13 @@ GCTimeRatio
 - TLABSize
 - YoungPLABSize/OldOLABSize
 
+The JVM can be blocked for substantial time periods when disk IO is heavy.
+JVM GC needs to log GC activities by issuing write() system calls;
+Such write() calls can be blocked due to background disk IO;
+GC logging is on the JVM pausing path, hence the time taken by write() calls contribute to JVM STW pauses.
+
+For latency-sensitive applications, an immediate solution should be avoiding the IO contention by putting the GC log file on a separate HDD or high-performing disk such as SSD.
+
 ## Links
 
 - [Garbage Collection](/docs/CS/memory/GC.md)
