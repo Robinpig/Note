@@ -1,33 +1,31 @@
 ## Introduction
 
-
 The network server for kafka. Now application specific code here, just general network server stuff.
 <br>
-The classes Receive and Send encapsulate the incoming and outgoing transmission of bytes. 
+The classes Receive and Send encapsulate the incoming and outgoing transmission of bytes.
 A Handler is a mapping between a Receive and a Send, and represents the users hook to add logic for mapping requests to actual processing code.
-Any uncaught exceptions in the reading or writing of the transmissions will result in the server logging an error and closing the offending socket. 
+Any uncaught exceptions in the reading or writing of the transmissions will result in the server logging an error and closing the offending socket.
 As a result it is the duty of the Handler implementation to catch and serialize any application-level errors that should be sent to the client.
 <br>
-This slightly lower-level interface that models sending and receiving rather than requests and responses is necessary in order to allow the send or receive to be overridden with a non-user-space writing of bytes using FileChannel.transferTo.
+This slightly lower-level interface that models sending and receiving rather than requests and responses is necessary
+in order to allow the send or receive to be overridden with a non-user-space writing of bytes using FileChannel.transferTo.
 
-The sendfile implementation is done by giving the MessageSet interface a writeTo method. 
+The sendfile implementation is done by giving the MessageSet interface a writeTo method.
 This allows the file-backed message set to use the more efficient transferTo implementation instead of an in-process buffered write.
 The threading model is a single acceptor thread and N processor threads which handle a fixed number of connections each.
+
 ```java
 /**
  *                                           Sender
  *                                             |
  *                                            \|/
  *  ClientRequest/ClientResponse        NetworkClient
- *      
- *  Send/Receive   kafka.Selector          KafkaChannel    
+ *    
+ *  Send/Receive   kafka.Selector          KafkaChannel  
  *
  *  Buffer          Selector                Channel
  *
- *
  */
-
-
 ```
 
 ## NetworkClient
@@ -69,10 +67,12 @@ public class NetworkClient implements KafkaClient {
     }
 }
 ```
+
 Begin connecting to the given address and add the connection to this nioSelector associated with the given id number.
 Note that this call only initiates the connection, which will be completed on a future poll(long) call. Check connected() to see which (if any) connections have completed after a given poll call.
 
 immediatelyConnectedKeys see [JDK NIO](/docs/CS/Java/JDK/IO/IO.md?id=Connect) and will finishConnect
+
 ```java
 public void connect(String id, InetSocketAddress address, int sendBufferSize, int receiveBufferSize) throws IOException {
         ensureNotRegistered(id);
@@ -180,8 +180,6 @@ public void connect(String id, InetSocketAddress address, int sendBufferSize, in
     }
 ```
 
-
-
 ### send
 
 ```java
@@ -253,6 +251,7 @@ public class NetworkClient implements KafkaClient {
 Queue the given request for sending in the subsequent poll(long) calls
 
 `Channel.setSend()`
+
 ```java
     public void send(NetworkSend send) {
         String connectionId = send.destinationId();
@@ -277,12 +276,12 @@ Queue the given request for sending in the subsequent poll(long) calls
     }
 ```
 
-
 ### poll
 
 Do actual reads and writes to sockets.
 
 call [Selector.poll()](/docs/CS/MQ/Kafka/Network.md?id=Selector)
+
 ```java
 public class NetworkClient implements KafkaClient {
     @Override
@@ -320,7 +319,9 @@ public class NetworkClient implements KafkaClient {
     }
 }
 ```
+
 #### handleCompletedSends
+
 Handle any completed request send. In particular if no response is expected consider the request complete.
 
 ```java
@@ -337,7 +338,6 @@ public class NetworkClient implements KafkaClient {
     }
 }
 ```
-
 
 ```java
 public class NetworkClient implements KafkaClient {
@@ -363,9 +363,7 @@ public class NetworkClient implements KafkaClient {
 }
 ```
 
-
 ### KafkaChannel
-
 
 ```java
  public KafkaChannel(String id, TransportLayer transportLayer, Supplier<Authenticator> authenticatorCreator,
@@ -383,7 +381,6 @@ public class NetworkClient implements KafkaClient {
         this.state = ChannelState.NOT_CONNECTED;
     }
 ```
-
 
 ```java
 protected SelectionKey registerChannel(String id, SocketChannel socketChannel, int interestedOps) throws IOException {
@@ -508,7 +505,6 @@ public class Selector implements Selectable, AutoCloseable {
     }
 }
 ```
-
 
 #### pollSelectionKeys
 
@@ -636,6 +632,7 @@ void pollSelectionKeys(Set<SelectionKey> selectionKeys,
         }
     }
 ```
+
 #### attemptWrite
 
 ```java
@@ -668,9 +665,7 @@ private void attemptWrite(SelectionKey key, KafkaChannel channel, long nowNanos)
 
 ```
 
-
 ### Buffer
-
 
 #### Send
 
@@ -699,6 +694,7 @@ public class KafkaChannel implements AutoCloseable {
 #### NetworkReceive
 
 A size delimited Receive that consists of a 4 byte network-ordered size N followed by N bytes of content
+
 ```java
 public class NetworkReceive implements Receive {
 
@@ -712,7 +708,6 @@ public class NetworkReceive implements Receive {
     private ByteBuffer buffer;
 }
 ```
-
 
 ```java
 public class KafkaChannel implements AutoCloseable {
@@ -743,14 +738,13 @@ public interface Partitioner extends Configurable, Closeable {
 
 RoundRobin
 
-
 The default partitioning strategy:
+
 - If a partition is specified in the record, use it
 - If no partition is specified but a key is present choose a partition based on a hash of the key
 - If no partition or key is present choose the sticky partition(`ThreadLocalRandom.current().nextInt()`) that changes when the batch is full. See KIP-480 for details about sticky partitioning.
 
 ### Topic
-
 
 See https://kafka.apache.org/documentation/#configuration
 
@@ -760,7 +754,6 @@ unclean.leader.election.enable：false
 auto.leader.rebalance.enable：false
 ```
 
-
 ```properties
 log.retention.{hour|minutes|ms}: 168
 log.retention.bytes：-1
@@ -768,7 +761,6 @@ message.max.bytes:
 ```
 
 JVM 6GB Heap
-
 
 ### KafkaTemplate
 
@@ -786,8 +778,6 @@ Producer compress、Broker storage(also decompress to verify records)、Consumer
 > [!WARNING]
 >
 > Broker keep the same compression type and same message version(v1 <-> v1, v2 <-> v2) as producers to avoid performance risk.
-
-
 
 ## NetworkServer
 
@@ -879,8 +869,6 @@ private class AcceptorThread extends Thread {
     }
 }
 ```
-
-
 
 ```java
 public class NioEchoServer extends Thread {

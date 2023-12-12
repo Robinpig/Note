@@ -97,7 +97,8 @@ it clutters interfaces, either explicitly through additional parameters to commu
 Requiring code to understand the rules of engagement limits the reusability of components.
 
 The key argument in favour of garbage collection is not just that it **simplifies coding** - which it does -
-but that it uncouples the problem of memory management from interfaces, rather than scattering it throughout the code. **It improves reusability.**
+but that it uncouples the problem of memory management from interfaces, rather than scattering it throughout the code.
+**It improves reusability.**
 
 We do not claim that garbage collection is a *silver bullet* that will eradicate all memoryrelated programming errors or that it is applicable in all situations.
 Although garbage collection tends to reduce the chance of memory leaks, it does not guarantee to eliminate them.
@@ -123,7 +124,8 @@ Worse, the tuning options in production virtual machines are inter-connected.
 **Safety**
 
 The prime consideration is that garbage collection should be safe: the collector must never reclaim the storage of live objects.
-However, safety comes with a cost, particularly for concurrent collectors. The safety of conservative collection, which receives no assistance from the compiler or run-time system, may in principle be vulnerable to certain compiler optimisations that disguise pointers.
+However, safety comes with a cost, particularly for concurrent collectors. The safety of conservative collection, 
+which receives no assistance from the compiler or run-time system, may in principle be vulnerable to certain compiler optimisations that disguise pointers.
 
 **Throughput**
 
@@ -141,32 +143,31 @@ mutator allocation performance (and possibly mutator performance more generally)
 
 Ideally, garbage collection should be complete: eventually, all garbage in the heap should be
 reclaimed. However, this is not always possible nor even desirable. Pure reference counting collectors, for example, are unable to reclaim cyclic garbage (self-referential structures).
-For performance reasons, it may be desirable not to collect the whole heap at every collection cycle. For example, generational collectors segregate objects by their age into two or
+For performance reasons, it may be desirable not to collect the whole heap at every collection cycle.
+For example, generational collectors segregate objects by their age into two or
 more regions called generations (we discuss generational garbage collection in Chapter 9).
 By concentrating effort on the youngest generation, generational collectors can both improve total collection time and reduce the average pause time for individual collections.
 
 Concurrent collectors interleave the execution of mutators and collectors; the goal of
-such collectors is to avoid, or at least bound, interruptions to the user program. One consequence is that objects that become garbage after a collection cycle has started may not be
+such collectors is to avoid, or at least bound, interruptions to the user program. 
+One consequence is that objects that become garbage after a collection cycle has started may not be
 reclaimed until the end of the next cycle; such objects are calledfloating garbage.
 Hence, in a concurrent setting it may be more appropriate to define completeness as eventual reclamation of all garbage, as opposed to reclamation within one cycle.
 Different collection algorithms may vary in their promptness of reclamation, again leading to time/space trade-offs.
 
 **Pause time**
 
-On the other hand, an important requirement may be to minimise the collector's intrusion on program execution. Many collectors introduce pauses into a program's execution
-because they stop all mutator threads while collecting garbage. It is clearly desirable to
-make these pauses as short as possible. This might be particularly important for interactive applications or servers handling transactions (when failure to meet a deadline might
-lead to the transaction being retried, thus building up a backlog of work). However, mechanisms for limiting pause times may have side-effects, as we shall see in more detail in
-later chapters. For example, generational collectors address this goal by frequently and
-quickly collecting a small nursery region, and only occasionally collecting larger, older
-generations. Clearly, when tuning a generational collector, there is a balance to be struck
-between the sizes of the generations, and hence not only the pause times required to collect
-different generations but also the frequency of collections. However, because the sources
-of some inter-generational pointers must be recorded, generational collection imposes a
-small tax on pointer write operations by the mutator.
-Parallel collectors stop the world to collect but reduce pause times by employing multiple threads. Concurrent and incremental collectors aim to reduce pause times still further
-by occasionally performing a small quantum of collection work interleaved or in parallel
-with mutator actions. This too requires taxation of the mutator in order to ensure correct
+On the other hand, an important requirement may be to minimise the collector's intrusion on program execution.
+Many collectors introduce pauses into a program's execution because they stop all mutator threads while collecting garbage. 
+It is clearly desirable to make these pauses as short as possible. 
+This might be particularly important for interactive applications or servers handling transactions (when failure to meet a deadline might lead to the transaction being retried, thus building up a backlog of work).
+However, mechanisms for limiting pause times may have side-effects, as we shall see in more detail in later chapters.
+For example, generational collectors address this goal by frequently and quickly collecting a small nursery region, and only occasionally collecting larger, older generations. 
+Clearly, when tuning a generational collector, there is a balance to be struck between the sizes of the generations, and hence not only the pause times required to collect different generations but also the frequency of collections. 
+However, because the sources of some inter-generational pointers must be recorded, generational collection imposes a small tax on pointer write operations by the mutator.
+Parallel collectors stop the world to collect but reduce pause times by employing multiple threads. 
+Concurrent and incremental collectors aim to reduce pause times still further by occasionally performing a small quantum of collection work interleaved or in parallel with mutator actions.
+This too requires taxation of the mutator in order to ensure correct
 synchronisation between mutators and collectors. As we shall see in Chapter 15, there are
 different ways to handle this synchronisation. The choice of mechanism affects both space
 and time costs. It also affects termination of a garbage collection cycle. The cost of the
@@ -1861,7 +1862,7 @@ In this scenario, finalisation in reachability order will finalise A first and t
 The finalisation race problem
 
 Lest we think that finalisation can be used straightforwardly without risk of subtle bugs, even in the case of objects not requiring special finalisation order there is a subtle kind of race condition that can arise.
-Consider the FileStream example shown in Figure 12.2.
+
 Suppose that the mutator is making its last call to write data to the file.
 The writeData method of FileStream may fetch the descriptor, and then as its last action call write on the descriptor, passing the data.
 Significantly, at this point the method's reference to the FileStream object is dead, and the compiler may optimise it away.
@@ -1884,7 +1885,8 @@ One is to apply synchronisation to all operations on the global data structure -
 This counts on the underlying implementation not to elide synchronisation on an apparently private object if that object has a finalisation method.
 The other approach is to arrange for the collector only to queue the object for finalisation, but not to begin the actual finalisation work.
 Some language implementations offer such queueing mechanisms as built-in features; if a particular implementation does not, then the programmer can code the finalisation method so that all it does is place the object in a programmerdefined queue.
-In the queueing approach, the programmer will add code to the program, at desirable (that is, safe) points. The code will process any enqueued objects needing finalisation.
+In the queueing approach, the programmer will add code to the program, at desirable (that is, safe) points. 
+The code will process any enqueued objects needing finalisation.
 Since running finalisers can cause other objects to be enqueued for finalisation, such queue-processing code should generally continue processing until the queue is empty, and may want to force collections if it is important to reclaim resources promptly.
 Suitable pseudocode appears in Algorithm 12.1.
 As previously noted, the thread that runs this algorithm should not be holding a lock on any object to be finalised, which constrains the places where this processing can proceed safely.
@@ -1910,9 +1912,11 @@ The primary role of most destructors is to cause explicit freeing of memory and 
 However, since programmers can offer any code they want, C++ destructors can handle the case of closing a file, and so forth.
 Destructors also provide a hook through which a programmer can support reference counting to reclaim (acyclic) shared data structures.
 In fact, C++ templates allow a general smart pointer mechanism to drive the reference counting.
-But this shows again that destructors are mostly about reclaiming memory - a job that a garbage collector already handles. Thus, true finalisation remains relatively rare, even for C++.
+But this shows again that destructors are mostly about reclaiming memory - a job that a garbage collector already handles. 
+Thus, true finalisation remains relatively rare, even for C++.
 The memory reclamation aspect of destructors is relatively safe and straightforward, not least because it does not involve user-visible locks.
-However, as soon as the programmer veers into the realm of 'true' finalisation, all the issues we mention here arise and are dropped into the programmer 's lap. This includes dealing with locking, order of invocation of finalisers, and so on.
+However, as soon as the programmer veers into the realm of 'true' finalisation, all the issues we mention here arise and are dropped into the programmer 's lap. 
+This includes dealing with locking, order of invocation of finalisers, and so on.
 Placing the responsibility for all this on the programmer's shoulders makes it difficult to ensure that it is done correctly.
 
 ### Weak references
@@ -1927,7 +1931,8 @@ But consider what happens if some names fall into disuse as the compiler runs.
 There are no references to the names from other data structures, but the canonical copy remains.
 It would be possible to reclaim a string whose only reference is from the table, but the situation is difficult for the program to detect reliably.
 Weak references (also called weak pointers) address this difficulty.
-A weak reference continues to refer to its target so long as the target is reachable from the roots via a chain consisting of ordinary strong references. Such objects are called strongly reachable.
+A weak reference continues to refer to its target so long as the target is reachable from the roots via a chain consisting of ordinary strong references.
+Such objects are called strongly reachable.
 However, if every path from roots to an object includes at least one weak reference, then the collector may reclaim the object and set any weak reference to the object to null.
 Such objects are called weakly-reachable.
 As we will see, the collector may also take additional action, such as notifying the mutator that a given weak reference has been set to null.
@@ -1984,14 +1989,16 @@ The result is a kind of weak reference that the collector may set to null if the
 It can make the judgement based on the space consumed by the weakly reachable objects in question.
 
 It is sometimes useful is to let a program know when an object is weakly reachable but not strongly reachable, and to allow it to take some action before the collector reclaims the object.
-This is a generalisation of finalisation, a topic we took up in Section 12. 1 .
+This is a generalisation of finalisation.
 Among other things, suitable arrangements of these sorts of weak references can allow better control of the order in which the program finalises objects.
 
 #### Supporting multiple pointer strengths
 
-Weak references can be generalised to provide multiple levels of weak pointers in addition to strong references. These levels can be used to address the issues described above.
+Weak references can be generalised to provide multiple levels of weak pointers in addition to strong references. 
+These levels can be used to address the issues described above.
 A totally ordered collection of strengths allows each strength level to be associated with a positive integer.
-For a given integer IX > 0, an object is IX*-reachable if it can be reached by a path of references where each reference has strength at least IX. An object is �X-reachable(without the superscript * ) if it is IX*-reachable but not (�X + I ) -reachable.
+For a given integer IX > 0, an object is IX*-reachable if it can be reached by a path of references where each reference has strength at least IX.
+An object is �X-reachable(without the superscript * ) if it is IX*-reachable but not (�X + I ) -reachable.
 An object is IXreachable if every path to it from a root includes at least one reference of strength a, and at least one path includes no references of strength less than IX.
 Below we will use the names of strengths in place of numeric values; the values are somewhat arbitrary anyway, since what we rely on is the relative order of the strengths.
 Also, for gracefulness of expression, we will say Weakly-reachable instead of Weak-reachable, and so on.
@@ -2031,7 +2038,7 @@ While we worded the steps as for a copying collector, they work just as well for
 However, it is more difficult to construct a reference counting version of the Java semantics.
 One way to do this is not to count the references from Soft, Weak and Phantom objects in the ordinary reference count, but rather to have a separate bit to indicate if an object is a referent of any of these Re fe rence objects.
 It is also convenient if an object has a separate bit indicating that it has a finaliser.
-We assume that there is a global table that, for each object 0 that is the referent of at least one Re ference object, indicates those Re fe r e n ce objects that refer to 0. We call this the Reverse Reference Table.
+We assume that there is a global table that, for each object 0 that is the referent of at least one Reference object, indicates those Re fe r e n ce objects that refer to 0. We call this the Reverse Reference Table.
 
 Since reference counting does not involve separate invocations of a collector, some other heuristic must be used to determine when to clear all Soft references, which must be done atomically.
 Given that approach, it seems easiest to count Soft references as ordinary references which, when they are cleared using the heuristic, may trigger reclamation, or processing of weaker strengths of pointers.
@@ -2041,7 +2048,8 @@ If the object's bits indicate that it is the referent of at least one Re fe renc
 Here are the cases for handling the Re fe rence objects that refer to the object whose ordinary reference count went to zero; we assume they are processed from strongest to weakest.
 
 - Weak: Clear the referent field of the WeakRe ference and enqueue it if requested.
-- Finaliser: Enqueue the object for finalisation. Let the entry in the finalisation queue count as an ordinary reference. Thus, the reference count will go back up to one. Clear the object's 'I have a finaliser' bit.
+- Finaliser: Enqueue the object for finalisation. Let the entry in the finalisation queue count as an ordinary reference. 
+  Thus, the reference count will go back up to one. Clear the object's 'I have a finaliser' bit.
 - Phantom: If the referent has a finaliser, then do nothing. Otherwise, enqueue the Phantom. In order to trigger reconsideration of the referent for reclamation, increment its ordinary reference count and mark the Phantom as enqueued.
   When the Phantom's reference is cleared, if the Phantom has been enqueued, decrement the referent's ordinary reference count.
   Do the same processing when reclaiming a Phantom reference.
@@ -2075,12 +2083,12 @@ Phantoms are intentionally designed to be weaker than finalisation reachability,
 Race in weak pointer clearing
 
 We note that, just as certain compiler optimisations can lead to a race that can cause premature finalisation, the same situations can lead to premature clearing of weak pointers.
-We described the finalisation case in Section 12.1.
 
 Notification of weak pointer clearing
 
 Given a weak reference mechanism, the program may find it useful to know when certain weak references are cleared (or, in the case of Phantoms, could be cleared), and then to take some appropriate action.
-To this end, weak reference mechanisms often also include support for notification. Generally this works by inserting the weak object into a queue.
+To this end, weak reference mechanisms often also include support for notification.
+Generally this works by inserting the weak object into a queue.
 For example, Java has a built-in class Re ferenceQueue for this purpose, and a program can poll a queue or use a blocking operation to wait (with or without a timeout).
 Likewise a program can check whether a given weak object is enqueued Gava allows a weak object to be enqueued on at most one queue).
 It is straightforward to add the necessary enqueuing actions to the collector's multi-pass processing of weak pointers described above.
