@@ -142,3 +142,6 @@ For example, while one would simply like to use the select() interface to manage
 
 ## Links
 
+## References
+
+1. [Real-world Concurrency](https://queue.acm.org/detail.cfm?id=1454462)
