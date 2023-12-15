@@ -1,11 +1,8 @@
 ## Introduction
 
-### Queue Hierarchy
 
-![queue](img/Queue.png)
 
-A collection designed for holding elements prior to processing. Besides basic Collection operations, queues provide
-additional insertion, extraction, and inspection operations.
+Queues provide additional insertion, extraction, and inspection operations.
 
 Each of these methods exists in two forms: one throws an exception if the operation fails, the other returns a special
 value (either null or false, depending on the operation).
@@ -20,53 +17,38 @@ in most implementations, insert operations cannot fail. Summary of Queue methods
 | Remove  | `remove()`       | `poll()`              |
 | Examine | `element()`      | `peek()`              |
 
-Queues **typically, but do not necessarily**, order elements in a `FIFO (first-in-first-out)` manner. Among the
-exceptions are priority queues, which order elements according to a supplied comparator, or the elements' natural
-ordering, and LIFO queues (or stacks) which order the elements LIFO (last-in-first-out). Whatever the ordering used, the
-head of the queue is that element which would be removed by a call to remove() or poll(). In a FIFO queue, all new
-elements are inserted at the tail of the queue. Other kinds of queues may use different placement rules. Every Queue
-implementation must specify its ordering properties.
+Queues **typically, but do not necessarily**, order elements in a `FIFO (first-in-first-out)` manner. 
+Among the exceptions are priority queues, which order elements according to a supplied comparator, or the elements' natural ordering,
+and LIFO queues (or stacks) which order the elements LIFO (last-in-first-out). 
+Whatever the ordering used, the head of the queue is that element which would be removed by a call to remove() or poll().
+In a FIFO queue, all new elements are inserted at the tail of the queue. 
+Other kinds of queues may use different placement rules.
+Every Queue implementation must specify its ordering properties.
+
+
+
+<div style="text-align: center;">
+
+![Fig.1. Queue](img/Queue.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Queue
+</p>
 
 ```java
 public interface Queue<E> extends Collection<E> {
-    /**
-     * Inserts the specified element into this queue if it is possible to do so
-     * immediately without violating capacity restrictions, returning
-     * {@code true} upon success and throwing an {@code IllegalStateException}
-     * if no space is currently available.
-     */
     boolean add(E e);
 
-    /**
-     * Inserts the specified element into this queue if it is possible to do
-     * so immediately without violating capacity restrictions.
-     * When using a capacity-restricted queue, this method is generally
-     * preferable to {@link #add}, which can fail to insert an element only
-     * by throwing an exception.
-     */
     boolean offer(E e);
 
-    // return the head of this queue
-    //throws NoSuchElementException if this queue is empty
     E remove();
 
-    /**
-     * Retrieves and removes the head of this queue,
-     * or returns {@code null} if this queue is empty.
-     */
     E poll();
 
-    /**
-     * Retrieves, but does not remove, the head of this queue.  This method
-     * differs from {@link #peek peek} only in that it throws an exception
-     * if this queue is empty.
-     */
     E element();
 
-    /**
-     * Retrieves, but does not remove, the head of this queue,
-     * or returns {@code null} if this queue is empty.
-     */
     E peek();
 }
 ```
