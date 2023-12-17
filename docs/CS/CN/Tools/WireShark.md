@@ -1,6 +1,17 @@
 ## Introduction
 
 
+
+
+
+```shell
+# RPM
+sudo yum install wireshark
+
+## DEB
+sudo apt-get install wireshark wireshark-qt
+```
+
 if don't have permission
 
 ```shell
@@ -14,3 +25,7 @@ whoami
 
 sudo chown robin:admin bp*
 ```
+
+
+## Links
+

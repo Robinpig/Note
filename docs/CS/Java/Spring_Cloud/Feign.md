@@ -16,7 +16,7 @@ Features:
 
 ![](https://camo.githubusercontent.com/f1bd8b9bfe3c049484b0776b42668bb76a57872fe0f01402e5ef73d29b811e50/687474703a2f2f7777772e706c616e74756d6c2e636f6d2f706c616e74756d6c2f70726f78793f63616368653d6e6f267372633d68747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f4f70656e466569676e2f666569676e2f6d61737465722f7372632f646f63732f6f766572766965772d6d696e646d61702e69756d6c)
 
-
+Enable with `@EnableFeignClients`
 
 ```java
 @Configuration(proxyBeanMethods = false)
@@ -80,7 +80,7 @@ registerBeanDefinition into [Spring](/docs/CS/Java/Spring/IoC.md).
 > 
 > BeanDefinition is FeignClientFactoryBean.class.
 
-```java
+```
 private void registerFeignClient(BeanDefinitionRegistry registry,
 			AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
 		String className = annotationMetadata.getClassName();
@@ -157,7 +157,7 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, A
 }
 ```
 
-### Trageter
+### Targeter
 
 
 ```java
@@ -234,6 +234,31 @@ public class ReflectiveFeign extends Feign {
         }
         return proxy;
     }
+
+    public Map<String, MethodHandler> apply(Target target) {
+        List<MethodMetadata> metadata = contract.parseAndValidateMetadata(target.type());
+        Map<String, MethodHandler> result = new LinkedHashMap<String, MethodHandler>();
+        for (MethodMetadata md : metadata) {
+            BuildTemplateByResolvingArgs buildTemplate;
+            if (!md.formParams().isEmpty() && md.template().bodyTemplate() == null) {
+                buildTemplate =
+                        new BuildFormEncodedTemplateFromArgs(md, encoder, queryMapEncoder, target);
+            } else if (md.bodyIndex() != null) {
+                buildTemplate = new BuildEncodedTemplateFromArgs(md, encoder, queryMapEncoder, target);
+            } else {
+                buildTemplate = new BuildTemplateByResolvingArgs(md, queryMapEncoder, target);
+            }
+            if (md.isIgnored()) {
+                result.put(md.configKey(), args -> {
+                    throw new IllegalStateException(md.configKey() + " is not a method handled by feign");
+                });
+            } else {
+                result.put(md.configKey(),
+                        factory.create(target, md, buildTemplate, options, decoder, errorDecoder));
+            }
+        }
+        return result;
+    }
 }
 ```
 
@@ -241,32 +266,6 @@ public class ReflectiveFeign extends Feign {
 
 #### parse
 
-```java
-public Map<String, MethodHandler> apply(Target target) {
-      List<MethodMetadata> metadata = contract.parseAndValidateMetadata(target.type());
-      Map<String, MethodHandler> result = new LinkedHashMap<String, MethodHandler>();
-      for (MethodMetadata md : metadata) {
-        BuildTemplateByResolvingArgs buildTemplate;
-        if (!md.formParams().isEmpty() && md.template().bodyTemplate() == null) {
-          buildTemplate =
-              new BuildFormEncodedTemplateFromArgs(md, encoder, queryMapEncoder, target);
-        } else if (md.bodyIndex() != null) {
-          buildTemplate = new BuildEncodedTemplateFromArgs(md, encoder, queryMapEncoder, target);
-        } else {
-          buildTemplate = new BuildTemplateByResolvingArgs(md, queryMapEncoder, target);
-        }
-        if (md.isIgnored()) {
-          result.put(md.configKey(), args -> {
-            throw new IllegalStateException(md.configKey() + " is not a method handled by feign");
-          });
-        } else {
-          result.put(md.configKey(),
-              factory.create(target, md, buildTemplate, options, decoder, errorDecoder));
-        }
-      }
-      return result;
-}
-```
 parseAndValidateMetadata like @RequestMapping in [Spring MVC](/docs/CS/Java/Spring/MVC.md)
 
 ```java
@@ -346,44 +345,35 @@ abstract class BaseContract implements Contract {
 dispatch method in cacheMap
 
 ```java
-  static class FeignInvocationHandler implements InvocationHandler {
+static class FeignInvocationHandler implements InvocationHandler {
 
     private final Target target;
     private final Map<Method, MethodHandler> dispatch;
-}
-```
 
-#### invoke
-
-Using RequestTemplate.
-
-```java
-@Override
-  public Object invoke(Object[] argv) throws Throwable {
-    RequestTemplate template = buildTemplateFromArgs.create(argv);
-    Options options = findOptions(argv);
-    Retryer retryer = this.retryer.clone();
-    while (true) {
-      try {
-        return executeAndDecode(template, options);
-      } catch (RetryableException e) {
-        try {
-          retryer.continueOrPropagate(e);
-        } catch (RetryableException th) {
-          Throwable cause = th.getCause();
-          if (propagationPolicy == UNWRAP && cause != null) {
-            throw cause;
-          } else {
-            throw th;
-          }
+    @Override
+    public Object invoke(Object[] argv) throws Throwable {
+        RequestTemplate template = buildTemplateFromArgs.create(argv);
+        Options options = findOptions(argv);
+        Retryer retryer = this.retryer.clone();
+        while (true) {
+            try {
+                return executeAndDecode(template, options);
+            } catch (RetryableException e) {
+                try {
+                    retryer.continueOrPropagate(e);
+                } catch (RetryableException th) {
+                    Throwable cause = th.getCause();
+                    if (propagationPolicy == UNWRAP && cause != null) {
+                        throw cause;
+                    } else {
+                        throw th;
+                    }
+                }
+                continue;
+            }
         }
-        if (logLevel != Logger.Level.NONE) {
-          logger.logRetry(metadata.configKey(), logLevel);
-        }
-        continue;
-      }
     }
-  }
+}
 ```
 
 ## Interceptor
