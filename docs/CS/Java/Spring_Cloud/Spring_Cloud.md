@@ -146,6 +146,8 @@ use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
 [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
 
+Load Balancer
+
 ## Circuit Breaker
 
 [Spring Cloud Circuit breaker](https://spring.io/projects/spring-cloud-circuitbreaker) provides an abstraction across different circuit breaker implementations.
@@ -185,6 +187,10 @@ The ReactiveCircuitBreakerFactory.create API will create an instance of a class 
 The run method takes with a Mono or Flux and wraps it in a circuit breaker. 
 
 ## Gateway
+
+Zuul
+
+
 
 - [Gateway](/docs/CS/Java/Spring_Cloud/gateway.md)
 
