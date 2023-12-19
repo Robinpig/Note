@@ -1,5 +1,21 @@
 ## Introduction
 
+
+```dot
+digraph g{
+   shape= box
+   initServerConfig
+   initServer
+   
+    main[shape=box]
+    OS[label="Operating System", shape=box]
+    App->OS->App
+    OS->CPU->OS
+    OS->Memory->OS
+    OS->Devices->OS
+}
+```
+
 The following are the most important steps in order to startup the Redis server.
 
 * `initServerConfig()` setups the default values of the `server` structure.
@@ -13,9 +29,7 @@ int main(int argc, char **argv) {
     int j;
 
     /* We need to initialize our libraries, and the server configuration. */
-#ifdef INIT_SETPROCTITLE_REPLACEMENT
-    spt_init(argc, argv);
-#endif
+
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
@@ -1291,7 +1305,7 @@ Ready to spawn our threads. We use the single argument the thread function accep
 }
 ```
 
-#### bioProcess
+##### bioProcess
 
 ```c
 void *bioProcessBackgroundJobs(void *arg) {
@@ -1402,24 +1416,11 @@ bioCreateLazyFreeJob
 }
 ```
 
-#### Multiple I/O
+#### initThreadedIO
 
+Initialize the data structures needed for threaded I/O.
 ```c
-/* Initialize the data structures needed for threaded I/O. */
 void initThreadedIO(void) {
-    server.io_threads_active = 0; /* We start with threads not active. */
-
-    /* Don't spawn any thread if the user selected a single thread:
-     * we'll handle I/O directly from the main thread. */
-    if (server.io_threads_num == 1) return;
-
-    if (server.io_threads_num > IO_THREADS_MAX_NUM) {
-        serverLog(LL_WARNING,"Fatal: too many I/O threads configured. "
-                             "The maximum number is %d.", IO_THREADS_MAX_NUM);
-        exit(1);
-    }
-
-    /* Spawn and initialize the I/O threads. */
     for (int i = 0; i < server.io_threads_num; i++) {
         /* Things we do for all the threads including the main thread. */
         io_threads_list[i] = listCreate();
@@ -1439,20 +1440,14 @@ void initThreadedIO(void) {
 }
 ```
 
-#### IOThreadMain
+##### IOThreadMain
 
 call `readQueryFromClient` when `IO_THREADS_OP_READ` in loop
 
 ```c
 void *IOThreadMain(void *myid) {
-    /* The ID is the thread number (from 0 to server.iothreads_num-1), and is
-     * used by the thread to just manipulate a single sub-array of clients. */
     long id = (unsigned long)myid;
     char thdname[16];
-
-    snprintf(thdname, sizeof(thdname), "io_thd_%ld", id);
-    redis_set_thread_title(thdname);
-    redisSetCpuAffinity(server.server_cpulist);
 
     while(1) {
         /* Wait for start */
@@ -1466,10 +1461,6 @@ void *IOThreadMain(void *myid) {
             pthread_mutex_unlock(&io_threads_mutex[id]);
             continue;
         }
-
-        serverAssert(io_threads_pending[id] != 0);
-
-        if (tio_debug) printf("[%ld] %d to handle\n", id, (int)listLength(io_threads_list[id]));
 
         /* Process: note that the main thread will never touch our list
          * before we drop the pending count to 0. */
