@@ -1,6 +1,20 @@
 ## Introduction
 
-## main
+
+```dot
+digraph g{
+   shape= box
+   initServerConfig
+   initServer
+   
+    main[shape=box]
+    OS[label="Operating System", shape=box]
+    App->OS->App
+    OS->CPU->OS
+    OS->Memory->OS
+    OS->Devices->OS
+}
+```
 
 The following are the most important steps in order to startup the Redis server.
 
@@ -15,9 +29,7 @@ int main(int argc, char **argv) {
     int j;
 
     /* We need to initialize our libraries, and the server configuration. */
-#ifdef INIT_SETPROCTITLE_REPLACEMENT
-    spt_init(argc, argv);
-#endif
+
     setlocale(LC_COLLATE,"");
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
@@ -646,7 +658,7 @@ void initServer(void) {
 }
 ```
 
-#### setupSignalHandlers
+### setupSignalHandlers
 
 ```c
 void setupSignalHandlers(void) {
@@ -673,7 +685,7 @@ void setupSignalHandlers(void) {
 }
 ```
 
-#### createSharedObjects
+### createSharedObjects
 
 shared objects 0 ~ 9999
 
@@ -797,7 +809,7 @@ void createSharedObjects(void) {
 }
 ```
 
-#### aeCreateTimeEvent
+### aeCreateTimeEvent
 
 `aeCreateTimeEvent` accepts the following as parameters:
 
@@ -842,7 +854,12 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
 }
 ```
 
-#### createEventHandler
+### createEventHandler
+
+
+<!-- tabs:start -->
+
+##### **TCP**
 
 ```c
 // networking.c
@@ -866,7 +883,10 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
         acceptCommonHandler(connCreateAcceptedSocket(cfd),0,cip);
     }
 }
+```
+##### **TLS**
 
+```c
 void acceptTLSHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[NET_IP_STR_LEN];
@@ -886,7 +906,11 @@ void acceptTLSHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
         acceptCommonHandler(connCreateAcceptedTLS(cfd, server.tls_auth_clients),0,cip);
     }
 }
+```
 
+##### **Unix**
+
+```c
 void acceptUnixHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cfd, max = MAX_ACCEPTS_PER_CALL;
     UNUSED(el);
@@ -907,7 +931,107 @@ void acceptUnixHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
 }
 ```
 
-##### acceptCommonHandler
+<!-- tabs:end -->
+
+#### createAcceptedSocket
+
+```c
+connection *connCreateAcceptedSocket(int fd) {
+    connection *conn = connCreateSocket();
+    conn->fd = fd;
+    conn->state = CONN_STATE_ACCEPTING;
+    return conn;
+}
+
+connection *connCreateSocket() {
+    connection *conn = zcalloc(sizeof(connection));
+    conn->type = &CT_Socket;
+    conn->fd = -1;
+
+    return conn;
+}
+```
+
+set socketEventHandler for conn
+```c
+ConnectionType CT_Socket = {
+    .ae_handler = connSocketEventHandler,
+    .close = connSocketClose,
+    .write = connSocketWrite,
+    .writev = connSocketWritev,
+    .read = connSocketRead,
+    .accept = connSocketAccept,
+    .connect = connSocketConnect,
+    .set_write_handler = connSocketSetWriteHandler,
+    .set_read_handler = connSocketSetReadHandler,
+    .get_last_error = connSocketGetLastError,
+    .blocking_connect = connSocketBlockingConnect,
+    .sync_write = connSocketSyncWrite,
+    .sync_read = connSocketSyncRead,
+    .sync_readline = connSocketSyncReadLine,
+    .get_type = connSocketGetType
+};
+
+
+
+static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientData, int mask)
+{
+    UNUSED(el);
+    UNUSED(fd);
+    connection *conn = clientData;
+
+    if (conn->state == CONN_STATE_CONNECTING &&
+            (mask & AE_WRITABLE) && conn->conn_handler) {
+
+        int conn_error = connGetSocketError(conn);
+        if (conn_error) {
+            conn->last_errno = conn_error;
+            conn->state = CONN_STATE_ERROR;
+        } else {
+            conn->state = CONN_STATE_CONNECTED;
+        }
+
+        if (!conn->write_handler) aeDeleteFileEvent(server.el,conn->fd,AE_WRITABLE);
+
+        if (!callHandler(conn, conn->conn_handler)) return;
+        conn->conn_handler = NULL;
+    }
+
+    /* Normally we execute the readable event first, and the writable
+     * event later. This is useful as sometimes we may be able
+     * to serve the reply of a query immediately after processing the
+     * query.
+     *
+     * However if WRITE_BARRIER is set in the mask, our application is
+     * asking us to do the reverse: never fire the writable event
+     * after the readable. In such a case, we invert the calls.
+     * This is useful when, for instance, we want to do things
+     * in the beforeSleep() hook, like fsync'ing a file to disk,
+     * before replying to a client. */
+    int invert = conn->flags & CONN_FLAG_WRITE_BARRIER;
+
+    int call_write = (mask & AE_WRITABLE) && conn->write_handler;
+    int call_read = (mask & AE_READABLE) && conn->read_handler;
+
+    /* Handle normal I/O flows */
+    if (!invert && call_read) {
+        if (!callHandler(conn, conn->read_handler)) return;
+    }
+    /* Fire the writable event. */
+    if (call_write) {
+        if (!callHandler(conn, conn->write_handler)) return;
+    }
+    /* If we have to invert the call, fire the readable event now
+     * after the writable one. */
+    if (invert && call_read) {
+        if (!callHandler(conn, conn->read_handler)) return;
+    }
+}
+```
+
+
+
+#### acceptCommonHandler
 
 ```c
 // networking.c
@@ -947,11 +1071,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
         connClose(conn);
         return;
     }
-```
 
-Create connection and client
-
-```c
     if ((c = createClient(conn)) == NULL) {
         connClose(conn); /* May be already closed, just ignore errors */
         return;
@@ -1125,12 +1245,10 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
 
 ### InitServerLast
 
+Some steps in server initialization need to be done last (after modules are loaded).
+
+Specifically, creation of threads due to a race bug in ld.so, in which Thread Local Storage initialization collides with dlopen call.
 ```c
-/* Some steps in server initialization need to be done last (after modules
- * are loaded).
- * Specifically, creation of threads due to a race bug in ld.so, in which
- * Thread Local Storage initialization collides with dlopen call.
- * see: https://sourceware.org/bugzilla/show_bug.cgi?id=19329 */
 void InitServerLast() {
     bioInit();
     initThreadedIO();
@@ -1187,7 +1305,7 @@ Ready to spawn our threads. We use the single argument the thread function accep
 }
 ```
 
-#### bioProcess
+##### bioProcess
 
 ```c
 void *bioProcessBackgroundJobs(void *arg) {
@@ -1298,24 +1416,11 @@ bioCreateLazyFreeJob
 }
 ```
 
-#### Multiple I/O
+#### initThreadedIO
 
+Initialize the data structures needed for threaded I/O.
 ```c
-/* Initialize the data structures needed for threaded I/O. */
 void initThreadedIO(void) {
-    server.io_threads_active = 0; /* We start with threads not active. */
-
-    /* Don't spawn any thread if the user selected a single thread:
-     * we'll handle I/O directly from the main thread. */
-    if (server.io_threads_num == 1) return;
-
-    if (server.io_threads_num > IO_THREADS_MAX_NUM) {
-        serverLog(LL_WARNING,"Fatal: too many I/O threads configured. "
-                             "The maximum number is %d.", IO_THREADS_MAX_NUM);
-        exit(1);
-    }
-
-    /* Spawn and initialize the I/O threads. */
     for (int i = 0; i < server.io_threads_num; i++) {
         /* Things we do for all the threads including the main thread. */
         io_threads_list[i] = listCreate();
@@ -1335,20 +1440,14 @@ void initThreadedIO(void) {
 }
 ```
 
-#### IOThreadMain
+##### IOThreadMain
 
 call `readQueryFromClient` when `IO_THREADS_OP_READ` in loop
 
 ```c
 void *IOThreadMain(void *myid) {
-    /* The ID is the thread number (from 0 to server.iothreads_num-1), and is
-     * used by the thread to just manipulate a single sub-array of clients. */
     long id = (unsigned long)myid;
     char thdname[16];
-
-    snprintf(thdname, sizeof(thdname), "io_thd_%ld", id);
-    redis_set_thread_title(thdname);
-    redisSetCpuAffinity(server.server_cpulist);
 
     while(1) {
         /* Wait for start */
@@ -1362,10 +1461,6 @@ void *IOThreadMain(void *myid) {
             pthread_mutex_unlock(&io_threads_mutex[id]);
             continue;
         }
-
-        serverAssert(io_threads_pending[id] != 0);
-
-        if (tio_debug) printf("[%ld] %d to handle\n", id, (int)listLength(io_threads_list[id]));
 
         /* Process: note that the main thread will never touch our list
          * before we drop the pending count to 0. */
