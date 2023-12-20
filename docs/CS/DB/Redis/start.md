@@ -1,21 +1,5 @@
 ## Introduction
 
-
-```dot
-digraph g{
-   shape= box
-   initServerConfig
-   initServer
-   
-    main[shape=box]
-    OS[label="Operating System", shape=box]
-    App->OS->App
-    OS->CPU->OS
-    OS->Memory->OS
-    OS->Devices->OS
-}
-```
-
 The following are the most important steps in order to startup the Redis server.
 
 * `initServerConfig()` setups the default values of the `server` structure.
