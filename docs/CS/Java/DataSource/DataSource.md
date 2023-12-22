@@ -2,9 +2,20 @@
 
 ## Connection Management
 
-### Pool Size
+
 
 maximum/minimum connection
+
+MinIdle
+
+
+fixed pool: minIdle == maxPoolSize
+
+
+IdleTimeout
+
+MaxLifetime
+
 
 #### pool-locking
 
