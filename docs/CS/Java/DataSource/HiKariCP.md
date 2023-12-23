@@ -3,6 +3,12 @@
 [HikariCP](https://github.com/brettwooldridge/HikariCP) contains many micro-optimizations that individually are barely measurable, but together combine as a boost to overall performance.
 Some of these optimizations are measured in fractions of a millisecond amortized over millions of invocations.
 
+
+## Params
+
+
+
+
 ### ArrayList
 
 One non-trivial (performance-wise) optimization was eliminating the use of an ArrayList<Statement> instance in the ConnectionProxy used to track open Statement instances.
