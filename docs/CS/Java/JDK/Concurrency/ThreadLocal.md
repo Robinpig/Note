@@ -8,24 +8,23 @@ Each thread holds an implicit reference to its copy of a thread-local variable a
 **after a thread goes away, all of its copies of thread-local instances are subject to garbage collection (unless other references to these copies exist**).
 
 
+> Don't Cache Expensive Reusable Objects in Thread-Local Variables
 
 ## ThreadLocal
 
 ### Create ThreadLocal withInitial
 
 ```java
-/**
- * Creates a thread local variable. The initial value of the variable is
- * determined by invoking the {@code get} method on the {@code Supplier}.
- */
-public static <S> ThreadLocal<S> withInitial(Supplier<? extends S> supplier) {
-    return new SuppliedThreadLocal<>(supplier);
-}
+public class ThreadLocal<T> {
+    public static <S> ThreadLocal<S> withInitial(Supplier<? extends S> supplier) {
+        return new SuppliedThreadLocal<>(supplier);
+    }
 
-/**
- * Creates a thread local variable.
- */
-public ThreadLocal() {
+    /**
+     * Creates a thread local variable.
+     */
+    public ThreadLocal() {
+    }
 }
 ```
 
@@ -36,32 +35,27 @@ public ThreadLocal() {
 `create ThreadLocalMap when set the first value`
 
 ```java
-/**
- * Sets the current thread's copy of this thread-local variable
- * to the specified value.  Most subclasses will have no need to
- * override this method, relying solely on the {@link #initialValue}
- * method to set the values of thread-locals.
- */
-public void set(T value) {
-    Thread t = Thread.currentThread();
-    ThreadLocalMap map = getMap(t);
-    if (map != null)
-        map.set(this, value);
-    else
-        createMap(t, value);
+public class ThreadLocal<T> {
+    public void set(T value) {
+        Thread t = Thread.currentThread();
+        ThreadLocalMap map = getMap(t);
+        if (map != null)
+            map.set(this, value);
+        else
+            createMap(t, value);
+    }
+
+    /** ThreadLocal values pertaining to this thread. This map is maintained
+     * by the ThreadLocal class. 
+     */
+    ThreadLocal.ThreadLocalMap threadLocals = null;
+
+    /**
+     * InheritableThreadLocal values pertaining to this thread. This map is
+     * maintained by the InheritableThreadLocal class.
+     */
+    ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
 }
-
-/** ThreadLocal values pertaining to this thread. This map is maintained
- * by the ThreadLocal class. 
- */
-ThreadLocal.ThreadLocalMap threadLocals = null;
-
-/**
- * InheritableThreadLocal values pertaining to this thread. This map is
- * maintained by the InheritableThreadLocal class.
- */
-ThreadLocal.ThreadLocalMap inheritableThreadLocals = null;
-
 ```
 
 ### create ThreadLocalMap
@@ -118,7 +112,8 @@ static class Entry extends WeakReference<ThreadLocal<?>> {
 
 ### hash
 
-ThreadLocals rely on **per-thread linear-probe hash maps** attached to each thread (**Thread.threadLocals and inheritableThreadLocals**). The ThreadLocal objects act as keys, searched via threadLocalHashCode. This is a custom hash code (**useful only within ThreadLocalMaps**) that **eliminates collisions in the common case where consecutively constructed ThreadLocals are used by the same threads**, while remaining well-behaved in less common cases.
+ThreadLocals rely on **per-thread linear-probe hash maps** attached to each thread (**Thread.threadLocals and inheritableThreadLocals**). 
+The ThreadLocal objects act as keys, searched via threadLocalHashCode. This is a custom hash code (**useful only within ThreadLocalMaps**) that **eliminates collisions in the common case where consecutively constructed ThreadLocals are used by the same threads**, while remaining well-behaved in less common cases.
 
 **HASH_INCREMENT = 0x61c88647**
 
