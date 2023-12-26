@@ -660,7 +660,7 @@ Implementations of BeanDefinitionRegistryPostProcessor:
 
 - ConfigurationClassPostProcessor
 - DubboAutoConfiguration
-- MyBatis MapperScannerConfigurer
+- [MyBatis MapperScannerConfigurer](/docs/CS/Java/MyBatis/MyBatis-Spring.md?id=MapperScan)
 
 ```java
 public abstract class AbstractApplicationContext {

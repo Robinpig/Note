@@ -1,6 +1,6 @@
 ## Introduction
 
-## transaction
+## Transaction
 
 <div style="text-align: center;">
 
@@ -19,12 +19,12 @@ public class SpringManagedTransactionFactory implements TransactionFactory {
     public Transaction newTransaction(DataSource dataSource, TransactionIsolationLevel level, boolean autoCommit) {
         return new SpringManagedTransaction(dataSource);
     }
-    
+  
     @Override
     public Transaction newTransaction(Connection conn) {
         throw new UnsupportedOperationException("New Spring transactions require a DataSource");
     }
-    
+  
     @Override
     public void setProperties(Properties props) {
         // not needed in this version
@@ -50,14 +50,14 @@ public class SpringManagedTransaction implements Transaction {
 }
 ```
 
-Helper class that provides static methods for obtaining JDBC Connections from a DataSource. Includes special support for Spring-managed transactional Connections, e.g. managed by DataSourceTransactionManager or org.springframework.transaction.jta.JtaTransactionManager.
-Used internally by Spring's org.springframework.jdbc.core.JdbcTemplate, Spring's JDBC operation objects and the JDBC DataSourceTransactionManager. Can also be used directly in application code.
+Helper class that provides static methods for obtaining JDBC Connections from a DataSource.
+Includes special support for Spring-managed transactional Connections, e.g. managed by DataSourceTransactionManager or org.springframework.transaction.jta.JtaTransactionManager.
+Used internally by Spring's org.springframework.jdbc.core.JdbcTemplate, Spring's JDBC operation objects and the JDBC DataSourceTransactionManager.
+Can also be used directly in application code.
 
 ```java
 // org.springframework.jdbc.datasource.DataSourceUtils
 public static Connection doGetConnection(DataSource dataSource) throws SQLException {
-   Assert.notNull(dataSource, "No DataSource specified");
-
    ConnectionHolder conHolder = (ConnectionHolder) TransactionSynchronizationManager.getResource(dataSource);
    if (conHolder != null && (conHolder.hasConnection() || conHolder.isSynchronizedWithTransaction())) {
       conHolder.requested();
@@ -296,9 +296,83 @@ Because every call will new SqlSession, please use transaction.
 
 ![](img/MapperScan.png)
 
+
+### MapperScan
+
+Use this annotation to register MyBatis mapper interfaces when using Java Config.
+It performs when same work as MapperScannerConfigurer via MapperScannerRegistrar.
+
+**Configuration example**:
+
+```java
+@Configuration
+@MapperScan("org.mybatis.spring.sample.mapper")
+public class AppConfig {
+
+    @Bean
+    public DataSource dataSource() {
+        return new EmbeddedDatabaseBuilder()
+                .addScript("schema.sql")
+                .addScript("data.sql")
+                .build();
+    }
+
+    @Bean
+    public DataSourceTransactionManager transactionManager() {
+        return new DataSourceTransactionManager(dataSource());
+    }
+
+    @Bean
+    public SqlSessionFactory sqlSessionFactory() throws Exception {
+        SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
+        sessionFactory.setDataSource(dataSource());
+        return sessionFactory.getObject();
+    }
+}
+```
+
+MapperScannerRegistrar register MapperScannerConfigurer into BeanDefinitionRegistry
+
+```java
+public class MapperScannerRegistrar implements ImportBeanDefinitionRegistrar, ResourceLoaderAware {
+    void registerBeanDefinitions(AnnotationMetadata annoMeta, AnnotationAttributes annoAttrs,
+                                 BeanDefinitionRegistry registry, String beanName) {
+
+        BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(MapperScannerConfigurer.class);
+        // ...
+        registry.registerBeanDefinition(beanName, builder.getBeanDefinition());
+
+    }
+}
+```
+
+#### processBeanDefinitions
+
+BeanDefinitionRegistryPostProcessor that searches recursively starting from a base package for **interfaces** and registers them as **MapperFactoryBean**.
+
+```java
+public class MapperScannerConfigurer
+        implements BeanDefinitionRegistryPostProcessor, InitializingBean, ApplicationContextAware, BeanNameAware {
+    @Override
+    public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
+        // ...
+        scanner.scan(
+                StringUtils.tokenizeToStringArray(this.basePackage, ConfigurableApplicationContext.CONFIG_LOCATION_DELIMITERS));
+    }
+}
+```
+
+This class was a BeanFactoryPostProcessor until 1.0.1 version. It changed to BeanDefinitionRegistryPostProcessor in 1.0.2.
+See https://jira.springsource.org/browse/SPR-8269 for the details.
+
+
+
 ### SpringBoot
 
-Auto-Configuration for Mybatis. Contributes a **SqlSessionFactory** and a **SqlSessionTemplate**. If `org.mybatis.spring.annotation.MapperScan` is used, or a configuration file is specified as a property, those will be considered, otherwise this auto-configuration will attempt to register mappers based on the interface definitions in or under the root auto-configuration package.
+Auto-Configuration for Mybatis.
+Contributes a **SqlSessionFactory** and a **SqlSessionTemplate**.
+If `org.mybatis.spring.annotation.MapperScan` is used, or a configuration file is specified as a property, those will be considered,
+otherwise this auto-configuration will attempt to register mappers based on the interface definitions in or under the root auto-configuration package.
 
 ```java
 @org.springframework.context.annotation.Configuration
@@ -344,164 +418,6 @@ public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Excepti
   }
 
   return factory.getObject();
-}
-```
-
-### use @MapperScan
-
-Use this annotation to register MyBatis mapper interfaces when using Java Config. It performs when same work as MapperScannerConfigurer via MapperScannerRegistrar.
-
-**Configuration example**:
-
-```java
-   @Configuration
-   @MapperScan("org.mybatis.spring.sample.mapper")
-   public class AppConfig {
-
-     @Bean
-     public DataSource dataSource() {
-       return new EmbeddedDatabaseBuilder()
-                .addScript("schema.sql")
-                .build();
-     }
-  
-     @Bean
-     public DataSourceTransactionManager transactionManager() {
-       return new DataSourceTransactionManager(dataSource());
-     }
-  
-     @Bean
-     public SqlSessionFactory sqlSessionFactory() throws Exception {
-       SqlSessionFactoryBean sessionFactory = new SqlSessionFactoryBean();
-       sessionFactory.setDataSource(dataSource());
-       return sessionFactory.getObject();
-     }
-   }
-```
-
-```java
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-@Documented
-@Import(MapperScannerRegistrar.class)
-@Repeatable(MapperScans.class)
-public @interface MapperScan {
-}
-```
-
-```java
-// MapperScannerRegistrar
-void registerBeanDefinitions(AnnotationAttributes annoAttrs, BeanDefinitionRegistry registry) {
-
-  ClassPathMapperScanner scanner = new ClassPathMapperScanner(registry);
-
-  // this check is needed in Spring 3.1
-  Optional.ofNullable(resourceLoader).ifPresent(scanner::setResourceLoader);
-
-  ...
-
-  scanner.registerFilters();
-  scanner.doScan(StringUtils.toStringArray(basePackages));
-}
-```
-
-#### processBeanDefinitions
-
-Calls the parent search that will search and register all the candidates. Then the registered objects are post processed to set them as **MapperFactoryBeans**
-
-```java
-// org.mybatis.spring.mapper.ClassPathMapperScanner extends ClassPathBeanDefinitionScanner 
-@Override
-public Set<BeanDefinitionHolder> doScan(String... basePackages) {
-  Set<BeanDefinitionHolder> beanDefinitions = super.doScan(basePackages);
-
-  if (beanDefinitions.isEmpty()) {
-  } else {
-    processBeanDefinitions(beanDefinitions);
-  }
-
-  return beanDefinitions;
-}
-
-private void processBeanDefinitions(Set<BeanDefinitionHolder> beanDefinitions) {
-  GenericBeanDefinition definition;
-  for (BeanDefinitionHolder holder : beanDefinitions) {
-    definition = (GenericBeanDefinition) holder.getBeanDefinition();
-    String beanClassName = definition.getBeanClassName();
-
-    // the mapper interface is the original class of the bean
-    // but, the actual class of the bean is MapperFactoryBean
-    definition.getConstructorArgumentValues().addGenericArgumentValue(beanClassName); // issue #59
-    definition.setBeanClass(this.mapperFactoryBean.getClass());
-
-    definition.getPropertyValues().add("addToConfig", this.addToConfig);
-
-    boolean explicitFactoryUsed = false;
-    if (StringUtils.hasText(this.sqlSessionFactoryBeanName)) {
-      definition.getPropertyValues().add("sqlSessionFactory", new RuntimeBeanReference(this.sqlSessionFactoryBeanName));
-      explicitFactoryUsed = true;
-    } else if (this.sqlSessionFactory != null) {
-      definition.getPropertyValues().add("sqlSessionFactory", this.sqlSessionFactory);
-      explicitFactoryUsed = true;
-    }
-
-    if (StringUtils.hasText(this.sqlSessionTemplateBeanName)) {
-      definition.getPropertyValues().add("sqlSessionTemplate", new RuntimeBeanReference(this.sqlSessionTemplateBeanName));
-      explicitFactoryUsed = true;
-    } else if (this.sqlSessionTemplate != null) {
-      definition.getPropertyValues().add("sqlSessionTemplate", this.sqlSessionTemplate);
-      explicitFactoryUsed = true;
-    }
-
-      definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
-    }
-  }
-}
-```
-
-### MapperScannerConfigurer
-
-BeanDefinitionRegistryPostProcessor that searches recursively starting from a base package for interfaces and registers them as MapperFactoryBean.
-Note that only interfaces with at least one method will be registered; concrete classes will be ignored.
-
-This class was a BeanFactoryPostProcessor until 1.0.1 version. It changed to BeanDefinitionRegistryPostProcessor in 1.0.2.
-See https://jira.springsource.org/browse/SPR-8269 for the details.
-
-The basePackage property can contain more than one package name, separated by either commas or semicolons.
-This class supports filtering the mappers created by either specifying a marker interface or an annotation.
-The annotationClass property specifies an annotation to search for.
-The markerInterface property specifies a parent interface to search for.
-If both properties are specified, mappers are added for interfaces that match either criteria.
-By default, these two properties are null, so all interfaces in the given basePackage are added as mappers.
-This configurer enables autowire for all the beans that it creates so that they are automatically autowired with the proper SqlSessionFactory or SqlSessionTemplate.
-If there is more than one SqlSessionFactory in the application, however, autowiring cannot be used.
-In this case you must explicitly specify either an SqlSessionFactory or an SqlSessionTemplate to use via the bean name properties.
-Bean names are used rather than actual objects because Spring does not initialize property placeholders until after this class is processed.
-
-Call [ClassPathMapperScanner::processBeanDefinitions()](/docs/CS/Java/MyBatis/MyBatis-Spring.md?id=processBeanDefinitions)
-
-```java
-public class MapperScannerConfigurer implements BeanDefinitionRegistryPostProcessor, InitializingBean, ApplicationContextAware, BeanNameAware {
-
-  @Override
-  public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
-    if (this.processPropertyPlaceHolders) {
-      processPropertyPlaceHolders();
-    }
-
-    ClassPathMapperScanner scanner = new ClassPathMapperScanner(registry);
-    scanner.setAddToConfig(this.addToConfig);
-    scanner.setAnnotationClass(this.annotationClass);
-    scanner.setMarkerInterface(this.markerInterface);
-    scanner.setSqlSessionFactory(this.sqlSessionFactory);
-    scanner.setSqlSessionTemplate(this.sqlSessionTemplate);
-    scanner.setSqlSessionFactoryBeanName(this.sqlSessionFactoryBeanName);
-    scanner.setSqlSessionTemplateBeanName(this.sqlSessionTemplateBeanName);
-    scanner.setResourceLoader(this.applicationContext);
-    scanner.setBeanNameGenerator(this.nameGenerator);
-    scanner.registerFilters();
-    scanner.scan(StringUtils.tokenizeToStringArray(this.basePackage, ConfigurableApplicationContext.CONFIG_LOCATION_DELIMITERS));
-  }
 }
 ```
 
