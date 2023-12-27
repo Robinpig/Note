@@ -1,8 +1,4 @@
-
-
 ## SqlSessionFactory
-
-
 
 ```java
 /**
@@ -21,8 +17,6 @@ public interface SqlSessionFactory {
   Configuration getConfiguration();
 }
 ```
-
-
 
 ### DefaultSqlSessionFactory
 
@@ -75,7 +69,7 @@ public class SqlSessionManager implements SqlSessionFactory, SqlSession {
         // Failover to true, as most poor drivers
         // or databases won't support transactions
         autoCommit = true;
-      }      
+      }    
       final Environment environment = configuration.getEnvironment();
       final TransactionFactory transactionFactory = getTransactionFactoryFromEnvironment(environment);
       final Transaction tx = transactionFactory.newTransaction(connection);
@@ -96,8 +90,6 @@ public class SqlSessionManager implements SqlSessionFactory, SqlSession {
   }
 }
 ```
-
-
 
 ### SqlSessionManager
 
@@ -120,8 +112,6 @@ public class SqlSessionManager implements SqlSessionFactory, SqlSession {
   } 
 }
 ```
-
-
 
 SqlSessionManager 与 DefaultSqlSessionFactory 的主要不同点 SqlSessionManager 提供了两种模式 在SqlSessionInterceptor的invoke里处理
 
@@ -162,8 +152,6 @@ private class SqlSessionInterceptor implements InvocationHandler {
 }
 ```
 
-
-
 ## SqlSession
 
 The primary Java interface for working with MyBatis.
@@ -176,11 +164,7 @@ public interface SqlSession extends Closeable {
 }
 ```
 
-
-
 ### DefaultSqlSession
-
-
 
 ```java
 public class DefaultSqlSession implements SqlSession {
@@ -204,7 +188,6 @@ public class DefaultSqlSession implements SqlSession {
 `all of select method invoke Executor.query()`
 
 ![DefaultSqlSession](img/DefaultSqlSession-query.png)
-
 
 ## Links
 

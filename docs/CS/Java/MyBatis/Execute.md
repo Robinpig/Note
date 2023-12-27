@@ -132,7 +132,7 @@ public MapperMethod(Class<?> mapperInterface, Method method, Configuration confi
 
 
 
-## execute
+## execute SQL
 
 
 

@@ -1,8 +1,4 @@
-
-
 ## Introduction
-
-
 
 ## DataSource
 
@@ -96,8 +92,6 @@ public class PooledDataSourceFactory extends UnpooledDataSourceFactory {
 }
 ```
 
-
-
 ### UnpooledDataSource
 
 ```java
@@ -166,8 +160,6 @@ public class UnpooledDataSource implements DataSource {
 }
 ```
 
-
-
 ### PooledDataSource
 
 ```java
@@ -199,8 +191,6 @@ public class PooledDataSource implements DataSource {
   }
 ```
 
-
-
 ### PoolState
 
 ```java
@@ -220,8 +210,6 @@ public class PoolState {
   protected long badConnectionCount = 0;
 }
 ```
-
-
 
 ### PooledConnection
 
@@ -303,8 +291,6 @@ class PooledConnection implements InvocationHandler {
 
 }
 ```
-
-
 
 #### pushConnection
 
@@ -437,8 +423,6 @@ private PooledConnection popConnection(String username, String password) throws 
 }
 ```
 
-
-
 #### pingConnection
 
 ```java
@@ -500,8 +484,6 @@ public static Connection unwrapConnection(Connection conn) {
 }
 ```
 
-
-
 #### forceCloseAll
 
 `Closes all active and idle connections in the pool. The method in finalize`
@@ -542,8 +524,6 @@ public void forceCloseAll() {
 }
 ```
 
-
-
 #### pingConnection
 
 `Method to check to see if a connection is still usable.True if the connection is still usable.`
@@ -583,10 +563,7 @@ protected boolean pingConnection(PooledConnection conn) {
 }
 ```
 
-
-
 ## Transaction
-
 
 ```java
 /**
@@ -622,8 +599,6 @@ public interface Transaction {
 
 }
 ```
-
-
 
 ### TransactionFactory
 
@@ -694,8 +669,6 @@ public class SpringManagedTransactionFactory implements TransactionFactory {
     // not needed in this version
   }
 ```
-
-
 
 ### JdbcTransaction
 
@@ -820,8 +793,6 @@ public class JdbcTransactionFactory implements TransactionFactory {
 }
 ```
 
-
-
 ### ManagedTransaction
 
 ```java
@@ -891,8 +862,6 @@ public class ManagedTransaction implements Transaction {
 }
 ```
 
-
-
 ### ManagedTransactionFactory
 
 ```java
@@ -927,8 +896,6 @@ public class ManagedTransactionFactory implements TransactionFactory {
   }
 }
 ```
-
-
 
 ### SpringManagedTransaction
 
@@ -995,9 +962,6 @@ public class SpringManagedTransaction implements Transaction {
     }
 }
 ```
-
-
-
 
 ## Links
 

@@ -4,7 +4,9 @@
 
 ![](img/Executor.png)
 
-`All SQLs are executed by Executor`
+> [!TIP]
+> 
+> All SQLs are executed by Executor
 
 ```java
 public interface Executor {

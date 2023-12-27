@@ -300,7 +300,7 @@ Because every call will new SqlSession, please use transaction.
 ### MapperScan
 
 Use this annotation to register MyBatis mapper interfaces when using Java Config.
-It performs when same work as MapperScannerConfigurer via MapperScannerRegistrar.
+It performs when same work as `MapperScannerConfigurer` via `MapperScannerRegistrar`.
 
 **Configuration example**:
 
@@ -367,7 +367,7 @@ See https://jira.springsource.org/browse/SPR-8269 for the details.
 
 
 
-### SpringBoot
+### MybatisAutoConfiguration
 
 Auto-Configuration for Mybatis.
 Contributes a **SqlSessionFactory** and a **SqlSessionTemplate**.
@@ -380,44 +380,67 @@ otherwise this auto-configuration will attempt to register mappers based on the 
 @ConditionalOnSingleCandidate(DataSource.class)
 @EnableConfigurationProperties(MybatisProperties.class)
 @AutoConfigureAfter(DataSourceAutoConfiguration.class)
-public class MybatisAutoConfiguration implements InitializingBean {}
+public class MybatisAutoConfiguration implements InitializingBean {
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
+        SqlSessionFactoryBean factory = new SqlSessionFactoryBean();
+        factory.setDataSource(dataSource);
+        factory.setVfs(SpringBootVFS.class);
+        // ...
+        return factory.getObject();
+    }
+}
 ```
 
+If mapper registering configuration or mapper scanning configuration not present, this configuration allow to scan mappers based on the same component-scanning path as Spring Boot itself.
 ```java
-// MybatisAutoConfiguration
-@Bean
-@ConditionalOnMissingBean
-public SqlSessionFactory sqlSessionFactory(DataSource dataSource) throws Exception {
-  SqlSessionFactoryBean factory = new SqlSessionFactoryBean();
-  factory.setDataSource(dataSource);
-  factory.setVfs(SpringBootVFS.class);
-  if (StringUtils.hasText(this.properties.getConfigLocation())) {
-    factory.setConfigLocation(this.resourceLoader.getResource(this.properties.getConfigLocation()));
-  }
-  applyConfiguration(factory);
-  if (this.properties.getConfigurationProperties() != null) {
-    factory.setConfigurationProperties(this.properties.getConfigurationProperties());
-  }
-  if (!ObjectUtils.isEmpty(this.interceptors)) { // set plugins
-    factory.setPlugins(this.interceptors);
-  }
-  if (this.databaseIdProvider != null) {
-    factory.setDatabaseIdProvider(this.databaseIdProvider);
-  }
-  if (StringUtils.hasLength(this.properties.getTypeAliasesPackage())) {
-    factory.setTypeAliasesPackage(this.properties.getTypeAliasesPackage());
-  }
-  if (this.properties.getTypeAliasesSuperType() != null) {
-    factory.setTypeAliasesSuperType(this.properties.getTypeAliasesSuperType());
-  }
-  if (StringUtils.hasLength(this.properties.getTypeHandlersPackage())) {
-    factory.setTypeHandlersPackage(this.properties.getTypeHandlersPackage());
-  }
-  if (!ObjectUtils.isEmpty(this.properties.resolveMapperLocations())) {
-    factory.setMapperLocations(this.properties.resolveMapperLocations());
-  }
 
-  return factory.getObject();
+@org.springframework.context.annotation.Configuration
+@Import(AutoConfiguredMapperScannerRegistrar.class)
+@ConditionalOnMissingBean({ MapperFactoryBean.class, MapperScannerConfigurer.class })
+public static class MapperScannerRegistrarNotFoundConfiguration implements InitializingBean {
+
+    @Override
+    public void afterPropertiesSet() {
+        logger.debug(
+                "Not found configuration for registering mapper bean using @MapperScan, MapperFactoryBean and MapperScannerConfigurer.");
+    }
+}
+
+public static class AutoConfiguredMapperScannerRegistrar implements BeanFactoryAware, ImportBeanDefinitionRegistrar {
+
+    private BeanFactory beanFactory;
+
+    @Override
+    public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
+      logger.debug("Searching for mappers annotated with @Mapper");
+
+      List<String> packages = AutoConfigurationPackages.get(this.beanFactory);
+
+      BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(MapperScannerConfigurer.class);
+      builder.addPropertyValue("processPropertyPlaceHolders", true);
+      builder.addPropertyValue("annotationClass", Mapper.class);
+      builder.addPropertyValue("basePackage", StringUtils.collectionToCommaDelimitedString(packages));
+      BeanWrapper beanWrapper = new BeanWrapperImpl(MapperScannerConfigurer.class);
+      Set<String> propertyNames = Stream.of(beanWrapper.getPropertyDescriptors()).map(PropertyDescriptor::getName)
+          .collect(Collectors.toSet());
+      if (propertyNames.contains("lazyInitialization")) {
+        // Need to mybatis-spring 2.0.2+
+        builder.addPropertyValue("lazyInitialization", "${mybatis.lazy-initialization:false}");
+      }
+      if (propertyNames.contains("defaultScope")) {
+        // Need to mybatis-spring 2.0.6+
+        builder.addPropertyValue("defaultScope", "${mybatis.mapper-default-scope:}");
+      }
+      registry.registerBeanDefinition(MapperScannerConfigurer.class.getName(), builder.getBeanDefinition());
+    }
+
+    @Override
+    public void setBeanFactory(BeanFactory beanFactory) {
+      this.beanFactory = beanFactory;
+    }
 }
 ```
 

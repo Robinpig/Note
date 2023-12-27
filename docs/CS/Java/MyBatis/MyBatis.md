@@ -11,13 +11,18 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 | --- | ------------------ | -------------- |
 | DB  | Depend on DB       | Independent DB |
 | SQL | write SQL manually | Less SQL       |
-|     |                    |                |
 
 ## Architecture
 
+
 [Init](/docs/CS/Java/MyBatis/Init.md)
 
+
 ### Infrastructure
+
+
+<div style="text-align: center;">
+
 
 ```dot
 strict digraph {
@@ -56,28 +61,15 @@ strict digraph {
     }
   
     session -> executor [label="query(MappedStatement)"]
-    executor -> sh [label="newStatementHandler"]
+    executor -> sh [label="newStatementHandler" ]
     executor -> rh [label="getSqlSession"]
   
     conn [shape="polygon" label="Connection"]
     sh -> conn [label="getConnection"]
     conn -> st [label="prepare"]
   
-    subgraph cluster_st {
-    
-        st [shape="polygon" label="Statement"]
-        pr [shape="polygon" label="PrepareStatement"]
-        ca [shape="polygon" label="CallableStatement"]
-    
-    
-        st -> pr [label="subClass"]
-        pr -> ca [label="subClass"]
-    }
-  
-  
-   
-  
-  
+    st [shape="polygon" label="Statement"]
+
     re [shape="polygon" label="ResultSet"]
     map [shape="polygon" label="ResultMap"]
     {rank="same"; conn;re;}
@@ -89,6 +81,13 @@ strict digraph {
   
 }
 ```
+
+</div>
+
+
+<p style="text-align: center;">
+Fig.1. MyBatis Infrastructure
+</p>
 
 - [Binding](/docs/CS/Java/MyBatis/binding.md)
 - [Log](/docs/CS/Java/MyBatis/Logging.md) provide log4j log4j2 slf4j jdklog and so on
@@ -109,3 +108,8 @@ strict digraph {
 ## Extension
 
 [MyBatis-Spring](/docs/CS/Java/MyBatis/MyBatis-Spring.md) : Load Mybatis-config.xml, create Configuration and SqlsessionFactory
+
+
+## Links
+
+- [Spring Framework](/docs/CS/Java/Spring/Spring.md)
