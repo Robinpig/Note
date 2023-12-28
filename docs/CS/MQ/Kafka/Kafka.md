@@ -1,7 +1,7 @@
 ## Introduction
 
 [Apache Kafka](https://kafka.apache.org/) is an open-source distributed **event streaming** platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
-Kafka is a distributed system consisting of servers and clients that communicate via a high-performance [TCP network protocol](/docs/CS/CN/TCP.md).
+Kafka is a distributed system consisting of servers and clients that communicate via a high-performance [TCP network protocol](/docs/CS/CN/TCP/TCP.md).
 It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
 
 > [Kafka Design](https://kafka.apache.org/documentation/#design)

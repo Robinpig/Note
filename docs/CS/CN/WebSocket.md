@@ -2,7 +2,7 @@
 
 The WebSocket Protocol enables two-way communication between a client running untrusted code in a controlled environment to a remote host that has opted-in to communications from that code.
 The security model used for this is the origin-based security model commonly used by web browsers.
-The protocol consists of an opening handshake followed by basic message framing, layered over [TCP](/docs/CS/CN/TCP.md).
+The protocol consists of an opening handshake followed by basic message framing, layered over [TCP](/docs/CS/CN/TCP/TCP.md).
 The goal of this technology is to provide a mechanism for browser-based applications that need two-way communication with servers that does not rely on opening multiple [HTTP](/docs/CS/CN/HTTP/HTTP.md) connections (e.g., using XMLHttpRequest or `<iframe>`s and long polling).
 
 ### Background
@@ -185,7 +185,7 @@ All control frames MUST have a payload length of 125 bytes or less and MUST NOT 
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
-- [TCP](/docs/CS/CN/TCP.md)
+- [TCP](/docs/CS/CN/TCP/TCP.md)
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 
 ## References

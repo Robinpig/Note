@@ -1,7 +1,7 @@
 ## Introduction
 
 SMTP is the principal application-layer protocol for Internet electronic mail. 
-It uses the reliable data transfer service of [TCP](/docs/CS/CN/TCP.md) to **transfer mail from the sender’s mail server to the recipient’s mail server**. 
+It uses the reliable data transfer service of [TCP](/docs/CS/CN/TCP/TCP.md) to **transfer mail from the sender’s mail server to the recipient’s mail server**. 
 
 
 ## Comparison with HTTP

@@ -157,7 +157,7 @@ As another example, a transport protocol can use encryption to guarantee that ap
 even when the network layer cannot guarantee the confidentiality of transport-layer segments.
 
 
-|                    | [TCP](/docs/CS/CN/TCP.md)                                                       | [UDP](/docs/CS/CN/UDP.md)    |
+|                    | [TCP](/docs/CS/CN/TCP/TCP.md)                                                       | [UDP](/docs/CS/CN/UDP.md)    |
 | -------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
 | Connection         | connections                                                                     | connectionless               |
 | Reliability        | acknowledgments, sequence numbers, RTT estimation, timeouts, or retransmissions | no                           |
@@ -166,7 +166,7 @@ even when the network layer cannot guarantee the confidentiality of transport-la
 | Full-duplex        | yes                                                                             | can be                       |
 |                    | one to one                                                                      | one to one / one to multiple |
 
-At any given time, multiple processes can be using any given transport: [UDP](/docs/CS/CN/UDP.md), SCTP, or [TCP](/docs/CS/CN/TCP.md).
+At any given time, multiple processes can be using any given transport: [UDP](/docs/CS/CN/UDP.md), SCTP, or [TCP](/docs/CS/CN/TCP/TCP.md).
 All three transport layers use 16-bit integer port numbers to differentiate between these processes.
 
 ### Multiplexing and Demultiplexing
@@ -248,7 +248,7 @@ then the two segments will be directed to the same destination process via the s
 
 #### Connection-Oriented
 
-The socket pair for a [TCP](/docs/CS/CN/TCP.md) connection is the four-tuple that defines the two endpoints of the connection: the local IP address, local port, foreign IP address, and foreign port.
+The socket pair for a [TCP](/docs/CS/CN/TCP/TCP.md) connection is the four-tuple that defines the two endpoints of the connection: the local IP address, local port, foreign IP address, and foreign port.
 A socket pair uniquely identifies every TCP connection on a network.
 For SCTP, an association is identified by a set of local IP addresses, a local port, a set of foreign IP addresses, and a foreign port.
 In its simplest form, where neither endpoint is multihomed, this results in the same four-tuple socket pair used with TCP.

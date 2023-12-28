@@ -1,6 +1,6 @@
 ## Introduction
 
-> See [TCP](/docs/CS/CN/TCP.md)
+> See [TCP](/docs/CS/CN/TCP/TCP.md)
 
 TCP sockets are an example of *stream sockets*.
 
@@ -2394,7 +2394,7 @@ SO_REUSEADDR vs. tw_reuse
 ## Links
 
 - [Linux Network](/docs/CS/OS/Linux/Linux.md?id=Network)
-- [TCP](/docs/CS/CN/TCP.md)
+- [TCP](/docs/CS/CN/TCP/TCP.md)
 
 ## References
 

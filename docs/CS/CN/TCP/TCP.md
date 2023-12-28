@@ -149,7 +149,7 @@ A connection typically goes through three phases: setup, data transfer (called e
 
 <div style="text-align: center;">
 
-![Fig.4. TCP Shake](img/TCP_Shake.png)
+![Fig.4. TCP Shake](../img/TCP_Shake.png)
 
 </div>
 
@@ -264,7 +264,7 @@ and the fictional state CLOSED.CLOSED is fictional because it represents the sta
 
 <div style="text-align: center;">
 
-![Fig.5. TCP State Transition Diagram](img/TCP_State_Transition_Diagram.png)
+![Fig.5. TCP State Transition Diagram](../img/TCP_State_Transition_Diagram.png)
 
 </div>
 
@@ -627,7 +627,7 @@ This forces the victim TCP to attempt to fit its data into very small packets, g
 Another type of attack involves disrupting an existing TCP connection and possibly taking it over (called hijacking).
 These forms of attacks usually involve a first step of “desynchronizing” the two TCP endpoints so that if they were to talk to each other, they would be using invalid sequence numbers.
 They are particular examples of sequence number attacks [RFC1948].
-They can be accomplished in at least two ways: by causing invalid state transitions during connection establishment (similar to [TWA](/docs/CS/CN/TCP.md?id=time-wait-assassination-twa)), and by generating extra data while in the ESTABLISHED state.
+They can be accomplished in at least two ways: by causing invalid state transitions during connection establishment (similar to [TWA](/docs/CS/CN/TCP/TCP.mdP.md?id=time-wait-assassination-twa)), and by generating extra data while in the ESTABLISHED state.
 
 A collection of attacks generally called spoofing attacks involve TCP segments that have been specially tailored by an attacker to disrupt or alter the behavior of an existing TCP connection.
 An attacker can generate a spoofed reset segment and send it to an existing TCP endpoint.
@@ -661,7 +661,7 @@ For connection establishment (sending SYN segments), these values may be differe
 
 In Linux, the R1 and R2 values for regular data segments are available to be changed by applications or can be changed using the system-wide configuration variables `net.ipv4.tcp_retries1` and `net.ipv4.tcp_retries2`, respectively.
 These are measured in the number of retransmissions, and not in units of time. The default value for tcp_retries2 is 15, which corresponds roughly to 13–30 minutes, depending on the connection’s RTO. The default value for net.ipv4.tcp_retries1 is 3.
-For SYN segments, see [Timeout of Connection Establishment](/docs/CS/CN/TCP.md?id=timeout-of-connection-establishment).
+For SYN segments, see [Timeout of Connection Establishment](/docs/CS/CN/TCP/TCP.mdP.md?id=timeout-of-connection-establishment).
 
 > From [ip-sysctl.txt](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)
 >
@@ -697,7 +697,7 @@ Traditionally, dupthresh has been a constant (with value 3), but some nonstandar
 
 A TCP sender observing at least dupthresh duplicate ACKs retransmits one or more packets that appear to be missing without waiting for a retransmission timer to expire.
 It may also send additional data that has not yet been sent. This is the essence of the fast retransmit algorithm.
-Packet loss inferred by the presence of duplicate ACKs is assumed to be related to network congestion, and [congestion control](/docs/CS/CN/TCP.md?id=Congestion-Control) procedures are invoked along with fast retransmit.
+Packet loss inferred by the presence of duplicate ACKs is assumed to be related to network congestion, and [congestion control](/docs/CS/CN/TCP/TCP.mdP.md?id=Congestion-Control) procedures are invoked along with fast retransmit.
 Without SACK, no more than one segment is typically retransmitted until an acceptable ACK is received.
 With SACK, ACKs contain additional information allowing the sender to fill more than one hole in the receiver per RTT.
 
@@ -794,7 +794,7 @@ The interaction between the Nagle algorithm and delayed ACKs
 
 <div style="text-align: center;">
 
-![Fig.5. The interaction between the Nagle algorithm and delayed ACKs](img/Nagle.png)
+![Fig.5. The interaction between the Nagle algorithm and delayed ACKs](../img/Nagle.png)
 
 </div>
 
@@ -968,7 +968,7 @@ The Host Requirements RFC [RFC1122] suggests that the first probe should happen 
 
 Window probes contain a single byte of data and are therefore reliably delivered (retransmitted) by TCP if lost, thereby eliminating the potential deadlock condition caused by lost window updates.
 The probes are sent whenever the TCP persist timer expires, and the byte included may or may not be accepted by the receiver, depending on how much buffer space it has available.
-As with the [TCP retransmission timer](/docs/CS/CN/TCP.md?id=Retransmission-Timeout), the normal exponential backoff can be used when calculating the timeout for the persist timer.
+As with the [TCP retransmission timer](/docs/CS/CN/TCP/TCP.mdP.md?id=Retransmission-Timeout), the normal exponential backoff can be used when calculating the timeout for the persist timer.
 An important difference, however, is that a normal TCP never gives up sending window probes, whereas it may eventually give up trying to perform retransmissions.
 
 There are numerous points that we can summarize:
@@ -1028,11 +1028,13 @@ net.ipv4.tcp_rmem = 4096        87380   6291456
 ### Attacks Involving Window Management
 
 The window management procedures for TCP have been the subject of various attacks, primarily forms of resource exhaustion.
-In essence, advertising a small window slows a TCP transfer, tying up resources such as memory for a potentially long time. This has been used as a form of attack on bad traffic (i.e., worms).
+In essence, advertising a small window slows a TCP transfer, tying up resources such as memory for a potentially long time. 
+This has been used as a form of attack on bad traffic (i.e., worms).
 
 ## Congestion Control
 
-If a router receives more data per unit time than it can send out, it must store that data. If this situation persists, eventually the storage will run out and the router will be forced to drop some of the data.
+If a router receives more data per unit time than it can send out, it must store that data. 
+If this situation persists, eventually the storage will run out and the router will be forced to drop some of the data.
 When a router is forced to discard data because it cannot handle the arriving traffic rate, is called *congestion*.
 The router is said to be congested when it is in this state, and even a single connection can drive one or more routers into congestion.
 Left unaddressed, congestion can cause the performance of a network to be reduced so badly that it becomes unusable.
@@ -1048,7 +1050,7 @@ The challenge is to determine exactly when and how TCP should slow down, and whe
 
 <div style="text-align: center;">
 
-![Fig.5. TCP congestion control FSM](img/TCP_Congestion_Control_FSM.png)
+![Fig.5. TCP congestion control FSM](../img/TCP_Congestion_Control_FSM.png)
 
 </div>
 
@@ -1125,7 +1127,7 @@ This issue arises primarily from the fixed additive increase behavior of congest
 The slow start algorithm is executed when a new TCP connection is created or when a loss has been detected due to a retransmission timeout (RTO).
 It may also be invoked after a sending TCP has gone idle for some time.
 The purpose of slow start is to help TCP find a value for cwnd before probing for more available bandwidth using congestion avoidance and to establish the ACK clock.
-Typically, a TCP begins a new connection in slow start, eventually drops a packet, and then settles into steady-state operation using the [congestion avoidance algorithm](/docs/CS/CN/TCP.md?id=Congestion-Avoidance).
+Typically, a TCP begins a new connection in slow start, eventually drops a packet, and then settles into steady-state operation using the [congestion avoidance algorithm](/docs/CS/CN/TCP/TCP.mdP.md?id=Congestion-Avoidance).
 
 > [!NOTE]
 > 
@@ -1476,16 +1478,16 @@ slabtop
 
 TCP maintains seven timers for each connection. They are briefly described here, in the approximate order of their occurrence during the lifetime of a connection.
 
-1. A [connection-establishment timer](/docs/CS/CN/TCP.md?id=timeout-of-connection-establishment) starts when a SYN is sent to establish a new connection.
+1. A [connection-establishment timer](/docs/CS/CN/TCP/TCP.mdP.md?id=timeout-of-connection-establishment) starts when a SYN is sent to establish a new connection.
    If a response is not received within 75 seconds, the connection establishment is aborted.
-2. A [retransmission timer](/docs/CS/CN/TCP.md?id=retransmission-timeout) is set when TCP sends data. If the data is not acknowledged by the other end when this timer expires, TCP retransmits the data.
-3. A [delayed ACK timer](/docs/CS/CN/TCP.md?id=delayed-acknowledgments) is set when TCP receives data that must be acknowledged, but need not be acknowledged immediately.
+2. A [retransmission timer](/docs/CS/CN/TCP/TCP.mdP.md?id=retransmission-timeout) is set when TCP sends data. If the data is not acknowledged by the other end when this timer expires, TCP retransmits the data.
+3. A [delayed ACK timer](/docs/CS/CN/TCP/TCP.mdP.md?id=delayed-acknowledgments) is set when TCP receives data that must be acknowledged, but need not be acknowledged immediately.
    Instead, TCP waits up to 200 ms before sending the ACK. If, during this 200-ms time period, TCP has data to send on this connection, the pending acknowledgment is sent along with the data (called piggybacking).
-4. A [persist timer](/docs/CS/CN/TCP.md?id=zero-windows-and-the-tcp-persist-timer) is set when the other end of a connection advertises a window of 0, stopping TCP from sending data.
+4. A [persist timer](/docs/CS/CN/TCP/TCP.mdP.md?id=zero-windows-and-the-tcp-persist-timer) is set when the other end of a connection advertises a window of 0, stopping TCP from sending data.
    Like the retransmission timer, the persist timer value is calculated dynamically, based on the round-trip time. The value of this is bounded by TCP to be between 5 and 60 seconds.
-5. A [keepalive timer](/docs/CS/CN/TCP.md?id=Keepalive) can be set by the process using the SO_KEEPALIVE socket option.
-6. A [FIN_WAIT_2 timer](/docs/CS/CN/TCP.md?id=fin_wait_2).
-7. A [TIME_WAIT timer](/docs/CS/CN/TCP.md?id=time_wait), often called the 2MSL timer.
+5. A [keepalive timer](/docs/CS/CN/TCP/TCP.mdP.md?id=Keepalive) can be set by the process using the SO_KEEPALIVE socket option.
+6. A [FIN_WAIT_2 timer](/docs/CS/CN/TCP/TCP.mdP.md?id=fin_wait_2).
+7. A [TIME_WAIT timer](/docs/CS/CN/TCP/TCP.mdP.md?id=time_wait), often called the 2MSL timer.
    The timer is set to 1 minute (Net/3 uses an MSL of 30 seconds) when the connection enters the TIME_WAIT state and when it expires, the TCP control block and Internet PCB are deleted, allowing that socket pair to be reused.
 
 TCP has two timer functions: one is called every 200 ms (the fast timer) and the other every 500 ms (the slow timer).

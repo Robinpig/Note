@@ -35,7 +35,7 @@ Test connections with isValid() before returning them from the pool
 
 socket timeout
 
-link [TCP keepalive](/docs/CS/CN/TCP.md?id=keepalive)
+link [TCP keepalive](/docs/CS/CN/TCP/TCP.md?id=keepalive)
 
 ### maxLifetime
 
