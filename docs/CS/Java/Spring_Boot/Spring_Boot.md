@@ -29,10 +29,10 @@ spring-boot-test
 
 ## [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
 
-### Configuration properties
+### Externalized Configuration
 
 The Spring environment abstraction is a one-stop shop for any configurable property.
-It abstracts the origins of properties so that beans needing those properties can consume them from Spring itself. 
+It abstracts the origins of properties so that beans needing those properties can consume them from Spring itself.
 The Spring environment pulls from several property sources, including the following:
 
 - JVM system properties
@@ -53,6 +53,13 @@ Figure 4 illustrates how properties from property sources flow through the Sprin
 Fig.4. The Spring environment pulls properties from property sources and makes them available to beans in the application context.
 </p>
 
+#### Configuration properties
+
+
+When binding to `Map` properties, if the `key` contains anything other than lowercase alpha-numeric characters or `-`, you need to use the bracket notation so that the original value is preserved. If the key is not surrounded by `[]`, any characters that are not alpha-numeric or `-` are removed.
+
+
+
 
 ```java
 @Configuration
@@ -62,6 +69,45 @@ public class OrderProps {
     @ConfigurationProperties(prefix = "taco.order.map")
     public BidiMap<String, String> getTacoOrderMap() {
         return new TreeBidiMap<>();
+    }
+}
+```
+
+```java
+public class ConfigurationPropertiesBindingPostProcessor
+        implements BeanPostProcessor, PriorityOrdered, ApplicationContextAware, InitializingBean {
+    @Override
+    public Object postProcessBeforeInitialization(Object bean, String beanName) throws BeansException {
+        bind(ConfigurationPropertiesBean.get(this.applicationContext, bean, beanName));
+        return bean;
+    }
+}
+```
+
+Return a @ConfigurationPropertiesBean instance for the given bean details or null if the bean is not a @ConfigurationProperties object.
+
+```java
+public final class ConfigurationPropertiesBean {
+    public static ConfigurationPropertiesBean get(ApplicationContext applicationContext, Object bean, String beanName) {
+        Method factoryMethod = findFactoryMethod(applicationContext, beanName);
+        return create(beanName, bean, bean.getClass(), factoryMethod);
+    }
+
+    private static ConfigurationPropertiesBean create(String name, Object instance, Class<?> type, Method factory) {
+        ConfigurationProperties annotation = findAnnotation(instance, type, factory, ConfigurationProperties.class);
+        if (annotation == null) {
+            return null;
+        }
+        Validated validated = findAnnotation(instance, type, factory, Validated.class);
+        Annotation[] annotations = (validated != null) ? new Annotation[]{annotation, validated}
+                : new Annotation[]{annotation};
+        ResolvableType bindType = (factory != null) ? ResolvableType.forMethodReturnType(factory)
+                : ResolvableType.forClass(type);
+        Bindable<Object> bindTarget = Bindable.of(bindType).withAnnotations(annotations);
+        if (instance != null) {
+            bindTarget = bindTarget.withExistingValue(instance);
+        }
+        return new ConfigurationPropertiesBean(name, instance, annotation, bindTarget);
     }
 }
 ```
