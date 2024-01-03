@@ -2816,14 +2816,8 @@ protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBea
 
 ## EventListener
 
-ApplicationEvent
+ApplicationEvent refer to this [page](/docs/CS/Java/Spring/Event.md).
 
-- ApplicationContextEvent
-  - ContextClosedEvent
-  - ContextRefreshedEvent
-  - ContextStartedEvent
-  - ContextStoppedEvent
-- RequestHandledEvent
 
 ### Example
 
