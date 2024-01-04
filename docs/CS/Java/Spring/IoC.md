@@ -143,7 +143,6 @@ On shutdown of a bean factory, the following lifecycle methods apply:
 The Spring framework provides several implementations of the ApplicationContext interface:
 `ClassPathXmlApplicationContext` and `FileSystemXmlApplicationContext` for standalone applications, and `WebApplicationContext` for web applications.
 
-
 <div style="text-align: center;">
 
 ![Fig.1. ApplicationContext](img/ApplicationContext.png)
@@ -319,9 +318,10 @@ digraph g{
 }
 ```
 
-
 <!-- tabs:start -->
+
 ##### **GenericApplicationContext**
+
 ```java
 public class GenericApplicationContext extends AbstractApplicationContext implements BeanDefinitionRegistry {
 
@@ -333,7 +333,9 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
     }
 }
 ```
+
 ##### **AbstractRefreshableApplicationContext**
+
 ```java
 // AbstractRefreshableApplicationContext::refreshBeanFactory()
 public abstract class AbstractRefreshableApplicationContext extends AbstractApplicationContext {
@@ -368,9 +370,7 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 }
 ```
 
-
 <!-- tabs:end -->
-
 
 #### customizeBeanFactory
 
@@ -1198,7 +1198,8 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 
 #### circular references
 
-Default false. 
+Default false.
+
 ```properties
 spring.main.allow-circular-references=false
 ```
@@ -1249,18 +1250,19 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
     }
 }
 ```
+
 The ProxyCreator and return it is after postInitialization if it has earlyProxyReferences
 
-```java	
+```java
 public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
-		implements SmartInstantiationAwareBeanPostProcessor, BeanFactoryAware {	
+		implements SmartInstantiationAwareBeanPostProcessor, BeanFactoryAware {
 	@Override
 	public Object getEarlyBeanReference(Object bean, String beanName) {
 		Object cacheKey = getCacheKey(bean.getClass(), beanName);
 		this.earlyProxyReferences.put(cacheKey, bean);
 		return wrapIfNecessary(bean, beanName, cacheKey);
 	}
-	
+
 	@Override
 	public Object postProcessAfterInitialization(@Nullable Object bean, String beanName) {
 		if (bean != null) {
@@ -1274,13 +1276,14 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 	}
 ```
 
-
 Circular References Scenarios:
 
 <!-- tabs:start -->
 
 ##### **Constructor Circular References**
+
 We can annotate the @Lazy annotation on the constructor parameters of cyclic dependency injection.
+
 ```java
 @Service
 public class AService {
@@ -1344,7 +1347,7 @@ public class BService {
 ```
 
 1. We can annotate the @Lazy annotation on the fields of cyclic dependency injection.
-2. From the source code comment above, we can see that when allowRawInjectionDespiteWrapping is true, 
+2. From the source code comment above, we can see that when allowRawInjectionDespiteWrapping is true,
    it won’t take that else if and won’t throw an exception, so we can solve the error problem by setting allowRawInjectionDespiteWrapping to true, the code is as follows.
 
 ```java
@@ -1356,6 +1359,7 @@ public class MyBeanFactoryPostProcessor implements BeanFactoryPostProcessor {
     }
 }
 ```
+
 Although this setup solves the problem, it is not recommended because it allows the early injected objects to be different from the final created objects and may result in the final generated objects not being dynamically proxied.
 
 <!-- tabs:end -->
@@ -1888,7 +1892,7 @@ Class
 
 Cglib
 
-```java
+```
 // CglibSubclassingInstantiationStrategy
 @Override
 	protected Object instantiateWithMethodInjection(RootBeanDefinition bd, @Nullable String beanName, BeanFactory owner,
@@ -1900,15 +1904,6 @@ Cglib
 ```
 
 ```java
-/** CglibSubclassingInstantiationStrategy.CglibSubclassCreator
- * Create a new instance of a dynamically generated subclass implementing the
- * required lookups.
- * @param ctor constructor to use. If this is {@code null}, use the
- * no-arg constructor (no parameterization, or Setter Injection)
- * @param args arguments to use for the constructor.
- * Ignored if the {@code ctor} parameter is {@code null}.
- * @return new instance of the dynamically generated subclass
- */
 public Object instantiate(@Nullable Constructor<?> ctor, Object... args) {
    Class<?> subclass = createEnhancedSubclass(this.beanDefinition);
    Object instance;
@@ -1934,10 +1929,6 @@ public Object instantiate(@Nullable Constructor<?> ctor, Object... args) {
    return instance;
 }
 
-/**
- * Create an enhanced subclass of the bean class for the provided bean
- * definition, using CGLIB.
- */
 private Class<?> createEnhancedSubclass(RootBeanDefinition beanDefinition) {
    Enhancer enhancer = new Enhancer();
    enhancer.setSuperclass(beanDefinition.getBeanClass());
@@ -1955,12 +1946,6 @@ private Class<?> createEnhancedSubclass(RootBeanDefinition beanDefinition) {
 #### markBeanAsCreated
 
 ```java
-/**
- * Mark the specified bean as already created (or about to be created).
- * <p>This allows the bean factory to optimize its caching for repeated
- * creation of the specified bean.
- * @param beanName the name of the bean
- */
 protected void markBeanAsCreated(String beanName) {
    if (!this.alreadyCreated.contains(beanName)) {
       synchronized (this.mergedBeanDefinitions) {
@@ -1974,12 +1959,6 @@ protected void markBeanAsCreated(String beanName) {
    }
 }
 
-
-/**
-	 * Remove the merged bean definition for the specified bean,
-	 * recreating it on next access.
-	 * @param beanName the bean name to clear the merged definition for
-	 */
 protected void clearMergedBeanDefinition(String beanName) {
   RootBeanDefinition bd = this.mergedBeanDefinitions.get(beanName);
   if (bd != null) {
@@ -2817,7 +2796,6 @@ protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBea
 ## EventListener
 
 ApplicationEvent refer to this [page](/docs/CS/Java/Spring/Event.md).
-
 
 ### Example
 
