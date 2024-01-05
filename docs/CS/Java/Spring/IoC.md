@@ -1974,14 +1974,6 @@ volatile boolean stale;
 #### getMergedLocalBeanDefinition
 
 ```java
-/**
- * Return a merged RootBeanDefinition, traversing the parent bean definition
- * if the specified bean corresponds to a child bean definition.
- * @param beanName the name of the bean to retrieve the merged definition for
- * @return a (potentially merged) RootBeanDefinition for the given bean
- * @throws NoSuchBeanDefinitionException if there is no bean with the given name
- * @throws BeanDefinitionStoreException in case of an invalid bean definition
- */
 protected RootBeanDefinition getMergedLocalBeanDefinition(String beanName) throws BeansException {
    // Quick check on the concurrent map first, with minimal locking.
    RootBeanDefinition mbd = this.mergedBeanDefinitions.get(beanName);
@@ -1994,123 +1986,92 @@ protected RootBeanDefinition getMergedLocalBeanDefinition(String beanName) throw
 ```
 
 ```java
-/**
- * Return a RootBeanDefinition for the given top-level bean, by merging with
- * the parent if the given bean's definition is a child bean definition.
- * @param beanName the name of the bean definition
- * @param bd the original bean definition (Root/ChildBeanDefinition)
- * @return a (potentially merged) RootBeanDefinition for the given bean
- * @throws BeanDefinitionStoreException in case of an invalid bean definition
- */
-protected RootBeanDefinition getMergedBeanDefinition(String beanName, BeanDefinition bd)
-      throws BeanDefinitionStoreException {
+public abstract class AbstractBeanFactory {
+    protected RootBeanDefinition getMergedBeanDefinition(String beanName, BeanDefinition bd)
+            throws BeanDefinitionStoreException {
 
-   return getMergedBeanDefinition(beanName, bd, null);
-}
-```
+        return getMergedBeanDefinition(beanName, bd, null);
+    }
 
-```java
-/**
- * Return a RootBeanDefinition for the given bean, by merging with the
- * parent if the given bean's definition is a child bean definition.
- * @param beanName the name of the bean definition
- * @param bd the original bean definition (Root/ChildBeanDefinition)
- * @param containingBd the containing bean definition in case of inner bean,
- * or {@code null} in case of a top-level bean
- * @return a (potentially merged) RootBeanDefinition for the given bean
- * @throws BeanDefinitionStoreException in case of an invalid bean definition
- */
-protected RootBeanDefinition getMergedBeanDefinition(
-      String beanName, BeanDefinition bd, @Nullable BeanDefinition containingBd)
-      throws BeanDefinitionStoreException {
+    protected RootBeanDefinition getMergedBeanDefinition(
+            String beanName, BeanDefinition bd, @Nullable BeanDefinition containingBd)
+            throws BeanDefinitionStoreException {
 
-   synchronized (this.mergedBeanDefinitions) {
-      RootBeanDefinition mbd = null;
-      RootBeanDefinition previous = null;
+        synchronized (this.mergedBeanDefinitions) {
+            RootBeanDefinition mbd = null;
+            RootBeanDefinition previous = null;
 
-      // Check with full lock now in order to enforce the same merged instance.
-      if (containingBd == null) {
-         mbd = this.mergedBeanDefinitions.get(beanName);
-      }
-
-      if (mbd == null || mbd.stale) {
-         previous = mbd;
-         if (bd.getParentName() == null) {
-            // Use copy of given root bean definition.
-            if (bd instanceof RootBeanDefinition) {
-               mbd = ((RootBeanDefinition) bd).cloneBeanDefinition();
+            // Check with full lock now in order to enforce the same merged instance.
+            if (containingBd == null) {
+                mbd = this.mergedBeanDefinitions.get(beanName);
             }
-            else {
-               mbd = new RootBeanDefinition(bd);
-            }
-         }
-         else {
-            // Child bean definition: needs to be merged with parent.
-            BeanDefinition pbd;
-            try {
-               String parentBeanName = transformedBeanName(bd.getParentName());
-               if (!beanName.equals(parentBeanName)) {
-                  pbd = getMergedBeanDefinition(parentBeanName);
-               }
-               else {
-                  BeanFactory parent = getParentBeanFactory();
-                  if (parent instanceof ConfigurableBeanFactory) {
-                     pbd = ((ConfigurableBeanFactory) parent).getMergedBeanDefinition(parentBeanName);
-                  }
-                  else {
-                     throw new NoSuchBeanDefinitionException(parentBeanName,
-                           "Parent name '" + parentBeanName + "' is equal to bean name '" + beanName +
-                           "': cannot be resolved without a ConfigurableBeanFactory parent");
-                  }
-               }
-            }
-            catch (NoSuchBeanDefinitionException ex) {
-               throw new BeanDefinitionStoreException(bd.getResourceDescription(), beanName,
-                     "Could not resolve parent bean definition '" + bd.getParentName() + "'", ex);
-            }
-            // Deep copy with overridden values.
-            mbd = new RootBeanDefinition(pbd);
-            mbd.overrideFrom(bd);
-         }
 
-         // Set default singleton scope, if not configured before.
-         if (!StringUtils.hasLength(mbd.getScope())) {
-            mbd.setScope(SCOPE_SINGLETON);
-         }
+            if (mbd == null || mbd.stale) {
+                previous = mbd;
+                if (bd.getParentName() == null) {
+                    // Use copy of given root bean definition.
+                    if (bd instanceof RootBeanDefinition) {
+                        mbd = ((RootBeanDefinition) bd).cloneBeanDefinition();
+                    } else {
+                        mbd = new RootBeanDefinition(bd);
+                    }
+                } else {
+                    // Child bean definition: needs to be merged with parent.
+                    BeanDefinition pbd;
+                    try {
+                        String parentBeanName = transformedBeanName(bd.getParentName());
+                        if (!beanName.equals(parentBeanName)) {
+                            pbd = getMergedBeanDefinition(parentBeanName);
+                        } else {
+                            BeanFactory parent = getParentBeanFactory();
+                            if (parent instanceof ConfigurableBeanFactory) {
+                                pbd = ((ConfigurableBeanFactory) parent).getMergedBeanDefinition(parentBeanName);
+                            } else {
+                                throw new NoSuchBeanDefinitionException(parentBeanName,
+                                        "Parent name '" + parentBeanName + "' is equal to bean name '" + beanName +
+                                                "': cannot be resolved without a ConfigurableBeanFactory parent");
+                            }
+                        }
+                    } catch (NoSuchBeanDefinitionException ex) {
+                        throw new BeanDefinitionStoreException(bd.getResourceDescription(), beanName,
+                                "Could not resolve parent bean definition '" + bd.getParentName() + "'", ex);
+                    }
+                    // Deep copy with overridden values.
+                    mbd = new RootBeanDefinition(pbd);
+                    mbd.overrideFrom(bd);
+                }
 
-         // A bean contained in a non-singleton bean cannot be a singleton itself.
-         // Let's correct this on the fly here, since this might be the result of
-         // parent-child merging for the outer bean, in which case the original inner bean
-         // definition will not have inherited the merged outer bean's singleton status.
-         if (containingBd != null && !containingBd.isSingleton() && mbd.isSingleton()) {
-            mbd.setScope(containingBd.getScope());
-         }
+                // Set default singleton scope, if not configured before.
+                if (!StringUtils.hasLength(mbd.getScope())) {
+                    mbd.setScope(SCOPE_SINGLETON);
+                }
 
-         // Cache the merged bean definition for the time being
-         // (it might still get re-merged later on in order to pick up metadata changes)
-         if (containingBd == null && isCacheBeanMetadata()) {
-            this.mergedBeanDefinitions.put(beanName, mbd);
-         }
-      }
-      if (previous != null) {
-         copyRelevantMergedBeanDefinitionCaches(previous, mbd);
-      }
-      return mbd;
-   }
+                // A bean contained in a non-singleton bean cannot be a singleton itself.
+                // Let's correct this on the fly here, since this might be the result of
+                // parent-child merging for the outer bean, in which case the original inner bean
+                // definition will not have inherited the merged outer bean's singleton status.
+                if (containingBd != null && !containingBd.isSingleton() && mbd.isSingleton()) {
+                    mbd.setScope(containingBd.getScope());
+                }
+
+                // Cache the merged bean definition for the time being
+                // (it might still get re-merged later on in order to pick up metadata changes)
+                if (containingBd == null && isCacheBeanMetadata()) {
+                    this.mergedBeanDefinitions.put(beanName, mbd);
+                }
+            }
+            if (previous != null) {
+                copyRelevantMergedBeanDefinitionCaches(previous, mbd);
+            }
+            return mbd;
+        }
+    }
 }
 ```
 
 #### checkMergedBeanDefinition
 
 ```java
-/**
- * Check the given merged bean definition,
- * potentially throwing validation exceptions.
- * @param mbd the merged bean definition to check
- * @param beanName the name of the bean
- * @param args the arguments for bean creation, if any
- * @throws BeanDefinitionStoreException in case of validation failure
- */
 protected void checkMergedBeanDefinition(RootBeanDefinition mbd, String beanName, @Nullable Object[] args)
       throws BeanDefinitionStoreException {
 
@@ -2123,12 +2084,6 @@ protected void checkMergedBeanDefinition(RootBeanDefinition mbd, String beanName
 #### registerDependentBean
 
 ```java
-/**
- * Register a dependent bean for the given bean,
- * to be destroyed before the given bean is destroyed.
- * @param beanName the name of the bean
- * @param dependentBeanName the name of the dependent bean
- */
 public void registerDependentBean(String beanName, String dependentBeanName) {
    String canonicalName = canonicalName(beanName);
 
@@ -2150,47 +2105,44 @@ public void registerDependentBean(String beanName, String dependentBeanName) {
 
 #### isDependent
 
-```java
-
+```
 /** Map between dependent bean names: bean name to Set of dependent bean names. */
 private final Map<String, Set<String>> dependentBeanMap = new ConcurrentHashMap<>(64);
 
-/**
- * Determine whether the specified dependent bean has been registered as
- * dependent on the given bean or on any of its transitive dependencies.
- * @param beanName the name of the bean to check
- * @param dependentBeanName the name of the dependent bean
- * @since 4.0
- */
-protected boolean isDependent(String beanName, String dependentBeanName) {
-   synchronized (this.dependentBeanMap) {
-      return isDependent(beanName, dependentBeanName, null);
-   }
-}
+```
+
+```java
+public class DefaultSingletonBeanRegistry {
+    protected boolean isDependent(String beanName, String dependentBeanName) {
+        synchronized (this.dependentBeanMap) {
+            return isDependent(beanName, dependentBeanName, null);
+        }
+    }
 
 
-private boolean isDependent(String beanName, String dependentBeanName, @Nullable Set<String> alreadySeen) {
-  if (alreadySeen != null && alreadySeen.contains(beanName)) {
-    return false;
-  }
-  String canonicalName = canonicalName(beanName);
-  Set<String> dependentBeans = this.dependentBeanMap.get(canonicalName);
-  if (dependentBeans == null) {
-    return false;
-  }
-  if (dependentBeans.contains(dependentBeanName)) {
-    return true;
-  }
-  for (String transitiveDependency : dependentBeans) {
-    if (alreadySeen == null) {
-      alreadySeen = new HashSet<>();
+    private boolean isDependent(String beanName, String dependentBeanName, @Nullable Set<String> alreadySeen) {
+        if (alreadySeen != null && alreadySeen.contains(beanName)) {
+            return false;
+        }
+        String canonicalName = canonicalName(beanName);
+        Set<String> dependentBeans = this.dependentBeanMap.get(canonicalName);
+        if (dependentBeans == null) {
+            return false;
+        }
+        if (dependentBeans.contains(dependentBeanName)) {
+            return true;
+        }
+        for (String transitiveDependency : dependentBeans) {
+            if (alreadySeen == null) {
+                alreadySeen = new HashSet<>();
+            }
+            alreadySeen.add(beanName);
+            if (isDependent(transitiveDependency, dependentBeanName, alreadySeen)) {
+                return true;
+            }
+        }
+        return false;
     }
-    alreadySeen.add(beanName);
-    if (isDependent(transitiveDependency, dependentBeanName, alreadySeen)) {
-      return true;
-    }
-  }
-  return false;
 }
 ```
 
