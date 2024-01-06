@@ -2256,15 +2256,6 @@ default PropertyValues postProcessPropertyValues(
 ```
 
 ```java
-/**
- * Apply the given property values, resolving any runtime references
- * to other beans in this bean factory. Must use deep copy, so we
- * don't permanently modify this property.
- * @param beanName the bean name passed for better exception information
- * @param mbd the merged bean definition
- * @param bw the BeanWrapper wrapping the target object
- * @param pvs the new property values
- */
 protected void applyPropertyValues(String beanName, BeanDefinition mbd, BeanWrapper bw, PropertyValues pvs) {
    if (pvs.isEmpty()) {
       return;
@@ -2364,24 +2355,6 @@ protected void applyPropertyValues(String beanName, BeanDefinition mbd, BeanWrap
 ##### resolveValueIfNecessary
 
 ```java
-/** BeanDefinitionValueResolver
- * Given a PropertyValue, return a value, resolving any references to other
- * beans in the factory if necessary. The value could be:
- * <li>A BeanDefinition, which leads to the creation of a corresponding
- * new bean instance. Singleton flags and names of such "inner beans"
- * are always ignored: Inner beans are anonymous prototypes.
- * <li>A RuntimeBeanReference, which must be resolved.
- * <li>A ManagedList. This is a special collection that may contain
- * RuntimeBeanReferences or Collections that will need to be resolved.
- * <li>A ManagedSet. May also contain RuntimeBeanReferences or
- * Collections that will need to be resolved.
- * <li>A ManagedMap. In this case the value may be a RuntimeBeanReference
- * or Collection that will need to be resolved.
- * <li>An ordinary object or {@code null}, in which case it's left alone.
- * @param argName the name of the argument that the value is defined for
- * @param value the value object to resolve
- * @return the resolved object
- */
 @Nullable
 public Object resolveValueIfNecessary(Object argName, @Nullable Object value) {
    // We must check each value to see whether it requires a runtime reference
