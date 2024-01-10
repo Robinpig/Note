@@ -240,54 +240,50 @@ public ConfigurableApplicationContext run(String... args) {
 
 
 - `SpringFactoriesLoader.loadFactoryNames(type, classLoader)`
-  - `Load the fully qualified class names of factory implementations of the given type from {@value #FACTORIES_RESOURCE_LOCATION}, using the given class loader.`
+  - Load the fully qualified class names of factory implementations of the given type from {@value #FACTORIES_RESOURCE_LOCATION}, using the given class loader.
 - `AnnotationAwareOrderComparator.sort(instances)`
-  - `Sort the given list with a default AnnotationAwareOrderComparator. Optimized to skip sorting for lists with size 0 or 1, in order to avoid unnecessary array extraction.`
+  - Sort the given list with a default AnnotationAwareOrderComparator. Optimized to skip sorting for lists with size 0 or 1, in order to avoid unnecessary array extraction.
 
-**AnnotationAwareOrderComparator**
+
 *AnnotationAwareOrderComparator* is an extension of *OrderComparator* that supports Spring's org.springframework.core.Ordered interface as well as the @Order and @Priority annotations, with an order value provided by an Ordered instance overriding a statically defined annotation value (if any).
 
 ```java
-private SpringApplicationRunListeners getRunListeners(String[] args) {
-   Class<?>[] types = new Class<?>[] { SpringApplication.class, String[].class };
-   return new SpringApplicationRunListeners(logger,
-         getSpringFactoriesInstances(SpringApplicationRunListener.class, types, this, args));
-}
+private SpringApplicationRunListeners getRunListeners(String[] args){
+        Class<?>[]types=new Class<?>[]{SpringApplication.class,String[].class };
+        return new SpringApplicationRunListeners(logger,
+        getSpringFactoriesInstances(SpringApplicationRunListener.class,types,this,args));
+        }
+private<T> Collection<T> getSpringFactoriesInstances(Class<T> type,Class<?>[]parameterTypes,Object...args){
+        ClassLoader classLoader=getClassLoader();
+        // Use names and ensure unique to protect against duplicates
+        Set<String> names=new LinkedHashSet<>(SpringFactoriesLoader.loadFactoryNames(type,classLoader));
+        List<T> instances=createSpringFactoriesInstances(type,parameterTypes,classLoader,args,names);
+        AnnotationAwareOrderComparator.sort(instances); // sort
+        return instances;
+        }
+
+@SuppressWarnings("unchecked")
+private<T> List<T> createSpringFactoriesInstances(Class<T> type,Class<?>[]parameterTypes,
+        ClassLoader classLoader,Object[]args,Set<String> names){
+        List<T> instances=new ArrayList<>(names.size());
+        for(String name:names){
+        try{
+        Class<?> instanceClass=ClassUtils.forName(name,classLoader);
+        Assert.isAssignable(type,instanceClass);
+        Constructor<?> constructor=instanceClass.getDeclaredConstructor(parameterTypes);
+        T instance=(T)BeanUtils.instantiateClass(constructor,args);
+        instances.add(instance);
+        }
+        catch(Throwable ex){
+        throw new IllegalArgumentException("Cannot instantiate "+type+" : "+name,ex);
+        }
+        }
+        return instances;
+        }
+        
 ```
 
 
-**createSpringFactoriesInstances**
-```
-private <T> Collection<T> getSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes, Object... args) {
-		ClassLoader classLoader = getClassLoader();
-		// Use names and ensure unique to protect against duplicates
-		Set<String> names = new LinkedHashSet<>(SpringFactoriesLoader.loadFactoryNames(type, classLoader));
-		List<T> instances = createSpringFactoriesInstances(type, parameterTypes, classLoader, args, names);
-		AnnotationAwareOrderComparator.sort(instances); // sort
-		return instances;
-	}
-
-	@SuppressWarnings("unchecked")
-	private <T> List<T> createSpringFactoriesInstances(Class<T> type, Class<?>[] parameterTypes,
-			ClassLoader classLoader, Object[] args, Set<String> names) {
-		List<T> instances = new ArrayList<>(names.size());
-		for (String name : names) {
-			try {
-				Class<?> instanceClass = ClassUtils.forName(name, classLoader);
-				Assert.isAssignable(type, instanceClass);
-				Constructor<?> constructor = instanceClass.getDeclaredConstructor(parameterTypes);
-				T instance = (T) BeanUtils.instantiateClass(constructor, args);
-				instances.add(instance);
-			}
-			catch (Throwable ex) {
-				throw new IllegalArgumentException("Cannot instantiate " + type + " : " + name, ex);
-			}
-		}
-		return instances;
-	}
-```
-
-### listeners.starting
 
 `new ApplicationStartingEvent() and invoke the given listener with the given event.`
 
@@ -435,7 +431,7 @@ protected void postProcessApplicationContext(ConfigurableApplicationContext cont
 
 ### applyInitializers
 
-`Apply any ApplicationContextInitializers to the context before it is refreshed.`
+Apply any ApplicationContextInitializers to the context before it is refreshed.
 
 ```java
 @SuppressWarnings({ "rawtypes", "unchecked" })
