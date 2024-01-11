@@ -1,8 +1,11 @@
 ## Introduction
 
 Feign is a Java to HTTP client binder inspired by Retrofit, JAXRS-2.0, and WebSocket. 
-Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of ReSTfulness.
+Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of [ReSTfulness]().
 
+Feign uses tools like Jersey and CXF to write Java clients for ReST or SOAP services.
+Furthermore, Feign allows you to write your own code on top of http libraries such as Apache HC. 
+Feign connects your code to http APIs with minimal overhead and code via customizable decoders and error handling, which can be written to any text-based http API.
 
 Features:
 
@@ -12,6 +15,12 @@ Features:
   - java 11 Http2
 - Circuit Breaker
 - [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
+
+
+Feign works by processing annotations into a templatized request. 
+Arguments are applied to these templates in a straightforward fashion before output. 
+Although Feign is limited to supporting text-based APIs, it dramatically simplifies system aspects such as replaying requests. 
+Furthermore, Feign makes it easy to unit test your conversions knowing this.
 
 
 ![](https://camo.githubusercontent.com/f1bd8b9bfe3c049484b0776b42668bb76a57872fe0f01402e5ef73d29b811e50/687474703a2f2f7777772e706c616e74756d6c2e636f6d2f706c616e74756d6c2f70726f78793f63616368653d6e6f267372633d68747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f4f70656e466569676e2f666569676e2f6d61737465722f7372632f646f63732f6f766572766965772d6d696e646d61702e69756d6c)
