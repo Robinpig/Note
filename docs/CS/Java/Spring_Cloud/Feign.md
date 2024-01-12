@@ -23,7 +23,6 @@ Although Feign is limited to supporting text-based APIs, it dramatically simplif
 Furthermore, Feign makes it easy to unit test your conversions knowing this.
 
 
-![](https://camo.githubusercontent.com/f1bd8b9bfe3c049484b0776b42668bb76a57872fe0f01402e5ef73d29b811e50/687474703a2f2f7777772e706c616e74756d6c2e636f6d2f706c616e74756d6c2f70726f78793f63616368653d6e6f267372633d68747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f4f70656e466569676e2f666569676e2f6d61737465722f7372632f646f63732f6f766572766965772d6d696e646d61702e69756d6c)
 
 Enable with `@EnableFeignClients`
 
@@ -215,6 +214,8 @@ class HystrixTargeter implements Targeter {
 
 creates an api binding to the target. As this invokes reflection, care should be taken to cache the result.
 
+
+
 ```java
 public class ReflectiveFeign extends Feign {
     @Override
@@ -352,6 +353,8 @@ abstract class BaseContract implements Contract {
 #### InvocationHandler
 
 dispatch method in cacheMap
+
+retryer
 
 ```java
 static class FeignInvocationHandler implements InvocationHandler {
