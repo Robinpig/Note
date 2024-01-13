@@ -58,7 +58,6 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 
         Set<String> basePackages;
         // get basePackage from getAnnotationAttributes(EnableFeignClients.class)
-
         for (String basePackage : basePackages) {
             Set<BeanDefinition> candidateComponents = scanner.findCandidateComponents(basePackage);
             for (BeanDefinition candidateComponent : candidateComponents) {
@@ -66,14 +65,11 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
                     // verify annotated class is an interface
                     AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
                     AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
-                    Assert.isTrue(annotationMetadata.isInterface(),
-                            "@FeignClient can only be specified on an interface");
+                    Assert.isTrue(annotationMetadata.isInterface(), "@FeignClient can only be specified on an interface");
 
                     Map<String, Object> attributes = annotationMetadata.getAnnotationAttributes(FeignClient.class.getCanonicalName());
-
                     String name = getClientName(attributes);
-                    registerClientConfiguration(registry, name,
-                            attributes.get("configuration"));
+                    registerClientConfiguration(registry, name, attributes.get("configuration"));
 
                     registerFeignClient(registry, annotationMetadata, attributes);
                 }
@@ -82,7 +78,7 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
     }
 }
 ```
-registerBeanDefinition into [Spring](/docs/CS/Java/Spring/IoC.md).
+BeanDefinitionReaderUtils.registerBeanDefinition into [Spring Context](/docs/CS/Java/Spring/IoC.md).
 
 > [!TIP]
 > 
@@ -122,7 +118,6 @@ public static final class Builder<T> {
 		public T build() {
 			return this.feignClientFactoryBean.getTarget();
 		}
-
 	}
 
 class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, ApplicationContextAware {
