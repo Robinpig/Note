@@ -382,6 +382,10 @@ static class FeignInvocationHandler implements InvocationHandler {
     }
 }
 ```
+InvocationHandlerFactory
+
+
+
 
 ## Interceptor
 
