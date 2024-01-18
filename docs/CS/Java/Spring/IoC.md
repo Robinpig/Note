@@ -1770,84 +1770,85 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 2. obtainFromSupplier
 
 ```java
-protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd, @Nullable Object[] args) {
-		// Make sure bean class is actually resolved at this point.
-		Class<?> beanClass = resolveBeanClass(mbd, beanName);
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
+    protected BeanWrapper createBeanInstance(String beanName, RootBeanDefinition mbd, @Nullable Object[] args) {
+        // Make sure bean class is actually resolved at this point.
+        Class<?> beanClass = resolveBeanClass(mbd, beanName);
 
-		if (beanClass != null && !Modifier.isPublic(beanClass.getModifiers()) && !mbd.isNonPublicAccessAllowed()) {
-			// throw "Bean class isn't public, and non-public access not allowed"
-		}
+        if (beanClass != null && !Modifier.isPublic(beanClass.getModifiers()) && !mbd.isNonPublicAccessAllowed()) {
+            // throw "Bean class isn't public, and non-public access not allowed"
+        }
 
-		Supplier<?> instanceSupplier = mbd.getInstanceSupplier();
-		if (instanceSupplier != null) {
-			return obtainFromSupplier(instanceSupplier, beanName);
-		}
+        Supplier<?> instanceSupplier = mbd.getInstanceSupplier();
+        if (instanceSupplier != null) {
+            return obtainFromSupplier(instanceSupplier, beanName);
+        }
 
-		if (mbd.getFactoryMethodName() != null) {
-			return instantiateUsingFactoryMethod(beanName, mbd, args);
-		}
+        if (mbd.getFactoryMethodName() != null) {
+            return instantiateUsingFactoryMethod(beanName, mbd, args);
+        }
 
-		// Shortcut when re-creating the same bean...
-		boolean resolved = false;
-		boolean autowireNecessary = false;
-		if (args == null) {
-			synchronized (mbd.constructorArgumentLock) {
-				if (mbd.resolvedConstructorOrFactoryMethod != null) {
-					resolved = true;
-					autowireNecessary = mbd.constructorArgumentsResolved;
-				}
-			}
-		}
-		if (resolved) {
-			if (autowireNecessary) {
-				return autowireConstructor(beanName, mbd, null, null);
-			}
-			else {
-				return instantiateBean(beanName, mbd);
-			}
-		}
+        // Shortcut when re-creating the same bean...
+        boolean resolved = false;
+        boolean autowireNecessary = false;
+        if (args == null) {
+            synchronized (mbd.constructorArgumentLock) {
+                if (mbd.resolvedConstructorOrFactoryMethod != null) {
+                    resolved = true;
+                    autowireNecessary = mbd.constructorArgumentsResolved;
+                }
+            }
+        }
+        if (resolved) {
+            if (autowireNecessary) {
+                return autowireConstructor(beanName, mbd, null, null);
+            } else {
+                return instantiateBean(beanName, mbd);
+            }
+        }
 
-		// Candidate constructors for autowiring?
-		Constructor<?>[] ctors = determineConstructorsFromBeanPostProcessors(beanClass, beanName);
-		if (ctors != null || mbd.getResolvedAutowireMode() == AUTOWIRE_CONSTRUCTOR ||
-				mbd.hasConstructorArgumentValues() || !ObjectUtils.isEmpty(args)) {
-			return autowireConstructor(beanName, mbd, ctors, args);
-		}
+        // Candidate constructors for autowiring?
+        Constructor<?>[] ctors = determineConstructorsFromBeanPostProcessors(beanClass, beanName);
+        if (ctors != null || mbd.getResolvedAutowireMode() == AUTOWIRE_CONSTRUCTOR ||
+                mbd.hasConstructorArgumentValues() || !ObjectUtils.isEmpty(args)) {
+            return autowireConstructor(beanName, mbd, ctors, args);
+        }
 
-		// Preferred constructors for default construction?
-		ctors = mbd.getPreferredConstructors();
-		if (ctors != null) {
-			return autowireConstructor(beanName, mbd, ctors, null);
-		}
+        // Preferred constructors for default construction?
+        ctors = mbd.getPreferredConstructors();
+        if (ctors != null) {
+            return autowireConstructor(beanName, mbd, ctors, null);
+        }
 
-		// No special handling: simply use no-arg constructor.
-		return instantiateBean(beanName, mbd);
-	}
+        // No special handling: simply use no-arg constructor.
+        return instantiateBean(beanName, mbd);
+    }
+}
 ```
 
 ##### instantiateBean
 
 ```java
-protected BeanWrapper instantiateBean(String beanName, RootBeanDefinition mbd) {
-		try {
-			Object beanInstance;
-			if (System.getSecurityManager() != null) {
-				beanInstance = AccessController.doPrivileged(
-						(PrivilegedAction<Object>) () -> getInstantiationStrategy().instantiate(mbd, beanName, this),
-						getAccessControlContext());
-			}
-			else {
-				beanInstance = getInstantiationStrategy().instantiate(mbd, beanName, this);
-			}
-			BeanWrapper bw = new BeanWrapperImpl(beanInstance);
-			initBeanWrapper(bw);
-			return bw;
-		}
-		catch (Throwable ex) {
-			throw new BeanCreationException(
-					mbd.getResourceDescription(), beanName, "Instantiation of bean failed", ex);
-		}
-	}
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
+    protected BeanWrapper instantiateBean(String beanName, RootBeanDefinition mbd) {
+        try {
+            Object beanInstance;
+            if (System.getSecurityManager() != null) {
+                beanInstance = AccessController.doPrivileged(
+                        (PrivilegedAction<Object>) () -> getInstantiationStrategy().instantiate(mbd, beanName, this),
+                        getAccessControlContext());
+            } else {
+                beanInstance = getInstantiationStrategy().instantiate(mbd, beanName, this);
+            }
+            BeanWrapper bw = new BeanWrapperImpl(beanInstance);
+            initBeanWrapper(bw);
+            return bw;
+        } catch (Throwable ex) {
+            throw new BeanCreationException(
+                    mbd.getResourceDescription(), beanName, "Instantiation of bean failed", ex);
+        }
+    }
+}
 ```
 
 Class
@@ -1904,42 +1905,42 @@ Cglib
 ```
 
 ```java
-public Object instantiate(@Nullable Constructor<?> ctor, Object... args) {
-   Class<?> subclass = createEnhancedSubclass(this.beanDefinition);
-   Object instance;
-   if (ctor == null) {
-      instance = BeanUtils.instantiateClass(subclass);
-   }
-   else {
-      try {
-         Constructor<?> enhancedSubclassConstructor = subclass.getConstructor(ctor.getParameterTypes());
-         instance = enhancedSubclassConstructor.newInstance(args);
-      }
-      catch (Exception ex) {
-         throw new BeanInstantiationException(this.beanDefinition.getBeanClass(),
-               "Failed to invoke constructor for CGLIB enhanced subclass [" + subclass.getName() + "]", ex);
-      }
-   }
-   // SPR-10785: set callbacks directly on the instance instead of in the
-   // enhanced class (via the Enhancer) in order to avoid memory leaks.
-   Factory factory = (Factory) instance;
-   factory.setCallbacks(new Callback[] {NoOp.INSTANCE,
-         new LookupOverrideMethodInterceptor(this.beanDefinition, this.owner),
-         new ReplaceOverrideMethodInterceptor(this.beanDefinition, this.owner)});
-   return instance;
-}
+public class CglibSubclassCreator {
+    public Object instantiate(@Nullable Constructor<?> ctor, Object... args) {
+        Class<?> subclass = createEnhancedSubclass(this.beanDefinition);
+        Object instance;
+        if (ctor == null) {
+            instance = BeanUtils.instantiateClass(subclass);
+        } else {
+            try {
+                Constructor<?> enhancedSubclassConstructor = subclass.getConstructor(ctor.getParameterTypes());
+                instance = enhancedSubclassConstructor.newInstance(args);
+            } catch (Exception ex) {
+                throw new BeanInstantiationException(this.beanDefinition.getBeanClass(),
+                        "Failed to invoke constructor for CGLIB enhanced subclass [" + subclass.getName() + "]", ex);
+            }
+        }
+        // SPR-10785: set callbacks directly on the instance instead of in the
+        // enhanced class (via the Enhancer) in order to avoid memory leaks.
+        Factory factory = (Factory) instance;
+        factory.setCallbacks(new Callback[]{NoOp.INSTANCE,
+                new LookupOverrideMethodInterceptor(this.beanDefinition, this.owner),
+                new ReplaceOverrideMethodInterceptor(this.beanDefinition, this.owner)});
+        return instance;
+    }
 
-private Class<?> createEnhancedSubclass(RootBeanDefinition beanDefinition) {
-   Enhancer enhancer = new Enhancer();
-   enhancer.setSuperclass(beanDefinition.getBeanClass());
-   enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
-   if (this.owner instanceof ConfigurableBeanFactory) {
-      ClassLoader cl = ((ConfigurableBeanFactory) this.owner).getBeanClassLoader();
-      enhancer.setStrategy(new ClassLoaderAwareGeneratorStrategy(cl));
-   }
-   enhancer.setCallbackFilter(new MethodOverrideCallbackFilter(beanDefinition));
-   enhancer.setCallbackTypes(CALLBACK_TYPES);
-   return enhancer.createClass();
+    private Class<?> createEnhancedSubclass(RootBeanDefinition beanDefinition) {
+        Enhancer enhancer = new Enhancer();
+        enhancer.setSuperclass(beanDefinition.getBeanClass());
+        enhancer.setNamingPolicy(SpringNamingPolicy.INSTANCE);
+        if (this.owner instanceof ConfigurableBeanFactory) {
+            ClassLoader cl = ((ConfigurableBeanFactory) this.owner).getBeanClassLoader();
+            enhancer.setStrategy(new ClassLoaderAwareGeneratorStrategy(cl));
+        }
+        enhancer.setCallbackFilter(new MethodOverrideCallbackFilter(beanDefinition));
+        enhancer.setCallbackTypes(CALLBACK_TYPES);
+        return enhancer.createClass();
+    }
 }
 ```
 
@@ -2256,268 +2257,249 @@ default PropertyValues postProcessPropertyValues(
 ```
 
 ```java
-protected void applyPropertyValues(String beanName, BeanDefinition mbd, BeanWrapper bw, PropertyValues pvs) {
-   if (pvs.isEmpty()) {
-      return;
-   }
-
-   if (System.getSecurityManager() != null && bw instanceof BeanWrapperImpl) {
-      ((BeanWrapperImpl) bw).setSecurityContext(getAccessControlContext());
-   }
-
-   MutablePropertyValues mpvs = null;
-   List<PropertyValue> original;
-
-   if (pvs instanceof MutablePropertyValues) {
-      mpvs = (MutablePropertyValues) pvs;
-      if (mpvs.isConverted()) {
-         // Shortcut: use the pre-converted values as-is.
-         try {
-            bw.setPropertyValues(mpvs);
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
+    protected void applyPropertyValues(String beanName, BeanDefinition mbd, BeanWrapper bw, PropertyValues pvs) {
+        if (pvs.isEmpty()) {
             return;
-         }
-         catch (BeansException ex) {
+        }
+
+        if (System.getSecurityManager() != null && bw instanceof BeanWrapperImpl) {
+            ((BeanWrapperImpl) bw).setSecurityContext(getAccessControlContext());
+        }
+
+        MutablePropertyValues mpvs = null;
+        List<PropertyValue> original;
+
+        if (pvs instanceof MutablePropertyValues) {
+            mpvs = (MutablePropertyValues) pvs;
+            if (mpvs.isConverted()) {
+                // Shortcut: use the pre-converted values as-is.
+                try {
+                    bw.setPropertyValues(mpvs);
+                    return;
+                } catch (BeansException ex) {
+                    throw new BeanCreationException(
+                            mbd.getResourceDescription(), beanName, "Error setting property values", ex);
+                }
+            }
+            original = mpvs.getPropertyValueList();
+        } else {
+            original = Arrays.asList(pvs.getPropertyValues());
+        }
+
+        TypeConverter converter = getCustomTypeConverter();
+        if (converter == null) {
+            converter = bw;
+        }
+        BeanDefinitionValueResolver valueResolver = new BeanDefinitionValueResolver(this, beanName, mbd, converter);
+
+        // Create a deep copy, resolving any references for values.
+        List<PropertyValue> deepCopy = new ArrayList<>(original.size());
+        boolean resolveNecessary = false;
+        for (PropertyValue pv : original) {
+            if (pv.isConverted()) {
+                deepCopy.add(pv);
+            } else {
+                String propertyName = pv.getName();
+                Object originalValue = pv.getValue();
+                if (originalValue == AutowiredPropertyMarker.INSTANCE) {
+                    Method writeMethod = bw.getPropertyDescriptor(propertyName).getWriteMethod();
+                    if (writeMethod == null) {
+                        throw new IllegalArgumentException("Autowire marker for property without write method: " + pv);
+                    }
+                    originalValue = new DependencyDescriptor(new MethodParameter(writeMethod, 0), true);
+                }
+                Object resolvedValue = valueResolver.resolveValueIfNecessary(pv, originalValue);
+                Object convertedValue = resolvedValue;
+                boolean convertible = bw.isWritableProperty(propertyName) &&
+                        !PropertyAccessorUtils.isNestedOrIndexedProperty(propertyName);
+                if (convertible) {
+                    convertedValue = convertForProperty(resolvedValue, propertyName, bw, converter);
+                }
+                // Possibly store converted value in merged bean definition,
+                // in order to avoid re-conversion for every created bean instance.
+                if (resolvedValue == originalValue) {
+                    if (convertible) {
+                        pv.setConvertedValue(convertedValue);
+                    }
+                    deepCopy.add(pv);
+                } else if (convertible && originalValue instanceof TypedStringValue &&
+                        !((TypedStringValue) originalValue).isDynamic() &&
+                        !(convertedValue instanceof Collection || ObjectUtils.isArray(convertedValue))) {
+                    pv.setConvertedValue(convertedValue);
+                    deepCopy.add(pv);
+                } else {
+                    resolveNecessary = true;
+                    deepCopy.add(new PropertyValue(pv, convertedValue));
+                }
+            }
+        }
+        if (mpvs != null && !resolveNecessary) {
+            mpvs.setConverted();
+        }
+
+        // Set our (possibly massaged) deep copy.
+        try {
+            bw.setPropertyValues(new MutablePropertyValues(deepCopy));
+        } catch (BeansException ex) {
             throw new BeanCreationException(
-                  mbd.getResourceDescription(), beanName, "Error setting property values", ex);
-         }
-      }
-      original = mpvs.getPropertyValueList();
-   }
-   else {
-      original = Arrays.asList(pvs.getPropertyValues());
-   }
-
-   TypeConverter converter = getCustomTypeConverter();
-   if (converter == null) {
-      converter = bw;
-   }
-   BeanDefinitionValueResolver valueResolver = new BeanDefinitionValueResolver(this, beanName, mbd, converter);
-
-   // Create a deep copy, resolving any references for values.
-   List<PropertyValue> deepCopy = new ArrayList<>(original.size());
-   boolean resolveNecessary = false;
-   for (PropertyValue pv : original) {
-      if (pv.isConverted()) {
-         deepCopy.add(pv);
-      }
-      else {
-         String propertyName = pv.getName();
-         Object originalValue = pv.getValue();
-         if (originalValue == AutowiredPropertyMarker.INSTANCE) {
-            Method writeMethod = bw.getPropertyDescriptor(propertyName).getWriteMethod();
-            if (writeMethod == null) {
-               throw new IllegalArgumentException("Autowire marker for property without write method: " + pv);
-            }
-            originalValue = new DependencyDescriptor(new MethodParameter(writeMethod, 0), true);
-         }
-         Object resolvedValue = valueResolver.resolveValueIfNecessary(pv, originalValue);
-         Object convertedValue = resolvedValue;
-         boolean convertible = bw.isWritableProperty(propertyName) &&
-               !PropertyAccessorUtils.isNestedOrIndexedProperty(propertyName);
-         if (convertible) {
-            convertedValue = convertForProperty(resolvedValue, propertyName, bw, converter);
-         }
-         // Possibly store converted value in merged bean definition,
-         // in order to avoid re-conversion for every created bean instance.
-         if (resolvedValue == originalValue) {
-            if (convertible) {
-               pv.setConvertedValue(convertedValue);
-            }
-            deepCopy.add(pv);
-         }
-         else if (convertible && originalValue instanceof TypedStringValue &&
-               !((TypedStringValue) originalValue).isDynamic() &&
-               !(convertedValue instanceof Collection || ObjectUtils.isArray(convertedValue))) {
-            pv.setConvertedValue(convertedValue);
-            deepCopy.add(pv);
-         }
-         else {
-            resolveNecessary = true;
-            deepCopy.add(new PropertyValue(pv, convertedValue));
-         }
-      }
-   }
-   if (mpvs != null && !resolveNecessary) {
-      mpvs.setConverted();
-   }
-
-   // Set our (possibly massaged) deep copy.
-   try {
-      bw.setPropertyValues(new MutablePropertyValues(deepCopy));
-   }
-   catch (BeansException ex) {
-      throw new BeanCreationException(
-            mbd.getResourceDescription(), beanName, "Error setting property values", ex);
-   }
+                    mbd.getResourceDescription(), beanName, "Error setting property values", ex);
+        }
+    }
 }
 ```
 
 ##### resolveValueIfNecessary
 
 ```java
-@Nullable
-public Object resolveValueIfNecessary(Object argName, @Nullable Object value) {
-   // We must check each value to see whether it requires a runtime reference
-   // to another bean to be resolved.
-   if (value instanceof RuntimeBeanReference) {
-      RuntimeBeanReference ref = (RuntimeBeanReference) value;
-      return resolveReference(argName, ref);
-   }
-   else if (value instanceof RuntimeBeanNameReference) {
-      String refName = ((RuntimeBeanNameReference) value).getBeanName();
-      refName = String.valueOf(doEvaluate(refName));
-      if (!this.beanFactory.containsBean(refName)) {
-         throw new BeanDefinitionStoreException(
-               "Invalid bean name '" + refName + "' in bean reference for " + argName);
-      }
-      return refName;
-   }
-   else if (value instanceof BeanDefinitionHolder) {
-      // Resolve BeanDefinitionHolder: contains BeanDefinition with name and aliases.
-      BeanDefinitionHolder bdHolder = (BeanDefinitionHolder) value;
-      return resolveInnerBean(argName, bdHolder.getBeanName(), bdHolder.getBeanDefinition());
-   }
-   else if (value instanceof BeanDefinition) {
-      // Resolve plain BeanDefinition, without contained name: use dummy name.
-      BeanDefinition bd = (BeanDefinition) value;
-      String innerBeanName = "(inner bean)" + BeanFactoryUtils.GENERATED_BEAN_NAME_SEPARATOR +
-            ObjectUtils.getIdentityHexString(bd);
-      return resolveInnerBean(argName, innerBeanName, bd);
-   }
-   else if (value instanceof DependencyDescriptor) {
-      Set<String> autowiredBeanNames = new LinkedHashSet<>(4);
-      Object result = this.beanFactory.resolveDependency(
-            (DependencyDescriptor) value, this.beanName, autowiredBeanNames, this.typeConverter);
-      for (String autowiredBeanName : autowiredBeanNames) {
-         if (this.beanFactory.containsBean(autowiredBeanName)) {
-            this.beanFactory.registerDependentBean(autowiredBeanName, this.beanName);
-         }
-      }
-      return result;
-   }
-   else if (value instanceof ManagedArray) {
-      // May need to resolve contained runtime references.
-      ManagedArray array = (ManagedArray) value;
-      Class<?> elementType = array.resolvedElementType;
-      if (elementType == null) {
-         String elementTypeName = array.getElementTypeName();
-         if (StringUtils.hasText(elementTypeName)) {
+public class BeanDefinitionValueResolver {
+    @Nullable
+    public Object resolveValueIfNecessary(Object argName, @Nullable Object value) {
+        // We must check each value to see whether it requires a runtime reference
+        // to another bean to be resolved.
+        if (value instanceof RuntimeBeanReference) {
+            RuntimeBeanReference ref = (RuntimeBeanReference) value;
+            return resolveReference(argName, ref);
+        } else if (value instanceof RuntimeBeanNameReference) {
+            String refName = ((RuntimeBeanNameReference) value).getBeanName();
+            refName = String.valueOf(doEvaluate(refName));
+            if (!this.beanFactory.containsBean(refName)) {
+                throw new BeanDefinitionStoreException(
+                        "Invalid bean name '" + refName + "' in bean reference for " + argName);
+            }
+            return refName;
+        } else if (value instanceof BeanDefinitionHolder) {
+            // Resolve BeanDefinitionHolder: contains BeanDefinition with name and aliases.
+            BeanDefinitionHolder bdHolder = (BeanDefinitionHolder) value;
+            return resolveInnerBean(argName, bdHolder.getBeanName(), bdHolder.getBeanDefinition());
+        } else if (value instanceof BeanDefinition) {
+            // Resolve plain BeanDefinition, without contained name: use dummy name.
+            BeanDefinition bd = (BeanDefinition) value;
+            String innerBeanName = "(inner bean)" + BeanFactoryUtils.GENERATED_BEAN_NAME_SEPARATOR +
+                    ObjectUtils.getIdentityHexString(bd);
+            return resolveInnerBean(argName, innerBeanName, bd);
+        } else if (value instanceof DependencyDescriptor) {
+            Set<String> autowiredBeanNames = new LinkedHashSet<>(4);
+            Object result = this.beanFactory.resolveDependency(
+                    (DependencyDescriptor) value, this.beanName, autowiredBeanNames, this.typeConverter);
+            for (String autowiredBeanName : autowiredBeanNames) {
+                if (this.beanFactory.containsBean(autowiredBeanName)) {
+                    this.beanFactory.registerDependentBean(autowiredBeanName, this.beanName);
+                }
+            }
+            return result;
+        } else if (value instanceof ManagedArray) {
+            // May need to resolve contained runtime references.
+            ManagedArray array = (ManagedArray) value;
+            Class<?> elementType = array.resolvedElementType;
+            if (elementType == null) {
+                String elementTypeName = array.getElementTypeName();
+                if (StringUtils.hasText(elementTypeName)) {
+                    try {
+                        elementType = ClassUtils.forName(elementTypeName, this.beanFactory.getBeanClassLoader());
+                        array.resolvedElementType = elementType;
+                    } catch (Throwable ex) {
+                        // Improve the message by showing the context.
+                        throw new BeanCreationException(
+                                this.beanDefinition.getResourceDescription(), this.beanName,
+                                "Error resolving array type for " + argName, ex);
+                    }
+                } else {
+                    elementType = Object.class;
+                }
+            }
+            return resolveManagedArray(argName, (List<?>) value, elementType);
+        } else if (value instanceof ManagedList) {
+            // May need to resolve contained runtime references.
+            return resolveManagedList(argName, (List<?>) value);
+        } else if (value instanceof ManagedSet) {
+            // May need to resolve contained runtime references.
+            return resolveManagedSet(argName, (Set<?>) value);
+        } else if (value instanceof ManagedMap) {
+            // May need to resolve contained runtime references.
+            return resolveManagedMap(argName, (Map<?, ?>) value);
+        } else if (value instanceof ManagedProperties) {
+            Properties original = (Properties) value;
+            Properties copy = new Properties();
+            original.forEach((propKey, propValue) -> {
+                if (propKey instanceof TypedStringValue) {
+                    propKey = evaluate((TypedStringValue) propKey);
+                }
+                if (propValue instanceof TypedStringValue) {
+                    propValue = evaluate((TypedStringValue) propValue);
+                }
+                if (propKey == null || propValue == null) {
+                    throw new BeanCreationException(
+                            this.beanDefinition.getResourceDescription(), this.beanName,
+                            "Error converting Properties key/value pair for " + argName + ": resolved to null");
+                }
+                copy.put(propKey, propValue);
+            });
+            return copy;
+        } else if (value instanceof TypedStringValue) {
+            // Convert value to target type here.
+            TypedStringValue typedStringValue = (TypedStringValue) value;
+            Object valueObject = evaluate(typedStringValue);
             try {
-               elementType = ClassUtils.forName(elementTypeName, this.beanFactory.getBeanClassLoader());
-               array.resolvedElementType = elementType;
+                Class<?> resolvedTargetType = resolveTargetType(typedStringValue);
+                if (resolvedTargetType != null) {
+                    return this.typeConverter.convertIfNecessary(valueObject, resolvedTargetType);
+                } else {
+                    return valueObject;
+                }
+            } catch (Throwable ex) {
+                // Improve the message by showing the context.
+                throw new BeanCreationException(
+                        this.beanDefinition.getResourceDescription(), this.beanName,
+                        "Error converting typed String value for " + argName, ex);
             }
-            catch (Throwable ex) {
-               // Improve the message by showing the context.
-               throw new BeanCreationException(
-                     this.beanDefinition.getResourceDescription(), this.beanName,
-                     "Error resolving array type for " + argName, ex);
-            }
-         }
-         else {
-            elementType = Object.class;
-         }
-      }
-      return resolveManagedArray(argName, (List<?>) value, elementType);
-   }
-   else if (value instanceof ManagedList) {
-      // May need to resolve contained runtime references.
-      return resolveManagedList(argName, (List<?>) value);
-   }
-   else if (value instanceof ManagedSet) {
-      // May need to resolve contained runtime references.
-      return resolveManagedSet(argName, (Set<?>) value);
-   }
-   else if (value instanceof ManagedMap) {
-      // May need to resolve contained runtime references.
-      return resolveManagedMap(argName, (Map<?, ?>) value);
-   }
-   else if (value instanceof ManagedProperties) {
-      Properties original = (Properties) value;
-      Properties copy = new Properties();
-      original.forEach((propKey, propValue) -> {
-         if (propKey instanceof TypedStringValue) {
-            propKey = evaluate((TypedStringValue) propKey);
-         }
-         if (propValue instanceof TypedStringValue) {
-            propValue = evaluate((TypedStringValue) propValue);
-         }
-         if (propKey == null || propValue == null) {
-            throw new BeanCreationException(
-                  this.beanDefinition.getResourceDescription(), this.beanName,
-                  "Error converting Properties key/value pair for " + argName + ": resolved to null");
-         }
-         copy.put(propKey, propValue);
-      });
-      return copy;
-   }
-   else if (value instanceof TypedStringValue) {
-      // Convert value to target type here.
-      TypedStringValue typedStringValue = (TypedStringValue) value;
-      Object valueObject = evaluate(typedStringValue);
-      try {
-         Class<?> resolvedTargetType = resolveTargetType(typedStringValue);
-         if (resolvedTargetType != null) {
-            return this.typeConverter.convertIfNecessary(valueObject, resolvedTargetType);
-         }
-         else {
-            return valueObject;
-         }
-      }
-      catch (Throwable ex) {
-         // Improve the message by showing the context.
-         throw new BeanCreationException(
-               this.beanDefinition.getResourceDescription(), this.beanName,
-               "Error converting typed String value for " + argName, ex);
-      }
-   }
-   else if (value instanceof NullBean) {
-      return null;
-   }
-   else {
-      return evaluate(value);
-   }
+        } else if (value instanceof NullBean) {
+            return null;
+        } else {
+            return evaluate(value);
+        }
+    }
 }
 ```
 
 ##### setPropertyValues
 
 ```java
-// AbstractPropertyAccessor
-@Override
-public void setPropertyValues(PropertyValues pvs, boolean ignoreUnknown, boolean ignoreInvalid)
-      throws BeansException {
+public abstract class AbstractPropertyAccessor extends TypeConverterSupport implements ConfigurablePropertyAccessor {
+    @Override
+    public void setPropertyValues(PropertyValues pvs, boolean ignoreUnknown, boolean ignoreInvalid)
+            throws BeansException {
 
-   List<PropertyAccessException> propertyAccessExceptions = null;
-   List<PropertyValue> propertyValues = (pvs instanceof MutablePropertyValues ?
-         ((MutablePropertyValues) pvs).getPropertyValueList() : Arrays.asList(pvs.getPropertyValues()));
+        List<PropertyAccessException> propertyAccessExceptions = null;
+        List<PropertyValue> propertyValues = (pvs instanceof MutablePropertyValues ?
+                ((MutablePropertyValues) pvs).getPropertyValueList() : Arrays.asList(pvs.getPropertyValues()));
 
-   if (ignoreUnknown) {
-      this.suppressNotWritablePropertyException = true;
-   }
-   try {
-      for (PropertyValue pv : propertyValues) {
-         // setPropertyValue may throw any BeansException, which won't be caught
-         // here, if there is a critical failure such as no matching field.
-         // We can attempt to deal only with less serious exceptions.
-         try {
-            setPropertyValue(pv);
-         }
-         catch (NotWritablePropertyException ex) {
-            // 
-         }
-      }
-   }
-   finally {
-      if (ignoreUnknown) {
-         this.suppressNotWritablePropertyException = false;
-      }
-   }
+        if (ignoreUnknown) {
+            this.suppressNotWritablePropertyException = true;
+        }
+        try {
+            for (PropertyValue pv : propertyValues) {
+                // setPropertyValue may throw any BeansException, which won't be caught
+                // here, if there is a critical failure such as no matching field.
+                // We can attempt to deal only with less serious exceptions.
+                try {
+                    setPropertyValue(pv);
+                } catch (NotWritablePropertyException ex) {
+                    // 
+                }
+            }
+        } finally {
+            if (ignoreUnknown) {
+                this.suppressNotWritablePropertyException = false;
+            }
+        }
 
-   // If we encountered individual exceptions, throw the composite exception.
-   if (propertyAccessExceptions != null) {
-      PropertyAccessException[] paeArray = propertyAccessExceptions.toArray(new PropertyAccessException[0]);
-      throw new PropertyBatchUpdateException(paeArray);
-   }
+        // If we encountered individual exceptions, throw the composite exception.
+        if (propertyAccessExceptions != null) {
+            PropertyAccessException[] paeArray = propertyAccessExceptions.toArray(new PropertyAccessException[0]);
+            throw new PropertyBatchUpdateException(paeArray);
+        }
+    }
 }
 ```
 
@@ -2685,37 +2667,37 @@ Give a bean a chance to react now all its properties are set, and a chance to kn
 This means checking whether the bean implements InitializingBean or defines a custom init method, and invoking the necessary callback(s) if it does.
 
 ```java
-protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBeanDefinition mbd)
-			throws Throwable {
+public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
+    protected void invokeInitMethods(String beanName, Object bean, @Nullable RootBeanDefinition mbd)
+            throws Throwable {
 
-		boolean isInitializingBean = (bean instanceof InitializingBean);
-		if (isInitializingBean && (mbd == null || !mbd.isExternallyManagedInitMethod("afterPropertiesSet"))) {
-			if (System.getSecurityManager() != null) {
-				try {
-					AccessController.doPrivileged((PrivilegedExceptionAction<Object>) () -> {
-						((InitializingBean) bean).afterPropertiesSet();
-						return null;
-					}, getAccessControlContext());
-				}
-				catch (PrivilegedActionException pae) {
-					throw pae.getException();
-				}
-			}
-			else {
-				((InitializingBean) bean).afterPropertiesSet();
-			}
-		}
+        boolean isInitializingBean = (bean instanceof InitializingBean);
+        if (isInitializingBean && (mbd == null || !mbd.isExternallyManagedInitMethod("afterPropertiesSet"))) {
+            if (System.getSecurityManager() != null) {
+                try {
+                    AccessController.doPrivileged((PrivilegedExceptionAction<Object>) () -> {
+                        ((InitializingBean) bean).afterPropertiesSet();
+                        return null;
+                    }, getAccessControlContext());
+                } catch (PrivilegedActionException pae) {
+                    throw pae.getException();
+                }
+            } else {
+                ((InitializingBean) bean).afterPropertiesSet();
+            }
+        }
 
-		// Reflection
-		if (mbd != null && bean.getClass() != NullBean.class) {
-			String initMethodName = mbd.getInitMethodName();
-			if (StringUtils.hasLength(initMethodName) &&
-					!(isInitializingBean && "afterPropertiesSet".equals(initMethodName)) &&
-					!mbd.isExternallyManagedInitMethod(initMethodName)) {
-				invokeCustomInitMethod(beanName, bean, mbd);
-			}
-		}
-	}
+        // Reflection
+        if (mbd != null && bean.getClass() != NullBean.class) {
+            String initMethodName = mbd.getInitMethodName();
+            if (StringUtils.hasLength(initMethodName) &&
+                    !(isInitializingBean && "afterPropertiesSet".equals(initMethodName)) &&
+                    !mbd.isExternallyManagedInitMethod(initMethodName)) {
+                invokeCustomInitMethod(beanName, bean, mbd);
+            }
+        }
+    }
+}
 ```
 
 ## EventListener
