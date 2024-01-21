@@ -14,7 +14,12 @@ An important role of the compiler is to report any errors in the source program 
 <div style="text-align: center;">
 
 ```dot
-span
+digraph g{
+    source[label="source program", shape=none]
+    Compiler[label="Compiler", shape=box]
+    target[label="target program", shape=none]
+    source->Compiler->target
+}
 ```
 
 </div>
@@ -25,7 +30,7 @@ Fig.1. A compiler.
 
 If the target program is an executable machine-language program, it can then be called by the user to process inputs and produce outputs; see Figure 2.
 
-span
+<div style="text-align: center;">
 
 ```dot
 digraph g{
