@@ -10,7 +10,7 @@ Feign connects your code to http APIs with minimal overhead and code via customi
 Features:
 
 - client
-  - [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
+  - [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)(In maintenance)
   - OK Http
   - java 11 Http2
 - Circuit Breaker
