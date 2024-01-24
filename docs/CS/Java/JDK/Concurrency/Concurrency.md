@@ -26,7 +26,7 @@ But without explicit synchronization to coordinate access to shared data, a thre
 ### Risks of Threads
 
 1. Safety Hazards
-2. Liveness Hazards
+2. Liveliness Hazards
 3. Performance Hazards
 
 #### Safety Hazards
