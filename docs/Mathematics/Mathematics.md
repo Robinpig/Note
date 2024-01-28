@@ -160,32 +160,12 @@ There are two basic types: Spherical and Hyperbolic Non-Euclidean geometries.
 Think of folding a plane in Euclidean geometry onto a sphere or a hyperboloid (a three-dimensional hyperbola).
 The lines are bent and circular or elliptical in spherical geometry, and parabolic or hyperbolic in hyperbolic geometry.
 
-
-
-
 ## Calculus
 
-Calculus is a branch of mathematics that is the study of change.
+[Calculus](/docs/Mathematics/Mathematics.md) is a branch of mathematics that is the study of change.
 We use calculus to help explain the physical world around us.
-Disciplines such as physics, statistics, economics, and medicine, 
+Disciplines such as physics, statistics, economics, and medicine,
 use calculus to not only explain the problems and issues that confront them,
 but also to construct models that can be used to predict future events or to describe past events.
-
-The two main branches of calculus are differential calculus and integral calculus. 
-At its base, differential calculus deals with rates of change and considers the slope of a function at a point, 
-while integral calculus considers the area under and between the curves of a function.
-
-In practice, calculus involves the thorough study of limits, 
-as an understanding of limits is necessary in order to tackle topics such as continuity, derivatives, integrals, series, and more.
-
-### Derivative
-The derivative of a function is the rate of change of the function's output relative to its input value. 
-Given y = f(x), the derivative of f(x), denoted f'(x) (or df(x)/dx), is defined by the following limit:
-```tex
-f'(x) = 
-```
-
-
-
 
 ## Links
