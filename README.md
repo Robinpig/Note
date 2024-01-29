@@ -73,7 +73,8 @@ Spring’s focus on speed, simplicity, and productivity has made it the world's 
 
 [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
-[Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md) provides tools for developers to quickly build some of the common patterns in distributed systems (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
+[Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md) provides tools for developers to quickly build some of the common patterns in distributed systems 
+(e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 
 ##### Netty
 

@@ -1,17 +1,37 @@
 ## Introduction
 
-Spring Cloud provides tools for developers to quickly build some of the common patterns in distributed systems 
+Spring Cloud provides tools for developers to quickly build some of the common patterns in [distributed systems](/docs/CS/Distributed/Distributed_Systems.md)
 (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 
-## Service Registry
 
+Spring Cloud focuses on providing good out of box experience for typical use cases and extensibility mechanism to cover others.
+
+* Distributed/versioned configuration
+* Service registration and discovery
+* Routing
+* Service-to-service calls
+* Load balancing
+* Circuit Breakers
+* Distributed messaging
+* Short lived microservices (tasks)
+* Consumer-driven and producer-driven contract testing
+
+## Main Projects
+
+
+### Spring Cloud Netflix
+
+Spring Cloud Netflix project provides Netflix OSS integrations for Spring Boot apps through autoconfiguration and binding to the Spring Environment and other Spring programming model idioms.
+The patterns provided include Service Discovery (Eureka), Circuit Breaker (Hystrix), Intelligent Routing (Zuul) and Client Side Load Balancing (Ribbon).
+
+## Service Registry
 
 - Registry
 - HeartBeat
 - UpdateTask
 
-
 Represents an instance of a service in a discovery system.
+
 ```java
 public interface ServiceInstance {
 
@@ -40,8 +60,6 @@ public interface ServiceInstance {
 }
 ```
 
-
-
 ### ServiceRegistry
 
 A marker interface used by a ServiceRegistry.
@@ -51,7 +69,9 @@ public interface Registration extends ServiceInstance {
 
 }
 ```
+
 Contract to register and deregister instances with a Service Registry.
+
 ```java
 public interface ServiceRegistry<R extends Registration> {
 
@@ -86,6 +106,7 @@ public interface ServiceRegistry<R extends Registration> {
 ### AbstractAutoServiceRegistration
 
 Implementations:
+
 - [Nacos](/docs/CS/Java/Spring_Cloud/nacos/registry.md)
 - [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
 
@@ -93,13 +114,13 @@ Implementations:
 public abstract class AbstractAutoServiceRegistration<R extends Registration>
         implements AutoServiceRegistration, ApplicationContextAware,
         ApplicationListener<WebServerInitializedEvent> {
-    
+  
     private final ServiceRegistry<R> serviceRegistry;
 
     private boolean autoStartup = true;
 
     private AtomicBoolean running = new AtomicBoolean(false);
-    
+  
     @Override
     @SuppressWarnings("deprecation")
     public void onApplicationEvent(WebServerInitializedEvent event) {
@@ -161,14 +182,13 @@ Implementations:
 - [Spring Retry]()
 
 > [!NOTE]
-> 
+>
 > Load Balancer retries timeout must less than circuit breaker timeout.
 
-The CircuitBreakerFactory.create API will create an instance of a class called CircuitBreaker. The run method takes a Supplier and a Function. 
-The Supplier is the code that you are going to wrap in a circuit breaker. 
-The Function is the fallback that will be executed if the circuit breaker is tripped. 
+The CircuitBreakerFactory.create API will create an instance of a class called CircuitBreaker. The run method takes a Supplier and a Function.
+The Supplier is the code that you are going to wrap in a circuit breaker.
+The Function is the fallback that will be executed if the circuit breaker is tripped.
 The function will be passed the Throwable that caused the fallback to be triggered.
-
 
 ```java
 public interface CircuitBreaker {
@@ -183,14 +203,13 @@ public interface CircuitBreaker {
 
 }
 ```
-The ReactiveCircuitBreakerFactory.create API will create an instance of a class called ReactiveCircuitBreaker. 
-The run method takes with a Mono or Flux and wraps it in a circuit breaker. 
+
+The ReactiveCircuitBreakerFactory.create API will create an instance of a class called ReactiveCircuitBreaker.
+The run method takes with a Mono or Flux and wraps it in a circuit breaker.
 
 ## Gateway
 
 Zuul
-
-
 
 - [Gateway](/docs/CS/Java/Spring_Cloud/gateway.md)
 
@@ -206,17 +225,13 @@ Specifically, Spring Cloud Sleuth
 
 - Adds trace and span ids to the Slf4J MDC, so you can extract all the logs from a given trace or span in a log aggregator.
 - Instruments common ingress and egress points from Spring applications (servlet filter, rest template, scheduled actions, message channels, feign client).
-- If `spring-cloud-sleuth-zipkin` is available then the app will generate and report Zipkin-compatible traces via HTTP. By default it sends them to a Zipkin collector service on localhost (port 9411). 
+- If `spring-cloud-sleuth-zipkin` is available then the app will generate and report Zipkin-compatible traces via HTTP. By default it sends them to a Zipkin collector service on localhost (port 9411).
   Configure the location of the service using `spring.zipkin.baseUrl`.
-
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
 
 ## RPC
 
 - [Feign](/docs/CS/Java/Spring_Cloud/Feign.md)
-
-
-
 
 ## Links
 
