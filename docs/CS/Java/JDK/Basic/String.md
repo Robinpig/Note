@@ -391,7 +391,7 @@ String#intern() cache String instances
 
 Deduplication remove char/byte array from String instances cache
 
-## Method
+## Methods
 
 Enahncements:
 
