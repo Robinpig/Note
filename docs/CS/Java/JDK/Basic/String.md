@@ -391,6 +391,14 @@ String#intern() cache String instances
 
 Deduplication remove char/byte array from String instances cache
 
+## Method
+
+Enahncements:
+
+- JDK9
+  - [JDK-8058779 : Faster implementation of String.replace(CharSequence, CharSequence)](https://bugs.java.com/bugdatabase/view_bug.do?bug_id=8058779)
+
+
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
