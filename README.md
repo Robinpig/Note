@@ -52,6 +52,8 @@ This definition leads to the following especially significant characteristics of
 
 ##### C
 
+[C](/docs/CS/C/C.md)
+
 ##### C++
 
 [C++](/docs/CS/C++/C++.md) blends the C language with support for object-oriented programming and for generic programming.
