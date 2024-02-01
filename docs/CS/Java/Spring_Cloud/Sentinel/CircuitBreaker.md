@@ -43,4 +43,4 @@ public abstract class AbstractCircuitBreaker implements CircuitBreaker {
 
 ## Links
 
-- [Spring Cloud Alibaba](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=)
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=Circuit-Breaker)

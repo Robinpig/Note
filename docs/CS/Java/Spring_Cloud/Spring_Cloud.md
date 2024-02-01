@@ -3,7 +3,6 @@
 Spring Cloud provides tools for developers to quickly build some of the common patterns in [distributed systems](/docs/CS/Distributed/Distributed_Systems.md)
 (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 
-
 Spring Cloud focuses on providing good out of box experience for typical use cases and extensibility mechanism to cover others.
 
 * Distributed/versioned configuration
@@ -18,13 +17,42 @@ Spring Cloud focuses on providing good out of box experience for typical use cas
 
 ## Main Projects
 
-
-### Spring Cloud Netflix
+**Spring Cloud Netflix**
 
 Spring Cloud Netflix project provides Netflix OSS integrations for Spring Boot apps through autoconfiguration and binding to the Spring Environment and other Spring programming model idioms.
 The patterns provided include Service Discovery (Eureka), Circuit Breaker (Hystrix), Intelligent Routing (Zuul) and Client Side Load Balancing (Ribbon).
 
+**Spring Cloud Sleuth**
+
+[Spring Cloud Sleuth](https://spring.io/projects/spring-cloud-sleuth) provides Spring Boot auto-configuration for distributed tracing.
+
+Sleuth configures everything you need to get started. This includes where trace data (spans) are reported to, how many traces to keep (sampling), if remote fields (baggage) are sent, and which libraries are traced.
+
+Specifically, Spring Cloud Sleuth
+
+- Adds trace and span ids to the Slf4J MDC, so you can extract all the logs from a given trace or span in a log aggregator.
+- Instruments common ingress and egress points from Spring applications (servlet filter, rest template, scheduled actions, message channels, feign client).
+- If `spring-cloud-sleuth-zipkin` is available then the app will generate and report Zipkin-compatible traces via HTTP.
+  By default it sends them to a Zipkin collector service on localhost (port 9411).
+  Configure the location of the service using `spring.zipkin.baseUrl`.
+- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
+
+**Spring Cloud Gateway**
+
+Spring Cloud Gateway is an intelligent and programmable router based on Project Reactor.
+
+**Spring Cloud OpenFeign**
+
+Spring Cloud OpenFeign provides integrations for Spring Boot apps through autoconfiguration and binding to the Spring Environment and other Spring programming model idioms.
+
 ## Service Registry
+
+A service registry makes it trivial to programmatically query for the location of a given service in a system.
+There are several popular implementations, including Apache Zookeeper, Netflix's Eureka, Hashicorp Consul, and others.
+
+You can even use Kubernetes and Cloud Foundry as service registries.
+Spring Cloud provides an abstraction, DiscoveryClient, that you can use to talk to these service registries generically.
+There are several patterns that a service registry enables that just arent possible with good 'ol DNS.
 
 - Registry
 - HeartBeat
@@ -163,6 +191,11 @@ public abstract class AbstractAutoServiceRegistration<R extends Registration>
 
 use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
+## Configuration
+
+Centralized external configuration management backed by a git repository.
+The configuration resources map directly to Spring Environment but could be used by non-Spring applications if desired.
+
 ## Load Balance
 
 [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
@@ -177,7 +210,7 @@ It provides a consistent API to use in your applications allowing you the develo
 Implementations:
 
 - [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
-- [Resilience4J]()
+- [Resilience4J](/docs/CS/Java/Spring_Cloud/Resilience4j.md)
 - [Sentinel](/docs/CS/Java/Spring_Cloud/Sentinel/Sentinel.md)
 - [Spring Retry]()
 
@@ -212,22 +245,6 @@ The run method takes with a Mono or Flux and wraps it in a circuit breaker.
 Zuul
 
 - [Gateway](/docs/CS/Java/Spring_Cloud/gateway.md)
-
-## Stream
-
-## Sleuth
-
-[Spring Cloud Sleuth](https://spring.io/projects/spring-cloud-sleuth) provides Spring Boot auto-configuration for distributed tracing.
-
-Sleuth configures everything you need to get started. This includes where trace data (spans) are reported to, how many traces to keep (sampling), if remote fields (baggage) are sent, and which libraries are traced.
-
-Specifically, Spring Cloud Sleuth
-
-- Adds trace and span ids to the Slf4J MDC, so you can extract all the logs from a given trace or span in a log aggregator.
-- Instruments common ingress and egress points from Spring applications (servlet filter, rest template, scheduled actions, message channels, feign client).
-- If `spring-cloud-sleuth-zipkin` is available then the app will generate and report Zipkin-compatible traces via HTTP. By default it sends them to a Zipkin collector service on localhost (port 9411).
-  Configure the location of the service using `spring.zipkin.baseUrl`.
-- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
 
 ## RPC
 
