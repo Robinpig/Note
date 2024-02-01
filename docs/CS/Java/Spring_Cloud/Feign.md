@@ -1,20 +1,28 @@
 ## Introduction
 
 Feign is a Java to HTTP client binder inspired by Retrofit, JAXRS-2.0, and WebSocket. 
-Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of ReSTfulness.
+Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of [ReSTfulness](/docs/CS/Distributed/RPC/RESTful.md).
 
+Feign uses tools like Jersey and CXF to write Java clients for ReST or SOAP services.
+Furthermore, Feign allows you to write your own code on top of http libraries such as Apache HC. 
+Feign connects your code to http APIs with minimal overhead and code via customizable decoders and error handling, which can be written to any text-based http API.
 
 Features:
 
 - client
-  - [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
+  - [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)(In maintenance)
   - OK Http
   - java 11 Http2
 - Circuit Breaker
 - [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
 
 
-![](https://camo.githubusercontent.com/f1bd8b9bfe3c049484b0776b42668bb76a57872fe0f01402e5ef73d29b811e50/687474703a2f2f7777772e706c616e74756d6c2e636f6d2f706c616e74756d6c2f70726f78793f63616368653d6e6f267372633d68747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f4f70656e466569676e2f666569676e2f6d61737465722f7372632f646f63732f6f766572766965772d6d696e646d61702e69756d6c)
+Feign works by processing annotations into a templatized request. 
+Arguments are applied to these templates in a straightforward fashion before output. 
+Although Feign is limited to supporting text-based APIs, it dramatically simplifies system aspects such as replaying requests. 
+Furthermore, Feign makes it easy to unit test your conversions knowing this.
+
+
 
 Enable with `@EnableFeignClients`
 
@@ -50,7 +58,6 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
 
         Set<String> basePackages;
         // get basePackage from getAnnotationAttributes(EnableFeignClients.class)
-
         for (String basePackage : basePackages) {
             Set<BeanDefinition> candidateComponents = scanner.findCandidateComponents(basePackage);
             for (BeanDefinition candidateComponent : candidateComponents) {
@@ -58,14 +65,11 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
                     // verify annotated class is an interface
                     AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
                     AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
-                    Assert.isTrue(annotationMetadata.isInterface(),
-                            "@FeignClient can only be specified on an interface");
+                    Assert.isTrue(annotationMetadata.isInterface(), "@FeignClient can only be specified on an interface");
 
                     Map<String, Object> attributes = annotationMetadata.getAnnotationAttributes(FeignClient.class.getCanonicalName());
-
                     String name = getClientName(attributes);
-                    registerClientConfiguration(registry, name,
-                            attributes.get("configuration"));
+                    registerClientConfiguration(registry, name, attributes.get("configuration"));
 
                     registerFeignClient(registry, annotationMetadata, attributes);
                 }
@@ -74,7 +78,7 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
     }
 }
 ```
-registerBeanDefinition into [Spring](/docs/CS/Java/Spring/IoC.md).
+BeanDefinitionReaderUtils.registerBeanDefinition into [Spring Context](/docs/CS/Java/Spring/IoC.md).
 
 > [!TIP]
 > 
@@ -114,7 +118,6 @@ public static final class Builder<T> {
 		public T build() {
 			return this.feignClientFactoryBean.getTarget();
 		}
-
 	}
 
 class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, ApplicationContextAware {
@@ -205,6 +208,8 @@ class HystrixTargeter implements Targeter {
 ### newInstance
 
 creates an api binding to the target. As this invokes reflection, care should be taken to cache the result.
+
+
 
 ```java
 public class ReflectiveFeign extends Feign {
@@ -344,6 +349,8 @@ abstract class BaseContract implements Contract {
 
 dispatch method in cacheMap
 
+retryer
+
 ```java
 static class FeignInvocationHandler implements InvocationHandler {
 
@@ -375,6 +382,10 @@ static class FeignInvocationHandler implements InvocationHandler {
     }
 }
 ```
+InvocationHandlerFactory
+
+
+
 
 ## Interceptor
 

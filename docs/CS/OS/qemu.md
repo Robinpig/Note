@@ -9,6 +9,29 @@ In this mode the CPU may be fully emulated, or it may work with a hypervisor suc
 The second supported way to use QEMU is User Mode Emulation, where QEMU can launch processes compiled for one CPU on another CPU.
 In this mode the CPU is always emulated.
 
+
+**Installing QEMU**
+
+
+<!-- tabs:start -->
+
+##### **CentOS**
+```shell
+yum install qemu
+
+# if no qemu
+yum -y install epel-release
+```
+
+##### **Ubuntu**
+```shell
+apt-get install qemu
+```
+
+
+<!-- tabs:end -->
+
+
 ## Links
 
 

@@ -94,7 +94,17 @@ Logically, the first two states are similar.
 In both cases the process is willing to run, only in the second one, there is temporarily no CPU available for it. 
 The third state is fundamentally different from the first two in that the process cannot run, even if the CPU is idle and has nothing else to do.
 
+
+<div style="text-align: center;">
+
+
 ![Process State](./img/Process%20State.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. A compiler.
+</p>
 
 Four transitions are possible among these three states, as shown.
 
