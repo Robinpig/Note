@@ -5,7 +5,8 @@ The buffer pool permits frequently used data to be accessed directly from memory
 On dedicated servers, up to 80% of physical memory is often assigned to the buffer pool.
 
 For efficiency of high-volume read operations, the buffer pool is divided into pages that can potentially hold multiple rows.
-For efficiency of cache management, the buffer pool is implemented as a linked list of pages; data that is rarely used is aged out of the cache using a variation of the least recently used (LRU) algorithm.
+For efficiency of cache management, the buffer pool is implemented as a linked list of pages; 
+data that is rarely used is aged out of the cache using a variation of the least recently used (LRU) algorithm.
 
 Knowing how to take advantage of the buffer pool to keep frequently accessed data in memory is an important aspect of MySQL tuning.
 
@@ -334,8 +335,8 @@ struct btr_search_t {
 
   /*!< when this exceeds BTR_SEARCH_HASH_ANALYSIS, the hash analysis starts; this is reset if no success noticed  17 */
   ulint hash_analysis;   
-         
-  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */    
+       
+  /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */  
   ulint n_hash_potential;  
 }
 ```
@@ -390,39 +391,36 @@ Structure
 | Page Directory      |        |             |
 | File Tailer         | 8Byte  |             |
 
-
 Supremum and Infimum
 InnoDB has two virtual row records per data page to define record boundaries.
-A Infimum record is a record that is smaller than any primary key value on the page, 
-and a Supremum record is a record that is larger than any primary key value on the modified page. 
+A Infimum record is a record that is smaller than any primary key value on the page,
+and a Supremum record is a record that is larger than any primary key value on the modified page.
 These two records are created when the page is created and will not be deleted under any circumstances.
 
-And since these two Records are not our own defined Records, they are not stored in the User Records section of the page, 
+And since these two Records are not our own defined Records, they are not stored in the User Records section of the page,
 they are placed separately in a section called Infimum + Supremum.
 
-Both Infimum and Supremum consist of a 5-byte record header and an 8-byte fixed part. 
+Both Infimum and Supremum consist of a 5-byte record header and an 8-byte fixed part.
 The fixed part of the smallest record is the word Infimum, and the fixed part of the largest record is the word Supremum.
 Since there are no variable-length fields or nullable fields, there are naturally no variable-length field lists and no NULL value lists.
 
-The structure of the Infimum and Supremum records is shown below. 
-Note that the Infimum record header record_type=2 indicates the minimum record. 
+The structure of the Infimum and Supremum records is shown below.
+Note that the Infimum record header record_type=2 indicates the minimum record.
 Supremum Record header record_type=3, which indicates the maximum record.
 
-After adding the Infimum and Supremum records, the records on the page look like the following figure. 
-The next_record of the Infimum record header points to the record with the smallest primary key on the page, 
+After adding the Infimum and Supremum records, the records on the page look like the following figure.
+The next_record of the Infimum record header points to the record with the smallest primary key on the page,
 and the next_record of the record with the largest primary key on the page points to the Supremum.
-The Infimum and Supremum form the record boundary. 
+The Infimum and Supremum form the record boundary.
 Note also that Infimum and Supremum are the first in the heAP_NO order in the record header.
 
-
 User Records is the part that actually stores row Records, and Free Space is obviously Free Space.
-At the beginning of page generation, there is no User Records part. 
+At the beginning of page generation, there is no User Records part.
 Every time a record is inserted, a Space of record size will be applied from the Free Space part to the User Records part.
 When the Space of the Free Space part is used up, the page will also be used up.
 
-
-First of all, InnoDB's data is organized by index. 
-The B+ tree index itself cannot find a specific record, but only the page where the record is located. 
+First of all, InnoDB's data is organized by index.
+The B+ tree index itself cannot find a specific record, but only the page where the record is located.
 The page is the smallest basic unit of data storage.
 
 
