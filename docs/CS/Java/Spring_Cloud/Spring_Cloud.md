@@ -214,11 +214,15 @@ Implementations:
 - [Sentinel](/docs/CS/Java/Spring_Cloud/Sentinel/Sentinel.md)
 - [Spring Retry]()
 
+
+In Hystrix calls to external systems have to be wrapped in a HystrixCommand.
+
 > [!NOTE]
 >
 > Load Balancer retries timeout must less than circuit breaker timeout.
 
-The CircuitBreakerFactory.create API will create an instance of a class called CircuitBreaker. The run method takes a Supplier and a Function.
+The CircuitBreakerFactory.create API will create an instance of a class called CircuitBreaker.
+The run method takes a Supplier and a Function.
 The Supplier is the code that you are going to wrap in a circuit breaker.
 The Function is the fallback that will be executed if the circuit breaker is tripped.
 The function will be passed the Throwable that caused the fallback to be triggered.

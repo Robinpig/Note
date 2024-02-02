@@ -242,6 +242,7 @@ abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObs
 
 
 Bulkhead Pattern
+
 ```properties
 execution.isolation.strategy=Semaphore
 ```
