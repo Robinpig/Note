@@ -27,7 +27,10 @@ mysql>SHOW VARIABLES LIKE 'innodb_buffer%';
 information_schema> SELECT * FROM INNODB_BUFFER_POOL_STATS;
 ```
 
-### Buffer Pool LRU Algorithm
+### Logical list
+
+
+#### LRU Algorithm
 
 The buffer pool is managed as a list using a variation of the LRU algorithm. When room is needed to add a new page to the buffer pool, the least recently used page is evicted and a new page is added to the middle of the list. This midpoint insertion strategy treats the list as two sublists:
 
@@ -60,9 +63,9 @@ LRU list
 mysql> SELECT TABLE_NAME,PAGE_NUMBER,PAGE_TYPE,INDEX_NAME,SPACE FROM information_schema.INNODB_BUFFER_PAGE_LRU WHERE SPACE = 1;
 ```
 
-### Free List
+#### Free List
 
-### Flush List
+#### Flush List
 
 Checkpoint
 
@@ -111,6 +114,18 @@ class buf_page_t
 #endif /* !UNIV_HOTBACKUP */
 };
 ```
+
+A page on the FLU List must be on the LRU List, but not the other way around. 
+A data page may be modified multiple times at different times, and the oldest (i.e., first) LSN of the first modification is recorded on the data page, i.e., the oldest_modification. 
+Different data pages have different oldest_modification, the nodes in the FLU List are sorted according to the oldest_modification, 
+the linked list tail is the smallest, that is, the earliest data page that has been modified, and when the page needs to be eliminated from the FLU List, 
+it will be eliminated from the end of the linked list.
+To join the FLU List, you need to use flush_list_mutex protection, so the order of the nodes in the FLU List can be ensured.
+
+### Page Hash
+
+
+
 
 ### Read-Ahead
 
@@ -369,7 +384,24 @@ The `innodb_flush_log_at_timeout` variable controls log flushing frequency.
 mysql> show variables like 'innodb_flush_log_at_timeout'; -- 1
 ```
 
+
+Buffer Chunks
+
+
 ## Page
+
+In InnoDB, the minimum unit of data management is a page, which is 16 KB by default, and the page can store data with control information in addition to user data.
+The smallest unit of read and write in the InnoDB IO subsystem is also a page. 
+If you want to read data from the compressed page, the compressed page needs to be decompressed first to form a decompressed page, and the decompressed page is 16KB. 
+The size of the compressed page is specified when creating a table, and currently supports 16K, 8K, 4K, 2K, and 1K.
+Even if the compressed page size is set to 16K, there is some benefit in the blob/varchar/text type. 
+For example, if the size of the compressed page is 4K, if a data page cannot be compressed to less than 4K,
+you need to perform a B-tree splitting operation, which is a time-consuming operation. 
+Under normal circumstances, the buffer pool will cache both compressed and decompressed pages,
+and when the free list is insufficient, 
+the elimination policy will be determined according to the actual load of the system.
+If the system bottleneck is on the I/O, only the decompressed pages are evicted,
+and the compressed pages remain in the buffer pool, otherwise both the decompressed and compressed pages are evicted.
 
 row format:
 
