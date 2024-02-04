@@ -5,7 +5,7 @@ The buffer pool permits frequently used data to be accessed directly from memory
 On dedicated servers, up to 80% of physical memory is often assigned to the buffer pool.
 
 For efficiency of high-volume read operations, the buffer pool is divided into pages that can potentially hold multiple rows.
-For efficiency of cache management, the buffer pool is implemented as a linked list of pages; 
+For efficiency of cache management, the buffer pool is implemented as a linked list of pages;
 data that is rarely used is aged out of the cache using a variation of the least recently used (LRU) algorithm.
 
 Knowing how to take advantage of the buffer pool to keep frequently accessed data in memory is an important aspect of MySQL tuning.
@@ -28,7 +28,6 @@ information_schema> SELECT * FROM INNODB_BUFFER_POOL_STATS;
 ```
 
 ### Logical list
-
 
 #### LRU Algorithm
 
@@ -115,17 +114,14 @@ class buf_page_t
 };
 ```
 
-A page on the FLU List must be on the LRU List, but not the other way around. 
-A data page may be modified multiple times at different times, and the oldest (i.e., first) LSN of the first modification is recorded on the data page, i.e., the oldest_modification. 
-Different data pages have different oldest_modification, the nodes in the FLU List are sorted according to the oldest_modification, 
-the linked list tail is the smallest, that is, the earliest data page that has been modified, and when the page needs to be eliminated from the FLU List, 
+A page on the FLU List must be on the LRU List, but not the other way around.
+A data page may be modified multiple times at different times, and the oldest (i.e., first) LSN of the first modification is recorded on the data page, i.e., the oldest_modification.
+Different data pages have different oldest_modification, the nodes in the FLU List are sorted according to the oldest_modification,
+the linked list tail is the smallest, that is, the earliest data page that has been modified, and when the page needs to be eliminated from the FLU List,
 it will be eliminated from the end of the linked list.
 To join the FLU List, you need to use flush_list_mutex protection, so the order of the nodes in the FLU List can be ensured.
 
 ### Page Hash
-
-
-
 
 ### Read-Ahead
 
@@ -350,7 +346,7 @@ struct btr_search_t {
 
   /*!< when this exceeds BTR_SEARCH_HASH_ANALYSIS, the hash analysis starts; this is reset if no success noticed  17 */
   ulint hash_analysis;   
-       
+     
   /*!< number of consecutive searches which would have succeeded, or did succeed, using the hash index; the range is 0 .. BTR_SEARCH_BUILD_LIMIT + 5 */  
   ulint n_hash_potential;  
 }
@@ -384,21 +380,19 @@ The `innodb_flush_log_at_timeout` variable controls log flushing frequency.
 mysql> show variables like 'innodb_flush_log_at_timeout'; -- 1
 ```
 
-
 Buffer Chunks
-
 
 ## Page
 
 In InnoDB, the minimum unit of data management is a page, which is 16 KB by default, and the page can store data with control information in addition to user data.
-The smallest unit of read and write in the InnoDB IO subsystem is also a page. 
-If you want to read data from the compressed page, the compressed page needs to be decompressed first to form a decompressed page, and the decompressed page is 16KB. 
+The smallest unit of read and write in the InnoDB IO subsystem is also a page.
+If you want to read data from the compressed page, the compressed page needs to be decompressed first to form a decompressed page, and the decompressed page is 16KB.
 The size of the compressed page is specified when creating a table, and currently supports 16K, 8K, 4K, 2K, and 1K.
-Even if the compressed page size is set to 16K, there is some benefit in the blob/varchar/text type. 
+Even if the compressed page size is set to 16K, there is some benefit in the blob/varchar/text type.
 For example, if the size of the compressed page is 4K, if a data page cannot be compressed to less than 4K,
-you need to perform a B-tree splitting operation, which is a time-consuming operation. 
+you need to perform a B-tree splitting operation, which is a time-consuming operation.
 Under normal circumstances, the buffer pool will cache both compressed and decompressed pages,
-and when the free list is insufficient, 
+and when the free list is insufficient,
 the elimination policy will be determined according to the actual load of the system.
 If the system bottleneck is on the I/O, only the decompressed pages are evicted,
 and the compressed pages remain in the buffer pool, otherwise both the decompressed and compressed pages are evicted.
