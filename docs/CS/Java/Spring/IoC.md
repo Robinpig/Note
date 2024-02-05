@@ -2700,77 +2700,9 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 }
 ```
 
-## EventListener
 
-ApplicationEvent refer to this [page](/docs/CS/Java/Spring/Event.md).
 
-### Example
 
-#### ApplicationEvent
-
-```java
-public class BlockedListEvent extends ApplicationEvent {
-
-    private final String address;
-    private final String content;
-
-    public BlockedListEvent(Object source, String address, String content) {
-        super(source);
-        this.address = address;
-        this.content = content;
-    }
-
-    // accessor and other methods...
-}
-```
-
-#### EventPublisher
-
-```java
-public class EmailService implements ApplicationEventPublisherAware {
-
-    private List<String> blockedList;
-    private ApplicationEventPublisher publisher;
-
-    public void setBlockedList(List<String> blockedList) {
-        this.blockedList = blockedList;
-    }
-
-    public void setApplicationEventPublisher(ApplicationEventPublisher publisher) {
-        this.publisher = publisher;
-    }
-
-    public void sendEmail(String address, String content) {
-        if (blockedList.contains(address)) {
-            publisher.publishEvent(new BlockedListEvent(this, address, content));
-            return;
-        }
-        // send email...
-    }
-}
-```
-
-#### EventListener
-
-```java
-public class BlockedListNotifier {
-
-    private String notificationAddress;
-
-    public void setNotificationAddress(String notificationAddress) {
-        this.notificationAddress = notificationAddress;
-    }
-
-    @EventListener
-    public void processBlockedListEvent(BlockedListEvent event) {
-        // notify appropriate parties via notificationAddress...
-    }
-}
-```
-
-### Usage Example
-
-- ZuulRefreshListener
 
 ## Message Resolution
 
