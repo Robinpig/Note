@@ -44,11 +44,20 @@ This definition leads to the following especially significant characteristics of
 
 ##### Go
 
+[Golang](/docs/CS/Go/Go.md)
+
 ##### Rust
+
+[Rust](/docs/CS/Rust/Rust.md)
 
 ##### Scala
 
+[Scala](/docs/CS/Scala/Scala.md)
+
 ##### Python
+
+
+[Python](/docs/CS/Python/Python.md)
 
 ##### C
 
