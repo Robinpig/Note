@@ -771,6 +771,18 @@ try {
 
 kafka.consumer.isolation-level: read_committed
 
+
+
+## Examples
+
+Spring Boot with Multiple producers
+
+
+The producer is **thread safe** and sharing a **single producer instance** across threads will generally be faster than having multiple instances.
+
+So mostly we use multiple producers for multiple servers.
+
+
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
