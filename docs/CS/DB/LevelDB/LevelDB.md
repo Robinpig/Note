@@ -21,7 +21,8 @@ For LevelDB, inserting a key-value pair goes through many steps: (1) the log fil
 </p>
 
 The main data structures in LevelDB are an ondisk log file, two in-memory sorted skiplists (memtable and immutable memtable), and seven levels (L0 to L6) of on-disk Sorted String Table (SSTable) files.
-LevelDB initially stores inserted key-value pairs in a log file and the in-memory memtable. Once the memtable is full, LevelDB switches to a new memtable and log file to handle further inserts from the user.
+LevelDB initially stores inserted key-value pairs in a log file and the in-memory memtable. 
+Once the memtable is full, LevelDB switches to a new memtable and log file to handle further inserts from the user.
 In the background, the previous memtable is converted into an immutable memtable, and a compaction thread then flushes it to the disk, generating a new SSTable file (about 2 MB usually) at level 0 (L0); the previous log file is discarded.
 The size of all files in each level is limited, and increases by a factor of ten with the level number.
 For example, the size limit of all files at L1 is 10 MB, while the limit of L2 is 100 MB.
@@ -253,9 +254,9 @@ class LEVELDB_EXPORT Iterator {
 
 ### Status
 
-You may have noticed the `leveldb::Status` type above. Values of this type are
-returned by most functions in leveldb that may encounter an error. You can check
-if such a result is ok, and also print an associated error message:
+You may have noticed the `leveldb::Status` type above. 
+Values of this type are returned by most functions in leveldb that may encounter an error.
+You can check if such a result is ok, and also print an associated error message:
 
 ```c++
 leveldb::Status s = ...;
