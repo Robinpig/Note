@@ -53,9 +53,11 @@ NGINX uses a predictable process model that is tuned to the available hardware r
 
 The NGINX configuration recommended in most cases – running one worker process per CPU core – makes the most efficient use of hardware resources. You configure it by setting the parameter on the directive:autoworker_processes
 
-When an NGINX server is active, only the worker processes are busy. Each worker process handles multiple connections in a nonblocking fashion, reducing the number of context switches.
+When an NGINX server is active, only the worker processes are busy. 
+Each worker process handles multiple connections in a nonblocking fashion, reducing the number of context switches.
 
-Each worker process is single‑threaded and runs independently, grabbing new connections and processing them. The processes can communicate using shared memory for shared cache data, session persistence data, and other shared resources.
+Each worker process is single‑threaded and runs independently, grabbing new connections and processing them. 
+The processes can communicate using shared memory for shared cache data, session persistence data, and other shared resources.
 
 
 ## Struct
@@ -352,6 +354,7 @@ main
  - ngx_os_init
  - ngx_init_cycle
    - ngx_conf_parse
+   - ngx_open_listening_sockets
  - ngx_master_process_cycle
    - ngx_start_worker_processes
      - ngx_worker_process_cycle
@@ -711,7 +714,7 @@ ngx_spawn_process(ngx_cycle_t *cycle, ngx_spawn_proc_pt proc, void *data,
 
     ngx_process_slot = s;
 
-
+    /** fork **/
     pid = fork();
 
     switch (pid) {
