@@ -18,7 +18,7 @@ Send to
 
 Traces
 
-OpenTracing
+[OpenTracing](/docs/CS/Tracing.md)
 
 - Jaeger
 - SkyWaljing
