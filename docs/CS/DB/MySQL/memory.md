@@ -190,7 +190,8 @@ During crash recovery, InnoDB looks for a checkpoint label written to the log fi
 It knows that all modifications to the database before the label are present in the disk image of the database.
 Then InnoDB scans the log files forward from the checkpoint, applying the logged modifications to the database.
 
-## Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
+Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
+
 
 A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages.
 The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extend). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
@@ -277,11 +278,12 @@ uint srv_change_buffer_max_size = CHANGE_BUFFER_DEFAULT_SIZE; // 25
 
 ```
 
-### How much space does InnoDB use for the change buffer?
+How much space does InnoDB use for the change buffer?
 
 Prior to the introduction of the innodb_change_buffer_max_size configuration option in MySQL 5.6, the maximum size of the on-disk change buffer in the system tablespace was 1/3 of the InnoDB buffer pool size.
 
-In MySQL 5.6 and later, the innodb_change_buffer_max_size configuration option defines the maximum size of the change buffer as a percentage of the total buffer pool size. By default, innodb_change_buffer_max_size is set to 25. The maximum setting is 50.
+In MySQL 5.6 and later, the innodb_change_buffer_max_size configuration option defines the maximum size of the change buffer as a percentage of the total buffer pool size.
+By default, innodb_change_buffer_max_size is set to 25. The maximum setting is 50.
 
 InnoDB does not buffer an operation if it would cause the on-disk change buffer to exceed the defined limit.
 
@@ -289,7 +291,9 @@ Change buffer pages are not required to persist in the buffer pool and may be ev
 
 How do I determine the current size of the change buffer?
 
-The current size of the change buffer is reported by SHOW ENGINE INNODB STATUS \G, under the INSERT BUFFER AND ADAPTIVE HASH INDEX heading. For example:
+The current size of the change buffer is reported by SHOW ENGINE INNODB STATUS \G, under the INSERT BUFFER AND ADAPTIVE HASH INDEX heading.
+
+For example:
 
 ```
 -------------------------------------
@@ -300,7 +304,9 @@ Ibuf: size 1, free list len 0, seg size 2, 0 merges
 
 Relevant data points include:
 
-size: The number of pages used within the change buffer. Change buffer size is equal to seg size - (1 + free list len). The 1 + value represents the change buffer header page.
+size: The number of pages used within the change buffer.
+Change buffer size is equal to seg size - (1 + free list len). 
+The 1 + value represents the change buffer header page.
 
 seg size: The size of the change buffer, in pages.
 
@@ -324,7 +330,8 @@ An optimization for InnoDB tables that can speed up lookups using `=` and `IN` o
 MySQL monitors index searches for InnoDB tables, and if queries could benefit from a hash index, it builds one automatically for index **pages** that are frequently accessed.
 In a sense, the adaptive hash index configures MySQL at runtime to take advantage of ample main memory, coming closer to the architecture of main-memory databases.
 This feature is controlled by the `innodb_adaptive_hash_index` configuration option.
-Because this feature benefits some workloads and not others, and the memory used for the hash index is reserved in the **buffer pool**, typically you should benchmark with this feature both enabled and disabled.
+Because this feature benefits some workloads and not others, and the memory used for the hash index is reserved in the **buffer pool**, 
+typically you should benchmark with this feature both enabled and disabled.
 
 The hash index is always built based on an existing **B-tree** index on the table.
 MySQL can build a hash index on a prefix of any length of the key defined for the B-tree, depending on the pattern of searches against the index.
@@ -336,7 +343,6 @@ In MySQL 5.6 and higher, another way to take advantage of fast single-value look
 // btr0sea.h
 /** The global limit for consecutive potentially successful hash searches, before hash index building is started */
 #define BTR_SEARCH_BUILD_LIMIT 100
-
 
 /** The search info struct in an index */
 struct btr_search_t {
@@ -362,7 +368,8 @@ A large log buffer enables large transactions to run without the need to write [
 Thus, if you have transactions that update, insert, or delete many rows, increasing the size of the log buffer saves disk I/O.
 
 Log buffer size is defined by the `innodb_log_buffer_size` variable.
-The default size is **16MB**. The contents of the log buffer are periodically flushed to disk.
+The default size is **16MB**.
+The contents of the log buffer are periodically flushed to disk.
 
 ```sql
 mysql> show variables like 'innodb_log_buffer_size'; -- 16777216
@@ -418,6 +425,7 @@ Structure
 | File Tailer         | 8Byte  |             |
 
 Supremum and Infimum
+
 InnoDB has two virtual row records per data page to define record boundaries.
 A Infimum record is a record that is smaller than any primary key value on the page,
 and a Supremum record is a record that is larger than any primary key value on the modified page.
@@ -478,7 +486,7 @@ spilt 2slots(4 and 5) when overlimit 8, add a bigger slot
 
 Find Record:
 
-1. 通过二分法确定该记录所在的槽，并找到该槽中主键值最小的那条记录。
+1. find the lowest primary value though binary search
 2. Iterate records in slot by `next_record`
 
 #### Page Header
