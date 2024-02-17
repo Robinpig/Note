@@ -384,7 +384,7 @@ RocketMQ all topics using single commitlog and multiple index
 
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
-- [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
+- [wApache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
 
 ## References
 
