@@ -1,7 +1,5 @@
 ## Introduction
 
-http://play.golang.org
-
 
 
 

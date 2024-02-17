@@ -2706,7 +2706,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 ## Message Resolution
 
-Furthermore, Spring provides two *MessageSource* implementations, [*ResourceBundleMessageSource*](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/support/ResourceBundleMessageSource.html) and [*StaticMessageSource*](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/context/support/StaticMessageSource.html).
+Furthermore, Spring provides two *MessageSource* implementations, *ResourceBundleMessageSource* and *StaticMessageSource*.
 
 ## BeanFactory vs ApplicationContext
 
