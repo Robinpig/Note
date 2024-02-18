@@ -1,13 +1,9 @@
+## Introduction
 
-
-
+Create a cache.
 ```c
 
 /**
- * __kmem_cache_create - Create a cache.
- * @cachep: cache management descriptor
- * @flags: SLAB flags
- *
  * Returns a ptr to the cache on success, NULL on failure.
  * Cannot be called within a int, but can be interrupted.
  * The @ctor is run when new pages are allocated by the cache.
