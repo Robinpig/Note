@@ -57,9 +57,13 @@ Structure Hazard
 
 ### Branches
 
+
+
 #### The Delayed Branch
 
 #### Branch Prediction
+
+
 
 #### Dynamic Branch Prediction
 
@@ -75,6 +79,7 @@ Head positioning is the most expensive part of an operation on the HDD. This is 
 
 
 ### Solid State Drives
+
 Solid state drives (SSDs) do not have moving parts: there’s no disk that spins, or head that has to be positioned for the read. A typical SSD is built of memory cells, connected into strings (typically 32 to 64 cells per string), strings are combined into arrays, arrays are combined into pages, and pages are combined into blocks.
 
 Depending on the exact technology used, a cell can hold one or multiple bits of data. Pages vary in size between devices, but typically their sizes range from 2 to 16 Kb. Blocks typically contain 64 to 512 pages. Blocks are organized into planes and, finally, planes are placed on a die. SSDs can have one or more dies. Figure 2-5 shows this hierarchy.
