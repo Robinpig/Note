@@ -144,6 +144,7 @@ When `acks=1` , producers consider messages as ”written successfully“ when t
 <p style="text-align: center;">
 acks = 1
 </p>
+
 Leader response is requested, but replication is not a guarantee as it happens in the background.
 If an ack is not received, the producer may retry the request. 
 If the leader broker goes offline unexpectedly but replicas haven’t replicated the data yet, we have a data loss.
@@ -225,7 +226,11 @@ For example, if the broker returns an INVALID_CONFIG exception,
 trying the same producer request again will not change the outcome of the request.
 
 It is desirable to enable retries in order to ensure that no messages are dropped when sent to Apache Kafka.
-Allowing retries without setting max.in.flight.requests.per.connection to 1 will potentially change the ordering of records because if two batches are sent to a single partition, and the first fails and is retried but the second succeeds, then the records in the second batch may appear first. If you rely on key-based ordering, that can be an issue. By limiting the number of in-flight requests to 1 (default being 5), i.e., max.in.flight.requests.per.connection = 1, we can guarantee that Kafka will preserve message order in the event that some messages will require multiple retries before they are successfully acknowledged.
+Allowing retries without setting max.in.flight.requests.per.connection to 1 will potentially change the ordering of records because if two batches are sent to a single partition, 
+and the first fails and is retried but the second succeeds, then the records in the second batch may appear first. 
+If you rely on key-based ordering, that can be an issue. 
+By limiting the number of in-flight requests to 1 (default being 5), i.e., max.in.flight.requests.per.connection = 1,
+we can guarantee that Kafka will preserve message order in the event that some messages will require multiple retries before they are successfully acknowledged.
 
 if we enable idempotence enable=idempotence=true, then it is required for max.in.flight.requests.per.connection to be less than or equal to 5 with message ordering preserved for any allowable value!!
 
@@ -234,7 +239,11 @@ if we enable idempotence enable=idempotence=true, then it is required for max.in
 Retrying to send a failed message often includes a small risk that both messages were successfully written to the broker, leading to duplicates.
 
 Producer idempotence ensures that duplicates are not introduced due to unexpected retries.
-When enable.idempotence is set to true, each producer gets assigned a Producer Id (PID) and the PIDis included every time a producer sends messages to a broker. Additionally, each message gets a monotonically increasing sequence number (different from the offset - used only for protocol purposes). A separate sequence is maintained for each topic partition that a producer sends messages to. On the broker side, on a per partition basis, it keeps track of the largest PID-Sequence Number combination that is successfully written. When a lower sequence number is received, it is discarded.
+When enable.idempotence is set to true, each producer gets assigned a Producer Id (PID) and the PIDis included every time a producer sends messages to a broker. 
+Additionally, each message gets a monotonically increasing sequence number (different from the offset - used only for protocol purposes). 
+A separate sequence is maintained for each topic partition that a producer sends messages to. 
+On the broker side, on a per partition basis, it keeps track of the largest PID-Sequence Number combination that is successfully written. 
+When a lower sequence number is received, it is discarded.
 
 
 ## send
@@ -459,27 +468,28 @@ public class RecordAccumulator {
 }
 ```
 
+
 ```
-public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers, Callback callback, long now) {
+    public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers, Callback callback, long now) {
         if (!recordsBuilder.hasRoomFor(timestamp, key, value, headers)) {
-        return null;
+            return null;
         } else {
-        this.recordsBuilder.append(timestamp, key, value, headers);
-        this.maxRecordSize = Math.max(this.maxRecordSize, AbstractRecords.estimateSizeInBytesUpperBound(magic(),
-        recordsBuilder.compressionType(), key, value, headers));
-        this.lastAppendTime = now;
-        FutureRecordMetadata future = new FutureRecordMetadata(this.produceFuture, this.recordCount,
-        timestamp,
-        key == null ? -1 : key.length,
-        value == null ? -1 : value.length,
-        Time.SYSTEM);
-        // we have to keep every future returned to the users in case the batch needs to be
-        // split to several new batches and resent.
-        thunks.add(new Thunk(callback, future));
-        this.recordCount++;
-        return future;
+            this.recordsBuilder.append(timestamp, key, value, headers);
+            this.maxRecordSize = Math.max(this.maxRecordSize, AbstractRecords.estimateSizeInBytesUpperBound(magic(),
+                    recordsBuilder.compressionType(), key, value, headers));
+            this.lastAppendTime = now;
+            FutureRecordMetadata future = new FutureRecordMetadata(this.produceFuture, this.recordCount,
+                    timestamp,
+                    key == null ? -1 : key.length,
+                    value == null ? -1 : value.length,
+                    Time.SYSTEM);
+            // we have to keep every future returned to the users in case the batch needs to be
+            // split to several new batches and resent.
+            thunks.add(new Thunk(callback, future));
+            this.recordCount++;
+            return future;
         }
-        }
+    }
 ```
 
 #### ready
@@ -730,13 +740,15 @@ delay
 A container that holds the list ProducerInterceptor and wraps calls to the chain of custom interceptors.
 
 A plugin interface that allows you to intercept (and possibly mutate) the records received by the producer before they are published to the Kafka cluster.
-This class will get producer config properties via configure() method, including clientId assigned by KafkaProducer if not specified in the producer config. The interceptor implementation needs to be aware that it will be sharing producer config namespace with other interceptors and serializers, and ensure that there are no conflicts.
+This class will get producer config properties via configure() method, including clientId assigned by KafkaProducer if not specified in the producer config. 
+The interceptor implementation needs to be aware that it will be sharing producer config namespace with other interceptors and serializers, and ensure that there are no conflicts.
 
 **Exceptions thrown by ProducerInterceptor methods will be caught, logged, but not propagated further.**
 As a result, if the user configures the interceptor with the wrong key and value type parameters, the producer will not throw an exception, just log the errors.
 ProducerInterceptor callbacks may be called from multiple threads. Interceptor implementation must ensure thread-safety, if needed.
 
-Implement org.apache.kafka.common.ClusterResourceListener to receive cluster metadata once it's available. Please see the class documentation for ClusterResourceListener for more information.
+Implement org.apache.kafka.common.ClusterResourceListener to receive cluster metadata once it's available. 
+Please see the class documentation for ClusterResourceListener for more information.
 
 ```java
 public interface ProducerInterceptor<K, V> extends Configurable, AutoCloseable {

@@ -31,7 +31,8 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 ### Distributed Systems
 
 A [distributed system](/docs/CS/Distributed/Distributed_Systems.md) is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
-This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
+This definition leads to the following especially significant characteristics of distributed systems:
+concurrency of components, lack of a global clock and independent failures of components.
 
 
 [Transaction](/docs/CS/Transaction.md)
@@ -79,21 +80,26 @@ The [Java Development Kit(JDK)](/docs/CS/Java/JDK/JDK.md) includes the Java Runt
 
 ##### Spring Framework
 
-The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody.
+The [Spring Framework](/docs/CS/Java/Spring/Spring.md) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - 
+on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody.
 Spring’s focus on speed, simplicity, and productivity has made it the world's most popular Java framework.
 
 [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
 [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md) provides tools for developers to quickly build some of the common patterns in distributed systems 
-(e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
+(e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, 
+one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 
 ##### Netty
 
-[Netty](/docs/CS/Java/Netty/Netty.md) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
+[Netty](/docs/CS/Java/Netty/Netty.md) is a NIO client server framework which enables quick and easy development of network applications such as protocol servers and clients. 
+It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
 
 ##### MyBatis
 
-[MyBatis](/docs/CS/Java/MyBatis/MyBatis.md) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Ordinary Java Objects) to database records.
+[MyBatis](/docs/CS/Java/MyBatis/MyBatis.md) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings. 
+MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results. 
+MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Ordinary Java Objects) to database records.
 
 ##### Dubbo
 
@@ -101,7 +107,9 @@ Spring’s focus on speed, simplicity, and productivity has made it the world's 
 
 ##### Tomcat
 
-[The Apache Tomcat® software](/docs/CS/Java/Tomcat/Tomcat.md) is an open source implementation of the Jakarta Servlet, Jakarta Server Pages, Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications. These specifications are part of the Jakarta EE platform.
+[The Apache Tomcat® software](/docs/CS/Java/Tomcat/Tomcat.md) is an open source implementation of the Jakarta Servlet, Jakarta Server Pages,
+Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications. 
+These specifications are part of the Jakarta EE platform.
 
 ##### ZooKeeper
 
