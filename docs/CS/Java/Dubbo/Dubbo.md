@@ -94,9 +94,7 @@ GenericFilter
 MultiHandler
 
 
-### registry
 
-[registry](/docs/CS/Java/Dubbo/registry.md)
 
 
 

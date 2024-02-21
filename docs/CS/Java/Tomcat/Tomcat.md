@@ -2,23 +2,9 @@
 
 [The Apache Tomcat® software](https://tomcat.apache.org/) is an open source implementation of the Jakarta [Servlet](/docs/CS/Java/JDK/Servlet.md), Jakarta Server Pages, Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications. These specifications are part of the Jakarta EE platform.
 
-> [Apache Tomcat Versions](https://tomcat.apache.org/whichversion.html)
+Different versions of Apache Tomcat are available for different versions of the specifications.
+The mapping between the specifications and the respective [Apache Tomcat Versions](https://tomcat.apache.org/whichversion.html).
 
-Different versions of Apache Tomcat are available for different versions of the specifications. The mapping between the specifications and the respective Apache Tomcat versions is:
-
-
-| **Servlet Spec** | **JSP Spec** | **EL Spec** | **WebSocket Spec** | **Authentication (JASPIC) Spec** | **Apache Tomcat Version** | **Latest Released Version** | **Supported Java Versions**                 |
-| ---------------- | ------------ | ----------- | ------------------ | -------------------------------- | ------------------------- | --------------------------- | ------------------------------------------- |
-| 6.0              | 3.1          | 5.0         | 2.1                | 3.0                              | 10.1.x                    | 10.1.1                      | 11 and later                                |
-| 5.0              | 3.0          | 4.0         | 2.0                | 2.0                              | 10.0.x (superseded)       | 10.0.27 (superseded)        | 8 and later                                 |
-| 4.0              | 2.3          | 3.0         | 1.1                | 1.1                              | 9.0.x                     | 9.0.68                      | 8 and later                                 |
-| 3.1              | 2.3          | 3.0         | 1.1                | 1.1                              | 8.5.x                     | 8.5.83                      | 7 and later                                 |
-| 3.1              | 2.3          | 3.0         | 1.1                | N/A                              | 8.0.x (superseded)        | 8.0.53 (superseded)         | 7 and later                                 |
-| 3.0              | 2.2          | 2.2         | 1.1                | N/A                              | 7.0.x (archived)          | 7.0.109 (archived)          | 6 and later<br/>(7 and later for WebSocket) |
-| 2.5              | 2.1          | 2.1         | N/A                | N/A                              | 6.0.x (archived)          | 6.0.53 (archived)           | 5 and later                                 |
-| 2.4              | 2.0          | N/A         | N/A                | N/A                              | 5.5.x (archived)          | 5.5.36 (archived)           | 1.4 and later                               |
-| 2.3              | 1.2          | N/A         | N/A                | N/A                              | 4.1.x (archived)          | 4.1.40 (archived)           | 1.3 and later                               |
-| 2.2              | 1.1          | N/A         | N/A                | N/A                              | 3.3.x (archived)          | 3.3.2 (archived)            | 1.1 and later                               |
 
 ### Debug Tomcat
 
@@ -226,15 +212,14 @@ interface Container << interface >>
 - [ClassLoader](/docs/CS/Java/Tomcat/ClassLoader.md)
 
 ```dot
-
 strict digraph  {
 rankdir=LR;
 autosize=false;
  size="30.0, 38.3";
   node [shape=box];
 
-  User -> SocketWrapper;
- 
+  User;
+
   Acceptor -> Poller 
   Poller -> Executor 
   Processor;
@@ -339,6 +324,8 @@ autosize=false;
         }
     }
 }
+  User -> SocketWrapper;
+
 }
 
 ```
@@ -349,10 +336,10 @@ A container must implement `org.apache.catalina.Container`.
 
 The first thing to note about containers in Catalina is that there are four types of containers at different conceptual levels:
 
-- Engine. Represents the entire Catalina servlet engine.
-- Host. Represents a virtual host with a number of contexts.
-- Context. Represents a web application. A context contains one or more wrappers.
-- Wrapper. Represents an individual servlet.
+- **Engine**. Represents the entire Catalina servlet engine.
+- **Host**. Represents a virtual host with a number of contexts.
+- **Context**. Represents a web application. A context contains one or more wrappers.
+- **Wrapper**. Represents an individual servlet.
 
 Each conceptual level above is represented by an interface in the org.apache.catalina package.
 These interfaces are Engine, Host, Context, and Wrapper. All the four extends the Container interface.
@@ -452,23 +439,25 @@ Child Containers are not allowed on Wrapper implementations, so the addChild() m
 
 ### Server and Service
 
-A Server element represents the entire Catalina servlet container. Its attributes represent the characteristics of the servlet container as a whole.
+A Server element represents the entire Catalina servlet container.
+Its attributes represent the characteristics of the servlet container as a whole.
 A Server may contain one or more Services, and the top level set of naming resources.
 Normally, an implementation of this interface will also implement Lifecycle, such that when the start() and stop() methods are called, all of the defined Services are also started or stopped.
 In between, the implementation must open a server socket on the port number specified by the port property. When a connection is accepted, the first line is read and compared with the specified shutdown command.
 If the command matches, shutdown of the server is initiated.
 
-- JreMemoryLeakPreventionListener Provide a workaround for known places where the Java Runtime environment can cause a memory leak or lock files.
-  Memory leaks occur when JRE code uses the context class loader to load a singleton as this will cause a memory leak if a web application class loader happens to be the context class loader at the time. The work-around is to initialise these singletons when Tomcat's common class loader is the context class loader.
+- `JreMemoryLeakPreventionListener` Provide a workaround for known places where the Java Runtime environment can cause a memory leak or lock files.
+  Memory leaks occur when JRE code uses the context class loader to load a singleton as this will cause a memory leak if a web application class loader happens to be the context class loader at the time. 
+  The work-around is to initialise these singletons when Tomcat's common class loader is the context class loader.
   Locked files usually occur when a resource inside a JAR is accessed without first disabling Jar URL connection caching. The workaround is to disable this caching by default.
-- ThreadLocalLeakPreventionListener A LifecycleListener that triggers the renewal of threads in Executor pools when a Context is being stopped to avoid thread-local related memory leaks.
+- `ThreadLocalLeakPreventionListener` A LifecycleListener that triggers the renewal of threads in Executor pools when a Context is being stopped to avoid thread-local related memory leaks.
   Note : active threads will be renewed one by one when they come back to the pool after executing their task, see ThreadPoolExecutor.afterExecute().
 
 A service component encapsulates a container and one or many connectors.
 
-The org.apache.catalina.core.StandardService class is the standard implementation of Service.
+The `org.apache.catalina.core.StandardService` class is the standard implementation of Service.
 The StandardService class's initialize method initializes all the connectors added to the service.
-StandardService implements Service as well as the org.apache.catalina.Lifecycle interface.
+StandardService implements Service as well as the `org.apache.catalina.Lifecycle` interface.
 Its start method starts the container and all the connectors.
 
 A StandardService instance contains two types of components: a container and one or more connectors.
@@ -525,6 +514,8 @@ public class CoyoteAdapter implements Adapter {
     }
 }
 ```
+
+
 
 ## BackgroundProcess
 

@@ -4,7 +4,7 @@
 
 Create a new ProtocolHandler for the given protocol.
 
-```java
+```
 // Connector
 // Defaults to using HTTP/1.1 NIO implementation.
 public Connector() {
