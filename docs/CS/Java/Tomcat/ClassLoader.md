@@ -238,15 +238,15 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
 
 #### loadClass
 
-Load the class with the specified name, searching using the following algorithm until it finds and returns the class.
+Load the class with the specified name, searching using the following algorithm until it finds and returns the class. 
+If the class cannot be found, returns ClassNotFoundException.
 
-1. If the class cannot be found, returns ClassNotFoundException.
-2. Call findLoadedClass(String) to check if the class has already been loaded. If it has, the same Class object is returned.
-3. If the delegate property is set to true, call the loadClass() method of the parent class loader, if any.
-4. Call findClass() to find this class in our locally defined repositories.
-5. Call the loadClass() method of our parent class loader, if any.
-6. If the class was found using the above steps, and the resolve flag is true, this method will then call resolveClass(Class) on the resulting Class object.
+- Call findLoadedClass(String) to check if the class has already been loaded. If it has, the same Class object is returned.
+- If the delegate property is set to true(**default false**), call the loadClass() method of the parent class loader, if any.
+- Call findClass() to find this class in our locally defined repositories.
+- Call the loadClass() method of our parent class loader, if any.
 
+If the class was found using the above steps, and the resolve flag is true, this method will then call resolveClass(Class) on the resulting Class object.
 ```java
 public abstract class WebappClassLoaderBase extends URLClassLoader
         implements Lifecycle, InstrumentableClassLoader, WebappProperties, PermissionCheck {
