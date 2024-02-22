@@ -45,7 +45,8 @@ Echo request    8
 
 Echo reply  0
 
-
+The TTL value varies depends on the version of an operating system and device.
+The default initial TTL value for Linux/Unix is 64, and TTL value for Windows is 128.
 
 
 
