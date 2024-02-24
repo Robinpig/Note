@@ -4,7 +4,8 @@ Tomcat startup using two classes in the `org.apache.catalina.startup` package, C
 The Catalina class is used to start and stop a Server object as well as parse the Tomcat configuration file, server.xml.
 The Bootstrap class is the entry point that creates an instance of Catalina and calls its process method.
 In theory, these two classes could have been merged.
-However, to support more than one mode of running Tomcat, a number of bootstrap classes are provided. For example, the aforementioned Bootstrap class is used for running Tomcat as a stand-alone application.
+However, to support more than one mode of running Tomcat, a number of bootstrap classes are provided.
+For example, the aforementioned Bootstrap class is used for running Tomcat as a stand-alone application.
 
 For user's convenience, Tomcat also comes with the batch files and shell scripts to start and stop the servlet container easily.
 With the help of these batch files and shell scripts, the user does not need to remember the options for the java.exe program to run the Bootstrap class.
@@ -61,7 +62,8 @@ Any state can transition to FAILED.
 The most important methods in Lifecycle are start and stop.
 A component provides implementations of these methods so that its parent component can start and stop it.
 The other three methods—addLifecycleListener, findLifecycleListeners, and removeLifecycleListener—are related to listeners.
-A component can have listeners that are interested in an event that occurs in that component. When an event occurs, the listener interested in that event will be notified.
+A component can have listeners that are interested in an event that occurs in that component.
+When an event occurs, the listener interested in that event will be notified.
 The names of the six events that can be triggered by a Lifecycle instance are defined in public static final Strings of the interface.
 
 ## Bootstrap
@@ -336,10 +338,13 @@ public void start() {
 
 #### startInternal
 
-Prepare for the beginning of active use of the public methods other than property getters/setters and life cycle methods of this component. This method should be called before any of the public methods other than property getters/setters and life cycle methods of this component are utilized. The following LifecycleEvents will be fired in the following order:
+Prepare for the beginning of active use of the public methods other than property getters/setters and life cycle methods of this component. 
+This method should be called before any of the public methods other than property getters/setters and life cycle methods of this component are utilized. 
+The following LifecycleEvents will be fired in the following order:
 
 1. BEFORE_START_EVENT: At the beginning of the method. It is as this point the state transitions to LifecycleState.STARTING_PREP.
-2. START_EVENT: During the method once it is safe to call start() for any child components. It is at this point that the state transitions to LifecycleState.STARTING and that the public methods other than property getters/setters and life cycle methods may be used.
+2. START_EVENT: During the method once it is safe to call start() for any child components.
+   It is at this point that the state transitions to LifecycleState.STARTING and that the public methods other than property getters/setters and life cycle methods may be used.
 3. AFTER_START_EVENT: At the end of the method, immediately before it returns. It is at this point that the state transitions to LifecycleState.STARTED.
 
 ```java
@@ -410,12 +415,16 @@ public class StandardService extends LifecycleMBeanBase implements Service {
 
 Gracefully terminate the active use of the public methods other than property getters/setters and life cycle methods of this component.
 
-- Once the STOP_EVENT is fired, the public methods other than property getters/setters and life cycle methods should not be used. The following LifecycleEvents will be fired in the following order:
+- Once the STOP_EVENT is fired, the public methods other than property getters/setters and life cycle methods should not be used. 
+  The following LifecycleEvents will be fired in the following order:
 - BEFORE_STOP_EVENT: At the beginning of the method. It is at this point that the state transitions to LifecycleState.STOPPING_PREP.
-- STOP_EVENT: During the method once it is safe to call stop() for any child components. It is at this point that the state transitions to LifecycleState.STOPPING and that the public methods other than property getters/setters and life cycle methods may no longer be used.
-- AFTER_STOP_EVENT: At the end of the method, immediately before it returns. It is at this point that the state transitions to LifecycleState.STOPPED.
+- STOP_EVENT: During the method once it is safe to call stop() for any child components. 
+  It is at this point that the state transitions to LifecycleState.STOPPING and that the public methods other than property getters/setters and life cycle methods may no longer be used.
+- AFTER_STOP_EVENT: At the end of the method, immediately before it returns. 
+  It is at this point that the state transitions to LifecycleState.STOPPED.
 
-Note that if transitioning from LifecycleState.FAILED then the three events above will be fired but the component will transition directly from LifecycleState.FAILED to LifecycleState.STOPPING, bypassing LifecycleState.STOPPING_PREP
+Note that if transitioning from LifecycleState.FAILED then the three events above will be fired
+but the component will transition directly from LifecycleState.FAILED to LifecycleState.STOPPING, bypassing LifecycleState.STOPPING_PREP
 
 ```java
 // // LifecycleBase
