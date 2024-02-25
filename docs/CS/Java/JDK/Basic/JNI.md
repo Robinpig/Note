@@ -2,6 +2,18 @@
 
 Java Native Interface
 
+
+### Example
+
+javac -h generate .h file
+create .c file
+compile link file
+
+
+
+
+--add-modules jdk.incubator.foreign  --enable-native-access=ALL-UNNAMED
+
 ## native call Java
 
 ```c
