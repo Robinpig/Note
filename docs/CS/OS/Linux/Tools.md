@@ -12,7 +12,7 @@ System
 - netstat
 - sar
 
-
+[nmon](https://nmon.sourceforge.io/pmwiki.php) is short for **N**igel's performance **Mon**itor **for Linux** on POWER, x86, x86_64, Mainframe & now ARM (Raspberry Pi).
 
 Process
 

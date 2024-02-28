@@ -1,5 +1,29 @@
 ## Introduction
 
+Ribbon is a client-side load balancer that gives you a lot of control over the behavior of HTTP and TCP clients. Feign already uses Ribbon.
+
+The following table shows the beans that Spring Cloud Netflix provides by default for Ribbon:
+
+| Bean Type | Bean Name | Class Name |
+| :--: | :--: | :--: |
+| `IClientConfig` | `ribbonClientConfig` | `DefaultClientConfigImpl` |
+| `IRule` | `ribbonRule` | `ZoneAvoidanceRule` |
+| `IPing` | `ribbonPing` | `DummyPing` |
+| `ServerList<Server>` | `ribbonServerList` | `ConfigurationBasedServerList` |
+| `ServerListFilter<Server>` | `ribbonServerListFilter` | `ZonePreferenceServerListFilter` |
+| `ILoadBalancer` | `ribbonLoadBalancer` | `ZoneAwareLoadBalancer` |
+| `ServerListUpdater` | `ribbonServerListUpdater` | `PollingServerListUpdater` |
+
+
+Each Ribbon named client has a corresponding child application Context that Spring Cloud maintains. This application context is lazily loaded on the first request to the named client. This lazy loading behavior can be changed to instead eagerly load these child application contexts at startup, by specifying the names of the Ribbon clients, as shown in the following example:
+
+```yml
+ribbon:
+  eager-load:
+    enabled: true
+    clients: client1, client2, client3
+``` 
+
 
 
 ### AutoConfiguration

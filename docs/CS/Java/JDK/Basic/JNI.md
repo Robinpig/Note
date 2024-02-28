@@ -2,6 +2,42 @@
 
 Java Native Interface
 
+
+### Example
+
+javac -h generate .h file
+create .c file
+compile link file
+
+
+JDK17
+```
+--add-modules jdk.incubator.foreign  --enable-native-access=ALL-UNNAMED
+```
+
+```java
+
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
+
+import jdk.incubator.foreign.*;
+
+public class Hello {
+    public static void main(String[] args) throws Throwable {
+        try (ResourceScope scope = ResourceScope.newConfinedScope()) {
+            CLinker cLinker = CLinker.getInstance();
+            MemorySegment helloWorld =
+                    CLinker.toCString("Hello, world!\n", scope);
+            MethodHandle cPrintf = cLinker.downcallHandle(
+                    CLinker.systemLookup().lookup("printf").get(),
+                    MethodType.methodType(int.class, MemoryAddress.class),
+                    FunctionDescriptor.of(CLinker.C_INT, CLinker.C_POINTER));
+            cPrintf.invoke(helloWorld.address());
+        }
+    }
+}
+```
+
 ## native call Java
 
 ```c

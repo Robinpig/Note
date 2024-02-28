@@ -94,9 +94,11 @@ GenericFilter
 MultiHandler
 
 
-### registry
 
-[registry](/docs/CS/Java/Dubbo/registry.md)
+
+
+
+[CVE-2020-1948](https://www.cve.org/CVERecord?id=CVE-2020-1948)
 
 ## Links
 

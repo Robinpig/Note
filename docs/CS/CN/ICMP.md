@@ -22,9 +22,8 @@ Other protocols, such as TCP, handle such situations.
 
 Because of the ability of ICMP to affect the operation of important system functions and obtain configuration information, hackers have used ICMP messages in a large number of attacks. 
 As a result of concerns about such attacks, network administrators often arrange to block ICMP messages with firewalls, especially at border routers. 
-If ICMP is blocked, however, a number of common diagnostic utilities (e.g., ping, traceroute) do not work properly [RFC4890].
-
-[RFC0792][RFC4443]
+If ICMP is blocked, however, a number of common diagnostic utilities (e.g., ping, traceroute) do not work properly.
+ 
 
 ## ICMP Messages
 
@@ -45,7 +44,8 @@ Echo request    8
 
 Echo reply  0
 
-
+The TTL value varies depends on the version of an operating system and device.
+The default initial TTL value for Linux/Unix is 64, and TTL value for Windows is 128.
 
 
 
@@ -64,7 +64,7 @@ The types of attacks involving ICMP fall primarily into three categories: floods
 In essence, floods cause a large amount of traffic to be generated, leading to an effective DoS attack on one or more computers. 
 The bomb class (sometimes called nuke class) refers to sending specially constructed messages that cause IP or ICMP processing to crash or hang. 
 Information disclosure attacks do not typically cause harm by themselves but can be used to inform the approaches used by other attack methods to avoid wasting time or avoid being detected. 
-ICMP attacks against TCP have been documented separately [RFC5927].
+ICMP attacks against TCP have been documented separately.
 
 
 
