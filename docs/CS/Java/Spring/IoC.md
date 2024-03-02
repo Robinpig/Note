@@ -1210,18 +1210,18 @@ See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
 2. allowCircularReferences
 3. isSingletonCurrentlyInCreation
 
-```
-// DefaultSingletonBeanRegistry is superClass of AbstractBeanFactory
- protected void addSingletonFactory(String beanName, ObjectFactory<?> singletonFactory) {
-     Assert.notNull(singletonFactory, "Singleton factory must not be null");
-     synchronized (this.singletonObjects) {
+```java
+public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements SingletonBeanRegistry {
+   protected void addSingletonFactory(String beanName, ObjectFactory<?> singletonFactory) {
+      synchronized (this.singletonObjects) {
          if (!this.singletonObjects.containsKey(beanName)) {
-             this.singletonFactories.put(beanName, singletonFactory);
-             this.earlySingletonObjects.remove(beanName);
-             this.registeredSingletons.add(beanName);
+            this.singletonFactories.put(beanName, singletonFactory);
+            this.earlySingletonObjects.remove(beanName);
+            this.registeredSingletons.add(beanName);
          }
-     }
- }
+      }
+   }
+}
 ```
 
 Obtain a reference for early access to the specified bean, typically for the purpose of resolving a circular reference.
