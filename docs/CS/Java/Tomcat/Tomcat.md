@@ -550,12 +550,12 @@ This servlet is intended to be mapped to /e.g.:
 input output buffer
 
 ```java
-    protected void serveResource(HttpServletRequest request,
+protected void serveResource(HttpServletRequest request,
                                HttpServletResponse response,
                                boolean content,
                                String inputEncoding)
           throws IOException, ServletException {
-      // ... 
+      // omitted 
       // Check if the conditions specified in the optional If headers are
       // satisfied.
       if (resource.isFile()) {
@@ -566,7 +566,7 @@ input output buffer
           return;
         }
       }
-    }
+}
 ```
 
 checkIfHeaders

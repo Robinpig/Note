@@ -4,7 +4,7 @@
 ## Thread Model
 
 
-property enable epoll\
+property enable [epoll](/docs/CS/OS/Linux/epoll.md)
 
 OptionalSslHandler
 
