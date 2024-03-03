@@ -17,10 +17,10 @@ Refactoring is a systematic process of improving code without creating new funct
 - Shotgun Surgery
 - Feature Envy
 - Data Clumps
-- Pimitive Obsession
+- Primitive Obsession
 - Repeated Switches
 - Loops
-- Lazy Elment
+- Lazy Element
 - Speculative Generality
 - Temporary Field
 - Message Chains

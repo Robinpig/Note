@@ -14,15 +14,11 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 
 ## Architecture
 
-
 [Init](/docs/CS/Java/MyBatis/Init.md)
-
 
 ### Infrastructure
 
-
 <div style="text-align: center;">
-
 
 ```dot
 strict digraph {
@@ -57,7 +53,7 @@ strict digraph {
         th [shape="polygon" label="TypeHandler"]
         ph [shape="polygon" label="ParameterHandler"]
         {rank="same"; sh;th;ph;rh;}
-    
+  
     }
   
     session -> executor [label="query(MappedStatement)"]
@@ -84,7 +80,6 @@ strict digraph {
 
 </div>
 
-
 <p style="text-align: center;">
 Fig.1. MyBatis Infrastructure
 </p>
@@ -108,7 +103,6 @@ Fig.1. MyBatis Infrastructure
 ## Extension
 
 [MyBatis-Spring](/docs/CS/Java/MyBatis/MyBatis-Spring.md) : Load Mybatis-config.xml, create Configuration and SqlsessionFactory
-
 
 ## Links
 

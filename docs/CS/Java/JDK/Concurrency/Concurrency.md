@@ -327,7 +327,7 @@ N_{threads} = N_{cpu}*U_{cpu}*(1+\frac{W}C)
 
 You can determine the number of CPUs using Runtime:
 
-```java
+```
 int N_CPUS = Runtime.getRuntime().availableProcessors();
 ```
 

@@ -1196,9 +1196,9 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 }
 ```
 
-#### circular references
+#### Circular References
 
-Default false.
+Prohibit circular references by default.
 
 ```properties
 spring.main.allow-circular-references=false
