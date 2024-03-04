@@ -1,5 +1,7 @@
 ## Introduction
 
+There is a body of software, in fact, that is responsible for making it easy to run programs, allowing programs to share memory, enabling programs to interact with devices, and other fun stuff like that. 
+That body of software is called the operating system (OS), as it is in charge of making sure the system operates correctly and efficiently in an easy-to-use manner.
 An operating system (OS) is a software program that serves as the interface between other applications and the hardware on a computer or mobile device.
 
 - Kernel
@@ -25,6 +27,10 @@ Modules with kernel code that can be inserted or removed while the system is up-
 This is assisted by elaborate means of communication between the kernel and userland that allows for implementing hotplugging and dynamic loading of modules.
 
 ## Virtualization
+
+The primary way the OS does this is through a general technique that we call virtualization.
+That is, the OS takes a physical resource (such as the processor, or memory, or a disk) and transforms it into a more general, powerful, and easy-to-use virtual form of itself.
+Thus, we sometimes refer to the operating system as a virtual machine.
 
 In order to virtualize the CPU, the operating system needs to somehow share the physical CPU among many jobs running seemingly at the same time.
 The basic idea is simple: run one process for a little while, then run another one, and so forth. By time sharing the CPU in this manner, virtualization is achieved.
