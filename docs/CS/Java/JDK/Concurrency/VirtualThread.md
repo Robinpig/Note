@@ -38,3 +38,8 @@ They exist to provide scale (higher throughput), not speed (lower latency).
 ## Links
 
 - [Java Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+
+
+## References
+
+1. [JEP 444: Virtual Threads](https://openjdk.org/jeps/444)
