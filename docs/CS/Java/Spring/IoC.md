@@ -337,16 +337,11 @@ public class GenericApplicationContext extends AbstractApplicationContext implem
 ##### **AbstractRefreshableApplicationContext**
 
 ```java
-// AbstractRefreshableApplicationContext::refreshBeanFactory()
 public abstract class AbstractRefreshableApplicationContext extends AbstractApplicationContext {
 
     @Nullable
     private volatile DefaultListableBeanFactory beanFactory;
 
-    /**
-     * This implementation performs an actual refresh of this context's underlying bean factory, 
-     * shutting down the previous bean factory (if any) and initializing a fresh bean factory for the next phase of the context's lifecycle.
-     */
     @Override
     protected final void refreshBeanFactory() throws BeansException {
         if (hasBeanFactory()) {
