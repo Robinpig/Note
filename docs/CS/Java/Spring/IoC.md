@@ -2,7 +2,7 @@
 
 We'll introduce the concepts of **IoC**(*Inversion of Control*) and **DI**(*Dependency Injection*), as well as take a look at how these are implemented in the Spring framework.
 Inversion of Control is a principle in software engineering which transfers the control of objects or portions of a program to a container or framework.
-We most often use it in the context of `OOP`(object-oriented programming).
+We most often use it in the context of **OOP**(*object-oriented programming*).
 In contrast with traditional programming, in which our custom code makes calls to a library, IoC enables a framework to take control of the flow of a program and make calls to our custom code.
 To enable this, frameworks use abstractions with additional behavior built in.
 If we want to add our own behavior, we need to extend the classes of the framework or plugin our own classes.
@@ -14,7 +14,9 @@ The advantages of this architecture are:
 - greater modularity of a program
 - greater ease in testing a program by isolating a component or mocking its dependencies, and allowing components to communicate through contracts
 
-We can achieve Inversion of Control through various mechanisms such as: Strategy design pattern, Service Locator pattern, Factory pattern, and Dependency Injection (DI).
+>  [!Note]
+>
+> We can achieve Inversion of Control through various mechanisms such as: Strategy design pattern, Service Locator pattern, Factory pattern, and Dependency Injection (DI).
 
 ### DI
 
@@ -48,8 +50,7 @@ Spring doesn't support constructor injection in an abstract class.
 <p style="text-align: center;">
 Fig.1. BeanFactory Hierarchy.
 </p>
-
-**The interfaces *BeanFactory* and *ApplicationContext* represent the Spring IoC container**.
+The interfaces *BeanFactory* and *ApplicationContext* represent the Spring IoC container.
 BeanFactory is the root interface for accessing the Spring container. It provides basic functionalities for managing beans.
 On the other hand, the ApplicationContext is a sub-interface of the BeanFactory.
 It adds:
@@ -943,16 +944,13 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader i
                 // Publish shutdown event.
                 publishEvent(new ContextClosedEvent(this));
             } catch (Throwable ex) {
-                logger.warn("Exception thrown from ApplicationListener handling ContextClosedEvent", ex);
             }
 
             // Stop all Lifecycle beans, to avoid delays during individual destruction.
             if (this.lifecycleProcessor != null) {
                 try {
                     this.lifecycleProcessor.onClose();
-                } catch (Throwable ex) {
-                    logger.warn("Exception thrown from LifecycleProcessor on context close", ex);
-                }
+                } catch (Throwable ex) {}
             }
 
             // Destroy all cached singletons in the context's BeanFactory.
@@ -979,19 +977,15 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader i
 
 ## Bean Lifecycle
 
+Bean lifecycle:
+
 - create
 - populate
 - init
 - using
 - destroy
 
-用户可声明Bean的init-method和destroy-method
 
-在调用Bean的初始化方法之前 会调用一系列的aware接口实现 把相关的BeanName BeanClassLoader  以及BeanFactoy注入到Bean中去
-
-对invokeInitMethods的调用   启动afterPropertiesSet需要Bean实现InitializingBean的接口  对应的初始化处理可以在InitializingBean接口的afterPropertiesSet方法中实现 这里同样是对Bean的一个回调
-
-Bean的销毁过程 首先对postProcessBeforeDestruction进行调用 然后调用Bean的destroy方法 最后是对Bean的自定义销毁方法的调用
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019114800284.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
 
 ## getBean
