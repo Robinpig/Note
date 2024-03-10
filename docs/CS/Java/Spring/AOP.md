@@ -1,10 +1,10 @@
 ## Introduction
 
-Aspect-Oriented Programming (AOP) complements Object-Oriented Programming (OOP) by providing another way of thinking about program structure. 
-The key unit of modularity in OOP is the class, whereas in AOP the unit of modularity is the aspect. 
+Aspect-Oriented Programming (AOP) complements Object-Oriented Programming (OOP) by providing another way of thinking about program structure.
+The key unit of modularity in OOP is the class, whereas in AOP the unit of modularity is the aspect.
 Aspects enable the modularization of concerns such as transaction management that cut across multiple types and objects. (Such concerns are often termed crosscutting concerns in AOP literature.)
 
-One of the key components of Spring is the AOP framework. 
+One of the key components of Spring is the AOP framework.
 While the Spring IoC container does not depend on AOP, meaning you do not need to use AOP if you don't want to, AOP complements Spring IoC to provide a very capable middleware solution.
 
 AOP is used in the Spring Framework to:
@@ -14,23 +14,23 @@ AOP is used in the Spring Framework to:
 
 ## AOP Concepts
 
-Let us begin by defining some central AOP concepts and terminology. 
-These terms are not Spring-specific. 
-Unfortunately, AOP terminology is not particularly intuitive. 
+Let us begin by defining some central AOP concepts and terminology.
+These terms are not Spring-specific.
+Unfortunately, AOP terminology is not particularly intuitive.
 However, it would be even more confusing if Spring used its own terminology.
 
-- Aspect: A modularization of a concern that cuts across multiple classes. 
+- Aspect: A modularization of a concern that cuts across multiple classes.
   Transaction management is a good example of a crosscutting concern in enterprise Java applications.
   In Spring AOP, aspects are implemented by using regular classes (the schema-based approach) or regular classes annotated with the @Aspect annotation (the @AspectJ style).
 - Join point: A point during the execution of a program, such as the execution of a method or the handling of an exception. In Spring AOP, a join point always represents a method execution.
-- Advice: Action taken by an aspect at a particular join point. 
-  Different types of advice include "around", "before", and "after" advice. (Advice types are discussed later.) 
+- Advice: Action taken by an aspect at a particular join point.
+  Different types of advice include "around", "before", and "after" advice. (Advice types are discussed later.)
   Many AOP frameworks, including Spring, model an advice as an interceptor and maintain a chain of interceptors around the join point.
-- Pointcut: A predicate that matches join points. Advice is associated with a pointcut expression and runs at any join point matched by the pointcut (for example, the execution of a method with a certain name). 
+- Pointcut: A predicate that matches join points. Advice is associated with a pointcut expression and runs at any join point matched by the pointcut (for example, the execution of a method with a certain name).
   The concept of join points as matched by pointcut expressions is central to AOP, and Spring uses the AspectJ pointcut expression language by default.
 - Introduction: Declaring additional methods or fields on behalf of a type. Spring AOP lets you introduce new interfaces (and a corresponding implementation) to any advised object.
   For example, you could use an introduction to make a bean implement an IsModified interface, to simplify caching. (An introduction is known as an inter-type declaration in the AspectJ community.)
-- Target object: An object being advised by one or more aspects. Also referred to as the "advised object". 
+- Target object: An object being advised by one or more aspects. Also referred to as the "advised object".
   Since Spring AOP is implemented by using runtime proxies, this object is always a proxied object.
 - AOP proxy: An object created by the AOP framework in order to implement the aspect contracts (advise method executions and so on). In the Spring Framework, an AOP proxy is a JDK dynamic proxy or a CGLIB proxy.
 - Weaving: linking aspects with other application types or objects to create an advised object.
@@ -42,24 +42,23 @@ Spring AOP includes the following types of advice:
 - After returning advice: Advice to be run after a join point completes normally (for example, if a method returns without throwing an exception).
 - After throwing advice: Advice to be run if a method exits by throwing an exception.
 - After (finally) advice: Advice to be run regardless of the means by which a join point exits (normal or exceptional return).
-- Around advice: Advice that surrounds a join point such as a method invocation. This is the most powerful kind of advice. 
+- Around advice: Advice that surrounds a join point such as a method invocation. This is the most powerful kind of advice.
   Around advice can perform custom behavior before and after the method invocation.
   It is also responsible for choosing whether to proceed to the join point or to shortcut the advised method execution by returning its own return value or throwing an exception.
 
-
-Around advice is the most general kind of advice. Since Spring AOP, like AspectJ, provides a full range of advice types, we recommend that you use the least powerful advice type that can implement the required behavior. 
-For example, if you need only to update a cache with the return value of a method, you are better off implementing an after returning advice than an around advice, although an around advice can accomplish the same thing. 
-Using the most specific advice type provides a simpler programming model with less potential for errors. 
+Around advice is the most general kind of advice. Since Spring AOP, like AspectJ, provides a full range of advice types, we recommend that you use the least powerful advice type that can implement the required behavior.
+For example, if you need only to update a cache with the return value of a method, you are better off implementing an after returning advice than an around advice, although an around advice can accomplish the same thing.
+Using the most specific advice type provides a simpler programming model with less potential for errors.
 For example, you do not need to invoke the method on the used for around advice, and, hence, you cannot fail to invoke it.proceed()JoinPoint
 
 All advice parameters are statically typed so that you work with advice parameters of the appropriate type (e.g. the type of the return value from a method execution) rather than arrays.Object
 
-The concept of join points matched by pointcuts is the key to AOP, which distinguishes it from older technologies offering only interception. 
-Pointcuts enable advice to be targeted independently of the object-oriented hierarchy. 
+The concept of join points matched by pointcuts is the key to AOP, which distinguishes it from older technologies offering only interception.
+Pointcuts enable advice to be targeted independently of the object-oriented hierarchy.
 For example, you can apply an around advice providing declarative transaction management to a set of methods that span multiple objects (such as all business operations in the service layer).
 
-
 ### Pointcut
+
 ```java
 public interface Pointcut {
 	ClassFilter getClassFilter();
@@ -69,7 +68,9 @@ public interface Pointcut {
 	Pointcut TRUE = TruePointcut.INSTANCE;
 }
 ```
+
 Pointcut types:
+
 - StaticMethodMatcherPointcut
 - DynamicMethodMatcherPointcut
 - AnnotationMatchingPointcut
@@ -78,11 +79,7 @@ Pointcut types:
 - ComposablePointcut
 - TruePointcut
 
-
-
-
 ### AOP Hierarchy
-
 
 ![](img/AOP.png)
 
@@ -118,10 +115,6 @@ public class AppConfig {
        }
    }
 ```
-
-
-
-
 
 ```java
 @Target(ElementType.TYPE)
@@ -161,8 +154,6 @@ class AspectJAutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 }
 ```
 
-
-
 #### AnnotationAwareAspectJAutoProxyCreator
 
 ```
@@ -187,17 +178,14 @@ protected void initBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 }
 ```
 
-
-
-
 *AspectJAwareAdvisorAutoProxyCreator subclass that processes all **AspectJ annotation aspects** in the current application context, as well as Spring Advisors.*
 Any AspectJ annotated classes will automatically be recognized, and their advice applied if Spring AOP's proxy-based model is capable of applying it. This covers method execution joinpoints.
-If the <aop:include> element is used, only @AspectJ beans with names matched by an include pattern will be considered as defining aspects to use for Spring auto-proxying.
+If the [aop:include](aop:include) element is used, only @AspectJ beans with names matched by an include pattern will be considered as defining aspects to use for Spring auto-proxying.
 
 Processing of Spring Advisors follows the rules established in `org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator`.
 
-
 #### findEligibleAdvisors
+
 Find all eligible Advisors for auto-proxying this class.
 
 ```
@@ -288,8 +276,6 @@ public List<Advisor> findAdvisorBeans() {
 	}
 ```
 
-
-
 ## ProxyFactoryBean
 
 ProxyFactoryBean is a FactoryBean implementation that builds an AOP proxy based on beans in Spring BeanFactory.
@@ -311,7 +297,9 @@ public Object getObject() throws BeansException {
    }
 }
 ```
+
 ### initializeAdvisorChain
+
 Create the advisor (interceptor) chain. Advisors that are sourced from a BeanFactory will be refreshed each time a new prototype instance is added.
 Interceptors added programmatically through the factory API are unaffected by such changes.
 
@@ -338,9 +326,7 @@ public class ProxyFactoryBean extends ProxyCreatorSupport implements FactoryBean
 }
 ```
 
-
 ### getSingletonInstance
-
 
 ```
 private synchronized Object getSingletonInstance() {
@@ -362,12 +348,10 @@ private synchronized Object getSingletonInstance() {
 }
 ```
 
-
-
 ### ProxyFactory
 
 Create a new proxy according to the settings in this factory.
-Can be called repeatedly. Effect will vary if we've added or removed interfaces. 
+Can be called repeatedly. Effect will vary if we've added or removed interfaces.
 Can add and remove interceptors.
 Uses the given class loader (if necessary for proxy creation).
 
@@ -388,11 +372,9 @@ public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
 }
 ```
 
-
 <!-- tabs:start -->
 
 ##### **JdkDynamicAopProxy**
-
 
 ```java
 final class JdkDynamicAopProxy implements AopProxy, InvocationHandler, Serializable {
@@ -402,8 +384,6 @@ final class JdkDynamicAopProxy implements AopProxy, InvocationHandler, Serializa
   }
 }
 ```
-
-
 
 ##### **CglibAopProxy**
 
@@ -480,18 +460,12 @@ class CglibAopProxy implements AopProxy, Serializable {
 
 <!-- tabs:end -->
 
-
-
-
 ## Create Proxy
 
-Spring AOP uses either JDK dynamic proxies or CGLIB to create the proxy for a given target object. (JDK dynamic proxies are preferred whenever you have a choice).
-
-
+Spring AOP uses either JDK dynamic proxies or CGLIB to create the proxy for a given target object.
+(JDK dynamic proxies are preferred whenever you have a choice).
 
 ![](img/AnnotationAwareAspectJAutoProxyCreator.png)
-
-
 
 `AbstractAutoProxyCreator` implements [BeanPostProcessor](/docs/CS/Java/Spring/IoC.md?id=BeanPostProcessor)
 
@@ -543,6 +517,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport imp
 #### getAdvicesAndAdvisorsForBean
 
 Return whether the given bean is to be proxied, what additional advices (e.g. AOP Alliance interceptors) and advisors to apply.
+
 ```
 @Override
 	@Nullable
@@ -556,7 +531,6 @@ Return whether the given bean is to be proxied, what additional advices (e.g. AO
 		return advisors.toArray();
 	}
 ```
-
 
 ### postProcessAfterInitialization
 
@@ -607,8 +581,8 @@ protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) 
 }
 ```
 
-
 ### createProxy
+
 Create an AOP proxy for the given bean.
 
 ```
@@ -649,7 +623,9 @@ protected Object createProxy(Class<?> beanClass, @Nullable String beanName,
    return proxyFactory.getProxy(classLoader);
 }
 ```
+
 #### buildAdvisors
+
 Determine the advisors for the given bean, including the specific interceptors as well as the common interceptor, all adapted to the Advisor interface.
 
 ```
@@ -687,7 +663,6 @@ protected Advisor[] buildAdvisors(@Nullable String beanName, @Nullable Object[] 
 	}
 
 ```
-
 
 ### getAdvisors
 
@@ -752,11 +727,11 @@ private List<Method> getAdvisorMethods(Class<?> aspectClass) {
 ```
 
 ### Order
+
 Factory that can create Spring AOP Advisors given AspectJ classes from classes honoring AspectJ's annotation syntax, using reflection to invoke the corresponding advice methods.
 
-
 > [!Note]
-> 
+>
 > Although @After is ordered before @AfterReturning and @AfterThrowing, an @After advice method will actually be invoked after @AfterReturning and @AfterThrowing methods
 > due to the fact that AspectJAfterAdvice.invoke(MethodInvocation) invokes proceed() in a `try` block and only invokes the @After advice method in a corresponding `finally` block.
 
@@ -777,12 +752,6 @@ public class AspectJAfterAdvice extends AbstractAspectJAdvice implements MethodI
   }
 }
 ```
-
-
-
-
-
-
 
 ## proceed
 
@@ -824,8 +793,6 @@ public Object proceed() throws Throwable {
 }
 ```
 
-
-
 `DefaultAdvisorAdapterRegistry#getInterceptors()`
 
 ```
@@ -858,8 +825,6 @@ public MethodInterceptor[] getInterceptors(Advisor advisor) throws UnknownAdvice
 }
 ```
 
-
-
 ### MethodBeforeAdviceInterceptor
 
 Interceptor to wrap a MethodBeforeAdvice.
@@ -891,11 +856,8 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 }
 ```
 
-
-
-
-
 ## Summary
+
 
 |               | Cglib     | JDK       |
 | ------------- | --------- | --------- |
@@ -903,25 +865,23 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 | Invoke method | Fast      | Slow      |
 | Prefer        | Singleton | Prototype |
 
-
 ### Do not get bean directly
-get bean by `@Autowired` or method or `ApplicationContext` rather than using `this.field`
 
+get bean by `@Autowired` or method or `ApplicationContext` rather than using `this.field`
 
 Using `AopContext.currentProxy()`(get a [ThreadLocal which default contains null](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)) must set `exposeProxy = true` in `@EnableAspectJAutoProxy`
 
 `ObjenesisCglibAopProxy`:
+
 - Objenesis-based extension of CglibAopProxy to **create proxy instances without invoking the constructor of the class**. Used by default as of Spring 4.
 - default use `sun.reflect.ReflectionFactory.newConstructorForSerialization().newInstance()`, and use `this.field` to do something that may cause `NPE`
 
-
 set `spring.objenesis.ignore = true`  to invoke the constructor of the class, but we suggest getting bean by method or `@Autowired`
-
 
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
 
-
 ## References
+
 1. [Aspect Oriented Programming with Spring](https://docs.spring.io/spring-framework/reference/core/aop.html)

@@ -173,3 +173,4 @@ state in native is RUNNABLE
 
 1. [Java Programming Tutorial Java Native Interface (JNI)](https://www3.ntu.edu.sg/home/ehchua/programming/java/JavaNativeInterface.html)
 2. [Java Native Interface Specification Contents](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/index.html)
+3. [JEP 454: Foreign Function & Memory API](https://openjdk.java.net/jeps/454)

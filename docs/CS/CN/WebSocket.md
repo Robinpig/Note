@@ -16,7 +16,7 @@ This results in a variety of problems:
 - The client-side script is forced to maintain a mapping from the outgoing connections to the incoming connection to track replies
 
 A simpler solution would be to use a single TCP connection for traffic in both directions. This is what the WebSocket Protocol provides.
-Combined with the WebSocket API [WSAPI], it provides an alternative to HTTP polling for two-way communication from a web page to a remote server.
+Combined with the WebSocket API, it provides an alternative to HTTP polling for two-way communication from a web page to a remote server.
 
 The same technique can be used for a variety of web applications: games, stock tickers, multiuser applications with simultaneous editing, user interfaces exposing server-side services in real time, etc.
 
@@ -56,24 +56,20 @@ Sec-WebSocket-Protocol: chat
 Once the client and server have both sent their handshakes, and if the handshake was successful, then the data transfer part starts.
 This is a two-way communication channel where each side can, independently from the other, send data at will.
 
-After a successful handshake, clients and servers transfer data back
-and forth in conceptual units referred to in this specification as
-"messages". On the wire, a message is composed of one or more
-frames. The WebSocket message does not necessarily correspond to a
-particular network layer framing, as a fragmented message may be
-coalesced or split by an intermediary.
+After a successful handshake, clients and servers transfer data back and forth in conceptual units referred to in this specification as "messages".
+On the wire, a message is composed of one or more frames. 
+The WebSocket message does not necessarily correspond to a particular network layer framing, as a fragmented message may be coalesced or split by an intermediary.
 
-A frame has an associated type. Each frame belonging to the same
-message contains the same type of data. Broadly speaking, there are
-types for textual data (which is interpreted as UTF-8 [RFC3629]
-text), binary data (whose interpretation is left up to the
-application), and control frames (which are not intended to carry
-data for the application but instead for protocol-level signaling,
-such as to signal that the connection should be closed). This
-version of the protocol defines six frame types and leaves ten
-reserved for future use.
+A frame has an associated type. 
+Each frame belonging to the same message contains the same type of data. Broadly speaking, 
+there are types for textual data (which is interpreted as UTF-8 text), 
+binary data (whose interpretation is left up to the application),
+and control frames (which are not intended to carry data for the application but instead for protocol-level signaling, 
+such as to signal that the connection should be closed). 
+This version of the protocol defines six frame types and leaves ten reserved for future use.
 
-The WebSocket Protocol is designed on the principle that there should be minimal framing (the only framing that exists is to make the protocol frame-based instead of stream-based and to support a distinction between Unicode text and binary frames).
+The WebSocket Protocol is designed on the principle that there should be minimal framing 
+(the only framing that exists is to make the protocol frame-based instead of stream-based and to support a distinction between Unicode text and binary frames).
 It is expected that metadata would be layered on top of WebSocket by the application layer, in the same way that metadata is layered on top of TCP by the application layer (e.g., HTTP).
 
 Conceptually, WebSocket is really just a layer on top of TCP that does the following:
