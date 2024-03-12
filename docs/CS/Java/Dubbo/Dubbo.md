@@ -1,6 +1,6 @@
 ## Introduction
 
-[Apache Dubbo](http://dubbo.apache.org/) is a high-performance, java based open source RPC framework.
+[Apache Dubbo](http://dubbo.apache.org/) is an easy-to-use, high-performance WEB and RPC framework with builtin service discovery, traffic management, observability, security features, tools and best practices for building enterprise-level microservices.
 
 
 - [start](/docs/CS/Java/Dubbo/Start.md)
@@ -15,8 +15,7 @@
 ### layers
 ![Dubbo Framework](img/Dubbo-framework.png)
 
-### packages
-![Dubbo-Packages](img/Dubbo-Package.png)
+
 
 ### cluster
 
