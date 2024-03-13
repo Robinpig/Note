@@ -46,7 +46,7 @@ head.S
 ## BIOS
 
 In computing, BIOS (`Basic Input/Output System`, also known as the System BIOS, ROM BIOS, BIOS ROM or PC BIOS) 
-is firmware used to provide runtime services for operating systems and programs and to perform hardware initialization during the booting process (power-on startup).[
+is firmware used to provide runtime services for operating systems and programs and to perform hardware initialization during the booting process (power-on startup).
 
 
 The BIOS in modern PCs initializes and tests the system hardware components (Power-on self-test), 
