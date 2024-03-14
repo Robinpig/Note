@@ -583,6 +583,12 @@ public class WebConfiguration implements WebMvcConfigurer {
 }
 ```
 
+GsonMessageConverter
+
+> [!TIP]
+> 
+> `@JsonIgnore` not work when not using Jackson.
+
 #### MessageConverter
 
 Create the method argument value of the expected parameter type by reading from the given HttpInputMessage.
