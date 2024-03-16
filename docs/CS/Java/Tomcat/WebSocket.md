@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 Interface between the HTTP upgrade process and the new protocol.
 ```java
 public interface HttpUpgradeHandler {
