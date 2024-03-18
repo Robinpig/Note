@@ -7,10 +7,13 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 **Compare with Hibernate**
 
 
-|     | MyBatis            | Hibernate      |
-| --- | ------------------ | -------------- |
-| DB  | Depend on DB       | Independent DB |
-| SQL | write SQL manually | Less SQL       |
+|             | MyBatis               | Hibernate       |
+| :---------- | --------------------- | --------------- |
+| DB          | Depend on DB          | Independent DB  |
+| SQL         | write SQL manually    | Less SQL        |
+|             | Relationship oriented | Object oriented |
+| Scalability | Low                   | High            |
+|             |                       |                 |
 
 ## Architecture
 
