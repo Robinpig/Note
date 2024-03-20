@@ -16,6 +16,8 @@ vim ~/.vimrc
 
 
 
+theme
+
 ```
 syntax on
 set number
