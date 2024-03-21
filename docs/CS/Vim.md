@@ -16,7 +16,7 @@ vim ~/.vimrc
 
 
 
-theme
+Theme
 
 ```
 syntax on
