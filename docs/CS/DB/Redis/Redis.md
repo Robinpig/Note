@@ -15,6 +15,14 @@ Data structures implemented into Redis have a few special properties:
 
 > [Try Redis directly inside your browser.](https://try.redis.io)
 
+
+
+>  [!TIP]
+>
+> The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
+
+
+
 Source code layout
 
 
