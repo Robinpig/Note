@@ -107,6 +107,23 @@ In general, cgroups control:
 - Block Device I/O per process.
 - Which network packets are identified as the same type so that another application can enforce network traffic rules.
 
+```shell
+cd /sys/fs/cgroup/cpu,cpuacct
+mkdir test
+cd test
+echo 100000 > cpu.cfs_period_us // 100ms 
+echo 100000 > cpu.cfs_quota_us //200ms 
+echo {$pid} > cgroup.procs
+```
+
+
+```c
+
+struct cgroup {
+	/* self css with NULL ->ss, points back to this cgroup */
+	struct cgroup_subsys_state self;
+```  
+
 ## Namespace
 
 A namespace wraps a global system resource in an abstraction that makes it appear to the processes within the namespace that they have their own isolated instance of the global resource.
