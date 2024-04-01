@@ -116,13 +116,52 @@ echo 100000 > cpu.cfs_quota_us //200ms
 echo {$pid} > cgroup.procs
 ```
 
+All cgroup_subsys_state(such as cpu, cpuset and memory) are inherited from different ancestors.
+
+| cgroup_subsys_state type | ancestor |
+| --- | --- |
+| cpu |  task_group |
+| memory | mem_cgroup |
+| dev | dev_cgroup |
+
 
 ```c
-
 struct cgroup {
-	/* self css with NULL ->ss, points back to this cgroup */
-	struct cgroup_subsys_state self;
-```  
+	/* Private pointers for each registered subsystem */
+	struct cgroup_subsys_state __rcu *subsys[CGROUP_SUBSYS_COUNT];
+};  
+```
+
+
+Let's see the task_struct.
+
+```c
+struct task_struct {
+  #ifdef CONFIG_CGROUPS
+	/* Control Group info protected by css_set_lock: */
+	struct css_set __rcu		*cgroups;
+	/* cg_list protected by css_set_lock and tsk->alloc_lock: */
+	struct list_head		cg_list;
+#endif
+}
+```
+
+A css_set is a structure holding pointers to a set of cgroup_subsys_state objects. This saves space in the task struct object and speeds up `fork()`/`exit()`, since a single inc/dec and a list_add()/del() can bump the reference count on the entire cgroup set for a task.
+
+```c
+struct css_set {
+	/*
+	 * Set of subsystem states, one for each subsystem. This array is
+	 * immutable after creation apart from the init_css_set during
+	 * subsystem registration (at boot time).
+	 */
+	struct cgroup_subsys_state *subsys[CGROUP_SUBSYS_COUNT];
+}    
+```
+
+
+
+
 
 ## Namespace
 
