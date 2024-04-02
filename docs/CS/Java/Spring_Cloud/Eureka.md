@@ -1,5 +1,7 @@
 ## Introduction
 
+Eureka is a RESTful (Representational State Transfer) service that is primarily used in the AWS cloud for the purpose of discovery, load balancing and failover of middle-tier servers. It plays a critical role in Netflix mid-tier infra.
+
 
 
 ## Service Registry
