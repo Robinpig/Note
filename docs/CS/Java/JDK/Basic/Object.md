@@ -460,6 +460,10 @@ java -XX:+PrintFlagsFinal -version | grep hashCode
 intx hashCode                                  = 5                                   {product}
 ```
 
+See [Xorshift RNGs](https://www.jstatsoft.org/article/view/v008i14)
+
+
+
 ### clone
 
 ```java

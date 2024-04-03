@@ -85,8 +85,8 @@ UNSAFE_ENTRY(void, Unsafe_FreeMemory0(JNIEnv *env, jobject unsafe, jlong addr)) 
 
 1. `reserveMemory`
 2. if has enough memory, return
-   2. Else `tryHandlePendingReference` free memory util enough memory
-   3. `System.gc()`
+   1. Else `tryHandlePendingReference` free memory util enough memory
+   2. `System.gc()`
    4. Continue step 1, 2 util enough memory or MAX_SLEEPS
    5. if still no enough memory, OOM
 3. `unsafe.allocateMemory`
