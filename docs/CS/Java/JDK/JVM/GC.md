@@ -211,6 +211,8 @@ public class Runtime {
 
 Differenct heap will execute `collect` method if `!DisableExplicitGC`.
 
+- Some collectors will execute concurrentFullGC if `-XX:+ExplicitGCInvokesConcurrent`
+
 ```cpp
 // Runtime.c
 JNIEXPORT void JNICALL
