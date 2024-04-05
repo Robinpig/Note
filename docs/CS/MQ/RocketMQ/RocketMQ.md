@@ -49,6 +49,27 @@ Topic -> multi message queue(like partition)
 
 [Name server](/docs/CS/MQ/RocketMQ/Namesrv.md)
 
+
+## Features
+
+Message Type
+- Normal Message
+- Delay Message
+- Ordered Message
+- Transaction Message
+
+Sending Retry and Throttling Policy
+
+Message Filtering
+
+Consumer Load Balancing
+
+Consumption Retry
+
+Message Storage and Cleanup
+
+
+
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=RocketMQ)

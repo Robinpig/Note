@@ -528,6 +528,9 @@ It is also possible to use a hybrid approach and store both data file offsets an
 
 ## OLAP
 
+OLAP, or online analytical processing, is technology for performing high-speed complex queries or multidimensional analysis on large volumes of data in a data warehouse, data lake or other data repository. 
+OLAP is used in business intelligence (BI), decision support, and a variety of business forecasting and reporting applications. 
+
 Table. Comparing characteristics of transaction processing versus analytic systems
 
 
@@ -539,10 +542,25 @@ Table. Comparing characteristics of transaction processing versus analytic syste
 | What data represents | Latest state of data (current point in time)      | History of events that happened over time |
 | Dataset size         | Gigabytes to terabytes                            | Terabytes to petabytes                    |
 
+
+MOLAP vs. ROLAP vs. HOLAP
+
+OLAP that works directly with a multidimensional OLAP cube is known as multidimensional OLAP, or MOLAP. Again, for most uses, MOLAP is the fastest and most practical type of multidimensional data analysis.
+
+ROLAP, or relational OLAP, is multidimensional data analysis that operates directly on data on relational tables, without first reorganizing the data into a cube.
+ROLAP is best when the ability to work directly with large amounts of data is more important than performance and flexibility.
+
+HOLAP, or hybrid OLAP, attempts to create the optimal division of labor between relational and multidimensional databases within a single OLAP architecture. 
+The relational tables contain larger quantities of data, and OLAP cubes are used for aggregations and speculative processing. 
+HOLAP requires an OLAP server that supports both MOLAP and ROLAP.
+
+
 At first, the same databases were used for both transaction processing and analytic queries.
 SQL turned out to be quite flexible in this regard: it works well for OLTPtype queries as well as OLAP-type queries. 
 Nevertheless, in the late 1980s and early 1990s, there was a trend for companies to stop using their OLTP systems for analytics purposes, and to run the analytics on a separate database instead. 
 This separate database was called a *data warehouse*
+
+
 
 ### Data Warehousing
 

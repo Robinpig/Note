@@ -107,6 +107,62 @@ In general, cgroups control:
 - Block Device I/O per process.
 - Which network packets are identified as the same type so that another application can enforce network traffic rules.
 
+```shell
+cd /sys/fs/cgroup/cpu,cpuacct
+mkdir test
+cd test
+echo 100000 > cpu.cfs_period_us // 100ms 
+echo 100000 > cpu.cfs_quota_us //200ms 
+echo {$pid} > cgroup.procs
+```
+
+All cgroup_subsys_state(such as cpu, cpuset and memory) are inherited from different ancestors.
+
+| cgroup_subsys_state type | ancestor |
+| --- | --- |
+| cpu |  task_group |
+| memory | mem_cgroup |
+| dev | dev_cgroup |
+
+
+```c
+struct cgroup {
+	/* Private pointers for each registered subsystem */
+	struct cgroup_subsys_state __rcu *subsys[CGROUP_SUBSYS_COUNT];
+};  
+```
+
+
+Let's see the task_struct.
+
+```c
+struct task_struct {
+  #ifdef CONFIG_CGROUPS
+	/* Control Group info protected by css_set_lock: */
+	struct css_set __rcu		*cgroups;
+	/* cg_list protected by css_set_lock and tsk->alloc_lock: */
+	struct list_head		cg_list;
+#endif
+}
+```
+
+A css_set is a structure holding pointers to a set of cgroup_subsys_state objects. This saves space in the task struct object and speeds up `fork()`/`exit()`, since a single inc/dec and a list_add()/del() can bump the reference count on the entire cgroup set for a task.
+
+```c
+struct css_set {
+	/*
+	 * Set of subsystem states, one for each subsystem. This array is
+	 * immutable after creation apart from the init_css_set during
+	 * subsystem registration (at boot time).
+	 */
+	struct cgroup_subsys_state *subsys[CGROUP_SUBSYS_COUNT];
+}    
+```
+
+
+
+
+
 ## Namespace
 
 A namespace wraps a global system resource in an abstraction that makes it appear to the processes within the namespace that they have their own isolated instance of the global resource.

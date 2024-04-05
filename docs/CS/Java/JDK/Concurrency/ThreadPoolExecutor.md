@@ -541,13 +541,20 @@ RejectedExecution method that may be invoked by a ThreadPoolExecutor when execut
 - **their bounds would be exceeded**
 - **upon shutdown of the Executor**
 
-In either case, the execute method invokes the RejectedExecutionHandler.rejectedExecution(Runnable, ThreadPoolExecutor) method of its RejectedExecutionHandler. Four predefined handler policies are provided:
+In either case, the execute method invokes the `RejectedExecutionHandler.rejectedExecution(Runnable, ThreadPoolExecutor)` method of its RejectedExecutionHandler. Four predefined handler policies are provided:
 
 1. In the **default** `ThreadPoolExecutor.AbortPolicy`, the handler throws a runtime RejectedExecutionException upon rejection.
+
 2. In `ThreadPoolExecutor.CallerRunsPolicy`, the thread that invokes execute itself runs the task. This provides a simple feedback control mechanism that will slow down the rate that new tasks are submitted.
-3. In `ThreadPoolExecutor.DiscardPolicy`, a task that cannot be executed is simply dropped.
+
+3. In `ThreadPoolExecutor.DiscardPolicy`, a task that cannot be executed is simply dropped. 
+
+   This policy is designed only for those rare cases in which task completion is never relied upon.
+
 4. In `ThreadPoolExecutor.DiscardOldestPolicy`, if the executor is not shut down, the task at the head of the work queue is dropped, and then execution is retried (which can fail again, causing this to be repeated.)
-   It is possible to define and use other kinds of RejectedExecutionHandler classes. Doing so requires some care  especially when policies are designed to work only under particular capacity or queuing policies.
+   This policy is rarely acceptable.  In nearly all cases, you should also cancel the task to cause an exception in any component waiting for its completion, and/or log the failure.
+
+It is possible to define and use other kinds of RejectedExecutionHandler classes. Doing so requires some care  especially when policies are designed to work only under particular capacity or queuing policies.
 
 ### execute
 
@@ -1183,6 +1190,10 @@ public static ScheduledExecutorService newScheduledThreadPool(
 |            |                      |                       |
 |            |                      |                       |
 
+
+
+
+
 ## Links
 
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
@@ -1193,3 +1204,5 @@ public static ScheduledExecutorService newScheduledThreadPool(
 
 1. [深入理解Java线程池：ThreadPoolExecutor](http://www.ideabuffer.cn/2017/04/04/深入理解Java线程池：ThreadPoolExecutor/)
 2. [Java线程池实现原理及其在美团业务中的实践](https://tech.meituan.com/2020/04/02/java-pooling-pratice-in-meituan.html)
+3. [JDK-8234131: Miscellaneous changes imported from jsr166 CVS 2021-01](https://bugs.openjdk.java.net/browse/JDK-8234131)
+4. [JDK-8257671: ThreadPoolExecutor.Discard*Policy: rejected tasks are not cancelled](https://bugs.openjdk.java.net/browse/JDK-8257671)

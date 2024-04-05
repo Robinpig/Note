@@ -118,7 +118,8 @@ This avoids the problem of applications running out of memory due to the limited
 
 -Xnoclassgc -verbose:class -XX:+TraceClassLoading -XX:+TraceClassUnLoading
 
-### Young GC 问题
+
+## Young GC 问题
 
 ```
 -XX:+UsePSAdaptiveSurvivorSizePolicy
@@ -146,7 +147,10 @@ CARD_TABLE [this address >> 9] = DIRTY;
 - GC日志对GC时间的影响
 - 操作系统活动影响（内存swap等）
 
-### Full GC 问题
+## Full GC
+
+
+
 
 FGC频次异常
 
@@ -189,6 +193,50 @@ void oopDesc::forward_to(oop p) {
   set_mark_raw(m);
 }
 ```
+
+
+### System.gc
+
+```java
+public final class System {
+   public static void gc() {
+        Runtime.getRuntime().gc();
+    }
+}
+
+public class Runtime {
+ 		public native void gc();
+}
+```
+
+Differenct heap will execute `collect` method if `!DisableExplicitGC`.
+
+- Some collectors will execute concurrentFullGC if `-XX:+ExplicitGCInvokesConcurrent`
+
+```cpp
+// Runtime.c
+JNIEXPORT void JNICALL
+Java_java_lang_Runtime_gc(JNIEnv *env, jobject this)
+{
+    JVM_GC();
+}
+
+// jvm.cpp
+JVM_ENTRY_NO_ENV(void, JVM_GC(void))
+  if (!DisableExplicitGC) {
+    EventSystemGC event;
+    event.set_invokedConcurrent(ExplicitGCInvokesConcurrent);
+    Universe::heap()->collect(GCCause::_java_lang_system_gc);
+    event.commit();
+  }
+JVM_END
+```
+
+
+
+
+
+
 
 ## Collectors
 

@@ -16,14 +16,14 @@ Since threads share the memory address space of their owning process, all thread
 which allows finer-grained data sharing than inter-process mechanisms.
 But without explicit synchronization to coordinate access to shared data, a thread may modify variables that another thread is in the middle of using, with unpredictable results.
 
-### Benefits of Threads
+**Benefits of Threads**
 
 1. Exploiting Multiple Processors
 2. Simplicity of Modeling
 3. Simplified Handling of Asynchronous Events
 4. More Responsive User Interfaces
 
-### Risks of Threads
+**Risks of Threads**
 
 1. Safety Hazards
 2. Liveliness Hazards
@@ -327,7 +327,7 @@ N_{threads} = N_{cpu}*U_{cpu}*(1+\frac{W}C)
 
 You can determine the number of CPUs using Runtime:
 
-```java
+```
 int N_CPUS = Runtime.getRuntime().availableProcessors();
 ```
 
@@ -459,6 +459,12 @@ This can be a serious problem if the blocked thread is a high-priority thread bu
 Even though the higher-priority thread should have precedence, it must wait until the lock is released, and this effectively downgrades its priority to that of the lower-priority thread.
 If a thread holding a lock is permanently blocked (due to an infinite loop, deadlock, livelock, or other liveness failure), any threads waiting for that lock can never make progress.
 
+
+
+
+
+
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
@@ -470,3 +476,4 @@ If a thread holding a lock is permanently blocked (due to an infinite loop, dead
 2. [Concurrency JSR-166 Interest Site](http://gee.cs.oswego.edu/dl/concurrency-interest/index.html)
 3. [The java.util.concurrent Synchronizer Framework](http://gee.cs.oswego.edu/dl/papers/aqs.pdf)
 4. [Concurrent Programming in Java](http://gee.cs.oswego.edu/dl/cpj/index.html)
+5. [Concurrency is hard](https://mkralka.github.io/blog/concurrency-is-hard)

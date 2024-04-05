@@ -15,6 +15,14 @@ Data structures implemented into Redis have a few special properties:
 
 > [Try Redis directly inside your browser.](https://try.redis.io)
 
+
+
+>  [!TIP]
+>
+> The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
+
+
+
 Source code layout
 
 
@@ -234,3 +242,4 @@ fork子进程的速度变慢
 1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
 2. [Redis源码分析(一) - 硬核课堂](https://hardcore.feishu.cn/docs/doccnp9v7IljXiJ5FpNT1ipLhlR#)
 3. [Distributed locks with Redis](https://redis.io/topics/distlock)
+4. [Garnet](https://github.com/microsoft/garnet)

@@ -188,6 +188,11 @@ You might assume that a software vendor has provided metrics that are well chose
 In reality, metrics can be confusing, complicated, unreliable, inaccurate, and even plain wrong (due to bugs).
 Sometimes a metric was correct in one software version but did not get updated to reflect the addition of new code and code paths.
 
+## Others
+
+[Containerization](/docs/CS/Container/Container.md) is the packaging of software code with just the operating system (OS) libraries and dependencies required to 
+run the code to create a single lightweight executable—called a container—that runs consistently on any infrastructure.
+
 ## Links
 
 - [Computer Organization](/docs/CS/CO/CO.md)
