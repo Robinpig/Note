@@ -399,7 +399,7 @@ struct task_struct {
 #endif
        kuid_t                      loginuid;
        unsigned int                 sessionid;
-#endif
+
        struct seccomp               seccomp;
        struct syscall_user_dispatch   syscall_dispatch;
 
@@ -798,18 +798,37 @@ struct task_struct {
 `get_current()` implement by different arch
 
 
-#### state
-Task state bitmask. NOTE! These bits are also
-encoded in fs/proc/array.c: get_task_state().
+A structure to contain pointers to all per-process namespaces - fs (mount), uts, network, sysvipc, etc.
 
-We have two separate sets of flags: task->state
-is about runnability, while task->exit_state are
-about the task exiting. Confusing, but this way
-modifying one set can't modify the other one by
-mistake.
+The pid namespace is an exception -- it's accessed using task_active_pid_ns.  The pid namespace here is the namespace that children will use.
+
+'count' is the number of tasks holding a reference.
+The count for each namespace, then, will be the number of nsproxies pointing to it, not the number of tasks.
+
+The nsproxy is shared by tasks which share all namespaces.
+As soon as a single namespace is cloned or unshared, the nsproxy is copied.
 
 ```c
-// 
+// nsproxy.h
+struct nsproxy {
+	atomic_t count;
+	struct uts_namespace *uts_ns;
+	struct ipc_namespace *ipc_ns;
+	struct mnt_namespace *mnt_ns;
+	struct pid_namespace *pid_ns_for_children;
+	struct net 	     *net_ns;
+	struct cgroup_namespace *cgroup_ns;
+};
+```
+
+
+#### state
+Task state bitmask. NOTE! These bits are also encoded in fs/proc/array.c: get_task_state().
+
+We have two separate sets of flags: task->state is about runnability, while task->exit_state are about the task exiting. Confusing, but this way modifying one set can't modify the other one by mistake.
+
+```c
+// sched.h
 /* Used in tsk->state: */
 #define TASK_RUNNING			0x0000
 #define TASK_INTERRUPTIBLE		0x0001
@@ -846,6 +865,21 @@ mistake.
 					 TASK_PARKED)
 
 ```
+
+
+
+pid
+
+```c
+struct task_struct {
+       // ...... 	
+       pid_t                       pid;
+       pid_t                       tgid;
+}    
+```
+
+
+
 
 
 ### init task
@@ -2006,10 +2040,83 @@ fork_out:
        spin_unlock_irq(&current->sighand->siglock);
        return ERR_PTR(retval);
 }
+
+
+```
+
+#### alloc_pid
+
+[Replace PID bitmap allocation with IDR API](https://lwn.net/Articles/735675/)
+
+
+
+<!-- tabs:start -->
+
+##### **BitMap**
+
+```c
+
 ```
 
 
+
+##### **IDR**
+
+```c
+
+struct pid *alloc_pid(struct pid_namespace *ns)
+{
+	struct pid *pid;
+	enum pid_type type;
+	int i, nr;
+	struct pid_namespace *tmp;
+	struct upid *upid;
+	int retval = -ENOMEM;
+
+	pid = kmem_cache_alloc(ns->pid_cachep, GFP_KERNEL);
+
+	tmp = ns;
+	pid->level = ns->level;
+
+	for (i = ns->level; i >= 0; i--) {
+		int pid_min = 1;
+
+		idr_preload(GFP_KERNEL);
+		spin_lock_irq(&pidmap_lock);
+
+		/* 
+		 * init really needs pid 1, but after reaching the maximum
+		 * wrap back to RESERVED_PIDS
+		 */
+		if (idr_get_cursor(&tmp->idr) > RESERVED_PIDS)
+			pid_min = RESERVED_PIDS;
+
+		/*
+		 * Store a null pointer so find_pid_ns does not find
+		 * a partially initialized PID (see below).
+		 */
+		nr = idr_alloc_cyclic(&tmp->idr, NULL, pid_min,
+				      pid_max, GFP_ATOMIC);
+		spin_unlock_irq(&pidmap_lock);
+		idr_preload_end();
+
+		if (nr < 0) {
+			retval = (nr == -ENOSPC) ? -EAGAIN : nr;
+			goto out_free;
+		}
+
+		pid->numbers[i].nr = nr;
+		pid->numbers[i].ns = tmp;
+		tmp = tmp->parent;
+	}
+	// ...
+}	
+```
+
+<!-- tabs:end -->
+
 #### dup_task_struct
+
 ```c
 // kernel/fork.c
 

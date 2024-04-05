@@ -902,10 +902,6 @@ struct mm_struct {
 
 		struct core_state *core_state; /* coredumping support */
 
-#ifdef CONFIG_AIO
-		spinlock_t			ioctx_lock;
-		struct kioctx_table __rcu	*ioctx_table;
-#endif
 #ifdef CONFIG_MEMCG
 		/*
 		 * "owner" points to a task that is regarded as the canonical
