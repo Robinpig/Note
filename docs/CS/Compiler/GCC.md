@@ -68,6 +68,48 @@ objdump -s -d xx.o
 readelf -a xx.o
 ```
 
+
+
+You may use __builtin_expect to provide the compiler with branch prediction information.
+
+`long __builtin_expect (long exp, long c)`
+
+
+```c
+#include <stdio.h>
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x)  __builtin_expect(!!(x), 0)
+
+int main(int argc, char *argv[])
+{
+ int n;
+ n = atoi(argv[1]);
+
+ if (likely(n == 10)){
+  n = n + 2;
+ } else {
+  n = n - 2;
+ }
+ printf("%d\n", n);
+ return 0;
+}
+```
+change 
+```makefile
+.PHONY: likely
+likely:
+	gcc -O2 likely.c -o likely
+	objdump -d -S  likely > likely.txt
+
+.PHONY: unlikely
+unlikely:
+	gcc -O2 unlikely.c -o unlikely
+	objdump -d -S  unlikely > unlikely.txt
+	
+```
+
+
+
 ## References
 
 1. [Executable and Linkable Format (ELF)](http://flint.cs.yale.edu/cs422/doc/ELF_Format.pdf)

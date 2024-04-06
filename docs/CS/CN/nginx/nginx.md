@@ -441,9 +441,6 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
                 ngx_sigalrm = 0;
             }
 
-            ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
-                           "termination cycle: %M", delay);
-
             itv.it_interval.tv_sec = 0;
             itv.it_interval.tv_usec = 0;
             itv.it_value.tv_sec = delay / 1000;
@@ -455,14 +452,9 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
             }
         }
 
-        ngx_log_debug0(NGX_LOG_DEBUG_EVENT, cycle->log, 0, "sigsuspend");
-
         sigsuspend(&set);
 
         ngx_time_update();
-
-        ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
-                       "wake up, sigio %i", sigio);
 
         if (ngx_reap) {
             ngx_reap = 0;
@@ -612,6 +604,8 @@ ngx_start_worker_processes(ngx_cycle_t *cycle, ngx_int_t n, ngx_int_t type)
 create worker process
 
 worker progress set ngx_channel = ngx_processes[s].channel[1];
+
+invoke [fork](/docs/CS/OS/Linux/processes.md/id=fork)
 
 ```c
 

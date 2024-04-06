@@ -1,6 +1,62 @@
 ## Introduction
 
 
+```c
+
+struct fs_struct {
+	int users;
+	spinlock_t lock;
+	seqcount_t seq;
+	int umask;
+	int in_exec;
+	struct path root, pwd;
+} __randomize_layout;
+
+struct path {
+	struct vfsmount *mnt;
+	struct dentry *dentry;
+} __randomize_layout;
+```
+
+
+```c
+
+struct dentry {
+	/* RCU lookup touched fields */
+	unsigned int d_flags;		/* protected by d_lock */
+	seqcount_spinlock_t d_seq;	/* per dentry seqlock */
+	struct hlist_bl_node d_hash;	/* lookup hash list */
+	struct dentry *d_parent;	/* parent directory */
+	struct qstr d_name;
+	struct inode *d_inode;		/* Where the name belongs to - NULL is
+					 * negative */
+	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
+
+	/* Ref lookup also touches following */
+	struct lockref d_lockref;	/* per-dentry lock and refcount */
+	const struct dentry_operations *d_op;
+	struct super_block *d_sb;	/* The root of the dentry tree */
+	unsigned long d_time;		/* used by d_revalidate */
+	void *d_fsdata;			/* fs-specific data */
+
+	union {
+		struct list_head d_lru;		/* LRU list */
+		wait_queue_head_t *d_wait;	/* in-lookup ones only */
+	};
+	struct list_head d_child;	/* child of parent list */
+	struct list_head d_subdirs;	/* our children */
+	/*
+	 * d_alias and d_rcu can share memory
+	 */
+	union {
+		struct hlist_node d_alias;	/* inode alias list */
+		struct hlist_bl_node d_in_lookup_hash;	/* only for in-lookup ones */
+	 	struct rcu_head d_rcu;
+	} d_u;
+} __randomize_layout;
+
+```
+
 ### The Way To Think
 
 The first is the data structures of the file system.
@@ -186,43 +242,6 @@ struct inode {
 
 ### dentry
 
-```c
-
-struct dentry {
-	/* RCU lookup touched fields */
-	unsigned int d_flags;		/* protected by d_lock */
-	seqcount_spinlock_t d_seq;	/* per dentry seqlock */
-	struct hlist_bl_node d_hash;	/* lookup hash list */
-	struct dentry *d_parent;	/* parent directory */
-	struct qstr d_name;
-	struct inode *d_inode;		/* Where the name belongs to - NULL is
-					 * negative */
-	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
-
-	/* Ref lookup also touches following */
-	struct lockref d_lockref;	/* per-dentry lock and refcount */
-	const struct dentry_operations *d_op;
-	struct super_block *d_sb;	/* The root of the dentry tree */
-	unsigned long d_time;		/* used by d_revalidate */
-	void *d_fsdata;			/* fs-specific data */
-
-	union {
-		struct list_head d_lru;		/* LRU list */
-		wait_queue_head_t *d_wait;	/* in-lookup ones only */
-	};
-	struct list_head d_child;	/* child of parent list */
-	struct list_head d_subdirs;	/* our children */
-	/*
-	 * d_alias and d_rcu can share memory
-	 */
-	union {
-		struct hlist_node d_alias;	/* inode alias list */
-		struct hlist_bl_node d_in_lookup_hash;	/* only for in-lookup ones */
-	 	struct rcu_head d_rcu;
-	} d_u;
-} __randomize_layout;
-
-```
 
 
 ### file
@@ -588,6 +607,25 @@ struct files_struct {
 	unsigned long open_fds_init[1];
 	unsigned long full_fds_bits_init[1];
 	struct file __rcu * fd_array[NR_OPEN_DEFAULT];
+};
+```
+
+In the new lock-free model of file descriptor management,
+the reference counting is similar, but the locking is
+based on RCU. The file descriptor table contains multiple
+elements - the fd sets (open_fds and close_on_exec, the
+array of file pointers, the sizes of the sets and the array
+etc.). In order for the updates to appear atomic to
+a lock-free reader, all the elements of the file descriptor
+table are in a separate structure - struct fdtable.
+```c
+struct fdtable {
+	unsigned int max_fds;
+	struct file __rcu **fd;      /* current fd array */
+	unsigned long *close_on_exec;
+	unsigned long *open_fds;
+	unsigned long *full_fds_bits;
+	struct rcu_head rcu;
 };
 ```
 
