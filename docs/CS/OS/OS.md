@@ -7,6 +7,12 @@ An operating system (OS) is a software program that serves as the interface betw
 - Kernel
 - Shell
 
+
+- Abstract
+- Multiplex, sharing and isolation
+- Security
+- Performance
+
 ### Implementation Strategies
 
 Currently, there are two main paradigms on which the implementation of operating systems is based:
