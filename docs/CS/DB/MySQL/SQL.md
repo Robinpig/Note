@@ -174,6 +174,38 @@ Like count(*), but suggest `count(*)`
 
 
 
+
+### limit
+
+If you need only a specified number of rows from a result set, use a LIMIT clause in the query, rather than fetching the whole result set and throwing away the extra data.
+
+MySQL sometimes optimizes a query that has a LIMIT row_count clause and no HAVING clause:
+
+- If you select only a few rows with LIMIT, MySQL uses indexes in some cases when normally it would prefer to do a full table scan.
+
+- If you combine LIMIT row_count with ORDER BY, MySQL stops sorting as soon as it has found the first row_count rows of the sorted result, rather than sorting the entire result. If ordering is done by using an index, this is very fast. If a filesort must be done, all rows that match the query without the LIMIT clause are selected, and most or all of them are sorted, before the first row_count are found. After the initial rows have been found, MySQL does not sort any remainder of the result set.
+
+- One manifestation of this behavior is that an ORDER BY query with and without LIMIT may return rows in different order, as described later in this section.
+
+- If you combine LIMIT row_count with DISTINCT, MySQL stops as soon as it finds row_count unique rows.
+
+- In some cases, a GROUP BY can be resolved by reading the index in order (or doing a sort on the index), then calculating summaries until the index value changes. In this case, LIMIT row_count does not calculate any unnecessary GROUP BY values.
+
+- As soon as MySQL has sent the required number of rows to the client, it aborts the query unless you are using SQL_CALC_FOUND_ROWS. In that case, the number of rows can be retrieved with SELECT FOUND_ROWS(). See Section 14.15, “Information Functions”.
+
+- LIMIT 0 quickly returns an empty set. This can be useful for checking the validity of a query. It can also be employed to obtain the types of the result columns within applications that use a MySQL API that makes result set metadata available. With the mysql client program, you can use the —column-type-info option to display result column types.
+
+- If the server uses temporary tables to resolve a query, it uses the LIMIT row_count clause to calculate how much space is required.
+
+- If an index is not used for ORDER BY but a LIMIT clause is also present, the optimizer may be able to avoid using a merge file and sort the rows in memory using an in-memory filesort operation.
+
+If multiple rows have identical values in the ORDER BY columns, the server is free to return those rows in any order, and may do so differently depending on the overall execution plan. In other words, the sort order of those rows is nondeterministic with respect to the nonordered columns.
+
+One factor that affects the execution plan is LIMIT, so an ORDER BY query with and without LIMIT may return rows in different orders.
+
+
+If it is important to ensure the same row order with and without LIMIT, include additional columns in the ORDER BY clause to make the order deterministic
+
 ## Reference
 
 1. [MySQL 8.0 Reference Manual - Aggregate Function Descriptions](https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html)
