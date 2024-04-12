@@ -3,7 +3,7 @@
 There is a body of software, in fact, that is responsible for making it easy to run programs, allowing programs to share memory, enabling programs to interact with devices, and other fun stuff like that. 
 That body of software is called the operating system (OS), as it is in charge of making sure the system operates correctly and efficiently in an easy-to-use manner.
 An operating system (OS) is a software program that serves as the interface between other applications and the hardware on a computer or mobile device.
-
+ 
 - Kernel
 - Shell
 
@@ -161,11 +161,16 @@ As long as there is no need for per-core concurrency, they are probably a good c
 
 [BootLoader](/docs/CS/OS/BootLoader.md)
 
-## Linux
+
+## Kernel Compile
+
+
+
+
 
 [Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
 
-## MacOS
+
 
 [MacOS](/docs/CS/OS/mac/mac.md)
 
