@@ -20,7 +20,11 @@ Spring Cloud focuses on providing good out of box experience for typical use cas
 **Spring Cloud Netflix**
 
 Spring Cloud Netflix project provides Netflix OSS integrations for Spring Boot apps through autoconfiguration and binding to the Spring Environment and other Spring programming model idioms.
-The patterns provided include Service Discovery (Eureka), Circuit Breaker (Hystrix), Intelligent Routing (Zuul) and Client Side Load Balancing (Ribbon).
+ The patterns provided include Service Discovery ([Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)).
+ 
+  　> Circuit Breaker (Hystrix), Intelligent Routing (Zuul) and Client Side Load Balancing (Ribbon).
+
+
 
 **Spring Cloud Sleuth**
 
