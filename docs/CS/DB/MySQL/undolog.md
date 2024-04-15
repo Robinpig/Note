@@ -1,10 +1,13 @@
 ## Introduction
 
-An undo log is a collection of undo log records associated with a single read-write transaction. 
-An undo log record contains information about how to undo the latest change by a transaction to a [clustered index](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_clustered_index) record. 
+An undo log is a collection of undo log records associated with a **single read-write transaction**. 
+An undo log record contains information about how to undo the latest change by a transaction to a [clustered index](/docs/CS/DB/MySQL/Index.md?id=Clustered-and-Secondary-Indexes) record. 
 If another transaction needs to see the original data as part of a consistent read operation, the unmodified data is retrieved from undo log records. 
-Undo logs exist within [undo log segments](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_undo_log_segment), which are contained within [rollback segments](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_rollback_segment). 
-Rollback segments reside in [undo tablespaces](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_undo_tablespace) and in the [global temporary tablespace](https://dev.mysql.com/doc/refman/8.0/en/glossary.html#glos_global_temporary_tablespace).
+Undo logs exist within `undo log segments`, which are contained within `rollback segments`. 
+Rollback segments reside in `undo tablespaces` and in the `global temporary tablespace`.
+
+These undo logs are not redo-logged, as they are not required for crash recovery. 
+They are used only for rollback while the server is running. This type of undo log benefits performance by avoiding redo logging I/O.
 
 
 What is undo log for:
@@ -14,16 +17,10 @@ What is undo log for:
 
 
 
-
-Undo logs that reside in the global temporary tablespace are used for transactions that modify data in user-defined temporary tables. These undo logs are not redo-logged, as they are not required for crash recovery. 
-They are used only for rollback while the server is running. This type of undo log benefits performance by avoiding redo logging I/O.
-
-
-Each undo tablespace and the global temporary tablespace individually support a maximum of 128(InnoDB Page Size 4KB/16)) rollback segments.
-
+Each undo tablespace and the global temporary tablespace individually support a maximum of **128** rollback segments.
+The number of transactions that a rollback segment supports depends on the number of undo slots in the rollback segment and the number of undo logs required by each transaction.((InnoDB Page Size / 16))
 
 A transaction is assigned up to four undo logs, one for each of the following operation types:
-
 1. `INSERT` operations on user-defined tables
 2. `UPDATE` and `DELETE` operations on user-defined tables
 3. `INSERT` operations on user-defined temporary tables
@@ -46,6 +43,31 @@ An undo log assigned to a transaction remains attached to the transaction for it
 
 
 
+```c
+struct trx_undo_t {
+  ulint id;        /*!< undo log slot number within the
+                   rollback segment */
+  ulint type;      /*!< TRX_UNDO_INSERT or
+                   TRX_UNDO_UPDATE */
+  ulint state;     /*!< state of the corresponding undo log
+                   segment */
+  bool del_marks;  /*!< relevant only in an update undo
+                    log: this is true if the transaction may
+                    have delete marked records, because of
+                    a delete of a row or an update of an
+                    indexed field; purge is then
+                    necessary; also true if the transaction
+                    has updated an externally stored
+                    field */
+  trx_id_t trx_id; /*!< id of the trx assigned to the undo
+                   log */
+  XID xid;         /*!< X/Open XA transaction
+                   identification */
+  ulint flag;      /*!< flag for current transaction XID and GTID.
+                   Persisted in TRX_UNDO_FLAGS flag of undo header. */
+};
+```
+
 ## Undo Tablespaces
 
 
@@ -54,12 +76,12 @@ Undo tablespaces contain undo logs, which are collections of records containing 
 Two default undo tablespaces are created when the MySQL instance is initialized.
 Default undo tablespaces are created at initialization time to provide a location for rollback segments that must exist before SQL statements can be accepted.
 
-A MySQL instance supports up to 127 undo tablespaces including the two default undo tablespaces created when the MySQL instance is initialized.
+A MySQL instance supports up to **127** undo tablespaces including the two default undo tablespaces created when the MySQL instance is initialized.
 
-As of MySQL 5.6, rollback segments can reside in undo tablespaces. 
+> As of MySQL 5.6, rollback segments can reside in undo tablespaces. 
 In MySQL 5.6 and MySQL 5.7, the number of undo tablespaces is controlled by the `innodb_undo_tablespaces` configuration option. In MySQL 8.0, two default undo tablespaces are created when the MySQL instance is initialized, and additional undo tablespaces can be created using `CREATE UNDO TABLESPACE` syntax.
 
-Prior to MySQL 8.0.23, the initial size of an undo tablespace depends on the `innodb_page_size` value.
+
 As of MySQL 8.0.23, the initial undo tablespace size is normally 16MiB.
 
 
@@ -211,7 +233,6 @@ ulint trx_purge(){
 
 ```
 
-
 ## Links
 
 - [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md?id=innodb-on-disk-structures)
@@ -219,3 +240,4 @@ ulint trx_purge(){
 ## References
 1. [InnoDB 事务分析-Undo Log](https://www.leviathan.vip/2019/02/14/InnoDB%E7%9A%84%E4%BA%8B%E5%8A%A1%E5%88%86%E6%9E%90-Undo-Log/)
 2. [MySQL · 引擎特性 · InnoDB undo log 漫游](http://mysql.taobao.org/monthly/2015/04/01/)
+3. [MySQL · 引擎特性· InnoDB之UNDO LOG介绍](http://mysql.taobao.org/monthly/2021/12/02/)
