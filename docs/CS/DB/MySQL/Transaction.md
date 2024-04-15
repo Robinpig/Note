@@ -102,6 +102,12 @@ It releases all the locks at the same time.
 The locking mechanisms described earlier are all implicit. 
 InnoDB handles locks automatically, according to your isolation level.
 
+
+> TODO:
+>
+> [MySQL · 源码分析 · MySQL deadlock cause by lock inherit](http://mysql.taobao.org/monthly/2024/03/02/)
+
+
 ### Locking Types
 
 ```mysql
