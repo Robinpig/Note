@@ -27,5 +27,14 @@ sudo chown robin:admin bp*
 ```
 
 
+
+
+
+disable Relative sequence numbers
+
+Preference -> Protocols -> TCP -> Relative sequence numbers
+
+
+
 ## Links
 
