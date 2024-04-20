@@ -214,7 +214,9 @@ The configuration resources map directly to Spring Environment but could be used
 
 ## Load Balance
 
-[Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)
+Spring Cloud Loadbalancer is a generic abstraction that can do the work that we used to do with Netflix's [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md) project. 
+
+
 
 Load Balancer
 

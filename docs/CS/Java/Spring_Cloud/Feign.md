@@ -1,32 +1,24 @@
 ## Introduction
 
-Feign is a Java to HTTP client binder inspired by Retrofit, JAXRS-2.0, and WebSocket. 
+[Feign](https://github.com/OpenFeign/feign) is a Java to HTTP client binder inspired by Retrofit, JAXRS-2.0, and WebSocket. 
 Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of [ReSTfulness](/docs/CS/Distributed/RPC/RESTful.md).
 
 Feign uses tools like Jersey and CXF to write Java clients for ReST or SOAP services.
 Furthermore, Feign allows you to write your own code on top of http libraries such as Apache HC. 
 Feign connects your code to http APIs with minimal overhead and code via customizable decoders and error handling, which can be written to any text-based http API.
 
+Feign works by processing annotations into a templatized request. 
+Arguments are applied to these templates in a straightforward fashion before output. 
+Although Feign is limited to supporting text-based APIs, it dramatically simplifies system aspects such as replaying requests.
+Furthermore, Feign makes it easy to unit test your conversions knowing this.
 
-
-Feign works by processing annotations into a templatized request. Arguments are applied to these templates in a straightforward fashion before output. Although Feign is limited to supporting text-based APIs, it dramatically simplifies system aspects such as replaying requests. Furthermore, Feign makes it easy to unit test your conversions knowing this.
-
-This is a map with current key features provided by feign:
-
-![](https://camo.githubusercontent.com/4922a4bb1cb17e62acdd037870cdf5f3c355f20adadc60fbd6f619b1a00cf0d9/687474703a2f2f7777772e706c616e74756d6c2e636f6d2f706c616e74756d6c2f70726f78793f63616368653d6e6f267372633d68747470733a2f2f7261772e67697468756275736572636f6e74656e742e636f6d2f4f70656e466569676e2f666569676e2f6d61737465722f7372632f646f63732f6f766572766965772d6d696e646d61702e69756d6c)
-
-
-
-
+client
+- [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)(In maintenance)
+- OK Http
+- java 11 Http2
 
 
 
-- client
-  - [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)(In maintenance)
-  - OK Http
-  - java 11 Http2
-- [Circuit Breaker]()
-- [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md)
 
 Feign works by processing annotations into a templatized request. 
 Arguments are applied to these templates in a straightforward fashion before output. 
@@ -40,6 +32,12 @@ Furthermore, Feign makes it easy to unit test your conversions knowing this.
 
 
 Enable with `@EnableFeignClients`
+
+```java
+@Import(FeignClientsRegistrar.class)
+public @interface EnableFeignClients
+```
+
 
 ```java
 @Configuration(proxyBeanMethods = false)
@@ -59,11 +57,21 @@ public class FeignClientsConfiguration {
 }
 ```
 
-## Prepare
 
 ### registerFeignClients
 
-Only allows interface.
+BeanDefinitionReaderUtils.registerBeanDefinition into [Spring Context](/docs/CS/Java/Spring/IoC.md).
+
+> [!TIP]
+> 
+> BeanDefinition is FeignClientFactoryBean.class.
+
+
+
+
+@FeignClient can only be specified on an interface.
+
+
 ```java
 class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLoaderAware, EnvironmentAware {
     public void registerFeignClients(AnnotationMetadata metadata,
@@ -80,7 +88,6 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
                     // verify annotated class is an interface
                     AnnotatedBeanDefinition beanDefinition = (AnnotatedBeanDefinition) candidateComponent;
                     AnnotationMetadata annotationMetadata = beanDefinition.getMetadata();
-                    Assert.isTrue(annotationMetadata.isInterface(), "@FeignClient can only be specified on an interface");
 
                     Map<String, Object> attributes = annotationMetadata.getAnnotationAttributes(FeignClient.class.getCanonicalName());
                     String name = getClientName(attributes);
@@ -91,49 +98,90 @@ class FeignClientsRegistrar implements ImportBeanDefinitionRegistrar, ResourceLo
             }
         }
     }
+
+    private void registerFeignClient(BeanDefinitionRegistry registry, AnnotationMetadata annotationMetadata,
+        Map<String, Object> attributes) {
+        String className = annotationMetadata.getClassName();
+        if (String.valueOf(false).equals(
+                environment.getProperty("spring.cloud.openfeign.lazy-attributes-resolution", String.valueOf(false)))) {
+            eagerlyRegisterFeignClientBeanDefinition(className, attributes, registry);
+        }
+        else {
+            lazilyRegisterFeignClientBeanDefinition(className, attributes, registry);
+        }
+	}
 }
 ```
-BeanDefinitionReaderUtils.registerBeanDefinition into [Spring Context](/docs/CS/Java/Spring/IoC.md).
 
-> [!TIP]
-> 
-> BeanDefinition is FeignClientFactoryBean.class.
 
-```
-private void registerFeignClient(BeanDefinitionRegistry registry,
-			AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
-		String className = annotationMetadata.getClassName();
-		BeanDefinitionBuilder definition = BeanDefinitionBuilder
-				.genericBeanDefinition(FeignClientFactoryBean.class);
-		//...
+```java
+
+	private void lazilyRegisterFeignClientBeanDefinition(String className, Map<String, Object> attributes,
+			BeanDefinitionRegistry registry) {
+		ConfigurableBeanFactory beanFactory = registry instanceof ConfigurableBeanFactory
+				? (ConfigurableBeanFactory) registry : null;
+		Class clazz = ClassUtils.resolveClassName(className, null);
+		String contextId = getContextId(beanFactory, attributes);
+		String name = getName(attributes);
+		FeignClientFactoryBean factoryBean = new FeignClientFactoryBean();
+		factoryBean.setBeanFactory(beanFactory);
+		factoryBean.setName(name);
+		factoryBean.setContextId(contextId);
+		factoryBean.setType(clazz);
+		factoryBean.setRefreshableClient(isClientRefreshEnabled());
+		BeanDefinitionBuilder definition = BeanDefinitionBuilder.genericBeanDefinition(clazz, () -> {
+			factoryBean.setUrl(getUrl(beanFactory, attributes));
+			factoryBean.setPath(getPath(beanFactory, attributes));
+			factoryBean.setDismiss404(Boolean.parseBoolean(String.valueOf(attributes.get("dismiss404"))));
+			Object fallback = attributes.get("fallback");
+			if (fallback != null) {
+				factoryBean.setFallback(fallback instanceof Class ? (Class<?>) fallback
+						: ClassUtils.resolveClassName(fallback.toString(), null));
+			}
+			Object fallbackFactory = attributes.get("fallbackFactory");
+			if (fallbackFactory != null) {
+				factoryBean.setFallbackFactory(fallbackFactory instanceof Class ? (Class<?>) fallbackFactory
+						: ClassUtils.resolveClassName(fallbackFactory.toString(), null));
+			}
+			return factoryBean.getObject();
+		});
+		definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
+		definition.setLazyInit(true);
+		validate(attributes);
+
+		AbstractBeanDefinition beanDefinition = definition.getBeanDefinition();
+		beanDefinition.setAttribute("feignClientsRegistrarFactoryBean", factoryBean);
+
 		// has a default, won't be null
 		boolean primary = (Boolean) attributes.get("primary");
+
 		beanDefinition.setPrimary(primary);
 
-		String qualifier = getQualifier(attributes);
-		if (StringUtils.hasText(qualifier)) {
-			alias = qualifier;
+		String[] qualifiers = getQualifiers(attributes);
+		if (ObjectUtils.isEmpty(qualifiers)) {
+			qualifiers = new String[] { contextId + "FeignClient" };
 		}
 
-		BeanDefinitionHolder holder = new BeanDefinitionHolder(beanDefinition, className,
-				new String[] { alias });
+		BeanDefinitionHolder holder = new BeanDefinitionHolder(beanDefinition, className, qualifiers);
 		BeanDefinitionReaderUtils.registerBeanDefinition(holder, registry);
+
+		registerRefreshableBeanDefinition(registry, contextId, Request.Options.class, OptionsFactoryBean.class);
+		registerRefreshableBeanDefinition(registry, contextId, RefreshableUrl.class, RefreshableUrlFactoryBean.class);
 	}
 ```
 
-## Execute
 
 ### builder
 
 ```java
 public static final class Builder<T> {
 
-		private FeignClientFactoryBean feignClientFactoryBean;
+    private FeignClientFactoryBean feignClientFactoryBean;
 
-		public T build() {
-			return this.feignClientFactoryBean.getTarget();
-		}
-	}
+    public T build() {
+        return this.feignClientFactoryBean.getTarget();
+    }
+}
 
 class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, ApplicationContextAware {
     <T> T getTarget() {
@@ -174,6 +222,41 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, A
     }
 }
 ```
+
+
+```java
+public class FeignAutoConfiguration {
+
+	@Autowired(required = false)
+	private List<FeignClientSpecification> configurations = new ArrayList<>();
+
+    @Bean
+	public FeignClientFactory feignContext() {
+		FeignClientFactory context = new FeignClientFactory();
+		context.setConfigurations(this.configurations);
+		return context;
+	}
+}
+```
+A factory that creates instances of feign classes. 
+It creates a Spring ApplicationContext per client name, and extracts the beans that it needs from there.
+
+```java
+public class FeignClientFactory extends NamedContextFactory<FeignClientSpecification> {
+
+	public FeignClientFactory() {
+		this(new HashMap<>());
+	}
+
+	public FeignClientFactory(
+			Map<String, ApplicationContextInitializer<GenericApplicationContext>> applicationContextInitializers) {
+		super(FeignClientsConfiguration.class, "spring.cloud.openfeign", "spring.cloud.openfeign.client.name",
+				applicationContextInitializers);
+	}
+}
+```
+
+
 
 ### Targeter
 
