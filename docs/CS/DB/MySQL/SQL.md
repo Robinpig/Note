@@ -32,73 +32,6 @@ rows_examined not same as engine execute rows
 
 
 
-和查询流程不一样，更新流程还涉及两个重要的日志模块，redo log（重做日志）和 binlog（归档日志）。
-
-### redo log
-
-参考一下计算机组成的金字塔模型就可以理解了。
-
-如果每次的更新操作都需要写进磁盘，然后磁盘也要找到对应的那条记录，然后再更新，整个过程 IO 成本、查找成本都很高。
-
-这种先计入cache然后空闲一次写入的技术就是WAL（Write-Ahead Logging）。先写日志，再写磁盘。
-
-当有一条记录需要更新的时候，InnoDB 引擎就会先把记录写到 redo log（粉板）里面，并更新内存，这个时候更新就算完成了。同时，InnoDB 引擎会在适当的时候，将这个操作记录更新到磁盘里面，而这个更新往往是在系统比较空闲的时候做
-
-InnoDB 的 redo log 是固定大小的，比如可以配置为一组 4 个文件，每个文件的大小是 1GB，那么这块“粉板”总共就可以记录 4GB 的操作。从头开始写，写到末尾就又回到开头循环写
-
-[![2](https://github.com/Simonhancrew/Recipes/raw/22b7bae785135555a8d49ef1075d8b24febf5880/XJBX/Server/DB/Mysql/Easy/Pic/2.png)](https://github.com/Simonhancrew/Recipes/blob/22b7bae785135555a8d49ef1075d8b24febf5880/XJBX/Server/DB/Mysql/Easy/Pic/2.png)
-
-write pos 是当前记录的位置，一边写一边后移，写到第 3 号文件末尾后就回到 0 号文件开头。checkpoint 是当前要擦除的位置，也是往后推移并且循环的，擦除记录前要把记录更新到数据文件。
-
-如果write pos追上了check point表明需要擦除一些记录，推进check point，之后再更新。
-
-有了 redo log，InnoDB 就可以保证即使数据库发生异常重启，之前提交的记录都不会丢失，这个能力称为 crash-safe。
-
-### binlog
-
-redolog是引擎层中InnoDB特有的日志，server层也有自己的日志，就是binlog。
-
-这两个日志有三点不同：
-
-1. redo log 是 InnoDB 引擎特有的；binlog 是 MySQL 的 Server 层实现的，所有引擎都可以使用。
-2. redo log 是物理日志，记录的是“在某个数据页上做了什么修改”；binlog 是逻辑日志，记录的是这个语句的原始逻辑，比如“给 ID=2 这一行的 c 字段加 1 ”。
-3. redo log 是循环写的，空间固定会用完；binlog 是可以追加写入的。“追加写”是指 binlog 文件写到一定大小后会切换到下一个，并不会覆盖以前的日志。
-
-再看一次update操作
-
-```
-update T set c=c+1 where ID=2;
-```
-
-1. 执行器先找引擎取 ID=2 这一行。ID 是主键，引擎直接用树搜索找到这一行。如果 ID=2 这一行所在的数据页本来就在内存中，就直接返回给执行器；否则，需要先从磁盘读入内存，然后再返回。
-2. 执行器拿到引擎给的行数据，把这个值加上 1，比如原来是 N，现在就是 N+1，得到新的一行数据，再调用引擎接口写入这行新数据。
-3. 引擎将这行新数据更新到内存中，同时将这个更新操作记录到 redo log 里面，此时 redo log 处于 prepare 状态。然后告知执行器执行完成了，随时可以提交事务。
-4. 执行器生成这个操作的 binlog，并把 binlog 写入磁盘。
-5. 执行器调用引擎的提交事务接口，引擎把刚刚写入的 redo log 改成提交（commit）状态，更新完成。
-
-### 为什么需要两阶段提交?
-
-怎样让数据库恢复到半个月内任意一秒的状态？
-
-binlog 会记录所有的逻辑操作，并且是采用“追加写”的形式。如果你的 DBA 承诺说半个月内可以恢复，那么备份系统中一定会保存最近半个月的所有 binlog，同时系统会定期做整库备份。备份的时间可以是自定义的。
-
-当需要恢复到指定的某一秒时，比如某天下午两点发现中午十二点有一次误删表，需要找回数据，：
-
-- 首先，找到最近的一次全量备份，如果你运气好，可能就是昨天晚上的一个备份，从这个备份恢复到临时库；
-- 然后，从备份的时间点开始，将备份的 binlog 依次取出来，重放到中午误删表之前的那个时刻。
-
-如果我们不按照这个顺序去做的话，假设当前 ID=2 的行，字段 c 的值是 0，再假设执行 update 语句过程中在写完第一个日志后，第二个日志还没有写完期间发生了 crash
-
-1. 先redolog，再binlog：假设在 redo log 写完，binlog 还没有写完的时候，MySQL 进程异常重启。由于我们前面说过的，redo log 写完之后，系统即使崩溃，仍然能够把数据恢复回来，所以恢复后这一行 c 的值是 1。但是由于 binlog 没写完就 crash 了，这时候 binlog 里面就没有记录这个语句。因此，之后备份日志的时候，存起来的 binlog 里面就没有这条语句。然后你会发现，如果需要用这个 binlog 来恢复临时库的话，由于这个语句的 binlog 丢失，这个临时库就会少了这一次更新，恢复出来的这一行 c 的值就是 0，与原库的值不同。
-2. 先binlog再redolog：由于 redo log 还没写，崩溃恢复以后这个事务无效，所以这一行 c 的值是 0。但是 binlog 里面已经记录了“把 c 从 0 改成 1”这个日志。所以，在之后用 binlog 来恢复的时候就多了一个事务出来，恢复出来的这一行 c 的值就是 1，与原库的值不同。
-
-不用两阶段提交，一致性就很难保证了。
-
-### 总结
-
-redolog主要为了保证crash-safe的能力，innodb_flush_log_at_trx_commit 这个参数设置成 1 的时候，表示每次事务的 redo log 都直接持久化到磁盘。这样可以保证MYSQL异常重启之后数据是不丢失的。
-
-sync_binlog 这个参数设置成 1 的时候，表示每次事务的 binlog 都持久化到磁盘，同理。
 
 
 
@@ -162,7 +95,7 @@ choose a least index
 
 
 
-### count(1)
+
 
 `InnoDB` handles `SELECT COUNT(*)` and `SELECT COUNT(1)` operations in the same way. There is no performance difference.
 
@@ -170,7 +103,8 @@ Like count(*), but suggest `count(*)`
 
 
 
-### count(column)
+
+ count(column)
 
 
 
@@ -182,21 +116,19 @@ If you need only a specified number of rows from a result set, use a LIMIT claus
 MySQL sometimes optimizes a query that has a LIMIT row_count clause and no HAVING clause:
 
 - If you select only a few rows with LIMIT, MySQL uses indexes in some cases when normally it would prefer to do a full table scan.
-
-- If you combine LIMIT row_count with ORDER BY, MySQL stops sorting as soon as it has found the first row_count rows of the sorted result, rather than sorting the entire result. If ordering is done by using an index, this is very fast. If a filesort must be done, all rows that match the query without the LIMIT clause are selected, and most or all of them are sorted, before the first row_count are found. After the initial rows have been found, MySQL does not sort any remainder of the result set.
-
-- One manifestation of this behavior is that an ORDER BY query with and without LIMIT may return rows in different order, as described later in this section.
-
+- If you combine LIMIT row_count with ORDER BY, MySQL stops sorting as soon as it has found the first row_count rows of the sorted result, rather than sorting the entire result. 
+  If ordering is done by using an index, this is very fast. 
+  If a filesort must be done, all rows that match the query without the LIMIT clause are selected, and most or all of them are sorted, before the first row_count are found. 
+  After the initial rows have been found, MySQL does not sort any remainder of the result set.
+  One manifestation of this behavior is that an ORDER BY query with and without LIMIT may return rows in different order, as described later in this section.
 - If you combine LIMIT row_count with DISTINCT, MySQL stops as soon as it finds row_count unique rows.
-
 - In some cases, a GROUP BY can be resolved by reading the index in order (or doing a sort on the index), then calculating summaries until the index value changes. In this case, LIMIT row_count does not calculate any unnecessary GROUP BY values.
-
-- As soon as MySQL has sent the required number of rows to the client, it aborts the query unless you are using SQL_CALC_FOUND_ROWS. In that case, the number of rows can be retrieved with SELECT FOUND_ROWS(). See Section 14.15, “Information Functions”.
-
-- LIMIT 0 quickly returns an empty set. This can be useful for checking the validity of a query. It can also be employed to obtain the types of the result columns within applications that use a MySQL API that makes result set metadata available. With the mysql client program, you can use the —column-type-info option to display result column types.
-
+- As soon as MySQL has sent the required number of rows to the client, it aborts the query unless you are using SQL_CALC_FOUND_ROWS. 
+  In that case, the number of rows can be retrieved with SELECT FOUND_ROWS().
+- LIMIT 0 quickly returns an empty set. This can be useful for checking the validity of a query.
+  It can also be employed to obtain the types of the result columns within applications that use a MySQL API that makes result set metadata available. 
+  With the mysql client program, you can use the —column-type-info option to display result column types.
 - If the server uses temporary tables to resolve a query, it uses the LIMIT row_count clause to calculate how much space is required.
-
 - If an index is not used for ORDER BY but a LIMIT clause is also present, the optimizer may be able to avoid using a merge file and sort the rows in memory using an in-memory filesort operation.
 
 If multiple rows have identical values in the ORDER BY columns, the server is free to return those rows in any order, and may do so differently depending on the overall execution plan. In other words, the sort order of those rows is nondeterministic with respect to the nonordered columns.
@@ -204,8 +136,12 @@ If multiple rows have identical values in the ORDER BY columns, the server is fr
 One factor that affects the execution plan is LIMIT, so an ORDER BY query with and without LIMIT may return rows in different orders.
 
 
-If it is important to ensure the same row order with and without LIMIT, include additional columns in the ORDER BY clause to make the order deterministic
+If it is important to ensure the same row order with and without LIMIT, include additional columns in the ORDER BY clause to make the order deterministic.
+
+For a query with an ORDER BY or GROUP BY and a LIMIT clause, the optimizer tries to choose an ordered index by default when it appears doing so would speed up query execution. Prior to MySQL 8.0.21, there was no way to override this behavior, even in cases where using some other optimization might be faster. Beginning with MySQL 8.0.21, it is possible to turn off this optimization by setting the optimizer_switch system variable's prefer_ordering_index flag to off.
+
 
 ## Reference
 
 1. [MySQL 8.0 Reference Manual - Aggregate Function Descriptions](https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html)
+2. [LIMIT Query Optimization](https://dev.mysql.com/doc/refman/8.0/en/limit-optimization.html)

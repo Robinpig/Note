@@ -26,30 +26,6 @@ More recently, with the introduction of [Spring Boot](/docs/CS/Java/Spring_Boot/
 Spring Boot is an extension of the Spring Framework that offers several productivity enhancements.
 The most well known of these enhancements is autoconfiguration, where Spring Boot can make reasonable guesses at what components need to be configured and wired together, based on entries in the classpath, environment variables, and other factors.
 
-Packages
-
-- IoC
-  - core
-  - beans
-  - context
-  - expression
-  
-- AOP
-  - aop
-  - aspects
-  - instrument
-- data
-  - jdbc
-  - tx
-  - orm
-  - oxm
-  - jms
-- web
-  - web
-  - webmvc
-  - websocket
-  - webflux
-
 ### Core
 
 - [The IoC Container](/docs/CS/Java/Spring/IoC.md)
