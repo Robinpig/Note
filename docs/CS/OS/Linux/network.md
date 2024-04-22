@@ -1376,9 +1376,24 @@ ls /sys/class/net/eth0/queues
 
 Generic Segmentation Offload
 
+
+#### TSO
+
 TCP Segmentation Offload
 
 OS split segmentation to n * MSS, and let device to split MSS
+
+
+GRO
+
+```shell
+ethtool -k enp0s3 | grep offload
+```
+
+
+```shell
+ethtool -k enp0s3 tso off
+```
 
 ### I/O AT
 

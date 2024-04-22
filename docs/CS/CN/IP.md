@@ -80,7 +80,17 @@ a.b.c.d/x
 
 
 
-以太网 MTU 1500Byte
+MTU
+
+MSS can be set through iptables while send SYNC
+
+```shell
+iptables -A FORWARD -p tcp --tcp-flags SYN SYN -j TCPMSS -set-mss 1400
+```
+
+
+Default unsupport fragment.
+
 
 
 
@@ -93,6 +103,11 @@ IPv6
 
 
 Without authentication or encryption (or when it is disabled for IPv6), IP spoofing attacks are possible.
+
+
+## IPSec
+
+
 
 
 

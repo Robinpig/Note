@@ -184,7 +184,7 @@ ISN based on the timestamp, see RFC1948
 
 | Retry   | File Settings                             | Default Value |
 | --------- | ------------------------------------------- | --------------- |
-| SYN     | cat /proc/sys/net/ipv4/tcp_syn_retries    | 5             |
+| SYN     | cat /proc/sys/net/ipv4/tcp_syn_retries    | 6             |
 | SYN+ACK | cat /proc/sys/net/ipv4/tcp_synack_retries | 5             |
 
 RFC1122 says the minimum retry MUST be at least 180secs.
@@ -198,6 +198,14 @@ if RTO very large, the actual reties will < setting retries
 #define TCP_RTO_MAX	((unsigned)(120*HZ))
 #define TCP_RTO_MIN	((unsigned)(HZ/5))
 ```
+
+```shell
+iptables -I INPUT -p tcp --dport 80 -j DROP
+```
+
+
+TCP can be rejected though a ICMP Port unreachable or TCP RST. 
+Capture the defintintion port may ignore the ICMP datagram.
 
 ### Connection Termination
 
@@ -870,7 +878,16 @@ The maximum window advertisement is 65,535 bytes unless the Window Scale TCP opt
 #### Sliding Windows
 
 Each endpoint of a TCP connection is capable of sending and receiving data.
-The amount of data sent or received on a connection is maintained by a set of *window structures*. For each active connection, each TCP endpoint maintains a *send window structure* and a *receive window structure*.
+The amount of data sent or received on a connection is maintained by a set of *window structures*. 
+For each active connection, each TCP endpoint maintains a *send window structure* and a *receive window structure*.
+
+> The window scale option appears only once in TCP handshanke.
+
+
+- Sent Window
+- Receive Window
+- Congestion Window
+
 
 ##### sender-side
 
