@@ -2,6 +2,33 @@
 
 
 
+Let’s remember what declaring a data source in Spring Boot looks like in application.yml:
+
+
+```yaml
+spring:
+  datasource:
+    url: ...
+    username: ...
+    password: ...
+    driverClassname: ...
+```	
+
+Spring maps these settings to an instance of org.springframework.boot.autoconfigure.jdbc.DataSourceProperties.
+So, to use multiple data sources, we need to declare multiple beans with different mappings within Spring’s application context.
+
+
+DataSourceAutoConfiguration
+
+DataSourceTransactionManagerAutoConfiguration
+
+JdbcTemplateAutoConfiguration
+
+
+With Spring Boot 2 and Spring Boot 3, HikariCP is the default connection pool and it is transitively imported with either `spring-boot-starter-jdbc` or `spring-boot-starter-data-jpa` starter dependency, so you don’t need to add any extra dependency to your project.
+Spring Boot will expose Hikari-specific settings to `spring.datasource.hikari`. 
+
+
 
 ### Transactional
 
@@ -46,9 +73,18 @@ private TransactionAttribute computeTransactionAttribute(Method method, Class<?>
 
 
 ### Propagation
+
 Enumeration that represents transaction propagation behaviors for use TransactionDefinition interface.
+ 
+
+
+Note that isolation level and timeout settings will not get applied unless an actual new transaction gets started. 
+As only `PROPAGATION_REQUIRED`, `PROPAGATION_REQUIRES_NEW` and `PROPAGATION_NESTED` can cause that, it usually doesn't make sense to specify those settings in other cases.
+
+
 
 ```java
+
 public enum Propagation {
 
 	REQUIRED(TransactionDefinition.PROPAGATION_REQUIRED),
@@ -65,34 +101,7 @@ public enum Propagation {
 
 	NESTED(TransactionDefinition.PROPAGATION_NESTED);
 }
-```
 
-
-### TransactionDefinition
-```java
-
-package org.springframework.transaction;
-
-import org.springframework.lang.Nullable;
-
-/**
- * Interface that defines Spring-compliant transaction properties.
- * Based on the propagation behavior definitions analogous to EJB CMT attributes.
- *
- * <p>Note that isolation level and timeout settings will not get applied unless
- * an actual new transaction gets started. As only {@link #PROPAGATION_REQUIRED},
- * {@link #PROPAGATION_REQUIRES_NEW} and {@link #PROPAGATION_NESTED} can cause
- * that, it usually doesn't make sense to specify those settings in other cases.
- * Furthermore, be aware that not all transaction managers will support those
- * advanced features and thus might throw corresponding exceptions when given
- * non-default values.
- *
- * <p>The {@link #isReadOnly() read-only flag} applies to any transaction context,
- * whether backed by an actual resource transaction or operating non-transactionally
- * at the resource level. In the latter case, the flag will only apply to managed
- * resources within the application, such as a Hibernate {@code Session}.
- *
- */
 public interface TransactionDefinition {
 
 	int PROPAGATION_REQUIRED = 0;
@@ -119,40 +128,8 @@ public interface TransactionDefinition {
 
 	int ISOLATION_SERIALIZABLE = 8;  // same as java.sql.Connection.TRANSACTION_SERIALIZABLE;
 
-
-	/**
-	 * Use the default timeout of the underlying transaction system,
-	 * or none if timeouts are not supported.
-	 */
 	int TIMEOUT_DEFAULT = -1;
-
-	default int getPropagationBehavior() {
-		return PROPAGATION_REQUIRED;
-	}
-
-	default int getIsolationLevel() {
-		return ISOLATION_DEFAULT;
-	}
-
-	default int getTimeout() {
-		return TIMEOUT_DEFAULT;
-	}
-
-	default boolean isReadOnly() {
-		return false;
-	}
-
-	@Nullable
-	default String getName() {
-		return null;
-	}
-
-
-	// Static builder methods
-	static TransactionDefinition withDefaults() {
-		return StaticTransactionDefinition.INSTANCE;
-	}
-
+ 
 }
 ```
 
