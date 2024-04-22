@@ -4,8 +4,6 @@
 Some of these optimizations are measured in fractions of a millisecond amortized over millions of invocations.
 
 
-## Params
-
 
 
 
