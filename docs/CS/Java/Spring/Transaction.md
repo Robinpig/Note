@@ -1,6 +1,11 @@
 ## Introduction
 
+The Spring Framework provides a consistent abstraction for transaction management that delivers the following benefits:
 
+- Consistent programming model across different transaction APIs such as Java Transaction API (JTA), JDBC, Hibernate, Java Persistence API (JPA), and Java Data Objects (JDO).
+Support for declarative transaction management.
+- - Simpler API for programmatic transaction management than complex transaction APIs such as JTA.
+- Excellent integration with Spring’s data access abstractions.
 
 Let’s remember what declaring a data source in Spring Boot looks like in application.yml:
 
@@ -30,6 +35,39 @@ Spring Boot will expose Hikari-specific settings to `spring.datasource.hikari`.
 
 
 
+A transaction strategy is defined by the org.springframework.transaction.PlatformTransactionManager interface:
+```java
+public interface PlatformTransactionManager {
+
+    TransactionStatus getTransaction(
+            TransactionDefinition definition) throws TransactionException;
+
+    void commit(TransactionStatus status) throws TransactionException;
+
+    void rollback(TransactionStatus status) throws TransactionException;
+}
+```
+
+The TransactionDefinition interface specifies:
+
+- Isolation: The degree to which this transaction is isolated from the work of other transactions. For example, can this transaction see uncommitted writes from other transactions?
+- Propagation: Typically, all code executed within a transaction scope will run in that transaction. However, you have the option of specifying the behavior in the event that a transactional method is executed when a transaction context already exists. For example, code can continue running in the existing transaction (the common case); or the existing transaction can be suspended and a new transaction created. Spring offers all of the transaction propagation options familiar from EJB CMT. To read about the semantics of transaction propagation in Spring, see Section 16.5.7, “Transaction propagation”.
+- Timeout: How long this transaction runs before timing out and being rolled back automatically by the underlying transaction infrastructure.
+- Read-only status: A read-only transaction can be used when your code reads but does not modify data. Read-only transactions can be a useful optimization in some cases, such as when you are using Hibernate.
+
+## Declarative transaction
+
+The Spring Framework’s declarative transaction management is made possible with Spring aspect-oriented programming (AOP).
+The combination of AOP with transactional metadata yields an AOP proxy that uses a TransactionInterceptor in conjunction with an appropriate PlatformTransactionManager implementation to drive transactions around method invocations.
+
+Conceptually, calling a method on a transactional proxy looks like this…​
+
+![](https://docs.spring.io/spring-framework/docs/4.2.x/spring-framework-reference/html/images/tx.png)
+
+ Declaring transaction semantics directly in the Java source code puts the declarations much closer to the affected code.
+
+
+
 ### Transactional
 
 Describes a transaction attribute on an individual method or on a class.
@@ -53,7 +91,18 @@ Alternatively, this annotation may demarcate a reactive transaction managed by a
 As a consequence, all participating data access operations need to execute within the same Reactor context in the same reactive pipeline.
 
 
-- **only support public method**
+> [!NOTE]
+> 
+> When using proxies, you should apply the @Transactional annotation only to methods with public visibility. If you do annotate protected, private or package-visible methods with the @Transactional annotation, no error is raised, but the annotated method does not exhibit the configured transactional settings. Consider the use of AspectJ (see below) if you need to annotate non-public methods.
+
+
+The @Transactional annotation is metadata that specifies that an interface, class, or method must have transactional semantics; for example, "start a brand new read-only transaction when this method is invoked, suspending any existing transaction". The default @Transactional settings are as follows:
+
+- Propagation setting is PROPAGATION_REQUIRED.
+- Isolation level is ISOLATION_DEFAULT.
+- Transaction is read/write.
+- Transaction timeout defaults to the default timeout of the underlying transaction system, or to none if timeouts are not supported.
+- Any RuntimeException triggers rollback, and any checked Exception does not.
 
 ```java
 //class TransactionalRepositoryProxyPostProcessor
@@ -245,6 +294,35 @@ public interface TransactionSynchronization extends Flushable {
 }
 ```
 
+## Programmatic transaction
+
+
+Gets called by TransactionTemplate.execute within a transactional context. Does not need to care about transactions itself, although it can retrieve and influence the status of the current transaction via the given status object, e.g. setting rollback-only.
+A RuntimeException thrown by the callback is treated as application exception that enforces a rollback. An exception gets propagated to the caller of the template.
+
+
+```java
+@FunctionalInterface
+public interface TransactionCallback<T> {
+
+	@Nullable
+	T doInTransaction(TransactionStatus status);
+
+}
+
+public abstract class TransactionCallbackWithoutResult implements TransactionCallback<Object> {
+
+	@Override
+	@Nullable
+	public final Object doInTransaction(TransactionStatus status) {
+		doInTransactionWithoutResult(status);
+		return null;
+	}
+
+	protected abstract void doInTransactionWithoutResult(TransactionStatus status);
+
+}
+```
 
 ## Multi-DataSource
 
