@@ -127,7 +127,9 @@ Enumeration that represents transaction propagation behaviors for use Transactio
  
 
 
-Note that isolation level and timeout settings will not get applied unless an actual new transaction gets started. 
+> [!NOTE]
+> 
+> Note that isolation level and timeout settings will not get applied unless an actual new transaction gets started. 
 As only `PROPAGATION_REQUIRED`, `PROPAGATION_REQUIRES_NEW` and `PROPAGATION_NESTED` can cause that, it usually doesn't make sense to specify those settings in other cases.
 
 
