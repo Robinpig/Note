@@ -55,6 +55,49 @@ The TransactionDefinition interface specifies:
 - Timeout: How long this transaction runs before timing out and being rolled back automatically by the underlying transaction infrastructure.
 - Read-only status: A read-only transaction can be used when your code reads but does not modify data. Read-only transactions can be a useful optimization in some cases, such as when you are using Hibernate.
 
+
+
+
+## Programmatic transaction
+
+The central method is execute, supporting transactional code that implements the TransactionCallback interface. 
+This template handles the transaction lifecycle and possible exceptions such that neither the TransactionCallback implementation nor the calling code needs to explicitly handle transactions.
+
+
+```java
+public class TransactionTemplate extends DefaultTransactionDefinition
+		implements TransactionOperations, InitializingBean {
+		}
+```
+
+Gets called by `TransactionTemplate.execute` within a transactional context. Does not need to care about transactions itself, although it can retrieve and influence the status of the current transaction via the given status object, e.g. setting rollback-only.
+A RuntimeException thrown by the callback is treated as application exception that enforces a rollback. An exception gets propagated to the caller of the template.
+
+
+```java
+@FunctionalInterface
+public interface TransactionCallback<T> {
+
+	@Nullable
+	T doInTransaction(TransactionStatus status);
+
+}
+
+public abstract class TransactionCallbackWithoutResult implements TransactionCallback<Object> {
+
+	@Override
+	@Nullable
+	public final Object doInTransaction(TransactionStatus status) {
+		doInTransactionWithoutResult(status);
+		return null;
+	}
+
+	protected abstract void doInTransactionWithoutResult(TransactionStatus status);
+
+}
+```
+
+
 ## Declarative transaction
 
 The Spring Framework’s declarative transaction management is made possible with Spring aspect-oriented programming (AOP).
@@ -110,8 +153,7 @@ private TransactionAttribute computeTransactionAttribute(Method method, Class<?>
    // Don't allow no-public methods as required.
    if (allowPublicMethodsOnly() && !Modifier.isPublic(method.getModifiers())) {
       return null;
-   }
-  //
+   } 
 }
 ```
 
@@ -293,36 +335,6 @@ public interface TransactionSynchronization extends Flushable {
 
     default void afterCompletion(int status) {
     }
-}
-```
-
-## Programmatic transaction
-
-
-Gets called by TransactionTemplate.execute within a transactional context. Does not need to care about transactions itself, although it can retrieve and influence the status of the current transaction via the given status object, e.g. setting rollback-only.
-A RuntimeException thrown by the callback is treated as application exception that enforces a rollback. An exception gets propagated to the caller of the template.
-
-
-```java
-@FunctionalInterface
-public interface TransactionCallback<T> {
-
-	@Nullable
-	T doInTransaction(TransactionStatus status);
-
-}
-
-public abstract class TransactionCallbackWithoutResult implements TransactionCallback<Object> {
-
-	@Override
-	@Nullable
-	public final Object doInTransaction(TransactionStatus status) {
-		doInTransactionWithoutResult(status);
-		return null;
-	}
-
-	protected abstract void doInTransactionWithoutResult(TransactionStatus status);
-
 }
 ```
 
