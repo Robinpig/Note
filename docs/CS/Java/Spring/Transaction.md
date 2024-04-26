@@ -30,6 +30,19 @@ DataSourceTransactionManagerAutoConfiguration
 JdbcTemplateAutoConfiguration
 
 
+
+Translate the given SQLException into a generic DataAccessException.
+
+```java
+public interface SQLExceptionTranslator {
+	@Nullable
+	DataAccessException translate(String task, @Nullable String sql, SQLException ex);
+}
+```
+> JavaBean `SQLErrorCodes` define in `spring-jdbc/src/main/resources/org/springframework/jdbc/support/sql-error-codes.xml`.
+> Can be overridden by definitions in a "`sql-error-codes.xml`" file in the root of the class path.
+
+
 With Spring Boot 2 and Spring Boot 3, HikariCP is the default connection pool and it is transitively imported with either `spring-boot-starter-jdbc` or `spring-boot-starter-data-jpa` starter dependency, so you don’t need to add any extra dependency to your project.
 Spring Boot will expose Hikari-specific settings to `spring.datasource.hikari`. 
 
@@ -103,7 +116,7 @@ public abstract class TransactionCallbackWithoutResult implements TransactionCal
 The Spring Framework’s declarative transaction management is made possible with Spring aspect-oriented programming (AOP).
 The combination of AOP with transactional metadata yields an AOP proxy that uses a TransactionInterceptor in conjunction with an appropriate PlatformTransactionManager implementation to drive transactions around method invocations.
 
-Conceptually, calling a method on a transactional proxy looks like this…​
+Conceptually, calling a method on a transactional proxy looks like this:
 
 ![](https://docs.spring.io/spring-framework/docs/4.2.x/spring-framework-reference/html/images/tx.png)
 
@@ -175,25 +188,12 @@ Enumeration that represents transaction propagation behaviors for use Transactio
 As only `PROPAGATION_REQUIRED`, `PROPAGATION_REQUIRES_NEW` and `PROPAGATION_NESTED` can cause that, it usually doesn't make sense to specify those settings in other cases.
 
 
+`PROPAGATION_NESTED` uses a single physical transaction with multiple savepoints that it can roll back to. 
+**Such partial rollbacks let an inner transaction scope trigger a rollback for its scope, with the outer transaction being able to continue the physical transaction despite some operations having been rolled back.** 
+This setting is typically mapped onto JDBC savepoints, so it works only with JDBC resource transactions.
+
 
 ```java
-
-public enum Propagation {
-
-	REQUIRED(TransactionDefinition.PROPAGATION_REQUIRED),
-
-	SUPPORTS(TransactionDefinition.PROPAGATION_SUPPORTS),
-
-	MANDATORY(TransactionDefinition.PROPAGATION_MANDATORY),
-
-	REQUIRES_NEW(TransactionDefinition.PROPAGATION_REQUIRES_NEW),
-
-	NOT_SUPPORTED(TransactionDefinition.PROPAGATION_NOT_SUPPORTED),
-
-	NEVER(TransactionDefinition.PROPAGATION_NEVER),
-
-	NESTED(TransactionDefinition.PROPAGATION_NESTED);
-}
 
 public interface TransactionDefinition {
 
