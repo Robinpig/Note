@@ -178,7 +178,7 @@ Configure your HikariCP idleTimeout and maxLifeTime settings to be one minute le
 
 ## Links
 
-- [DataSource](/docs/CS/Java/DataSource/DataSource.md)
+- [DataSource](/docs/CS/Java/ConnectionPool/ConnectionPool.md)
 
 ## References
 
