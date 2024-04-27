@@ -187,14 +187,36 @@ Enumeration that represents transaction propagation behaviors for use Transactio
 > Note that isolation level and timeout settings will not get applied unless an actual new transaction gets started. 
 As only `PROPAGATION_REQUIRED`, `PROPAGATION_REQUIRES_NEW` and `PROPAGATION_NESTED` can cause that, it usually doesn't make sense to specify those settings in other cases.
 
+<!-- tabs:start -->
+##### **PROPAGATION_REQUIRED**
+`PROPAGATION_REQUIRED` enforces a physical transaction, either locally for the current scope if no transaction exists yet or participating in an existing 'outer' transaction defined for a larger scope. This is a fine default in common call stack arrangements within the same thread (for example, a service facade that delegates to several repository methods where all the underlying resources have to participate in the service-level transaction).
+
+When the propagation setting is `PROPAGATION_REQUIRED`, a logical transaction scope is created for each method upon which the setting is applied. 
+Each such logical transaction scope can determine rollback-only status individually, with an outer transaction scope being logically independent from the inner transaction scope. 
+In the case of standard `PROPAGATION_REQUIRED` behavior, all these scopes are mapped to the same physical transaction. 
+So a rollback-only marker set in the inner transaction scope does affect the outer transaction’s chance to actually commit.
+
+However, in the case where an inner transaction scope sets the rollback-only marker, the outer transaction has not decided on the rollback itself, so the rollback (silently triggered by the inner transaction scope) is unexpected. 
+**A corresponding `UnexpectedRollbackException` is thrown at that point.**
+This is expected behavior so that the caller of a transaction can never be misled to assume that a commit was performed when it really was not. 
+So, if an inner transaction (of which the outer caller is not aware) silently marks a transaction as rollback-only, the outer caller still calls commit. 
+The outer caller needs to receive an `UnexpectedRollbackException` to indicate clearly that a rollback was performed instead.
+
+
+##### **PROPAGATION_REQUIRES_NEW**
+
+`PROPAGATION_REQUIRES_NEW`, in contrast to PROPAGATION_REQUIRED, always uses an independent physical transaction for each affected transaction scope, never participating in an existing transaction for an outer scope. In such an arrangement, the underlying resource transactions are different and, hence, can commit or roll back independently, with an outer transaction not affected by an inner transaction’s rollback status and with an inner transaction’s locks released immediately after its completion. Such an independent inner transaction can also declare its own isolation level, timeout, and read-only settings and not inherit an outer transaction’s characteristics.
+
+
+##### **PROPAGATION_NESTED**
 
 `PROPAGATION_NESTED` uses a single physical transaction with multiple savepoints that it can roll back to. 
 **Such partial rollbacks let an inner transaction scope trigger a rollback for its scope, with the outer transaction being able to continue the physical transaction despite some operations having been rolled back.** 
 This setting is typically mapped onto JDBC savepoints, so it works only with JDBC resource transactions.
 
+<!-- tabs:end -->
 
 ```java
-
 public interface TransactionDefinition {
 
 	int PROPAGATION_REQUIRED = 0;
