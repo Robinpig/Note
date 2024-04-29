@@ -9,7 +9,7 @@ While the Spring IoC container does not depend on AOP, meaning you do not need t
 
 AOP is used in the Spring Framework to:
 
-- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is declarative transaction management.
+- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management].
 - allow users to implement custom aspects, complementing their use of OOP with AOP.
 
 ## AOP Concepts
@@ -85,7 +85,7 @@ Pointcut types:
 
 ## start
 
-### Example:
+### Example
 
 ```java
 @Configuration
@@ -156,15 +156,10 @@ class AspectJAutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 
 #### AnnotationAwareAspectJAutoProxyCreator
 
-```
+```java
 // AnnotationAwareAspectJAutoProxyCreator
-@Nullable
 private List<Pattern> includePatterns;
-
-@Nullable
 private AspectJAdvisorFactory aspectJAdvisorFactory;
-
-@Nullable
 private BeanFactoryAspectJAdvisorsBuilder aspectJAdvisorsBuilder;
 
 @Override
