@@ -3,6 +3,14 @@
 > HTTPS = [HTTP](/docs/CS/CN/HTTP/HTTP.md) + TLS/SSL
 
 TLS is a client/server protocol, designed to support security for a connection between two applications. 
+Although TLS can be used on top of any low-level transport protocol, the original goal of the protocol was to encrypt HTTP traffic.
+HTTP encrypted using TLS is commonly referred to as HTTPS. 
+TLS-encrypted web traffic is by convention exchanged on port 443 by default, while unencrypted HTTP uses port 80 by default. 
+
+
+
+## Protocols
+
 The Record protocol provides fragmentation, compression, integrity protection, and encryption for data objects exchanged between clients and servers, 
 and the handshake protocols establish identities, perform authentication, indicate alerts, and provide unique key material for the Record protocol to use on each connection. 
 The handshaking protocols comprise four specific protocols: the Handshake protocol, the Alert protocol, the Change Cipher Spec protocol, and the application data protocol. 
@@ -13,6 +21,7 @@ Such switching is allowed only after the pending state has been readied.
 TLS depends on five cryptographic operations: digital signing, stream cipher encryption, block cipher encryption, AEAD, and public key encryption. For integrity protection, the TLS record layer uses HMAC. 
 For key generation, TLS 1.2 uses a PRF based on HMAC with SHA-256. TLS also integrates an optional compression algorithm that is negotiated when a connection is first established.
 
+HTTPS remains an important use case for TLS.
 
 ### Record Protocol
 
@@ -50,9 +59,6 @@ provide security parameters to the record layer, and verify that all of these op
 TLS supports the ability to renegotiate cryptographic connection parameters while maintaining the same connection. This can be initiated by either the server or the client. 
 If the server wishes to renegotiate the connection parameters, it generates a HelloRequest message, and the client responds with a new ClientHell message, which begins the renegotiation procedure. 
 The client is also able to generate such a ClientHello message spontaneously, without prompting from the server.
-
-
-
 
 The primary goal of TLS is to provide a secure channel between two communicating peers; the only requirement from the underlying transport is a reliable, in-order data stream.  
 Specifically, the secure channel should provide the following properties:
@@ -239,3 +245,4 @@ AES
 2. [RFC 4346 - The Transport Layer Security (TLS) Protocol Version 1.1](https://www.rfc-editor.org/rfc/rfc4346.html)
 3. [RFC 5246 - The Transport Layer Security (TLS) Protocol Version 1.2](https://www.rfc-editor.org/rfc/rfc5246.html)
 4. [RFC 8446 - The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446.html)
+5. [Transport Layer Security](https://developer.mozilla.org/en-US/docs/Web/Security/Transport_Layer_Security)

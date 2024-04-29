@@ -1,8 +1,18 @@
 ## Introduction
 
-`tcpdump`, a powerful command-line packet analyzer;
+The [tcpdump](https://www.tcpdump.org/) command can be used to capture network traffic on a Linux system.
 
 *libpcap*, a portable C/C++ library for network traffic capture.
+
+```dot
+strict digraph {
+    rankdir = "BT"
+    tcpdump [shape="polygon" ]
+    libpcap [shape="polygon" ]
+    BPF [shape="polygon" ]
+    tcpdump -> libpcap -> BPF
+}
+
 
 tcpdump before ip_rcv or arp_rcv
 

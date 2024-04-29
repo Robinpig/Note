@@ -36,4 +36,4 @@ The best value for maxIdle for heavily loaded system will vary but the default i
 
 ## Links
 
-- [HiKariCP](/docs/CS/Java/DataSource/HiKariCP.md)
+- [HiKariCP](/docs/CS/Java/ConnectionPool/HiKariCP.md)

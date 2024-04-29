@@ -181,15 +181,7 @@ bool oopDesc::is_forwarded() const {
 
 // Used by scavengers
 void oopDesc::forward_to(oop p) {
-  assert(check_obj_alignment(p),
-         "forwarding to something not aligned");
-  assert(Universe::heap()->is_in_reserved(p),
-         "forwarding to something not in heap");
-  assert(!is_archived_object(oop(this)) &&
-         !is_archived_object(p),
-         "forwarding archive object");
   markOop m = markOopDesc::encode_pointer_as_mark(p);
-  assert(m->decode_pointer() == p, "encoding must be reversable");
   set_mark_raw(m);
 }
 ```

@@ -1,5 +1,126 @@
 ## Introduction
 
+The Spring Framework provides a consistent abstraction for transaction management that delivers the following benefits:
+
+- Consistent programming model across different transaction APIs such as Java Transaction API (JTA), JDBC, Hibernate, Java Persistence API (JPA), and Java Data Objects (JDO).
+Support for declarative transaction management.
+- - Simpler API for programmatic transaction management than complex transaction APIs such as JTA.
+- Excellent integration with Spring’s data access abstractions.
+
+Let’s remember what declaring a data source in Spring Boot looks like in application.yml:
+
+
+```yaml
+spring:
+  datasource:
+    url: ...
+    username: ...
+    password: ...
+    driverClassname: ...
+```	
+
+Spring maps these settings to an instance of org.springframework.boot.autoconfigure.jdbc.DataSourceProperties.
+So, to use multiple data sources, we need to declare multiple beans with different mappings within Spring’s application context.
+
+
+DataSourceAutoConfiguration
+
+DataSourceTransactionManagerAutoConfiguration
+
+JdbcTemplateAutoConfiguration
+
+
+
+Translate the given SQLException into a generic DataAccessException.
+
+```java
+public interface SQLExceptionTranslator {
+	@Nullable
+	DataAccessException translate(String task, @Nullable String sql, SQLException ex);
+}
+```
+> JavaBean `SQLErrorCodes` define in `spring-jdbc/src/main/resources/org/springframework/jdbc/support/sql-error-codes.xml`.
+> Can be overridden by definitions in a "`sql-error-codes.xml`" file in the root of the class path.
+
+
+With Spring Boot 2 and Spring Boot 3, HikariCP is the default connection pool and it is transitively imported with either `spring-boot-starter-jdbc` or `spring-boot-starter-data-jpa` starter dependency, so you don’t need to add any extra dependency to your project.
+Spring Boot will expose Hikari-specific settings to `spring.datasource.hikari`. 
+
+
+
+A transaction strategy is defined by the org.springframework.transaction.PlatformTransactionManager interface:
+```java
+public interface PlatformTransactionManager {
+
+    TransactionStatus getTransaction(
+            TransactionDefinition definition) throws TransactionException;
+
+    void commit(TransactionStatus status) throws TransactionException;
+
+    void rollback(TransactionStatus status) throws TransactionException;
+}
+```
+
+The TransactionDefinition interface specifies:
+
+- Isolation: The degree to which this transaction is isolated from the work of other transactions. For example, can this transaction see uncommitted writes from other transactions?
+- Propagation: Typically, all code executed within a transaction scope will run in that transaction. However, you have the option of specifying the behavior in the event that a transactional method is executed when a transaction context already exists. For example, code can continue running in the existing transaction (the common case); or the existing transaction can be suspended and a new transaction created. Spring offers all of the transaction propagation options familiar from EJB CMT. To read about the semantics of transaction propagation in Spring, see Section 16.5.7, “Transaction propagation”.
+- Timeout: How long this transaction runs before timing out and being rolled back automatically by the underlying transaction infrastructure.
+- Read-only status: A read-only transaction can be used when your code reads but does not modify data. Read-only transactions can be a useful optimization in some cases, such as when you are using Hibernate.
+
+
+
+
+## Programmatic transaction
+
+The central method is execute, supporting transactional code that implements the TransactionCallback interface. 
+This template handles the transaction lifecycle and possible exceptions such that neither the TransactionCallback implementation nor the calling code needs to explicitly handle transactions.
+
+
+```java
+public class TransactionTemplate extends DefaultTransactionDefinition
+		implements TransactionOperations, InitializingBean {
+		}
+```
+
+Gets called by `TransactionTemplate.execute` within a transactional context. Does not need to care about transactions itself, although it can retrieve and influence the status of the current transaction via the given status object, e.g. setting rollback-only.
+A RuntimeException thrown by the callback is treated as application exception that enforces a rollback. An exception gets propagated to the caller of the template.
+
+
+```java
+@FunctionalInterface
+public interface TransactionCallback<T> {
+
+	@Nullable
+	T doInTransaction(TransactionStatus status);
+
+}
+
+public abstract class TransactionCallbackWithoutResult implements TransactionCallback<Object> {
+
+	@Override
+	@Nullable
+	public final Object doInTransaction(TransactionStatus status) {
+		doInTransactionWithoutResult(status);
+		return null;
+	}
+
+	protected abstract void doInTransactionWithoutResult(TransactionStatus status);
+
+}
+```
+
+
+## Declarative transaction
+
+The Spring Framework’s declarative transaction management is made possible with Spring aspect-oriented programming (AOP).
+The combination of AOP with transactional metadata yields an AOP proxy that uses a TransactionInterceptor in conjunction with an appropriate PlatformTransactionManager implementation to drive transactions around method invocations.
+
+Conceptually, calling a method on a transactional proxy looks like this:
+
+![](https://docs.spring.io/spring-framework/docs/4.2.x/spring-framework-reference/html/images/tx.png)
+
+ Declaring transaction semantics directly in the Java source code puts the declarations much closer to the affected code.
 
 
 
@@ -26,7 +147,18 @@ Alternatively, this annotation may demarcate a reactive transaction managed by a
 As a consequence, all participating data access operations need to execute within the same Reactor context in the same reactive pipeline.
 
 
-- **only support public method**
+> [!NOTE]
+> 
+> When using proxies, you should apply the @Transactional annotation only to methods with public visibility. If you do annotate protected, private or package-visible methods with the @Transactional annotation, no error is raised, but the annotated method does not exhibit the configured transactional settings. Consider the use of AspectJ (see below) if you need to annotate non-public methods.
+
+
+The @Transactional annotation is metadata that specifies that an interface, class, or method must have transactional semantics; for example, "start a brand new read-only transaction when this method is invoked, suspending any existing transaction". The default @Transactional settings are as follows:
+
+- Propagation setting is PROPAGATION_REQUIRED.
+- Isolation level is ISOLATION_DEFAULT.
+- Transaction is read/write.
+- Transaction timeout defaults to the default timeout of the underlying transaction system, or to none if timeouts are not supported.
+- Any RuntimeException triggers rollback, and any checked Exception does not.
 
 ```java
 //class TransactionalRepositoryProxyPostProcessor
@@ -34,8 +166,7 @@ private TransactionAttribute computeTransactionAttribute(Method method, Class<?>
    // Don't allow no-public methods as required.
    if (allowPublicMethodsOnly() && !Modifier.isPublic(method.getModifiers())) {
       return null;
-   }
-  //
+   } 
 }
 ```
 
@@ -46,53 +177,46 @@ private TransactionAttribute computeTransactionAttribute(Method method, Class<?>
 
 
 ### Propagation
+
 Enumeration that represents transaction propagation behaviors for use TransactionDefinition interface.
+ 
+
+
+> [!NOTE]
+> 
+> Note that isolation level and timeout settings will not get applied unless an actual new transaction gets started. 
+As only `PROPAGATION_REQUIRED`, `PROPAGATION_REQUIRES_NEW` and `PROPAGATION_NESTED` can cause that, it usually doesn't make sense to specify those settings in other cases.
+
+<!-- tabs:start -->
+##### **PROPAGATION_REQUIRED**
+`PROPAGATION_REQUIRED` enforces a physical transaction, either locally for the current scope if no transaction exists yet or participating in an existing 'outer' transaction defined for a larger scope. This is a fine default in common call stack arrangements within the same thread (for example, a service facade that delegates to several repository methods where all the underlying resources have to participate in the service-level transaction).
+
+When the propagation setting is `PROPAGATION_REQUIRED`, a logical transaction scope is created for each method upon which the setting is applied. 
+Each such logical transaction scope can determine rollback-only status individually, with an outer transaction scope being logically independent from the inner transaction scope. 
+In the case of standard `PROPAGATION_REQUIRED` behavior, all these scopes are mapped to the same physical transaction. 
+So a rollback-only marker set in the inner transaction scope does affect the outer transaction’s chance to actually commit.
+
+However, in the case where an inner transaction scope sets the rollback-only marker, the outer transaction has not decided on the rollback itself, so the rollback (silently triggered by the inner transaction scope) is unexpected. 
+**A corresponding `UnexpectedRollbackException` is thrown at that point.**
+This is expected behavior so that the caller of a transaction can never be misled to assume that a commit was performed when it really was not. 
+So, if an inner transaction (of which the outer caller is not aware) silently marks a transaction as rollback-only, the outer caller still calls commit. 
+The outer caller needs to receive an `UnexpectedRollbackException` to indicate clearly that a rollback was performed instead.
+
+
+##### **PROPAGATION_REQUIRES_NEW**
+
+`PROPAGATION_REQUIRES_NEW`, in contrast to PROPAGATION_REQUIRED, always uses an independent physical transaction for each affected transaction scope, never participating in an existing transaction for an outer scope. In such an arrangement, the underlying resource transactions are different and, hence, can commit or roll back independently, with an outer transaction not affected by an inner transaction’s rollback status and with an inner transaction’s locks released immediately after its completion. Such an independent inner transaction can also declare its own isolation level, timeout, and read-only settings and not inherit an outer transaction’s characteristics.
+
+
+##### **PROPAGATION_NESTED**
+
+`PROPAGATION_NESTED` uses a single physical transaction with multiple savepoints that it can roll back to. 
+**Such partial rollbacks let an inner transaction scope trigger a rollback for its scope, with the outer transaction being able to continue the physical transaction despite some operations having been rolled back.** 
+This setting is typically mapped onto JDBC savepoints, so it works only with JDBC resource transactions.
+
+<!-- tabs:end -->
 
 ```java
-public enum Propagation {
-
-	REQUIRED(TransactionDefinition.PROPAGATION_REQUIRED),
-
-	SUPPORTS(TransactionDefinition.PROPAGATION_SUPPORTS),
-
-	MANDATORY(TransactionDefinition.PROPAGATION_MANDATORY),
-
-	REQUIRES_NEW(TransactionDefinition.PROPAGATION_REQUIRES_NEW),
-
-	NOT_SUPPORTED(TransactionDefinition.PROPAGATION_NOT_SUPPORTED),
-
-	NEVER(TransactionDefinition.PROPAGATION_NEVER),
-
-	NESTED(TransactionDefinition.PROPAGATION_NESTED);
-}
-```
-
-
-### TransactionDefinition
-```java
-
-package org.springframework.transaction;
-
-import org.springframework.lang.Nullable;
-
-/**
- * Interface that defines Spring-compliant transaction properties.
- * Based on the propagation behavior definitions analogous to EJB CMT attributes.
- *
- * <p>Note that isolation level and timeout settings will not get applied unless
- * an actual new transaction gets started. As only {@link #PROPAGATION_REQUIRED},
- * {@link #PROPAGATION_REQUIRES_NEW} and {@link #PROPAGATION_NESTED} can cause
- * that, it usually doesn't make sense to specify those settings in other cases.
- * Furthermore, be aware that not all transaction managers will support those
- * advanced features and thus might throw corresponding exceptions when given
- * non-default values.
- *
- * <p>The {@link #isReadOnly() read-only flag} applies to any transaction context,
- * whether backed by an actual resource transaction or operating non-transactionally
- * at the resource level. In the latter case, the flag will only apply to managed
- * resources within the application, such as a Hibernate {@code Session}.
- *
- */
 public interface TransactionDefinition {
 
 	int PROPAGATION_REQUIRED = 0;
@@ -119,40 +243,8 @@ public interface TransactionDefinition {
 
 	int ISOLATION_SERIALIZABLE = 8;  // same as java.sql.Connection.TRANSACTION_SERIALIZABLE;
 
-
-	/**
-	 * Use the default timeout of the underlying transaction system,
-	 * or none if timeouts are not supported.
-	 */
 	int TIMEOUT_DEFAULT = -1;
-
-	default int getPropagationBehavior() {
-		return PROPAGATION_REQUIRED;
-	}
-
-	default int getIsolationLevel() {
-		return ISOLATION_DEFAULT;
-	}
-
-	default int getTimeout() {
-		return TIMEOUT_DEFAULT;
-	}
-
-	default boolean isReadOnly() {
-		return false;
-	}
-
-	@Nullable
-	default String getName() {
-		return null;
-	}
-
-
-	// Static builder methods
-	static TransactionDefinition withDefaults() {
-		return StaticTransactionDefinition.INSTANCE;
-	}
-
+ 
 }
 ```
 
@@ -267,7 +359,6 @@ public interface TransactionSynchronization extends Flushable {
     }
 }
 ```
-
 
 ## Multi-DataSource
 

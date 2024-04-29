@@ -4,8 +4,6 @@
 Some of these optimizations are measured in fractions of a millisecond amortized over millions of invocations.
 
 
-## Params
-
 
 
 
@@ -180,7 +178,7 @@ Configure your HikariCP idleTimeout and maxLifeTime settings to be one minute le
 
 ## Links
 
-- [DataSource](/docs/CS/Java/DataSource/DataSource.md)
+- [DataSource](/docs/CS/Java/ConnectionPool/ConnectionPool.md)
 
 ## References
 
