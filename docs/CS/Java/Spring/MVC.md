@@ -503,6 +503,21 @@ public class DispatcherServlet extends FrameworkServlet {
 8. HandlerExceptionResolver handle Exception
 9. View
 10. interceptor afterCompletion
+11. writeWithMessageConverter
+
+
+
+## Interceptor
+
+
+
+- HandlerInterceptor/AsyncHandlerInterceptor
+
+- ResponseBodyAdvice
+
+
+
+
 
 ## Filter
 
@@ -630,6 +645,23 @@ public class RequestResponseBodyMethodProcessor extends AbstractMessageConverter
     }
 }
 ```
+
+
+
+### Static Resources
+
+By default Spring boot serves static content from one of the following locations in the classpath: 
+
+1. /static
+2. /public
+3. /resources
+4. /META-INF/resources
+
+We can customize the static resource locations using `spring.resources.static-locations` property. 
+
+We can specify additional static locations by overriding the `addResourceHandlers` method of `WebMvcConfigurer`.
+
+
 
 ### Request
 

@@ -6,7 +6,7 @@ It is fully non-blocking, supports [reactive streams](http://www.reactive-stream
 
 ### Concurrency Model
 
-Both Spring MVC and Spring WebFlux support annotated controllers, but there is a key difference in the concurrency model and the default assumptions for blocking and threads.
+Both [Spring MVC](/docs/CS/Java/Spring/MVC.md) and Spring WebFlux support annotated controllers, but there is a key difference in the concurrency model and the default assumptions for blocking and threads.
 - In Spring MVC (and servlet applications in general), it is assumed that applications can block the current thread, (for example, for remote calls). 
   For this reason, servlet containers use a large thread pool to absorb potential blocking during request handling.
 - In Spring WebFlux (and non-blocking servers in general), it is assumed that applications do not block. 
