@@ -1,27 +1,44 @@
 ## Overview
 
-OpenJDK is a three tiered compilation environment. 
-Methods that are only executed a few times are interpreted. 
-Once a method hits a certain threshold of executions it is compiled using a text book style compiler called C1. 
+OpenJDK is a three tiered compilation environment.
+Methods that are only executed a few times are interpreted.
+Once a method hits a certain threshold of executions it is compiled using a text book style compiler called C1.
 Only when the method has hit an even higher threshold of executions will it be compiled using C2, the optimizing compiler.
 
 The JVM interprets and executes bytecode at runtime. In addition, it makes use of the just-in-time (JIT) compilation to boost performance.
 
-In earlier versions of Java, we had to manually choose between the two types of JIT compilers available in the Hotspot JVM. One is optimized for faster application start-up, while the other achieves better overall performance. Java 7 introduced tiered compilation in order to achieve the best of both worlds.
+In earlier versions of Java, we had to manually choose between the two types of JIT compilers available in the Hotspot JVM. 
+One is optimized for faster application start-up, while the other achieves better overall performance.
+Java 7 introduced tiered compilation in order to achieve the best of both worlds.
 
-A JIT compiler compiles bytecode to native code for frequently executed sections. These sections are called hotspots, hence the name Hotspot JVM. As a result, Java can run with similar performance to a fully compiled language. Let's look at the two types of JIT compilers available in the JVM.
+A JIT compiler compiles bytecode to native code for frequently executed sections.
+These sections are called hotspots, hence the name Hotspot JVM.
+As a result, Java can run with similar performance to a fully compiled language.
+Let's look at the two types of JIT compilers available in the JVM.
+
+The system supports 5 execution levels:
+
+* level 0 - interpreter (Profiling is tracked by a MethodData object, or MDO in short)
+* level 1 - C1 with full optimization (no profiling)
+* level 2 - C1 with invocation and backedge counters
+* level 3 - C1 with full profiling (level 2 + All other MDO profiling information)
+* level 4 - C2 with full profile guided optimization
 
 C1 – Client Compiler
 
-The client compiler, also called C1, is a type of a JIT compiler optimized for faster start-up time. It tries to optimize and compile the code as soon as possible.
+The client compiler, also called C1, is a type of a JIT compiler optimized for faster start-up time. 
+It tries to optimize and compile the code as soon as possible.
 
-Historically, we used C1 for short-lived applications and applications where start-up time was an important non-functional requirement. Prior to Java 8, we had to specify the -client flag to use the C1 compiler. However, if we use Java 8 or higher, this flag will have no effect.
+Historically, we used C1 for short-lived applications and applications where start-up time was an important non-functional requirement. 
+Prior to Java 8, we had to specify the -client flag to use the C1 compiler. However, if we use Java 8 or higher, this flag will have no effect.
 
 C2 – Server Compiler
 
-The server compiler, also called C2(Opto), is a type of a JIT compiler optimized for better overall performance. C2 observes and analyzes the code over a longer period of time compared to C1. This allows C2 to make better optimizations in the compiled code.
+The server compiler, also called C2(Opto), is a type of a JIT compiler optimized for better overall performance. 
+C2 observes and analyzes the code over a longer period of time compared to C1. This allows C2 to make better optimizations in the compiled code.
 
-Historically, we used C2 for long-running server-side applications. Prior to Java 8, we had to specify the -server flag to use the C2 compiler. However, this flag will have no effect in Java 8 or higher.
+Historically, we used C2 for long-running server-side applications. 
+Prior to Java 8, we had to specify the -server flag to use the C2 compiler. However, this flag will have no effect in Java 8 or higher.
 
 We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
 
@@ -29,28 +46,29 @@ We should note that the Graal JIT compiler is also available since Java 10, as a
 
 On-stack replacement (OSR) is essential technology for adaptive optimization, allowing changes to code actively executing in a managed runtime.
 
-OSR embodiments have to ensure that, whenever control is transferred from a currently running function version to another one, execution can transparently continue without altering the intended program semantics. 
-In the adaptive optimization practice, optimizing OSR transitions typically happen at places where state realignment is simple, i.e., at a method or loop entry. 
+OSR embodiments have to ensure that, whenever control is transferred from a currently running function version to another one, execution can transparently continue without altering the intended program semantics.
+In the adaptive optimization practice, optimizing OSR transitions typically happen at places where state realignment is simple, i.e., at a method or loop entry.
 The placement of deoptimizing OSR points is determined by the runtime: it can emit them for all instructions that might deoptimize, or group them and resume execution from the last instruction in the deoptimized code that causes outside-visible effects.
 
 ### Tiered Compilation
+
 The C2 compiler often takes more time and consumes more memory to compile the same methods. However, it generates better-optimized native code than that produced by C1.
 
 The tiered compilation concept was first introduced in Java 7. Its goal was to use a mix of C1 and C2 compilers in order to achieve both fast startup and good long-term performance.
 
 Tiered compilation is enabled by default since Java 8.
+```shell
+-XX:+TieredCompilation
+```
 
 **JVM doesn't use the generic CompileThreshold parameter when tiered compilation is enabled.**
 
 final not optimize
 
-
 ### Counter
 
 - Invocation Counter
 - Back Edge Counter
-
-
 - from_compiled_entry
 - from_interpreted_entry
 
@@ -65,6 +83,7 @@ Since Java 9, the JVM segments the code cache into three areas:
 Segmented code cache helps to improve code locality and reduces memory fragmentation. Thus, it improves overall performance.
 
 ### Deoptimization
+
 Even though C2 compiled code is highly optimized and long-lived, it can be deoptimized. As a result, the JVM would temporarily roll back to interpretation.
 
 Deoptimization happens when the compiler’s optimistic assumptions are proven wrong — for example, when profile information does not match method behavior:
@@ -72,6 +91,7 @@ Deoptimization happens when the compiler’s optimistic assumptions are proven w
 jstat  -compiler process_id 编译信息
 
 ### Compilation Levels
+
 Even though the JVM works with only one interpreter and two JIT compilers, there are five possible levels of compilation. The reason behind this is that the C1 compiler can operate on three different levels. The difference between those three levels is in the amount of profiling done.
 
 - level 0 - interpreter
@@ -83,6 +103,7 @@ Even though the JVM works with only one interpreter and two JIT compilers, there
 The most common scenario in JIT compilation is that the interpreted code jumps directly from level 0 to level 3.
 
 ### Compilation Logs
+
 By default, JIT compilation logs are disabled. To enable them, we can set the `-XX:+PrintCompilation` flag. The compilation logs are formatted as:
 
 Timestamp – In milliseconds since application start-up
@@ -105,17 +126,9 @@ Tier4CompileThreshold
 
 compile Threads
 
-
-
 inline
 
-
-
 EscapeAnalysis
-
-
-
-
 
 ```cpp
 CompileBroker::compile_method
@@ -123,8 +136,6 @@ CompileBroker::compile_method
 // CompileBroker::invoke_compiler_on_method
 // Compile a method.
 ```
-
-
 
 1. Iterative Global Value Numbering
 2. Inline
@@ -136,14 +147,12 @@ CompileBroker::compile_method
 8. Loop transforms on the ideal graph.  Range Check Elimination, peeling, unrolling, etc.
 9. Conditional Constant Propagation
 10. Iterative Global Value Numbering, including ideal transforms
-11. 
+11.
 
 ```cpp
 // Given a graph, optimize it.
 void Compile::Optimize() {
 ```
-
-
 
 call `method::set_code()`
 
@@ -176,8 +185,6 @@ void ciEnv::register_method(...) {
   }  // safepoints are allowed again
 }
 ```
-
-
 
 ### adapter
 
@@ -229,11 +236,13 @@ void ciEnv::register_method(...) {
 ## c1
 
 ### compile_java_method
+
 [CompilerThread](/docs/CS/Java/JDK/JVM/Thread.md?id=CompilerThread) -> Compilation::compile_method -> Compilation::compile_java_method
 
 1. build hir
 2. build lir
 3. generate emit_code
+
 ```cpp
 int Compilation::compile_java_method() {
   if (BailoutOnExceptionHandlers) {
@@ -278,6 +287,7 @@ int Compilation::compile_java_method() {
 ```
 
 Or see Timer
+
 ```cpp
 typedef enum {
   _t_compile,
@@ -385,6 +395,7 @@ void C2Compiler::compile_method(ciEnv* env, ciMethod* target, int entry_bci, boo
 ```
 
 Or see PhaseTraceId
+
 ```cpp
 
   enum PhaseTraceId {
@@ -451,7 +462,6 @@ Compile::Compile -> Compile::Optimize
 
 ### Inline Method
 
-
 ### Escape Analysis
 
 ```cpp
@@ -473,8 +483,8 @@ Compile::Compile -> Compile::Optimize
 Compile::Optimize -> ConnectionGraph::do_analysis
 
 #### Stack Allocations
-support escape method, not support escape thread
 
+support escape method, not support escape thread
 
 #### Scalar Replacement
 
@@ -496,20 +506,20 @@ not support escape method
 
 ### Dereflection
 
-
 ## Tools
 
 1. c1visualizer
 2. idealgraphvisualizer
 3. JITWatch
 
-
 ## Links
+
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 
-
 ## References
+
 1. [Tiered Compilation in JVM](https://www.baeldung.com/jvm-tiered-compilation)
 2. [Compilation Optimization - Java Platform, Standard Edition JRockit to HotSpot Migration Guide](https://docs.oracle.com/javacomponents/jrockit-hotspot/migration-guide/comp-opt.htm#JRHMG117)
 3. [Bril JIT with On-Stack Replacement](https://www.cs.cornell.edu/courses/cs6120/2019fa/blog/bril-osr/)
 4. [深入浅出 Java 10 的实验性 JIT 编译器 Graal](https://www.infoq.cn/article/java-10-jit-compiler-graal)
+5. [基本功 | Java即时编译器原理解析及实践](https://tech.meituan.com/2020/10/22/java-jit-practice-in-meituan.html)
