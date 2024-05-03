@@ -23,122 +23,6 @@ public static ConfigurableApplicationContext run(Class<?>[] primarySources, Stri
 }
 ```
 
-## Prepare
-
-### Annotation
-
-@SpringBootApplication
-
-```java
-@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Inherited
-@SpringBootConfiguration
-@EnableAutoConfiguration
-@ComponentScan(excludeFilters = { @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
-      @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
-public @interface SpringBootApplication {}
-```
-
-@SpringBootConfiguration
-
-```java
-@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Configuration
-public @interface SpringBootConfiguration {}
-```
-
-@EnableAutoConfiguration
-
-```java
-@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Inherited
-@AutoConfigurationPackage//Indicates that the package containing the annotated class should be registered with AutoConfigurationPackages
-@Import(AutoConfigurationImportSelector.class)
-public @interface EnableAutoConfiguration {}
-```
-
-In class AutoConfigurationImportSelector, **getAutoConfigurationEntry** load configurations.
-
-```java
-//Return the AutoConfigurationEntry based on the AnnotationMetadata of the importing @Configuration class.
-protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata annotationMetadata) {
-   if (!isEnabled(annotationMetadata)) {
-      return EMPTY_ENTRY;
-   }
-   AnnotationAttributes attributes = getAttributes(annotationMetadata);
-   List<String> configurations = getCandidateConfigurations(annotationMetadata, attributes);
-   configurations = removeDuplicates(configurations);
-   Set<String> exclusions = getExclusions(annotationMetadata, attributes);
-   checkExcludedClasses(configurations, exclusions);
-   configurations.removeAll(exclusions);
-   configurations = getConfigurationClassFilter().filter(configurations);
-   fireAutoConfigurationImportEvents(configurations, exclusions);
-   return new AutoConfigurationEntry(configurations, exclusions);
-}
-
-protected List<String> getCandidateConfigurations(AnnotationMetadata metadata, AnnotationAttributes attributes) {
-        List<String> configurations = SpringFactoriesLoader.loadFactoryNames(getSpringFactoriesLoaderFactoryClass(),
-        getBeanClassLoader());
-        Assert.notEmpty(configurations, "No auto configuration classes found in META-INF/spring.factories. If you "
-        + "are using a custom packaging, make sure that file is correct.");
-        return configurations;
-        }
-
-
-```
-
-getResources from `META-INF/spring.factories` by **SpringFactoriesLoader**.
-
-```java
-//SpringFactoriesLoader.java
-public static List<String> loadFactoryNames(Class<?> factoryType, @Nullable ClassLoader classLoader) {
-        String factoryTypeName = factoryType.getName();
-        return (List)loadSpringFactories(classLoader).getOrDefault(factoryTypeName, Collections.emptyList());
-    }
-
-private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoader classLoader) {
-        MultiValueMap<String, String> result = (MultiValueMap)cache.get(classLoader);
-        if (result != null) {
-        return result;
-        } else {
-        try {
-        Enumeration<URL> urls = classLoader != null ? classLoader.getResources("META-INF/spring.factories") : ClassLoader.getSystemResources("META-INF/spring.factories");
-        LinkedMultiValueMap result = new LinkedMultiValueMap();
-
-        while(urls.hasMoreElements()) {
-        URL url = (URL)urls.nextElement();
-        UrlResource resource = new UrlResource(url);
-        Properties properties = PropertiesLoaderUtils.loadProperties(resource);
-        Iterator var6 = properties.entrySet().iterator();
-
-        while(var6.hasNext()) {
-        Entry<?, ?> entry = (Entry)var6.next();
-        String factoryTypeName = ((String)entry.getKey()).trim();
-        String[] var9 = StringUtils.commaDelimitedListToStringArray((String)entry.getValue());
-        int var10 = var9.length;
-
-        for(int var11 = 0; var11 < var10; ++var11) {
-        String factoryImplementationName = var9[var11];
-        result.add(factoryTypeName, factoryImplementationName.trim());
-        }
-        }
-        }
-
-        cache.put(classLoader, result);
-        return result;
-        } catch (IOException var13) {
-        throw new IllegalArgumentException("Unable to load factories from location [META-INF/spring.factories]", var13);
-        }
-        }
-}
-```
-
 ## new SpringApplication instance
 
 Create a new SpringApplication instance. The application context will load beans from the specified primary sources (see class-level documentation for details. The instance can be customized before calling run(String...).
@@ -151,7 +35,6 @@ Create a new SpringApplication instance. The application context will load beans
 ```java
 public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
    this.resourceLoader = resourceLoader;
-   Assert.notNull(primarySources, "PrimarySources must not be null");
    this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
    this.webApplicationType = WebApplicationType.deduceFromClasspath();
    setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
@@ -183,17 +66,16 @@ static WebApplicationType deduceFromClasspath() {
 2. prepareEnvironment
 3. configureIgnoreBeanInfo
 4. createApplicationContext
-5. prepareContext
-6. refreshContext
-7. afterRefresh
-8. listeners started
-9. callRunners
-10. listeners running
+5. getSpringFactoriesInstances -> [SpringFactoriesLoader.loadSpringFactories()](/docs//CS/Java/Spring_Boot/Start.md?id=LoadFactories)
+6. prepareContext
+7. refreshContext
+8. afterRefresh
+9. listeners started
+10. callRunners
+11. listeners running
 
 ```java
 public ConfigurableApplicationContext run(String... args) {
-   StopWatch stopWatch = new StopWatch();
-   stopWatch.start();
    ConfigurableApplicationContext context = null;
    Collection<SpringBootExceptionReporter> exceptionReporters = new ArrayList<>();
    configureHeadlessProperty();
@@ -211,8 +93,7 @@ public ConfigurableApplicationContext run(String... args) {
       prepareContext(context, environment, listeners, applicationArguments, printedBanner);
       refreshContext(context);
       afterRefresh(context, applicationArguments);
-   
-      stopWatch.stop();
+
       if (this.logStartupInfo) {
          new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), stopWatch);
       }
@@ -370,6 +251,108 @@ static WebApplicationType deduceFromApplicationContext(Class<?> applicationConte
 		return WebApplicationType.NONE;
 	}
 ```
+
+
+### loadFactories
+
+
+
+@SpringBootApplication
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@SpringBootConfiguration
+@EnableAutoConfiguration
+@ComponentScan(excludeFilters = { @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+      @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
+public @interface SpringBootApplication {}
+```
+
+@SpringBootConfiguration
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Configuration
+public @interface SpringBootConfiguration {}
+```
+
+@EnableAutoConfiguration
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@AutoConfigurationPackage//Indicates that the package containing the annotated class should be registered with AutoConfigurationPackages
+@Import(AutoConfigurationImportSelector.class)
+public @interface EnableAutoConfiguration {}
+```
+
+In class AutoConfigurationImportSelector, **getAutoConfigurationEntry** load configurations.
+
+getResources from `META-INF/spring.factories` by **SpringFactoriesLoader**.
+
+```java
+//Return the AutoConfigurationEntry based on the AnnotationMetadata of the importing @Configuration class.
+protected AutoConfigurationEntry getAutoConfigurationEntry(AnnotationMetadata annotationMetadata) {
+   AnnotationAttributes attributes = getAttributes(annotationMetadata);
+   List<String> configurations = getCandidateConfigurations(annotationMetadata, attributes);
+   configurations = removeDuplicates(configurations);
+   Set<String> exclusions = getExclusions(annotationMetadata, attributes);
+   configurations.removeAll(exclusions);
+   configurations = getConfigurationClassFilter().filter(configurations);
+   fireAutoConfigurationImportEvents(configurations, exclusions);
+   return new AutoConfigurationEntry(configurations, exclusions);
+}
+
+protected List<String> getCandidateConfigurations(AnnotationMetadata metadata, AnnotationAttributes attributes) {
+        List<String> configurations = SpringFactoriesLoader.loadFactoryNames(getSpringFactoriesLoaderFactoryClass(),
+        getBeanClassLoader());
+        return configurations;
+}
+
+  public static List<String> loadFactoryNames(Class<?> factoryType, @Nullable ClassLoader classLoader) {
+    String factoryTypeName = factoryType.getName();
+    return (List) loadSpringFactories(classLoader).getOrDefault(factoryTypeName, Collections.emptyList());
+  }
+
+  private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoader classLoader) {
+		MultiValueMap<String, String> result = cache.get(classLoader);
+		if (result != null) {
+			return result;
+		}
+
+		try {
+			Enumeration<URL> urls = (classLoader != null ?
+					classLoader.getResources(FACTORIES_RESOURCE_LOCATION) :
+					ClassLoader.getSystemResources(FACTORIES_RESOURCE_LOCATION));
+			result = new LinkedMultiValueMap<>();
+			while (urls.hasMoreElements()) {
+				URL url = urls.nextElement();
+				UrlResource resource = new UrlResource(url);
+				Properties properties = PropertiesLoaderUtils.loadProperties(resource);
+				for (Map.Entry<?, ?> entry : properties.entrySet()) {
+					String factoryTypeName = ((String) entry.getKey()).trim();
+					for (String factoryImplementationName : StringUtils.commaDelimitedListToStringArray((String) entry.getValue())) {
+						result.add(factoryTypeName, factoryImplementationName.trim());
+					}
+				}
+			}
+			cache.put(classLoader, result);
+			return result;
+		}
+		catch (IOException ex) {
+			throw new IllegalArgumentException("Unable to load factories from location [" +
+					FACTORIES_RESOURCE_LOCATION + "]", ex);
+		}
+	}
+```
+
 
 ### prepareContext
 

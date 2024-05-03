@@ -1,13 +1,11 @@
 ## Introduction
 
-[Spring Boot](https://spring.io/projects/spring-boot) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
+[Spring Boot](https://docs.spring.io/spring-boot/index.html) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
 - [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
 - [Actuator](Actuator.md)
 
 ## Architecture
-
-![packages.png](img/packages.png)
 
 **Convention Over Configuration**
 
@@ -49,6 +47,21 @@ On the other hand, without the parent POM, we no longer benefit from plugin mana
 
 
 ## AutoConfiguration
+
+Spring Boot auto-configuration attempts to automatically configure your Spring application based on the jar dependencies that you have added. 
+
+You need to opt-in to auto-configuration by adding the @EnableAutoConfiguration or @SpringBootApplication annotations to one of your @Configuration classes.
+
+> You should only ever add one @SpringBootApplication or @EnableAutoConfiguration annotation. We generally recommend that you add one or the other to your primary @Configuration class only. 
+
+
+
+Auto-configuration is non-invasive. 
+At any point, you can start to define your own configuration to replace specific parts of the auto-configuration. 
+
+If you need to find out what auto-configuration is currently being applied, and why, start your application with the `--debug` switch. 
+
+
 
 - Cache
 - Log - LoggingApplicationListener
