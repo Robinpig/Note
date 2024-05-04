@@ -577,6 +577,9 @@ out:
 ## Links
 
 - [BPF](/docs/CS/OS/Linux/Tools/BPF.md)
+- [Xcap](/docs/CS/CN/Tools/Xcap.md)
+- [WireShark](/docs/CS/CN/Tools/WireShark.md)
+- [netfilter](/docs/CS/CN/Tools/netfilter.md)
 
 ## References
 
