@@ -2750,6 +2750,25 @@ see `BeanPostProcessor.postProcessProperties()`
 
 Disposable
 
+
+
+### PropertySource
+
+Spring 3.1 also introduces the new `@PropertySource` annotation as a convenient mechanism for adding property sources to the environment.
+
+```java
+@Configuration
+@PropertySources({   
+    @PropertySource("classpath:foo.properties"),
+  	@PropertySource("classpath:persistence-${envTarget:mysql}.properties")
+})
+public class PropertiesWithJavaConfig {
+    //...
+}
+```
+
+
+
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
