@@ -681,6 +681,17 @@ logging:
     org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor: debug
 ```
 
+
+
+### Http2
+
+```properties
+server.http2.enabled=true
+server.port = 8443
+server.ssl.key-store=classpath:my_keystore.jks
+server.ssl.key-store-password=secretpassword
+```
+
 ## Links
 
 - [Spring](/docs/CS/Java/Spring/Spring.md)
