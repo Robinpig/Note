@@ -16,36 +16,6 @@ spring-boot-starters
 
 spring-boot-test
 
-Spring Boot provides the parent POM for an easier creation of Spring Boot applications.
-However, using the parent POM may not always be desirable, if we already have a parent to inherit from.
-
-If we don’t make use of the parent POM, we can still benefit from dependency management by adding the spring-boot-dependencies artifact with scope=import:
-```xml
-<dependencyManagement>
-     <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-dependencies</artifactId>
-            <version>3.1.5</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
-```
-On the other hand, without the parent POM, we no longer benefit from plugin management. This means we need to add the spring-boot-maven-plugin explicitly:
-```xml
-<build>
-    <plugins>
-        <plugin>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-maven-plugin</artifactId>
-        </plugin>
-    </plugins>
-</build>
-```
-
-
 ## AutoConfiguration
 
 Spring Boot auto-configuration attempts to automatically configure your Spring application based on the jar dependencies that you have added. 
@@ -70,7 +40,28 @@ If you need to find out what auto-configuration is currently being applied, and 
 - DispatcherServletAutoConfiguration
 - WebMvcAutoConfiguration
 
-## [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
+
+
+
+
+[How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
+
+
+
+## Starter
+
+Dependency management is a critical aspects of any complex project. And doing this manually is less than ideal; the more time you spent on it the less time you have on the other important aspects of the project.
+
+Starters are a set of convenient dependency descriptors that you can include in your application. You get a one-stop-shop for all the Spring and related technology that you need, without having to hunt through sample code and copy paste loads of dependency descriptors. 
+
+The starters contain a lot of the dependencies that you need to get a project up and running quickly and with a consistent, supported set of managed transitive dependencies.
+
+A full Spring Boot starter for a library may contain the following components:
+
+- The `autoconfigure` module that contains the auto-configuration code.
+- The `starter` module that provides a dependency to the autoconfigure module as well as the library and any additional dependencies that are typically useful. In a nutshell, adding the starter should be enough to start using that library.
+
+> You may combine the auto-configuration code and the dependency management in a single module if you don’t need to separate those two concerns.
 
 ### Externalized Configuration
 
@@ -127,7 +118,7 @@ public class ConfigurationPropertiesBindingPostProcessor
 }
 ```
 
-Return a @ConfigurationPropertiesBean instance for the given bean details or null if the bean is not a @ConfigurationProperties object.
+Return a `@ConfigurationPropertiesBean` instance for the given bean details or null if the bean is not a `@ConfigurationProperties` object.
 
 ```java
 public final class ConfigurationPropertiesBean {
@@ -155,37 +146,21 @@ public final class ConfigurationPropertiesBean {
 }
 ```
 
-## YAML
 
-How to bind the properties
-
-```groovy
-annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
-```
-
-## Tools
-
-### DevTools
-
-DevTools provides Spring developers with some handy develop-ment-time tools.
-Among those are the following:
-
-- Automatic application restart when code changes
-- Automatic browser refresh when browser-destined resources (such as templates, JavaScript, stylesheets, and so on) change
-- Automatic disabling of template caches
-- Built in H2 Console, if the H2 database is in use
-
-More precisely, when DevTools is active, the application is loaded into two separate class loaders in the Java virtual machine (JVM). One class loader is loaded with your Java code, property files, and pretty much anything that’s in the src/main/ path of the project. These are items that are likely to change frequently. The other class loader is loaded with dependency libraries, which aren’t likely to change as often.
-
-When a change is detected, DevTools reloads only the class loader containing your project code and restarts the Spring application context but leaves the other class loader and the JVM intact. Although subtle, this strategy affords a small reduction in the time it takes to start the application.
-
-The downside of this strategy is that changes to dependencies won’t be available in automatic restarts. That’s because the class loader containing dependency libraries isn’t automatically reloaded. Any time you add, change, or remove a dependency in your build specification, you’ll need to do a hard restart of the application for those changes to take effect.
-
-### SpringInitializer
-
-### Lombok
 
 ## Web
+
+
+
+If you don't want to include web:
+
+- don't add starter-web
+- set `spring.main.web-application-type=none`
+- set  `WebApplicationType.NONE`  before `SpringApplication.run()`
+
+
+
+
 
 resolve request order:
 
@@ -198,9 +173,7 @@ resolve request order:
 
 It's need JDK15 to build Junit5,.
 
-#### Condition
-
-#### Extension
+#### 
 
 #### Annotations
 
@@ -327,6 +300,119 @@ public class GlobalExceptionHandler {
 ```
 
 ## Starter
+
+
+
+## Build Systems
+
+### Dependency Management
+
+Spring Boot provides the parent POM for an easier creation of Spring Boot applications.
+However, using the parent POM may not always be desirable, if we already have a parent to inherit from.
+
+If we don’t make use of the parent POM, we can still benefit from dependency management by adding the spring-boot-dependencies artifact with scope=import:
+```xml
+<dependencyManagement>
+     <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-dependencies</artifactId>
+            <version>3.1.5</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+On the other hand, without the parent POM, we no longer benefit from plugin management. This means we need to add the spring-boot-maven-plugin explicitly:
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+        </plugin>
+    </plugins>
+</build>
+```
+
+
+
+### Developer Tools
+
+DevTools provides Spring developers with some handy develop-ment-time tools.
+Among those are the following:
+
+- Automatic application restart when code changes
+- Automatic browser refresh when browser-destined resources (such as templates, JavaScript, stylesheets, and so on) change
+- Automatic disabling of template caches
+- Built in H2 Console, if the H2 database is in use
+
+More precisely, when DevTools is active, the application is loaded into two separate class loaders in the Java virtual machine (JVM). One class loader is loaded with your Java code, property files, and pretty much anything that’s in the src/main/ path of the project. These are items that are likely to change frequently. The other class loader is loaded with dependency libraries, which aren’t likely to change as often.
+
+When a change is detected, DevTools reloads only the class loader containing your project code and restarts the Spring application context but leaves the other class loader and the JVM intact. Although subtle, this strategy affords a small reduction in the time it takes to start the application.
+
+The downside of this strategy is that changes to dependencies won’t be available in automatic restarts. That’s because the class loader containing dependency libraries isn’t automatically reloaded. Any time you add, change, or remove a dependency in your build specification, you’ll need to do a hard restart of the application for those changes to take effect.
+
+
+
+### Docker
+
+add dockerfile-maven-plugin
+
+```xml
+            <plugin>
+                <groupId>com.spotify</groupId>
+                <artifactId>dockerfile-maven-plugin</artifactId>
+                <version>1.3.6</version>
+                <executions>
+                    <execution>
+                        <id>default</id>
+                        <goals>
+                            <goal>build</goal>
+                            
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <repository>com.naylor/${project.artifactId}</repository>
+                    <tag>${project.version}</tag>
+                    <buildArgs>
+                        <JAR_FILE>${project.build.finalName}.jar</JAR_FILE>
+                    </buildArgs>
+                </configuration>
+            </plugin>
+
+```
+
+add Dockerfile
+
+```dockerfile
+FROM java:8
+EXPOSE 8080
+ARG JAR_FILE
+ADD target/${JAR_FILE} /app.jar
+ENTRYPOINT ["java", "-jar","/app.jar"]
+
+```
+
+mvn package
+
+
+
+then check by `docker image ls`
+
+## Production-ready Features
+
+Spring Boot includes a number of additional features to help you monitor and manage your application when you push it to production. You can choose to manage and monitor your application by using HTTP endpoints or with JMX. Auditing, health, and metrics gathering can also be automatically applied to your application.
+
+The `spring-boot-actuator` module provides all of Spring Boot’s production-ready features. The recommended way to enable the features is to add a dependency on the spring-boot-starter-actuator “Starter”.
+
+### Observability
+Observability is the ability to observe the internal state of a running system from the outside. It consists of the three pillars logging, metrics and traces.
+
+For metrics and traces, Spring Boot uses Micrometer Observation. 
+To create your own observations (which will lead to metrics and traces), you can inject an `ObservationRegistry`.
 
 ## Links
 
