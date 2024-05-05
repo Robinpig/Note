@@ -17,19 +17,31 @@ Spring Cloud focuses on providing good out of box experience for typical use cas
 * Short lived microservices (tasks)
 * Consumer-driven and producer-driven contract testing
 
-Cloud Native is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development. A related discipline is that of building 12-factor Applications, in which development practices are aligned with delivery and operations goals — for instance, by using declarative programming and management and monitoring. Spring Cloud facilitates these styles of development in a number of specific ways. The starting point is a set of features to which all components in a distributed system need easy access.
+[Cloud Native](/docs/CS/Java/Spring_Cloud/Cloud.md) is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development.
+A related discipline is that of building `12-factor` Applications, in which development practices are aligned with delivery and operations goals—for instance, by using declarative programming and management and monitoring.
+Spring Cloud facilitates these styles of development in a number of specific ways.
+The starting point is a set of features to which all components in a distributed system need easy access.
 
-Many of those features are covered by Spring Boot, on which Spring Cloud builds. Some more features are delivered by Spring Cloud as two libraries: Spring Cloud Context and Spring Cloud Commons. Spring Cloud Context provides utilities and special services for the ApplicationContext of a Spring Cloud application (bootstrap context, encryption, refresh scope, and environment endpoints). Spring Cloud Commons is a set of abstractions and common classes used in different Spring Cloud implementations (such as Spring Cloud Netflix and Spring Cloud Consul).
-
+Many of those features are covered by Spring Boot, on which Spring Cloud builds.
+Some more features are delivered by Spring Cloud as two libraries: Spring Cloud Context and Spring Cloud Commons.
+Spring Cloud Context provides utilities and special services for the ApplicationContext of a Spring Cloud application (bootstrap context, encryption, refresh scope, and environment endpoints).
+Spring Cloud Commons is a set of abstractions and common classes used in different Spring Cloud implementations (such as Spring Cloud Netflix and Spring Cloud Consul).
 
 ### Spring Cloud Context
 
-Spring Boot has an opinionated view of how to build an application with Spring. For instance, it has conventional locations for common configuration files and has endpoints for common management and monitoring tasks. Spring Cloud builds on top of that and adds a few features that many components in a system would use or occasionally need.
+[Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md) has an opinionated view of how to build an application with Spring.
+For instance, it has conventional locations for common configuration files and has endpoints for common management and monitoring tasks.
+Spring Cloud builds on top of that and adds a few features that many components in a system would use or occasionally need.
+
 #### The Bootstrap Application Context
-A Spring Cloud application operates by creating a “bootstrap” context, which is a parent context for the main application. This context is responsible for loading configuration properties from the external sources and for decrypting properties in the local external configuration files. The two contexts share an Environment, which is the source of external properties for any Spring application. By default, bootstrap properties (not bootstrap.properties but properties that are loaded during the bootstrap phase) are added with high precedence, so they cannot be overridden by local configuration.
 
-The bootstrap context uses a different convention for locating external configuration than the main application context. Instead of application.yml (or .properties), you can use bootstrap.yml, keeping the external configuration for bootstrap and main context nicely separate
+A Spring Cloud application operates by creating a “bootstrap” context, which is a parent context for the main application.
+This context is responsible for loading configuration properties from the external sources and for decrypting properties in the local external configuration files.
+The two contexts share an Environment, which is the source of external properties for any Spring application.
+By default, bootstrap properties (not bootstrap.properties but properties that are loaded during the bootstrap phase) are added with high precedence, so they cannot be overridden by local configuration.
 
+The bootstrap context uses a different convention for locating external configuration than the main application context.
+Instead of application.yml (or .properties), you can use bootstrap.yml, keeping the external configuration for bootstrap and main context nicely separate
 
 <div style="text-align: center;">
 
@@ -86,7 +98,7 @@ public interface ServiceInstance {
 
 ### ServiceRegistry
 
-Commons now provides a ServiceRegistry interface that provides methods such as register(Registration) and deregister(Registration), which let you provide custom registered services.
+Commons now provides a `ServiceRegistry` interface that provides methods such as `register(Registration)` and `deregister(Registration)`, which let you provide custom registered services.
 
 ```java
 public interface ServiceRegistry<R extends Registration> {
@@ -118,16 +130,10 @@ Spring Cloud Commons provides a /service-registry actuator endpoint. This endpoi
 > Add Spring Cloud LoadBalancer starter to your project in order to use it.
 > Then, BlockingLoadBalancerClient or ReactiveLoadBalancer is used underneathto create a full physical address.
 
-
 A load-balanced RestTemplate can be configured to retry failed requests.
-By default, this logic is disabled. 
+By default, this logic is disabled.
 For the non-reactive version (with RestTemplate), you can enable it by adding Spring Retry to your application’s classpath.
 For the reactive version (with WebTestClient), you need to set `spring.cloud.loadbalancer.retry.enabled=true.
-
-
-
-
-
 
 ### AbstractAutoServiceRegistration
 
@@ -190,7 +196,10 @@ public abstract class AbstractAutoServiceRegistration<R extends Registration>
 With so many clients and servers in play, it’s often helpful to include an API gateway in your cloud architecture.
 A gateway can take care of securing and routing messages, hiding services, throttling load, and many other useful things.
 
-An API Gateway helps you to solve these problems and more. It is a powerful architectural tool which you can use to manage message routing, filtering and proxying in your microservice architecture. Many API Management Gateways can be dated back to SOA and these tend to have been implemented as centralized servers. But as microservices became more popular, modern lightweight independent and decentralized micro-gateway applications have appeared – such as Spring Cloud Gateway.
+An API Gateway helps you to solve these problems and more.
+It is a powerful architectural tool which you can use to manage message routing, filtering and proxying in your microservice architecture.
+Many API Management Gateways can be dated back to SOA and these tend to have been implemented as centralized servers.
+But as microservices became more popular, modern lightweight independent and decentralized micro-gateway applications have appeared – such as Spring Cloud Gateway.
 
 [Spring Cloud Gateway](/docs/CS/Java/Spring_Cloud/gateway.md) gives you precise control of your API layer, integrating Spring Cloud service discovery and client-side load-balancing solutions to simplify configuration and maintenance.
 
@@ -198,15 +207,19 @@ Zuul
 
 ## Cloud configuration
 
-In the cloud, configuration can’t simply be embedded inside the application. The configuration has to be flexible enough to cope with multiple applications, environments, and service instances, as well as deal with dynamic changes without downtime.
+In the cloud, configuration can’t simply be embedded inside the application.
+The configuration has to be flexible enough to cope with multiple applications, environments, and service instances, as well as deal with dynamic changes without downtime.
 
 Centralized external configuration management backed by a git repository.
 The configuration resources map directly to Spring Environment but could be used by non-Spring applications if desired.
 
-Spring Cloud Config provides server and client-side support for externalized configuration in a distributed system. With the Config Server you have a central place to manage external properties for applications across all environments.
-The concepts on both client and server map identically to the Spring Environment and PropertySource abstractions, so they fit very well with Spring applications, but can be used with any application running in any language.
+Spring Cloud Config provides server and client-side support for externalized configuration in a distributed system.
+With the Config Server you have a central place to manage external properties for applications across all environments.
+The concepts on both client and server map identically to the Spring Environment and PropertySource abstractions,
+so they fit very well with Spring applications, but can be used with any application running in any language.
 As an application moves through the deployment pipeline from dev to test and into production you can manage the configuration between those environments and be certain that applications have everything they need to run when they migrate.
-The default implementation of the server storage backend uses git so it easily supports labelled versions of configuration environments, as well as being accessible to a wide range of tooling for managing the content.
+The default implementation of the server storage backend uses git so it easily supports labelled versions of configuration environments,
+as well as being accessible to a wide range of tooling for managing the content.
 It is easy to add alternative implementations and plug them in with Spring configuration.
 
 Spring Cloud Config Server features:
@@ -228,18 +241,16 @@ use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
 
 ## Load Balancer
 
-Spring Cloud provides its own client-side load-balancer abstraction and implementation. For the load-balancing mechanism, ReactiveLoadBalancer interface has been added and a Round-Robin-based and Random implementations have been provided for it. In order to get instances to select from reactive ServiceInstanceListSupplier is used. Currently we support a service-discovery-based implementation of ServiceInstanceListSupplier that retrieves available instances from Service Discovery using a Discovery Client available in the classpath.
+Spring Cloud provides its own client-side load-balancer abstraction and implementation.
+For the load-balancing mechanism, ReactiveLoadBalancer interface has been added and a Round-Robin-based and Random implementations have been provided for it.
+In order to get instances to select from reactive ServiceInstanceListSupplier is used.
+Currently we support a service-discovery-based implementation of ServiceInstanceListSupplier that retrieves available instances from Service Discovery using a Discovery Client available in the classpath.
 
 Spring Cloud Loadbalancer is a generic abstraction that can do the work that we used to do with [Netflix's Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md) project.
-
-
-
 
 ### LoadBalancer Caching
 
 If you do not have Caffeine in the classpath, the DefaultLoadBalancerCache, which comes automatically with spring-cloud-starter-loadbalancer, will be used.
-
-
 
 ## Circuit Breaker
 
@@ -254,22 +265,20 @@ In Hystrix calls to external systems have to be wrapped in a HystrixCommand.
 >
 > Load Balancer retries timeout must less than circuit breaker timeout.
 
-To create a circuit breaker in your code, you can use the CircuitBreakerFactory API. 
+To create a circuit breaker in your code, you can use the CircuitBreakerFactory API.
 When you include a Spring Cloud Circuit Breaker starter on your classpath, a bean that implements this API is automatically created for you.
 
-
-The CircuitBreakerFactory.create API creates an instance of a class called CircuitBreaker. 
-The run method takes a Supplier and a Function. The Supplier is the code that you are going to wrap in a circuit breaker. 
-The Function is the fallback that is run if the circuit breaker is tripped. 
-The function is passed the Throwable that caused the fallback to be triggered. 
+The CircuitBreakerFactory.create API creates an instance of a class called CircuitBreaker.
+The run method takes a Supplier and a Function. The Supplier is the code that you are going to wrap in a circuit breaker.
+The Function is the fallback that is run if the circuit breaker is tripped.
+The function is passed the Throwable that caused the fallback to be triggered.
 You can optionally exclude the fallback if you do not want to provide one.
- 
+
 > The ReactiveCircuitBreakerFactory.create API will create an instance of a class called ReactiveCircuitBreaker.
 > The run method takes with a Mono or Flux and wraps it in a circuit breaker.
 
 ```java
 public interface CircuitBreaker {
-
 	default <T> T run(Supplier<T> toRun) {
 		return run(toRun, throwable -> {
 			throw new NoFallbackAvailableException("No fallback available.", throwable);
@@ -277,23 +286,27 @@ public interface CircuitBreaker {
 	};
 
 	<T> T run(Supplier<T> toRun, Function<Throwable, T> fallback);
-
 }
 ```
-You can configure your circuit breakers by creating beans of type Customizer. 
+
+You can configure your circuit breakers by creating beans of type Customizer.
 The Customizer interface has a single method (called customize) that takes the Object to customize.
 
-Some CircuitBreaker implementations such as Resilience4JCircuitBreaker call customize method every time CircuitBreaker#run is called. It can be inefficient. In that case, you can use CircuitBreaker#once method. It is useful where calling customize many times doesn’t make sense, for example, in case of consuming Resilience4j’s events.
+Some CircuitBreaker implementations such as Resilience4JCircuitBreaker call customize method every time CircuitBreaker#run is called.
+It can be inefficient. In that case, you can use CircuitBreaker#once method.
+It is useful where calling customize many times doesn’t make sense, for example, in case of consuming Resilience4j’s events.
 
 ## Tracing
 
-Debugging distributed applications can be complex and take a long time. For any given failure, you might need to piece together traces of information from several independent services.
+Debugging distributed applications can be complex and take a long time.
+For any given failure, you might need to piece together traces of information from several independent services.
 [Spring Cloud Sleuth](/docs/CS/Java/Spring_Cloud/Sleuth.md) can instrument your applications in a predictable and repeatable way.
 And when used in conjunction with [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md), you can zero in on any latency problems you might have.
 
 `Spring Cloud Sleuth` provides Spring Boot auto-configuration for distributed tracing.
 
-Sleuth configures everything you need to get started. This includes where trace data (spans) are reported to, how many traces to keep (sampling), if remote fields (baggage) are sent, and which libraries are traced.
+Sleuth configures everything you need to get started.
+This includes where trace data (spans) are reported to, how many traces to keep (sampling), if remote fields (baggage) are sent, and which libraries are traced.
 
 Specifically, Spring Cloud Sleuth
 
@@ -309,7 +322,9 @@ Specifically, Spring Cloud Sleuth
 
 ## Testing
 
-In the cloud, you get extra points for having reliable, trustworthy, stable APIs—but getting there can be a journey. Contract-based testing is one technique that high-performing teams often use to stay on track. It helps by formalizing the content of APIs and building tests around them to ensure code remains in check.
+In the cloud, you get extra points for having reliable, trustworthy, stable APIs—but getting there can be a journey.
+Contract-based testing is one technique that high-performing teams often use to stay on track.
+It helps by formalizing the content of APIs and building tests around them to ensure code remains in check.
 
 Spring Cloud Contract provides contract-based testing support for REST and messaging-based APIs with contracts written in Groovy, Java, or Kotlin.
 
