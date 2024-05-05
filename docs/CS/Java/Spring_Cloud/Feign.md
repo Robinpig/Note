@@ -29,7 +29,48 @@ Furthermore, Feign makes it easy to unit test your conversions knowing this.
 
 ## Spring Cloud OpenFeign
 
+Spring Cloud adds support for Spring MVC annotations and for using the same HttpMessageConverters used by default in Spring Web. 
+Spring Cloud integrates Eureka, Spring Cloud CircuitBreaker, as well as Spring Cloud LoadBalancer to provide a load-balanced http client when using Feign.
 
+> [!NOTE]
+> 
+> `spring-cloud-starter-openfeign` supports `spring-cloud-starter-loadbalancer`. 
+> However, as is an optional dependency.
+
+
+To include Feign in your project use the starter with group `org.springframework.cloud` and artifact id `spring-cloud-starter-openfeign`.
+
+
+In the @FeignClient annotation the String value ("stores" above) is an arbitrary client name, which is used to create a Spring Cloud LoadBalancer client. 
+You can also specify a URL using the url attribute (absolute value or just a hostname). 
+The name of the bean in the application context is the fully qualified name of the interface. 
+To specify your own alias value you can use the qualifiers value of the @FeignClient annotation.
+
+The load-balancer client above will want to discover the physical addresses for the "stores" service. 
+If your application is a Eureka client then it will resolve the service in the Eureka service registry.
+If you don’t want to use Eureka, you can configure a list of servers in your external configuration using SimpleDiscoveryClient.
+
+
+While creating Feign client beans, we resolve the values passed via the @FeignClient annotation. 
+As of 4.x, the values are being resolved eagerly. This is a good solution for most use-cases, and it also allows for AOT support.
+
+If you need the attributes to be resolved lazily, set the spring.cloud.openfeign.lazy-attributes-resolution property value to true.
+
+
+> A bean of `Retryer.NEVER_RETRY` with the type Retryer is created by default, which will disable retrying.
+
+
+If Spring Cloud CircuitBreaker is on the classpath and `spring.cloud.openfeign.circuitbreaker.enabled=true`, Feign will wrap all methods with a circuit breaker.
+To enable Spring Cloud CircuitBreaker group set the spring.cloud.openfeign.circuitbreaker.group.enabled property to true (by default false).
+
+
+Feign supports boilerplate apis via single-inheritance interfaces. This allows grouping common operations into convenient base interfaces.
+
+
+We discourage using Feign clients in the early stages of application lifecycle, while processing configurations and initialising beans.
+Using the clients during bean initialisation is not supported.
+Similarly, depending on how you are using your Feign clients, you may see initialization errors when starting your application. 
+To work around this problem you can use an ObjectProvider when autowiring your client.
 
 Enable with `@EnableFeignClients`
 
