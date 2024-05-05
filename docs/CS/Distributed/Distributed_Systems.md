@@ -1174,6 +1174,7 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Encoding](/docs/CS/Encoding.md)
+- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
 
 ## References
 
