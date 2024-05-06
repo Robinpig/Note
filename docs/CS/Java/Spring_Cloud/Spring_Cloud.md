@@ -213,7 +213,7 @@ The configuration has to be flexible enough to cope with multiple applications, 
 Centralized external configuration management backed by a git repository.
 The configuration resources map directly to Spring Environment but could be used by non-Spring applications if desired.
 
-Spring Cloud Config provides server and client-side support for externalized configuration in a distributed system.
+[Spring Cloud Config](/docs/CS/Java/Spring_Cloud/Config.md) provides server and client-side support for externalized configuration in a distributed system.
 With the Config Server you have a central place to manage external properties for applications across all environments.
 The concepts on both client and server map identically to the Spring Environment and PropertySource abstractions,
 so they fit very well with Spring applications, but can be used with any application running in any language.
