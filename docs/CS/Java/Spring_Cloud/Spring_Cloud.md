@@ -248,6 +248,9 @@ Currently we support a service-discovery-based implementation of ServiceInstance
 
 Spring Cloud Loadbalancer is a generic abstraction that can do the work that we used to do with [Netflix's Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md) project.
 
+ClientHttpRequestInterceptor
+
+
 ### LoadBalancer Caching
 
 If you do not have Caffeine in the classpath, the DefaultLoadBalancerCache, which comes automatically with spring-cloud-starter-loadbalancer, will be used.
