@@ -1,4 +1,4 @@
-## Inroduction
+## Introduction
 
 Cloud Native is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development. 
 A related discipline is that of building 12-factor Applications, in which development practices are aligned with delivery and operations goals-for instance, by using declarative programming and management and monitoring.
