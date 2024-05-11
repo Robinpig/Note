@@ -21,6 +21,10 @@ protected int maxQueueSize = Integer.MAX_VALUE;
 
 [prestart All CoreThreads](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=prestartCoreThread)
 
+```properties
+server.tomcat.max-threads=xx
+```
+
 ```java
 // StandardThreadExecutor
 @Override
