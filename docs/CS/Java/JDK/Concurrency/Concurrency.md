@@ -132,7 +132,10 @@ The design process for a thread‐safe class should include these three basic el
 - Identify the invariants that constrain the state variables;
 - Establish a policy for managing concurrent access to the object's state.
 
-Constraints placed on states or state transitions by invariants and post‐conditions create additional synchronization or encapsulation requirements. If certain states are invalid, then the underlying state variables must be encapsulated, otherwise client code could put the object into an invalid state. If an operation has invalid state transitions, it must be made atomic. On the other hand, if the class does not impose any such constraints, we may be able to relax encapsulation or serialization requirements to obtain greater flexibility or better performance.
+Constraints placed on states or state transitions by invariants and post‐conditions create additional synchronization or encapsulation requirements. 
+If certain states are invalid, then the underlying state variables must be encapsulated, otherwise client code could put the object into an invalid state. 
+If an operation has invalid state transitions, it must be made atomic. 
+On the other hand, if the class does not impose any such constraints, we may be able to relax encapsulation or serialization requirements to obtain greater flexibility or better performance.
 
 #### Locking
 
@@ -148,7 +151,9 @@ The lock is automatically acquired by the executing thread before entering a syn
 whether by the normal control path or by throwing an exception out of the block.
 The only way to acquire an intrinsic lock is to enter a synchronized block or method guarded by that lock.
 
-There are advantages to using a private lock object instead of an object's intrinsic lock (or any other publicly accessible lock). Making the lock object private encapsulates the lock so that client code cannot acquire it, whereas a publicly accessible lock allows client code to participate in its synchronization policy ‐ correctly or incorrectly. Clients that improperly acquire another object's lock could cause liveness problems, and verifying that a publicly accessible lock is properly used requires examining the entire program rather than a single class.
+There are advantages to using a private lock object instead of an object's intrinsic lock (or any other publicly accessible lock). 
+Making the lock object private encapsulates the lock so that client code cannot acquire it, whereas a publicly accessible lock allows client code to participate in its synchronization policy ‐ correctly or incorrectly. 
+Clients that improperly acquire another object's lock could cause liveness problems, and verifying that a publicly accessible lock is properly used requires examining the entire program rather than a single class.
 
 ##### Reentrancy
 
@@ -221,7 +226,7 @@ When many threads are expected to access a given collection, a ConcurrentHashMap
 and a ConcurrentSkipListMap is normally preferable to a synchronized TreeMap.
 A CopyOnWriteArrayList is preferable to a synchronized ArrayList when the expected number of reads and traversals greatly outnumber the number of updates to a list.
 The "Concurrent" prefix used with some classes in this package is a shorthand indicating several differences from similar "synchronized" classes.
-For example java.util.Hashtable and Collections.synchronizedMap(new HashMap()) are synchronized. But ConcurrentHashMap is "concurrent".
+For example `java.util.Hashtable` and `Collections.synchronizedMap(new HashMap())` are synchronized. But ConcurrentHashMap is "concurrent".
 
 A concurrent collection is thread-safe, but not governed by a single exclusion lock.
 In the particular case of ConcurrentHashMap, it safely permits any number of concurrent reads as well as a tunable number of concurrent writes.
@@ -230,9 +235,9 @@ In the particular case of ConcurrentHashMap, it safely permits any number of con
 In other cases in which multiple threads are expected to access a common collection, "concurrent" versions are normally preferable.
 And unsynchronized collections are preferable when either collections are unshared, or are accessible only when holding other locks.
 Most concurrent Collection implementations (including most Queues) also differ from the usual java.util conventions in that their Iterators and Spliterators provide weakly consistent rather than fast-fail traversal:
-they may proceed concurrently with other operations
-they will never throw ConcurrentModificationException
-they are guaranteed to traverse elements as they existed upon construction exactly once, and may (but are not guaranteed to) reflect any modifications subsequent to construction.
+- they may proceed concurrently with other operations
+- they will never throw ConcurrentModificationException
+- they are guaranteed to traverse elements as they existed upon construction exactly once, and may (but are not guaranteed to) reflect any modifications subsequent to construction.
 
 #### Synchronizers
 
@@ -327,7 +332,7 @@ N_{threads} = N_{cpu}*U_{cpu}*(1+\frac{W}C)
 
 You can determine the number of CPUs using Runtime:
 
-```
+```tex
 int N_CPUS = Runtime.getRuntime().availableProcessors();
 ```
 
@@ -361,7 +366,8 @@ You can create a thread pool by calling one of the static factory methods in [Ex
 
 #### Cancellation and Shutdown
 
-We've seen how to create an Executor but not how to shut one down. An Executor implementation is likely to create threads for processing tasks.
+We've seen how to create an Executor but not how to shut one down. 
+An Executor implementation is likely to create threads for processing tasks.
 But the JVM can't exit until all the (nondaemon) threads have terminated, so failing to shut down an Executor could prevent the JVM from exiting.
 
 #### Delayed and Periodic Tasks
@@ -372,7 +378,9 @@ You can construct a ScheduledThreadPoolExecutor through its constructor or throu
 
 ## Performance
 
-Improving performance means doing more work with fewer resources. The meaning of "resources" can vary; for a given activity, some specific resource is usually in shortest supply, whether it is CPU cycles, memory, network bandwidth, I/O bandwidth, database requests, disk space, or any number of other resources. When the performance of an activity is limited by availability of a particular resource, we say it is bound by that resource: CPU‐bound, database‐bound, etc.
+Improving performance means doing more work with fewer resources. 
+The meaning of "resources" can vary; for a given activity, some specific resource is usually in shortest supply, whether it is CPU cycles, memory, network bandwidth, I/O bandwidth, database requests, disk space, or any number of other resources. 
+When the performance of an activity is limited by availability of a particular resource, we say it is bound by that resource: CPU‐bound, database‐bound, etc.
 
 In using concurrency to achieve better performance, we are trying to do two things: utilize the processing resources we have more effectively, and enable our program to exploit additional processing resources if they become available.
 From a performance monitoring perspective, this means we are looking to keep the CPUs as busy as possible.
@@ -453,7 +461,8 @@ Atomic variables can also be used as “better volatile variables” even if you
 Atomic variables offer the same memory semantics as volatile variables, but with additional support for atomic updates—making them ideal for counters,
 sequence generators, and statistics gathering while offering better scalability than lock-based alternatives.
 
-Locking has a few other disadvantages. When a thread is waiting for a lock, it cannot do anything else.
+Locking has a few other disadvantages. 
+When a thread is waiting for a lock, it cannot do anything else.
 If a thread holding a lock is delayed (due to a page fault, scheduling delay, or the like), then no thread that needs that lock can make progress.
 This can be a serious problem if the blocked thread is a high-priority thread but the thread holding the lock is a lower-priority thread—a performance hazard known as priority inversion.
 Even though the higher-priority thread should have precedence, it must wait until the lock is released, and this effectively downgrades its priority to that of the lower-priority thread.

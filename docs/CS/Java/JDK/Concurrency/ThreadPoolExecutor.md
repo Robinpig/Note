@@ -1126,7 +1126,22 @@ Or we can override a LinkedBlockingQueue to allow resizing thread safe.
 
 ## Executors
 
-Creates a thread pool that maintains enough threads to support the given parallelism level, and may use multiple queues to reduce contention. The parallelism level corresponds to the maximum number of threads actively engaged in, or available to engage in, task processing. The actual number of threads may grow and shrink dynamically. A work-stealing pool makes no guarantees about the order in which submitted tasks are executed.
+
+Factory and utility methods for Executor, ExecutorService, ScheduledExecutorService, ThreadFactory, and Callable classes defined in this package. This class supports the following kinds of methods:
+Methods that create and return an ExecutorService set up with commonly useful configuration settings.
+Methods that create and return a ScheduledExecutorService set up with commonly useful configuration settings.
+Methods that create and return a "wrapped" ExecutorService, that disables reconfiguration by making implementation-specific methods inaccessible.
+Methods that create and return a ThreadFactory that sets newly created threads to a known state.
+Methods that create and return a Callable out of other closure-like forms, so they can be used in execution methods requiring Callable.
+
+
+<!-- tabs:start -->
+##### **newWorkStealingPool**
+Creates a thread pool that maintains enough threads to support the given parallelism level, and may use multiple queues to reduce contention. 
+The parallelism level corresponds to the maximum number of threads actively engaged in, or available to engage in, task processing. 
+The actual number of threads may grow and shrink dynamically. 
+A work-stealing pool makes no guarantees about the order in which submitted tasks are executed.
+
 
 ```java
 public static ExecutorService newWorkStealingPool(int parallelism) {
@@ -1136,8 +1151,11 @@ public static ExecutorService newWorkStealingPool(int parallelism) {
          null, true);
 }
 ```
-
-Creates a thread pool that reuses a fixed number of threads operating off a shared unbounded queue, using the provided ThreadFactory to create new threads when needed. At any point, at most nThreads threads will be active processing tasks. If additional tasks are submitted when all threads are active, they will wait in the queue until a thread is available. If any thread terminates due to a failure during execution prior to shutdown, a new one will take its place if needed to execute subsequent tasks. The threads in the pool will exist until it is explicitly shutdown.
+##### **newFixedThreadPool**
+Creates a thread pool that reuses a fixed number of threads operating off a shared unbounded queue, using the provided ThreadFactory to create new threads when needed. At any point, at most nThreads threads will be active processing tasks. 
+If additional tasks are submitted when all threads are active, they will wait in the queue until a thread is available. 
+If any thread terminates due to a failure during execution prior to shutdown, a new one will take its place if needed to execute subsequent tasks. 
+The threads in the pool will exist until it is explicitly shutdown.
 
 ```java
 public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory threadFactory) {
@@ -1147,7 +1165,7 @@ public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory thr
                                   threadFactory);
 }
 ```
-
+##### **newCachedThreadPool**
 Creates a thread pool that creates new threads as needed, but will reuse previously constructed threads when they are available, and uses the provided ThreadFactory to create new threads when needed.
 
 ```java
@@ -1158,7 +1176,7 @@ public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
                                   threadFactory);
 }
 ```
-
+##### **newSingleThreadExecutor**
 Creates an Executor that uses a single worker thread operating off an unbounded queue, and uses the provided ThreadFactory to create a new thread when needed. Unlike the otherwise equivalent newFixedThreadPool(1, threadFactory) the returned executor is guaranteed not to be reconfigurable to use additional threads.
 
 ```java
@@ -1173,6 +1191,8 @@ public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactor
 
 ```
 
+##### **newScheduledThreadPool**
+
 Creates a thread pool that can schedule commands to run after a given delay, or to execute periodically.
 
 ```java
@@ -1182,6 +1202,7 @@ public static ScheduledExecutorService newScheduledThreadPool(
 }
 ```
 
+<!-- tabs:end -->
 
 |            | Cache                | Fix                   |
 | ---------- | -------------------- | --------------------- |
