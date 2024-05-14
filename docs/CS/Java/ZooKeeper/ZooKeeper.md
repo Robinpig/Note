@@ -13,7 +13,7 @@ Consensus, group management, and presence protocols will be implemented by the s
 Application specific uses of these will consist of a mixture of specific components of Zoo Keeper and application specific conventions.
 
 **ZooKeeper provides a per client guarantee of FIFO execution of requests and linearizability for all requests that change the ZooKeeper state.**
-To guarantee that update operations satisfy linearizability, Zookeeper implements a leader-based atomic broadcast protocol, called **Zab**.
+To guarantee that update operations satisfy linearizability, Zookeeper implements a leader-based atomic broadcast protocol, called [Zab](/docs/CS/Java/ZooKeeper/Zab.md).
 
 In ZooKeeper, servers process read operations locally, and we do not use Zab to totally order them.
 
@@ -121,7 +121,8 @@ ZooKeeper does this because it prioritizes performance over consistency for the 
 
 ### Simple API
 
-One of the design goals of ZooKeeper is providing a very simple programming interface. As a result, it supports only these operations:
+One of the design goals of ZooKeeper is providing a very simple programming interface.
+As a result, it supports only these operations:
 
 - *create* : creates a node at a location in the tree
 - *delete* : deletes a node
@@ -134,6 +135,8 @@ One of the design goals of ZooKeeper is providing a very simple programming inte
 ## Implementation
 
 ![The components of the ZooKeeper service](./img/components.png)
+
+session
 
 ## Atomic Broadcast
 
@@ -396,9 +399,97 @@ These can be implemented using ZooKeeper. As with priority queues, first define 
 
 Here are a few things to notice:
 
-- The removal of a node will only cause one client to wake up since each node is watched by exactly one client. In this way, you avoid the herd effect.
+- The removal of a node will only cause one client to wake up since each node is watched by exactly one client. In this way, you avoid the *herd effect*.
 - There is no polling or timeouts.
 - Because of the way you implement locking, it is easy to see the amount of lock contention, break locks, debug locking problems, etc.
+
+```java
+public interface LockListener {
+    void lockAcquired();
+
+    void lockReleased();
+}
+```
+
+Attempts to acquire the exclusive write lock returning whether or not it was acquired. Note that the exclusive lock may be acquired some time later after this method has been invoked due to the current lock owner going away.
+
+```
+public class WriteLock extends ProtocolSupport {
+    public synchronized boolean lock() throws KeeperException, InterruptedException {
+        if (isClosed()) {
+            return false;
+        }
+        ensurePathExists(dir);
+
+        return (Boolean) retryOperation(zop);
+    }
+}
+```
+
+the command that is run and retried for actually obtaining the lock.
+
+delay =
+
+```
+attemptCount * 0.5s
+```
+
+```
+RETRY_COUNT = 10
+```
+
+```
+ @SuppressFBWarnings(
+            value = "NP_NULL_PARAM_DEREF_NONVIRTUAL",
+            justification = "findPrefixInChildren will assign a value to this.id")
+        public boolean execute() throws KeeperException, InterruptedException {
+            do {
+                if (id == null) {
+                    long sessionId = zookeeper.getSessionId();
+                    String prefix = "x-" + sessionId + "-";
+                    // lets try look up the current ID if we failed
+                    // in the middle of creating the znode
+                    findPrefixInChildren(prefix, zookeeper, dir);
+                    idName = new ZNodeName(id);
+                }
+                List<String> names = zookeeper.getChildren(dir, false);
+                if (names.isEmpty()) {
+                    LOG.warn("No children in: {} when we've just created one! Lets recreate it...", dir);
+                    // lets force the recreation of the id
+                    id = null;
+                } else {
+                    // lets sort them explicitly (though they do seem to come back in order ususally :)
+                    SortedSet<ZNodeName> sortedNames = new TreeSet<>();
+                    for (String name : names) {
+                        sortedNames.add(new ZNodeName(dir + "/" + name));
+                    }
+                    ownerId = sortedNames.first().getName();
+                    SortedSet<ZNodeName> lessThanMe = sortedNames.headSet(idName);
+                    if (!lessThanMe.isEmpty()) {
+                        ZNodeName lastChildName = lessThanMe.last();
+                        lastChildId = lastChildName.getName();
+                        LOG.debug("Watching less than me node: {}", lastChildId);
+                        Stat stat = zookeeper.exists(lastChildId, new LockWatcher());
+                        if (stat != null) {
+                            return Boolean.FALSE;
+                        } else {
+                            LOG.warn("Could not find the stats for less than me: {}", lastChildName.getName());
+                        }
+                    } else {
+                        if (isOwner()) {
+                            LockListener lockListener = getLockListener();
+                            if (lockListener != null) {
+                                lockListener.lockAcquired();
+                            }
+                            return Boolean.TRUE;
+                        }
+                    }
+                }
+            }
+            while (id == null);
+            return Boolean.FALSE;
+        }
+```
 
 ### Two-phased Commit
 
@@ -431,14 +522,148 @@ To avoid the herd effect, it is sufficient to watch for the next znode down on t
 If a client receives a notification that the znode it is watching is gone, then it becomes the new leader in the case that there is no smaller znode.
 Note that this avoids the herd effect by not having all clients watching the same znode.
 
+Once configured, invoking start() will cause the client to connect to ZooKeeper and create a leader offer.
+
+```java
+ public synchronized void start() {
+        state = State.START;
+        dispatchEvent(EventType.START);
+
+        LOG.info("Starting leader election support");
+
+        if (zooKeeper == null) {
+            throw new IllegalStateException(
+                "No instance of zookeeper provided. Hint: use setZooKeeper()");
+        }
+
+        if (hostName == null) {
+            throw new IllegalStateException(
+                "No hostname provided. Hint: use setHostName()");
+        }
+
+        try {
+            makeOffer();
+            determineElectionStatus();
+        } catch (KeeperException | InterruptedException e) {
+            becomeFailed(e);
+        }
+    }
+```
+
+```java
+private void makeOffer() throws KeeperException, InterruptedException {
+        state = State.OFFER;
+        dispatchEvent(EventType.OFFER_START);
+
+        LeaderOffer newLeaderOffer = new LeaderOffer();
+        byte[] hostnameBytes;
+        synchronized (this) {
+            newLeaderOffer.setHostName(hostName);
+            hostnameBytes = hostName.getBytes();
+            newLeaderOffer.setNodePath(zooKeeper.create(rootNodeName + "/" + "n_",
+                                                        hostnameBytes, ZooDefs.Ids.OPEN_ACL_UNSAFE,
+                                                        CreateMode.EPHEMERAL_SEQUENTIAL));
+            leaderOffer = newLeaderOffer;
+        }
+        LOG.debug("Created leader offer {}", leaderOffer);
+
+        dispatchEvent(EventType.OFFER_COMPLETE);
+    }
+```
+
+```java
+    private void determineElectionStatus() throws KeeperException, InterruptedException {
+
+        state = State.DETERMINE;
+        dispatchEvent(EventType.DETERMINE_START);
+
+        LeaderOffer currentLeaderOffer = getLeaderOffer();
+
+        String[] components = currentLeaderOffer.getNodePath().split("/");
+
+        currentLeaderOffer.setId(Integer.valueOf(components[components.length - 1].substring("n_".length())));
+
+        List<LeaderOffer> leaderOffers = toLeaderOffers(zooKeeper.getChildren(rootNodeName, false));
+
+        /*
+         * For each leader offer, find out where we fit in. If we're first, we
+         * become the leader. If we're not elected the leader, attempt to stat the
+         * offer just less than us. If they exist, watch for their failure, but if
+         * they don't, become the leader.
+         */
+        for (int i = 0; i < leaderOffers.size(); i++) {
+            LeaderOffer leaderOffer = leaderOffers.get(i);
+
+            if (leaderOffer.getId().equals(currentLeaderOffer.getId())) {
+                LOG.debug("There are {} leader offers. I am {} in line.", leaderOffers.size(), i);
+
+                dispatchEvent(EventType.DETERMINE_COMPLETE);
+
+                if (i == 0) {
+                    becomeLeader();
+                } else {
+                    becomeReady(leaderOffers.get(i - 1));
+                }
+
+                /* Once we've figured out where we are, we're done. */
+                break;
+            }
+        }
+    }
+```
+
+## Observer
+
+As we add more voting members, the write performance drops. This is due to the fact that a write operation requires the agreement of (in general) at least half the nodes in an ensemble and therefore the cost of a vote can increase significantly as more voters are added.
+
+We have introduced a new type of ZooKeeper node called an Observer which helps address this problem and further improves ZooKeeper's scalability. Observers are non-voting members of an ensemble which only hear the results of votes, not the agreement protocol that leads up to them. Other than this simple distinction, Observers function exactly the same as Followers - clients may connect to them and send read and write requests to them. Observers forward these requests to the Leader like Followers do, but they then simply wait to hear the result of the vote. Because of this, we can increase the number of Observers as much as we like without harming the performance of votes.
+
+Observers have other advantages. Because they do not vote, they are not a critical part of the ZooKeeper ensemble. Therefore they can fail, or be disconnected from the cluster, without harming the availability of the ZooKeeper service. The benefit to the user is that Observers may connect over less reliable network links than Followers. In fact, Observers may be used to talk to a ZooKeeper server from another data center. Clients of the Observer will see fast reads, as all reads are served locally, and writes result in minimal network traffic as the number of messages required in the absence of the vote protocol is smaller.
+
+
+## Storage
+
+
+epoch
+
+64bits  zxid = epoch + counter
+
+
+Files:
+
+log.x or snapshot
+
+`zkSnapShotToolkit.sh`
+
+
+epoch(only quorum)
+
+- currentEpoch
+- 
+
+
 ## Logging
 
 Zookeeper uses slf4j as an abstraction layer for logging.
 
+
+
+
 ## Dynamic Reconfiguration
+
+Prior to the 3.5.0 release, the membership and all other configuration parameters of Zookeeper were static - loaded during boot and immutable at runtime.
+Operators resorted to ''rolling restarts'' - a manually intensive and error-prone method of changing the configuration that has caused data loss and inconsistency in production.
 
 **Note:** Starting with 3.5.3, the dynamic reconfiguration feature is disabled by default, and has to be explicitly turned on via [reconfigEnabled](https://zookeeper.apache.org/doc/r3.8.0/zookeeperAdmin.html#sc_advancedConfiguration) configuration option.
 
+## Monitoring
+
+### JMX
+
+
+## 
+
+ 
 ## Links
 
 - [Chubby](/docs/CS/Distributed/Chubby.md)
@@ -448,5 +673,5 @@ Zookeeper uses slf4j as an abstraction layer for logging.
 1. [ZooKeeper: Wait-free coordination for Internet-scale systems](https://www.usenix.org/legacy/event/atc10/tech/full_papers/Hunt.pdf)
 2. [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
 3. [Distributed Locks are Dead; Long Live Distributed Locks!](https://hazelcast.com/blog/long-live-distributed-locks/)
-4. [ZooKeeper Programmer's Guide](https://zookeeper.apache.org/doc/current/zookeeperProgrammers.html)
+4. [ZooKeeper Programmer&#39;s Guide](https://zookeeper.apache.org/doc/current/zookeeperProgrammers.html)
 5. [Dynamic Reconfiguration of Primary/Backup Clusters](https://www.usenix.org/system/files/conference/atc12/atc12-final74.pdf)
