@@ -51,22 +51,33 @@ selector.start();
 ## Service Discovery
 
 ServiceInstance
-A service instance is represented by the class: ServiceInstance. ServiceInstances have a name, id, address, port and/or ssl port, and an optional payload (user defined). 
+
+A service instance is represented by the class: `ServiceInstance`.
+ ServiceInstances have a name, id, address, port and/or ssl port, and an optional payload (user defined). 
 
 
 
 ServiceProvider
-The main abstraction class is ServiceProvider. It encapsulates the discovery service for a particular named service along with a provider strategy. A provider strategy is a scheme for selecting one instance from a set of instances for a given service. There are three bundled strategies: Round Robin, Random and Sticky (always selects the same one).
+
+The main abstraction class is ServiceProvider. 
+It encapsulates the discovery service for a particular named service along with a provider strategy. 
+A provider strategy is a scheme for selecting one instance from a set of instances for a given service. 
+There are three bundled strategies: Round Robin, Random and Sticky (always selects the same one).
 
 ServiceDiscovery
+
 In order to allocate a ServiceProvider, you must have a ServiceDiscovery. It is created by a ServiceDiscoveryBuilder.
 
 You must call start() on the object and, when done with it, call close().
 
 Service Cache
-Each of the above query methods calls ZooKeeper directly. If you need more than occasional querying of services you can use the ServiceCache. It caches in memory the list of instances for a particular service. It uses a Watcher to keep the list up to date.
 
-You allocate a ServiceCache via the builder returned by ServiceDiscovery.serviceCacheBuilder(). The ServiceCache object must be started by calling start() and, when done, you should call close(). 
+Each of the above query methods calls ZooKeeper directly. 
+If you need more than occasional querying of services you can use the ServiceCache. 
+It caches in memory the list of instances for a particular service. 
+It uses a Watcher to keep the list up to date.
+
+You allocate a ServiceCache via the builder returned by `ServiceDiscovery.serviceCacheBuilder()`. The ServiceCache object must be started by calling start() and, when done, you should call close(). 
 
 ```xml
 <!-- https://mvnrepository.com/artifact/org.apache.curator/curator-x-discovery -->
