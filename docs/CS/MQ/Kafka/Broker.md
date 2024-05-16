@@ -39,21 +39,18 @@ Upon recovering the preferred leader broker and having its partition data back i
 
 ### Replication Factor and Partition Count
 
-When creating a topic, we have to provide a partition count and the replication factor. 
+When creating a topic, we have to provide a partition count and the replication factor.
 These two are very important to set correctly as they impact the performance and durability in the system.
-
-
 
 The factors to consider while choosing replication factor are:
 
-It should be at least 2 and a maximum of 4. 
+It should be at least 2 and a maximum of 4.
 The recommended number is 3 as it provides the right balance between performance and fault tolerance
 
 A Kafka cluster should have a maximum of 200,000 partitions across all brokers when managed by Zookeeper. The reason is that if brokers go down, Zookeeper needs to perform a lot of leader elections.
 Confluent still recommends up to 4,000 partitions per broker in your cluster.
 This problem should be solved by Kafka in a Zookeeper-less mode (Kafka KRaft)
 If you need more than 200,000 partitions in your cluster, follow the Netflix model and create more Kafka clusters
-
 
 ## Structure
 
@@ -2754,19 +2751,17 @@ Kafka stores messages for a set amount of time and purge messages older than the
 This expiration happens due to a policy called log.cleanup.policy.
 There are two cleanup policies:
 
-- `log.cleanup.policy=delete`<br/>
+- `log.cleanup.policy=delete<br/>`
   This is the default for all the user topics.
   With this policy configured for a topic, Kafka deletes events older than the configured retention time.
   The default retention period is a week. Log Cleanup Policy delete has already been discussed here.
-- `log.cleanup.policy=compact`<br/>
+- `log.cleanup.policy=compact<br/>`
   This policy is the default for Kafka‘s __consumer_offsets topic.
   With this policy on a topic, Kafka only stores the most recent value for each key in the topic.
   Setting the policy to compact only makes sense on topics for which applications produce events that contain both a key and a value.
 
 Cleanup should happen often enough to ensure the files are deleted, but not so often as to affect the broker and disk performance.
 Smaller log retention sizes might require more frequent checks.
-
-
 
 ### Log Compaction Guarantees
 
@@ -2779,18 +2774,12 @@ There are some important guarantees that Kafka provides for messages produced on
 * The offset of a message is immutable (it never changes). Offsets are just skipped if a message is missing
 * Deleted records can still be seen by consumers for a period of `log.cleaner.delete.retention.ms` (default is 24 hours). This gives some heads-up time for the consumers to catch up on the messages that will be deleted.
 
-
 If compaction is enabled when Kafka starts, each broker will start a compaction manager thread and a number of compaction threads. These are responsible for performing the compaction tasks.
-
 
 * Cleaner threads start with the oldest segment and check their contents. The active segments are left untouched by the cleaner threads.
 * If the message it has just read is still the latest for a key, it copies over the message to a replacement segment. Otherwise it omits the message because there is a message with an identical key but a newer value later in the partition.
 * Once the cleaner thread has copied over all the messages that still contain the latest value for their key, we swap the replacement segment for the original and move on to the next segment.
 * At the end of the process, we are left with one message per key - the one with the latest value.
-
-
-
-
 
 ```scala
   private[log] def startupWithConfigOverrides(defaultConfig: LogConfig, topicConfigOverrides: Map[String, LogConfig]): Unit = {
@@ -2978,6 +2967,17 @@ Connect to Zookeeper through `bin/zookeeper-shell.sh 127.0.0.1:2181`
 - log_dir_event_notification
 
 ZooKeeper adds an extra layer of management.
+
+
+```scala
+ def registerBroker(brokerInfo: BrokerInfo): Long = {
+    val path = brokerInfo.path
+    val stat = checkedEphemeralCreate(path, brokerInfo.toJsonBytes)
+    info(s"Registered broker ${brokerInfo.broker.id} at path $path with addresses: " +
+      s"${brokerInfo.broker.endPoints.map(_.connectionString).mkString(",")}, czxid (broker epoch): ${stat.getCzxid}")
+    stat.getCzxid
+  }
+```
 
 ### KRaft
 
