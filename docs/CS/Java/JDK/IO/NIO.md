@@ -4,9 +4,8 @@
 
 The table below summarizes the main differences between Java NIO and IO.
 
-
 | IO              | NIO             |
-| ----------------- | ----------------- |
+| --------------- | --------------- |
 | Stream oriented | Buffer oriented |
 | Blocking IO     | Non blocking IO |
 |                 | Selectors       |
@@ -38,8 +37,8 @@ Here are the most important Channel implementations in Java NIO:
 
 A buffer is essentially a block of memory into which you can write data, which you can then later read again. This memory block is wrapped in a NIO Buffer object, which provides a set of methods that makes it easier to work with the memory block.
 
-实质是一个数组进行封装
-从channel读写数据到buffer
+
+
 
 directBuffer
 
@@ -64,7 +63,6 @@ A selector is an object that can monitor multiple channels for events (like: con
 SelectorProvider sychronized 单例
 依据不同JDK生成不同的Selector实现类
 调用OS的接口创建FD
-
 
 ### SelectorProvider
 
@@ -100,13 +98,9 @@ public static SelectorProvider create() {
     }
 ```
 
-
-
 See [Netty EventLoop - Selector](/docs/CS/Java/Netty/EventLoop.md?id=Selector).
 
 ## Links
-
-
 
 ## Reference
 
