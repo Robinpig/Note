@@ -28,6 +28,12 @@ ZooKeeper provides to its clients the abstraction of a set of data nodes (znodes
 ZooKeeper also has the following two liveness and durability guarantees: if a majority of ZooKeeper servers are active and communicating the service will be available;
 and if the ZooKeeper service responds successfully to a change request, that change persists across any number of failures as long as a quorum of servers is eventually able to recover.
 
+```shell
+git clone https://github.com/apache/zookeeper.git
+
+mvn clean install -DskipTest
+```
+
 ### ZooKeeper guarantees
 
 ZooKeeper has two basic ordering guarantees:
@@ -328,6 +334,88 @@ It is reasonable to expect that a majority of co-locations will have a majority 
 
 With ZooKeeper, we provide a user with the ability of configuring servers to use majority quorums, weights, or a hierarchy of groups.
 
+### Protocol
+
+In versions 3.5+, a ZooKeeper server can use Netty instead of NIO (default option) by setting the environment variable `zookeeper.serverCnxnFactory` to `org.apache.zookeeper.server.NettyServerCnxnFactory` ; for the client, set `zookeeper.clientCnxnSocket` to `org.apache.zookeeper.ClientCnxnSocketNetty` .
+
+
+
+```java
+
+    @Override
+    void connect(InetSocketAddress addr) throws IOException {
+        firstConnect = new CountDownLatch(1);
+
+        Bootstrap bootstrap = new Bootstrap().group(eventLoopGroup)
+                                             .channel(NettyUtils.nioOrEpollSocketChannel())
+                                             .option(ChannelOption.SO_LINGER, -1)
+                                             .option(ChannelOption.TCP_NODELAY, true)
+                                             .handler(new ZKClientPipelineFactory(addr.getHostString(), addr.getPort()));
+        bootstrap = configureBootstrapAllocator(bootstrap);
+        bootstrap.validate();
+
+        connectLock.lock();
+        try {
+            connectFuture = bootstrap.connect(addr);
+            connectFuture.addListener(new ChannelFutureListener() {
+                @Override
+                public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                    // this lock guarantees that channel won't be assigned after cleanup().
+                    boolean connected = false;
+                    connectLock.lock();
+                    try {
+                        if (!channelFuture.isSuccess()) {
+                            LOG.warn("future isn't success.", channelFuture.cause());
+                            return;
+                        } else if (connectFuture == null) {
+                            LOG.info("connect attempt cancelled");
+                            // If the connect attempt was cancelled but succeeded
+                            // anyway, make sure to close the channel, otherwise
+                            // we may leak a file descriptor.
+                            channelFuture.channel().close();
+                            return;
+                        }
+                        // setup channel, variables, connection, etc.
+                        channel = channelFuture.channel();
+
+                        disconnected.set(false);
+                        initialized = false;
+                        lenBuffer.clear();
+                        incomingBuffer = lenBuffer;
+
+                        sendThread.primeConnection();
+                        updateNow();
+                        updateLastSendAndHeard();
+
+                        if (sendThread.tunnelAuthInProgress()) {
+                            waitSasl.drainPermits();
+                            needSasl.set(true);
+                            sendPrimePacket();
+                        } else {
+                            needSasl.set(false);
+                        }
+                        connected = true;
+                    } finally {
+                        connectFuture = null;
+                        connectLock.unlock();
+                        if (connected) {
+                            LOG.info("channel is connected: {}", channelFuture.channel());
+                        }
+                        // need to wake on connect success or failure to avoid
+                        // timing out ClientCnxn.SendThread which may be
+                        // blocked waiting for first connect in doTransport().
+                        wakeupCnxn();
+                        firstConnect.countDown();
+                    }
+                }
+            });
+        } finally {
+            connectLock.unlock();
+        }
+    }
+
+```
+
 ## Recipes
 
 - Configuration Management
@@ -620,14 +708,11 @@ We have introduced a new type of ZooKeeper node called an Observer which helps a
 
 Observers have other advantages. Because they do not vote, they are not a critical part of the ZooKeeper ensemble. Therefore they can fail, or be disconnected from the cluster, without harming the availability of the ZooKeeper service. The benefit to the user is that Observers may connect over less reliable network links than Followers. In fact, Observers may be used to talk to a ZooKeeper server from another data center. Clients of the Observer will see fast reads, as all reads are served locally, and writes result in minimal network traffic as the number of messages required in the absence of the vote protocol is smaller.
 
-
 ## Storage
-
 
 epoch
 
 64bits  zxid = epoch + counter
-
 
 Files:
 
@@ -635,19 +720,47 @@ log.x or snapshot
 
 `zkSnapShotToolkit.sh`
 
-
 epoch(only quorum)
 
 - currentEpoch
 - 
 
+### jute
+
+InputArchive with `java.io.DataInput`
+
+```dot
+digraph "TxnLog" {
+
+splines  = ortho;
+fontname = "Inconsolata";
+
+node [colorscheme = ylgnbu4];
+edge [colorscheme = dark28, dir = both];
+
+DataNode       [shape = record, label = "{ DataNode |  }"];
+DataTree       [shape = record, label = "{ DataTree |  }"];
+FileSnap       [shape = record, label = "{ FileSnap |  }"];
+FileTxnLog     [shape = record, label = "{ FileTxnLog |  }"];
+FileTxnSnapLog [shape = record, label = "{ FileTxnSnapLog |  }"];
+SnapShot       [shape = record, label = "{ \<\<interface\>\>\nSnapShot |  }"];
+TxnLog         [shape = record, label = "{ \<\<interface\>\>\nTxnLog |  }"];
+
+DataTree       -> DataNode       [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+DataTree       -> DataNode       [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "root\n1"];
+FileSnap       -> SnapShot       [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+FileTxnLog     -> TxnLog         [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+FileTxnSnapLog -> FileSnap       [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+FileTxnSnapLog -> FileTxnLog     [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+FileTxnSnapLog -> SnapShot       [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "snapLog\n1"];
+FileTxnSnapLog -> TxnLog         [color = "#595959", style = solid , arrowtail = diamond , arrowhead = vee     , taillabel = "1", label = "", headlabel = "txnLog\n1"];
+
+}
+```
 
 ## Logging
 
 Zookeeper uses slf4j as an abstraction layer for logging.
-
-
-
 
 ## Dynamic Reconfiguration
 
@@ -660,10 +773,13 @@ Operators resorted to ''rolling restarts'' - a manually intensive and error-pron
 
 ### JMX
 
+## compare with Chubby
 
-## 
+|          | Chubby  | Zookeeper |
+| -------- | ------- | --------- |
+| Lock     | has api |           |
+| protocol | Paxos   | Zab       |
 
- 
 ## Links
 
 - [Chubby](/docs/CS/Distributed/Chubby.md)
