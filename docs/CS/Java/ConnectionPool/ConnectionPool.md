@@ -1,25 +1,26 @@
 ## Introduction
 
+
+
+Connection pooling is a well-known data access pattern. 
+Its main purpose is to reduce the overhead involved in performing database connections and read/write database operations.
+**At the most basic level,** **a connection pool is a database connection cache implementation** that can be configured to suit specific requirements.
+
 ## Connection Management
-
-
 
 maximum/minimum connection
 
 MinIdle
 
-
 fixed pool: minIdle == maxPoolSize
-
 
 IdleTimeout
 
 MaxLifetime
 
-
 #### pool-locking
 
-The prospect of "pool-locking" has been raised with respect to single actors that acquire many connections. This is largely an application-level issue. 
+The prospect of "pool-locking" has been raised with respect to single actors that acquire many connections. This is largely an application-level issue.
 Increasing the pool size can alleviate lockups in these scenarios, but we would urge you to examine first what can be done at the application level.
 
 ### connect timeout
@@ -29,7 +30,6 @@ leak connections
 ### keepalive
 
 statement execute timeout
-
 
 Test connections with isValid() before returning them from the pool
 
@@ -50,7 +50,7 @@ cache: statement
 ### Connection Issues
 
 > [Connect Java to a MySQL database Stack Overflow](https://stackoverflow.com/questions/2839321/connect-java-to-a-mysql-database/2840358#2840358)
-> 
+>
 > If you get a SQLException: Connection refused or Connection timed out or a MySQL specific CommunicationsException:
 > Communications link failure, then it means that the DB isn't reachable at all.
 >
@@ -74,6 +74,16 @@ cache: statement
 > 6. Restart the DB and fix your code accordingly that it closes connections in finally.
 > 7. Disable firewall and/or configure firewall/proxy to allow/forward the port.
 
-
 ### Dynamic Configuration
 
+## JDBC Connection Pooling Frameworks
+
+[Apache Commons DBCP](/docs/CS/Java/ConnectionPool/DBCP.md)
+
+[HikariCP](/docs/CS/Java/ConnectionPool/HiKariCP.md)
+
+[Druid](/docs/CS/Java/ConnectionPool/Druid.md)
+
+## Links
+
+　

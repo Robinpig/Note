@@ -128,8 +128,7 @@ Unlike monolithic apps built as a single indivisible unit, microservice apps con
   The ability to choose different programming languages is two sides of the same coin. Using different languages make deployment more difficult.
   In addition, it’s harder to switch programmers between development phases when each service is written in a different language.
 
-Microservices are good, but not for all types of apps. This pattern works great for evolving applications and complex systems.
-Consider choosing a microservices architecture when you have multiple experienced teams and when the app is complex enough to break it into services.
+**Microservices are good, but not for all types of apps.** This pattern works great for evolving applications and complex systems.
 When an application is large and needs to be flexible and scalable, microservices are beneficial.
 
 Monolithic apps consist of interdependent, indivisible units and feature very low development speed.

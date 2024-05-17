@@ -7,8 +7,6 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 - **Minimal dependency**: As we will see in a minute, you can get the whole framework with just a single dependency
 - **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
 - **Security**: Complete SSL/TLS and StartTLS support.
-
-
 - [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
 - [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
 - [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
@@ -48,8 +46,9 @@ It also allows you to implement your own event type without breaking the existin
 This is another differentiator against other frameworks.
 
 ## Sequence
-In Java-based networking, the fundamental construct is the class Socket . 
-Netty’s Channel interface provides an API that greatly simplifies the complexity of working directly with Socket. 
+
+In Java-based networking, the fundamental construct is the class Socket .
+Netty’s Channel interface provides an API that greatly simplifies the complexity of working directly with Socket.
 To work with TCP/IP Channels, we will deal with SocketChannel which represents the TCP connection between client and servers:
 
 SocketChannels are managed by EventLoop which is looking for new events, such as incoming data.. When an event occurs, it is eventually passed on to the appropriate Handler for example a ChannelHandler.
@@ -339,7 +338,7 @@ AllocateByteBuf
 - [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
 - [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
 - [Flink](/docs/CS/Java/Flink)
-- [Rocket MQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
+- [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Cassandra](/docs/CS/DB/Cassandra.md)
 - [Hadoop](/docs/CS/Java/Hadoop/Hadoop.md)
 

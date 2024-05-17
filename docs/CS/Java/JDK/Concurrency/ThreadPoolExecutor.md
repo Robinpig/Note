@@ -30,25 +30,20 @@ These classes employ a work-stealing scheduler that attains high throughput for 
 - Stability
   There is a limit on how many threads can be created.
 
-
-
-
 ![ThreadPoolExecutor](../img/ThreadPoolExecutor.png)
 
 ## Executor
 
-Thread pools offer the same benefit for thread management, and `java.util.concurrent` provides a flexible thread pool implementation as part of the Executor framework. 
+Thread pools offer the same benefit for thread management, and `java.util.concurrent` provides a flexible thread pool implementation as part of the Executor framework.
 The primary abstraction for task execution in the Java class libraries is not Thread, but `Executor`.
 This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.
+
 ```java
 public interface Executor {
    //The command may execute in a new thread, in a pooled thread, or in the calling thread
     void execute(Runnable command);
 }
 ```
-
-
-
 
 ### ExecutorService
 
@@ -94,7 +89,6 @@ public interface ExecutorService extends Executor {
 
 ### AbstractExecutorService
 
-
 Wrap and execute [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask) .
 
 ```
@@ -117,6 +111,7 @@ protected <T> RunnableFuture<T> newTaskFor(Callable<T> callable) {
 #### Implementation
 
 cancelAll
+
 ```
 private static <T> void cancelAll(ArrayList<Future<T>> futures) {
         cancelAll(futures, 0);
@@ -127,6 +122,7 @@ private static <T> void cancelAll(ArrayList<Future<T>> futures, int j) {
         futures.get(j).cancel(true);
 }
 ```
+
 <!-- tabs:start -->
 
 ##### **invokeAll**
@@ -170,8 +166,6 @@ public abstract class AbstractExecutorService implements ExecutorService {
     }
 }
 ```
-
-
 
 ##### **invokeAny**
 
@@ -339,6 +333,11 @@ Sets the core number of threads. This overrides any value set in the constructor
 
 - If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
 - If larger, new threads will, if needed, be started to execute any queued tasks.
+
+prestartAllCoreThreads
+
+allowCoreThreadTimeOut
+
 
 #### setMaximumPoolSize
 
@@ -544,13 +543,10 @@ RejectedExecution method that may be invoked by a ThreadPoolExecutor when execut
 In either case, the execute method invokes the `RejectedExecutionHandler.rejectedExecution(Runnable, ThreadPoolExecutor)` method of its RejectedExecutionHandler. Four predefined handler policies are provided:
 
 1. In the **default** `ThreadPoolExecutor.AbortPolicy`, the handler throws a runtime RejectedExecutionException upon rejection.
-
 2. In `ThreadPoolExecutor.CallerRunsPolicy`, the thread that invokes execute itself runs the task. This provides a simple feedback control mechanism that will slow down the rate that new tasks are submitted.
-
-3. In `ThreadPoolExecutor.DiscardPolicy`, a task that cannot be executed is simply dropped. 
+3. In `ThreadPoolExecutor.DiscardPolicy`, a task that cannot be executed is simply dropped.
 
    This policy is designed only for those rare cases in which task completion is never relied upon.
-
 4. In `ThreadPoolExecutor.DiscardOldestPolicy`, if the executor is not shut down, the task at the head of the work queue is dropped, and then execution is retried (which can fail again, causing this to be repeated.)
    This policy is rarely acceptable.  In nearly all cases, you should also cancel the task to cause an exception in any component waiting for its completion, and/or log the failure.
 
@@ -1126,7 +1122,6 @@ Or we can override a LinkedBlockingQueue to allow resizing thread safe.
 
 ## Executors
 
-
 Factory and utility methods for Executor, ExecutorService, ScheduledExecutorService, ThreadFactory, and Callable classes defined in this package. This class supports the following kinds of methods:
 Methods that create and return an ExecutorService set up with commonly useful configuration settings.
 Methods that create and return a ScheduledExecutorService set up with commonly useful configuration settings.
@@ -1134,14 +1129,14 @@ Methods that create and return a "wrapped" ExecutorService, that disables reconf
 Methods that create and return a ThreadFactory that sets newly created threads to a known state.
 Methods that create and return a Callable out of other closure-like forms, so they can be used in execution methods requiring Callable.
 
-
 <!-- tabs:start -->
-##### **newWorkStealingPool**
-Creates a thread pool that maintains enough threads to support the given parallelism level, and may use multiple queues to reduce contention. 
-The parallelism level corresponds to the maximum number of threads actively engaged in, or available to engage in, task processing. 
-The actual number of threads may grow and shrink dynamically. 
-A work-stealing pool makes no guarantees about the order in which submitted tasks are executed.
 
+##### **newWorkStealingPool**
+
+Creates a thread pool that maintains enough threads to support the given parallelism level, and may use multiple queues to reduce contention.
+The parallelism level corresponds to the maximum number of threads actively engaged in, or available to engage in, task processing.
+The actual number of threads may grow and shrink dynamically.
+A work-stealing pool makes no guarantees about the order in which submitted tasks are executed.
 
 ```java
 public static ExecutorService newWorkStealingPool(int parallelism) {
@@ -1151,10 +1146,12 @@ public static ExecutorService newWorkStealingPool(int parallelism) {
          null, true);
 }
 ```
+
 ##### **newFixedThreadPool**
-Creates a thread pool that reuses a fixed number of threads operating off a shared unbounded queue, using the provided ThreadFactory to create new threads when needed. At any point, at most nThreads threads will be active processing tasks. 
-If additional tasks are submitted when all threads are active, they will wait in the queue until a thread is available. 
-If any thread terminates due to a failure during execution prior to shutdown, a new one will take its place if needed to execute subsequent tasks. 
+
+Creates a thread pool that reuses a fixed number of threads operating off a shared unbounded queue, using the provided ThreadFactory to create new threads when needed. At any point, at most nThreads threads will be active processing tasks.
+If additional tasks are submitted when all threads are active, they will wait in the queue until a thread is available.
+If any thread terminates due to a failure during execution prior to shutdown, a new one will take its place if needed to execute subsequent tasks.
 The threads in the pool will exist until it is explicitly shutdown.
 
 ```java
@@ -1165,7 +1162,9 @@ public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory thr
                                   threadFactory);
 }
 ```
+
 ##### **newCachedThreadPool**
+
 Creates a thread pool that creates new threads as needed, but will reuse previously constructed threads when they are available, and uses the provided ThreadFactory to create new threads when needed.
 
 ```java
@@ -1176,7 +1175,9 @@ public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
                                   threadFactory);
 }
 ```
+
 ##### **newSingleThreadExecutor**
+
 Creates an Executor that uses a single worker thread operating off an unbounded queue, and uses the provided ThreadFactory to create a new thread when needed. Unlike the otherwise equivalent newFixedThreadPool(1, threadFactory) the returned executor is guaranteed not to be reconfigurable to use additional threads.
 
 ```java
@@ -1204,16 +1205,12 @@ public static ScheduledExecutorService newScheduledThreadPool(
 
 <!-- tabs:end -->
 
-|            | Cache                | Fix                   |
-| ---------- | -------------------- | --------------------- |
-| threads    | all non-core threads | all core threads      |
-| None tasks | recycle after 60s    | block on queue.take() |
-|            |                      |                       |
-|            |                      |                       |
-
-
-
-
+|              | Cache                 | Fix                   |
+| ------------ | --------------------- | --------------------- |
+| threads      | all non-core threads  | all core threads      |
+| None tasks   | recycle after 60s     | block on queue.take() |
+| disadvantage | unbound thread counts | unbound linked queue |
+|              |                       |                       |
 
 ## Links
 
