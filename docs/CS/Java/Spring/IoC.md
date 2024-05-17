@@ -1193,6 +1193,10 @@ Prohibit circular references by default.
 spring.main.allow-circular-references=false
 ```
 
+> [!TIP]
+> 
+> Self-injection can also create a circular dependency.
+
 See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
 
 1. isSingleton
