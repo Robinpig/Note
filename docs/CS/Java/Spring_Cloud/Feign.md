@@ -1,7 +1,7 @@
 ## Introduction
 
 [Feign](https://github.com/OpenFeign/feign) is a Java to HTTP client binder inspired by Retrofit, JAXRS-2.0, and WebSocket. 
-Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of [ReSTfulness](/docs/CS/Distributed/RPC/RESTful.md).
+Feign's first goal was reducing the complexity of binding Denominator uniformly to HTTP APIs regardless of [RESTfulness](/docs/CS/Distributed/RPC/RESTful.md).
 
 Feign uses tools like Jersey and CXF to write Java clients for ReST or SOAP services.
 Furthermore, Feign allows you to write your own code on top of http libraries such as Apache HC. 
@@ -32,19 +32,21 @@ Furthermore, Feign makes it easy to unit test your conversions knowing this.
 Spring Cloud adds support for Spring MVC annotations and for using the same HttpMessageConverters used by default in Spring Web. 
 Spring Cloud integrates Eureka, Spring Cloud CircuitBreaker, as well as Spring Cloud LoadBalancer to provide a load-balanced http client when using Feign.
 
+To include Feign in your project use the starter with group `org.springframework.cloud` and artifact id `spring-cloud-starter-openfeign`.
+
 > [!NOTE]
 > 
 > `spring-cloud-starter-openfeign` supports `spring-cloud-starter-loadbalancer`. 
 > However, as is an optional dependency.
 
 
-To include Feign in your project use the starter with group `org.springframework.cloud` and artifact id `spring-cloud-starter-openfeign`.
 
+A central concept in Spring Cloud’s Feign support is that of the named client. 
+Each feign client is part of an ensemble of components that work together to contact a remote server on demand, and the ensemble has a name that you give it as an application developer using the `@FeignClient` annotation.
+Spring Cloud creates a new ensemble as an ApplicationContext on demand for each named client using FeignClientsConfiguration.
+This contains (amongst other things) an feign.Decoder, a feign.Encoder, and a feign.Contract. It is possible to override the name of that ensemble by using the contextId attribute of the @FeignClient annotation.
 
-In the @FeignClient annotation the String value ("stores" above) is an arbitrary client name, which is used to create a Spring Cloud LoadBalancer client. 
-You can also specify a URL using the url attribute (absolute value or just a hostname). 
-The name of the bean in the application context is the fully qualified name of the interface. 
-To specify your own alias value you can use the qualifiers value of the @FeignClient annotation.
+If we want to create multiple feign clients with the same name or url so that they would point to the same server but each with a different custom configuration then we have to use contextId attribute of the @FeignClient in order to avoid name collision of these configuration beans.
 
 The load-balancer client above will want to discover the physical addresses for the "stores" service. 
 If your application is a Eureka client then it will resolve the service in the Eureka service registry.
@@ -74,21 +76,23 @@ To work around this problem you can use an ObjectProvider when autowiring your c
 
 Enable with `@EnableFeignClients`
 
-```java
-@Import(FeignClientsRegistrar.class)
-public @interface EnableFeignClients
-```
+Spring Cloud OpenFeign does not provide the following beans by default for feign, but still looks up beans of these types from the application context to create the feign client:
 
+- Logger.Level
+- Retryer
+- ErrorDecoder
+- Request.Options
+- Collection<RequestInterceptor>
+- SetterFactory
+- QueryMapEncoder
+- Capability (MicrometerObservationCapability and CachingCapability are provided by default)
+
+
+A bean of Retryer.NEVER_RETRY with the type Retryer is created by default, which will disable retrying. Notice this retrying behavior is different from the Feign default one, where it will automatically retry IOExceptions, treating them as transient network related exceptions, and any RetryableException thrown from an ErrorDecoder.
 
 ```java
 @Configuration(proxyBeanMethods = false)
 public class FeignClientsConfiguration {
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnMissingClass("org.springframework.data.domain.Pageable")
-    public Encoder feignEncoder(ObjectProvider<AbstractFormWriter> formWriterProvider) {
-        return springEncoder(formWriterProvider);
-    }
 
     @Bean
     @ConditionalOnMissingBean
@@ -97,6 +101,47 @@ public class FeignClientsConfiguration {
     }
 }
 ```
+
+Creating a bean of one of those type and placing it in a @FeignClient configuration (such as FooConfiguration above) allows you to override each one of the beans described. 
+Example:
+```java
+@Configuration
+public class FooConfiguration {
+	 @Bean
+    public Retryer feignRetryer() {
+        return new Retryer.Default();
+    }
+}
+```
+
+
+
+@FeignClient also can be configured using configuration properties.
+
+```yaml
+spring:
+    cloud:
+        openfeign:
+            client:
+                config:
+                    feignName:
+                        url: http://remote-service.com
+                        connectTimeout: 5000 #default 10s
+                        readTimeout: 5000    #default 60s 
+                        loggerLevel: full
+                        errorDecoder: com.example.SimpleErrorDecoder
+                        retryer: com.example.SimpleRetryer
+```
+> [!TIP]
+> 
+> If we create both @Configuration bean and configuration properties, configuration properties will win. It will override @Configuration values. 
+> But if you want to change the priority to @Configuration, you can change spring.cloud.openfeign.client.default-to-properties to false.
+
+
+In case the server is not running or available a packet results in connection refused. 
+The communication ends either with an error message or in a fallback.
+This can happen before the connectTimeout if it is set very low. The time taken to perform a lookup and to receive such a packet causes a significant part of this delay.
+It is subject to change based on the remote host that involves a DNS lookup.
 
 
 ### registerFeignClients

@@ -246,6 +246,11 @@ For the load-balancing mechanism, ReactiveLoadBalancer interface has been added 
 In order to get instances to select from reactive ServiceInstanceListSupplier is used.
 Currently we support a service-discovery-based implementation of ServiceInstanceListSupplier that retrieves available instances from Service Discovery using a Discovery Client available in the classpath.
 
+Spring Cloud LoadBalancer creates a separate Spring child context for each service id.
+By default, these contexts are initialised lazily, whenever the first request for a service id is being load-balanced.
+You can choose to load those contexts eagerly. 
+In order to do that, specify the service ids for which you want to do eager load using the `spring.cloud-loadbalancer.eager-load.clients` property.
+
 Spring Cloud Loadbalancer is a generic abstraction that can do the work that we used to do with [Netflix's Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md) project.
 
 ClientHttpRequestInterceptor
