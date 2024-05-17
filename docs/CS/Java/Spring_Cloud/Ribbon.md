@@ -1,6 +1,18 @@
 ## Introduction
 
-Ribbon is a client-side load balancer that gives you a lot of control over the behavior of HTTP and TCP clients. Feign already uses Ribbon.
+Ribbon is a client-side load balancer that gives you a lot of control over the behavior of HTTP and TCP clients. 
+It provides the following features
+
+- Load balancing
+- Fault tolerance
+- Multiple protocol (HTTP, TCP, UDP) support in an asynchronous and reactive model
+- Caching and batching
+
+Feign already uses Ribbon.
+
+> [!WARNING]
+> 
+> Last Release on Nov 17, 2021
 
 The following table shows the beans that Spring Cloud Netflix provides by default for Ribbon:
 
