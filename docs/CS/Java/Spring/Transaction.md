@@ -149,10 +149,14 @@ As a consequence, all participating data access operations need to execute withi
 
 > [!NOTE]
 > 
-> When using proxies, you should apply the @Transactional annotation only to methods with public visibility. If you do annotate protected, private or package-visible methods with the @Transactional annotation, no error is raised, but the annotated method does not exhibit the configured transactional settings. Consider the use of AspectJ (see below) if you need to annotate non-public methods.
+> When using proxies, you should apply the `@Transactional` annotation only to methods with public visibility. 
+> If you do annotate protected, private or package-visible methods with the `@Transactional` annotation, no error is raised, but the annotated method does not exhibit the configured transactional settings. 
+> Consider the use of AspectJ (see below) if you need to annotate non-public methods.
 
 
-The @Transactional annotation is metadata that specifies that an interface, class, or method must have transactional semantics; for example, "start a brand new read-only transaction when this method is invoked, suspending any existing transaction". The default @Transactional settings are as follows:
+The @Transactional annotation is metadata that specifies that an interface, class, or method must have transactional semantics; 
+for example, "start a brand new read-only transaction when this method is invoked, suspending any existing transaction". 
+The default @Transactional settings are as follows:
 
 - Propagation setting is PROPAGATION_REQUIRED.
 - Isolation level is ISOLATION_DEFAULT.
@@ -276,7 +280,6 @@ public class TransactionInterceptor extends TransactionAspectSupport implements 
 
 ```java
 // TransactionAspectSupport
-	/** Prepare a TransactionInfo for the given attribute and status object. */
 	protected TransactionInfo prepareTransactionInfo(@Nullable PlatformTransactionManager tm,
 			@Nullable TransactionAttribute txAttr, String joinpointIdentification,
 			@Nullable TransactionStatus status) {
@@ -293,11 +296,6 @@ public class TransactionInterceptor extends TransactionAspectSupport implements 
 		else {
 			// The TransactionInfo.hasTransaction() method will return false. We created it only
 			// to preserve the integrity of the ThreadLocal stack maintained in this class.
-			if (logger.isTraceEnabled()) {
-				logger.trace("No need to create transaction for [" + joinpointIdentification +
-						"]: This method is not transactional.");
-			}
-		}
 
 		// We always bind the TransactionInfo to the thread, even if we didn't create
 		// a new transaction here. This guarantees that the TransactionInfo stack
@@ -307,6 +305,190 @@ public class TransactionInterceptor extends TransactionAspectSupport implements 
 	}
 ```
 
+```properties
+logging.level.org.springframework.transaction.interceptor.TransactionAspectSupport=TRACE
+```
+
+
+
+```java
+public class TransactionInterceptor extends TransactionAspectSupport implements MethodInterceptor, Serializable {
+@Override
+	@Nullable
+	public Object invoke(MethodInvocation invocation) throws Throwable {
+		// Work out the target class: may be {@code null}.
+		// The TransactionAttributeSource should be passed the target class
+		// as well as the method, which may be from an interface.
+		Class<?> targetClass = (invocation.getThis() != null ? AopUtils.getTargetClass(invocation.getThis()) : null);
+
+		// Adapt to TransactionAspectSupport's invokeWithinTransaction...
+		return invokeWithinTransaction(invocation.getMethod(), targetClass, new CoroutinesInvocationCallback() {
+			@Override
+			@Nullable
+			public Object proceedWithInvocation() throws Throwable {
+				return invocation.proceed();
+			}
+			@Override
+			public Object getTarget() {
+				return invocation.getThis();
+			}
+			@Override
+			public Object[] getArguments() {
+				return invocation.getArguments();
+			}
+		});
+	}
+}
+
+public abstract class TransactionAspectSupport implements BeanFactoryAware, InitializingBean {
+@Nullable
+	protected Object invokeWithinTransaction(Method method, @Nullable Class<?> targetClass,
+			final InvocationCallback invocation) throws Throwable {
+
+		// If the transaction attribute is null, the method is non-transactional.
+		TransactionAttributeSource tas = getTransactionAttributeSource();
+		final TransactionAttribute txAttr = (tas != null ? tas.getTransactionAttribute(method, targetClass) : null);
+		final TransactionManager tm = determineTransactionManager(txAttr);
+
+		if (this.reactiveAdapterRegistry != null && tm instanceof ReactiveTransactionManager rtm) {
+			boolean isSuspendingFunction = KotlinDetector.isSuspendingFunction(method);
+			boolean hasSuspendingFlowReturnType = isSuspendingFunction &&
+					COROUTINES_FLOW_CLASS_NAME.equals(new MethodParameter(method, -1).getParameterType().getName());
+			if (isSuspendingFunction && !(invocation instanceof CoroutinesInvocationCallback)) {
+				throw new IllegalStateException("Coroutines invocation not supported: " + method);
+			}
+			CoroutinesInvocationCallback corInv = (isSuspendingFunction ? (CoroutinesInvocationCallback) invocation : null);
+
+			ReactiveTransactionSupport txSupport = this.transactionSupportCache.computeIfAbsent(method, key -> {
+				Class<?> reactiveType =
+						(isSuspendingFunction ? (hasSuspendingFlowReturnType ? Flux.class : Mono.class) : method.getReturnType());
+				ReactiveAdapter adapter = this.reactiveAdapterRegistry.getAdapter(reactiveType);
+				if (adapter == null) {
+					throw new IllegalStateException("Cannot apply reactive transaction to non-reactive return type [" +
+							method.getReturnType() + "] with specified transaction manager: " + tm);
+				}
+				return new ReactiveTransactionSupport(adapter);
+			});
+
+			InvocationCallback callback = invocation;
+			if (corInv != null) {
+				callback = () -> KotlinDelegate.invokeSuspendingFunction(method, corInv);
+			}
+			return txSupport.invokeWithinTransaction(method, targetClass, callback, txAttr, rtm);
+		}
+
+		PlatformTransactionManager ptm = asPlatformTransactionManager(tm);
+		final String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
+
+		if (txAttr == null || !(ptm instanceof CallbackPreferringPlatformTransactionManager cpptm)) {
+			// Standard transaction demarcation with getTransaction and commit/rollback calls.
+			TransactionInfo txInfo = createTransactionIfNecessary(ptm, txAttr, joinpointIdentification);
+
+			Object retVal;
+			try {
+				// This is an around advice: Invoke the next interceptor in the chain.
+				// This will normally result in a target object being invoked.
+				retVal = invocation.proceedWithInvocation();
+			}
+			catch (Throwable ex) {
+				// target invocation exception
+				completeTransactionAfterThrowing(txInfo, ex);
+				throw ex;
+			}
+			finally {
+				cleanupTransactionInfo(txInfo);
+			}
+
+			if (retVal != null && txAttr != null) {
+				TransactionStatus status = txInfo.getTransactionStatus();
+				if (status != null) {
+					if (retVal instanceof Future<?> future && future.isDone()) {
+						try {
+							future.get();
+						}
+						catch (ExecutionException ex) {
+							if (txAttr.rollbackOn(ex.getCause())) {
+								status.setRollbackOnly();
+							}
+						}
+						catch (InterruptedException ex) {
+							Thread.currentThread().interrupt();
+						}
+					}
+					else if (vavrPresent && VavrDelegate.isVavrTry(retVal)) {
+						// Set rollback-only in case of Vavr failure matching our rollback rules...
+						retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
+					}
+				}
+			}
+
+			commitTransactionAfterReturning(txInfo);
+			return retVal;
+		}
+
+		else {
+			Object result;
+			final ThrowableHolder throwableHolder = new ThrowableHolder();
+
+			// It's a CallbackPreferringPlatformTransactionManager: pass a TransactionCallback in.
+			try {
+				result = cpptm.execute(txAttr, status -> {
+					TransactionInfo txInfo = prepareTransactionInfo(ptm, txAttr, joinpointIdentification, status);
+					try {
+						Object retVal = invocation.proceedWithInvocation();
+						if (retVal != null && vavrPresent && VavrDelegate.isVavrTry(retVal)) {
+							// Set rollback-only in case of Vavr failure matching our rollback rules...
+							retVal = VavrDelegate.evaluateTryFailure(retVal, txAttr, status);
+						}
+						return retVal;
+					}
+					catch (Throwable ex) {
+						if (txAttr.rollbackOn(ex)) {
+							// A RuntimeException: will lead to a rollback.
+							if (ex instanceof RuntimeException runtimeException) {
+								throw runtimeException;
+							}
+							else {
+								throw new ThrowableHolderException(ex);
+							}
+						}
+						else {
+							// A normal return value: will lead to a commit.
+							throwableHolder.throwable = ex;
+							return null;
+						}
+					}
+					finally {
+						cleanupTransactionInfo(txInfo);
+					}
+				});
+			}
+			catch (ThrowableHolderException ex) {
+				throw ex.getCause();
+			}
+			catch (TransactionSystemException ex2) {
+				if (throwableHolder.throwable != null) {
+					logger.error("Application exception overridden by commit exception", throwableHolder.throwable);
+					ex2.initApplicationException(throwableHolder.throwable);
+				}
+				throw ex2;
+			}
+			catch (Throwable ex2) {
+				if (throwableHolder.throwable != null) {
+					logger.error("Application exception overridden by commit exception", throwableHolder.throwable);
+				}
+				throw ex2;
+			}
+
+			// Check result state: It might indicate a Throwable to rethrow.
+			if (throwableHolder.throwable != null) {
+				throw throwableHolder.throwable;
+			}
+			return result;
+		}
+	}
+}	
+```
 
 ### TransactionSynchronizationManager
 
@@ -317,8 +499,6 @@ Note that synchronizations can implement the `org.springframework.core.Ordered` 
 public abstract class TransactionSynchronizationManager {
     public static void registerSynchronization(TransactionSynchronization synchronization)
             throws IllegalStateException {
-
-        Assert.notNull(synchronization, "TransactionSynchronization must not be null");
         Set<TransactionSynchronization> synchs = synchronizations.get();
         if (synchs == null) {
             throw new IllegalStateException("Transaction synchronization is not active");
