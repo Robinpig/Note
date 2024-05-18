@@ -1,7 +1,5 @@
-# Lombok
-
-## 简述
-
+## Introduction
+ 
 Lombok能以简单的注解形式来简化java代码，提高开发人员的开发效率。例如开发中经常需要写的javabean，都需要花时间去添加相应的getter/setter，也许还要去写构造器、equals等方法，而且需要维护，当属性多时会出现大量的getter/setter方法，这些显得很冗长也没有太多技术含量，一旦修改属性，就容易出现忘记修改对应方法的失误。
 
 Lombok能通过注解的方式，在编译时自动为属性生成构造器、getter/setter、equals、hashcode、toString方法。出现的神奇就是在源码中没有getter和setter方法，但是在编译生成的字节码文件中有getter和setter方法。这样就省去了手动重建这些代码的麻烦，使代码看起来更简洁些。
@@ -28,7 +26,10 @@ Lombok能通过注解的方式，在编译时自动为属性生成构造器、ge
 
 ### @EqualsAndHashCode
 
- 该注解需应用在类上，使用该注解，lombok会为我们生成 equals(Object other) 和 hashcode() 方法，包括所有非静态属性和非transient的属性，同样该注解也可以通过 exclude 属性排除某些字段，of 属性指定某些字段，也可以通过 callSuper 属性在重写的方法中使用父类的字段，这样我们可以更灵活的定义bean的比对 。
+ 该注解需应用在类上，使用该注解，lombok会为我们生成 equals(Object other) 和 hashcode() 方法，包括所有非静态属性和非transient的属性，
+ 
+  exclude 属性排除某些字段，
+ of 属性指定某些字段，也可以通过 callSuper 属性在重写的方法中使用父类的字段，这样我们可以更灵活的定义bean的比对 。
 
 ### @ToString
 
