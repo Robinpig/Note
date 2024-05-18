@@ -229,3 +229,8 @@ In fact, in addition to allowing writes to be delayed, caching can permit them t
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md?id=MySQL)
+
+
+## References
+
+1. [MySQL Source Code Documentation](https://dev.mysql.com/doc/dev/mysql-server/latest/)
