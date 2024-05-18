@@ -166,6 +166,8 @@ public static int highestOneBit(int i) {
 
 ### BigDecimal
 
+use **BigDecimal(String)** to create object 
+
 use `compareTo()` rather than `equals()`
 
 `equals()` compares this BigDecimal with the specified Object for equality. Unlike compareTo, this method considers two BigDecimal objects equal only if they are **equal in value and scale** (thus 2.0 is not equal to 2.00 when compared by this method).
@@ -211,7 +213,6 @@ public int compareTo(BigDecimal val) {
   return (xsign > 0) ? cmp : -cmp;
 }
 ```
-use **BigDecimal(String)**  create object param must be notBlank
 
 ### BigInteger
 

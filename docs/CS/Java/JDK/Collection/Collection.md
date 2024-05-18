@@ -205,8 +205,12 @@ public static <T> List<T> asList(T... a) {
 }
 ```
 
-- When the parameter is primitiveType array, the List only has one element of this array.
-- The  java.util.Arrays$ArrayList can't use remove method.
+> [!WARNING]
+> 
+> When the parameter is primitiveType array, the List only has one element of this array.
+> Please using Arrays#stream instead.
+
+The java.util.Arrays$ArrayList can't use remove method.
 
 ## Collections
 
