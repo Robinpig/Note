@@ -305,11 +305,11 @@ public class TransactionInterceptor extends TransactionAspectSupport implements 
 	}
 ```
 
+### TransactionInterceptor
+
 ```properties
 logging.level.org.springframework.transaction.interceptor.TransactionAspectSupport=TRACE
 ```
-
-
 
 ```java
 public class TransactionInterceptor extends TransactionAspectSupport implements MethodInterceptor, Serializable {

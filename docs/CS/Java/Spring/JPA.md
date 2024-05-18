@@ -211,7 +211,11 @@ class QueryExecutorMethodInterceptor implements MethodInterceptor {
 }
 ```
 
+## Log
 
+```properties
+logging.level.org.springframework.orm.jpa=DEBUG
+```
 
 
 ## Links
