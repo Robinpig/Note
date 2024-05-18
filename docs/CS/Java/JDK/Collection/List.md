@@ -66,7 +66,28 @@ private void checkForComodification(final int expectedModCount) {
     }
 ```
 
+
+### subList
+
+Returns a view of the portion of this list between the specified fromIndex, inclusive, and toIndex, exclusive. 
+(If fromIndex and toIndex are equal, the returned list is empty.) The returned list is backed by this list, so non-structural changes in the returned list are reflected in this list, and vice-versa. 
+The returned list supports all of the optional list operations supported by this list.
+
+This method eliminates the need for explicit range operations (of the sort that commonly exist for arrays). 
+Any operation that expects a list can be used as a range operation by passing a subList view instead of a whole list. 
+For example, the following idiom removes a range of elements from a list:
+
+
+> [!TIP]
+> 
+> Stream#skip and Stream#limit instead.
+
 ## LinkedList
+
+> [!NOTE]
+> 
+> Does anyone actually use LinkedList? I wrote it, and I never use it. -- Joshua Bloch
+
 
 **Deque** means that the LinkedList supports insertion/deletion from head and tail.
 

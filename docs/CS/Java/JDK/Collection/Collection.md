@@ -195,7 +195,9 @@ ConcurrentHashMap UNSAFE.getObjectVolatile
 
 #### asList
 
-Returns a **fixed-size** list( **java.util.Arrays$ArrayList** ) backed by the specified array. (Changes to the returned list "write through" to the array.) This method acts as bridge between array-based and collection-based APIs, in combination with Collection.toArray. The returned list is serializable and implements RandomAccess.
+Returns a **fixed-size** list( **java.util.Arrays$ArrayList** ) backed by the specified array. (Changes to the returned list "write through" to the array.) 
+This method acts as bridge between array-based and collection-based APIs, in combination with Collection.toArray. The returned list is serializable and implements RandomAccess.
+
 This method also provides a convenient way to create a fixed-size list initialized to contain several elements:
 List<String> stooges = Arrays.asList("Larry", "Moe", "Curly");
 
@@ -203,14 +205,30 @@ List<String> stooges = Arrays.asList("Larry", "Moe", "Curly");
 public static <T> List<T> asList(T... a) {
     return new ArrayList<>(a);
 }
+
+private static class ArrayList<E> extends AbstractList<E>
+        implements RandomAccess, java.io.Serializable
+    {
+         private final E[] a;
+ArrayList(E[] array) {
+            a = Objects.requireNonNull(array);
+        }
+
+                @Override
+        public E set(int index, E element) {
+            E oldValue = a[index];
+            a[index] = element;
+            return oldValue;
+        }
+}
 ```
 
 > [!WARNING]
 > 
 > When the parameter is primitiveType array, the List only has one element of this array.
 > Please using Arrays#stream instead.
-
-The java.util.Arrays$ArrayList can't use remove method.
+>
+> And the java.util.Arrays$ArrayList not support to add/remove method.
 
 ## Collections
 
