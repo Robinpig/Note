@@ -39,6 +39,17 @@ OutOfMemoryError
 java.lang.OutOfMemoryError: Java heap space
 ```
 
+
+> [!TIP]
+>
+> Never throw a new Exception in finally clause. Or using addSuppressed.
+> Using `try-with-resources`
+
+
+#### InterruptedException
+
+See [Interrupts](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Interruptions) in Thread.
+
 athrow
 
 ```cpp
