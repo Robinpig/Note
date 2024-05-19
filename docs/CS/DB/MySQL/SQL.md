@@ -107,6 +107,15 @@ Like count(*), but suggest `count(*)`
  count(column)
 
 
+## NULL 
+
+
+- sum IFNULL(SUM(column), 0)
+- count(column) not contain NULL row, please use count(*)
+- IS NULL or IS NOT NULL in where clause
+
+ 
+
 
 
 ### limit
