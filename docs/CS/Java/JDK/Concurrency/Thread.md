@@ -1195,7 +1195,7 @@ void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
 
 *The `interrupt` method interrupts **this thread**.*
 Unless the current thread is interrupting itself, which is always permitted, the checkAccess method of this thread is invoked, which may cause a SecurityException to be thrown.
-
+The interruption is that it doesn’t actually interrupt a running thread — it just requests that the thread interrupt itself at the next convenient opportunity.
 1. If this thread is blocked in an invocation of the wait(), wait(long), or wait(long, int) methods of the Object class, or of the join(), join(long), join(long, int), sleep(long), or sleep(long, int), methods of this class, then its interrupt status will be cleared and it will receive an InterruptedException.
 
 2. If this thread is blocked in an I/O operation upon an InterruptibleChannel then the channel will be closed, the thread's interrupt status will be set, and the thread will receive a java.nio.channels.ClosedByInterruptException.
@@ -1204,6 +1204,12 @@ Unless the current thread is interrupting itself, which is always permitted, the
 3. If none of the previous conditions hold then this thread's interrupt status will be set.
 
 4. Interrupting a thread that is not alive need not have any effect.
+
+Threads may block for several reasons: waiting to wake up from a Thread.sleep(), waiting to acquire a lock, waiting for I/O completion, or waiting for the result of a computation in another thread, among others.
+
+The InterruptedException is usually thrown by all blocking methods so that it can be handled and the corrective action can be performed. There are several methods in Java that throw InterruptedException. These include Thread.sleep(), Thread.join(), the wait() method of the Object class, and put() and take() methods of BlockingQueue, to name a few.
+
+
 
 *The `interrupted` method Tests whether the **current thread** has been interrupted and clear interrupted status.*
 *The `isInterrupted` method tests whether **this thread** has been interrupted. A thread interruption ignored because a thread was not alive at the time of the interrupt will be reflected by this method returning false.*
