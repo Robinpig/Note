@@ -11,7 +11,8 @@ The java.net package supports two protocols,
 
 ### Socket
 
-This class represents a Socket Address with no protocol attachment. As an abstract class, it is meant to be subclassed with a specific, protocol dependent, implementation.
+This class represents a Socket Address with no protocol attachment. 
+As an abstract class, it is meant to be subclassed with a specific, protocol dependent, implementation.
 It provides an immutable object used by sockets for binding, connecting, or as returned values.
 
 ```java
@@ -423,6 +424,35 @@ public abstract Selector wakeup();
 
 
 ## AIO
+
+
+## File
+
+Read all lines from a file as a Stream. Unlike readAllLines, this method does not read all lines into a List, but instead populates lazily as the stream is consumed.
+
+```java
+public static Stream<String> lines(Path path, Charset cs) throws IOException {
+    // Use the good splitting spliterator if:
+    // 1) the path is associated with the default file system;
+    // 2) the character set is supported; and
+    // 3) the file size is such that all bytes can be indexed by int values
+    //    (this limitation is imposed by ByteBuffer)
+    if (path.getFileSystem() == FileSystems.getDefault() &&
+        FileChannelLinesSpliterator.SUPPORTED_CHARSET_NAMES.contains(cs.name())) {
+        FileChannel fc = FileChannel.open(path, StandardOpenOption.READ);
+
+        Stream<String> fcls = createFileChannelLinesStream(fc, cs);
+        if (fcls != null) {
+            return fcls;
+        }
+        fc.close();
+    }
+
+    return createBufferedReaderLinesStream(Files.newBufferedReader(path, cs));
+}
+```
+
+### transferTo
 
 
 
