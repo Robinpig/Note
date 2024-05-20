@@ -9,7 +9,7 @@ While the Spring IoC container does not depend on AOP, meaning you do not need t
 
 AOP is used in the Spring Framework to:
 
-- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management].
+- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Java/Spring/Transaction.md?id=Declarative-transaction).
 - allow users to implement custom aspects, complementing their use of OOP with AOP.
 
 ## AOP Concepts
@@ -36,6 +36,7 @@ However, it would be even more confusing if Spring used its own terminology.
 - Weaving: linking aspects with other application types or objects to create an advised object.
   This can be done at compile time (using the AspectJ compiler, for example), load time, or at runtime. Spring AOP, like other pure Java AOP frameworks, performs weaving at runtime.
 
+### Advice
 Spring AOP includes the following types of advice:
 
 - Before advice: Advice that runs before a join point but that does not have the ability to prevent execution flow proceeding to the join point (unless it throws an exception).
@@ -732,6 +733,11 @@ Factory that can create Spring AOP Advisors given AspectJ classes from classes h
 
 - Order: `Around` -> `Before` -> `After` -> `AfterReturning` -> `AfterThrowing`
 - Actual invoke: `Around` -> `Before` -> `AfterReturning` -> `AfterThrowing` -> `After`
+
+
+> [!TIP]
+> 
+> Usually, the metrics and logs are set to HIGHEST_PRECEDENCE so that it doesn't affect other advices, such as the tansaction interceptor.
 
 ```java
 public class AspectJAfterAdvice extends AbstractAspectJAdvice implements MethodInterceptor, AfterAdvice, Serializable {
