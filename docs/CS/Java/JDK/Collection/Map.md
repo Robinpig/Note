@@ -1029,6 +1029,16 @@ public ConcurrentHashMap(int initialCapacity) {
 
 ### put
 
+> The main reason that nulls aren’t allowed in ConcurrentMaps (ConcurrentHashMaps, ConcurrentSkipListMaps) is that ambiguities that may be just barely tolerable in non-concurrent maps can’t be accommodated. 
+> The main one is that if map.get(key) returns null, you can’t detect whether the key explicitly maps to null vs the key isn’t mapped. 
+> In a non-concurrent map, you can check this via map.contains(key),but in a concurrent one, the map might have changed between calls. ​
+> Further digressing: I personally think that allowing nulls in Maps (also Sets) is an open invitation for programs to contain errors that remain undetected until they break at just the wrong time. 
+> (Whether to allow nulls even in non-concurrent Maps/Sets is one of the few design issues surrounding Collections that Josh Bloch and I have long disagreed about.) ​
+>
+> It is very difficult to check for null keys and values in my entire application .
+>
+> Would it be easier to declare somewhere     static final Object NULL = new Object(); and replace all use of nulls in uses of maps with NULL? ​ -Doug
+
 1. Empty bin use CAS add
 2. else synchronized first node
 
