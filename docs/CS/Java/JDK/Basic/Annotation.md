@@ -28,7 +28,7 @@ Annotations applied to other annotations:
 - @Retention – Specifies how the marked annotation is stored—Whether in code only, compiled into the class, or available at runtime through reflection.
 - @Documented – Marks another annotation for inclusion in the documentation.
 - @Target – Marks another annotation to restrict what kind of java elements the annotation may be applied to.
-- @Inherited – Marks another annotation to be inherited to subclasses of annotated class (by default annotations are not inherited to subclasses).
+- @Inherited – Marks another annotation to be inherited to subclasses of **annotated class** (by default annotations are not inherited to subclasses).
 
 ### Annotation Hierarchy
 
@@ -204,8 +204,14 @@ and the class declaration has no annotation for this type, then the class's supe
 This process will be repeated until an annotation for this type is found, or the top of the class hierarchy (Object) is reached. 
 If no superclass has an annotation for this type, then the query will indicate that the class in question has no such annotation.
 
-Note that this meta-annotation type has no effect if the annotated type is used to annotate anything other than a class. 
-Note also that this meta-annotation only causes annotations to be inherited from superclasses; annotations on implemented interfaces have no effect.
+> [!NOTE]
+>
+> Note that this meta-annotation type has no effect if the annotated type is used to annotate anything other than a class. 
+> Note also that this meta-annotation only causes annotations to be inherited from superclasses; annotations on implemented interfaces have no effect.
+
+
+> AnnotatedElementUtil#findMergedAnnotation could help us. 
+
 
 ```java
 @Documented
