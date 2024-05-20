@@ -14,31 +14,25 @@ and dispatches them to the single appender attached to this appender.
 
 ```java
 public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implements AppenderAttachable<E> {
+    public static final int DEFAULT_QUEUE_SIZE = 256;
 
     @Override
     public void start() {
         // ...
-        
         blockingQueue = new ArrayBlockingQueue<E>(queueSize);
-
         if (discardingThreshold == UNDEFINED)
             discardingThreshold = queueSize / 5;
         
         worker.setDaemon(true);
         worker.setName("AsyncAppender-Worker-" + getName());
-        
-        // make sure this instance is marked as "started" before staring the worker Thread
         super.start();
         worker.start();
     }
 }
 ```
 
-### produce
 
-Discard logs when:
-1. remainingCapacity < discardingThreshold(default `queueSize / 5`)
-2. and events of level TRACE, DEBUG and INFO
+Discard TRACE, DEBUG and INFO logs when remainingCapacity < discardingThreshold(default `queueSize / 5`)
 
 ```java
 public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implements AppenderAttachable<E> {
@@ -64,17 +58,35 @@ public class AsyncAppenderBase<E> extends UnsynchronizedAppenderBase<E> implemen
 }
 ```
 
-put
+Default block if queue is full
 ```java
 private void put(E eventObject) {
-        if (neverBlock) {
-            // discard if queue is full
-            blockingQueue.offer(eventObject);
-        } else {
-            // cach interrupt and blocking put until enqueue successfully in while loop
-            putUninterruptibly(eventObject); 
+    if (neverBlock) {
+        // discard if queue is full
+        blockingQueue.offer(eventObject);
+    } else {
+        // cach interrupt and blocking put until enqueue successfully in while loop
+        putUninterruptibly(eventObject); 
+    }
+}
+
+private void putUninterruptibly(E eventObject) {
+    boolean interrupted = false;
+    try {
+        while (true) {
+            try {
+                blockingQueue.put(eventObject);
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+    } finally {
+        if (interrupted) {
+            Thread.currentThread().interrupt();
         }
     }
+}
 ```
 
 ### consume
@@ -107,7 +119,10 @@ class Worker extends Thread {
 }
 ```
 
+## Links
 
+- [Log](/docs/CS/log/Log.md)
+- [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
 
 
 
