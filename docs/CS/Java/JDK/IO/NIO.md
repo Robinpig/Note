@@ -57,12 +57,26 @@ Using a** **`Buffer` to read and write data typically follows this little 4-step
 
 ## Selectors
 
-A selector is an object that can monitor multiple channels for events (like: connection opened, data arrived etc.). Thus, a single thread can monitor multiple channels for data.
+A selector is an object that can monitor multiple channels for events (like: connection opened, data arrived etc.). 
+Thus, a single thread can monitor multiple channels for data.
 
 轮询注册的channel状态
 SelectorProvider sychronized 单例
 依据不同JDK生成不同的Selector实现类
 调用OS的接口创建FD
+
+A selectable channel's registration with a selector is represented by a SelectionKey object. A selector maintains three sets of selection keys:
+
+- The key set contains the keys representing the current channel registrations of this selector. This set is returned by the keys method.
+- The selected-key set is the set of keys such that each key's channel was detected to be ready for at least one of the operations identified in the key's interest set during a prior selection operation that adds keys or updates keys in the set. 
+  This set is returned by the selectedKeys method. The selected-key set is always a subset of the key set.
+- The cancelled-key set is the set of keys that have been cancelled but whose channels have not yet been deregistered. 
+  This set is not directly accessible. The cancelled-key set is always a subset of the key set.
+
+All three sets are empty in a newly-created selector.
+
+
+[Epoll](https://hg.openjdk.org/jdk/jdk/file/d8327f838b88/src/java.base/linux/classes/sun/nio/ch/EPollSelectorImpl.java)
 
 ### SelectorProvider
 
