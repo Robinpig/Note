@@ -264,6 +264,19 @@ public static <T> void sort(T[] a, Comparator<? super T> c) {
 }
 ```
 
+#### TimSort
+
+#### DualPivotQuicksort
+
+```java
+public static void sort(int[] a) {
+        DualPivotQuicksort.sort(a, 0, 0, a.length);
+    }
+```
+
+
+[The new optimized version of Dual-Pivot Quicksort](https://mail.openjdk.org/pipermail/core-libs-dev/2018-January/051000.html)
+
 ### binarySearch
 
 ```java
