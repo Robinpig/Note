@@ -7,10 +7,19 @@ Aspects enable the modularization of concerns such as transaction management tha
 One of the key components of Spring is the AOP framework.
 While the Spring IoC container does not depend on AOP, meaning you do not need to use AOP if you don't want to, AOP complements Spring IoC to provide a very capable middleware solution.
 
+As AspectJ uses compile time and classload time weaving, Spring AOP makes use of runtime weaving.
+
 AOP is used in the Spring Framework to:
 
 - provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Java/Spring/Transaction.md?id=Declarative-transaction).
 - allow users to implement custom aspects, complementing their use of OOP with AOP.
+
+
+If the target object to be proxied implements at least one interface, a JDK dynamic proxy is used. All of the interfaces implemented by the target type are proxied. 
+If the target object does not implement any interfaces, a CGLIB proxy is created.
+
+![](img/AOP.png)
+
 
 ## AOP Concepts
 
@@ -58,6 +67,9 @@ The concept of join points matched by pointcuts is the key to AOP, which disting
 Pointcuts enable advice to be targeted independently of the object-oriented hierarchy.
 For example, you can apply an around advice providing declarative transaction management to a set of methods that span multiple objects (such as all business operations in the service layer).
 
+
+
+
 ### Pointcut
 
 ```java
@@ -82,7 +94,7 @@ Pointcut types:
 
 ### AOP Hierarchy
 
-![](img/AOP.png)
+![](img/Hierarchy.png)
 
 ## start
 
