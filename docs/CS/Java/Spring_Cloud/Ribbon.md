@@ -243,6 +243,28 @@ Default use [ZoneAwareLoadBalancer](/docs/CS/Java/Spring_Cloud/Ribbon.md?id=choo
 		RestClientRibbonConfiguration.class, HttpClientRibbonConfiguration.class })
 public class RibbonClientConfiguration {
 
+    public static final int DEFAULT_CONNECT_TIMEOUT = 1000;
+
+    public static final int DEFAULT_READ_TIMEOUT = 1000;
+
+
+    @Bean
+    @ConditionalOnMissingBean
+    public IClientConfig ribbonClientConfig() {
+        DefaultClientConfigImpl config = new DefaultClientConfigImpl();
+
+        config.loadProperties(this.name);
+
+        config.set(CommonClientConfigKey.ConnectTimeout, getProperty(
+                CommonClientConfigKey.ConnectTimeout, DEFAULT_CONNECT_TIMEOUT));
+
+        config.set(CommonClientConfigKey.ReadTimeout,
+                getProperty(CommonClientConfigKey.ReadTimeout, DEFAULT_READ_TIMEOUT));
+
+        config.set(CommonClientConfigKey.GZipPayload, DEFAULT_GZIP_PAYLOAD);
+        return config;
+    }
+    
     @Bean
     @ConditionalOnMissingBean
     public ILoadBalancer ribbonLoadBalancer(IClientConfig config,
@@ -256,8 +278,12 @@ public class RibbonClientConfiguration {
     }
 }
 ```
+> [!TIP]
+> 
+>
 
-
+feign.client.config.default.readTimeout=3000
+feign.client.config.default.connectTimeout=3000
 
 
 
