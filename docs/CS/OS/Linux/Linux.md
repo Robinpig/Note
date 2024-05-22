@@ -18,26 +18,27 @@ cat /proc/version
 Directory
 
 
-| Directory |                                                                                                                                                                                                           |  |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | - |
-| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                     |  |
-| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources. There is a separate subdirectory for each processor architecture supported by the kernel.                   |  |
-| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book). It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |  |
-| mm        | High-level memory management resides in mm/.                                                                                                                                                              |  |
-| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                             |  |
-| include   | include/ contains all header files with publicly exported functions.                                                                                                                                      |  |
-| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                |  |
-| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                         |  |
-| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel, including data structures to implement various trees and data compression routines.                              |  |
-| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                         |  |
-| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                              |  |
-| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                               |  |
-| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                  |  |
-| firmware  |                                                                                                                                                                                                           |  |
-| virt      |                                                                                                                                                                                                           |  |
-| usr       |                                                                                                                                                                                                           |  |
-| tools     |                                                                                                                                                                                                           |  |
-| block     |                                                                                                                                                                                                           |  |
+| Directory |                                                                                                                                                                                                                |  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | - |
+| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                          |  |
+| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources.<br />There is a separate subdirectory for each processor architecture supported by the kernel.                    |  |
+| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book).<br />It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |  |
+| mm        | High-level memory management resides in mm/.                                                                                                                                                                   |  |
+| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                                  |  |
+| include   | include/ contains all header files with publicly exported functions.                                                                                                                                           |  |
+| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                     |  |
+| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                              |  |
+| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel,<br />including data structures to implement various trees and data compression routines.                               |  |
+| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                               |  |
+| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                                   |  |
+| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                                     |  |
+| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                       |  |
+|           |                                                                                                                                                                                                                |  |
+| firmware  |                                                                                                                                                                                                                |  |
+| virt      |                                                                                                                                                                                                                |  |
+| usr       |                                                                                                                                                                                                                |  |
+| tools     |                                                                                                                                                                                                                |  |
+| block     | block device                                                                                                                                                                                                   |  |
 
 ```shell
 usr/src/kernels/
@@ -76,7 +77,6 @@ It's called spurious because the thread has seemingly been awakened for no reaso
 - To allow for implementation flexibility in dealing with error conditions and races inside the operating system, condition variables may also be allowed to return from a wait even if not signaled, though it is not clear how many implementations actually do that.
   In the Solaris implementation of condition variables, a spurious wakeup may occur without the condition being signaled if the process is signaled; the wait system call aborts and returns EINTR.
   **The Linux pthread implementation of condition variables guarantees it will not do that.**
-
 
 Much more compelling reason for introducing concept of spurious wakeups is provided in [this answer at SO](https://stackoverflow.com/a/1051816/839601) that is based on additional details provided in an (older version) of that very article:
 
