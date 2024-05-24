@@ -28,5 +28,89 @@ The JNDI Lookup only supports the java protocol or no protocol.
 
 **Java's JNDI module is not available on Android.**
 
+
+## Async
+
+
+
+get stack trace(not suggest to enable in PROD)
+
+- 1.8 new throwable
+- 9+ stackwalker
+
+```c++
+// javaclasses.cpp
+void java_lang_Throwable::get_stack_trace_elements(int depth, Handle backtrace,
+                                                   objArrayHandle stack_trace_array_h, TRAPS) {
+
+    // ...
+    InstanceKlass* holder = InstanceKlass::cast(java_lang_Class::as_Klass(bte._mirror()));
+    methodHandle method (THREAD, holder->method_with_orig_idnum(bte._method_id, bte._version));
+
+    java_lang_StackTraceElement::fill_in(stack_trace_element, holder,
+                                         method,
+                                         bte._version,
+                                         bte._bci,
+                                         bte._name,
+                                         CHECK);
+  }
+}
+```
+
+
+```cpp
+// stackwalk.cpp
+oop StackWalk::walk(Handle stackStream, jlong mode, int skip_frames, Handle cont_scope, Handle cont,
+                    int frame_count, int start_index, objArrayHandle frames_array,
+                    TRAPS) {
+  // ...
+  // Setup traversal onto my stack.
+  if (live_frame_info(mode)) {
+    RegisterMap regMap = cont.is_null() ? RegisterMap(jt,
+                                                      RegisterMap::UpdateMap::include,
+                                                      RegisterMap::ProcessFrames::include,
+                                                      RegisterMap::WalkContinuation::include)
+                                        : RegisterMap(cont(), RegisterMap::UpdateMap::include);
+    LiveFrameStream stream(jt, &regMap, cont_scope, cont);
+    return fetchFirstBatch(stream, stackStream, mode, skip_frames, frame_count,
+                           start_index, frames_array, THREAD);
+  } else {
+    JavaFrameStream stream(jt, mode, cont_scope, cont);
+    return fetchFirstBatch(stream, stackStream, mode, skip_frames, frame_count,
+                           start_index, frames_array, THREAD);
+  }
+}
+```
+
+
+### RingBuffer
+
+
+
+
+### Metrics
+
+
+
+### Batch flush
+
+
+### Wait strategy
+
+
+AsyncLoggerConfig.WaitStrategy=Sleep
+
+
+
+
+
+
+
 ## Links
 
+- [logback](/docs/CS/log/logback.md)
+
+
+## References
+
+1. [LMAX Disruptor](https://lmax-exchange.github.io/disruptor/)

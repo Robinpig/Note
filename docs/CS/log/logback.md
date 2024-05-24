@@ -123,6 +123,7 @@ class Worker extends Thread {
 
 - [Log](/docs/CS/log/Log.md)
 - [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+- [Log4j](/docs/CS/Java/Log4j.md)
 
 
 
