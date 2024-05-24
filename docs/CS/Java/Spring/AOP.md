@@ -379,6 +379,7 @@ public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
   }
 }
 ```
+#### createAopProxy
 
 <!-- tabs:start -->
 
