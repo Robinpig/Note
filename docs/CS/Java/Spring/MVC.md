@@ -524,6 +524,12 @@ public class DispatcherServlet extends FrameworkServlet {
 1. @WebFilter @ServletComponentScan FilterRegistration
 2. @Component + implements Filter
 
+ServletComponentRegisteringPostProcessor
+
+actual FilterRegistrationBean
+
+Filter will be create when web server start
+
 see [FilterChain.doFilter() in Tomcat](/docs/CS/Java/Tomcat/Connector.md?id=doFilter)
 
 Spring MVC provides fine-grained support for CORS configuration through annotations on controllers.
@@ -580,7 +586,43 @@ public interface WebMvcConfigurer {
 }
 ```
 
+#### Request Header Resolver
+
+receive all headers
+```
+@RequestHeader() MultiValueMap map
+// Perfer below way
+@RequestHeader() HttpHeaders map
+```
+
+request header in MultiValueMap are case-sensitive
+
+
 ### Converter
+
+```java
+public class FormattingConversionService extends GenericConversionService
+		implements FormatterRegistry, EmbeddedValueResolverAware {
+    @Override
+    public void addFormatterForFieldAnnotation(AnnotationFormatterFactory<? extends Annotation> annotationFormatterFactory) {
+        Class<? extends Annotation> annotationType = getAnnotationType(annotationFormatterFactory);
+        if (this.embeddedValueResolver != null &&
+                annotationFormatterFactory instanceof EmbeddedValueResolverAware embeddedValueResolverAware) {
+            embeddedValueResolverAware.setEmbeddedValueResolver(this.embeddedValueResolver);
+        }
+        Set<Class<?>> fieldTypes = annotationFormatterFactory.getFieldTypes();
+        for (Class<?> fieldType : fieldTypes) {
+            addConverter(new AnnotationPrinterConverter(annotationType, annotationFormatterFactory, fieldType));
+            addConverter(new AnnotationParserConverter(annotationType, annotationFormatterFactory, fieldType));
+        }
+    }
+}
+```
+
+```
+@DateTimeFormat(pattern="yyyy-MM-dd HH:mm:ss") Date date
+```
+
 
 Avoid response can not cast to String Exception when we transform response String to Object
 
@@ -681,6 +723,56 @@ logging:
     org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor: debug
 ```
 
+validate requestBody
+
+```java
+// HandlerMethodArgumentResolverComposite
+@Nullable
+public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+    NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+
+    HandlerMethodArgumentResolver resolver = getArgumentResolver(parameter);
+    if (resolver == null) {
+    throw new IllegalArgumentException("Unsupported parameter type [" +
+    parameter.getParameterType().getName() + "]. supportsParameter should be called first.");
+    }
+    return resolver.resolveArgument(parameter, mavContainer, webRequest, binderFactory);
+}
+        
+// RequestResponseBodyMethodProcessor
+@Override
+public boolean supportsParameter(MethodParameter parameter) {
+    return parameter.hasParameterAnnotation(RequestBody.class);
+}
+
+@Nullable
+public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+    parameter = parameter.nestedIfOptional();
+    Object arg = readWithMessageConverters(webRequest, parameter, parameter.getNestedGenericParameterType());
+
+    if (binderFactory != null) {
+        String name = Conventions.getVariableNameForParameter(parameter);
+        ResolvableType type = ResolvableType.forMethodParameter(parameter);
+        WebDataBinder binder = binderFactory.createBinder(webRequest, arg, name, type);
+        if (arg != null) {
+            // Validate the binding target if applicable.
+            // The default implementation checks for @jakarta.validation.Valid, Spring's org.springframework.validation.annotation.Validated, 
+            // and custom annotations whose name starts with "Valid".
+            validateIfApplicable(binder, parameter);
+            if (binder.getBindingResult().hasErrors() && isBindExceptionRequired(binder, parameter)) {
+                throw new MethodArgumentNotValidException(parameter, binder.getBindingResult());
+            }
+        }
+        if (mavContainer != null) {
+            mavContainer.addAttribute(BindingResult.MODEL_KEY_PREFIX + name, binder.getBindingResult());
+        }
+    }
+
+    return adaptArgumentIfNecessary(arg, parameter);
+}
+```
+nested filed validation must annotate with ` @jakarta.validation.Valid`
 
 
 ### Http2

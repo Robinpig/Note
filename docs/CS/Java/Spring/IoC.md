@@ -14,32 +14,30 @@ The advantages of this architecture are:
 - greater modularity of a program
 - greater ease in testing a program by isolating a component or mocking its dependencies, and allowing components to communicate through contracts
 
->  [!Note]
+Dependency injection (DI) is a specialized form of IoC, whereby objects define their dependencies (that is, the other objects they work with) only through constructor arguments, arguments to a factory method, or properties that are set on the object instance after it is constructed or returned from a factory method. 
+The IoC container then injects those dependencies when it creates the bean. 
+This process is fundamentally the inverse (hence the name, Inversion of Control) of the bean itself controlling the instantiation or location of its dependencies by using direct construction of classes or a mechanism such as the Service Locator pattern.
+
+> [!Note]
 >
 > We can achieve Inversion of Control through various mechanisms such as: Strategy design pattern, Service Locator pattern, Factory pattern, and Dependency Injection (DI).
 
-### DI
-
-Dependency injection is a pattern we can use to implement IoC, where the control being inverted is setting an object's dependencies.
-**Dependency Injection in Spring can be done through constructors, setters or fields:**
-
-- Constructor-Based Dependency Injection. Using constructors to create object instances is more natural from the OOP standpoint.
-- Setter-Based Dependency Injection
-- Field-Based Dependency Injection `org.springframework.beans.factory.annotation.Autowired` / `javax.annotation.Resource` / `javax.inject.Inject`
-
-The table below summarizes our discussion.
 
 
-| Scenario                                                                 | @Resource | @Inject | @Autowired |
-| :----------------------------------------------------------------------- | --------- | ------- | ---------- |
-| Application-wide use of singletons through polymorphism                  | ✗        | ✔      | ✔         |
-| Fine-grained application behavior configuration through polymorphism     | ✔        | ✗      | ✗         |
-| Dependency injection should be handled solely by the Jakarta EE platform | ✔        | ✔      | ✗         |
-| Dependency injection should be handled solely by the Spring Framework    | ✗        | ✗      | ✔         |
+The org.springframework.beans and org.springframework.context packages are the basis for Spring Framework’s IoC container. 
+The BeanFactory interface provides an advanced configuration mechanism capable of managing any type of object. 
+ApplicationContext is a sub-interface of BeanFactory.
+It adds:
 
-Spring doesn't support constructor injection in an abstract class.
+- Easier integration with Spring’s AOP features
+- Message resource handling (for use in internationalization)
+- [Event publication](/docs/CS/Java/Spring/Event.md)
+- Application-layer specific contexts such as the WebApplicationContext for use in web applications.
 
-## BeanFactory Hierarchy
+ In short, the BeanFactory provides the configuration framework and basic functionality, and the ApplicationContext adds more enterprise-specific functionality. 
+
+## Container Overview
+
 
 <div style="text-align: center;">
 
@@ -139,6 +137,7 @@ On shutdown of a bean factory, the following lifecycle methods apply:
 2. DisposableBean's destroy
 3. a custom destroy-method definition
 
+
 ### ApplicationContext
 
 The Spring framework provides several implementations of the ApplicationContext interface:
@@ -197,6 +196,99 @@ public interface FactoryBean<T> {
 }
 
 ```
+
+
+
+## Bean Overview
+### Bean Scope
+
+
+| Scope       | Description                                                                                                                                                                                                                                                             |
+| :---------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| singleton   | (Default) Scopes a single bean definition to a single object instance for each Spring IoC container.                                                                                                                                                                    |
+| prototype   | Scopes a single bean definition to any number of object instances.                                                                                                                                                                                                      |
+| request     | Scopes a single bean definition to the lifecycle of a single HTTP request. <br />That is, each HTTP request has its own instance of a bean created off the back of a single bean definition. <br />Only valid in the context of a web-aware Spring`ApplicationContext`. |
+| session     | Scopes a single bean definition to the lifecycle of an HTTP`Session`. <br />Only valid in the context of a web-aware Spring `ApplicationContext`.                                                                                                                       |
+| application | Scopes a single bean definition to the lifecycle of a`ServletContext`. <br />Only valid in the context of a web-aware Spring `ApplicationContext`.                                                                                                                      |
+| websocket   | Scopes a single bean definition to the lifecycle of a`WebSocket`. <br />Only valid in the context of a web-aware Spring `ApplicationContext`.                                                                                                                           |
+
+
+Spring’s concept of a singleton bean differs from the singleton pattern as defined in the Gang of Four (GoF) patterns book. 
+The GoF singleton hard-codes the scope of an object such that one and only one instance of a particular class is created per ClassLoader. 
+The scope of the Spring singleton is best described as being per-container and per-bean.
+The singleton scope is the default scope in Spring.
+
+The non-singleton prototype scope of bean deployment results in the creation of a new bean instance every time a request for that specific bean is made. 
+That is, the bean is injected into another bean or you request it through a getBean() method call on the container. 
+As a rule, you should use the prototype scope for all stateful beans and the singleton scope for stateless beans.
+
+In contrast to the other scopes, Spring does not manage the complete lifecycle of a prototype bean. 
+The container instantiates, configures, and otherwise assembles a prototype object and hands it to the client, with no further record of that prototype instance. 
+**Thus, although initialization lifecycle callback methods are called on all objects regardless of scope, in the case of prototypes,
+configured destruction lifecycle callbacks are not called. 
+The client code must clean up prototype-scoped objects and release expensive resources that the prototype beans hold.** 
+To get the Spring container to release resources held by prototype-scoped beans,
+try using a custom bean post-processor which holds a reference to beans that need to be cleaned up.
+> [!NOTE]
+> 
+> In some respects, the Spring container’s role in regard to a prototype-scoped bean is a replacement for the Java new operator. 
+> All lifecycle management past that point must be handled by the client.
+
+
+
+### Bean name
+Derive a default bean name from the given bean definition.
+The default implementation simply builds a decapitalized version of the short class name: e.g. "mypackage.MyJdbcDao" → "myJdbcDao".
+Uncapitalize a String in JavaBeans property format, changing the first letter to lower case as per Character.toLowerCase(char), **unless the initial two letters are upper case in direct succession**.
+
+Note that inner classes will thus have names of the form "outerClassName.InnerClassName", which because of the period in the name may be an issue if you are autowiring by name.
+
+
+```java
+	protected String buildDefaultBeanName(BeanDefinition definition) {
+		String beanClassName = definition.getBeanClassName();
+		Assert.state(beanClassName != null, "No bean class name set");
+		String shortClassName = ClassUtils.getShortName(beanClassName);
+		return StringUtils.uncapitalizeAsProperty(shortClassName);
+	}
+```
+
+
+
+### destroy
+
+The optional name of a method to call on the bean instance upon closing the application context, for example a close() method on a JDBC DataSource implementation, or a Hibernate SessionFactory object. The method must have no arguments but may throw any exception.
+As a convenience to the user, the container will attempt to infer a destroy method against an object returned from the @Bean method. 
+For example, given an @Bean method returning an Apache Commons DBCP BasicDataSource, the container will notice the close() method available on that object and automatically register it as the destroyMethod. 
+This 'destroy method inference' is currently limited to detecting only public, no-arg methods named '`close`' or '`shutdown`'.
+The method may be declared at any level of the inheritance hierarchy and will be detected regardless of the return type of the @Bean method (i.e., detection occurs reflectively against the bean instance itself at creation time).
+
+## Dependencies
+
+### Dependency Injection
+
+Dependency injection is a pattern we can use to implement IoC, where the control being inverted is setting an object's dependencies.
+**Dependency Injection in Spring can be done through constructors, setters or fields:**
+
+- Constructor-Based Dependency Injection. Using constructors to create object instances is more natural from the OOP standpoint.
+- Setter-Based Dependency Injection
+- Field-Based Dependency Injection `org.springframework.beans.factory.annotation.Autowired` / `javax.annotation.Resource` / `javax.inject.Inject`
+
+The table below summarizes our discussion.
+
+
+| Scenario                                                                 | @Resource             | @Inject               | @Autowired            |
+| :----------------------------------------------------------------------- | --------------------- | --------------------- | --------------------- |
+| Application-wide use of singletons through polymorphism                  | ✗                    | ✔                    | ✔                    |
+| Fine-grained application behavior configuration through polymorphism     | ✔                    | ✗                    | ✗                    |
+| Dependency injection should be handled solely by the Jakarta EE platform | ✔                    | ✔                    | ✗                    |
+| Dependency injection should be handled solely by the Spring Framework    | ✗                    | ✗                    | ✔                    |
+| Matching Order                                                           | Name, Type, Qualifier | Type, Qualifier, Name | Type, Qualifier, Name |
+
+Spring doesn't support constructor injection in an abstract class.
+
+
+
 
 ## refresh
 
@@ -980,7 +1072,6 @@ Bean lifecycle:
 - using
 - destroy
 
-
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019114800284.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
 
 ## getBean
@@ -1194,7 +1285,7 @@ spring.main.allow-circular-references=false
 ```
 
 > [!TIP]
-> 
+>
 > Self-injection can also create a circular dependency.
 
 See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
@@ -1936,6 +2027,12 @@ public class CglibSubclassCreator {
     }
 }
 ```
+
+##### registerDisposableBeanIfNecessary
+
+See bean destroy method
+
+DisposableBeanAdapter#hasDestroyMethod
 
 #### markBeanAsCreated
 
@@ -2693,10 +2790,6 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 }
 ```
 
-
-
-
-
 ## Message Resolution
 
 Furthermore, Spring provides two *MessageSource* implementations, *ResourceBundleMessageSource* and *StaticMessageSource*.
@@ -2754,8 +2847,6 @@ see `BeanPostProcessor.postProcessProperties()`
 
 Disposable
 
-
-
 ### PropertySource
 
 Spring 3.1 also introduces the new `@PropertySource` annotation as a convenient mechanism for adding property sources to the environment.
@@ -2770,8 +2861,6 @@ public class PropertiesWithJavaConfig {
     //...
 }
 ```
-
-
 
 ## Links
 

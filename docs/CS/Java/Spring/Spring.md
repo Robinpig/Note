@@ -28,14 +28,12 @@ The most well known of these enhancements is autoconfiguration, where Spring Boo
 
 ### Core
 
-- [The IoC Container](/docs/CS/Java/Spring/IoC.md)
-- [Resources]
-- [Validation, Data Binding, and Type Conversion]
-- [Spring Expression Language]
-- [Aspect Oriented Programming with Spring](/docs/CS/Java/Spring/AOP.md)
-- [Data Buffers and Codecs]
-- [Event](/docs/CS/Java/Spring/Event.md)
-- [AOT](/docs/CS/Java/Spring/AOT.md)
+Foremost amongst these is the Spring Framework’s [Inversion of Control (IoC)](/docs/CS/Java/Spring/IoC.md) container. 
+A thorough treatment of the Spring Framework’s IoC container is closely followed by comprehensive coverage of Spring’s [Aspect-Oriented Programming (AOP)](/docs/CS/Java/Spring/AOP.md) technologies.
+
+[AOT](/docs/CS/Java/Spring/AOT.md) processing can be used to optimize your application ahead-of-time. It is typically used for native image deployment using GraalVM.
+
+
 
 ### Web
 
