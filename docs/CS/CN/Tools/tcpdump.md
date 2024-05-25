@@ -12,7 +12,7 @@ strict digraph {
     BPF [shape="polygon" ]
     tcpdump -> libpcap -> BPF
 }
-
+```
 
 tcpdump before ip_rcv or arp_rcv
 
