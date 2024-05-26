@@ -24,7 +24,7 @@ jcmd process_id command optional_arguments
 | --------- | ---- |
 | VM.uptime |      |
 
-### jmc
+
 
 ### jconsole
 
@@ -81,7 +81,14 @@ jinfo command process_id
 
 ### jstack
 
+top -H pid
+
 jstack process_id  == jcmd process_id Thread.print
+
+
+vjtop
+
+
 
 
 ### jmap
@@ -92,7 +99,7 @@ jstack process_id  == jcmd process_id Thread.print
 
 ## JFR
 
-
+## JMC
 
 ### PerfData
 
