@@ -32,6 +32,38 @@ The [Collection](/docs/CS/Java/JDK/Collection/Collection.md) in Java is a framew
 
 [JVM (Java Virtual Machine)](/docs/CS/Java/JDK/JVM/JVM.md) is an abstract machine. It is a specification that provides runtime environment in which java bytecode can be executed.
 
+
+## Security
+
+if you want to high security, please enable
+
+-Djava.security.manager
+
+
+SecurityManger
+
+
+[JEP 332: Transport Layer Security (TLS) 1.3](https://openjdk.org/jeps/332)
+
+
+
+keytool
+
+jarsigner
+
+
+
+### Zip Bomb Attack
+
+The central idea of zip bomb attacks is to exploit the characteristics of the zip compressor and its techniques to create small and easy-to-transport zip files. However, these files require many computational resources (time, processing, memory, or disk) to uncompress.
+
+The most common objective of a zip bomb is rapidly consuming the available computer memory in a relatively CPU-intensive process. In such a way, the attacker expects that the computer victim of a zip bomb crashes at some point.
+
+However, attackers may design zip bombs to exploit other characteristics of software installed on the victim’s computer. For example, some zip bombs aim to crash file systems without consuming all the computer’s memory.
+
+
+
+
 ## Projects
 
 A Project is a collaborative effort to produce a specific artifact, which may be a body of code, or documentation, or some other material.
