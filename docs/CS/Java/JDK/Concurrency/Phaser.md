@@ -4,7 +4,6 @@ A Phaser provides a more flexible form of barrier that may be used to control ph
 A reusable synchronization barrier, similar in functionality to CyclicBarrier and CountDownLatch but supporting more flexible usage.
 
 
-
 ```java
 public Phaser() {
     this(null, 0);
