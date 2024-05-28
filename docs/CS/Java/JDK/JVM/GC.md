@@ -112,15 +112,20 @@ False Sharing
 
 ## MetaSpace
 
-Starting with Java 8, the MetaSpace memory space replaces the PermGen space. The implementation differs from the PermGen and this space of the heap is now automatically resized.
+Starting with Java 8, the MetaSpace memory space replaces the PermGen space. 
+The implementation differs from the PermGen and this space of the heap is now automatically resized.
 
-This avoids the problem of applications running out of memory due to the limited size of the PermGen space of the heap. The Metaspace memory can be garbage collected and the classes that are no longer used can be automatically cleaned when the Metaspace reaches its maximum size.
-
--Xnoclassgc -verbose:class -XX:+TraceClassLoading -XX:+TraceClassUnLoading
+This avoids the problem of applications running out of memory due to the limited size of the PermGen space of the heap. 
+The Metaspace memory can be garbage collected and the classes that are no longer used can be automatically cleaned when the Metaspace reaches its maximum size.
+```
+-Xnoclassgc -verbose:class -XX:+TraceClassLoading -XX:+TraceClassUnLoading -XX:+ClassUnloadingWithConcurrentMark -XX:+PrintAdaptiveSizePolicy
+```
 
 
 ## Young GC 问题
 
+
+If it takes long time, check the size
 ```
 -XX:+UsePSAdaptiveSurvivorSizePolicy
 
@@ -138,6 +143,14 @@ CARD_TABLE [this address >> 9] = DIRTY;
 ```
 
 -XX:+UseCondCardMark
+
+
+
+-XX:+PrintReferenceGC
+
+
+
+-XX:+ParallelRefProcEnabled
 
 #### YGC耗时异常
 
