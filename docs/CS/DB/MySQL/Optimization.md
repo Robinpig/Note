@@ -85,21 +85,21 @@ Reading rows using a range scan on a secondary index can result in many random d
 
 The Multi-Range Read optimization provides these benefits:
 
-- MRR enables data rows to be accessed sequentially rather than in random order, based on index tuples. 
+- MRR enables data rows to be accessed sequentially rather than in random order, based on index tuples.
   The server obtains a set of index tuples that satisfy the query conditions, sorts them according to data row ID order, and uses the sorted tuples to retrieve data rows in order. This makes data access more efficient and less expensive.
 - MRR enables batch processing of requests for key access for operations that require access to data rows through index tuples, such as range index scans and equi-joins that use an index for the join attribute. MRR iterates over a sequence of index ranges to obtain qualifying index tuples. As these results accumulate, they are used to access the corresponding data rows. It is not necessary to acquire all index tuples before starting to read data rows.
 
 When MRR is used, the `Extra` column in [`EXPLAIN`](https://dev.mysql.com/doc/refman/8.0/en/explain.html) output shows Using `MRR`.
 
-`InnoDB` and `MyISAM` do not use MRR if full table rows need not be accessed to produce the query result. 
+`InnoDB` and `MyISAM` do not use MRR if full table rows need not be accessed to produce the query result.
 This is the case if results can be produced entirely on the basis on information in the index tuples (through a `covering index`); MRR provides no benefit.
 
 Two `optimizer_switch` system variable flags provide an interface to the use of MRR optimization.
-The `mrr` flag controls whether MRR is enabled. 
-If `mrr` is enabled (`on`), the `mrr_cost_based` flag controls whether the optimizer attempts to make a cost-based choice between using and not using MRR (`on`) or uses MRR whenever possible (`off`). 
+The `mrr` flag controls whether MRR is enabled.
+If `mrr` is enabled (`on`), the `mrr_cost_based` flag controls whether the optimizer attempts to make a cost-based choice between using and not using MRR (`on`) or uses MRR whenever possible (`off`).
 By default, `mrr` is `on` and `mrr_cost_based` is `on`.
 
-For MRR, a storage engine uses the value of the `read_rnd_buffer_size` system variable as a guideline for how much memory it can allocate for its buffer. 
+For MRR, a storage engine uses the value of the `read_rnd_buffer_size` system variable as a guideline for how much memory it can allocate for its buffer.
 The engine uses up to `read_rnd_buffer_size` bytes and determines the number of ranges to process in a single pass.
 
 #### Batched Key Access Joins
@@ -108,13 +108,146 @@ BKA can be applied when there is an index access to the table produced by the se
 
 For BKA to be used, the `batched_key_access` flag of the `optimizer_switch` system variable must be set to on. BKA uses MRR, so the `mrr` flag must also be `on`.
 
-
 ```mysql
 SET optimizer_trace="enabled=on";
 -- select SQL;
 SELECT * FROM information_schema.OPTIMIZER_TRACE;
 SET optimizer_trace="enabled=off";
 ```
+
+### Execution Plan
+
+Depending on the details of your tables, columns, indexes, and the conditions in your WHERE clause,
+the MySQL optimizer considers many techniques to efficiently perform the lookups involved in an SQL query.
+A query on a huge table can be performed without reading all the rows; a join involving several tables can be performed without comparing every combination of rows.
+The set of operations that the optimizer chooses to perform the most efficient query is called the “query execution plan”, also known as the `EXPLAIN` plan.
+
+The EXPLAIN statement provides information about how MySQL executes statements:
+
+- EXPLAIN works with SELECT, DELETE, INSERT, REPLACE, and UPDATE statements.
+- When EXPLAIN is used with an explainable statement, MySQL displays information from the optimizer about the statement execution plan.
+  That is, MySQL explains how it would process the statement, including information about how tables are joined and in which order.
+- When EXPLAIN is used with FOR CONNECTION connection_id rather than an explainable statement, it displays the execution plan for the statement executing in the named connection.
+- For SELECT statements, EXPLAIN produces additional execution plan information that can be displayed using SHOW WARNINGS.
+- EXPLAIN is useful for examining queries involving partitioned tables.
+- The FORMAT option can be used to select the output format. TRADITIONAL presents the output in tabular format.
+  This is the default if no FORMAT option is present. JSON format displays the information in JSON format.
+
+With the help of EXPLAIN, you can see where you should add indexes to tables so that the statement executes faster by using indexes to find rows.
+You can also use EXPLAIN to check whether the optimizer joins the tables in an optimal order.
+To give a hint to the optimizer to use a join order corresponding to the order in which the tables are named in a SELECT statement, begin the statement with SELECT STRAIGHT_JOIN rather than just SELECT.
+However, STRAIGHT_JOIN may prevent indexes from being used because it disables semijoin transformations.
+
+
+
+
+**EXPLAIN Output Columns**
+
+
+
+| Column    | JSON Name       | Meaning                                        |
+|-----------| --------------- | ---------------------------------------------- |
+| `id`      | `select_id`     | The`SELECT` identifier                         |
+| `select_type` | None            | The`SELECT` type                               |
+| `table`   | `table_name`    | The table for the output row                   |
+| `partitions` | `partitions`    | The matching partitions                        |
+| `type`    | `access_type`   | The join type                                  |
+| `possible_keys` | `possible_keys` | The possible indexes to choose                 |
+| `key`     | `key`           | The index actually chosen                      |
+| `key_len` | `key_length`    | The length of the chosen key                   |
+| `ref`     | `ref`           | The columns compared to the index              |
+| `rows`    | `rows`          | Estimate of rows to be examined                |
+| `filtered` | `filtered`      | Percentage of rows filtered by table condition |
+| `Extra`   | None            | Additional information                         |
+
+
+Each output row from EXPLAIN provides information about one table. 
+Each row contains the values summarized in “EXPLAIN Output Columns”, and described in more detail following the table.
+
+The type of SELECT, which can be any of those shown in the following table. A JSON-formatted EXPLAIN exposes the SELECT type as a property of a query_block, unless it is SIMPLE or PRIMARY. The JSON names (where applicable) are also shown in the table.
+
+| select_type Value |	JSON Name |	Meaning |
+| --- | --- | --- |
+| SIMPLE |	None |	Simple SELECT (not using UNION or subqueries) |
+| PRIMARY |	None |	Outermost SELECT |
+| UNION |	None |	Second or later SELECT statement in a UNION |
+| DEPENDENT | UNION |	dependent (true)	Second or later SELECT statement in a UNION, dependent on outer query |
+| UNION | RESULT |	union_result	Result of a UNION. |
+| SUBQUERY |	None |	First SELECT in subquery |
+| DEPENDENT | SUBQUERY |	dependent (true)	First SELECT in subquery, dependent on outer query |
+| DERIVED |	None |	Derived table |
+| DEPENDENT | DERIVED |	dependent (true)	Derived table dependent on another table |
+| MATERIALIZED |	materialized_from_subquery |	Materialized subquery |
+| UNCACHEABLE | SUBQUERY |	cacheable (false)	A subquery for which the result cannot be cached and must be re-evaluated for each row of the outer query |
+| UNCACHEABLE | UNION |	cacheable (false)	The second or later select in a UNION that belongs to an uncacheable subquery (see UNCACHEABLE SUBQUERY) |
+
+
+
+
+The type column of EXPLAIN output describes how tables are joined. In JSON-formatted output, these are found as values of the access_type property. The following list describes the join types, ordered from the best type to the worst:
+
+system
+
+The table has only one row (= system table). This is a special case of the const join type.
+
+const
+
+The table has at most one matching row, which is read at the start of the query.
+eq_ref
+
+One row is read from this table for each combination of rows from the previous tables. Other than the system and const types, this is the best possible join type.
+ref
+
+All rows with matching index values are read from this table for each combination of rows from the previous tables. ref is used if the join uses only a leftmost prefix of the key or if the key is not a PRIMARY KEY or UNIQUE index (in other words, if the join cannot select a single row based on the key value). If the key that is used matches only a few rows, this is a good join type.
+fulltext
+
+The join is performed using a FULLTEXT index.
+
+ref_or_null
+
+This join type is like ref, but with the addition that MySQL does an extra search for rows that contain NULL values.
+
+range
+
+index
+
+all
+
+
+possible_keys (JSON name: possible_keys)
+
+The possible_keys column indicates the indexes from which MySQL can choose to find the rows in this table. Note that this column is totally independent of the order of the tables as displayed in the output from EXPLAIN. 
+That means that some of the keys in possible_keys might not be usable in practice with the generated table order.
+If this column is NULL (or undefined in JSON-formatted output), there are no relevant indexes. 
+In this case, you may be able to improve the performance of your query by examining the WHERE clause to check whether it refers to some column or columns that would be suitable for indexing.
+If so, create an appropriate index and check the query with EXPLAIN again.
+
+
+
+key (JSON name: key)
+
+The key column indicates the key (index) that MySQL actually decided to use. If MySQL decides to use one of the possible_keys indexes to look up rows, that index is listed as the key value.
+It is possible that key may name an index that is not present in the possible_keys value.
+This can happen if none of the possible_keys indexes are suitable for looking up rows, but all the columns selected by the query are columns of some other index.
+That is, the named index covers the selected columns, so although it is not used to determine which rows to retrieve, an index scan is more efficient than a data row scan.
+For InnoDB, a secondary index might cover the selected columns even if the query also selects the primary key because InnoDB stores the primary key value with each secondary index.
+If key is NULL, MySQL found no index to use for executing the query more efficiently.
+To force MySQL to use or ignore an index listed in the possible_keys column, use FORCE INDEX, USE INDEX, or IGNORE INDEX in your query.
+
+
+ref (JSON name: ref)
+
+The ref column shows which columns or constants are compared to the index named in the key column to select rows from the table.
+If the value is func, the value used is the result of some function. To see which function, use SHOW WARNINGS following EXPLAIN to see the extended EXPLAIN output. 
+The function might actually be an operator such as an arithmetic operator.
+
+
+Extra (JSON name: none)
+
+This column contains additional information about how MySQL resolves the query. For descriptions of the different values, see EXPLAIN Extra Information.
+
+There is no single JSON property corresponding to the Extra column; however, values that can occur in this column are exposed as JSON properties, or as the text of the message property.
+
 
 ## Optimizing for InnoDB Tables
 
@@ -137,11 +270,11 @@ To optimize `InnoDB` transaction processing, find the ideal balance between the 
 
   This issue is expected to be infrequent with the default setting `innodb_change_buffering=all`, which allows update and delete operations to be cached in memory, making them faster to perform in the first place, and also faster to roll back if needed. Make sure to use this parameter setting on servers that process long-running transactions with many inserts, updates, or deletes.
 - If you can afford the loss of some of the latest committed transactions if an unexpected exit occurs, you can set the `innodb_flush_log_at_trx_commit` parameter to 0. `InnoDB` tries to flush the log once per second anyway, although the flush is not guaranteed.
-- When rows are modified or deleted, the rows and associated [undo logs](/docs/CS/DB/MySQL/undolog.md) are not physically removed immediately, or even immediately after the transaction commits. 
+- When rows are modified or deleted, the rows and associated [undo logs](/docs/CS/DB/MySQL/undolog.md) are not physically removed immediately, or even immediately after the transaction commits.
   The old data is preserved until transactions that started earlier or concurrently are finished, so that those transactions can access the previous state of modified or deleted rows.
   Thus, a long-running transaction can prevent `InnoDB` from purging data that was changed by a different transaction.
 - When rows are modified or deleted within a long-running transaction, other transactions using the `READ COMMITTED` and `REPEATABLE READ` isolation levels have to do more work to reconstruct the older data if they read those same rows.
-- When a long-running transaction modifies a table, queries against that table from other transactions do not make use of the `covering index` technique. 
+- When a long-running transaction modifies a table, queries against that table from other transactions do not make use of the `covering index` technique.
   Queries that normally could retrieve all the result columns from a secondary index, instead look up the appropriate values from the table data.
 
   If secondary index pages are found to have a `PAGE_MAX_TRX_ID` that is too new, or if records in the secondary index are delete-marked, `InnoDB` may need to look up records using a clustered index.
