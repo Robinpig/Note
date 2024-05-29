@@ -7,7 +7,7 @@ Aspects enable the modularization of concerns such as transaction management tha
 One of the key components of Spring is the AOP framework.
 While the Spring IoC container does not depend on AOP, meaning you do not need to use AOP if you don't want to, AOP complements Spring IoC to provide a very capable middleware solution.
 
-As AspectJ uses compile time and classload time weaving, Spring AOP makes use of runtime weaving.
+As [AspectJ](/docs/CS/Java/AspectJ.md) uses compile time and classload time weaving, Spring AOP makes use of runtime weaving.
 
 AOP is used in the Spring Framework to:
 
