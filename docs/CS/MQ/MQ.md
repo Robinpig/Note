@@ -365,6 +365,14 @@ When the number of topics increases, the policy of deconcentrated storage of mes
 In contrast, all the messages in Apache RocketMQ are stored in the same physical file. The number of topics and partitions is just a logic division for Apache RocketMQ.
 So the increasing number of topics won't generate a huge impact on the Apache RocketMQ performance.
 
+The Cons of Using RabbitMQ:
+
+- Once a message with RabbitMQ has been delivered it is removed from the queue.
+- RabbitMQ scales vertically and relies on getting more powerful hardware to increase throughput.
+- RabbitMQ stores messages in memory as long as there is space after which messages will be transferred to disk.
+- RabbitMQ cannot deal with high throughput, as it doesn’t support message batching, and is optimized for one message at a time instead.
+- Many of RabbitMQ’s disadvantages stem from being written in Erlang, however, it can also be difficult for a developer to read the source code and understand what’s going on when troubleshooting.
+
 ### Kafka
 
 [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
