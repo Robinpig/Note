@@ -323,6 +323,14 @@ static boolean tryHandlePending(boolean waitForNotify) {
 }
 ```
 
+enable NMT
+
+```
+-XX:NativeMemoryTracking={summary|detail}
+```
+
+-XX:+UnlockDiagnosticVMOptions -XX:+PrintNMTStatistics
+
 
 
 ## Links
