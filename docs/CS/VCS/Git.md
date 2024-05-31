@@ -51,5 +51,11 @@ git branch -a
 git branch -d branchName
 ```
 
+
+## Hooks
+
+
+CVE-2024-32002
+
 ## Links
 
