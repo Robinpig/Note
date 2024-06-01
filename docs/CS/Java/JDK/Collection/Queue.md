@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 Queues provide additional insertion, extraction, and inspection operations.
 
 Each of these methods exists in two forms: one throws an exception if the operation fails, the other returns a special
@@ -17,15 +15,13 @@ in most implementations, insert operations cannot fail. Summary of Queue methods
 | Remove  | `remove()`       | `poll()`              |
 | Examine | `element()`      | `peek()`              |
 
-Queues **typically, but do not necessarily**, order elements in a `FIFO (first-in-first-out)` manner. 
+Queues **typically, but do not necessarily**, order elements in a `FIFO (first-in-first-out)` manner.
 Among the exceptions are priority queues, which order elements according to a supplied comparator, or the elements' natural ordering,
-and LIFO queues (or stacks) which order the elements LIFO (last-in-first-out). 
+and LIFO queues (or stacks) which order the elements LIFO (last-in-first-out).
 Whatever the ordering used, the head of the queue is that element which would be removed by a call to remove() or poll().
-In a FIFO queue, all new elements are inserted at the tail of the queue. 
+In a FIFO queue, all new elements are inserted at the tail of the queue.
 Other kinds of queues may use different placement rules.
 Every Queue implementation must specify its ordering properties.
-
-
 
 <div style="text-align: center;">
 
@@ -124,19 +120,19 @@ Stack methods are precisely equivalent to Deque methods as indicated in the tabl
 
 ### ArrayDeque
 
-Resizable-array implementation of the Deque interface. 
+Resizable-array implementation of the Deque interface.
 Array deques have no capacity restrictions; they grow as necessary to support usage.
-They are not thread-safe; in the absence of external synchronization, they do not support concurrent access by multiple threads. 
+They are not thread-safe; in the absence of external synchronization, they do not support concurrent access by multiple threads.
 Null elements are prohibited. This class is likely to be faster than Stack when used as a stack, and faster than LinkedList when used as a queue.
 
 Most ArrayDeque operations run in amortized constant time. Exceptions include remove, removeFirstOccurrence, removeLastOccurrence, contains, iterator.remove(), and the bulk operations, all of which run in linear time.
 
-The iterators returned by this class's iterator method are fail-fast: 
+The iterators returned by this class's iterator method are fail-fast:
 If the deque is modified at any time after the iterator is created, in any way except through the iterator's own remove method, the iterator will generally throw a **ConcurrentModificationException**.
 Thus, in the face of concurrent modification, the iterator fails quickly and cleanly, rather than risking arbitrary, non-deterministic behavior at an undetermined time in the future.
 
 Note that the fail-fast behavior of an iterator cannot be guaranteed as it is, generally speaking, impossible to make any hard guarantees in the presence of unsynchronized concurrent modification.
-Fail-fast iterators throw ConcurrentModificationException on a best-effort basis. 
+Fail-fast iterators throw ConcurrentModificationException on a best-effort basis.
 Therefore, it would be wrong to write a program that depended on this exception for its correctness: the fail-fast behavior of iterators should be used only to detect bugs.
 
 This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces.
@@ -518,14 +514,12 @@ takeLock and putLock
 private final ReentrantLock takeLock = new ReentrantLock();
 
 /** Wait queue for waiting takes */
-@SuppressWarnings("serial") // Classes implementing Condition may be serializable.
 private final Condition notEmpty = takeLock.newCondition();
 
 /** Lock held by put, offer, etc */
 private final ReentrantLock putLock = new ReentrantLock();
 
 /** Wait queue for waiting puts */
-@SuppressWarnings("serial") // Classes implementing Condition may be serializable.
 private final Condition notFull = putLock.newCondition();
 ```
 
@@ -565,81 +559,75 @@ public void put(E e) throws InterruptedException {
 
 ### SynchronousQueue
 
-*A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**.
-A synchronous queue **does not have any internal capacity, not even a capacity of one**.*
+A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**.
+A synchronous queue **does not have any internal capacity, not even a capacity of one**.
 
-*you cannot insert an element (using any method) unless another thread is trying to remove it;*
+The head of the queue is the element that the first queued inserting thread is trying to add to the queue; if there is
+no such queued thread then no element is available for removal and poll() will return null.
 
-*The head of the queue is the element that the first queued inserting thread is trying to add to the queue; if there is
-no such queued thread then no element is available for removal and poll() will return null.*
+For purposes of other Collection methods (for example contains), a SynchronousQueue acts as an empty collection. This
+queue does not permit null elements.
 
-*For purposes of other Collection methods (for example contains), a SynchronousQueue acts as an empty collection. This
-queue does not permit null elements.*
-
-*Synchronous queues are similar to rendezvous channels used in CSP and Ada. They are well suited for handoff designs, in
+Synchronous queues are similar to rendezvous channels used in CSP and Ada. 
+They are well suited for handoff designs, in
 which an object running in one thread must sync up with an object running in another thread in order to hand it some
-information, event, or task.*
-*This class supports an optional fairness policy for ordering waiting producer and consumer threads. By default, this
-ordering is not guaranteed. However, a queue constructed with fairness set to true grants threads access in FIFO order.*
-*This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces.*
+information, event, or task.
+This class supports an optional fairness policy for ordering waiting producer and consumer threads. By default, this
+ordering is not guaranteed. However, a queue constructed with fairness set to true grants threads access in FIFO order.
+This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces.
 
 ```java
 public class SynchronousQueue<E> extends AbstractQueue<E>
         implements BlockingQueue<E>, java.io.Serializable {
+
+   private ReentrantLock qlock;
+   private WaitQueue waitingProducers;
+   private WaitQueue waitingConsumers;
+
+
+   /**
+    * The transferer. Set only in constructor, but cannot be declared
+    * as final without further complicating serialization.  Since
+    * this is accessed only at most once per public method, there
+    * isn't a noticeable performance penalty for using volatile
+    * instead of final here.
+    */
+   private transient volatile Transferer<E> transferer;
+
+   abstract static class Transferer<E> {
+      // Performs a put or take.
+      abstract E transfer(E e, boolean timed, long nanos);
+   }
+
+   public SynchronousQueue(boolean fair) { // default false
+      transferer = fair ? new TransferQueue<E>() : new TransferStack<E>();
+   }
 }
 ```
 
-```java
-private ReentrantLock qlock;
-private WaitQueue waitingProducers;
-private WaitQueue waitingConsumers;
-
-
-/**
-  * The transferer. Set only in constructor, but cannot be declared
-  * as final without further complicating serialization.  Since
-  * this is accessed only at most once per public method, there
-  * isn't a noticeable performance penalty for using volatile
-  * instead of final here.
-  */
-private transient volatile Transferer<E> transferer;
-
-abstract static class Transferer<E> {
-  // Performs a put or take.
-  abstract E transfer(E e, boolean timed, long nanos);
-}
-
-public SynchronousQueue(boolean fair) { // default false
-  transferer = fair ? new TransferQueue<E>() : new TransferStack<E>();
-}
-```
-
-`You cannot peek at a synchronous queue because an element is only present when you try to remove it.`
+You cannot peek at a synchronous queue because an element is only present when you try to remove it.
+You cannot iterate as there is nothing to iterate.
 
 ```java
-public E peek(){
-        return null;
-        }
-```
+   public E peek() {
+      return null;
+   }
 
-`You cannot iterate as there is nothing to iterate.`
+   public Iterator<E> iterator() {
+      return Collections.emptyIterator();
+   }
 
-```java
-public Iterator<E> iterator(){
-        return Collections.emptyIterator();
-        }
+   public boolean isEmpty() {
+      return true;
+   }
 
-public boolean isEmpty(){
-        return true;
-        }
+   public int size() {
+      return 0;
+   }
 
-public int size(){
-        return 0;
-        }
-
-public int remainingCapacity(){
-        return 0;
-        }
+   public int remainingCapacity() {
+      return 0;
+   }
 ```
 
 #### transfer
@@ -767,10 +755,6 @@ In each case, along the way, check for and try to help advance head and tail on 
 The loop starts off with a null check guarding against seeing uninitialized head or tail values. This never happens in current SynchronousQueue, but could if callers held non-volatile/final ref to the transferer. The check is here anyway because it places null checks at top of loop, which is usually faster than having them implicitly interspersed.
 
 ```java
-/**
- * Puts or takes an item.
- */
-@SuppressWarnings("unchecked")
 E transfer(E e, boolean timed, long nanos) {
     QNode s = null; // constructed/reused as needed
     boolean isData = (e != null);
@@ -885,9 +869,9 @@ private transient volatile int allocationSpinLock;
 
 
 | Queue                 | Boundary           | Lock     | Struct     |
-| --------------------- | ------------------ | -------- | ---------- |
-| ArrayBlockingQueue    | bounded            | lock     | arrayList  |
-| LinkedBlockingQueue   | optionally-bounded | lock     | linkedList |
+| --------------------- | ------------------ |----------| ---------- |
+| ArrayBlockingQueue    | bounded            | 1 lock   | arrayList  |
+| LinkedBlockingQueue   | optionally-bounded | 2 locks  | linkedList |
 | ConcurrentLinkedQueue | unbounded          | Non-lock | linkedList |
 | LinkedTransferQueue   | unbounded          | Non-lock | linkedList |
 | PriorityBlockingQueue | unbounded          | lock     | heap       |
