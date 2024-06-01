@@ -314,3 +314,8 @@ I think that exceptions (even checked exceptions) have their place, so I offer y
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+
+
+## References
+
+1. [Checked exceptions: Java’s biggest mistake](http://literatejava.com/exceptions/checked-exceptions-javas-biggest-mistake/)
