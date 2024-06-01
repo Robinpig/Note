@@ -22,7 +22,7 @@ We discussed several data encoding formats and their compatibility properties:
 - Textual formats like JSON, XML, and CSV are widespread, and their compatibility depends on how you use them.
   They have optional schema languages, which are sometimes helpful and sometimes a hindrance.
   These formats are somewhat vague about datatypes, so you have to be careful with things like numbers and binary strings.
-- Binary schema–driven formats like Thrift, Protocol Buffers, and Avro allow compact, efficient encoding with clearly defined forward and backward compatibility semantics.
+- Binary schema–driven formats like Thrift, [Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md), and Avro allow compact, efficient encoding with clearly defined forward and backward compatibility semantics.
   The schemas can be useful for documentation and code generation in statically typed languages.
   However, they have the downside that data needs to be decoded before it is human-readable.
 
@@ -77,6 +77,20 @@ For data that is used only internally within your organization, there is less pr
 For example, you could choose a format that is more compact or faster to parse. 
 For a small dataset, the gains are negligible, but once you get into the terabytes, the choice of data format can have a big impact.
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [RPC](/docs/CS/Distributed/RPC/RPC.md)
