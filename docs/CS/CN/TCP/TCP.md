@@ -1428,7 +1428,7 @@ If this happens, the peer’s system is determined to be unreachable and the con
 A keepalive probe is an empty (or 1-byte) segment with sequence number equal to one less than the largest ACK number seen from the peer so far.
 Because this sequence number has already been ACKed by the receiving TCP, the arriving segment does no harm, but it elicits an ACK that is used to determine whether the connection is still operating.
 Neither the probe nor its ACK contains any new data (it is “garbage” data), and neither is retransmitted by TCP if lost.
-[RFC1122] dictates that because of this fact, the lack of response for a single keepalive probe should not be considered sufficient evidence that the connection has stopped operating.
+RFC1122 dictates that because of this fact, the lack of response for a single keepalive probe should not be considered sufficient evidence that the connection has stopped operating.
 This is the reason for the keepalive probes parameter setting mentioned previously. Note that some (mostly older) TCP implementations do not respond to keepalives lacking the “garbage” byte of data.
 
 Anytime it is operating, a TCP using keepalives may find its peer in one of four states:
