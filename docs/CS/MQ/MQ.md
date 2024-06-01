@@ -342,6 +342,27 @@ Kafka
 - consumer
   - enable.auto.commit: false
 
+
+Producer:
+
+正确处理返回值或者捕获异常并重发，就可以保证这个阶段的消息不会丢
+
+Broker:
+
+如果
+Broker 出现了故障，比如进程死掉了或者服务器宕机了，还是可能会丢失消息的
+
+配置刷盘
+
+至少将消息发送到 2 个以上的节点，再给客户端回复发送确认响应
+
+Consumer:
+
+在执
+行完所有消费业务逻辑之后，再发送消费确认。
+
+
+
 ### Duplicate Consume
 
 Based on no message losing
