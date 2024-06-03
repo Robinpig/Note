@@ -894,6 +894,7 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
 
 ## Frame detection
 
+### ByteToMessageDecoder
 ByteToMessageDecoder decodes bytes in a stream-like fashion from one ByteBuf to an other Message type.
 
 Generally frame detection should be handled earlier in the pipeline by adding a `DelimiterBasedFrameDecoder`, `FixedLengthFrameDecoder`, `LengthFieldBasedFrameDecoder`, or `LineBasedFrameDecoder`.
@@ -912,17 +913,16 @@ For example calling in.getInt(0) is assuming the frame starts at the beginning o
 
 channelRead -> callDecode -> decodeRemovalReentryProtection -> decode
 
-### cumulate
+#### LengthFieldBased
+
+
+
+#### cumulate
 
 cumulate before callDecode
 
 ```java
  public interface Cumulator {
-        /**
-         * Cumulate the given {@link ByteBuf}s and return the {@link ByteBuf} that holds the cumulated bytes.
-         * The implementation is responsible to correctly handle the life-cycle of the given {@link ByteBuf}s and so
-         * call {@link ByteBuf#release()} if a {@link ByteBuf} is fully consumed.
-         */
         ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in);
 }
 ```
@@ -930,7 +930,40 @@ cumulate before callDecode
 - memcopy default
 - composite
 
+Be aware that CompositeByteBuf use a more complex indexing implementation so depending on your use-case and the decoder implementation this may be slower than just use the MERGE_CUMULATOR.
+
+### MessageToMessageDecoder
+
 MessageToMessageDecoder decodes from one message to an other message.
+
+
+```java
+
+public class WorldClockClientInitializer extends ChannelInitializer<SocketChannel> {
+
+    private final SslContext sslCtx;
+
+    public WorldClockClientInitializer(SslContext sslCtx) {
+        this.sslCtx = sslCtx;
+    }
+
+    @Override
+    public void initChannel(SocketChannel ch) {
+        ChannelPipeline p = ch.pipeline();
+        if (sslCtx != null) {
+            p.addLast(sslCtx.newHandler(ch.alloc(), WorldClockClient.HOST, WorldClockClient.PORT));
+        }
+
+        p.addLast(new ProtobufVarint32FrameDecoder());
+        p.addLast(new ProtobufDecoder(WorldClockProtocol.LocalTimes.getDefaultInstance()));
+
+        p.addLast(new ProtobufVarint32LengthFieldPrepender());
+        p.addLast(new ProtobufEncoder());
+
+        p.addLast(new WorldClockClientHandler());
+    }
+}
+```
 
 ## Traffic
 
@@ -1043,7 +1076,158 @@ override userEventTriggered method and reply IdleStateEvent
 
 WriteTimeoutHandler Raises a WriteTimeoutException when a write operation cannot finish in a certain period of time.
 
-### WriteTimeoutHandler
+
+```java
+private abstract static class AbstractIdleTask implements Runnable {
+  private final ChannelHandlerContext ctx;
+  AbstractIdleTask(ChannelHandlerContext ctx) {
+    this.ctx = ctx;
+  }
+  @Override
+  public void run() {
+    if (!ctx.channel().isOpen()) {
+      return;
+    }
+    run(ctx);
+  }
+  protected abstract void run(ChannelHandlerContext ctx);
+}
+```
+ReaderIdleTimeoutTask
+```java
+private final class ReaderIdleTimeoutTask extends AbstractIdleTask {
+    @Override
+    protected void run(ChannelHandlerContext ctx) {
+        long nextDelay = readerIdleTimeNanos;
+        if (!reading) {
+            nextDelay -= ticksInNanos() - lastReadTime;
+        }
+
+        if (nextDelay <= 0) {
+            // Reader is idle - set a new timeout and notify the callback.
+            readerIdleTimeout = schedule(ctx, this, readerIdleTimeNanos, TimeUnit.NANOSECONDS);
+
+            boolean first = firstReaderIdleEvent;
+            firstReaderIdleEvent = false;
+
+            try {
+                IdleStateEvent event = newIdleStateEvent(IdleState.READER_IDLE, first);
+                channelIdle(ctx, event);
+            } catch (Throwable t) {
+                ctx.fireExceptionCaught(t);
+            }
+        } else {
+            // Read occurred before the timeout - set a new timeout with shorter delay.
+            readerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
+        }
+    }
+}
+```
+
+WriterIdleTimeoutTask
+```java
+private final class WriterIdleTimeoutTask extends AbstractIdleTask {
+    @Override
+    protected void run(ChannelHandlerContext ctx) {
+        long lastWriteTime = IdleStateHandler.this.lastWriteTime;
+        long nextDelay = writerIdleTimeNanos - (ticksInNanos() - lastWriteTime);
+        if (nextDelay <= 0) {
+            // Writer is idle - set a new timeout and notify the callback.
+            writerIdleTimeout = schedule(ctx, this, writerIdleTimeNanos, TimeUnit.NANOSECONDS);
+
+            boolean first = firstWriterIdleEvent;
+            firstWriterIdleEvent = false;
+
+            try {
+                if (hasOutputChanged(ctx, first)) {
+                    return;
+                }
+
+                IdleStateEvent event = newIdleStateEvent(IdleState.WRITER_IDLE, first);
+                channelIdle(ctx, event);
+            } catch (Throwable t) {
+                ctx.fireExceptionCaught(t);
+            }
+        } else {
+            // Write occurred before the timeout - set a new timeout with shorter delay.
+            writerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
+        }
+    }
+}
+```
+hasOutputChanged
+```java
+public class IdleStateHandler extends ChannelDuplexHandler {
+  private boolean hasOutputChanged(ChannelHandlerContext ctx, boolean first) {
+    if (observeOutput) {
+
+      // We can take this shortcut if the ChannelPromises that got passed into write()
+      // appear to complete. It indicates "change" on message level and we simply assume
+      // that there's change happening on byte level. If the user doesn't observe channel
+      // writability events then they'll eventually OOME and there's clearly a different
+      // problem and idleness is least of their concerns.
+      if (lastChangeCheckTimeStamp != lastWriteTime) {
+        lastChangeCheckTimeStamp = lastWriteTime;
+
+        // But this applies only if it's the non-first call.
+        if (!first) {
+          return true;
+        }
+      }
+
+      Channel channel = ctx.channel();
+      Unsafe unsafe = channel.unsafe();
+      ChannelOutboundBuffer buf = unsafe.outboundBuffer();
+
+      if (buf != null) {
+        int messageHashCode = System.identityHashCode(buf.current());
+        long pendingWriteBytes = buf.totalPendingWriteBytes();
+
+        if (messageHashCode != lastMessageHashCode || pendingWriteBytes != lastPendingWriteBytes) {
+          lastMessageHashCode = messageHashCode;
+          lastPendingWriteBytes = pendingWriteBytes;
+
+          if (!first) {
+            return true;
+          }
+        }
+
+        long flushProgress = buf.currentProgress();
+        if (flushProgress != lastFlushProgress) {
+          lastFlushProgress = flushProgress;
+          return !first;
+        }
+      }
+    }
+
+    return false;
+  }
+}
+```
+## TimeoutHandler
+
+#### WriteTimeoutHandler
+
+
+
+```java
+private final class WriteTimeoutTask implements Runnable, ChannelFutureListener {
+  @Override
+  public void run() {
+    // Was not written yet so issue a write timeout
+    // The promise itself will be failed with a ClosedChannelException once the close() was issued
+    // See https://github.com/netty/netty/issues/2159
+    if (!promise.isDone()) {
+      try {
+        writeTimedOut(ctx);
+      } catch (Throwable t) {
+        ctx.fireExceptionCaught(t);
+      }
+    }
+    removeWriteTimeoutTask(this);
+  }
+}
+```
 
 ## Filter
 

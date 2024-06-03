@@ -381,7 +381,7 @@ private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
 - if isPowerOfTwo default use **PowerOfTwoEventExecutorChooser**  idx.getAndIncrement() & executors.length - 1
 - or else GenericEventExecutorChooser Math.abs(idx.getAndIncrement() % executors.length)
 
-
+ 
 ## Selector
 
 See [Selector](/docs/CS/Java/JDK/IO/NIO.md?id=Selectors)
