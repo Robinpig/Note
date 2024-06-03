@@ -43,8 +43,8 @@ Create Connections
 
 The first step to start consuming records is to create a `KafkaConsumer` instance. 
 Creating a `KafkaConsumer` is very similar to creating a `KafkaProducer`—you create a Java `Properties` instance with the properties you want to pass to the consumer.
-```
-Properties props = new Properties();
+```java
+    Properties props = new Properties();
     props.setProperty("bootstrap.servers", "localhost:9092");
     props.setProperty("group.id", "aaa");
     props.setProperty("enable.auto.commit", "true");
@@ -54,8 +54,9 @@ Properties props = new Properties();
     KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props);
 ```
 
-Once we create a consumer, the next step is to subscribe to one or more topics. The `subcribe()` method takes a list of topics as a parameter.
-```
+Once we create a consumer, the next step is to subscribe to one or more topics. 
+The `subcribe()` method takes a list of topics as a parameter.
+```java
 consumer.subscribe(Arrays.asList("quickstart-events", "bar"), new NoOpConsumerRebalanceListener());
 ```
 
@@ -65,7 +66,7 @@ leaving the developer with a clean API that simply returns available data from t
 The main body of a consumer will look as follows:
 
 
-```
+```java
 try {
   while (true) {
       ConsumerRecords<String, String> records = consumer.poll(100);
@@ -222,6 +223,43 @@ See KIP-794 for more info. The partitioning strategy:
   NOTE: In contrast to the DefaultPartitioner, the record key is NOT used as part of the partitioning strategy in this partitioner.
   Records with the same key are not guaranteed to be sent to the same partition. See KIP-480 for details about sticky partitioning.
 
+## subscribe
+
+```java
+public class AsyncKafkaConsumer<K, V> implements ConsumerDelegate<K, V> {
+  private void subscribeInternal(Collection<String> topics, Optional<ConsumerRebalanceListener> listener) {
+    acquireAndEnsureOpen(); // Acquire the light lock and ensure that the consumer hasn't been closed.
+    try {
+      if (topics.isEmpty()) {
+        // treat subscribing to empty topic list as the same as unsubscribing
+        unsubscribe();
+      } else {
+        throwIfNoAssignorsConfigured();
+
+        // Clear the buffered data which are not a part of newly assigned topics
+        final Set<TopicPartition> currentTopicPartitions = new HashSet<>();
+
+        for (TopicPartition tp : subscriptions.assignedPartitions()) {
+          if (topics.contains(tp.topic()))
+            currentTopicPartitions.add(tp);
+        }
+
+        fetchBuffer.retainAll(currentTopicPartitions);
+        log.info("Subscribed to topic(s): {}", join(topics, ", "));
+        if (subscriptions.subscribe(new HashSet<>(topics), listener))
+          metadata.requestUpdateForNewTopics();
+
+        // Trigger subscribe event to effectively join the group if not already part of it,
+        // or just send the new subscription to the broker.
+        applicationEventHandler.add(new SubscriptionChangeApplicationEvent());
+      }
+    } finally {
+      release();
+    }
+  }
+}
+```
+
 ## poll
 
 Kafka consumers poll the Kafka broker to receive batches of data.
@@ -359,27 +397,39 @@ This method returns immediately if there are records available or if the positio
 Otherwise, it will await the passed timeout. If the timeout expires, an empty record set will be returned.
 Note that this method may block beyond the timeout in order to execute custom ConsumerRebalanceListener callbacks.
 
-```java
-public class KafkaConsumer<K, V> implements Consumer<K, V> {
-  private ConsumerRecords<K, V> poll(final Timer timer, final boolean includeMetadataInTimeout) {
-    try {
-      do {
-        final Fetch<K, V> fetch = pollForFetches(timer);
-        if (!fetch.isEmpty()) {
-          // before returning the fetched records, we can send off the next round of fetches
-          // and avoid block waiting for their responses to enable pipelining while the user
-          // is handling the fetched records.
-          //
-          // NOTE: since the consumed position has already been updated, we must not allow
-          // wakeups or any other errors to be triggered prior to returning the fetched records.
-          if (fetcher.sendFetches() > 0 || client.hasPendingRequests()) {
-            client.transmitSends();
-          }
+- updateAssignmentMetadataIfNeed
+- pollForFetches
 
-          return this.interceptors.onConsume(new ConsumerRecords<>(fetch.records()));
-        }
+
+```java
+public class AsyncKafkaConsumer<K, V> implements ConsumerDelegate<K, V> {
+  public ConsumerRecords<K, V> poll(final Duration timeout) {
+    Timer timer = time.timer(timeout);
+
+    acquireAndEnsureOpen();
+    try {
+      wakeupTrigger.setFetchAction(fetchBuffer);
+      kafkaConsumerMetrics.recordPollStart(timer.currentTimeMs());
+
+      applicationEventHandler.add(new PollApplicationEvent(timer.currentTimeMs()));
+
+      do {
+        // We must not allow wake-ups between polling for fetches and returning the records.
+        // If the polled fetches are not empty the consumed position has already been updated in the polling
+        // of the fetches. A wakeup between returned fetches and returning records would lead to never
+        // returning the records in the fetches. Thus, we trigger a possible wake-up before we poll fetches.
+        wakeupTrigger.maybeTriggerWakeup();
+
+        updateAssignmentMetadataIfNeeded(timer);
+        final Fetch<K, V> fetch = pollForFetches(timer);
+        return interceptors.onConsume(new ConsumerRecords<>(fetch.records()));
+        // We will wait for retryBackoffMs
       } while (timer.notExpired());
       return ConsumerRecords.empty();
+    } finally {
+      kafkaConsumerMetrics.recordPollEnd(timer.currentTimeMs());
+      wakeupTrigger.clearTask();
+      release();
     }
   }
 }
@@ -388,7 +438,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
 ### pollForFetches
 
 ```java
-public class KafkaConsumer<K, V> implements Consumer<K, V> {
+public class AsyncKafkaConsumer<K, V> implements ConsumerDelegate<K, V> {
   private Fetch<K, V> pollForFetches(Timer timer) {
     long pollTimeout = coordinator == null ? timer.remainingMs() :
             Math.min(coordinator.timeToNextPoll(timer.currentTimeMs()), timer.remainingMs());
@@ -597,9 +647,98 @@ public class ConsumerNetworkClient implements Closeable {
 
     metadata.maybeThrowAnyException();
   }
+
+  long trySend(long now) {
+    long pollDelayMs = maxPollTimeoutMs;
+
+    // send any requests that can be sent now
+    for (Node node : unsent.nodes()) {
+      Iterator<ClientRequest> iterator = unsent.requestIterator(node);
+      if (iterator.hasNext())
+        pollDelayMs = Math.min(pollDelayMs, client.pollDelayMs(node, now));
+
+      while (iterator.hasNext()) {
+        ClientRequest request = iterator.next();
+        if (client.ready(node, now)) {
+          client.send(request, now);
+          iterator.remove();
+        } else {
+          // try next node when current node is not ready
+          break;
+        }
+      }
+    }
+    return pollDelayMs;
+  }
 }
 ```
 
+### collectFetch
+
+Return the fetched records, empty the record buffer, and update the consumed position. 
+NOTE: returning an empty fetch guarantees the consumed position is not updated.
+
+
+```java
+public class FetchCollector<K, V> {
+  public Fetch<K, V> collectFetch(final FetchBuffer fetchBuffer) {
+    final Fetch<K, V> fetch = Fetch.empty();
+    final Queue<CompletedFetch> pausedCompletedFetches = new ArrayDeque<>();
+    int recordsRemaining = fetchConfig.maxPollRecords;
+
+    try {
+      while (recordsRemaining > 0) {
+        final CompletedFetch nextInLineFetch = fetchBuffer.nextInLineFetch();
+
+        if (nextInLineFetch == null || nextInLineFetch.isConsumed()) {
+          final CompletedFetch completedFetch = fetchBuffer.peek();
+
+          if (completedFetch == null)
+            break;
+
+          if (!completedFetch.isInitialized()) {
+            try {
+              fetchBuffer.setNextInLineFetch(initialize(completedFetch));
+            } catch (Exception e) {
+              // Remove a completedFetch upon a parse with exception if (1) it contains no completedFetch, and
+              // (2) there are no fetched completedFetch with actual content preceding this exception.
+              // The first condition ensures that the completedFetches is not stuck with the same completedFetch
+              // in cases such as the TopicAuthorizationException, and the second condition ensures that no
+              // potential data loss due to an exception in a following record.
+              if (fetch.isEmpty() && FetchResponse.recordsOrFail(completedFetch.partitionData).sizeInBytes() == 0)
+                fetchBuffer.poll();
+
+              throw e;
+            }
+          } else {
+            fetchBuffer.setNextInLineFetch(completedFetch);
+          }
+
+          fetchBuffer.poll();
+        } else if (subscriptions.isPaused(nextInLineFetch.partition)) {
+          // when the partition is paused we add the records back to the completedFetches queue instead of draining
+          // them so that they can be returned on a subsequent poll if the partition is resumed at that time
+          log.debug("Skipping fetching records for assigned partition {} because it is paused", nextInLineFetch.partition);
+          pausedCompletedFetches.add(nextInLineFetch);
+          fetchBuffer.setNextInLineFetch(null);
+        } else {
+          final Fetch<K, V> nextFetch = fetchRecords(nextInLineFetch, recordsRemaining);
+          recordsRemaining -= nextFetch.numRecords();
+          fetch.add(nextFetch);
+        }
+      }
+    } catch (KafkaException e) {
+      if (fetch.isEmpty())
+        throw e;
+    } finally {
+      // add any polled completed fetches for paused partitions back to the completed fetches queue to be
+      // re-evaluated in the next poll
+      fetchBuffer.addAll(pausedCompletedFetches);
+    }
+    return fetch;
+  }
+}
+```
 
 ## Heartbeat
 
