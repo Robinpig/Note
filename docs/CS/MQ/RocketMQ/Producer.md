@@ -5,6 +5,105 @@ You do not need to create producers each time you send messages or destroy the p
 If you regularly create and destroy producers, a large number of short connection requests are generated on the broker.
 We recommend that you create and initialize the minimum number of producers that your business scenarios require, and reuse as many producers as you can.
 
+
+DefaultMQProducerImpl 封装了大部分 Producer 的业务逻辑，
+MQClientInstance 封装了客户端一些通用的业务逻辑，MQClientAPIImpl 封装了客户端
+与服务端的 RPC，NettyRemotingClient 实现了底层网络通信。
+
+
+```java
+public class DefaultMQProducer extends ClientConfig implements MQProducer {
+    public void start() throws MQClientException {
+        this.setProducerGroup(withNamespace(this.producerGroup));
+        this.defaultMQProducerImpl.start();
+        if (this.produceAccumulator != null) {
+            this.produceAccumulator.start();
+        }
+        if (enableTrace) {
+            try {
+                AsyncTraceDispatcher dispatcher = new AsyncTraceDispatcher(producerGroup, TraceDispatcher.Type.PRODUCE, traceTopic, rpcHook);
+                dispatcher.setHostProducer(this.defaultMQProducerImpl);
+                dispatcher.setNamespaceV2(this.namespaceV2);
+                traceDispatcher = dispatcher;
+                this.defaultMQProducerImpl.registerSendMessageHook(
+                        new SendMessageTraceHookImpl(traceDispatcher));
+                this.defaultMQProducerImpl.registerEndTransactionHook(
+                        new EndTransactionTraceHookImpl(traceDispatcher));
+            } catch (Throwable e) {
+                logger.error("system mqtrace hook init failed ,maybe can't send msg trace data");
+            }
+        }
+        if (null != traceDispatcher) {
+            if (traceDispatcher instanceof AsyncTraceDispatcher) {
+                ((AsyncTraceDispatcher) traceDispatcher).getTraceProducer().setUseTLS(isUseTLS());
+            }
+            try {
+                traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());
+            } catch (MQClientException e) {
+                logger.warn("trace dispatcher start failed ", e);
+            }
+        }
+    }
+}
+```
+
+
+```java
+public class DefaultMQProducerImpl implements MQProducerInner {
+    public void start() throws MQClientException {
+        this.start(true);
+    }
+
+    public void start(final boolean startFactory) throws MQClientException {
+        switch (this.serviceState) {
+            case CREATE_JUST:
+                this.serviceState = ServiceState.START_FAILED;
+
+                this.checkConfig();
+
+                if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
+                    this.defaultMQProducer.changeInstanceNameToPID();
+                }
+
+                this.mQClientFactory = MQClientManager.getInstance().getOrCreateMQClientInstance(this.defaultMQProducer, rpcHook);
+
+                boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
+                if (!registerOK) {
+                    this.serviceState = ServiceState.CREATE_JUST;
+                    throw new MQClientException("The producer group[" + this.defaultMQProducer.getProducerGroup()
+                            + "] has been created before, specify another name please." + FAQUrl.suggestTodo(FAQUrl.GROUP_NAME_DUPLICATE_URL),
+                            null);
+                }
+
+                if (startFactory) {
+                    mQClientFactory.start();
+                }
+
+                this.initTopicRoute();
+
+                this.mqFaultStrategy.startDetector();
+
+                log.info("the producer [{}] start OK. sendMessageWithVIPChannel={}", this.defaultMQProducer.getProducerGroup(),
+                        this.defaultMQProducer.isSendMessageWithVIPChannel());
+                this.serviceState = ServiceState.RUNNING;
+                break;
+            case RUNNING:
+            case START_FAILED:
+            case SHUTDOWN_ALREADY:
+                throw new MQClientException("The producer service state not OK, maybe started once, "
+                        + this.serviceState
+                        + FAQUrl.suggestTodo(FAQUrl.CLIENT_SERVICE_NOT_OK),
+                        null);
+            default:
+                break;
+        }
+
+        this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
+
+        RequestFutureHolder.getInstance().startScheduledTask(this);
+    }
+}
+```
 ## send
 
 ```java
@@ -160,6 +259,53 @@ public class DefaultMQProducerImpl implements MQProducerInner {
   }
 }
 ```
+
+
+```java
+public class DefaultMQProducerImpl implements MQProducerInner {
+    public void executeAsyncMessageSend(Runnable runnable, final Message msg, final BackpressureSendCallBack sendCallback,
+                                        final long timeout, final long beginStartTime)
+            throws MQClientException, InterruptedException {
+        ExecutorService executor = this.getAsyncSenderExecutor();
+        boolean isEnableBackpressureForAsyncMode = this.getDefaultMQProducer().isEnableBackpressureForAsyncMode();
+        boolean isSemaphoreAsyncNumbAcquired = false;
+        boolean isSemaphoreAsyncSizeAcquired = false;
+        int msgLen = msg.getBody() == null ? 1 : msg.getBody().length;
+
+        try {
+            if (isEnableBackpressureForAsyncMode) {
+                long costTime = System.currentTimeMillis() - beginStartTime;
+                isSemaphoreAsyncNumbAcquired = timeout - costTime > 0
+                        && semaphoreAsyncSendNum.tryAcquire(timeout - costTime, TimeUnit.MILLISECONDS);
+                if (!isSemaphoreAsyncNumbAcquired) {
+                    sendCallback.onException(
+                            new RemotingTooMuchRequestException("send message tryAcquire semaphoreAsyncNum timeout"));
+                    return;
+                }
+                costTime = System.currentTimeMillis() - beginStartTime;
+                isSemaphoreAsyncSizeAcquired = timeout - costTime > 0
+                        && semaphoreAsyncSendSize.tryAcquire(msgLen, timeout - costTime, TimeUnit.MILLISECONDS);
+                if (!isSemaphoreAsyncSizeAcquired) {
+                    sendCallback.onException(
+                            new RemotingTooMuchRequestException("send message tryAcquire semaphoreAsyncSize timeout"));
+                    return;
+                }
+            }
+            sendCallback.isSemaphoreAsyncSizeAcquired = isSemaphoreAsyncSizeAcquired;
+            sendCallback.isSemaphoreAsyncNumbAcquired = isSemaphoreAsyncNumbAcquired;
+            sendCallback.msgLen = msgLen;
+            executor.submit(runnable);
+        } catch (RejectedExecutionException e) {
+            if (isEnableBackpressureForAsyncMode) {
+                runnable.run();
+            } else {
+                throw new MQClientException("executor rejected ", e);
+            }
+        }
+    }
+}
+```
+
 
 ### sendKernelImpl
 
@@ -365,6 +511,48 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
 ```
+batch does not support compressing right now
+
+compression related
+
+```java
+ private int compressLevel = Integer.parseInt(System.getProperty(MixAll.MESSAGE_COMPRESS_LEVEL, "5"));
+private CompressionType compressType = CompressionType.of(System.getProperty(MixAll.MESSAGE_COMPRESS_TYPE, "ZLIB"));
+// Compress message body threshold, namely, message body larger than 4k will be compressed on default.
+private int compressMsgBodyOverHowmuch = 1024 * 4;
+```
+
+default not enable batch message
+
+retry
+
+```java
+ /**
+     * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
+     * <p>
+     * This may potentially cause message duplication which is up to application developers to resolve.
+     */
+    private int retryTimesWhenSendFailed = 2;
+
+    /**
+     * Maximum number of retry to perform internally before claiming sending failure in asynchronous mode. </p>
+     * <p>
+     * This may potentially cause message duplication which is up to application developers to resolve.
+     */
+    private int retryTimesWhenSendAsyncFailed = 2;
+
+    /**
+     * Indicate whether to retry another broker on sending failure internally.
+     */
+    private boolean retryAnotherBrokerWhenNotStoreOK = false;
+
+    /**
+     * Maximum allowed message body size in bytes.
+     */
+    private int maxMessageSize = 1024 * 1024 * 4; // 4M
+
+
+```
 
 #### sendMessage
 
@@ -522,7 +710,7 @@ public class MQClientInstance {
 }
 ```
 
-start
+#### MQClientInstance#start
 
 ```java
 public class MQClientInstance {
@@ -536,7 +724,7 @@ public class MQClientInstance {
           if (null == this.clientConfig.getNamesrvAddr()) {
             this.mQClientAPIImpl.fetchNameServerAddr();
           }
-          // Start request-response channel
+          // Start request-response channel, NettyRemotingClient
           this.mQClientAPIImpl.start();
           // Start various schedule tasks
           this.startScheduledTask();
