@@ -76,7 +76,8 @@ With transparent RPC, the client can hardly be expected to negotiate with its pr
 
 In order to marshall the parameters, the client stub has to know how many there are and what type they all have.
 
-For strongly typed languages, these usually does not cause any trouble, although if union types or variant records are permitted, the stub may not be able to deduce which union member or variant record is being passed.
+For strongly typed languages, these usually does not cause any trouble, although if union types or variant records are permitted, 
+the stub may not be able to deduce which union member or variant record is being passed.
 
 For languages such as C, which are not type safe, the problems are worse.
 The procedure printf, for example, is called with a variety of different parameters.

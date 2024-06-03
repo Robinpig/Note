@@ -25,8 +25,8 @@ These classes employ a work-stealing scheduler that attains high throughput for 
   thread creation takes time, introducing latency into request processing, and requires some processing activity by the
   JVM and OS.
 - Resource consumption
-  Active threads consume system resources, especially memory. When there are more runnable
-  threads than available processors, threads sit idle.
+  Active threads consume system resources, especially memory. 
+  When there are more runnable threads than available processors, threads sit idle.
 - Stability
   There is a limit on how many threads can be created.
 
@@ -560,9 +560,6 @@ If the task cannot be submitted for execution,
 
 ```java
 public void execute(Runnable command) {
-    if (command == null)
-        throw new NullPointerException();
-  
     int c = ctl.get();
     if (workerCountOf(c) < corePoolSize) { // addWaiter if less than corePoolSize
         if (addWorker(command, true))

@@ -595,32 +595,33 @@ private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
 
 ## ChannelConfig
 
-- A set of configuration properties of a [`Channel`](https://netty.io/4.1/api/io/netty/channel/Channel.html).
+- A set of configuration properties of a `Channel`.
 
-  Please down-cast to more specific configuration type such as [`SocketChannelConfig`](https://netty.io/4.1/api/io/netty/channel/socket/SocketChannelConfig.html) or use [`setOptions(Map)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setOptions-java.util.Map-) to set the transport-specific properties:
+  Please down-cast to more specific configuration type such as `SocketChannelConfig` or use `setOptions(Map)` to set the transport-specific properties:
 
-  ```java
+```java
    Channel ch = ...;
    SocketChannelConfig cfg = (SocketChannelConfig) ch.getConfig();
    cfg.setTcpNoDelay(false);
    
-  ```
+```
 
   ### Option map
 
-  An option map property is a dynamic write-only property which allows the configuration of a [`Channel`](https://netty.io/4.1/api/io/netty/channel/Channel.html) without down-casting its associated [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html). To update an option map, please call [`setOptions(Map)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setOptions-java.util.Map-).
+  An option map property is a dynamic write-only property which allows the configuration of a `Channel` without down-casting its associated `ChannelConfig`. 
+  To update an option map, please call `setOptions(Map)`.
 
-  All [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html) has the following options:
+  All [`ChannelConfig` has the following options:
 
-  | Name                                                         | Associated setter method                                     |
-  | ------------------------------------------------------------ | ------------------------------------------------------------ |
-  | [`ChannelOption.CONNECT_TIMEOUT_MILLIS`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#CONNECT_TIMEOUT_MILLIS) | [`setConnectTimeoutMillis(int)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setConnectTimeoutMillis-int-) |
-  | [`ChannelOption.WRITE_SPIN_COUNT`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#WRITE_SPIN_COUNT) | [`setWriteSpinCount(int)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setWriteSpinCount-int-) |
-  | [`ChannelOption.WRITE_BUFFER_WATER_MARK`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#WRITE_BUFFER_WATER_MARK) | [`setWriteBufferWaterMark(WriteBufferWaterMark)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setWriteBufferWaterMark-io.netty.channel.WriteBufferWaterMark-) |
-  | [`ChannelOption.ALLOCATOR`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#ALLOCATOR) | [`setAllocator(ByteBufAllocator)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setAllocator-io.netty.buffer.ByteBufAllocator-) |
-  | [`ChannelOption.AUTO_READ`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html#AUTO_READ) | [`setAutoRead(boolean)`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html#setAutoRead-boolean-) |
+  | Name                                                                                                                           | Associated setter method                                   |
+--------------------------------------------------------------------------------------------------------------------------------| ---------------------------------------------------------- |
+  | `ChannelOption.CONNECT_TIMEOUT_MILLIS`                                                                                         | `setConnectTimeoutMillis(int)` |
+  | `ChannelOption.WRITE_SPIN_COUNT`               | `setWriteSpinCount(int)` |
+  | `ChannelOption.WRITE_BUFFER_WATER_MARK` | `setWriteBufferWaterMark(WriteBufferWaterMark)` |
+  | `ChannelOption.ALLOCATOR`                             | `setAllocator(ByteBufAllocator)` |
+  | `ChannelOption.AUTO_READ`                                                                                                      | `setAutoRead(boolean)` |
 
-  More options are available in the sub-types of [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html). For example, you can configure the parameters which are specific to a TCP/IP socket as explained in [`SocketChannelConfig`](https://netty.io/4.1/api/io/netty/channel/socket/SocketChannelConfig.html).
+  More options are available in the sub-types of `ChannelConfig`. For example, you can configure the parameters which are specific to a TCP/IP socket as explained in `SocketChannelConfig`.
 
 
 
@@ -628,9 +629,10 @@ private void fulfillConnectPromise(ChannelPromise promise, boolean wasActive) {
 > 
 > Suggest use childOption(NioChannelOption) rather than  childOption(ChannelOption).
 
-**Deprecated.** *Use [`MaxMessagesRecvByteBufAllocator`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html) and [`MaxMessagesRecvByteBufAllocator.maxMessagesPerRead()`](https://netty.io/4.1/api/io/netty/channel/MaxMessagesRecvByteBufAllocator.html#maxMessagesPerRead--).*
+**Deprecated.** Use `MaxMessagesRecvByteBufAllocator` and `MaxMessagesRecvByteBufAllocator.maxMessagesPerRead()`.
 
-*Returns the maximum number of messages to read per read loop. a* [`channelRead()`](https://netty.io/4.1/api/io/netty/channel/ChannelInboundHandler.html#channelRead-io.netty.channel.ChannelHandlerContext-java.lang.Object-) *event. If this value is greater than 1, an event loop might attempt to read multiple times to procure multiple messages.*
+Returns the maximum number of messages to read per read loop. a `channelRead()` event. 
+If this value is greater than 1, an event loop might attempt to read multiple times to procure multiple messages.
 
 ```java
 @Deprecated
@@ -642,7 +644,9 @@ ChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead);
 
 
 
-Returns the maximum loop count for a write operation until [`WritableByteChannel.write(ByteBuffer)`](https://docs.oracle.com/javase/8/docs/api/java/nio/channels/WritableByteChannel.html?is-external=true#write-java.nio.ByteBuffer-) returns a non-zero value. It is similar to what a spin lock is used for in concurrency programming. It improves memory utilization and write throughput depending on the platform that JVM runs on. The default value is **`16`**.
+Returns the maximum loop count for a write operation until `WritableByteChannel.write(ByteBuffer)` returns a non-zero value. 
+It is similar to what a spin lock is used for in concurrency programming.
+It improves memory utilization and write throughput depending on the platform that JVM runs on. The default value is **`16`**.
 
 ```java
 int getWriteSpinCount();
@@ -672,7 +676,8 @@ public final class WriteBufferWaterMark {
 
 ## ChannelOption
 
-A [`ChannelOption`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html) allows to configure a [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html) in a type-safe way. Which [`ChannelOption`](https://netty.io/4.1/api/io/netty/channel/ChannelOption.html) is supported depends on the actual implementation of [`ChannelConfig`](https://netty.io/4.1/api/io/netty/channel/ChannelConfig.html) and may depend on the nature of the transport it belongs to.
+A `ChannelOption` allows to configure a `ChannelConfig` in a type-safe way. 
+Which `ChannelOption` is supported depends on the actual implementation of `ChannelConfig` and may depend on the nature of the transport it belongs to.
 
 
 

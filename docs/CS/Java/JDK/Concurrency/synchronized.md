@@ -1927,6 +1927,11 @@ void ObjectMonitor::ExitEpilog(JavaThread* current, ObjectWaiter* Wakee) {
 }
 ```
 
+#### deflate_idle_monitors
+
+
+
+
 ## Summary
 
 Using ParkEvent(A wrapper of mutex).

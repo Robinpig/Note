@@ -174,10 +174,52 @@ An easy way to visualize the difference among volumes, bind mounts, and `tmpfs` 
 - `tmpfs` mounts are stored in the host system's memory only, and are never written to the host system's filesystem.
 
 
+
+
 ## Docker Images
 
 
+## Dockerfile
 
+A Docker Dockerfile contains a set of instructions for how to build a Docker image. 
+The Docker build command executes the Dockerfile and builds a Docker image from it.
+
+A Docker image typically consists of:
+
+- A base Docker image on top of which to build your own Docker image.
+- A set of tools and applications to be installed in the Docker image.
+- A set of files to be copied into the Docker image (e.g configuration files).
+- Possibly a network (TCP / UDP) port (or more) to be opened for traffic in the firewall. 
+- etc.
+
+
+A Dockerfile consists of a set of instructions. 
+Each instruction consists of a command followed by arguments to that command, similar to command line executables.
+
+A Docker image consists of layers. Each layer adds something to the final Docker image. Each layer is actually a separate Docker image.
+The Dockerfile FROM command specifies the base image of your Docker images.
+
+
+The CMD command specifies the command line command to execute when a Docker container is started up which is based on the Docker image built from this Dockerfile.
+
+The Dockerfile COPY command copies one or more files from the Docker host (the computer building the Docker image from the Dockerfile) into the Docker image. 
+The COPY command can copy both a file or a directory from the Docker host to the Docker image.
+
+The Dockerfile ADD instruction works in the same way as the COPY instruction with a few minor differences:
+
+- The ADD instruction can copy and extract TAR files from the Docker host to the Docker image.
+- The ADD instruction can download files via HTTP and copy them into the Docker image.
+
+The Dockerfile ENV command can set an environment variable inside the Docker image.
+
+
+The Dockerfile RUN command can execute command line executables within the Docker image.
+
+The Dockerfile EXPOSE instruction opens up network ports in the Docker container to the outside world.
+
+
+The Dockerfile HEALTHCHECK instruction can execute a health check command line command at regular intervals, 
+to monitor the health of the application running inside the Docker container.
 
 
 ## Docker Network

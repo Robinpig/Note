@@ -961,41 +961,38 @@ private void record0(Object hint) {
 
 ## Allocator
 
-Implementations are responsible to allocate buffers. Implementations of this interface are expected to be thread-safe.
+
+Default pooled if not Android.
 
 ```java
-public interface ByteBufAllocator {
+public final class ByteBufUtil {
+   static {
+      String allocType = SystemPropertyUtil.get(
+              "io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "pooled");
 
-    ByteBufAllocator DEFAULT = ByteBufUtil.DEFAULT_ALLOCATOR;
-  ...
-}   
-```
+      ByteBufAllocator alloc;
+      if ("unpooled".equals(allocType)) {
+         alloc = UnpooledByteBufAllocator.DEFAULT;
+         logger.debug("-Dio.netty.allocator.type: {}", allocType);
+      } else if ("pooled".equals(allocType)) {
+         alloc = PooledByteBufAllocator.DEFAULT;
+         logger.debug("-Dio.netty.allocator.type: {}", allocType);
+      } else if ("adaptive".equals(allocType)) {
+         alloc = new AdaptiveByteBufAllocator();
+         logger.debug("-Dio.netty.allocator.type: {}", allocType);
+      } else {
+         alloc = PooledByteBufAllocator.DEFAULT;
+         logger.debug("-Dio.netty.allocator.type: pooled (unknown: {})", allocType);
+      }
 
+      DEFAULT_ALLOCATOR = alloc;
 
+      THREAD_LOCAL_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.threadLocalDirectBufferSize", 0);
+      logger.debug("-Dio.netty.threadLocalDirectBufferSize: {}", THREAD_LOCAL_BUFFER_SIZE);
 
-```java
-// ByteBufUtil
-static final ByteBufAllocator DEFAULT_ALLOCATOR;
-
-static {
-    String allocType = SystemPropertyUtil.get(
-            "io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "pooled");
-    allocType = allocType.toLowerCase(Locale.US).trim();
-
-    ByteBufAllocator alloc;
-    if ("unpooled".equals(allocType)) {
-        alloc = UnpooledByteBufAllocator.DEFAULT;
-    } else if ("pooled".equals(allocType)) {
-        alloc = PooledByteBufAllocator.DEFAULT; // default
-    } else {
-        alloc = PooledByteBufAllocator.DEFAULT;
-    }
-
-    DEFAULT_ALLOCATOR = alloc;
-
-    THREAD_LOCAL_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.threadLocalDirectBufferSize", 0);
-
-    MAX_CHAR_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.maxThreadLocalCharBufferSize", 16 * 1024);
+      MAX_CHAR_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.maxThreadLocalCharBufferSize", 16 * 1024);
+      logger.debug("-Dio.netty.maxThreadLocalCharBufferSize: {}", MAX_CHAR_BUFFER_SIZE);
+   }
 }
 ```
 

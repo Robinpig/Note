@@ -4,4 +4,4 @@
 
 ## Links
 
-- [RPC](/docs/CS/Distributed/RPC/RPC.md)
+- [Encoding](/docs/CS/Encoding.md)

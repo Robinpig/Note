@@ -7,10 +7,6 @@
 ### group
 
 ```java
-/**
- * The {@link EventLoopGroup} which is used to handle all the events for the to-be-created
- * {@link Channel}
- */
 public B group(EventLoopGroup group) {
     ObjectUtil.checkNotNull(group, "group");
     if (this.group != null) {
@@ -23,11 +19,6 @@ public B group(EventLoopGroup group) {
 ```
 
 ```java
-/**
- * Set the {@link EventLoopGroup} for the parent (acceptor) and the child (client). These
- * {@link EventLoopGroup}'s are used to handle all the events and IO for {@link ServerChannel} and
- * {@link Channel}'s.
- */
 public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) {
     super.group(parentGroup);
     ObjectUtil.checkNotNull(childGroup, "childGroup");

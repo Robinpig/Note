@@ -57,6 +57,13 @@ For example, if thread A is waiting for a resource that thread B holds exclusive
 
 We will describe various forms of [liveness failures](/docs/CS/OS/Deadlocks.md) and how to avoid them, including deadlock, starvation, and livelock.
 
+Deadlock issues:
+
+- [JDK-8198928 (so) SocketChannel connect may deadlock if closed at around same time that connect fails](https://bugs.openjdk.org/browse/JDK-8198928)
+
+
+ThreadMXBean 
+
 #### Performance Hazards
 
 Related to liveness is performance. Liveness means that something good eventually happens, eventually may not be good enough—we often want good things to happen quickly.

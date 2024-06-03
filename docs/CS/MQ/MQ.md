@@ -342,6 +342,27 @@ Kafka
 - consumer
   - enable.auto.commit: false
 
+
+Producer:
+
+正确处理返回值或者捕获异常并重发，就可以保证这个阶段的消息不会丢
+
+Broker:
+
+如果
+Broker 出现了故障，比如进程死掉了或者服务器宕机了，还是可能会丢失消息的
+
+配置刷盘
+
+至少将消息发送到 2 个以上的节点，再给客户端回复发送确认响应
+
+Consumer:
+
+在执
+行完所有消费业务逻辑之后，再发送消费确认。
+
+
+
 ### Duplicate Consume
 
 Based on no message losing
@@ -364,6 +385,14 @@ The difference is attributable to the fact that every topic and partition of Kaf
 When the number of topics increases, the policy of deconcentrated storage of messages to disks will lead to disk IO competition to cause performance bottlenecks.
 In contrast, all the messages in Apache RocketMQ are stored in the same physical file. The number of topics and partitions is just a logic division for Apache RocketMQ.
 So the increasing number of topics won't generate a huge impact on the Apache RocketMQ performance.
+
+The Cons of Using RabbitMQ:
+
+- Once a message with RabbitMQ has been delivered it is removed from the queue.
+- RabbitMQ scales vertically and relies on getting more powerful hardware to increase throughput.
+- RabbitMQ stores messages in memory as long as there is space after which messages will be transferred to disk.
+- RabbitMQ cannot deal with high throughput, as it doesn’t support message batching, and is optimized for one message at a time instead.
+- Many of RabbitMQ’s disadvantages stem from being written in Erlang, however, it can also be difficult for a developer to read the source code and understand what’s going on when troubleshooting.
 
 ### Kafka
 

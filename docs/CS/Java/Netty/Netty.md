@@ -323,12 +323,27 @@ deactivate el
 
 ## Under Hood
 
+
+### Memory
+
+- use primitive type rather than wrapper type(long + AtomicLongFieldUpdater rather than AtomicLong)
+- reduce object creative
+  - class field rather than instance field
+- expect map size to reduce expand, AdaptiveRecvByteBufAllocator
+- zero copy
+
+
 AllocateByteBuf
 
-## Zero Copy
+
+[Memory Pool](/docs/CS/Java/Netty/memory.md)
+
+
+
+### Zero Copy
 
 - Direct Memory
-- Composite ByteBuf
+- Composite or wrap ByteBuf
 - FileChannel transfer
 
 [Future and Promise](/docs/CS/Java/Netty/Future.md)
@@ -337,10 +352,11 @@ AllocateByteBuf
 
 - [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
 - [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
-- [Flink](/docs/CS/Java/Flink)
+- [Flink](/docs/CS/Java/Flink.md)
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Cassandra](/docs/CS/DB/Cassandra.md)
 - [Hadoop](/docs/CS/Java/Hadoop/Hadoop.md)
+- [ElasticSearch](/docs/CS)
 
 ## References
 

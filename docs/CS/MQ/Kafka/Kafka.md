@@ -764,7 +764,8 @@ The protocol is kept quite simple to allow for future implementation of clients 
 
 ## References
 
-1. [Kafka Documentation](https://kafka.apache.org/documentation/#design)
+1. [The Log: What every software engineer should know about real-time data's unifying abstraction](https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying)
+2. [Kafka Documentation](https://kafka.apache.org/documentation/#design)
 2. [Kafka: a Distributed Messaging System for Log Processing](http://notes.stephenholiday.com/Kafka.pdf)
 3. [KSQL: Streaming SQL Engine for Apache Kafka](https://openproceedings.org/2019/conf/edbt/EDBT19_paper_329.pdf)
 4. [Streams and Tables: Two Sides of the Same Coin](https://dl.acm.org/doi/10.1145/3242153.3242155)

@@ -1,4 +1,5 @@
 ## Introduction
+NameServer是一个几乎无状态节点，可集群部署，节点之间无任何信息同步。
 
 ## start
 
@@ -104,7 +105,7 @@ public class NamesrvController {
 }
 ```
 
-### Processor
+### DefaultRequestProcessor#processRequest
 
 ```java
 public class DefaultRequestProcessor implements NettyRequestProcessor {
@@ -176,7 +177,7 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
 
 clients get latest route information by active
 
-## RouteInfo
+## Route
 
 ### RouteInfoManager
 
@@ -215,21 +216,20 @@ RouteInfoManager
 
 #### registerBroker
 
+receive register request
 ```java
-public RegisterBrokerResult registerBroker(
-        final String clusterName,
-        final String brokerAddr,
-        final String brokerName,
-        final long brokerId,
-        final String haServerAddr,
-        final String zoneName,
-        final Long timeoutMillis,
-        final TopicConfigSerializeWrapper topicConfigWrapper,
-        final List<String> filterServerList,
-        final Channel channel) {
-        return registerBroker(clusterName, brokerAddr, brokerName, brokerId, haServerAddr, zoneName, timeoutMillis, false, topicConfigWrapper, filterServerList, channel);
+public class DefaultRequestProcessor implements NettyRequestProcessor {
+    public RemotingCommand processRequest(ChannelHandlerContext ctx,
+                                          RemotingCommand request) throws RemotingCommandException {
+        switch (request.getCode()) {
+            // ...
+            case RequestCode.REGISTER_BROKER:
+                return this.registerBroker(ctx, request);
+        }
     }
+}
 ```
+
 
 Route info is not real-time. The clients need to pull latest topic info in fix rate.
 
@@ -343,6 +343,11 @@ public class ClientRequestProcessor implements NettyRequestProcessor {
     }
 }
 ```
+
+## HouseKeep
+
+BrokerHousekeepingService
+
 
 ## Links
 

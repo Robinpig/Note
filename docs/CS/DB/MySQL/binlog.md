@@ -3,16 +3,17 @@
 The binary log contains “events” that describe database changes such as table creation operations or changes to table data.
 It also contains events for statements that potentially could have made changes (for example, a DELETE which matched no rows), unless row-based logging is used.
 The binary log also contains information about how long each statement took that updated data.
+**The binary log is not used for statements such as SELECT or SHOW that do not modify data.**
 
 The binary log has two important purposes:
 
-- For replication, the binary log on a replication source server provides a record of the data changes to be sent to replicas.
+- **For replication**, the binary log on a replication source server provides a record of the data changes to be sent to replicas.
   The source sends the information contained in its binary log to its replicas, which reproduce those transactions to make the same data changes that were made on the source.
-- Certain data recovery operations require use of the binary log.
+- **Certain data recovery operations** require use of the binary log.
   After a backup has been restored, the events in the binary log that were recorded after the backup was made are re-executed.
   These events bring databases up to date from the point of the backup.
 
-To log all statements (for example, to identify a problem query), use the general query log.
+
 
 By default, the binary log is synchronized to disk at each write (sync_binlog=1).
 If sync_binlog was not enabled, and the operating system or machine (not only the MySQL server) crashed, there is a chance that the last statements of the binary log could be lost.

@@ -178,6 +178,28 @@ public AbstractStringBuilder delete(int start, int end) {
 }
 ```
 
+append
+
+```java
+public class StringTest {
+
+    public static String concat(String str) {
+        return str + "aa"+ "bb";
+    }
+}
+```
+
+JDK8
+```
+
+```
+
+JDK9+
+```
+         1: invokedynamic #7,  0              // InvokeDynamic #0:makeConcatWithConstants:(Ljava/lang/String;)Ljava/lang/String;
+```
+
+
 ## StringTable
 
 HashTable size:
