@@ -33,6 +33,8 @@ The prisoners' dilemma is a common game theory example and one that adequately s
 - In the Nash equilibrium, each player's strategy is optimal when considering the decisions of other players. Every player wins because everyone gets the outcome they desire.
 - The Nash equilibrium does not always mean that the most optimal strategy is chosen.
 
+## Pareto Efficiency
+
 
 ## Links
 
