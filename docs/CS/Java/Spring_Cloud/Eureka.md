@@ -658,3 +658,4 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 ## Links
 
 - [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=service-registry)
+

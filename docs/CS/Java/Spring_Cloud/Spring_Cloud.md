@@ -60,6 +60,7 @@ A service registry, such as `Netflix Eureka`, or a sidecar solution, such as `Ha
 Spring Cloud provides `DiscoveryClient` implementations for popular registries such as [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md), [Consul](/docs/CS/Java/Spring_Cloud/Consul.md), [Zookeeper](/docs/CS/Java/Zookeeper/ZooKeeper.md), and even [Kubernetes](/docs/CS/Container/K8s.md)' built-in system.
 There’s also a [Spring Cloud Load Balancer](https://spring.io/guides/gs/spring-cloud-loadbalancer/) to help you distribute the load carefully among your service instances.
 
+
 ### DiscoveryClient
 
 Spring Cloud Commons provides the `@EnableDiscoveryClient` annotation.
@@ -360,3 +361,6 @@ It contains all the components required to develop distributed applications, mak
 
 - [Spring Framework](/docs/CS/Java/Spring/Spring.md)
 - [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+
+## References
+1. [Eureka! Why You Shouldn’t Use ZooKeeper for Service Discovery](https://medium.com/knerd/eureka-why-you-shouldnt-use-zookeeper-for-service-discovery-4932c5c7e764)
