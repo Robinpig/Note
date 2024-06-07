@@ -89,24 +89,21 @@ For locking reads (SELECT with FOR UPDATE or LOCK IN SHARE MODE), UPDATE, and DE
 - For a unique index with a unique search condition, InnoDB locks only the index record found, not the gap before it.
 - For other search conditions, InnoDB locks the index range scanned, using gap locks or next-key locks to block insertions by other sessions into the gaps covered by the range.
 
-
 > [!TIP]
-> 
+>
 > It is best practice to not mix storage engines in your application. Failed transactions can lead to inconsistent results as some parts can roll back and others cannot.
 
 ## Locking
 
-InnoDB uses a two-phase locking protocol. 
-It can acquire locks at any time during a transaction, but it does not release them until a COMMIT or ROLLBACK. 
-It releases all the locks at the same time. 
-The locking mechanisms described earlier are all implicit. 
+InnoDB uses a two-phase locking protocol.
+It can acquire locks at any time during a transaction, but it does not release them until a COMMIT or ROLLBACK.
+It releases all the locks at the same time.
+The locking mechanisms described earlier are all implicit.
 InnoDB handles locks automatically, according to your isolation level.
-
 
 > TODO:
 >
 > [MySQL · 源码分析 · MySQL deadlock cause by lock inherit](http://mysql.taobao.org/monthly/2024/03/02/)
-
 
 ### Locking Types
 
@@ -136,7 +133,7 @@ Instead, transaction `T2` has to wait for transaction `T1` to release its lock o
 #### Intention Locks
 
 `InnoDB` supports *multiple granularity locking* which permits coexistence of row locks and table locks.
-For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table. 
+For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table.
 To make locking at multiple granularity levels practical, `InnoDB` uses intention locks.
 Intention locks are **table-level** locks that indicate which type of lock (shared or exclusive) a transaction requires later for a row in a table.
 There are two types of intention locks:
@@ -227,10 +224,10 @@ but do not block each other because the rows are nonconflicting.
 
 #### AUTO-INC Locks
 
-An `AUTO-INC` lock is a special table-level lock taken by transactions inserting into tables with `AUTO_INCREMENT` columns. 
+An `AUTO-INC` lock is a special table-level lock taken by transactions inserting into tables with `AUTO_INCREMENT` columns.
 In the simplest case, if one transaction is inserting values into the table, any other transactions must wait to do their own inserts into that table, so that rows inserted by the first transaction receive consecutive primary key values.
 
-The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking. 
+The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking.
 It allows you to choose how to trade off between predictable sequences of auto-increment values and maximum concurrency for insert operations.
 
 ### Source Code
@@ -304,8 +301,8 @@ You can cope with deadlocks and reduce the likelihood of their occurrence with t
 - At any time, issue `SHOW ENGINE INNODB STATUS` to determine the cause of the most recent deadlock. That can help you to tune your application to avoid deadlocks.
 - `SHOW FULL PROCESSLIST`
 - table `INNODB_TRX`, `INNODB_LOCKS`, `INNODB_LOCK_WAITS` in information_schema
-- If frequent deadlock warnings cause concern, collect more extensive debugging information by enabling the `innodb_print_all_deadlocks` variable. 
-  Information about each deadlock, not just the latest one, is recorded in the MySQL [error log](). 
+- If frequent deadlock warnings cause concern, collect more extensive debugging information by enabling the `innodb_print_all_deadlocks` variable.
+  Information about each deadlock, not just the latest one, is recorded in the MySQL [error log]().
   Disable this option when you are finished debugging.
 - Always be prepared to re-issue a transaction if it fails due to deadlock. Deadlocks are not dangerous. Just try again.
 - Keep transactions small and short in duration to make them less prone to collision.
@@ -315,16 +312,16 @@ You can cope with deadlocks and reduce the likelihood of their occurrence with t
   Then transactions form well-defined queues and do not deadlock.
   For example, organize database operations into functions within your application, or call stored routines, rather than coding multiple similar sequences of `INSERT`, `UPDATE`, and `DELETE` statements in different places.
 - Add well-chosen indexes to your tables so that your queries scan fewer index records and set fewer locks. Use `EXPLAIN SELECT` to determine which indexes the MySQL server regards as the most appropriate for your queries.
-- Use less locking. If you can afford to permit a `SELECT` to return data from an old snapshot, do not add a `FOR UPDATE` or `FOR SHARE` clause to it. 
+- Use less locking. If you can afford to permit a `SELECT` to return data from an old snapshot, do not add a `FOR UPDATE` or `FOR SHARE` clause to it.
   Using the `READ COMMITTED` isolation level is good here, because each consistent read within the same transaction reads from its own fresh snapshot.
-- If nothing else helps, serialize your transactions with table-level locks. The correct way to use `LOCK TABLES` with transactional tables, 
-  such as `InnoDB` tables, is to begin a transaction with `SET autocommit = 0` (not `START TRANSACTION`) followed by `LOCK TABLES`, 
+- If nothing else helps, serialize your transactions with table-level locks. The correct way to use `LOCK TABLES` with transactional tables,
+  such as `InnoDB` tables, is to begin a transaction with `SET autocommit = 0` (not `START TRANSACTION`) followed by `LOCK TABLES`,
   and to not call `UNLOCK TABLES` until you commit the transaction explicitly. For example, if you need to write to table `t1` and read from table `t2`, you can do this:
 
   Table-level locks prevent concurrent updates to the table, avoiding deadlocks at the expense of less responsiveness for a busy system.
-- Another way to serialize transactions is to create an auxiliary “semaphore” table that contains just a single row. 
-  Have each transaction update that row before accessing other tables. In that way, all transactions happen in a serial fashion. 
-  Note that the `InnoDB` instant deadlock detection algorithm also works in this case, because the serializing lock is a row-level lock. 
+- Another way to serialize transactions is to create an auxiliary “semaphore” table that contains just a single row.
+  Have each transaction update that row before accessing other tables. In that way, all transactions happen in a serial fashion.
+  Note that the `InnoDB` instant deadlock detection algorithm also works in this case, because the serializing lock is a row-level lock.
   With MySQL table-level locks, the timeout method must be used to resolve deadlocks.
 
 #### Deadlock Detection
@@ -367,15 +364,15 @@ While Oracle and MySQL use the [undo log](/docs/CS/DB/MySQL/undolog.md) to captu
 
 ### InnoDB Multi-Versioning
 
-InnoDB implements MVCC by assigning a transaction ID for each transaction that starts. 
+InnoDB implements MVCC by assigning a transaction ID for each transaction that starts.
 That ID is assigned the first time the transaction reads any data.
-When a record is modified within that transaction, an undo record that explains how to revert that change is written to the undo log, 
-and the rollback pointer of the transaction is pointed at that undo log record. 
+When a record is modified within that transaction, an undo record that explains how to revert that change is written to the undo log,
+and the rollback pointer of the transaction is pointed at that undo log record.
 This is how the transaction can find the way to roll back if needed.
 
-When a different session reads a cluster key index record, InnoDB compares the record’s transaction ID versus the read view of that session. 
-If the record in its current state should not be visible (the transaction that altered it has not yet committed), 
-the undo log record is followed and applied until the session reaches a transaction ID that is eligible to be visible. 
+When a different session reads a cluster key index record, InnoDB compares the record’s transaction ID versus the read view of that session.
+If the record in its current state should not be visible (the transaction that altered it has not yet committed),
+the undo log record is followed and applied until the session reaches a transaction ID that is eligible to be visible.
 This process can loop all the way to an undo record that deletes this row entirely, signaling to the read view that this row does not exist.
 
 Records in a transaction are deleted by setting a “deleted” bit in the “info flags” of the record.
@@ -385,61 +382,60 @@ It is also worth noting that all undo log writes are also redo logged because th
 The size of these redo and undo logs also plays a large part in how transactions at high concurrency perform.
 
 The result of all this extra record keeping is that most read queries never acquire locks.
-They simply read data as fast as they can, making sure to select only rows that meet the criteria. 
+They simply read data as fast as they can, making sure to select only rows that meet the criteria.
 The drawbacks are that the storage engine has to store more data with each row, do more work when examining rows, and handle some additional housekeeping operations.
 
-MVCC works only with the REPEATABLE READ and READ COMMITTED isolation levels. 
-READ UNCOMMITTED isn’t MVCC compatible because queries don’t read the row version that’s appropriate for their transaction version; they read the newest version, no matter what. 
+MVCC works only with the REPEATABLE READ and READ COMMITTED isolation levels.
+READ UNCOMMITTED isn’t MVCC compatible because queries don’t read the row version that’s appropriate for their transaction version; they read the newest version, no matter what.
 SERIALIZABLE isn’t MVCC compatible because reads lock every row they return.
 
-
-`InnoDB` is a multi-version storage engine. 
-It keeps information about old versions of changed rows to support transactional features such as concurrency and rollback. 
+`InnoDB` is a multi-version storage engine.
+It keeps information about old versions of changed rows to support transactional features such as concurrency and rollback.
 **This information is stored in undo tablespaces in a data structure called a rollback segment.**
-`InnoDB` uses the information in the rollback segment to perform the undo operations needed in a transaction rollback. 
+`InnoDB` uses the information in the rollback segment to perform the undo operations needed in a transaction rollback.
 It also uses the information to build earlier versions of a row for a consistent read.
 
 Internally, `InnoDB` adds three fields to each row stored in the database:
 
-- A 6-byte `DB_TRX_ID` field indicates the transaction identifier for the last transaction that inserted or updated the row. 
+- A 6-byte `DB_TRX_ID` field indicates the transaction identifier for the last transaction that inserted or updated the row.
   Also, a deletion is treated internally as an update where a special bit in the row is set to mark it as deleted.
 - A 7-byte `DB_ROLL_PTR` field called the roll pointer. The roll pointer points to an **undo log** record written to the rollback segment.
   If the row was updated, the undo log record contains the information necessary to rebuild the content of the row before it was updated.
-- A 6-byte `DB_ROW_ID` field contains a row ID that increases monotonically as new rows are inserted. 
+- A 6-byte `DB_ROW_ID` field contains a row ID that increases monotonically as new rows are inserted.
   If `InnoDB` generates a clustered index automatically, the index contains row ID values. Otherwise, the `DB_ROW_ID` column does not appear in any index.
 
-Undo logs in the rollback segment are divided into insert and update undo logs. 
-Insert undo logs are needed only in transaction rollback and can be discarded as soon as the transaction commits. 
-Update undo logs are used also in consistent reads, but they can be discarded only after there is no transaction present for 
+Undo logs in the rollback segment are divided into insert and update undo logs.
+Insert undo logs are needed only in transaction rollback and can be discarded as soon as the transaction commits.
+Update undo logs are used also in consistent reads, but they can be discarded only after there is no transaction present for
 which `InnoDB` has assigned a snapshot that in a consistent read could require the information in the update undo log to build an earlier version of a database row.
 
 It is recommend that you commit transactions regularly, including transactions that issue only consistent reads. Otherwise,
 `InnoDB` cannot discard data from the update undo logs, and the rollback segment may grow too big, filling up the undo tablespace in which it resides.
 
-The physical size of an undo log record in the rollback segment is typically smaller than the corresponding inserted or updated row. 
+The physical size of an undo log record in the rollback segment is typically smaller than the corresponding inserted or updated row.
 You can use this information to calculate the space needed for your rollback segment.
 
-In the `InnoDB` multi-versioning scheme, a row is not physically removed from the database immediately when you delete it with an SQL statement. 
-`InnoDB` only physically removes the corresponding row and its index records when it discards the update undo log record written for the deletion. 
+In the `InnoDB` multi-versioning scheme, a row is not physically removed from the database immediately when you delete it with an SQL statement.
+`InnoDB` only physically removes the corresponding row and its index records when it discards the update undo log record written for the deletion.
 This removal operation is called a purge, and it is quite fast, usually taking the same order of time as the SQL statement that did the deletion.
 
-If you insert and delete rows in smallish batches at about the same rate in the table, 
-the purge thread can start to lag behind and the table can grow bigger and bigger because of all the “dead” rows, making everything disk-bound and very slow. 
+If you insert and delete rows in smallish batches at about the same rate in the table,
+the purge thread can start to lag behind and the table can grow bigger and bigger because of all the “dead” rows, making everything disk-bound and very slow.
 In such cases, throttle new row operations, and allocate more resources to the purge thread by tuning the `innodb_max_purge_lag` system variable.
 
 ### Multi-Versioning and Secondary Indexes
 
 `InnoDB` multiversion concurrency control (MVCC) treats secondary indexes differently than clustered indexes.
-Records in a clustered index are updated in-place, and their hidden system columns point undo log entries from which earlier versions of records can be reconstructed. 
+Records in a clustered index are updated in-place, and their hidden system columns point undo log entries from which earlier versions of records can be reconstructed.
 Unlike clustered index records, secondary index records do not contain hidden system columns nor are they updated in-place.
 
-When a secondary index column is updated, old secondary index records are delete-marked, new records are inserted, and delete-marked records are eventually purged. 
-**When a secondary index record is delete-marked or the secondary index page is updated by a newer transaction, `InnoDB` looks up the database record in the clustered index.** 
+When a secondary index column is updated, old secondary index records are delete-marked, new records are inserted, and delete-marked records are eventually purged.
+**When a secondary index record is delete-marked or the secondary index page is updated by a newer transaction, `InnoDB` looks up the database record in the clustered index.**
 In the clustered index, the record's `DB_TRX_ID` is checked, and the correct version of the record is retrieved from the undo log if the record was modified after the reading transaction was initiated.
 
-- If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md?id=covering_index) technique is not used. 
+- If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md?id=covering_index) technique is not used.
   Instead of returning values from the index structure, `InnoDB` looks up the record in the clustered index.
-- If the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index, 
+- If the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index,
   the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index.
   - If no matching records are found, the clustered index lookup is avoided.
   - If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
@@ -466,9 +462,34 @@ Suppose that you are running in the default `REPEATABLE READ` isolation level. W
 
 If you insert or modify some rows and then commit that transaction, a `DELETE`or `UPDATE`statement issued from another concurrent `REPEATABLE READ` transaction **could affect those just-committed rows, even though the session could not query them**. If a transaction does update or delete rows committed by a different transaction, those changes do become visible to the current transaction.
 
-### Source Code
+## Transaction flow
 
-#### System Columns
+
+
+When the transaction is first started:
+1. A transaction ID (TRX_ID) is assigned and may be written to the highest transaction ID field in the TRX_SYS page. A record of the TRX_SYS page modification is redo logged if the field
+2. A read view is created based on the assigned TRX_ID.
+
+
+Record modification
+Each time the UPDATE modifies a record:
+
+Undo log space is allocated.
+Previous values from record are copied to undo log.
+Record of undo log modifications are written to redo log.
+Page is modified in buffer pool; rollback pointer is pointed to previous version written in undo log.
+Record of page modifications are written to redo log.
+Page is marked as “dirty” (needs to be flushed to disk). Therefore the answer is yes.
+Transaction commit
+When the transaction is committed (implicitly or explicitly):
+
+Undo log page state is set to “purge” (meaning it can be cleaned up when it’s no longer needed).
+Record of undo log modifications are written to redo log.
+Redo log buffer is flushed to disk (depending on the setting of innodb_flush_log_at_trx_commit).
+
+
+
+System Columns
 
 1. DATA_ROW_ID
 2. DATA_TRX_ID
@@ -880,7 +901,7 @@ static bool trx_write_serialisation_history(
    /* Will set trx->no and will add rseg to purge queue. */
     serialised = trx_serialisation_number_get(trx, redo_rseg_undo_ptr,
                                               temp_rseg_undo_ptr)
-    
+  
 
   /* Update the latest MySQL binlog name and offset information
   in trx sys header only if MySQL binary logging is on and clone
