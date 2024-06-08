@@ -409,6 +409,17 @@ Kafka partition -> segment -> .log, .index, .timeindex
 
 RocketMQ all topics using single commitlog and multiple index
 
+
+### Comparsion
+
+
+naming Service
+
+- rocketmq ， client connect to the name server getting the topics and brokers 
+- Kafka clients connect to the broker 
+
+
+
 ## Links
 
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)
