@@ -12,6 +12,62 @@ A partition may be assigned to multiple brokers, which will result in the partit
 This provides redundancy of messages in the partition, such that another broker can take over leadership if there is a broker failure.
 However, all consumers and producers operating on that partition must connect to the leader.
 
+
+| NAME                            | DESCRIPTION                                                                                                                                                         | TYPE | DEFAULT             | VALID VALUES | IMPORTANCE |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- | ------------------- | ------------ | ---------- |
+| log.flush.interval.messages     | The number of messages accumulated on a log partition before messages are flushed to disk                                                                           | long | 9223372036854775807 | [1,...]      | high       |
+| log.flush.interval.ms           | The maximum time in ms that a message in any topic is kept in memory before flushed to disk. <br />If not set, the value in log.flush.scheduler.interval.ms is used | long | null                |              | high       |
+| log.flush.scheduler.interval.ms | The frequency in ms that the log flusher checks whether any log needs to be flushed to disk                                                                         | long | 9223372036854775807 |              | high       |
+
+```scala
+private def append(...): LogAppendInfo = {
+      // ...
+      lock synchronized {
+        // ...
+        if (localLog.unflushedMessages >= config.flushInterval) 
+          flush(false)
+        appendInfo
+        }
+  }
+```
+
+```scala
+private def append(...): LogAppendInfo = {
+      // ...
+      lock synchronized {
+        // ...
+        // Append the records, and increment the local log end offset immediately after the append because a
+        // write to the transaction index below may fail and we want to ensure that the offsets
+        // of future appends still grow monotonically. The resulting transaction index inconsistency
+        // will be cleaned up after the log directory is recovered. Note that the end offset of the
+        // ProducerStateManager will not be updated and the last stable offset will not advance
+        // if the append to the transaction index fails.
+        localLog.append(appendInfo.lastOffset, appendInfo.maxTimestamp, appendInfo.offsetOfMaxTimestamp, validRecords)
+        // ...
+        }
+  }
+// FileRecords
+public int append(MemoryRecords records) throws IOException {
+  if (records.sizeInBytes() > Integer.MAX_VALUE - size.get())
+    throw new IllegalArgumentException("Append of size " + records.sizeInBytes() +
+            " bytes is too large for segment with current file position at " + size.get());
+
+  int written = records.writeFullyTo(channel);
+  size.getAndAdd(written);
+  return written;
+}
+
+// MemoryRecords
+public int writeFullyTo(GatheringByteChannel channel) throws IOException {
+  buffer.mark();
+  int written = 0;
+  while (written < sizeInBytes())
+    written += channel.write(buffer);
+  buffer.reset();
+  return written;
+}
+```
+
 ### ISR
 
 An ISR is a replica that is up to date with the leader broker for a partition.
@@ -742,6 +798,8 @@ Fig.2. Topic Segments and Indexes
 Kafka stores all of its data in a directory on the broker disk. This directory is specified using the property log.dirs in the broker's configuration file.
 
 ### appendRecords
+
+`request.required.acks` = 0  Send the response immediately.
 
 ```scala
   def handleProduceRequest(request: RequestChannel.Request, requestLocal: RequestLocal): Unit = {
@@ -1906,9 +1964,11 @@ If the controller itself fails, then another controller will be elected.
 
 QuorumController implements the main logic of the KRaft (Kafka Raft Metadata) mode controller.
 The node which is the leader of the metadata log becomes the active controller.
-All other nodes remain in standby mode. Standby controllers cannot create new metadata log entries.
+All other nodes remain in standby mode.
+Standby controllers cannot create new metadata log entries.
 They just replay the metadata log entries that the current active controller has created.
-The QuorumController is **single-threaded**. A single event handler thread performs most operations.
+The QuorumController is **single-threaded**. 
+A single event handler thread performs most operations.
 This avoids the need for complex locking.
 The controller exposes an *asynchronous, futures-based API* to the world.
 This reflects the fact that the controller may have several operations in progress at any given point.
@@ -2720,7 +2780,139 @@ private[timer] class TimingWheel(tickMs: Long, wheelSize: Int, startMs: Long, ta
 }
 ```
 
+## index
+
+Apache Kafka is a commit-log system.
+The records are appended at the end of each Partition, and each Partition is also split into segments.
+Segments help delete older records through Compaction, improve performance, and much more.
+
+A partition is a logical unit of work in Kafka where records get appended but it is not the unit of storage.
+Partitions are further split into Segments which are the actual files on the file system.
+For better performance and maintainability, multiple segments get created, and rather than reading from one huge Partition,
+Consumers can now read faster from a smaller segment file.
+A directory with the partition name gets created and maintains all the segments for that partition as various files.
+
+Here is a sample directory structure for Topic my-topic and its partition my-topic-0.
+
+- .log file - This file contains the actual records and maintains the records up to a specific offset.
+  The name of the file depicts the starting offset added to this file.
+- .index file - This file has an index that maps a record offset to the byte offset of the record within the
+- .log file. This mapping is used to read the record from any specific offset.
+- .timeindex file - This file contains the mapping of the timestamp to record offset, which internally maps to the byte offset of the record usingthe
+- .index file. This helps in accessing the records from the specific timestamp.
+- .snapshot file - contains a snapshot of the producer state regarding sequence IDs used to avoid duplicate records. It is used when, after a new leader is elected, the preferred one comes back and needs such a state to become a leader again. This is only available for the active segment (log file).
+- leader-epoch-checkpoint - It refers to the number of leaders previously assigned by the controller. The replicas use the leader epoch as a means of verifying the current leader. The leader-epoch-checkpoint file contains two columns: epochs and offsets. Each row is a checkpoint for the latest recorded leader epoch and the leader's latest offset upon becoming leader
+
+From the structure, we could see that the first log segment 00000000000000000000.log contains the records from offset 0 to offset 1006.
+The next segment 00000000000000001007.log has the records starting from offset 1007, and this is called the active segment.
+
+The active segment is the only file available for reading and writing while consumers can use other log segments (non-active) to read data.
+When the active segment becomes full (configured by log.segment.bytes, default 1 GB) or the configured time (log.roll.hours or log.roll.ms, default 7 days) passes, the segment gets rolled.
+This means that the active segment gets closed and re-opens with read-only mode and a new segment file (active segment) will be created in read-write mode.
+
+Indexing helps consumers to read data starting from any specific offset or using any time range. As mentioned previously, the .index file contains an index that maps the logical offset to the byte offset of the record within the .log file. You might expect that this mapping is available for each record, but it doesn’t work this way.
+
+How these entries are added inside the index file is defined by the log.index.interval.bytes parameter, which is 4096 bytes by default. This means that after every 4096 bytes added to the log, an entry gets added to the index file. Suppose the producer is sending records of 100 bytes each to a Kafka topic. In this case, a new index entry will be added to the .index file after every 41 records (41*100 = 4100 bytes) appended to the log file.
+
+![](https://www.conduktor.io/_next/image/?url=https%3A%2F%2Fimages.ctfassets.net%2Flm7q36eaz111%2F6DDk2dGmKxP0RXI3VErcxC%2F8e6e2b944543eae951c78faba6266946%2Fimage-4.png&w=3840&q=75)
+
+As we can see in the above diagram, the offset with id 41 is at 4100 bytes in the log file, offset 82 is at 8200 bytes in the log file, and so on.
+
+If a consumer wants to read starting at a specific offset, a search for the record is made as follows:
+
+Search for the .index file based on its name. For e.g. If the offset is 1191, the index file will be searched whose name has a value less than 1191. The naming convention for the index file is the same as that of the log file
+
+Search for an entry in the .index file where the requested offset falls.
+
+Use the mapped byte offset to access the .log file and start consuming the records from that byte offset.
+
+As we mentioned, consumers may also want to read the records from a specific timestamp. This is where the .timeindex file comes into the picture. It maintains a timestamp and offset mapping (which maps to the corresponding entry in the .index file), which maps to the actual byte offset in the .log file.
+
+![](https://www.conduktor.io/_next/image/?url=https%3A%2F%2Fimages.ctfassets.net%2Flm7q36eaz111%2F19foafoHS07ks25vCLr8dc%2F86235e6e5a0849e392c0f3b16125b7d4%2Fimage-3.png&w=3840&q=75)
+
+#### roll
+
+the active segment gets rolled once any of these conditions are met-
+
+1. Maximum segment size - configured by log.segment.bytes, defaults to 1 Gb 
+2. Rolling segment time - configured by log.roll.ms and log.roll.hours, defaults to 7 days 
+3. Index/timeindex is full - The index and timeindex share the same maximum size, which is defined by the log.index.size.max.bytes, defaults to 10 MB
+
+The 3rd condition is not well known but it also impacts the segment rolling. We know that because log.index.interval.bytes is 4096 bytes by default, an entry is added in the index every 4096 bytes of records. It means that for a 1 GiB segment size, 1 GiB / 4096 bytes = 262144 entries are added to the index. One entry in the index file takes 8 bytes so this equals 2 MB of the index (262144 * 8 bytes). The default index size of 10 MB is enough to handle a segment size of 5 GiB.
+
+
+Kafka mmaps index files into memory, and all the read / write operations of the index is through OS page cache. 
+This avoids blocked disk I/O in most cases.
+
+
+segment.index.bytes default 10M
+
+
+
 ## Log
+
+
+Flush any log which has exceeded its flush interval and has unwritten messages.
+ 
+```scala
+// LogManager
+def startup(topicNames: Set[String]): Unit = {
+  startupWithConfigOverrides(defaultConfig, fetchTopicConfigOverrides(defaultConfig, topicNames))
+}
+
+private[log] def startupWithConfigOverrides(defaultConfig: LogConfig, topicConfigOverrides: Map[String, LogConfig]): Unit = {
+
+  /* Schedule the cleanup task to delete old logs */
+  if (scheduler != null) {
+    info("Starting log flusher with a default period of %d ms.".format(flushCheckMs))
+    scheduler.schedule("kafka-log-flusher",
+                       flushDirtyLogs _,
+                       delay = InitialTaskDelayMs,
+                       period = flushCheckMs, // log.flush.scheduler.interval.ms
+                       TimeUnit.MILLISECONDS)
+    // ...
+  }
+  // ...
+}
+
+private def flushDirtyLogs(): Unit = {
+  for ((topicPartition, log) <- currentLogs.toList ++ futureLogs.toList) {
+    try {
+      val timeSinceLastFlush = time.milliseconds - log.lastFlushTime
+      if(timeSinceLastFlush >= log.config.flushMs)  // log.flush.interval.ms 
+        log.flush(false)
+    } catch {
+      case e: Throwable =>
+        error(s"Error flushing topic ${topicPartition.topic}", e)
+    }
+  }
+}
+```
+
+```scala
+// LogSegement
+ @threadsafe
+  def flush(): Unit = {
+    LogFlushStats.logFlushTimer.time {
+      log.flush()
+      offsetIndex.flush()
+      timeIndex.flush()
+      txnIndex.flush()
+    }
+  }
+
+// FileRecords
+public void flush() throws IOException {
+  channel.force(true);
+}
+
+// AbstractIndex
+def flush(): Unit = {
+  inLock(lock) {
+    mmap.force()
+  }
+}
+```
 
 The most common configuration for how long Kafka will retain messages is by time.
 The default is specified in the configuration file using the parameter `log.retention.hours`, and it is set to 168 hours, the equivalent of one week.
@@ -2968,7 +3160,6 @@ Connect to Zookeeper through `bin/zookeeper-shell.sh 127.0.0.1:2181`
 
 ZooKeeper adds an extra layer of management.
 
-
 ```scala
  def registerBroker(brokerInfo: BrokerInfo): Long = {
     val path = brokerInfo.path
@@ -3005,6 +3196,20 @@ This ensures that metadata changes will always arrive in the same order.
 Brokers will be able to store metadata locally in a file.
 When they start up, they will only need to read what has changed from the controller, not the full state.
 This will let us support more partitions with less CPU consumption.
+
+## Fault tolerance
+
+### follower
+
+remove from ISR
+
+after recovery, drop data > local HW, sync data from leader util the LEO > partition HW and join ISR
+
+### leader
+
+leader election
+
+followers drop the data > local HW and sync from the new leader
 
 ## Links
 
