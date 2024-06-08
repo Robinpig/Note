@@ -99,7 +99,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 ### Producer acks setting
 
 Kafka producers only write data to the current leader broker for a partition.
-
 Kafka producers must also specify a level of acknowledgment acks to specify if the message must be written to a minimum number of replicas before being considered a successful write.
 
 > [!NOTE]

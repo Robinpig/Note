@@ -5,6 +5,7 @@ Kafka is a distributed system consisting of servers and clients that communicate
 It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
 
 > [Kafka Design](https://kafka.apache.org/documentation/#design)
+> 
 > We designed Kafka to be able to act as a unified platform for handling all the real-time data feeds a large company might have. To do this we had to think through a fairly broad set of use cases.
 >
 > - It would have to have high-throughput to support high volume event streams such as real-time log aggregation.

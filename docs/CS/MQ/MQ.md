@@ -342,7 +342,6 @@ Kafka
 - consumer
   - enable.auto.commit: false
 
-
 Producer:
 
 正确处理返回值或者捕获异常并重发，就可以保证这个阶段的消息不会丢
@@ -360,8 +359,6 @@ Consumer:
 
 在执
 行完所有消费业务逻辑之后，再发送消费确认。
-
-
 
 ### Duplicate Consume
 
@@ -402,15 +399,35 @@ The Cons of Using RabbitMQ:
 
 [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 
+### Comparison
+
+
+| Messaging Product              | ActiveMQ                                                                                                 | Kafka                                                                                                                           | RocketMQ                                                                |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Client SDK                     | Java, .NET, C++ etc.                                                                                     | Java, Scala etc.                                                                                                                | Java, C++, Go                                                           |
+| Protocol and Specification     | Push model, support OpenWire, STOMP, AMQP, MQTT, JMS                                                     | Pull model, support TCP                                                                                                         | Pull model, support TCP, JMS, OpenMessaging                             |
+| Ordered Message                | Exclusive Consumer or Exclusive Queues can ensure ordering                                               | Ensure ordering of messages within a partition                                                                                  | Ensure strict ordering of messages,and can scale out gracefully         |
+| Scheduled Message              | Supported                                                                                                | Not Supported                                                                                                                   | Supported                                                               |
+| Batched Message                | Not Supported                                                                                            | Supported, with async producer                                                                                                  | Supported, with sync mode to avoid message loss                         |
+| BroadCast Message              | Supported                                                                                                | Not Supported                                                                                                                   | Supported                                                               |
+| Message Filter                 | Supported                                                                                                | Supported, you can use Kafka Streams to filter messages                                                                         | Supported, property filter expressions based on SQL92                   |
+| Server Triggered Redelivery    | Not Supported                                                                                            | Not Supported                                                                                                                   | Supported                                                               |
+| Message Storage                | Supports very fast persistence using JDBC along with a high performance journal，such as levelDB, kahaDB | High performance file storage                                                                                                   | High performance and low latency file storage                           |
+| Message Retroactive            | Supported                                                                                                | Supported offset indicate                                                                                                       | Supported timestamp and offset two indicates                            |
+| Message Priority               | Supported                                                                                                | Not Supported                                                                                                                   | Not Supported                                                           |
+| High Availability and Failover | Supported, depending on storage,if using levelDB it requires a ZooKeeper server                          | Supported                                                                                                                       | Supported, Master-Slave model, without another kit                      |
+| Message Track                  | Not Supported                                                                                            | Not Supported                                                                                                                   | Supported                                                               |
+| Configuration                  | The default configuration is low level, user need to optimize the configuration parameters               | Kafka uses key-value pairs format for configuration. <br />These values can be supplied either from a file or programmatically. | Work out of box,user only need to pay attention to a few configurations |
+| Management and Operation Tools | Supported                                                                                                | Supported, use terminal command to expose core metrics                                                                          | Supported, rich web and terminal command to expose core metrics         |
+
 Topic
------
 
 Kafka partition -> segment -> .log, .index, .timeindex
 
 RocketMQ all topics using single commitlog and multiple index
 
 
-### Comparsion
+### Comparison
 
 
 naming Service
