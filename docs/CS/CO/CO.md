@@ -69,20 +69,25 @@ Structure Hazard
 
 ## Disk
 
-On spinning disks, seeks increase costs of random reads because they require disk rotation and mechanical head movements to position the read/write head to the desired location. However, once the expensive part is done, reading or writing contiguous bytes (i.e., sequential operations) is relatively cheap.
+On spinning disks, seeks increase costs of random reads because they require disk rotation and mechanical head movements to position the read/write head to the desired location.
+However, once the expensive part is done, reading or writing contiguous bytes (i.e., sequential operations) is relatively cheap.
 
 The smallest transfer unit of a spinning drive is a sector, so when some operation is performed, at least an entire sector can be read or written. Sector sizes typically range from 512 bytes to 4 Kb.
 
 Head positioning is the most expensive part of an operation on the HDD. This is one of the reasons we often hear about the positive effects of sequential I/O: reading and writing contiguous memory segments from disk.
 
 
-
+磁道 扇区 通常扇区512Byte
 
 ### Solid State Drives
 
-Solid state drives (SSDs) do not have moving parts: there’s no disk that spins, or head that has to be positioned for the read. A typical SSD is built of memory cells, connected into strings (typically 32 to 64 cells per string), strings are combined into arrays, arrays are combined into pages, and pages are combined into blocks.
+Solid state drives (SSDs) do not have moving parts: there’s no disk that spins, or head that has to be positioned for the read. 
+A typical SSD is built of memory cells, connected into strings (typically 32 to 64 cells per string), 
+strings are combined into arrays, arrays are combined into pages, and pages are combined into blocks.
 
-Depending on the exact technology used, a cell can hold one or multiple bits of data. Pages vary in size between devices, but typically their sizes range from 2 to 16 Kb. Blocks typically contain 64 to 512 pages. Blocks are organized into planes and, finally, planes are placed on a die. SSDs can have one or more dies. Figure 2-5 shows this hierarchy.
+Depending on the exact technology used, a cell can hold one or multiple bits of data. 
+Pages vary in size between devices, but typically their sizes range from 2 to 16 Kb. Blocks typically contain 64 to 512 pages. 
+Blocks are organized into planes and, finally, planes are placed on a die. SSDs can have one or more dies. Figure 1 shows this hierarchy.
 
 
 
