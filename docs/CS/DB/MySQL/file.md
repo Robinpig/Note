@@ -18,6 +18,17 @@ Only InnoDB:
 - [Redo Log](/docs/CS/DB/MySQL/redolog.md)
 - [undo Log](/docs/CS/DB/MySQL/undolog.md)
 
+
+The binary log is only logged when the transaction commits, and for each transaction, it is only logged when the transaction commits,
+and for each transaction, only one log of the corresponding transaction is included. 
+For the redo logs of the InnoDB storage engine,
+because their records are physical operations logs, each transaction corresponds to multiple log entries, 
+and the redo log writes for the transaction are concurrent, 
+not written at transaction commits, and the order in which they are recorded in the file is not the order in which the transaction begins.
+
+innodb produce redo log during transaction and may sync to disk even if the transaction has not committed.
+
+
 ## Table file
 
 .frm

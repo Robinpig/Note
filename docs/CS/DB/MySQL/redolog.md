@@ -4,9 +4,10 @@ The redo log is a disk-based data structure used during crash recovery to correc
 During normal operations, the redo log encodes requests to **change table data**(except SELECT/SHOW) that result from SQL statements or low-level API calls.
 Modifications that did not finish updating the data files before an unexpected shutdown are replayed automatically during initialization, and before connections are accepted.
 
-By default, the redo log is physically represented on disk by two 5MB files named `ib_logfile0` and `ib_logfile1`.
+By default, the redo log is **physically represented on disk** by two 5MB files named `ib_logfile0` and `ib_logfile1`.
 MySQL writes to the redo log files in a **circular fashion**.
-Data in the redo log is encoded in terms of records affected; this data is collectively referred to as redo. The passage of data through the redo log is represented by an ever-increasing `LSN` value.
+Data in the redo log is encoded in terms of records affected; this data is collectively referred to as redo.
+The passage of data through the redo log is represented by an ever-increasing `LSN` value.
 
 ```mysql
 mysql> show variables like 'innodb_log_file_size';
