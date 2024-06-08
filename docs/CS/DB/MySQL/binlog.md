@@ -38,6 +38,26 @@ This should not happen if sync_binlog=1 and the disk/file system do an actual sy
 In this case, this binary log is not correct and replication should be restarted from a fresh snapshot of the source's data.
 
 
+## sync
+
+
+### ES
+
+使用 canal 将 MySQL 增量数据同步到 ES 。
+
+MySQL , 需要先开启 Binlog 写入功能，配置 binlog-format 为 ROW 模式
+
+授权 canal 链接 MySQL 账号具有作为 MySQL slave
+
+```mysql
+CREATE USER canal IDENTIFIED BY 'canal';  
+GRANT SELECT, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'canal'@'%';
+-- GRANT ALL PRIVILEGES ON *.* TO 'canal'@'%' ;
+FLUSH PRIVILEGES;
+```
+
+
+
 
 ## Links
 
