@@ -53,7 +53,8 @@ Spinning to wait for a lock held on another processor doesn’t waste many cycle
 Fault-tolerant consensus is expensive. 
 Exclusive access by a single process (also known as locking) is cheap, but it is not fault-tolerant—if a process fails while it is holding a lock, no one else can access the resource. 
 Adding a timeout to a lock makes a fault-tolerant lock or ‘lease’.
-Thus a process holds a lease on a state component or ‘resource’ until an expiration time; we say that the process is the ‘master’ for the resource while it holds the lease. No other process will touch the resource until the lease expires. 
+Thus a process holds a lease on a state component or ‘resource’ until an expiration time; we say that the process is the ‘master’ for the resource while it holds the lease.
+No other process will touch the resource until the lease expires. 
 For this to work, of course, the processes must have synchronized clocks. 
 More precisely, if the maximum skew between the clocks of two processes is ε and process P’s lease expires at time t, then P knows that no other process will touch the resource before time t – ε on P’s clock.
 
