@@ -12,9 +12,11 @@ Optimizing CPU and memory usage can also improve scalability, allowing the datab
 
 The most basic reason a query doesn’t perform well is because it’s working with too much data.
 Some queries just have to sift through a lot of data, which can’t be helped.
-That’s unusual, though; most bad queries can be changed to access less data. We’ve found it useful to analyze a poorly performing query in two steps:
+That’s unusual, though; most bad queries can be changed to access less data.
+We’ve found it useful to analyze a poorly performing query in two steps:
 
-1. Find out whether your application is retrieving more data than you need. That usually means it’s accessing too many rows, but it might also be accessing too many columns.
+1. Find out whether your application is retrieving more data than you need.
+   That usually means it’s accessing too many rows, but it might also be accessing too many columns.
 2. Find out whether the MySQL server is analyzing more rows than it needs.
 
 The optimizer might not always choose the best plan, for many reasons:
@@ -138,51 +140,44 @@ You can also use EXPLAIN to check whether the optimizer joins the tables in an o
 To give a hint to the optimizer to use a join order corresponding to the order in which the tables are named in a SELECT statement, begin the statement with SELECT STRAIGHT_JOIN rather than just SELECT.
 However, STRAIGHT_JOIN may prevent indexes from being used because it disables semijoin transformations.
 
-
-
-
 **EXPLAIN Output Columns**
 
 
-
-| Column    | JSON Name       | Meaning                                        |
-|-----------| --------------- | ---------------------------------------------- |
-| `id`      | `select_id`     | The`SELECT` identifier                         |
-| `select_type` | None            | The`SELECT` type                               |
-| `table`   | `table_name`    | The table for the output row                   |
-| `partitions` | `partitions`    | The matching partitions                        |
-| `type`    | `access_type`   | The join type                                  |
+| Column          | JSON Name       | Meaning                                        |
+| --------------- | --------------- | ---------------------------------------------- |
+| `id`            | `select_id`     | The`SELECT` identifier                         |
+| `select_type`   | None            | The`SELECT` type                               |
+| `table`         | `table_name`    | The table for the output row                   |
+| `partitions`    | `partitions`    | The matching partitions                        |
+| `type`          | `access_type`   | The join type                                  |
 | `possible_keys` | `possible_keys` | The possible indexes to choose                 |
-| `key`     | `key`           | The index actually chosen                      |
-| `key_len` | `key_length`    | The length of the chosen key                   |
-| `ref`     | `ref`           | The columns compared to the index              |
-| `rows`    | `rows`          | Estimate of rows to be examined                |
-| `filtered` | `filtered`      | Percentage of rows filtered by table condition |
-| `Extra`   | None            | Additional information                         |
+| `key`           | `key`           | The index actually chosen                      |
+| `key_len`       | `key_length`    | The length of the chosen key                   |
+| `ref`           | `ref`           | The columns compared to the index              |
+| `rows`          | `rows`          | Estimate of rows to be examined                |
+| `filtered`      | `filtered`      | Percentage of rows filtered by table condition |
+| `Extra`         | None            | Additional information                         |
 
-
-Each output row from EXPLAIN provides information about one table. 
+Each output row from EXPLAIN provides information about one table.
 Each row contains the values summarized in “EXPLAIN Output Columns”, and described in more detail following the table.
 
 The type of SELECT, which can be any of those shown in the following table. A JSON-formatted EXPLAIN exposes the SELECT type as a property of a query_block, unless it is SIMPLE or PRIMARY. The JSON names (where applicable) are also shown in the table.
 
-| select_type Value |	JSON Name |	Meaning |
-| --- | --- | --- |
-| SIMPLE |	None |	Simple SELECT (not using UNION or subqueries) |
-| PRIMARY |	None |	Outermost SELECT |
-| UNION |	None |	Second or later SELECT statement in a UNION |
-| DEPENDENT | UNION |	dependent (true)	Second or later SELECT statement in a UNION, dependent on outer query |
-| UNION | RESULT |	union_result	Result of a UNION. |
-| SUBQUERY |	None |	First SELECT in subquery |
-| DEPENDENT | SUBQUERY |	dependent (true)	First SELECT in subquery, dependent on outer query |
-| DERIVED |	None |	Derived table |
-| DEPENDENT | DERIVED |	dependent (true)	Derived table dependent on another table |
-| MATERIALIZED |	materialized_from_subquery |	Materialized subquery |
-| UNCACHEABLE | SUBQUERY |	cacheable (false)	A subquery for which the result cannot be cached and must be re-evaluated for each row of the outer query |
-| UNCACHEABLE | UNION |	cacheable (false)	The second or later select in a UNION that belongs to an uncacheable subquery (see UNCACHEABLE SUBQUERY) |
 
-
-
+| select_type Value | JSON Name                  | Meaning                                                                                                                     |
+| ----------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| SIMPLE            | None                       | Simple SELECT (not using UNION or subqueries)                                                                               |
+| PRIMARY           | None                       | Outermost SELECT                                                                                                            |
+| UNION             | None                       | Second or later SELECT statement in a UNION                                                                                 |
+| DEPENDENT         | UNION                      | dependent (true)	Second or later SELECT statement in a UNION, dependent on outer query                                      |
+| UNION             | RESULT                     | union_result	Result of a UNION.                                                                                             |
+| SUBQUERY          | None                       | First SELECT in subquery                                                                                                    |
+| DEPENDENT         | SUBQUERY                   | dependent (true)	First SELECT in subquery, dependent on outer query                                                         |
+| DERIVED           | None                       | Derived table                                                                                                               |
+| DEPENDENT         | DERIVED                    | dependent (true)	Derived table dependent on another table                                                                   |
+| MATERIALIZED      | materialized_from_subquery | Materialized subquery                                                                                                       |
+| UNCACHEABLE       | SUBQUERY                   | cacheable (false)	A subquery for which the result cannot be cached and must be re-evaluated for each row of the outer query |
+| UNCACHEABLE       | UNION                      | cacheable (false)	The second or later select in a UNION that belongs to an uncacheable subquery (see UNCACHEABLE SUBQUERY)  |
 
 The type column of EXPLAIN output describes how tables are joined. In JSON-formatted output, these are found as values of the access_type property. The following list describes the join types, ordered from the best type to the worst:
 
@@ -213,16 +208,13 @@ index
 
 all
 
-
 possible_keys (JSON name: possible_keys)
 
-The possible_keys column indicates the indexes from which MySQL can choose to find the rows in this table. Note that this column is totally independent of the order of the tables as displayed in the output from EXPLAIN. 
+The possible_keys column indicates the indexes from which MySQL can choose to find the rows in this table. Note that this column is totally independent of the order of the tables as displayed in the output from EXPLAIN.
 That means that some of the keys in possible_keys might not be usable in practice with the generated table order.
-If this column is NULL (or undefined in JSON-formatted output), there are no relevant indexes. 
+If this column is NULL (or undefined in JSON-formatted output), there are no relevant indexes.
 In this case, you may be able to improve the performance of your query by examining the WHERE clause to check whether it refers to some column or columns that would be suitable for indexing.
 If so, create an appropriate index and check the query with EXPLAIN again.
-
-
 
 key (JSON name: key)
 
@@ -234,13 +226,11 @@ For InnoDB, a secondary index might cover the selected columns even if the query
 If key is NULL, MySQL found no index to use for executing the query more efficiently.
 To force MySQL to use or ignore an index listed in the possible_keys column, use FORCE INDEX, USE INDEX, or IGNORE INDEX in your query.
 
-
 ref (JSON name: ref)
 
 The ref column shows which columns or constants are compared to the index named in the key column to select rows from the table.
-If the value is func, the value used is the result of some function. To see which function, use SHOW WARNINGS following EXPLAIN to see the extended EXPLAIN output. 
+If the value is func, the value used is the result of some function. To see which function, use SHOW WARNINGS following EXPLAIN to see the extended EXPLAIN output.
 The function might actually be an operator such as an arithmetic operator.
-
 
 Extra (JSON name: none)
 
@@ -248,6 +238,43 @@ This column contains additional information about how MySQL resolves the query. 
 
 There is no single JSON property corresponding to the Extra column; however, values that can occur in this column are exposed as JSON properties, or as the text of the message property.
 
+Estimate the number of matched rows for each joined table.
+Set up range scan for tables that have proper predicates.
+Eliminate tables that have filter conditions that are always false based on
+analysis performed in resolver phase or analysis of range scan predicates.
+
+
+```sql
+select * from mysql.server_cost;
+```
+
+| cost_name                    | default_value |
+| ---------------------------- | ------------- |
+| disk_temptable_create_cost   | 20            |
+| disk_temptable_row_cost      | 0.5           |
+| key_compare_cost             | 0.05          |
+| memory_temptable_create_cost | 1             |
+| memory_temptable_row_cost    | 0.1           |
+| row_evaluate_cost            | 0.1           |
+
+
+
+```sql
+select * from mysql.engine_cost;
+```
+
+| engine_name | device_type | cost_name              | cost_value | default_value |
+| --- | --- | --- | --- | --- | 
+| default     |           0 | io_block_read_cost     |       NULL |             1 |
+| default     |           0 | memory_block_read_cost |       NULL |          0.25 |
+
+
+
+
+```cpp
+bool JOIN::estimate_rowcount() {
+}
+```
 
 ## Optimizing for InnoDB Tables
 
@@ -277,4 +304,9 @@ To optimize `InnoDB` transaction processing, find the ideal balance between the 
 - When a long-running transaction modifies a table, queries against that table from other transactions do not make use of the `covering index` technique.
   Queries that normally could retrieve all the result columns from a secondary index, instead look up the appropriate values from the table data.
 
-  If secondary index pages are found to have a `PAGE_MAX_TRX_ID` that is too new, or if records in the secondary index are delete-marked, `InnoDB` may need to look up records using a clustered index.
+If secondary index pages are found to have a `PAGE_MAX_TRX_ID` that is too new, or if records in the secondary index are delete-marked, `InnoDB` may need to look up records using a clustered index.
+
+
+## Links
+
+- [SQL](/docs/CS/DB/MySQL/SQL.md)
