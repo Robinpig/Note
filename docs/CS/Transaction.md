@@ -881,8 +881,6 @@ and decouple decisions from their initiators and allow participants to decide on
 
 A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
 
-TiDB
-
 Let’s start with the most straightforward protocol for a distributed commit that allows multipartition atomic updates.
 Two-phase commit (2PC) is usually discussed in the context of database transactions. 2PC executes in two phases.
 During the first phase, the decided value is distributed, and votes are collected. During the second phase, nodes just flip the switch, making the results of the first phase visible.

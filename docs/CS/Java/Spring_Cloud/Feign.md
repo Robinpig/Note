@@ -572,6 +572,15 @@ InvocationHandlerFactory
 
 
 ## Interceptor
+Zero or more RequestInterceptors may be configured for purposes such as adding headers to all requests. 
+**No guarantees are given with regards to the order that interceptors are applied.** 
+Once interceptors are applied, `Target.apply(RequestTemplate)` is called to create the immutable http request sent via `Client.execute(Request, Request.Options)`.
+```java
+public interface RequestInterceptor {
+  void apply(RequestTemplate template);
+}
+```
+RequestInterceptors are configured via `Feign.Builder.requestInterceptors`.
 
 ## Retry
 
