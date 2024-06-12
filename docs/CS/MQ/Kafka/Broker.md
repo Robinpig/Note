@@ -1826,10 +1826,6 @@ Read from multiple topic partitions at the given offset up to maxSize bytes
 
       val adjustedMaxBytes = math.min(fetchInfo.maxBytes, limitBytes)
       try {
-        if (traceEnabled)
-          trace(s"Fetching log segment for partition $tp, offset $offset, partition fetch size $partitionFetchSize, " +
-            s"remaining response limit $limitBytes" +
-            (if (minOneMessage) s", ignoring response/partition size limits" else ""))
 
         val partition = getPartitionOrException(tp.topicPartition)
         val fetchTimeMs = time.milliseconds
@@ -1977,6 +1973,16 @@ The future associated with each operation will not be completed until the result
 1. Register Brokers
 2. Register Topics
 3. load Balance
+
+
+
+Controller Context
+ControllerChannelManager
+ControllerEventManager
+
+Lead election
+
+metadata manager
 
 ```scala
   private def elect(): Unit = {
@@ -2535,6 +2541,15 @@ maybeFetch -> processFetchRequest
     }
   }
 ```
+
+### scenarios
+
+某些核心业务的主题分区一直处于“不可用”状态。
+
+通过使用“kafka-topics”命令查询，我们发现，这些分区的Leader显示是-1。之前，这些Leader所在的Broker机器因为负载高宕机了，当Broker重启回来后，Controller竟然无法成功地为这些分区选举Leader，因此，它们一直处于“不可用”状态。
+
+
+
 
 ## Metadata as an Event Log
 
