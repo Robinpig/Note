@@ -135,7 +135,23 @@ therad pool per NettyRequestProcessor
 
 
 
-在 RocketMQ 中不论是 CommitLog 还是 CosumerQueue 都采用了 mmap
+在 RocketMQ 中不论是 CommitLog 还是 ConsumerQueue 都采用了 mmap
+
+ConsumerQueue 结构
+
+
+ConsumeQueue's store unit. Format:
+```
+┌───────────────────────────────┬───────────────────┬───────────────────────────────┐
+│    CommitLog Physical Offset  │      Body Size    │            Tag HashCode       │
+│          (8 Bytes)            │      (4 Bytes)    │             (8 Bytes)         │
+├───────────────────────────────┴───────────────────┴───────────────────────────────┤
+│                                     Store Unit                                    │
+```
+ConsumeQueue's store unit. Size: CommitLog Physical Offset(8) + Body Size(4) + Tag HashCode(8) = 20 Bytes
+
+
+
 
 Files
 

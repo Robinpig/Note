@@ -234,6 +234,11 @@ void ensurePrestart() {
 
 ## DelayedWorkQueue
 
+A DelayedWorkQueue is based on a heap-based data structure like those in DelayQueue and [PriorityQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=PriorityQueue), except that every ScheduledFutureTask also records its index into the heap array.
+This eliminates the need to find a task upon cancellation, greatly speeding up removal (down from O(n) to O(log n)), and reducing garbage retention that would otherwise occur by waiting for the element to rise to top before clearing.
+But because the queue may also hold RunnableScheduledFutures that are not ScheduledFutureTasks, we are not guaranteed to have such indices available, in which case we fall back to linear search. 
+(We expect that most tasks will not be decorated, and that the faster cases will be much more common.)
+
 Specialized delay queue. To mesh with TPE declarations, this class must be declared as a BlockingQueue  even though it can only hold RunnableScheduledFutures.
 
 ```java

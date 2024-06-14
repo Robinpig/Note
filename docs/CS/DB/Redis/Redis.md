@@ -233,6 +233,29 @@ fork子进程的速度变慢
 - redis-check-aof
 - redis-benchmark
 
+## Tuning
+
+BigKey
+
+对于JIT技术在存储引擎中而言，“EVAL is evil”，尽量避免使用lua耗费内存和计算资源
+
+
+Pubsub的典型场景
+Pubsub适合悲观锁和简单信号，不适合稳定的更新，因为可能会丢消息。在1对N的消息转发通道中，服务瓶颈。还有模
+糊通知方面，算力瓶颈。在channel和client比较多的情况下，造成CPU打满、服务夯住。
+
+Transaction
+Transaction是一种伪事物，没有回滚条件；集群版需要所有key使用hashtag保证，代码比较复杂，hashtag也可能导
+致算力和存储倾斜；Lua中封装了multi-exec，但更耗费CPU，比如编译、加载时，经常出现问题。
+
+
+Pipeline
+Pipeline用的比较多，如下面的示意图，实际上是把多个请求封装在一个请求中，合并在一个请求里发送，服务端一次
+性返回，能够有效减少IO，提高执行效率。需要注意的是，用户需要聚合小的命令，避免在pipeline里做大range。注意
+Pipeline中的批量任务不是原子执行的（从来不是），所以要处理Pipeline其中部分命令失败的场景。
+
+危险命令禁用
+
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md?id=Redis)

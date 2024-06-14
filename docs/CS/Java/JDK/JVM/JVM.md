@@ -1493,6 +1493,21 @@ CollectedHeap* G1Arguments::create_heap() {
 }
 ```
 
+## Tuning
+
+### OOM
+
+```shell
+jmap -heap <pid>
+```
+
+dumpfile
+```shell
+jmap -dump:format=b
+```
+with jvisualvm
+
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)

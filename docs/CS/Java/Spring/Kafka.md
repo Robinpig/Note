@@ -1,5 +1,9 @@
-
-The Spring for Apache Kafka (spring-kafka) project applies core Spring concepts to the development of Kafka-based messaging solutions. It provides a "template" as a high-level abstraction for sending messages. It also provides support for Message-driven POJOs with `@KafkaListener` annotations and a "listener container". These libraries promote the use of dependency injection and declarative. In all of these cases, you will see similarities to the JMS support in the Spring Framework and RabbitMQ support in Spring AMQP.
+## Introduction
+The Spring for Apache Kafka (spring-kafka) project applies core Spring concepts to the development of Kafka-based messaging solutions. 
+It provides a "template" as a high-level abstraction for sending messages. 
+It also provides support for Message-driven POJOs with `@KafkaListener` annotations and a "listener container". 
+These libraries promote the use of dependency injection and declarative.
+In all of these cases, you will see similarities to the JMS support in the Spring Framework and RabbitMQ support in Spring AMQP.
 
 
 Single-threaded Message listener container using the Java Consumer supporting auto-partition assignment or user-configured assignment.
@@ -169,3 +173,8 @@ private RuntimeException doInvokeRecordListener(final ConsumerRecord<K, V> cReco
     });  
 }
 ```
+
+
+## Links
+
+- [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)

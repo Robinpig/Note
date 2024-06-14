@@ -44,8 +44,23 @@ The producer consists of a pool of buffer space that holds records that haven't 
 Failure to close the producer after use will leak these resources.
 
 
+A simple producer thread supporting two send modes:
+- Async mode (default): records are sent without waiting for the response.
+- Sync mode: each send operation blocks waiting for the response.
 
-new KafkaThread with Sender
+### Init Producer
+
+```dot
+strict digraph {
+    Producer [shape="polygon" ]
+    Sender [shape="polygon" ]
+    metadata [shape="polygon" ]
+    Producer -> Sender [label="start Thread"]
+    Sender -> metadata [label="renew"]
+}
+```
+
+start IO Thread(Sender)
 
 ```java
 public class KafkaProducer<K, V> implements Producer<K, V> {
@@ -64,8 +79,6 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
          this.valueSerializer = valueSerializer;
          this.interceptors = interceptors;
 
-         // As per Kafka producer configuration documentation batch.size may be set to 0 to explicitly disable
-         // batching which in practice actually means using a batch size of 1.
          int batchSize = Math.max(1, config.getInt(ProducerConfig.BATCH_SIZE_CONFIG));
          this.accumulator = new RecordAccumulator(logContext,
                  batchSize,
@@ -82,7 +95,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                  new BufferPool(this.totalMemorySize, batchSize, metrics, time, PRODUCER_METRIC_GROUP_NAME));
 
          this.metadata = metadata;
-
+         // new IO Thread with Sender
          this.sender = newSender(logContext, kafkaClient, this.metadata);
          String ioThreadName = NETWORK_THREAD_PREFIX + " | " + clientId;
          this.ioThread = new KafkaThread(ioThreadName, this.sender, true);
@@ -96,7 +109,13 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
 }
 ```
 
-### Producer acks setting
+> [!TIP]
+> 
+> Enable ALL logging levels for `org.apache.kafka.clients.producer.KafkaProducer` logger to see what happens inside.
+
+### Producer Config
+
+#### Producer acks setting
 
 Kafka producers only write data to the current leader broker for a partition.
 Kafka producers must also specify a level of acknowledgment acks to specify if the message must be written to a minimum number of replicas before being considered a successful write.
@@ -244,6 +263,201 @@ A separate sequence is maintained for each topic partition that a producer sends
 On the broker side, on a per partition basis, it keeps track of the largest PID-Sequence Number combination that is successfully written. 
 When a lower sequence number is received, it is discarded.
 
+
+#### idempotence
+
+
+
+When set `enable.idempotence` to 'true', the producer will ensure that exactly one copy of each message is written in the stream.
+If 'false', producer retries due to broker failures, etc., may write duplicates of the retried message in the stream. 
+Note that enabling idempotence requires `max.in.flight.requests.per.connection` to be less than or equal to 5 (with message ordering preserved for any allowable value), retries to be greater than 0, and acks must be 'all'.
+
+Idempotence is enabled by default if no conflicting configurations are set.
+
+
+`max.in.flight.requests.per.connection`
+
+The maximum number of unacknowledged requests the client will send on a single connection before blocking. 
+Note that if this configuration is set to be greater than 1 and enable.idempotence is set to false, there is a risk of message reordering after a failed send due to retries (i.e., if retries are enabled); if retries are disabled or if `enable.idempotence` is set to true, ordering will be preserved.  
+
+```java
+public class KafkaProducer<K, V> implements Producer<K, V> {
+    private static int configureInflightRequests(ProducerConfig config, boolean idempotenceEnabled) {
+        if (idempotenceEnabled && 5 < config.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION)) {
+            throw new ConfigException("Must set " + ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION + " to at most 5" +
+                    " to use the idempotent producer.");
+        }
+        return config.getInt(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION);
+    }
+
+    private static short configureAcks(ProducerConfig config, boolean idempotenceEnabled, Logger log) {
+        boolean userConfiguredAcks = false;
+        short acks = (short) parseAcks(config.getString(ProducerConfig.ACKS_CONFIG));
+        if (config.originals().containsKey(ProducerConfig.ACKS_CONFIG)) {
+            userConfiguredAcks = true;
+        }
+
+        if (idempotenceEnabled && !userConfiguredAcks) {
+            log.info("Overriding the default {} to all since idempotence is enabled.", ProducerConfig.ACKS_CONFIG);
+            return -1;
+        }
+
+        if (idempotenceEnabled && acks != -1) {
+            throw new ConfigException("Must set " + ProducerConfig.ACKS_CONFIG + " to all in order to use the idempotent " +
+                    "producer. Otherwise we cannot guarantee idempotence.");
+        }
+        return acks;
+    }
+}
+```
+
+```java
+public class Sender implements Runnable {
+    private void maybeWaitForProducerId() {
+        while (!forceClose && !transactionManager.hasProducerId() && !transactionManager.hasError()) {
+            Node node = null;
+            try {
+                node = awaitLeastLoadedNodeReady(requestTimeoutMs);
+                if (node != null) {
+                    ClientResponse response = sendAndAwaitInitProducerIdRequest(node);
+                    InitProducerIdResponse initProducerIdResponse = (InitProducerIdResponse) response.responseBody();
+                    Errors error = initProducerIdResponse.error();
+                    if (error == Errors.NONE) {
+                        ProducerIdAndEpoch producerIdAndEpoch = new ProducerIdAndEpoch(
+                                initProducerIdResponse.producerId(), initProducerIdResponse.epoch());
+                        transactionManager.setProducerIdAndEpoch(producerIdAndEpoch);
+                        return;
+                    } else if (error.exception() instanceof RetriableException) {
+                        log.debug("Retriable error from InitProducerId response", error.message());
+                    } else {
+                        transactionManager.transitionToFatalError(error.exception());
+                        break;
+                    }
+                }
+            } catch (UnsupportedVersionException e) {
+                transactionManager.transitionToFatalError(e);
+                break;
+            } catch (IOException e) {
+                log.debug("Broker {} disconnected while awaiting InitProducerId response", node, e);
+            }
+            time.sleep(retryBackoffMs);
+            metadata.requestUpdate();
+        }
+    }
+
+    private ClientResponse sendAndAwaitInitProducerIdRequest(Node node) throws IOException {
+        String nodeId = node.idString();
+        InitProducerIdRequest.Builder builder = new InitProducerIdRequest.Builder(null);
+        ClientRequest request = client.newClientRequest(nodeId, builder, time.milliseconds(), true, requestTimeoutMs, null);
+        return NetworkClientUtils.sendAndReceive(client, request, time);
+    }
+}
+```
+
+当开启了幂等性，KafkaProducer发送消息时，会额外设置producer_id 和 序列号字段
+producer_id是从Kafka服务端请求获取的，消息序列号是Producer端生成的，初始值为0，之后自增加一
+batch包含了多条消息。所以Producer只会设置该batch的第一个消息的序列号，后面消息的序列号可以根据第一个消息的序列号计算出来
+
+
+```java
+public class RecordAccumulator {
+    private List<ProducerBatch> drainBatchesForOneNode(MetadataSnapshot metadataSnapshot, Node node, int maxSize, long now) {
+        int size = 0;
+        List<PartitionInfo> parts = metadataSnapshot.cluster().partitionsForNode(node.id());
+        List<ProducerBatch> ready = new ArrayList<>();
+        if (parts.isEmpty())
+            return ready;
+        /* to make starvation less likely each node has it's own drainIndex */
+        int drainIndex = getDrainIndex(node.idString());
+        int start = drainIndex = drainIndex % parts.size();
+        do {
+            PartitionInfo part = parts.get(drainIndex);
+
+            TopicPartition tp = new TopicPartition(part.topic(), part.partition());
+            updateDrainIndex(node.idString(), drainIndex);
+            drainIndex = (drainIndex + 1) % parts.size();
+            // Only proceed if the partition has no in-flight batches.
+            if (isMuted(tp))
+                continue;
+            Deque<ProducerBatch> deque = getDeque(tp);
+            if (deque == null)
+                continue;
+
+            OptionalInt leaderEpoch = metadataSnapshot.leaderEpochFor(tp);
+
+            final ProducerBatch batch;
+            synchronized (deque) {
+                // invariant: !isMuted(tp,now) && deque != null
+                ProducerBatch first = deque.peekFirst();
+                if (first == null)
+                    continue;
+
+                // first != null
+                // Only drain the batch if it is not during backoff period.
+                first.maybeUpdateLeaderEpoch(leaderEpoch);
+                if (shouldBackoff(first.hasLeaderChangedForTheOngoingRetry(), first, first.waitedTimeMs(now)))
+                    continue;
+
+                if (size + first.estimatedSizeInBytes() > maxSize && !ready.isEmpty()) {
+                    // there is a rare case that a single batch size is larger than the request size due to
+                    // compression; in this case we will still eventually send this batch in a single request
+                    break;
+                } else {
+                    if (shouldStopDrainBatchesForPartition(first, tp))
+                        break;
+                }
+
+                batch = deque.pollFirst();
+
+                boolean isTransactional = transactionManager != null && transactionManager.isTransactional();
+                ProducerIdAndEpoch producerIdAndEpoch =
+                        transactionManager != null ? transactionManager.producerIdAndEpoch() : null;
+                if (producerIdAndEpoch != null && !batch.hasSequence()) {
+                    // If the producer id/epoch of the partition do not match the latest one
+                    // of the producer, we update it and reset the sequence. This should be
+                    // only done when all its in-flight batches have completed. This is guarantee
+                    // in `shouldStopDrainBatchesForPartition`.
+                    transactionManager.maybeUpdateProducerIdAndEpoch(batch.topicPartition);
+
+                    // If the batch already has an assigned sequence, then we should not change the producer id and
+                    // sequence number, since this may introduce duplicates. In particular, the previous attempt
+                    // may actually have been accepted, and if we change the producer id and sequence here, this
+                    // attempt will also be accepted, causing a duplicate.
+                    //
+                    // Additionally, we update the next sequence number bound for the partition, and also have
+                    // the transaction manager track the batch so as to ensure that sequence ordering is maintained
+                    // even if we receive out of order responses.
+                    batch.setProducerState(producerIdAndEpoch, transactionManager.sequenceNumber(batch.topicPartition), isTransactional);
+                    transactionManager.incrementSequenceNumber(batch.topicPartition, batch.recordCount);
+                    log.debug("Assigned producerId {} and producerEpoch {} to batch with base sequence " +
+                                    "{} being sent to partition {}", producerIdAndEpoch.producerId,
+                            producerIdAndEpoch.epoch, batch.baseSequence(), tp);
+
+                    transactionManager.addInFlightBatch(batch);
+                }
+            }
+
+            // the rest of the work by processing outside the lock
+            // close() is particularly expensive
+
+            batch.close();
+            size += batch.records().sizeInBytes();
+            ready.add(batch);
+
+            batch.drained(now);
+        } while (start != drainIndex);
+        return ready;
+    }
+}
+```
+
+Why max.in.inflight <= 5?
+
+```java
+public class ProducerStateEntry {
+    public static final int NUM_BATCHES_TO_RETAIN = 5;
+}
+```
 
 ## send
 
@@ -531,7 +745,8 @@ TODO:
 
 ## Sender
 
-
+The background thread that handles the sending of produce requests to the Kafka cluster. 
+This thread makes metadata requests to renew its view of the cluster and then sends produce requests to the appropriate nodes.
 
 ```plantuml
 Sender ->  RecordAccumulator :ready
@@ -760,6 +975,18 @@ public interface ProducerInterceptor<K, V> extends Configurable, AutoCloseable {
 }
 ```
 
+## record
+
+A record batch is a container for records.
+In old versions of the record format (versions 0 and 1), a batch consisted always of a single record if no compression was enabled, but could contain many records otherwise. 
+Newer versions (magic versions 2 and above) will generally contain many records regardless of compression.
+
+```java
+public interface RecordBatch extends Iterable<Record> {
+    
+}
+```
+
 ## Idempotence
 
 single partition, single session
@@ -797,3 +1024,7 @@ So mostly we use multiple producers for multiple servers.
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+
+
+## References
+1. [Kafka Producer 幂等性原理](https://zhmin.github.io/posts/kafka-producer-idempotence/)

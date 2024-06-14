@@ -176,6 +176,14 @@ Various web caching techniques can be employed both on the server and on the cli
 Server side web caching typically involves utilizing a web proxy which retains web responses from the web servers it sits in front of, effectively reducing their load and latency.
 Client side web caching can include browser based caching which retains a cached version of the previously visited web content.
 
+## App Cache
+
+Guava Cache
+
+Caffeine
+
+本地缓存更适合存储一些变化频率极低，数据量较小的场景，诸如基础数据、配置了类型的数据缓存等
+
 ## Database Cache
 
 A database cache supplements your primary database by removing unnecessary pressure on it, typically in the form of frequently-accessed read data.
@@ -197,7 +205,7 @@ The following are the three most common types of database caches:
   The majority of these disadvantages are mitigated with remote caches.
 - Remote caches
   A remote cache (or side cache) is a separate instance (or separate instances) dedicated for storing the cached data in-memory.
-  Remote caches are stored on dedicated servers and are typically built on key/ value NoSQL stores, such as Redis and Memcached.
+  Remote caches are stored on dedicated servers and are typically built on key/ value NoSQL stores, such as [Redis](/docs/CS/DB/Redis/Redis.md) and [Memcached](/docs/CS/DB/Memcached.md).
   They provide hundreds of thousands of requests (and up to a million) per second per cache node.
   The average latency of a request to a remote cache is on the sub-millisecond timescale, which, in the order of magnitude, is faster than a request to a disk-based database.
   At these speeds, local caches are seldom necessary.
