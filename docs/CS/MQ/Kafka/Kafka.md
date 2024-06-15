@@ -187,6 +187,14 @@ The Kafka project includes a tool called MirrorMaker, used for this purpose.
 At its core, MirrorMaker is simply a Kafka consumer and producer, linked together with a queue.
 Messages are consumed from one Kafka cluster and produced for another.
 
+> [!TIP]
+> 
+> Here are some reasons why Kafka developers might have chosen to implement their own socket server instead of using Netty:
+> 1. Performance: By implementing a custom solution tailored specifically to Kafka's needs, the developers may have been able to optimize performance for Kafka's use cases. Customizing the implementation allows developers to fine-tune the networking layer for Kafka's specific requirements, potentially leading to better performance compared to using a more general-purpose library like Netty.
+> 2. The rest of the reason is dependencies. 
+> 
+> 
+
 ## Efficiency
 
 The small I/O problem happens both between the client and the server and in the server's own persistent operations.
