@@ -200,6 +200,19 @@ mvn test -Dmaven.surefire.debug
 
 ## Plugins
 
+## Tuning
+
+### 依赖冲突
+
+检查依赖
+```
+mvn -Dverbose dependency:tree
+```
+
+omitted for conflict with xx
+
+依赖冲突会常导致发生NoClassDefFoundError、NoSuchMethodException、IllegalAccessError等错误
+
 ## Links
 
 - [Build Tools](/docs/CS/BuildTool/BuildTools.md)
