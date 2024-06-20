@@ -31,7 +31,12 @@ Connection isClose() or isValid()
 
 
 
-## PreparStatement
+## PrepareStatement
+
+提前生成执行计划
+- 性能稍微好一点
+- 执行引擎按照执行计划执行 可以防SQL注入
+
 It's safety to use #{} replace \${}
 
 
