@@ -1021,6 +1021,10 @@ The producer is **thread safe** and sharing a **single producer instance** acros
 So mostly we use multiple producers for multiple servers.
 
 
+## Tuning
+
+`connections.max.idle.ms`
+
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
