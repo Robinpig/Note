@@ -256,6 +256,28 @@ Pipeline中的批量任务不是原子执行的（从来不是），所以要处
 
 危险命令禁用
 
+### slowlog
+
+slowlog-log-slower-than
+
+slowlog-max-len 慢查询日志删除使用FIFO
+
+```c
+void slowlogPushEntryIfNeeded(client *c, robj **argv, int argc, long long duration) {
+    if (server.slowlog_log_slower_than < 0 || server.slowlog_max_len == 0) return; /* Slowlog disabled */
+    if (duration >= server.slowlog_log_slower_than)
+        listAddNodeHead(server.slowlog,
+                        slowlogCreateEntry(c,argv,argc,duration));
+
+    /* Remove old entries if needed. */
+    while (listLength(server.slowlog) > server.slowlog_max_len)
+        listDelNode(server.slowlog,listLast(server.slowlog));
+}
+```
+
+slowlog get
+
+
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md?id=Redis)
