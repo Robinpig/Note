@@ -213,6 +213,13 @@ omitted for conflict with xx
 
 依赖冲突会常导致发生NoClassDefFoundError、NoSuchMethodException、IllegalAccessError等错误
 
+
+### Build Issues
+
+快照版本用于测试 因为MANIFEST.MF文件里的jar名字是快照版本携带时间戳 报错ClassNotFoundException
+
+<useUniqueVersions>false</useUniqueVersions>
+
 ## Links
 
 - [Build Tools](/docs/CS/BuildTool/BuildTools.md)
