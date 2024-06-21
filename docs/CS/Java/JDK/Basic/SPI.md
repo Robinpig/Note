@@ -1,16 +1,21 @@
-
-
 ## Introduction
 
 Java 6 has introduced a feature for discovering and loading implementations matching a given interface: **Service Provider Interface** (SPI).
 
-An *extensible* application is one that you can extend without modifying its original code base. You can enhance its functionality with new plug-ins or modules. Developers, software vendors, and customers can add new functionality or application programming interfaces (APIs) by adding a new Java Archive (JAR) file onto the application class path or into an application-specific extension directory.
+An *extensible* application is one that you can extend without modifying its original code base.
+You can enhance its functionality with new plug-ins or modules. Developers, software vendors, and customers can add new functionality or application programming interfaces (APIs) by adding a new Java Archive (JAR) file onto the application class path or into an application-specific extension directory.
+
+SPI 的本质是将接口实现类的全限定名配置在文件中，并由服务加载器读取配置文件，加载实现类。这样可以在运行时，动态为接口替换实现类。
+正因此特性，我们可以很容易的通过 SPI 机制为我们的程序提供拓展功能。
+
 
 The following are terms and definitions important to understand extensible applications:
 
 - Service
 
-  A set of programming interfaces and classes that provide access to some specific application functionality or feature. The service can define the interfaces for the functionality and a way to retrieve an implementation. In the word-processor example, a dictionary service can define a way to retrieve a dictionary and the definition of a word, but it does not implement the underlying feature set. Instead, it relies on a *service provider* to implement that functionality.
+  A set of programming interfaces and classes that provide access to some specific application functionality or feature. 
+  The service can define the interfaces for the functionality and a way to retrieve an implementation. 
+  In the word-processor example, a dictionary service can define a way to retrieve a dictionary and the definition of a word, but it does not implement the underlying feature set. Instead, it relies on a *service provider* to implement that functionality.
 
 - Service provider interface (SPI)
 
@@ -24,9 +29,15 @@ The following are terms and definitions important to understand extensible appli
 
 ## ServiceLoader
 
-The `java.util.ServiceLoader` class helps you find, load, and use service providers. It searches for service providers on your application's class path or in your runtime environment's extensions directory. **It loads them and enables your application to use the provider's APIs.** If you add new providers to the class path or runtime extension directory, the `ServiceLoader` class finds them. If your application knows the provider interface, it can find and use different implementations of that interface. **You can use the first loadable instance of the interface or iterate through all the available interfaces**.
+The `java.util.ServiceLoader` class helps you find, load, and use service providers. 
+It searches for service providers on your application's class path or in your runtime environment's extensions directory.
+It loads them and enables your application to use the provider's APIs.
+If you add new providers to the class path or runtime extension directory, the `ServiceLoader` class finds them. 
+If your application knows the provider interface, it can find and use different implementations of that interface. 
+**You can use the first loadable instance of the interface or iterate through all the available interfaces**.
 
-The `ServiceLoader` class is final, which means that you cannot make it a subclass or override its loading algorithms. **You cannot, for example, change its algorithm to search for services from a different location**.
+The `ServiceLoader` class is final, which means that you cannot make it a subclass or override its loading algorithms. 
+**You cannot, for example, change its algorithm to search for services from a different location**.
 
 ```java
 public final class ServiceLoader<S>
@@ -49,21 +60,39 @@ public final class ServiceLoader<S>
 
     // The current lazy-lookup iterator
     private LazyIterator lookupIterator;
-...
 }
 ```
 
 
 
-From the perspective of the `ServiceLoader` class, all services have a single type, which is usually a single interface or abstract class. The provider itself contains one or more concrete classes that extend the service type with an implementation specific to its purpose. The `ServiceLoader` class requires that the single exposed provider type has a default constructor, which requires no arguments. This enables the `ServiceLoader` class to easily instantiate the service providers that it finds.
+From the perspective of the `ServiceLoader` class, all services have a single type, which is usually a single interface or abstract class. 
+The provider itself contains one or more concrete classes that extend the service type with an implementation specific to its purpose.
+The `ServiceLoader` class requires that the single exposed provider type has a default constructor, which requires no arguments. 
+This enables the `ServiceLoader` class to easily instantiate the service providers that it finds.
 
-Providers are located and instantiated on demand. A service loader maintains a cache of the providers that were loaded. Each invocation of the loader's `iterator` method returns an iterator that first yields all of the elements of the cache, in instantiation order. The service loader then locates and instantiates any new providers, adding each one to the cache in turn. You can clear the provider cache with the `reload` method.
+Providers are located and instantiated on demand. 
+A service loader maintains a cache of the providers that were loaded. 
+Each invocation of the loader's `iterator` method returns an iterator that first yields all of the elements of the cache, in instantiation order. 
+The service loader then locates and instantiates any new providers, adding each one to the cache in turn. 
+You can clear the provider cache with the `reload` method.
 
-To create a loader for a specific class, provide the class itself to the `load` or `loadInstalled` method. You can use default class loaders or provide your own `ClassLoader` subclass.
+To create a loader for a specific class, provide the class itself to the `load` or `loadInstalled` method. 
+You can use default class loaders or provide your own `ClassLoader` subclass.
 
-The `loadInstalled` method searches the runtime environment's extension directory of installed runtime providers. The default extension location is your runtime environment's `jre/lib/ext` directory. You should use the extension location only for well-known, trusted providers because this location becomes part of the class path for all applications. In this article, providers do not use the extension directory but will instead depend on an application-specific class path.
+The `loadInstalled` method searches the runtime environment's extension directory of installed runtime providers. 
+The default extension location is your runtime environment's `jre/lib/ext` directory. 
+You should use the extension location only for well-known, trusted providers because this location becomes part of the class path for all applications. 
 
 
+## Implementation
+
+- [JDBC](/docs/CS/Java/JDK/Basic/JDBC.md)
+- Log
+- Spring
+- [Dubbo](/docs/CS/Java/Dubbo/SPI.md)
+- Netty
+- MyBatis
+- Hadoop
 
 ## Sample
 
@@ -240,6 +269,7 @@ public class DictionaryDemo {
 1. Load all implemetions
 2. Less extensions
 3. exception not quite evidently
+4. not supported concurrency
 
 
 
