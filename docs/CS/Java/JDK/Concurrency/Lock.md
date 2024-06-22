@@ -9,7 +9,7 @@ but can differ in their locking semantics, scheduling algorithms, ordering guara
 
 
 ## Lock
-Lock implementations provide more extensive locking operations than can be obtained using synchronized methods and statements. 
+Lock implementations provide more extensive locking operations than can be obtained using [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) methods and statements. 
 They allow more flexible structuring, may have quite different properties, and may support multiple associated Condition objects.*
 
 A lock is a tool for controlling access to a shared resource by multiple threads. 
@@ -29,17 +29,12 @@ Implementations of the Lock interface enable the use of such techniques by allow
 
 ```java
 public interface Lock {
-
-    //Acquires the lock.
     void lock();
-
     void lockInterruptibly() throws InterruptedException;
 
     boolean tryLock();
-
     boolean tryLock(long time, TimeUnit unit) throws InterruptedException;
 
-    //Releases the lock.
     void unlock();
 
     Condition newCondition();
@@ -91,6 +86,9 @@ The ReentrantLock constructor offers a choice of two fairness options: create a 
 > **Otherwise, prefer synchronized.**
 
 [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+
+
+
 ## Condition
 
 ### Summary of Condition 

@@ -1495,6 +1495,10 @@ CollectedHeap* G1Arguments::create_heap() {
 
 ## Tuning
 
+```shell
+java -XX:+PrintFlagsFinal -XX:+UnlockDiagnosticVMOptions -version
+```
+
 ### OOM
 
 
