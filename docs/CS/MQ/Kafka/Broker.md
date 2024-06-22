@@ -20,7 +20,7 @@ However, all consumers and producers operating on that partition must connect to
 | log.flush.scheduler.interval.ms | The frequency in ms that the log flusher checks whether any log needs to be flushed to disk                                                                         | long | 9223372036854775807 |              | high       |
 
 ```scala
-private def append(...): LogAppendInfo = {
+private def append(): LogAppendInfo = {
       // ...
       lock synchronized {
         // ...
@@ -32,7 +32,7 @@ private def append(...): LogAppendInfo = {
 ```
 
 ```scala
-private def append(...): LogAppendInfo = {
+private def append(): LogAppendInfo = {
       // ...
       lock synchronized {
         // ...
@@ -480,17 +480,9 @@ Purgatory
         isStartingUp.set(false)
         AppInfoParser.registerAppInfo(Server.MetricsPrefix, config.brokerId.toString, metrics, time.milliseconds())
         info("started")
-      }
-    }
-    catch {
-      case e: Throwable =>
-        fatal("Fatal error during KafkaServer startup. Prepare to shutdown", e)
-        isStartingUp.set(false)
-        shutdown()
-        throw e
-    }
-  }
-}
+    
+
+
 ```
 
 
@@ -1161,7 +1153,10 @@ class ReplicaManager {
         } catch {
           // NOTE: Failed produce requests metric is not incremented for known exceptions
           // it is supposed to indicate un-expected failures of a broker in handling a produce request
-          }
+        }
+      }
+ } } 
+}
 ```
 
 #### appendRecordsToLeader
@@ -3162,7 +3157,7 @@ In there future, we may use a backend thread to periodically touch the entire wa
 1) support larger warm section
 2) make sure the warm section of low QPS topic-partitions are really warm.
 
-```scala
+```
 protected final int warmEntries() {
     return 8192 / entrySize();
 }
@@ -3226,7 +3221,9 @@ public AbstractIndex(File file, long baseOffset, int maxIndexSize, boolean writa
   this.maxEntries = mmap.limit() / entrySize();
   this.entries = mmap.position() / entrySize();
 }
+```
 
+```scala
 private void createAndAssignMmap() throws IOException {
   boolean newlyCreated = file.createNewFile();
   RandomAccessFile raf;
@@ -3252,6 +3249,9 @@ private void createAndAssignMmap() throws IOException {
     Utils.closeQuietly(raf, "index " + file.getName());
   }
 }
+```
+
+```scala
 private static MappedByteBuffer createMappedBuffer(RandomAccessFile raf, boolean newlyCreated, long length, boolean writable, int entrySize) throws IOException {
     MappedByteBuffer idx;
     if (writable)

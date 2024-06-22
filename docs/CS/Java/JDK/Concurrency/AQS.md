@@ -719,7 +719,8 @@ public class ConditionObject implements Condition, java.io.Serializable {
     /**
      * Creates a new {@code ConditionObject} instance.
      */
-    public ConditionObject() { }
+    public ConditionObject() {
+    }
 
     // Internal methods
 
@@ -742,6 +743,7 @@ public class ConditionObject implements Condition, java.io.Serializable {
         lastWaiter = node;
         return node;
     }
+}
 ```
 
 

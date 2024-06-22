@@ -77,6 +77,13 @@ As for optimistic lock, database access libraries like Hibernate usually provide
 - [Hazelcast](https://hazelcast.com/blog/long-live-distributed-locks/) offers a lock system based on his [CP subsystem](https://docs.hazelcast.org/docs/3.12.3/manual/html-single/index.html#cp-subsystem).
 - [有赞 Bond](https://tech.youzan.com/bond/)
 
+
+
+
+数据库 select for update
+
+
+
 Redisson lua based on Redis single thread model
 
 RedissonLock#unlockInnerAsync

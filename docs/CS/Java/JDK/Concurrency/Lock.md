@@ -142,7 +142,7 @@ private static void setBlocker(Thread t, Object arg) {
 ```
 **sample**:
 
-```java
+```
 while (!canProceed()) { ... LockSupport.park(this); }
 ```
 

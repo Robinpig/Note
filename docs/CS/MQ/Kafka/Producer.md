@@ -883,7 +883,6 @@ Send clientRequest by [networkClient](/docs/CS/MQ/Kafka/Network.md?id=send)
               requestTimeoutMs, callback);
       client.send(clientRequest, now);
    }
-}
 ```
 
 drain
