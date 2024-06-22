@@ -12,16 +12,20 @@ Data structures implemented into Redis have a few special properties:
 
 > Another good example is to think of Redis as a more complex version of memcached, where the operations are not just SETs and GETs, but operations that work with complex data types like Lists, Sets, ordered data structures, and so forth.
 
-
-> [Try Redis directly inside your browser.](https://try.redis.io)
-
-
+ 
 
 >  [!TIP]
 >
 > The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
 
 
+
+> It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound. 
+> For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.
+
+
+上下文切换
+多线程同步
 
 Source code layout
 
@@ -109,13 +113,71 @@ latency monitor
 
 ## Cluster
 
-### Singleton
+单机Redis瓶颈
+- QPS
+- 容量
+- 单点故障
+
+
 
 ### Master-Slave
+
+主从复制
+- Redis读大于写 类似MySQL 副本提供读
+
+
+
+主从一致性
+
+
+
+```
+(error) READONLY You can't write against a read only replica.
+```
+
 
 disadvantage:
 
 load balance and recovery
+
+
+
+
+
+```log
+# replica log
+Connecting to MASTER 127.0.0.1:7000
+MASTER <-> REPLICA sync started
+Non blocking connect for SYNC fired the event.
+Master replied to PING, replication can continue...
+Partial resynchronization not possible (no cached master)
+Full resync from master: 21a84515a95124a3326bd63d9ecf94e52e44c129:0
+MASTER <-> REPLICA sync: receiving streamed RDB from master with EOF to disk
+MASTER <-> REPLICA sync: Flushing old data
+MASTER <-> REPLICA sync: Loading DB in memory
+Loading RDB produced by version 7.2.5
+RDB age 0 seconds
+RDB memory usage when created 0.52 Mb
+Done loading RDB, keys loaded: 0, keys expired: 0.
+MASTER <-> REPLICA sync: Finished with success
+```
+
+```log
+# master log
+Replica 127.0.0.1:7001 asks for synchronization
+Full resync requested by replica 127.0.0.1:7001
+Replication backlog created, my new replication IDs are '21a84515a95124a3326bd63d9ecf94e52e44c129' and '0000000000000000000000000000000000000000'
+Delay next BGSAVE for diskless SYNC
+Starting BGSAVE for SYNC with target: replicas sockets
+Background RDB transfer started by pid 16752
+Fork CoW for RDB: current 4 MB, peak 4 MB, average 4 MB
+Diskless rdb transfer, done reading from pipe, 1 replicas still up.
+Background RDB transfer terminated with success
+Streamed RDB transfer with replica 127.0.0.1:7001 succeeded (socket). Waiting for REPLCONF ACK from replica to enable streaming
+Synchronization with replica 127.0.0.1:7001 succeeded
+```
+
+
 
 ### Redis Sentinel
 
@@ -125,6 +187,12 @@ monitor
 - notify slaves to replicaof and notify clients to create connections with new master
 
 ### Redis Cluster
+分片算法
+
+range 连续数据 业务相关
+
+hash
+
 
 ## [Distributed Lock](/docs/CS/DB/Redis/Lock.md)
 
@@ -233,6 +301,19 @@ fork子进程的速度变慢
 - redis-check-aof
 - redis-benchmark
 
+
+## 缓存一致性
+
+广播更新
+
+应用监听Redis的更改
+
+
+定时更新
+
+
+
+
 ## Tuning
 
 BigKey
@@ -258,9 +339,13 @@ Pipeline中的批量任务不是原子执行的（从来不是），所以要处
 
 ### slowlog
 
-slowlog-log-slower-than
-
-slowlog-max-len 慢查询日志删除使用FIFO
+```properties
+# 10ms
+slowlog-log-slower-than=10000
+# 128
+slowlog-max-len=128
+```
+慢查询日志删除使用FIFO
 
 ```c
 void slowlogPushEntryIfNeeded(client *c, robj **argv, int argc, long long duration) {

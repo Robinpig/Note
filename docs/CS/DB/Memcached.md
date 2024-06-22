@@ -13,13 +13,25 @@ Free & open source, high-performance, distributed memory object caching system, 
 
 
 
+worker thread
+- notiofy_receive_fd
+- notiofy_send_fd
+
+
+thread_libevent_process
 
 
 
+## Distributed
+
+Memcached Server不互相通信
+
+客户端实现分布式
 
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
+- [Cache](/docs/CS/Cache.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - Twemcache
 - Twemproxy

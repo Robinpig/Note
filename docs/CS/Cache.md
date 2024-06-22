@@ -328,6 +328,9 @@ it will not write to the cache, which will lead to the non-existent data every r
 
 When traffic is high, DB may hang up. If someone attacks our application frequently by using nonexistent keys, this is a vulnerability.
 
+对请求进行前置校验 过载保护
+
+
 Solution
 
 - Intercept through a Bloom filter.
@@ -357,17 +360,10 @@ Solution
 
 Avoid too many requests accessing DataBases.
 
-**Prevent Beforehand:**
 
-Using random expire timestamps(or never expire).
+收集缓存监控信息 流处理如Flink判断是否是hot key 再通过监控系统通知到应用做处理 缓存集群需要查看是否均匀
 
-Using cluster cache servers.
-
-httpClient retry 3
-
-缓存一致性
-
-本地与集中 数据库与缓存
+Redis里可以使用zset取最近访问的一定数量的请求ip zrang排序发现热点
 
 ## Tuning
 

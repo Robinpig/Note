@@ -41,7 +41,8 @@ A simpler solution is to use a combination of unix time with microseconds resolu
 The time we use as the key time to live, is called the “lock validity time”. 
 It is both the auto release time, and the time the client has in order to perform the operation required before another client may be able to acquire the lock again, without technically violating the mutual exclusion guarantee, which is only limited to a given window of time from the moment the lock is acquired.
 
-So now we have a good way to acquire and release the lock. The system, reasoning about a non-distributed system composed of a single, always available, instance, is safe. Let’s extend the concept to a distributed system where we don’t have such guarantees.
+So now we have a good way to acquire and release the lock. T
+he system, reasoning about a non-distributed system composed of a single, always available, instance, is safe. Let’s extend the concept to a distributed system where we don’t have such guarantees.
 
 
 ```
