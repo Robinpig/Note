@@ -300,7 +300,7 @@ class KafkaServer(
 }
 ```
 
-### SocketServer
+## SocketServer
 
 Handles new connections, requests and responses to and from broker. 
 Kafka supports two types of request planes :
@@ -493,10 +493,22 @@ Purgatory
 }
 ```
 
-Processor#run
 
 ```scala
 
+class RequestChannel(val queueSize: Int,
+                     val metricNamePrefix: String,
+                     time: Time,
+                     val metrics: RequestChannel.Metrics) {
+  private val requestQueue = new ArrayBlockingQueue[BaseRequest](queueSize)
+  private val processors = new ConcurrentHashMap[Int, Processor]()
+  private val callbackQueue = new ArrayBlockingQueue[BaseRequest](queueSize)
+}
+```
+
+### Processor#run
+
+```scala
   override def run(): Unit = {
     try {
       while (shouldRun.get()) {
@@ -525,8 +537,106 @@ Processor#run
       CoreUtils.swallow(closeAll(), this, Level.ERROR)
     }
   }
-
 ```
+
+
+
+
+Processor 线程仅仅是网络接收线程，不会执行真正的 Request 请求处理逻辑，那是 I/O 线程负责的
+```scala
+def sendRequest(request: RequestChannel.Request): Unit = {
+  requestQueue.put(request)
+}
+
+def receiveRequest(timeout: Long): RequestChannel.BaseRequest = {
+  val callbackRequest = callbackQueue.poll()
+  if (callbackRequest != null)
+    callbackRequest
+  else {
+    val request = requestQueue.poll(timeout, TimeUnit.MILLISECONDS)
+    request match {
+      case WakeupRequest => callbackQueue.poll()
+      case _ => request
+    }
+  }
+}
+
+def receiveRequest(): RequestChannel.BaseRequest =
+  requestQueue.take()
+```
+
+
+#### processNewResponses
+```scala
+  
+  private def processNewResponses(): Unit = {
+    var currentResponse: RequestChannel.Response = null
+    while ({currentResponse = dequeueResponse(); currentResponse != null}) {
+      val channelId = currentResponse.request.context.connectionId
+      try {
+        currentResponse match {
+          case response: NoOpResponse =>
+            // There is no response to send to the client, we need to read more pipelined requests
+            // that are sitting in the server's socket buffer
+            updateRequestMetrics(response)
+            // Try unmuting the channel. If there was no quota violation and the channel has not been throttled,
+            // it will be unmuted immediately. If the channel has been throttled, it will be unmuted only if the
+            // throttling delay has already passed by now.
+            handleChannelMuteEvent(channelId, ChannelMuteEvent.RESPONSE_SENT)
+            tryUnmuteChannel(channelId)
+
+          case response: SendResponse =>
+            sendResponse(response, response.responseSend)
+          case response: CloseConnectionResponse =>
+            updateRequestMetrics(response)
+            close(channelId)
+          case _: StartThrottlingResponse =>
+            handleChannelMuteEvent(channelId, ChannelMuteEvent.THROTTLE_STARTED)
+          case _: EndThrottlingResponse =>
+            // Try unmuting the channel. The channel will be unmuted only if the response has already been sent out to
+            // the client.
+            handleChannelMuteEvent(channelId, ChannelMuteEvent.THROTTLE_ENDED)
+            tryUnmuteChannel(channelId)
+          case _ =>
+            throw new IllegalArgumentException(s"Unknown response type: ${currentResponse.getClass}")
+        }
+      } catch {
+        case e: Throwable =>
+          processChannelException(channelId, s"Exception while processing response for $channelId", e)
+      }
+    }
+  }
+```
+
+##### sendResponse
+```scala
+private[network] def sendResponse(response: RequestChannel.Response): Unit = {
+  response match {
+    // We should only send one of the following per request
+    case _: SendResponse | _: NoOpResponse | _: CloseConnectionResponse =>
+      val request = response.request
+      val timeNanos = time.nanoseconds()
+      request.responseCompleteTimeNanos = timeNanos
+      if (request.apiLocalCompleteTimeNanos == -1L)
+        request.apiLocalCompleteTimeNanos = timeNanos
+      // If this callback was executed after KafkaApis returned we will need to adjust the callback completion time here.
+      if (request.callbackRequestDequeueTimeNanos.isDefined && request.callbackRequestCompleteTimeNanos.isEmpty)
+        request.callbackRequestCompleteTimeNanos = Some(time.nanoseconds())
+    // For a given request, these may happen in addition to one in the previous section, skip updating the metrics
+    case _: StartThrottlingResponse | _: EndThrottlingResponse => ()
+  }
+
+  val processor = processors.get(response.processor)
+  // The processor may be null if it was shutdown. In this case, the connections
+  // are closed, so the response is dropped.
+  if (processor != null) {
+    processor.enqueueResponse(response)
+  }
+} 
+```
+
+
+## Admin
 
 ### createTopics
 
@@ -1051,10 +1161,7 @@ class ReplicaManager {
         } catch {
           // NOTE: Failed produce requests metric is not incremented for known exceptions
           // it is supposed to indicate un-expected failures of a broker in handling a produce request
-          case e@(_: UnknownTopicOrPartitionException |
-                  _: NotLeaderOrFollowerException |
-                  _: RecordTooLargeException |
-                  _: RecordBatchTooLargeException |
+          }
 ```
 
 #### appendRecordsToLeader
@@ -1325,77 +1432,7 @@ Append the given messages starting with the given offset. Add an entry to the in
   }
 
 ```
-
-## request
-
-### RequestChannel
-
-```scala
-
-class RequestChannel(val queueSize: Int,
-                     val metricNamePrefix: String,
-                     time: Time,
-                     val metrics: RequestChannel.Metrics) {
-  private val requestQueue = new ArrayBlockingQueue[BaseRequest](queueSize)
-  private val processors = new ConcurrentHashMap[Int, Processor]()
-  private val callbackQueue = new ArrayBlockingQueue[BaseRequest](queueSize)
-}
-```
-
-
-
-Processor 线程仅仅是网络接收线程，不会执行真正的 Request 请求处理逻辑，那是 I/O 线程负责的
-```scala
-def sendRequest(request: RequestChannel.Request): Unit = {
-  requestQueue.put(request)
-}
-
-def receiveRequest(timeout: Long): RequestChannel.BaseRequest = {
-  val callbackRequest = callbackQueue.poll()
-  if (callbackRequest != null)
-    callbackRequest
-  else {
-    val request = requestQueue.poll(timeout, TimeUnit.MILLISECONDS)
-    request match {
-      case WakeupRequest => callbackQueue.poll()
-      case _ => request
-    }
-  }
-}
-
-def receiveRequest(): RequestChannel.BaseRequest =
-  requestQueue.take()
-```
-
-
-### sendResponse
-
-```scala
-private[network] def sendResponse(response: RequestChannel.Response): Unit = {
-  response match {
-    // We should only send one of the following per request
-    case _: SendResponse | _: NoOpResponse | _: CloseConnectionResponse =>
-      val request = response.request
-      val timeNanos = time.nanoseconds()
-      request.responseCompleteTimeNanos = timeNanos
-      if (request.apiLocalCompleteTimeNanos == -1L)
-        request.apiLocalCompleteTimeNanos = timeNanos
-      // If this callback was executed after KafkaApis returned we will need to adjust the callback completion time here.
-      if (request.callbackRequestDequeueTimeNanos.isDefined && request.callbackRequestCompleteTimeNanos.isEmpty)
-        request.callbackRequestCompleteTimeNanos = Some(time.nanoseconds())
-    // For a given request, these may happen in addition to one in the previous section, skip updating the metrics
-    case _: StartThrottlingResponse | _: EndThrottlingResponse => ()
-  }
-
-  val processor = processors.get(response.processor)
-  // The processor may be null if it was shutdown. In this case, the connections
-  // are closed, so the response is dropped.
-  if (processor != null) {
-    processor.enqueueResponse(response)
-  }
-} 
-```
-
+  
 ## read log
 
 ### handleFetchRequest

@@ -472,7 +472,7 @@ This allows the producer to batch together individual records for efficiency.
 4. ensureValidRecordSize
 5. new interceptCallback
 6. append into buffer
-7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Network.md?id=Sender) which is responsible for sending those batches of records to the appropriate Kafka brokers.
+7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Producer.md?id=Sender) which is responsible for sending those batches of records to the appropriate Kafka brokers.
 
 ```plantuml
 actor Actor
@@ -682,7 +682,7 @@ public class RecordAccumulator {
 ```
 
 
-```
+```java
     public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers, Callback callback, long now) {
         if (!recordsBuilder.hasRoomFor(timestamp, key, value, headers)) {
             return null;
@@ -751,11 +751,17 @@ This thread makes metadata requests to renew its view of the cluster and then se
 ```plantuml
 Sender ->  RecordAccumulator :ready
 RecordAccumulator -->  Sender :readyCheckResults
-Sender -> NetworkClient : client.poll()
+Sender -> NetworkClient : client.send()
 activate NetworkClient
+NetworkClient -> KSelector : selector.send()
+activate KSelector
+KSelector -> KafkaChannel : setSend()
+KafkaChannel --> KSelector
+deactivate KSelector
+Sender -> NetworkClient : client.poll()
+activate KSelector
 NetworkClient -> NetworkClient : maybeUpdateMetadata
 NetworkClient -> KSelector : selector.poll()
-activate KSelector
 KSelector -> KSelector : clear()
 KSelector -> Selector : select()
 KSelector -> Selector : pollSelectionKeys()
@@ -801,7 +807,6 @@ public class Sender implements Runnable {
 
    void runOnce() {
       // transactionManager
-
       long currentTimeMs = time.milliseconds();
       long pollTimeout = sendProducerData(currentTimeMs);
       client.poll(pollTimeout, currentTimeMs);
@@ -820,48 +825,51 @@ public class Sender implements Runnable {
 
 ```java
 public class Sender implements Runnable {
-   private long sendProducerData(long now) {
-      Cluster cluster = metadata.fetch();
-      // get the list of partitions with data ready to send
-      RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
+    private long sendProducerData(long now) {
+        Cluster cluster = metadata.fetch();
+        // get the list of partitions with data ready to send
+        RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
-      // if there are any partitions whose leaders are not known yet, force metadata update
-      if (!result.unknownLeaderTopics.isEmpty()) {
-         for (String topic : result.unknownLeaderTopics)
-            this.metadata.add(topic, now);
-         this.metadata.requestUpdate();
-      }
+        // if there are any partitions whose leaders are not known yet, force metadata update
+        if (!result.unknownLeaderTopics.isEmpty()) {
+            for (String topic : result.unknownLeaderTopics)
+                this.metadata.add(topic, now);
+            this.metadata.requestUpdate();
+        }
 
-      // remove any nodes we aren't ready to send to
+        // remove any nodes we aren't ready to send to
 
-      // create produce requests
-      Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes, this.maxRequestSize, now);
-      addToInflightBatches(batches);
-      if (guaranteeMessageOrder) {
-         for (List<ProducerBatch> batchList : batches.values()) {
-            for (ProducerBatch batch : batchList)
-               this.accumulator.mutePartition(batch.topicPartition);
-         }
-      }
+        // create produce requests
+        Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes, this.maxRequestSize, now);
+        addToInflightBatches(batches);
+        if (guaranteeMessageOrder) {
+            for (List<ProducerBatch> batchList : batches.values()) {
+                for (ProducerBatch batch : batchList)
+                    this.accumulator.mutePartition(batch.topicPartition);
+            }
+        }
 
-      accumulator.resetNextBatchExpiryTime();
-      List<ProducerBatch> expiredInflightBatches = getExpiredInflightBatches(now);
-      List<ProducerBatch> expiredBatches = this.accumulator.expiredBatches(now);
-      expiredBatches.addAll(expiredInflightBatches);
+        accumulator.resetNextBatchExpiryTime();
+        List<ProducerBatch> expiredInflightBatches = getExpiredInflightBatches(now);
+        List<ProducerBatch> expiredBatches = this.accumulator.expiredBatches(now);
+        expiredBatches.addAll(expiredInflightBatches);
 
-      // Reset the producer id if an expired batch has previously been sent to the broker.
-      for (ProducerBatch expiredBatch : expiredBatches) {
-         failBatch(expiredBatch, new TimeoutException(errorMessage), false);
-      }
+        // Reset the producer id if an expired batch has previously been sent to the broker.
+        for (ProducerBatch expiredBatch : expiredBatches) {
+            failBatch(expiredBatch, new TimeoutException(errorMessage), false);
+        }
 
-      long pollTimeout = Math.min(result.nextReadyCheckDelayMs, notReadyTimeout);
-      pollTimeout = Math.min(pollTimeout, this.accumulator.nextExpiryTimeMs() - now);
-      pollTimeout = Math.max(pollTimeout, 0);
-   
-      sendProduceRequests(batches, now);
-      return pollTimeout;
-   }
+        long pollTimeout = Math.min(result.nextReadyCheckDelayMs, notReadyTimeout);
+        pollTimeout = Math.min(pollTimeout, this.accumulator.nextExpiryTimeMs() - now);
+        pollTimeout = Math.max(pollTimeout, 0);
 
+        sendProduceRequests(batches, now);
+        return pollTimeout;
+    }
+}
+```
+Send clientRequest by [networkClient](/docs/CS/MQ/Kafka/Network.md?id=send)
+```java
    private void sendProduceRequest(long now, int destination, short acks, int timeout, List<ProducerBatch> batches) {
       final Map<TopicPartition, ProducerBatch> recordsByPartition = new HashMap<>(batches.size());
 
