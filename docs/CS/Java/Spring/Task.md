@@ -102,12 +102,7 @@ public class AsyncConfigurationSelector extends AdviceModeImportSelector<EnableA
 
    private static final String ASYNC_EXECUTION_ASPECT_CONFIGURATION_CLASS_NAME =
          "org.springframework.scheduling.aspectj.AspectJAsyncConfiguration";
-
-   /**
-    * Returns {@link ProxyAsyncConfiguration} or {@code AspectJAsyncConfiguration}
-    * for {@code PROXY} and {@code ASPECTJ} values of {@link EnableAsync#mode()},
-    * respectively.
-    */
+   
    @Override
    @Nullable
    public String[] selectImports(AdviceMode adviceMode) {
@@ -476,7 +471,7 @@ public interface TriggerContext {
 
 Spring provides two implementations of the `Trigger` interface. The most interesting one is the `CronTrigger`. It enables the scheduling of tasks based on cron expressions. For example, the following task is scheduled to run 15 minutes past each hour but only during the 9-to-5 “business hours” on weekdays:
 
-```java
+```
 scheduler.schedule(task, new CronTrigger("0 15 9-17 * * MON-FRI"));
 ```
 
@@ -750,6 +745,22 @@ public static Method selectInvocableMethod(Method method, @Nullable Class<?> tar
    return methodToUse;
 }
 ```
+
+## Tuning
+
+### 异步失效
+
+- 未使用@EnableAsync
+
+@Async基于[AOP](/docs/CS/Java/Spring/AOP.md)
+- 函数access flag非 public
+- 函数是final或者static
+- 当前类里其它方法内部调用
+
+Spring相关
+- 未被Spring管理
+- @Async方法返回值必须是void或者Future
+
 
 
 ## Links
