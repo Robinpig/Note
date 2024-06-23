@@ -1828,3 +1828,8 @@ CommitFailedException 异常
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+
+
+## References
+
+1. [Consumer threading refactor design](https://cwiki.apache.org/confluence/display/KAFKA/Consumer+threading+refactor+design)

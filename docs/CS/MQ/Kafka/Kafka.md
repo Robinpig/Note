@@ -829,3 +829,4 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 5. [Streams and Tables: Two Sides of the Same Coin](https://dl.acm.org/doi/10.1145/3242153.3242155)
 6. [Building a Replicated Logging System with Apache Kafka](https://dl.acm.org/doi/10.14778/2824032.2824063)
 7. [huxihx](https://www.cnblogs.com/huxi2b)
+8. [关于 Kafka 的一些面试题目](https://juejin.cn/post/6844904022827073549)
