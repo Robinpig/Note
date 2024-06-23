@@ -53,7 +53,37 @@ Design strategies and characteristics of different In-Memory engines can be appl
   In addition to lower latency, in-memory systems also offer much higher request rates (IOPS) relative to a comparable disk-based database.
   A single instance used as a distributed side-cache can serve hundreds of thousands of requests per second.
 
-## Caching patterns
+### 缓存特征
+
+命中率
+
+最大空间
+
+驱逐策略
+
+
+## Where is Caching Implemented?
+
+缓存的应用遍及整个技术领域--在各个层面和许多不同的技术栈中。
+
+在硬件层面，缓存是 CPU 架构的一部分，例如，以 1-3 级（L1/L2/L3）缓存的形式出现。
+
+在操作系统内核层面，有一种磁盘缓存形式被称为页面缓存。当然，还有其他形式。
+
+对于基于网络的系统，当然有浏览器缓存和 CDN（内容分发网络）。它们分别在客户端或 CDN 端缓存常用的静态资源（图片、样式表等）。这样做的目的是减少带宽，并快速、高效、低成本的向用户提供这些资源。
+
+不同类型的应用程序和中间件也有自己的缓存。例如，数据库使用缓存来保存经常使用的查询和经常返回的结果集。
+
+当然，还有许多强大的软件缓存产品，如 Redis、EHCache、Memcached、Hazelcast、Infinispan 等，可以在分布式应用中实现可扩展的分布式缓存。
+
+"分布式"高速缓存的概念也可以与"本地"或"本地化"高速缓存相比较。分布式缓存是一种分布在网络上多个设备上的缓存形式，本地缓存只存在于一台设备上。
+如果有多个实例访问缓存，可能需要解决同步问题、竞争条件、数据损坏以及分布式应用带来的其他挑战。另一方面，共享缓存是一个强大的概念，可以帮助应用程序处理本地缓存（尽管更简单）无法处理的用例
+
+分布式缓存和本地缓存都面临着一些共同的挑战。
+
+主要挑战在于如何在保持数据新鲜度、在优化缓存失效和驱逐之间保持平衡，以及如何使缓存管理方式与特定用例相匹配。
+
+## Caching Strategies
 
 When you are caching data from your database, there are caching patterns for Redis and Memcached that you can implement, including proactive and reactive approaches.
 The patterns you choose to implement should be directly related to your caching and application objectives.
@@ -64,7 +94,9 @@ With both approaches, the application is essentially managing what data is being
 
 A proper caching strategy includes effective use of both write-through and lazy loading of your data and setting an appropriate expiration for the data to keep it relevant and lean.
 
-### Cache-Aside (Lazy Loading)
+<!-- tabs:start -->
+
+### **Cache-Aside (Lazy Loading)**
 
 A cache-aside cache is the most common caching strategy available. The fundamental data retrieval logic can be summarized as follows:
 
@@ -73,6 +105,8 @@ A cache-aside cache is the most common caching strategy available. The fundament
 3. If the data isn’t available (a cache miss), the database is queried for the data.
    The cache is then populated with the data that is retrieved from the database, and the data is returned to the caller.
 
+![](https://cdn-images-1.readmedium.com/v2/resize:fit:800/1*CmM4Gk6rRqmlSL22SEymXg.png)
+
 This approach has a couple of advantages:
 
 - The cache contains only data that the application actually requests,whichhelpskeepthecache size cost-effective.
@@ -80,7 +114,7 @@ This approach has a couple of advantages:
 
 A disadvantage when using cache-aside as the only caching pattern is that because the data is loaded into the cache only after a cache miss, some overhead is added to the initial response time because additional roundtrips to the cache and database are needed.
 
-### Write-Through
+### **Write-Through**
 
 A write-through cache reverses the order of how the cache is populated. Instead of lazy-loading the data in the cache after a cache miss, the cache is proactively updated immediately following the primary database update. The fundamental data retrieval logic can be summarized as follows:
 
@@ -88,6 +122,9 @@ A write-through cache reverses the order of how the cache is populated. Instead 
 2. Immediately afterward, the data is also updated in the cache.
 
 The write-through pattern is almost always implemented along with lazy loading. If the application gets a cache miss because the data is not present or has expired, the lazy loading pattern is performed to update the cache.
+
+![](https://cdn-images-1.readmedium.com/v2/resize:fit:800/1*jqEFeug5DzxyZm-cygN6wA.png)
+
 The write-through approach has a couple of advantages:
 
 - Because the cache is up-to-date with the primary database,there is a much greater likelihood that the data will be found in the cache.
@@ -96,10 +133,89 @@ The write-through approach has a couple of advantages:
 
 A disadvantage of the write-through approach is that infrequently-requested data is also written to the cache, resulting in a larger and more expensive cache.
 
-## Cache Validity
+### **Write-Around**
+
+这种策略会填充底层存储，但不会填充缓存本身。换句话说，写操作绕过缓存，只写入底层存储。这种技术与Cache-Aside有一些重叠。
+
+不同之处在于，使用 Cache-Aside 时，重点是读取和懒加载--只有在首次从数据存储中读取数据时才将其填充到缓存中。而使用 Write-Around 缓存时，重点则是写入性能。当数据被频繁写入但不被频繁读取时，这种技术通常用于避免缓存污染。
+
+
+![](https://cdn-images-1.readmedium.com/v2/resize:fit:800/1*ff5rO7x7w858hLOqpXvqLQ.png)
+优点
+
+减少缓存污染，因为每次写入都不会填充缓存
+缺点
+
+如果某些记录经常被读取，性能就会受到影响，因此，如果能主动加载到缓存中，就能避免在首次读取时访问数据库。
+何时使用
+
+当写入量较大但读取量明显较小时，通常会使用这种方法。
+
+### **Write-Back (Write-Behind)**
+
+写操作首先填充缓存，然后写入数据存储。这里的关键是，写入数据存储是异步进行的，因此不需要两阶段的事务提交。
+
+Write-Behind 缓存策略通常由缓存产品处理。如果缓存产品有这种机制，应用将向缓存写入内容，然后缓存产品将负责向数据库发送更改内容。如果缓存产品不支持这种机制，应用程序本身将触发对数据库的异步更新。
+
+![](https://cdn-images-1.readmedium.com/v2/resize:fit:800/1*zK_El88WRHFCZ_zU919J4A.png)
+
+
+优点
+
+写入速度更快，因为系统只需在初始事务中写入缓存。数据库将在稍后时间更新。
+如果流量由缓存产品处理，那么应用逻辑的复杂性就会降低。
+
+缺点
+
+在数据库接收到新更改之前，数据库和高速缓存可能会不同步，因此可能会出现不一致。
+当缓存最终尝试更新数据库时，可能会出现错误。如果出现这种情况，就需要有更复杂的机制来确保数据库接收到最新的数据。
+
+何时使用
+
+当写入性能非常重要，而且数据库中的数据与缓存中的数据暂时稍有不同步是可以接受的时候，就可以使用回写缓存。适用于写入量大但一致性要求不那么严格的应用。例如，CDN（内容分发网络）可用于快速更新缓存内容，然后将其同步到记录系统。
+
+### **Read-Through**
+
+直读缓存在某种意义上类似于旁路缓存模式，因为在这两种模式中，缓存都是我们首先查找记录的地方。如果缓存未命中，就会在数据库中查找。不过，在旁路缓存模式中，查询缓存和数据库的责任都落在了应用程序身上，而在直读缓存中，这一责任则落在了缓存产品身上（如果它有这种机制的话）。
+
+![](https://cdn-images-1.readmedium.com/v2/resize:fit:800/1*dpWPJxDphTKb_Z63FmPzNA.png)
+优点
+
+简单--所有逻辑都封装在缓存应用程序中
+缺点
+
+缓存缺失时从数据库读取数据的潜在延迟。需要复杂的数据更新失效机制。
+何时使用
+
+当你想简化访问数据的代码时，就会使用直读缓存。此外，当你想确保缓存始终包含来自数据存储的最新数据时，也可以使用直读缓存。这对于读取数据比写入数据更频繁的应用程序非常有用。但这里的关键点是，缓存产品应该能够通过配置或本地方式从底层记录系统中执行读取操作。
+
+
+
+<!-- tabs:end -->
+
+### Summary of Caching Strategies
+
+| 缓存策略          | 策略概述             | 负责DB操作    | 应用场景                    |
+|---------------|------------------|-----------|-------------------------|
+| Cache-Aside   | 只在需要读缓存时从DB获取来更新 | 应用程序      | 按需缓存产品详细信息场景            |
+| Write-Through | 写操作同时DB和缓存       | 缓存产品或应用程序 | 较强一致性要求 如银行系统           |
+| Write-Around  | 直接写DB 绕过缓存       |      应用程序     | 日志操作 无需缓存               |
+| Write-Back    | 先写缓存 异步写入到存储     | 缓存产品或应用程序 | CDN 先更新缓存中的内容，然后同步到存储系统 |
+| Read-Through  | 主要读缓存 缺失则从存储系统加载 |    缓存产品或应用程序       |    用户配置文件服务在缓存缺失时获取和缓存用户数据  |
+
+
+
+## 缓存失效
+
+
+缓存策略与如何从缓存中加载和检索数据有关，而缓存失效则更多的与记录系统和缓存之间的数据一致性和新鲜度有关。
+
+因此，这两个概念之间存在一些重叠，对于某些缓存策略来说，失效比其他策略更简单。例如，使用"通过缓存写入"方法时，缓存会在每次写入时更新，因此无需额外实现。但是，删除可能不会被反映，因此可能需要应用逻辑来显式处理。
+
 
 You can control the freshness of your cached data by applying a time to live (TTL) or expiration to your cached keys.
 After the set time has passed, the key is deleted from the cache, and access to the origin data store is required along with reaching the updated data.
+
 
 Two principles can help you determine the appropriate TTLs to apply and the types of caching patterns to implement.
 First, it’s important that you understand the rate of change of the underlying data.
@@ -118,7 +234,9 @@ If all your product data expires at the same time and your application is under 
 Depending on the load, that could generate too much pressure on your database, resulting in poor performance.
 By adding slight jitter to your TTLs, a randomly-generated time value (for example, TTL = your initial TTL value in seconds + jitter) would reduce the pressure on your backend database and also reduce the CPU use on your cache engine as a result of deleting expired keys.
 
-### Evictions
+## 缓存驱逐
+
+缓存驱逐与缓存失效类似，都是删除旧的缓存记录。但两者区别在于，当缓存已满，无法再容纳任何记录时，就需要进行缓存驱逐。
 
 Evictions occur when cache memory is overfilled or is greater than the maxmemory setting for the cache, causing the engine selecting keys to evict in order to manage its memory. The keys that are chosen are based on the eviction policy you select.
 
@@ -131,22 +249,17 @@ Evictions occur when cache memory is overfilled or is greater than the maxmemory
 
 ### Eviction policy
 
-By default, Amazon ElastiCache for Redis sets the volatile-lru eviction policy to your Redis cluster.
-When this policy is selected, the least recently used keys that have an expiration (TTL) value set are evicted.
-Other eviction policies are available and can be applied in the configurable maxmemory-policy parameter.
+
 The following table summarizes eviction policies:
 
 
-| Eviction Policy | Description                                                                            |
-| --------------- | -------------------------------------------------------------------------------------- |
-| allkeys-lru     | The cache evicts the least recently used (LRU) keys regardless of TTL set.             |
-| allkeys-lfu     | The cache evicts the least frequently used (LFU) keys regardless of TTL set.           |
-| volatile-lru    | The cache evicts the least recently used (LRU) keys from those that have a TTL set.    |
-| volatile-lfu    | The cache evicts the least frequently used (LFU) keys from those that have a TTL set.  |
-| volatile-ttl    | The cache evicts the keys with the shortest TTL set.                                   |
-| volatile-random | The cache randomly evicts keys with a TTL set.                                         |
-| allkeys-random  | The cache randomly evicts keys regardless of TTL set.                                  |
-| no-eviction     | The cache doesn’t evict keys at all. This blocks future writes until memory frees up. |
+| Eviction Policy | Description | 适用场景                                       |
+|----------|------------|--------------------------------------------|
+| LRU             |            | 非常适合通用缓存                                   |
+| FIFO            |            | 适用于缓存可预测使用时间的数据                            |
+| LFU             |            | 适用于具有稳定访问模式 长期频繁访问数据的应用程序  访问模式会显著变化场景不适用  |
+| TTL             |            | 不适用于有效性不会随时间自然失效的数据，以及基于其他因素需要无限期保留在缓存中的数据 |
+| Random          |            | 当访问模式不可预测 其它模式都不适用时                        |
 
 A good strategy in selecting an appropriate eviction policy is to consider the data stored in your cluster and the outcome of keys being evicted.
 Generally, least recently used (LRU)-based policies are more common for basic caching use cases.
@@ -317,6 +430,33 @@ Cache a subset of a fetched database row into a custom structure that can be con
 | Memcached | 是    | 只有K/V       | 无 不支持灾难恢复 | 多线程                |
 
 
+## 缓存一致性
+
+大多数情况下都是最终一致性 要实现强一致性需要有分布式锁的设计 或者队列处理 降低性能
+
+Cache-Aside下:
+
+通常先更新DB 再删除缓存 如果删除缓存失败 可以将事件发送给MQ 进行异步重试删除
+- 极端场景下此时缓存过期 其它请求会从DB获取旧数据 在删除缓存之后更新缓存 存在数据不一致事件窗口 stale 最大要等到缓存过期  概率非常低
+- 删除缓存动作可能会失败
+需要订阅MQ重试再在缓存过期时间内删除一次缓存 减少不一致窗口
+
+还有应用只更新DB 由canal订阅DB binlog 搭配MQ 由单独的服务进行更新缓存
+
+另外还有:
+
+先删除缓存 再更新DB的 因为DB操作事件较缓存操作时间更长 存在其它请求读取DB过期数据  时间窗口较大 需要再删除一次缓存
+
+
+
+多级缓存一致性
+
+
+本地缓存 订阅MQ广播缓存更新的消息
+
+
+
+
 ## Cache Issues
 
 Cache Penetration, Cache Breakdown, Cache Avalanche
@@ -384,9 +524,15 @@ RDB 简单来说就是快照文件，也就是当 Redis 执行 SAVE 或者 BGSAV
 
 ## Links
 
-## Reference
+## References
 
 1. [Wiki - Cache (computing)](https://en.wikipedia.org/wiki/Cache_(computing))
 2. [A Guide To Caching in Spring](https://www.baeldung.com/spring-cache-tutorial)
 3. [缓存那些事 - 美团技术团队](https://tech.meituan.com/2017/03/17/cache-about.html)
 4. [Thundering Herds & Promises](https://instagram-engineering.com/thundering-herds-promises-82191c8af57d)
+5. [Mastering Caching in Distributed Applications](https://readmedium.com/mastering-caching-in-distributed-applications-e7449f4db399)
+6. [The LRU-K Page Replacement Algorithm For Database Disk Buffering](http://www.cs.cmu.edu/~christos/courses/721-resources/p297-o_neil.pdf)
+7. [X3: A Low Overhead High Performance Buffer Management Replacement Algorithm](https://www.vldb.org/conf/1994/P439.PDF)
+8. [Scaling Memcache at Facebook](https://css.csail.mit.edu/6.824/2014/papers/memcache-fb.pdf)
+9. [缓存数据一致性探究](https://mp.weixin.qq.com/s/OWuP66WxpciBAgm2mptUxw)
+10. [技术派中的缓存一致性解决方案](https://mp.weixin.qq.com/s/UHANeIKe7YADZzuBKcqdgA)

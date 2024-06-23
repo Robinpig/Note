@@ -49,10 +49,26 @@ The simplest way to understand how a program works is to understand the [data st
 
 Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
+## Architecture
+
+
+<div style="text-align: center;">
+
+![Fig.1. Architecture](./img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Architecture
+</p>
+
+
 ## Persistence
 
 [Persistence](/docs/CS/DB/Redis/persist.md) refers to the writing of data to durable storage, such as a solid-state disk (SSD).
 The most important thing to understand is the different trade-offs between the RDB and AOF persistence.
+
+
 
 ## [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
 
@@ -304,14 +320,154 @@ fork子进程的速度变慢
 
 ## 缓存一致性
 
-广播更新
+本地缓存和Redis缓存一致性
 
-应用监听Redis的更改
-
-
-定时更新
+常见是Redis和本地缓存都监听canal事件 同步数据库变更
 
 
+
+### Client side caching
+
+
+Redis6 客户端缓存机制 监听key
+
+通常，客户端缓存的两个主要优点是：
+
+1. 数据以非常小的延迟提供。
+2. 数据库系统接收的查询较少，因此可以使用较少数量的节点为同一数据集提供服务。
+
+
+
+
+
+The tracking table is constituted by a radix tree of keys, each pointing to a radix tree of client IDs, used to track the clients that may have certain keys in their local, client side, cache.
+
+ When a client enables tracking with "CLIENT TRACKING on", each key served to the client is remembered in the table mapping the keys to the client IDs.
+
+ Later, when a key is modified, all the clients that may have local copy of such key will receive an invalidation message.
+
+ Clients will normally take frequently requested objects in memory, removing them when invalidation messages are received. 
+
+
+
+Redis 客户端缓存支持称为*跟踪*，有两种模式：
+
+- 在默认模式下，服务器会记住给定客户端访问的密钥，并在修改相同的密钥时发送失效消息。这会消耗服务器端的内存，但仅针对客户端内存中可能具有的密钥集发送失效消息。 服务端在给客户端发送过一次 invalidate 消息后，如果 key 再被修改，此时，服务端就不会再次给客户端发送 invalidate 消息。
+
+  **只有下次客户端再次执行只读命令被 track，才会进行下一次消息通知** 。
+
+- 在*广播*模式下，服务器不会尝试记住给定客户端访问了哪些密钥，因此此模式在服务器端根本不消耗内存。服务端会给客户端广播所有 key 的失效情况，如果 key 被频繁修改，服务端会发送大量的失效广播消息，这就会消耗大量的网络带宽资源。
+
+  所以，在实际应用中，我们设置让客户端注册只跟踪指定前缀的 key，当注册跟踪的 key 前缀匹配被修改，服务端就会把失效消息广播给所有关注这个 key前缀的客户端
+
+
+
+默认模式
+
+ Redis 服务端使用 TrackingTable 存储普通模式的客户端数据，它的数据类型是基数树(radix tree)
+
+Redis 用它存储**键的指针**和**客户端 ID** 的映射关系。因为键对象的指针就是内存地址，也就是长整型数据。客户端缓存的相关操作就是对该数据的增删改查： 
+
+- 当开启 track 功能的客户端获取某一个键值时，Redis 会调用 `enableTracking` 方法使用基数树记录下该 key 和 clientId 的映射关系。 
+- 当某一个 key 被修改或删除时，Redis 会调用 `trackingInvalidateKey` 方法根据 key 从 TrackingTable 中查找所有对应的客户端ID，然后调用 `sendTrackingMessage` 方法发送失效消息给这些客户端(会检查 CLIENT_TRACKING 相关标志位是否开启和是否开启了 NOLOOP)。
+- 发送完失效消息后，根据**键的指针值**将映射关系从 TrackingTable中删除。 
+- 客户端关闭 track 功能后，因为删除需要进行大量操作，所以 Redis 使用懒删除方式，只是将该客户端的 CLIENT_TRACKING 相关标志位删除掉
+
+
+
+*广播*模式
+
+广播模式与普通模式类似，Redis 同样使用 `PrefixTable` 存储广播模式下的客户端数据，它存储**前缀字符串指针和(需要通知的key和客户端ID)**的映射关系。它和广播模式最大的区别就是真正发送失效消息的时机不同：
+
+- 当客户端开启广播模式时，会在 `PrefixTable`的前缀对应的客户端列表中加入该客户端ID。 
+-  当某一个 key 被修改或删除时，Redis 会调用 `trackingInvalidateKey` 方法，`trackingInvalidateKey` 方法中如果发现 `PrefixTable` 不为空，则调用 `trackingRememberKeyToBroadcast` 依次遍历所有前缀，如果key 符合前缀规则，则记录到 `PrefixTable` 对应的位置。 
+-  在 Redis 的事件处理周期函数 beforeSleep 函数里会调用 `trackingBroadcastInvalidationMessages` 函数来真正发送消息。
+
+
+
+```c
+
+void trackingInvalidateKey(client *c, robj *keyobj, int bcast) {
+    if (TrackingTable == NULL) return;
+
+    unsigned char *key = (unsigned char*)keyobj->ptr;
+    size_t keylen = sdslen(keyobj->ptr);
+
+    if (bcast && raxSize(PrefixTable) > 0)
+        trackingRememberKeyToBroadcast(c,(char *)key,keylen);
+
+    void *result;
+    if (!raxFind(TrackingTable,key,keylen,&result)) return;
+    rax *ids = result;
+
+    raxIterator ri;
+    raxStart(&ri,ids);
+    raxSeek(&ri,"^",NULL,0);
+    while(raxNext(&ri)) {
+        uint64_t id;
+        memcpy(&id,ri.key,sizeof(id));
+        client *target = lookupClientByID(id);
+        /* Note that if the client is in BCAST mode, we don't want to
+         * send invalidation messages that were pending in the case
+         * previously the client was not in BCAST mode. This can happen if
+         * TRACKING is enabled normally, and then the client switches to
+         * BCAST mode. */
+        if (target == NULL ||
+            !(target->flags & CLIENT_TRACKING)||
+            target->flags & CLIENT_TRACKING_BCAST)
+        {
+            continue;
+        }
+
+        /* If the client enabled the NOLOOP mode, don't send notifications
+         * about keys changed by the client itself. */
+        if (target->flags & CLIENT_TRACKING_NOLOOP &&
+            target == server.current_client)
+        {
+            continue;
+        }
+
+        /* If target is current client and it's executing a command, we need schedule key invalidation.
+         * As the invalidation messages may be interleaved with command
+         * response and should after command response. */
+        if (target == server.current_client && (server.current_client->flags & CLIENT_EXECUTING_COMMAND)) {
+            incrRefCount(keyobj);
+            listAddNodeTail(server.tracking_pending_keys, keyobj);
+        } else {
+            sendTrackingMessage(target,(char *)keyobj->ptr,sdslen(keyobj->ptr),0);
+        }
+    }
+    raxStop(&ri);
+
+    /* Free the tracking table: we'll create the radix tree and populate it
+     * again if more keys will be modified in this caching slot. */
+    TrackingTableTotalItems -= raxSize(ids);
+    raxFree(ids);
+    raxRemove(TrackingTable,(unsigned char*)key,keylen,NULL);
+}
+```
+
+
+
+转发模式
+
+对于使用 RESP 2 协议的客户端来说，实现客户端缓存则需要另一种模式：重定向模式（redirect）
+
+RESP 2 无法直接 PUSH 失效消息，所以 需要另一个支持 RESP 3 协议的客户端 告诉 Server 将失效消息通过 Pus/Sub 通知给 RESP 2 客户端。
+
+在重定向模式下，想要获得失效消息通知的客户端，就需要执行订阅命令 SUBSCRIBE，专门订阅用于发送失效消息的频道 `_redis_:invalidate`。
+
+同时，再使用另外一个客户端，执行 CLIENT TRACKING 命令，设置服务端将失效消息转发给使用 RESP 2 协议的客户端。
+
+
+
+
+
+客户端可能希望运行有关次数的内部统计信息 给定的缓存密钥实际上是在请求中提供的，以便在 未来什么好缓存。通常：
+
+- 我们不希望缓存许多不断更改的键。
+- 我们不想缓存许多很少请求的密钥。
+- 我们希望缓存经常请求的密钥，并以合理的速率进行更改
 
 
 ## Tuning
@@ -373,3 +529,5 @@ slowlog get
 2. [Redis源码分析(一) - 硬核课堂](https://hardcore.feishu.cn/docs/doccnp9v7IljXiJ5FpNT1ipLhlR#)
 3. [Distributed locks with Redis](https://redis.io/topics/distlock)
 4. [Garnet](https://github.com/microsoft/garnet)
+5. [java - Redis 6.0 新特性篇：深度剖析客户端缓存（Client side caching）原理与性能 - Redis - SegmentFault 思否](https://segmentfault.com/a/1190000040926742)
+
