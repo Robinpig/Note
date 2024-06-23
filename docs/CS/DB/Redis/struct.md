@@ -145,6 +145,10 @@ autosize=false;
 Fig.1. Structs
 </p>
 
+
+![](https://substackcdn.com/image/fetch/f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F36232d4c-1720-4ca0-81db-bbb6df5f95a2_1600x687.png)
+
+
 ### Keys
 
 Redis keys are binary safe, this means that you can use any binary sequence as a key, from a string like "foo" to the content of a JPEG file.
@@ -395,3 +399,5 @@ A [Redis script](/docs/CS/DB/Redis/struct.md?id=lua-scripts) is transactional by
 - [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
 
 ## References
+
+1. [A Crash Course in Redis](https://blog.bytebytego.com/p/a-crash-course-in-redis)
