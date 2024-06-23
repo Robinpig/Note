@@ -5,7 +5,7 @@ Kafka is a distributed system consisting of servers and clients that communicate
 It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
 
 > [Kafka Design](https://kafka.apache.org/documentation/#design)
-> 
+>
 > We designed Kafka to be able to act as a unified platform for handling all the real-time data feeds a large company might have. To do this we had to think through a fairly broad set of use cases.
 >
 > - It would have to have high-throughput to support high volume event streams such as real-time log aggregation.
@@ -106,9 +106,6 @@ so that there are always multiple brokers that have a copy of the data just in c
 A common production setting is a replication factor of 3, i.e., there will always be three copies of your data.
 This replication is performed at the level of topic-partitions.
 
-
-
-
 ### Message Delivery Semantics
 
 Recall the [message delivery semantics](/docs/CS/MQ/MQ.md?id=Message-Delivery-Semantics).
@@ -187,6 +184,13 @@ The Kafka project includes a tool called MirrorMaker, used for this purpose.
 At its core, MirrorMaker is simply a Kafka consumer and producer, linked together with a queue.
 Messages are consumed from one Kafka cluster and produced for another.
 
+> [!TIP]
+>
+> Here are some reasons why Kafka developers might have chosen to implement their own socket server instead of using Netty:
+>
+> 1. Performance: By implementing a custom solution tailored specifically to Kafka's needs, the developers may have been able to optimize performance for Kafka's use cases. Customizing the implementation allows developers to fine-tune the networking layer for Kafka's specific requirements, potentially leading to better performance compared to using a more general-purpose library like Netty.
+> 2. The rest of the reason is dependencies.
+
 ## Efficiency
 
 The small I/O problem happens both between the client and the server and in the server's own persistent operations.
@@ -221,6 +225,21 @@ Due to this restriction, sendfile is not used when SSL is enabled. For enabling 
 > TODO: How about [QUIC](/docs/CS/CN/HTTP/QUIC.md)(with TLS libraries operate at the user space)?
 
 ### Compression
+
+This feature introduces the end-to-end block compression feature in Kafka.
+If enabled, data will be compressed by the producer, written in compressed format on the server and decompressed by the consumer.
+Compression will improve the consumer throughput for some decompression cost.
+This is especially useful when mirroring data across data centers.
+By default, producer messages are sent uncompressed.
+
+> Producer端压缩、Broker端保持、Consumer端解压
+
+Broker重新压缩原因: compression type与producer不同 需要重新压缩
+We cannot do in place assignment in one of the following situations:
+
+1. Source and target compression codec are different 
+2. When the target magic is not equal to batches' magic, meaning format conversion is needed. 
+3. When the target magic is equal to V0, meaning absolute offsets need to be re-assigned.
 
 multi-compression versions
 
@@ -336,7 +355,7 @@ If you are unlucky enough to have this occur, it is important to consider what w
 1. Wait for a replica in the ISR to come back to life and choose this replica as the leader (hopefully it still has all its data).
 2. Choose the first replica (not necessarily in the ISR) that comes back to life as the leader.
 
-This is a simple tradeoff between availability and consistency. 
+This is a simple tradeoff between availability and consistency.
 If we wait for replicas in the ISR, then we will remain unavailable as long as those replicas are down.
 If such replicas were destroyed or their data was lost, then we are permanently down.
 If, on the other hand, a non-in-sync replica comes back to life and we allow it to become leader, then its log becomes the source of truth even though it is not guaranteed to have every committed message.
@@ -346,13 +365,13 @@ This behavior can be changed using configuration property unclean.leader.electio
 This dilemma is not specific to Kafka. It exists in any quorum-based scheme.
 For example in a majority voting scheme, if a majority of servers suffer a permanent failure, then you must either choose to lose 100% of your data or violate consistency by taking what remains on an existing server as your new source of truth.
 
-When writing to Kafka, producers can choose whether they wait for the message to be acknowledged by 0,1 or all (-1) replicas. 
-Note that "acknowledgement by all replicas" does not guarantee that the full set of assigned replicas have received the message. 
+When writing to Kafka, producers can choose whether they wait for the message to be acknowledged by 0,1 or all (-1) replicas.
+Note that "acknowledgement by all replicas" does not guarantee that the full set of assigned replicas have received the message.
 By default, when acks=all, acknowledgement happens as soon as all the current in-sync replicas have received the message. For example, if a topic is configured with only two replicas and one fails (i.e., only one in sync replica remains), then writes that specify acks=all will succeed. However, these writes could be lost if the remaining replica also fails. Although this ensures maximum availability of the partition, this behavior may be undesirable to some users who prefer durability over availability. Therefore, we provide two topic-level configurations that can be used to prefer message durability over availability:
 
-1. Disable unclean leader election - if all replicas become unavailable, then the partition will remain unavailable until the most recent leader becomes available again. 
+1. Disable unclean leader election - if all replicas become unavailable, then the partition will remain unavailable until the most recent leader becomes available again.
    This effectively prefers unavailability over the risk of message loss.
-2. Specify a minimum ISR size - the partition will only accept writes if the size of the ISR is above a certain minimum, 
+2. Specify a minimum ISR size - the partition will only accept writes if the size of the ISR is above a certain minimum,
    in order to prevent the loss of messages that were written to just a single replica, which subsequently becomes unavailable.
    This setting only takes effect if the producer uses acks=all and guarantees that the message will be acknowledged by at least this many in-sync replicas.
    This setting offers a trade-off between consistency and availability.
@@ -759,6 +778,44 @@ The protocol is kept quite simple to allow for future implementation of clients 
 - disk
 - bandwidth
 
+## Tuning
+
+JVM 堆大小设置成 6GB
+
+```
+Topic max.message.bytes
+Broker replica.fetch.max.bytes
+Consumer fetch.message.max.bytes
+```
+
+### 消息丢失
+
+- Producer: Kafka只对“已提交”的消息（committed message）做有限度的持久化保证 - ACK and ISR
+  - send是异步 可设置retry和callback
+- Consumer: consumer offset, 
+  - 先消费 再提交consumer offset
+  - 自动commit
+  - 新增分区时 消费auto.offset.reset earliest
+  - 使用多线程消费消息时关闭自动提交 需注意消息重复
+
+### 消息重复
+
+- Producer idempotent and transaction
+- Consumer
+  - rebalance后分配给其它Consumer
+
+我们目前的做法是kafka消费前都有一个消息接口表，可以使用Redis或者MySQL(Redis只存最近100个消息)，然后会设置consumer拉取消息的大小极限，
+保证消息数量不超过100(这个阈值可以自行调整)，其中我们会保证kafka消息的key是全局唯一的，比如使用雪花算法，在进行消费的时候可以通过前置表进行幂等性去重
+
+### Zero Copy
+
+基于 mmap 的索引和日志文件读写所用的 TransportLayer。
+
+在不同的操作系统下，mmap 的创建和销毁成本可能是不一样的。很高的创建和销毁开销会抵消 Zero Copy 带来的性能优势
+kafka的log文件是以分区为单位的 日志未采用mmap
+
+如果 I/O 通道使用普通的 PLAINTEXT，那么，Kafka 就可以利用 Zero Copy 特性，直接将页缓存中的数据发送到网卡的 Buffer 中，避免中间的多次拷贝。相反，如果I/O 通道启用了 SSL，那么，Kafka 便无法利用 Zero Copy 特性了
+
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=Kafka)
@@ -767,7 +824,9 @@ The protocol is kept quite simple to allow for future implementation of clients 
 
 1. [The Log: What every software engineer should know about real-time data's unifying abstraction](https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying)
 2. [Kafka Documentation](https://kafka.apache.org/documentation/#design)
-2. [Kafka: a Distributed Messaging System for Log Processing](http://notes.stephenholiday.com/Kafka.pdf)
-3. [KSQL: Streaming SQL Engine for Apache Kafka](https://openproceedings.org/2019/conf/edbt/EDBT19_paper_329.pdf)
-4. [Streams and Tables: Two Sides of the Same Coin](https://dl.acm.org/doi/10.1145/3242153.3242155)
-5. [Building a Replicated Logging System with Apache Kafka](https://dl.acm.org/doi/10.14778/2824032.2824063)
+3. [Kafka: a Distributed Messaging System for Log Processing](http://notes.stephenholiday.com/Kafka.pdf)
+4. [KSQL: Streaming SQL Engine for Apache Kafka](https://openproceedings.org/2019/conf/edbt/EDBT19_paper_329.pdf)
+5. [Streams and Tables: Two Sides of the Same Coin](https://dl.acm.org/doi/10.1145/3242153.3242155)
+6. [Building a Replicated Logging System with Apache Kafka](https://dl.acm.org/doi/10.14778/2824032.2824063)
+7. [huxihx](https://www.cnblogs.com/huxi2b)
+8. [关于 Kafka 的一些面试题目](https://juejin.cn/post/6844904022827073549)

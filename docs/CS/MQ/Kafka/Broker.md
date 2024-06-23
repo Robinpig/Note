@@ -20,7 +20,7 @@ However, all consumers and producers operating on that partition must connect to
 | log.flush.scheduler.interval.ms | The frequency in ms that the log flusher checks whether any log needs to be flushed to disk                                                                         | long | 9223372036854775807 |              | high       |
 
 ```scala
-private def append(...): LogAppendInfo = {
+private def append(): LogAppendInfo = {
       // ...
       lock synchronized {
         // ...
@@ -32,7 +32,7 @@ private def append(...): LogAppendInfo = {
 ```
 
 ```scala
-private def append(...): LogAppendInfo = {
+private def append(): LogAppendInfo = {
       // ...
       lock synchronized {
         // ...
@@ -67,46 +67,6 @@ public int writeFullyTo(GatheringByteChannel channel) throws IOException {
   return written;
 }
 ```
-
-### ISR
-
-An ISR is a replica that is up to date with the leader broker for a partition.
-Any replica that is not up to date with the leader is out of sync.
-
-When the leader for a partition is no longer available, one of the in-sync replicas (ISR) will be chosen as the new leader. This leader election is ”clean“ in the sense that it guarantees no loss of committed data - by definition, committed data exists on all ISRs.
-
-But what to do when no ISR exists except for the leader that just became unavailable?
-
-Wait for an ISR to come back online. This is the default behavior, and this makes you run the risk of the topic becoming unavailable.
-
-Enable unclean.leader.election.enable=true and start producing to non-ISR partitions. We are going to lose all messages that were written to the old leader while that replica was out of sync and also cause some inconsistencies in consumers.
-
-### Consumers Replicas Fetching
-
-Kafka consumers read by default from the partition leader.
-But since Apache Kafka 2.4, it is possible to configure consumers to read from in-sync replicas instead (usually the closest).
-Reading from the closest in-sync replicas (ISR) may improve the request latency, and also decrease network costs, because in most cloud environments cross-data centers network requests incur charges.
-
-### Preferred leader
-
-The preferred leader is the designated leader broker for a partition at topic creation time (as opposed to being a replica).
-When the preferred leader goes down, any partition that is an ISR (in-sync replica) is eligible to become a new leader (but not a preferred leader).
-Upon recovering the preferred leader broker and having its partition data back in sync, the preferred leader will regain leadership for that partition.
-
-### Replication Factor and Partition Count
-
-When creating a topic, we have to provide a partition count and the replication factor.
-These two are very important to set correctly as they impact the performance and durability in the system.
-
-The factors to consider while choosing replication factor are:
-
-It should be at least 2 and a maximum of 4.
-The recommended number is 3 as it provides the right balance between performance and fault tolerance
-
-A Kafka cluster should have a maximum of 200,000 partitions across all brokers when managed by Zookeeper. The reason is that if brokers go down, Zookeeper needs to perform a lot of leader elections.
-Confluent still recommends up to 4,000 partitions per broker in your cluster.
-This problem should be solved by Kafka in a Zookeeper-less mode (Kafka KRaft)
-If you need more than 200,000 partitions in your cluster, follow the Netflix model and create more Kafka clusters
 
 ## Structure
 
@@ -340,12 +300,32 @@ class KafkaServer(
 }
 ```
 
-### SocketServer
+## SocketServer
+
+Handles new connections, requests and responses to and from broker. 
+Kafka supports two types of request planes :
+- data-plane :
+  - Handles requests from clients and other brokers in the cluster.
+  - The threading model is 1 Acceptor thread per listener, that handles new connections. It is possible to configure multiple data-planes by specifying multiple "," separated endpoints for "listeners" in KafkaConfig. Acceptor has N Processor threads that each have their own selector and read requests from sockets M Handler threads that handle requests and produce responses back to the processor threads for writing.
+- control-plane :
+  - Handles requests from controller. This is optional and can be configured by specifying "control.plane.listener.name". If not configured, the controller requests are handled by the data-plane.
+  - The threading model is 1 Acceptor thread that handles new connections Acceptor has 1 Processor thread that has its own selector and read requests from the socket. 1 Handler thread that handles requests and produces responses back to the processor thread for writing.
+
 
 Create and start the socket server acceptor threads so that the bound port is known.
 Delay starting processors until the end of the initialization sequence to ensure that credentials have been loaded before processing authentications.
 
 Note that we allow the use of KRaft mode controller APIs when forwarding is enabled so that the Envelope request is exposed. This is only used in testing currently.
+
+num.network.threads 3
+num.io.threads 8
+
+请求队列是所有网络线程共享的，而响应队列则是每个网络线程专属的
+
+Purgatory
+
+数据类请求和控制类请求的分离
+
 
 ```scala
         socketServer = new SocketServer(config, metrics, time, credentialProvider, apiVersionManager)
@@ -500,23 +480,27 @@ Note that we allow the use of KRaft mode controller APIs when forwarding is enab
         isStartingUp.set(false)
         AppInfoParser.registerAppInfo(Server.MetricsPrefix, config.brokerId.toString, metrics, time.milliseconds())
         info("started")
-      }
-    }
-    catch {
-      case e: Throwable =>
-        fatal("Fatal error during KafkaServer startup. Prepare to shutdown", e)
-        isStartingUp.set(false)
-        shutdown()
-        throw e
-    }
-  }
-}
+    
+
+
 ```
 
-Processor#run
 
 ```scala
 
+class RequestChannel(val queueSize: Int,
+                     val metricNamePrefix: String,
+                     time: Time,
+                     val metrics: RequestChannel.Metrics) {
+  private val requestQueue = new ArrayBlockingQueue[BaseRequest](queueSize)
+  private val processors = new ConcurrentHashMap[Int, Processor]()
+  private val callbackQueue = new ArrayBlockingQueue[BaseRequest](queueSize)
+}
+```
+
+### Processor#run
+
+```scala
   override def run(): Unit = {
     try {
       while (shouldRun.get()) {
@@ -545,8 +529,106 @@ Processor#run
       CoreUtils.swallow(closeAll(), this, Level.ERROR)
     }
   }
-
 ```
+
+
+
+
+Processor 线程仅仅是网络接收线程，不会执行真正的 Request 请求处理逻辑，那是 I/O 线程负责的
+```scala
+def sendRequest(request: RequestChannel.Request): Unit = {
+  requestQueue.put(request)
+}
+
+def receiveRequest(timeout: Long): RequestChannel.BaseRequest = {
+  val callbackRequest = callbackQueue.poll()
+  if (callbackRequest != null)
+    callbackRequest
+  else {
+    val request = requestQueue.poll(timeout, TimeUnit.MILLISECONDS)
+    request match {
+      case WakeupRequest => callbackQueue.poll()
+      case _ => request
+    }
+  }
+}
+
+def receiveRequest(): RequestChannel.BaseRequest =
+  requestQueue.take()
+```
+
+
+#### processNewResponses
+```scala
+  
+  private def processNewResponses(): Unit = {
+    var currentResponse: RequestChannel.Response = null
+    while ({currentResponse = dequeueResponse(); currentResponse != null}) {
+      val channelId = currentResponse.request.context.connectionId
+      try {
+        currentResponse match {
+          case response: NoOpResponse =>
+            // There is no response to send to the client, we need to read more pipelined requests
+            // that are sitting in the server's socket buffer
+            updateRequestMetrics(response)
+            // Try unmuting the channel. If there was no quota violation and the channel has not been throttled,
+            // it will be unmuted immediately. If the channel has been throttled, it will be unmuted only if the
+            // throttling delay has already passed by now.
+            handleChannelMuteEvent(channelId, ChannelMuteEvent.RESPONSE_SENT)
+            tryUnmuteChannel(channelId)
+
+          case response: SendResponse =>
+            sendResponse(response, response.responseSend)
+          case response: CloseConnectionResponse =>
+            updateRequestMetrics(response)
+            close(channelId)
+          case _: StartThrottlingResponse =>
+            handleChannelMuteEvent(channelId, ChannelMuteEvent.THROTTLE_STARTED)
+          case _: EndThrottlingResponse =>
+            // Try unmuting the channel. The channel will be unmuted only if the response has already been sent out to
+            // the client.
+            handleChannelMuteEvent(channelId, ChannelMuteEvent.THROTTLE_ENDED)
+            tryUnmuteChannel(channelId)
+          case _ =>
+            throw new IllegalArgumentException(s"Unknown response type: ${currentResponse.getClass}")
+        }
+      } catch {
+        case e: Throwable =>
+          processChannelException(channelId, s"Exception while processing response for $channelId", e)
+      }
+    }
+  }
+```
+
+##### sendResponse
+```scala
+private[network] def sendResponse(response: RequestChannel.Response): Unit = {
+  response match {
+    // We should only send one of the following per request
+    case _: SendResponse | _: NoOpResponse | _: CloseConnectionResponse =>
+      val request = response.request
+      val timeNanos = time.nanoseconds()
+      request.responseCompleteTimeNanos = timeNanos
+      if (request.apiLocalCompleteTimeNanos == -1L)
+        request.apiLocalCompleteTimeNanos = timeNanos
+      // If this callback was executed after KafkaApis returned we will need to adjust the callback completion time here.
+      if (request.callbackRequestDequeueTimeNanos.isDefined && request.callbackRequestCompleteTimeNanos.isEmpty)
+        request.callbackRequestCompleteTimeNanos = Some(time.nanoseconds())
+    // For a given request, these may happen in addition to one in the previous section, skip updating the metrics
+    case _: StartThrottlingResponse | _: EndThrottlingResponse => ()
+  }
+
+  val processor = processors.get(response.processor)
+  // The processor may be null if it was shutdown. In this case, the connections
+  // are closed, so the response is dropped.
+  if (processor != null) {
+    processor.enqueueResponse(response)
+  }
+} 
+```
+
+
+## Admin
 
 ### createTopics
 
@@ -1071,10 +1153,10 @@ class ReplicaManager {
         } catch {
           // NOTE: Failed produce requests metric is not incremented for known exceptions
           // it is supposed to indicate un-expected failures of a broker in handling a produce request
-          case e@(_: UnknownTopicOrPartitionException |
-                  _: NotLeaderOrFollowerException |
-                  _: RecordTooLargeException |
-                  _: RecordBatchTooLargeException |
+        }
+      }
+ } } 
+}
 ```
 
 #### appendRecordsToLeader
@@ -1124,7 +1206,7 @@ Append this message set to the active segment of the local log, assigning offset
   }
 ```
 
-#### UnifiedLog#append
+### UnifiedLog#append
 
 Append this message set to the active segment of the local log, rolling over to a fresh segment if necessary.
 
@@ -1302,11 +1384,6 @@ This method will generally be responsible for assigning offsets to the messages,
               // update the first unstable offset (which is used to compute LSO)
               maybeIncrementFirstUnstableOffset()
 
-              trace(s"Appended message set with last offset: ${appendInfo.lastOffset}, " +
-                s"first offset: ${appendInfo.firstOffset}, " +
-                s"next offset: ${localLog.logEndOffset}, " +
-                s"and messages: $validRecords")
-
               if (localLog.unflushedMessages >= config.flushInterval) flush(false)
           }
           appendInfo
@@ -1350,8 +1427,8 @@ Append the given messages starting with the given offset. Add an entry to the in
   }
 
 ```
-
-## read
+  
+## read log
 
 ### handleFetchRequest
 
@@ -1806,154 +1883,155 @@ public final class ConsumerCoordinator extends AbstractCoordinator {
 }
 ```
 
-#### readFromLocalLog
+### read
 
 Read from multiple topic partitions at the given offset up to maxSize bytes
 
+not use synchronized
+
+查看一下读取隔离级别设置。
+- 普通消费者能够看到[Log Start Offset, LEO)之间的消息
+- 事务型消费者只能看到[Log Start Offset, Log Stable Offset]之间的消息。Log St
+- Follower副本消费者能够看到[Log Start Offset，高水位值]之间的消息
+
 ```scala
-  def readFromLocalLog(
-    params: FetchParams,
-    readPartitionInfo: Seq[(TopicIdPartition, PartitionData)],
-    quota: ReplicaQuota,
-    readFromPurgatory: Boolean
-  ): Seq[(TopicIdPartition, LogReadResult)] = {
-    val traceEnabled = isTraceEnabled
+def read(startOffset: Long,
+         maxLength: Int,
+         isolation: FetchIsolation,
+         minOneMessage: Boolean): FetchDataInfo = {
+  checkLogStartOffset(startOffset)
+  val maxOffsetMetadata = isolation match {
+    case FetchIsolation.LOG_END => localLog.logEndOffsetMetadata
+    case FetchIsolation.HIGH_WATERMARK => fetchHighWatermarkMetadata
+    case FetchIsolation.TXN_COMMITTED => fetchLastStableOffsetMetadata
+  }
+  localLog.read(startOffset, maxLength, minOneMessage, maxOffsetMetadata, isolation == FetchIsolation.TXN_COMMITTED)
+}
 
-    def read(tp: TopicIdPartition, fetchInfo: PartitionData, limitBytes: Int, minOneMessage: Boolean): LogReadResult = {
-      val offset = fetchInfo.fetchOffset
-      val partitionFetchSize = fetchInfo.maxBytes
-      val followerLogStartOffset = fetchInfo.logStartOffset
+def read(startOffset: Long,
+         maxLength: Int,
+         minOneMessage: Boolean,
+         maxOffsetMetadata: LogOffsetMetadata,
+         includeAbortedTxns: Boolean): FetchDataInfo = {
+  maybeHandleIOException(s"Exception while reading from $topicPartition in dir ${dir.getParent}") {
 
-      val adjustedMaxBytes = math.min(fetchInfo.maxBytes, limitBytes)
-      try {
-        if (traceEnabled)
-          trace(s"Fetching log segment for partition $tp, offset $offset, partition fetch size $partitionFetchSize, " +
-            s"remaining response limit $limitBytes" +
-            (if (minOneMessage) s", ignoring response/partition size limits" else ""))
+    val endOffsetMetadata = nextOffsetMetadata
+    val endOffset = endOffsetMetadata.messageOffset
+    var segmentOpt = segments.floorSegment(startOffset)
 
-        val partition = getPartitionOrException(tp.topicPartition)
-        val fetchTimeMs = time.milliseconds
+    // return error on attempt to read beyond the log end offset
+    if (startOffset > endOffset || !segmentOpt.isPresent)
+      throw new OffsetOutOfRangeException(s"Received request for offset $startOffset for partition $topicPartition, " +
+              s"but we only have log segments upto $endOffset.")
 
-        // Check if topic ID from the fetch request/session matches the ID in the log
-        val topicId = if (tp.topicId == Uuid.ZERO_UUID) None else Some(tp.topicId)
-        if (!hasConsistentTopicId(topicId, partition.topicId))
-          throw new InconsistentTopicIdException("Topic ID in the fetch session did not match the topic ID in the log.")
+    if (startOffset == maxOffsetMetadata.messageOffset)
+      emptyFetchDataInfo(maxOffsetMetadata, includeAbortedTxns)
+    else if (startOffset > maxOffsetMetadata.messageOffset)
+      emptyFetchDataInfo(convertToOffsetMetadataOrThrow(startOffset), includeAbortedTxns)
+    else {
+      // Do the read on the segment with a base offset less than the target offset
+      // but if that segment doesn't contain any messages with an offset greater than that
+      // continue to read from successive segments until we get some messages or we reach the end of the log
+      var fetchDataInfo: FetchDataInfo = null
+      while (fetchDataInfo == null && segmentOpt.isPresent) {
+        val segment = segmentOpt.get
+        val baseOffset = segment.baseOffset
 
-        // If we are the leader, determine the preferred read-replica
-        val preferredReadReplica = params.clientMetadata.flatMap(
-          metadata => findPreferredReadReplica(partition, metadata, params.replicaId, fetchInfo.fetchOffset, fetchTimeMs))
+        val maxPosition =
+          // Use the max offset position if it is on this segment; otherwise, the segment size is the limit.
+          if (maxOffsetMetadata.segmentBaseOffset == segment.baseOffset) maxOffsetMetadata.relativePositionInSegment
+          else segment.size
 
-        if (preferredReadReplica.isDefined) {
-          replicaSelectorOpt.foreach { selector =>
-            debug(s"Replica selector ${selector.getClass.getSimpleName} returned preferred replica " +
-              s"${preferredReadReplica.get} for ${params.clientMetadata}")
-          }
-          // If a preferred read-replica is set, skip the read
-          val offsetSnapshot = partition.fetchOffsetSnapshot(fetchInfo.currentLeaderEpoch, fetchOnlyFromLeader = false)
-          LogReadResult(info = FetchDataInfo(LogOffsetMetadata.UnknownOffsetMetadata, MemoryRecords.EMPTY),
-            divergingEpoch = None,
-            highWatermark = offsetSnapshot.highWatermark.messageOffset,
-            leaderLogStartOffset = offsetSnapshot.logStartOffset,
-            leaderLogEndOffset = offsetSnapshot.logEndOffset.messageOffset,
-            followerLogStartOffset = followerLogStartOffset,
-            fetchTimeMs = -1L,
-            lastStableOffset = Some(offsetSnapshot.lastStableOffset.messageOffset),
-            preferredReadReplica = preferredReadReplica,
-            exception = None)
-        } else {
-          // Try the read first, this tells us whether we need all of adjustedFetchSize for this partition
-          val readInfo: LogReadInfo = partition.fetchRecords(
-            fetchParams = params,
-            fetchPartitionData = fetchInfo,
-            fetchTimeMs = fetchTimeMs,
-            maxBytes = adjustedMaxBytes,
-            minOneMessage = minOneMessage,
-            updateFetchState = !readFromPurgatory
-          )
+        fetchDataInfo = segment.read(startOffset, maxLength, maxPosition, minOneMessage)
+        if (fetchDataInfo != null) {
+          if (includeAbortedTxns)
+            fetchDataInfo = addAbortedTransactions(startOffset, segment, fetchDataInfo)
+        } else segmentOpt = segments.higherSegment(baseOffset)
+      }
 
-          val fetchDataInfo = if (params.isFromFollower && shouldLeaderThrottle(quota, partition, params.replicaId)) {
-            // If the partition is being throttled, simply return an empty set.
-            FetchDataInfo(readInfo.fetchedData.fetchOffsetMetadata, MemoryRecords.EMPTY)
-          } else if (!params.hardMaxBytesLimit && readInfo.fetchedData.firstEntryIncomplete) {
-            // For FetchRequest version 3, we replace incomplete message sets with an empty one as consumers can make
-            // progress in such cases and don't need to report a `RecordTooLargeException`
-            FetchDataInfo(readInfo.fetchedData.fetchOffsetMetadata, MemoryRecords.EMPTY)
-          } else {
-            readInfo.fetchedData
-          }
-
-          LogReadResult(info = fetchDataInfo,
-            divergingEpoch = readInfo.divergingEpoch,
-            highWatermark = readInfo.highWatermark,
-            leaderLogStartOffset = readInfo.logStartOffset,
-            leaderLogEndOffset = readInfo.logEndOffset,
-            followerLogStartOffset = followerLogStartOffset,
-            fetchTimeMs = fetchTimeMs,
-            lastStableOffset = Some(readInfo.lastStableOffset),
-            preferredReadReplica = preferredReadReplica,
-            exception = None
-          )
-        }
-      } catch {
-        // NOTE: Failed fetch requests metric is not incremented for known exceptions since it
-        // is supposed to indicate un-expected failure of a broker in handling a fetch request
-        case e@ (_: UnknownTopicOrPartitionException |
-                 _: NotLeaderOrFollowerException |
-                 _: UnknownLeaderEpochException |
-                 _: FencedLeaderEpochException |
-                 _: ReplicaNotAvailableException |
-                 _: KafkaStorageException |
-                 _: OffsetOutOfRangeException |
-                 _: InconsistentTopicIdException) =>
-          LogReadResult(info = FetchDataInfo(LogOffsetMetadata.UnknownOffsetMetadata, MemoryRecords.EMPTY),
-            divergingEpoch = None,
-            highWatermark = UnifiedLog.UnknownOffset,
-            leaderLogStartOffset = UnifiedLog.UnknownOffset,
-            leaderLogEndOffset = UnifiedLog.UnknownOffset,
-            followerLogStartOffset = UnifiedLog.UnknownOffset,
-            fetchTimeMs = -1L,
-            lastStableOffset = None,
-            exception = Some(e))
-        case e: Throwable =>
-          brokerTopicStats.topicStats(tp.topic).failedFetchRequestRate.mark()
-          brokerTopicStats.allTopicsStats.failedFetchRequestRate.mark()
-
-          val fetchSource = Request.describeReplicaId(params.replicaId)
-          error(s"Error processing fetch with max size $adjustedMaxBytes from $fetchSource " +
-            s"on partition $tp: $fetchInfo", e)
-
-          LogReadResult(info = FetchDataInfo(LogOffsetMetadata.UnknownOffsetMetadata, MemoryRecords.EMPTY),
-            divergingEpoch = None,
-            highWatermark = UnifiedLog.UnknownOffset,
-            leaderLogStartOffset = UnifiedLog.UnknownOffset,
-            leaderLogEndOffset = UnifiedLog.UnknownOffset,
-            followerLogStartOffset = UnifiedLog.UnknownOffset,
-            fetchTimeMs = -1L,
-            lastStableOffset = None,
-            exception = Some(e)
-          )
+      if (fetchDataInfo != null) fetchDataInfo
+      else {
+        // okay we are beyond the end of the last segment with no data fetched although the start offset is in range,
+        // this can happen when all messages with offset larger than start offsets have been deleted.
+        // In this case, we will return the empty set with log end offset metadata
+        new FetchDataInfo(nextOffsetMetadata, MemoryRecords.EMPTY)
       }
     }
-
-    var limitBytes = params.maxBytes
-    val result = new mutable.ArrayBuffer[(TopicIdPartition, LogReadResult)]
-    var minOneMessage = !params.hardMaxBytesLimit
-    readPartitionInfo.foreach { case (tp, fetchInfo) =>
-      val readResult = read(tp, fetchInfo, limitBytes, minOneMessage)
-      val recordBatchSize = readResult.info.records.sizeInBytes
-      // Once we read from a non-empty partition, we stop ignoring request and partition level size limits
-      if (recordBatchSize > 0)
-        minOneMessage = false
-      limitBytes = math.max(0, limitBytes - recordBatchSize)
-      result += (tp -> readResult)
-    }
-    result
   }
+}
 ```
 
 Partition#readRecords
 
+
+## recover
+Run recovery on the given segment. 
+**This will rebuild the index from the log file and lop off any invalid bytes from the end of the log and index.**
+
+
+
+```java
+    public int recover(ProducerStateManager producerStateManager, Optional<LeaderEpochFileCache> leaderEpochCache) throws IOException {
+        offsetIndex().reset();
+        timeIndex().reset();
+        txnIndex.reset();
+        int validBytes = 0;
+        int lastIndexEntry = 0;
+        maxTimestampAndOffsetSoFar = TimestampOffset.UNKNOWN;
+        try {
+            for (RecordBatch batch : log.batches()) {
+                batch.ensureValid();
+                ensureOffsetInRange(batch.lastOffset());
+
+                // The max timestamp is exposed at the batch level, so no need to iterate the records
+                if (batch.maxTimestamp() > maxTimestampSoFar()) {
+                    maxTimestampAndOffsetSoFar = new TimestampOffset(batch.maxTimestamp(), batch.lastOffset());
+                }
+
+                // Build offset index
+                if (validBytes - lastIndexEntry > indexIntervalBytes) {
+                    offsetIndex().append(batch.lastOffset(), validBytes);
+                    timeIndex().maybeAppend(maxTimestampSoFar(), offsetOfMaxTimestampSoFar());
+                    lastIndexEntry = validBytes;
+                }
+                validBytes += batch.sizeInBytes();
+
+                if (batch.magic() >= RecordBatch.MAGIC_VALUE_V2) {
+                    leaderEpochCache.ifPresent(cache -> {
+                        if (batch.partitionLeaderEpoch() >= 0 &&
+                                (!cache.latestEpoch().isPresent() || batch.partitionLeaderEpoch() > cache.latestEpoch().getAsInt()))
+                            cache.assign(batch.partitionLeaderEpoch(), batch.baseOffset());
+                    });
+                    updateProducerState(producerStateManager, batch);
+                }
+            }
+        } catch (CorruptRecordException | InvalidRecordException e) {
+            LOGGER.warn("Found invalid messages in log segment {} at byte offset {}.", log.file().getAbsolutePath(),
+                validBytes, e);
+        }
+        int truncated = log.sizeInBytes() - validBytes;
+        if (truncated > 0)
+            LOGGER.debug("Truncated {} invalid bytes at the end of segment {} during recovery", truncated, log.file().getAbsolutePath());
+
+        log.truncateTo(validBytes);
+        offsetIndex().trimToValidSize();
+        // A normally closed segment always appends the biggest timestamp ever seen into log segment, we do this as well.
+        timeIndex().maybeAppend(maxTimestampSoFar(), offsetOfMaxTimestampSoFar(), true);
+        timeIndex().trimToValidSize();
+        return truncated;
+    }
+```
+
 ## Controller
+
+ControlPlaneAcceptorAndProcessor
+
+
+Zookeeper
+
+第一个成功创建 /controller 节点的 Broker 会被指定为控制器
+
+
 
 It is also important to optimize the leadership election process as that is the critical window of unavailability.
 A naive implementation of leader election would end up running an election per partition for all partitions a node hosted when that node failed.
@@ -1961,6 +2039,8 @@ As discussed above in the section on replication, Kafka clusters have a special 
 If the controller detects the failure of a broker, it is responsible for electing one of the remaining members of the ISR to serve as the new leader.
 The result is that we are able to batch together many of the required leadership change notifications which makes the election process far cheaper and faster for a large number of partitions.
 If the controller itself fails, then another controller will be elected.
+
+
 
 QuorumController implements the main logic of the KRaft (Kafka Raft Metadata) mode controller.
 The node which is the leader of the metadata log becomes the active controller.
@@ -1977,6 +2057,16 @@ The future associated with each operation will not be completed until the result
 1. Register Brokers
 2. Register Topics
 3. load Balance
+
+
+
+Controller Context
+ControllerChannelManager
+ControllerEventManager
+
+Lead election
+
+metadata manager
 
 ```scala
   private def elect(): Unit = {
@@ -1999,7 +2089,19 @@ The future associated with each operation will not be completed until the result
   }
 ```
 
-### handleLeader
+### Leader election
+
+LeaderElectionStrategy
+```scala
+sealed trait PartitionLeaderElectionStrategy
+final case class OfflinePartitionLeaderElectionStrategy(allowUnclean: Boolean) extends PartitionLeaderElectionStrategy
+final case object ReassignPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy
+final case object PreferredReplicaPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy
+final case object ControlledShutdownPartitionLeaderElectionStrategy extends PartitionLeaderElectionStrategy
+
+```
+
+handleLeader
 
 ```scala
   def handleLeaderAndIsrRequest(request: RequestChannel.Request): Unit = {
@@ -2536,6 +2638,15 @@ maybeFetch -> processFetchRequest
   }
 ```
 
+### scenarios
+
+某些核心业务的主题分区一直处于“不可用”状态。
+
+通过使用“kafka-topics”命令查询，我们发现，这些分区的Leader显示是-1。之前，这些Leader所在的Broker机器因为负载高宕机了，当Broker重启回来后，Controller竟然无法成功地为这些分区选举Leader，因此，它们一直处于“不可用”状态。
+
+
+
+
 ## Metadata as an Event Log
 
 We often talk about the benefits of managing state as a stream of events.
@@ -2582,6 +2693,51 @@ This will allow the broker to start up very quickly, even if there are hundreds 
 
 Most of the time, the broker should only need to fetch the deltas, not the full state.
 However, if the broker is too far behind the active controller, or if the broker has no cached metadata at all, the controller will send a full metadata image rather than a series of deltas.
+
+## HW
+
+high watermark <= Log End Offset
+
+Kafka 副本机制在运行过程中，会更新 Broker 1 上 Follower 副本的高水位和 LEO 值，同时也会更新 Broker 0 上 Leader 副本的高水位和 LEO 以及所有远程副本的 LEO，但它不会更新远程副本的高水位值
+
+
+更新HW 取最小值
+- leader, min(currentHW, followers LEO)
+- followers, min(currentHW from leader, currentLEO)
+
+
+Leader Epoch
+即副本是否执行日志截断不再依赖于高水位进行判断
+
+Keep track of the current high watermark in order to ensure that segments containing offsets at or above it are not eligible for deletion. 
+This means that the active segment is only eligible for deletion if the high watermark equals the log end offset (which may never happen for a partition under consistent load). 
+This is needed to prevent the log start offset (which is exposed in fetch responses) from getting ahead of the high watermark.
+The new high watermark will be lower bounded by the log start offset and upper bounded by the log end offset.
+
+并发访问 使用synchronized
+
+update:
+- follower maybeUpdateHighWatermark
+- leader maybeIncrementHighWatermark
+```scala
+  @volatile private var highWatermarkMetadata: LogOffsetMetadata = new LogOffsetMetadata(logStartOffset)
+
+  private def fetchHighWatermarkMetadata: LogOffsetMetadata = {
+    localLog.checkIfMemoryMappedBufferClosed()
+
+    val offsetMetadata = highWatermarkMetadata
+    if (offsetMetadata.messageOffsetOnly) {
+      lock.synchronized {
+        val fullOffset = convertToOffsetMetadataOrThrow(highWatermark)
+        updateHighWatermarkMetadata(fullOffset)
+        fullOffset
+      }
+    } else {
+      offsetMetadata
+    }
+  }
+```
+
 
 ## Delay
 
@@ -2780,7 +2936,8 @@ private[timer] class TimingWheel(tickMs: Long, wheelSize: Int, startMs: Long, ta
 }
 ```
 
-## index
+## File
+
 
 Apache Kafka is a commit-log system.
 The records are appended at the end of each Partition, and each Partition is also split into segments.
@@ -2791,6 +2948,39 @@ Partitions are further split into Segments which are the actual files on the fil
 For better performance and maintainability, multiple segments get created, and rather than reading from one huge Partition,
 Consumers can now read faster from a smaller segment file.
 A directory with the partition name gets created and maintains all the segments for that partition as various files.
+
+[Log layer refactor for KIP-405](https://docs.google.com/document/d/1dQJL4MCwqQJSPmZkVmVzshFZKuFy_bCPtubav4wBfHQ/edit#heading=h.wra20vi9sku9)
+
+KAFKA-13068: Rename Log to UnifiedLog (#11154)
+
+In this PR, I've renamed kafka.log.Log to kafka.log.UnifiedLog. With the advent of KIP-405, going forward the existing Log class would present a unified view of local and tiered log segments, so we rename it to UnifiedLog. The motivation for this PR is also the same as outlined in this design document:
+
+A segment of the log. Each segment has two components: a log and an index.
+The log is a FileRecords containing the actual messages. 
+The index is an OffsetIndex that maps from logical offsets to physical file positions. 
+Each segment has a base offset which is an offset <= the least offset of any message in this segment and > any offset in any previous segment. 
+A segment with a base offset of [base_offset] would be stored in two files, a [base_offset].index and a [base_offset].log file.
+
+```scala
+ public LogSegment(FileRecords log,
+                      LazyIndex<OffsetIndex> lazyOffsetIndex,
+                      LazyIndex<TimeIndex> lazyTimeIndex,
+                      TransactionIndex txnIndex,
+                      long baseOffset,
+                      int indexIntervalBytes,
+                      long rollJitterMs,
+                      Time time) {
+        this.log = log;
+        this.lazyOffsetIndex = lazyOffsetIndex;
+        this.lazyTimeIndex = lazyTimeIndex;
+        this.txnIndex = txnIndex;
+        this.baseOffset = baseOffset;
+        this.indexIntervalBytes = indexIntervalBytes; // log.index.interval.bytes
+        this.rollJitterMs = rollJitterMs;
+        this.time = time;
+        this.created = time.milliseconds();
+    }
+```
 
 Here is a sample directory structure for Topic my-topic and its partition my-topic-0.
 
@@ -2803,6 +2993,7 @@ Here is a sample directory structure for Topic my-topic and its partition my-top
 - .snapshot file - contains a snapshot of the producer state regarding sequence IDs used to avoid duplicate records. It is used when, after a new leader is elected, the preferred one comes back and needs such a state to become a leader again. This is only available for the active segment (log file).
 - leader-epoch-checkpoint - It refers to the number of leaders previously assigned by the controller. The replicas use the leader epoch as a means of verifying the current leader. The leader-epoch-checkpoint file contains two columns: epochs and offsets. Each row is a checkpoint for the latest recorded leader epoch and the leader's latest offset upon becoming leader
 
+
 From the structure, we could see that the first log segment 00000000000000000000.log contains the records from offset 0 to offset 1006.
 The next segment 00000000000000001007.log has the records starting from offset 1007, and this is called the active segment.
 
@@ -2810,9 +3001,84 @@ The active segment is the only file available for reading and writing while cons
 When the active segment becomes full (configured by log.segment.bytes, default 1 GB) or the configured time (log.roll.hours or log.roll.ms, default 7 days) passes, the segment gets rolled.
 This means that the active segment gets closed and re-opens with read-only mode and a new segment file (active segment) will be created in read-write mode.
 
-Indexing helps consumers to read data starting from any specific offset or using any time range. As mentioned previously, the .index file contains an index that maps the logical offset to the byte offset of the record within the .log file. You might expect that this mapping is available for each record, but it doesn’t work this way.
+### FileSuffix
+```scala
+object UnifiedLog extends Logging {
+  val LogFileSuffix = LogFileUtils.LOG_FILE_SUFFIX
+  val IndexFileSuffix = LogFileUtils.INDEX_FILE_SUFFIX
+  val TimeIndexFileSuffix = LogFileUtils.TIME_INDEX_FILE_SUFFIX
+  val TxnIndexFileSuffix = LogFileUtils.TXN_INDEX_FILE_SUFFIX
+  val CleanedFileSuffix = LocalLog.CleanedFileSuffix
+  val SwapFileSuffix = LocalLog.SwapFileSuffix
+  val DeleteDirSuffix = LocalLog.DeleteDirSuffix
+  val StrayDirSuffix = LocalLog.StrayDirSuffix
+  val FutureDirSuffix = LocalLog.FutureDirSuffix
+  }
+```
 
-How these entries are added inside the index file is defined by the log.index.interval.bytes parameter, which is 4096 bytes by default. This means that after every 4096 bytes added to the log, an entry gets added to the index file. Suppose the producer is sending records of 100 bytes each to a Kafka topic. In this case, a new index entry will be added to the .index file after every 41 records (41*100 = 4100 bytes) appended to the log file.
+### LocalLog
+
+```scala
+class LocalLog(@volatile private var _dir: File,
+               @volatile private[log] var config: LogConfig,
+               private[log] val segments: LogSegments,
+               @volatile private[log] var recoveryPoint: Long,
+               @volatile private var nextOffsetMetadata: LogOffsetMetadata,
+               private[log] val scheduler: Scheduler,
+               private[log] val time: Time,
+               private[log] val topicPartition: TopicPartition,
+               private[log] val logDirFailureChannel: LogDirFailureChannel) extends Logging {}
+```
+
+This class encapsulates a thread-safe navigable map of LogSegment instances and provides the required read and write behavior on the map.
+```java
+public class LogSegments {
+  private final TopicPartition topicPartition;
+  /* the segments of the log with key being LogSegment base offset and value being a LogSegment */
+  private final ConcurrentNavigableMap<Long, LogSegment> segments = new ConcurrentSkipListMap<>();
+}
+```
+
+## index
+
+
+```dot
+digraph "AbstractIndex" {
+
+splines  = ortho;
+fontname = "Inconsolata";
+
+node [colorscheme = ylgnbu4];
+edge [colorscheme = dark28, dir = both];
+
+AbstractIndex    [shape = record, label = "{ AbstractIndex |  }"];
+Closeable        [shape = record, label = "{ \<\<interface\>\>\nCloseable |  }"];
+"LazyIndex<T>"   [shape = record, label = "{ LazyIndex\<T\> |  }"];
+OffsetIndex      [shape = record, label = "{ OffsetIndex |  }"];
+TimeIndex        [shape = record, label = "{ TimeIndex |  }"];
+TransactionIndex [shape = record, label = "{ TransactionIndex |  }"];
+
+AbstractIndex    -> Closeable        [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+"LazyIndex<T>"   -> AbstractIndex    [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "", headlabel = ""];
+"LazyIndex<T>"   -> Closeable        [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+"LazyIndex<T>"   -> OffsetIndex      [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+"LazyIndex<T>"   -> TimeIndex        [color = "#595959", style = dashed, arrowtail = none    , arrowhead = vee     , taillabel = "", label = "«create»", headlabel = ""];
+OffsetIndex      -> AbstractIndex    [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+TimeIndex        -> AbstractIndex    [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+TransactionIndex -> Closeable        [color = "#008200", style = dashed, arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+
+}
+
+```
+
+Indexing helps consumers to read data starting from any specific offset or using any time range. 
+As mentioned previously, the .index file contains an index that maps the logical offset to the byte offset of the record within the .log file.
+You might expect that this mapping is available for each record, but it doesn’t work this way.
+
+How these entries are added inside the index file is defined by the log.index.interval.bytes parameter, which is 4096 bytes by default. 
+This means that after every 4096 bytes added to the log, an entry gets added to the index file. 
+Suppose the producer is sending records of 100 bytes each to a Kafka topic. 
+In this case, a new index entry will be added to the .index file after every 41 records (41*100 = 4100 bytes) appended to the log file.
 
 ![](https://www.conduktor.io/_next/image/?url=https%3A%2F%2Fimages.ctfassets.net%2Flm7q36eaz111%2F6DDk2dGmKxP0RXI3VErcxC%2F8e6e2b944543eae951c78faba6266946%2Fimage-4.png&w=3840&q=75)
 
@@ -2820,7 +3086,8 @@ As we can see in the above diagram, the offset with id 41 is at 4100 bytes in th
 
 If a consumer wants to read starting at a specific offset, a search for the record is made as follows:
 
-Search for the .index file based on its name. For e.g. If the offset is 1191, the index file will be searched whose name has a value less than 1191. The naming convention for the index file is the same as that of the log file
+Search for the .index file based on its name. For e.g. If the offset is 1191, the index file will be searched whose name has a value less than 1191. 
+The naming convention for the index file is the same as that of the log file
 
 Search for an entry in the .index file where the requested offset falls.
 
@@ -2830,7 +3097,101 @@ As we mentioned, consumers may also want to read the records from a specific tim
 
 ![](https://www.conduktor.io/_next/image/?url=https%3A%2F%2Fimages.ctfassets.net%2Flm7q36eaz111%2F19foafoHS07ks25vCLr8dc%2F86235e6e5a0849e392c0f3b16125b7d4%2Fimage-3.png&w=3840&q=75)
 
-#### roll
+
+
+### readIndex
+
+#### warmEntry
+
+
+Kafka mmaps index files into memory, and all the read / write operations of the index is through OS page cache. 
+This avoids blocked disk I/O in most cases.
+
+To the extent of our knowledge, all the modern operating systems use LRU policy or its variants to manage page cache.
+Kafka always appends to the end of the index file, and almost all the index lookups (typically from in-sync followers or consumers) are very close to the end of the index. 
+So, the LRU cache replacement policy should work very well with Kafka's index access pattern.
+
+However, when looking up index, the standard binary search algorithm is not cache friendly, and can cause unnecessary page faults 
+(the thread is blocked to wait for reading some index entries from hard disk, as those entries are not cached in the page cache).
+
+ For example, in an index with 13 pages, to lookup an entry in the last page (page #12), the standard binary search algorithm will read index entries in page #0, 6, 9, 11, and 12.
+
+ page number: |0|1|2|3|4|5|6|7|8|9|10|11|12 |
+ steps:       |1| | | | | |3| | |4|  |5 |2/6|
+
+ In each page, there are hundreds of log entries, corresponding to hundreds to thousands of kafka messages. 
+ When the index gradually grows from the 1st entry in page #12 to the last entry in page #12, all the write (append) operations are in page #12, and all the in-sync follower / consumer lookups read page #0,6,9,11,12. 
+ As these pages are always used in each in-sync lookup, we can assume these pages are fairly recently used, and are very likely to be in the page cache. 
+ When the index grows to page #13, the pages needed in a in-sync lookup change to #0, 7, 10, 12, and 13:
+
+ page number: |0|1|2|3|4|5|6|7|8|9|10|11|12|13 |
+ steps:       |1| | | | | | |3| | | 4|5 | 6|2/7|
+
+ Page #7 and page #10 have not been used for a very long time. 
+ They are much less likely to be in the page cache, than the other pages. 
+ The 1st lookup, after the 1st index entry in page #13 is appended, is likely to have to read page #7 and page #10 from disk (page fault), which can take up to more than a second. 
+ In our test, this can cause the at-least-once produce latency to jump to about 1 second from a few ms.
+ 
+ Here, we use a more cache-friendly lookup algorithm:
+ if (target > indexEntry[end - N]) // if the target is in the last N entries of the index
+    binarySearch(end - N, end)
+ else
+    binarySearch(begin, end - N)
+ 
+ If possible, we only look up in the last N entries of the index. By choosing a proper constant N, all the in-sync
+ lookups should go to the 1st branch. We call the last N entries the "warm" section. As we frequently look up in this
+ relatively small section, the pages containing this section are more likely to be in the page cache.
+ 
+**We set N (_warmEntries) to 8192, because**
+1. This number is small enough to guarantee all the pages of the "warm" section is touched in every warm-section lookup. So that, the entire warm section is really "warm".
+   When doing warm-section lookup, following 3 entries are always touched: indexEntry(end), indexEntry(end-N), and indexEntry((end*2 -N)/2). 
+   If page size >= 4096, all the warm-section pages (3 or fewer) are touched, when we touch those 3 entries. 
+   As of 2018, 4096 is the smallest page size for all the processors (x86-32, x86-64, MIPS, SPARC, Power, ARM etc.).
+2. This number is large enough to guarantee most of the in-sync lookups are in the warm-section. 
+   With default Kafka settings, 8KB index corresponds to about 4MB (offset index) or 2.7MB (time index) log messages.
+
+ We can't set make N (_warmEntries) to be larger than 8192, as there is no simple way to guarantee all the "warm"
+ section pages are really warm (touched in every lookup) on a typical 4KB-page host.
+
+In there future, we may use a backend thread to periodically touch the entire warm section. So that, we can
+1) support larger warm section
+2) make sure the warm section of low QPS topic-partitions are really warm.
+
+```
+protected final int warmEntries() {
+    return 8192 / entrySize();
+}
+```
+
+```scala
+private int indexSlotRangeFor(ByteBuffer idx, long target, IndexSearchType searchEntity,
+                                  SearchResultType searchResultType) {
+        // check if the index is empty
+        if (entries == 0)
+            return -1;
+
+        int firstHotEntry = Math.max(0, entries - 1 - warmEntries());
+        // check if the target offset is in the warm section of the index
+        if (compareIndexEntry(parseEntry(idx, firstHotEntry), target, searchEntity) < 0) {
+            return binarySearch(idx, target, searchEntity,
+                searchResultType, firstHotEntry, entries - 1);
+        }
+
+        // check if the target offset is smaller than the least offset
+        if (compareIndexEntry(parseEntry(idx, 0), target, searchEntity) > 0) {
+            switch (searchResultType) {
+                case LARGEST_LOWER_BOUND:
+                    return -1;
+                case SMALLEST_UPPER_BOUND:
+                    return 0;
+            }
+        }
+
+        return binarySearch(idx, target, searchEntity, searchResultType, 0, firstHotEntry);
+    }
+```
+
+### roll
 
 the active segment gets rolled once any of these conditions are met-
 
@@ -2845,9 +3206,105 @@ Kafka mmaps index files into memory, and all the read / write operations of the 
 This avoids blocked disk I/O in most cases.
 
 
-segment.index.bytes default 10M
+`segment.index.bytes` default 10M
 
 
+```scala
+public AbstractIndex(File file, long baseOffset, int maxIndexSize, boolean writable) throws IOException {
+  Objects.requireNonNull(file);
+  this.file = file;
+  this.baseOffset = baseOffset;
+  this.maxIndexSize = maxIndexSize;
+  this.writable = writable;
+
+  createAndAssignMmap();
+  this.maxEntries = mmap.limit() / entrySize();
+  this.entries = mmap.position() / entrySize();
+}
+```
+
+```scala
+private void createAndAssignMmap() throws IOException {
+  boolean newlyCreated = file.createNewFile();
+  RandomAccessFile raf;
+  if (writable)
+    raf = new RandomAccessFile(file, "rw");
+  else
+    raf = new RandomAccessFile(file, "r");
+
+  try {
+    /* pre-allocate the file if necessary */
+    if (newlyCreated) {
+      if (maxIndexSize < entrySize())
+        throw new IllegalArgumentException("Invalid max index size: " + maxIndexSize);
+      raf.setLength(roundDownToExactMultiple(maxIndexSize, entrySize()));
+    }
+
+    long length = raf.length();
+    MappedByteBuffer mmap = createMappedBuffer(raf, newlyCreated, length, writable, entrySize());
+
+    this.length = length;
+    this.mmap = mmap;
+  } finally {
+    Utils.closeQuietly(raf, "index " + file.getName());
+  }
+}
+```
+
+```scala
+private static MappedByteBuffer createMappedBuffer(RandomAccessFile raf, boolean newlyCreated, long length, boolean writable, int entrySize) throws IOException {
+    MappedByteBuffer idx;
+    if (writable)
+        idx = raf.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, length);
+    else
+        idx = raf.getChannel().map(FileChannel.MapMode.READ_ONLY, 0, length);
+
+    /* set the position in the index for the next entry */
+    if (newlyCreated)
+        idx.position(0);
+    else
+        // if this is a pre-existing index, assume it is valid and set position to last entry
+        idx.position(roundDownToExactMultiple(idx.limit(), entrySize));
+
+    return idx;
+}
+```
+### OffsetIndex
+
+**An index that maps offsets to physical file locations for a particular log segment.**
+This index may be sparse: that is it may not hold an entry for all messages in the log. 
+The index is stored in a file that is pre-allocated to hold a fixed maximum number of 8-byte entries.
+
+The index supports lookups against a memory-map of this file.
+These lookups are done using a simple binary search variant to locate the offset/location pair for the greatest offset less than or equal to the target offset.
+Index files can be opened in two ways: either as an empty, mutable index that allows appends or an immutable read-only index file that has previously been populated. 
+The makeReadOnly method will turn a mutable file into an immutable one and truncate off any extra bytes. This is done when the index file is rolled over. 
+No attempt is made to checksum the contents of this file, in the event of a crash it is rebuilt.
+The file format is a series of entries. The physical format is a 4 byte "relative" offset and a 4 byte file location for the message with that offset. 
+The offset stored is relative to the base offset of the index file.
+So, for example, if the base offset was 50, then the offset 55 would be stored as 5. Using relative offsets in this way let's us use only 4 bytes for the offset. 
+The frequency of entries is up to the user of this class.
+All external APIs translate from relative offsets to full offsets, so users of this class do not interact with the internal storage format.
+
+### timeIndex
+
+**An index that maps from the timestamp to the logical offsets of the messages in a segment.**
+This index might be sparse, i.e. it may not hold an entry for all the messages in the segment.
+
+The index is stored in a file that is preallocated to hold a fixed maximum amount of 12-byte time index entries. 
+The file format is a series of time index entries. 
+The physical format is a 8 bytes timestamp and a 4 bytes "relative" offset used in the [[OffsetIndex]]. 
+A time index entry (TIMESTAMP, OFFSET) means that the biggest timestamp seen before OFFSET is TIMESTAMP. i.e. 
+Any message whose timestamp is greater than TIMESTAMP must come after OFFSET. 
+
+All external APIs translate from relative offsets to full offsets, so users of this class do not interact with the internal storage format.
+The timestamps in the same time index file are guaranteed to be monotonically increasing. 
+The index supports timestamp lookup for a memory map of this file.
+The lookup is done using a binary search to find the offset of the message whose indexed timestamp is closest but smaller or equals to the target timestamp. 
+Time index files can be opened in two ways: either as an empty, mutable index that allows appending or an immutable read-only index file that has previously been populated.
+The makeReadOnly method will turn a mutable file into an immutable one and truncate off any extra bytes. 
+This is done when the index file is rolled over. 
+No attempt is made to checksum the contents of this file, in the event of a crash it is rebuilt.
 
 ## Log
 
@@ -3211,6 +3668,69 @@ leader election
 
 followers drop the data > local HW and sync from the new leader
 
+
+## Tuning
+
+performance
+
+- OS fast file system ZFS, mount -o noatime swappiness low  Big pagecache log.segment.bytes
+- JVM 6-8G
+- Broker keep the same version with clients. num.repclia.fetchers
+- producer batch size linger.ms compress acks retries buffer
+- consumer fetch.min.bytes
+
+For throutput
+
+broker incr num.repclia.fetchers
+
+procuder:
+incr batch.size
+incr linger.ms
+compression
+acks=0/1
+retries=0
+incr buffer.memory
+
+multi-thread consume
+incr fetch.min.bytes
+
+for delay
+
+broker incr num.repclia.fetchers
+
+linger.ms=0
+none compression
+acks=1
+
+fetch.min.bytes=1
+
+
+### log
+
+大面积日志段同时间切分，导致瞬时打满磁盘 I/O带宽
+
+segment.jitter.ms
+The maximum random jitter subtracted from the scheduled segment roll time to avoid thundering herds of segment rolling
+
+Server Default Property:	log.roll.jitter.ms
+
+
+log.roll.jitter.ms > 0 通过给日志段切分执行时间加一个扰动值的方式，来避免大量日志段在同一时刻执行切分动作，从而显著降低磁盘 I/O
+```java
+    public boolean shouldRoll(RollParams rollParams) throws IOException {
+        boolean reachedRollMs = timeWaitedForRoll(rollParams.now, rollParams.maxTimestampInMessages) > rollParams.maxSegmentMs - rollJitterMs;
+        int size = size();
+        return size > rollParams.maxSegmentBytes - rollParams.messagesSize ||
+            (size > 0 && reachedRollMs) ||
+            offsetIndex().isFull() || timeIndex().isFull() || !canConvertToRelativeOffset(rollParams.maxOffsetInMessages);
+    }
+```
+
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+
+
+## References
+
+1. [Kafka服务端之网络层源码分析](https://mp.weixin.qq.com/s/-VzDU0V8J2guNXwhiBEEyg)

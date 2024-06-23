@@ -72,11 +72,21 @@ The Spring Framework provides two choices for making calls to REST endpoints:
 - RestTemplate: The original Spring REST client with a synchronous, template method API.
 - WebClient: a non-blocking, reactive alternative that supports both synchronous and asynchronous as well as streaming scenarios.
 
+Callback interface that can be used to customize the ClientHttpRequest sent from a RestTemplate.
+```java
+@FunctionalInterface
+public interface RestTemplateRequestCustomizer<T extends ClientHttpRequest> {
+	void customize(T request);
+
+}
+```
+
 [Task Execution and Scheduling](/docs/CS/Java/Spring/Task.md)
 
 [Cache Abstraction](/docs/CS/Java/Spring/Cache.md)
 
 [Spring Security](/docs/CS/Java/Spring/Security.md)
+
 
 ### Testing
 

@@ -1,18 +1,12 @@
 ## Introduction
 
-> [!TIP]
->
-> [Java SPI](/docs/CS/Java/JDK/Basic/SPI.md)
+Dubbo 并未使用 Java 原生的 [SPI](/docs/CS/Java/JDK/Basic/SPI.md) 机制，而是对其进行了增强.
 
-Changes on extension configuration file Use Protocol as an example, its configuration file `'META-INF/dubbo/com.xxx.Protocol'` is changed from:
-
-- com.foo.XxxProtocol
-- com.foo.YyyProtocol
-
-to key-value pair
-
-- xxx=com.foo.XxxProtocol
-- yyy=com.foo.YyyProtocol
+Dubbo SPI是通过键值对的方式进行配置
+```
+xxx=com.foo.XxxProtocol
+yyy=com.foo.YyyProtocol
+```
 
 The reason for this change is:
 If there's third party library referenced by static field or by method in extension implementation, its class will fail to initialize if the third party library doesn't exist.
@@ -56,13 +50,14 @@ public interface Protocol {
 
 ## ExtensionLoader
 
-org.apache.dubbo.rpc.model.ApplicationModel, DubboBootstrap and this class are at present designed to be singleton or static (by itself totally static or uses some static fields). So the instances returned from them are of process or classloader scope. If you want to support multiple dubbo servers in a single process, you may need to refactor these three classes.
+org.apache.dubbo.rpc.model.ApplicationModel, DubboBootstrap and this class are at present designed to be singleton or static (by itself totally static or uses some static fields). So the instances returned from them are of process or classloader scope. 
+If you want to support multiple dubbo servers in a single process, you may need to refactor these three classes.
+
 Load dubbo extensions
 auto inject dependency extension
 auto wrap extension in wrapper
 default extension is an adaptive instance
-See Also:
-[Service Provider in Java 5](https://docs.oracle.com/javase/1.5.0/docs/guide/jar/jar.html#Service%20Provider) , SPI, Adaptive, Activate
+
 
 ```java
 public class ExtensionLoader<T> {
@@ -566,11 +561,6 @@ private void saveInExtensionClass(Map<String, Class<?>> extensionClasses, Class<
 ### getExtension
 
 ```java
-/**
- * Find the extension with the given name. If the specified name is not found, then {@link IllegalStateException}
- * will be thrown.
- */
-@SuppressWarnings("unchecked")
 public T getExtension(String name) {
     return getExtension(name, true);
 }
@@ -595,11 +585,6 @@ public T getExtension(String name, boolean wrap) {
 ```
 
 ```java
-/**
- * get the original type.
- * @param name
- * @return
- */
 public T getOriginalInstance(String name) {
     getExtension(name);
     Class<?> clazz = getExtensionClasses().get(name);
@@ -613,9 +598,6 @@ public T getOriginalInstance(String name) {
 2. getExtension
 
 ```java
-/**
- * Return default extension, return <code>null</code> if it's not configured.
- */
 public T getDefaultExtension() {
     getExtensionClasses();
     if (StringUtils.isBlank(cachedDefaultName) || "true".equals(cachedDefaultName)) {
@@ -944,12 +926,12 @@ public class JdkCompiler extends AbstractCompiler {
 ## Summary
 
 
-|              | JDK SPI                   | Dubbo SPI       |
-| -------------- | --------------------------- | ----------------- |
-| load         | must load all SubClasses  | -               |
-| Source       | only one source           | -               |
-| Fail Message | fail message may override | -               |
-| Extension    | -                         | support IoC AOP |
+|              | JDK SPI                   | Dubbo SPI       | Spring SPI |
+| -------------- | --------------------------- | ----------------- | ---------- |
+| load         | must load all SubClasses  | -               | must load all SubClasses |
+| Source       | only one source           | -               |  |
+| Fail Message | fail message may override | -               |  |
+| Extension    | -                         | support IoC AOP |  |
 
 
 ## Links

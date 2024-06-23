@@ -27,6 +27,37 @@ Standard Context Events:
 - ContextStoppedEvent
 - ContextClosedEvent
 
+## multicastEvent
+support [Async](/docs/CS/Java/Spring/Task.md)
+```java
+public class SimpleApplicationEventMulticaster extends AbstractApplicationEventMulticaster {
+    public void multicastEvent(ApplicationEvent event, @Nullable ResolvableType eventType) {
+        ResolvableType type = (eventType != null ? eventType : ResolvableType.forInstance(event));
+        Executor executor = getTaskExecutor();
+        for (ApplicationListener<?> listener : getApplicationListeners(event, type)) {
+            if (executor != null && listener.supportsAsyncExecution()) {
+                try {
+                    executor.execute(() -> invokeListener(listener, event));
+                } catch (RejectedExecutionException ex) {
+                    // Probably on shutdown -> invoke listener locally instead
+                    invokeListener(listener, event);
+                }
+            } else {
+                invokeListener(listener, event);
+            }
+        }
+    }
+    private void doInvokeListener(ApplicationListener listener, ApplicationEvent event) {
+        try {
+            listener.onApplicationEvent(event);
+        }
+        catch (ClassCastException ex) {
+            // ...
+        }
+    }
+}
+```
+
 ## EventPublisher
 
 ```java
@@ -38,6 +69,80 @@ public interface ApplicationEventPublisher {
 
 	void publishEvent(Object event);
 
+}
+```
+### publishEvent
+
+
+
+```java
+protected void initApplicationEventMulticaster() {
+		ConfigurableListableBeanFactory beanFactory = getBeanFactory();
+		if (beanFactory.containsLocalBean(APPLICATION_EVENT_MULTICASTER_BEAN_NAME)) {
+			this.applicationEventMulticaster =
+					beanFactory.getBean(APPLICATION_EVENT_MULTICASTER_BEAN_NAME, ApplicationEventMulticaster.class);
+			if (logger.isTraceEnabled()) {
+				logger.trace("Using ApplicationEventMulticaster [" + this.applicationEventMulticaster + "]");
+			}
+		}
+		else {
+			this.applicationEventMulticaster = new SimpleApplicationEventMulticaster(beanFactory);
+			beanFactory.registerSingleton(APPLICATION_EVENT_MULTICASTER_BEAN_NAME, this.applicationEventMulticaster);
+			if (logger.isTraceEnabled()) {
+				logger.trace("No '" + APPLICATION_EVENT_MULTICASTER_BEAN_NAME + "' bean, using " +
+						"[" + this.applicationEventMulticaster.getClass().getSimpleName() + "]");
+			}
+		}
+	}
+    
+```
+
+
+```java
+public abstract class AbstractApplicationContext extends DefaultResourceLoader
+        implements ConfigurableApplicationContext {
+    protected void publishEvent(Object event, @Nullable ResolvableType typeHint) {
+        ResolvableType eventType = null;
+
+        // Decorate event as an ApplicationEvent if necessary
+        ApplicationEvent applicationEvent;
+        if (event instanceof ApplicationEvent applEvent) {
+            applicationEvent = applEvent;
+            eventType = typeHint;
+        } else {
+            ResolvableType payloadType = null;
+            if (typeHint != null && ApplicationEvent.class.isAssignableFrom(typeHint.toClass())) {
+                eventType = typeHint;
+            } else {
+                payloadType = typeHint;
+            }
+            applicationEvent = new PayloadApplicationEvent<>(this, event, payloadType);
+        }
+
+        // Determine event type only once (for multicast and parent publish)
+        if (eventType == null) {
+            eventType = ResolvableType.forInstance(applicationEvent);
+            if (typeHint == null) {
+                typeHint = eventType;
+            }
+        }
+
+        // Multicast right now if possible - or lazily once the multicaster is initialized
+        if (this.earlyApplicationEvents != null) {
+            this.earlyApplicationEvents.add(applicationEvent);
+        } else if (this.applicationEventMulticaster != null) {
+            this.applicationEventMulticaster.multicastEvent(applicationEvent, eventType);
+        }
+
+        // Publish event via parent context as well...
+        if (this.parent != null) {
+            if (this.parent instanceof AbstractApplicationContext abstractApplicationContext) {
+                abstractApplicationContext.publishEvent(event, typeHint);
+            } else {
+                this.parent.publishEvent(event);
+            }
+        }
+    }
 }
 ```
 

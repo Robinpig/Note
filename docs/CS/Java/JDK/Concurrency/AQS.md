@@ -1,5 +1,3 @@
-
-
 ## Introduction
 
 Provides a framework for [implementing blocking locks](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=Locks) and related [synchronizers](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=synchronizers) (semaphores, events, etc) that rely on first-in-first-out (**FIFO**) [wait queues](/docs/CS/Java/JDK/Concurrency/AQS.md?id=Wait-Queue). 
@@ -9,8 +7,9 @@ This class is designed to be a useful basis for most kinds of synchronizers that
 Subclasses must define the protected methods that change this state, and which define what that state means in terms of this object being acquired or released. 
 Given these, the other methods in this class carry out all queuing and blocking mechanics. 
 
-Subclasses can maintain other state fields, but only the atomically updated int value manipulated using methods getState, setState and compareAndSetState is tracked with respect to synchronization.
+Subclasses can maintain other state fields, but only the atomically updated int value manipulated using methods `getState`, `setState` and `compareAndSetState` is tracked with respect to synchronization.
 
+## Architecture
 
 ![](img/AQS.png)
 
@@ -720,7 +719,8 @@ public class ConditionObject implements Condition, java.io.Serializable {
     /**
      * Creates a new {@code ConditionObject} instance.
      */
-    public ConditionObject() { }
+    public ConditionObject() {
+    }
 
     // Internal methods
 
@@ -743,6 +743,7 @@ public class ConditionObject implements Condition, java.io.Serializable {
         lastWaiter = node;
         return node;
     }
+}
 ```
 
 

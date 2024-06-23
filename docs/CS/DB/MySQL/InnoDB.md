@@ -79,7 +79,6 @@ These include predictive read-ahead for prefetching data from disk, an adaptive 
 
 ### InnoDB On-Disk Structures
 
-- [Tables](https://dev.mysql.com/doc/refman/8.0/en/innodb-tables.html)
 - [Tablespaces](/docs/CS/DB/MySQL/tablespace.md)
 - [Indexes](/docs/CS/DB/MySQL/Index.md)
 - [Redo Log](/docs/CS/DB/MySQL/redolog.md)
@@ -431,54 +430,27 @@ You can also store tables in general tablespaces. General tablespaces are shared
 They can be created outside of the MySQL data directory, are capable of holding multiple tables, and support tables of all row formats.
 For more information, see Section 15.6.3.3, “General Tablespaces”.
 
-Pages, Extents, Segments, and Tablespaces
-
-Each tablespace consists of database pages. Every tablespace in a MySQL instance has the same page size.
-By default, all tablespaces have a page size of 16KB; you can reduce the page size to 8KB or 4KB by specifying the innodb_page_size option when you create the MySQL instance.
-You can also increase the page size to 32KB or 64KB. For more information, refer to the innodb_page_size documentation.
-
-The pages are grouped into extents of size 1MB for pages up to 16KB in size (64 consecutive 16KB pages, or 128 8KB pages, or 256 4KB pages).
-For a page size of 32KB, extent size is 2MB.
-For page size of 64KB, extent size is 4MB.
-The “files” inside a tablespace are called segments in InnoDB.
-(These segments are different from the rollback segment, which actually contains many tablespace segments.)
-
-When a segment grows inside the tablespace, InnoDB allocates the first 32 pages to it one at a time.
-After that, InnoDB starts to allocate whole extents to the segment. InnoDB can add up to 4 extents at a time to a large segment to ensure good sequentiality of data.
-
-Two segments are allocated for each index in InnoDB. One is for nonleaf nodes of the B-tree, the other is for the leaf nodes.
-Keeping the leaf nodes contiguous on disk enables better sequential I/O operations, because these leaf nodes contain the actual table data.
-
-Some pages in the tablespace contain bitmaps of other pages, and therefore a few extents in an InnoDB tablespace cannot be allocated to segments as a whole, but only as individual pages.
-
-When you ask for available free space in the tablespace by issuing a SHOW TABLE STATUS statement, InnoDB reports the extents that are definitely free in the tablespace.
-InnoDB always reserves some extents for cleanup and other internal purposes; these reserved extents are not included in the free space.
-
-When you delete data from a table, contracts the corresponding B-tree indexes.
-Whether the freed space becomes available for other users depends on whether the pattern of deletes frees individual pages or extents to the tablespace.
-Dropping a table or deleting all rows from it is guaranteed to release the space to other users, but remember that deleted rows are physically removed only by the purge operation,
-which happens automatically some time after they are no longer needed for transaction rollbacks or consistent reads.
 
 ## InnoDB Limits
 
-It describes limits for `InnoDB` tables, indexes, tablespaces, and other aspects of the `InnoDB` storage engine.
+It describes limits for `InnoDB` tables, indexes, tablespaces, and other aspects of the `InnoDB` storage engine.
 
 - A table can contain a maximum of 1017 columns. Virtual generated columns are included in this limit.
-- A table can contain a maximum of 64 [secondary indexes](/docs/CS/DB/MySQL/Index.md?id=secondary-index).
-- The index key prefix length limit is 3072 bytes for `InnoDB` tables that use `DYNAMIC` or `COMPRESSED` row format.
-  The index key prefix length limit is 767 bytes for `InnoDB` tables that use the `REDUNDANT` or `COMPACT` row format. For example, you might hit this limit with a column prefix index of more than 191 characters on a `TEXT` or `VARCHAR` column, assuming a `utf8mb4` character set and the maximum of 4 bytes for each character.
+- A table can contain a maximum of 64 [secondary indexes](/docs/CS/DB/MySQL/Index.md?id=secondary-index).
+- The index key prefix length limit is 3072 bytes for `InnoDB` tables that use `DYNAMIC` or `COMPRESSED` row format.
+  The index key prefix length limit is 767 bytes for `InnoDB` tables that use the `REDUNDANT` or `COMPACT` row format. For example, you might hit this limit with a column prefix index of more than 191 characters on a `TEXT` or `VARCHAR` column, assuming a `utf8mb4` character set and the maximum of 4 bytes for each character.
   Attempting to use an index key prefix length that exceeds the limit returns an error.
-  If you reduce the `InnoDB` page size to 8KB or 4KB by specifying the `innodb_page_size` option when creating the MySQL instance, the maximum length of the index key is lowered proportionally, based on the limit of 3072 bytes for a 16KB page size. That is, the maximum index key length is 1536 bytes when the page size is 8KB, and 768 bytes when the page size is 4KB.
+  If you reduce the `InnoDB` page size to 8KB or 4KB by specifying the `innodb_page_size` option when creating the MySQL instance, the maximum length of the index key is lowered proportionally, based on the limit of 3072 bytes for a 16KB page size. That is, the maximum index key length is 1536 bytes when the page size is 8KB, and 768 bytes when the page size is 4KB.
   The limits that apply to index key prefixes also apply to full-column index keys.
 - A maximum of 16 columns is permitted for multicolumn indexes. Exceeding the limit returns an error.
 - The maximum row size, excluding any variable-length columns that are stored off-page, is slightly less than half of a page for 4KB, 8KB, 16KB, and 32KB page sizes.
-- - Although `InnoDB` supports row sizes larger than 65,535 bytes internally, MySQL itself imposes a row-size limit of 65,535 for the combined size of all columns. 
-- The maximum table or tablespace size is impacted by the server's file system, which can impose a maximum file size that's smaller than the internal 64 TiB size limit defined by `InnoDB`. 
-  For example, the _ext4_ file system on Linux has a maximum file size of 16 TiB, so the maximum table or tablespace size becomes 16 TiB instead of 64 TiB. Another example is the _FAT32_ file system, which has a maximum file size of 4 GB.
+- - Although `InnoDB` supports row sizes larger than 65,535 bytes internally, MySQL itself imposes a row-size limit of 65,535 for the combined size of all columns. 
+- The maximum table or tablespace size is impacted by the server's file system, which can impose a maximum file size that's smaller than the internal 64 TiB size limit defined by `InnoDB`. 
+  For example, the _ext4_ file system on Linux has a maximum file size of 16 TiB, so the maximum table or tablespace size becomes 16 TiB instead of 64 TiB. Another example is the _FAT32_ file system, which has a maximum file size of 4 GB.
   If you require a larger system tablespace, configure it using several smaller data files rather than one large data file, or distribute table data across file-per-table and general tablespace data files.
-- The combined maximum size for `InnoDB` log files is 512GB.
-- The minimum tablespace size is slightly larger than 10MB. The maximum tablespace size depends on the `InnoDB` page size.
-- The path of a tablespace file, including the file name, cannot exceed the `MAX_PATH` limit on Windows.
+- The combined maximum size for `InnoDB` log files is 512GB.
+- The minimum tablespace size is slightly larger than 10MB. The maximum tablespace size depends on the `InnoDB` page size.
+- The path of a tablespace file, including the file name, cannot exceed the `MAX_PATH` limit on Windows.
 
 ## Links
 

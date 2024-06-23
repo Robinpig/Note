@@ -798,6 +798,22 @@ startScheduledTask
 ```
 
 
+```java
+public class ConsistentHashRouter<T extends Node> {
+    private final SortedMap<Long, VirtualNode<T>> ring = new TreeMap<>();
+    private final HashFunction hashFunction;
+    public T routeNode(String objectKey) {
+        if (ring.isEmpty()) {
+            return null;
+        }
+        Long hashVal = hashFunction.hash(objectKey);
+        SortedMap<Long, VirtualNode<T>> tailMap = ring.tailMap(hashVal);
+        Long nodeHashVal = !tailMap.isEmpty() ? tailMap.firstKey() : ring.firstKey();
+        return ring.get(nodeHashVal).getPhysicalNode();
+    }
+}
+```
+
 ## Links
 
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)

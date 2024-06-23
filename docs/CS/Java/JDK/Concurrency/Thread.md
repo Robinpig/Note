@@ -23,9 +23,11 @@ public Thread(Runnable target) {
 ### init
 Threads are divided into two types: normal threads and daemon threads.
 
-Normal threads and daemon threads differ only in what happens when they exit. When a thread exits, the JVM performs an inventory of running threads, and if the only threads that are left are daemon threads, it initiates an orderly shutdown. When the JVM halts, any remaining daemon threads are abandoned ‐ finally blocks are not executed, stacks are not unwound ‐ the JVM just exits.
+Normal threads and daemon threads differ only in what happens when they exit. 
+When a thread exits, the JVM performs an inventory of running threads, and if the only threads that are left are daemon threads, it initiates an orderly shutdown. 
+When the JVM halts, any remaining daemon threads are abandoned ‐ finally blocks are not executed, stacks are not unwound ‐ the JVM just exits.
 
-*Daemon threads are not a good substitute for properly managing the lifecycle of services within an application.*
+Daemon threads are not a good substitute for properly managing the lifecycle of services within an application.
 ```java
 private void init(ThreadGroup g, Runnable target, String name,
                   long stackSize) {
@@ -111,44 +113,43 @@ private void init(ThreadGroup g, Runnable target, String name,
 
 ## Lifetime
 
+
+A thread can be in one of the following states:
+
+| State        | Description                                                                                                           |
+| ------------ |-----------------------------------------------------------------------------------------------------------------------|
+| NEW          | A thread that has not yet started is in this state.                                                                   |
+| RUNNABLE     | A thread executing in the Java virtual machine is in this state.                                                      |
+| BLOCKED      | A thread that is blocked waiting for a [monitor lock]() is in this state.                                             |
+| WATING       | A thread that is waiting indefinitely for another thread to perform a particular action is in this state.             |
+| TIME_WAITING | A thread that is waiting for another thread to perform an action for up to a specified waiting time is in this state. |
+| TERMINATED   | A thread that has exited is in this state.                                                                            |
+
+
 图源《Java并发编程的艺术》4.1.4节:
 
 ![Thread-Lifetime](../img/Thread-Lifetime.png)
 
-#### State
-
-A thread can be in one of the following states:
-
-| State        | Description                                                  |
-| ------------ | ------------------------------------------------------------ |
-| NEW          | A thread that has not yet started is in this state.          |
-| RUNNABLE     | A thread executing in the Java virtual machine is in this state. |
-| BLOCKED      | A thread that is blocked waiting for a monitor lock is in this state. |
-| WATING       | A thread that is waiting indefinitely for another thread to perform a particular action is in this state. |
-| TIME_WAITING | A thread that is waiting for another thread to perform an action for up to a specified waiting time is in this state. |
-| TERMINATED   | A thread that has exited is in this state.                   |
-
-
+当线程未分配到时间片或者主动调用yield函数释放时间片时为Ready状态
 
 ## Start
 
-*Causes this thread to begin execution; the Java Virtual Machine calls the run method of this thread.*
+Causes this thread to begin execution; the Java Virtual Machine calls the run method of this thread.
 
-*The result is that **two threads are running concurrently**: *
+The result is that **two threads are running concurrently**: 
 
 1. *the current thread (which returns from the call to the start method)*
 2. *the other thread (which executes its run method).*
 
-*It is never legal to start a thread more than once.*
+It is never legal to start a thread more than once.
+
+using synchronized and volatile
 
 ```java
+private volatile int threadStatus;
+
 public synchronized void start() {
-    /**
-     * This method is not invoked for the main method thread or "system"
-     * group threads created/set up by the VM. Any new functionality added
-     * to this method in the future may have to also be added to the VM.
-     * A zero status value corresponds to state "NEW".
-     */
+
     if (threadStatus != 0)
         throw new IllegalThreadStateException();
 
@@ -167,8 +168,7 @@ public synchronized void start() {
                 group.threadStartFailed(this);
             }
         } catch (Throwable ignore) {
-            /* do nothing. If start0 threw a Throwable then
-              it will be passed up the call stack */
+            /* do nothing. If start0 threw a Throwable then it will be passed up the call stack */
         }
     }
 }
@@ -717,7 +717,8 @@ public final void wait() throws InterruptedException {
 
 #### join
 
-Waits at most millis milliseconds for this thread to die. A timeout of 0 means to wait forever.
+Waits at most millis milliseconds for this thread to die. 
+A timeout of 0 means to wait forever.
 This implementation uses **a loop of this.wait** calls conditioned on this.isAlive.
 As a thread terminates the this.notifyAll method is invoked.
 **It is recommended that applications not use wait, notify, or notifyAll on Thread instances.**
@@ -726,7 +727,7 @@ As a thread terminates the this.notifyAll method is invoked.
 Actually call [wait](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait)
 ```java
 public final synchronized void join(long millis) throws InterruptedException {
-    ...
+    //...
     while (isAlive()) {
         wait(0);
     }
@@ -1329,13 +1330,13 @@ void os::interrupt(Thread* thread) {
 > 
 > **Note that if a thread is both interrupted and woken via `notify`, and that thread returns from `wait` by throwing an `InterruptedException`, then some other thread in the wait set must be notified.**
 
-Such as two threads wait for lock, may thread1 be notified and `Thread.interrupted` return true while the other thread still waiting
+Such as two threads wait for lock, may thread1 be notified and `Thread.interrupted` return true while the other thread still waiting.
 
-```java
-synchronized (lock) {
+```
+synchronized (lockObject) {
     thread1.interrupt();
   	// Thread.yield(); 
-    lock.notify();
+    lockObject.notify();
 }
 ```
 
@@ -1344,30 +1345,31 @@ synchronized (lock) {
 ## Sleep and Yield
 
 
-`Thread.sleep()` causes the currently executing thread to sleep (temporarily cease execution) for the specified duration, 
-subject to the precision and accuracy of system timers and schedulers. The thread **does not lose ownership of any monitors**, 
-and resumption of execution will depend on scheduling and the availability of processors on which to execute the thread.
+`Thread.sleep()` causes the currently executing thread to sleep (temporarily cease execution) for the specified duration, subject to the precision and accuracy of system timers and schedulers. 
+The thread **does not lose ownership of any monitors**, and resumption of execution will depend on scheduling and the availability of processors on which to execute the thread.
 
-**It is important to note that neither Thread.sleep nor Thread.yield have any synchronization semantics.** 
+**It is important to note that neither `Thread.sleep` nor `Thread.yield` have any synchronization semantics.** 
 In particular, the compiler does not have to flush writes cached in registers out to shared memory before a call to sleep or yield, 
 nor does the compiler have to reload values cached in registers after a call to sleep or yield. 
 
 > For example, in the following (broken) code fragment, assume that this.done is a non-volatile boolean field:
 
-```java
-        while (!this.done)
+```
+    while (!this.done)
         Thread.sleep(1000);
 ```
+
 > The compiler is free to read the field this.done just once, and reuse the cached value in each execution of the loop.
 > This would mean that the loop would never terminate, even if another thread changed the value of this.done.
 
 
 
 |              | wait      | yield       | sleep       |
-| ------------ | --------- | ----------- | ----------- |
+|--------------|-----------| ----------- | ----------- |
 | From         | Object    | Thread      | Thread      |
 | Lock         | Dependent | Independent | Independent |
 | Interruption | Throws    |             | Throws      |
+| CPU          | release   |         release    | release      |
 
 
 ### sleep
@@ -1543,6 +1545,7 @@ void os::naked_yield() {
 
 
 ## Timing
+
 The TimeUnit class provides multiple granularities (including nanoseconds) for specifying and controlling time-out based operations.
 Most classes in the package contain operations based on time-outs in addition to indefinite waits.
 In all cases that time-outs are used, the time-out specifies the minimum time that the method should wait before indicating that it timed-out.
@@ -1613,6 +1616,28 @@ public void sleep(long timeout) throws InterruptedException {
 
 
 See [OpenHFT Java Thread Affinity library](https://github.com/OpenHFT/Java-Thread-Affinity)
+
+## features
+
+### priority
+
+优先级分配的是 时间片长度 不保证执行顺序
+
+
+### 线程间通信
+
+
+
+wait/notify await/signal  Thread.join
+
+
+终端 Interrupt
+
+synchronized/lock
+
+ThreadLocal
+
+
 
 ## Fiber
 

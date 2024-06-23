@@ -271,40 +271,45 @@ public static final class Builder<T> {
 
 class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, ApplicationContextAware {
     <T> T getTarget() {
-        FeignContext context = applicationContext.getBean(FeignContext.class);
-        Feign.Builder builder = feign(context);
+        FeignClientFactory feignClientFactory = beanFactory != null ? beanFactory.getBean(FeignClientFactory.class)
+                : applicationContext.getBean(FeignClientFactory.class);
+        Feign.Builder builder = feign(feignClientFactory);
+        if (!StringUtils.hasText(url) && !isUrlAvailableInConfig(contextId)) {
 
-        if (!StringUtils.hasText(url)) {
-            if (!name.startsWith("http")) {
+            if (LOG.isInfoEnabled()) {
+                LOG.info("For '" + name + "' URL not provided. Will try picking an instance via load-balancing.");
+            }
+            if (!name.startsWith("http://") && !name.startsWith("https://")) {
                 url = "http://" + name;
-            } else {
+            }
+            else {
                 url = name;
             }
             url += cleanPath();
-            return (T) loadBalance(builder, context,
-                    new HardCodedTarget<>(type, name, url));
+            return (T) loadBalance(builder, feignClientFactory, new HardCodedTarget<>(type, name, url));
         }
-        if (StringUtils.hasText(url) && !url.startsWith("http")) {
+        if (StringUtils.hasText(url) && !url.startsWith("http://") && !url.startsWith("https://")) {
             url = "http://" + url;
         }
-        String url = this.url + cleanPath();
-        Client client = getOptional(context, Client.class);
+        Client client = getOptional(feignClientFactory, Client.class);
         if (client != null) {
-            if (client instanceof LoadBalancerFeignClient) {
-                // not load balancing because we have a url,
-                // but ribbon is on the classpath, so unwrap
-                client = ((LoadBalancerFeignClient) client).getDelegate();
-            }
             if (client instanceof FeignBlockingLoadBalancerClient) {
                 // not load balancing because we have a url,
                 // but Spring Cloud LoadBalancer is on the classpath, so unwrap
                 client = ((FeignBlockingLoadBalancerClient) client).getDelegate();
             }
+            if (client instanceof RetryableFeignBlockingLoadBalancerClient) {
+                // not load balancing because we have a url,
+                // but Spring Cloud LoadBalancer is on the classpath, so unwrap
+                client = ((RetryableFeignBlockingLoadBalancerClient) client).getDelegate();
+            }
             builder.client(client);
         }
-        Targeter targeter = get(context, Targeter.class);
-        return (T) targeter.target(this, builder, context,
-                new HardCodedTarget<>(type, name, url));
+
+        applyBuildCustomizers(feignClientFactory, builder);
+
+        Targeter targeter = get(feignClientFactory, Targeter.class);
+        return targeter.target(this, builder, feignClientFactory, resolveTarget(feignClientFactory, contextId, url));
     }
 }
 ```
@@ -391,7 +396,8 @@ class HystrixTargeter implements Targeter {
 
 ### newInstance
 
-creates an api binding to the target. As this invokes reflection, care should be taken to cache the result.
+creates an api binding to the target. 
+As this invokes reflection, care should be taken to cache the result.
 
 
 
@@ -529,8 +535,9 @@ abstract class BaseContract implements Contract {
 }
 ```
 
-#### InvocationHandler
+### InvocationHandler
 
+create a restTemplate
 dispatch method in cacheMap
 
 retryer
@@ -542,7 +549,24 @@ static class FeignInvocationHandler implements InvocationHandler {
     private final Map<Method, MethodHandler> dispatch;
 
     @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        // equals/hashCode/toString no need remote call
+        if (!dispatch.containsKey(method)) {
+            throw new UnsupportedOperationException(String.format("Method \"%s\" should not be called", method.getName()));
+        }
+
+        return dispatch.get(method).invoke(args);
+    }
+}
+```
+InvocationHandlerFactory
+
+#### SynchronousMethodHandler
+```java
+final class SynchronousMethodHandler implements MethodHandler {
+    @Override
     public Object invoke(Object[] argv) throws Throwable {
+        // Create a Request Template from an existing Request Template.
         RequestTemplate template = buildTemplateFromArgs.create(argv);
         Options options = findOptions(argv);
         Retryer retryer = this.retryer.clone();
@@ -553,25 +577,63 @@ static class FeignInvocationHandler implements InvocationHandler {
                 try {
                     retryer.continueOrPropagate(e);
                 } catch (RetryableException th) {
-                    Throwable cause = th.getCause();
-                    if (propagationPolicy == UNWRAP && cause != null) {
-                        throw cause;
-                    } else {
-                        throw th;
-                    }
+                   // ...
                 }
                 continue;
             }
         }
     }
+
+    Object executeAndDecode(RequestTemplate template, Options options) throws Throwable {
+        Request request = targetRequest(template);
+        Response response;
+        long start = System.nanoTime();
+        try {
+            response = client.execute(request, options);
+            // ensure the request is set. TODO: remove in Feign 12
+            response = response.toBuilder()
+                    .request(request)
+                    .requestTemplate(template)
+                    .build();
+        } catch (IOException e) {
+            throw errorExecuting(request, e);
+        }
+
+        long elapsedTime = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        return responseHandler.handleResponse(
+                metadata.configKey(), response, metadata.returnType(), elapsedTime);
+    }
+
+    Request targetRequest(RequestTemplate template) {
+        for (RequestInterceptor interceptor : requestInterceptors) {
+            interceptor.apply(template);
+        }
+        return target.apply(template);
+    }
 }
 ```
-InvocationHandlerFactory
+execute by client
 
-
-
+```java
+package feign;
+/**
+ * Submits HTTP requests. Implementations are expected to be thread-safe.
+ */
+public interface Client {
+    Response execute(Request request, Options options) throws IOException;
+}
+```
 
 ## Interceptor
+Zero or more RequestInterceptors may be configured for purposes such as adding headers to all requests. 
+**No guarantees are given with regards to the order that interceptors are applied.** 
+Once interceptors are applied, `Target.apply(RequestTemplate)` is called to create the immutable http request sent via `Client.execute(Request, Request.Options)`.
+```java
+public interface RequestInterceptor {
+  void apply(RequestTemplate template);
+}
+```
+RequestInterceptors are configured via `Feign.Builder.requestInterceptors`.
 
 ## Retry
 

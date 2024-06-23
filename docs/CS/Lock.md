@@ -50,42 +50,55 @@ Spinning to wait for a lock held on another processor doesn’t waste many cycle
 
 ## Distributed Lock
 
-Fault-tolerant consensus is expensive. 
-Exclusive access by a single process (also known as locking) is cheap, but it is not fault-tolerant—if a process fails while it is holding a lock, no one else can access the resource. 
+Fault-tolerant consensus is expensive.
+Exclusive access by a single process (also known as locking) is cheap, but it is not fault-tolerant—if a process fails while it is holding a lock, no one else can access the resource.
 Adding a timeout to a lock makes a fault-tolerant lock or ‘lease’.
 Thus a process holds a lease on a state component or ‘resource’ until an expiration time; we say that the process is the ‘master’ for the resource while it holds the lease.
-No other process will touch the resource until the lease expires. 
-For this to work, of course, the processes must have synchronized clocks. 
+No other process will touch the resource until the lease expires.
+For this to work, of course, the processes must have synchronized clocks.
 More precisely, if the maximum skew between the clocks of two processes is ε and process P’s lease expires at time t, then P knows that no other process will touch the resource before time t – ε on P’s clock.
 
-While it holds the lease the master can read and write the resource freely. 
-Writes must take bounded time, so that they can be guaranteed either to fail or to precede any operation that starts after the lease expires; 
+While it holds the lease the master can read and write the resource freely.
+Writes must take bounded time, so that they can be guaranteed either to fail or to precede any operation that starts after the lease expires;
 this can be a serious problem for a resource such as a SCSI disk, which has weak ordering guarantees and a long upper bound on the time a write can take.
 
-A process can keep control of a resource by renewing its lease before it expires. 
-It can also release its lease, perhaps on demand. 
-If you can’t talk to the process that holds the lease, however (perhaps because it has failed), you have to wait for the lease to expire before touching its resource. 
-So there is a tradeoff between the cost of renewing a lease and the time you have to wait for the lease to expire after a (possible) failure. 
-A short lease means a short wait during recovery but a higher cost to renew the lease. 
+A process can keep control of a resource by renewing its lease before it expires.
+It can also release its lease, perhaps on demand.
+If you can’t talk to the process that holds the lease, however (perhaps because it has failed), you have to wait for the lease to expire before touching its resource.
+So there is a tradeoff between the cost of renewing a lease and the time you have to wait for the lease to expire after a (possible) failure.
+A short lease means a short wait during recovery but a higher cost to renew the lease.
 A long lease means a long wait during recovery but a lower cost to renew.
 
 As for optimistic lock, database access libraries like Hibernate usually provide facilities, but in a distributed scenario, we would use more specific solutions that are used to implement more complex algorithms like:
 
 - [Redis](/docs/CS/DB/Redis/Lock.md) uses libraries that implement a lock algorithm like [ShedLock](https://github.com/lukas-krecan/ShedLock), and [Redisson](https://github.com/redisson/redisson/wiki/8.-Distributed-locks-and-synchronizers).
   The first one provides lock implementation using also other systems like MongoDB, DynamoDB, and more.
-- [Zookeeper](/docs/CS/Java/ZooKeeper/ZooKeeper.md) provides some recipes about locking.
+- [Zookeeper](/docs/CS/Java/Zookeeper/ZooKeeper.md?id=lock) provides some recipes about locking.
 - [Hazelcast](https://hazelcast.com/blog/long-live-distributed-locks/) offers a lock system based on his [CP subsystem](https://docs.hazelcast.org/docs/3.12.3/manual/html-single/index.html#cp-subsystem).
 - [有赞 Bond](https://tech.youzan.com/bond/)
 
 
-Implementing a pessimistic lock, we have a big issue; what happens if the lock owner doesn’t release it? The lock will be held forever and we could be in a **deadlock**. 
+
+
+数据库 select for update
+
+
+
+Redisson lua based on Redis single thread model
+
+RedissonLock#unlockInnerAsync
+
+- delete whe decrement to zero
+- broadcast to waiting
+
+Implementing a pessimistic lock, we have a big issue; what happens if the lock owner doesn’t release it? The lock will be held forever and we could be in a **deadlock**.
 To prevent this issue, we will set an **expiration time** on the lock, so the lock will be **auto-released**.
 
-But if the time expires before the task is finished by the first lock holder, another microservice can acquire the lock, and both lock holders can now release the lock, causing inconsistency. 
+But if the time expires before the task is finished by the first lock holder, another microservice can acquire the lock, and both lock holders can now release the lock, causing inconsistency.
 Remember, no timer assumption can be reliable in asynchronous networks.
 
-We need to use a **fencing token,** which is incremented each time a microservice acquires a lock. 
-This token must be passed to the lock manager when we release the lock, so if the first owner releases the lock before the second owner, the system will refuse the second lock release. 
+We need to use a **fencing token,** which is incremented each time a microservice acquires a lock.
+This token must be passed to the lock manager when we release the lock, so if the first owner releases the lock before the second owner, the system will refuse the second lock release.
 Depending on the implementation, we can also decide to let win the second lock owner.
 
 scenarios:
@@ -96,18 +109,6 @@ scenarios:
 - reentrant lock
 - lock TTL
 - hot key
-
-
-[How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
-
-[Leases: an efficient fault-tolerant mechanism for distributed file cache consistency](https://dl.acm.org/doi/pdf/10.1145/74851.74870)
-
-[A simple distributed lock with memcached](https://bluxte.net/musings/2009/10/28/simple-distributed-lock-memcached/)
-[Distributed resource locking using memcached](https://source.coveo.com/2014/12/29/distributed-resource-locking/)
-
-[The Chubby lock service for loosely-coupled distributed systems]()
-
-[Redis and Zookeeper for distributed lock](https://www.fatalerrors.org/a/redis-and-zookeeper-for-distributed-lock.html)
 
 ## Lock-based Concurrent Data Structures
 
@@ -229,3 +230,9 @@ Curiously, building condition variables out of semaphores is a much trickier pro
 ## References
 
 1. [Everything I Know About Distributed Locks](https://dzone.com/articles/everything-i-know-about-distributed-locks)
+2. [Leases: an efficient fault-tolerant mechanism for distributed file cache consistency](https://dl.acm.org/doi/pdf/10.1145/74851.74870)
+3. [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+4. [A simple distributed lock with memcached](https://bluxte.net/musings/2009/10/28/simple-distributed-lock-memcached/)
+5. [Distributed resource locking using memcached](https://source.coveo.com/2014/12/29/distributed-resource-locking/)
+6. [The Chubby lock service for loosely-coupled distributed systems]()
+7. [Redis and Zookeeper for distributed lock](https://www.fatalerrors.org/a/redis-and-zookeeper-for-distributed-lock.html)

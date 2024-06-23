@@ -86,6 +86,11 @@ Eden:from:to=8:1:1
 
 #### Handle Promotion
 
+当HandlePromotionFailure设置true 允许
+否则进行Full GC
+
+
+
 ### Old Generation
 
 Objects that are long-lived are eventually moved from the Young Generation to the Old Generation.

@@ -1,16 +1,27 @@
 ## Introduction
 
+Rate limiting is an essential technique used in software systems to control the rate of incoming requests. 
+It helps to prevent the overloading of servers by limiting the number of requests that can be made in a given time frame.
+
+Rate limiting helps prevent resource starvation caused by Denial of Service (DoS) attacks.
+Rate limiting can help limit cost overruns by preventing the overuse of a resource.
 
 
-Method 
 
-- reject
-- queue
-- mock
+
+Most rate limiting implementations share three core concepts. 
+They are the limit, the window, and the identifier.
 
 ## Algorithms
 
-- Semaphore only for counts
+Several algorithms are used for rate limiting, including
+
+- Token bucket
+- Leaky bucket
+- Sliding window logs
+- Sliding window counters
+
+
 - 计数器
   - 固定窗口 瞬时峰值隐患
   - solid window 窗口粒度越小消耗资源高
@@ -21,7 +32,12 @@ Method
 
 
 
-### Semaphore
+### Counter
+
+最大连接数
+
+
+#### Semaphore
 
 ```java
 Semaphore semaphore = new Semaphore(10);
@@ -40,12 +56,63 @@ for (int i = 0; i < 100; i++) {
 }
 ```
 
+### Fixed Window Counter
 
+### Sliding Window Logs
+
+Another approach to rate limiting is to use sliding window logs. 
+This data structure involves a “window” of **fixed size** that slides along a timeline of events, storing information about the events that fall within the window at any given time.
+
+This rate limitation keeps track of each client’s request in a time-stamped log. 
+These logs are normally stored in a time-sorted hash set or table.
+
+The sliding window logs algorithm can be implemented using the following steps:
+
+- A time-sorted queue or hash table of timestamps within the time range of the most recent window is maintained for each client making the requests.
+- When a certain length of the queue is reached or after a certain number of minutes, whenever a new request comes, a check is done for any timestamps older than the current window time.
+- The queue is updated with new timestamp of incoming request and if number of elements in queue does not exceed the authorised count, it is proceeded otherwise an exception is triggered.
+
+
+
+时间精度越高 花费越高
+
+### Sliding Window Counters
+
+The sliding window counter algorithm is an optimization over sliding window logs. As we can see in the previous approach, memory usage is high. For example, to manage numerous users or huge window timeframes, all the request timestamps must be kept for a window time, which eventually uses a huge amount of memory. Also, removing numerous timestamps older than a particular timeframe means high complexity of time as well.
+
+To reduce surges of traffic, this algorithm accounts for a weighted value of the previous window’s request based on timeframe. If we have a one-minute rate limit, we can record the counter for each second and calculate the sum of all counters in the previous minute whenever we get a new request to determine the throttling limit.
+
+The sliding window counters can be separated into the following concepts:
+
+- Remove all counters which are more than 1 minute old.
+- If a request comes which falls in the current bucket, the counter is increased.
+- If a request comes when the current bucket has reached it’s throat limit, the request is blocked.
 
 ### Leaky Bucket
+It is based on the idea that if the average rate at which water is poured exceeds the rate at which the bucket leaks, the bucket will overflow.
+
+**The leaky bucket empties at a fixed rate. 
+Each incoming request adds to the bucket’s depth, and if the bucket overflows, the request is rejected.**
+
+One way to implement this is using a queue, which corresponds to the bucket that will contain the incoming requests. 
+Whenever a new request is made, it is added to the queue’s end. If the queue is full at any time, then the additional requests are discarded.
+
+The leaky bucket algorithm can be separated into the following concepts:
+
+- Initialize the leaky bucket with a fixed depth and a rate at which it leaks.
+- For each request, add to the bucket’s depth.
+- If the bucket’s depth exceeds its capacity, reject the request.
+- Leak the bucket at a fixed rate.
 
 
 ### Token Bucket
+
+
+- The token bucket algorithm allocates tokens at a fixed rate into a “bucket.”
+- Each request consumes a token from the bucket, and requests are only allowed if there are sufficient tokens available.
+- Unused tokens are stored in the bucket, up to a maximum capacity.
+- This algorithm provides a simple and flexible way to control the rate of requests and smooth out bursts of traffic.
+
 
 guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in `SmoothRateLimiter`.
 
@@ -326,3 +393,28 @@ Redis+Lua
 Nginx+Lua
 
 Sentinel
+
+
+## Distributed
+
+Distributed rate limiting involves distributing rate limiting across multiple nodes or instances of a system to handle high traffic loads and improve scalability. Techniques such as consistent hashing, token passing, or distributed caches are used to coordinate rate limiting across nodes.
+
+
+
+Sentinel
+
+
+Hystrix
+
+
+### Redis
+
+
+
+
+
+## Links
+
+## References
+
+1. [Rate Limiting Fundamentals](https://blog.bytebytego.com/p/rate-limiting-fundamentals)

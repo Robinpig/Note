@@ -1,12 +1,18 @@
 ## Introduction
 
-
-
-Connection pooling is a well-known data access pattern. 
+Connection pooling is a well-known data access pattern.
 Its main purpose is to reduce the overhead involved in performing database connections and read/write database operations.
 **At the most basic level,** **a connection pool is a database connection cache implementation** that can be configured to suit specific requirements.
 
 ## Connection Management
+
+
+
+
+| 参数 | 释义 | 参考因素 |
+|--| ---- | ---- |
+| Maximum | | 业务期望并发量, 服务端资源支持最大并发量, 客户端执行命令时间, 客户端维护资源开销     |  
+| maxIdle  |  常规意义上最大连接数    |      |
 
 maximum/minimum connection
 

@@ -30,6 +30,22 @@ Any **column index** or **composite index** could act as a covering index, given
 Design your indexes and queries to take advantage of this optimization technique wherever possible.
 
 
+### 联合索引
+
+
+当遇到>或者<时 当前column走索引 下个column不再使用索引 此时会根据查询回表代价估计是否全表还是使用index condition
+
+is null, is not null和 != 会根据查询回表代价估计 在大多数情况下会回表 当前column不走索引
+
+
+between >=, =< 和 LIKE 'XX%' 索引都可在下个column继续
+
+LIKE '%XX' 无法使用索引
+
+
+MySQL can also optimize the combination col_name = expr OR col_name IS NULL, a form that is common in resolved subqueries. EXPLAIN shows ref_or_null when this optimization is used.
+
+
 ### Clustered and Secondary Indexes
 
 Each InnoDB table has a special index called the clustered index that stores row data. 

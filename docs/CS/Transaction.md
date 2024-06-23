@@ -881,8 +881,6 @@ and decouple decisions from their initiators and allow participants to decide on
 
 A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
 
-TiDB
-
 Let’s start with the most straightforward protocol for a distributed commit that allows multipartition atomic updates.
 Two-phase commit (2PC) is usually discussed in the context of database transactions. 2PC executes in two phases.
 During the first phase, the decided value is distributed, and votes are collected. During the second phase, nodes just flip the switch, making the results of the first phase visible.
@@ -947,7 +945,7 @@ If one of the cohorts has failed after accepting the proposal, it has to learn a
 
 Since the protocol has multiple spots where processes are waiting for the other participants (when the coordinator collects votes, or when the cohort is waiting for the commit/abort phase), link failures might lead to message loss, and this wait will continue indefinitely. If the coordinator does not receive a response from the replica during the propose phase, it can trigger a timeout and abort the transaction.”
 
-### Coordinator Failures in 2PC
+#### Coordinator Failures in 2PC
 
 If one of the cohorts does not receive a commit or abort command from the coordinator during the second phase, as shown in Figure 13-3,
 it should attempt to find out which decision was made by the coordinator.
@@ -1027,7 +1025,29 @@ As Figure 13-5 shows, the three-phase commit round consists of three steps:
 
 ### TCC
 
-not used normally
+
+Try Confirm Canel
+
+XA-2PC变种
+
+
+实现自由度高 将实现成本转移给component
+
+短事务 柔性事务锁定资源少 性能高
+
+对业务侵入性强 实现难度大
+
+
+Component需要实现try/confirm/canel
+
+
+Component 幂等职责:
+- try/confirm/cancel at least one
+- 网络问题 try可能延迟丢失 cancel先到达 需要支持空回滚 忽略后续try
+
+
+在异步轮询任务兜底下 try/confirm存在失败可能
+
 
 ### Saga
 

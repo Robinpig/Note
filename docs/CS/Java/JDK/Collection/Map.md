@@ -971,9 +971,10 @@ A hash table supporting full concurrency of retrievals and high expected concurr
 ### ConcurrentMap
 
 A Map providing thread safety and atomicity guarantees.
-To maintain the specified guarantees, default implementations of methods including putIfAbsent inherited from Map must be overridden by implementations of this interface. Similarly, implementations of the collections returned by methods keySet, values, and entrySet must override methods such as removeIf when necessary to preserve atomicity guarantees.
+To maintain the specified guarantees, default implementations of methods including putIfAbsent inherited from Map must be overridden by implementations of this interface. 
+Similarly, implementations of the collections returned by methods keySet, values, and entrySet must override methods such as removeIf when necessary to preserve atomicity guarantees.
+
 Memory consistency effects: As with other concurrent collections, actions in a thread prior to placing an object into a ConcurrentMap as a key or value happen-before actions subsequent to the access or removal of that object from the ConcurrentMap in another thread.
-This interface is a member of the Java Collections Framework.
 
 ```java
 public interface ConcurrentMap<K,V> extends Map<K,V> {
@@ -991,12 +992,8 @@ public interface ConcurrentMap<K,V> extends Map<K,V> {
 }
 ```
 
-### ForwardingNode
+A node inserted at head of bins during transfer operations.
 ```java
-
-/**
- * A node inserted at head of bins during transfer operations.
- */
 static final class ForwardingNode<K,V> extends Node<K,V> {
     final Node<K, V>[] nextTable;
 
@@ -1008,7 +1005,7 @@ static final class ForwardingNode<K,V> extends Node<K,V> {
 ```
 
 
-### Constructor
+Constructor
 
 ```java
 public class ConcurrentHashMap<K,V> extends AbstractMap<K,V>
@@ -1579,16 +1576,33 @@ static final class CounterCell {
 
 ## LinkedHashMap
 
-*Hash table and linked list implementation of the Map interface, with **predictable iteration order**. This implementation differs from `HashMap` in that it **maintains a doubly-linked list running through all of its entries**. 
+Hash table and linked list implementation of the Map interface, with **predictable iteration order**.
+This implementation differs from `HashMap` in that it **maintains a doubly-linked list running through all of its entries**. 
 
-*This **linked list defines the iteration ordering**:*
+This **linked list defines the iteration ordering**:
 
-1. *normally the order in which keys were inserted into the map (insertion-order).*
-2. *Note that insertion order is not affected if a key is re-inserted into the map. (A key k is reinserted into a map m if m.put(k, v) is invoked when m.containsKey(k) would return true immediately prior to the invocation.)*
+1. normally the order in which keys were inserted into the map (insertion-order).
+2. Note that insertion order is not affected if a key is re-inserted into the map. (A key k is reinserted into a map m if m.put(k, v) is invoked when m.containsKey(k) would return true immediately prior to the invocation.)
 
-*This implementation spares its clients from the unspecified, generally chaotic ordering provided by HashMap (and Hashtable), without incurring the increased cost associated with TreeMap.* 
+This implementation spares its clients from the unspecified, generally chaotic ordering provided by HashMap (and Hashtable), without incurring the increased cost associated with TreeMap.
 
 [Other LRU implements](/docs/CS/Algorithms/LRU.md)
+
+
+Returns true if this map should remove its eldest entry. This method is invoked by put and putAll after inserting a new entry into the map. 
+It provides the implementor with the opportunity to remove the eldest entry each time a new one is added. 
+This is useful if the map represents a cache: it allows the map to reduce memory consumption by deleting stale entries.
+
+This method typically does not modify the map in any way, instead allowing the map to modify itself as directed by its return value. 
+It is permitted for this method to modify the map directly, but if it does so, it must return false (indicating that the map should not attempt any further modification). 
+The effects of returning true after modifying the map from within this method are unspecified.
+This implementation merely returns false (so that this map acts like a normal map - the eldest element is never removed).
+
+```
+   protected boolean removeEldestEntry(Map.Entry<K,V> eldest) {
+        return false;
+    }
+```
 
 ### Entry
 
@@ -1798,7 +1812,7 @@ public class TreeMap<K,V>
 
 
 
-### put
+### TreeMap#put
 
 Associates the specified value with the specified key in this map. If the map previously contained a mapping for the key, the old value is replaced.
 
@@ -2049,7 +2063,37 @@ final Entry<K,V> getEntry(Object key) {
 }
 ```
 
-## [WeakHashMap](/docs/CS/Java/JDK/Collection/WeakHashMap.md)
+first/last key
+
+```
+    public K firstKey() {
+        return key(getFirstEntry());
+    }
+
+    public K lastKey() {
+        return key(getLastEntry());
+    }
+    
+     final Entry<K,V> getFirstEntry() {
+        Entry<K,V> p = root;
+        if (p != null)
+            while (p.left != null)
+                p = p.left;
+        return p;
+    }
+    
+    final Entry<K,V> getLastEntry() {
+        Entry<K,V> p = root;
+        if (p != null)
+            while (p.right != null)
+                p = p.right;
+        return p;
+    }
+```
+
+## WeakHashMap
+
+[WeakHashMap](/docs/CS/Java/JDK/Collection/WeakHashMap.md)
 
 
 
