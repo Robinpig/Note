@@ -926,12 +926,12 @@ public class JdkCompiler extends AbstractCompiler {
 ## Summary
 
 
-|              | JDK SPI                   | Dubbo SPI       |
-| -------------- | --------------------------- | ----------------- |
-| load         | must load all SubClasses  | -               |
-| Source       | only one source           | -               |
-| Fail Message | fail message may override | -               |
-| Extension    | -                         | support IoC AOP |
+|              | JDK SPI                   | Dubbo SPI       | Spring SPI |
+| -------------- | --------------------------- | ----------------- | ---------- |
+| load         | must load all SubClasses  | -               | must load all SubClasses |
+| Source       | only one source           | -               |  |
+| Fail Message | fail message may override | -               |  |
+| Extension    | -                         | support IoC AOP |  |
 
 
 ## Links
