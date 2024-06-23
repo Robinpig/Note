@@ -761,7 +761,9 @@ Spring相关
 - 未被Spring管理
 - @Async方法返回值必须是void或者Future
 
+### 线程池
 
+手动设置自定义的线程池
 
 ## Links
 
@@ -770,3 +772,4 @@ Spring相关
 ## References
 
 - [Spring 5.2.x doc](https://docs.spring.io/spring-framework/docs/5.2.x/spring-framework-reference/integration.html#scheduling)
+- [浅析Spring中Async注解底层异步线程池原理｜得物技术](https://mp.weixin.qq.com/s/FySv5L0bCdrlb5MoSfQtAA)
