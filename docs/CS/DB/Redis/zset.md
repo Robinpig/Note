@@ -468,6 +468,24 @@ The general layout of the ziplist is as follows:
  <zlbytes> <zltail> <zllen> <entry> <entry> ... <entry> <zlend>
 ```
 
+
+```dot
+digraph  {
+    node [shape=plaintext, fontsize=18];
+    rankdir = "TB"
+       
+    Sets [label="<f0> zlbytes | <f1> zltail | <f2> entry1 | <f3> entry2| <f4> ...| <f5> entryN | <f6> zlend:255", color=black, fillcolor=white, style=filled,shape=record, fontcolor=black, fontsize=14, width=6, fixedsize=true];
+
+    entrys [label="<f0> prerawlen | <f1> len | <f2> data | <f3> prerawlen | <f4> len | <f5> data | <f6> ... | <7> prerawlen | <f8> len | <f9> data ", color=black, fillcolor=white, style=filled, shape=record, fontcolor=black, fontsize=14, width=12, fixedsize=true]; 
+     
+    Sets:f2 -> entrys:f1; 
+    Sets:f3 -> entrys:f4; 
+    Sets:f5 -> entrys:f8;          
+}
+```
+
+
+
 [hash](/docs/CS/DB/Redis/hash.md) and [zset](/docs/CS/DB/Redis/zset.md) default use ziplist.
 
 [list use quicklist( based on ziplist)](/docs/CS/DB/Redis/list.md?id=quicklist).
