@@ -450,6 +450,26 @@ GC logging is on the JVM pausing path, hence the time taken by write() calls con
 
 For latency-sensitive applications, an immediate solution should be avoiding the IO contention by putting the GC log file on a separate HDD or high-performing disk such as SSD.
 
+## Tuning
+
+年轻代的内存使用率处在高位，导致频繁的 Minor GC，而频繁 GC 的效率又不高，说明对象没那么快能被回收，这时年轻代可以适当调大一点
+
+年老代的内存使用率处在高位，导致频繁的 Full GC，这样分两种情况：
+- 如果每次 Full GC 后年老代的内存占用率没有下来，可以怀疑是内存泄漏；
+- 如果 Full GC 后年老代的内存占用率下来了，说明不是内存泄漏，我们要考虑调大年老代
+
+
+### OOM
+
+- heap
+- GC overhead 考虑内存泄漏
+- Requested array size exceeds VM limit 大数组分配
+- MetaSpace
+- Request size bytes for reason. Out of swap space
+- Unable to create native threads
+
+
+
 ## Links
 
 - [Garbage Collection](/docs/CS/memory/GC.md)

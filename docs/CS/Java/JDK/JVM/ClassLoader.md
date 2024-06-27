@@ -146,7 +146,7 @@ Returns the lock object for class loading operations. For backward compatibility
 findBootstrapClassOrNull
 
 ### Destroy delegate model
-
+双亲委托的逻辑在loadClass函数中
 1. override loadClass(), not findClass()
 2. SPI, JDBC JNDI,use contextClassLoader(most be ApplicationClassLoader)
 3. hotswap, `OSGI`(`Open Service Gateway Initiative`), Tomcat WebApplicationClassLoader or Spring devtools

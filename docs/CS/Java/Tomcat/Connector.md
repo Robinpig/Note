@@ -781,20 +781,12 @@ public abstract class AbstractEndpoint<S,U> {
                 sc = processorCache.pop();
             }
             if (sc == null) {
-```
-
-create SocketProcessor
-
-```java
+                //create SocketProcessor
                 sc = createSocketProcessor(socketWrapper, event);
             } else {
                 sc.reset(socketWrapper, event);
             }
-```
-
-execute SocketProcessor in workers
-
-```java
+            // execute SocketProcessor in workers
             Executor executor = getExecutor();
             if (dispatch && executor != null) {
                 executor.execute(sc);
