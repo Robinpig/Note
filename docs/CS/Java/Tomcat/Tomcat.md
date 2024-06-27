@@ -24,6 +24,37 @@ change password in conf/tomcat-users.xml
 
 ## Architecture
 
+
+Catalina is a very sophisticated piece of software, which was elegantly designed and developed.
+It is also modular too.<br>
+Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the [container](/docs/CS/Java/Tomcat/Tomcat.md?id=Container).
+
+
+<div style="text-align: center;">
+
+```plantuml
+@startuml
+
+!theme plain
+top to bottom direction
+skinparam linetype ortho
+
+class Connector
+interface Container << interface >>
+
+@enduml
+```
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Tomcat architecture
+</p>
+
+详细类图如下:
+
+<div style="text-align: center;">
+
 ```plantuml
 @startuml
 
@@ -96,26 +127,16 @@ Wrapper                 -[#008200,plain]-^  Container
 
 ```
 
-Catalina is a very sophisticated piece of software, which was elegantly designed and developed.
-It is also modular too.<br>
-Catalina is consisting of two main modules: the [connector](/docs/CS/Java/Tomcat/Connector.md) and the [container](/docs/CS/Java/Tomcat/Tomcat.md?id=Container).
 
-```plantuml
-@startuml
+</div>
 
-!theme plain
-top to bottom direction
-skinparam linetype ortho
+<p style="text-align: center;">
+Fig.2. Tomcat 
+</p>
 
-class Connector
-interface Container << interface >>
+请求处理流程图:
 
-@enduml
-
-```
-
-- [start](/docs/CS/Java/Tomcat/Start.md)
-- [ClassLoader](/docs/CS/Java/Tomcat/ClassLoader.md)
+<div style="text-align: center;">
 
 ```dot
 strict digraph  {
@@ -126,8 +147,8 @@ autosize=false;
 
   User;
 
-  Acceptor -> Poller 
-  Poller -> Executor 
+  Acceptor -> Poller [label="Channel"]
+  Poller -> Executor [label="SocketProcessor"]
   Processor;
   Executor -> Processor 
   
@@ -154,6 +175,9 @@ autosize=false;
             {rank="same"; Mapper2;Mapper;}
         subgraph cluster_Connector {
             label="Connector"
+
+            Executor [label=<Executor<BR/> <FONT POINT-SIZE="12">Thread Pool</FONT>>] ;
+
             subgraph cluster_ProtocolHandler {
                 label="ProtocolHandler"
   
@@ -164,8 +188,9 @@ autosize=false;
                         SocketWrapper;
                         Poller;
                         Acceptor;
-                        Executor [label=<Executor<BR/> <FONT POINT-SIZE="12">A Thread Pool</FONT>>] ;
-                        {rank="same"; SocketWrapper;Acceptor;Poller;Executor;}
+                        
+        
+                        {rank="same"; SocketWrapper;Acceptor;Poller;}
                         LimitLatch;
                     }
                 Processor;
@@ -174,10 +199,8 @@ autosize=false;
             Adapter;
             Processor -> Adapter;
             Adapter -> Mapper;
-            Adapter -> Processor;
-        
-            Processor -> SocketWrapper;
-  
+         
+            {rank="same"; Executor;Processor;Adapter;}
         }
 
         subgraph cluster_Engine {
@@ -235,6 +258,16 @@ autosize=false;
 }
 
 ```
+
+</div>
+
+<p style="text-align: center;">
+Fig.3. Tomcat请求处理流程
+</p>
+
+
+- [start](/docs/CS/Java/Tomcat/Start.md)
+- [ClassLoader](/docs/CS/Java/Tomcat/ClassLoader.md)
 
 ### Container
 
@@ -421,116 +454,19 @@ public class CoyoteAdapter implements Adapter {
 }
 ```
 
+ 
+
+## Session
+在 Java 中，是 Web 应用程序在调用
+HttpServletRequest 的 getSession 方法时，由 Web 容器（比如 Tomcat）创建的
 
 
-## BackgroundProcess
+服务端生成session id 通过set-cookie放在响应header中
 
-Private runnable class to invoke the backgroundProcess method of this container and its children after a fixed delay.
-
-```java
-protected class ContainerBackgroundProcessor implements Runnable {
-
-    @Override
-    public void run() {
-        processChildren(ContainerBase.this);
-    }
-
-    protected void processChildren(Container container) {
-        ClassLoader originalClassLoader = null;
-
-        try {
-            if (container instanceof Context) {
-                Loader loader = ((Context) container).getLoader();
-                // Loader will be null for FailedContext instances
-                if (loader == null) {
-                    return;
-                }
-
-                // Ensure background processing for Contexts and Wrappers is performed under the web app's class loader
-                originalClassLoader = ((Context) container).bind(false, null);
-            }
-            container.backgroundProcess();
-            Container[] children = container.findChildren();
-            for (int i = 0; i < children.length; i++) {
-                if (children[i].getBackgroundProcessorDelay() <= 0) {
-                    processChildren(children[i]);
-                }
-            }
-        } catch (Throwable t) {
-            ExceptionUtils.handleThrowable(t);
-            log.error(sm.getString("containerBase.backgroundProcess.error"), t);
-        } finally {
-            if (container instanceof Context) {
-                ((Context) container).unbind(false, originalClassLoader);
-            }
-        }
-    }
-}
-```
-
-backgroundProcess
-
-```java
-public class StandardContext extends ContainerBase implements Context, NotificationEmitter {
-    @Override
-    public void backgroundProcess() {
-        Loader loader = getLoader();
-        if (loader != null) {
-            loader.backgroundProcess();
-        }
-        // ...
-    }
-}
-```
-
-Execute a periodic task, such as reloading, etc. This method will be invoked inside the classloading context of this container. Unexpected throwables will be caught and logged.
-
-```java
-public class WebappLoader extends LifecycleMBeanBase implements Loader {
-    @Override
-    public void backgroundProcess() {
-        Context context = getContext();
-        if (context != null) {
-            if (context.getReloadable() && modified()) {
-                ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
-                try {
-                    Thread.currentThread().setContextClassLoader(WebappLoader.class.getClassLoader());
-                    context.reload();
-                } finally {
-                    Thread.currentThread().setContextClassLoader(originalTccl);
-                }
-            }
-        }
-    }
-}
-```
-
-### reload
-
-Reload this web application, if reloading is supported.
-**This method is designed to deal with reloads required by changes to classes in the underlying repositories of our class loader and changes to the web.xml file.**
-It does not handle changes to any context.xml file.
-If the context.xml has changed, you should stop this Context and create (and start) a new Context instance instead.
-Note that there is additional code in CoyoteAdapter#postParseRequest() to handle mapping requests to paused Contexts.
-
-```java
-public class StandardContext extends ContainerBase implements Context, NotificationEmitter {
-  @Override
-    public synchronized void reload() {
-
-    // Validate our current component state
-
-    // Stop accepting requests temporarily.
-    setPaused(true);
-
-    stop();
-
-    start();
-
-    setPaused(false);
-  }
-}
-```
+Tomcat 的 Session 管理器提供了多种持久化方案来存储 Session，通常会采用高性能的存
+储方式，比如 Redis，并且通过集群部署的方式，防止单点故障，从而提升高可用。同时，
+Session 有过期时间，因此 Tomcat 会开启后台线程定期的轮询，如果 Session 过期了就
+将 Session 失效
 
 ## Log
 
@@ -669,6 +605,320 @@ public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot 
   }
 }
 ```
+
+## WebSocket
+
+
+跟 Servlet 不同的地方在于，Tomcat 会给每一个 WebSocket 连接创建一个 Endpoint实例。
+
+
+omcat 的 WebSocket 加载是通过 ServletContainerInitializer 机制完成
+
+UpgradeProcessor
+
+当WebSocket 的握手请求到来时，HttpProtocolHandler 首先接收到这个请求，在处理这个 HTTP 请求时，Tomcat 通过一个特殊的 Filter 判断该当HTTP 请求是否是一个WebSocket Upgrade 请求（即包含Upgrade:websocket的 HTTP 头信息），如果是，则在 HTTP 响应里添加 WebSocket 相关的响应头信息，并进行协议升级
+
+用 UpgradeProtocolHandler 替换当前的HttpProtocolHandler，相应的，把当前 Socket 的Processor 替换成 UpgradeProcessor，同时 Tomcat 会创建 WebSocket Session 实例和 Endpoint 实例，并跟当前的 WebSocket 连接一一对应起来。
+这个 WebSocket 连接不会立即关闭，并且在请求处理中，不再使用原有的HttpProcessor，而是用专门的 UpgradeProcessor，UpgradeProcessor 最终会调用相应的 Endpoint 实例来处理请求
+
+
+![alt text](./img/WebSocket.png)
+
+
+Tomcat 对 WebSocket 请求的处理没有经过
+Servlet 容器，而是通过 UpgradeProcessor 组件直接把请
+求发到 ServerEndpoint 实例，并且 Tomcat 的
+WebSocket 实现不需要关注具体 I/O 模型的细节，从而实
+现了与具体 I/O 方式的解耦
+
+
+## 对象池
+
+Tomcat连接器中 SocketWrapper 和 SocketProcessor
+
+SynchronizedStack内部维护了一个对象数组，并且用数组来实现栈的接口：push 和 pop 方法，这两个方法分别用来归还对象和获取对象
+
+SynchronizedStack 用数组而不是链表来维护对象，可以减少结点维护的内存开销，并且它本身只支持扩容不支持缩容，也就是说数组对象在使用过程中不会被重新赋值，也就不会被 GC。
+这样设计的目的是用最低的内存和 GC 的代价来实现无界容器，同时Tomcat 的最大同时请求数是有限制的，因此不需要担心对象的数量会无限膨胀
+
+## Adavance
+
+### background
+
+热加载 后台线程监听类文件变化 不会清空session 常用于开发环境
+
+热部署 同上 会清空session 适合生产环境
+
+
+Private runnable class to invoke the backgroundProcess method of this container and its children after a fixed delay.
+
+在顶层容器，也就是Engine 容器中启动一个后台线程，那么这个线程不但会执行 Engine 容器的周期性任务，它还会执行所有子容器的周期性任务
+
+```java
+protected class ContainerBackgroundProcessor implements Runnable {
+
+    @Override
+    public void run() {
+        processChildren(ContainerBase.this);
+    }
+
+    protected void processChildren(Container container) {
+        ClassLoader originalClassLoader = null;
+
+        try {
+            if (container instanceof Context) {
+                Loader loader = ((Context) container).getLoader();
+                // Loader will be null for FailedContext instances
+                if (loader == null) {
+                    return;
+                }
+
+                // Ensure background processing for Contexts and Wrappers is performed under the web app's class loader
+                originalClassLoader = ((Context) container).bind(false, null);
+            }
+            container.backgroundProcess();
+            Container[] children = container.findChildren();
+            for (int i = 0; i < children.length; i++) {
+                if (children[i].getBackgroundProcessorDelay() <= 0) {
+                    processChildren(children[i]);
+                }
+            }
+        } catch (Throwable t) {
+            ExceptionUtils.handleThrowable(t);
+            log.error(sm.getString("containerBase.backgroundProcess.error"), t);
+        } finally {
+            if (container instanceof Context) {
+                ((Context) container).unbind(false, originalClassLoader);
+            }
+        }
+    }
+}
+```
+
+#### backgroundProcess
+
+
+```java
+public class StandardContext extends ContainerBase implements Context, NotificationEmitter {
+    @Override
+    public void backgroundProcess() {
+        Loader loader = getLoader();
+        if (loader != null) {
+            loader.backgroundProcess();
+        }
+        // ...
+    }
+}
+```
+
+Execute a periodic task, such as reloading, etc. This method will be invoked inside the classloading context of this container. 
+Unexpected throwables will be caught and logged.
+
+```java
+public class WebappLoader extends LifecycleMBeanBase implements Loader {
+    @Override
+    public void backgroundProcess() {
+        Context context = getContext();
+        if (context != null) {
+            if (context.getReloadable() && modified()) {
+                ClassLoader originalTccl = Thread.currentThread().getContextClassLoader();
+                try {
+                    Thread.currentThread().setContextClassLoader(WebappLoader.class.getClassLoader());
+                    context.reload();
+                } finally {
+                    Thread.currentThread().setContextClassLoader(originalTccl);
+                }
+            }
+        }
+    }
+}
+```
+
+#### reload
+
+在context层级实现热加载 通过创建新的类加载器来实现重新加载
+
+Reload this web application, if reloading is supported.
+**This method is designed to deal with reloads required by changes to classes in the underlying repositories of our class loader and changes to the web.xml file.**
+It does not handle changes to any context.xml file.
+If the context.xml has changed, you should stop this Context and create (and start) a new Context instance instead.
+Note that there is additional code in CoyoteAdapter#postParseRequest() to handle mapping requests to paused Contexts.
+
+```java
+public class StandardContext extends ContainerBase implements Context, NotificationEmitter {
+  @Override
+    public synchronized void reload() {
+
+    // Validate our current component state
+
+    // Stop accepting requests temporarily.
+    setPaused(true);
+
+    stop();
+
+    start();
+
+    setPaused(false);
+  }
+}
+```
+
+#### 热部署
+
+热部署过程中 Context 容器被销毁了，执行行为在 Host 
+
+HostConfig 做的事情都是比较“宏观”的，它不会去检查具体类文件或者资源文件是否有变化，而是检查 Web应用目录级别的变化。
+
+```java
+public class HostConfig implements LifecycleListener {
+  protected void check() {
+
+        if (host.getAutoDeploy()) {
+            // Check for resources modification to trigger redeployment
+            DeployedApplication[] apps = deployed.values().toArray(new DeployedApplication[0]);
+            for (DeployedApplication app : apps) {
+                if (tryAddServiced(app.name)) {
+                    try {
+                        checkResources(app, false);
+                    } finally {
+                        removeServiced(app.name);
+                    }
+                }
+            }
+
+            // Check for old versions of applications that can now be undeployed
+            if (host.getUndeployOldVersions()) {
+                checkUndeploy();
+            }
+
+            // Hotdeploy applications
+            deployApps();
+        }
+    }
+}
+```
+
+热部署只是监听粗粒度的事件即可 不需要重写backgroundProcessor做定时任务
+
+
+
+### ASync
+
+
+
+Tomcat 中，负责 flush 响应数据的是 CoyoteAdaptor，它还会销毁 Request 对象和
+Response 对象
+连接器是调用 CoyoteAdapter 的 service 方法来处理请求的，而
+CoyoteAdapter 会调用容器的 service 方法，当容器的 service 方法返回时，
+CoyoteAdapter 判断当前的请求是不是异步 Servlet 请求，如果是，就不会销毁 Request
+和 Response 对象，也不会把响应信息发到浏览器
+
+```
+this.request.getCoyoteRequest().action(ActionCode.ASYNC_START, this);
+```
+
+
+使用ConcurrentHashMap缓存ScoketWrapper和Processor的映射
+
+![alt text](./img/ASync.png)
+
+
+
+### Metrics
+
+
+JMX
+
+```shell
+#setenv.sh
+export JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote"
+export JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote.port=9001"
+export JAVA_OPTS="${JAVA_OPTS} -Djava.rmi.server.hostname=x.x.x.x"
+export JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote.ssl=false"
+export JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote.authenticate=false"
+```
+
+
+## Tuning
+
+### 启动速度
+
+清理不必要的 Web 应用 删除掉 webapps 文件夹下不需要的工程，一般是 host-manager、
+example、doc 等这些默认的工程
+
+ Tomcat 在启动的时候会解析所有的 XML 配置文件，但 XML 解析的代价可不小，
+因此我们要尽量保持配置文件的简洁，需要解析的东西越少，速度自然就会越快
+
+删除所有不需要的 JAR 文件。JVM 的类加载器在加载类时，需要查找每一个
+JAR 文件，去找到所需要的类。如果删除了不需要的 JAR 文件，查找的速度就会快一些。这
+里请注意：Web 应用中的 lib 目录下不应该出现 Servlet API 或者 Tomcat 自身的 JAR，
+这些 JAR 由 Tomcat 负责提供。如果你是使用 Maven 来构建你的应用，对 Servlet API 的
+依赖应该指定为`<scope>provided</scope>`
+
+及时清理日志，删除 logs 文件夹下不需要的日志文件。同样还有 work 文件夹下的 catalina
+文件夹，它其实是 Tomcat 把 JSP 转换为 Class 文件的工作目录。有时候我们也许会遇到修
+改了代码，重启了 Tomcat，但是仍没效果，这时候便可以删除掉这个文件夹，Tomcat 下
+次启动的时候会重新生成
+
+
+Tomcat 为了支持 JSP，在应用启动的时候会扫描 JAR 包里面的 TLD 文件，加载里面定义的
+标签库
+
+
+如果你的项目没有使用 JSP 作为 Web 页面模板，而是使用 Velocity 之类的模板引擎，你
+完全可以把 TLD 扫描禁止掉。方法是，找到 Tomcat 的conf/目录下的context.xml文
+件，在这个文件里 Context 标签下，加上JarScanner和JarScanFilter子标签，像下面这
+样。
+```xml
+<Context>
+  <JarScanner>
+    <JarScanFilter defaultTldScan="false"/>
+  </JarScanner>
+</Context>
+```
+
+
+如果你的项目使用了 JSP 作为 Web 页面模块，意味着 TLD 扫描无法避免，但是我们可以
+通过配置来告诉 Tomcat，只扫描那些包含 TLD 文件的 JAR 包。方法是，找到 Tomcat
+的conf/目录下的catalina.properties文件，在这个文件里的 jarsToSkip 配置项
+中，加上你的 JAR 包
+
+```properties
+tomcat.util.scan.StandardJarScanFilter.jarsToSkip=xxx.jar
+```
+
+关闭 WebSocket 支持
+
+关闭 JSP 支持
+
+因此如果你没有使用 Servlet 注解这个功能，可以告诉 Tomcat 不要去扫描
+Servlet 注解
+
+配置 Web-Fragment 扫描
+
+
+Tomcat 7 以上的版本依赖 Java 的 SecureRandom 类来生成随
+机数，比如 Session ID。而 JVM 默认使用阻塞式熵源（/dev/random）， 在某些情况下
+就会导致 Tomcat 启动变慢。当阻塞时间较长时， 你会看到这样一条警告日志：
+解决方案是通过设置，让 JVM
+使用非阻塞式的熵源。
+`-Djava.security.egd=file:/dev/./urandom`
+
+
+去除AJP
+
+
+并行启动多个 Web 应用 Host
+
+
+JVM tuning
+
+
+### 故障处理
+
+
+
+
 
 ## Links
 

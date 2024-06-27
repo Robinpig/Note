@@ -1,10 +1,26 @@
 ## Introduction
 
+Connector负责:
+- 网络通信
+- 协议解析
+- Servlet req/resp 与 Tomcat req/resp的转换
+
+三个组件负责以上职能, 分别是 EndPoint、Processor和 Adapter。
+EndPoint 负责提供字节流给 Processor，Processor 负责提供 Tomcat Request 对象给 Adapter，Adapter 负责提供 ServletRequest 对象给容器
+
 ## ProtocolHandler
 
-Create a new ProtocolHandler for the given protocol.
+I/O模型很多都与应用层协议解析在一起, 设置ProtocolHandler, 子类实现各种应用层协议与I/O的组合
 
-```
+- org.apache.coyote.http11.Http11NioProtocol
+- org.apache.coyote.http11.Http11Nio2Protocol
+- org.apache.coyote.ajp.AjpNioProtocol
+- org.apache.coyote.ajp.AjpNio2Protocol
+
+
+ 
+
+```java
 // Connector
 // Defaults to using HTTP/1.1 NIO implementation.
 public Connector() {
@@ -13,19 +29,8 @@ public Connector() {
 
 public Connector(String protocol) {
   p = ProtocolHandler.create(protocol);
-}
-```
+} 
 
-
-
-Combine IO and protocol
-
-- org.apache.coyote.http11.Http11NioProtocol
-- org.apache.coyote.http11.Http11Nio2Protocol
-- org.apache.coyote.ajp.AjpNioProtocol
-- org.apache.coyote.ajp.AjpNio2Protocol
-
-```java
 // ProtocolHandler
 public static ProtocolHandler create(String protocol)
         throws ClassNotFoundException, InstantiationException, IllegalAccessException,
@@ -69,7 +74,6 @@ Start the NIO endpoint, creating acceptor, poller threads and [executor](/docs/C
 public class NioEndpoint extends AbstractJsseEndpoint<NioChannel,SocketChannel> {
     @Override
     public void startInternal() throws Exception {
-
         if (!running) {
             running = true;
             paused = false;
@@ -543,6 +547,10 @@ public class SynchronizedQueue<T> {
 ## Poller
 
 call in NioEndpoint
+
+> [!TIP]
+>
+> 在Nio2Endpoint 即异步IO模式下没有Poller Selector的工作由Kernel完成
 
 ```java
 public class Poller implements Runnable {
@@ -1166,7 +1174,7 @@ Process the request in the [adapter](/docs/CS/Java/Tomcat/Connector.md?id=Coyote
 }
 ```
 
-#### CoyoteAdapter
+### Adapter
 
 get Valve by getPipeline().getFirst(), then Value.invoke()
 
@@ -1178,25 +1186,7 @@ public class CoyoteAdapter implements Adapter {
 
         Request request = (Request) req.getNote(ADAPTER_NOTES);
         Response response = (Response) res.getNote(ADAPTER_NOTES);
-
-        if (request == null) {
-            // Create objects
-            request = connector.createRequest();
-            request.setCoyoteRequest(req);
-            response = connector.createResponse();
-            response.setCoyoteResponse(res);
-
-            // Link objects
-            request.setResponse(response);
-            response.setRequest(request);
-
-            // Set as notes
-            req.setNote(ADAPTER_NOTES, request);
-            res.setNote(ADAPTER_NOTES, response);
-
-            // Set query string encoding
-            req.getParameters().setQueryStringCharset(connector.getURICharset());
-        }
+        //... 设置request/response与req/res
 
         if (connector.getXpoweredBy()) {
             response.addHeader("X-Powered-By", POWERED_BY);
@@ -1217,7 +1207,8 @@ public class CoyoteAdapter implements Adapter {
                         connector.getService().getContainer().getPipeline().isAsyncSupported());
 ```
 
-Call the first [Valve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke) of Pipeline
+Call the [first Valve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=Pipeline) of Pipeline
+
 
 ```java
                 connector.getService().getContainer().getPipeline().getFirst().invoke(
@@ -1308,7 +1299,57 @@ Call the first [Valve.invoke()](/docs/CS/Java/Tomcat/Connector.md?id=invoke) of 
 }
 ```
 
-### Pipeline-Valve
+### Pipeline
+
+```java
+public interface Valve {
+    public Valve getNext();
+    public void setNext(Valve valve);
+    public void invoke(Request request, Response response)
+}
+
+public interface Pipeline extends Contained {
+    public void addValve(Valve valve);
+    public Valve getBasic();
+    public void setBasic(Valve valve);
+    public Valve getFirst();
+}
+```
+
+
+The container's normal request processing functionality is generally encapsulated in a container-specific Valve, which should always be executed at the end of a pipeline.
+  To facilitate this, the setBasic() method is provided to set the Valve instance that will always be executed last. 
+  Other Valves will be executed in the order that they were added, before the basic Valve is executed.
+
+每层pipeline的在tail都会调用下层Container的pipeline第一个valve. 例如:
+```java
+final class StandardEngineValve extends ValveBase {
+    @Override
+    public void invoke(Request request, Response response) throws IOException, ServletException {
+
+        // Select the Host to be used for this Request
+        Host host = request.getHost();
+        // ...
+        // Ask this Host to process this request
+        host.getPipeline().getFirst().invoke(request, response);
+    }
+}
+
+```
+编织成多层Pipeline-Valve
+
+<div style="text-align: center;">
+
+![](./img/Pipeline.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Pipeline-Valve
+</p>
+
+
+最终调用到StandardWrapperValve
 
 #### invoke
 
@@ -1617,6 +1658,9 @@ public final class ApplicationFilterFactory {
 }
 ```
 
+
+FilterChain是每个请求会生成一个
+
 #### doFilter
 
 Invoke the next filter in this chain, passing the specified request and response.
@@ -1663,6 +1707,11 @@ We fell off the end of the chain -- call the [servlet.service()](/docs/CS/Java/J
     }
 }
 ```
+
+## APR
+
+APR使用堆外内存和C程序库 再通过sendfile减少copy
+
 
 ## Links
 
