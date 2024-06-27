@@ -14,6 +14,9 @@ This model is flexible and supports diverse workflows.
 The DispatcherServlet, as any Servlet, needs to be declared and mapped according to the Servlet specification by using Java configuration or in web.xml.
 In turn, the DispatcherServlet uses Spring configuration to discover the delegate components it needs for request mapping, view resolution, exception handling, and more.
 
+比
+如 Spring MVC 中的 DispatcherServlet，就是在 init 方法里创建了自己的 Spring 容器
+
 <!-- tabs:start -->
 
 ##### **Java configuration**
@@ -104,6 +107,11 @@ Bootstrap listener to start up and shut down Spring's **root WebApplicationConte
 Simply delegates to ContextLoader as well as to ContextCleanupListener.
 As of Spring 3.1, ContextLoaderListener supports injecting the root web application context via the ContextLoaderListener(WebApplicationContext) constructor, allowing for programmatic configuration in Servlet 3.0+ environments.
 See org.springframework.web.WebApplicationInitializer for usage examples.
+
+> [!TIP]
+>
+> Spring Boot 默认只有一个上下文
+
 
 ```java
 public class ContextLoaderListener extends ContextLoader implements ServletContextListener {
