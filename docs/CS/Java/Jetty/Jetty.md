@@ -86,6 +86,17 @@ Connection 跟这个 Channel 绑定，接着就不断地检测 I/O 事件。
 6. 回调函数内部实现，其实就是调用 EndPoint 的接口方法来读数据。
 7.Connection 解析读到的数据，生成请求对象并交给 Handler 组件去处理
 
+
+ManagedSelector将 I/O 事件的侦测和处理放到同一个线程来处理，充分利用了 CPU 缓存并减少了线程上下文切换的开销
+
+### ExecutionStrategy
+
+ProduceConsume、
+ProduceExecuteConsume、ExecuteProduceConsume
+和 EatWhatYouKill
+
+
+在低线程情况下，就执行 ProduceExecuteConsume 策略，I/O 侦测用专门的线程处理，I/O 事件的处理扔给线程池处理，其实就是放到线程池的队列里慢慢处理。
 ## Handler
 
 A Jetty component that handles HTTP requests, of any version (HTTP/1.1, HTTP/2 or HTTP/3). A Handler is a Request.Handler with the addition of LifeCycle behaviours, plus variants that allow organizing Handlers as a tree structure.
@@ -95,6 +106,11 @@ Handlers may wrap the Request, Response and/or Callback and then forward the wra
 A Handler is an Invocable and implementations must respect the Invocable.InvocationType they declare within calls to handle(Request, Response, Callback).
 
 Handler实现了 Servlet 规范中的 Servlet、Filter 和 Listener 功能中的一个或者多个
+
+
+HandlerWrapper持有下一个Handler的引用 用于编织处理链路
+
+ScopedHandler实现回溯调用
 
 
 
@@ -114,6 +130,22 @@ server.join()
 
 ```
 
+## 对象池
+
+
+ByteBufferPool
+
+ByteBufferPool 是用不同的桶（Bucket）来管理不同长度的
+ByteBuffer，因为我们可能需要分配一块 1024 字节的 Buffer，也可能需要一块 64K 字节
+的 Buffer。而桶的内部用一个 ConcurrentLinkedDeque 来放置 ByteBuffer 对象的引
+用。
+
+Buffer 的分配和释放过程，就是找到相应的桶，并对桶中的 Deque 做出队和入队的操
+作，而不是直接向 JVM 堆申请和释放内存
+
+对象池大小靠连接数/queue length限制
+
+
 ## Comparison with Tomcat
 
 
@@ -129,7 +161,13 @@ server.join()
 
 
 
-
+Tomcat 和 Jetty 在解析 HTTP 协议数据时， 都采取了延迟解析的策
+略，HTTP 的请求体（HTTP Body）直到用的时候才解析
+当 Tomcat 调用Servlet 的 service 方法时，只是读取了和解析了 HTTP 请求头，并没有读取 HTTP 请求体。
+直到你的 Web 应用程序调用了 ServletRequest 对象的 getInputStream 方法或者
+getParameter 方法时，Tomcat 才会去读取和解析 HTTP 请求体中的数据；这意味着如果
+你的应用程序没有调用上面那两个方法，HTTP 请求体的数据就不会被读取和解析，这样就
+省掉了一次 I/O 系统调用
 
 
 
@@ -148,6 +186,11 @@ Connection 向 EndPoint 注册了一堆回调函数。它的本质将函数当�
 Jetty的Selector和processor默认是同一个线程处理 类似Netty
 
 Tomcat是分离的 使用Poller单独做Selector
+
+Jetty 在吞吐量和响应速度方面稍有优势，并且 Jetty 消耗的线程和内存资源明显比
+Tomcat 要少，这也恰好说明了 Jetty 在设计上更加小巧和轻量级的特点。
+但是 Jetty 有 2.45% 的错误率，而 Tomcat 没有任何错误，并且我经过多次测试都是
+这个结果。因此我们可以认为 Tomcat 比 Jetty 更加成熟和稳定
 
 ## Links
 
