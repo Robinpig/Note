@@ -50,7 +50,32 @@ java.lang.OutOfMemoryError: Java heap space
 
 See [Interrupts](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Interruptions) in Thread.
 
-athrow
+## create Exception
+
+异常实例的构造十分昂贵。这是由于在构造异常实例时，Java 虚拟机便需要生成该异常的
+栈轨迹（stack trace）。该操作会逐一访问当前线程的 Java 栈帧，并且记录下各种调试信
+息，包括栈帧所指向方法的名字，方法所在的类名、文件名，以及在代码中的第几行触发该
+异常
+
+在生成栈轨迹时，Java 虚拟机会忽略掉异常构造器以及填充栈帧的 Java 方法
+（Throwable.fillInStackTrace），直接从新建异常位置开始算起。此外，Java 虚拟机还会
+忽略标记为不可见的 Java 方法栈帧
+
+可以缓存异常实例，在需要用到的时候直接抛出 但这种做法可能会误导开发人员，使其定位到错误的位置 
+
+
+在编译生成的字节码中，每个方法都附带一个异常表。异常表中的每一个条目代表一个异常
+处理器，并且由 from 指针、to 指针、target 指针以及所捕获的异常类型构成。这些指针
+的值是字节码索引（bytecode index，bci），用以定位字节码
+
+当程序触发异常时，Java 虚拟机会从上至下遍历异常表中的所有条目。当触发异常的字节
+码的索引值在某个异常表条目的监控范围内，Java 虚拟机会判断所抛出的异常和该条目想
+要捕获的异常是否匹配。如果匹配，Java 虚拟机会将控制流转移至该条目 target 指针指向
+的字节码。
+如果遍历完所有异常表条目，Java 虚拟机仍未匹配到异常处理器，那么它会弹出当前方法
+对应的 Java 栈帧，并且在调用者（caller）中重复上述操作。在最坏情况下，Java 虚拟机
+需要遍历当前线程 Java 栈上所有方法的异常表
+
 
 ```cpp
 // Exceptions
