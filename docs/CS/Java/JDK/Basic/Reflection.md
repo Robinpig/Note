@@ -48,7 +48,42 @@ java.lang.Class.getMethods don't keep the order of methods
 because they are sorted by memory not name for improve performance
 
 
+MethodAccessor
 
+MethodAccessor 是一个接口，它有两个已有的具体实现：一
+个通过本地方法NativeMethodAccessorImpl来实现反射调用，另一个则使用了委派模式DelegatingMethodAccessorImpl
+每个 Method 实例的第一次反射调用都会生成一个委派实现，它所委派的具体实现便是一
+个本地实现。
+本地实现非常容易理解。当进入了 Java 虚拟机内部之后，我们便拥有了
+Method 实例所指向方法的具体地址。这时候，反射调用无非就是将传入的参数准备好，
+然后调用进入目标方法
+ 
+
+-Dsun.reflect.inflationThreshold=15
+
+
+当某个反射调用的调用次数在 15 之下时，
+采用本地实现；当达到 15 时，便开始动态生成字节码，并将委派实现的委派对象切换至动
+态实现，这个过程我们称之为 Inflation。
+
+反射调用的 Inflation 机制是可以通过参数（-Dsun.reflect.noInflation=true）来关闭的
+
+
+```java
+// java -verbose:class Test
+public class Test {
+  public static void target(int i) {
+    new Exception("#" + i).printStackTrace();
+  }
+  public static void main(String[] args) throws Exception {
+    Class<?> klass = Class.forName("Test");
+    Method method = klass.getMethod("target", int.class);
+    for (int i = 0; i < 20; i++) {
+      method.invoke(null, i);
+    }
+  }
+}
+```
 
 
 ## Proxy
@@ -257,6 +292,12 @@ public class ProxyGenerator {
   }
 }
 ```
+
+
+## Tuning
+
+方法的反射调用会带来不少性能开销，原因主要有三个：变长参数方法导致的 Object 数组，基本类型的自动装箱、拆箱，还有最重要的方法内联
+
 
 
 ## Links
