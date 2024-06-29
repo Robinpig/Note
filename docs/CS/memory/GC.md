@@ -633,6 +633,14 @@ Note that the mark-sweep collector imposes constraints upon the heap layout.
 From the viewpoint of the garbage collector, mutator threads perform just three operations
 of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=Mutator-read-and-write-operations)").
 
+
+
+内存碎片
+
+分配效率
+
+
+
 ### Bitmap marking
 
 Space for a mark-bit can usually be found in an object header word.
