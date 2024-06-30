@@ -282,6 +282,12 @@ When should I use a dead-letter queue?
 
 Most message queues provide best-effort ordering which ensures that messages are generally delivered in the same order as they're sent, and that a message is delivered at least once.
 
+
+
+### Transaction Message
+
+
+
 ### Poison-pill Messages
 
 Poison pills are special messages that can be received, but not processed.
@@ -427,7 +433,6 @@ Kafka partition -> segment -> .log, .index, .timeindex
 RocketMQ all topics using single commitlog and multiple index
 
 
-### Comparison
 
 
 naming Service
