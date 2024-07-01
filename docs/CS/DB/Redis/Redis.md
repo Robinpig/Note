@@ -4,19 +4,19 @@
 What this means is that Redis provides access to mutable data structures via a set of commands, which are sent using a *server-client* model with [TCP sockets](/docs/CS/CN/TCP/TCP.md) and a simple protocol.
 So different processes can query and modify the same data structures in a shared way.
 
-Data structures implemented into Redis have a few special properties:
-
-- Redis cares to store them on disk, even if they are always served and modified into the server memory. This means that Redis is fast, but that it is also non-volatile.
-- The implementation of data structures emphasizes memory efficiency, so data structures inside Redis will likely use less memory compared to the same data structure modelled using a high-level programming language.
-- Redis offers a number of features that are natural to find in a database, like replication, tunable levels of durability, clustering, and high availability.
-
-> Another good example is to think of Redis as a more complex version of memcached, where the operations are not just SETs and GETs, but operations that work with complex data types like Lists, Sets, ordered data structures, and so forth.
-
- 
+Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
 >  [!TIP]
 >
 > The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
+
+### Why Redis so fast
+
+完全基于内存实现 持久化机制都是使用子进程处理 不影响
+
+高效的数据结构
+
+线程模型
 
 
 
@@ -24,30 +24,24 @@ Data structures implemented into Redis have a few special properties:
 > For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.
 
 
-上下文切换
-多线程同步
 
-Source code layout
-
-
-monotonic clock
-
-
-By default, Redis will build using the POSIX clock_gettime function as the monotonic clock source. On most modern systems, the internal processor clock can be used to improve performance. Cautions can be found here: http://oliveryang.net/2015/09/pitfalls-of-TSC-usage/
-
-To build with support for the processor’s internal instruction clock, use:
-
-% make CFLAGS=“-DUSE_PROCESSOR_CLOCK”
+网络I/O模型  
 
 
 
-> Link: [How fast is Redis?](https://redis.io/topics/benchmarks)
+主从复制 哨兵集群 Cluster分片集群
 
-The simplest way to understand how a program works is to understand the [data structures](/docs/CS/DB/Redis/struct.md) it uses.
+
+
+负载均衡
+
+
+
+
 
 - [db](/docs/CS/DB/Redis/redisDb.md)
 
-Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
+
 
 ## Architecture
 
@@ -347,6 +341,10 @@ The tracking table is constituted by a radix tree of keys, each pointing to a ra
  Later, when a key is modified, all the clients that may have local copy of such key will receive an invalidation message.
 
  Clients will normally take frequently requested objects in memory, removing them when invalidation messages are received. 
+
+```redis
+CLIENT TRACKING ON|OFF [REDIRECT client-id] [PREFIX prefix] [BCAST] [OPTIN] [OPTOUT] [NOLOOP]
+```
 
 
 

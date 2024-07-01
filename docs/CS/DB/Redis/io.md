@@ -1,5 +1,43 @@
 ## Introduction
 
+
+
+Multi I/O
+
+
+
+**主要流程**：
+
+1. 主线程负责接收建立连接请求，获取 `socket` 放入全局等待读处理队列；
+2. 主线程通过轮询将可读 `socket` 分配给 IO 线程；
+3. 主线程阻塞等待 IO 线程读取 `socket` 完成；
+4. 主线程执行 IO 线程读取和解析出来的 Redis 请求命令；
+5. 主线程阻塞等待 IO 线程将指令执行结果回写回 `socket`完毕；
+6. 主线程清空全局队列，等待客户端后续的请求
+
+![](https://mmbiz.qpic.cn/mmbiz_png/EoJib2tNvVtficyIzKOicibvLa33THndmjqmSibCy8KnXf0ZE3WRyWAfCUSgicDfaictMhgySliaQ7f4nvfqdecoNKJX6A/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+
+
+
+
+```config
+io-threads-do-reads yes
+io-threads 4
+```
+
+4 核的机器建议设置为 2 或 3 个线程，8核的建议设置为 6 个线程，线程数一定要小于机器核数。
+
+Redis 的多线程网络模型实际上并不是一个标准的 `Multi-Reactors/Master-Workers`模型。
+
+Redis 的多线程方案中，I/O 线程任务仅仅是通过 socket 读取客户端请求命令并解析，却没有真正去执行命令。
+
+所有客户端命令最后还需要回到主线程去执行，因此对多核的利用率并不算高，而且每次主线程都必须在分配完任务之后忙轮询等待所有 I/O 线程完成任务之后才能继续执行其他逻辑。
+
+
+
+
+
 ```c
 // bio.h
 /* Background job opcodes */
