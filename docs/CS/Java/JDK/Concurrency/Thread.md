@@ -513,7 +513,9 @@ static void *thread_native_entry(Thread *thread) {
 
 ### Thread::start
 
-`Set RUNNABLE before os::start_thread(thread)`
+Initialize the thread state to RUNNABLE before starting this thread.
+
+Can not set it after the thread started because we do not know the exact thread state at that time. It could be in MONITOR_WAIT or in SLEEPING or some other state. 
 
 
 ```cpp
@@ -523,11 +525,7 @@ void Thread::start(Thread* thread) {
   // being called from a Java method synchronized on the Thread object.
   if (!DisableStartThread) {
     if (thread->is_Java_thread()) {
-      // Initialize the thread state to RUNNABLE before starting this thread.
-      // Can not set it after the thread started because we do not know the
-      // exact thread state at that time. It could be in MONITOR_WAIT or
-      // in SLEEPING or some other state.
-      java_lang_Thread::set_thread_status(((JavaThread*)thread)->threadObj(),
+     java_lang_Thread::set_thread_status(((JavaThread*)thread)->threadObj(),
                                           java_lang_Thread::RUNNABLE);
     }
     os::start_thread(thread);
@@ -767,13 +765,10 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 
 ```cpp
 //objectMonitor.cpp
-// Note: a subset of changes to ObjectMonitor::wait()
-// will need to be replicated in complete_exit
 void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
   Thread * const Self = THREAD;
   JavaThread *jt = (JavaThread *)THREAD;
 
-  // Throw IMSX or IEX.
   CHECK_OWNER();
 
   EventJavaMonitorWait event;
@@ -1376,7 +1371,7 @@ nor does the compiler have to reload values cached in registers after a call to 
 if millis = 0, `os::naked_yield()` like [Thread#yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield)
 ```cpp
 
-```c
+​```c
 //Thread.c
 static JNINativeMethod methods[] = {
     {"sleep",            "(J)V",       (void *)&JVM_Sleep},
