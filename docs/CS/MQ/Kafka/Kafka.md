@@ -780,6 +780,61 @@ The protocol is kept quite simple to allow for future implementation of clients 
 
 ## Tuning
 
+
+
+### performance
+
+
+
+Broker
+
+```properties
+num.network.threads=8
+num.io.threads=16
+socket.send.buffer.bytes=102400
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+```
+
+
+
+- OS fast file system ZFS, mount -o noatime swappiness low  Big pagecache log.segment.bytes
+- JVM 6-8G
+- Broker keep the same version with clients. num.repclia.fetchers
+- producer batch size linger.ms compress acks retries buffer
+- consumer fetch.min.bytes
+
+#### Throutput
+
+broker incr num.repclia.fetchers
+
+procuder:
+incr batch.size
+incr linger.ms
+compression
+acks=0/1
+retries=0
+incr buffer.memory
+
+max.request.size
+
+Consumer
+
+multi-thread consume
+incr fetch.min.bytes
+
+#### Latency
+
+broker incr num.repclia.fetchers
+
+linger.ms=0
+none compression
+acks=1
+
+fetch.min.bytes=1
+
+
+
 JVM 堆大小设置成 6GB
 
 ```

@@ -1427,7 +1427,7 @@ Append the given messages starting with the given offset. Add an entry to the in
   }
 
 ```
-  
+
 ## read log
 
 ### handleFetchRequest
@@ -3131,17 +3131,17 @@ However, when looking up index, the standard binary search algorithm is not cach
  They are much less likely to be in the page cache, than the other pages. 
  The 1st lookup, after the 1st index entry in page #13 is appended, is likely to have to read page #7 and page #10 from disk (page fault), which can take up to more than a second. 
  In our test, this can cause the at-least-once produce latency to jump to about 1 second from a few ms.
- 
+
  Here, we use a more cache-friendly lookup algorithm:
  if (target > indexEntry[end - N]) // if the target is in the last N entries of the index
     binarySearch(end - N, end)
  else
     binarySearch(begin, end - N)
- 
+
  If possible, we only look up in the last N entries of the index. By choosing a proper constant N, all the in-sync
  lookups should go to the 1st branch. We call the last N entries the "warm" section. As we frequently look up in this
  relatively small section, the pages containing this section are more likely to be in the page cache.
- 
+
 **We set N (_warmEntries) to 8192, because**
 1. This number is small enough to guarantee all the pages of the "warm" section is touched in every warm-section lookup. So that, the entire warm section is really "warm".
    When doing warm-section lookup, following 3 entries are always touched: indexEntry(end), indexEntry(end-N), and indexEntry((end*2 -N)/2). 
@@ -3310,7 +3310,7 @@ No attempt is made to checksum the contents of this file, in the event of a cras
 
 
 Flush any log which has exceeded its flush interval and has unwritten messages.
- 
+
 ```scala
 // LogManager
 def startup(topicNames: Set[String]): Unit = {
@@ -3671,38 +3671,7 @@ followers drop the data > local HW and sync from the new leader
 
 ## Tuning
 
-performance
 
-- OS fast file system ZFS, mount -o noatime swappiness low  Big pagecache log.segment.bytes
-- JVM 6-8G
-- Broker keep the same version with clients. num.repclia.fetchers
-- producer batch size linger.ms compress acks retries buffer
-- consumer fetch.min.bytes
-
-For throutput
-
-broker incr num.repclia.fetchers
-
-procuder:
-incr batch.size
-incr linger.ms
-compression
-acks=0/1
-retries=0
-incr buffer.memory
-
-multi-thread consume
-incr fetch.min.bytes
-
-for delay
-
-broker incr num.repclia.fetchers
-
-linger.ms=0
-none compression
-acks=1
-
-fetch.min.bytes=1
 
 
 ### log
