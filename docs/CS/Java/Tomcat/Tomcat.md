@@ -138,17 +138,18 @@ Fig.2. Tomcat
 
 <div style="text-align: center;">
 
+
 ```dot
 strict digraph  {
-rankdir=LR;
-autosize=false;
- size="30.0, 38.3";
+  rankdir=LR;
+  autosize=false;
+  size="15.0, 5";
   node [shape=box];
 
   User;
 
-  Acceptor -> Poller [label="Channel"]
-  Poller -> Executor [label="SocketProcessor"]
+  Acceptor -> Poller
+  Poller -> Executor
   Processor;
   Executor -> Processor 
   
@@ -200,17 +201,17 @@ autosize=false;
             Processor -> Adapter;
             Adapter -> Mapper;
          
-            {rank="same"; Executor;Processor;Adapter;}
+            {rank="same"; Executor;Processor;}
         }
 
         subgraph cluster_Engine {
             label="Engine"
-            Engine_Valve [label="Valve"];
         
               subgraph cluster_Engine_Pipeline {
                 label="Pipeline"
+                Engine_Valve [label="Valve"];
+                
                 StanardEngineValve[label="Stanard\nEngineValve"]
-                {rank="same"; Engine_Valve;StanardEngineValve;}
               }  
              Adapter -> Engine_Valve;
              Engine_Valve -> StanardEngineValve;
@@ -218,29 +219,27 @@ autosize=false;
                 label="Host"
                 subgraph cluster_Host_Pipeline {
                   label="Pipeline"
+                  Host_Valve [label="Valve"];
+                  
                   StandardHostValve[label="Standard\nHostValve"]
-                  {rank="same"; Host_Valve;StandardHostValve;}
                 }
-                Host_Valve [label="Valve"];
                 subgraph cluster_Context {
                     label="Context"
                     autosize=false;
                     size="10.0, 18.3";
                     subgraph cluster_Engine_Pipeline {
                       label="Pipeline"
+                      Context_Valve [label="Valve"];
                       StandardContextValve[label="Standard\nContextValve"]
-                      {rank="same"; Context_Valve;StandardContextValve;}
                     }  
-                    Context_Valve [label="Valve"];
                     subgraph cluster_Wrapper_1 {
                         label="Wrapper"
                     
                         subgraph cluster_Host_Pipeline {
                           label="Pipeline"
+                          Wrapper_Valve_1 [label="Valve"];
                           StandardWrapperValve[label="Standard\nWrapperValve"]
-                          {rank="same"; Wrapper_Valve_1;StandardWrapperValve;}
                         }
-                        Wrapper_Valve_1 [label="Valve"];
                         StandardWrapperValve;
                         Servlet_1[label="Servlet"];
             
@@ -258,6 +257,7 @@ autosize=false;
 }
 
 ```
+
 
 </div>
 
