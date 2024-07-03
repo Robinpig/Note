@@ -16,9 +16,13 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 
 高效的数据结构
 
+整个 Redis 就是一个全局 哈希表，他的时间复杂度是 O(1)，而且为了防止哈希冲突导致链表过长，Redis 会执行 rehash 操作，扩充 哈希桶数量，减少哈希冲突。并且防止一次性 重新映射数据过大导致线程阻塞，采用 渐进式 rehash。巧妙的将一次性拷贝分摊到多次请求过程后总，避免阻塞。
+
+同时根据实际存储的数据类型选择不同编码
+
 线程模型
 
-
+保证了每个操作的原子性，也减少了线程的上下文切换和竞争
 
 > It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound. 
 > For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.
@@ -27,7 +31,7 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 
 网络I/O模型  
 
-
+IO 多路复用，使用了单线程来轮询描述符，将数据库的开、关、读、写都转换成了事件，Redis 采用自己实现的事件分离器，效率比较高。
 
 主从复制 哨兵集群 Cluster分片集群
 
