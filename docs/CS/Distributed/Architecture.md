@@ -135,6 +135,16 @@ Monolithic apps consist of interdependent, indivisible units and feature very lo
 SOA is broken into smaller, moderately coupled services, and features slow development.
 Microservices are very small, loosely coupled independent services and feature rapid continuous development.
 
+
+微服务架构，第⼀阶段要解决服务间的发现问题和相互通信问题，
+这是微服务框架所覆盖的基本功能。第⼆阶段要解决微服务应⽤的交付和规模化运维问题，这些是容器和Ks的领域
+
+第三阶段随着微服务架构复杂化，分布式场景下排查和诊断效
+率急剧下降开始成为开发者主要痛点，因此⼜催⽣了分布式链路跟踪和可观测性技术
+
+微服务治理
+
+
 #### Serverless architecture
 
 Serverless architecture is a cloud computing approach to building and running apps and services without the need for infrastructure management.
