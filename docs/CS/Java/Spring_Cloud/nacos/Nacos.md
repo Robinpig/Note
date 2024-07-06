@@ -20,6 +20,10 @@ Nacos supports both transport layer (PING or TCP) health check and application l
 For the health check of complex clouds and network topologies(such as VPC, Edge Service etc), Nacos provides both agent mode and server mode health check. 
 Nacos also provide a unity service health dashboard to help you manage the availability and traffic of services.
 
+采⽤了阿⾥巴巴内部⾃研的 Distro 协议来实现数据弱⼀致性同步。其中
+所有节点都将存储集群内所有服务元数据，因此都可以提供数据读取服务，但每个节点只负责
+⼀部分客户端的数据写服务
+
 ### Dynamic configuration management
 
 [Dynamic configuration](/docs/CS/Java/Spring_Cloud/nacos/config.md) service allows you to manage the configuration of all applications and services in a centralized, externalized and dynamic manner across all environments.

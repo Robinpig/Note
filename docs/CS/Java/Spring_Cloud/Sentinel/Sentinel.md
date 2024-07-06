@@ -1,8 +1,6 @@
 ## Introduction
 
-Sentinel is a powerful flow control component that takes "flow" as the breakthrough point and covers multiple fields including flow control, 
-concurrency limiting, circuit breaking, and adaptive system protection to guarantee the reliability of microservices.
-
+Sentinel 是面向分布式、多语言异构化服务架构的流量治理组件，主要以流量为切入点，从流量路由、流量控制、流量整形、熔断降级、系统自适应过载保护、热点流量防护等多个维度来帮助开发者保障微服务的稳定性。
 
 - core
 - dashboard
@@ -37,6 +35,10 @@ spring.cloud.sentinel.transport.dashboard = localhost:8080
 
 - [How Sentinel works](/docs/CS/Java/Spring_Cloud/Sentinel)
 - [CircuitBreaker](/docs/CS/Java/Spring_Cloud/Sentinel/CircuitBreaker.md)
+
+
+
+
 
 
 
