@@ -7,6 +7,8 @@ SchedulerX 是阿里巴巴自研的分布式任务调度平台（兼容开源 XX
 
 
 
+> 基于Akka?
+
 和其它开源产品对比
 
 | **项目**     | **Quartz**                     | **Elastic-Job**                    | **XXL-JOB**                                | **SchedulerX**                                               |
@@ -26,6 +28,13 @@ SchedulerX 是阿里巴巴自研的分布式任务调度平台（兼容开源 XX
 
 
 ## Architecture
+
+
+
+server
+
+
+configserver
 
 
 
@@ -106,7 +115,11 @@ public class MyHelloJob extends JavaProcessor {
     }
 }              
 ```
+在应用管理页面查看实例总数。
 
+如果实例总数为0，说明应用接入失败。请检查、修改本地应用。
+
+如果实例总数不为0，显示接入的实例个数，说明应用接入成功。在操作列单击查看实例，即可在连接实例对话框中查看实例列表。
 
 
 ## 定时调度
