@@ -119,8 +119,9 @@ ZooKeeper is very fast and very simple. Since its goal, though, is to be a basis
 - Reliability - Once an update has been applied, it will persist from that time forward until a client overwrites the update.
 - Timeliness - The clients view of the system is guaranteed to be up-to-date within a certain time bound.
 
-The consistency guarantees of ZooKeeper lie between sequential consistency and linearizability.
-Write operations in ZooKeeper are linearizable. In other words, each write will appear to take effect atomically at some point between when the client issues the request and receives the corresponding response.
+**The consistency guarantees of ZooKeeper lie between sequential consistency and linearizability.
+Write operations in ZooKeeper are linearizable.**
+In other words, each write will appear to take effect atomically at some point between when the client issues the request and receives the corresponding response.
 Read operations in ZooKeeper are not linearizable since they can return potentially stale data.
 This is because a read in ZooKeeper is not a quorum operation and a server will respond immediately to a client that is performing a read.
 ZooKeeper does this because it prioritizes performance over consistency for the read use case.

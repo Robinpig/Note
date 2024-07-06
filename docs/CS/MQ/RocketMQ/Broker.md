@@ -126,6 +126,33 @@ therad pool per NettyRequestProcessor
 
 ## storage
 
+消息存储机制主要定义以下关键问题：
+
+- 消息存储管理粒度：Apache RocketMQ 按存储节点管理消息的存储时长，并不是按照主题或队列粒度来管理。
+- 消息存储判断依据：消息存储按照存储时间作为判断依据，相对于消息数量、消息大小等条件，使用存储时间作为判断依据，更利于业务方对消息数据的价值进行评估。
+- 消息存储和是否消费状态无关：Apache RocketMQ 的消息存储是按照消息的生产时间计算，和消息是否被消费无关。按照统一的计算策略可以有效地简化存储机制。
+
+
+
+
+在 RocketMQ 中不论是 CommitLog 还是 ConsumerQueue 都采用了 mmap
+
+ConsumerQueue 结构
+
+
+ConsumeQueue's store unit. Format:
+```
+┌───────────────────────────────┬───────────────────┬───────────────────────────────┐
+│    CommitLog Physical Offset  │      Body Size    │            Tag HashCode       │
+│          (8 Bytes)            │      (4 Bytes)    │             (8 Bytes)         │
+├───────────────────────────────┴───────────────────┴───────────────────────────────┤
+│                                     Store Unit                                    │
+```
+ConsumeQueue's store unit. Size: CommitLog Physical Offset(8) + Body Size(4) + Tag HashCode(8) = 20 Bytes
+
+
+
+
 Files
 
 - CommitLog
@@ -796,6 +823,124 @@ indexKeyHashMethod
 
     }
 
+```
+
+
+transferMsgByHeap
+
+
+MappedFileQueue
+```java
+protected MappedFile doCreateMappedFile(String nextFilePath, String nextNextFilePath) {
+        MappedFile mappedFile = null;
+
+        if (this.allocateMappedFileService != null) {
+            mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
+                    nextNextFilePath, this.mappedFileSize);
+        } else {
+            try {
+                mappedFile = new DefaultMappedFile(nextFilePath, this.mappedFileSize);
+            } catch (IOException e) {
+                log.error("create mappedFile exception", e);
+            }
+        }
+
+        if (mappedFile != null) {
+            if (this.mappedFiles.isEmpty()) {
+                mappedFile.setFirstCreateInQueue(true);
+            }
+            this.mappedFiles.add(mappedFile);
+        }
+
+        return mappedFile;
+    }
+```
+
+
+```java
+public class AllocateMappedFileService extends ServiceThread {
+    private static int waitTimeOut = 1000 * 5;
+    private ConcurrentMap<String, AllocateRequest> requestTable =
+            new ConcurrentHashMap<>();
+    private PriorityBlockingQueue<AllocateRequest> requestQueue =
+            new PriorityBlockingQueue<>();
+    private volatile boolean hasException = false; 
+
+    public MappedFile putRequestAndReturnMappedFile(String nextFilePath, String nextNextFilePath, int fileSize) {
+        int canSubmitRequests = 2;
+        if (this.messageStore.isTransientStorePoolEnable()) {
+            if (this.messageStore.getMessageStoreConfig().isFastFailIfNoBufferInStorePool()
+                    && BrokerRole.SLAVE != this.messageStore.getMessageStoreConfig().getBrokerRole()) { //if broker is slave, don't fast fail even no buffer in pool
+                canSubmitRequests = this.messageStore.remainTransientStoreBufferNumbs() - this.requestQueue.size();
+            }
+        }
+
+        AllocateRequest nextReq = new AllocateRequest(nextFilePath, fileSize);
+        boolean nextPutOK = this.requestTable.putIfAbsent(nextFilePath, nextReq) == null;
+
+        if (nextPutOK) {
+            if (canSubmitRequests <= 0) {
+                log.warn("[NOTIFYME]TransientStorePool is not enough, so create mapped file error, " +
+                        "RequestQueueSize : {}, StorePoolSize: {}", this.requestQueue.size(), this.messageStore.remainTransientStoreBufferNumbs());
+                this.requestTable.remove(nextFilePath);
+                return null;
+            }
+            boolean offerOK = this.requestQueue.offer(nextReq);
+            if (!offerOK) {
+                log.warn("never expected here, add a request to preallocate queue failed");
+            }
+            canSubmitRequests--;
+        }
+
+        AllocateRequest nextNextReq = new AllocateRequest(nextNextFilePath, fileSize);
+        boolean nextNextPutOK = this.requestTable.putIfAbsent(nextNextFilePath, nextNextReq) == null;
+        if (nextNextPutOK) {
+            if (canSubmitRequests <= 0) {
+                log.warn("[NOTIFYME]TransientStorePool is not enough, so skip preallocate mapped file, " +
+                        "RequestQueueSize : {}, StorePoolSize: {}", this.requestQueue.size(), this.messageStore.remainTransientStoreBufferNumbs());
+                this.requestTable.remove(nextNextFilePath);
+            } else {
+                boolean offerOK = this.requestQueue.offer(nextNextReq);
+                if (!offerOK) {
+                    log.warn("never expected here, add a request to preallocate queue failed");
+                }
+            }
+        }
+
+        if (hasException) {
+            log.warn(this.getServiceName() + " service has exception. so return null");
+            return null;
+        }
+
+        AllocateRequest result = this.requestTable.get(nextFilePath);
+        try {
+            if (result != null) {
+                messageStore.getPerfCounter().startTick("WAIT_MAPFILE_TIME_MS");
+                boolean waitOK = result.getCountDownLatch().await(waitTimeOut, TimeUnit.MILLISECONDS);
+                messageStore.getPerfCounter().endTick("WAIT_MAPFILE_TIME_MS");
+                if (!waitOK) {
+                    log.warn("create mmap timeout " + result.getFilePath() + " " + result.getFileSize());
+                    return null;
+                } else {
+                    this.requestTable.remove(nextFilePath);
+                    return result.getMappedFile();
+                }
+            } else {
+                log.error("find preallocate mmap failed, this never happen");
+            }
+        } catch (InterruptedException e) {
+            log.warn(this.getServiceName() + " service has exception. ", e);
+        }
+
+        return null;
+    }
+}
+```
+
+```java
+public class AllocateMappedFileService extends ServiceThread {
+    
+}
 ```
 
 ### sync

@@ -14,6 +14,25 @@ The binary log has two important purposes:
   These events bring databases up to date from the point of the backup.
 
 
+## Binary Logging Formats
+
+The server uses several logging formats to record information in the binary log:
+
+- Replication capabilities in MySQL originally were based on propagation of SQL statements from source to replica. 
+  This is called statement-based logging. You can cause this format to be used by starting the server with --binlog-format=STATEMENT.
+- In row-based logging (the default), the source writes events to the binary log that indicate how individual table rows are affected. 
+  You can cause the server to use row-based logging by starting it with --binlog-format=ROW.
+- A third option is also available: mixed logging. 
+  With mixed logging, statement-based logging is used by default, but the logging mode switches automatically to row-based in certain cases as described below. 
+  You can cause MySQL to use mixed logging explicitly by starting mysqld with the option --binlog-format=MIXED.
+
+With statement-based replication, there may be issues with replicating nondeterministic statements. 
+In deciding whether or not a given statement is safe for statement-based replication, MySQL determines whether it can guarantee that the statement can be replicated using statement-based logging. 
+If MySQL cannot make this guarantee, it marks the statement as potentially unreliable and issues the warning, Statement may not be safe to log in statement format.
+You can avoid these issues by using MySQL's row-based replication instead.
+
+
+## file sync
 
 By default, the binary log is synchronized to disk at each write (sync_binlog=1).
 If sync_binlog was not enabled, and the operating system or machine (not only the MySQL server) crashed, there is a chance that the last statements of the binary log could be lost.
@@ -36,6 +55,28 @@ This ensures that the binary log reflects the exact data of InnoDB tables, and t
 If the MySQL server discovers at crash recovery that the binary log is shorter than it should have been, it lacks at least one successfully committed InnoDB transaction. 
 This should not happen if sync_binlog=1 and the disk/file system do an actual sync when they are requested to (some do not), so the server prints an error message The binary log file_name is shorter than its expected size. 
 In this case, this binary log is not correct and replication should be restarted from a fresh snapshot of the source's data.
+
+
+## sync
+
+
+flinkcdc
+
+### ES
+
+使用 canal 将 MySQL 增量数据同步到 ES 。
+
+MySQL , 需要先开启 Binlog 写入功能，配置 binlog-format 为 ROW 模式
+
+授权 canal 链接 MySQL 账号具有作为 MySQL slave
+
+```mysql
+CREATE USER canal IDENTIFIED BY 'canal';  
+GRANT SELECT, REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'canal'@'%';
+-- GRANT ALL PRIVILEGES ON *.* TO 'canal'@'%' ;
+FLUSH PRIVILEGES;
+```
+
 
 
 

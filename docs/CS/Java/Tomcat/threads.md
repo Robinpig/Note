@@ -1,5 +1,11 @@
 ## Introduction
 
+名字里带有Acceptor的线程负责接收浏览器的连接请求。
+名字里带有Poller的线程，其实内部是个Selector，负责侦测IO事件。
+精选留言 (13)  写留言名字里带有Catalina-exec的是工作线程，负责处理请求。
+名字里带有 Catalina-utility的是Tomcat中的工具线程，主要是干杂活，比如在后台定期检查
+Session是否过期、定期检查Web应用是否更新（热部署热加载）、检查异步Servlet的连接是否
+过期等等。
 
 ## StandardThreadExecutor
 
@@ -65,10 +71,8 @@ createExecutor by Endpoint
 
 ### execute
 
-Executes the given command at some time in the future. 
-The command may execute in a new thread, in a pooled thread, or in the calling thread, at the discretion of the Executor implementation. 
-- If no threads are available, it will be added to the work queue. 
-- **If the work queue is full, the system will wait for the specified time and it throw a RejectedExecutionException if the queue is still full after that.**
+
+与JDK ThreadPoolExecutor不同的是 在抛出RejectedExecutionException后会再次尝试任务入队
 
 ```java
 public class ThreadPoolExecutor extends java.util.concurrent.ThreadPoolExecutor {
@@ -100,11 +104,11 @@ public class ThreadPoolExecutor extends java.util.concurrent.ThreadPoolExecutor 
 
 ### TaskQueue
 
-As task queue specifically designed to run with a thread pool executor. 
-The task queue is optimised to properly utilize threads within a thread pool executor. 
-If you use a normal queue, the executor will spawn threads when there are idle threads and you wont be able to force items onto the queue itself.
+继承自无界队列LinkedBlockingQueue的TaskQueue需要自己维护offer的处理
+因为默认线程池使用无界队列是无法创建非核心线程的
 
-**If we have less threads than maximum force creation of a new thread.**
+当前线程数大于核心线程数、小于最大线程数，并且已提交的任务个数大于当前线程数
+时，也就是说线程不够用了，但是线程数又没达到极限，会去创建新的线程 这样能做到eager thread pool 尽快创建非核心线程
 
 ```java
 public class TaskQueue extends LinkedBlockingQueue<Runnable> {
@@ -118,11 +122,11 @@ public class TaskQueue extends LinkedBlockingQueue<Runnable> {
         if (parent.getPoolSize() == parent.getMaximumPoolSize()) {
             return super.offer(o);
         }
-        //we have idle threads, just add it to the queue
+        //提交任务数小于当前线程数 入队 此时线程数还未到最大
         if (parent.getSubmittedCount()<=(parent.getPoolSize())) {
             return super.offer(o);
         }
-        //if we have less threads than maximum force creation of a new thread
+        //提交任务数大于当前线程数 当前线程数小于最大线程数 允许创建新线程
         if (parent.getPoolSize()<parent.getMaximumPoolSize()) {
             return false;
         }
@@ -133,10 +137,6 @@ public class TaskQueue extends LinkedBlockingQueue<Runnable> {
     @Override
     public int remainingCapacity() {
         if (forcedRemainingCapacity != null) {
-            // ThreadPoolExecutor.setCorePoolSize checks that
-            // remainingCapacity==0 to allow to interrupt idle threads
-            // I don't see why, but this hack allows to conform to this
-            // "requirement"
             return forcedRemainingCapacity.intValue();
         }
         return super.remainingCapacity();

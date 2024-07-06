@@ -171,6 +171,22 @@ Debug with [GDB](/docs/CS/C/GDB.md) or [Visual Studio Code]().
 
 [segmentation fault in the jvm](https://mail.openjdk.org/pipermail/jdk7-dev/2011-March/001983.html)
 
+## Upgrade
+
+Upgrade causes:
+- performance improvement, such as JVM(GC)
+- Framework supported, like Spring
+
+Upgrade concern:
+- dependencies, such as xml, 
+
+8 to 11
+
+Maven, Compile 
+
+jdwp host/ip from 0.0.0.0 to localhost and not support to debug remotely
+
+
 ## References
 
 1. [The Java Language Environment: Contents A White Paper](https://www.oracle.com/java/technologies/language-environment.html)

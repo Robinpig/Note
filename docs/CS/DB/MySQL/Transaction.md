@@ -225,10 +225,28 @@ but do not block each other because the rows are nonconflicting.
 #### AUTO-INC Locks
 
 An `AUTO-INC` lock is a special table-level lock taken by transactions inserting into tables with `AUTO_INCREMENT` columns.
-In the simplest case, if one transaction is inserting values into the table, any other transactions must wait to do their own inserts into that table, so that rows inserted by the first transaction receive consecutive primary key values.
+In the simplest case, if one transaction is inserting values into the table, any other transactions must wait to do their own inserts into that table,
+so that rows inserted by the first transaction receive consecutive primary key values.
 
 The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking.
 It allows you to choose how to trade off between predictable sequences of auto-increment values and maximum concurrency for insert operations.
+
+
+```sql
+SHOW VARIABLES LIKE 'innodb_autoinc_lock_mode'; -- 2
+```
+
+We cannot create yet another interval as we already contain one. 
+This situation can happen. 
+Assume innodb_autoinc_lock_mode>=1 and 
+CREATE TABLE T(A INT AUTO_INCREMENT PRIMARY KEY) ENGINE=INNODB;
+
+INSERT INTO T VALUES (NULL),(NULL),(1025),(NULL);
+      
+Then InnoDB will reserve [1,4] (because of 4 rows) then [1026,1026]. 
+Only the first interval is important for statement-based binary logging as it tells the starting point. 
+So we ignore the second interval:
+
 
 ### Source Code
 

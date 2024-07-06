@@ -17,7 +17,7 @@ spring:
     username: ...
     password: ...
     driverClassname: ...
-```	
+```
 
 Spring maps these settings to an instance of org.springframework.boot.autoconfigure.jdbc.DataSourceProperties.
 So, to use multiple data sources, we need to declare multiple beans with different mappings within Spring’s application context.
@@ -113,7 +113,7 @@ public abstract class TransactionCallbackWithoutResult implements TransactionCal
 
 ## Declarative transaction
 
-The Spring Framework’s declarative transaction management is made possible with Spring aspect-oriented programming (AOP).
+The Spring Framework’s declarative transaction management is made possible with Spring [aspect-oriented programming](/docs/CS/Java/Spring/AOP.md) (AOP).
 The combination of AOP with transactional metadata yields an AOP proxy that uses a TransactionInterceptor in conjunction with an appropriate PlatformTransactionManager implementation to drive transactions around method invocations.
 
 Conceptually, calling a method on a transactional proxy looks like this:
@@ -284,25 +284,25 @@ public class TransactionInterceptor extends TransactionAspectSupport implements 
 			@Nullable TransactionAttribute txAttr, String joinpointIdentification,
 			@Nullable TransactionStatus status) {
 
-		TransactionInfo txInfo = new TransactionInfo(tm, txAttr, joinpointIdentification);
-		if (txAttr != null) {
-			// We need a transaction for this method...
-			if (logger.isTraceEnabled()) {
-				logger.trace("Getting transaction for [" + txInfo.getJoinpointIdentification() + "]");
-			}
-			// The transaction manager will flag an error if an incompatible tx already exists.
-			txInfo.newTransactionStatus(status);
-		}
-		else {
-			// The TransactionInfo.hasTransaction() method will return false. We created it only
-			// to preserve the integrity of the ThreadLocal stack maintained in this class.
+        TransactionInfo txInfo = new TransactionInfo(tm, txAttr, joinpointIdentification);
+        if (txAttr != null) {
+            // We need a transaction for this method...
+            if (logger.isTraceEnabled()) {
+                logger.trace("Getting transaction for [" + txInfo.getJoinpointIdentification() + "]");
+            }
+            // The transaction manager will flag an error if an incompatible tx already exists.
+            txInfo.newTransactionStatus(status);
+        } else {
+            // The TransactionInfo.hasTransaction() method will return false. We created it only
+            // to preserve the integrity of the ThreadLocal stack maintained in this class.
 
-		// We always bind the TransactionInfo to the thread, even if we didn't create
-		// a new transaction here. This guarantees that the TransactionInfo stack
-		// will be managed correctly even if no transaction was created by this aspect.
-		txInfo.bindToThread();
-		return txInfo;
-	}
+            // We always bind the TransactionInfo to the thread, even if we didn't create
+            // a new transaction here. This guarantees that the TransactionInfo stack
+            // will be managed correctly even if no transaction was created by this aspect.
+            txInfo.bindToThread();
+            return txInfo;
+        }
+    }
 ```
 
 ### TransactionInterceptor
@@ -497,6 +497,25 @@ Note that synchronizations can implement the `org.springframework.core.Ordered` 
 
 ```java
 public abstract class TransactionSynchronizationManager {
+
+    private static final ThreadLocal<Map<Object, Object>> resources =
+            new NamedThreadLocal<>("Transactional resources");
+
+    private static final ThreadLocal<Set<TransactionSynchronization>> synchronizations =
+            new NamedThreadLocal<>("Transaction synchronizations");
+
+    private static final ThreadLocal<String> currentTransactionName =
+            new NamedThreadLocal<>("Current transaction name");
+
+    private static final ThreadLocal<Boolean> currentTransactionReadOnly =
+            new NamedThreadLocal<>("Current transaction read-only status");
+
+    private static final ThreadLocal<Integer> currentTransactionIsolationLevel =
+            new NamedThreadLocal<>("Current transaction isolation level");
+
+    private static final ThreadLocal<Boolean> actualTransactionActive =
+            new NamedThreadLocal<>("Actual transaction active");
+    
     public static void registerSynchronization(TransactionSynchronization synchronization)
             throws IllegalStateException {
         Set<TransactionSynchronization> synchs = synchronizations.get();
@@ -549,7 +568,55 @@ AbstractRoutingDataSource
 
 Pattern-based use `contains()`
 
+## Tuning
 
+### 事务失效
+
+
+Spring相关
+- 未被Spring管理
+- 多线程调用 数据库连接可能会不一样 事务不同, 例如使用@Async的函数是不支持事务 但函数内部调用的事务方法支持事务
+- 事务传播特性设置不使用事务(较少)
+
+
+声明式事务基于[AOP](/docs/CS/Java/Spring/AOP.md) 故导致函数无法被代理的情况
+- 函数access flag非 public
+- 函数是final或者static
+- 当前类里其它方法内部调用
+
+异常相关
+- catch住异常后Spring无法感知异常做回滚处理
+- 设置的回滚异常和实际抛出异常不对应
+- 同个事务里子事务标记回滚 但是在外层catch住后 事务commit `UnexpectedRollbackException`
+
+其它情况
+- 表不支持事务
+
+
+### 长事务
+
+长事务问题
+
+长事务引发的常见危害有：
+
+- 数据库连接池被占满，应用无法获取连接资源；
+- 容易引发数据库死锁；
+- 数据库回滚时间长；
+- 在主从架构中会导致主从延时变大。
+
+服务系统开始出现故障：数据库监控平台一直收到告警短信，数据库连接不足，出现大量死锁；日志显示调用流程引擎接口出现大量超时；同时一直提示CannotGetJdbcConnectionException，数据库连接池连接占满。
+
+
+Solution
+
+长事务少用 `@Transactional` 使用编程式事务管理
+
+拆分粒度 
+- select放到事务外
+- 减少remote call, 发MQ消息, 其它Redis MongoDB, 使用重试+补偿实现最终一致性
+- 数据分批处理 
+
+可延时的行为 在事务外发送MQ消息 异步处理
 
 ## Links
 
@@ -560,3 +627,4 @@ Pattern-based use `contains()`
 
 ## References
 1. [Transaction Management - Spring](https://docs.spring.io/spring-framework/docs/current/reference/html/data-access.html#transaction)
+2. [Spring Boot项目业务代码中使用@Transactional事务失效踩坑点总结](https://mp.weixin.qq.com/s/S0-LUjC_f6ybYQi-dfK_sA)

@@ -31,8 +31,31 @@ Connection isClose() or isValid()
 
 
 
-## PreparStatement
+## PrepareStatement
+
+提前生成执行计划
+- 性能稍微好一点
+- 执行引擎按照执行计划执行 可以防SQL注入
+
 It's safety to use #{} replace \${}
+
+## DriverManager
+
+
+
+NOTE: The javax. sql. DataSource interface, provides another way to connect to a data source. 
+The use of a DataSource object is the preferred means of connecting to a data source.
+As part of its initialization, the DriverManager class will attempt to load available JDBC drivers by using:
+
+The jdbc. drivers system property which contains a colon separated list of fully qualified class names of JDBC drivers. 
+Each driver is loaded using the system class loader:
+jdbc.drivers=foo.bah.Driver:wombat.sql.Driver:bad.taste.ourDriver
+
+Service providers of the `java.sql.Driver` class, that are loaded via the [service-provider loading](/docs/CS/Java/JDK/Basic/SPI.md) mechanism.
+ 
+
+
+
 
 
 ## Links

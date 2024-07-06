@@ -25,11 +25,16 @@ TimerTasks that are already scheduled but not yet executed are never run, and ne
 ## ScheduledExecutorService
 An ExecutorService that can schedule commands to run after a given delay, or to execute periodically.
 
-The schedule methods create tasks with various delays and return a task object that can be used to cancel or check execution. The scheduleAtFixedRate and scheduleWithFixedDelay methods create and execute tasks that run periodically until cancelled.
+The schedule methods create tasks with various delays and return a task object that can be used to cancel or check execution. 
+The scheduleAtFixedRate and scheduleWithFixedDelay methods create and execute tasks that run periodically until cancelled.
 
-Commands submitted using the Executor.execute(Runnable) and ExecutorService submit methods are scheduled with a requested delay of zero. Zero and negative delays (but not periods) are also allowed in schedule methods, and are treated as requests for immediate execution.
+Commands submitted using the Executor.execute(Runnable) and ExecutorService submit methods are scheduled with a requested delay of zero. 
+Zero and negative delays (but not periods) are also allowed in schedule methods, and are treated as requests for immediate execution.
 
-All schedule methods accept relative delays and periods as arguments, not absolute times or dates. It is a simple matter to transform an absolute time represented as a java.util.Date to the required form. For example, to schedule at a certain future date, you can use: schedule(task, date.getTime() - System.currentTimeMillis(), TimeUnit.MILLISECONDS). Beware however that expiration of a relative delay need not coincide with the current Date at which the task is enabled due to network time synchronization protocols, clock drift, or other factors.
+All schedule methods accept relative delays and periods as arguments, not absolute times or dates. 
+It is a simple matter to transform an absolute time represented as a java.util.Date to the required form. 
+For example, to schedule at a certain future date, you can use: schedule(task, date.getTime() - System.currentTimeMillis(), TimeUnit.MILLISECONDS). 
+Beware however that expiration of a relative delay need not coincide with the current Date at which the task is enabled due to network time synchronization protocols, clock drift, or other factors.
 
 The Executors class provides convenient factory methods for the ScheduledExecutorService implementations provided in this package.
 
@@ -39,17 +44,9 @@ The Executors class provides convenient factory methods for the ScheduledExecuto
 ```java
 public interface ScheduledExecutorService extends ExecutorService {
 
-    /**
-     * Creates and executes a one-shot action that becomes enabled
-     * after the given delay.
-     */
     public ScheduledFuture<?> schedule(Runnable command,
                                        long delay, TimeUnit unit);
 
-    /**
-     * Creates and executes a ScheduledFuture that becomes enabled after the
-     * given delay.
-     */
     public <V> ScheduledFuture<V> schedule(Callable<V> callable,
                                            long delay, TimeUnit unit);
 
@@ -92,12 +89,12 @@ class BeeperControl {
 
 ## ScheduledThreadPoolExecutor
 
-  *This class specializes ThreadPoolExecutor implementation by*
+This class specializes ThreadPoolExecutor implementation by
 
-    1. *Using a custom task type, ScheduledFutureTask for tasks, even those that don't require scheduling (i.e., those submitted using ExecutorService execute, not ScheduledExecutorService methods) which are treated as delayed tasks with a delay of zero.*
-    2. *Using a custom queue (DelayedWorkQueue), a variant of unbounded DelayQueue. The lack of capacity constraint and the fact that corePoolSize and maximumPoolSize are effectively identical simplifies some execution mechanics (see delayedExecute) compared to ThreadPoolExecutor.*
-    3. *Supporting optional run-after-shutdown parameters, which leads to overrides of shutdown methods to remove and cancel tasks that should NOT be run after shutdown, as well as different recheck logic when task (re)submission overlaps with a shutdown.*
-    4. *Task decoration methods to allow interception and instrumentation, which are needed because subclasses cannot otherwise override submit methods to get this effect. These don't have any impact on pool control logic though.*
+1. Using a custom task type, ScheduledFutureTask for tasks, even those that don't require scheduling (i.e., those submitted using ExecutorService execute, not ScheduledExecutorService methods) which are treated as delayed tasks with a delay of zero.
+2. Using a custom queue (DelayedWorkQueue), a variant of unbounded DelayQueue. The lack of capacity constraint and the fact that corePoolSize and maximumPoolSize are effectively identical simplifies some execution mechanics (see delayedExecute) compared to ThreadPoolExecutor.
+3. Supporting optional run-after-shutdown parameters, which leads to overrides of shutdown methods to remove and cancel tasks that should NOT be run after shutdown, as well as different recheck logic when task (re)submission overlaps with a shutdown.
+4. Task decoration methods to allow interception and instrumentation, which are needed because subclasses cannot otherwise override submit methods to get this effect. These don't have any impact on pool control logic though.
 
 
 
@@ -144,11 +141,14 @@ public int compareTo(Delayed other) {
 
 
 ## scheduleAtFixedRate
-Creates and executes a periodic action that becomes enabled first after the given initial delay, and subsequently with the given period; that is executions will commence after initialDelay then initialDelay+period, then initialDelay + 2 * period, and so on. 
+Creates and executes a periodic action that becomes enabled first after the given initial delay, and subsequently with the given period; 
+that is executions will commence after initialDelay then initialDelay+period, then initialDelay + 2 * period, and so on. 
 
-**If any execution of the task encounters an exception, subsequent executions are suppressed. Otherwise, the task will only terminate via cancellation or termination of the executor.**
+**If any execution of the task encounters an exception, subsequent executions are suppressed.** 
+Otherwise, the task will only terminate via cancellation or termination of the executor.
 
-**If any execution of this task takes longer than its period, then subsequent executions may start late, but will not concurrently execute.**
+If any execution of this task takes longer than its period, then subsequent executions may start late, but will not concurrently execute.
+
 ```java
 public ScheduledFuture<?> scheduleAtFixedRate(Runnable command,
                                               long initialDelay,
@@ -234,6 +234,11 @@ void ensurePrestart() {
 
 ## DelayedWorkQueue
 
+A DelayedWorkQueue is based on a heap-based data structure like those in DelayQueue and [PriorityQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=PriorityQueue), except that every ScheduledFutureTask also records its index into the heap array.
+This eliminates the need to find a task upon cancellation, greatly speeding up removal (down from O(n) to O(log n)), and reducing garbage retention that would otherwise occur by waiting for the element to rise to top before clearing.
+But because the queue may also hold RunnableScheduledFutures that are not ScheduledFutureTasks, we are not guaranteed to have such indices available, in which case we fall back to linear search. 
+(We expect that most tasks will not be decorated, and that the faster cases will be much more common.)
+
 Specialized delay queue. To mesh with TPE declarations, this class must be declared as a BlockingQueue  even though it can only hold RunnableScheduledFutures.
 
 ```java
@@ -313,3 +318,15 @@ public boolean offer(Runnable x) {
     return true;
 }
 ```
+## Tuning
+
+ScheduledThreadPoolExecutor内部对task做了catch, 出现异常的task将不再加入队列
+
+
+
+## Links
+- [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
+
+## References
+
+1. [踩了定时线程池的坑，导致公司损失几千万，血的教训](https://mp.weixin.qq.com/s/nZNyF_DAdV3T8z07ALXOFg)

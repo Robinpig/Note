@@ -142,6 +142,30 @@ RocketMQ架构上主要分为四部分，如上图所示：
   4. HA Service：高可用服务，提供Master Broker 和 Slave Broker之间的数据同步功能。
   5. Index Service：根据特定的Message key对投递到Broker的消息进行索引服务，以提供消息的快速查询。
 
+
+
+
+
+## Features
+
+### 消息过滤
+
+tag
+
+### 事务消息
+
+
+
+### 延时消息
+
+延时队列
+
+
+
+### 死信队列
+
+
+
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=RocketMQ)

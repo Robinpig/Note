@@ -1493,6 +1493,39 @@ CollectedHeap* G1Arguments::create_heap() {
 }
 ```
 
+## Tuning
+
+```shell
+java -XX:+PrintFlagsFinal -XX:+UnlockDiagnosticVMOptions -version
+```
+
+### OOM
+
+
+The -XX:HeapDumpOnOutOfMemoryError Option
+This option tells the Java HotSpot VM to generate a heap dump when an allocation from the Java heap or the permanent generation cannot be satisfied. 
+There is no overhead in running with this option, so it can be useful for production systems where the OutOfMemoryError exception takes a long time to surface.
+You can also specify this option at runtime with the MBeans tab in the JConsole utility.
+
+
+容器环境下
+- 无法生成dump文件
+  - 中间层目录没创建 FileNotFoundException
+  - 对外内存不足 
+
+
+
+```shell
+jmap -heap <pid>
+```
+
+dumpfile
+```shell
+jmap -dump:format=b
+```
+with jvisualvm
+
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)

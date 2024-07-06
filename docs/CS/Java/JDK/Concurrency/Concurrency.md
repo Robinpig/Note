@@ -478,6 +478,21 @@ If a thread holding a lock is permanently blocked (due to an infinite loop, dead
 
 
 
+## Tuning
+
+减少锁粒度 通常使用synchronized都是用小的方法体
+- 如Tocmat启动流程里就是在service层对engine,executors和connectors分别加synchronized
+
+
+使用原子变量或者CAS
+- Jetty启动线程池线程是在while循环里用CAS, 成功则继续往下创建线程 失败则continue循环下一轮
+
+并发容器的使用
+- 常见的CopyOnWriteArrayList适合读多写少的场景 如tomcat的监听器初始化后基本不变
+
+
+volatile
+- 常见于status的可见性 例如Tomcat
 
 
 

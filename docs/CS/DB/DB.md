@@ -17,6 +17,14 @@ To compare databases, it’s helpful to understand the use case in great detail 
 - Expected changes in any of these variables
 
 
+
+Type:
+- Based on Disk: B-Tree or LSM Tree
+- Based on memory: hashtable or skiplist
+- Storge layout: row or 
+- encode: protobuf or Thirft
+
+
 ### Memory- Versus Disk-Based
 
 Database systems store data in memory and on disk. In-memory database management systems (sometimes called main memory DBMS) store data primarily in memory and use the disk for recovery and logging. 

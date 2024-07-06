@@ -140,14 +140,14 @@ MySQL sometimes optimizes a query that has a LIMIT row_count clause and no HAVIN
 - If the server uses temporary tables to resolve a query, it uses the LIMIT row_count clause to calculate how much space is required.
 - If an index is not used for ORDER BY but a LIMIT clause is also present, the optimizer may be able to avoid using a merge file and sort the rows in memory using an in-memory filesort operation.
 
-If multiple rows have identical values in the ORDER BY columns, the server is free to return those rows in any order, and may do so differently depending on the overall execution plan. In other words, the sort order of those rows is nondeterministic with respect to the nonordered columns.
-
-One factor that affects the execution plan is LIMIT, so an ORDER BY query with and without LIMIT may return rows in different orders.
-
+If multiple rows have identical values in the ORDER BY columns, the server is free to return those rows in any order, and may do so differently depending on the overall execution plan. 
+In other words, the sort order of those rows is nondeterministic with respect to the nonordered columns.
+**One factor that affects the execution plan is LIMIT, so an ORDER BY query with and without LIMIT may return rows in different orders.**
 
 If it is important to ensure the same row order with and without LIMIT, include additional columns in the ORDER BY clause to make the order deterministic.
-
-For a query with an ORDER BY or GROUP BY and a LIMIT clause, the optimizer tries to choose an ordered index by default when it appears doing so would speed up query execution. Prior to MySQL 8.0.21, there was no way to override this behavior, even in cases where using some other optimization might be faster. Beginning with MySQL 8.0.21, it is possible to turn off this optimization by setting the optimizer_switch system variable's prefer_ordering_index flag to off.
+For a query with an ORDER BY or GROUP BY and a LIMIT clause, the optimizer tries to choose an ordered index by default when it appears doing so would speed up query execution.
+Prior to MySQL 8.0.21, there was no way to override this behavior, even in cases where using some other optimization might be faster. 
+Beginning with MySQL 8.0.21, it is possible to turn off this optimization by setting the optimizer_switch system variable's prefer_ordering_index flag to off.
 
 
 ## Reference

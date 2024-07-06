@@ -654,6 +654,11 @@ void sdsclear(sds s) {
 }
 ```
 
+
+## int
+
+incr
+
 ## Summary
 
 - $O(1)$ getLen

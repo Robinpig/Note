@@ -14,6 +14,9 @@ This model is flexible and supports diverse workflows.
 The DispatcherServlet, as any Servlet, needs to be declared and mapped according to the Servlet specification by using Java configuration or in web.xml.
 In turn, the DispatcherServlet uses Spring configuration to discover the delegate components it needs for request mapping, view resolution, exception handling, and more.
 
+比
+如 Spring MVC 中的 DispatcherServlet，就是在 init 方法里创建了自己的 Spring 容器
+
 <!-- tabs:start -->
 
 ##### **Java configuration**
@@ -104,6 +107,11 @@ Bootstrap listener to start up and shut down Spring's **root WebApplicationConte
 Simply delegates to ContextLoader as well as to ContextCleanupListener.
 As of Spring 3.1, ContextLoaderListener supports injecting the root web application context via the ContextLoaderListener(WebApplicationContext) constructor, allowing for programmatic configuration in Servlet 3.0+ environments.
 See org.springframework.web.WebApplicationInitializer for usage examples.
+
+> [!TIP]
+>
+> Spring Boot 默认只有一个上下文
+
 
 ```java
 public class ContextLoaderListener extends ContextLoader implements ServletContextListener {
@@ -507,7 +515,32 @@ public class DispatcherServlet extends FrameworkServlet {
 
 
 
-## Interceptor
+## Chain
+ 
+
+HandlerInterceptors are part of the Spring MVC framework and sit between the DispatcherServlet and our Controllers.
+
+HandlerInterceptor is basically similar to a Servlet Filter,
+but in contrast to the latter it just allows custom pre-processing with the option of prohibiting the execution of the handler itself, and custom post-processing. 
+
+Filters are more powerful, for example they allow for exchanging the request and response objects that are handed down the chain.
+Note that a filter gets configured in web. xml, a HandlerInterceptor in the application context.
+
+As a basic guideline, fine-grained handler-related preprocessing tasks are candidates for HandlerInterceptor implementations,
+especially factored-out common handler code and authorization checks.
+On the other hand, a Filter is well-suited for request content and view content handling, like multipart forms and GZIP compression. 
+This typically shows when one needs to map the filter to certain content types (e. g. images), or to all requests.
+
+[Spring Security](/docs/CS/Java/Spring/Security.md) is a great example of using filters for authentication and authorization.
+To configure Spring Security, we simply need to add a single filter, the DelegatingFilterProxy.
+Spring Security can then intercept all incoming and outgoing traffic.
+This is why Spring Security can be used outside of Spring MVC.
+
+![](./img/MVC-chain.png)
+
+
+
+### HandlerInterceptor
 
 
 
@@ -515,11 +548,34 @@ public class DispatcherServlet extends FrameworkServlet {
 
 - ResponseBodyAdvice
 
+> [Spring Interceptor vs AOP](https://coderanch.com/t/636483/frameworks/Spring-Interceptor-AOP)
+> 
+> MVC Interceptor is a MVC only concept. They can intercept requests to the controller only. 
+> [AOP](/docs/CS/Java/Spring/AOP.md) can be used to intercept calls to any public method in any Spring loaded bean.
+> 
+> AOP is only option to use if you are trying to weave code into your service layer.
+> A Controller method can be intercepted by either an Aspect or a HandlerInterceptor. 
+> The difference is that the AOP advice only has access to the controller being called, and the parameters being passed to the method. 
+> A HandlerInterceptor always has access to the complete HttpRequest, HttpResponse and the object being called. 
+> So, if your interceptor is doing something that requires it to always have access to the Request and response, you should use HandlerInterceptor. 
+> If you want to do something with the parameters to the controller method, you should write an Aspect
 
+```java
+public interface HandlerInterceptor {
+	default boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+			throws Exception {
+		return true;
+	}
+	default void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler,
+			@Nullable ModelAndView modelAndView) throws Exception {
+	}
+	default void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler,
+			@Nullable Exception ex) throws Exception {
+	}
+}
+```
 
-
-
-## Filter
+### Filter
 
 1. @WebFilter @ServletComponentScan FilterRegistration
 2. @Component + implements Filter

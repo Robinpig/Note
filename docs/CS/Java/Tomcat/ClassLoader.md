@@ -109,6 +109,11 @@ For example, it caches the previously loaded classes to enhance performance.
 It also caches the names of classes it has failed to find, so that the next time the same classes are requested to be loaded, the class loader can throw the ClassNotFoundException without first trying to find them.
 WebappClassLoader searches for classes in the list of repositories as well as the specified JAR files.
 
+ommonClassLoader 能加载的类都可以被CatalinaClassLoader 和 SharedClassLoader 用，而CatalinaClassLoader 和 SharedClassLoader 能加载的类则与对方相互隔离。
+WebAppClassLoader 可以使用SharedClassLoader 加载到的类，但各个WebAppClassLoader 实例之间相互隔离
+
+共享的第三方 JAR 包加载特定 Web应用的类是通过设置WebClassLoader到线程上下文加载器来解决
+
 ## CommonLoader
 
 ### initClassLoaders
@@ -237,6 +242,9 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
 
 
 #### loadClass
+
+默认loadClass方法是双亲委派机制
+先用WebClass Loader, 绕过常用的AppClassLoader, 然后到Ext和Boostrap对核心类库加载 最后用AppClassLoader 
 
 Load the class with the specified name, searching using the following algorithm until it finds and returns the class. 
 If the class cannot be found, returns ClassNotFoundException.

@@ -22,6 +22,16 @@ Such a cache miss is termed a “capacity miss”, because it is caused by the c
 However, most caches can be forced to eject an old item to make room for a new item even when they are not yet full.
 This is due to the fact that large caches are implemented as hardware hash tables with fixedsize hash buckets (or “sets”, as CPU designers call them) and no chaining, as shown in Figure 2.
 
+
+
+
+- L1
+  - L1d cache
+  - L1i cache
+- L2
+- L3
+
+
 ## Cache-Coherence Protocols
 
 Cache-coherency protocols manage cache-line states so as to prevent inconsistent or lost data.

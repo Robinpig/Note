@@ -168,26 +168,43 @@ add mirror into `<mirrors></mirrors>` of `~/.m2/settings.xml`
 
 ```xml
 <mirror>
-    <id>aliyunmaven</id>
-    <mirrorOf>*</mirrorOf>
-    <name>阿里云公共仓库</name>
-    <url>https://maven.aliyun.com/repository/public</url>
+  <id>nexus-163</id>
+  <mirrorOf>*</mirrorOf>
+  <name>Nexus 163</name>
+  <url>http://mirrors.163.com/maven/repository/maven-public/</url>
 </mirror>
 ```
 
 other proxy repos into `<repositories></repositories>` of `~/.m2/settings.xml`:
 
 ```xml
-<repository>
-    <id>spring</id>
-    <url>https://maven.aliyun.com/repository/spring</url>
-    <releases>
-        <enabled>true</enabled>
-    </releases>
+<repositories>
+  <repository>
+    <id>nexus-163</id>
+    <name>Nexus 163</name>
+    <url>http://mirrors.163.com/maven/repository/maven-public/</url>
+    <layout>default</layout>
     <snapshots>
-        <enabled>true</enabled>
+      <enabled>false</enabled>
     </snapshots>
-</repository>
+    <releases>
+      <enabled>true</enabled>
+    </releases>
+  </repository>
+</repositories>
+<pluginRepositories>
+<pluginRepository>
+  <id>nexus-163</id>
+  <name>Nexus 163</name>
+  <url>http://mirrors.163.com/maven/repository/maven-public/</url>
+  <snapshots>
+    <enabled>false</enabled>
+  </snapshots>
+  <releases>
+    <enabled>true</enabled>
+  </releases>
+</pluginRepository>
+</pluginRepositories>
 ```
 
 ## Test
@@ -199,6 +216,26 @@ mvn test -Dmaven.surefire.debug
 ```
 
 ## Plugins
+
+## Tuning
+
+### 依赖冲突
+
+检查依赖
+```
+mvn -Dverbose dependency:tree
+```
+
+omitted for conflict with xx
+
+依赖冲突会常导致发生NoClassDefFoundError、NoSuchMethodException、IllegalAccessError等错误
+
+
+### Build Issues
+
+快照版本用于测试 因为MANIFEST.MF文件里的jar名字是快照版本携带时间戳 报错ClassNotFoundException
+
+<useUniqueVersions>false</useUniqueVersions>
 
 ## Links
 

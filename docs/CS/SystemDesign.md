@@ -185,6 +185,33 @@ js，css压缩合并(varinish)，去除无用注释（基于安全考虑）
 ```
 
 
+## Samples
+
+计数服务
+
+
+
+需求探讨
+
+请求量多少, 是否有流量高峰
+
+数据实时性要求 
+
+
+扩展 性能 
+可用 增加MQ 流量削峰
+
+
+
+聚合处理
+
+
+是否采用预聚合 预聚合搭配批处理
+
+
+
+
+
 ## References
 
 1. [The System Design Primer](https://github.com/donnemartin/system-design-primer)

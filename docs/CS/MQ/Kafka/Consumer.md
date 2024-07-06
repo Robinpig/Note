@@ -34,11 +34,12 @@ Un-synchronized access will result in ConcurrentModificationException.
 1. One Consumer Per Thread
 2. Decouple Consumption and Processing
 
-Create Connections
+Connections
+- connect to bootstrap server and get metadata, find Coordinator(connection will be closed by Broker after connection.max.idle.ms)
+- connect to Coordinator
+- consume records(using different connection)
 
-- FindCoordinator
-- connect Coordinator
-- consume records
+正常运行的Consumer连接数量: 1 to Coordinator + N to Brokers which have leader topic partition 
 
 
 The first step to start consuming records is to create a `KafkaConsumer` instance. 
@@ -98,6 +99,16 @@ If a rebalance is triggered, it will be handled inside the poll loop as well.
 And of course the heartbeats that keep con‐ sumers alive are sent from within the poll loop.
 For this reason, we try to make sure that whatever processing we do between iterations is fast and efficient.
  
+
+```java
+public class GroupCoordinatorService implements GroupCoordinator {
+  public int partitionFor(String groupId) {
+    return Utils.abs(groupId.hashCode()) % numPartitions;
+  }
+}
+```
+different consumer group find the leader of different partition as Coordinator
+
 
 ### Consumer Group
 
@@ -184,7 +195,9 @@ In this case, the offset fetch will fail with an CoordinatorLoadInProgressExcept
 group.id+topic+partitionId=offset
 ```
 
-Deafult 50 log filles.
+offsets.topic.num.partitions 50
+
+offsets.topic.replication.factor 3
 
 
 
@@ -353,6 +366,8 @@ The .seek() and .assign() API are also helpful to replay data from a specific of
 
 <!-- tabs:end -->
 
+#### auto commit
+
 The easiest way to commit offsets is to allow the consumer to do it for you.
 If you configure enable.auto.commit=true, then every five seconds the consumer will commit the largest offset your client received from poll(). 
 The five-second interval is the default and is controlled by setting `auto.commit.interval.ms`. 
@@ -366,7 +381,8 @@ This is usually not an issue, but pay attention when you handle exceptions or ex
 
 Automatic commits are convenient, but they don’t give developers enough control to avoid duplicate messages.
 
-Most developers exercise more control over the time at which offsets are committed both to eliminate the possibility of missing messages and to reduce the number of messages duplicated during rebalancing. The consumer API has the option of com‐ mitting the current offset at a point that makes sense to the application developer rather than based on a timer.
+Most developers exercise more control over the time at which offsets are committed both to eliminate the possibility of missing messages and to reduce the number of messages duplicated during rebalancing. 
+The consumer API has the option of com‐ mitting the current offset at a point that makes sense to the application developer rather than based on a timer.
 
 By setting `auto.commit.offset=false`, offsets will only be committed when the application explicitly chooses to do so. 
 The simplest and most reliable of the commit APIs is commitSync(). 
@@ -858,13 +874,16 @@ private class HeartbeatThread extends KafkaThread implements AutoCloseable {
 ## Rebalance
 
 Moving partition ownership from one consumer to another is called a _rebalance_.<br/>
-Rebalances are important because they provide the consumer group with high availability and scalability (allowing us to easily and safely add and remove consumers), but in the normal course of events they are fairly undesirable. 
+Rebalances are important because they provide the consumer group with high availability and scalability 
+(allowing us to easily and safely add and remove consumers), but in the normal course of events they are fairly undesirable. 
 
 - During a rebalance, consumers can’t consume messages, so a rebalance is basically a short window of unavailability of the entire consumer group. 
-- In addition, when partitions are moved from one consumer to another, the consumer loses its current state; if it was caching any data, it will need to refresh its caches—slowing down the application until the consumer sets up its state again.
+- In addition, when partitions are moved from one consumer to another, 
+  the consumer loses its current state; if it was caching any data, it will need to refresh its caches—slowing down the application until the consumer sets up its state again.
 
 The way consumers maintain membership in a consumer group and ownership of the partitions assigned to them is by sending heartbeats to a Kafka broker designated as the group coordinator (this broker can be different for different consumer groups).
-As long as the consumer is sending heartbeats at regular intervals, it is assumed to be alive, well, and processing messages from its partitions. Heartbeats are sent when the consumer polls (i.e., retrieves records) and when it commits records it has consumed.
+As long as the consumer is sending heartbeats at regular intervals, it is assumed to be alive, well, and processing messages from its partitions. 
+Heartbeats are sent when the consumer polls (i.e., retrieves records) and when it commits records it has consumed.
 
 If the consumer stops sending heartbeats for long enough, its session will time out and the group coordinator will consider it dead and trigger a rebalance.
 If a consumer crashed and stopped processing messages, it will take the group coordinator a few seconds without heartbeats to decide it is dead and trigger the rebalance. 
@@ -872,7 +891,12 @@ During those seconds, no messages will be processed from the partitions owned by
 When closing a consumer cleanly, the consumer will notify the group coordinator that it is leaving, and the group coordinator will trigger a rebalance immediately, reducing the gap in processing.
 
 
-When a consumer wants to join a group, it sends a JoinGroup request to the group coordinator. The first consumer to join the group becomes the group leader. The leader receives a list of all consumers in the group from the group coordinator (this will include all consumers that sent a heartbeat recently and which are therefore considered alive) and is responsible for assigning a subset of partitions to each consumer. It uses an implementation of Parti tionAssignor to decide which partitions should be handled by which consumer.
+When a consumer wants to join a group, it sends a JoinGroup request to the group coordinator. 
+The first consumer to join the group becomes the group leader. 
+The leader receives a list of all consumers in the group from the group coordinator 
+(this will include all consumers that sent a heartbeat recently and which are therefore considered alive) 
+and is responsible for assigning a subset of partitions to each consumer. 
+It uses an implementation of PartitionAssignor to decide which partitions should be handled by which consumer.
 
 
 1. Partitions
@@ -881,14 +905,15 @@ When a consumer wants to join a group, it sends a JoinGroup request to the group
 
 
 
-partitionId=Math.abs(groupId.hashCode() % offsetsTopicPartitionCount)
 
-- session.timeout.ms = 6s。
-- heartbeat.interval.ms = 2s
-- max.poll.interval.ms
-- Full GC STW
 
 Choose a leader of consumers and let leader selects strategy.
+使用consumer选择partition strategy原因:
+- client易更改
+- consumer可以灵活选择
+- 减轻broker负担
+
+control flow:
 
 - JOIN_GROUP
 - HEARTBEAT
@@ -1753,7 +1778,58 @@ public interface ConsumerRebalanceListener {
 }
 
 ```
+## Tuning
+
+
+### Avoid rebalance
+
+partitionId=Math.abs(groupId.hashCode() % offsetsTopicPartitionCount)
+
+max.poll.interval.ms 5min
+
+Full GC STW
+
+session.timeout.ms >= 3 * heartbeat.interval.ms
+
+
+- Full GC STW
+
+
+### MultiThread consume
+
+手动commit
+
+
+
+### CommitFailedException
+
+**This exception is raised when an offset commit with `KafkaConsumer.commitSync()` fails with an unrecoverable error.**
+This can happen when a group rebalance completes before the commit could be successfully applied. 
+In this case, the commit cannot generally be retried because some of the partitions may have already been assigned to another member in the group.
+
+
+This means that the time between subsequent calls to `poll()` was longer than the configured `max.poll.interval.ms`, which typically implies that the poll loop is spending too much time message processing. 
+You can address this either by increasing `max.poll.interval.ms` or by reducing the maximum size of batches returned in `poll()` with `max.poll.records`.
+
+了设置相同 group.id 值的消费者组程序和独立消
+费者程序，那么当独立消费者程序手动提交位移时，Kafka 就会立即抛出
+CommitFailedException 异常
+
+
+### lag
+
+监控
+1. kafka-consumer-groups script
+2. AdminClient.listConsumerGroupOffsets
+3. JMX kafka.consumer:type=consumer-fetch-managermetrics,client-id=“{client-id} records-lag-max records-lead-min
+
+
 
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+
+
+## References
+
+1. [Consumer threading refactor design](https://cwiki.apache.org/confluence/display/KAFKA/Consumer+threading+refactor+design)

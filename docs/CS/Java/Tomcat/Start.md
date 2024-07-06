@@ -411,6 +411,36 @@ public class StandardService extends LifecycleMBeanBase implements Service {
 }
 ```
 
+##### StandardContext
+
+在startInternal里fire了 ServletContextListener
+
+
+```java
+public boolean listenerStart() {
+        //...
+        Object instances[] = getApplicationLifecycleListeners();
+        //...
+        for (Object instance : instances) {
+            ServletContextListener listener = (ServletContextListener) instance;
+            try {
+                fireContainerEvent("beforeContextInitialized", listener);
+                if (noPluggabilityListeners.contains(listener)) {
+                    listener.contextInitialized(tldEvent);
+                } else {
+                    listener.contextInitialized(event);
+                }
+                fireContainerEvent("afterContextInitialized", listener);
+            } catch (Throwable t) {
+                //...
+            }
+        }
+        return ok;
+
+    }
+```
+
+
 #### stopInternal
 
 Gracefully terminate the active use of the public methods other than property getters/setters and life cycle methods of this component.

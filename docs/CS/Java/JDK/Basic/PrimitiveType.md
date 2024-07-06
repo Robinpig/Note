@@ -60,16 +60,41 @@ In C and C++, the sizeof( ) operator satisfies a specific need: it tells you the
 When a primitive data type is a member of a class, it is guaranteed to get a default value if you do not initialize it:
 
 
-| **Primitive type** | **Default**           |
-| ------------------ | --------------------- |
-| **boolean**        | **false**             |
-| **char**           | **‘\u0000’ (null)** |
-| **byte**           | **(byte)0**           |
-| **short**          | **(short)0**          |
-| **int**            | **0**                 |
-| **long**           | **0L**                |
-| **float**          | **0.0f**              |
-| **double**         | **0.0d**              |
+| Primitive type | 值域 | Default           | VM Sign |
+| ------------ |  ------ | --------------------- | --- |
+| boolean  |  {false, true}    | false             |  Z  |
+| char     |    [0, 65535]  | ‘\u0000’ (null) |  C  |
+| byte     |   [-128, 127]   | (byte)0           |   B |
+| short    |  [-32768, 32767]    | (short)0          | S    |
+| int      |  [-2^31, 2^31 - 1]    | 0                 | I   |
+| long     |  [-2^63, 2^63 - 1]     | 0L                |   J |
+| float    |  ~[-3.4E38, 3.4E38]    | 0.0f              |  F  |
+| double   |  ~[-1.8E308, 1.8E308]     | 0.0d              |  D  |
+
+
+char默认是非负数 可用作数组索引
+
+
+Java 虚拟机每调用一个 Java 方法，便会创建一个栈帧。 
+这种栈帧有两个主要的组成部分，分别是局部变量区，以及字节码的操作数栈。这里的局部
+变量是广义的，除了普遍意义下的局部变量之外，它还包含实例方法的“this 指针”以及
+方法所接收的参数。
+在 Java 虚拟机规范中，局部变量区等价于一个数组，并且可以用正整数来索引。除了
+long、double 值需要用两个数组单元来存储之外，其他基本类型以及引用类型的值均占用
+一个数组单元。
+也就是说，boolean、byte、char、short 这四种类型，在栈上占用的空间和 int 是一样
+的，和引用类型也是一样的。因此，在 32 位的 HotSpot 中，这些类型在栈上将占用 4 个
+字节；而在 64 位的 HotSpot 中，他们将占 8 个字节
+
+仅存在于局部变量，而并不会出现在存储于堆中的字段或者数组元素上。对
+于 byte、char 以及 short 这三种类型的字段或者数组单元，它们在堆上占用的空间分别为
+一字节、两字节，以及两字节，也就是说，跟这些类型的值域相吻合
+
+存储会被截取 掩码
+
+加载用零填充高位字节 根据是否有符号设置符号位
+
+
 
 ## Wrapper Class
 
@@ -87,7 +112,12 @@ IntegerCache
 
 The `boolean` type has two values, represented by the *boolean literals* `true` and `false`, formed from ASCII letters.
 
-私有属性
+在 Java 语言规范中，boolean 类型的值只有两种可能，它们分别用符
+号“true”和“false”来表示。显然，这两个符号是不能被虚拟机直接使用的。
+
+在 Java 虚拟机规范中，boolean 类型则被映射成 int 类型。具体来说，“true”被映射为
+整数 1，而“false”被映射为整数 0。这个编码规则约束了 Java 字节码的具体实现。
+
 
 ```java
 private final boolean value;

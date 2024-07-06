@@ -16,7 +16,8 @@ The following features are responsible for the popularity of Write Ahead Logging
 - **Accessible Data Backup:**<br>
   WAL caters to your data backup needs and also provides you with backup and point-in-time recovery. You can simply archive the WAL data and revert to any time instant that occurred prior to the latest data write.
 
-In a system using WAL, all modifications are written to a log before they are applied. Usually both redo and undo information is stored in the log.
+In a system using WAL, all modifications are written to a log before they are applied. 
+Usually both redo and undo information is stored in the log.
 
 The purpose of this can be illustrated by an example. Imagine a program that is in the middle of performing some operation when the machine it is running on loses power.
 Upon restart, that program might need to know whether the operation it was performing succeeded, succeeded partially, or failed.

@@ -195,20 +195,20 @@ A set of synchronization edges, *S*, is *sufficient* if it is the minimal set su
 It follows from the above definitions that:
 
 - An unlock on a monitor *happens-before* every subsequent lock on that monitor.
-- A write to a `volatile` field ([§8.3.1.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.3.1.4)) *happens-before* every subsequent read of that field.
+- A write to a `volatile` field *happens-before* every subsequent read of that field.
 - A call to `start()` on a thread *happens-before* any actions in the started thread.
 - All actions in a thread *happen-before* any other thread successfully returns from a `join()` on that thread.
 - The default initialization of any object *happens-before* any other actions (other than default-writes) of a program.
 
-When a program contains two conflicting accesses ([§17.4.1](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.1)) that are not ordered by a happens-before relationship, it is said to contain a *data race*.
+When a program contains two conflicting accesses that are not ordered by a happens-before relationship, it is said to contain a *data race*.
 
-The semantics of operations other than inter-thread actions, such as reads of array lengths ([§10.7](https://docs.oracle.com/javase/specs/jls/se8/html/jls-10.html#jls-10.7)), executions of checked casts ([§5.5](https://docs.oracle.com/javase/specs/jls/se8/html/jls-5.html#jls-5.5), [§15.16](https://docs.oracle.com/javase/specs/jls/se8/html/jls-15.html#jls-15.16)), and invocations of virtual methods ([§15.12](https://docs.oracle.com/javase/specs/jls/se8/html/jls-15.html#jls-15.12)), are not directly affected by data races.
+The semantics of operations other than inter-thread actions, such as reads of array lengths, executions of checked casts, and invocations of virtual methods, are not directly affected by data races.
 
 Therefore, a data race cannot cause incorrect behavior such as returning the wrong length for an array.
 
 A program is *correctly synchronized* if and only if all sequentially consistent executions are free of data races.
 
-If a program is correctly synchronized, then all executions of the program will appear to be sequentially consistent ([§17.4.3](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.3)).
+If a program is correctly synchronized, then all executions of the program will appear to be sequentially consistent.
 
 This is an extremely strong guarantee for programmers. Programmers do not need to reason about reorderings to determine that their code contains data races. Therefore they do not need to reason about reorderings when determining whether their code is correctly synchronized. Once the determination that the code is correctly synchronized is made, the programmer does not need to worry that reorderings will affect his or her code.
 
@@ -233,9 +233,9 @@ Before presenting the Java memory model in full, we will present a simpler memor
 
 This model involves several properties/requirements:
 - There is a total order over all synchronization actions, known as the synchronization order. This order is consistent with program order and with mutual exclusion of locks.
-- Synchronization actions induce synchronizes-with edges between matched actions, as described in Section 5.
-- The transitive closure of the synchronizes-with edges and program order gives a partial order known as the happens-before order, as described in Section 5.
-- The values that can be seen by a non-volatile read are determined by a rule known as happensbefore consistency.
+- Synchronization actions induce synchronizes-with edges between matched actions.
+- The transitive closure of the synchronizes-with edges and program order gives a partial order known as the happens-before order.
+- The values that can be seen by a non-volatile read are determined by a rule known as happens before consistency.
 - The value seen by a volatile read are determined by a rule known as synchronization order consistency. 
 
   
@@ -247,7 +247,8 @@ Happens-before consistency says that a read r of a variable v is allowed to obse
 
 Synchronization order consistency says that each read r of a volatile variable v returns the last write to v to come before it in the synchronization order. 
 
-For example, the behavior shown in Figure 1 is allowed by the happens-before memory model. There are no synchronizes-with or happens-before edges between threads, and each read is allowed to see the write by the other thread.
+For example, the behavior shown in Figure 1 is allowed by the happens-before memory model. 
+There are no synchronizes-with or happens-before edges between threads, and each read is allowed to see the write by the other thread.
 
 
 
@@ -255,16 +256,25 @@ snooping
 
 
 **The rules for happens‐before are:**
-- Program order rule. Each action in a thread happens‐before every action in that thread that comes later in the program order.
-- Monitor lock rule. An unlock on a monitor lock happens‐before every subsequent lock on that same monitor lock.(Locks and unlocks on explicit Lock objects have the same memory semantics as intrinsic locks.)
-- Volatile variable rule. A write to a volatile field happens‐before every subsequent read of that same field.(Reads and writes of atomic variables have the same memory semantics as volatile variables.)
-- Thread start rule. A call to Thread.start on a thread happens‐before every action in the started thread.
-- Thread termination rule. Any action in a thread happens‐before any other thread detects that thread has terminated, either by successfully return from Thread.join or by Thread.isAlive returning false.
-- Interruption rule. A thread calling interrupt on another thread happens‐before the interrupted thread detects the interrupt (either by having InterruptedException thrown, or invoking isInterrupted or interrupted).
-- Finalizer rule. The end of a constructor for an object happens‐before the start of the finalizer for that object.
-- Transitivity. If A happens‐before B, and B happens‐before C, then A happens‐before C.
+- Program order rule. 
+  Each action in a thread happens‐before every action in that thread that comes later in the program order.
+- Monitor lock rule. 
+  An unlock on a monitor lock happens‐before every subsequent lock on that same monitor lock.(Locks and unlocks on explicit Lock objects have the same memory semantics as intrinsic locks.)
+- Volatile variable rule. 
+  A write to a volatile field happens‐before every subsequent read of that same field.(Reads and writes of atomic variables have the same memory semantics as volatile variables.)
+- Thread start rule. 
+  A call to Thread.start on a thread happens‐before every action in the started thread.
+- Thread termination rule. 
+  Any action in a thread happens‐before any other thread detects that thread has terminated, either by successfully return from Thread.join or by Thread.isAlive returning false.
+- Interruption rule. 
+  A thread calling interrupt on another thread happens‐before the interrupted thread detects the interrupt (either by having InterruptedException thrown, or invoking isInterrupted or interrupted).
+- Finalizer rule. 
+  The end of a constructor for an object happens‐before the start of the finalizer for that object.
+- Transitivity. 
+  If A happens‐before B, and B happens‐before C, then A happens‐before C.
 
 ### Piggybacking on Synchronization
+
 The implementation of the protected AbstractQueuedSynchronizer methods in FutureTask illustrates piggybacking. 
 AQS maintains an integer of synchronizer state that FutureTask uses to store the task state: running, completed, or cancelled. 
 But FutureTask also maintains additional variables, such as the result of the computation. 
@@ -287,6 +297,13 @@ Other happens‐before orderings guaranteed by the class library include:
 
 
 ### Memory Barries
+
+
+写读
+
+Buffer Fully Flush
+
+
 
 
 ## Links

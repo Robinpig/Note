@@ -104,6 +104,8 @@ The container initializes the servlet instance by calling the init method of the
 This configuration object allows the servlet to access name-value initialization parameters from the Web application’s configuration information.
 The configuration object also gives the servlet access to an object (implementing the ServletContext interface) that describes the servlet’s runtime environment.
 
+实现线程安全通常都是使用synchronized
+
 #### Request Handling
 
 After a servlet is properly initialized, the servlet container may use it to handle client requests.
@@ -143,6 +145,13 @@ In the case where asynchronous processing occurs, the request object remains val
 Containers commonly recycle request objects in order to avoid the performance overhead of request object creation.
 The developer must be aware that maintaining references to request objects for which startAsync has not been called outside the scope described above is not recommended as it may have indeterminate results.
 
+当客户请求某个资源时，HTTP 服务器会用一个 ServletRequest 对象把客户的请求信息封
+装起来，然后调用 Servlet 容器的 service 方法，Servlet 容器拿到请求后，根据请求的
+URL 和 Servlet 的映射关系，找到相应的 Servlet，如果 Servlet 还没有被加载，就用反射
+机制创建这个 Servlet，并调用 Servlet 的 init 方法来完成初始化，接着调用 Servlet 的
+service 方法来处理请求，把 ServletResponse 对象返回给 HTTP 服务器，HTTP 服务器会
+把响应发送给客户端
+
 ## Servlet Context
 
 The ServletContext interface defines a servlet’s view of the Web application within which the servlet is running.
@@ -151,6 +160,12 @@ Using the ServletContext object, a servlet can log events, obtain URL references
 
 There is one instance object of the ServletContext interface associated with each Web application deployed into a container.
 In cases where the container is distributed over many virtual machines, a Web application will have an instance of the ServletContext for each JVM.
+
+Servlet 规范里定义了ServletContext这个接口来对应一个 Web 应用。Web 应用部署好
+后，Servlet 容器在启动时会加载 Web 应用，并为每个 Web 应用创建唯一的
+ServletContext 对象。 一个 Web 应用可能有多个 Servlet，这些 Servlet 可以通过全局的 ServletContext 来共享数据，这些数据包
+括 Web 应用的初始化参数、Web 应用目录下的文件资源等。由于 ServletContext 持有所
+有 Servlet 实例，你还可以通过它来实现 Servlet 请求的转发
 
 Servlets in a container that were not deployed as part of a Web application are implicitly part of a “default” Web application and have a default ServletContext.
 In a distributed container, the default ServletContext is non-distributable and must only exist in one JVM.
@@ -239,14 +254,15 @@ If the exception is of type UnavailableException, the container may examine the 
 
 Only one instance per <filter> declaration in the deployment descriptor is instantiated per JVM of the container.
 The container provides the filter config as declared in the filter’s deployment descriptor, the reference to the ServletContext for the web application, and the set of initialization parameters.
-When the container receives an incoming request, it takes the first filter instance in the list and calls its doFilter method, passing in the ServletRequest and ServletResponse , and a reference to the FilterChain object it will use.
 
-The doFilter method of a filter will typically be implemented following this or some subset of the following pattern:
+When the container receives an incoming request, it takes the first filter instance in the list and calls its `doFilter` method, passing in the ServletRequest and ServletResponse , and a reference to the FilterChain object it will use.
+
+The `doFilter` method of a filter will typically be implemented following this or some subset of the following pattern:
 
 1. The method examines the request’s headers.
 2. The method may wrap the request object with a customized implementation of ServletRequest or
    HttpServletRequest in order to modify request headers or data.
-3. The method may wrap the response object passed in to its doFilter method with a customized
+3. The method may wrap the response object passed in to its `doFilter` method with a customized
    implementation of ServletResponse or HttpServletResponse to modify response headers or data.
 4. The filter may invoke the next entity in the filter chain. The next entity may be another filter, or if
    the filter making the invocation is the last filter configured in the deployment descriptor for this
@@ -292,12 +308,18 @@ In order to support this style of filter the container must support the followin
   AsyncContext.dispatch() (or overloaded variant) must either: be the same wrapper objects that
   were passed; or wrappers of the objects that were passed.
 
+## Listeners
+
+Spring 就实现了自己的监听器[ContextLoaderListener](/docs/CS/Java/Spring/MVC.md?id=ContextLoaderListener)，来监听 ServletContext 的启动事件，
+目的是当 Servlet 容器启动时，init 全局的ApplicationContext方便后续的WebApplicationContext使用
 ## Sessions
 
 The Hypertext Transfer Protocol (HTTP) is by design a stateless protocol.
 To build effective web applications, it is imperative that requests from a particular client be associated with each other.
 Many strategies for session tracking have evolved over time, but all are difficult or troublesome for the programmer to use directly.
 This specification defines a simple HttpSession interface that allows a servlet container to use any of several approaches to track a user’s session without involving the Application Developer in the nuances of any one approach.
+
+https，加密后攻击者就拿不到sessionid了，另外CSRF也是一种防止session劫持的方式
 
 ### Session Tracking Mechanisms
 
@@ -382,6 +404,14 @@ Servlet request listeners are used to manage state across the lifecycle of servl
 Async listeners are used to manage async events such as time outs and completion of async processing.
 
 There may be multiple listener classes listening to each event type, and the Application Developer may specify the order in which the container invokes the listener beans for each event type.
+
+
+## ASync
+
+AsyncContext req和res
+
+
+
 
 ## Links
 

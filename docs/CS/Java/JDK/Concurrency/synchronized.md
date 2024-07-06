@@ -651,7 +651,8 @@ enum HeuristicsResult {
 
 ### Lightweight Lock
 
-
+Displaced Mark Word = 25 hashcode + 4 age + 1 biased flag
+Mark Word = pointer to Displaced Mark Word
 
 #### ObjectSynchronizer::slow_enter
 1. is_neutral, cas set mark
@@ -1930,6 +1931,14 @@ void ObjectMonitor::ExitEpilog(JavaThread* current, ObjectWaiter* Wakee) {
 #### deflate_idle_monitors
 
 
+
+Deflate the specified ObjectMonitor if not in-use. Returns true if it was deflated and false otherwise.
+
+The async deflation protocol sets owner to DEFLATER_MARKER and makes contentions negative as signals to contending threads that an async deflation is in progress. 
+There are a number of checks as part of the protocol to make sure that the calling thread has not lost the race to a contending thread.
+
+The ObjectMonitor has been successfully async deflated when: (contentions < 0)
+Contending threads that see that condition know to retry their operation.
 
 
 ## Summary

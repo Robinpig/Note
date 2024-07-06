@@ -1140,7 +1140,7 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [Dynamo](/docs/CS/Distributed/Dynamo.md)
 
-[Spark](/docs/CS/Distributed/Spark.md)
+
 
 [F1](https://courses.cs.washington.edu/courses/cse550/21au/papers/CSE550.F1.pdf)
 
@@ -1148,7 +1148,7 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [Dryad]
 
-[Cassandra]
+
 
 [Ceph]
 
@@ -1169,6 +1169,36 @@ A distributed system consists of a finite set of processes and a finite set of c
 [Cloud Design Patterns](https://docs.microsoft.com/en-us/azure/architecture/patterns/)
 
 [Concurrency Control in Distributed Database Systems](https://people.eecs.berkeley.edu/~brewer/cs262/concurrency-distributed-databases.pdf)
+
+## Calc
+
+Big Data
+
+
+归一化数据集
+
+组合算子 map shuffle
+
+
+数据执行流水线 DAG
+
+[Spark](/docs/CS/Distributed/Spark.md)
+
+
+engine
+- Planner
+- optimizer
+- Executor
+
+## Metadata service
+
+
+etcd
+zookeeper
+
+
+
+
 
 ## Links
 
