@@ -150,6 +150,17 @@ It is a lightweight alternative to using Docker, Moby or rkt as the runtime for 
 
 
 
+### probes
+
+
+启动
+
+存活
+
+就绪
+
+
+
 ## Network Management
 
 ## Resource Management
