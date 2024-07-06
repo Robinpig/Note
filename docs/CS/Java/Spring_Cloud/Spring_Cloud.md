@@ -61,6 +61,20 @@ Spring Cloud provides `DiscoveryClient` implementations for popular registries s
 There’s also a [Spring Cloud Load Balancer](https://spring.io/guides/gs/spring-cloud-loadbalancer/) to help you distribute the load carefully among your service instances.
 
 
+⾯向失败的设计告诉我们，服务并不能完全相信注册中⼼的通知的地址，当注册中⼼的推送地
+址为空时候，服务调⽤肯定会出 no provider 错误，那么我们就忽略此次推送的地址变更
+
+⼼跳续约是注册中⼼感知实例可⽤性的基本途径。但是在特定情况下，⼼跳存续并不能完全等
+同于服务可⽤。
+因为仍然存在⼼跳正常，但服务不可⽤的情况，例如：
+ Request 处理的线程池满
+ 依赖的 RDS 连接异常或慢 SQL
+
+此时服务并不能完全相信注册中⼼的通知的地址，推送的地址中，可能存在⼀些服务质量低下
+的服务提供者，因此客户端需要⾃⼰根据调⽤的结果来判断服务地址的可⽤性与提供服务质量
+的好坏，来定向忽略某些地址
+
+
 ### DiscoveryClient
 
 Spring Cloud Commons provides the `@EnableDiscoveryClient` annotation.
