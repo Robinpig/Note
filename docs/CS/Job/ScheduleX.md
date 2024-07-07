@@ -96,6 +96,26 @@ spring.schedulerx2.appKey=${appKey}
 #spring.schedulerx2.aliyunSecretKey=${aliyunSecretKey}   
 ```
 
+编程模型
+
+```java
+
+JavaProcessor
+● public void preProcess(JobContext context) throws Exception; （可选）
+● public ProcessResult process(JobContext context) throws Exception; (必选)
+● public void postProcess(JobContext context); （可选）
+● public void kill(JobContext context); （可选）
+
+MapJobProcessor
+● public ProcessResult process(JobContext context) throws Exception; (必选)
+● public void postProcess(JobContext context); （可选）
+● public void kill(JobContext context); （可选）
+● public ProcessResult map(List<? extends Object> taskList, String taskName); (必选
+
+```
+
+
+
 inject JobProcessor bean
 
 ```java
@@ -123,6 +143,8 @@ public class MyHelloJob extends JavaProcessor {
 
 
 ## 定时调度
+
+
 Crontab
 
 支持Unix Crontab表达式，不支持秒级别调度。更多信息，请参见Cron。
@@ -150,6 +172,7 @@ SchedulerX可以处理具有数据状态的任务。创建任务时支持填写�
 支持可拖拽的工作流DAG（Directed Acyclic Graph）进行任务编排，操作简单，前端直接拖拽即可。详细的任务状态图能让您直观地查看并排查下游任务未执行的原因。
 
 ## 分布式计算
+
 提供简单、易用的分布式编程模型，支持进行大数据批处理。
 
 单机
@@ -167,6 +190,8 @@ Map模型
 MapReduce模型
 
 MapReduce模型是Map模型的扩展，废弃了postProcess方法，新增了Reduce接口。所有子任务完成后会执行Reduce方法，可以在Reduce方法中返回该任务实例的执行结果或者回调业务。更多信息，请参见MapReduce模型。
+
+不支持子任务级别的超时时间，只支持整个任务的超时，可以通过控制台动态修改
 
 分片运行
 
