@@ -76,7 +76,7 @@ The [Java Development Kit(JDK)](/docs/CS/Java/JDK/JDK.md) includes the Java Runt
 
 ##### Quartz
 
-[Quartz](/docs/CS/Java/Quartz/Quartz.md) can be used to create simple or complex schedules for executing tens, hundreds, or even tens-of-thousands of jobs.
+[Quartz](/docs/CS/Job/Quartz/Quartz.md) can be used to create simple or complex schedules for executing tens, hundreds, or even tens-of-thousands of jobs.
 
 ##### Spring Framework
 
