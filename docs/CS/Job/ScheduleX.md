@@ -41,44 +41,7 @@ configserver
 
 ## 客户端接入
 
-
-### Java
-
-```xml
-<dependency>
-  <groupId>com.aliyun.schedulerx</groupId>
-  <artifactId>schedulerx2-spring-boot-starter</artifactId>
-  <version>${schedulerx2.version}</version>
-  <!--如果使用logback，需要将log4j和log4j2排除 -->
-  <exclusions>
-    <exclusion>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-api</artifactId>
-    </exclusion>
-    <exclusion>
-      <groupId>org.apache.logging.log4j</groupId>
-      <artifactId>log4j-core</artifactId>
-    </exclusion>
-    <exclusion>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-    </exclusion>
-  </exclusions>
-</dependency> 
-```
-properties配置
-
-```properties
-spring.schedulerx2.endpoint=${endpoint}
-spring.schedulerx2.namespace=${namespace}
-spring.schedulerx2.groupId=${groupId}
-# 1.2.1及以上版本设置appKey
-spring.schedulerx2.appKey=${appKey}
-
-# 1.2.1以下版本设置AK/SK，开启其他特殊配置（例如配置文件定义任务同步、Spring任务自动同步）也需要额外配置以下参数
-#spring.schedulerx2.aliyunAccessKey=${aliyunAccessKey}
-#spring.schedulerx2.aliyunSecretKey=${aliyunSecretKey}   
-```
+> https://www.alibabacloud.com/help/zh/schedulerx/getting-started/connect-an-agent-to-schedulerx/?spm=a2c63.p38356.0.0.38f57d87tuu7MI
 
 编程模型
 
@@ -327,7 +290,7 @@ one_time任务，跑完了在哪看历史记录
 
 
 
-Dispatcher.timeout] submit appGroupId xxx
+Dispatcher.timeout submit appGroupId xxx
 
 **原因:**
 
@@ -340,15 +303,7 @@ Dispatcher.timeout] submit appGroupId xxx
 - 保证自己的应用实例正常
 - 升级到最新版本
 
-used space beyond 90.0%!
 
-**原因:** 
-
-- 磁盘满了
-
-**解决方案:**
-
-- 清理下ECS或者容器上的磁盘空间
 
 ClassNotFoundException
 
