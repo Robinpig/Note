@@ -225,6 +225,10 @@ Zuul
 In the cloud, configuration can’t simply be embedded inside the application.
 The configuration has to be flexible enough to cope with multiple applications, environments, and service instances, as well as deal with dynamic changes without downtime.
 
+
+
+
+
 Centralized external configuration management backed by a git repository.
 The configuration resources map directly to Spring Environment but could be used by non-Spring applications if desired.
 
@@ -249,6 +253,18 @@ Config Client features (for Spring applications):
 - Encrypt and decrypt property values (symmetric or asymmetric)
 
 As long as Spring Boot Actuator and Spring Config Client are on the classpath any Spring Boot application will try to contact a config server on `[http://localhost:8888](http://localhost:8888)`, the default value of `spring.cloud.config.uri`.
+
+
+
+配置中心的主要作用是发布metadata, 单个数据内容通常应小于100k
+
+配置中心的配置变更频率不宜太快, 应尽量小于分钟/次
+
+配置中心对于查询的QPS不会很高 和Redis等产品不是同一个定位 通常是使用长链接监听变更通知
+
+配置中心的配置同步到所有服务是需要一定时间的 是最终一致性
+
+配置同步都是使用覆盖写的 需要服务做好幂等性
 
 ### Config Refresh
 
