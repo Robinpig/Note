@@ -11,13 +11,13 @@ IEEE Standard 754 Floating Point Numbers
 IEEE 754 has 3 basic components:
 
 1. **The Sign of Mantissa**
-  This is as simple as the name. 0 represents a positive number while 1 represents a negative number.
+    This is as simple as the name. 0 represents a positive number while 1 represents a negative number.
 2. **The Biased exponent**
-  The exponent field needs to represent both positive and negative exponents. A bias is added to the actual exponent in order to get the stored exponent.
+    The exponent field needs to represent both positive and negative exponents. A bias is added to the actual exponent in order to get the stored exponent.
 3. **The Normalised Mantissa**
-  The mantissa is part of a number in scientific notation or a floating-point number, consisting of its significant digits. 
-  Here we have only 2 digits, i.e. O and 1. So a normalised mantissa is one with only one 1 to the left of the decimal.
-  IEEE 754 numbers are divided into two based on the above three components: single precision and double precision.
+    The mantissa is part of a number in scientific notation or a floating-point number, consisting of its significant digits. 
+    Here we have only 2 digits, i.e. O and 1. So a normalised mantissa is one with only one 1 to the left of the decimal.
+    IEEE 754 numbers are divided into two based on the above three components: single precision and double precision.
 
 Number Systems
 
@@ -124,6 +124,24 @@ A MAC provides message integrity and message authentication using a combination 
 ### Digital signature
 
 A digital signature uses a pair of private–public keys.
+
+
+
+### 故障演练
+
+故障模拟
+
+故障主要分三类
+
+- **中间件服务故障**，如模拟hsf调用方异常，tddl调用异常等。
+- **机器故障**，如网络延迟，网络丢包等。
+- **第三方故障**，如mysql响应延迟等。
+
+故障演练的范围可以细化到应用，机房，甚至某个具体虚拟机。
+
+
+
+参考alibaba Monkeyking
 
 ## Theory of Computation
 
