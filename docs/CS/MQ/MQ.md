@@ -373,7 +373,7 @@ Based on no message losing
 - Redis is always idempotent.
 - DB primary key is unique.
 - update wehn exist, insert when not exist.
-- every request has own id, check if has consumed(a set).
+- every request has own message id, check if has consumed(a set).
 
 ### message ordering
 
