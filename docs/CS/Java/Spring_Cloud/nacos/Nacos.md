@@ -2,6 +2,9 @@
 
 Nacos `/nɑ:kəʊs/` 是 Dynamic Naming and Configuration Service的首字母简称，一个更易于构建云原生应用的动态服务发现、配置管理和服务管理平台
 
+Nacos 支持将注册中心(Service Registry）与配置中心(Config Center) 在一个进程合并部署或者将2者分离部署的两种模式
+
+
 服务（Service）是 Nacos 世界的一等公民。Nacos 支持几乎所有主流类型的“服务”的发现、配置和管理
 
 Nacos 的关键特性包括:
@@ -42,6 +45,9 @@ Nacos 的关键特性包括:
 
 ## Service Registry
 
+Nacos 作为注册中心，用来接收客户端（服务实例）发起的注册请求，并将注册信息存放到注册中心进行管理
+
+
 ```java
 public interface NamingClientProxy extends Closeable {
   void registerService(String serviceName, String groupName, Instance instance) throws NacosException;
@@ -77,7 +83,15 @@ grpc
     }
 
 ```
+
+临时服务实例就是我们默认使用的 Nacos 注册中心模式，客户端注册后，客户端需要定时上报心跳信息来进行服务实例续约。这个在注册的时候，可以通过传参设置是否是临时实例。
+
+持久化服务实例就是不需要上报心跳信息的，不会被自动摘除，除非手动移除实例，如果实例宕机了，Nacos 只会将这个客户端标记为不健康。
+
+
+
 Ephemeral
+
 ```java
 private void registerServiceForEphemeral(String serviceName, String groupName, Instance instance)
             throws NacosException {
@@ -93,7 +107,9 @@ public void doRegisterService(String serviceName, String groupName, Instance ins
         redoService.instanceRegistered(serviceName, groupName);
     }
 ```
+
 Persistent
+
 
 ```java
 public void doRegisterServiceForPersistent(String serviceName, String groupName, Instance instance)
@@ -294,7 +310,178 @@ public abstract class Connection implements Requester {
 
 
 
-HTTP
+### server louter forward
+
+
+```java
+public class DistroFilter implements Filter {
+     
+    @Override
+    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain)
+            throws IOException, ServletException {
+        ReuseHttpServletRequest req = new ReuseHttpServletRequest((HttpServletRequest) servletRequest);
+        HttpServletResponse resp = (HttpServletResponse) servletResponse;
+        
+        String urlString = req.getRequestURI();
+        
+        if (StringUtils.isNotBlank(req.getQueryString())) {
+            urlString += ”?“ + req.getQueryString();
+        }
+        
+        try {
+            Method method = controllerMethodsCache.getMethod(req);
+            
+            String path = new URI(req.getRequestURI()).getPath();
+            if (method == null) {
+                throw new NoSuchMethodException(req.getMethod() + ” “ + path);
+            }
+            
+            if (!method.isAnnotationPresent(CanDistro.class)) {
+                filterChain.doFilter(req, resp);
+                return;
+            }
+            String distroTag = distroTagGenerator.getResponsibleTag(req);
+            
+            if (distroMapper.responsible(distroTag)) {
+                filterChain.doFilter(req, resp);
+                return;
+            }
+            
+            // proxy request to other server if necessary:
+            String userAgent = req.getHeader(HttpHeaderConsts.USER_AGENT_HEADER);
+            
+            if (StringUtils.isNotBlank(userAgent) && userAgent.contains(UtilsAndCommons.NACOS_SERVER_HEADER)) {
+                // This request is sent from peer server, should not be redirected again:
+                Loggers.SRV_LOG.error(”receive invalid redirect request from peer {}“, req.getRemoteAddr());
+                resp.sendError(HttpServletResponse.SC_BAD_REQUEST,
+                        ”receive invalid redirect request from peer “ + req.getRemoteAddr());
+                return;
+            }
+            
+            final String targetServer = distroMapper.mapSrv(distroTag);
+            
+            List<String> headerList = new ArrayList<>(16);
+            Enumeration<String> headers = req.getHeaderNames();
+            while (headers.hasMoreElements()) {
+                String headerName = headers.nextElement();
+                headerList.add(headerName);
+                headerList.add(req.getHeader(headerName));
+            }
+            
+            final String body = IoUtils.toString(req.getInputStream(), StandardCharsets.UTF_8.name());
+            final Map<String, String> paramsValue = HttpClient.translateParameterMap(req.getParameterMap());
+            
+            RestResult<String> result = HttpClient
+                    .request(HTTP_PREFIX + targetServer + req.getRequestURI(), headerList, paramsValue, body,
+                            PROXY_CONNECT_TIMEOUT, PROXY_READ_TIMEOUT, StandardCharsets.UTF_8.name(), req.getMethod());
+            String data = result.ok() ? result.getData() : result.getMessage();
+            try {
+                WebUtils.response(resp, data, result.getCode());
+            } catch (Exception ignore) {
+                Loggers.SRV_LOG.warn(”[DISTRO-FILTER] request failed: “ + distroMapper.mapSrv(distroTag) + urlString);
+            }
+        } catch (AccessControlException e) {
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN, ”access denied: “ + ExceptionUtil.getAllExceptionMsg(e));
+        } catch (NoSuchMethodException e) {
+            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
+                    ”no such api:“ + req.getMethod() + ”:“ + req.getRequestURI());
+        } catch (Exception e) {
+            Loggers.SRV_LOG.warn(”[DISTRO-FILTER] Server failed: “, e);
+            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
+                    ”Server failed, “ + ExceptionUtil.getAllExceptionMsg(e));
+        }
+        
+    }
+}
+```
+
+
+
+
+register
+
+```java
+    /**
+     * Register new instance.
+     *
+     * @param request http request
+     * @return ‘ok’ if success
+     * @throws Exception any error during register
+     */
+    @CanDistro
+    @PostMapping
+    @TpsControl(pointName = ”NamingInstanceRegister“, name = ”HttpNamingInstanceRegister“)
+    @Secured(action = ActionTypes.WRITE)
+    public String register(HttpServletRequest request) throws Exception {
+        
+        final String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID,
+                Constants.DEFAULT_NAMESPACE_ID);
+        final String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
+        NamingUtils.checkServiceNameFormat(serviceName);
+        
+        final Instance instance = HttpRequestInstanceBuilder.newBuilder()
+                .setDefaultInstanceEphemeral(switchDomain.isDefaultInstanceEphemeral()).setRequest(request).build();
+        
+        getInstanceOperator().registerInstance(namespaceId, serviceName, instance);
+        NotifyCenter.publishEvent(new RegisterInstanceTraceEvent(System.currentTimeMillis(), ”“, false, namespaceId,
+                NamingUtils.getGroupName(serviceName), NamingUtils.getServiceName(serviceName), instance.getIp(),
+                instance.getPort()));
+        return ”ok“;
+    }
+
+@Override
+    public void registerInstance(String namespaceId, String serviceName, Instance instance) throws NacosException {
+        NamingUtils.checkInstanceIsLegal(instance);
+        
+        boolean ephemeral = instance.isEphemeral();
+        String clientId = IpPortBasedClient.getClientId(instance.toInetAddr(), ephemeral);
+        createIpPortClientIfAbsent(clientId);
+        Service service = getService(namespaceId, serviceName, ephemeral);
+        clientOperationService.registerInstance(service, instance, clientId);
+    }
+
+@Override
+    public void registerInstance(Service service, Instance instance, String clientId) throws NacosException {
+        final ClientOperationService operationService = chooseClientOperationService(instance);
+        operationService.registerInstance(service, instance, clientId);
+    }
+
+
+
+@Component(”persistentClientOperationServiceImpl“)
+public class PersistentClientOperationServiceImpl extends RequestProcessor4CP implements ClientOperationService {
+@Override
+    public void registerInstance(Service service, Instance instance, String clientId) {
+        Service singleton = ServiceManager.getInstance().getSingleton(service);
+        if (singleton.isEphemeral()) {
+            throw new NacosRuntimeException(NacosException.INVALID_PARAM,
+                    String.format(”Current service %s is ephemeral service, can‘t register persistent instance.“,
+                            singleton.getGroupedServiceName()));
+        }
+        final InstanceStoreRequest request = new InstanceStoreRequest();
+        request.setService(service);
+        request.setInstance(instance);
+        request.setClientId(clientId);
+        final WriteRequest writeRequest = WriteRequest.newBuilder().setGroup(group())
+                .setData(ByteString.copyFrom(serializer.serialize(request))).setOperation(DataOperation.ADD.name())
+                .build();
+        
+        try {
+            protocol.write(writeRequest);
+            Loggers.RAFT.info(”Client registered. service={}, clientId={}, instance={}“, service, clientId, instance);
+        } catch (Exception e) {
+            throw new NacosRuntimeException(NacosException.SERVER_ERROR, e);
+        }
+    }
+}
+```
+
+
+
+
+
+
+### HTTP
 
 
 
