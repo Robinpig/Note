@@ -292,9 +292,7 @@ public final void start() throws NacosException {
             
             return null;
         });
-        
     }
-    
 ```
 
 
@@ -312,54 +310,52 @@ public abstract class Connection implements Requester {
 
 ### server louter forward
 
+#### DistroFilter
+
 
 ```java
 public class DistroFilter implements Filter {
-     
+
     @Override
     public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain)
             throws IOException, ServletException {
         ReuseHttpServletRequest req = new ReuseHttpServletRequest((HttpServletRequest) servletRequest);
         HttpServletResponse resp = (HttpServletResponse) servletResponse;
-        
+
         String urlString = req.getRequestURI();
-        
         if (StringUtils.isNotBlank(req.getQueryString())) {
-            urlString += ”?“ + req.getQueryString();
+            urlString += ”?“+req.getQueryString();
         }
-        
+
         try {
             Method method = controllerMethodsCache.getMethod(req);
-            
+
             String path = new URI(req.getRequestURI()).getPath();
-            if (method == null) {
-                throw new NoSuchMethodException(req.getMethod() + ” “ + path);
-            }
-            
             if (!method.isAnnotationPresent(CanDistro.class)) {
                 filterChain.doFilter(req, resp);
                 return;
             }
             String distroTag = distroTagGenerator.getResponsibleTag(req);
-            
+
             if (distroMapper.responsible(distroTag)) {
                 filterChain.doFilter(req, resp);
                 return;
             }
-            
+
             // proxy request to other server if necessary:
             String userAgent = req.getHeader(HttpHeaderConsts.USER_AGENT_HEADER);
-            
+
             if (StringUtils.isNotBlank(userAgent) && userAgent.contains(UtilsAndCommons.NACOS_SERVER_HEADER)) {
                 // This request is sent from peer server, should not be redirected again:
-                Loggers.SRV_LOG.error(”receive invalid redirect request from peer {}“, req.getRemoteAddr());
+                Loggers.SRV_LOG.error(”receive invalid redirect request from peer {
+                }“,req.getRemoteAddr());
                 resp.sendError(HttpServletResponse.SC_BAD_REQUEST,
                         ”receive invalid redirect request from peer “ + req.getRemoteAddr());
                 return;
             }
-            
+
             final String targetServer = distroMapper.mapSrv(distroTag);
-            
+
             List<String> headerList = new ArrayList<>(16);
             Enumeration<String> headers = req.getHeaderNames();
             while (headers.hasMoreElements()) {
@@ -367,10 +363,10 @@ public class DistroFilter implements Filter {
                 headerList.add(headerName);
                 headerList.add(req.getHeader(headerName));
             }
-            
+
             final String body = IoUtils.toString(req.getInputStream(), StandardCharsets.UTF_8.name());
             final Map<String, String> paramsValue = HttpClient.translateParameterMap(req.getParameterMap());
-            
+
             RestResult<String> result = HttpClient
                     .request(HTTP_PREFIX + targetServer + req.getRequestURI(), headerList, paramsValue, body,
                             PROXY_CONNECT_TIMEOUT, PROXY_READ_TIMEOUT, StandardCharsets.UTF_8.name(), req.getMethod());
@@ -378,19 +374,18 @@ public class DistroFilter implements Filter {
             try {
                 WebUtils.response(resp, data, result.getCode());
             } catch (Exception ignore) {
-                Loggers.SRV_LOG.warn(”[DISTRO-FILTER] request failed: “ + distroMapper.mapSrv(distroTag) + urlString);
+                Loggers.SRV_LOG.warn(”[DISTRO - FILTER] request failed: “+distroMapper.mapSrv(distroTag) + urlString);
             }
         } catch (AccessControlException e) {
-            resp.sendError(HttpServletResponse.SC_FORBIDDEN, ”access denied: “ + ExceptionUtil.getAllExceptionMsg(e));
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN, ”access denied: “+ExceptionUtil.getAllExceptionMsg(e));
         } catch (NoSuchMethodException e) {
             resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED,
-                    ”no such api:“ + req.getMethod() + ”:“ + req.getRequestURI());
+                    ”no such api:“+req.getMethod() + ”:“+req.getRequestURI());
         } catch (Exception e) {
-            Loggers.SRV_LOG.warn(”[DISTRO-FILTER] Server failed: “, e);
+            Loggers.SRV_LOG.warn(”[DISTRO - FILTER] Server failed: “,e);
             resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR,
                     ”Server failed, “ + ExceptionUtil.getAllExceptionMsg(e));
         }
-        
     }
 }
 ```
@@ -400,14 +395,7 @@ public class DistroFilter implements Filter {
 
 register
 
-```java
-    /**
-     * Register new instance.
-     *
-     * @param request http request
-     * @return ‘ok’ if success
-     * @throws Exception any error during register
-     */
+```java 
     @CanDistro
     @PostMapping
     @TpsControl(pointName = ”NamingInstanceRegister“, name = ”HttpNamingInstanceRegister“)
@@ -490,6 +478,92 @@ public class PersistentClientOperationServiceImpl extends RequestProcessor4CP im
 ## Config
 
 
+
+## Distro
+
+
+
+```java
+ublic class DistroClientDataProcessor extends SmartSubscriber implements DistroDataStorage, DistroDataProcessor {
+}
+```
+
+
+
+## 
+
+```java
+private void syncToAllServer(ClientEvent event) {
+        Client client = event.getClient();
+        if (isInvalidClient(client)) {
+            return;
+        }
+        if (event instanceof ClientEvent.ClientDisconnectEvent) {
+            DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
+            distroProtocol.sync(distroKey, DataOperation.DELETE);
+        } else if (event instanceof ClientEvent.ClientChangedEvent) {
+            DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
+            distroProtocol.sync(distroKey, DataOperation.CHANGE);
+        }
+    }
+
+public void sync(DistroKey distroKey, DataOperation action, long delay) {
+    for (Member each : memberManager.allMembersWithoutSelf()) {
+        syncToTarget(distroKey, action, each.getAddress(), delay);
+    }
+}
+```
+
+
+
+## Consistency
+
+
+### JRaft
+
+A concrete implementation of CP protocol: JRaft.
+
+```java
+/**
+ * <pre>
+ *                                           ┌──────────────────────┐
+ *            ┌──────────────────────┐       │                      ▼
+ *            │   ProtocolManager    │       │        ┌───────────────────────────┐
+ *            └──────────────────────┘       │        │for p in [LogProcessor4CP] │
+ *                        │                  │        └───────────────────────────┘
+ *                        ▼                  │                      │
+ *      ┌──────────────────────────────────┐ │                      ▼
+ *      │    discovery LogProcessor4CP     │ │             ┌─────────────────┐
+ *      └──────────────────────────────────┘ │             │  get p.group()  │
+ *                        │                  │             └─────────────────┘
+ *                        ▼                  │                      │
+ *                 ┌─────────────┐           │                      │
+ *                 │ RaftConfig  │           │                      ▼
+ *                 └─────────────┘           │      ┌──────────────────────────────┐
+ *                        │                  │      │  create raft group service   │
+ *                        ▼                  │      └──────────────────────────────┘
+ *              ┌──────────────────┐         │
+ *              │  JRaftProtocol   │         │
+ *              └──────────────────┘         │
+ *                        │                  │
+ *                     init()                │
+ *                        │                  │
+ *                        ▼                  │
+ *               ┌─────────────────┐         │
+ *               │   JRaftServer   │         │
+ *               └─────────────────┘         │
+ *                        │                  │
+ *                        │                  │
+ *                        ▼                  │
+ *             ┌────────────────────┐        │
+ *             │JRaftServer.start() │        │
+ *             └────────────────────┘        │
+ *                        │                  │
+ *                        └──────────────────┘
+ * </pre>
+ *
+ */
+```
 
 
 

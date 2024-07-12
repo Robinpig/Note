@@ -20,9 +20,6 @@ public class NacosServiceRegistryAutoConfiguration {
 }
 ```
 
-
-### register
-
 Override [Spring Cloud register](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=AbstractAutoServiceRegistration)
 
 ```java
@@ -76,7 +73,8 @@ public class NacosNamingService implements NamingService {
 
 ### registerInstance
 
-If you'd like to use "Service Registry" features, NamingService is a core service interface to get or publish config, you could use "Dependency Injection" to inject NamingService instance in your Spring Beans.
+If you'd like to use "Service Registry" features, NamingService is a core service interface to get or publish config, 
+you could use "Dependency Injection" to inject NamingService instance in your Spring Beans.
 
 And [Dubbo](/docs/CS/Java/Dubbo/registry.md?id=NacosRegistry) wrapped it.
 
@@ -244,25 +242,56 @@ use NacosRestTemplate call [Server register](/docs/CS/Java/Spring_Cloud/nacos/re
 
 ## Server Register
 
+
+##### **InstanceController**
+
 ```java
 // com.alibaba.nacos.naming.controllers.InstanceController /v1/ns/instance
 @CanDistro
 @PostMapping
-@Secured(parser = NamingResourceParser.class, action = ActionTypes.WRITE)
+@TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
+@Secured(action = ActionTypes.WRITE)
 public String register(HttpServletRequest request) throws Exception {
-    
-    final String namespaceId = WebUtils
-            .optional(request, CommonParams.NAMESPACE_ID, Constants.DEFAULT_NAMESPACE_ID);
+
+    final String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID,
+            Constants.DEFAULT_NAMESPACE_ID);
     final String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
     NamingUtils.checkServiceNameFormat(serviceName);
-    
+
     final Instance instance = HttpRequestInstanceBuilder.newBuilder()
             .setDefaultInstanceEphemeral(switchDomain.isDefaultInstanceEphemeral()).setRequest(request).build();
-    
+
     getInstanceOperator().registerInstance(namespaceId, serviceName, instance);
+    NotifyCenter.publishEvent(new RegisterInstanceTraceEvent(System.currentTimeMillis(),
+            NamingRequestUtil.getSourceIpForHttpRequest(request), false, namespaceId,
+            NamingUtils.getGroupName(serviceName), NamingUtils.getServiceName(serviceName), instance.getIp(),
+            instance.getPort()));
     return "ok";
 }
 ```
+
+##### **InstanceControllerV2**
+```java
+@CanDistro
+@PostMapping
+@TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
+@Secured(action = ActionTypes.WRITE)
+public Result<String> register(InstanceForm instanceForm) throws NacosException {
+    // check param
+    instanceForm.validate();
+    checkWeight(instanceForm.getWeight());
+    // build instance
+    Instance instance = buildInstance(instanceForm);
+    instanceServiceV2.registerInstance(instanceForm.getNamespaceId(), buildCompositeServiceName(instanceForm),
+            instance);
+    NotifyCenter.publishEvent(
+            new RegisterInstanceTraceEvent(System.currentTimeMillis(), NamingRequestUtil.getSourceIp(), false,
+                    instanceForm.getNamespaceId(), instanceForm.getGroupName(), instanceForm.getServiceName(),
+                    instance.getIp(), instance.getPort()));
+    return Result.success("ok");
+}
+```
+
 
 ```java
 // ServiceManager
