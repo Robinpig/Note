@@ -84,8 +84,29 @@ public class NacosPropertySourceLocator implements PropertySourceLocator {
 }
 ```
 
-
 ### ConfigService
+
+```java
+public NacosConfigService(Properties properties) throws NacosException {
+    PreInitUtils.asyncPreLoadCostComponent();
+    final NacosClientProperties clientProperties = NacosClientProperties.PROTOTYPE.derive(properties);
+    ValidatorUtils.checkInitParam(clientProperties);
+
+    initNamespace(clientProperties);
+    this.configFilterChainManager = new ConfigFilterChainManager(clientProperties.asProperties());
+    ServerListManager serverListManager = new ServerListManager(clientProperties);
+    serverListManager.start();
+
+    this.worker = new ClientWorker(this.configFilterChainManager, serverListManager, clientProperties);
+    // will be deleted in 2.0 later versions
+    agent = new ServerHttpAgent(serverListManager);
+
+}
+```
+
+
+
+
 
 execute by executorService run [LongPollingRunnable](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md?id=LongPollingRunnable)
 
