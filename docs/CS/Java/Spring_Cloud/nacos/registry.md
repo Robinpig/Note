@@ -1,4 +1,4 @@
-## Introduction
+Introduction
 
 [NACOS-DISCOVERY-QUICK-START](https://github.com/nacos-group/nacos-spring-boot-project/blob/master/NACOS-DISCOVERY-QUICK-START.md)
 
@@ -239,6 +239,94 @@ use NacosRestTemplate call [Server register](/docs/CS/Java/Spring_Cloud/nacos/re
                 "failed to req API:" + api + " after all servers(" + servers + ") tried: " + exception.getMessage());
 }
 ```
+
+
+
+## Distro
+
+Distro 协议是 Nacos 社区自研的一种 AP 分布式协议，是面向临时实例设计的一种分布式协议 其数据存储在缓存中，并且会在启动时进行全量数据同步，并定期进行数据校验 保证了在某些 Nacos 节点宕机后，整个临时实例处理系统依旧可以正常工作。 Distro 协议作为 Nacos 的内嵌临时实例一致性协议，保证了在分布式环境下每个节点上面的服务信息的状态都能够及时地通知其他节点，可以维持数十万量级服务实例的存储和一致性。
+
+
+
+Distro 协议的主要设计思想如下：
+
+- Nacos 每个节点是平等的都可以处理写请求 每个节点只负责部分数据，
+
+- - 当该节点接收到属于该节点负责的实例的写请求时，直接写入 
+  - 当该节点接收到不属于该节点负责的实例的写请求时，将在集群内部路由，转发给对应的节点，从而完成写入
+
+- 定时发送自己负责数据的校验值到其他节点来保持数据一致性。
+- 每个节点独立处理读请求，及时从本地发出响应。
+
+
+
+新加入的 Distro 节点会进行全量数据拉取。具体操作是轮询所有的 Distro 节点，通过向其他的机器发送请求拉取全量数据。
+在全量拉取操作完成之后，Nacos 的每台机器上都维护了当前的所有注册上来的非持久化实例数据。
+
+
+
+
+
+在 Distro 集群启动之后，各台机器之间会定期的发送心跳。心跳信息主要为各个机器上的所有数据的元信息（之所以使用元信息，是因为需要保证网络中数据传输的量级维持在一个较低水平）。这种数据校验会以心跳的形式进行，即每台机器在固定时间间隔会向其他机器发起一次数据校验请求。
+一旦在数据校验过程中，某台机器发现其他机器上的数据与本地数据不一致，则会发起一次全量拉取请求，将数据补齐。
+
+
+
+对于一个已经启动完成的 Distro 集群，在一次客户端发起写操作的流程中，当注册非持久化的实例的写请求打到某台 Nacos 服务器时，Distro 集群处理的流程图如下。
+
+整个步骤包括几个部分（图中从上到下顺序）：
+
+- 前置的 Filter 拦截请求，并根据请求中包含的 IP 和 port 信息计算其所属的 Distro 责任节点，并将该请求转发到所属的 Distro 责任节点上。
+- 责任节点上的 Controller 将写请求进行解析。
+- Distro 协议定期执行 Sync 任务，将本机所负责的所有的实例信息同步到其他节点上。
+
+
+
+
+
+由于每台机器上都存放了全量数据，因此在每一次读操作中，Distro 机器会直接从本地拉取数据。快速响应。
+这种机制保证了 Distro 协议可以作为一种 AP 协议，对于读操作都进行及时的响应。在网络分区的情况下，对于所有的读操作也能够正常返回；当网络恢复时，各个 Distro 节点会把各数据分片的数据进行合并恢复。
+
+
+
+
+
+
+
+
+
+```java
+public class DistroClientDataProcessor extends SmartSubscriber implements DistroDataStorage, DistroDataProcessor {
+}
+```
+
+
+
+
+
+```java
+private void syncToAllServer(ClientEvent event) {
+        Client client = event.getClient();
+        if (isInvalidClient(client)) {
+            return;
+        }
+        if (event instanceof ClientEvent.ClientDisconnectEvent) {
+            DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
+            distroProtocol.sync(distroKey, DataOperation.DELETE);
+        } else if (event instanceof ClientEvent.ClientChangedEvent) {
+            DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
+            distroProtocol.sync(distroKey, DataOperation.CHANGE);
+        }
+    }
+
+public void sync(DistroKey distroKey, DataOperation action, long delay) {
+    for (Member each : memberManager.allMembersWithoutSelf()) {
+        syncToTarget(distroKey, action, each.getAddress(), delay);
+    }
+}
+```
+
+
 
 ## Server Register
 

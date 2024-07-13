@@ -479,41 +479,6 @@ public class PersistentClientOperationServiceImpl extends RequestProcessor4CP im
 
 
 
-## Distro
-
-
-
-```java
-ublic class DistroClientDataProcessor extends SmartSubscriber implements DistroDataStorage, DistroDataProcessor {
-}
-```
-
-
-
-## 
-
-```java
-private void syncToAllServer(ClientEvent event) {
-        Client client = event.getClient();
-        if (isInvalidClient(client)) {
-            return;
-        }
-        if (event instanceof ClientEvent.ClientDisconnectEvent) {
-            DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
-            distroProtocol.sync(distroKey, DataOperation.DELETE);
-        } else if (event instanceof ClientEvent.ClientChangedEvent) {
-            DistroKey distroKey = new DistroKey(client.getClientId(), TYPE);
-            distroProtocol.sync(distroKey, DataOperation.CHANGE);
-        }
-    }
-
-public void sync(DistroKey distroKey, DataOperation action, long delay) {
-    for (Member each : memberManager.allMembersWithoutSelf()) {
-        syncToTarget(distroKey, action, each.getAddress(), delay);
-    }
-}
-```
-
 
 
 ## Consistency
