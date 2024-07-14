@@ -593,7 +593,7 @@ public class InstanceRequestHandler extends RequestHandler<InstanceRequest, Inst
 
 ```
 
-
+通过异步事件机制完成instance metadata等数据的存储 sync数据到其它server
 ```java
 @Component("ephemeralClientOperationService")
 public class EphemeralClientOperationServiceImpl implements ClientOperationService {
@@ -618,14 +618,25 @@ public class EphemeralClientOperationServiceImpl implements ClientOperationServi
     }
 }
 ```
+#### addServiceInstance
 
-publishInfo被添加到Client下ConcurrentHashMap, 发布两个异步事件
+publishInfo被添加到Client下ConcurrentHashMap, 发布[ClientChangedEvent](/docs/CS/Java/Spring_Cloud/nacos/registry.md?id=ClientChangedEvent), sync数据到其它server
 ```java
 public abstract class AbstractClient implements Client {
 
     protected final ConcurrentHashMap<Service, InstancePublishInfo> publishers = new ConcurrentHashMap<>(16, 0.75f, 1);
+
+    @Override
+    public boolean addServiceInstance(Service service, InstancePublishInfo instancePublishInfo) {
+        if (null == publishers.put(service, instancePublishInfo)) {
+            MetricsMonitor.incrementInstanceCount();
+        }
+        NotifyCenter.publishEvent(new ClientEvent.ClientChangedEvent(this));
+        return true;
+    }
 }
 ```
+
 ClientRegisterServiceEvent事件 添加信息到全局ConcurrentMap<Service, Set<String>>中
 ```java
 
@@ -986,6 +997,67 @@ public class ServiceStorage {
 }
 ```
 
+## MemberLookup
+
+```java
+public class AddressServerMemberLookup extends AbstractMemberLookup {
+
+    @Override
+    public void doStart() throws NacosException {
+        this.maxFailCount = Integer.parseInt(EnvUtil.getProperty(HEALTH_CHECK_FAIL_COUNT_PROPERTY, DEFAULT_HEALTH_CHECK_FAIL_COUNT));
+        initAddressSys();
+        run();
+    }
+
+
+    private void initAddressSys() {
+        String envDomainName = System.getenv(ADDRESS_SERVER_DOMAIN_ENV);
+        if (StringUtils.isBlank(envDomainName)) {
+            domainName = EnvUtil.getProperty(ADDRESS_SERVER_DOMAIN_PROPERTY, DEFAULT_SERVER_DOMAIN);
+        } else {
+            domainName = envDomainName;
+        }
+        String envAddressPort = System.getenv(ADDRESS_SERVER_PORT_ENV);
+        if (StringUtils.isBlank(envAddressPort)) {
+            addressPort = EnvUtil.getProperty(ADDRESS_SERVER_PORT_PROPERTY, DEFAULT_SERVER_POINT);
+        } else {
+            addressPort = envAddressPort;
+        }
+        String envAddressUrl = System.getenv(ADDRESS_SERVER_URL_ENV);
+        if (StringUtils.isBlank(envAddressUrl)) {
+            addressUrl = EnvUtil.getProperty(ADDRESS_SERVER_URL_PROPERTY, EnvUtil.getContextPath() + "/" + "serverlist");
+        } else {
+            addressUrl = envAddressUrl;
+        }
+        addressServerUrl = HTTP_PREFIX + domainName + ":" + addressPort + addressUrl;
+        envIdUrl = HTTP_PREFIX + domainName + ":" + addressPort + "/env";
+    }
+
+    @SuppressWarnings("PMD.UndefineMagicConstantRule")
+    private void run() throws NacosException {
+        // With the address server, you need to perform a synchronous member node pull at startup
+        // Repeat three times, successfully jump out
+        boolean success = false;
+        Throwable ex = null;
+        int maxRetry = EnvUtil.getProperty(ADDRESS_SERVER_RETRY_PROPERTY, Integer.class, DEFAULT_SERVER_RETRY_TIME);
+        for (int i = 0; i < maxRetry; i++) {
+            try {
+                syncFromAddressUrl();
+                success = true;
+                break;
+            } catch (Throwable e) {
+                ex = e;
+                Loggers.CLUSTER.error("[serverlist] exception, error : {}", ExceptionUtil.getAllExceptionMsg(ex));
+            }
+        }
+        if (!success) {
+            throw new NacosException(NacosException.SERVER_ERROR, ex);
+        }
+
+        GlobalExecutor.scheduleByCommon(new AddressServerSyncTask(), DEFAULT_SYNC_TASK_DELAY_MS);
+    }
+}
+```
 
 ## Distro
 
@@ -1021,24 +1093,43 @@ Distro 协议的主要设计思想如下：
 - Distro 协议定期执行 Sync 任务，将本机所负责的所有的实例信息同步到其他节点上。
 
 
-
-
-
 由于每台机器上都存放了全量数据，因此在每一次读操作中，Distro 机器会直接从本地拉取数据。快速响应。
 这种机制保证了 Distro 协议可以作为一种 AP 协议，对于读操作都进行及时的响应。在网络分区的情况下，对于所有的读操作也能够正常返回；当网络恢复时，各个 Distro 节点会把各数据分片的数据进行合并恢复。
 
 
-
-
-
-
-
-
+事件驱动
 
 ```java
+ @Component
+public class DistroClientComponentRegistry {
+  @PostConstruct
+    public void doRegister() {
+        DistroClientDataProcessor dataProcessor = new DistroClientDataProcessor(clientManager, distroProtocol);
+        DistroTransportAgent transportAgent = new DistroClientTransportAgent(clusterRpcClientProxy,
+                serverMemberManager);
+        DistroClientTaskFailedHandler taskFailedHandler = new DistroClientTaskFailedHandler(taskEngineHolder);
+        componentHolder.registerDataStorage(DistroClientDataProcessor.TYPE, dataProcessor);
+        componentHolder.registerDataProcessor(dataProcessor);
+        componentHolder.registerTransportAgent(DistroClientDataProcessor.TYPE, transportAgent);
+        componentHolder.registerFailedTaskHandler(DistroClientDataProcessor.TYPE, taskFailedHandler);
+    }
+}
+
 public class DistroClientDataProcessor extends SmartSubscriber implements DistroDataStorage, DistroDataProcessor {
+  @Override
+    public void onEvent(Event event) {
+        if (EnvUtil.getStandaloneMode()) {
+            return;
+        }
+        if (event instanceof ClientEvent.ClientVerifyFailedEvent) {
+            syncToVerifyFailedServer((ClientEvent.ClientVerifyFailedEvent) event);
+        } else {
+            syncToAllServer((ClientEvent) event);
+        }
+    }
 }
 ```
+
 
 ### verify
 
@@ -1093,46 +1184,11 @@ public class EphemeralIpPortClientManager implements ClientManager {
 
 ### sync
 
-事件驱动
 
+
+#### ClientChangedEvent
+遍历所有的member
 ```java
- @Component
-public class DistroClientComponentRegistry {
-  @PostConstruct
-    public void doRegister() {
-        DistroClientDataProcessor dataProcessor = new DistroClientDataProcessor(clientManager, distroProtocol);
-        DistroTransportAgent transportAgent = new DistroClientTransportAgent(clusterRpcClientProxy,
-                serverMemberManager);
-        DistroClientTaskFailedHandler taskFailedHandler = new DistroClientTaskFailedHandler(taskEngineHolder);
-        componentHolder.registerDataStorage(DistroClientDataProcessor.TYPE, dataProcessor);
-        componentHolder.registerDataProcessor(dataProcessor);
-        componentHolder.registerTransportAgent(DistroClientDataProcessor.TYPE, transportAgent);
-        componentHolder.registerFailedTaskHandler(DistroClientDataProcessor.TYPE, taskFailedHandler);
-    }
-}
-
-public class DistroClientDataProcessor extends SmartSubscriber implements DistroDataStorage, DistroDataProcessor {
-  @Override
-    public void onEvent(Event event) {
-        if (EnvUtil.getStandaloneMode()) {
-            return;
-        }
-        if (event instanceof ClientEvent.ClientVerifyFailedEvent) {
-            syncToVerifyFailedServer((ClientEvent.ClientVerifyFailedEvent) event);
-        } else {
-            syncToAllServer((ClientEvent) event);
-        }
-    }
-}
-```
-
-
-
-
-
-```java
-
-
 private void syncToAllServer(ClientEvent event) {
         Client client = event.getClient();
         if (isInvalidClient(client)) {
@@ -1158,12 +1214,46 @@ private void syncToAllServer(ClientEvent event) {
                 targetServer);
         DistroDelayTask distroDelayTask = new DistroDelayTask(distroKeyWithTarget, action, delay);
         distroTaskEngineHolder.getDelayTaskExecuteEngine().addTask(distroKeyWithTarget, distroDelayTask);
-        if (Loggers.DISTRO.isDebugEnabled()) {
-            Loggers.DISTRO.debug("[DISTRO-SCHEDULE] {} to {}", distroKey, targetServer);
-        }
     }
 ```
+delay通过grpc发送sync通知
+```java
+public class DistroDelayTaskProcessor implements NacosTaskProcessor {
+    @Override
+    public boolean process(NacosTask task) {
+        if (!(task instanceof DistroDelayTask)) {
+            return true;
+        }
+        DistroDelayTask distroDelayTask = (DistroDelayTask) task;
+        DistroKey distroKey = distroDelayTask.getDistroKey();
+        switch (distroDelayTask.getAction()) {
+            case DELETE:
+                DistroSyncDeleteTask syncDeleteTask = new DistroSyncDeleteTask(distroKey, distroComponentHolder);
+                distroTaskEngineHolder.getExecuteWorkersManager().addTask(distroKey, syncDeleteTask);
+                return true;
+            case CHANGE:
+            case ADD:
+                DistroSyncChangeTask syncChangeTask = new DistroSyncChangeTask(distroKey, distroComponentHolder);
+                distroTaskEngineHolder.getExecuteWorkersManager().addTask(distroKey, syncChangeTask);
+                return true;
+            default:
+                return false;
+        }
+    }
+}
 
+
+public class DistroSyncChangeTask extends AbstractDistroExecuteTask {
+
+    @Override
+    protected boolean doExecute() {
+        String type = getDistroKey().getResourceType();
+        DistroData distroData = getDistroData(type);
+        return getDistroComponentHolder().findTransportAgent(type)
+                .syncData(distroData, getDistroKey().getTargetServer());
+    }
+}
+```
 
 
 ## Server Register
@@ -1353,7 +1443,6 @@ doClean任务 超时60s则执行remove操作
   }
   
   private void removeExpiredMetadata(ExpiredMetadataInfo expiredInfo) {
-      Loggers.SRV_LOG.info("Remove expired metadata {}", expiredInfo);
       if (null == expiredInfo.getMetadataId()) {
           if (metadataManager.containServiceMetadata(expiredInfo.getService())) {
               metadataOperateService.deleteServiceMetadata(expiredInfo.getService());
@@ -1364,6 +1453,33 @@ doClean任务 超时60s则执行remove操作
           }
       }
   }
+```
+
+metadata的操作是通过cp协议(JRaft)保证
+```java
+@Component
+public class NamingMetadataOperateService {
+    public void deleteInstanceMetadata(Service service, String metadataId) {
+        MetadataOperation<InstanceMetadata> operation = buildMetadataOperation(service);
+        operation.setTag(metadataId);
+        WriteRequest operationLog = WriteRequest.newBuilder().setGroup(Constants.INSTANCE_METADATA)
+                .setOperation(DataOperation.DELETE.name()).setData(ByteString.copyFrom(serializer.serialize(operation)))
+                .build();
+        submitMetadataOperation(operationLog);
+    }
+
+    private void submitMetadataOperation(WriteRequest operationLog) {
+        try {
+            Response response = cpProtocol.write(operationLog);
+            if (!response.getSuccess()) {
+                throw new NacosRuntimeException(NacosException.SERVER_ERROR,
+                        "do metadata operation failed " + response.getErrMsg());
+            }
+        } catch (Exception e) {
+            throw new NacosRuntimeException(NacosException.SERVER_ERROR, "do metadata operation failed", e);
+        }
+    }
+}
 ```
 
 
