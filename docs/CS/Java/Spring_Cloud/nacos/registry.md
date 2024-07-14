@@ -258,19 +258,15 @@ Distro 协议的主要设计思想如下：
 - 定时发送自己负责数据的校验值到其他节点来保持数据一致性。
 - 每个节点独立处理读请求，及时从本地发出响应。
 
-
+> [!TIP]
+>
+> Distro 协议是在Gossip的优化：每个节点负责一部分数据，然后将数据同步给其他节点，有效的降低了消息冗余的问题。
 
 新加入的 Distro 节点会进行全量数据拉取。具体操作是轮询所有的 Distro 节点，通过向其他的机器发送请求拉取全量数据。
 在全量拉取操作完成之后，Nacos 的每台机器上都维护了当前的所有注册上来的非持久化实例数据。
 
-
-
-
-
 在 Distro 集群启动之后，各台机器之间会定期的发送心跳。心跳信息主要为各个机器上的所有数据的元信息（之所以使用元信息，是因为需要保证网络中数据传输的量级维持在一个较低水平）。这种数据校验会以心跳的形式进行，即每台机器在固定时间间隔会向其他机器发起一次数据校验请求。
 一旦在数据校验过程中，某台机器发现其他机器上的数据与本地数据不一致，则会发起一次全量拉取请求，将数据补齐。
-
-
 
 对于一个已经启动完成的 Distro 集群，在一次客户端发起写操作的流程中，当注册非持久化的实例的写请求打到某台 Nacos 服务器时，Distro 集群处理的流程图如下。
 
@@ -302,9 +298,48 @@ public class DistroClientDataProcessor extends SmartSubscriber implements Distro
 
 
 
+### sync
+
+事件驱动
+
+```java
+ @Component
+public class DistroClientComponentRegistry {
+  @PostConstruct
+    public void doRegister() {
+        DistroClientDataProcessor dataProcessor = new DistroClientDataProcessor(clientManager, distroProtocol);
+        DistroTransportAgent transportAgent = new DistroClientTransportAgent(clusterRpcClientProxy,
+                serverMemberManager);
+        DistroClientTaskFailedHandler taskFailedHandler = new DistroClientTaskFailedHandler(taskEngineHolder);
+        componentHolder.registerDataStorage(DistroClientDataProcessor.TYPE, dataProcessor);
+        componentHolder.registerDataProcessor(dataProcessor);
+        componentHolder.registerTransportAgent(DistroClientDataProcessor.TYPE, transportAgent);
+        componentHolder.registerFailedTaskHandler(DistroClientDataProcessor.TYPE, taskFailedHandler);
+    }
+}
+
+public class DistroClientDataProcessor extends SmartSubscriber implements DistroDataStorage, DistroDataProcessor {
+  @Override
+    public void onEvent(Event event) {
+        if (EnvUtil.getStandaloneMode()) {
+            return;
+        }
+        if (event instanceof ClientEvent.ClientVerifyFailedEvent) {
+            syncToVerifyFailedServer((ClientEvent.ClientVerifyFailedEvent) event);
+        } else {
+            syncToAllServer((ClientEvent) event);
+        }
+    }
+}
+```
+
+
+
 
 
 ```java
+
+
 private void syncToAllServer(ClientEvent event) {
         Client client = event.getClient();
         if (isInvalidClient(client)) {
@@ -319,11 +354,21 @@ private void syncToAllServer(ClientEvent event) {
         }
     }
 
-public void sync(DistroKey distroKey, DataOperation action, long delay) {
-    for (Member each : memberManager.allMembersWithoutSelf()) {
-        syncToTarget(distroKey, action, each.getAddress(), delay);
+    public void sync(DistroKey distroKey, DataOperation action, long delay) {
+        for (Member each : memberManager.allMembersWithoutSelf()) {
+            syncToTarget(distroKey, action, each.getAddress(), delay);
+        }
     }
-}
+
+    public void syncToTarget(DistroKey distroKey, DataOperation action, String targetServer, long delay) {
+        DistroKey distroKeyWithTarget = new DistroKey(distroKey.getResourceKey(), distroKey.getResourceType(),
+                targetServer);
+        DistroDelayTask distroDelayTask = new DistroDelayTask(distroKeyWithTarget, action, delay);
+        distroTaskEngineHolder.getDelayTaskExecuteEngine().addTask(distroKeyWithTarget, distroDelayTask);
+        if (Loggers.DISTRO.isDebugEnabled()) {
+            Loggers.DISTRO.debug("[DISTRO-SCHEDULE] {} to {}", distroKey, targetServer);
+        }
+    }
 ```
 
 

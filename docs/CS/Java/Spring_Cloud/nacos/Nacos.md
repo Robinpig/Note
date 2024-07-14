@@ -35,6 +35,21 @@ Nacos 的关键特性包括:
 
 
 
+Run and Debug
+
+```shell
+git clone https://github.com/alibaba/nacos.git
+cd nacos/
+# -Drat.skip=true 
+mvn -Prelease-nacos -Dmaven.test.skip=true clean install -U  
+ls -al distribution/target/
+
+// change the $version to your actual path
+cd distribution/target/nacos-server-$version/nacos/bin
+```
+
+Run Nacos.java file in module nacos-console with VM options `-Dnacos.standalone=true`
+
 ## Architecture
 
 整体架构分为用户层、 业务层、 内核层和插件， 用户层主要解决用户使用的易用性问题， 业务层主要解决服务发现和配置管理的功能问题， 内核层解决分布式系统⼀致性、 存储、 高可用等核心问题，插件解决扩展性问题。  
