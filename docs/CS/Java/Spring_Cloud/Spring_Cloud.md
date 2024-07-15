@@ -111,6 +111,11 @@ public interface ServiceInstance {
 }
 ```
 
+
+publishEvent(new ServletWebServerInitializedEvent
+
+Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的register函数
+
 ### ServiceRegistry
 
 Commons now provides a `ServiceRegistry` interface that provides methods such as `register(Registration)` and `deregister(Registration)`, which let you provide custom registered services.
@@ -240,6 +245,13 @@ As an application moves through the deployment pipeline from dev to test and int
 The default implementation of the server storage backend uses git so it easily supports labelled versions of configuration environments,
 as well as being accessible to a wide range of tooling for managing the content.
 It is easy to add alternative implementations and plug them in with Spring configuration.
+
+配置中心的四个基础诉求：
+- 需要支持动态修改配置
+- 需要动态变更有多实时
+- 变更快了之后如何管控控制变更风险，如灰度、回滚等
+- 敏感配置如何做安全配置
+
 
 Spring Cloud Config Server features:
 

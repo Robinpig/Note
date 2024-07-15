@@ -64,16 +64,7 @@ Run Nacos.java file in module nacos-console with VM options `-Dnacos.standalone=
 
 
 
-## Service Registry
-
-
-
  
-
-
-## Config
-
-
 
 
 

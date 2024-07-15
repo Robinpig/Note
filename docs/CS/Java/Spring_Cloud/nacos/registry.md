@@ -5,7 +5,30 @@
 ## Client Registry
 
 
-#### AutoConfiguration
+
+<!-- tabs:start -->
+
+##### **Dubbo**
+
+```java
+
+```
+
+
+
+##### **Spring Boot**
+
+
+
+publishEvent(new ServletWebServerInitializedEvent
+
+Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的register函数
+
+Nacos实现子类NacosAutoServiceRegistration
+
+
+
+
 ```java
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties
@@ -21,6 +44,8 @@ public class NacosServiceRegistryAutoConfiguration {
 ```
 
 Override [Spring Cloud register](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=AbstractAutoServiceRegistration)
+
+createNamingService
 
 ```java
 public class NacosServiceRegistry implements ServiceRegistry<Registration> {
@@ -41,9 +66,16 @@ public class NacosServiceRegistry implements ServiceRegistry<Registration> {
 }
 ```
 
+
+<!-- tabs:end -->
+
 ### NamingService
 
-Get NamingService by Constructor.newInstance(properties);
+
+
+创建namingService时会创建clientProxy 包括grpc和Http
+
+NamingGrpcClientProxy
 
 1. HostReactor schedule updateTask every 10s
 2. BeatReactor schedule BeatTask
