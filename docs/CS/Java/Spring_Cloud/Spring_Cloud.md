@@ -152,9 +152,9 @@ For the reactive version (with WebTestClient), you need to set `spring.cloud.loa
 
 ### AbstractAutoServiceRegistration
 
-Implementations:
+实现ServiceRegistry并在register方法里做注册逻辑
 
-- [Nacos](/docs/CS/Java/Spring_Cloud/nacos/registry.md)
+- [Nacos](/docs/CS/Java/Spring_Cloud/nacos/registry.md?id=Client-Registry)
 - [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
 
 ```java
