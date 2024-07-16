@@ -904,7 +904,30 @@ It uses an implementation of PartitionAssignor to decide which partitions should
 3. Consumers
 
 
+支持消费者主动发起rebalance请求
+> 
+> Alert the consumer to trigger a new rebalance by rejoining the group. This is a nonblocking call that forces the consumer to trigger a new rebalance on the next poll(Duration) call. 
+> Note that this API does not itself initiate the rebalance, so you must still call poll(Duration). If a rebalance is already in progress this call will be a no-op. If you wish to force an additional rebalance you must complete the current one by calling poll before retrying this API.
+> You do not need to call this during normal processing, as the consumer group will manage itself automatically and rebalance when necessary. 
+> However there may be situations where the application wishes to trigger a rebalance that would otherwise not occur. 
+> For example, if some condition external and invisible to the Consumer and its group changes in a way that would affect the userdata encoded in the Subscription, the Consumer will not be notified and no rebalance will occur. 
+> This API can be used to force the group to rebalance so that the assignor can perform a partition reassignment based on the latest userdata. 
+> If your assignor does not use this userdata, or you do not use a custom ConsumerPartitionAssignor, you should not use this API.
 
+```java
+@Override
+    public void enforceRebalance(final String reason) {
+        acquireAndEnsureOpen();
+        try {
+            if (coordinator == null) {
+                throw new IllegalStateException("Tried to force a rebalance but consumer does not have a group.");
+            }
+            coordinator.requestRejoin(reason == null || reason.isEmpty() ? DEFAULT_REASON : reason);
+        } finally {
+            release();
+        }
+    }
+```
 
 
 Choose a leader of consumers and let leader selects strategy.
