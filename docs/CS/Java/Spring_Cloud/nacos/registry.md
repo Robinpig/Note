@@ -20,9 +20,9 @@
 
 
 
-publishEvent(new ServletWebServerInitializedEvent
+Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的[register](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=AbstractAutoServiceRegistration)函数
 
-Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的register函数
+
 
 Nacos实现子类NacosAutoServiceRegistration
 
@@ -42,8 +42,6 @@ public class NacosServiceRegistryAutoConfiguration {
     
 }
 ```
-
-Override [Spring Cloud register](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=AbstractAutoServiceRegistration)
 
 createNamingService
 
