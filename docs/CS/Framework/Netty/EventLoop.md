@@ -140,7 +140,7 @@ public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit uni
 
 ## EventLoopGroup
 
-Special EventExecutorGroup which allows [registering Channels](/docs/CS/Java/Netty/Channel.md?id=register) that get processed for later selection during the event loop.
+Special EventExecutorGroup which allows [registering Channels](/docs/CS/Framework/Netty/Channel.md?id=register) that get processed for later selection during the event loop.
 
 ```dot
 digraph  {
@@ -326,7 +326,7 @@ protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
 
 ### ThreadFactory
 
-create [FastThreadLocalThread](/docs/CS/Java/Netty/FastThreadLocal.md)
+create [FastThreadLocalThread](/docs/CS/Framework/Netty/FastThreadLocal.md)
 
 ```java
 	//DefaultThreadFactory#newThread()
@@ -699,9 +699,9 @@ private void doStartThread() {
 
 ### run
 
-1. [select](/docs/CS/Java/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Java/Netty/EventLoop.md?id=rebuildSelector) if IOException occurs
-2. [processSelectedKeys](/docs/CS/Java/Netty/EventLoop.md?id=processSelectedKey)
-3. Ensure we always [run tasks](/docs/CS/Java/Netty/EventLoop.md?id=runAllTasks).
+1. [select](/docs/CS/Framework/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Framework/Netty/EventLoop.md?id=rebuildSelector) if IOException occurs
+2. [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processSelectedKey)
+3. Ensure we always [run tasks](/docs/CS/Framework/Netty/EventLoop.md?id=runAllTasks).
 
 'wakenUp.compareAndSet(false, true)' is always evaluated before calling 'selector.wakeup()' to reduce the wake-up overhead. (Selector.wakeup() is an expensive operation.)
 However, there is a race condition in this approach.
@@ -724,7 +724,7 @@ the first case (BAD - wake-up required) and the second case
 (OK - no wake-up required).
 
 Always handle shutdown even if the loop processing threw an exception.
-And [closeAll](/docs/CS/Java/Netty/EventLoop.md?id=closeAll) before shut down
+And [closeAll](/docs/CS/Framework/Netty/EventLoop.md?id=closeAll) before shut down
 
 ```java
 public final class NioEventLoop extends SingleThreadEventLoop {
@@ -923,7 +923,7 @@ private void select(boolean oldWakenUp) throws IOException {
 
 ### processSelectedKey
 
-call [Channel#finishConnect()](/docs/CS/Java/Netty/Channel.md?id=finishConnect)
+call [Channel#finishConnect()](/docs/CS/Framework/Netty/Channel.md?id=finishConnect)
 
 ```java
 private void processSelectedKeys() {
@@ -1227,7 +1227,7 @@ private void closeAll() {
 }
 ```
 
-unsafe.close( ) in [Channel](/docs/CS/Java/Netty/Channel.md )
+unsafe.close( ) in [Channel](/docs/CS/Framework/Netty/Channel.md )
 
 ## Implementation
 
@@ -1408,4 +1408,4 @@ Create an [AffinityThreadFactory](https://github.com/OpenHFT/Java-Thread-Affinit
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

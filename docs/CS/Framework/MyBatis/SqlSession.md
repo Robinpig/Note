@@ -191,4 +191,4 @@ public class DefaultSqlSession implements SqlSession {
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

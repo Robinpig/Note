@@ -17,10 +17,10 @@
 
 ## AutoConfiguration
 
-Injected Beans will be used in [handle](/docs/CS/Java/Spring_Cloud/gateway.md?id=handle):
+Injected Beans will be used in [handle](/docs/CS/Framework/Spring_Cloud/gateway.md?id=handle):
 
-- [RoutePredicateHandlerMapping](/docs/CS/Java/Spring_Cloud/gateway.md?id=predicate)
-- [FilteringWebHandler](/docs/CS/Java/Spring_Cloud/gateway.md?id=filter)
+- [RoutePredicateHandlerMapping](/docs/CS/Framework/Spring_Cloud/gateway.md?id=predicate)
+- [FilteringWebHandler](/docs/CS/Framework/Spring_Cloud/gateway.md?id=filter)
 
 ```java
 @Configuration(proxyBeanMethods = false)
@@ -72,7 +72,7 @@ public class GatewayLoadBalancerClientAutoConfiguration {
 
 ## handle
 
-See [Webflux Handle](/docs/CS/Java/Spring/webflux.md?id=handle)
+See [Webflux Handle](/docs/CS/Framework/Spring/webflux.md?id=handle)
 
 ```java
 public class RoutePredicateHandlerMapping extends AbstractHandlerMapping {
@@ -220,5 +220,5 @@ public class FilteringWebHandler implements WebHandler {
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=gateway)
-- [Spring Webflux](/docs/CS/Java/Spring/webflux.md)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=gateway)
+- [Spring Webflux](/docs/CS/Framework/Spring/webflux.md)

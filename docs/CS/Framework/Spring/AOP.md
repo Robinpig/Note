@@ -11,7 +11,7 @@ As [AspectJ](/docs/CS/Java/AspectJ.md) uses compile time and classload time weav
 
 AOP is used in the Spring Framework to:
 
-- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Java/Spring/Transaction.md?id=Declarative-transaction).
+- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Framework/Spring/Transaction.md?id=Declarative-transaction).
 - allow users to implement custom aspects, complementing their use of OOP with AOP.
 
 
@@ -476,7 +476,7 @@ Spring AOP uses either JDK dynamic proxies or CGLIB to create the proxy for a gi
 
 ![](img/AnnotationAwareAspectJAutoProxyCreator.png)
 
-`AbstractAutoProxyCreator` implements [BeanPostProcessor](/docs/CS/Java/Spring/IoC.md?id=BeanPostProcessor)
+`AbstractAutoProxyCreator` implements [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=BeanPostProcessor)
 
 ### postProcessBeforeInstantiation
 
@@ -894,7 +894,7 @@ set `spring.objenesis.ignore = true`  to invoke the constructor of the class, bu
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)
 
 ## References
 

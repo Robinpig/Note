@@ -28,7 +28,7 @@ Standard Context Events:
 - ContextClosedEvent
 
 ## multicastEvent
-support [Async](/docs/CS/Java/Spring/Task.md)
+support [Async](/docs/CS/Framework/Spring/Task.md)
 ```java
 public class SimpleApplicationEventMulticaster extends AbstractApplicationEventMulticaster {
     public void multicastEvent(ApplicationEvent event, @Nullable ResolvableType eventType) {
@@ -202,7 +202,7 @@ Application events are sent in the following order, as your application runs:
 
 1. An `ApplicationStartingEvent` is sent at the start of a run but before any processing, except for the registration of listeners and initializers.
 2. An `ApplicationEnvironmentPreparedEvent` is sent when the `Environment` to be used in the context is known but before the context is created.
-3. An `ApplicationPreparedEvent` is sent just before the [refresh](/docs/CS/Java/Spring/IoC.md?id=refresh) is started but after bean definitions have been loaded.
+3. An `ApplicationPreparedEvent` is sent just before the [refresh](/docs/CS/Framework/Spring/IoC.md?id=refresh) is started but after bean definitions have been loaded.
 4. An `ApplicationStartedEvent` is sent after the context has been refreshed but before any application and command-line runners have been called.
 5. An `ApplicationReadyEvent` is sent after any application and command-line runners have been called. It indicates that the application is ready to service requests.
 6. An `ApplicationFailedEvent` is sent if there is an exception on startup.
@@ -214,4 +214,4 @@ ZuulRefreshListener
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)

@@ -752,7 +752,7 @@ public static Method selectInvocableMethod(Method method, @Nullable Class<?> tar
 
 - 未使用@EnableAsync
 
-@Async基于[AOP](/docs/CS/Java/Spring/AOP.md)
+@Async基于[AOP](/docs/CS/Framework/Spring/AOP.md)
 - 函数access flag非 public
 - 函数是final或者static
 - 当前类里其它方法内部调用
@@ -767,7 +767,7 @@ Spring相关
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)
 
 ## References
 

@@ -70,7 +70,7 @@ These methods are:
 Typically when developing HTTP-based servlets, a Servlet Developer will only concern himself with the doGet and doPost methods.
 The other methods are considered to be methods for use by programmers very familiar with HTTP programming.
 
-See `doPost` override by [org.springframework.web.servlet.FrameworkServlet](/docs/CS/Java/Spring/MVC.md?id=dispatch)
+See `doPost` override by [org.springframework.web.servlet.FrameworkServlet](/docs/CS/Framework/Spring/MVC.md?id=dispatch)
 
 ### Number of Instances
 
@@ -310,7 +310,7 @@ In order to support this style of filter the container must support the followin
 
 ## Listeners
 
-Spring 就实现了自己的监听器[ContextLoaderListener](/docs/CS/Java/Spring/MVC.md?id=ContextLoaderListener)，来监听 ServletContext 的启动事件，
+Spring 就实现了自己的监听器[ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=ContextLoaderListener)，来监听 ServletContext 的启动事件，
 目的是当 Servlet 容器启动时，init 全局的ApplicationContext方便后续的WebApplicationContext使用
 ## Sessions
 
@@ -415,8 +415,8 @@ AsyncContext req和res
 
 ## Links
 
-- [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
-- [Spring MVC](/docs/CS/Java/Spring/MVC.md)
+- [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
+- [Spring MVC](/docs/CS/Framework/Spring/MVC.md)
 
 ## References
 

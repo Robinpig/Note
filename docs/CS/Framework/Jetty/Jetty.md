@@ -194,4 +194,4 @@ Tomcat 要少，这也恰好说明了 Jetty 在设计上更加小巧和轻量级
 
 ## Links
 
-- [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
+- [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)

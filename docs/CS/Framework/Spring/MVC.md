@@ -3,7 +3,7 @@
 [Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc) is the original web framework built on the Servlet API and has been included in the Spring Framework from the very beginning.
 The formal name, “Spring Web MVC,” comes from the name of its source module (spring-webmvc), but it is more commonly known as “Spring MVC”.
 
-Parallel to Spring Web MVC, Spring Framework 5.0 introduced a reactive-stack web framework whose name, [“Spring WebFlux”](/docs/CS/Java/Spring/webflux.md) is also based on its source module (spring-webflux).
+Parallel to Spring Web MVC, Spring Framework 5.0 introduced a reactive-stack web framework whose name, [“Spring WebFlux”](/docs/CS/Framework/Spring/webflux.md) is also based on its source module (spring-webflux).
 
 ### DispatcherServlet
 
@@ -531,7 +531,7 @@ especially factored-out common handler code and authorization checks.
 On the other hand, a Filter is well-suited for request content and view content handling, like multipart forms and GZIP compression. 
 This typically shows when one needs to map the filter to certain content types (e. g. images), or to all requests.
 
-[Spring Security](/docs/CS/Java/Spring/Security.md) is a great example of using filters for authentication and authorization.
+[Spring Security](/docs/CS/Framework/Spring/Security.md) is a great example of using filters for authentication and authorization.
 To configure Spring Security, we simply need to add a single filter, the DelegatingFilterProxy.
 Spring Security can then intercept all incoming and outgoing traffic.
 This is why Spring Security can be used outside of Spring MVC.
@@ -551,7 +551,7 @@ This is why Spring Security can be used outside of Spring MVC.
 > [Spring Interceptor vs AOP](https://coderanch.com/t/636483/frameworks/Spring-Interceptor-AOP)
 > 
 > MVC Interceptor is a MVC only concept. They can intercept requests to the controller only. 
-> [AOP](/docs/CS/Java/Spring/AOP.md) can be used to intercept calls to any public method in any Spring loaded bean.
+> [AOP](/docs/CS/Framework/Spring/AOP.md) can be used to intercept calls to any public method in any Spring loaded bean.
 > 
 > AOP is only option to use if you are trying to weave code into your service layer.
 > A Controller method can be intercepted by either an Aspect or a HandlerInterceptor. 
@@ -586,10 +586,10 @@ actual FilterRegistrationBean
 
 Filter will be create when web server start
 
-see [FilterChain.doFilter() in Tomcat](/docs/CS/Java/Tomcat/Connector.md?id=doFilter)
+see [FilterChain.doFilter() in Tomcat](/docs/CS/Framework/Tomcat/Connector.md?id=doFilter)
 
 Spring MVC provides fine-grained support for CORS configuration through annotations on controllers.
-However, when used with [Spring Security](/docs/CS/Java/Spring/Security.md), we advise relying on the built-in CorsFilter that must be ordered ahead of Spring Security’s chain of filters.
+However, when used with [Spring Security](/docs/CS/Framework/Spring/Security.md), we advise relying on the built-in CorsFilter that must be ordered ahead of Spring Security’s chain of filters.
 
 ## Asynchronous Requests
 
@@ -842,7 +842,7 @@ server.ssl.key-store-password=secretpassword
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)
 
 ## References
 

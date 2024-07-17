@@ -155,7 +155,7 @@ Two familiar mechanisms, proxies and partitioning, that they expect will allow C
 
 - [Google](/docs/CS/Distributed/Google.md)
 - [Paxos](/docs/CS/Distributed/Paxos.md)
-- [Zookeeper](/docs/CS/Java/ZooKeeper/ZooKeeper.md)
+- [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 
 ## References
 

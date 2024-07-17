@@ -13,7 +13,7 @@ Although Feign is limited to supporting text-based APIs, it dramatically simplif
 Furthermore, Feign makes it easy to unit test your conversions knowing this.
 
 client
-- [Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md)(In maintenance)
+- [Ribbon](/docs/CS/Framework/Spring_Cloud/Ribbon.md)(In maintenance)
 - OK Http
 - java 11 Http2
 
@@ -146,7 +146,7 @@ It is subject to change based on the remote host that involves a DNS lookup.
 
 ### registerFeignClients
 
-BeanDefinitionReaderUtils.registerBeanDefinition into [Spring Context](/docs/CS/Java/Spring/IoC.md).
+BeanDefinitionReaderUtils.registerBeanDefinition into [Spring Context](/docs/CS/Framework/Spring/IoC.md).
 
 > [!TIP]
 > 
@@ -361,7 +361,7 @@ class DefaultTargeter implements Targeter {
 ```
 #### HystrixTargeter
 
-Also you can wrapper it using [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md).
+Also you can wrapper it using [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md).
 
 ```java
 class HystrixTargeter implements Targeter {
@@ -461,7 +461,7 @@ public class ReflectiveFeign extends Feign {
 
 #### parse
 
-parseAndValidateMetadata like @RequestMapping in [Spring MVC](/docs/CS/Java/Spring/MVC.md)
+parseAndValidateMetadata like @RequestMapping in [Spring MVC](/docs/CS/Framework/Spring/MVC.md)
 
 ```java
 abstract class BaseContract implements Contract {
@@ -651,7 +651,7 @@ But, it's possible to add metric collection capabilities to any feign client.
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=RPC)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=RPC)
 
 ## References
 

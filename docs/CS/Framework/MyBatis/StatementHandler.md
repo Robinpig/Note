@@ -425,4 +425,4 @@ public class CallableStatementHandler extends BaseStatementHandler {
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

@@ -31,7 +31,7 @@ It adds:
 
 - Easier integration with Spring’s AOP features
 - Message resource handling (for use in internationalization)
-- [Event publication](/docs/CS/Java/Spring/Event.md)
+- [Event publication](/docs/CS/Framework/Spring/Event.md)
 - Application-layer specific contexts such as the WebApplicationContext for use in web applications.
 
  In short, the BeanFactory provides the configuration framework and basic functionality, and the ApplicationContext adds more enterprise-specific functionality. 
@@ -53,7 +53,7 @@ BeanFactory is the root interface for accessing the Spring container. It provide
 On the other hand, the ApplicationContext is a sub-interface of the BeanFactory.
 It adds:
 
-- Easier integration with [Spring’s AOP](/docs/CS/Java/Spring/AOP.md) features
+- Easier integration with [Spring’s AOP](/docs/CS/Framework/Spring/AOP.md) features
 - Message resource handling (for use in internationalization)
 - Event publication
 - Application-layer specific contexts such as the `WebApplicationContext` for use in web applications.
@@ -748,7 +748,7 @@ Implementations of BeanDefinitionRegistryPostProcessor:
 
 - ConfigurationClassPostProcessor
 - DubboAutoConfiguration
-- [MyBatis MapperScannerConfigurer](/docs/CS/Java/MyBatis/MyBatis-Spring.md?id=MapperScan)
+- [MyBatis MapperScannerConfigurer](/docs/CS/Framework/MyBatis/MyBatis-Spring.md?id=MapperScan)
 
 ```java
 public abstract class AbstractApplicationContext {
@@ -1079,13 +1079,13 @@ Bean lifecycle:
 he Spring framework, by default, initializes all singleton beans eagerly at the application startup and put them in application context.
 
 1. resolve aliases to canonical beanName
-2. [eagerly check singleton cache](/docs/CS/Java/Spring/IoC.md?id=getSingleton), allows for an early reference to a currently created singleton (resolving a [circular reference](/docs/CS/Java/Spring/IoC.md?id=circular-references)).
-   1. [Get the object if the non-null bean instance](/docs/CS/Java/Spring/IoC.md?id=getObjectForBeanInstance)
+2. [eagerly check singleton cache](/docs/CS/Framework/Spring/IoC.md?id=getSingleton), allows for an early reference to a currently created singleton (resolving a [circular reference](/docs/CS/Framework/Spring/IoC.md?id=circular-references)).
+   1. [Get the object if the non-null bean instance](/docs/CS/Framework/Spring/IoC.md?id=getObjectForBeanInstance)
 3. or else check isPrototypeCurrentlyInCreation
 4. getBean from parentBeanFactory
 5. merge BeanDefinition
 6. check dependOn
-7. [createBean](/docs/CS/Java/Spring/IoC.md?id=createBean)
+7. [createBean](/docs/CS/Framework/Spring/IoC.md?id=createBean)
 
 ```java
 public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport implements ConfigurableBeanFactory {
@@ -1288,7 +1288,7 @@ spring.main.allow-circular-references=false
 >
 > Self-injection can also create a circular dependency.
 
-See [doCreateBean](/docs/CS/Java/Spring/IoC.md?id=doCreateBean):
+See [doCreateBean](/docs/CS/Framework/Spring/IoC.md?id=doCreateBean):
 
 1. isSingleton
 2. allowCircularReferences
@@ -1557,7 +1557,7 @@ Post-process the given object that has been obtained from the FactoryBean.
 The resulting object will get exposed for bean references.
 
 - The default implementation simply returns the given object as-is.
-- Subclasses may override this, for example, to apply [post-processors](/docs/CS/Java/Spring/IoC.md?id=PostBean).
+- Subclasses may override this, for example, to apply [post-processors](/docs/CS/Framework/Spring/IoC.md?id=PostBean).
 
 <!-- tabs:start -->
 
@@ -1602,7 +1602,7 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 
 ##### BeanPostProcessor
 
-Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies(AOP)](/docs/CS/Java/Spring/AOP.md?id=createProxy).
+Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies(AOP)](/docs/CS/Framework/Spring/AOP.md?id=createProxy).
 
 Typically, post-processors that populate beans via marker interfaces or the like will implement postProcessBeforeInitialization, while post-processors that wrap beans with proxies will normally implement postProcessAfterInitialization.
 
@@ -1633,7 +1633,7 @@ public interface BeanPostProcessor {
 ### createBean
 
 1. Prepare method overrides
-2. resolveBeforeInstantiation([AOP](/docs/CS/Java/Spring/AOP.md?id=Create-Proxy)) if bean not null
+2. resolveBeforeInstantiation([AOP](/docs/CS/Framework/Spring/AOP.md?id=Create-Proxy)) if bean not null
 3. doCreateBean
 
 ```
@@ -1692,7 +1692,7 @@ protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable O
 
 Apply before-instantiation post-processors, resolving whether there is a before-instantiation shortcut for the specified bean.
 
-call [BeanPostProcessor](/docs/CS/Java/Spring/IoC.md?id=postBean) if bean != null.
+call [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=postBean) if bean != null.
 
 ```
 @Nullable
@@ -1764,7 +1764,7 @@ public boolean isSingleton(String name) throws NoSuchBeanDefinitionException {
 
 1. createBeanInstance
 2. BeanDefinition PostProcessors
-3. Eagerly cache singletons to be able to resolve [circular references](/docs/CS/Java/Spring/IoC.md?id=circular-references)
+3. Eagerly cache singletons to be able to resolve [circular references](/docs/CS/Framework/Spring/IoC.md?id=circular-references)
 4. populateBean
 5. initializeBean
 
@@ -2864,7 +2864,7 @@ public class PropertiesWithJavaConfig {
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)
 
 ## References
 

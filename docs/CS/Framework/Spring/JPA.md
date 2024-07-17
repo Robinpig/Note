@@ -220,4 +220,4 @@ logging.level.org.springframework.orm.jpa=DEBUG
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)

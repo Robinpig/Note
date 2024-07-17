@@ -163,4 +163,4 @@ public Object invoke(Object proxy, Method method, Object[] params)
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

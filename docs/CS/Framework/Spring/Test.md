@@ -9,4 +9,4 @@ To understand how caching works, it is important to understand what is meant by 
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)

@@ -1457,8 +1457,8 @@ private long allocateRun(int runSize) {
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
-- [Memory Pool](/docs/CS/Java/Netty/memory.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [Memory Pool](/docs/CS/Framework/Netty/memory.md)
 
 
 ## References

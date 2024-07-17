@@ -204,7 +204,7 @@ public interface Promise<V> extends Future<V> {
 
 **Special ChannelFuture which is writable.**
 
-Use in [Bootstrap-bind-register](/docs/CS/Java/Netty/Bootstrap.md?id=register)
+Use in [Bootstrap-bind-register](/docs/CS/Framework/Netty/Bootstrap.md?id=register)
 
 ```java
 public interface ChannelPromise extends ChannelFuture, Promise<Void> {
@@ -376,7 +376,7 @@ public class DefaultChannelPromise extends DefaultPromise<Void> implements Chann
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)
 
 
 ## References

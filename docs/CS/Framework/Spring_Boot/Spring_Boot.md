@@ -2,7 +2,7 @@
 
 [Spring Boot](https://docs.spring.io/spring-boot/index.html) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
-- [How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
+- [How to start Spring Boot Application?](/docs/CS/Framework/Spring_Boot/Start.md)
 - [Actuator](Actuator.md)
 
 ## Architecture
@@ -44,7 +44,7 @@ If you need to find out what auto-configuration is currently being applied, and 
 
 
 
-[How to start Spring Boot Application?](/docs/CS/Java/Spring_Boot/Start.md)
+[How to start Spring Boot Application?](/docs/CS/Framework/Spring_Boot/Start.md)
 
 
 
@@ -416,5 +416,5 @@ To create your own observations (which will lead to metrics and traces), you can
 
 ## Links
 
-- [Spring Framework](/docs/CS/Java/Spring/Spring.md)
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
+- [Spring Framework](/docs/CS/Framework/Spring/Spring.md)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)

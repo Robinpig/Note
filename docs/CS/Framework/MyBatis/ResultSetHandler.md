@@ -162,4 +162,4 @@ private <E> List<E> selectList() throws SQLException {
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

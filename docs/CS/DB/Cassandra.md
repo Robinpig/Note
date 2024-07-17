@@ -17,7 +17,7 @@ Flusher
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)
 - [DataBases](/docs/CS/DB/DB.md)
 
 ## References

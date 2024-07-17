@@ -404,7 +404,7 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
 ## Links
 
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
-- [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
+- [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
 
 ## References
 

@@ -299,7 +299,7 @@ interface Unsafe {
 
 ### register
 
-submit a Runnable of `register0` to [EventLoop](/docs/CS/Java/Netty/Eventloop.md?id=execute).
+submit a Runnable of `register0` to [EventLoop](/docs/CS/Framework/Netty/Eventloop.md?id=execute).
 
 ```java
 //AbstractChannel$AbstracrUnsafe#register()
@@ -331,8 +331,8 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 
 1. `doRegister()` by [java.nio.channels.SelectableChannel]() to EventLoop
 2. `ChannelPipeline#invokeHandlerAddedIfNeeded()` ensure we call `handlerAdded()` before we actually notify the promise
-3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/ChannelHandler.md?id=firechannelactive)
-4. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/ChannelHandler.md?id=beginread) or fireChannelActive if active
+3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelactive)
+4. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/ChannelHandler.md?id=beginread) or fireChannelActive if active
 
 ```java
 // AbstractChannel$AbstracrUnsafe
@@ -717,4 +717,4 @@ Write only support ByteBuf or FileRegion
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

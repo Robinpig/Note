@@ -6,7 +6,7 @@ It is fully non-blocking, supports [reactive streams](http://www.reactive-stream
 
 ### Concurrency Model
 
-Both [Spring MVC](/docs/CS/Java/Spring/MVC.md) and Spring WebFlux support annotated controllers, but there is a key difference in the concurrency model and the default assumptions for blocking and threads.
+Both [Spring MVC](/docs/CS/Framework/Spring/MVC.md) and Spring WebFlux support annotated controllers, but there is a key difference in the concurrency model and the default assumptions for blocking and threads.
 - In Spring MVC (and servlet applications in general), it is assumed that applications can block the current thread, (for example, for remote calls). 
   For this reason, servlet containers use a large thread pool to absorb potential blocking during request handling.
 - In Spring WebFlux (and non-blocking servers in general), it is assumed that applications do not block. 
@@ -16,7 +16,7 @@ Both [Spring MVC](/docs/CS/Java/Spring/MVC.md) and Spring WebFlux support annota
 
 ## Start Server
 
-[AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md?id=abstractapplicationcontextrefresh)-> finishRefresh -> LifecycleProcessor#onRefresh() -> DefaultLifecycleProcessor#startBeans() -> DefaultLifecycleProcessor#doStart()
+[AbstractApplicationContext#refresh()](/docs/CS/Framework/Spring/IoC.md?id=abstractapplicationcontextrefresh)-> finishRefresh -> LifecycleProcessor#onRefresh() -> DefaultLifecycleProcessor#startBeans() -> DefaultLifecycleProcessor#doStart()
 -> WebServerStartStopLifecycle#start() -> NettyWebServer#start()
 
 ```java
@@ -52,7 +52,7 @@ private void startDaemonAwaitThread(DisposableServer disposableServer) {
 }
 ```
 
-reactor.netty.tcp.TcpServerBind#bind() invoke [io.netty.bootstrap.ServerBootstrap#bind()](/docs/CS/Java/Netty/Bootstrap.md?id=serverbootstrapbind-)
+reactor.netty.tcp.TcpServerBind#bind() invoke [io.netty.bootstrap.ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=serverbootstrapbind-)
 ```java
 // reactor.netty.tcp.TcpServerBind#bind()
 public Mono<? extends DisposableServer> bind(ServerBootstrap b) {
@@ -107,7 +107,7 @@ DispatcherHandler discovers the delegate components it needs from Spring configu
 
 - HandlerMapping -- map requests to handler objects
   - RoutePredicateHandlerMapping
-    - [Spring Cloud Gateway](/docs/CS/Java/Spring_Cloud/gateway.md)
+    - [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)
 - HandlerAdapter -- for using any handler interface
 - HandlerResultHandler -- process handler return values
 
@@ -203,5 +203,5 @@ public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, A
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

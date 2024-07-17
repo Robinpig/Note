@@ -17,7 +17,7 @@ Spring Cloud focuses on providing good out of box experience for typical use cas
 * Short lived microservices (tasks)
 * Consumer-driven and producer-driven contract testing
 
-[Cloud Native](/docs/CS/Java/Spring_Cloud/Cloud.md) is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development.
+[Cloud Native](/docs/CS/Framework/Spring_Cloud/Cloud.md) is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development.
 A related discipline is that of building `12-factor` Applications, in which development practices are aligned with delivery and operations goals—for instance, by using declarative programming and management and monitoring.
 Spring Cloud facilitates these styles of development in a number of specific ways.
 The starting point is a set of features to which all components in a distributed system need easy access.
@@ -29,7 +29,7 @@ Spring Cloud Commons is a set of abstractions and common classes used in differe
 
 ### Spring Cloud Context
 
-[Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md) has an opinionated view of how to build an application with Spring.
+[Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md) has an opinionated view of how to build an application with Spring.
 For instance, it has conventional locations for common configuration files and has endpoints for common management and monitoring tasks.
 Spring Cloud builds on top of that and adds a few features that many components in a system would use or occasionally need.
 
@@ -57,7 +57,7 @@ Fig.1. Spring Cloud architecture
 
 In the cloud, applications can’t always know the exact location of other services.
 A service registry, such as `Netflix Eureka`, or a sidecar solution, such as `HashiCorp Consul`, can help.
-Spring Cloud provides `DiscoveryClient` implementations for popular registries such as [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md), [Consul](/docs/CS/Java/Spring_Cloud/Consul.md), [Zookeeper](/docs/CS/Java/Zookeeper/ZooKeeper.md), and even [Kubernetes](/docs/CS/Container/K8s.md)' built-in system.
+Spring Cloud provides `DiscoveryClient` implementations for popular registries such as [Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md), [Consul](/docs/CS/Framework/Spring_Cloud/Consul.md), [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md), and even [Kubernetes](/docs/CS/Container/K8s.md)' built-in system.
 There’s also a [Spring Cloud Load Balancer](https://spring.io/guides/gs/spring-cloud-loadbalancer/) to help you distribute the load carefully among your service instances.
 
 
@@ -159,8 +159,8 @@ For the reactive version (with WebTestClient), you need to set `spring.cloud.loa
 
 实现ServiceRegistry并在register方法里做注册逻辑
 
-- [Nacos](/docs/CS/Java/Spring_Cloud/nacos/registry.md?id=Client-Registry)
-- [Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)
+- [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=Client-Registry)
+- [Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md)
 
 ```java
 public abstract class AbstractAutoServiceRegistration<R extends Registration>
@@ -221,7 +221,7 @@ It is a powerful architectural tool which you can use to manage message routing,
 Many API Management Gateways can be dated back to SOA and these tend to have been implemented as centralized servers.
 But as microservices became more popular, modern lightweight independent and decentralized micro-gateway applications have appeared – such as Spring Cloud Gateway.
 
-[Spring Cloud Gateway](/docs/CS/Java/Spring_Cloud/gateway.md) gives you precise control of your API layer, integrating Spring Cloud service discovery and client-side load-balancing solutions to simplify configuration and maintenance.
+[Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md) gives you precise control of your API layer, integrating Spring Cloud service discovery and client-side load-balancing solutions to simplify configuration and maintenance.
 
 Zuul
 
@@ -237,7 +237,7 @@ The configuration has to be flexible enough to cope with multiple applications, 
 Centralized external configuration management backed by a git repository.
 The configuration resources map directly to Spring Environment but could be used by non-Spring applications if desired.
 
-[Spring Cloud Config](/docs/CS/Java/Spring_Cloud/Config.md) provides server and client-side support for externalized configuration in a distributed system.
+[Spring Cloud Config](/docs/CS/Framework/Spring_Cloud/Config.md) provides server and client-side support for externalized configuration in a distributed system.
 With the Config Server you have a central place to manage external properties for applications across all environments.
 The concepts on both client and server map identically to the Spring Environment and PropertySource abstractions,
 so they fit very well with Spring applications, but can be used with any application running in any language.
@@ -280,7 +280,7 @@ As long as Spring Boot Actuator and Spring Config Client are on the classpath an
 
 ### Config Refresh
 
-use [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
+use [Spring RefreshEventListener](/docs/CS/Framework/Spring/IoC.md?id=EventListener).
 
 ## Load Balancer
 
@@ -294,7 +294,7 @@ By default, these contexts are initialised lazily, whenever the first request fo
 You can choose to load those contexts eagerly. 
 In order to do that, specify the service ids for which you want to do eager load using the `spring.cloud-loadbalancer.eager-load.clients` property.
 
-Spring Cloud Loadbalancer is a generic abstraction that can do the work that we used to do with [Netflix's Ribbon](/docs/CS/Java/Spring_Cloud/Ribbon.md) project.
+Spring Cloud Loadbalancer is a generic abstraction that can do the work that we used to do with [Netflix's Ribbon](/docs/CS/Framework/Spring_Cloud/Ribbon.md) project.
 
 ClientHttpRequestInterceptor
 
@@ -306,7 +306,7 @@ If you do not have Caffeine in the classpath, the DefaultLoadBalancerCache, whic
 ## Circuit Breaker
 
 Distributed systems can be unreliable. Requests might encounter timeouts or fail completely.
-A circuit breaker can help mitigate these issues, and Spring Cloud Circuit Breaker gives you the choice of three popular options: [Resilience4J](/docs/CS/Java/Spring_Cloud/Resilience4j.md), [Sentinel](/docs/CS/Java/Spring_Cloud/Sentinel/Sentinel.md), or [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md).
+A circuit breaker can help mitigate these issues, and Spring Cloud Circuit Breaker gives you the choice of three popular options: [Resilience4J](/docs/CS/Framework/Spring_Cloud/Resilience4j.md), [Sentinel](/docs/CS/Framework/Spring_Cloud/Sentinel/Sentinel.md), or [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md).
 
 [Spring Retry]()
 
@@ -351,7 +351,7 @@ It is useful where calling customize many times doesn’t make sense, for exampl
 
 Debugging distributed applications can be complex and take a long time.
 For any given failure, you might need to piece together traces of information from several independent services.
-[Spring Cloud Sleuth](/docs/CS/Java/Spring_Cloud/Sleuth.md) can instrument your applications in a predictable and repeatable way.
+[Spring Cloud Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md) can instrument your applications in a predictable and repeatable way.
 And when used in conjunction with [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md), you can zero in on any latency problems you might have.
 
 `Spring Cloud Sleuth` provides Spring Boot auto-configuration for distributed tracing.
@@ -369,7 +369,7 @@ Specifically, Spring Cloud Sleuth
 
 ## RPC
 
-- [Feign](/docs/CS/Java/Spring_Cloud/Feign.md)
+- [Feign](/docs/CS/Framework/Spring_Cloud/Feign.md)
 
 ## Testing
 
@@ -385,7 +385,7 @@ Spring Cloud Contract provides contract-based testing support for REST and messa
 
 Spring Cloud Netflix project provides Netflix OSS integrations for Spring Boot apps through autoconfiguration and binding to the Spring Environment and other Spring programming model idioms.
 
-- The patterns provided include Service Discovery ([Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md)).
+- The patterns provided include Service Discovery ([Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md)).
 
 > Circuit Breaker (Hystrix), Intelligent Routing (Zuul) and Client Side Load Balancing (Ribbon).
 
@@ -401,8 +401,8 @@ It contains all the components required to develop distributed applications, mak
 
 ## Links
 
-- [Spring Framework](/docs/CS/Java/Spring/Spring.md)
-- [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+- [Spring Framework](/docs/CS/Framework/Spring/Spring.md)
+- [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
 
 ## References
 1. [Eureka! Why You Shouldn’t Use ZooKeeper for Service Discovery](https://medium.com/knerd/eureka-why-you-shouldnt-use-zookeeper-for-service-discovery-4932c5c7e764)

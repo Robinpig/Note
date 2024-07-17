@@ -7,11 +7,11 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 - **Minimal dependency**: As we will see in a minute, you can get the whole framework with just a single dependency
 - **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
 - **Security**: Complete SSL/TLS and StartTLS support.
-- [Bootstrap](/docs/CS/Java/Netty/Bootstrap.md)
-- [EventLoop](/docs/CS/Java/Netty/EventLoop.md)
-- [ByteBuf](/docs/CS/Java/Netty/ByteBuf.md)
-- [Future](/docs/CS/Java/Netty/Future.md)
-- [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
+- [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)
+- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
+- [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
+- [Future](/docs/CS/Framework/Netty/Future.md)
+- [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md)
 
 ## Architecture
 
@@ -35,7 +35,7 @@ Netty supports a zero-copy approach where by a ChannelBuffer "points" to the req
 ### Universal Asynchronous I/O API
 
 Traditional I/O APIs in Java provide different types and methods for different transport types.
-Netty has a universal asynchronous I/O interface called a [Channel](/docs/CS/Java/Netty/Channel.md), which abstracts away all operations required for point-to-point communication.
+Netty has a universal asynchronous I/O interface called a [Channel](/docs/CS/Framework/Netty/Channel.md), which abstracts away all operations required for point-to-point communication.
 That is, once you wrote your application on one Netty transport, your application can run on other Netty transports.
 
 ### Event Model based on the Interceptor Chain Pattern
@@ -63,7 +63,7 @@ Let’s see how to use the above Classes with a simple Server echo example.
 
 ### Bind
 
-- [Create EventLoopGroup](/docs/CS/Java/Netty/EventLoop.md?id=create-eventloopgroup)
+- [Create EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
 - BossEventLoop starts thread when register ServerSocketChannel
 - first register(Selector, 0, ServerSocketChannel)
 - selectionKey.interestOps(OP_ACCEPT) when fireChannelActive() after bind
@@ -310,14 +310,14 @@ deactivate el
 deactivate el
 ```
 
-1. [Create EventLoopGroup](/docs/CS/Java/Netty/EventLoop.md?id=create-nioeventloopgroup)
-2. [Create ServerBootstrap](/docs/CS/Java/Netty/Bootstrap.md?id=create-serverbootstrap)
-3. Set [Channel](/docs/CS/Java/Netty/Channel.md)
-4. Set [ChannelHandler](/docs/CS/Java/Netty/ChannelHandler.md)
+1. [Create EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-nioeventloopgroup)
+2. [Create ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=create-serverbootstrap)
+3. Set [Channel](/docs/CS/Framework/Netty/Channel.md)
+4. Set [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
 5. Option
 6. ChildOption
-7. [ServerBootstrap#bind()](/docs/CS/Java/Netty/Bootstrap.md?id=bind)
-8. [ChannelFuture](/docs/CS/Java/Netty/Future.md)
+7. [ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
+8. [ChannelFuture](/docs/CS/Framework/Netty/Future.md)
 
 ### close
 
@@ -336,7 +336,7 @@ deactivate el
 AllocateByteBuf
 
 
-[Memory Pool](/docs/CS/Java/Netty/memory.md)
+[Memory Pool](/docs/CS/Framework/Netty/memory.md)
 
 
 
@@ -346,7 +346,7 @@ AllocateByteBuf
 - Composite or wrap ByteBuf
 - FileChannel transfer
 
-[Future and Promise](/docs/CS/Java/Netty/Future.md)
+[Future and Promise](/docs/CS/Framework/Netty/Future.md)
 
 ## Links
 

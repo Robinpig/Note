@@ -147,7 +147,7 @@ public class CommandExecutor {
 }
 ```
 
-All of them call [toObservable](/docs/CS/Java/Spring_Cloud/Hystrix.md?id=execute) finally.
+All of them call [toObservable](/docs/CS/Framework/Spring_Cloud/Hystrix.md?id=execute) finally.
 ```java
 public ResponseType execute() {
         try {
@@ -585,4 +585,4 @@ abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObs
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=circuit-breaker)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=circuit-breaker)

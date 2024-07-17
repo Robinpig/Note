@@ -56,4 +56,4 @@ However, @SpringBootTest does not do this, so if we would like to roll back any 
 
 ## Links
 
-- [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+- [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)

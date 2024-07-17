@@ -1,6 +1,32 @@
 ## Overview
 
 
+
+Nacos 配置管理⼀致性协议分为两个大部分， 第⼀部分是 Server 间⼀致性协议， ⼀个是 SDK 与
+Server 的⼀致性协议， 配置作为分布式系统中非强⼀致数据， 在出现脑裂的时候可用性高于⼀致性，
+因此阿里配置中心是采用 AP ⼀致性协议。  
+
+Server 间的⼀致性协议
+有 DB 模式（读写分离架构）
+⼀致性的核心是 Server 与 DB 保持数据⼀致性， 从而保证 Server 数据⼀致； Server 之间都是对
+等的。 数据写任何⼀个 Server， 优先持久化， 持久化成功后异步通知其他节点到数据库中拉取最新
+配置值， 并且通知写入成功。  
+
+无 DB 模式
+Server 间采用 Raft 协议保证数据⼀致性  
+
+
+
+SDK 与 Server 的⼀致性协议
+SDK 与 Server ⼀致性协议的核心是通过 MD5 值是否⼀致， 如果不⼀致就拉取最新值  
+
+Nacos2.x升级成长链接模式， 配置变更， 启动建立长链接， 配置变更服务端推送变更配置列表， 然后 SDK 拉取配置更新， 因此通信效率大幅提升。  
+
+
+
+
+
+
 从整体上Nacos服务端的配置存储分为三层：
 
 - 内存：Nacos每个节点都在内存里缓存了配置，但是只包含配置的md5（缓存配置文件太多了），所以内存级别的配置只能用于比较配置是否发生了变更，只用于客户端长轮询配置等场景。
@@ -213,7 +239,7 @@ public class InternalConfigChangeNotifier extends Subscriber<LocalDataChangeEven
 
 
 另外，NacosServer启动后，会同步启动一个定时任务，每隔6小时，会dump一次全量数据到本地文件
- 
+
 
 
 
@@ -648,7 +674,7 @@ public class DumpConfigHandler extends Subscriber<ConfigDumpEvent> {
 ## Config Refresh
 
 ### PropertySourceLocator
-1. init [ConfigService](/docs/CS/Java/Spring_Cloud/nacos/config.md?id=ConfigService)
+1. init [ConfigService](/docs/CS/Framework/Spring_Cloud/nacos/config.md?id=ConfigService)
 2. merge configurations
 
 ```java
@@ -722,7 +748,7 @@ public NacosConfigService(Properties properties) throws NacosException {
 
 
 
-ClientWorker里两个单线程池 一个负责10ms一次配置变更检查 将长轮询请求[LongPollingRunnable](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md?id=LongPollingRunnable) dispatch到另一个线程池处理
+ClientWorker里两个单线程池 一个负责10ms一次配置变更检查 将长轮询请求[LongPollingRunnable](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md?id=LongPollingRunnable) dispatch到另一个线程池处理
 
 ```java
 public class NacosConfigService implements ConfigService {
@@ -869,7 +895,7 @@ class LongPollingRunnable implements Runnable {
 
 ### Refresh Listener
 
-Register listeners for Publish RefreshEvent to [Spring RefreshEventListener](/docs/CS/Java/Spring/IoC.md?id=EventListener).
+Register listeners for Publish RefreshEvent to [Spring RefreshEventListener](/docs/CS/Framework/Spring/IoC.md?id=EventListener).
 
 ```java
 public class NacosContextRefresher
@@ -933,7 +959,7 @@ public class NacosContextRefresher
 
 ## Links
 
-- [Nacos](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md)
+- [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md)
 
 
 ## References

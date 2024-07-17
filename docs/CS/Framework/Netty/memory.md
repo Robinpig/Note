@@ -42,7 +42,7 @@ static PooledDirectByteBuf newInstance(int maxCapacity) {
 }
 ```
 
-get from [FastThreadLocal](/docs/CS/Java/Netty/FastThreadLocal.md)
+get from [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md)
 
 ```java
 // Recycler
@@ -877,4 +877,4 @@ The initial run:
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

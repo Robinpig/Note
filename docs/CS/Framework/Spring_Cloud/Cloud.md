@@ -130,7 +130,7 @@ Envoy Proxy 作为数据⾯Sidecar 代理业务流量，Istio 和 Envoy Proxy �
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 - [Container](/docs/CS/Container/Container.md)
 
 ## References

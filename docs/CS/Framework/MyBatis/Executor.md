@@ -292,9 +292,9 @@ public List<BatchResult> doFlushStatements(boolean isRollback) throws SQLExcepti
 1. newStatementHandler
 2. get Connection from transaction
 3. get Statement
-4. [StatementHandler update](/docs/CS/Java/MyBatis/StatementHandler.md?id=update)
+4. [StatementHandler update](/docs/CS/Framework/MyBatis/StatementHandler.md?id=update)
    1. execute
-   2. resultSetHandler.handleResultSets(Query) or [keyGenerator::processAfter()](/docs/CS/Java/MyBatis/KeyGenerator.md?id=processAfter)
+   2. resultSetHandler.handleResultSets(Query) or [keyGenerator::processAfter()](/docs/CS/Framework/MyBatis/KeyGenerator.md?id=processAfter)
 
 ```java
 public class SimpleExecutor extends BaseExecutor {
@@ -446,7 +446,7 @@ public class BatchExecutor extends BaseExecutor {
 
 ## CachingExecutor
 
-[2nd Level Cache](/docs/CS/Java/MyBatis/Cache.md)
+[2nd Level Cache](/docs/CS/Framework/MyBatis/Cache.md)
 
 
 ```java
@@ -495,4 +495,4 @@ public class CachingExecutor implements Executor {
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

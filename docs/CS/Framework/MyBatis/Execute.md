@@ -191,7 +191,7 @@ public Object execute(SqlSession sqlSession, Object[] args) {
 
 
 
-execute by [Executor](/docs/CS/Java/MyBatis/Executor.md)
+execute by [Executor](/docs/CS/Framework/MyBatis/Executor.md)
 
 ```java
 // DefaultSession
@@ -211,4 +211,4 @@ public <E> List<E> selectList(String statement, Object parameter, RowBounds rowB
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

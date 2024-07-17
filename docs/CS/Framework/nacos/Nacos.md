@@ -12,14 +12,14 @@ Nacos 支持将注册中心(Service Registry）与配置中心(Config Center) �
 Nacos 的关键特性包括:
 
 - **Service Discovery And Service Health Check**
-  Nacos supports both DNS-based and RPC-based (Dubbo/gRPC) [service discovery](/docs/CS/Java/Spring_Cloud/nacos/registry.md). 
+  Nacos supports both DNS-based and RPC-based (Dubbo/gRPC) [service discovery](/docs/CS/Framework/Spring_Cloud/nacos/registry.md). 
   After a service provider registers a service with native, OpenAPI, or a dedicated agent, a consumer can discover the service with either DNS or HTTP.
   Nacos provides real-time health check to prevent services from sending requests to unhealthy hosts or service instances. 
   Nacos supports both transport layer (PING or TCP) health check and application layer (such as HTTP, Redis, MySQL, and user-defined protocol) health check. 
   For the health check of complex clouds and network topologies(such as VPC, Edge Service etc), Nacos provides both agent mode and server mode health check. 
   Nacos also provide a unity service health dashboard to help you manage the availability and traffic of services.
 - **Dynamic configuration management**
-  [Dynamic configuration](/docs/CS/Java/Spring_Cloud/nacos/config.md) service allows you to manage the configuration of all applications and services in a centralized, externalized and dynamic manner across all environments.
+  [Dynamic configuration](/docs/CS/Framework/Spring_Cloud/nacos/config.md) service allows you to manage the configuration of all applications and services in a centralized, externalized and dynamic manner across all environments.
   Dynamic configuration eliminates the need to redeploy applications and services when configurations are updated.
   Centralized management of configuration makes it more convenient for you to achieve stateless services and elastic expansion of service instances on-demand.
   Nacos provides an easy-to-use UI (DEMO) to help you manage all of your application or services's configurations. 
@@ -136,7 +136,7 @@ A concrete implementation of CP protocol: JRaft.
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 
 ## References
 1. [Quick Start for Nacos Spring Boot Projects](https://nacos.io/en-us/docs/quick-start-spring-boot.html)

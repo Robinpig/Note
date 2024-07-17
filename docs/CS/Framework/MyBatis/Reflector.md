@@ -1174,4 +1174,4 @@ private static Type resolveType(Type type, Type srcType, Class<?> declaringClass
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

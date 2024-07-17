@@ -76,8 +76,8 @@ Start entrance:
 startup.sh -> catalina.sh start ->java -jar org.apache.catalina.startup.Bootstrap.main()
 ```
 
-1. [invoke Catalina](/docs/CS/Java/Tomcat/Start.md?id=invoke-Catalina)
-2. invoke [org.apache.catalina.startup.Catalina#load()](/docs/CS/Java/Tomcat/Start.md?id=load) and [org.apache.catalina.startup.Catalina#start](/docs/CS/Java/Tomcat/Start.md?id=start) by Reflection
+1. [invoke Catalina](/docs/CS/Framework/Tomcat/Start.md?id=invoke-Catalina)
+2. invoke [org.apache.catalina.startup.Catalina#load()](/docs/CS/Framework/Tomcat/Start.md?id=load) and [org.apache.catalina.startup.Catalina#start](/docs/CS/Framework/Tomcat/Start.md?id=start) by Reflection
 
 ```java
 //Bootstrap.java
@@ -122,7 +122,7 @@ public static void main(String[] args) {
 
 Initialize daemon.
 
-[initClassLoaders](/docs/CS/Java/Tomcat/ClassLoader.md?id=initClassLoaders)
+[initClassLoaders](/docs/CS/Framework/Tomcat/ClassLoader.md?id=initClassLoaders)
 
 ```java
 //Bootstrap.java
@@ -286,7 +286,7 @@ Start Flow:
 
 1. start Server
 2. start Service
-3. start [Connector](/docs/CS/Java/Tomcat/Connector.md)
+3. start [Connector](/docs/CS/Framework/Tomcat/Connector.md)
 4. register [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
 
 ```java
@@ -512,7 +512,7 @@ CatalinaShutdownHook
 
 ## Links
 
-- [Tomcat](/docs/CS/Java/Tomcat/Tomcat.md)
+- [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
 
 ## References
 

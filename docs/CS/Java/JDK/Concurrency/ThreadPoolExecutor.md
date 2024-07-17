@@ -341,14 +341,14 @@ allowCoreThreadTimeOut
 Sets the maximum allowed number of threads. This overrides any value set in the constructor.
 If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
 
-- [Hystrix](/docs/CS/Java/Spring_Cloud/Hystrix.md?id=HystrixThreadPool)
+- [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md?id=HystrixThreadPool)
 
 #### prestartCoreThread
 
 By default, **even core threads are initially created and started only when new tasks arrive**, but this can be overridden dynamically using method prestartCoreThread or prestartAllCoreThreads.
 You probably want to prestart threads if you construct the pool with a non-empty queue.
 
-- [Tomcat](/docs/CS/Java/Tomcat/threads.md?id=StandardThreadExecutor)
+- [Tomcat](/docs/CS/Framework/Tomcat/threads.md?id=StandardThreadExecutor)
 - [Dubbo]()
 
 #### allowsCoreThreadTimeOut

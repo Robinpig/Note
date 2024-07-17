@@ -60,4 +60,4 @@ Service providers of the `java.sql.Driver` class, that are loaded via the [servi
 
 ## Links
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

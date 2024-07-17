@@ -965,4 +965,4 @@ public class SpringManagedTransaction implements Transaction {
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

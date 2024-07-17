@@ -159,7 +159,7 @@ private BeanNameGenerator resolveBeanNameGenerator(BeanDefinitionRegistry regist
 ### doExport
 
 
-Invoked after publish ContextRefreshedEvent in [Spring finishRefresh](/docs/CS/Java/Spring/IoC.md?id=finishRefresh)
+Invoked after publish ContextRefreshedEvent in [Spring finishRefresh](/docs/CS/Framework/Spring/IoC.md?id=finishRefresh)
 
 ```java
 public class DubboBootstrapApplicationListener extends OnceApplicationContextEventListener implements Ordered {

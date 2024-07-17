@@ -22,26 +22,26 @@ Automatic configuration has its roots in the Spring techniques known as autowiri
 With component scanning, Spring can automatically discover components from an application’s classpath and create them as beans in the Spring application context.
 With autowiring, Spring automatically injects the components with the other beans that they depend on.
 
-More recently, with the introduction of [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md), automatic configuration has gone well beyond component scanning and autowiring.
+More recently, with the introduction of [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md), automatic configuration has gone well beyond component scanning and autowiring.
 Spring Boot is an extension of the Spring Framework that offers several productivity enhancements.
 The most well known of these enhancements is autoconfiguration, where Spring Boot can make reasonable guesses at what components need to be configured and wired together, based on entries in the classpath, environment variables, and other factors.
 
 ### Core
 
-Foremost amongst these is the Spring Framework’s [Inversion of Control (IoC)](/docs/CS/Java/Spring/IoC.md) container. 
-A thorough treatment of the Spring Framework’s IoC container is closely followed by comprehensive coverage of Spring’s [Aspect-Oriented Programming (AOP)](/docs/CS/Java/Spring/AOP.md) technologies.
+Foremost amongst these is the Spring Framework’s [Inversion of Control (IoC)](/docs/CS/Framework/Spring/IoC.md) container. 
+A thorough treatment of the Spring Framework’s IoC container is closely followed by comprehensive coverage of Spring’s [Aspect-Oriented Programming (AOP)](/docs/CS/Framework/Spring/AOP.md) technologies.
 
-[AOT](/docs/CS/Java/Spring/AOT.md) processing can be used to optimize your application ahead-of-time. It is typically used for native image deployment using GraalVM.
+[AOT](/docs/CS/Framework/Spring/AOT.md) processing can be used to optimize your application ahead-of-time. It is typically used for native image deployment using GraalVM.
 
 
 
 ### Web
 
-Spring comes with a powerful web framework known as [Spring MVC](/docs/CS/Java/Spring/MVC.md).
+Spring comes with a powerful web framework known as [Spring MVC](/docs/CS/Framework/Spring/MVC.md).
 At the center of Spring MVC is the concept of a *controller*, a class that handles requests and responds with information of some sort.
 In the case of a browser-facing application, a controller responds by optionally populating model data and passing the request on to a view to produce HTML that’s returned to the browser.
 
-[Spring WebFlux](/docs/CS/Java/Spring/webflux.md) web frameworks.
+[Spring WebFlux](/docs/CS/Framework/Spring/webflux.md) web frameworks.
 
 ### Data Access
 
@@ -81,11 +81,11 @@ public interface RestTemplateRequestCustomizer<T extends ClientHttpRequest> {
 }
 ```
 
-[Task Execution and Scheduling](/docs/CS/Java/Spring/Task.md)
+[Task Execution and Scheduling](/docs/CS/Framework/Spring/Task.md)
 
-[Cache Abstraction](/docs/CS/Java/Spring/Cache.md)
+[Cache Abstraction](/docs/CS/Framework/Spring/Cache.md)
 
-[Spring Security](/docs/CS/Java/Spring/Security.md)
+[Spring Security](/docs/CS/Framework/Spring/Security.md)
 
 
 ### Testing
@@ -136,5 +136,5 @@ shutdown: graceful
 
 ## Links
 
-- [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
+- [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)

@@ -13,7 +13,7 @@ Consensus, group management, and presence protocols will be implemented by the s
 Application specific uses of these will consist of a mixture of specific components of Zoo Keeper and application specific conventions.
 
 **ZooKeeper provides a per client guarantee of FIFO execution of requests and linearizability for all requests that change the ZooKeeper state.**
-To guarantee that update operations satisfy linearizability, Zookeeper implements a leader-based atomic broadcast protocol, called [Zab](/docs/CS/Java/ZooKeeper/Zab.md).
+To guarantee that update operations satisfy linearizability, Zookeeper implements a leader-based atomic broadcast protocol, called [Zab](/docs/CS/Framework/ZooKeeper/Zab.md).
 
 In ZooKeeper, servers process read operations locally, and we do not use Zab to totally order them.
 
@@ -150,7 +150,7 @@ session
 At the heart of ZooKeeper is an atomic messaging system that keeps all of the servers in sync.
 
 **All requests that update ZooKeeper state are forwarded to the leader.**
-The leader executes the request and broadcasts the change to the ZooKeeper state through [Zab](/docs/CS/Java/ZooKeeper/Zab.md), an atomic broadcast protocol.
+The leader executes the request and broadcasts the change to the ZooKeeper state through [Zab](/docs/CS/Framework/ZooKeeper/Zab.md), an atomic broadcast protocol.
 The server that receives the client request responds to the client when it delivers the corresponding state change.
 Zab uses by default simple majority quorums to decide on a proposal, so Zab and thus ZooKeeper can only work if a majority of servers are correct (i.e., with $2f + 1$ server we can tolerate $f$ failures).
 

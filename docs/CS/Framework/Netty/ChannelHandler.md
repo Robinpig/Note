@@ -1247,4 +1247,4 @@ You can change it to your preferred logging framework before other Netty classes
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

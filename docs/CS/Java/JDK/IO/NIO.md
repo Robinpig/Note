@@ -112,7 +112,7 @@ public static SelectorProvider create() {
     }
 ```
 
-See [Netty EventLoop - Selector](/docs/CS/Java/Netty/EventLoop.md?id=Selector).
+See [Netty EventLoop - Selector](/docs/CS/Framework/Netty/EventLoop.md?id=Selector).
 
 ## Links
 

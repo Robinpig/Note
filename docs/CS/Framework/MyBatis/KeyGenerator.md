@@ -243,4 +243,4 @@ All of them set value using [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

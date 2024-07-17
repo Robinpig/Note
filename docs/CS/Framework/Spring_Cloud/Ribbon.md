@@ -81,7 +81,7 @@ public class LoadBalancerAutoConfiguration {
 
 ### RibbonLoadBalancerClient
 
-1. [ILoadBalancer#chooseServer()](/docs/CS/Java/Spring_Cloud/Ribbon.md?id=chooseserver)
+1. [ILoadBalancer#chooseServer()](/docs/CS/Framework/Spring_Cloud/Ribbon.md?id=chooseserver)
 2. LoadBalancerRequest#apply() -> AsyncLoadBalancerInterceptor#intercept()
 
 ```java
@@ -209,7 +209,7 @@ public class BaseLoadBalancer extends AbstractLoadBalancer implements PrimeConne
 
 AsyncLoadBalancerInterceptor#intercept() wrap request to `ServiceRequestWrapper` then executeAsync by `org.springframework.http.client.AsyncClientHttpRequestExecution`
 
-Use [LoadBalancer](/docs/CS/Java/Spring_Cloud/Ribbon.md?id=LoadBalancer) to execute.
+Use [LoadBalancer](/docs/CS/Framework/Spring_Cloud/Ribbon.md?id=LoadBalancer) to execute.
 
 ```java
 // org.springframework.cloud.client.loadbalancer.AsyncLoadBalancerInterceptor
@@ -231,7 +231,7 @@ public ListenableFuture<ClientHttpResponse> intercept(final HttpRequest request,
 
 
 
-Default use [ZoneAwareLoadBalancer](/docs/CS/Java/Spring_Cloud/Ribbon.md?id=chooseServer) which can avoid a zone as a whole when choosing server.
+Default use [ZoneAwareLoadBalancer](/docs/CS/Framework/Spring_Cloud/Ribbon.md?id=chooseServer) which can avoid a zone as a whole when choosing server.
 ```java
 // org.springframework.cloud.netflix.ribbon
 @Configuration(proxyBeanMethods = false)
@@ -295,7 +295,7 @@ default `RoundRobinRule`
 
 ## ServerListUpdater
 
-scheduleWithFixedDelay 30s get serversList from Registry Center([Eureka](/docs/CS/Java/Spring_Cloud/Eureka.md), [Nacos](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md), etc. ) and check timestamps.
+scheduleWithFixedDelay 30s get serversList from Registry Center([Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md), [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md), etc. ) and check timestamps.
 
 ```java
 public class PollingServerListUpdater implements ServerListUpdater {
@@ -404,4 +404,4 @@ public class DynamicServerListLoadBalancer<T extends Server> extends BaseLoadBal
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=load-balance)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=load-balance)

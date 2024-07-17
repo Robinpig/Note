@@ -113,7 +113,7 @@ public abstract class TransactionCallbackWithoutResult implements TransactionCal
 
 ## Declarative transaction
 
-The Spring Framework’s declarative transaction management is made possible with Spring [aspect-oriented programming](/docs/CS/Java/Spring/AOP.md) (AOP).
+The Spring Framework’s declarative transaction management is made possible with Spring [aspect-oriented programming](/docs/CS/Framework/Spring/AOP.md) (AOP).
 The combination of AOP with transactional metadata yields an AOP proxy that uses a TransactionInterceptor in conjunction with an appropriate PlatformTransactionManager implementation to drive transactions around method invocations.
 
 Conceptually, calling a method on a transactional proxy looks like this:
@@ -579,7 +579,7 @@ Spring相关
 - 事务传播特性设置不使用事务(较少)
 
 
-声明式事务基于[AOP](/docs/CS/Java/Spring/AOP.md) 故导致函数无法被代理的情况
+声明式事务基于[AOP](/docs/CS/Framework/Spring/AOP.md) 故导致函数无法被代理的情况
 - 函数access flag非 public
 - 函数是final或者static
 - 当前类里其它方法内部调用
@@ -620,7 +620,7 @@ Solution
 
 ## Links
 
-- [Spring](/docs/CS/Java/Spring/Spring.md)
+- [Spring](/docs/CS/Framework/Spring/Spring.md)
 - [Transaction](/docs/CS/Transaction.md)
 - [Transaction - MySQL](/docs/CS/DB/MySQL/Transaction.md)
 

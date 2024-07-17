@@ -63,7 +63,7 @@ public interface IoHandler extends EventLoop.Unsafe {
 
 ## NioHandler
 
-call [processSelectedKeys](/docs/CS/Java/Netty/EventLoop.md?id=processSelectedKey)
+call [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processSelectedKey)
 
 ```java
 // NioHandler
@@ -137,4 +137,4 @@ public int run(IoExecutionContext runner) {
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

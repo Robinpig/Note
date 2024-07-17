@@ -32,7 +32,7 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
 
 ## bind
 
-1. [initAndRegister channel](/docs/CS/Java/Netty/Bootstrap.md?id=initAndRegister)
+1. [initAndRegister channel](/docs/CS/Framework/Netty/Bootstrap.md?id=initAndRegister)
 2. then doBind0
 
 ```java
@@ -339,12 +339,12 @@ private void initChild(final Channel child) {
 
 ### register
 
-[AbstractChannel$AbstractUnsafe#register()](/docs/CS/Java/Netty/Channel.md?id=register) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Java/Netty/Eventloop.md?id=nioeventloopexecute).
+[AbstractChannel$AbstractUnsafe#register()](/docs/CS/Framework/Netty/Channel.md?id=register) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Framework/Netty/Eventloop.md?id=nioeventloopexecute).
 
 **AbstractChannel$AbstracrUnsafe#register0** execute follow methods:
 
-1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Java/Netty/ChannelHandler.md?id=channelpipelinefirechannelactive-)
-2. [AbstractChannel#beginRead()](/docs/CS/Java/Netty/Channel.md?id=abstractchannelbeginread-)
+1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=channelpipelinefirechannelactive-)
+2. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/Channel.md?id=abstractchannelbeginread-)
 
 ### doBind0
 
@@ -595,4 +595,4 @@ public <T> B option(ChannelOption<T> option, T value) {
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

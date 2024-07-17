@@ -227,5 +227,5 @@ public void processRequest(Request request) throws RequestProcessorException {
 
 ## Links
 
-- [ZooKeeper](/docs/CS/Java/ZooKeeper/ZooKeeper.md)
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 - [Consensus](/docs/CS/Distributed/Consensus.md)

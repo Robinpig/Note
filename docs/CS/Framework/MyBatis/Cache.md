@@ -233,7 +233,7 @@ public class LruCache implements Cache {
 
 @CacheNamespace 
 
-enable 2nd level cache in [CachingExecutor](/docs/CS/Java/MyBatis/Executor.md)
+enable 2nd level cache in [CachingExecutor](/docs/CS/Framework/MyBatis/Executor.md)
 
 ### TransactionalCacheManager
 
@@ -381,7 +381,7 @@ public class TransactionalCache implements Cache {
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)
 
 ## References
 

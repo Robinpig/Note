@@ -446,4 +446,4 @@ public static class AutoConfiguredMapperScannerRegistrar implements BeanFactoryA
 
 ## Links
 
-- [MyBatis](/docs/CS/Java/MyBatis/MyBatis.md)
+- [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)

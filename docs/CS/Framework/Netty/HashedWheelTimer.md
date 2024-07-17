@@ -175,7 +175,7 @@ private static int normalizeTicksPerWheel(int ticksPerWheel) {
 
 #### timeout
 
-timeouts is a [MpscQueue](/docs/CS/Java/Netty/MpscLinkedQueue.md)
+timeouts is a [MpscQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md)
 
 ```java
 private final Queue<HashedWheelTimeout> timeouts = PlatformDependent.newMpscQueue();
@@ -804,4 +804,4 @@ for(Tasks task : tasks) {
 
 ## Links
 
-- [Netty](/docs/CS/Java/Netty/Netty.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)

@@ -76,4 +76,4 @@ class SimpleCacheConfiguration {
 
 ## Links
 
-- [Spring Cache](/docs/CS/Java/Spring/Cache.md)
+- [Spring Cache](/docs/CS/Framework/Spring/Cache.md)

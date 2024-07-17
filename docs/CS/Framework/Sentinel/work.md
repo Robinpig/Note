@@ -75,7 +75,7 @@ public interface Sph extends SphResourceTypeSupport {
 ```
 1. getContext from [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md) or create default Context
 2. lookProcessChain and entry all of them
-3. call [Slot.entry()](/docs/CS/Java/Spring_Cloud/Sentinel?id=entry)
+3. call [Slot.entry()](/docs/CS/Framework/Spring_Cloud/Sentinel?id=entry)
 
 ```java
 public class CtSph implements Sph {
@@ -545,7 +545,7 @@ public class StatisticSlot extends AbstractLinkedProcessorSlot<DefaultNode> {
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 
 ## References
 1. [How it works](https://github.com/alibaba/Sentinel/wiki/How-it-works)

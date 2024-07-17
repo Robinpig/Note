@@ -66,7 +66,7 @@ static WebApplicationType deduceFromClasspath() {
 2. prepareEnvironment
 3. configureIgnoreBeanInfo
 4. createApplicationContext
-5. getSpringFactoriesInstances -> [SpringFactoriesLoader.loadSpringFactories()](/docs//CS/Java/Spring_Boot/Start.md?id=LoadFactories)
+5. getSpringFactoriesInstances -> [SpringFactoriesLoader.loadSpringFactories()](/docs//CS/Framework/Spring_Boot/Start.md?id=LoadFactories)
 6. prepareContext
 7. refreshContext
 8. afterRefresh
@@ -457,7 +457,7 @@ protected void load(ApplicationContext context, Object[] sources) {
 
 ### refreshContext
 
-see [AbstractApplicationContext#refresh()](/docs/CS/Java/Spring/IoC.md?id=refresh),
+see [AbstractApplicationContext#refresh()](/docs/CS/Framework/Spring/IoC.md?id=refresh),
 
 create webServer in `onRefresh`
 
@@ -533,4 +533,4 @@ void running(ConfigurableApplicationContext context) {
 
 ## Links
 
-- [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+- [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)

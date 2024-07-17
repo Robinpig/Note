@@ -1,6 +1,36 @@
 ## Introduction
 
-[NACOS-DISCOVERY-QUICK-START](https://github.com/nacos-group/nacos-spring-boot-project/blob/master/NACOS-DISCOVERY-QUICK-START.md)
+
+### 数据模型
+
+在 Nacos 中， 服务的定义包括以下几个内容：
+- 命名空间（Namespace） ： Nacos 数据模型中最顶层、 也是包含范围最广的概念， 用于在类似环境或租户等需要强制隔离的场景中定义。 Nacos 的服务也需要使用命名空间来进行隔离。
+- 分组（Group） ： Nacos 数据模型中次于命名空间的⼀种隔离概念， 区别于命名空间的强制隔离属性， 
+  分组属于⼀个弱隔离概念， 主要用于逻辑区分⼀些服务使用场景或不同应用的同名服务， 最常用的情况主要是同⼀个服务的测试分组和生产分组、 或者将应用名作为分组以防止不同应用 提供的服务重名。
+- 服务名（Name） ： 该服务实际的名字，⼀般用于描述该服务提供了某种功能或能力
+
+之所以 Nacos 将服务的定义拆分为命名空间、 分组和服务名， 除了方便隔离使用场景外， 还有方便用户发现唯⼀服务的优点。 
+在注册中心的实际使用场景上， 同个公司的不同开发者可能会开发出类似作用的服务， 如果仅仅使用服务名来做服务的定义和表示， 容易在⼀些通用服务上出现冲突， 比如登陆服务等。
+
+通常推荐使用由运行环境作为命名空间、 应用名作为分组和服务功能作为服务名的组合来确保该服
+务的天然唯⼀性， 当然使用者可以忽略命名空间和分组， 仅使用服务名作为服务唯⼀标示， 这就需
+要使用者在定义服务名时额外增加自己的规则来确保在使用中能够唯⼀定位到该服务而不会发现到
+错误的服务上。
+
+服务元数据
+
+服务的定义只是为服务设置了⼀些基本的信息， 用于描述服务以及方便快速的找到服务， 而服务的
+元数据是进⼀步定义了 Nacos 中服务的细节属性和描述信息。 主要包含：
+- 健康保护阈值（ProtectThreshold） ： 为了防止因过多实例故障， 导致所有流量全部流入剩余实
+例， 继而造成流量压力将剩余实例被压垮形成的雪崩效应。 应将健康保护阈值定义为⼀个 0 到 1
+之间的浮点数。 当域名健康实例数占总服务实例数的比例小于该值时， 无论实例是否健康， 都会
+将这个实例返回给客户端。 这样做虽然损失了⼀部分流量， 但是保证了集群中剩余健康实例能正
+常工作。
+- 实例选择器（Selector） ： 用于在获取服务下的实例列表时， 过滤和筛选实例。 该选择器也被称
+为路由器， 目前 Nacos 支持通过将实例的部分信息存储在外部元数据管理 CMDB 中， 并在发现
+服务时使用 CMDB 中存储的元数据标签来进行筛选的能力。
+- 拓展数据(extendData)： 用于用户在注册实例时自定义扩展的元数据内容， 形式为 K-V 。 可以在
+服务中拓展服务的元数据信息， 方便用户实现自己的自定义逻辑
 
 ## Client Registry
 
@@ -20,7 +50,7 @@
 
 
 
-Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的[register](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=AbstractAutoServiceRegistration)函数
+Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的[register](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=AbstractAutoServiceRegistration)函数
 
 
 
@@ -143,7 +173,7 @@ public void addBeatInfo(String serviceName, BeatInfo beatInfo) {
 }
 ```
 
-call [Server beat](/docs/CS/Java/Spring_Cloud/nacos/registry.md?id=server-beat).
+call [Server beat](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=server-beat).
 
 ```java
 class BeatTask implements Runnable {
@@ -266,7 +296,7 @@ public void registerService(String serviceName, String groupName, Instance insta
 
 Random for load balance
 
-use NacosRestTemplate call [Server register](/docs/CS/Java/Spring_Cloud/nacos/registry.md?id=server-Register) in `callServer`.
+use NacosRestTemplate call [Server register](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=server-Register) in `callServer`.
 
 
 ```java
@@ -650,7 +680,7 @@ public class EphemeralClientOperationServiceImpl implements ClientOperationServi
 ```
 #### addServiceInstance
 
-publishInfo被添加到Client下ConcurrentHashMap, 发布[ClientChangedEvent](/docs/CS/Java/Spring_Cloud/nacos/registry.md?id=ClientChangedEvent), sync数据到其它server
+publishInfo被添加到Client下ConcurrentHashMap, 发布[ClientChangedEvent](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=ClientChangedEvent), sync数据到其它server
 ```java
 public abstract class AbstractClient implements Client {
 
@@ -849,7 +879,7 @@ public class DistroFilter implements Filter {
 }
 ```
 
- 
+
 ## Client subscribe
 
 ```java
@@ -1512,8 +1542,32 @@ public class NamingMetadataOperateService {
 }
 ```
 
-
 ## Server Beat
+
+
+
+Nacos 中， 服务的注册我们从注册方式维度实际可以分为两大类。 第⼀类通过 SDK RPC 连接进
+行注册， 客户端会和注册中心保持链接。 第二类， 通过 OpenAPI 进行 IP 和端口注册。
+对于第⼀类， 如何寻找到对其负责的注册中心节点呢？ 聪明的你肯定想到了， 只需要和注册中心集
+群中的任意⼀台节点建立联系， 那么由这个节点负责这个客户端就可以了。 注册中心会在启动时注
+册⼀个全局的同步任务， 用于将其当前负责的所有节点信息同步到集群中的其他节点， 其他非负责
+的节点也会创建该客户端的信息， 在非负责的节点上， 连接类型的客户端， 会有⼀个续约时间的概
+念， 在收到其他节点的同步信息时， 更新续约时间为当前时间， 如果在集群中的其他节点在⼀段时
+间内没有收到不是自己的负责的节点的同步信息， 那么认为此节点已经不健康， 从而达到对不是自
+己负责的节点健康状态检查。  
+
+
+
+对于第二类， 方式其实也基本和第⼀类⼀致， OpenAPI 注册的临时实例也是通过同步自身负责的节
+点到其他节点来更新其他节点的对应的临时实例的心跳时间， 保证其他节点不会删除或者修改此实
+例的健康状态。 前面我们特别指明了是临时实例而没有说所有实例， 你应该也可能会想到这种方式
+对于持久化节点会显得多余， 永久实例会在被主动删除前⼀直存在于注册中心， 那么我们健康检查
+并不会去删除实例， 所以我们只需要在负责的节点永久实例健康状态变更的时候通知到其余的节点
+即可  
+
+
+
+
 
 1. if getInstance == null, register instance
 2. getService and hanle beat
@@ -1600,4 +1654,4 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
 
 ## Links
 
-- [Nacos](/docs/CS/Java/Spring_Cloud/nacos/Nacos.md)
+- [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md)

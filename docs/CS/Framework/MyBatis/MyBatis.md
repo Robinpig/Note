@@ -17,7 +17,7 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 
 ## Architecture
 
-[Init](/docs/CS/Java/MyBatis/Init.md)
+[Init](/docs/CS/Framework/MyBatis/Init.md)
 
 ### Infrastructure
 
@@ -87,26 +87,26 @@ strict digraph {
 Fig.1. MyBatis Infrastructure
 </p>
 
-- [Binding](/docs/CS/Java/MyBatis/binding.md)
-- [Log](/docs/CS/Java/MyBatis/Logging.md) provide log4j log4j2 slf4j jdklog and so on
-- [Cache](/docs/CS/Java/MyBatis/Cache.md)
-- [DataSource](/docs/CS/Java/MyBatis/DataSource.md)
-- [Reflector](/docs/CS/Java/MyBatis/Reflector.md) class represents a cached set of class definition information that allows for easy mapping between property names and getter/setter methods.`
+- [Binding](/docs/CS/Framework/MyBatis/binding.md)
+- [Log](/docs/CS/Framework/MyBatis/Logging.md) provide log4j log4j2 slf4j jdklog and so on
+- [Cache](/docs/CS/Framework/MyBatis/Cache.md)
+- [DataSource](/docs/CS/Framework/MyBatis/DataSource.md)
+- [Reflector](/docs/CS/Framework/MyBatis/Reflector.md) class represents a cached set of class definition information that allows for easy mapping between property names and getter/setter methods.`
 
 ### Core
 
-- [How SQL works](/docs/CS/Java/MyBatis/Execute.md)
-- [Executor](/docs/CS/Java/MyBatis/Executor.md)
-- [StatementHandler](/docs/CS/Java/MyBatis/StatementHandler.md)
-- [ResultSetHandler](/docs/CS/Java/MyBatis/ResultSetHandler.md)
-- [Interceptor](/docs/CS/Java/MyBatis/Interceptor.md)
-- [KeyGenerator](/docs/CS/Java/MyBatis/KeyGenerator.md)
-- [SqlSession](/docs/CS/Java/MyBatis/SqlSession.md)
+- [How SQL works](/docs/CS/Framework/MyBatis/Execute.md)
+- [Executor](/docs/CS/Framework/MyBatis/Executor.md)
+- [StatementHandler](/docs/CS/Framework/MyBatis/StatementHandler.md)
+- [ResultSetHandler](/docs/CS/Framework/MyBatis/ResultSetHandler.md)
+- [Interceptor](/docs/CS/Framework/MyBatis/Interceptor.md)
+- [KeyGenerator](/docs/CS/Framework/MyBatis/KeyGenerator.md)
+- [SqlSession](/docs/CS/Framework/MyBatis/SqlSession.md)
 
 ## Extension
 
-[MyBatis-Spring](/docs/CS/Java/MyBatis/MyBatis-Spring.md) : Load Mybatis-config.xml, create Configuration and SqlsessionFactory
+[MyBatis-Spring](/docs/CS/Framework/MyBatis/MyBatis-Spring.md) : Load Mybatis-config.xml, create Configuration and SqlsessionFactory
 
 ## Links
 
-- [Spring Framework](/docs/CS/Java/Spring/Spring.md)
+- [Spring Framework](/docs/CS/Framework/Spring/Spring.md)

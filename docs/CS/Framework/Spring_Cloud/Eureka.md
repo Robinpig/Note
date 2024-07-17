@@ -116,7 +116,7 @@ public class EurekaAutoServiceRegistration implements AutoServiceRegistration,
 #### registry
 
 1. init DiscoveryClient
-2. notify [StatusChangeListener](/docs/CS/Java/Spring_Cloud/Eureka.md?id=Status-Change)
+2. notify [StatusChangeListener](/docs/CS/Framework/Spring_Cloud/Eureka.md?id=Status-Change)
 
 > [!NOTE]
 >
@@ -657,5 +657,5 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=service-registry)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=service-registry)
 
