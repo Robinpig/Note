@@ -153,6 +153,7 @@ sudo apt-get install libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst
 
 ##### **MacOS**
 
+make sure you have installed Xcode
 ```shell
 brew install ccache
 brew install freetype
