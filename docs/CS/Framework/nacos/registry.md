@@ -1650,6 +1650,76 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
     }
 ```
 
+## Tuning
+
+Eureka迁移nacos
+
+通过多注册和聚合订阅平滑迁移到 Nacos 的架构图如下：
+
+![](./img/Eureka_2_Nacos.png)
+
+默认情况下 Spring Cloud 只支持在依赖中引入⼀个注册中心， 当存在多个注册中心时， 启动
+错。 所以这里需要添加⼀个依赖 edas-sc-migration-starter ， 使得 Spring Cloud 应用支持多注
+```xml
+<dependency>
+<groupId>com.alibaba.edas</groupId>
+<artifactId>edas-sc-migration-starter</artifactId>
+<version>1.0.1</version>
+</dependency>
+```
+
+修改 Ribbon 配置， 支持同时从多个注册中心订阅
+在应用启动的主类中， 显示地指定 RibbonClients 的配置为 MigrationRibbonConfiguration。
+```java
+@SpringBootApplication
+@RibbonClients(defaultConfiguration = MigrationRibbonConfiguration.class)
+public class ConsumerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(ConsumerApplication.class, args);
+    }
+}
+```
+默认的订阅策略是从所有注册中心订阅， 并对数据做⼀些简单的聚合。
+您可以通过 spring.cloud.edas.migration.subscribes 属性来选择从哪几个注册中心订阅数据。
+可以通过配置中心动态修改配置
+```properties
+
+spring.cloud.edas.migration.subscribes=nacos,eureka # 同时从 Eureka 和 Nacos 订阅服务
+spring.cloud.edas.migration.subscribes=nacos # 只从 Nacos 订阅服务
+```
+观察业务本身是否正常。
+
+如果您的应用开启了 Actuator 监控， 那么可以通过 Actuator 来查看此应用订阅的各服务的 Ri
+bbonServerList 的信息。 metaInfo 中的 serverGroup 字段 代表了此节点来源于哪个服务注册
+中心。
+```
+http://ip:port/migration_server_list ## Spring Boot 1.x 版本
+http://ip:port/actuator/migration-server-list ## Spring Boot 2.x 版本
+```
+
+当应用都已经迁移到 Nacos 之后， 此时可以删除原有的注册中心的配置 和 迁移过程专用的依赖
+edas-sc-migration-starter ， 完成整个迁移。
+1. 从 pom.xml 中删除原有的注册中心的依赖 和 edas-sc-migration-starter 。
+2. 参考第⼀步中第 2 小步骤中的部署方式， 将修改后的应用依次全部重新部署。
+3. 停止原有的 Eureka 集群。
+
+
+从目前方案的设计中， 没有发现明显的风险点。 但是因为在迁移的过程中涉及到所有应用的两次修
+改和重启， 所以建议在迁移的过程中实时关注业务数据监控的详情， 确保完全不影响业务的情况下
+再进行下⼀步操作。
+如果遇到异常情况， 针对于不同阶段的处理方案如下：
+1. 执行第⼀步的过程中出现业务异常。 还原代码， 重新部署到原有机器， 恢复业务。 查清楚具体
+   问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
+2. 执行第二步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复
+   业务。 查清楚具体问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
+3. 执行第三步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复
+   业务
+
+如何选择最先迁移哪个应⽤
+- 建议是从最下层 Provider 开始迁移。 但如果调用链路太复杂， 比较难分析， 所以我们设计的方
+案中是支持随便找⼀个非流量入口应用进行迁移。
+- 因为流量入口的应⽤比较特殊， 所以建议迁移流量入口应⽤时需要根据自己应⽤的实际情况考虑
+迁移方案。
 
 
 ## Links
