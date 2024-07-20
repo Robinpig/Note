@@ -16,6 +16,7 @@ wsl --install
 
 Open Windows PowerShell
 
+修改完配置后使用如下命令shutdown后重启加载配置
 ```shell
 wsl --shutdown
 ```
@@ -65,9 +66,14 @@ debugConsole=true
 sparseVhd=true
 ```
 
+查看memory
+```shell
+cat /proc/meminfo
+```
 
 
 ## References
 
 1. [示例 .wslconfig 文件](https://learn.microsoft.com/zh-cn/windows/wsl/wsl-config)
+2. [Windows 10 中配置 WSL2 与 Ubuntu（进阶）](https://rich1e.github.io/workspace/Windows10%E4%B8%AD%E9%85%8D%E7%BD%AEWSL2%E4%B8%8EUbuntu%EF%BC%88%E8%BF%9B%E9%98%B6%EF%BC%89.html)
 
