@@ -28,8 +28,18 @@ follow process when fork
 ```
 
 
-## gdbtui
+### gdbgui
 
+
+gdbgui
+```shell
+
+apt install python3-pip
+pip3 install gdbgui --upgrade
+```
+
+
+## gdbtui
 
 ```shell
 gdb -tui
