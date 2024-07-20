@@ -207,7 +207,7 @@ private Class<?> getAdaptiveExtensionClass() {
 
 #### createAdaptiveExtensionClass
 
-**create Dynamic Class** by [AdaptiveClassCodeGenerator](/docs/CS/Java/Dubbo/SPi.md?id=AdaptiveClassCodeGenerator)
+**create Dynamic Class** by [AdaptiveClassCodeGenerator](/docs/CS/Framework/Dubbo/SPi.md?id=AdaptiveClassCodeGenerator)
 
 ```java
 private Class<?> createAdaptiveExtensionClass() {
@@ -612,7 +612,7 @@ public T getDefaultExtension() {
 
 Wrap extensions like AOP
 
-invoke [injectExension](/docs/CS/Java/Dubbo/SPI.md?id=injectExension)
+invoke [injectExension](/docs/CS/Framework/Dubbo/SPI.md?id=injectExension)
 
 ```java
 @SuppressWarnings("unchecked")
@@ -936,4 +936,4 @@ public class JdkCompiler extends AbstractCompiler {
 
 ## Links
 
-- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)

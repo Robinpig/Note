@@ -3,7 +3,7 @@
 
 HSF连通不同的业务系统，解耦系统间的实现依赖。HSF从分布式应用的层面，统一了服务的发布与调用方式，从而帮助用户更加方便、快速地开发分布式应用，以及提供或使用公共功能模块。HSF为用户屏蔽了分布式领域中的各种复杂技术细节，如远程通讯、序列化实现、性能损耗、同步与异步调用方式的实现等。
 
-> HSF3内核为Dubbo3.
+> HSF3内核为[Dubbo3](/docs/CS/Framework/Dubbo/Dubbo.md).
 
 ## Architecture
 
@@ -11,10 +11,18 @@ HSF连通不同的业务系统，解耦系统间的实现依赖。HSF从分布�
 HSF作为一个纯客户端架构的RPC框架，没有服务端集群，所有HSF服务调用均是通过服务消费方（Consumer）与服务提供方（Provider）点对点进行。为了实现整套分布式服务体系，HSF还需要依赖以下外部系统。
 
 
+
+<div style="text-align: center;">
+
+
 ![](./img/Architecture.png)
 
 
+</div>
 
+<p style="text-align: center;">
+Fig.1. HSF architecture.
+</p>
 
 
 - Provider
@@ -56,7 +64,7 @@ HSF内部设计了调用过滤器，能够主动发现用户的调用过滤器�
 
 ## Links
 
-- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 
 
 ## References

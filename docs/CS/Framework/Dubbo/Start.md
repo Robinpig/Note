@@ -230,7 +230,7 @@ export either local or remote, not both
 
 if remote:
 
-1. use [ProxyFactory](/docs/CS/Java/Dubbo/Start.md?id=proxy) wrap Invoker
+1. use [ProxyFactory](/docs/CS/Framework/Dubbo/Start.md?id=proxy) wrap Invoker
 2. may export no registries
 3. may only injvm
 4. add monitor
@@ -550,7 +550,7 @@ public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
 
 ### createProxy
 
-all of scenarios need to create [Proxy](/docs/CS/Java/Dubbo/Start.md?id=proxy) :
+all of scenarios need to create [Proxy](/docs/CS/Framework/Dubbo/Start.md?id=proxy) :
 
 1. shouldJvmRefer
 2. one registry
@@ -877,4 +877,4 @@ public class DubboBootstrapApplicationListener implements ApplicationListener, A
 
 ## Links
 
-- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)

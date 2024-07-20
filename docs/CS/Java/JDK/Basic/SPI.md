@@ -89,7 +89,7 @@ You should use the extension location only for well-known, trusted providers bec
 - [JDBC](/docs/CS/Java/JDK/Basic/JDBC.md)
 - Log
 - Spring
-- [Dubbo](/docs/CS/Java/Dubbo/SPI.md)
+- [Dubbo](/docs/CS/Framework/Dubbo/SPI.md)
 - Netty
 - MyBatis
 - Hadoop

@@ -103,7 +103,7 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 
 ##### Dubbo
 
-[Dubbo](/docs/CS/Java/Dubbo/Dubbo.md) is a high-performance, java based open source RPC framework.
+[Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md) is a high-performance, java based open source RPC framework.
 
 ##### Tomcat
 

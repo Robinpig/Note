@@ -6,4 +6,4 @@ It is also applicable in last mile of distributed computing to connect devices, 
 
 ## Links
 
-- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)

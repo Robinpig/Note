@@ -351,7 +351,7 @@ AllocateByteBuf
 ## Links
 
 - [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
-- [Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 - [Flink](/docs/CS/Java/Flink.md)
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Cassandra](/docs/CS/DB/Cassandra.md)

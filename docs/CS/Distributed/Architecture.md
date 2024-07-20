@@ -98,6 +98,17 @@ The best solution is to use the SOA approach and organize complex apps into isol
 Microservice is a type of service-oriented software architecture that focuses on building a series of autonomous components that make up an app.
 Unlike monolithic apps built as a single indivisible unit, microservice apps consist of multiple independent components that are glued together with APIs.
 
+
+
+简而言之， 微服务架构风格是一种将单个应用程序开发为一套小服务程序的方法，
+每个小服务都在自己的进程中运行， 并使用轻量级协议（通常是 HTTP 协议） 进行通信  
+这些服务围绕业务功能构建， 可通过全自动部署机制独立部署。 这些服务很少使用
+中心化管理模式， 可以用不同的编程语言开发， 也可能使用不同的数据存储技术    
+
+-- James Lewis 与 Martin Fowler  
+
+
+
 **Pros of microservices**
 
 - Easy to develop, test, and deploy

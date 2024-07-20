@@ -3,12 +3,12 @@
 [Apache Dubbo](http://dubbo.apache.org/) is an easy-to-use, high-performance WEB and RPC framework with builtin service discovery, traffic management, observability, security features, tools and best practices for building enterprise-level microservices.
 
 
-- [start](/docs/CS/Java/Dubbo/Start.md)
-- [Registry](/docs/CS/Java/Dubbo/registry.md)
-- [Remoting](/docs/CS/Java/Dubbo/remoting.md)
-- [cluster](/docs/CS/Java/Dubbo/cluster.md)
-- [Transporter](/docs/CS/Java/Dubbo/Transporter.md)
-- [LoadBalance](/docs/CS/Java/Dubbo/LoadBalance.md)
+- [start](/docs/CS/Framework/Dubbo/Start.md)
+- [Registry](/docs/CS/Framework/Dubbo/registry.md)
+- [Remoting](/docs/CS/Framework/Dubbo/remoting.md)
+- [cluster](/docs/CS/Framework/Dubbo/cluster.md)
+- [Transporter](/docs/CS/Framework/Dubbo/Transporter.md)
+- [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)
 
 ## Design
 
@@ -40,7 +40,7 @@
 
 ### SPI
 
-[SPI](/docs/CS/Java/Dubbo/SPI.md)
+[SPI](/docs/CS/Framework/Dubbo/SPI.md)
 
 use Adapter
 

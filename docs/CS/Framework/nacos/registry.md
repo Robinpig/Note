@@ -136,7 +136,7 @@ public class NacosNamingService implements NamingService {
 If you'd like to use "Service Registry" features, NamingService is a core service interface to get or publish config, 
 you could use "Dependency Injection" to inject NamingService instance in your Spring Beans.
 
-And [Dubbo](/docs/CS/Java/Dubbo/registry.md?id=NacosRegistry) wrapped it.
+And [Dubbo](/docs/CS/Framework/Dubbo/registry.md?id=NacosRegistry) wrapped it.
 
 1. schedule BeatTask
 2. registerService

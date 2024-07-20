@@ -473,7 +473,7 @@ public interface Directory<T> extends Node {
 
 
 
-[Load Balance](/docs/CS/Java/Dubbo/LoadBalance.md)
+[Load Balance](/docs/CS/Framework/Dubbo/LoadBalance.md)
 
 ```java
 /**

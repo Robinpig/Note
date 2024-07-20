@@ -174,7 +174,7 @@ Now [gRPC](/docs/CS/Distributed/RPC/grpc.md) and Finagle support to build stream
 
 [Thrift](/docs/CS/Distributed/RPC/Thrift.md)
 
-[Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+[Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 
 
 

@@ -223,7 +223,7 @@ public @interface Inherited {
 
 ## Implementations
 
-See [Dubbo SPI](/docs/CS/Java/Dubbo/SPI.md)
+See [Dubbo SPI](/docs/CS/Framework/Dubbo/SPI.md)
 
 ```java
 @Documented
