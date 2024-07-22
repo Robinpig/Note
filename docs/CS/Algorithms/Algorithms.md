@@ -1,5 +1,7 @@
 ## Introduction
 
+以下涉及的都是计算机算法
+
 
 算法应用
 
@@ -7,6 +9,10 @@
 社会
 
 推荐算法
+- 衣食住行 买东西
+
+路径规划算法
+
 
 人工智能算法
 
@@ -99,6 +105,8 @@ We rely on probability to analyze hash-table operations, but you can understand 
 [Substring Search](/docs/CS/Algorithms/KMP.md)
 
 ## Algorithm Analysis
+
+
 
 An *algorithm* is a finite set of instructions that, if followed, accomplishes a particular task.
 In addition, all algorithms must satisfy the following criteria:
