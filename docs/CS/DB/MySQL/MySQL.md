@@ -23,6 +23,44 @@ docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql
 
 <!-- tabs:end -->
 
+
+
+**Build from source**
+
+<!-- tabs:start -->
+
+Download source file and  unzip
+
+
+
+##### **Ubuntu**
+
+```shell
+sudo apt install gcc build-essential cmake bison libncurses5-dev libssl-dev pkg-config
+
+# cd source code root
+
+cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./extra/boost -DCMAKE_BUILD_TYPE=Debug -DWITH_DEBUG=1
+
+sudo make && make install
+```
+
+##### **MacOS**
+
+```shell
+brew install cmake gcc bison
+# cd source code root
+cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./boost -DCMAKE_BUILD_TYPE=Debug -DWITH_DEBUG=1 -DBISON_EXECUTABLE=/opt/homebrew/opt/bison/bin/bison
+
+sudo make && make install
+```
+
+
+
+
+
+<!-- tabs:end -->
+
 ## Architecture
 
 The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements.
