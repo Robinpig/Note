@@ -57,9 +57,20 @@ sudo make && make install
 
 
 
+Init
+
+```shell
+./bin/mysqld --initialize-insecure --datadir=./data
+
+# run
+./bin/mysqld --datadir=./data
+```
+
 
 
 <!-- tabs:end -->
+
+Use gdb/lldb to debug
 
 ## Architecture
 
@@ -272,3 +283,4 @@ In fact, in addition to allowing writes to be delayed, caching can permit them t
 ## References
 
 1. [MySQL Source Code Documentation](https://dev.mysql.com/doc/dev/mysql-server/latest/)
+2. [MySQL源码编译和调试指南(Ubuntu 22.04.4 LTS) by GrokDB](https://grokdb.io/post/first-post/)
