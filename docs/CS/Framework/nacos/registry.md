@@ -1057,68 +1057,6 @@ public class ServiceStorage {
 }
 ```
 
-## MemberLookup
-
-```java
-public class AddressServerMemberLookup extends AbstractMemberLookup {
-
-    @Override
-    public void doStart() throws NacosException {
-        this.maxFailCount = Integer.parseInt(EnvUtil.getProperty(HEALTH_CHECK_FAIL_COUNT_PROPERTY, DEFAULT_HEALTH_CHECK_FAIL_COUNT));
-        initAddressSys();
-        run();
-    }
-
-
-    private void initAddressSys() {
-        String envDomainName = System.getenv(ADDRESS_SERVER_DOMAIN_ENV);
-        if (StringUtils.isBlank(envDomainName)) {
-            domainName = EnvUtil.getProperty(ADDRESS_SERVER_DOMAIN_PROPERTY, DEFAULT_SERVER_DOMAIN);
-        } else {
-            domainName = envDomainName;
-        }
-        String envAddressPort = System.getenv(ADDRESS_SERVER_PORT_ENV);
-        if (StringUtils.isBlank(envAddressPort)) {
-            addressPort = EnvUtil.getProperty(ADDRESS_SERVER_PORT_PROPERTY, DEFAULT_SERVER_POINT);
-        } else {
-            addressPort = envAddressPort;
-        }
-        String envAddressUrl = System.getenv(ADDRESS_SERVER_URL_ENV);
-        if (StringUtils.isBlank(envAddressUrl)) {
-            addressUrl = EnvUtil.getProperty(ADDRESS_SERVER_URL_PROPERTY, EnvUtil.getContextPath() + "/" + "serverlist");
-        } else {
-            addressUrl = envAddressUrl;
-        }
-        addressServerUrl = HTTP_PREFIX + domainName + ":" + addressPort + addressUrl;
-        envIdUrl = HTTP_PREFIX + domainName + ":" + addressPort + "/env";
-    }
-
-    @SuppressWarnings("PMD.UndefineMagicConstantRule")
-    private void run() throws NacosException {
-        // With the address server, you need to perform a synchronous member node pull at startup
-        // Repeat three times, successfully jump out
-        boolean success = false;
-        Throwable ex = null;
-        int maxRetry = EnvUtil.getProperty(ADDRESS_SERVER_RETRY_PROPERTY, Integer.class, DEFAULT_SERVER_RETRY_TIME);
-        for (int i = 0; i < maxRetry; i++) {
-            try {
-                syncFromAddressUrl();
-                success = true;
-                break;
-            } catch (Throwable e) {
-                ex = e;
-                Loggers.CLUSTER.error("[serverlist] exception, error : {}", ExceptionUtil.getAllExceptionMsg(ex));
-            }
-        }
-        if (!success) {
-            throw new NacosException(NacosException.SERVER_ERROR, ex);
-        }
-
-        GlobalExecutor.scheduleByCommon(new AddressServerSyncTask(), DEFAULT_SYNC_TASK_DELAY_MS);
-    }
-}
-```
-
 ## Distro
 
 Distro 协议是 Nacos 社区自研的一种 AP 分布式协议，是面向临时实例设计的一种分布式协议 其数据存储在缓存中，并且会在启动时进行全量数据同步，并定期进行数据校验 保证了在某些 Nacos 节点宕机后，整个临时实例处理系统依旧可以正常工作。 
@@ -1546,8 +1484,11 @@ public class NamingMetadataOperateService {
 
 
 
-Nacos 中， 服务的注册我们从注册方式维度实际可以分为两大类。 第⼀类通过 SDK RPC 连接进
-行注册， 客户端会和注册中心保持链接。 第二类， 通过 OpenAPI 进行 IP 和端口注册。
+Nacos 中， 服务的注册我们从注册方式维度实际可以分为两大类。 
+
+- 第⼀类通过 SDK RPC 连接进行注册， 客户端会和注册中心保持链接。 
+- 第二类， 通过 OpenAPI 进行 IP 和端口注册。
+
 对于第⼀类， 如何寻找到对其负责的注册中心节点呢？ 聪明的你肯定想到了， 只需要和注册中心集
 群中的任意⼀台节点建立联系， 那么由这个节点负责这个客户端就可以了。 注册中心会在启动时注
 册⼀个全局的同步任务， 用于将其当前负责的所有节点信息同步到集群中的其他节点， 其他非负责

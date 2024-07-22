@@ -4,10 +4,9 @@ Nacos `/nɑ:kəʊs/` 是 Dynamic Naming and Configuration Service的首字母简
 
 来源于阿里内部三个产品（Configserver 非持久注册中心， VIPServer 持久化注册中心， Diamond 配置中心 最早⼀个产品逐步演化成 3 个产品的）   
 
-Nacos 支持将注册中心(Service Registry）与配置中心(Config Center) 在一个进程合并部署或者将2者分离部署的两种模式
+Nacos 支持将注册中心(Service Registry）与配置中心(Config Center) 在一个进程合并部署或者将2者分离部署的两种模式 服务（Service）是 Nacos 世界的一等公民。Nacos 支持几乎所有主流类型的“服务”的发现、配置和管理
 
 
-服务（Service）是 Nacos 世界的一等公民。Nacos 支持几乎所有主流类型的“服务”的发现、配置和管理
 
 Nacos 的关键特性包括:
 
@@ -63,6 +62,12 @@ Run Nacos.java file in module nacos-console with VM options `-Dnacos.standalone=
 采⽤了阿⾥巴巴内部⾃研的 Distro 协议来实现数据弱⼀致性同步。其中所有节点都将存储集群内所有服务元数据，因此都可以提供数据读取服务，但每个节点只负责⼀部分客户端的数据写服务
 
 
+
+## grpc
+
+sdkserver 端口 server.port+1000
+
+grpcserver端口 server.port+1001
 
  ## Consistency
 
@@ -130,6 +135,82 @@ A concrete implementation of CP protocol: JRaft.
  *
  */
 ```
+
+端口号 server.port - 1000
+
+
+
+
+
+
+
+## Cluster
+
+目前需要手动配置在cluster.conf文件里 未来预期通过其它web服务获取
+
+
+### MemberLookup
+
+```java
+public class AddressServerMemberLookup extends AbstractMemberLookup {
+
+    @Override
+    public void doStart() throws NacosException {
+        this.maxFailCount = Integer.parseInt(EnvUtil.getProperty(HEALTH_CHECK_FAIL_COUNT_PROPERTY, DEFAULT_HEALTH_CHECK_FAIL_COUNT));
+        initAddressSys();
+        run();
+    }
+
+
+    private void initAddressSys() {
+        String envDomainName = System.getenv(ADDRESS_SERVER_DOMAIN_ENV);
+        if (StringUtils.isBlank(envDomainName)) {
+            domainName = EnvUtil.getProperty(ADDRESS_SERVER_DOMAIN_PROPERTY, DEFAULT_SERVER_DOMAIN);
+        } else {
+            domainName = envDomainName;
+        }
+        String envAddressPort = System.getenv(ADDRESS_SERVER_PORT_ENV);
+        if (StringUtils.isBlank(envAddressPort)) {
+            addressPort = EnvUtil.getProperty(ADDRESS_SERVER_PORT_PROPERTY, DEFAULT_SERVER_POINT);
+        } else {
+            addressPort = envAddressPort;
+        }
+        String envAddressUrl = System.getenv(ADDRESS_SERVER_URL_ENV);
+        if (StringUtils.isBlank(envAddressUrl)) {
+            addressUrl = EnvUtil.getProperty(ADDRESS_SERVER_URL_PROPERTY, EnvUtil.getContextPath() + "/" + "serverlist");
+        } else {
+            addressUrl = envAddressUrl;
+        }
+        addressServerUrl = HTTP_PREFIX + domainName + ":" + addressPort + addressUrl;
+        envIdUrl = HTTP_PREFIX + domainName + ":" + addressPort + "/env";
+    }
+
+    @SuppressWarnings("PMD.UndefineMagicConstantRule")
+    private void run() throws NacosException {
+        // With the address server, you need to perform a synchronous member node pull at startup
+        // Repeat three times, successfully jump out
+        boolean success = false;
+        Throwable ex = null;
+        int maxRetry = EnvUtil.getProperty(ADDRESS_SERVER_RETRY_PROPERTY, Integer.class, DEFAULT_SERVER_RETRY_TIME);
+        for (int i = 0; i < maxRetry; i++) {
+            try {
+                syncFromAddressUrl();
+                success = true;
+                break;
+            } catch (Throwable e) {
+                ex = e;
+                Loggers.CLUSTER.error("[serverlist] exception, error : {}", ExceptionUtil.getAllExceptionMsg(ex));
+            }
+        }
+        if (!success) {
+            throw new NacosException(NacosException.SERVER_ERROR, ex);
+        }
+
+        GlobalExecutor.scheduleByCommon(new AddressServerSyncTask(), DEFAULT_SYNC_TASK_DELAY_MS);
+    }
+}
+```
+
 
 
 
