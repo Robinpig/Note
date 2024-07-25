@@ -284,3 +284,5 @@ In fact, in addition to allowing writes to be delayed, caching can permit them t
 
 1. [MySQL Source Code Documentation](https://dev.mysql.com/doc/dev/mysql-server/latest/)
 2. [MySQL源码编译和调试指南(Ubuntu 22.04.4 LTS) by GrokDB](https://grokdb.io/post/first-post/)
+3. [Mac系统下源码编译安装MySQL 5.7.17的教程](http://www.80vps.com/new1114.htm)
+4. [Mac上编译MySQL源码与安装](https://max2d.com/archives/983)
