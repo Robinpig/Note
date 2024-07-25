@@ -451,6 +451,7 @@ public void dump(String dataId, String group, String tenant, long lastModified, 
 ```
 
 
+NacosDelayTaskExecuteEngine
 
 
 ```java
@@ -681,8 +682,6 @@ public class DumpConfigHandler extends Subscriber<ConfigDumpEvent> {
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnProperty(name = "spring.cloud.nacos.config.enabled", matchIfMissing = true)
 public class NacosConfigBootstrapConfiguration {
-    //...
-    
     @Bean
     public NacosPropertySourceLocator nacosPropertySourceLocator(
             NacosConfigManager nacosConfigManager) {
