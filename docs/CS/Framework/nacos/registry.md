@@ -690,7 +690,7 @@ public class NamingSubscriberServiceV2Impl extends SmartSubscriber implements Na
 ```
 
 
-事件InstanceMetadataEvent, 更新过期事件
+InstanceMetadataEvent, 更新过期事件
 ```java
 @Component
 public class NamingMetadataManager extends SmartSubscriber {
@@ -714,7 +714,7 @@ public class NamingMetadataManager extends SmartSubscriber {
 ```
 
 
-raft
+persistentClientOperationServiceImpl
 ```java
 @Component(”persistentClientOperationServiceImpl“)
 public class PersistentClientOperationServiceImpl extends RequestProcessor4CP implements ClientOperationService {
@@ -962,183 +962,6 @@ public void addInstance(String namespaceId, String serviceName, boolean ephemera
         
         consistencyService.put(key, instances);
     }
-}
-```
-
-## Client subscribe
-
-```java
-@Override
-    public void subscribe(String serviceName, String groupName, List<String> clusters, EventListener listener)
-            throws NacosException {
-        if (null == listener) {
-            return;
-        }
-        String clusterString = StringUtils.join(clusters, ",");
-        changeNotifier.registerListener(groupName, serviceName, clusterString, listener);
-        clientProxy.subscribe(serviceName, groupName, clusterString);
-    }
-public class NamingClientProxyDelegate implements NamingClientProxy {
-    @Override
-    public ServiceInfo subscribe(String serviceName, String groupName, String clusters) throws NacosException {
-        NAMING_LOGGER.info("[SUBSCRIBE-SERVICE] service:{}, group:{}, clusters:{} ", serviceName, groupName, clusters);
-        String serviceNameWithGroup = NamingUtils.getGroupedName(serviceName, groupName);
-        String serviceKey = ServiceInfo.getKey(serviceNameWithGroup, clusters);
-        serviceInfoUpdateService.scheduleUpdateIfAbsent(serviceName, groupName, clusters);
-        ServiceInfo result = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
-        if (null == result || !isSubscribed(serviceName, groupName, clusters)) {
-            result = grpcClientProxy.subscribe(serviceName, groupName, clusters);
-        }
-        serviceInfoHolder.processServiceInfo(result);
-        return result;
-    }
-}
-```
-
-```java
-public class ServiceInfoUpdateService implements Closeable {
-
-  @Override
-  public void run() {
-    long delayTime = DEFAULT_DELAY;
-
-    try {
-      if (!changeNotifier.isSubscribed(groupName, serviceName, clusters) && !futureMap.containsKey(
-              serviceKey)) {
-        NAMING_LOGGER.info("update task is stopped, service:{}, clusters:{}", groupedServiceName, clusters);
-        isCancel = true;
-        return;
-      }
-
-      ServiceInfo serviceObj = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
-      if (serviceObj == null) {
-        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
-        serviceInfoHolder.processServiceInfo(serviceObj);
-        lastRefTime = serviceObj.getLastRefTime();
-        return;
-      }
-
-      if (serviceObj.getLastRefTime() <= lastRefTime) {
-        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
-        serviceInfoHolder.processServiceInfo(serviceObj);
-      }
-      lastRefTime = serviceObj.getLastRefTime();
-      if (CollectionUtils.isEmpty(serviceObj.getHosts())) {
-        incFailCount();
-        return;
-      }
-      // TODO multiple time can be configured.
-      delayTime = serviceObj.getCacheMillis() * DEFAULT_UPDATE_CACHE_TIME_MULTIPLE;
-      resetFailCount();
-    } catch (Throwable e) {
-      incFailCount();
-      NAMING_LOGGER.warn("[NA] failed to update serviceName: {}", groupedServiceName, e);
-    } finally {
-      if (!isCancel) {
-        executor.schedule(this, Math.min(delayTime << failCount, DEFAULT_DELAY * 60),
-                TimeUnit.MILLISECONDS);
-      }
-    }
-  }
-
-}
-```
-
-
-```java
-public void scheduleUpdateIfAbsent(String serviceName, String groupName, String clusters) {
-        String serviceKey = ServiceInfo.getKey(NamingUtils.getGroupedName(serviceName, groupName), clusters);
-        if (futureMap.get(serviceKey) != null) {
-            return;
-        }
-        synchronized (futureMap) {
-            if (futureMap.get(serviceKey) != null) {
-                return;
-            }
-            
-            ScheduledFuture<?> future = addTask(new UpdateTask(serviceName, groupName, clusters));
-            futureMap.put(serviceKey, future);
-        }
-    }
-```
-
-
-
-grpc
-
-```java
-public ServiceInfo doSubscribe(String serviceName, String groupName, String clusters) throws NacosException {
-        SubscribeServiceRequest request = new SubscribeServiceRequest(namespaceId, groupName, serviceName, clusters,
-                true);
-        SubscribeServiceResponse response = requestToServer(request, SubscribeServiceResponse.class);
-        redoService.subscriberRegistered(serviceName, groupName, clusters);
-        return response.getServiceInfo();
-    }
-```
-
-server
-```java
-
-    @Override
-    @Secured(action = ActionTypes.READ)
-    public SubscribeServiceResponse handle(SubscribeServiceRequest request, RequestMeta meta) throws NacosException {
-        String namespaceId = request.getNamespace();
-        String serviceName = request.getServiceName();
-        String groupName = request.getGroupName();
-        String app = request.getHeader("app", "unknown");
-        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
-        Service service = Service.newService(namespaceId, groupName, serviceName, true);
-        Subscriber subscriber = new Subscriber(meta.getClientIp(), meta.getClientVersion(), app, meta.getClientIp(),
-                namespaceId, groupedServiceName, 0, request.getClusters());
-        ServiceInfo serviceInfo = ServiceUtil.selectInstancesWithHealthyProtection(serviceStorage.getData(service),
-                metadataManager.getServiceMetadata(service).orElse(null), subscriber);
-        if (request.isSubscribe()) {
-            clientOperationService.subscribeService(service, subscriber, meta.getConnectionId());
-        } else {
-            clientOperationService.unsubscribeService(service, subscriber, meta.getConnectionId());
-        }
-        return new SubscribeServiceResponse(ResponseCode.SUCCESS.getCode(), "success", serviceInfo);
-    }
-```
-
-
-```java
-@Component
-public class ServiceStorage {
-
-    private final ClientManager clientManager;
-
-    private final ConcurrentMap<Service, ServiceInfo> serviceDataIndexes;
-
-    public ServiceInfo getData(Service service) {
-        return serviceDataIndexes.containsKey(service) ? serviceDataIndexes.get(service) : getPushData(service);
-    }
-
-    public ServiceInfo getPushData(Service service) {
-        ServiceInfo result = emptyServiceInfo(service);
-        if (!ServiceManager.getInstance().containSingleton(service)) {
-            return result;
-        }
-        result.setHosts(getAllInstancesFromIndex(service));
-        serviceDataIndexes.put(service, result);
-        return result;
-    }
-
-  private List<Instance> getAllInstancesFromIndex(Service service) {
-    Set<Instance> result = new HashSet<>();
-    Set<String> clusters = new HashSet<>();
-    for (String each : serviceIndexesManager.getAllClientsRegisteredService(service)) {
-      Optional<InstancePublishInfo> instancePublishInfo = getInstanceInfo(each, service);
-      if (instancePublishInfo.isPresent()) {
-        Instance instance = parseInstance(service, instancePublishInfo.get());
-        result.add(instance);
-        clusters.add(instance.getClusterName());
-      }
-    }
-    // cache clusters of this service
-    serviceClusterIndex.put(service, clusters);
-    return new LinkedList<>(result);
-  }
 }
 ```
 
@@ -1537,6 +1360,239 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
     }
 ```
 
+## Client subscribe
+client端本地缓存
+```java
+public class NacosNamingService implements NamingService {
+    @Override
+    public void subscribe(String serviceName, String groupName, List<String> clusters, EventListener listener)
+            throws NacosException {
+        if (null == listener) {
+            return;
+        }
+        String clusterString = StringUtils.join(clusters, ",");
+        changeNotifier.registerListener(groupName, serviceName, clusterString, listener);
+        clientProxy.subscribe(serviceName, groupName, clusterString);
+    }
+}
+
+public class NamingClientProxyDelegate implements NamingClientProxy {
+    @Override
+    public ServiceInfo subscribe(String serviceName, String groupName, String clusters) throws NacosException {
+        String serviceNameWithGroup = NamingUtils.getGroupedName(serviceName, groupName);
+        String serviceKey = ServiceInfo.getKey(serviceNameWithGroup, clusters);
+        serviceInfoUpdateService.scheduleUpdateIfAbsent(serviceName, groupName, clusters);
+        ServiceInfo result = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
+        if (null == result || !isSubscribed(serviceName, groupName, clusters)) {
+            result = grpcClientProxy.subscribe(serviceName, groupName, clusters);
+        }
+        serviceInfoHolder.processServiceInfo(result);
+        return result;
+    }
+}
+```
+
+默认任务6s一次 最长一分钟一次
+
+```java
+public class ServiceInfoUpdateService implements Closeable {
+
+  @Override
+  public void run() {
+    long delayTime = DEFAULT_DELAY;
+
+    try {
+      if (!changeNotifier.isSubscribed(groupName, serviceName, clusters) && !futureMap.containsKey(
+              serviceKey)) {
+        NAMING_LOGGER.info("update task is stopped, service:{}, clusters:{}", groupedServiceName, clusters);
+        isCancel = true;
+        return;
+      }
+
+      ServiceInfo serviceObj = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
+      if (serviceObj == null) {
+        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
+        serviceInfoHolder.processServiceInfo(serviceObj);
+        lastRefTime = serviceObj.getLastRefTime();
+        return;
+      }
+
+      if (serviceObj.getLastRefTime() <= lastRefTime) {
+        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
+        serviceInfoHolder.processServiceInfo(serviceObj);
+      }
+      lastRefTime = serviceObj.getLastRefTime();
+      if (CollectionUtils.isEmpty(serviceObj.getHosts())) {
+        incFailCount();
+        return;
+      }
+      // TODO multiple time can be configured.
+      delayTime = serviceObj.getCacheMillis() * DEFAULT_UPDATE_CACHE_TIME_MULTIPLE;
+      resetFailCount();
+    } catch (Throwable e) {
+      incFailCount();
+      NAMING_LOGGER.warn("[NA] failed to update serviceName: {}", groupedServiceName, e);
+    } finally {
+      if (!isCancel) {
+        executor.schedule(this, Math.min(delayTime << failCount, DEFAULT_DELAY * 60),
+                TimeUnit.MILLISECONDS);
+      }
+    }
+  }
+
+}
+```
+
+UpdateTask
+```java
+public void scheduleUpdateIfAbsent(String serviceName, String groupName, String clusters) {
+        String serviceKey = ServiceInfo.getKey(NamingUtils.getGroupedName(serviceName, groupName), clusters);
+        if (futureMap.get(serviceKey) != null) {
+            return;
+        }
+        synchronized (futureMap) {
+            if (futureMap.get(serviceKey) != null) {
+                return;
+            }
+            
+            ScheduledFuture<?> future = addTask(new UpdateTask(serviceName, groupName, clusters));
+            futureMap.put(serviceKey, future);
+        }
+    }
+```
+
+
+
+grpc
+
+```java
+public ServiceInfo doSubscribe(String serviceName, String groupName, String clusters) throws NacosException {
+        SubscribeServiceRequest request = new SubscribeServiceRequest(namespaceId, groupName, serviceName, clusters,
+                true);
+        SubscribeServiceResponse response = requestToServer(request, SubscribeServiceResponse.class);
+        redoService.subscriberRegistered(serviceName, groupName, clusters);
+        return response.getServiceInfo();
+    }
+```
+
+server
+```java
+
+    @Override
+    @Secured(action = ActionTypes.READ)
+    public SubscribeServiceResponse handle(SubscribeServiceRequest request, RequestMeta meta) throws NacosException {
+        String namespaceId = request.getNamespace();
+        String serviceName = request.getServiceName();
+        String groupName = request.getGroupName();
+        String app = request.getHeader("app", "unknown");
+        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+        Service service = Service.newService(namespaceId, groupName, serviceName, true);
+        Subscriber subscriber = new Subscriber(meta.getClientIp(), meta.getClientVersion(), app, meta.getClientIp(),
+                namespaceId, groupedServiceName, 0, request.getClusters());
+        ServiceInfo serviceInfo = ServiceUtil.selectInstancesWithHealthyProtection(serviceStorage.getData(service),
+                metadataManager.getServiceMetadata(service).orElse(null), subscriber);
+        if (request.isSubscribe()) {
+            clientOperationService.subscribeService(service, subscriber, meta.getConnectionId());
+        } else {
+            clientOperationService.unsubscribeService(service, subscriber, meta.getConnectionId());
+        }
+        return new SubscribeServiceResponse(ResponseCode.SUCCESS.getCode(), "success", serviceInfo);
+    }
+```
+### server get
+```java
+
+@Component
+public class ServiceQueryRequestHandler extends RequestHandler<ServiceQueryRequest, QueryServiceResponse> {
+    
+    private final ServiceStorage serviceStorage;
+    
+    private final NamingMetadataManager metadataManager;
+    
+    public ServiceQueryRequestHandler(ServiceStorage serviceStorage, NamingMetadataManager metadataManager) {
+        this.serviceStorage = serviceStorage;
+        this.metadataManager = metadataManager;
+    }
+    
+    @Override
+    @Secured(action = ActionTypes.READ)
+    public QueryServiceResponse handle(ServiceQueryRequest request, RequestMeta meta) throws NacosException {
+        String namespaceId = request.getNamespace();
+        String groupName = request.getGroupName();
+        String serviceName = request.getServiceName();
+        Service service = Service.newService(namespaceId, groupName, serviceName);
+        String cluster = null == request.getCluster() ? "" : request.getCluster();
+        boolean healthyOnly = request.isHealthyOnly();
+        ServiceInfo result = serviceStorage.getData(service);
+        ServiceMetadata serviceMetadata = metadataManager.getServiceMetadata(service).orElse(null);
+        result = ServiceUtil.selectInstancesWithHealthyProtection(result, serviceMetadata, cluster, healthyOnly, true,
+                meta.getClientIp());
+        return QueryServiceResponse.buildSuccessResponse(result);
+    }
+}
+```
+
+```java
+@Component
+public class ServiceStorage {
+
+    private final ClientManager clientManager;
+
+    private final ConcurrentMap<Service, ServiceInfo> serviceDataIndexes;
+
+    public ServiceInfo getData(Service service) {
+        return serviceDataIndexes.containsKey(service) ? serviceDataIndexes.get(service) : getPushData(service);
+    }
+
+    public ServiceInfo getPushData(Service service) {
+        ServiceInfo result = emptyServiceInfo(service);
+        if (!ServiceManager.getInstance().containSingleton(service)) {
+            return result;
+        }
+        result.setHosts(getAllInstancesFromIndex(service));
+        serviceDataIndexes.put(service, result);
+        return result;
+    }
+
+  private List<Instance> getAllInstancesFromIndex(Service service) {
+    Set<Instance> result = new HashSet<>();
+    Set<String> clusters = new HashSet<>();
+    for (String each : serviceIndexesManager.getAllClientsRegisteredService(service)) {
+      Optional<InstancePublishInfo> instancePublishInfo = getInstanceInfo(each, service);
+      if (instancePublishInfo.isPresent()) {
+        Instance instance = parseInstance(service, instancePublishInfo.get());
+        result.add(instance);
+        clusters.add(instance.getClusterName());
+      }
+    }
+    // cache clusters of this service
+    serviceClusterIndex.put(service, clusters);
+    return new LinkedList<>(result);
+  }
+}
+```
+
+## select instance
+
+
+
+
+```java
+public class ServiceInfoHolder implements Closeable {
+    private final ConcurrentMap<String, ServiceInfo> serviceInfoMap;
+
+    public ServiceInfo getServiceInfo(final String serviceName, final String groupName, final String clusters) {
+        NAMING_LOGGER.debug("failover-mode: {}", failoverReactor.isFailoverSwitch());
+        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+        String key = ServiceInfo.getKey(groupedServiceName, clusters);
+        if (failoverReactor.isFailoverSwitch()) {
+            return failoverReactor.getService(key);
+        }
+        return serviceInfoMap.get(key);
+    }
+}
+```
+
 ## Tuning
 
 Eureka迁移nacos
@@ -1545,8 +1601,7 @@ Eureka迁移nacos
 
 ![](./img/Eureka_2_Nacos.png)
 
-默认情况下 Spring Cloud 只支持在依赖中引入⼀个注册中心， 当存在多个注册中心时， 启动
-错。 所以这里需要添加⼀个依赖 edas-sc-migration-starter ， 使得 Spring Cloud 应用支持多注
+默认情况下 Spring Cloud 只支持在依赖中引入⼀个注册中心， 当存在多个注册中心时， 启动出错。 所以这里需要添加⼀个依赖 edas-sc-migration-starter ， 使得 Spring Cloud 应用支持多注
 ```xml
 <dependency>
 <groupId>com.alibaba.edas</groupId>
@@ -1576,37 +1631,27 @@ spring.cloud.edas.migration.subscribes=nacos # 只从 Nacos 订阅服务
 ```
 观察业务本身是否正常。
 
-如果您的应用开启了 Actuator 监控， 那么可以通过 Actuator 来查看此应用订阅的各服务的 Ri
-bbonServerList 的信息。 metaInfo 中的 serverGroup 字段 代表了此节点来源于哪个服务注册
-中心。
+如果您的应用开启了 Actuator 监控， 那么可以通过 Actuator 来查看此应用订阅的各服务的 RibbonServerList 的信息。 metaInfo 中的 serverGroup 字段 代表了此节点来源于哪个服务注册中心。
 ```
 http://ip:port/migration_server_list ## Spring Boot 1.x 版本
 http://ip:port/actuator/migration-server-list ## Spring Boot 2.x 版本
 ```
 
-当应用都已经迁移到 Nacos 之后， 此时可以删除原有的注册中心的配置 和 迁移过程专用的依赖
-edas-sc-migration-starter ， 完成整个迁移。
+当应用都已经迁移到 Nacos 之后， 此时可以删除原有的注册中心的配置 和 迁移过程专用的依赖edas-sc-migration-starter ， 完成整个迁移。
 1. 从 pom.xml 中删除原有的注册中心的依赖 和 edas-sc-migration-starter 。
 2. 参考第⼀步中第 2 小步骤中的部署方式， 将修改后的应用依次全部重新部署。
 3. 停止原有的 Eureka 集群。
 
 
-从目前方案的设计中， 没有发现明显的风险点。 但是因为在迁移的过程中涉及到所有应用的两次修
-改和重启， 所以建议在迁移的过程中实时关注业务数据监控的详情， 确保完全不影响业务的情况下
-再进行下⼀步操作。
+从目前方案的设计中， 没有发现明显的风险点。 但是因为在迁移的过程中涉及到所有应用的两次修改和重启， 所以建议在迁移的过程中实时关注业务数据监控的详情， 确保完全不影响业务的情况下再进行下⼀步操作。
 如果遇到异常情况， 针对于不同阶段的处理方案如下：
-1. 执行第⼀步的过程中出现业务异常。 还原代码， 重新部署到原有机器， 恢复业务。 查清楚具体
-   问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
-2. 执行第二步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复
-   业务。 查清楚具体问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
-3. 执行第三步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复
-   业务
+1. 执行第⼀步的过程中出现业务异常。 还原代码， 重新部署到原有机器， 恢复业务。 查清楚具体问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
+2. 执行第二步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复业务。 查清楚具体问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
+3. 执行第三步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复业务
 
 如何选择最先迁移哪个应⽤
-- 建议是从最下层 Provider 开始迁移。 但如果调用链路太复杂， 比较难分析， 所以我们设计的方
-案中是支持随便找⼀个非流量入口应用进行迁移。
-- 因为流量入口的应⽤比较特殊， 所以建议迁移流量入口应⽤时需要根据自己应⽤的实际情况考虑
-迁移方案。
+- 建议是从最下层 Provider 开始迁移。 但如果调用链路太复杂， 比较难分析， 所以我们设计的方案中是支持随便找⼀个非流量入口应用进行迁移。
+- 因为流量入口的应⽤比较特殊， 所以建议迁移流量入口应⽤时需要根据自己应⽤的实际情况考虑迁移方案。
 
 
 ## Links
