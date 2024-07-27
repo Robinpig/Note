@@ -479,11 +479,16 @@ public class NamingHttpClientProxy extends AbstractNamingClientProxy {
 }
 ```
 
-
+- 如果是临时实例 添加beatTask
+- reqApi注册
 
 ```java
 public void registerService(String serviceName, String groupName, Instance instance) throws NacosException {
-
+        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+        if (instance.isEphemeral()) {
+            BeatInfo beatInfo = beatReactor.buildBeatInfo(groupedServiceName, instance);
+            beatReactor.addBeatInfo(groupedServiceName, beatInfo);
+        }
         final Map<String, String> params = new HashMap<String, String>(9);
         params.put(CommonParams.NAMESPACE_ID, namespaceId);
         params.put(CommonParams.SERVICE_NAME, serviceName);
@@ -497,24 +502,115 @@ public void registerService(String serviceName, String groupName, Instance insta
         params.put("ephemeral", String.valueOf(instance.isEphemeral()));
         params.put("metadata", JSON.toJSONString(instance.getMetadata()));
 
-        reqAPI(UtilAndComs.NACOS_URL_INSTANCE, params, HttpMethod.POST); // url = /nacos/v1/ns/instance
-
+        reqAPI(UtilAndComs.NACOS_URL_INSTANCE, params, HttpMethod.POST); 
     }
 ```
 
 
-Random for load balance
+#### beatTask
 
-use NacosRestTemplate call [Server register](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=server-Register) in `callServer`.
-
+5s执行一次心跳任务
 
 ```java
- public String reqApi(String api, Map<String, String> params, Map<String, String> body, List<String> servers,
-            String method) throws NacosException {
+
+public class BeatReactor implements Closeable {
+    
+    private final ScheduledExecutorService executorService;
+    
+    public final Map<String, BeatInfo> dom2Beat = new ConcurrentHashMap<String, BeatInfo>();
+    public void addBeatInfo(String serviceName, BeatInfo beatInfo) {
+        NAMING_LOGGER.info("[BEAT] adding beat: {} to beat map.", beatInfo);
+        String key = buildKey(serviceName, beatInfo.getIp(), beatInfo.getPort());
+        BeatInfo existBeat;
+        //fix #1733
+        if ((existBeat = dom2Beat.remove(key)) != null) {
+            existBeat.setStopped(true);
+        }
+        dom2Beat.put(key, beatInfo);
+        executorService.schedule(new BeatTask(beatInfo), beatInfo.getPeriod(), TimeUnit.MILLISECONDS);
+        MetricsMonitor.getDom2BeatSizeMonitor().set(dom2Beat.size());
+    }
+}
+```
+
+发送HTTP心跳
+
+```java
+class BeatTask implements Runnable {
+    
+    BeatInfo beatInfo;
+    
+    public BeatTask(BeatInfo beatInfo) {
+        this.beatInfo = beatInfo;
+    }
+    
+    @Override
+    public void run() {
+        if (beatInfo.isStopped()) {
+            return;
+        }
+        long nextTime = beatInfo.getPeriod();
+        try {
+            JsonNode result = serverProxy.sendBeat(beatInfo, BeatReactor.this.lightBeatEnabled);
+            long interval = result.get(CLIENT_BEAT_INTERVAL_FIELD).asLong();
+            boolean lightBeatEnabled = false;
+            if (result.has(CommonParams.LIGHT_BEAT_ENABLED)) {
+                lightBeatEnabled = result.get(CommonParams.LIGHT_BEAT_ENABLED).asBoolean();
+            }
+            BeatReactor.this.lightBeatEnabled = lightBeatEnabled;
+            if (interval > 0) {
+                nextTime = interval;
+            }
+            int code = NamingResponseCode.OK;
+            if (result.has(CommonParams.CODE)) {
+                code = result.get(CommonParams.CODE).asInt();
+            }
+            if (code == NamingResponseCode.RESOURCE_NOT_FOUND) {
+                Instance instance = new Instance();
+                instance.setPort(beatInfo.getPort());
+                instance.setIp(beatInfo.getIp());
+                instance.setWeight(beatInfo.getWeight());
+                instance.setMetadata(beatInfo.getMetadata());
+                instance.setClusterName(beatInfo.getCluster());
+                instance.setServiceName(beatInfo.getServiceName());
+                instance.setInstanceId(instance.getInstanceId());
+                instance.setEphemeral(true);
+                try {
+                    serverProxy.registerService(beatInfo.getServiceName(),
+                            NamingUtils.getGroupName(beatInfo.getServiceName()), instance);
+                } catch (Exception ignore) {
+                }
+            }
+        } catch (NacosException ex) {
+            NAMING_LOGGER.error("[CLIENT-BEAT] failed to send beat: {}, code: {}, msg: {}",
+                    JacksonUtils.toJson(beatInfo), ex.getErrCode(), ex.getErrMsg());
+
+        } catch (Exception unknownEx) {
+            NAMING_LOGGER.error("[CLIENT-BEAT] failed to send beat: {}, unknown exception msg: {}",
+                    JacksonUtils.toJson(beatInfo), unknownEx.getMessage(), unknownEx);
+        } finally {
+            executorService.schedule(new BeatTask(beatInfo), nextTime, TimeUnit.MILLISECONDS);
+        }
+    }
+}
+```
+
+
+
+#### reqApi
+
+Random for load balance
+
+请求[url = /v1/ns/instance](/docs/CS/Framework/nacos/registry.md?id=InstanceController) 注册
+
+```java
+public class NamingHttpClientProxy extends AbstractNamingClientProxy {
+    public String reqApi(String api, Map<String, String> params, Map<String, String> body, List<String> servers,
+                         String method) throws NacosException {
         params.put(CommonParams.NAMESPACE_ID, getNamespaceId());
-        
+
         NacosException exception = new NacosException();
-        
+
         if (StringUtils.isNotBlank(nacosDomain)) {
             for (int i = 0; i < maxRetry; i++) {
                 try {
@@ -526,7 +622,7 @@ use NacosRestTemplate call [Server register](/docs/CS/Framework/Spring_Cloud/nac
         } else {
             Random random = new Random(System.currentTimeMillis());
             int index = random.nextInt(servers.size());
-            
+
             for (int i = 0; i < servers.size(); i++) {
                 String server = servers.get(index);
                 try {
@@ -539,14 +635,9 @@ use NacosRestTemplate call [Server register](/docs/CS/Framework/Spring_Cloud/nac
         }
         throw new NacosException(exception.getErrCode(),
                 "failed to req API:" + api + " after all servers(" + servers + ") tried: " + exception.getMessage());
+    }
 }
 ```
-
-
-
-
-
-
 
 
 ## Server
@@ -822,9 +913,11 @@ public class DistroFilter implements Filter {
 }
 ```
 
-
 ### InstanceController
 
+当客户端使用[HTTP注册](/docs/CS/Framework/nacos/registry.md?id=reqApi)会走到此处
+
+<!-- tabs:start -->
 
 ##### **InstanceController**
 
@@ -874,6 +967,8 @@ public Result<String> register(InstanceForm instanceForm) throws NacosException 
     return Result.success("ok");
 }
 ```
+
+<!-- tabs:end -->
 
 
 ```java
@@ -945,6 +1040,8 @@ public void createServiceIfAbsent(String namespaceId, String serviceName, boolea
 #### addInstance
 
 Add instance to service.
+
+针对临时实例 这里存储层服务默认是DistroConsistencyServiceImpl
 
 ```java
 public void addInstance(String namespaceId, String serviceName, boolean ephemeral, Instance... ips)
@@ -1370,6 +1467,56 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
 ```
 
 ## Client subscribe
+
+
+
+
+
+Spring Cloud
+
+通过Bean自定义生命周期 在启动的finishRefresh阶段订阅
+
+```java
+public class NacosWatch implements SmartLifecycle, DisposableBean {
+    
+	@Override
+	public void start() {
+		if (this.running.compareAndSet(false, true)) {
+			EventListener eventListener = listenerMap.computeIfAbsent(buildKey(),
+					event -> new EventListener() {
+						@Override
+						public void onEvent(Event event) {
+							if (event instanceof NamingEvent namingEvent) {
+								List<Instance> instances = namingEvent.getInstances();
+								Optional<Instance> instanceOptional = selectCurrentInstance(
+										instances);
+								instanceOptional.ifPresent(currentInstance -> {
+									resetIfNeeded(currentInstance);
+								});
+							}
+						}
+					});
+
+			NamingService namingService = nacosServiceManager.getNamingService();
+			try {
+				namingService.subscribe(properties.getService(), properties.getGroup(),
+						Arrays.asList(properties.getClusterName()), eventListener);
+			}
+			catch (Exception e) {
+				log.error("namingService subscribe failed, properties:{}", properties, e);
+			}
+
+		}
+	}
+}
+```
+
+
+
+
+
+
+
 client端本地缓存
 ```java
 public class NacosNamingService implements NamingService {
@@ -1452,7 +1599,8 @@ public class ServiceInfoUpdateService implements Closeable {
 }
 ```
 
-UpdateTask
+#### UpdateTask
+
 ```java
 public void scheduleUpdateIfAbsent(String serviceName, String groupName, String clusters) {
         String serviceKey = ServiceInfo.getKey(NamingUtils.getGroupedName(serviceName, groupName), clusters);
@@ -1472,7 +1620,7 @@ public void scheduleUpdateIfAbsent(String serviceName, String groupName, String 
 
 
 
-grpc
+grpc请求获取服务信息
 
 ```java
 public ServiceInfo doSubscribe(String serviceName, String groupName, String clusters) throws NacosException {
@@ -1665,4 +1813,9 @@ http://ip:port/actuator/migration-server-list ## Spring Boot 2.x 版本
 
 ## Links
 
-- [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md)
+- [Nacos](/docs/CS/Framework/nacos/Nacos.md)
+
+
+## References
+
+1. [Nacos 2.1.0 注册中心源码分析图](https://www.processon.com/view/link/64116327bad505275e0585dc)
