@@ -646,7 +646,7 @@ server端处理register request
 
 ### InstanceRequestHandler
 
-InstanceRequestHandler for EphemeralClient
+InstanceRequestHandler for EphemeralClient 即gRPC请求
 
 
 ```java
