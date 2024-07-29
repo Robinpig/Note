@@ -207,6 +207,9 @@ They are really there to **bundle up blocks of code as data**. Consequently, the
 Classes in the new `java.util.stream` package provide a Stream API to support functional-style operations on streams of elements.
 The Stream API is integrated into the Collections API, which enables bulk operations on collections, such as sequential or parallel map-reduce transformations.
 
+1.流并不存储元素。这些元素可能存储在底层的集合中，或者是按需生成。2.流的操作不会修改其数据元素，而是生成一个新的流。3.流的操作是尽可能惰性执行的。这意味着直至需要其结果时，操作才会执行
+
+
 A sequence of elements supporting sequential and parallel aggregate operations.
 The following example illustrates an aggregate operation using Stream and IntStream:
 
