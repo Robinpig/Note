@@ -709,6 +709,310 @@ We have introduced a new type of ZooKeeper node called an Observer which helps a
 
 Observers have other advantages. Because they do not vote, they are not a critical part of the ZooKeeper ensemble. Therefore they can fail, or be disconnected from the cluster, without harming the availability of the ZooKeeper service. The benefit to the user is that Observers may connect over less reliable network links than Followers. In fact, Observers may be used to talk to a ZooKeeper server from another data center. Clients of the Observer will see fast reads, as all reads are served locally, and writes result in minimal network traffic as the number of messages required in the absence of the vote protocol is smaller.
 
+
+
+## Ephemeral
+
+
+
+```java
+public class DataTree {
+/**
+ * This hashtable lists the paths of the ephemeral nodes of a session.
+ */
+private final Map<Long, HashSet<String>> ephemerals = new ConcurrentHashMap<Long, HashSet<String>>();
+}
+```
+
+createNode
+
+```java
+public void createNode(final String path, byte[] data, List<ACL> acl, long ephemeralOwner, int parentCVersion, long zxid, long time, Stat outputStat) throws KeeperException.NoNodeException, KeeperException.NodeExistsException {
+    int lastSlash = path.lastIndexOf('/');
+    String parentName = path.substring(0, lastSlash);
+    String childName = path.substring(lastSlash + 1);
+    StatPersisted stat = createStat(zxid, time, ephemeralOwner);
+    DataNode parent = nodes.get(parentName);
+    if (parent == null) {
+        throw new KeeperException.NoNodeException();
+    }
+    synchronized (parent) {
+        // Add the ACL to ACL cache first, to avoid the ACL not being
+        // created race condition during fuzzy snapshot sync.
+        //
+        // This is the simplest fix, which may add ACL reference count
+        // again if it's already counted in in the ACL map of fuzzy
+        // snapshot, which might also happen for deleteNode txn, but
+        // at least it won't cause the ACL not exist issue.
+        //
+        // Later we can audit and delete all non-referenced ACLs from
+        // ACL map when loading the snapshot/txns from disk, like what
+        // we did for the global sessions.
+        Long longval = aclCache.convertAcls(acl);
+
+        Set<String> children = parent.getChildren();
+        if (children.contains(childName)) {
+            throw new KeeperException.NodeExistsException();
+        }
+
+        nodes.preChange(parentName, parent);
+        if (parentCVersion == -1) {
+            parentCVersion = parent.stat.getCversion();
+            parentCVersion++;
+        }
+        // There is possibility that we'll replay txns for a node which
+        // was created and then deleted in the fuzzy range, and it's not
+        // exist in the snapshot, so replay the creation might revert the
+        // cversion and pzxid, need to check and only update when it's
+        // larger.
+        if (parentCVersion > parent.stat.getCversion()) {
+            parent.stat.setCversion(parentCVersion);
+            parent.stat.setPzxid(zxid);
+        }
+        DataNode child = new DataNode(data, longval, stat);
+        parent.addChild(childName);
+        nodes.postChange(parentName, parent);
+        nodeDataSize.addAndGet(getNodeSize(path, child.data));
+        nodes.put(path, child);
+        EphemeralType ephemeralType = EphemeralType.get(ephemeralOwner);
+        if (ephemeralType == EphemeralType.CONTAINER) {
+            containers.add(path);
+        } else if (ephemeralType == EphemeralType.TTL) {
+            ttls.add(path);
+        } else if (ephemeralOwner != 0) {
+            HashSet<String> list = ephemerals.get(ephemeralOwner);
+            if (list == null) {
+                list = new HashSet<String>();
+                ephemerals.put(ephemeralOwner, list);
+            }
+            synchronized (list) {
+                list.add(path);
+            }
+        }
+        if (outputStat != null) {
+            child.copyStat(outputStat);
+        }
+    }
+    // now check if its one of the zookeeper node child
+    if (parentName.startsWith(quotaZookeeper)) {
+        // now check if its the limit node
+        if (Quotas.limitNode.equals(childName)) {
+            // this is the limit node
+            // get the parent and add it to the trie
+            pTrie.addPath(Quotas.trimQuotaPath(parentName));
+        }
+        if (Quotas.statNode.equals(childName)) {
+            updateQuotaForPath(Quotas.trimQuotaPath(parentName));
+        }
+    }
+
+    String lastPrefix = getMaxPrefixWithQuota(path);
+    long bytes = data == null ? 0 : data.length;
+    // also check to update the quotas for this node
+    if (lastPrefix != null) {    // ok we have some match and need to update
+        updateQuotaStat(lastPrefix, bytes, 1);
+    }
+    updateWriteStat(path, bytes);
+    dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
+    childWatches.triggerWatch(parentName.equals("") ? "/" : parentName, Event.EventType.NodeChildrenChanged);
+}
+```
+
+
+
+delete Node
+
+```java
+public void deleteNode(String path, long zxid) throws KeeperException.NoNodeException {
+    int lastSlash = path.lastIndexOf('/');
+    String parentName = path.substring(0, lastSlash);
+    String childName = path.substring(lastSlash + 1);
+
+    // The child might already be deleted during taking fuzzy snapshot,
+    // but we still need to update the pzxid here before throw exception
+    // for no such child
+    DataNode parent = nodes.get(parentName);
+    if (parent == null) {
+        throw new KeeperException.NoNodeException();
+    }
+    synchronized (parent) {
+        nodes.preChange(parentName, parent);
+        parent.removeChild(childName);
+        // Only update pzxid when the zxid is larger than the current pzxid,
+        // otherwise we might override some higher pzxid set by a create
+        // Txn, which could cause the cversion and pzxid inconsistent
+        if (zxid > parent.stat.getPzxid()) {
+            parent.stat.setPzxid(zxid);
+        }
+        nodes.postChange(parentName, parent);
+    }
+
+    DataNode node = nodes.get(path);
+    if (node == null) {
+        throw new KeeperException.NoNodeException();
+    }
+    nodes.remove(path);
+    synchronized (node) {
+        aclCache.removeUsage(node.acl);
+        nodeDataSize.addAndGet(-getNodeSize(path, node.data));
+    }
+
+    // Synchronized to sync the containers and ttls change, probably
+    // only need to sync on containers and ttls, will update it in a
+    // separate patch.
+    synchronized (parent) {
+        long eowner = node.stat.getEphemeralOwner();
+        EphemeralType ephemeralType = EphemeralType.get(eowner);
+        if (ephemeralType == EphemeralType.CONTAINER) {
+            containers.remove(path);
+        } else if (ephemeralType == EphemeralType.TTL) {
+            ttls.remove(path);
+        } else if (eowner != 0) {
+            Set<String> nodes = ephemerals.get(eowner);
+            if (nodes != null) {
+                synchronized (nodes) {
+                    nodes.remove(path);
+                }
+            }
+        }
+    }
+
+    if (parentName.startsWith(procZookeeper) && Quotas.limitNode.equals(childName)) {
+        // delete the node in the trie.
+        // we need to update the trie as well
+        pTrie.deletePath(Quotas.trimQuotaPath(parentName));
+    }
+
+    // also check to update the quotas for this node
+    String lastPrefix = getMaxPrefixWithQuota(path);
+    if (lastPrefix != null) {
+        // ok we have some match and need to update
+        long bytes = 0;
+        synchronized (node) {
+            bytes = (node.data == null ? 0 : -(node.data.length));
+        }
+        updateQuotaStat(lastPrefix, bytes, -1);
+    }
+
+    updateWriteStat(path, 0L);
+
+    if (LOG.isTraceEnabled()) {
+        ZooTrace.logTraceMessage(
+            LOG,
+            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
+            "dataWatches.triggerWatch " + path);
+        ZooTrace.logTraceMessage(
+            LOG,
+            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
+            "childWatches.triggerWatch " + parentName);
+    }
+
+    WatcherOrBitSet processed = dataWatches.triggerWatch(path, EventType.NodeDeleted);
+    childWatches.triggerWatch(path, EventType.NodeDeleted, processed);
+    childWatches.triggerWatch("".equals(parentName) ? "/" : parentName, EventType.NodeChildrenChanged);
+}
+```
+
+ExpiryQueue tracks elements in time sorted fixed duration buckets.
+It's used by SessionTrackerImpl to expire sessions and NIOServerCnxnFactory to expire connections.
+
+```java
+public class ExpiryQueue<E> {
+
+    private final ConcurrentHashMap<E, Long> elemMap = new ConcurrentHashMap<E, Long>();
+    /**
+     * The maximum number of buckets is equal to max timeout/expirationInterval,
+     * so the expirationInterval should not be too small compared to the
+     * max timeout that this expiry queue needs to maintain.
+     */
+    private final ConcurrentHashMap<Long, Set<E>> expiryMap = new ConcurrentHashMap<Long, Set<E>>();
+}
+```
+
+
+
+This is a full featured SessionTracker. It tracks session in grouped by tick interval.
+ It always rounds up the tick interval to provide a sort of grace period.
+Sessions are thus expired in batches made up of sessions that expire in a given interval.
+
+
+
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+
+    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<Long, SessionImpl>();
+
+    private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
+
+  	@Override
+    public void run() {
+        try {
+            while (running) {
+                long waitTime = sessionExpiryQueue.getWaitTime();
+                if (waitTime > 0) {
+                    Thread.sleep(waitTime);
+                    continue;
+                }
+
+                for (SessionImpl s : sessionExpiryQueue.poll()) {
+                    ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
+                    setSessionClosing(s.sessionId);
+                    expirer.expire(s);
+                }
+            }
+        } catch (InterruptedException e) {
+            handleException(this.getName(), e);
+        }
+        LOG.info("SessionTrackerImpl exited loop!");
+    }
+}
+```
+
+
+
+更新session过期时间
+
+```java
+public class ExpiryQueue<E> {
+public Long update(E elem, int timeout) {
+    Long prevExpiryTime = elemMap.get(elem);
+    long now = Time.currentElapsedTime();
+    Long newExpiryTime = roundToNextInterval(now + timeout);
+
+    if (newExpiryTime.equals(prevExpiryTime)) {
+        // No change, so nothing to update
+        return null;
+    }
+
+    // First add the elem to the new expiry time bucket in expiryMap.
+    Set<E> set = expiryMap.get(newExpiryTime);
+    if (set == null) {
+        // Construct a ConcurrentHashSet using a ConcurrentHashMap
+        set = Collections.newSetFromMap(new ConcurrentHashMap<E, Boolean>());
+        // Put the new set in the map, but only if another thread
+        // hasn't beaten us to it
+        Set<E> existingSet = expiryMap.putIfAbsent(newExpiryTime, set);
+        if (existingSet != null) {
+            set = existingSet;
+        }
+    }
+    set.add(elem);
+
+    // Map the elem to the new expiry time. If a different previous
+    // mapping was present, clean up the previous expiry bucket.
+    prevExpiryTime = elemMap.put(elem, newExpiryTime);
+    if (prevExpiryTime != null && !newExpiryTime.equals(prevExpiryTime)) {
+        Set<E> prevSet = expiryMap.get(prevExpiryTime);
+        if (prevSet != null) {
+            prevSet.remove(elem);
+        }
+    }
+    return newExpiryTime;
+}
+}
+```
+
+
 ## Storage
 
 epoch
@@ -724,7 +1028,10 @@ log.x or snapshot
 epoch(only quorum)
 
 - currentEpoch
-- 
+
+
+
+
 
 ### jute
 
@@ -758,6 +1065,12 @@ FileTxnSnapLog -> TxnLog         [color = "#595959", style = solid , arrowtail =
 
 }
 ```
+
+
+
+This code is originally from HDFS, see the similarly named files there in case of bug fixing, history, etc...
+
+
 
 ## Logging
 
