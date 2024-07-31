@@ -10,48 +10,16 @@ The `InnoDB` transaction model aims combine the best properties of a multi-versi
 The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed.
 Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
 
-The following sections discuss how MySQL features, in particular the `InnoDB` storage engine, interact with the categories of the ACID model:
+ 
+ 和ACID事务关系
 
-### Atomicity
+- 通过Undo Log实现原子性
+- 隔离性是Lock和MVCC
+- 隔离性是Redo log
 
-The **atomicity** aspect of the ACID model mainly involves `InnoDB` transactions. Related MySQL features include:
+在sql记录执行流程
 
-- The `autocommit` setting.
-- The `COMMIT` statement.
-- The `ROLLBACK` statement.
-
-### Consistency
-
-The **consistency** aspect of the ACID model mainly involves internal `InnoDB` processing to protect data from crashes. Related MySQL features include:
-
-- The `InnoDB` [doublewrite buffer](/docs/CS/DB/MySQL/Double-Buffer.md?id=Doublewrite_Buffer).
-- `InnoDB` crash recovery.
-
-### Isolation
-
-The **isolation** aspect of the ACID model mainly involves `InnoDB` transactions, in particular the isolation level that applies to each transaction.
-Related MySQL features include:
-
-- The [`autocommit` setting.
-- Transaction isolation levels and the `SET TRANSACTION` statement.
-- The low-level details of `InnoDB` locking. Details can be viewed in the `INFORMATION_SCHEMA` tables.
-
-### Durability
-
-The **durability** aspect of the ACID model involves MySQL software features interacting with your particular hardware configuration.
-Because of the many possibilities depending on the capabilities of your CPU, network, and storage devices, this aspect is the most complicated to provide concrete guidelines for.
-(And those guidelines might take the form of “buy new hardware”.) Related MySQL features include:
-
-- The `InnoDB` doublewrite buffer.
-- The `innodb_flush_log_at_trx_commit` variable.
-- The `sync_binlog` variable.
-- The `innodb_file_per_table` variable.
-- The write buffer in a storage device, such as a disk drive, SSD, or RAID array.
-- A battery-backed cache in a storage device.
-- The operating system used to run MySQL, in particular its support for the `fsync()` system call.
-- An uninterruptible power supply (UPS) protecting the electrical power to all computer servers and storage devices that run MySQL servers and store MySQL data.
-- Your backup strategy, such as frequency and types of backups, and backup retention periods.
-- For distributed or hosted data applications, the particular characteristics of the data centers where the hardware for the MySQL servers is located, and network connections between the data centers.
+![](./img/execute.png)
 
 ### Transaction Isolation Levels
 
@@ -246,6 +214,32 @@ INSERT INTO T VALUES (NULL),(NULL),(1025),(NULL);
 Then InnoDB will reserve [1,4] (because of 4 rows) then [1026,1026]. 
 Only the first interval is important for statement-based binary logging as it tells the starting point. 
 So we ignore the second interval:
+
+
+Update & Delete 加锁
+
+ClusterIndex
+
+命中 都是X锁
+
+未命中 只有RR加GAP锁
+
+Second Unique Index
+命中 二级索引和聚簇索引都是X锁
+
+未命中 只有RR在二级索引加GAP锁
+
+二级非唯一索引
+
+命中 RC对两个索引加X锁 RR对二级索引加X和GAP锁 对Cluster索引加X锁
+
+未命中 只有RR在二级索引加GAP锁
+
+
+INSERT语句加锁
+
+- 为了防止幻读，如果记录之间加有GAP锁，此时不能INSERT。
+- 如果INSERT的记录和已有记录造成唯一键冲突，此时不能INSERT。
 
 
 ### Source Code

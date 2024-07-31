@@ -12,25 +12,16 @@
 之所以 Nacos 将服务的定义拆分为命名空间、 分组和服务名， 除了方便隔离使用场景外， 还有方便用户发现唯⼀服务的优点。 
 在注册中心的实际使用场景上， 同个公司的不同开发者可能会开发出类似作用的服务， 如果仅仅使用服务名来做服务的定义和表示， 容易在⼀些通用服务上出现冲突， 比如登陆服务等。
 
-通常推荐使用由运行环境作为命名空间、 应用名作为分组和服务功能作为服务名的组合来确保该服
-务的天然唯⼀性， 当然使用者可以忽略命名空间和分组， 仅使用服务名作为服务唯⼀标示， 这就需
-要使用者在定义服务名时额外增加自己的规则来确保在使用中能够唯⼀定位到该服务而不会发现到
-错误的服务上。
+通常推荐使用由运行环境作为命名空间、 应用名作为分组和服务功能作为服务名的组合来确保该服务的天然唯⼀性， 
+当然使用者可以忽略命名空间和分组， 仅使用服务名作为服务唯⼀标示， 这就需要使用者在定义服务名时额外增加自己的规则来确保在使用中能够唯⼀定位到该服务而不会发现到错误的服务上。
 
 服务元数据
 
 服务的定义只是为服务设置了⼀些基本的信息， 用于描述服务以及方便快速的找到服务， 而服务的
 元数据是进⼀步定义了 Nacos 中服务的细节属性和描述信息。 主要包含：
-- 健康保护阈值（ProtectThreshold） ： 为了防止因过多实例故障， 导致所有流量全部流入剩余实
-例， 继而造成流量压力将剩余实例被压垮形成的雪崩效应。 应将健康保护阈值定义为⼀个 0 到 1
-之间的浮点数。 当域名健康实例数占总服务实例数的比例小于该值时， 无论实例是否健康， 都会
-将这个实例返回给客户端。 这样做虽然损失了⼀部分流量， 但是保证了集群中剩余健康实例能正
-常工作。
-- 实例选择器（Selector） ： 用于在获取服务下的实例列表时， 过滤和筛选实例。 该选择器也被称
-为路由器， 目前 Nacos 支持通过将实例的部分信息存储在外部元数据管理 CMDB 中， 并在发现
-服务时使用 CMDB 中存储的元数据标签来进行筛选的能力。
-- 拓展数据(extendData)： 用于用户在注册实例时自定义扩展的元数据内容， 形式为 K-V 。 可以在
-服务中拓展服务的元数据信息， 方便用户实现自己的自定义逻辑
+- 健康保护阈值（ProtectThreshold） ： 为了防止因过多实例故障， 导致所有流量全部流入剩余实例， 继而造成流量压力将剩余实例被压垮形成的雪崩效应。 应将健康保护阈值定义为⼀个 0 到 1之间的浮点数。 当域名健康实例数占总服务实例数的比例小于该值时， 无论实例是否健康， 都会将这个实例返回给客户端。 这样做虽然损失了⼀部分流量， 但是保证了集群中剩余健康实例能正常工作。
+- 实例选择器（Selector） ： 用于在获取服务下的实例列表时， 过滤和筛选实例。 该选择器也被称为路由器， 目前 Nacos 支持通过将实例的部分信息存储在外部元数据管理 CMDB 中， 并在发现服务时使用 CMDB 中存储的元数据标签来进行筛选的能力。
+- 拓展数据(extendData)： 用于用户在注册实例时自定义扩展的元数据内容， 形式为 K-V 。 可以在服务中拓展服务的元数据信息， 方便用户实现自己的自定义逻辑
 
 ## Client Registry
 
@@ -101,12 +92,11 @@ public class NacosServiceRegistry implements ServiceRegistry<Registration> {
 
 
 
-创建namingService时会创建clientProxy 包括grpc和Http
+创建namingService时会创建clientProxy 包括grpc和Http 大多数情况下都是使用临时实例 即使用grpc client
+1. NamingHttpClientProxy
+2. NamingGrpcClientProxy
 
-NamingGrpcClientProxy
 
-1. HostReactor schedule updateTask every 10s
-2. BeatReactor schedule BeatTask
 ```java
 public class NacosNamingService implements NamingService {
     public NacosNamingService(Properties properties) throws NacosException {
@@ -117,128 +107,20 @@ public class NacosNamingService implements NamingService {
         ValidatorUtils.checkInitParam(properties);
         this.namespace = InitUtils.initNamespaceForNaming(properties);
         InitUtils.initSerialization();
-        initServerAddr(properties);
         InitUtils.initWebRootContext(properties);
-        initCacheDir();
         initLogName(properties);
 
-        this.serverProxy = new NamingProxy(this.namespace, this.endpoint, this.serverList, properties);
-        this.beatReactor = new BeatReactor(this.serverProxy, initClientBeatThreadCount(properties));
-        this.hostReactor = new HostReactor(this.serverProxy, beatReactor, this.cacheDir, isLoadCacheAtStart(properties),
-                isPushEmptyProtect(properties), initPollingThreadCount(properties));
+        this.changeNotifier = new InstancesChangeNotifier();
+        NotifyCenter.registerToPublisher(InstancesChangeEvent.class, 16384);
+        NotifyCenter.registerSubscriber(changeNotifier);
+        this.serviceInfoHolder = new ServiceInfoHolder(namespace, properties);
+        this.clientProxy = new NamingClientProxyDelegate(this.namespace, serviceInfoHolder, properties, changeNotifier);
     }
 }
 ```
-
-
-### registerInstance
-
-If you'd like to use "Service Registry" features, NamingService is a core service interface to get or publish config, 
-you could use "Dependency Injection" to inject NamingService instance in your Spring Beans.
-
-And [Dubbo](/docs/CS/Framework/Dubbo/registry.md?id=NacosRegistry) wrapped it.
-
-1. schedule BeatTask
-2. registerService
-
-```java
-public class NacosNamingService implements NamingService {
-    @Override
-    public void registerInstance(String serviceName, String groupName, Instance instance) throws NacosException {
-        NamingUtils.checkInstanceIsLegal(instance);
-        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
-        if (instance.isEphemeral()) {
-            BeatInfo beatInfo = beatReactor.buildBeatInfo(groupedServiceName, instance);
-            beatReactor.addBeatInfo(groupedServiceName, beatInfo);
-        }
-        serverProxy.registerService(groupedServiceName, groupName, instance);
-    }
-}
-```
-
-#### addBeatInfo
-
-```java
-public void addBeatInfo(String serviceName, BeatInfo beatInfo) {
-        NAMING_LOGGER.info("[BEAT] adding beat: {} to beat map.", beatInfo);
-        String key = buildKey(serviceName, beatInfo.getIp(), beatInfo.getPort());
-        BeatInfo existBeat = null;
-        //fix #1733
-        if ((existBeat = dom2Beat.remove(key)) != null) {
-        existBeat.setStopped(true);
-        }
-        dom2Beat.put(key, beatInfo);
-        executorService.schedule(new BeatTask(beatInfo), beatInfo.getPeriod(), TimeUnit.MILLISECONDS);
-        MetricsMonitor.getDom2BeatSizeMonitor().set(dom2Beat.size());
-}
-```
-
-call [Server beat](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=server-beat).
-
-```java
-class BeatTask implements Runnable {
-
-        BeatInfo beatInfo;
-
-        public BeatTask(BeatInfo beatInfo) {
-            this.beatInfo = beatInfo;
-        }
-
-        @Override
-        public void run() {
-            if (beatInfo.isStopped()) {
-                return;
-            }
-            long nextTime = beatInfo.getPeriod();
-            try {
-                JSONObject result = serverProxy.sendBeat(beatInfo, BeatReactor.this.lightBeatEnabled);
-                long interval = result.getIntValue("clientBeatInterval");
-                boolean lightBeatEnabled = false;
-                if (result.containsKey(CommonParams.LIGHT_BEAT_ENABLED)) {
-                    lightBeatEnabled = result.getBooleanValue(CommonParams.LIGHT_BEAT_ENABLED);
-                }
-                BeatReactor.this.lightBeatEnabled = lightBeatEnabled;
-                if (interval > 0) {
-                    nextTime = interval;
-                }
-                int code = NamingResponseCode.OK;
-                if (result.containsKey(CommonParams.CODE)) {
-                    code = result.getIntValue(CommonParams.CODE);
-                }
-                if (code == NamingResponseCode.RESOURCE_NOT_FOUND) {
-                    Instance instance = new Instance();
-                    instance.setPort(beatInfo.getPort());
-                    instance.setIp(beatInfo.getIp());
-                    instance.setWeight(beatInfo.getWeight());
-                    instance.setMetadata(beatInfo.getMetadata());
-                    instance.setClusterName(beatInfo.getCluster());
-                    instance.setServiceName(beatInfo.getServiceName());
-                    instance.setInstanceId(instance.getInstanceId());
-                    instance.setEphemeral(true);
-                    try {
-                        serverProxy.registerService(beatInfo.getServiceName(),
-                            NamingUtils.getGroupName(beatInfo.getServiceName()), instance);
-                    } catch (Exception ignore) {
-                    }
-                }
-            } catch (NacosException ne) {
-                NAMING_LOGGER.error("[CLIENT-BEAT] failed to send beat: {}, code: {}, msg: {}",
-                    JSON.toJSONString(beatInfo), ne.getErrCode(), ne.getErrMsg());
-
-            }
-            executorService.schedule(new BeatTask(beatInfo), nextTime, TimeUnit.MILLISECONDS);
-        }
-    }
-```
-
-
-#### registerService
 
 
 Nacos 作为注册中心，用来接收客户端（服务实例）发起的注册请求，并将注册信息存放到注册中心进行管理
-
-1. NamingHttpClientProxy
-2. NamingGrpcClientProxy
 
 临时实例使用grpc
 ```java
@@ -258,88 +140,7 @@ public class NamingClientProxyDelegate implements NamingClientProxy {
 ```
 
 
-### HTTP
-
-
-
-```java
-public class NamingHttpClientProxy extends AbstractNamingClientProxy {
-    
-    private final NacosRestTemplate nacosRestTemplate = NamingHttpClientManager.getInstance().getNacosRestTemplate();
-    
-}
-```
-
-
-
-```java
-public void registerService(String serviceName, String groupName, Instance instance) throws NacosException {
-
-        final Map<String, String> params = new HashMap<String, String>(9);
-        params.put(CommonParams.NAMESPACE_ID, namespaceId);
-        params.put(CommonParams.SERVICE_NAME, serviceName);
-        params.put(CommonParams.GROUP_NAME, groupName);
-        params.put(CommonParams.CLUSTER_NAME, instance.getClusterName());
-        params.put("ip", instance.getIp());
-        params.put("port", String.valueOf(instance.getPort()));
-        params.put("weight", String.valueOf(instance.getWeight()));
-        params.put("enable", String.valueOf(instance.isEnabled()));
-        params.put("healthy", String.valueOf(instance.isHealthy()));
-        params.put("ephemeral", String.valueOf(instance.isEphemeral()));
-        params.put("metadata", JSON.toJSONString(instance.getMetadata()));
-
-        reqAPI(UtilAndComs.NACOS_URL_INSTANCE, params, HttpMethod.POST); // url = /nacos/v1/ns/instance
-
-    }
-```
-
-
-Random for load balance
-
-use NacosRestTemplate call [Server register](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=server-Register) in `callServer`.
-
-
-```java
- public String reqApi(String api, Map<String, String> params, Map<String, String> body, List<String> servers,
-            String method) throws NacosException {
-        params.put(CommonParams.NAMESPACE_ID, getNamespaceId());
-        
-        NacosException exception = new NacosException();
-        
-        if (StringUtils.isNotBlank(nacosDomain)) {
-            for (int i = 0; i < maxRetry; i++) {
-                try {
-                    return callServer(api, params, body, nacosDomain, method);
-                } catch (NacosException e) {
-                    exception = e;
-                }
-            }
-        } else {
-            Random random = new Random(System.currentTimeMillis());
-            int index = random.nextInt(servers.size());
-            
-            for (int i = 0; i < servers.size(); i++) {
-                String server = servers.get(index);
-                try {
-                    return callServer(api, params, body, server, method);
-                } catch (NacosException e) {
-                    exception = e;
-                }
-                index = (index + 1) % servers.size();
-            }
-        }
-        throw new NacosException(exception.getErrCode(),
-                "failed to req API:" + api + " after all servers(" + servers + ") tried: " + exception.getMessage());
-}
-```
-
-
-
-
-
-
 ### grpc
-
 
 
 ```java
@@ -398,8 +199,6 @@ public void doRegisterServiceForPersistent(String serviceName, String groupName,
             if (responseClass.isAssignableFrom(response.getClass())) {
                 return (T) response;
             }
-            NAMING_LOGGER.error("Server return unexpected response '{}', expected response should be '{}'",
-                    response.getClass().getName(), responseClass.getName());
             throw new NacosException(NacosException.SERVER_ERROR, "Server return invalid response");
         } catch (NacosException e) {
             recordRequestFailedMetrics(request, e, response);
@@ -414,6 +213,77 @@ public void doRegisterServiceForPersistent(String serviceName, String groupName,
 
 
 #### RPC client
+
+```java
+public Response request(Request request, long timeoutMills) throws NacosException {
+        int retryTimes = 0;
+        Response response;
+        Exception exceptionThrow = null;
+        long start = System.currentTimeMillis();
+        while (retryTimes < RETRY_TIMES && System.currentTimeMillis() < timeoutMills + start) {
+            boolean waitReconnect = false;
+            try {
+                if (this.currentConnection == null || !isRunning()) {
+                    waitReconnect = true;
+                    throw new NacosException(NacosException.CLIENT_DISCONNECT,
+                            "Client not connected, current status:" + rpcClientStatus.get());
+                }
+                response = this.currentConnection.request(request, timeoutMills);
+                if (response == null) {
+                    throw new NacosException(SERVER_ERROR, "Unknown Exception.");
+                }
+                if (response instanceof ErrorResponse) {
+                    if (response.getErrorCode() == NacosException.UN_REGISTER) {
+                        synchronized (this) {
+                            waitReconnect = true;
+                            if (rpcClientStatus.compareAndSet(RpcClientStatus.RUNNING, RpcClientStatus.UNHEALTHY)) {
+                                LoggerUtils.printIfErrorEnabled(LOGGER,
+                                        "Connection is unregistered, switch server, connectionId = {}, request = {}",
+                                        currentConnection.getConnectionId(), request.getClass().getSimpleName());
+                                switchServerAsync();
+                            }
+                        }
+                        
+                    }
+                    throw new NacosException(response.getErrorCode(), response.getMessage());
+                }
+                // return response.
+                lastActiveTimeStamp = System.currentTimeMillis();
+                return response;
+                
+            } catch (Exception e) {
+                if (waitReconnect) {
+                    try {
+                        // wait client to reconnect.
+                        Thread.sleep(Math.min(100, timeoutMills / 3));
+                    } catch (Exception exception) {
+                        // Do nothing.
+                    }
+                }
+                
+                LoggerUtils.printIfErrorEnabled(LOGGER, "Send request fail, request = {}, retryTimes = {}, errorMessage = {}",
+                        request, retryTimes, e.getMessage());
+                
+                exceptionThrow = e;
+                
+            }
+            retryTimes++;
+            
+        }
+        
+        if (rpcClientStatus.compareAndSet(RpcClientStatus.RUNNING, RpcClientStatus.UNHEALTHY)) {
+            switchServerAsyncOnRequestFail();
+        }
+        
+        if (exceptionThrow != null) {
+            throw (exceptionThrow instanceof NacosException) ? (NacosException) exceptionThrow
+                    : new NacosException(SERVER_ERROR, exceptionThrow);
+        } else {
+            throw new NacosException(SERVER_ERROR, "Request fail, unknown Error");
+        }
+    }
+```
+
 
 ```java
 public final void start() throws NacosException {
@@ -564,14 +434,219 @@ public final void start() throws NacosException {
 
 
 
-Abstract Connection
+Connection抽象了RPC协议
 
 ```java
 public abstract class Connection implements Requester {
 }
 ```
 
+<!-- tabs:start -->
+
+##### **grpc**
+
+```java
+public class GrpcConnection extends Connection {
+    @Override
+    public Response request(Request request, long timeouts) throws NacosException {
+        Payload grpcRequest = GrpcUtils.convert(request);
+        ListenableFuture<Payload> requestFuture = grpcFutureServiceStub.request(grpcRequest);
+        Payload grpcResponse;
+        try {
+            grpcResponse = requestFuture.get(timeouts, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            throw new NacosException(NacosException.SERVER_ERROR, e);
+        }
+
+        return (Response) GrpcUtils.parse(grpcResponse);
+    }
+}
+```
+
+
+<!-- tabs:end -->
+
+
+### HTTP
+
+
+
+```java
+public class NamingHttpClientProxy extends AbstractNamingClientProxy {
+    
+    private final NacosRestTemplate nacosRestTemplate = NamingHttpClientManager.getInstance().getNacosRestTemplate();
+    
+}
+```
+
+- 如果是临时实例 添加beatTask
+- reqApi注册
+
+```java
+public void registerService(String serviceName, String groupName, Instance instance) throws NacosException {
+        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+        if (instance.isEphemeral()) {
+            BeatInfo beatInfo = beatReactor.buildBeatInfo(groupedServiceName, instance);
+            beatReactor.addBeatInfo(groupedServiceName, beatInfo);
+        }
+        final Map<String, String> params = new HashMap<String, String>(9);
+        params.put(CommonParams.NAMESPACE_ID, namespaceId);
+        params.put(CommonParams.SERVICE_NAME, serviceName);
+        params.put(CommonParams.GROUP_NAME, groupName);
+        params.put(CommonParams.CLUSTER_NAME, instance.getClusterName());
+        params.put("ip", instance.getIp());
+        params.put("port", String.valueOf(instance.getPort()));
+        params.put("weight", String.valueOf(instance.getWeight()));
+        params.put("enable", String.valueOf(instance.isEnabled()));
+        params.put("healthy", String.valueOf(instance.isHealthy()));
+        params.put("ephemeral", String.valueOf(instance.isEphemeral()));
+        params.put("metadata", JSON.toJSONString(instance.getMetadata()));
+
+        reqAPI(UtilAndComs.NACOS_URL_INSTANCE, params, HttpMethod.POST); 
+    }
+```
+
+
+#### beatTask
+
+5s执行一次心跳任务
+
+```java
+
+public class BeatReactor implements Closeable {
+    
+    private final ScheduledExecutorService executorService;
+    
+    public final Map<String, BeatInfo> dom2Beat = new ConcurrentHashMap<String, BeatInfo>();
+    public void addBeatInfo(String serviceName, BeatInfo beatInfo) {
+        NAMING_LOGGER.info("[BEAT] adding beat: {} to beat map.", beatInfo);
+        String key = buildKey(serviceName, beatInfo.getIp(), beatInfo.getPort());
+        BeatInfo existBeat;
+        //fix #1733
+        if ((existBeat = dom2Beat.remove(key)) != null) {
+            existBeat.setStopped(true);
+        }
+        dom2Beat.put(key, beatInfo);
+        executorService.schedule(new BeatTask(beatInfo), beatInfo.getPeriod(), TimeUnit.MILLISECONDS);
+        MetricsMonitor.getDom2BeatSizeMonitor().set(dom2Beat.size());
+    }
+}
+```
+
+发送HTTP心跳
+
+```java
+class BeatTask implements Runnable {
+    
+    BeatInfo beatInfo;
+    
+    public BeatTask(BeatInfo beatInfo) {
+        this.beatInfo = beatInfo;
+    }
+    
+    @Override
+    public void run() {
+        if (beatInfo.isStopped()) {
+            return;
+        }
+        long nextTime = beatInfo.getPeriod();
+        try {
+            JsonNode result = serverProxy.sendBeat(beatInfo, BeatReactor.this.lightBeatEnabled);
+            long interval = result.get(CLIENT_BEAT_INTERVAL_FIELD).asLong();
+            boolean lightBeatEnabled = false;
+            if (result.has(CommonParams.LIGHT_BEAT_ENABLED)) {
+                lightBeatEnabled = result.get(CommonParams.LIGHT_BEAT_ENABLED).asBoolean();
+            }
+            BeatReactor.this.lightBeatEnabled = lightBeatEnabled;
+            if (interval > 0) {
+                nextTime = interval;
+            }
+            int code = NamingResponseCode.OK;
+            if (result.has(CommonParams.CODE)) {
+                code = result.get(CommonParams.CODE).asInt();
+            }
+            if (code == NamingResponseCode.RESOURCE_NOT_FOUND) {
+                Instance instance = new Instance();
+                instance.setPort(beatInfo.getPort());
+                instance.setIp(beatInfo.getIp());
+                instance.setWeight(beatInfo.getWeight());
+                instance.setMetadata(beatInfo.getMetadata());
+                instance.setClusterName(beatInfo.getCluster());
+                instance.setServiceName(beatInfo.getServiceName());
+                instance.setInstanceId(instance.getInstanceId());
+                instance.setEphemeral(true);
+                try {
+                    serverProxy.registerService(beatInfo.getServiceName(),
+                            NamingUtils.getGroupName(beatInfo.getServiceName()), instance);
+                } catch (Exception ignore) {
+                }
+            }
+        } catch (NacosException ex) {
+            NAMING_LOGGER.error("[CLIENT-BEAT] failed to send beat: {}, code: {}, msg: {}",
+                    JacksonUtils.toJson(beatInfo), ex.getErrCode(), ex.getErrMsg());
+
+        } catch (Exception unknownEx) {
+            NAMING_LOGGER.error("[CLIENT-BEAT] failed to send beat: {}, unknown exception msg: {}",
+                    JacksonUtils.toJson(beatInfo), unknownEx.getMessage(), unknownEx);
+        } finally {
+            executorService.schedule(new BeatTask(beatInfo), nextTime, TimeUnit.MILLISECONDS);
+        }
+    }
+}
+```
+
+
+
+#### reqApi
+
+Random for load balance
+
+请求[url = /v1/ns/instance](/docs/CS/Framework/nacos/registry.md?id=InstanceController) 注册
+
+```java
+public class NamingHttpClientProxy extends AbstractNamingClientProxy {
+    public String reqApi(String api, Map<String, String> params, Map<String, String> body, List<String> servers,
+                         String method) throws NacosException {
+        params.put(CommonParams.NAMESPACE_ID, getNamespaceId());
+
+        NacosException exception = new NacosException();
+
+        if (StringUtils.isNotBlank(nacosDomain)) {
+            for (int i = 0; i < maxRetry; i++) {
+                try {
+                    return callServer(api, params, body, nacosDomain, method);
+                } catch (NacosException e) {
+                    exception = e;
+                }
+            }
+        } else {
+            Random random = new Random(System.currentTimeMillis());
+            int index = random.nextInt(servers.size());
+
+            for (int i = 0; i < servers.size(); i++) {
+                String server = servers.get(index);
+                try {
+                    return callServer(api, params, body, server, method);
+                } catch (NacosException e) {
+                    exception = e;
+                }
+                index = (index + 1) % servers.size();
+            }
+        }
+        throw new NacosException(exception.getErrCode(),
+                "failed to req API:" + api + " after all servers(" + servers + ") tried: " + exception.getMessage());
+    }
+}
+```
+
+
 ## Server
+
+server端处理register request
+
+### InstanceRequestHandler
+
+InstanceRequestHandler for EphemeralClient 即gRPC请求
 
 
 ```java
@@ -608,52 +683,11 @@ public class InstanceRequestHandler extends RequestHandler<InstanceRequest, Inst
 }
 ```
 
+使用ConcurrentHashMap的putIfAbsent获取singletonService
 
-
-
-```java 
-    @CanDistro
-    @PostMapping
-    @TpsControl(pointName = ”NamingInstanceRegister“, name = ”HttpNamingInstanceRegister“)
-    @Secured(action = ActionTypes.WRITE)
-    public String register(HttpServletRequest request) throws Exception {
-        
-        final String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID,
-                Constants.DEFAULT_NAMESPACE_ID);
-        final String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
-        NamingUtils.checkServiceNameFormat(serviceName);
-        
-        final Instance instance = HttpRequestInstanceBuilder.newBuilder()
-                .setDefaultInstanceEphemeral(switchDomain.isDefaultInstanceEphemeral()).setRequest(request).build();
-        
-        getInstanceOperator().registerInstance(namespaceId, serviceName, instance);
-        NotifyCenter.publishEvent(new RegisterInstanceTraceEvent(System.currentTimeMillis(), ”“, false, namespaceId,
-                NamingUtils.getGroupName(serviceName), NamingUtils.getServiceName(serviceName), instance.getIp(),
-                instance.getPort()));
-        return ”ok“;
-    }
-
-@Override
-    public void registerInstance(String namespaceId, String serviceName, Instance instance) throws NacosException {
-        NamingUtils.checkInstanceIsLegal(instance);
-        
-        boolean ephemeral = instance.isEphemeral();
-        String clientId = IpPortBasedClient.getClientId(instance.toInetAddr(), ephemeral);
-        createIpPortClientIfAbsent(clientId);
-        Service service = getService(namespaceId, serviceName, ephemeral);
-        clientOperationService.registerInstance(service, instance, clientId);
-    }
-
-@Override
-    public void registerInstance(Service service, Instance instance, String clientId) throws NacosException {
-        final ClientOperationService operationService = chooseClientOperationService(instance);
-        operationService.registerInstance(service, instance, clientId);
-    }
-
-
-```
 
 通过异步事件机制完成instance metadata等数据的存储 sync数据到其它server
+
 ```java
 @Component("ephemeralClientOperationService")
 public class EphemeralClientOperationServiceImpl implements ClientOperationService {
@@ -678,7 +712,7 @@ public class EphemeralClientOperationServiceImpl implements ClientOperationServi
     }
 }
 ```
-#### addServiceInstance
+#### handle events
 
 publishInfo被添加到Client下ConcurrentHashMap, 发布[ClientChangedEvent](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=ClientChangedEvent), sync数据到其它server
 ```java
@@ -697,7 +731,7 @@ public abstract class AbstractClient implements Client {
 }
 ```
 
-ClientRegisterServiceEvent事件 添加信息到全局ConcurrentMap<Service, Set<String>>中
+ClientRegisterServiceEvent事件 添加信息到全局ConcurrentMap<Service, Set<String>> **publisherIndexes**中
 ```java
 
 @Component
@@ -747,7 +781,7 @@ public class NamingSubscriberServiceV2Impl extends SmartSubscriber implements Na
 ```
 
 
-事件InstanceMetadataEvent, 更新过期事件
+InstanceMetadataEvent, 更新过期事件
 ```java
 @Component
 public class NamingMetadataManager extends SmartSubscriber {
@@ -771,7 +805,7 @@ public class NamingMetadataManager extends SmartSubscriber {
 ```
 
 
-raft
+persistentClientOperationServiceImpl
 ```java
 @Component(”persistentClientOperationServiceImpl“)
 public class PersistentClientOperationServiceImpl extends RequestProcessor4CP implements ClientOperationService {
@@ -797,7 +831,7 @@ public class PersistentClientOperationServiceImpl extends RequestProcessor4CP im
 ```
 
 
-### server louter forward
+
 
 #### DistroFilter
 
@@ -879,242 +913,151 @@ public class DistroFilter implements Filter {
 }
 ```
 
+### InstanceController
 
-## Client subscribe
+当客户端使用[HTTP注册](/docs/CS/Framework/nacos/registry.md?id=reqApi)会走到此处
+
+<!-- tabs:start -->
+
+##### **InstanceController**
 
 ```java
-@Override
-    public void subscribe(String serviceName, String groupName, List<String> clusters, EventListener listener)
-            throws NacosException {
-        if (null == listener) {
-            return;
-        }
-        String clusterString = StringUtils.join(clusters, ",");
-        changeNotifier.registerListener(groupName, serviceName, clusterString, listener);
-        clientProxy.subscribe(serviceName, groupName, clusterString);
-    }
-public class NamingClientProxyDelegate implements NamingClientProxy {
-    @Override
-    public ServiceInfo subscribe(String serviceName, String groupName, String clusters) throws NacosException {
-        NAMING_LOGGER.info("[SUBSCRIBE-SERVICE] service:{}, group:{}, clusters:{} ", serviceName, groupName, clusters);
-        String serviceNameWithGroup = NamingUtils.getGroupedName(serviceName, groupName);
-        String serviceKey = ServiceInfo.getKey(serviceNameWithGroup, clusters);
-        serviceInfoUpdateService.scheduleUpdateIfAbsent(serviceName, groupName, clusters);
-        ServiceInfo result = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
-        if (null == result || !isSubscribed(serviceName, groupName, clusters)) {
-            result = grpcClientProxy.subscribe(serviceName, groupName, clusters);
-        }
-        serviceInfoHolder.processServiceInfo(result);
-        return result;
-    }
+// com.alibaba.nacos.naming.controllers.InstanceController /v1/ns/instance
+@CanDistro
+@PostMapping
+@TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
+@Secured(action = ActionTypes.WRITE)
+public String register(HttpServletRequest request) throws Exception {
+
+    final String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID,
+            Constants.DEFAULT_NAMESPACE_ID);
+    final String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
+    NamingUtils.checkServiceNameFormat(serviceName);
+
+    final Instance instance = HttpRequestInstanceBuilder.newBuilder()
+            .setDefaultInstanceEphemeral(switchDomain.isDefaultInstanceEphemeral()).setRequest(request).build();
+
+    getInstanceOperator().registerInstance(namespaceId, serviceName, instance);
+    NotifyCenter.publishEvent(new RegisterInstanceTraceEvent(System.currentTimeMillis(),
+            NamingRequestUtil.getSourceIpForHttpRequest(request), false, namespaceId,
+            NamingUtils.getGroupName(serviceName), NamingUtils.getServiceName(serviceName), instance.getIp(),
+            instance.getPort()));
+    return "ok";
 }
 ```
 
+##### **InstanceControllerV2**
 ```java
-public class ServiceInfoUpdateService implements Closeable {
+@CanDistro
+@PostMapping
+@TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
+@Secured(action = ActionTypes.WRITE)
+public Result<String> register(InstanceForm instanceForm) throws NacosException {
+    // check param
+    instanceForm.validate();
+    checkWeight(instanceForm.getWeight());
+    // build instance
+    Instance instance = buildInstance(instanceForm);
+    instanceServiceV2.registerInstance(instanceForm.getNamespaceId(), buildCompositeServiceName(instanceForm),
+            instance);
+    NotifyCenter.publishEvent(
+            new RegisterInstanceTraceEvent(System.currentTimeMillis(), NamingRequestUtil.getSourceIp(), false,
+                    instanceForm.getNamespaceId(), instanceForm.getGroupName(), instanceForm.getServiceName(),
+                    instance.getIp(), instance.getPort()));
+    return Result.success("ok");
+}
+```
 
-  @Override
-  public void run() {
-    long delayTime = DEFAULT_DELAY;
+<!-- tabs:end -->
 
-    try {
-      if (!changeNotifier.isSubscribed(groupName, serviceName, clusters) && !futureMap.containsKey(
-              serviceKey)) {
-        NAMING_LOGGER.info("update task is stopped, service:{}, clusters:{}", groupedServiceName, clusters);
-        isCancel = true;
-        return;
-      }
 
-      ServiceInfo serviceObj = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
-      if (serviceObj == null) {
-        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
-        serviceInfoHolder.processServiceInfo(serviceObj);
-        lastRefTime = serviceObj.getLastRefTime();
-        return;
-      }
-
-      if (serviceObj.getLastRefTime() <= lastRefTime) {
-        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
-        serviceInfoHolder.processServiceInfo(serviceObj);
-      }
-      lastRefTime = serviceObj.getLastRefTime();
-      if (CollectionUtils.isEmpty(serviceObj.getHosts())) {
-        incFailCount();
-        return;
-      }
-      // TODO multiple time can be configured.
-      delayTime = serviceObj.getCacheMillis() * DEFAULT_UPDATE_CACHE_TIME_MULTIPLE;
-      resetFailCount();
-    } catch (Throwable e) {
-      incFailCount();
-      NAMING_LOGGER.warn("[NA] failed to update serviceName: {}", groupedServiceName, e);
-    } finally {
-      if (!isCancel) {
-        executor.schedule(this, Math.min(delayTime << failCount, DEFAULT_DELAY * 60),
-                TimeUnit.MILLISECONDS);
-      }
-    }
-  }
-
+```java
+// ServiceManager
+public void registerInstance(String namespaceId, String serviceName, Instance instance) throws NacosException {
+    
+    createEmptyService(namespaceId, serviceName, instance.isEphemeral());
+    
+    Service service = getService(namespaceId, serviceName);
+    
+    addInstance(namespaceId, serviceName, instance.isEphemeral(), instance);
 }
 ```
 
 
+#### createService
+
+Create service if not exist.
 ```java
-public void scheduleUpdateIfAbsent(String serviceName, String groupName, String clusters) {
-        String serviceKey = ServiceInfo.getKey(NamingUtils.getGroupedName(serviceName, groupName), clusters);
-        if (futureMap.get(serviceKey) != null) {
-            return;
+public void createServiceIfAbsent(String namespaceId, String serviceName, boolean local, Cluster cluster)
+        throws NacosException {
+    Service service = getService(namespaceId, serviceName);
+    if (service == null) {
+        
+        Loggers.SRV_LOG.info("creating empty service {}:{}", namespaceId, serviceName);
+        service = new Service();
+        service.setName(serviceName);
+        service.setNamespaceId(namespaceId);
+        service.setGroupName(NamingUtils.getGroupName(serviceName));
+        // now validate the service. if failed, exception will be thrown
+        service.setLastModifiedMillis(System.currentTimeMillis());
+        service.recalculateChecksum();
+        if (cluster != null) {
+            cluster.setService(service);
+            service.getClusterMap().put(cluster.getName(), cluster);
         }
-        synchronized (futureMap) {
-            if (futureMap.get(serviceKey) != null) {
-                return;
-            }
-            
-            ScheduledFuture<?> future = addTask(new UpdateTask(serviceName, groupName, clusters));
-            futureMap.put(serviceKey, future);
+        service.validate(); // validate service name & cluster name is mathch 0-9a-zA-Z- 
+        
+        putServiceAndInit(service);
+        if (!local) {
+            addOrReplaceService(service);
         }
     }
-```
-
-
-
-grpc
-
-```java
-public ServiceInfo doSubscribe(String serviceName, String groupName, String clusters) throws NacosException {
-        SubscribeServiceRequest request = new SubscribeServiceRequest(namespaceId, groupName, serviceName, clusters,
-                true);
-        SubscribeServiceResponse response = requestToServer(request, SubscribeServiceResponse.class);
-        redoService.subscriberRegistered(serviceName, groupName, clusters);
-        return response.getServiceInfo();
-    }
-```
-
-server
-```java
-
-    @Override
-    @Secured(action = ActionTypes.READ)
-    public SubscribeServiceResponse handle(SubscribeServiceRequest request, RequestMeta meta) throws NacosException {
-        String namespaceId = request.getNamespace();
-        String serviceName = request.getServiceName();
-        String groupName = request.getGroupName();
-        String app = request.getHeader("app", "unknown");
-        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
-        Service service = Service.newService(namespaceId, groupName, serviceName, true);
-        Subscriber subscriber = new Subscriber(meta.getClientIp(), meta.getClientVersion(), app, meta.getClientIp(),
-                namespaceId, groupedServiceName, 0, request.getClusters());
-        ServiceInfo serviceInfo = ServiceUtil.selectInstancesWithHealthyProtection(serviceStorage.getData(service),
-                metadataManager.getServiceMetadata(service).orElse(null), subscriber);
-        if (request.isSubscribe()) {
-            clientOperationService.subscribeService(service, subscriber, meta.getConnectionId());
-        } else {
-            clientOperationService.unsubscribeService(service, subscriber, meta.getConnectionId());
-        }
-        return new SubscribeServiceResponse(ResponseCode.SUCCESS.getCode(), "success", serviceInfo);
-    }
-```
-
-
-```java
-@Component
-public class ServiceStorage {
-
-    private final ClientManager clientManager;
-
-    private final ConcurrentMap<Service, ServiceInfo> serviceDataIndexes;
-
-    public ServiceInfo getData(Service service) {
-        return serviceDataIndexes.containsKey(service) ? serviceDataIndexes.get(service) : getPushData(service);
-    }
-
-    public ServiceInfo getPushData(Service service) {
-        ServiceInfo result = emptyServiceInfo(service);
-        if (!ServiceManager.getInstance().containSingleton(service)) {
-            return result;
-        }
-        result.setHosts(getAllInstancesFromIndex(service));
-        serviceDataIndexes.put(service, result);
-        return result;
-    }
-
-  private List<Instance> getAllInstancesFromIndex(Service service) {
-    Set<Instance> result = new HashSet<>();
-    Set<String> clusters = new HashSet<>();
-    for (String each : serviceIndexesManager.getAllClientsRegisteredService(service)) {
-      Optional<InstancePublishInfo> instancePublishInfo = getInstanceInfo(each, service);
-      if (instancePublishInfo.isPresent()) {
-        Instance instance = parseInstance(service, instancePublishInfo.get());
-        result.add(instance);
-        clusters.add(instance.getClusterName());
-      }
-    }
-    // cache clusters of this service
-    serviceClusterIndex.put(service, clusters);
-    return new LinkedList<>(result);
-  }
 }
 ```
 
-## MemberLookup
+#### putServiceAndInit
 
 ```java
-public class AddressServerMemberLookup extends AbstractMemberLookup {
+    private void putServiceAndInit(Service service) throws NacosException {
+        putService(service);
+        service = getService(service.getNamespaceId(), service.getName());
+        service.init();
+        consistencyService
+        .listen(KeyBuilder.buildInstanceListKey(service.getNamespaceId(), service.getName(), true), service);
+        consistencyService
+        .listen(KeyBuilder.buildInstanceListKey(service.getNamespaceId(), service.getName(), false), service);
+    }    
 
-    @Override
-    public void doStart() throws NacosException {
-        this.maxFailCount = Integer.parseInt(EnvUtil.getProperty(HEALTH_CHECK_FAIL_COUNT_PROPERTY, DEFAULT_HEALTH_CHECK_FAIL_COUNT));
-        initAddressSys();
-        run();
+    public void init() {
+        HealthCheckReactor.scheduleCheck(clientBeatCheckTask);
+        for (Map.Entry<String, Cluster> entry : clusterMap.entrySet()) {
+            entry.getValue().setService(this);
+            entry.getValue().init();
+        }
     }
+```
 
+#### addInstance
 
-    private void initAddressSys() {
-        String envDomainName = System.getenv(ADDRESS_SERVER_DOMAIN_ENV);
-        if (StringUtils.isBlank(envDomainName)) {
-            domainName = EnvUtil.getProperty(ADDRESS_SERVER_DOMAIN_PROPERTY, DEFAULT_SERVER_DOMAIN);
-        } else {
-            domainName = envDomainName;
-        }
-        String envAddressPort = System.getenv(ADDRESS_SERVER_PORT_ENV);
-        if (StringUtils.isBlank(envAddressPort)) {
-            addressPort = EnvUtil.getProperty(ADDRESS_SERVER_PORT_PROPERTY, DEFAULT_SERVER_POINT);
-        } else {
-            addressPort = envAddressPort;
-        }
-        String envAddressUrl = System.getenv(ADDRESS_SERVER_URL_ENV);
-        if (StringUtils.isBlank(envAddressUrl)) {
-            addressUrl = EnvUtil.getProperty(ADDRESS_SERVER_URL_PROPERTY, EnvUtil.getContextPath() + "/" + "serverlist");
-        } else {
-            addressUrl = envAddressUrl;
-        }
-        addressServerUrl = HTTP_PREFIX + domainName + ":" + addressPort + addressUrl;
-        envIdUrl = HTTP_PREFIX + domainName + ":" + addressPort + "/env";
-    }
+Add instance to service.
 
-    @SuppressWarnings("PMD.UndefineMagicConstantRule")
-    private void run() throws NacosException {
-        // With the address server, you need to perform a synchronous member node pull at startup
-        // Repeat three times, successfully jump out
-        boolean success = false;
-        Throwable ex = null;
-        int maxRetry = EnvUtil.getProperty(ADDRESS_SERVER_RETRY_PROPERTY, Integer.class, DEFAULT_SERVER_RETRY_TIME);
-        for (int i = 0; i < maxRetry; i++) {
-            try {
-                syncFromAddressUrl();
-                success = true;
-                break;
-            } catch (Throwable e) {
-                ex = e;
-                Loggers.CLUSTER.error("[serverlist] exception, error : {}", ExceptionUtil.getAllExceptionMsg(ex));
-            }
-        }
-        if (!success) {
-            throw new NacosException(NacosException.SERVER_ERROR, ex);
-        }
+针对临时实例 这里存储层服务默认是DistroConsistencyServiceImpl
 
-        GlobalExecutor.scheduleByCommon(new AddressServerSyncTask(), DEFAULT_SYNC_TASK_DELAY_MS);
+```java
+public void addInstance(String namespaceId, String serviceName, boolean ephemeral, Instance... ips)
+        throws NacosException {
+    
+    String key = KeyBuilder.buildInstanceListKey(namespaceId, serviceName, ephemeral);
+    
+    Service service = getService(namespaceId, serviceName);
+    
+    synchronized (service) {
+        List<Instance> instanceList = addIpAddresses(service, ephemeral, ips);
+        
+        Instances instances = new Instances();
+        instances.setInstanceList(instanceList);
+        
+        consistencyService.put(key, instances);
     }
 }
 ```
@@ -1315,146 +1258,7 @@ public class DistroSyncChangeTask extends AbstractDistroExecuteTask {
 }
 ```
 
-
-## Server Register
-
-
-##### **InstanceController**
-
-```java
-// com.alibaba.nacos.naming.controllers.InstanceController /v1/ns/instance
-@CanDistro
-@PostMapping
-@TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
-@Secured(action = ActionTypes.WRITE)
-public String register(HttpServletRequest request) throws Exception {
-
-    final String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID,
-            Constants.DEFAULT_NAMESPACE_ID);
-    final String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
-    NamingUtils.checkServiceNameFormat(serviceName);
-
-    final Instance instance = HttpRequestInstanceBuilder.newBuilder()
-            .setDefaultInstanceEphemeral(switchDomain.isDefaultInstanceEphemeral()).setRequest(request).build();
-
-    getInstanceOperator().registerInstance(namespaceId, serviceName, instance);
-    NotifyCenter.publishEvent(new RegisterInstanceTraceEvent(System.currentTimeMillis(),
-            NamingRequestUtil.getSourceIpForHttpRequest(request), false, namespaceId,
-            NamingUtils.getGroupName(serviceName), NamingUtils.getServiceName(serviceName), instance.getIp(),
-            instance.getPort()));
-    return "ok";
-}
-```
-
-##### **InstanceControllerV2**
-```java
-@CanDistro
-@PostMapping
-@TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
-@Secured(action = ActionTypes.WRITE)
-public Result<String> register(InstanceForm instanceForm) throws NacosException {
-    // check param
-    instanceForm.validate();
-    checkWeight(instanceForm.getWeight());
-    // build instance
-    Instance instance = buildInstance(instanceForm);
-    instanceServiceV2.registerInstance(instanceForm.getNamespaceId(), buildCompositeServiceName(instanceForm),
-            instance);
-    NotifyCenter.publishEvent(
-            new RegisterInstanceTraceEvent(System.currentTimeMillis(), NamingRequestUtil.getSourceIp(), false,
-                    instanceForm.getNamespaceId(), instanceForm.getGroupName(), instanceForm.getServiceName(),
-                    instance.getIp(), instance.getPort()));
-    return Result.success("ok");
-}
-```
-
-
-```java
-// ServiceManager
-public void registerInstance(String namespaceId, String serviceName, Instance instance) throws NacosException {
-    
-    createEmptyService(namespaceId, serviceName, instance.isEphemeral());
-    
-    Service service = getService(namespaceId, serviceName);
-    
-    addInstance(namespaceId, serviceName, instance.isEphemeral(), instance);
-}
-```
-### createService
-
-Create service if not exist.
-```java
-public void createServiceIfAbsent(String namespaceId, String serviceName, boolean local, Cluster cluster)
-        throws NacosException {
-    Service service = getService(namespaceId, serviceName);
-    if (service == null) {
-        
-        Loggers.SRV_LOG.info("creating empty service {}:{}", namespaceId, serviceName);
-        service = new Service();
-        service.setName(serviceName);
-        service.setNamespaceId(namespaceId);
-        service.setGroupName(NamingUtils.getGroupName(serviceName));
-        // now validate the service. if failed, exception will be thrown
-        service.setLastModifiedMillis(System.currentTimeMillis());
-        service.recalculateChecksum();
-        if (cluster != null) {
-            cluster.setService(service);
-            service.getClusterMap().put(cluster.getName(), cluster);
-        }
-        service.validate(); // validate service name & cluster name is mathch 0-9a-zA-Z- 
-        
-        putServiceAndInit(service);
-        if (!local) {
-            addOrReplaceService(service);
-        }
-    }
-}
-```
-
-#### putServiceAndInit
-
-```java
-    private void putServiceAndInit(Service service) throws NacosException {
-        putService(service);
-        service = getService(service.getNamespaceId(), service.getName());
-        service.init();
-        consistencyService
-        .listen(KeyBuilder.buildInstanceListKey(service.getNamespaceId(), service.getName(), true), service);
-        consistencyService
-        .listen(KeyBuilder.buildInstanceListKey(service.getNamespaceId(), service.getName(), false), service);
-    }    
-
-    public void init() {
-        HealthCheckReactor.scheduleCheck(clientBeatCheckTask);
-        for (Map.Entry<String, Cluster> entry : clusterMap.entrySet()) {
-            entry.getValue().setService(this);
-            entry.getValue().init();
-        }
-    }
-```
-
-#### addInstance
-
-Add instance to service.
-
-```java
-public void addInstance(String namespaceId, String serviceName, boolean ephemeral, Instance... ips)
-        throws NacosException {
-    
-    String key = KeyBuilder.buildInstanceListKey(namespaceId, serviceName, ephemeral);
-    
-    Service service = getService(namespaceId, serviceName);
-    
-    synchronized (service) {
-        List<Instance> instanceList = addIpAddresses(service, ephemeral, ips);
-        
-        Instances instances = new Instances();
-        instances.setInstanceList(instanceList);
-        
-        consistencyService.put(key, instances);
-    }
-}
-```
+ 
 
 ## expire
 
@@ -1544,10 +1348,15 @@ public class NamingMetadataOperateService {
 
 ## Server Beat
 
+注册中心不应该仅仅提供服务注册和发现功能，还应该保证对服务可用性进行监测，对不健康的服务和过期的进行标识或剔除，维护实例的生命周期，以保证客户端尽可能的查询到可用的服务列表
+我们需要知道 个服务是否还健康。那么第 种方式是客户端主动上报，告诉服务端自己健康状态，如果在 段时间没有上报，那么我们就认为服务已经不健康。第二种，则是服务端主动向客户端进行探测，检查客户端是否还被能探测到。
+在当前主流的注册中心，对于健康检查机制主要都采用了 TTL（Time To Live）机制，即客户端在定时间没有向注册中心发送心跳，那么注册中心会认为此服务不健康，进而触发后续的剔除逻辑。对于主动探测的方式那么根据不同的场景，需要采用的方式可能会有不同
 
+Nacos 中， 服务的注册我们从注册方式维度实际可以分为两大类。 
 
-Nacos 中， 服务的注册我们从注册方式维度实际可以分为两大类。 第⼀类通过 SDK RPC 连接进
-行注册， 客户端会和注册中心保持链接。 第二类， 通过 OpenAPI 进行 IP 和端口注册。
+- 第⼀类通过 SDK RPC 连接进行注册， 客户端会和注册中心保持链接。 
+- 第二类， 通过 OpenAPI 进行 IP 和端口注册。
+
 对于第⼀类， 如何寻找到对其负责的注册中心节点呢？ 聪明的你肯定想到了， 只需要和注册中心集
 群中的任意⼀台节点建立联系， 那么由这个节点负责这个客户端就可以了。 注册中心会在启动时注
 册⼀个全局的同步任务， 用于将其当前负责的所有节点信息同步到集群中的其他节点， 其他非负责
@@ -1565,9 +1374,16 @@ Nacos 中， 服务的注册我们从注册方式维度实际可以分为两大�
 并不会去删除实例， 所以我们只需要在负责的节点永久实例健康状态变更的时候通知到其余的节点
 即可  
 
+在 Nacos 中，用户可以通过两种方式进行临时实例的注册，通过 Nacos 的 OpenAP 进行服务注册或通过 Nacos 提供的 SDK 进行服务注册。
 
+对于永久实例的的监看检查，Nacos 采用的是注册中心探测机制，注册中心会在永久服务初始化时根据客户端选择的协议类型注册探活的定时任务。
+Nacos 现在内置提供了三种探测的协议，即Http、TCP 以及 MySQL 。
+般而言 Http 和 TCP 已经可以涵盖绝大多数的健康检查场景。MySQL 主要用于特殊的业务场景，
+例如数据库的主备需要通过服务名对外提供访问，需要确定当前访问数据库是否为主库时，那么我们此时的健康检查接口，是 个检查数据库是否为主库的 MySQL命令
 
+NamingEventPublisher notifySubscriber -> DistroClientDataProcessor on Event ClientDataChangeEvent -> synctoAll distroProtocol.sync
 
+BaseGrpcServer startServer-> addServices GrpcRequestAccptor -> RequestHandler -> DistroDataRequestHandler
 
 1. if getInstance == null, register instance
 2. getService and hanle beat
@@ -1650,6 +1466,290 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
     }
 ```
 
+## Client subscribe
+
+
+
+
+
+Spring Cloud
+
+通过Bean自定义生命周期 在启动的finishRefresh阶段订阅
+
+```java
+public class NacosWatch implements SmartLifecycle, DisposableBean {
+    
+	@Override
+	public void start() {
+		if (this.running.compareAndSet(false, true)) {
+			EventListener eventListener = listenerMap.computeIfAbsent(buildKey(),
+					event -> new EventListener() {
+						@Override
+						public void onEvent(Event event) {
+							if (event instanceof NamingEvent namingEvent) {
+								List<Instance> instances = namingEvent.getInstances();
+								Optional<Instance> instanceOptional = selectCurrentInstance(
+										instances);
+								instanceOptional.ifPresent(currentInstance -> {
+									resetIfNeeded(currentInstance);
+								});
+							}
+						}
+					});
+
+			NamingService namingService = nacosServiceManager.getNamingService();
+			try {
+				namingService.subscribe(properties.getService(), properties.getGroup(),
+						Arrays.asList(properties.getClusterName()), eventListener);
+			}
+			catch (Exception e) {
+				log.error("namingService subscribe failed, properties:{}", properties, e);
+			}
+
+		}
+	}
+}
+```
+
+
+
+
+
+
+
+client端本地缓存
+```java
+public class NacosNamingService implements NamingService {
+    @Override
+    public void subscribe(String serviceName, String groupName, List<String> clusters, EventListener listener)
+            throws NacosException {
+        if (null == listener) {
+            return;
+        }
+        String clusterString = StringUtils.join(clusters, ",");
+        changeNotifier.registerListener(groupName, serviceName, clusterString, listener);
+        clientProxy.subscribe(serviceName, groupName, clusterString);
+    }
+}
+
+public class NamingClientProxyDelegate implements NamingClientProxy {
+    @Override
+    public ServiceInfo subscribe(String serviceName, String groupName, String clusters) throws NacosException {
+        String serviceNameWithGroup = NamingUtils.getGroupedName(serviceName, groupName);
+        String serviceKey = ServiceInfo.getKey(serviceNameWithGroup, clusters);
+        serviceInfoUpdateService.scheduleUpdateIfAbsent(serviceName, groupName, clusters);
+        ServiceInfo result = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
+        if (null == result || !isSubscribed(serviceName, groupName, clusters)) {
+            result = grpcClientProxy.subscribe(serviceName, groupName, clusters);
+        }
+        serviceInfoHolder.processServiceInfo(result);
+        return result;
+    }
+}
+```
+
+默认任务6s一次 最长一分钟一次
+
+```java
+public class ServiceInfoUpdateService implements Closeable {
+
+  @Override
+  public void run() {
+    long delayTime = DEFAULT_DELAY;
+
+    try {
+      if (!changeNotifier.isSubscribed(groupName, serviceName, clusters) && !futureMap.containsKey(
+              serviceKey)) {
+        NAMING_LOGGER.info("update task is stopped, service:{}, clusters:{}", groupedServiceName, clusters);
+        isCancel = true;
+        return;
+      }
+
+      ServiceInfo serviceObj = serviceInfoHolder.getServiceInfoMap().get(serviceKey);
+      if (serviceObj == null) {
+        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
+        serviceInfoHolder.processServiceInfo(serviceObj);
+        lastRefTime = serviceObj.getLastRefTime();
+        return;
+      }
+
+      if (serviceObj.getLastRefTime() <= lastRefTime) {
+        serviceObj = namingClientProxy.queryInstancesOfService(serviceName, groupName, clusters, 0, false);
+        serviceInfoHolder.processServiceInfo(serviceObj);
+      }
+      lastRefTime = serviceObj.getLastRefTime();
+      if (CollectionUtils.isEmpty(serviceObj.getHosts())) {
+        incFailCount();
+        return;
+      }
+      // TODO multiple time can be configured.
+      delayTime = serviceObj.getCacheMillis() * DEFAULT_UPDATE_CACHE_TIME_MULTIPLE;
+      resetFailCount();
+    } catch (Throwable e) {
+      incFailCount();
+      NAMING_LOGGER.warn("[NA] failed to update serviceName: {}", groupedServiceName, e);
+    } finally {
+      if (!isCancel) {
+        executor.schedule(this, Math.min(delayTime << failCount, DEFAULT_DELAY * 60),
+                TimeUnit.MILLISECONDS);
+      }
+    }
+  }
+
+}
+```
+
+#### UpdateTask
+
+```java
+public void scheduleUpdateIfAbsent(String serviceName, String groupName, String clusters) {
+        String serviceKey = ServiceInfo.getKey(NamingUtils.getGroupedName(serviceName, groupName), clusters);
+        if (futureMap.get(serviceKey) != null) {
+            return;
+        }
+        synchronized (futureMap) {
+            if (futureMap.get(serviceKey) != null) {
+                return;
+            }
+            
+            ScheduledFuture<?> future = addTask(new UpdateTask(serviceName, groupName, clusters));
+            futureMap.put(serviceKey, future);
+        }
+    }
+```
+
+
+
+grpc请求获取服务信息
+
+```java
+public ServiceInfo doSubscribe(String serviceName, String groupName, String clusters) throws NacosException {
+        SubscribeServiceRequest request = new SubscribeServiceRequest(namespaceId, groupName, serviceName, clusters,
+                true);
+        SubscribeServiceResponse response = requestToServer(request, SubscribeServiceResponse.class);
+        redoService.subscriberRegistered(serviceName, groupName, clusters);
+        return response.getServiceInfo();
+    }
+```
+
+server
+```java
+
+    @Override
+    @Secured(action = ActionTypes.READ)
+    public SubscribeServiceResponse handle(SubscribeServiceRequest request, RequestMeta meta) throws NacosException {
+        String namespaceId = request.getNamespace();
+        String serviceName = request.getServiceName();
+        String groupName = request.getGroupName();
+        String app = request.getHeader("app", "unknown");
+        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+        Service service = Service.newService(namespaceId, groupName, serviceName, true);
+        Subscriber subscriber = new Subscriber(meta.getClientIp(), meta.getClientVersion(), app, meta.getClientIp(),
+                namespaceId, groupedServiceName, 0, request.getClusters());
+        ServiceInfo serviceInfo = ServiceUtil.selectInstancesWithHealthyProtection(serviceStorage.getData(service),
+                metadataManager.getServiceMetadata(service).orElse(null), subscriber);
+        if (request.isSubscribe()) {
+            clientOperationService.subscribeService(service, subscriber, meta.getConnectionId());
+        } else {
+            clientOperationService.unsubscribeService(service, subscriber, meta.getConnectionId());
+        }
+        return new SubscribeServiceResponse(ResponseCode.SUCCESS.getCode(), "success", serviceInfo);
+    }
+```
+### server get
+```java
+
+@Component
+public class ServiceQueryRequestHandler extends RequestHandler<ServiceQueryRequest, QueryServiceResponse> {
+    
+    private final ServiceStorage serviceStorage;
+    
+    private final NamingMetadataManager metadataManager;
+    
+    public ServiceQueryRequestHandler(ServiceStorage serviceStorage, NamingMetadataManager metadataManager) {
+        this.serviceStorage = serviceStorage;
+        this.metadataManager = metadataManager;
+    }
+    
+    @Override
+    @Secured(action = ActionTypes.READ)
+    public QueryServiceResponse handle(ServiceQueryRequest request, RequestMeta meta) throws NacosException {
+        String namespaceId = request.getNamespace();
+        String groupName = request.getGroupName();
+        String serviceName = request.getServiceName();
+        Service service = Service.newService(namespaceId, groupName, serviceName);
+        String cluster = null == request.getCluster() ? "" : request.getCluster();
+        boolean healthyOnly = request.isHealthyOnly();
+        ServiceInfo result = serviceStorage.getData(service);
+        ServiceMetadata serviceMetadata = metadataManager.getServiceMetadata(service).orElse(null);
+        result = ServiceUtil.selectInstancesWithHealthyProtection(result, serviceMetadata, cluster, healthyOnly, true,
+                meta.getClientIp());
+        return QueryServiceResponse.buildSuccessResponse(result);
+    }
+}
+```
+
+```java
+@Component
+public class ServiceStorage {
+
+    private final ClientManager clientManager;
+
+    private final ConcurrentMap<Service, ServiceInfo> serviceDataIndexes;
+
+    public ServiceInfo getData(Service service) {
+        return serviceDataIndexes.containsKey(service) ? serviceDataIndexes.get(service) : getPushData(service);
+    }
+
+    public ServiceInfo getPushData(Service service) {
+        ServiceInfo result = emptyServiceInfo(service);
+        if (!ServiceManager.getInstance().containSingleton(service)) {
+            return result;
+        }
+        result.setHosts(getAllInstancesFromIndex(service));
+        serviceDataIndexes.put(service, result);
+        return result;
+    }
+
+  private List<Instance> getAllInstancesFromIndex(Service service) {
+    Set<Instance> result = new HashSet<>();
+    Set<String> clusters = new HashSet<>();
+    for (String each : serviceIndexesManager.getAllClientsRegisteredService(service)) {
+      Optional<InstancePublishInfo> instancePublishInfo = getInstanceInfo(each, service);
+      if (instancePublishInfo.isPresent()) {
+        Instance instance = parseInstance(service, instancePublishInfo.get());
+        result.add(instance);
+        clusters.add(instance.getClusterName());
+      }
+    }
+    // cache clusters of this service
+    serviceClusterIndex.put(service, clusters);
+    return new LinkedList<>(result);
+  }
+}
+```
+
+## select instance
+
+
+
+
+```java
+public class ServiceInfoHolder implements Closeable {
+    private final ConcurrentMap<String, ServiceInfo> serviceInfoMap;
+
+    public ServiceInfo getServiceInfo(final String serviceName, final String groupName, final String clusters) {
+        NAMING_LOGGER.debug("failover-mode: {}", failoverReactor.isFailoverSwitch());
+        String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+        String key = ServiceInfo.getKey(groupedServiceName, clusters);
+        if (failoverReactor.isFailoverSwitch()) {
+            return failoverReactor.getService(key);
+        }
+        return serviceInfoMap.get(key);
+    }
+}
+```
+
 ## Tuning
 
 Eureka迁移nacos
@@ -1658,8 +1758,7 @@ Eureka迁移nacos
 
 ![](./img/Eureka_2_Nacos.png)
 
-默认情况下 Spring Cloud 只支持在依赖中引入⼀个注册中心， 当存在多个注册中心时， 启动
-错。 所以这里需要添加⼀个依赖 edas-sc-migration-starter ， 使得 Spring Cloud 应用支持多注
+默认情况下 Spring Cloud 只支持在依赖中引入⼀个注册中心， 当存在多个注册中心时， 启动出错。 所以这里需要添加⼀个依赖 edas-sc-migration-starter ， 使得 Spring Cloud 应用支持多注
 ```xml
 <dependency>
 <groupId>com.alibaba.edas</groupId>
@@ -1689,39 +1788,34 @@ spring.cloud.edas.migration.subscribes=nacos # 只从 Nacos 订阅服务
 ```
 观察业务本身是否正常。
 
-如果您的应用开启了 Actuator 监控， 那么可以通过 Actuator 来查看此应用订阅的各服务的 Ri
-bbonServerList 的信息。 metaInfo 中的 serverGroup 字段 代表了此节点来源于哪个服务注册
-中心。
+如果您的应用开启了 Actuator 监控， 那么可以通过 Actuator 来查看此应用订阅的各服务的 RibbonServerList 的信息。 metaInfo 中的 serverGroup 字段 代表了此节点来源于哪个服务注册中心。
 ```
 http://ip:port/migration_server_list ## Spring Boot 1.x 版本
 http://ip:port/actuator/migration-server-list ## Spring Boot 2.x 版本
 ```
 
-当应用都已经迁移到 Nacos 之后， 此时可以删除原有的注册中心的配置 和 迁移过程专用的依赖
-edas-sc-migration-starter ， 完成整个迁移。
+当应用都已经迁移到 Nacos 之后， 此时可以删除原有的注册中心的配置 和 迁移过程专用的依赖edas-sc-migration-starter ， 完成整个迁移。
 1. 从 pom.xml 中删除原有的注册中心的依赖 和 edas-sc-migration-starter 。
 2. 参考第⼀步中第 2 小步骤中的部署方式， 将修改后的应用依次全部重新部署。
 3. 停止原有的 Eureka 集群。
 
 
-从目前方案的设计中， 没有发现明显的风险点。 但是因为在迁移的过程中涉及到所有应用的两次修
-改和重启， 所以建议在迁移的过程中实时关注业务数据监控的详情， 确保完全不影响业务的情况下
-再进行下⼀步操作。
+从目前方案的设计中， 没有发现明显的风险点。 但是因为在迁移的过程中涉及到所有应用的两次修改和重启， 所以建议在迁移的过程中实时关注业务数据监控的详情， 确保完全不影响业务的情况下再进行下⼀步操作。
 如果遇到异常情况， 针对于不同阶段的处理方案如下：
-1. 执行第⼀步的过程中出现业务异常。 还原代码， 重新部署到原有机器， 恢复业务。 查清楚具体
-   问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
-2. 执行第二步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复
-   业务。 查清楚具体问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
-3. 执行第三步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复
-   业务
+1. 执行第⼀步的过程中出现业务异常。 还原代码， 重新部署到原有机器， 恢复业务。 查清楚具体问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
+2. 执行第二步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复业务。 查清楚具体问题， 排查完毕后再重新执行。 主要排查是否是机器权限的问题。
+3. 执行第三步的过程中出现业务异常。 还原正在迁移的应用的代码， 重新部署到原有机器， 恢复业务
 
 如何选择最先迁移哪个应⽤
-- 建议是从最下层 Provider 开始迁移。 但如果调用链路太复杂， 比较难分析， 所以我们设计的方
-案中是支持随便找⼀个非流量入口应用进行迁移。
-- 因为流量入口的应⽤比较特殊， 所以建议迁移流量入口应⽤时需要根据自己应⽤的实际情况考虑
-迁移方案。
+- 建议是从最下层 Provider 开始迁移。 但如果调用链路太复杂， 比较难分析， 所以我们设计的方案中是支持随便找⼀个非流量入口应用进行迁移。
+- 因为流量入口的应⽤比较特殊， 所以建议迁移流量入口应⽤时需要根据自己应⽤的实际情况考虑迁移方案。
 
 
 ## Links
 
-- [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md)
+- [Nacos](/docs/CS/Framework/nacos/Nacos.md)
+
+
+## References
+
+1. [Nacos 2.1.0 注册中心源码分析图](https://www.processon.com/view/link/64116327bad505275e0585dc)

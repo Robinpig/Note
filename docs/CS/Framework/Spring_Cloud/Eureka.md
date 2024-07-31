@@ -23,6 +23,192 @@ but there is a possibility of clients having different views of the servers duri
 
 In these scenarios, the server tries to protect the information it already has. There may be scenarios in case of a mass outage that this may cause the clients to get the instances that do not exist anymore. The clients must make sure they are resilient to eureka server returning an instance that is non-existent or un-responsive. The best protection in these scenarios is to timeout quickly and try other servers.
 
+## Servcer Initialization
+
+The class that kick starts the eureka server.
+The eureka server is configured by using the configuration EurekaServerConfig specified by eureka.server.props in the classpath. 
+The eureka client component is also initialized by using the configuration EurekaInstanceConfig specified by eureka.client.props. 
+If the server runs in the AWS cloud, the eureka server binds it to the elastic ip as specified.
+
+```java
+public abstract class EurekaBootStrap implements ServletContextListener {
+    protected void initEurekaServerContext() throws Exception {
+        EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
+
+        // For backward compatibility
+        JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+        XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+
+        ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
+
+        ApplicationInfoManager applicationInfoManager = null;
+
+        if (eurekaClient == null) {
+            EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
+                    ? new CloudInstanceConfig()
+                    : new MyDataCenterInstanceConfig();
+
+            applicationInfoManager = new ApplicationInfoManager(
+                    instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
+
+            EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
+            eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig, getTransportClientFactories(),
+                    getDiscoveryClientOptionalArgs());
+        } else {
+            applicationInfoManager = eurekaClient.getApplicationInfoManager();
+        }
+
+        EurekaServerHttpClientFactory eurekaServerHttpClientFactory = getEurekaServerHttpClientFactory();
+
+        PeerAwareInstanceRegistry registry;
+        if (isAws(applicationInfoManager.getInfo())) {
+            registry = new AwsInstanceRegistry(
+                    eurekaServerConfig,
+                    eurekaClient.getEurekaClientConfig(),
+                    serverCodecs,
+                    eurekaClient, eurekaServerHttpClientFactory
+            );
+            awsBinder = new AwsBinderDelegate(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), registry, applicationInfoManager);
+            awsBinder.start();
+        } else {
+            registry = new PeerAwareInstanceRegistryImpl(
+                    eurekaServerConfig,
+                    eurekaClient.getEurekaClientConfig(),
+                    serverCodecs,
+                    eurekaClient, eurekaServerHttpClientFactory
+            );
+        }
+
+        PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
+                registry,
+                eurekaServerConfig,
+                eurekaClient.getEurekaClientConfig(),
+                serverCodecs,
+                applicationInfoManager
+        );
+
+        serverContext = new DefaultEurekaServerContext(
+                eurekaServerConfig,
+                serverCodecs,
+                registry,
+                peerEurekaNodes,
+                applicationInfoManager
+        );
+
+        EurekaServerContextHolder.initialize(serverContext);
+
+        serverContext.initialize();
+        logger.info("Initialized server context");
+
+        // Copy registry from neighboring eureka node
+        int registryCount = registry.syncUp();
+        registry.openForTraffic(applicationInfoManager, registryCount);
+
+        // Register all monitoring statistics.
+        EurekaMonitors.registerAllStats();
+    }
+}
+```
+
+```java
+@Singleton
+public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
+    @Override
+    public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
+        // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
+        this.expectedNumberOfClientsSendingRenews = count;
+        updateRenewsPerMinThreshold();
+        logger.info("Got {} instances from neighboring DS node", count);
+        logger.info("Renew threshold is: {}", numberOfRenewsPerMinThreshold);
+        this.startupTime = System.currentTimeMillis();
+        if (count > 0) {
+            this.peerInstancesTransferEmptyOnStartup = false;
+        }
+        DataCenterInfo.Name selfName = applicationInfoManager.getInfo().getDataCenterInfo().getName();
+        boolean isAws = Name.Amazon == selfName;
+        if (isAws && serverConfig.shouldPrimeAwsReplicaConnections()) {
+            logger.info("Priming AWS connections for all replicas..");
+            primeAwsReplicas(applicationInfoManager);
+        }
+        applicationInfoManager.setInstanceStatus(InstanceStatus.UP);
+        super.postInit();
+    }
+}
+```
+evict Timer启动 60s一次 淘汰90s*2时间内未续期的服务实例
+```java
+
+   protected void postInit() {
+      renewsLastMin.start();
+      if (evictionTaskRef.get() != null) {
+         evictionTaskRef.get().cancel();
+      }
+      evictionTaskRef.set(new EvictionTask());
+      evictionTimer.schedule(evictionTaskRef.get(),
+              serverConfig.getEvictionIntervalTimerInMs(),
+              serverConfig.getEvictionIntervalTimerInMs());
+   }
+```
+
+```java
+class EvictionTask extends TimerTask {
+   @Override
+   public void run() {
+      try {
+         long compensationTimeMs = getCompensationTimeMs();
+         logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
+         evict(compensationTimeMs);
+      } catch (Throwable e) {
+         logger.error("Could not run the evict task", e);
+      }
+   }
+}
+```
+evict 从registry缓存中获取注册实例信息 判断过期加入expiredLeases中 最后随机(Knuth shuffle algorithm)从过期列表淘汰
+```java
+public void evict(long additionalLeaseMs) {
+   // We collect first all expired items, to evict them in random order. For large eviction sets,
+   // if we do not that, we might wipe out whole apps before self preservation kicks in. By randomizing it,
+   // the impact should be evenly distributed across all applications.
+   List<Lease<InstanceInfo>> expiredLeases = new ArrayList<>();
+   for (Entry<String, Map<String, Lease<InstanceInfo>>> groupEntry : registry.entrySet()) {
+      Map<String, Lease<InstanceInfo>> leaseMap = groupEntry.getValue();
+      if (leaseMap != null) {
+         for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
+            Lease<InstanceInfo> lease = leaseEntry.getValue();
+            if (lease.isExpired(additionalLeaseMs) && lease.getHolder() != null) {
+               expiredLeases.add(lease);
+            }
+         }
+      }
+   }
+
+   // To compensate for GC pauses or drifting local time, we need to use current registry size as a base for
+   // triggering self-preservation. Without that we would wipe out full registry.
+   int registrySize = (int) getLocalRegistrySize();
+   int registrySizeThreshold = (int) (registrySize * serverConfig.getRenewalPercentThreshold());
+   int evictionLimit = registrySize - registrySizeThreshold;
+
+   int toEvict = Math.min(expiredLeases.size(), evictionLimit);
+   if (toEvict > 0) {
+      logger.info("Evicting {} items (expired={}, evictionLimit={})", toEvict, expiredLeases.size(), evictionLimit);
+
+      Random random = new Random(System.currentTimeMillis());
+      for (int i = 0; i < toEvict; i++) {
+         // Pick a random item (Knuth shuffle algorithm)
+         int next = i + random.nextInt(expiredLeases.size() - i);
+         Collections.swap(expiredLeases, i, next);
+         Lease<InstanceInfo> lease = expiredLeases.get(i);
+
+         String appName = lease.getHolder().getAppName();
+         String id = lease.getHolder().getId();
+         EXPIRED.increment();
+         internalCancel(appName, id, false);
+      }
+   }
+}
+```
+
 ## Service Registry
 
 start -> registry -> getEurekaClient -> init
@@ -400,9 +586,206 @@ public class DiscoveryClient implements EurekaClient {
 }  
 ```
 
-## Self Traffic
+### Server addInstance
 
-EvictionTask
+```java
+@Produces({"application/xml", "application/json"})
+public class ApplicationResource {
+    @POST
+    @Consumes({"application/json", "application/xml"})
+    public Response addInstance(InstanceInfo info,
+                                @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
+        logger.debug("Registering instance {} (replication={})", info.getId(), isReplication);
+        // validate that the instanceinfo contains all the necessary required fields
+        if (isBlank(info.getId())) {
+            return Response.status(400).entity("Missing instanceId").build();
+        } else if (isBlank(info.getHostName())) {
+            return Response.status(400).entity("Missing hostname").build();
+        } else if (isBlank(info.getIPAddr())) {
+            return Response.status(400).entity("Missing ip address").build();
+        } else if (isBlank(info.getAppName())) {
+            return Response.status(400).entity("Missing appName").build();
+        } else if (!appName.equals(info.getAppName())) {
+            return Response.status(400).entity("Mismatched appName, expecting " + appName + " but was " + info.getAppName()).build();
+        } else if (info.getDataCenterInfo() == null) {
+            return Response.status(400).entity("Missing dataCenterInfo").build();
+        } else if (info.getDataCenterInfo().getName() == null) {
+            return Response.status(400).entity("Missing dataCenterInfo Name").build();
+        }
+
+        // handle cases where clients may be registering with bad DataCenterInfo with missing data
+        DataCenterInfo dataCenterInfo = info.getDataCenterInfo();
+        if (dataCenterInfo instanceof UniqueIdentifier) {
+            String dataCenterInfoId = ((UniqueIdentifier) dataCenterInfo).getId();
+            if (isBlank(dataCenterInfoId)) {
+                boolean experimental = "true".equalsIgnoreCase(serverConfig.getExperimental("registration.validation.dataCenterInfoId"));
+                if (experimental) {
+                    String entity = "DataCenterInfo of type " + dataCenterInfo.getClass() + " must contain a valid id";
+                    return Response.status(400).entity(entity).build();
+                } else if (dataCenterInfo instanceof AmazonInfo) {
+                    AmazonInfo amazonInfo = (AmazonInfo) dataCenterInfo;
+                    String effectiveId = amazonInfo.get(AmazonInfo.MetaDataKey.instanceId);
+                    if (effectiveId == null) {
+                        amazonInfo.getMetadata().put(AmazonInfo.MetaDataKey.instanceId.getName(), info.getId());
+                    }
+                } else {
+                    logger.warn("Registering DataCenterInfo of type {} without an appropriate id", dataCenterInfo.getClass());
+                }
+            }
+        }
+
+        registry.register(info, "true".equals(isReplication));
+        return Response.status(204).build();  // 204 to be backwards compatible
+    }
+}
+```
+
+
+```java
+@Singleton
+public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
+    @Override
+    public void register(final InstanceInfo info, final boolean isReplication) {
+        int leaseDuration = Lease.DEFAULT_DURATION_IN_SECS;
+        if (info.getLeaseInfo() != null && info.getLeaseInfo().getDurationInSecs() > 0) {
+            leaseDuration = info.getLeaseInfo().getDurationInSecs();
+        }
+        super.register(info, leaseDuration, isReplication);
+        replicateToPeers(Action.Register, info.getAppName(), info.getId(), info, null, isReplication);
+    }
+}
+```
+
+#### register info
+
+```java
+public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
+        read.lock();
+        try {
+            Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
+            REGISTER.increment(isReplication);
+            if (gMap == null) {
+                final ConcurrentHashMap<String, Lease<InstanceInfo>> gNewMap = new ConcurrentHashMap<String, Lease<InstanceInfo>>();
+                gMap = registry.putIfAbsent(registrant.getAppName(), gNewMap);
+                if (gMap == null) {
+                    gMap = gNewMap;
+                }
+            }
+            Lease<InstanceInfo> existingLease = gMap.get(registrant.getId());
+            // Retain the last dirty timestamp without overwriting it, if there is already a lease
+            if (existingLease != null && (existingLease.getHolder() != null)) {
+                Long existingLastDirtyTimestamp = existingLease.getHolder().getLastDirtyTimestamp();
+                Long registrationLastDirtyTimestamp = registrant.getLastDirtyTimestamp();
+                logger.debug("Existing lease found (existing={}, provided={}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
+
+                // this is a > instead of a >= because if the timestamps are equal, we still take the remote transmitted
+                // InstanceInfo instead of the server local copy.
+                if (existingLastDirtyTimestamp > registrationLastDirtyTimestamp) {
+                    logger.warn("There is an existing lease and the existing lease's dirty timestamp {} is greater" +
+                            " than the one that is being registered {}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
+                    logger.warn("Using the existing instanceInfo instead of the new instanceInfo as the registrant");
+                    registrant = existingLease.getHolder();
+                }
+            } else {
+                // The lease does not exist and hence it is a new registration
+                synchronized (lock) {
+                    if (this.expectedNumberOfClientsSendingRenews > 0) {
+                        // Since the client wants to register it, increase the number of clients sending renews
+                        this.expectedNumberOfClientsSendingRenews = this.expectedNumberOfClientsSendingRenews + 1;
+                        updateRenewsPerMinThreshold();
+                    }
+                }
+                logger.debug("No previous lease information found; it is new registration");
+            }
+            Lease<InstanceInfo> lease = new Lease<>(registrant, leaseDuration);
+            if (existingLease != null) {
+                lease.setServiceUpTimestamp(existingLease.getServiceUpTimestamp());
+            }
+            gMap.put(registrant.getId(), lease);
+            recentRegisteredQueue.add(new Pair<Long, String>(
+                    System.currentTimeMillis(),
+                    registrant.getAppName() + "(" + registrant.getId() + ")"));
+            // This is where the initial state transfer of overridden status happens
+            if (!InstanceStatus.UNKNOWN.equals(registrant.getOverriddenStatus())) {
+                logger.debug("Found overridden status {} for instance {}. Checking to see if needs to be add to the "
+                                + "overrides", registrant.getOverriddenStatus(), registrant.getId());
+                if (!overriddenInstanceStatusMap.containsKey(registrant.getId())) {
+                    logger.info("Not found overridden id {} and hence adding it", registrant.getId());
+                    overriddenInstanceStatusMap.put(registrant.getId(), registrant.getOverriddenStatus());
+                }
+            }
+            InstanceStatus overriddenStatusFromMap = overriddenInstanceStatusMap.get(registrant.getId());
+            if (overriddenStatusFromMap != null) {
+                logger.info("Storing overridden status {} from map", overriddenStatusFromMap);
+                registrant.setOverriddenStatus(overriddenStatusFromMap);
+            }
+
+            // Set the status based on the overridden status rules
+            InstanceStatus overriddenInstanceStatus = getOverriddenInstanceStatus(registrant, existingLease, isReplication);
+            registrant.setStatusWithoutDirty(overriddenInstanceStatus);
+
+            // If the lease is registered with UP status, set lease service up timestamp
+            if (InstanceStatus.UP.equals(registrant.getStatus())) {
+                lease.serviceUp();
+            }
+            registrant.setActionType(ActionType.ADDED);
+            recentlyChangedQueue.add(new RecentlyChangedItem(lease));
+            registrant.setLastUpdatedTimestamp();
+            invalidateCache(registrant.getAppName(), registrant.getVIPAddress(), registrant.getSecureVipAddress());
+            logger.info("Registered instance {}/{} with status {} (replication={})",
+                    registrant.getAppName(), registrant.getId(), registrant.getStatus(), isReplication);
+        } finally {
+            read.unlock();
+        }
+    }
+```
+
+#### replicateToPeers
+```java
+ private void replicateToPeers(Action action, String appName, String id,
+                                  InstanceInfo info /* optional */,
+                                  InstanceStatus newStatus /* optional */, boolean isReplication) {
+        Stopwatch tracer = action.getTimer().start();
+        try {
+            if (isReplication) {
+                numberOfReplicationsLastMin.increment();
+            }
+            // If it is a replication already, do not replicate again as this will create a poison replication
+            if (peerEurekaNodes == Collections.EMPTY_LIST || isReplication) {
+                return;
+            }
+
+            for (final PeerEurekaNode node : peerEurekaNodes.getPeerEurekaNodes()) {
+                // If the url represents this host, do not replicate to yourself.
+                if (peerEurekaNodes.isThisMyUrl(node.getServiceUrl())) {
+                    continue;
+                }
+                replicateInstanceActionsToPeers(action, appName, id, info, newStatus, node);
+            }
+        } finally {
+            tracer.stop();
+        }
+    }
+```
+
+
+```java
+public class PeerEurekaNode {
+    public void register(final InstanceInfo info) throws Exception {
+        long expiryTime = System.currentTimeMillis() + getLeaseRenewalOf(info);
+        batchingDispatcher.process(
+                taskId("register", info),
+                new InstanceReplicationTask(targetHost, Action.Register, info, null, true) {
+                    public EurekaHttpResponse<Void> execute() {
+                        return replicationClient.register(info);
+                    }
+                },
+                expiryTime
+        );
+    }
+}
+```
+
 
 ## Beat
 

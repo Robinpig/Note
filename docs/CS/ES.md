@@ -27,10 +27,24 @@ Merging is easy too since you can get a sorted iterator over the values that are
 then merge these iterators into a sorted iterator on the fly and build the tree of the merged segment from this sorted iterator.
 
 ## ELK
+日志采集系统
 
-file beats -> MQ -> Logstash -> ES -> Kibana
+filebeat -> MQ -> Logstash -> ES -> Kibana
+
+filebeat配置
+
+
+Logstash负责解析转换日志
+
+
+
+告警
+规则设置与通知机制
+
+
 
 
 ## References
 
 1. [Searching numb3rs in 5.0](https://www.elastic.co/blog/searching-numb3rs-in-5-0)
+2. [伴鱼数据库之慢日志系统](https://tech.ipalfish.com/blog/2020/07/21/tidb_slowlog/)

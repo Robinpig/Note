@@ -1,25 +1,34 @@
 ## Introduction
-A _safepoint_ is a point in program execution where the state of the program is known and can be examined. Things like registers, memory, etc.
-For the JVM to completely pause and run tasks (such as GC), **all threads** must come to a safepoint.
+A _safepoint_ is a point in program execution where the state of the program is known and can be examined. Things like registers, memory, etc.
+For the JVM to completely pause and run tasks (such as GC), **all threads** must come to a safepoint.
 
-For example, to retrieve a stack trace on a thread we must come to a safepoint. This also means tools like `jstack` require that all threads of the program be able to reach a safepoint.
+For example, to retrieve a stack trace on a thread we must come to a safepoint. 
+This also means tools like `jstack` require that all threads of the program be able to reach a safepoint.
 
-> A point during program execution at which all GC roots are known and all heap object contents are consistent. From a global point of view, all threads must block at a safepoint before the GC can run. (As a special case, threads running JNI code can continue to run, because they use only handles. During a safepoint they must block instead of loading the contents of the handle.) From a local point of view, a safepoint is a distinguished point in a block of code where the executing thread may block for the GC. Most call sites qualify as safepoints. There are strong invariants which hold true at every safepoint, which may be disregarded at non-safepoints. Both compiled Java code and C/C++ code be optimized between safepoints, but less so across safepoints. The JIT compiler emits a GC map at each safepoint. C/C++ code in the VM uses stylized macro-based conventions (e.g., TRAPS) to mark potential safepoints.
+> A point during program execution at which all GC roots are known and all heap object contents are consistent. 
+> From a global point of view, all threads must block at a safepoint before the GC can run. 
+> (As a special case, threads running JNI code can continue to run, because they use only handles. During a safepoint they must block instead of loading the contents of the handle.) 
+> From a local point of view, a safepoint is a distinguished point in a block of code where the executing thread may block for the GC. Most call sites qualify as safepoints. 
+> There are strong invariants which hold true at every safepoint, which may be disregarded at non-safepoints.
+> Both compiled Java code and C/C++ code be optimized between safepoints, but less so across safepoints. 
+> The JIT compiler emits a GC map at each safepoint. C/C++ code in the VM uses stylized macro-based conventions (e.g., TRAPS) to mark potential safepoints.
 
 
-While GC is one of the most common safepoint operations, there are many VM operations[2](https://blanco.io/blog/jvm-safepoint-pauses/#fn:2) that are run while threads are at safepoints. Some may be invoked externally by connecting to the HotSpot JVM (i.e. `jstack`, `jcmd`) while others are internal to the JVM operation (monitor deflation, code deoptimization). A list of common operations is below.
+While GC is one of the most common safepoint operations, there are many VM operations[2](https://blanco.io/blog/jvm-safepoint-pauses/#fn:2) that are run while threads are at safepoints. 
+Some may be invoked externally by connecting to the HotSpot JVM (i.e. `jstack`, `jcmd`) while others are internal to the JVM operation (monitor deflation, code deoptimization). 
+A list of common operations is below.
 
 -   User Invoked:
     -   Deadlock detection
     -   JVMTI
     -   Thread Dumps
--   Run at regular intervals (see `-XX:GuaranteedSafepointInterval`[3](https://blanco.io/blog/jvm-safepoint-pauses/#fn:opt_ref))
+-   Run at regular intervals 可以配置`-XX:GuaranteedSafepointInterval=0`关闭
     -   Monitor Deflation
     -   Inline Cache Cleaning
     -   Invocation Counter Delay
     -   Compiled Code Marking
 -   Other:
-    -   Revoking [Biased Locks](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
+    -   Revoking [Biased Locks](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
     -   Compiled method Deoptimization
     -   GC
 
@@ -60,7 +69,7 @@ So, if applications are not responding, it may be because
 
 The issue is that we need to figure out exactly what is triggering the pause in the first place if anything, and then investigate which part of the pause is taking a long time; the time to get to the safepoint (TTSP), or the time spent performing the VM operation.
 
-To do that more logging is required. The flags that need to be added to the JVM are `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1`. Adding these two arguments will print to stdout or the configured log file every time a safepoint operation occurs.
+To do that more logging is required. The flags that need to be added to the JVM are `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1`. Adding these two arguments will print to stdout or the configured log file every time a safepoint operation occurs.
 
 
 

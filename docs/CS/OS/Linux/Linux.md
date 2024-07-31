@@ -8,11 +8,33 @@ All the so-called “Linux” distributions are really distributions of GNU/Linu
 On a purely technical level, the kernel is an intermediary layer between the hardware and the software.
 Its purpose is to pass application requests to the hardware and to act as a low-level driver to address the devices and components of the system.
 
-## Working with the Source Code
+
+
+常见Linux发行版
+
+- Red Hat Enterprise Linux
+- [Fedora](/docs/CS/OS/Linux/Distribution/Fedora.md)
+- [Ubuntu](/docs/CS/OS/Linux/Distribution/Ubuntu.md)
+- [CentOS](/docs/CS/OS/Linux/Distribution/CentOS.md)
+- Debian
+- Arch Linux
+
+
+跨平台在其它OS下使用Linux
+- Docker
+- 虚拟机
+
+Windows下使用Linux
+- [WSL](/docs/CS/OS/Windows/WSL.md)
+
+
+
+### Kernel
+
+Working with the Kernel
 
 ```shell
 cat /proc/version
-
 ```
 
 Directory

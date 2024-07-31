@@ -729,6 +729,19 @@ public abstract class AbstractApplicationContext {
 
 ### BeanFactoryPostProcessor
 
+
+
+ConfigurationClassPostProcessor -> BeanDefinitionRegistryPostProcessor -> BeanFactoryPostProcessor
+
+
+PriorityOrdered -> Ordered
+
+
+先执行子类方法 后父类
+
+先执行PriorityOrdered后Ordered 最后无序的
+
+
 ```java
 public abstract class AbstractApplicationContext {
     protected void invokeBeanFactoryPostProcessors(ConfigurableListableBeanFactory beanFactory) {

@@ -23,6 +23,55 @@ docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql
 
 <!-- tabs:end -->
 
+
+
+**Build from source**
+
+<!-- tabs:start -->
+
+Download source file and  unzip
+
+
+
+##### **Ubuntu**
+
+```shell
+sudo apt install gcc build-essential cmake bison libncurses5-dev libssl-dev pkg-config
+
+# cd source code root
+
+cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./extra/boost -DCMAKE_BUILD_TYPE=Debug -DWITH_DEBUG=1
+
+sudo make && make install
+```
+
+##### **MacOS**
+
+```shell
+brew install cmake gcc bison
+# cd source code root
+cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./boost -DCMAKE_BUILD_TYPE=Debug -DWITH_DEBUG=1 -DBISON_EXECUTABLE=/opt/homebrew/opt/bison/bin/bison
+
+sudo make && make install
+```
+
+
+
+Init
+
+```shell
+./bin/mysqld --initialize-insecure --datadir=./data
+
+# run
+./bin/mysqld --datadir=./data
+```
+
+
+
+<!-- tabs:end -->
+
+Use gdb/lldb to debug
+
 ## Architecture
 
 The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements.
@@ -234,3 +283,6 @@ In fact, in addition to allowing writes to be delayed, caching can permit them t
 ## References
 
 1. [MySQL Source Code Documentation](https://dev.mysql.com/doc/dev/mysql-server/latest/)
+2. [MySQL源码编译和调试指南(Ubuntu 22.04.4 LTS) by GrokDB](https://grokdb.io/post/first-post/)
+3. [Mac系统下源码编译安装MySQL 5.7.17的教程](http://www.80vps.com/new1114.htm)
+4. [Mac上编译MySQL源码与安装](https://max2d.com/archives/983)
