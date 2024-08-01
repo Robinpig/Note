@@ -701,6 +701,141 @@ private void makeOffer() throws KeeperException, InterruptedException {
     }
 ```
 
+## ZooKeeperMain
+
+
+创建Zookeeper对象处理command
+```java
+public class ZooKeeperMain {
+    protected ZooKeeper zk;
+  
+    void run() throws IOException, InterruptedException {
+        if (cl.getCommand() == null) {
+            System.out.println("Welcome to ZooKeeper!");
+
+            boolean jlinemissing = false;
+            // only use jline if it's in the classpath
+            try {
+                Class<?> consoleC = Class.forName("jline.console.ConsoleReader");
+                Class<?> completorC = Class.forName("org.apache.zookeeper.JLineZNodeCompleter");
+
+                System.out.println("JLine support is enabled");
+
+                Object console = consoleC.getConstructor().newInstance();
+
+                Object completor = completorC.getConstructor(ZooKeeper.class).newInstance(zk);
+                Method addCompletor = consoleC.getMethod("addCompleter", Class.forName("jline.console.completer.Completer"));
+                addCompletor.invoke(console, completor);
+
+                String line;
+                Method readLine = consoleC.getMethod("readLine", String.class);
+                while ((line = (String) readLine.invoke(console, getPrompt())) != null) {
+                    executeLine(line);
+                }
+            } catch (ClassNotFoundException
+                     | NoSuchMethodException
+                     | InvocationTargetException
+                     | IllegalAccessException
+                     | InstantiationException e
+            ) {
+                LOG.debug("Unable to start jline", e);
+                jlinemissing = true;
+            }
+
+            if (jlinemissing) {
+                System.out.println("JLine support is disabled");
+                BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+
+                String line;
+                while ((line = br.readLine()) != null) {
+                    executeLine(line);
+                }
+            }
+        } else {
+            // Command line args non-null.  Run what was passed.
+            processCmd(cl);
+        }
+        ServiceUtils.requestSystemExit(exitCode);
+    }
+}
+```
+
+
+processZKCmd
+
+#### submitRequest
+
+This class manages the socket i/o for the client. ClientCnxn maintains a list of available servers to connect to and "transparently" switches servers it is connected to as needed.
+
+提交请求到队列 等待唤醒
+```java
+public class ClientCnxn {
+    public ReplyHeader submitRequest(
+            RequestHeader h,
+            Record request,
+            Record response,
+            WatchRegistration watchRegistration,
+            WatchDeregistration watchDeregistration) throws InterruptedException {
+        ReplyHeader r = new ReplyHeader();
+        Packet packet = queuePacket(
+                h,
+                r,
+                request,
+                response,
+                null,
+                null,
+                null,
+                null,
+                watchRegistration,
+                watchDeregistration);
+        synchronized (packet) {
+            if (requestTimeout > 0) {
+                // Wait for request completion with timeout
+                waitForPacketFinish(r, packet);
+            } else {
+                // Wait for request completion infinitely
+                while (!packet.finished) {
+                    packet.wait();
+                }
+            }
+        }
+        if (r.getErr() == Code.REQUESTTIMEOUT.intValue()) {
+            sendThread.cleanAndNotifyState();
+        }
+        return r;
+    }
+}
+```
+唤醒机制根据底层网络IO框架实现不同
+
+
+wakeupCnxn
+
+## Server
+
+
+```java
+ublic class FollowerRequestProcessor extends ZooKeeperCriticalThread implements RequestProcessor {
+    
+  RequestProcessor nextProcessor;
+}
+```
+
+
+This Request processor actually applies any transaction associated with a request and services any queries. It is always at the end of a RequestProcessor chain (hence the name), so it does not have a nextProcessor member.
+This RequestProcessor counts on ZooKeeperServer to populate the outstandingRequests member of ZooKeeperServer.
+```java
+public class FinalRequestProcessor implements RequestProcessor {
+    
+}
+```
+
+> https://blog.csdn.net/waltonhuang/article/details/106104511
+> 
+> https://blog.csdn.net/waltonhuang/article/details/106097257
+> 
+> https://blog.csdn.net/waltonhuang/article/details/106071393
+
 ## Observer
 
 As we add more voting members, the write performance drops. This is due to the fact that a write operation requires the agreement of (in general) at least half the nodes in an ensemble and therefore the cost of a vote can increase significantly as more voters are added.
@@ -711,19 +846,80 @@ Observers have other advantages. Because they do not vote, they are not a critic
 
 
 
-## Ephemeral
 
-
+## DataTree
 
 ```java
 public class DataTree {
-/**
- * This hashtable lists the paths of the ephemeral nodes of a session.
- */
-private final Map<Long, HashSet<String>> ephemerals = new ConcurrentHashMap<Long, HashSet<String>>();
+    /**
+     * This map provides a fast lookup to the data nodes. The tree is the
+     * source of truth and is where all the locking occurs
+     */
+    private final NodeHashMap nodes;
 }
 ```
 
+a simple wrapper to ConcurrentHashMap that recalculates a digest after each mutation.
+
+```java
+  public class NodeHashMapImpl implements NodeHashMap {
+
+    private final ConcurrentHashMap<String, DataNode> nodes;
+    private final boolean digestEnabled;
+    private final DigestCalculator digestCalculator;
+}
+```
+
+
+
+This class contains the data for a node in the data tree.
+
+A data node contains a reference to its parent, a byte array as its data, an array of ACLs, a stat object, and a set of its children's paths.
+
+```java
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+public class DataNode implements Record {
+    // the digest value of this node, calculated from path, data and stat
+    private volatile long digest;
+
+    // indicate if the digest of this node is up to date or not, used to
+    // optimize the performance.
+    volatile boolean digestCached;
+
+    /** the data for this datanode */
+    byte[] data;
+
+    /**
+     * the acl map long for this datanode. the datatree has the map
+     */
+    Long acl;
+
+    /**
+     * the stat for this node that is persisted to disk.
+     */
+    public StatPersisted stat;
+
+    /**
+     * the list of children for this node. note that the list of children string
+     * does not contain the parent path -- just the last part of the path. This
+     * should be synchronized on except deserializing (for speed up issues).
+     */
+    private Set<String> children = null;
+}
+```
+
+### Ephemeral
+
+DataTree里维护了ephemerals的Map
+
+```java
+public class DataTree {
+    /**
+     * This hashtable lists the paths of the ephemeral nodes of a session.
+     */
+    private final Map<Long, HashSet<String>> ephemerals = new ConcurrentHashMap<Long, HashSet<String>>();
+}
+```
 createNode
 
 ```java
@@ -912,6 +1108,7 @@ public void deleteNode(String path, long zxid) throws KeeperException.NoNodeExce
     childWatches.triggerWatch("".equals(parentName) ? "/" : parentName, EventType.NodeChildrenChanged);
 }
 ```
+#### expire
 
 ExpiryQueue tracks elements in time sorted fixed duration buckets.
 It's used by SessionTrackerImpl to expire sessions and NIOServerCnxnFactory to expire connections.
