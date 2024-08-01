@@ -231,7 +231,7 @@ The Pulsar metadata store can be deployed on a separate ZooKeeper cluster or dep
 You can use one ZooKeeper cluster for both Pulsar metadata store and BookKeeper metadata store.
 If you want to deploy Pulsar brokers connected to an existing BookKeeper cluster, you need to deploy separate ZooKeeper clusters for Pulsar metadata store and BookKeeper metadata store respectively.
 
-> Pulsar also supports more metadata backend services, including [etcd](/docs/CS/Distributed/etcd.md) and [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) (for standalone Pulsar only).
+> Pulsar also supports more metadata backend services, including [etcd](/docs/CS/Framework/etcd/etcd.md) and [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) (for standalone Pulsar only).
 
 In a Pulsar instance:
 

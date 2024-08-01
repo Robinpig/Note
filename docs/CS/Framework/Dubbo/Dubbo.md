@@ -79,7 +79,7 @@ Apache Dubbo 概念与架构 13Dubbo 抽象了一套微服务治理模式并发�
 </div>
 
 <p style="text-align: center;">
-Fig.1. Architecture
+Fig.1. Dubbo和Spring Cloud比较
 </p>
 
 虽然两者有很多相似之处，但由于它们在诞生背景与架构设计上的巨大差异，两者 在性能、适用的微服务集群规模、生产稳定性保障、服务治理等方面都有很大差异。

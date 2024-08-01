@@ -8,6 +8,37 @@ etcd is a distributed reliable key-value store for the most critical data of a d
 * *Reliable*: properly distributed using Raft
 
 etcd is written in Go and uses the [Raft](/docs/CS/Distributed/Raft.md) consensus algorithm to manage a highly-available replicated log.
+etcd 通过 Raft 协议进行 leader 选举和数据备份，对外提供高可用的数据存储，能有效应对网络问题和机器故障带来的数据丢失问题。
+同时它还可以提供服务发现、分布式锁、分布式数据队列、分布式通知和协调、集群选举等功能
+
+etcd 是 Kubernetes 的后端唯一存储实现
+
+
+## Architecture
+
+
+etcd 整体架构如下图所示：
+
+
+<div style="text-align: center;">
+
+![Fig.1. Queue](img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Architecture
+</p>
+
+从大体上可以将其划分为以下 4 个模块：
+
+
+
+- http：负责对外提供 http 访问接口和 http client
+- raft 状态机：根据接受的 raft 消息进行状态转移，调用各状态下的动作。
+- wal 日志存储：持久化存储日志条目。
+- kv 数据存储：kv 数据的存储引擎，v3 支持不同的后端存储，当前采用 boltdb。通过 boltdb 支持事务操作。
+
 
 ## Network
 
@@ -432,3 +463,10 @@ type Peer interface {
 ```
 
 ## Links
+
+- [K8s](/docs/CS/Container/K8s.md)
+
+
+## References
+
+1. [深入浅出 etcd 系列 part 1 – 解析 etcd 的架构和代码框架](https://www.infoq.cn/article/KO9B17UcPZAjbd8sdLi9?utm_source=related_read_bottom&utm_medium=article)
