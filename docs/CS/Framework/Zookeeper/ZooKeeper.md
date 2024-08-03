@@ -34,6 +34,12 @@ git clone https://github.com/apache/zookeeper.git
 mvn clean install -DskipTest
 ```
 
+拷贝conf目录下的zoo_smaple.cfg to zoo.cfg
+
+启动类配置参数 zoo.cfg
+
+
+
 ### ZooKeeper guarantees
 
 ZooKeeper has two basic ordering guarantees:
