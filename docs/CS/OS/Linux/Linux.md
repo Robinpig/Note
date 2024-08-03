@@ -8,8 +8,6 @@ All the so-called “Linux” distributions are really distributions of GNU/Linu
 On a purely technical level, the kernel is an intermediary layer between the hardware and the software.
 Its purpose is to pass application requests to the hardware and to act as a low-level driver to address the devices and components of the system.
 
-
-
 常见Linux发行版
 
 - Red Hat Enterprise Linux
@@ -19,17 +17,94 @@ Its purpose is to pass application requests to the hardware and to act as a low-
 - Debian
 - Arch Linux
 
-
 跨平台在其它OS下使用Linux
+
 - Docker
 - 虚拟机
 
 Windows下使用Linux
+
 - [WSL](/docs/CS/OS/Windows/WSL.md)
 
-
-
 ### Kernel
+
+编译Kernel
+
+下载解压缩 kernel
+
+```shell
+export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+
+make allnoconfig
+make menuconfig
+```
+
+kernel配置
+
+```
+General setup  --->   
+  [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support  
+  [*] Configure standard kernel features (expert users)  ---> 
+
+Executable file formats  --->
+  [*] Kernel support for ELF binaries 
+  [*] Kernel support for scripts starting with #! 
+
+Device Drivers  --->  
+  Generic Driver Options  --->
+    [*] Maintain a devtmpfs filesystem to mount at /dev
+    [*]   Automount devtmpfs at /dev, after the kernel mounted the rootfs 
+
+Device Drivers  ---> 
+  Character devices  ---> 
+    Serial drivers  ---> 
+      [*] ARM AMBA PL010 serial port support 
+        [*]   Support for console on AMBA serial port
+      [*] ARM AMBA PL011 serial port support  
+        [*]   Support for console on AMBA serial port   
+
+File systems  --->  
+  [*] Second extended fs support
+  [*] The Extended 4 (ext4) filesystem 
+
+Device Drivers  ---> 
+  [*] Block devices  ---> 
+    [*]   RAM block device support
+```
+
+<!-- tabs:start -->
+
+##### **Ubuntu**
+
+```shell
+
+```
+
+##### **ARM Mac**
+
+```shell
+brew install make
+brew install aarch64-elf-gcc
+brew install openssl@1.1
+
+/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- defconfig
+
+# 去掉CONFIG_KVM选项避免不必要的报错
+# [ ] Virtualization  ----
+/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- menuconfig
+
+
+```
+
+> https://ixx.life/notes/cross-compile-linux-on-macos/
+
+##### **x86 Mac**
+
+```shell
+
+```
+
+<!-- tabs:end -->
 
 Working with the Kernel
 
@@ -166,6 +241,24 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
+
+## 参考书籍
+
+
+| 书名                                    | col2 | col3 |
+| --------------------------------------- | ---- | ---- |
+| Linux Performance and Tuning Guidelines |      |      |
+| Linux内核源码剖析 - TCP/IP实现          |      |      |
+| Linux内核源代码情景分析                 |      |      |
+| Linux内核设计与实现                     |      |      |
+| 深入理解计算机系统                      |      |      |
+| UNIX网络编程                            |      |      |
+| 图解TCP/IP                              |      |      |
+| 网络是怎样连接的                        |      |      |
+|                                         |      |      |
+|                                         |      |      |
+|                                         |      |      |
+|                                         |      |      |
 
 ## References
 
