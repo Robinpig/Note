@@ -1,8 +1,26 @@
 ## Introduction
 
 
+Dubbo 配置加载大概分为两个阶段
+- 第一阶段为 DubboBootstrap 初始化之前，在 Spring context 启动时解析处理 XML 配置/注解配置/Java-config 或者是执行 API 配置代码，创建 config bean 并且加入到 ConfigManager 中。 
+- 第二阶段为 DubboBootstrap 初始化过程，从配置中心读取外部配置，依次处 理实例级属性配置和应用级属性配置，最后刷新所有配置实例的属性，也就是 属性覆盖
 
 
+发生属性覆盖可能有两种情况，并且二者可能是会同时发生的：
+- 不同配置源配置了相同的配置项。
+- 相同配置源，但在不同层次指定了相同的配置项。
+
+属性覆盖处理流程： 按照优先级从高到低依次查找，如果找到此前缀开头的属性，则选定使用这个前缀 提取属性，忽略后面的配置。
+
+
+DubboBootstrap 就是用来启动 Dubbo 服务的。类似 于 Netty 的 Bootstrap 类型和 ServerBootstrap 启动器
+
+
+Dubbo 的 bootstrap 类为啥要用单例模式。 通过调用静态方法 getInstance()获取单例实例。之所以设计为单例，是因为 Dubbo 中的一些类（如 ExtensionLoader）只为每个进程设计一个实例。
+
+
+
+DefaultApplicationDeployer 类型的 startConfigCenter()
 ## Config
 
 Enables Dubbo components as Spring Beans, equals `DubboComponentScan` and `EnableDubboConfig` combination.
