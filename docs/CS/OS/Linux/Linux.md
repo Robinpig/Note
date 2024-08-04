@@ -8,8 +8,6 @@ All the so-called “Linux” distributions are really distributions of GNU/Linu
 On a purely technical level, the kernel is an intermediary layer between the hardware and the software.
 Its purpose is to pass application requests to the hardware and to act as a low-level driver to address the devices and components of the system.
 
-
-
 常见Linux发行版
 
 - Red Hat Enterprise Linux
@@ -19,19 +17,127 @@ Its purpose is to pass application requests to the hardware and to act as a low-
 - Debian
 - Arch Linux
 
-
 跨平台在其它OS下使用Linux
+
 - Docker
 - 虚拟机
 
 Windows下使用Linux
+
 - [WSL](/docs/CS/OS/Windows/WSL.md)
-
-
 
 ### Kernel
 
+编译Kernel
+
+下载解压缩 kernel
+
+```shell
+export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+
+make allnoconfig
+make menuconfig
+```
+
+kernel配置
+
+```
+General setup  --->   
+  [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support  
+  [*] Configure standard kernel features (expert users)  ---> 
+
+Executable file formats  --->
+  [*] Kernel support for ELF binaries 
+  [*] Kernel support for scripts starting with #! 
+
+Device Drivers  --->  
+  Generic Driver Options  --->
+    [*] Maintain a devtmpfs filesystem to mount at /dev
+    [*]   Automount devtmpfs at /dev, after the kernel mounted the rootfs 
+
+Device Drivers  ---> 
+  Character devices  ---> 
+    Serial drivers  ---> 
+      [*] ARM AMBA PL010 serial port support 
+        [*]   Support for console on AMBA serial port
+      [*] ARM AMBA PL011 serial port support  
+        [*]   Support for console on AMBA serial port   
+
+File systems  --->  
+  [*] Second extended fs support
+  [*] The Extended 4 (ext4) filesystem 
+
+Device Drivers  ---> 
+  [*] Block devices  ---> 
+    [*]   RAM block device support
+```
+
+<!-- tabs:start -->
+
+##### **Ubuntu**
+
+```shell
+
+```
+
+##### **ARM Mac**
+
+```shell
+brew install make
+brew install aarch64-elf-gcc
+brew install openssl@1.1
+
+/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- defconfig
+
+# 去掉CONFIG_KVM选项避免不必要的报错
+# [ ] Virtualization  ----
+/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- menuconfig
+
+
+```
+
+> https://ixx.life/notes/cross-compile-linux-on-macos/
+
+##### **x86 Mac**
+
+```shell
+
+```
+
+<!-- tabs:end -->
+
 Working with the Kernel
+```shell
+ wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.10.3.tar.xz
+ 
+ tar Jxf linux-6.10.3.tar.xz
+```
+
+Linux 内核的构建过程会查找 .config 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
+
+获取 Linux 内核的 .config 文件有两种方式：
+
+使用你的 Linux 发行版的配置作为基础（推荐做法）
+使用默认的，通用的配置
+
+
+Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
+
+大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
+一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
+
+```shell
+zcat /proc/config.gz > .config
+```
+
+```shell
+ sudo apt install libelf-dev
+```
+
+
+```shell
+make -j8
+```
 
 ```shell
 cat /proc/version
@@ -166,6 +272,24 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
+
+## 参考书籍
+
+
+| 书名                                    | col2 | col3 |
+| --------------------------------------- | ---- | ---- |
+| Linux Performance and Tuning Guidelines |      |      |
+| Linux内核源码剖析 - TCP/IP实现          |      |      |
+| Linux内核源代码情景分析                 |      |      |
+| Linux内核设计与实现                     |      |      |
+| 深入理解计算机系统                      |      |      |
+| UNIX网络编程                            |      |      |
+| 图解TCP/IP                              |      |      |
+| 网络是怎样连接的                        |      |      |
+|                                         |      |      |
+|                                         |      |      |
+|                                         |      |      |
+|                                         |      |      |
 
 ## References
 

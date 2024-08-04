@@ -1,6 +1,12 @@
 ## Introduction
 
 
+
+
+
+
+ApplicationDeployer
+
 Dubbo 配置加载大概分为两个阶段
 - 第一阶段为 DubboBootstrap 初始化之前，在 Spring context 启动时解析处理 XML 配置/注解配置/Java-config 或者是执行 API 配置代码，创建 config bean 并且加入到 ConfigManager 中。 
 - 第二阶段为 DubboBootstrap 初始化过程，从配置中心读取外部配置，依次处 理实例级属性配置和应用级属性配置，最后刷新所有配置实例的属性，也就是 属性覆盖

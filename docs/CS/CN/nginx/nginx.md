@@ -3,7 +3,43 @@
 [nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by Igor Sysoev.
 
 
-### [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
+### Install NGINX
+
+[Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
+
+
+> 下载路径https://nginx.org/download/
+> 
+```shell
+# download source code && tar
+wget https://nginx.org/download/nginx-1.27.0.tar.gz
+
+./configure --prefix=/usr/local/nginx
+vim objs/Makefile
+# 修改优化选项 -O ==> -O0
+# CFLAGS = -pipe -O0 -W -Wall -Wpointer-arith -Wno-unused-parameter -Werror -g
+
+# 重新编译安装
+make && make install
+```
+
+
+```shell
+gdb /usr/local/nginx/sbin/nginx
+# 设置 gdb 调试子进程模式。
+set follow-fork-mode child
+set detach-on-fork off
+# 设置断点
+b ngx_event_accept
+# 运行
+r
+```
+telnet
+```shell
+telnet 127.0.0.1 80
+
+```
+
 
 
 ## Architecture

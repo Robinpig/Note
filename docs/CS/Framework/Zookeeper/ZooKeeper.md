@@ -34,6 +34,15 @@ git clone https://github.com/apache/zookeeper.git
 mvn clean install -DskipTest
 ```
 
+拷贝conf目录下的zoo_smaple.cfg to zoo.cfg
+
+拷贝conf目录下logback.xml到resources下
+
+
+启动类配置参数 zoo.cfg
+
+直接启动类找不到的话 对provide的依赖 注释provide
+
 ### ZooKeeper guarantees
 
 ZooKeeper has two basic ordering guarantees:
@@ -812,6 +821,12 @@ public class ClientCnxn {
 wakeupCnxn
 
 ## Server
+
+
+
+zoo.cfg加载为Properties对象 设置到QuorumPeerConfig中 提供给QuorumPeer使用
+
+
 
 
 ```java

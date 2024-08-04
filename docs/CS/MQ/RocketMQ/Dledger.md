@@ -30,6 +30,53 @@ build
 mvn clean install -DskipTests
 ```
 
+选举核心类
+
+- DLedgerConfig
+- MemberState 节点状态机
+- DLedgerClientProtocol 客户端通信协议
+
+
+
+```java
+package io.openmessaging.storage.dledger.protocol;
+
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Both the RaftLogServer(inbound) and RaftRpcService (outbound) should implement this protocol
+ */
+public interface DLedgerClientProtocol {
+
+    CompletableFuture<GetEntriesResponse> get(GetEntriesRequest request) throws Exception;
+
+    CompletableFuture<AppendEntryResponse> append(AppendEntryRequest request) throws Exception;
+
+    CompletableFuture<MetadataResponse> metadata(MetadataRequest request) throws Exception;
+
+    CompletableFuture<LeadershipTransferResponse> leadershipTransfer(LeadershipTransferRequest request) throws Exception;
+}
+```
+
+- DLedgerProtocol 服务端通信协议
+
+```Java
+/**
+ * Both the RaftLogServer(inbound) and RaftRpcService (outbound) should implement this protocol
+ */
+public interface DLedgerProtocol extends DLedgerClientProtocol {
+
+    CompletableFuture<VoteResponse> vote(VoteRequest request) throws Exception;
+
+    CompletableFuture<HeartBeatResponse> heartBeat(HeartBeatRequest request) throws Exception;
+
+    CompletableFuture<PullEntriesResponse> pull(PullEntriesRequest request) throws Exception;
+
+    CompletableFuture<PushEntryResponse> push(PushEntryRequest request) throws Exception;
+
+}
+```
+
 ## RocketMQ
 
 Dledger 虽然只需要写 CommitLog，但是基于 CommitLog 是可以做很多事情的。

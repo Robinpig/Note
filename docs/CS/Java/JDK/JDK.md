@@ -16,6 +16,11 @@ In one book I read that it was “completely wrong to say that Java supports pas
 And everything is actually pass by value. <br>
 **So you’re not passing by reference, you’re “passing an object reference by value.”**
 
+
+JDK版本
+
+[毕昇JDK](https://www.openeuler.org/zh/other/projects/bishengjdk/)
+
 ## Basics
 
 [Basics of Java](/docs/CS/Java/JDK/Basic/Basic.md)
