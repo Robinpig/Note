@@ -3,6 +3,12 @@
 
 
 
+
+
+ApplicationDeployer
+
+
+
 ## Config
 
 Enables Dubbo components as Spring Beans, equals `DubboComponentScan` and `EnableDubboConfig` combination.
