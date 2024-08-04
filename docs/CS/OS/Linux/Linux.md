@@ -107,6 +107,37 @@ brew install openssl@1.1
 <!-- tabs:end -->
 
 Working with the Kernel
+```shell
+ wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.10.3.tar.xz
+ 
+ tar Jxf linux-6.10.3.tar.xz
+```
+
+Linux 内核的构建过程会查找 .config 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
+
+获取 Linux 内核的 .config 文件有两种方式：
+
+使用你的 Linux 发行版的配置作为基础（推荐做法）
+使用默认的，通用的配置
+
+
+Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
+
+大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
+一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
+
+```shell
+zcat /proc/config.gz > .config
+```
+
+```shell
+ sudo apt install libelf-dev
+```
+
+
+```shell
+make -j8
+```
 
 ```shell
 cat /proc/version
