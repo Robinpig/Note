@@ -33,13 +33,52 @@ Windows下使用Linux
 下载解压缩 kernel
 
 ```shell
+ wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.10.3.tar.xz
+ 
+ tar Jxf linux-6.10.3.tar.xz
+```
+
+
+
+Linux 内核的构建过程会查找 .config 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
+获取 Linux 内核的 .config 文件有两种方式：
+
+- 使用你的 Linux 发行版的配置作为基础（推荐做法）
+- 使用默认的，通用的配置
+
+
+Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
+
+- 大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
+- 一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
+
+
+```shell
 export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 
 make allnoconfig
 make menuconfig
 ```
 
-kernel配置
+
+
+
+过程中遇到问题需要关闭功能 例如CONFIG_DEBUG_INFO_BIF=N时需要重新设置.config
+- 运行脚本关闭: scripts/config --disable CONFIG_DEBUG_INFO_BIF
+- 在menuconfig上设置
+
+menuconfig是Linux平台用于管理代码工程、模块及功能的实用工具
+menuconfig 其实只能算是一个“前端”，用于支撑它、决定它拥有什么配置项的“后端”则被称为 Kconfig
+
+Kconfig参考文档位于 ./Document/kbuild/kconfig-language.rst
+
+Kconfig常用的几个知识点有以下五个：
+
+1. config模块
+2. menuconfig模块
+3. menu模块
+4. choice模块
+5. if 与 depends on 模块
 
 ```
 General setup  --->   
@@ -77,6 +116,10 @@ Device Drivers  --->
 ##### **Ubuntu**
 
 ```shell
+sudo apt install libelf-dev
+
+
+zcat /proc/config.gz > .config
 
 ```
 
@@ -106,33 +149,8 @@ brew install openssl@1.1
 
 <!-- tabs:end -->
 
-Working with the Kernel
-```shell
- wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.10.3.tar.xz
- 
- tar Jxf linux-6.10.3.tar.xz
-```
-
-Linux 内核的构建过程会查找 .config 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
-
-获取 Linux 内核的 .config 文件有两种方式：
-
-使用你的 Linux 发行版的配置作为基础（推荐做法）
-使用默认的，通用的配置
 
 
-Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
-
-大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
-一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
-
-```shell
-zcat /proc/config.gz > .config
-```
-
-```shell
- sudo apt install libelf-dev
-```
 
 
 ```shell
