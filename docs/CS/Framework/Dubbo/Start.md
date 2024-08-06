@@ -27,6 +27,49 @@ Dubbo 的 bootstrap 类为啥要用单例模式。 通过调用静态方法 getI
 
 
 DefaultApplicationDeployer 类型的 startConfigCenter()
+
+
+通过 ls / 查看根目录，我们发现 Dubbo 注册了两个目录，/dubbo 和 /services 目录：
+Dubbo 3.x 推崇的一个应用级注册新特性，在不改变任何 Dubbo 配置的情况下，可以兼 容一个应用从 2.x 版本平滑升级到 3.x 版本，这个新特性主要是为了将来能支持十万甚至百万 的集群实例地址发现，并且可以与不同的微服务体系实现地址发现互联互通
+增加了对services目录下的应用级注册功能
+
+你可以通过在提供方设置 dubbo.application.register-mode 属性来自由控制
+
+- interface：只接口级注册。 
+- instance：只应用级注册。 
+- all：接口级注册、应用级注册都会存在，同时也是默认值。
+
+Consumer
+
+可以考虑在消费方的 Dubbo XML 配置文件中，为 DemoFacade 服务添加 check="false" 的属性，来达到启动不检查服务的目的，
+
+
+dubbo目录下各服务注册里有consumer
+所以通过一个 interface，我们就能从注 册中心查看有哪些提供方应用节点、哪些消费方应用节点。
+
+在消费方侧也存在如何抉择的问题，到 底是订阅接口级注册信息，还是订阅应用级注册信息呢
+
+其实 Dubbo 也为我们提供了过渡的兼容方案，你可以通过在消费方设置 dubbo.application.service-discovery.migration 属性来兼容新老订阅方案
+
+FORCE_INTERFACE：只订阅消费接口级信息。 APPLICATION_FIRST：注册中心有应用级注册信息则订阅应用级信息，否则订阅接口级信 息，起到了智能决策来兼容过渡方案。 FORCE_APPLICATION：只订阅应用级信息
+
+不过总有调用不顺畅的时候，尤其是在提供方服务有点耗时的情况下，你可能会遇到这样的异 常信息
+
+源码中默认的超时时间，可以从这段代码中查看，是 1000ms：
+
+除了网络抖动影响调用，更多时候可能因为有些服务器故障了，比如消费方调着调着，提供方 突然就挂了，消费方如果换台提供方，继续重试调用一下也许就正常了，所以你可以继续设置failover容错策略
+常用容错策略有
+
+
+
+
+容错设置帮我们尽可能保障服务稳定调用，但调用也有流量高低之分，流量低的时候可能你发 现不了什么特殊情况，一旦流量比较高，你可能会发现提供方总是有那么几台服务器流量特别 高，另外几个服务器流量特别低。 这是因为 Dubbo 默认使用的是 loadbalance="random" 随机类型的负载均衡策略，为了尽 可能雨露均沾调用到提供方各个节点，你可以继续设置 loadbalance="roundrobin" 来进 行轮询调用
+
+
+Dubbo 线程池总数默认是固定的，200 个，
+
+采用上下文对象来存储，那异步化的结果也就毋庸置疑存储在上下文对象中。
+
 ## Config
 
 Enables Dubbo components as Spring Beans, equals `DubboComponentScan` and `EnableDubboConfig` combination.
