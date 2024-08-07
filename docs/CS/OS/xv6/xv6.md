@@ -80,10 +80,112 @@ $U/_helloworld\
 ```
 
 编译运行 Xv6 
- 
-在 Xv6 中 ls，可以看到我们的 helloworld 程序 
- 
 
+在 Xv6 中 ls，可以看到我们的 helloworld 程序 
+
+
+
+```c
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "user/user.h"
+
+int main() {
+	int pid = fork();
+	if(pid > 0) {
+		printf("parent: child=%d\n", pid);
+		pid = wait((int *) 0);
+		printf("child %d is done\n", pid);
+	} else if (pid == 0) {
+		printf("child: exiting\n");
+		exit(0);
+	} else {
+		printf("fork error\n");
+	}
+
+	exit(0);
+}
+```
+
+在 Xv6 里提供的 printf 线程不安全，运行程序打印出的字符可能随机混合在一起 
+
+
+
+在UNIX下 printf是线程安全的 
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main() {
+	int pid = fork();
+	if(pid > 0) {
+		printf("parent: child=%d\n", pid);
+		pid = wait((int *) 0);
+		printf("child %d is done\n", pid);
+	} else if (pid == 0) {
+		printf("child: exiting\n");
+		// sleep(2);
+		exit(0);
+	} else {
+		printf("fork error\n");
+	}
+
+	return 0;
+}
+```
+
+
+
+Xv6 系统下的 `useexec.c`：
+
+注意 include 库与真实世界中的不同
+
+
+
+
+
+```c
+#include "kernel/types.h"
+#include "kernel/stat.h"
+#include "user/user.h"
+
+int main() {
+	char *argv[3];
+
+	argv[0] = "echo";
+	argv[1] = "hello";
+	argv[2] = 0;
+
+	exec("echo", argv);
+	// exec 成功了会替换程序，下面的就执行不到了:
+	printf("exec error\n");
+
+	exit(0);
+}
+```
+
+
+macOS 下的 `useexec.c`:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+int main() {
+	char *argv[3];
+
+	argv[0] = "echo";
+	argv[1] = "hello";
+	argv[2] = 0;
+
+	execv("/bin/echo", argv);
+	// execv("/bin/echooooo", argv);  // an error one
+	printf("exec error\n");
+}
+```
 
 
 
