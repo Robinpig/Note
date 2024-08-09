@@ -5,7 +5,97 @@
 
 
 
+
+如果按完整服务启动与订阅的顺序我们可以归结为以下6点:
+
+- 导出服务(提供者)
+  - 服务提供方通过指定端口对外暴露服务
+- 注册服务(提供者)
+  - 提供方向注册中心注册自己的信息
+- (服务发现)-订阅服务(消费者)
+  - 服务调用方通过注册中心订阅自己感兴趣的服务
+- (服务发现)-服务推送(消费者)
+  - 注册中心向调用方推送地址列表
+- 调用服务(消费者调用提供者)
+  - 调用方选择一个地址发起RPC调用
+- 监控服务
+  - 服务提供方和调用方的统计数据由监控模块收集展示
+
+上面的完整的服务启动订阅与调用流程不仅仅适用于Dubbo 同样也适用于其他服务治理与发现的模型, 一般服务发现与服务调用的思路就是这样的,我们将以上内容扩展,暴漏服务可以使用http,tcp,udp等各种协议,注册服务可以注册到Redis,Dns,Etcd,Zookeeper等注册中心中,订阅服务可以主动去注册中心查询服务列表,服务发现可以让注册中心将服务数据动态推送给消费者.Dubbo其实就是基于这种简单的服务模型来扩展出各种功能的支持,来满足服务治理的各种场景,了解了这里可能各位同学就想着自行开发一个简单的微服务框架了。
+
+所有的功能都是由导出服务(提供者)开始的,只有提供者先提供了服务才可以有真正的服务让消费者调用
+
+来看一个Provider的启动:
+
+```java
+public class Application {
+
+    private static final String REGISTRY_URL = "zookeeper://127.0.0.1:2181";
+
+    public static void main(String[] args) {
+        startWithBootstrap();
+    }
+
+    private static void startWithBootstrap() {
+        ServiceConfig<DemoServiceImpl> service = new ServiceConfig<>();
+        service.setInterface(DemoService.class);
+        service.setRef(new DemoServiceImpl());
+
+        DubboBootstrap bootstrap = DubboBootstrap.getInstance();
+        bootstrap
+                .application(new ApplicationConfig("dubbo-demo-api-provider"))
+                .registry(new RegistryConfig(REGISTRY_URL))
+                .protocol(new ProtocolConfig(CommonConstants.DUBBO, -1))
+                .service(service)
+                .start()
+                .await();
+    }
+}
+```
+
+首先是DubboBootstrap的初始化配置
+
+
+
+
+
+Dubbo启动器借助Deployer发布器来启动和发布服务,发布器的启动过程包含了启动配置中心,加载配置,启动元数据中心,启动服务等操作都是比较重要又比较复杂的过程
+
+来看DubboBootstrap的start()方法:
+
+```java
+ public DubboBootstrap start() {
+        //调用重载的方法进行启动参数代表是否等待启动结束
+        this.start(true);
+        return this;
+    }
+```
+
+
+
+```java
+ublic DubboBootstrap start(boolean wait) {
+    Future future = applicationDeployer.start();
+    if (wait) {
+        try {
+            future.get();
+        } catch (Exception e) {
+            throw new IllegalStateException("await dubbo application start finish failure", e);
+        }
+    }
+    return this;
+}
+```
+
+
+
 ApplicationDeployer
+
+
+
+
+
+
 
 Dubbo 配置加载大概分为两个阶段
 - 第一阶段为 DubboBootstrap 初始化之前，在 Spring context 启动时解析处理 XML 配置/注解配置/Java-config 或者是执行 API 配置代码，创建 config bean 并且加入到 ConfigManager 中。 
