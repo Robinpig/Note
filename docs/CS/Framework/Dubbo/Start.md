@@ -4,7 +4,7 @@
 
 
 
-
+## start
 
 如果按完整服务启动与订阅的顺序我们可以归结为以下6点:
 
@@ -22,6 +22,8 @@
   - 服务提供方和调用方的统计数据由监控模块收集展示
 
 上面的完整的服务启动订阅与调用流程不仅仅适用于Dubbo 同样也适用于其他服务治理与发现的模型, 一般服务发现与服务调用的思路就是这样的,我们将以上内容扩展,暴漏服务可以使用http,tcp,udp等各种协议,注册服务可以注册到Redis,Dns,Etcd,Zookeeper等注册中心中,订阅服务可以主动去注册中心查询服务列表,服务发现可以让注册中心将服务数据动态推送给消费者.Dubbo其实就是基于这种简单的服务模型来扩展出各种功能的支持,来满足服务治理的各种场景,了解了这里可能各位同学就想着自行开发一个简单的微服务框架了。
+
+
 
 所有的功能都是由导出服务(提供者)开始的,只有提供者先提供了服务才可以有真正的服务让消费者调用
 
@@ -53,28 +55,89 @@ public class Application {
 }
 ```
 
+
+
+### DubboBootstrap
+
 首先是DubboBootstrap的初始化配置
 
-
-
-
-
-Dubbo启动器借助Deployer发布器来启动和发布服务,发布器的启动过程包含了启动配置中心,加载配置,启动元数据中心,启动服务等操作都是比较重要又比较复杂的过程
-
-来看DubboBootstrap的start()方法:
+nstanceMap设计为Map类型 Key,意味着可以为多个应用程序模型创建不同的启动器,启动多个服务
 
 ```java
- public DubboBootstrap start() {
-        //调用重载的方法进行启动参数代表是否等待启动结束
-        this.start(true);
-        return this;
-    }
+public static DubboBootstrap getInstance(ApplicationModel applicationModel) {
+    return ConcurrentHashMapUtils.computeIfAbsent(
+            instanceMap, applicationModel, _k -> new DubboBootstrap(applicationModel));
+}
 ```
 
 
 
+
+
 ```java
-ublic DubboBootstrap start(boolean wait) {
+private DubboBootstrap(ApplicationModel applicationModel) {
+    this.applicationModel = applicationModel;
+    configManager = applicationModel.getApplicationConfigManager();
+    environment = applicationModel.modelEnvironment();
+
+    executorRepository = ExecutorRepository.getInstance(applicationModel);
+    applicationDeployer = applicationModel.getDeployer();
+    // listen deploy events
+    applicationDeployer.addDeployListener(new DeployListenerAdapter<ApplicationModel>() {
+        @Override
+        public void onStarted(ApplicationModel scopeModel) {
+            notifyStarted(applicationModel);
+        }
+
+        @Override
+        public void onStopped(ApplicationModel scopeModel) {
+            notifyStopped(applicationModel);
+        }
+
+        @Override
+        public void onFailure(ApplicationModel scopeModel, Throwable cause) {
+            notifyStopped(applicationModel);
+        }
+    });
+    // register DubboBootstrap bean
+    applicationModel.getBeanFactory().registerBean(this);
+}
+```
+
+
+
+DubboBootstrap的application方法设置一个应用程序配置ApplicationConfig对象
+
+```java
+ public DubboBootstrap application(ApplicationConfig applicationConfig) {
+        //将启动器构造器中初始化的默认应用程序模型对象传递给配置对象
+        applicationConfig.setScopeModel(applicationModel);
+        //将配置信息添加到配置管理器中
+        configManager.setApplication(applicationConfig);
+        return this;
+    }
+```
+
+ConfigManager配置管理器
+
+
+
+
+
+
+
+来看DubboBootstrap的start()方法:
+
+Dubbo启动器借助Deployer发布器来启动和发布服务,发布器的启动过程包含了启动配置中心,加载配置,启动元数据中心,启动服务等操作都是比较重要又比较复杂的过程
+
+```java
+public DubboBootstrap start() {
+        //调用重载的方法进行启动参数代表是否等待启动结束
+        this.start(true);
+        return this;
+    }
+
+public DubboBootstrap start(boolean wait) {
     Future future = applicationDeployer.start();
     if (wait) {
         try {
@@ -89,11 +152,99 @@ ublic DubboBootstrap start(boolean wait) {
 
 
 
-ApplicationDeployer
+发布器包含
+
+- 应用发布器ApplicationDeployer用于初始化并启动应用程序实例
+- 模块发布器ModuleDeployer 模块（服务）的导出/引用服务
+
+两种发布器有各自的接口，他们都继承了抽象的发布器AbstractDeployer 封装了一些公共的操作比如状态切换，状态查询的逻辑
+
+### ApplicationDeployer::start
 
 
 
 
+
+```java
+public Future start() {
+    synchronized (startLock) {
+        if (isStopping() || isStopped() || isFailed()) {
+            throw new IllegalStateException(getIdentifier() + " is stopping or stopped, can not start again");
+        }
+
+        try {
+            // maybe call start again after add new module, check if any new module
+            boolean hasPendingModule = hasPendingModule();
+
+            if (isStarting()) {
+                // currently, is starting, maybe both start by module and application
+                // if it has new modules, start them
+                if (hasPendingModule) {
+                    startModules();
+                }
+                // if it is starting, reuse previous startFuture
+                return startFuture;
+            }
+
+            // if is started and no new module, just return
+            if (isStarted() && !hasPendingModule) {
+                return CompletableFuture.completedFuture(false);
+            }
+
+            // pending -> starting : first start app
+            // started -> starting : re-start app
+            onStarting();
+
+            initialize();
+
+            doStart();
+        } catch (Throwable e) {
+            onFailed(getIdentifier() + " start failure", e);
+            throw e;
+        }
+
+        return startFuture;
+    }
+}
+```
+
+### initialize
+
+
+
+```java
+@Override
+public void initialize() {
+    if (initialized) {
+        return;
+    }
+    // Ensure that the initialization is completed when concurrent calls
+    synchronized (startLock) {
+        if (initialized) {
+            return;
+        }
+        onInitialize();
+
+        // register shutdown hook
+        registerShutdownHook();
+
+        startConfigCenter();
+
+        loadApplicationConfigs();
+
+        initModuleDeployers();
+
+        initMetricsReporter();
+
+        initMetricsService();
+
+        // @since 2.7.8
+        startMetadataCenter();
+
+        initialized = true;
+    }
+}
+```
 
 
 
@@ -117,6 +268,129 @@ Dubbo 的 bootstrap 类为啥要用单例模式。 通过调用静态方法 getI
 
 
 DefaultApplicationDeployer 类型的 startConfigCenter()
+
+
+
+### doStart
+
+发布服务 先启动内部服务，再启动外部服务
+
+```java
+private void doStart() {
+    startModules();
+}
+
+private void startModules() {
+    // ensure init and start internal module first
+    prepareInternalModule();
+
+    // filter and start pending modules, ignore new module during starting, throw exception of module start
+    for (ModuleModel moduleModel : applicationModel.getModuleModels()) {
+        if (moduleModel.getDeployer().isPending()) {
+        moduleModel.getDeployer().start();
+        }
+    }
+}
+```
+
+
+
+
+
+```java
+@Override
+public Future start() throws IllegalStateException {
+    // initialize，maybe deadlock applicationDeployer lock & moduleDeployer lock
+    applicationDeployer.initialize();
+
+    return startSync();
+}
+```
+
+
+
+```java
+private synchronized Future startSync() throws IllegalStateException {
+    if (isStopping() || isStopped() || isFailed()) {
+        throw new IllegalStateException(getIdentifier() + " is stopping or stopped, can not start again");
+    }
+
+    try {
+        if (isStarting() || isStarted()) {
+            return startFuture;
+        }
+
+        onModuleStarting();
+
+        initialize();
+
+        // export services
+        exportServices();
+
+        // prepare application instance
+        // exclude internal module to avoid wait itself
+        if (moduleModel != moduleModel.getApplicationModel().getInternalModule()) {
+            applicationDeployer.prepareInternalModule();
+        }
+
+        // refer services
+        referServices();
+
+        // if no async export/refer services, just set started
+        if (asyncExportingFutures.isEmpty() && asyncReferringFutures.isEmpty()) {
+            // publish module started event
+            onModuleStarted();
+
+            // register services to registry
+            registerServices();
+
+            // check reference config
+            checkReferences();
+
+            // complete module start future after application state changed
+            completeStartFuture(true);
+        } else {
+            frameworkExecutorRepository.getSharedExecutor().submit(() -> {
+                try {
+                    // wait for export finish
+                    waitExportFinish();
+                    // wait for refer finish
+                    waitReferFinish();
+
+                    // publish module started event
+                    onModuleStarted();
+
+                    // register services to registry
+                    registerServices();
+
+                    // check reference config
+                    checkReferences();
+                } catch (Throwable e) {
+                    logger.warn(
+                            CONFIG_FAILED_WAIT_EXPORT_REFER,
+                            "",
+                            "",
+                            "wait for export/refer services occurred an exception",
+                            e);
+                    onModuleFailed(getIdentifier() + " start failed: " + e, e);
+                } finally {
+                    // complete module start future after application state changed
+                    completeStartFuture(true);
+                }
+            });
+        }
+
+    } catch (Throwable e) {
+        onModuleFailed(getIdentifier() + " start failed: " + e, e);
+        throw e;
+    }
+
+    return startFuture;
+}
+```
+
+
+
 ## Config
 
 Enables Dubbo components as Spring Beans, equals `DubboComponentScan` and `EnableDubboConfig` combination.
