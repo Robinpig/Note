@@ -70,6 +70,22 @@ Dubbo 线程池总数默认是固定的，200 个，
 
 采用上下文对象来存储，那异步化的结果也就毋庸置疑存储在上下文对象中。
 
+Dubbo 异步实现原理
+
+首先，还是定义线程池对象，在 Dubbo 中 RpcContext.startAsync 方法意味着异步模式的开 启：
+
+最终是通过 CAS 原子性的方式创建了一个 java.util.concurrent.CompletableFuture 对象，这个对象就存储在当前的上下文 org.apache.dubbo.rpc.RpcContextAttachment 对象中。
+
+asyncContext 富含上下文信息，只需要把这个所谓的 asyncContext 对象传入到子线程 中，然后将 asyncContext 中的上下文信息充分拷贝到子线程中，这样，子线程处理所需要的 任何信息就不会因为开启了异步化处理而缺失
+
+Dubbo 用 asyncContext.write 写入异步结果，通过 write 方法的查看，最终我们的异步化结果 是存入了 java.util.concurrent.CompletableFuture 对象中，这样拦截处只需要调用 java.util.concurrent.CompletableFuture#get(long timeout, TimeUnit unit) 方法就可以很轻松地 拿到异步化结果了。
+
+
+日志追踪 使用FIlter
+隐式传递trace id 到rpc context中
+
+
+
 ## Config
 
 Enables Dubbo components as Spring Beans, equals `DubboComponentScan` and `EnableDubboConfig` combination.
