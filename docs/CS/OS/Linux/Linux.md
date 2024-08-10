@@ -115,6 +115,10 @@ Device Drivers  --->
 
 ##### **Ubuntu**
 
+> 异常: gelf.h: No such file or directory
+> 
+> sudo apt install libelf-dev
+
 ```shell
 sudo apt install libelf-dev
 
