@@ -257,9 +257,28 @@ Following Dijkstra *et al*, a garbage-collected program is divided into two semi
   As a result of such reference updates, any object can end up disconnected from the roots, that is, unreachable by following any sequence of edges from the roots.
 - The collector executes garbage collection code, which discovers unreachable objects and reclaims their storage.
 
-A program may have more than one mutator thread, but the threads together can usually
-be thought of as a single actor over the heap. Equally, there may be one or more collector
-threads.
+A program may have more than one mutator thread, but the threads together can usually be thought of as a single actor over the heap. 
+Equally, there may be one or more collector threads.
+
+### Comparing garbage collectors
+
+- Throughput
+- Pause time
+- Space
+- Implementation
+- Adaptive systems
+
+From [JVM](https://book.douban.com/subject/34907497/):
+
+![Our Collectors](../img/our-collectors.png)
+
+And
+
+![GC Collector](../img/GC-collector.png)
+
+
+
+
 
 - [CMS](/docs/CS/Java/JDK/JVM/CMS.md)(removed since JDK14)
 - [G1](/docs/CS/Java/JDK/JVM/G1.md)
@@ -283,22 +302,6 @@ old_collector
 - Z;
 - Shenandoah;
 - SerialOld;
-
-### Comparing garbage collectors
-
-- Throughput
-- Pause time
-- Space
-- Implementation
-- Adaptive systems
-
-From [JVM](https://book.douban.com/subject/34907497/):
-
-![Our Collectors](../img/our-collectors.png)
-
-And
-
-![GC Collector](../img/GC-collector.png)
 
 [JEP 173: Retire Some Rarely-Used GC Combinations](https://openjdk.java.net/jeps/173)
 
