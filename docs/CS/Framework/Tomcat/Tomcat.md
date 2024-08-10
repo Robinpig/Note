@@ -8,7 +8,6 @@ The mapping between the specifications and the respective [Apache Tomcat Version
 
 ### Debug Tomcat
 
-
 ```shell
 git clone git@github.com:apache/tomcat.git
 
@@ -17,6 +16,7 @@ git switch -c origin/10.1.x
 # edit build.properties
 base.path={project.absolute.path}/tomcat-build-libs
 
+# Tomcat需要使用ant编译
 ant ide-intellij
 ```
 
