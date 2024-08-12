@@ -255,6 +255,8 @@ public interface MetadataReportFactory {
 ```dot
 digraph "MetadataReportFactory" {
 
+rankdir = BT
+
 splines  = ortho;
 fontname = "Inconsolata";
 
