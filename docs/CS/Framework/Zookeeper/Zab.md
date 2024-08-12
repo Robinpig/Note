@@ -10,6 +10,33 @@ Zab is very similar to [Paxos](/docs/CS/Distributed/Paxos.md), with one crucial 
 This difference allows Zab to preserve primary order, which may be violated by Paxos.
 
 
+
+```java
+    public enum ServerState {
+        LOOKING,
+        FOLLOWING,
+        LEADING,
+        OBSERVING
+    }
+```
+
+每台服务器在进行FastLeaderElection对象创建时，都会启动一个QuorumCnxManager,负责各台服务器之间的底层Leader选举过程中的网络通信，
+这个类中维护了一系列的队列，用于保存接收到的/待发送的消息，对于发送队列，会对每台其他服务器分别创建一个发送队列，互不干扰。
+
+
+
+QuorumCnxManager会为每个远程服务器创建一个SendWorker线程和RecvWorker线程
+
+- 消息发送过程：
+  每个SendWorker不断的从对应的消息发送队列中获取一个消息来发送，并将这个消息放入lastMessageSent中，如果队列为空，则从lastMessageSent取出最后一个消息重新发送，可解决接方没有正确接收或处理消息的问题
+- 消息接收过程：
+  每个RecvWorker不断的从这个TCP连接中读取消息，并将其保存到recvQueue队列中
+
+
+
+在两两创建连接时，有个规则：只允许SID大的服务器主动和其他服务器建立连接，否则断开连接。在receiveConnection方法中，服务器会接受远程SID比自己大的连接。从而避免了两台服务器之间的重复连接
+
+
 There are three states this server can be in:
 Leader election - each server will elect a leader (proposing itself as a leader initially).
 Follower - the server will synchronize with the leader and replicate any transactions.
