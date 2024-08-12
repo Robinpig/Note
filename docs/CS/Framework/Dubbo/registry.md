@@ -1,6 +1,17 @@
 ## Introduction
 
+Dubbo 将注册中心抽象为以`Registry`为核心的注册中心组件，将这些组件引入到`Consumer`和`Provider`后，就可以执行注册中心的相关操作了，如注册服务、订阅服务变更事件和通知服务变更等
 
+
+
+Dubbo 中注册中心模块的核心组件包含`Registry`、`RegistryFactory`、`Directory`和`NotifyListener`组件。
+
+- `Registry`：是对注册中心的抽象，一个`Registry`就代表一个注册中心。
+- `RegistryFactory`：注册中心工厂，用于在初始化时创建`Registry`。
+- `Directory`：服务目录，用于刷新和保存可用于远程调用的`Invoker`，严格来说，服务目录是一个公用组件，它既可以划分到注册中心，也可以划分到下文中服务容错的模块里，因为这两个功能模块里都用到了`Directory`(服务目录)。
+- `NotifyListener`：定义了通知(`notify()`)接口，此接口的实现类用于接收服务变更的通知。
+
+`RegistryDirectory`同时实现了`Directory`和`NotifyListener`，它既实现了刷新和保存可用于远程调用的`Invoker`的功能，也实现了接收服务变更通知的功能。
 
 ### Registry Hierarchy
 
@@ -1730,26 +1741,17 @@ private void doNotify(Collection<String> keys, URL url, Collection<NotifyListene
 
 ## NotifyListener
 
-```java
-/**
- * NotifyListener. (API, Prototype, ThreadSafe)
- *
- * @see org.apache.dubbo.registry.RegistryService#subscribe(URL, NotifyListener)
- */
-public interface NotifyListener {
+Triggered when a service change notification is received.
+Notify needs to support the contract: 
 
-    /**
-     * Triggered when a service change notification is received.
-     * <p>
-     * Notify needs to support the contract: <br>
-     * 1. Always notifications on the service interface and the dimension of the data type. that is, won't notify part of the same type data belonging to one service. Users do not need to compare the results of the previous notification.<br>
-     * 2. The first notification at a subscription must be a full notification of all types of data of a service.<br>
-     * 3. At the time of change, different types of data are allowed to be notified separately, e.g.: providers, consumers, routers, overrides. It allows only one of these types to be notified, but the data of this type must be full, not incremental.<br>
-     * 4. If a data type is empty, need to notify a empty protocol with category parameter identification of url data.<br>
-     * 5. The order of notifications to be guaranteed by the notifications(That is, the implementation of the registry). Such as: single thread push, queue serialization, and version comparison.<br>
-     *
-     * @param urls The list of registered information , is always not empty. The meaning is the same as the return value of {@link org.apache.dubbo.registry.RegistryService#lookup(URL)}.
-     */
+1. Always notifications on the service interface and the dimension of the data type. that is, won't notify part of the same type data belonging to one service. Users do not need to compare the results of the previous notification. 
+2. The first notification at a subscription must be a full notification of all types of data of a service.
+3. At the time of change, different types of data are allowed to be notified separately, e.g.: providers, consumers, routers, overrides. It allows only one of these types to be notified, but the data of this type must be full, not incremental.
+4. If a data type is empty, need to notify a empty protocol with category parameter identification of url data.
+5. The order of notifications to be guaranteed by the notifications(That is, the implementation of the registry). Such as: single thread push, queue serialization, and version comparison.
+
+```java
+public interface NotifyListener {
     void notify(List<URL> urls);
 
     default void addServiceListener(ServiceInstancesChangedListener instanceListener) {

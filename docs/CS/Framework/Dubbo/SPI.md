@@ -30,21 +30,21 @@ When user configure to use mina, dubbo will complain the extension cannot be loa
 
 ![Dubbo-SPI](img/Dubbo-SPI.png)
 
+### Example
+
+对接口添加@SPI注解
+
 ```java
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE})
 public @interface SPI {
-
     /**
      * default extension name
      */
     String value() default "";
-
 }
 ```
-
-### Example
 
 `SPI` marker for extension interface
 
@@ -129,6 +129,8 @@ public class ExtensionLoader<T> {
 
 ### getExtensionLoader
 
+获取ExtensionLoader
+
 ```java
 @SuppressWarnings("unchecked")
 public static <T> ExtensionLoader<T> getExtensionLoader(Class<T> type) {
@@ -148,6 +150,17 @@ private ExtensionLoader(Class<?> type) {
                 (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
     }
 ```
+获取Extension
+
+Dubbo SPI 第一次获取扩展点在流程上可以分为以下五步：
+
+1. 解析扩展点配置文件；
+2. 加载扩展点实现类；
+3. 实例化扩展点；
+4. 依赖注入；
+5. 如果是包装类，则特殊处理并返回包装类。
+
+以下是一些获取拓展点的函数
 
 1. getExtension
 2. getAdaptiveExtension
@@ -231,6 +244,15 @@ private Class<?> createAdaptiveExtensionClass() {
 
 #### injectExtension
 
+Dubbo SPI 扩展点的依赖注入有两个关键点：
+
+1. 成员变量`ExtensionFactory objectFactory`；
+2. 依赖注入逻辑`injectExtension(T instance)`。
+
+
+
+ExtensionFactory`是扩展点工厂，用于获取扩展点。所有的依赖注入之前都要通过 objectFactory 获取依赖的扩展点。
+
 objectFactory set by ExtensionLoader's constructor
 
 ```java
@@ -242,13 +264,15 @@ public interface ExtensionFactory {
 }
 ```
 
-Implementations:
+`ExtensionFactory`只有一个 getExtension 方法，用于获取扩展点。三个实现类分别是`SpiExtensionFactory`、`SpringExtensionFactory`和`AdaptiveExtensionFactory`。
 
-1. AdaptiveExtensionFactory
-2. SpiExtensionFactory
-3. SpringExtensionFactory
+- `SpiExtensionFactory`：通过 Dubbo SPI 获取扩展点。
+- `SpringExtensionFactory`：通过 Spring 获取扩展点。
+- `AdaptiveExtensionFactory`：相当于对`SpiExtensionFactory`和`SpringExtensionFactory`的封装，除了`ExtensionFactory`对象外，所有依赖注入获取依赖扩展点都是通过`AdaptiveExtensionFactory`获取的。它持有了`SpiExtensionFactory`和`SpringExtensionFactor
 
-use `setter` to inject like IoC
+
+
+通过getAdaptiveExtension获取所有的拓展点 使用反射通过setter函数赋值
 
 ```java
 private T injectExtension(T instance) {
@@ -292,6 +316,8 @@ private void initExtension(T instance) {
 
 #### getExtensionClasses
 
+先看缓存
+
 ```java
 private Map<String, Class<?>> getExtensionClasses() {
     Map<String, Class<?>> classes = cachedClasses.get();
@@ -310,10 +336,10 @@ private Map<String, Class<?>> getExtensionClasses() {
 
 ##### loadExtensionClasses
 
+在上层调用已经有锁 没有线程安全问题
+
 ```java
-/**
- * synchronized in getExtensionClasses
- */
+
 private Map<String, Class<?>> loadExtensionClasses() {
     cacheDefaultExtensionName();
 
@@ -570,6 +596,8 @@ private void saveInExtensionClass(Map<String, Class<?>> extensionClasses, Class<
 
 ### getExtension
 
+双重校验锁防止创建多个
+
 ```java
 public T getExtension(String name) {
     return getExtension(name, true);
@@ -602,20 +630,6 @@ public T getOriginalInstance(String name) {
 }
 ```
 
-#### getDefaultExtension
-
-1. getExtensionClasses
-2. getExtension
-
-```java
-public T getDefaultExtension() {
-    getExtensionClasses();
-    if (StringUtils.isBlank(cachedDefaultName) || "true".equals(cachedDefaultName)) {
-        return null;
-    }
-    return getExtension(cachedDefaultName);
-}
-```
 
 #### createExtension
 
@@ -627,6 +641,7 @@ invoke [injectExension](/docs/CS/Framework/Dubbo/SPI.md?id=injectExension)
 ```java
 @SuppressWarnings("unchecked")
 private T createExtension(String name, boolean wrap) {
+    // 解析配置文件 加载类
     Class<?> clazz = getExtensionClasses().get(name);
     try {
         T instance = (T) EXTENSION_INSTANCES.get(clazz);
@@ -634,11 +649,12 @@ private T createExtension(String name, boolean wrap) {
             EXTENSION_INSTANCES.putIfAbsent(clazz, clazz.getDeclaredConstructor().newInstance());
             instance = (T) EXTENSION_INSTANCES.get(clazz);
         }
+        // 依赖注入
         injectExtension(instance);
 
 
         if (wrap) {
-
+			// 包装类
             List<Class<?>> wrapperClassesList = new ArrayList<>();
             if (cachedWrapperClasses != null) {
                 wrapperClassesList.addAll(cachedWrapperClasses);
@@ -656,7 +672,7 @@ private T createExtension(String name, boolean wrap) {
                 }
             }
         }
-
+		// 初始化
         initExtension(instance);
         return instance;
     } catch (Throwable t) {
@@ -683,16 +699,9 @@ public String getExtensionName(Class<?> extensionClass) {
 
 ### getActivateExtension
 
+Get activate extensions.
+
 ```java
-/**
- * Get activate extensions.
- *
- * @param url    url
- * @param values extension point names
- * @param group  group
- * @return extension list which are activated
- * @see org.apache.dubbo.common.extension.Activate
- */
 public List<T> getActivateExtension(URL url, String[] values, String group) {
     List<T> activateExtensions = new ArrayList<>();
     // solve the bug of using @SPI's wrapper method to report a null pointer exception.
@@ -761,9 +770,6 @@ public List<T> getActivateExtension(URL url, String[] values, String group) {
 ### AdaptiveClassCodeGenerator
 
 ```java
-/**
- * generate and return class code
- */
 public String generate() {
     // no need to generate adaptive class since there's no adaptive method found.
     if (!hasAdaptiveMethod()) {

@@ -142,7 +142,210 @@ Dubbo 已经实现了对 Istio 体系的全面接入，可以用 Istio 控制面
 
 从控制面视角，Dubbo 可接入原生 Istio 标准控制面和规则体系，而对于一些 Dubbo 老版本用户，Dubbo Mesh 提供了平滑迁移方案，具体请查看 Dubbo Mesh 服务网 格。
 
+
+
+
+
+## Data Model
+
+
+
+注册数据
+
+Dubbo3的注册信息新增:
+
+- `/dubbo/metadata` **元数据信息**
+- `/dubbo/mapping` 服务和应用的 **映射信息**
+- `/dubbo/config` **注册中心配置**
+- `/services目录` **应用信息**
+
+
+
+服务的配置 ServiceConfig
+
+
+
+ScopeNodel
+
+```java
+public ServiceConfigBase() {
+        //服务元数据对象创建
+        serviceMetadata = new ServiceMetadata();
+        //为服务元数据对象
+        serviceMetadata.addAttribute("ORIGIN_CONFIG", this);
+    }
+```
+
+### ScopeModel
+
+**为什么会在Dubbo3的新版本中加入这个域模型呢** ，主要有如下原因 之前dubbo都是只有一个作用域的，通过静态类 属性共享 增加域模型是为了: 
+
+1. 让Dubbo支持多应用的部署，这块一些大企业有诉求 
+2. 从架构设计上，解决静态属性资源共享、清理的问题 
+3. 分层模型将应用的管理和服务的管理分开
+
+ Dubbo3中在启动时候需要启动配置中心、元数据中心，这个配置中心和元数据中心可以归应用模型来管理。 Dubbo作为RPC框架又需要启动服务和引用服务，服务级别的管理就交给了这个模块模型来管理。 分层次的管理方便我们理解和处理逻辑，父子级别的模型又方便了数据传递。
+
+| 类型                  | 说明                                                         |
+| :-------------------- | :----------------------------------------------------------- |
+| **ExtensionAccessor** | - 扩展的统一访问器 - 用于获取扩展加载管理器ExtensionDirector对象 **获取扩展对象ExtensionLoader** 根据扩展名字 **获取具体扩展对象** - 获取自适应扩展对象- 获取默认扩展对象 |
+| **ScopeModel**        | 模型对象的公共抽象父类型 ，内部id用于表示模型树的层次结构 公共模型名称，可以被用户设置 描述信息 类加载器管理 父模型管理parent 当前模型的所属域ExtensionScope有: **FRAMEWORK(框架)** ，**APPLICATION(应用)** ，**MODULE(模块)** ，**SELF(自给自足** ，为每个作用域创建一个实例，用于特殊的SPI扩展，如ExtensionInjector) 具体的扩展加载程序管理器对象的管理: **ExtensionDirector** 域Bean工厂管理，一个内部共享的Bean工厂 **ScopeBeanFactory** |
+| **FrameworkModel**    | dubbo框架模型，可与多个应用程序共享 - FrameworkModel实例对象集合，allInstances ，所有ApplicationModel实例对象集合，applicationModels ，发布的ApplicationModel实例对象集合pubApplicationModels ，框架的服务存储库 **FrameworkServiceRepository** 类型对象(数据存储在内存中) ，内部的应用程序模型对象internalApplicationModel |
+| **ApplicationModel**  | 表示正在使用Dubbo的应用程序，并存储基本 **元数据信息** ，以便在RPC调用过程中使用。 ApplicationModel包括许多关于 **发布服务** 的ProviderModel和许多关于订阅服务的Consumer Model。 |
+| **ModuleModel**       | 服务模块的模型                                               |
+
+
+
+```java
+ public static ApplicationModel defaultModel() {
+        // should get from default FrameworkModel, avoid out of sync
+        return FrameworkModel.defaultModel().defaultApplication();
+    }
+```
+
+During destroying the default FrameworkModel, the FrameworkModel.defaultModel() or ApplicationModel.defaultModel() will return a broken model, maybe cause unpredictable problem.
+
+Recommendation: Avoid using the default model as much as possible.
+
+
+```java
+public static FrameworkModel defaultModel() {
+    FrameworkModel instance = defaultInstance;
+    if (instance == null) {
+        synchronized (globalLock) {
+            resetDefaultFrameworkModel();
+            if (defaultInstance == null) {
+                defaultInstance = new FrameworkModel();
+            }
+            instance = defaultInstance;
+        }
+    }
+    return instance;
+}
+```
+
+reset
+
+```java
+private static void resetDefaultFrameworkModel() {
+    synchronized (globalLock) {
+        if (defaultInstance != null && !defaultInstance.isDestroyed()) {
+            return;
+        }
+        FrameworkModel oldDefaultFrameworkModel = defaultInstance;
+        if (allInstances.size() > 0) {
+            defaultInstance = allInstances.get(0);
+        } else {
+            defaultInstance = null;
+        }
+        if (oldDefaultFrameworkModel != defaultInstance) {
+            if (LOGGER.isInfoEnabled()) {
+                LOGGER.info("Reset global default framework from " + safeGetModelDesc(oldDefaultFrameworkModel)
+                        + " to " + safeGetModelDesc(defaultInstance));
+            }
+        }
+    }
+}
+```
+
+
+
+
+
+
+
+```java
+public FrameworkModel() {
+    super(null, ExtensionScope.FRAMEWORK, false);
+    synchronized (globalLock) {
+        synchronized (instLock) {
+            this.setInternalId(String.valueOf(index.getAndIncrement()));
+            // register FrameworkModel instance early
+            allInstances.add(this);
+            if (LOGGER.isInfoEnabled()) {
+                LOGGER.info(getDesc() + " is created");
+            }
+            initialize();
+
+            TypeDefinitionBuilder.initBuilders(this);
+
+            serviceRepository = new FrameworkServiceRepository(this);
+
+            ExtensionLoader<ScopeModelInitializer> initializerExtensionLoader =
+                    this.getExtensionLoader(ScopeModelInitializer.class);
+            Set<ScopeModelInitializer> initializers = initializerExtensionLoader.getSupportedExtensionInstances();
+            for (ScopeModelInitializer initializer : initializers) {
+                initializer.initializeFrameworkModel(this);
+            }
+
+            internalApplicationModel = new ApplicationModel(this, true);
+            internalApplicationModel
+                    .getApplicationConfigManager()
+                    .setApplication(new ApplicationConfig(
+                            internalApplicationModel, CommonConstants.DUBBO_INTERNAL_APPLICATION));
+            internalApplicationModel.setModelName(CommonConstants.DUBBO_INTERNAL_APPLICATION);
+        }
+    }
+}
+```
+
+initialize
+
+```java
+protected void initialize() {
+        synchronized (instLock) {
+            this.extensionDirector =
+                    new ExtensionDirector(parent != null ? parent.getExtensionDirector() : null, scope, this);
+            this.extensionDirector.addExtensionPostProcessor(new ScopeModelAwareExtensionProcessor(this));
+            this.beanFactory = new ScopeBeanFactory(parent != null ? parent.getBeanFactory() : null, extensionDirector);
+
+            // Add Framework's ClassLoader by default
+            ClassLoader dubboClassLoader = ScopeModel.class.getClassLoader();
+            if (dubboClassLoader != null) {
+                this.addClassLoader(dubboClassLoader);
+            }
+        }
+    }
+```
+
+
+
+
+
+域模型初始化器的获取与初始化(ScopeModelInitializer类型和initializeFrameworkModel方法) 加载到的ScopeModelInitializer类型的SPI扩展实现
+
+
+
+域模型初始化器的SPI扩展类型有如下8个:
+
+
+
+
+
+创建ApplicationConfig对象让后将其添加至应用模型中 内部应用程序模型，这里为应用配置管理器设置一个应用配置对象，将这个应用配置的模块名字配置名字设置为DUBBO_INTERNAL_APPLICATION， 应用配置记录着我们常见的应用配置信息
+
+
+
+
+
+#### AplicationModel
+
+ 
+
+
+
+#### ModuleModel
+
+
+
+
+
 ### layers
+
+
+
+调用链路
+
 ![Dubbo Framework](img/Dubbo-framework.png)
 
 
