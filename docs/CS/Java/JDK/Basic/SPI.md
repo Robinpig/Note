@@ -7,22 +7,18 @@ You can enhance its functionality with new plug-ins or modules. Developers, soft
 
 SPI 的本质是将接口实现类的全限定名配置在文件中，并由服务加载器读取配置文件，加载实现类。这样可以在运行时，动态为接口替换实现类。
 正因此特性，我们可以很容易的通过 SPI 机制为我们的程序提供拓展功能。
-
+SPI的核心原理可以总结为：基于接口的编程 + 策略模式 + 配置文件 + 反射机制
 
 The following are terms and definitions important to understand extensible applications:
 
 - Service
-
   A set of programming interfaces and classes that provide access to some specific application functionality or feature. 
   The service can define the interfaces for the functionality and a way to retrieve an implementation. 
-  In the word-processor example, a dictionary service can define a way to retrieve a dictionary and the definition of a word, but it does not implement the underlying feature set. Instead, it relies on a *service provider* to implement that functionality.
-
+  In the word-processor example, a dictionary service can define a way to retrieve a dictionary and the definition of a word, but it does not implement the underlying feature set. 
+  Instead, it relies on a *service provider* to implement that functionality.
 - Service provider interface (SPI)
-
   The set of public interfaces and abstract classes that a service defines. The SPI defines the classes and methods available to your application.
-
 - Service Provider
-
   Implements the SPI. An application with extensible services enable you, vendors, and customers to add service providers without modifying the original application.
 
 
@@ -40,10 +36,7 @@ The `ServiceLoader` class is final, which means that you cannot make it a subcla
 **You cannot, for example, change its algorithm to search for services from a different location**.
 
 ```java
-public final class ServiceLoader<S>
-    implements Iterable<S>
-{
-
+public final class ServiceLoader<S> implements Iterable<S> {
     private static final String PREFIX = "META-INF/services/";
 
     // The class or interface representing the service being loaded
@@ -92,6 +85,7 @@ You should use the extension location only for well-known, trusted providers bec
 3. 实现类的解析：是在调用`iterator.hasNext()`方法时完成的。
 4. 实现类的加载和实例化：是在调用`iterator.next()`完成的。
 
+### load
 Creates a new service loader for the given service type, using the current thread's context class loader.
 
 ```java
@@ -103,7 +97,7 @@ public static <S> ServiceLoader<S> load(Class<S> service) {
 ```
 
 
-
+获取SystemClassLoader 
 ```java
 private ServiceLoader(Class<?> caller, Class<S> svc, ClassLoader cl) {
     Objects.requireNonNull(svc);
@@ -139,7 +133,7 @@ private ServiceLoader(Class<?> caller, Class<S> svc, ClassLoader cl) {
 }
 ```
 
-
+### LayerLookupIterator
 
 iterator
 
@@ -240,7 +234,7 @@ private final class LayerLookupIterator<T>
 }
 ```
 
-
+### hasNext
 
 在hasNextService里做解析文件处理
 
@@ -290,6 +284,8 @@ private boolean hasNextService() {
 }
     }
 ```
+
+### next
 
 
 
