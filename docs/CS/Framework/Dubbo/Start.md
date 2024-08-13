@@ -23,7 +23,37 @@
 
 上面的完整的服务启动订阅与调用流程不仅仅适用于Dubbo 同样也适用于其他服务治理与发现的模型, 一般服务发现与服务调用的思路就是这样的,我们将以上内容扩展,暴漏服务可以使用http,tcp,udp等各种协议,注册服务可以注册到Redis,Dns,Etcd,Zookeeper等注册中心中,订阅服务可以主动去注册中心查询服务列表,服务发现可以让注册中心将服务数据动态推送给消费者.Dubbo其实就是基于这种简单的服务模型来扩展出各种功能的支持,来满足服务治理的各种场景,了解了这里可能各位同学就想着自行开发一个简单的微服务框架了。
 
+##### **Spring Boot**
 
+伴随着SpringBoot容器的启动，Dubbo 主要是做了如下几件事情:
+
+
+● 将解析属性配置的class 和解析注解（@Service、@Reference等等）配置的class 注册到beanDefinitionMap
+● 将解析后的配置类（AnnotationAttributes）和Dubbo的@Service服务，注册到beanDefinitionMap
+● 当Spring创建Bean、填充属性时，对@Reference 注解标注的属性做注入（inject）
+● 通过监听ContextRefreshedEvent事件，调用DubboBootstrap 启动器，暴露@Service 服务到注册中心
+
+DubboConfigConfigurationRegistrar 用于将不同的属性加载到不同的配置文件中
+registerBeans 方法最终通过 ConfigurationBeanBindingsRegister 将解析之后的配置类注册到BeanDefinitionMap
+最终在Spring 容器中他们会被初始化成若干对象，例如：dubbo:registry 会转换成org.apache.dubbo.config.RegistryConfig#0
+
+
+DubboComponentScanRegistrar 主要是用来将ServiceAnnotationBeanPostProcessor 注册到BeanDefinitionMap 中。
+在Spring调用BeanFactory相关的后置处理器（invokeBeanFactoryPostProcessors）时，会使用ServiceAnnotationBeanPostProcessor 将@DubboService相关注解注册到BeanDefinitionMap
+
+在 ServiceAnnotationBeanPostProcessor 中，真正做注解解析注册的是他的父类ServiceClassPostProcessor
+在ServiceClassPostProcessor 中，它注册了一个dubbo监听器，用于监听Spring容器的刷新、关闭事件，同时也将@DubboService 注解的类注册到了BeanDefinitionMap 中.
+
+伴随着Spring 容器的启动，在invokeBeanFactoryPostProcessors阶段我们注册了dubbo相关的组件到IOC，在finishBeanFactoryInitialization(beanFactory) Dubbo的组件被初始化、实例化，最后Dubbo通过监听Spring事件的方式完成启动器的调用、服务导出等操作
+
+DubboBootstrap 的启动是通过监听Spring事件实现的。Spring会在容器Refresh 的最后一步发送一个事件ContextRefreshedEvent，表示容器刷新完毕
+
+对于ContextRefreshedEvent 事件的监听，最终调用了dubboBootstrap.start() 方法
+
+
+```java
+
+```
 
 所有的功能都是由导出服务(提供者)开始的,只有提供者先提供了服务才可以有真正的服务让消费者调用
 
