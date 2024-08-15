@@ -274,7 +274,7 @@ Dubbo3中在启动时候需要启动配置中心、元数据中心，这个配�
 ```dot
 digraph "ScopeModel" {
 
-rankdir=“BT”
+rankdir="BT"
 
 splines  = ortho;
 fontname = "Inconsolata";
