@@ -28,39 +28,7 @@ ZooKeeper provides to its clients the abstraction of a set of data nodes (znodes
 ZooKeeper also has the following two liveness and durability guarantees: if a majority of ZooKeeper servers are active and communicating the service will be available;
 and if the ZooKeeper service responds successfully to a change request, that change persists across any number of failures as long as a quorum of servers is eventually able to recover.
 
-```shell
-git clone https://github.com/apache/zookeeper.git
-
-mvn clean install -DskipTest
-```
-
-拷贝conf目录下的zoo_smaple.cfg to zoo.cfg
-
-拷贝conf目录下logback.xml到resources下
-
-
-启动类配置参数 zoo.cfg
-
-直接启动类找不到的话 对provide的依赖 注释provide
-
-### ZooKeeper guarantees
-
-ZooKeeper has two basic ordering guarantees:
-
-- **Linearizable writes:** all requests that update the state of ZooKeeper are serializable and respect precedence;
-- **FIFO client order:** all requests from a given client are executed in the order that they were sent by the client.
-
-ecause only update requests are Alinearizable, ZooKeeper processes read requests locally at each replica.
-This allows the service to scale linearly as servers are added to the system.
-
-ZooKeeper is very fast and very simple. Since its goal, though, is to be a basis for the construction of more complicated services, such as synchronization, it provides a set of guarantees. These are:
-
-* Sequential Consistency - Updates from a client will be applied in the order that they were sent.
-* Atomicity - Updates either succeed or fail. No partial results.
-* Single System Image - A client will see the same view of the service regardless of the server that it connects to. i.e., a client will never see an older view of the system even if the client fails over to a different server with the same session.
-* Reliability - Once an update has been applied, it will persist from that time forward until a client overwrites the update.
-* Timeliness - The clients view of the system is guaranteed to be up-to-date within a certain time bound.
-
+> [Build and run Zookeeper](/docs/CS/Framework/Zookeeper/start.md)
 ## Data Model
 
 ZooKeeper has a hierarchal name space, much like a distributed file system.
@@ -101,11 +69,18 @@ For instance, whenever a client retrieves data it also receives the version of t
 The data stored at each znode in a namespace is read and written atomically. Reads get all the data bytes associated with a znode and a write replaces all the data.
 Each node has an Access Control List (ACL) that restricts who can do what.
 
+Ephemeral Nodes
+
+
 ZooKeeper also has the notion of ephemeral nodes. These znodes exists as long as the session that created the znode is active. When the session ends the znode is deleted.
 
 Container node
 
 TTL time to live
+
+
+
+
 
 ### Watches
 

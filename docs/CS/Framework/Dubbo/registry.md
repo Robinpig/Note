@@ -1,5 +1,37 @@
 ## Introduction
 
+Dubbo 将注册中心抽象为以`Registry`为核心的注册中心组件，将这些组件引入到`Consumer`和`Provider`后，就可以执行注册中心的相关操作了，如注册服务、订阅服务变更事件和通知服务变更等
+
+
+
+Dubbo 中注册中心模块的核心组件包含`Registry`、`RegistryFactory`、`Directory`和`NotifyListener`组件。
+
+- `Registry`：是对注册中心的抽象，一个`Registry`就代表一个注册中心。
+- `RegistryFactory`：注册中心工厂，用于在初始化时创建`Registry`。
+- `Directory`：服务目录，用于刷新和保存可用于远程调用的`Invoker`，严格来说，服务目录是一个公用组件，它既可以划分到注册中心，也可以划分到下文中服务容错的模块里，因为这两个功能模块里都用到了`Directory`(服务目录)。
+- `NotifyListener`：定义了通知(`notify()`)接口，此接口的实现类用于接收服务变更的通知。
+
+`RegistryDirectory`同时实现了`Directory`和`NotifyListener`，它既实现了刷新和保存可用于远程调用的`Invoker`的功能，也实现了接收服务变更通知的功能。
+
+
+应用级服务发现给 Dubbo 带来以下优势：
+1. 与业界主流微服务模型对齐，比如 SpringCloud、Kubernetes Native Service等。
+2. 提升性能与可伸缩性。注册中心数据的重新组织（减少），能最大幅度的减轻注册中心的存储、推送压力，进而减少 Dubbo Consumer 侧的地址计算压力；集群规模也开始变得可预测、可评估（与 RPC 接口数量无关，只与实例部署规模相关）。
+
+Spring Cloud 通过注册中心只同步了应用与实例地址，消费方可以基于实例地址与服务提供方建立连接，但是消费方对于如何发起 http 调用（SpringCloud 基于 rest 通信）一无所知，比如对方有哪些 http endpoint，需要传入哪些参数等。
+
+
+RPC 服务这部分信息目前都是通过线下约定或离线的管理系统来协商的。这种架构的优缺点总结如下。 优势：部署结构清晰、地址推送量小； 缺点：地址订阅需要指定应用名， provider 应用变更（拆分）需消费端感知；RPC 调用无法全自动同步
+
+Dubbo 通过注册中心同时同步了实例地址和 RPC 方法，因此其能实现 RPC 过程的自动同步，面向 RPC 编程、面向 RPC 治理，对后端应用的拆分消费端无感知，其缺点则是地址推送数量变大，和 RPC 方法成正比
+
+Dubbo 与 SpringCloud、Kubernetes 等不同产品在微服务的抽象定义上还是存在很大不同的。SpringCloud 和 Kubernetes 在微服务的模型抽象上还是比较接近的，两者基本都只关心实例地址的同步，如果我们去关心其他的一些服务框架产品，会发现它们绝大多数也是这么设计的；
+
+> 即 REST 成熟度模型中的 L3 级别。
+
+对比起来 Dubbo 则相对是比较特殊的存在，更多的是从 RPC 服务的粒度去设计的。
+
+> 对应 REST 成熟度模型中的 L4 级别
 
 
 ### Registry Hierarchy
@@ -1730,26 +1762,17 @@ private void doNotify(Collection<String> keys, URL url, Collection<NotifyListene
 
 ## NotifyListener
 
-```java
-/**
- * NotifyListener. (API, Prototype, ThreadSafe)
- *
- * @see org.apache.dubbo.registry.RegistryService#subscribe(URL, NotifyListener)
- */
-public interface NotifyListener {
+Triggered when a service change notification is received.
+Notify needs to support the contract: 
 
-    /**
-     * Triggered when a service change notification is received.
-     * <p>
-     * Notify needs to support the contract: <br>
-     * 1. Always notifications on the service interface and the dimension of the data type. that is, won't notify part of the same type data belonging to one service. Users do not need to compare the results of the previous notification.<br>
-     * 2. The first notification at a subscription must be a full notification of all types of data of a service.<br>
-     * 3. At the time of change, different types of data are allowed to be notified separately, e.g.: providers, consumers, routers, overrides. It allows only one of these types to be notified, but the data of this type must be full, not incremental.<br>
-     * 4. If a data type is empty, need to notify a empty protocol with category parameter identification of url data.<br>
-     * 5. The order of notifications to be guaranteed by the notifications(That is, the implementation of the registry). Such as: single thread push, queue serialization, and version comparison.<br>
-     *
-     * @param urls The list of registered information , is always not empty. The meaning is the same as the return value of {@link org.apache.dubbo.registry.RegistryService#lookup(URL)}.
-     */
+1. Always notifications on the service interface and the dimension of the data type. that is, won't notify part of the same type data belonging to one service. Users do not need to compare the results of the previous notification. 
+2. The first notification at a subscription must be a full notification of all types of data of a service.
+3. At the time of change, different types of data are allowed to be notified separately, e.g.: providers, consumers, routers, overrides. It allows only one of these types to be notified, but the data of this type must be full, not incremental.
+4. If a data type is empty, need to notify a empty protocol with category parameter identification of url data.
+5. The order of notifications to be guaranteed by the notifications(That is, the implementation of the registry). Such as: single thread push, queue serialization, and version comparison.
+
+```java
+public interface NotifyListener {
     void notify(List<URL> urls);
 
     default void addServiceListener(ServiceInstancesChangedListener instanceListener) {
