@@ -61,6 +61,20 @@ public class QuorumPeerMain {
 QuorumPeerMain会做一个判断，当使用配置文件(args.length == 1)且是集群配置的情况下，启动集群形式QuorumPeer，否则启动单机模式ZooKeeperServerMain。
 
 这里还启动了DatadirCleanupManager，用于清理早期的版本快照文件
+
+
+
+QuorumPeer类型继承了ZooKeeperThread，而ZookeeperThread类型继承了Thread 也就是说QuorumPeer其实是一个线程类型
+
+QuorumPeer重写了start方法在 线程启动之前执行了一些初始化操作 QuorumPeer类型中 重写了start方法主要步骤如下:
+● 将数据从 磁盘加载到内存 中，并将事务添加到内存中的committedlog中。
+● 服务端 开启连接线程
+● 开启 管理端
+● 开启 选举功能
+● 开启 JVM监控
+● QuorumPeer线程启动 ,开始进行逻辑处理
+
+
  
 ```java
  protected void initializeAndRun(String[] args) throws ConfigException, IOException, AdminServerException {
