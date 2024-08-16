@@ -69,11 +69,18 @@ For instance, whenever a client retrieves data it also receives the version of t
 The data stored at each znode in a namespace is read and written atomically. Reads get all the data bytes associated with a znode and a write replaces all the data.
 Each node has an Access Control List (ACL) that restricts who can do what.
 
+Ephemeral Nodes
+
+
 ZooKeeper also has the notion of ephemeral nodes. These znodes exists as long as the session that created the znode is active. When the session ends the znode is deleted.
 
 Container node
 
 TTL time to live
+
+
+
+
 
 ### Watches
 
