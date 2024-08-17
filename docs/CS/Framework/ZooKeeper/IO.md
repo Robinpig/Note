@@ -1,9 +1,11 @@
+## Introduction
 
 
 
 在QuorumPeerMain::runFromConfig的启动中初始化了Communication layer并设置到QuorumPeer
 
 
+```java
 
 ServerCnxnFactory cnxnFactory = null;
 ServerCnxnFactory secureCnxnFactory = null;
@@ -22,7 +24,9 @@ if (config.getSecureClientPortAddress() != null) {
 quorumPeer.setCnxnFactory(cnxnFactory);
 quorumPeer.setSecureCnxnFactory(secureCnxnFactory);
 
-
+```
+createFactory
+```java
 public static ServerCnxnFactory createFactory() throws IOException {
     String serverCnxnFactoryName = System.getProperty(ZOOKEEPER_SERVER_CNXN_FACTORY);
     if (serverCnxnFactoryName == null) {
@@ -39,6 +43,7 @@ public static ServerCnxnFactory createFactory() throws IOException {
         throw ioe;
     }
 }
+```
 
 
 Zookeeper作为一个服务器,自然要与客户端进行网络通信,如何高效的与客户端进行通信,让网络IO不成为ZooKeeper的瓶颈是ZooKeeper急需解决的问题,ZooKeeper中使用ServerCnxnFactory管理与客户端的连接,从系统属性zookeeper.serverCnxnFactory中获取配置 其有两个实现, 
@@ -51,7 +56,7 @@ Zookeeper作为一个服务器,自然要与客户端进行网络通信,如何高
 
 使用ServerCnxn代表一个客户端与服务端的连接
 
-
+```java
 public class NettyServerCnxnFactory extends ServerCnxnFactory {
     @Override
     public void start() {
@@ -66,6 +71,7 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
         LOG.info(“bound to port {}”, getLocalPort());
     }
 }
+```
 
 
 
@@ -76,10 +82,11 @@ NIOServerCnxnFactory implements a multi-threaded ServerCnxnFactory using NIO non
 - 1-N selector threads, each of which selects on 1/ N of the connections. The reason the factory supports more than one selector thread is that with large numbers of connections, select() itself can become a performance bottleneck. 
 - 0-M socket I/ O worker threads, which perform basic socket reads and writes. If configured with 0 worker threads, the selector threads do the socket I/ O directly. 
 - 1 connection expiration thread, which closes idle connections; this is necessary to expire connections on which no session is established. 
+
 Typical (default) thread counts are: on a 32 core machine, 1 accept thread, 1 connection expiration thread, 4 selector threads, and 64 worker threads.
 
 
-
+```java
 public class NIOServerCnxnFactory extends ServerCnxnFactory {
     @Override
     public void start() {
@@ -101,12 +108,14 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
         }
     }
 }
+```
 
+SelectorThread.acceptedQueue
 
-SelectorThread.acceptedQueue¶
 acceptedQueue是LinkedBlockingQueue类型的, 在selector thread中.其中包含了accept thread接收的客户端连接,由selector thread负责将客户端连接注册到selector上,监听OP_READ和OP_WRITE.
 
-SelectorThread.updateQueue¶
+SelectorThread.updateQueue
+
 updateQueue和acceptedQueue一样,也是LinkedBlockingQueue类型的,在selector thread中.但是要说明白该队列的作用,就要对Java NIO的实现非常了解了. _Java NIO使用epoll（Linux中）系统调用,且是水平触发,也即若selector.select()发现socketChannel中有事件发生,比如有数据可读, 只要没有将这些数据从socketChannel读取完毕,下一次selector.select()还是会检测到有事件发生,直至数据被读取完毕. ZooKeeper一直认为selector.select()是性能的瓶颈,为了提高selector.select()的性能,避免上述水平触发模式的缺陷,ZooKeeper在处理IO的过程中, 会让socketChannel不再监听OP_READ和OP_WRITE事件,这样就可以减轻selector.select()的负担. 
 
 
@@ -115,7 +124,8 @@ ZooKeeper为了追求性能的极致,设计为由selector thread调用key.intere
 
 
 
-socketChannel.NIOServerCnxn.outgoingBuffers¶
+socketChannel.NIOServerCnxn.outgoingBuffers
+
 outgoingBuffers存放待发送给客户端的响应数据. 注:既然key.interestOps(OP_READ & OP_WRITE)会阻塞selector.select(),那么accepted.register(selector, SelectionKey.OP_READ) 也会阻塞selector.select(), 因此接收到的客户端连接注册到selector上也要在selector thread上执行,这也是acceptedQueue存在的理由
 
 ## Netty
@@ -132,6 +142,9 @@ outgoingBuffers存放待发送给客户端的响应数据. 注:既然key.interes
 
 
 
+## Links
+
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 
 
 

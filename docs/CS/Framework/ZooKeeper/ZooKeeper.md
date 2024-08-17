@@ -28,7 +28,7 @@ ZooKeeper provides to its clients the abstraction of a set of data nodes (znodes
 ZooKeeper also has the following two liveness and durability guarantees: if a majority of ZooKeeper servers are active and communicating the service will be available;
 and if the ZooKeeper service responds successfully to a change request, that change persists across any number of failures as long as a quorum of servers is eventually able to recover.
 
-> [Build and run Zookeeper](/docs/CS/Framework/Zookeeper/start.md)
+> [Build and run Zookeeper](/docs/CS/Framework/ZooKeeper/start.md)
 ## Data Model
 
 ZooKeeper has a hierarchal name space, much like a distributed file system.
@@ -92,6 +92,26 @@ Changes to that znode trigger the watch and then clear the watch. When a watch t
 ZooKeeper also has the notion of ephemeral nodes.
 These znodes exists as long as the session that created the znode is active.
 When the session ends the znode is deleted. Because of this behavior ephemeral znodes are not allowed to have children.
+
+
+### ZooKeeper guarantees
+
+ZooKeeper has two basic ordering guarantees:
+
+- **Linearizable writes:** all requests that update the state of ZooKeeper are serializable and respect precedence;
+- **FIFO client order:** all requests from a given client are executed in the order that they were sent by the client.
+
+ecause only update requests are Alinearizable, ZooKeeper processes read requests locally at each replica.
+This allows the service to scale linearly as servers are added to the system.
+
+ZooKeeper is very fast and very simple. Since its goal, though, is to be a basis for the construction of more complicated services, such as synchronization, it provides a set of guarantees. These are:
+
+* Sequential Consistency - Updates from a client will be applied in the order that they were sent.
+* Atomicity - Updates either succeed or fail. No partial results.
+* Single System Image - A client will see the same view of the service regardless of the server that it connects to. i.e., a client will never see an older view of the system even if the client fails over to a different server with the same session.
+* Reliability - Once an update has been applied, it will persist from that time forward until a client overwrites the update.
+* Timeliness - The clients view of the system is guaranteed to be up-to-date within a certain time bound.
+
 
 ### Guarantees
 
@@ -1198,6 +1218,20 @@ public Long update(E elem, int timeout) {
 }
 }
 ```
+
+
+## Watcher
+
+在DataTree中有两个IWatchManager类型的对象，一个是dataWatches，一个是childWatches， 其中:
+● dataWatches是保存节点层面的watcher对象，
+● childWatches是保存子节点层面的watcher对象，
+使用这两个监听器可以分别为节点路径添加监听器在合适的场景下来触发监听，当然也可以移除已添加路径的监听器
+
+主要的监听方法是添加，移除，触发监听器，和查询信息等方法
+
+
+
+dataWatches和childWatches分别是如何创建呢我们可以看下在DataTree类型的构造器中初始化监听管理器对象是通过WatchManagerFactory工厂类型提供的工厂方法创建的
 
 
 ## Storage
