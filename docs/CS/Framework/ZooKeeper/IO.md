@@ -591,7 +591,16 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
 
 简单比较
 
-
+| ***不同点\*** | ***NIO\***                                                   | ***Netty\***                                                 |
+| :------------ | :----------------------------------------------------------- | :----------------------------------------------------------- |
+| accept事件    | 启动1个accept thread                                         | boss group处理accept事件,默认启动1个线程                     |
+| select()      | 启动select thread                                            | 添加handler时调用addLast(EventExecutorGroup, ChannelHandler…),则handler处理IO事件会在EventExecutorGroup中进行 |
+| 网络IO        | 启动worker thread                                            | 启动work group处理网络IO,默认启动核心数∗2核心数∗2个线程      |
+| 处理读事件    | 在worker thread中调用NIOServerCnxn.doIO()处理                | 在handler中处理读事件                                        |
+| 粘包拆包      | 通过lenBuffer和incomingBuffer解决该问题,代码很复杂           | 插入处理粘包拆包的handler即可                                |
+| 处理写事件    | 执行FinalRP.processRequest()的线程与worker thread通过NIOServerCnxn.outgoingBuffers进行通信,由worker thread批量写 | netty天生支持异步写,若当前线程为EventLoop线程,则将待写入数据存放到ChannelOutboundBuffer中.若当前线程不是EventLoop线程,构造写任务添加至EventLoop任务队列中 |
+| 直接内存      | 使用ThreadLocal的直接内存                                    | 记不太清楚netty中如何使用直接内存了,但netty支持直接内存,且使用较为方便 |
+| 处理连接关闭  | 启动connection expiration thread管理连接                     | 在handler中处理连接                                          |
 
 
 
