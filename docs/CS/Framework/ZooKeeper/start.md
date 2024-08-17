@@ -1425,6 +1425,74 @@ public void run() {
 
 由于是刚刚启动，是 LOOKING 状态。所以走第一条分支。调用 setCurrentVote(makeLEStrategy().lookForLeader())
 
+```java
+case LOOKING:
+    LOG.info("LOOKING");
+    ServerMetrics.getMetrics().LOOKING_COUNT.add(1);
+
+    if (Boolean.getBoolean("readonlymode.enabled")) {
+        LOG.info("Attempting to start ReadOnlyZooKeeperServer");
+
+        // Create read-only server but don't start it immediately
+        final ReadOnlyZooKeeperServer roZk = new ReadOnlyZooKeeperServer(logFactory, this, this.zkDb);
+
+        // Instead of starting roZk immediately, wait some grace
+        // period before we decide we're partitioned.
+        //
+        // Thread is used here because otherwise it would require
+        // changes in each of election strategy classes which is
+        // unnecessary code coupling.
+        Thread roZkMgr = new Thread() {
+            public void run() {
+                try {
+                    // lower-bound grace period to 2 secs
+                    sleep(Math.max(2000, tickTime));
+                    if (ServerState.LOOKING.equals(getPeerState())) {
+                        roZk.startup();
+                    }
+                } catch (InterruptedException e) {
+                    LOG.info("Interrupted while attempting to start ReadOnlyZooKeeperServer, not started");
+                } catch (Exception e) {
+                    LOG.error("FAILED to start ReadOnlyZooKeeperServer", e);
+                }
+            }
+        };
+        try {
+            roZkMgr.start();
+            reconfigFlagClear();
+            if (shuttingDownLE) {
+                shuttingDownLE = false;
+                startLeaderElection();
+            }
+            setCurrentVote(makeLEStrategy().lookForLeader());
+            checkSuspended();
+        } catch (Exception e) {
+            LOG.warn("Unexpected exception", e);
+            setPeerState(ServerState.LOOKING);
+        } finally {
+            // If the thread is in the the grace period, interrupt
+            // to come out of waiting.
+            roZkMgr.interrupt();
+            roZk.shutdown();
+        }
+    } else {
+        try {
+            reconfigFlagClear();
+            if (shuttingDownLE) {
+                shuttingDownLE = false;
+                startLeaderElection();
+            }
+            setCurrentVote(makeLEStrategy().lookForLeader());
+        } catch (Exception e) {
+            LOG.warn("Unexpected exception", e);
+            setPeerState(ServerState.LOOKING);
+        }
+    }
+    break;
+```
+
+##### lookForLeader
+
 
 
 ```java
@@ -1515,11 +1583,9 @@ public Vote lookForLeader() throws InterruptedException {
                 switch (n.state) {
                 case LOOKING:
                     if (getInitLastLoggedZxid() == -1) {
-                        LOG.debug("Ignoring notification as our zxid is -1");
                         break;
                     }
                     if (n.zxid == -1) {
-                        LOG.debug("Ignoring notification from member with -1 zxid {}", n.sid);
                         break;
                     }
                     // If notification > current, replace and send messages out
@@ -1533,22 +1599,11 @@ public Vote lookForLeader() throws InterruptedException {
                         }
                         sendNotifications();
                     } else if (n.electionEpoch < logicalclock.get()) {
-                            LOG.debug(
-                                "Notification election epoch is smaller than logicalclock. n.electionEpoch = 0x{}, logicalclock=0x{}",
-                                Long.toHexString(n.electionEpoch),
-                                Long.toHexString(logicalclock.get()));
                         break;
                     } else if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
                         updateProposal(n.leader, n.zxid, n.peerEpoch);
                         sendNotifications();
                     }
-
-                    LOG.debug(
-                        "Adding vote: from={}, proposed leader={}, proposed zxid=0x{}, proposed election epoch=0x{}",
-                        n.sid,
-                        n.leader,
-                        Long.toHexString(n.zxid),
-                        Long.toHexString(n.electionEpoch));
 
                     // don't care about the version if it's in LOOKING state
                     recvset.put(n.sid, new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch));
@@ -1578,34 +1633,7 @@ public Vote lookForLeader() throws InterruptedException {
                     }
                     break;
                 case OBSERVING:
-                    LOG.debug("Notification from observer: {}", n.sid);
                     break;
-
-                    /*
-                    * In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING.
-                    * To avoid the duplication of codes, we create a method called followingBehavior which was used to
-                    * shared by FOLLOWING and LEADING. This method returns a Vote. When the returned Vote is null, it follows
-                    * the original idea to break swtich statement; otherwise, a valid returned Vote indicates, a leader
-                    * is generated.
-                    *
-                    * The reason why we need to separate these behaviors is to make the algorithm runnable for 2-node
-                    * setting. An extra condition for generating leader is needed. Due to the majority rule, only when
-                    * there is a majority in the voteset, a leader will be generated. However, in a configuration of 2 nodes,
-                    * the number to achieve the majority remains 2, which means a recovered node cannot generate a leader which is
-                    * the existed leader. Therefore, we need the Oracle to kick in this situation. In a two-node configuration, the Oracle
-                    * only grants the permission to maintain the progress to one node. The oracle either grants the permission to the
-                    * remained node and makes it a new leader when there is a faulty machine, which is the case to maintain the progress.
-                    * Otherwise, the oracle does not grant the permission to the remained node, which further causes a service down.
-                    *
-                    * In the former case, when a failed server recovers and participate in the leader election, it would not locate a
-                    * new leader because there does not exist a majority in the voteset. It fails on the containAllQuorum() infinitely due to
-                    * two facts. First one is the fact that it does do not have a majority in the voteset. The other fact is the fact that
-                    * the oracle would not give the permission since the oracle already gave the permission to the existed leader, the healthy machine.
-                    * Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
-                    * To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
-                    *
-                    *
-                    * */
                 case FOLLOWING:
                     /*
                     * To avoid duplicate codes
@@ -1656,6 +1684,49 @@ public Vote lookForLeader() throws InterruptedException {
 ```
 
 
+In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING. 
+To avoid the duplication of codes, we create a method called followingBehavior which was used to shared by FOLLOWING and LEADING. This method returns a Vote. 
+When the returned Vote is null, it follows the original idea to break switch statement; otherwise, a valid returned Vote indicates, a leader is generated.
+
+The reason why we need to separate these behaviors is to make the algorithm runnable for 2-node setting. An extra condition for generating leader is needed. 
+Due to the majority rule, only when there is a majority in the voteset, a leader will be generated. 
+However, in a configuration of 2 nodes, the number to achieve the majority remains 2, which means a recovered node cannot generate a leader which is the existed leader.
+Therefore, we need the Oracle to kick in this situation. 
+In a two-node configuration, the Oracle only grants the permission to maintain the progress to one node. 
+The oracle either grants the permission to the remained node and makes it a new leader when there is a faulty machine, which is the case to maintain the progress.
+Otherwise, the oracle does not grant the permission to the remained node, which further causes a service down.
+
+In the former case, when a failed server recovers and participate in the leader election, it would not locate a new leader because there does not exist a majority in the voteset.
+It fails on the containAllQuorum() infinitely due to two facts. 
+- First one is the fact that it does do not have a majority in the voteset. 
+- The other fact is the fact that the oracle would not give the permission since the oracle already gave the permission to the existed leader, the healthy machine. 
+
+Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
+To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
+
+sendNotifications
+
+发送消息到sendQueue
+
+
+```java
+private void sendNotifications() {
+    for (long sid : self.getCurrentAndNextConfigVoters()) {
+        QuorumVerifier qv = self.getQuorumVerifier();
+        ToSend notmsg = new ToSend(
+            ToSend.mType.notification,
+            proposedLeader,
+            proposedZxid,
+            logicalclock.get(),
+            QuorumPeer.ServerState.LOOKING,
+            sid,
+            proposedEpoch,
+            qv.toString().getBytes(UTF_8));
+
+        sendqueue.offer(notmsg);
+    }
+}
+```
 
 
 
