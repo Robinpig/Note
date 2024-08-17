@@ -94,6 +94,198 @@ These znodes exists as long as the session that created the znode is active.
 When the session ends the znode is deleted. Because of this behavior ephemeral znodes are not allowed to have children.
 
 
+
+在DataTree中有两个IWatchManager类型的对象，一个是dataWatches，一个是childWatches， 其中:
+
+- dataWatches是保存节点层面的watcher对象，
+- childWatches是保存子节点层面的watcher对象
+
+使用这两个监听器可以分别为节点路径添加监听器在合适的场景下来触发监听，当然也可以移除已添加路径的监听器
+
+```java
+public class DataTree {
+
+    private IWatchManager dataWatches;
+
+    private IWatchManager childWatches;
+    
+    DataTree(DigestCalculator digestCalculator) {
+        // ...
+        try {
+            dataWatches = WatchManagerFactory.createWatchManager();
+            childWatches = WatchManagerFactory.createWatchManager();
+        } catch (Exception e) {
+            LOG.error("Unexpected exception when creating WatchManager, exiting abnormally", e);
+        }
+    }
+}
+```
+
+
+
+在DataTree类型的构造器中初始化监听管理器对象是通过WatchManagerFactory工厂类型提供的工厂方法创建的
+
+```java
+public static IWatchManager createWatchManager() throws IOException {
+    String watchManagerName = System.getProperty(ZOOKEEPER_WATCH_MANAGER_NAME);
+    if (watchManagerName == null) {
+        watchManagerName = WatchManager.class.getName();
+    }
+    try {
+        IWatchManager watchManager = (IWatchManager) Class.forName(watchManagerName).getConstructor().newInstance();
+        LOG.info("Using {} as watch manager", watchManagerName);
+        return watchManager;
+    } catch (Exception e) {
+        IOException ioe = new IOException("Couldn't instantiate " + watchManagerName, e);
+        throw ioe;
+    }
+}
+```
+
+**WatchManager类型** 主要实现了IWatchManager接口针对监听管理器做具体的实现
+
+WatchManager重写了IWatchManager接口针对监听管理的通用方法比如添加监听器，移除监听器，触发监听器等等
+
+其中添加和移除监听器操作分别会将监听器在watchTable，watch2Paths，watcherModeManager 对象中放入或者移除，而触发监听器方法则会执行通知操作
+
+```java
+public class WatchManager implements IWatchManager {
+
+    private final Map<String, Set<Watcher>> watchTable = new HashMap<>();
+
+    private final Map<Watcher, Map<String, WatchStats>> watch2Paths = new HashMap<>();
+
+    private int recursiveWatchQty = 0;
+}
+```
+
+EventType是一个枚举类型用来列举Zookeeper可能发生的事件， 可以看到监听事件的触发主要发生在节点状态的变更与节点数据的变更时触发
+
+```java
+@InterfaceAudience.Public
+enum EventType {
+    None(-1),
+    NodeCreated(1),
+    NodeDeleted(2),
+    NodeDataChanged(3),
+    NodeChildrenChanged(4),
+    DataWatchRemoved(5),
+    ChildWatchRemoved(6),
+    PersistentWatchRemoved (7);
+
+    private final int intValue;     // Integer representation of value
+    // for sending over wire
+}
+```
+
+
+
+#### triggerWatch
+
+通知所有订阅者
+
+```java
+@Override
+public WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List<ACL> acl, WatcherOrBitSet supress) {
+    WatchedEvent e = new WatchedEvent(type, KeeperState.SyncConnected, path, zxid);
+    Set<Watcher> watchers = new HashSet<>();
+    synchronized (this) {
+        PathParentIterator pathParentIterator = getPathParentIterator(path);
+        for (String localPath : pathParentIterator.asIterable()) {
+            Set<Watcher> thisWatchers = watchTable.get(localPath);
+            if (thisWatchers == null || thisWatchers.isEmpty()) {
+                continue;
+            }
+            Iterator<Watcher> iterator = thisWatchers.iterator();
+            while (iterator.hasNext()) {
+                Watcher watcher = iterator.next();
+                Map<String, WatchStats> paths = watch2Paths.getOrDefault(watcher, Collections.emptyMap());
+                WatchStats stats = paths.get(localPath);
+                if (stats == null) {
+                    LOG.warn("inconsistent watch table for watcher {}, {} not in path list", watcher, localPath);
+                    continue;
+                }
+                if (!pathParentIterator.atParentPath()) {
+                    watchers.add(watcher);
+                    WatchStats newStats = stats.removeMode(WatcherMode.STANDARD);
+                    if (newStats == WatchStats.NONE) {
+                        iterator.remove();
+                        paths.remove(localPath);
+                    } else if (newStats != stats) {
+                        paths.put(localPath, newStats);
+                    }
+                } else if (stats.hasMode(WatcherMode.PERSISTENT_RECURSIVE)) {
+                    watchers.add(watcher);
+                }
+            }
+            if (thisWatchers.isEmpty()) {
+                watchTable.remove(localPath);
+            }
+        }
+    }
+    if (watchers.isEmpty()) {
+        if (LOG.isTraceEnabled()) {
+            ZooTrace.logTraceMessage(LOG, ZooTrace.EVENT_DELIVERY_TRACE_MASK, "No watchers for " + path);
+        }
+        return null;
+    }
+
+    for (Watcher w : watchers) {
+        if (supress != null && supress.contains(w)) {
+            continue;
+        }
+        if (w instanceof ServerWatcher) {
+            ((ServerWatcher) w).process(e, acl);
+        } else {
+            w.process(e);
+        }
+    }
+
+    switch (type) {
+        case NodeCreated:
+            ServerMetrics.getMetrics().NODE_CREATED_WATCHER.add(watchers.size());
+            break;
+
+        case NodeDeleted:
+            ServerMetrics.getMetrics().NODE_DELETED_WATCHER.add(watchers.size());
+            break;
+
+        case NodeDataChanged:
+            ServerMetrics.getMetrics().NODE_CHANGED_WATCHER.add(watchers.size());
+            break;
+
+        case NodeChildrenChanged:
+            ServerMetrics.getMetrics().NODE_CHILDREN_WATCHER.add(watchers.size());
+            break;
+        default:
+            // Other types not logged.
+            break;
+    }
+
+    return new WatcherOrBitSet(watchers);
+}
+```
+
+```java
+class ZKWatchManager implements ClientWatchManager {
+
+    private final Map<String, Set<Watcher>> dataWatches = new HashMap<>();
+    private final Map<String, Set<Watcher>> existWatches = new HashMap<>();
+    private final Map<String, Set<Watcher>> childWatches = new HashMap<>();
+    private final Map<String, Set<Watcher>> persistentWatches = new HashMap<>();
+    private final Map<String, Set<Watcher>> persistentRecursiveWatches = new HashMap<>();
+    private final boolean disableAutoWatchReset;
+
+    private volatile Watcher defaultWatcher;
+
+    ZKWatchManager(boolean disableAutoWatchReset, Watcher defaultWatcher) {
+        this.disableAutoWatchReset = disableAutoWatchReset;
+        this.defaultWatcher = defaultWatcher;
+    }
+}
+```
+
+
 ### ZooKeeper guarantees
 
 ZooKeeper has two basic ordering guarantees:
