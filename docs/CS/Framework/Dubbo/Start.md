@@ -27,11 +27,10 @@
 
 伴随着SpringBoot容器的启动，Dubbo 主要是做了如下几件事情:
 
-
-● 将解析属性配置的class 和解析注解（@Service、@Reference等等）配置的class 注册到beanDefinitionMap
-● 将解析后的配置类（AnnotationAttributes）和Dubbo的@Service服务，注册到beanDefinitionMap
-● 当Spring创建Bean、填充属性时，对@Reference 注解标注的属性做注入（inject）
-● 通过监听ContextRefreshedEvent事件，调用DubboBootstrap 启动器，暴露@Service 服务到注册中心
+- 将解析属性配置的class 和解析注解（@Service、@Reference等等）配置的class 注册到beanDefinitionMap
+- 将解析后的配置类（AnnotationAttributes）和Dubbo的@Service服务，注册到beanDefinitionMap
+- 当Spring创建Bean、填充属性时，对@Reference 注解标注的属性做注入（inject）
+- 通过监听ContextRefreshedEvent事件，调用DubboBootstrap 启动器，暴露@Service 服务到注册中心
 
 DubboConfigConfigurationRegistrar 用于将不同的属性加载到不同的配置文件中
 registerBeans 方法最终通过 ConfigurationBeanBindingsRegister 将解析之后的配置类注册到BeanDefinitionMap

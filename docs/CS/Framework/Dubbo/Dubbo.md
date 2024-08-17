@@ -44,10 +44,6 @@ Dubbo 数据面
 
 
 
-Dubbo 在微服务应用开发框架之上抽象了一 套 RPC 服务定义、暴露、调用与治理的编程范式，比如 Dubbo Java 作为服务开发 框架，当运行在 Spring 体系时就是构建在 Spring Boot 应用开发框架之上的微服务 开发框架，并在此之上抽象了一套 RPC 服务定义、暴露、调用与治理的编程范式。
-
-
-
 - [start](/docs/CS/Framework/Dubbo/Start.md)
 - [Registry](/docs/CS/Framework/Dubbo/registry.md)
 - [Remoting](/docs/CS/Framework/Dubbo/remoting.md)
@@ -149,8 +145,19 @@ Dubbo 已经实现了对 Istio 体系的全面接入，可以用 Istio 控制面
 
 从控制面视角，Dubbo 可接入原生 Istio 标准控制面和规则体系，而对于一些 Dubbo 老版本用户，Dubbo Mesh 提供了平滑迁移方案，具体请查看 Dubbo Mesh 服务网格。
 
-
 <!-- tabs:end -->
+
+
+
+
+
+Dubbo 主要有以下核心组件:
+
+- Provider:服务的提供方，通过 Jar 或者容器的方式启动服务
+- Consumer:服务消费方
+- Registry:注册中心 
+- Monitor:统计服务和调用次数，调用时间监控中心。(Dubbo 的控制台页面中可 以显示，目前只有一个简单版本)
+- Container:服务运行的容器
 
 
 ## Data Model

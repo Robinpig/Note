@@ -1071,7 +1071,22 @@ public void unsubscribe(URL url, NotifyListener listener) {
 
 ### NacosRegistry
 
+当Dubbo使用3.0.0及以上版本时，需要使用Nacos 2.0.0及以上版本。
 
+服务名前缀为 providers: 的信息为服务提供者的元信息，consumers: 则代表服务消费者的元信息
+应用级服务发现的 “服务名” 为应用名
+
+Dubbo3 默认采用 “应用级服务发现 + 接口级服务发现” 的双注册模式，因此会发现应用级服务（应用名）和接口级服务（接口名）同时出现在 Nacos 控制台，可以通过配置 dubbo.registry.register-mode=instance/interface/all 来改变注册行为。
+
+在 Nacos 中，本身就存在配置中心这个概念，正好用于元数据存储。在配置中心的场景下，存在命名空间- namespace 的概念，在 namespace 之下，还存在 group 概念。即通过 namespace 和 group 以及 dataId 去定位一个配置项，在不指定 namespace 的情况下，默认使用 public 作为默认的命名空间。
+
+
+
+service name 和 application name 可能是一对多的，在 nacos 中，使用单个 key-value 进行保存，多个 application name 通过英文逗号`,`隔开。由于是单个 key-value 去保存数据，在多客户端的情况下可能会存在并发覆盖的问题。因此，我们使用 nacos 中 publishConfigCas 的能力去解决该问题。在 nacos 中，使用 publishConfigCas 会让用户传递一个参数 casMd5，该值的含义是之前配置内容的 md5 值。不同客户端在更新之前，先去查一次 nacos 的 content 的值，计算出 md5 值，当作本地凭证。在更新时，把凭证 md5 传到服务端比对 md5 值, 如果不一致说明在此期间被其他客户端修改过，重新获取凭证再进行重试(CAS)。目前如果重试6次都失败的话，放弃本次更新映射行为
+
+
+
+映射信息位于 namespace: ‘public’, dataId: ‘{service name}’, group: ‘mapping’
 
 ```java
 public class NacosRegistryFactory extends AbstractRegistryFactory {
