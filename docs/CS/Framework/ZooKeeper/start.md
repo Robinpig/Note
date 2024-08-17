@@ -327,6 +327,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 }
 ```
 
+loadDataBase
+
 
 
 
@@ -415,8 +417,71 @@ PING的时间足够保守，以确保有合理的时间检测死连接并重新�
 
 
 
+## loadDataBase
 
 
+```java
+private void loadDataBase() {
+        try {
+            zkDb.loadDataBase();
+
+            // load the epochs
+            long lastProcessedZxid = zkDb.getDataTree().lastProcessedZxid;
+            long epochOfZxid = ZxidUtils.getEpochFromZxid(lastProcessedZxid);
+            try {
+                currentEpoch = readLongFromFile(CURRENT_EPOCH_FILENAME);
+            } catch (FileNotFoundException e) {
+                // pick a reasonable epoch number
+                // this should only happen once when moving to a
+                // new code version
+                currentEpoch = epochOfZxid;
+                LOG.info(
+                    "{} not found! Creating with a reasonable default of {}. "
+                        + "This should only happen when you are upgrading your installation",
+                    CURRENT_EPOCH_FILENAME,
+                    currentEpoch);
+                writeLongToFile(CURRENT_EPOCH_FILENAME, currentEpoch);
+            }
+            if (epochOfZxid > currentEpoch) {
+                // acceptedEpoch.tmp file in snapshot directory
+                File currentTmp = new File(getTxnFactory().getSnapDir(),
+                    CURRENT_EPOCH_FILENAME + AtomicFileOutputStream.TMP_EXTENSION);
+                if (currentTmp.exists()) {
+                    long epochOfTmp = readLongFromFile(currentTmp.getName());
+                    LOG.info("{} found. Setting current epoch to {}.", currentTmp, epochOfTmp);
+                    setCurrentEpoch(epochOfTmp);
+                } else {
+                    throw new IOException(
+                        "The current epoch, " + ZxidUtils.zxidToString(currentEpoch)
+                            + ", is older than the last zxid, " + lastProcessedZxid);
+                }
+            }
+            try {
+                acceptedEpoch = readLongFromFile(ACCEPTED_EPOCH_FILENAME);
+            } catch (FileNotFoundException e) {
+                // pick a reasonable epoch number
+                // this should only happen once when moving to a
+                // new code version
+                acceptedEpoch = epochOfZxid;
+                LOG.info(
+                    "{} not found! Creating with a reasonable default of {}. "
+                        + "This should only happen when you are upgrading your installation",
+                    ACCEPTED_EPOCH_FILENAME,
+                    acceptedEpoch);
+                writeLongToFile(ACCEPTED_EPOCH_FILENAME, acceptedEpoch);
+            }
+            if (acceptedEpoch < currentEpoch) {
+                throw new IOException("The accepted epoch, "
+                                      + ZxidUtils.zxidToString(acceptedEpoch)
+                                      + " is less than the current epoch, "
+                                      + ZxidUtils.zxidToString(currentEpoch));
+            }
+        } catch (IOException ie) {
+            LOG.error("Unable to load database on disk", ie);
+            throw new RuntimeException("Unable to run quorum server ", ie);
+        }
+    }
+```
 
 
 ## Leader Election
@@ -425,19 +490,18 @@ This class manages the quorum protocol. There are three states this server can b
 1. Leader election - each server will elect a leader (proposing itself as a leader initially).
 2. Follower - the server will synchronize with the leader and replicate any transactions.
 
-
 This class will setup a datagram socket that will always respond with its view of the current leader. The response will take the form of:
    int xid;
    long myid;
    long leader_id;
    long leader_zxid;
 
+优先zxid最大 其次myid最大
+
 
 The request for the current leader will consist solely of an xid: int xid
 
-
 启动时候从磁盘加载数据到内存，然后开启服务端的网络处理服务，然后开启一个管理端，接下来就进入比较重要的选举功能
-startLeaderElection
 
 ```java
 public synchronized void startLeaderElection() {
@@ -454,11 +518,11 @@ public synchronized void startLeaderElection() {
     this.electionAlg = createElectionAlgorithm(electionType);
 }
 ```
-ZK节点状态角色 ZK集群单节点状态（每个节点有且只有一个状态），ZK的定位一定需要一个leader节点处于lading状态。
-● looking：寻找leader状态，当前集群没有leader，进入leader选举流程。
-● following：跟随者状态，接受leading节点同步和指挥。
-● leading：领导者状态。
-● observing：观察者状态，表名当前服务器是observer。
+ZK节点状态角色 ZK集群单节点状态（每个节点有且只有一个状态），ZK的定位一定需要一个leader节点处于leading状态。
+- looking：寻找leader状态，当前集群没有leader，进入leader选举流程。
+- following：跟随者状态，接受leading节点同步和指挥。
+- leading：领导者状态。
+- observing：观察者状态，表名当前服务器是observer。
 
 
 
@@ -497,12 +561,36 @@ protected Election createElectionAlgorithm(int electionAlgorithm) {
 }
 ```
 electionType 的值是哪里来的呢 其实是来源配置文件中electionAlg属性默认值为3.使用何种选举方式，目前只支持3在老的版本中也是支持其他选项的（0，1，2，3），
-● “0”表示使用 原生的UDP（LeaderElection），
-● “1”表示使用 非授权UDP
-● “2”表示 授权UDP
-● “3”基于 TCP的快速选举（FastLeaderElection）
+- “0”表示使用 原生的UDP（LeaderElection），
+- “1”表示使用 非授权UDP
+- “2”表示 授权UDP
+- “3”基于 TCP的快速选举（FastLeaderElection）
 
-目前保留“3”，其他方式将在未来版本不予支持，参QuorumPear.createElectionAlgorithm（int alg）
+
+
+创建QuorumCnxManager和Listener并启动Listener 创建对象完毕之后则将QuorumCnxManager对象存入成员变量AtomicReference中用于跨线程可见
+
+使用QuorumCnxManager创建并启动FastLeaderElection
+
+### QuorumCnxManager
+
+创建QuorumCnxManager对象： **QuorumCnxManager(qcm)** 实现领导选举中的网络连接管理功能。它为每一对节点维护唯一的一个连接，在两个节点都启动申请连接时，只有sid大的一方才会申请连接成功。qcm对每个节点维护一个消息发送队列。
+
+ Qcm主要成员变量： 
+
+- `public final ArrayBlockingQueue recvQueue;` //本节点的消息接收队列 
+- `final ConcurrentHashMap senderWorkerMap;`//对每一个远程节点都会定义一个SendWorker
+- `ConcurrentHashMap> queueSendMap;`//每个远程节点都会定义一个消息发型队列 - `Qcm`主要三个内类（线程）：
+- `Listener` 网络监听线程 - `SendWorker` 消息发送线程（每个远程节点都会有一个） - `RecvWorker` 消息接受线程
+
+这个类实现了使用TCP进行 **leader选举的连接管理器** 。
+它为每对服务器维护一个连接。棘手的部分是确保每对正确运行并可以通过网络通信的服务器只有一个连接。
+
+如果两个服务器试图同时启动一个连接，那么连接管理器将使用一种非常简单的打破连接机制，根据双方的IP地址来决定要删除哪个连接。
+
+对于每个对等点，管理器维护一个要发送的消息队列。
+
+如果与任何特定对等点的连接断开，则发送方线程将消息放回到列表中。由于此实现目前使用队列实现来维护要发送给另一个对等体的消息，因此我们将消息添加到队列的尾部，从而更改消息的顺序。虽然这对领导选举来说不是问题，但在点对点通信时可能会出现问题
 
 ```java
 public QuorumCnxManager createCnxnManager() {
@@ -575,11 +663,11 @@ private void initializeConnectionExecutor(final long mySid, final int quorumCnxn
     this.connectionExecutor.allowCoreThreadTimeOut(true);
 }
 ```
-创建对象完毕之后则将QuorumCnxManager对象存入成员变量AtomicReference中用于跨线程可见
+
+
+### listener
 
 Listener内部线程的run方法如下用于启动监听端口，监听其他server的连接与数据传输
-
-
 
 ```java
 public class Listener extends ZooKeeperThread {
@@ -648,9 +736,143 @@ public class Listener extends ZooKeeperThread {
 - 如果建立连接的客户端的sid大于当前实例的sid则正常连接开启发送和接收的子线程SendWorker和RecvWorker
 - 发送线程循环从发送队列中拉取消息进行发送(queueSendMap 中sid对应的发送队列)
 - 接收消息线程循环的获取客户端发送过来的消息,然后将消息存入接收消息队列中recvQueue - 在FastLeaderElection选取算法类型中会创建Messenger类型对象
-- Messenger类型对象通过内部的WorkerSender和WorkerReceiver线程来处理需要发送和需要接收的消息然后将消息放入发送队列(queueSendMap中sid对应的发送队列)或者从接收队列recvQueue中获取消息进行处理 
+- Messenger类型对象通过内部的WorkerSender和WorkerReceiver线程来处理需要发送和需要接收的消息然后将消息放入发送队列(queueSendMap中sid对应的发送队列)或者从接收队列recvQueue中获取消息进行处理
 
 
+
+```java
+class ListenerHandler implements Runnable, Closeable {
+    private ServerSocket serverSocket;
+    private InetSocketAddress address;
+    private boolean portUnification;
+    private boolean sslQuorum;
+    private CountDownLatch latch;
+
+    ListenerHandler(InetSocketAddress address, boolean portUnification, boolean sslQuorum,
+                    CountDownLatch latch) {
+        this.address = address;
+        this.portUnification = portUnification;
+        this.sslQuorum = sslQuorum;
+        this.latch = latch;
+    }
+
+    @Override
+    public void run() {
+        try {
+            Thread.currentThread().setName("ListenerHandler-" + address);
+            acceptConnections();
+            try {
+                close();
+            } catch (IOException e) {
+                LOG.warn("Exception when shutting down listener: ", e);
+            }
+        } catch (Exception e) {
+            // Output of unexpected exception, should never happen
+            LOG.error("Unexpected error ", e);
+        } finally {
+            latch.countDown();
+        }
+    }
+}
+```
+
+
+
+连接处理
+
+```java
+private void acceptConnections() {
+    int numRetries = 0;
+    Socket client = null;
+
+    while ((!shutdown) && (portBindMaxRetry == 0 || numRetries < portBindMaxRetry)) {
+        try {
+            serverSocket = createNewServerSocket();
+            LOG.info("{} is accepting connections now, my election bind port: {}", QuorumCnxManager.this.mySid, address.toString());
+            while (!shutdown) {
+                try {
+                    client = serverSocket.accept();
+                    setSockOpts(client);
+                    LOG.info("Received connection request from {}", client.getRemoteSocketAddress());
+                    // Receive and handle the connection request
+                    // asynchronously if the quorum sasl authentication is
+                    // enabled. This is required because sasl server
+                    // authentication process may take few seconds to finish,
+                    // this may delay next peer connection requests.
+                    if (quorumSaslAuthEnabled) {
+                        receiveConnectionAsync(client);
+                    } else {
+                        receiveConnection(client);
+                    }
+                    numRetries = 0;
+                } catch (SocketTimeoutException e) {
+                    LOG.warn("The socket is listening for the election accepted "
+                            + "and it timed out unexpectedly, but will retry."
+                            + "see ZOOKEEPER-2836");
+                }
+            }
+        } catch (IOException e) {
+            if (shutdown) {
+                break;
+            }
+
+            LOG.error("Exception while listening to address {}", address, e);
+
+            if (e instanceof SocketException) {
+                socketException.set(true);
+            }
+
+            numRetries++;
+            try {
+                close();
+                Thread.sleep(1000);
+            } catch (IOException ie) {
+                LOG.error("Error closing server socket", ie);
+            } catch (InterruptedException ie) {
+                LOG.error("Interrupted while sleeping. Ignoring exception", ie);
+            }
+            closeSocket(client);
+        }
+    }
+    if (!shutdown) {
+        LOG.error(
+          "Leaving listener thread for address {} after {} errors. Use {} property to increase retry count.",
+          formatInetAddr(address),
+          numRetries,
+          ELECTION_PORT_BIND_RETRY);
+    }
+}
+
+private ServerSocket createNewServerSocket() throws IOException {
+    ServerSocket socket;
+
+    if (portUnification) {
+        LOG.info("Creating TLS-enabled quorum server socket");
+        socket = new UnifiedServerSocket(self.getX509Util(), true);
+    } else if (sslQuorum) {
+        LOG.info("Creating TLS-only quorum server socket");
+        socket = new UnifiedServerSocket(self.getX509Util(), false);
+    } else {
+        socket = new ServerSocket();
+    }
+
+    socket.setReuseAddress(true);
+    address = new InetSocketAddress(address.getHostString(), address.getPort());
+    socket.bind(address);
+
+    return socket;
+}
+```
+
+
+
+### FastLeaderElection
+
+FastLeaderElection对象的创建涉及到哪些内容:
+
+- 创建发送队列sendqueue
+- 创建接收队列recvqueue
+- 创建Messenger类型对象
 
 ```java
 public class FastLeaderElection implements Election {
@@ -676,22 +898,25 @@ public class FastLeaderElection implements Election {
         Thread wsThread = null;
         Thread wrThread = null;
 
-
         Messenger(QuorumCnxManager manager) {
-
             this.ws = new WorkerSender(manager);
-
             this.wsThread = new Thread(this.ws, "WorkerSender[myid=" + self.getMyId() + "]");
             this.wsThread.setDaemon(true);
 
             this.wr = new WorkerReceiver(manager);
-
             this.wrThread = new Thread(this.wr, "WorkerReceiver[myid=" + self.getMyId() + "]");
             this.wrThread.setDaemon(true);
         }
     }
 }
 ```
+
+启动了用于接收和发送数据使用的WorkerSender线程和WorkerReceiver线程,
+
+是否需要投票还需要根据当前集群的一个状态来看,在 QuorumPeer 最后一步启动的时候会进行状态判断发起投票. 发送和接收的详细内容待会在看 WorkerSender数据传输层 
+
+这个发送类型主要做中间层将需要发送的消息转换成ByteBuffer ,然后调用QuorumCnxManager的toSend方法来发送消息
+
 
 ```java
 
@@ -703,7 +928,6 @@ void start() {
     this.wrThread.start();
 }
 ```
-启动了用于接收和发送数据使用的WorkerSender线程和WorkerReceiver线程,是否需要投票还需要根据当前集群的一个状态来看,在 QuorumPeer 最后一步启动的时候会进行状态判断发起投票. 发送和接收的详细内容待会在看 WorkerSender数据传输层 这个发送类型主要做中间层将需要发送的消息转换成ByteBuffer ,然后调用QuorumCnxManager的toSend方法来发送消息
 
 ### Sender
 
@@ -1013,6 +1237,869 @@ class WorkerReceiver extends ZooKeeperThread {
 
 }
 ```
+
+
+### QuorumPeer::run
+
+在QuorumPeer 中通过super.start()方法启动线程 在线程中根据集群的状态来决定是否需要参与投票,加入集群
+
+```java
+@Override
+public void run() {
+    updateThreadName();
+
+    LOG.debug("Starting quorum peer");
+    try {
+        jmxQuorumBean = new QuorumBean(this);
+        MBeanRegistry.getInstance().register(jmxQuorumBean, null);
+        for (QuorumServer s : getView().values()) {
+            ZKMBeanInfo p;
+            if (getMyId() == s.id) {
+                p = jmxLocalPeerBean = new LocalPeerBean(this);
+                try {
+                    MBeanRegistry.getInstance().register(p, jmxQuorumBean);
+                } catch (Exception e) {
+                    LOG.warn("Failed to register with JMX", e);
+                    jmxLocalPeerBean = null;
+                }
+            } else {
+                RemotePeerBean rBean = new RemotePeerBean(this, s);
+                try {
+                    MBeanRegistry.getInstance().register(rBean, jmxQuorumBean);
+                    jmxRemotePeerBean.put(s.id, rBean);
+                } catch (Exception e) {
+                    LOG.warn("Failed to register with JMX", e);
+                }
+            }
+        }
+    } catch (Exception e) {
+        LOG.warn("Failed to register with JMX", e);
+        jmxQuorumBean = null;
+    }
+
+    try {
+        /*
+         * Main loop
+         */
+        while (running) {
+            if (unavailableStartTime == 0) {
+                unavailableStartTime = Time.currentElapsedTime();
+            }
+
+            switch (getPeerState()) {
+            case LOOKING:
+                LOG.info("LOOKING");
+                ServerMetrics.getMetrics().LOOKING_COUNT.add(1);
+
+                if (Boolean.getBoolean("readonlymode.enabled")) {
+                    LOG.info("Attempting to start ReadOnlyZooKeeperServer");
+
+                    // Create read-only server but don't start it immediately
+                    final ReadOnlyZooKeeperServer roZk = new ReadOnlyZooKeeperServer(logFactory, this, this.zkDb);
+
+                    // Instead of starting roZk immediately, wait some grace
+                    // period before we decide we're partitioned.
+                    //
+                    // Thread is used here because otherwise it would require
+                    // changes in each of election strategy classes which is
+                    // unnecessary code coupling.
+                    Thread roZkMgr = new Thread() {
+                        public void run() {
+                            try {
+                                // lower-bound grace period to 2 secs
+                                sleep(Math.max(2000, tickTime));
+                                if (ServerState.LOOKING.equals(getPeerState())) {
+                                    roZk.startup();
+                                }
+                            } catch (InterruptedException e) {
+                                LOG.info("Interrupted while attempting to start ReadOnlyZooKeeperServer, not started");
+                            } catch (Exception e) {
+                                LOG.error("FAILED to start ReadOnlyZooKeeperServer", e);
+                            }
+                        }
+                    };
+                    try {
+                        roZkMgr.start();
+                        reconfigFlagClear();
+                        if (shuttingDownLE) {
+                            shuttingDownLE = false;
+                            startLeaderElection();
+                        }
+                        setCurrentVote(makeLEStrategy().lookForLeader());
+                        checkSuspended();
+                    } catch (Exception e) {
+                        LOG.warn("Unexpected exception", e);
+                        setPeerState(ServerState.LOOKING);
+                    } finally {
+                        // If the thread is in the the grace period, interrupt
+                        // to come out of waiting.
+                        roZkMgr.interrupt();
+                        roZk.shutdown();
+                    }
+                } else {
+                    try {
+                        reconfigFlagClear();
+                        if (shuttingDownLE) {
+                            shuttingDownLE = false;
+                            startLeaderElection();
+                        }
+                        setCurrentVote(makeLEStrategy().lookForLeader());
+                    } catch (Exception e) {
+                        LOG.warn("Unexpected exception", e);
+                        setPeerState(ServerState.LOOKING);
+                    }
+                }
+                break;
+            case OBSERVING:
+                try {
+                    LOG.info("OBSERVING");
+                    setObserver(makeObserver(logFactory));
+                    observer.observeLeader();
+                } catch (Exception e) {
+                    LOG.warn("Unexpected exception", e);
+                } finally {
+                    observer.shutdown();
+                    setObserver(null);
+                    updateServerState();
+
+                    // Add delay jitter before we switch to LOOKING
+                    // state to reduce the load of ObserverMaster
+                    if (isRunning()) {
+                        Observer.waitForObserverElectionDelay();
+                    }
+                }
+                break;
+            case FOLLOWING:
+                try {
+                    LOG.info("FOLLOWING");
+                    setFollower(makeFollower(logFactory));
+                    follower.followLeader();
+                } catch (Exception e) {
+                    LOG.warn("Unexpected exception", e);
+                } finally {
+                    follower.shutdown();
+                    setFollower(null);
+                    updateServerState();
+                }
+                break;
+            case LEADING:
+                LOG.info("LEADING");
+                try {
+                    setLeader(makeLeader(logFactory));
+                    leader.lead();
+                    setLeader(null);
+                } catch (Exception e) {
+                    LOG.warn("Unexpected exception", e);
+                } finally {
+                    if (leader != null) {
+                        leader.shutdown("Forcing shutdown");
+                        setLeader(null);
+                    }
+                    updateServerState();
+                }
+                break;
+            }
+        }
+    } finally {
+        LOG.warn("QuorumPeer main thread exited");
+        MBeanRegistry instance = MBeanRegistry.getInstance();
+        instance.unregister(jmxQuorumBean);
+        instance.unregister(jmxLocalPeerBean);
+
+        for (RemotePeerBean remotePeerBean : jmxRemotePeerBean.values()) {
+            instance.unregister(remotePeerBean);
+        }
+
+        jmxQuorumBean = null;
+        jmxLocalPeerBean = null;
+        jmxRemotePeerBean = null;
+    }
+}
+```
+
+
+
+
+
+#### case LOOKING
+
+由于是刚刚启动，是 LOOKING 状态。所以走第一条分支。调用 setCurrentVote(makeLEStrategy().lookForLeader())
+
+
+
+```java
+public Vote lookForLeader() throws InterruptedException {
+    // ...
+    self.start_fle = Time.currentElapsedTime();
+    try {
+        /*
+         * The votes from the current leader election are stored in recvset. In other words, a vote v is in recvset
+         * if v.electionEpoch == logicalclock. The current participant uses recvset to deduce on whether a majority
+         * of participants has voted for it.
+         */
+        Map<Long, Vote> recvset = new HashMap<>();
+
+        /*
+         * The votes from previous leader elections, as well as the votes from the current leader election are
+         * stored in outofelection. Note that notifications in a LOOKING state are not stored in outofelection.
+         * Only FOLLOWING or LEADING notifications are stored in outofelection. The current participant could use
+         * outofelection to learn which participant is the leader if it arrives late (i.e., higher logicalclock than
+         * the electionEpoch of the received notifications) in a leader election.
+         */
+        Map<Long, Vote> outofelection = new HashMap<>();
+
+        int notTimeout = minNotificationInterval;
+
+        synchronized (this) {
+            logicalclock.incrementAndGet();
+            updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
+        }
+
+        LOG.info(
+            "New election. My id = {}, proposed zxid=0x{}",
+            self.getMyId(),
+            Long.toHexString(proposedZxid));
+        sendNotifications();
+
+        SyncedLearnerTracker voteSet = null;
+
+        /*
+         * Loop in which we exchange notifications until we find a leader
+         */
+
+        while ((self.getPeerState() == ServerState.LOOKING) && (!stop)) {
+            /*
+             * Remove next notification from queue, times out after 2 times
+             * the termination time
+             */
+            Notification n = recvqueue.poll(notTimeout, TimeUnit.MILLISECONDS);
+
+            /*
+             * Sends more notifications if haven't received enough.
+             * Otherwise processes new notification.
+             */
+            if (n == null) {
+                if (manager.haveDelivered()) {
+                    sendNotifications();
+                } else {
+                    manager.connectAll();
+                }
+
+                /*
+                 * Exponential backoff
+                 */
+                notTimeout = Math.min(notTimeout << 1, maxNotificationInterval);
+
+                /*
+                 * When a leader failure happens on a master, the backup will be supposed to receive the honour from
+                 * Oracle and become a leader, but the honour is likely to be delay. We do a re-check once timeout happens
+                 *
+                 * The leader election algorithm does not provide the ability of electing a leader from a single instance
+                 * which is in a configuration of 2 instances.
+                 * */
+                if (self.getQuorumVerifier() instanceof QuorumOracleMaj
+                        && self.getQuorumVerifier().revalidateVoteset(voteSet, notTimeout != minNotificationInterval)) {
+                    setPeerState(proposedLeader, voteSet);
+                    Vote endVote = new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch);
+                    leaveInstance(endVote);
+                    return endVote;
+                }
+
+                LOG.info("Notification time out: {} ms", notTimeout);
+
+            } else if (validVoter(n.sid) && validVoter(n.leader)) {
+                /*
+                 * Only proceed if the vote comes from a replica in the current or next
+                 * voting view for a replica in the current or next voting view.
+                 */
+                switch (n.state) {
+                case LOOKING:
+                    if (getInitLastLoggedZxid() == -1) {
+                        LOG.debug("Ignoring notification as our zxid is -1");
+                        break;
+                    }
+                    if (n.zxid == -1) {
+                        LOG.debug("Ignoring notification from member with -1 zxid {}", n.sid);
+                        break;
+                    }
+                    // If notification > current, replace and send messages out
+                    if (n.electionEpoch > logicalclock.get()) {
+                        logicalclock.set(n.electionEpoch);
+                        recvset.clear();
+                        if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, getInitId(), getInitLastLoggedZxid(), getPeerEpoch())) {
+                            updateProposal(n.leader, n.zxid, n.peerEpoch);
+                        } else {
+                            updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
+                        }
+                        sendNotifications();
+                    } else if (n.electionEpoch < logicalclock.get()) {
+                            LOG.debug(
+                                "Notification election epoch is smaller than logicalclock. n.electionEpoch = 0x{}, logicalclock=0x{}",
+                                Long.toHexString(n.electionEpoch),
+                                Long.toHexString(logicalclock.get()));
+                        break;
+                    } else if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
+                        updateProposal(n.leader, n.zxid, n.peerEpoch);
+                        sendNotifications();
+                    }
+
+                    LOG.debug(
+                        "Adding vote: from={}, proposed leader={}, proposed zxid=0x{}, proposed election epoch=0x{}",
+                        n.sid,
+                        n.leader,
+                        Long.toHexString(n.zxid),
+                        Long.toHexString(n.electionEpoch));
+
+                    // don't care about the version if it's in LOOKING state
+                    recvset.put(n.sid, new Vote(n.leader, n.zxid, n.electionEpoch, n.peerEpoch));
+
+                    voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
+
+                    if (voteSet.hasAllQuorums()) {
+
+                        // Verify if there is any change in the proposed leader
+                        while ((n = recvqueue.poll(finalizeWait, TimeUnit.MILLISECONDS)) != null) {
+                            if (totalOrderPredicate(n.leader, n.zxid, n.peerEpoch, proposedLeader, proposedZxid, proposedEpoch)) {
+                                recvqueue.put(n);
+                                break;
+                            }
+                        }
+
+                        /*
+                         * This predicate is true once we don't read any new
+                         * relevant message from the reception queue
+                         */
+                        if (n == null) {
+                            setPeerState(proposedLeader, voteSet);
+                            Vote endVote = new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch);
+                            leaveInstance(endVote);
+                            return endVote;
+                        }
+                    }
+                    break;
+                case OBSERVING:
+                    LOG.debug("Notification from observer: {}", n.sid);
+                    break;
+
+                    /*
+                    * In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING.
+                    * To avoid the duplication of codes, we create a method called followingBehavior which was used to
+                    * shared by FOLLOWING and LEADING. This method returns a Vote. When the returned Vote is null, it follows
+                    * the original idea to break swtich statement; otherwise, a valid returned Vote indicates, a leader
+                    * is generated.
+                    *
+                    * The reason why we need to separate these behaviors is to make the algorithm runnable for 2-node
+                    * setting. An extra condition for generating leader is needed. Due to the majority rule, only when
+                    * there is a majority in the voteset, a leader will be generated. However, in a configuration of 2 nodes,
+                    * the number to achieve the majority remains 2, which means a recovered node cannot generate a leader which is
+                    * the existed leader. Therefore, we need the Oracle to kick in this situation. In a two-node configuration, the Oracle
+                    * only grants the permission to maintain the progress to one node. The oracle either grants the permission to the
+                    * remained node and makes it a new leader when there is a faulty machine, which is the case to maintain the progress.
+                    * Otherwise, the oracle does not grant the permission to the remained node, which further causes a service down.
+                    *
+                    * In the former case, when a failed server recovers and participate in the leader election, it would not locate a
+                    * new leader because there does not exist a majority in the voteset. It fails on the containAllQuorum() infinitely due to
+                    * two facts. First one is the fact that it does do not have a majority in the voteset. The other fact is the fact that
+                    * the oracle would not give the permission since the oracle already gave the permission to the existed leader, the healthy machine.
+                    * Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
+                    * To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
+                    *
+                    *
+                    * */
+                case FOLLOWING:
+                    /*
+                    * To avoid duplicate codes
+                    * */
+                    Vote resultFN = receivedFollowingNotification(recvset, outofelection, voteSet, n);
+                    if (resultFN == null) {
+                        break;
+                    } else {
+                        return resultFN;
+                    }
+                case LEADING:
+                    /*
+                    * In leadingBehavior(), it performs followingBehvior() first. When followingBehavior() returns
+                    * a null pointer, ask Oracle whether to follow this leader.
+                    * */
+                    Vote resultLN = receivedLeadingNotification(recvset, outofelection, voteSet, n);
+                    if (resultLN == null) {
+                        break;
+                    } else {
+                        return resultLN;
+                    }
+                default:
+                    LOG.warn("Notification state unrecognized: {} (n.state), {}(n.sid)", n.state, n.sid);
+                    break;
+                }
+            } else {
+                if (!validVoter(n.leader)) {
+                    LOG.warn("Ignoring notification for non-cluster member sid {} from sid {}", n.leader, n.sid);
+                }
+                if (!validVoter(n.sid)) {
+                    LOG.warn("Ignoring notification for sid {} from non-quorum member sid {}", n.leader, n.sid);
+                }
+            }
+        }
+        return null;
+    } finally {
+        try {
+            if (self.jmxLeaderElectionBean != null) {
+                MBeanRegistry.getInstance().unregister(self.jmxLeaderElectionBean);
+            }
+        } catch (Exception e) {
+            LOG.warn("Failed to unregister with JMX", e);
+        }
+        self.jmxLeaderElectionBean = null;
+        LOG.debug("Number of connection processing threads: {}", manager.getConnectionThreadCount());
+    }
+}
+```
+
+
+
+
+
+#### case OBSERVING
+
+
+
+```java
+case OBSERVING:
+    try {
+        LOG.info("OBSERVING");
+        setObserver(makeObserver(logFactory));
+        observer.observeLeader();
+    } catch (Exception e) {
+        LOG.warn("Unexpected exception", e);
+    } finally {
+        observer.shutdown();
+        setObserver(null);
+        updateServerState();
+
+        // Add delay jitter before we switch to LOOKING
+        // state to reduce the load of ObserverMaster
+        if (isRunning()) {
+            Observer.waitForObserverElectionDelay();
+        }
+    }
+    break;
+```
+
+setObserver(makeObserver(logFactory));
+观察者是不参与原子广播协议的对等点。 相反，他们会被领导者告知成功的提案。 因此，观察者自然地充当发布提案流的中继点，并可以减轻追随者的一些连接负载。 观察员可以提交提案，但不投票接受。 有关此功能的讨论，请参阅 ZOOKEEPER-368。
+
+
+
+Observer和Follower都继承了Learner 接下来Observer开始连接leader
+
+```java
+void observeLeader() throws Exception {
+    zk.registerJMX(new ObserverBean(this, zk), self.jmxLocalPeerBean);
+    long connectTime = 0;
+    boolean completedSync = false;
+    try {
+        self.setZabState(QuorumPeer.ZabState.DISCOVERY);
+        QuorumServer master = findLearnerMaster();
+        try {
+            connectToLeader(master.addr, master.hostname);
+            connectTime = System.currentTimeMillis();
+            long newLeaderZxid = registerWithLeader(Leader.OBSERVERINFO);
+            if (self.isReconfigStateChange()) {
+                throw new Exception("learned about role change");
+            }
+
+            final long startTime = Time.currentElapsedTime();
+            self.setLeaderAddressAndId(master.addr, master.getId());
+            self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
+            syncWithLeader(newLeaderZxid);
+            self.setZabState(QuorumPeer.ZabState.BROADCAST);
+            completedSync = true;
+            final long syncTime = Time.currentElapsedTime() - startTime;
+            ServerMetrics.getMetrics().OBSERVER_SYNC_TIME.add(syncTime);
+            QuorumPacket qp = new QuorumPacket();
+            while (this.isRunning() && nextLearnerMaster.get() == null) {
+                readPacket(qp);
+                processPacket(qp);
+            }
+        } catch (Exception e) {
+            LOG.warn("Exception when observing the leader", e);
+            closeSocket();
+
+            // clear pending revalidations
+            pendingRevalidations.clear();
+        }
+    } finally {
+        currentLearnerMaster = null;
+        zk.unregisterJMX(this);
+        if (connectTime != 0) {
+            long connectionDuration = System.currentTimeMillis() - connectTime;
+            messageTracker.dumpToLog(leaderAddr.toString());
+        }
+    }
+}
+```
+
+
+
+#### case FOLLOWING
+
+选主完成following切换到following状态
+
+```java
+case FOLLOWING:
+    try {
+        LOG.info("FOLLOWING");
+        setFollower(makeFollower(logFactory));
+        follower.followLeader();
+    } catch (Exception e) {
+        LOG.warn("Unexpected exception", e);
+    } finally {
+        follower.shutdown();
+        setFollower(null);
+        updateServerState();
+    }
+    break;
+```
+
+followLeader
+
+```java
+void followLeader() throws InterruptedException {
+    self.end_fle = Time.currentElapsedTime();
+    long electionTimeTaken = self.end_fle - self.start_fle;
+    self.setElectionTimeTaken(electionTimeTaken);
+    ServerMetrics.getMetrics().ELECTION_TIME.add(electionTimeTaken);
+    LOG.info("FOLLOWING - LEADER ELECTION TOOK - {} {}", electionTimeTaken, QuorumPeer.FLE_TIME_UNIT);
+    self.start_fle = 0;
+    self.end_fle = 0;
+    fzk.registerJMX(new FollowerBean(this, zk), self.jmxLocalPeerBean);
+
+    long connectionTime = 0;
+    boolean completedSync = false;
+
+    try {
+        self.setZabState(QuorumPeer.ZabState.DISCOVERY);
+        QuorumServer leaderServer = findLeader();
+        try {
+            connectToLeader(leaderServer.addr, leaderServer.hostname);
+            connectionTime = System.currentTimeMillis();
+            long newEpochZxid = registerWithLeader(Leader.FOLLOWERINFO);
+            if (self.isReconfigStateChange()) {
+                throw new Exception("learned about role change");
+            }
+            //check to see if the leader zxid is lower than ours
+            //this should never happen but is just a safety check
+            long newEpoch = ZxidUtils.getEpochFromZxid(newEpochZxid);
+            if (newEpoch < self.getAcceptedEpoch()) {
+                LOG.error("Proposed leader epoch "
+                          + ZxidUtils.zxidToString(newEpochZxid)
+                          + " is less than our accepted epoch "
+                          + ZxidUtils.zxidToString(self.getAcceptedEpoch()));
+                throw new IOException("Error: Epoch of leader is lower");
+            }
+            long startTime = Time.currentElapsedTime();
+            self.setLeaderAddressAndId(leaderServer.addr, leaderServer.getId());
+            self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
+            syncWithLeader(newEpochZxid);
+            self.setZabState(QuorumPeer.ZabState.BROADCAST);
+            completedSync = true;
+            long syncTime = Time.currentElapsedTime() - startTime;
+            ServerMetrics.getMetrics().FOLLOWER_SYNC_TIME.add(syncTime);
+            if (self.getObserverMasterPort() > 0) {
+                LOG.info("Starting ObserverMaster");
+
+                om = new ObserverMaster(self, fzk, self.getObserverMasterPort());
+                om.start();
+            } else {
+                om = null;
+            }
+            // create a reusable packet to reduce gc impact
+            QuorumPacket qp = new QuorumPacket();
+            while (this.isRunning()) {
+                readPacket(qp);
+                processPacket(qp);
+            }
+        } catch (Exception e) {
+            LOG.warn("Exception when following the leader", e);
+            closeSocket();
+
+            // clear pending revalidations
+            pendingRevalidations.clear();
+        }
+    } finally {
+        if (om != null) {
+            om.stop();
+        }
+        zk.unregisterJMX(this);
+
+        if (connectionTime != 0) {
+            long connectionDuration = System.currentTimeMillis() - connectionTime;
+            LOG.info(
+                "Disconnected from leader (with address: {}). Was connected for {}ms. Sync state: {}",
+                leaderAddr,
+                connectionDuration,
+                completedSync);
+            messageTracker.dumpToLog(leaderAddr.toString());
+        }
+    }
+}
+```
+
+
+
+#### case LEADING
+
+```java
+case LEADING:
+    LOG.info("LEADING");
+    try {
+        setLeader(makeLeader(logFactory));
+        leader.lead();
+        setLeader(null);
+    } catch (Exception e) {
+        LOG.warn("Unexpected exception", e);
+    } finally {
+        if (leader != null) {
+            leader.shutdown("Forcing shutdown");
+            setLeader(null);
+        }
+        updateServerState();
+    }
+    break;
+```
+
+
+
+lead方法
+
+
+
+```java
+void lead() throws IOException, InterruptedException {
+    self.end_fle = Time.currentElapsedTime();
+    long electionTimeTaken = self.end_fle - self.start_fle;
+    self.setElectionTimeTaken(electionTimeTaken);
+    ServerMetrics.getMetrics().ELECTION_TIME.add(electionTimeTaken);
+    LOG.info("LEADING - LEADER ELECTION TOOK - {} {}", electionTimeTaken, QuorumPeer.FLE_TIME_UNIT);
+    self.start_fle = 0;
+    self.end_fle = 0;
+
+    zk.registerJMX(new LeaderBean(this, zk), self.jmxLocalPeerBean);
+
+    try {
+        self.setZabState(QuorumPeer.ZabState.DISCOVERY);
+        self.tick.set(0);
+        zk.loadData();
+
+        leaderStateSummary = new StateSummary(self.getCurrentEpoch(), zk.getLastProcessedZxid());
+
+        // Start thread that waits for connection requests from
+        // new followers.
+        cnxAcceptor = new LearnerCnxAcceptor();
+        cnxAcceptor.start();
+
+        long epoch = getEpochToPropose(self.getMyId(), self.getAcceptedEpoch());
+
+        zk.setZxid(ZxidUtils.makeZxid(epoch, 0));
+
+        synchronized (this) {
+            lastProposed = zk.getZxid();
+        }
+
+        newLeaderProposal.packet = new QuorumPacket(NEWLEADER, zk.getZxid(), null, null);
+
+        if ((newLeaderProposal.packet.getZxid() & 0xffffffffL) != 0) {
+            LOG.info("NEWLEADER proposal has Zxid of {}", Long.toHexString(newLeaderProposal.packet.getZxid()));
+        }
+
+        QuorumVerifier lastSeenQV = self.getLastSeenQuorumVerifier();
+        QuorumVerifier curQV = self.getQuorumVerifier();
+        if (curQV.getVersion() == 0 && curQV.getVersion() == lastSeenQV.getVersion()) {
+            // This was added in ZOOKEEPER-1783. The initial config has version 0 (not explicitly
+            // specified by the user; the lack of version in a config file is interpreted as version=0).
+            // As soon as a config is established we would like to increase its version so that it
+            // takes presedence over other initial configs that were not established (such as a config
+            // of a server trying to join the ensemble, which may be a partial view of the system, not the full config).
+            // We chose to set the new version to the one of the NEWLEADER message. However, before we can do that
+            // there must be agreement on the new version, so we can only change the version when sending/receiving UPTODATE,
+            // not when sending/receiving NEWLEADER. In other words, we can't change curQV here since its the committed quorum verifier,
+            // and there's still no agreement on the new version that we'd like to use. Instead, we use
+            // lastSeenQuorumVerifier which is being sent with NEWLEADER message
+            // so its a good way to let followers know about the new version. (The original reason for sending
+            // lastSeenQuorumVerifier with NEWLEADER is so that the leader completes any potentially uncommitted reconfigs
+            // that it finds before starting to propose operations. Here we're reusing the same code path for
+            // reaching consensus on the new version number.)
+
+            // It is important that this is done before the leader executes waitForEpochAck,
+            // so before LearnerHandlers return from their waitForEpochAck
+            // hence before they construct the NEWLEADER message containing
+            // the last-seen-quorumverifier of the leader, which we change below
+            try {
+                LOG.debug(String.format("set lastSeenQuorumVerifier to currentQuorumVerifier (%s)", curQV.toString()));
+                QuorumVerifier newQV = self.configFromString(curQV.toString());
+                newQV.setVersion(zk.getZxid());
+                self.setLastSeenQuorumVerifier(newQV, true);
+            } catch (Exception e) {
+                throw new IOException(e);
+            }
+        }
+
+        newLeaderProposal.addQuorumVerifier(self.getQuorumVerifier());
+        if (self.getLastSeenQuorumVerifier().getVersion() > self.getQuorumVerifier().getVersion()) {
+            newLeaderProposal.addQuorumVerifier(self.getLastSeenQuorumVerifier());
+        }
+
+        // We have to get at least a majority of servers in sync with
+        // us. We do this by waiting for the NEWLEADER packet to get
+        // acknowledged
+
+        waitForEpochAck(self.getMyId(), leaderStateSummary);
+        self.setCurrentEpoch(epoch);
+        self.setLeaderAddressAndId(self.getQuorumAddress(), self.getMyId());
+        self.setZabState(QuorumPeer.ZabState.SYNCHRONIZATION);
+
+        try {
+            waitForNewLeaderAck(self.getMyId(), zk.getZxid());
+        } catch (InterruptedException e) {
+            shutdown("Waiting for a quorum of followers, only synced with sids: [ "
+                     + newLeaderProposal.ackSetsToString()
+                     + " ]");
+            HashSet<Long> followerSet = new HashSet<>();
+
+            for (LearnerHandler f : getLearners()) {
+                if (self.getQuorumVerifier().getVotingMembers().containsKey(f.getSid())) {
+                    followerSet.add(f.getSid());
+                }
+            }
+            boolean initTicksShouldBeIncreased = true;
+            for (Proposal.QuorumVerifierAcksetPair qvAckset : newLeaderProposal.qvAcksetPairs) {
+                if (!qvAckset.getQuorumVerifier().containsQuorum(followerSet)) {
+                    initTicksShouldBeIncreased = false;
+                    break;
+                }
+            }
+            if (initTicksShouldBeIncreased) {
+                LOG.warn("Enough followers present. Perhaps the initTicks need to be increased.");
+            }
+            return;
+        }
+
+        startZkServer();
+
+        /**
+         * WARNING: do not use this for anything other than QA testing
+         * on a real cluster. Specifically to enable verification that quorum
+         * can handle the lower 32bit roll-over issue identified in
+         * ZOOKEEPER-1277. Without this option it would take a very long
+         * time (on order of a month say) to see the 4 billion writes
+         * necessary to cause the roll-over to occur.
+         *
+         * This field allows you to override the zxid of the server. Typically
+         * you'll want to set it to something like 0xfffffff0 and then
+         * start the quorum, run some operations and see the re-election.
+         */
+        String initialZxid = System.getProperty("zookeeper.testingonly.initialZxid");
+        if (initialZxid != null) {
+            long zxid = Long.parseLong(initialZxid);
+            zk.setZxid((zk.getZxid() & 0xffffffff00000000L) | zxid);
+        }
+
+        if (!System.getProperty("zookeeper.leaderServes", "yes").equals("no")) {
+            self.setZooKeeperServer(zk);
+        }
+
+        self.setZabState(QuorumPeer.ZabState.BROADCAST);
+        self.adminServer.setZooKeeperServer(zk);
+
+        // We ping twice a tick, so we only update the tick every other
+        // iteration
+        boolean tickSkip = true;
+        // If not null then shutdown this leader
+        String shutdownMessage = null;
+
+        while (true) {
+            synchronized (this) {
+                long start = Time.currentElapsedTime();
+                long cur = start;
+                long end = start + self.tickTime / 2;
+                while (cur < end) {
+                    wait(end - cur);
+                    cur = Time.currentElapsedTime();
+                }
+
+                if (!tickSkip) {
+                    self.tick.incrementAndGet();
+                }
+
+                // We use an instance of SyncedLearnerTracker to
+                // track synced learners to make sure we still have a
+                // quorum of current (and potentially next pending) view.
+                SyncedLearnerTracker syncedAckSet = new SyncedLearnerTracker();
+                syncedAckSet.addQuorumVerifier(self.getQuorumVerifier());
+                if (self.getLastSeenQuorumVerifier() != null
+                    && self.getLastSeenQuorumVerifier().getVersion() > self.getQuorumVerifier().getVersion()) {
+                    syncedAckSet.addQuorumVerifier(self.getLastSeenQuorumVerifier());
+                }
+
+                syncedAckSet.addAck(self.getMyId());
+
+                for (LearnerHandler f : getLearners()) {
+                    if (f.synced()) {
+                        syncedAckSet.addAck(f.getSid());
+                    }
+                }
+
+                // check leader running status
+                if (!this.isRunning()) {
+                    // set shutdown flag
+                    shutdownMessage = "Unexpected internal error";
+                    break;
+                }
+
+                /*
+                 *
+                 * We will need to re-validate the outstandingProposal to maintain the progress of ZooKeeper.
+                 * It is likely a proposal is waiting for enough ACKs to be committed. The proposals are sent out, but the
+                 * only follower goes away which makes the proposals will not be committed until the follower recovers back.
+                 * An earlier proposal which is not committed will block any further proposals. So, We need to re-validate those
+                 * outstanding proposal with the help from Oracle. A key point in the process of re-validation is that the proposals
+                 * need to be processed in order.
+                 *
+                 * We make the whole method blocking to avoid any possible race condition on outstandingProposal and lastCommitted
+                 * as well as to avoid nested synchronization.
+                 *
+                 * As a more generic approach, we pass the object of forwardingFollowers to QuorumOracleMaj to determine if we need
+                 * the help from Oracle.
+                 *
+                 *
+                 * the size of outstandingProposals can be 1. The only one outstanding proposal is the one waiting for the ACK from
+                 * the leader itself.
+                 * */
+                if (!tickSkip && !syncedAckSet.hasAllQuorums()
+                    && !(self.getQuorumVerifier().overrideQuorumDecision(getForwardingFollowers()) && self.getQuorumVerifier().revalidateOutstandingProp(this, new ArrayList<>(outstandingProposals.values()), lastCommitted))) {
+                    // Lost quorum of last committed and/or last proposed
+                    // config, set shutdown flag
+                    shutdownMessage = "Not sufficient followers synced, only synced with sids: [ "
+                                      + syncedAckSet.ackSetsToString()
+                                      + " ]";
+                    break;
+                }
+                tickSkip = !tickSkip;
+            }
+            for (LearnerHandler f : getLearners()) {
+                f.ping();
+            }
+        }
+        if (shutdownMessage != null) {
+            shutdown(shutdownMessage);
+            // leader goes in looking state
+        }
+    } finally {
+        zk.unregisterJMX(this);
+    }
+}
+```
+
 ## issue
 
 
@@ -1036,10 +2123,6 @@ zxid 是一个 64bits 的数，有两个部分组成：当前选举周期（epoc
 在业务的实现中，可通过Curator Recipes中的LeaderSelector替换LeaderLatch的方法，对ZooKeeper短暂的断连做一定的容忍
 
 
-## Observer
-
-setObserver(makeObserver(logFactory));
-观察者是不参与原子广播协议的对等点。 相反，他们会被领导者告知成功的提案。 因此，观察者自然地充当发布提案流的中继点，并可以减轻追随者的一些连接负载。 观察员可以提交提案，但不投票接受。 有关此功能的讨论，请参阅 ZOOKEEPER-368。
 
 
 
