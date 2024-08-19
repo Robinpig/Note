@@ -2199,7 +2199,7 @@ zxid 是一个 64bits 的数，有两个部分组成：当前选举周期（epoc
 
 ## Purge
 
-清理日志和快照文件
+由于 ZooKeeper 的任何一个变更操作都产生事务，事务日志需要持久化到硬盘，同时当写操作达到一定量或者一定时间间隔后，会对内存中的数据进行一次快照并写入到硬盘上的 snapshop 中，快照为了缩短启动时加载数据的时间从而加快整个系统启动。而随着运行时间的增长生成的 transaction log 和 snapshot 将越来越多，所以要定期清理，DatadirCleanupManager 就是启动一个 TimeTask 定时任务用于清理 DataDir 中的 snapshot 及对应的 transaction log
 
 DatadirCleanupManager日志清理工具,相关配置如下：
 - autopurge.purgeInterval 参数，单位是小时，当填写一个1或更大的整数，则开启，默认是0，或者配置了负数则表示不开启自动清理功能。
