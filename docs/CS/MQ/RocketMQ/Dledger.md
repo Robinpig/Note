@@ -8,14 +8,13 @@ Dledger 作为一个轻量级的 Java Library，它的作用就是将 Raft 有�
 Dledger 只做一件事情，就是 CommitLog。
 Dledger 的定位就是把上一层的 StateMachine 给去除，只留下 CommitLog。这样的话，系统就只需要实现一件事：就是把操作日志变得高可用和高可靠。
 
-
 这样做对消息系统还有非常特别的含义。消息系统里面如果还采用 StateMachine + CommitLog 的方式，会出现 double IO 的问题，因为消息本省可以理解为是一个操作记录。
 所以 Dledger 会提供一些对原生 CommitLog 访问的 API。通过这些 API 可以直接去访问 CommitLog。这样的话，只需要写入一次就可以拿到写入的内容。
 Dledger 对外提供的是简单的 API，如下图 6 所示。可以把它理解为一个可以无限写入操作记录的文件，可以不停 append，每一个 append 的记录会加上一个编号。
 所以直接去访问 Dledger 的话就是两个 API：一个是 append，另一个是 get，即根据编号拿到相应的 entry（一条记录）。
 
 
-## Arxhitecture
+## Architecture
 
 
 
@@ -35,6 +34,8 @@ mvn clean install -DskipTests
 - DLedgerConfig
 - MemberState 节点状态机
 - DLedgerClientProtocol 客户端通信协议
+
+
 
 
 

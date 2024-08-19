@@ -3,6 +3,10 @@ NameServer是一个几乎无状态节点，可集群部署，节点之间无任�
 
 ## start
 
+> 启动前注意环境变量`ROCKETMQ_HOME`的设置
+
+
+
 Brokers send heart beats to name server every 30 seconds and name server update live broker table time stamp.
 Name server scan live broker table every 10s and remove last time stamp > 120s brokers.
 
@@ -105,7 +109,7 @@ public class NamesrvController {
 }
 ```
 
-### DefaultRequestProcessor#processRequest
+### DefaultRequestProcessor::processRequest
 
 ```java
 public class DefaultRequestProcessor implements NettyRequestProcessor {
