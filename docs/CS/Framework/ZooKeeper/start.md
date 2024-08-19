@@ -2258,6 +2258,8 @@ public void start() {
 }
 ```
 
+### PurgeTask
+
 创建清理任务PurgeTask开启定时器以一定间隔时间来执行PurgeTask中的定时任务，定时任务在执行的时候会触发定时任务的run方法
 
 ```java
@@ -2300,6 +2302,8 @@ public static void purge(File dataDir, File snapDir, int num) throws IOException
 
 创建事物快照日志文件对象FileTxnSnapLog，然后根据参数获取获取到需要保留的文件数量， 然后根据保留的文件数量计算出保留文件中最小的那个zxid， 然后根据最小的zxid找到需要保留的事物日志文件列表 (事物日志当前最小的那个id之前的1个不能清理在zookeeper事物日志中可能发生滚动日志之前的文件也是会记录到最新的数据)， 然后过滤所有事物日志文件过滤出来需要删除的事物日志文件， 在过滤所有的快照文件找到所有需要删除的快照文件，最后循环删除需要删除的事物日志和快照文件
 
+#### findNValidSnapshots
+
 ```java
 public List<File> findNValidSnapshots(int n) {
     FileSnap snaplog = new FileSnap(snapDir);
@@ -2329,6 +2333,8 @@ protected List<File> findNValidSnapshots(int n) {
         return list;
     }
 ```
+
+#### purgeOlderSnapshots
 
 在处理事物日志和快照的时候，事物日志不能直接删除掉所有比需要保留最小zxid更小的日志文件 ，因为比需要保留最小zxid快照文件的事物日志可能存在于当前最小需要保留zxid的前一个文件中， 也就是说事物日志要比快快照日志多保留一个，这个于日志写入时的滚动机制有关
 

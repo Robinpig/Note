@@ -191,7 +191,6 @@ SelectorThread.updateQueue
 
 updateQueue和acceptedQueue一样,也是LinkedBlockingQueue类型的,在selector thread中.但是要说明白该队列的作用,就要对Java NIO的实现非常了解了. _Java NIO使用epoll（Linux中）系统调用,且是水平触发,也即若selector.select()发现socketChannel中有事件发生,比如有数据可读, 只要没有将这些数据从socketChannel读取完毕,下一次selector.select()还是会检测到有事件发生,直至数据被读取完毕. ZooKeeper一直认为selector.select()是性能的瓶颈,为了提高selector.select()的性能,避免上述水平触发模式的缺陷,ZooKeeper在处理IO的过程中, 会让socketChannel不再监听OP_READ和OP_WRITE事件,这样就可以减轻selector.select()的负担. 
 
-
 此时便出现一个问题,IO处理完毕后,如何让socketChannel再监听OP_READ和OP_WRITE事件? 有的小伙伴可能认为这件事情非常容易,worker thread处理IO结束后,直接调用key.interestOps(OP_READ & OP_WRITE)不就可以了吗? 事情并没有这简单,是因为selector.select()是在selector thread中执行的, 若在 selector.select()的过程中 ,worker thread调用了 key.interestOps(OP_READ & OP_WRITE) , 可能会阻塞selector.select() .
 ZooKeeper为了追求性能的极致,设计为由selector thread调用key.interestOps(OP_READ & OP_WRITE), 因此worker thread就需在IO处理完毕后告诉selector thread该socketChannel可以去监听OP_READ和OP_WRITE事件了, updateQueue就是存放那些需要监听OP_READ和OP_WRITE事件
 
@@ -601,6 +600,321 @@ public class NettyServerCnxnFactory extends ServerCnxnFactory {
 | 处理写事件    | 执行FinalRP.processRequest()的线程与worker thread通过NIOServerCnxn.outgoingBuffers进行通信,由worker thread批量写 | netty天生支持异步写,若当前线程为EventLoop线程,则将待写入数据存放到ChannelOutboundBuffer中.若当前线程不是EventLoop线程,构造写任务添加至EventLoop任务队列中 |
 | 直接内存      | 使用ThreadLocal的直接内存                                    | 记不太清楚netty中如何使用直接内存了,但netty支持直接内存,且使用较为方便 |
 | 处理连接关闭  | 启动connection expiration thread管理连接                     | 在handler中处理连接                                          |
+
+
+
+
+
+
+
+## handle
+
+```java
+private void handleConnection(Socket sock, DataInputStream din) throws IOException {
+    Long sid = null, protocolVersion = null;
+    MultipleAddresses electionAddr = null;
+
+    try {
+        protocolVersion = din.readLong();
+        if (protocolVersion >= 0) { // this is a server id and not a protocol version
+            sid = protocolVersion;
+        } else {
+            try {
+                InitialMessage init = InitialMessage.parse(protocolVersion, din);
+                sid = init.sid;
+                if (!init.electionAddr.isEmpty()) {
+                    electionAddr = new MultipleAddresses(init.electionAddr,
+                            Duration.ofMillis(self.getMultiAddressReachabilityCheckTimeoutMs()));
+                }
+                LOG.debug("Initial message parsed by {}: {}", self.getMyId(), init.toString());
+            } catch (InitialMessage.InitialMessageException ex) {
+                LOG.error("Initial message parsing error!", ex);
+                closeSocket(sock);
+                return;
+            }
+        }
+
+        if (sid == QuorumPeer.OBSERVER_ID) {
+            /*
+             * Choose identifier at random. We need a value to identify
+             * the connection.
+             */
+            sid = observerCounter.getAndDecrement();
+            LOG.info("Setting arbitrary identifier to observer: {}", sid);
+        }
+    } catch (IOException e) {
+        LOG.warn("Exception reading or writing challenge", e);
+        closeSocket(sock);
+        return;
+    }
+
+    // do authenticating learner
+    authServer.authenticate(sock, din);
+    //If wins the challenge, then close the new connection.
+    if (sid < self.getMyId()) {
+        /*
+         * This replica might still believe that the connection to sid is
+         * up, so we have to shut down the workers before trying to open a
+         * new connection.
+         */
+        SendWorker sw = senderWorkerMap.get(sid);
+        if (sw != null) {
+            sw.finish();
+        }
+
+        /*
+         * Now we start a new connection
+         */
+        LOG.debug("Create new connection to server: {}", sid);
+        closeSocket(sock);
+
+        if (electionAddr != null) {
+            connectOne(sid, electionAddr);
+        } else {
+            connectOne(sid);
+        }
+
+    } else if (sid == self.getMyId()) {
+        // we saw this case in ZOOKEEPER-2164
+        LOG.warn("We got a connection request from a server with our own ID. "
+                 + "This should be either a configuration error, or a bug.");
+    } else { // Otherwise start worker threads to receive data.
+        SendWorker sw = new SendWorker(sock, sid);
+        RecvWorker rw = new RecvWorker(sock, din, sid, sw);
+        sw.setRecv(rw);
+
+        SendWorker vsw = senderWorkerMap.get(sid);
+
+        if (vsw != null) {
+            vsw.finish();
+        }
+
+        senderWorkerMap.put(sid, sw);
+
+        queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
+
+        sw.start();
+        rw.start();
+    }
+}
+```
+
+
+
+```java
+synchronized boolean connectOne(long sid, MultipleAddresses electionAddr) {
+    if (senderWorkerMap.get(sid) != null) {
+        LOG.debug("There is a connection already for server {}", sid);
+        if (self.isMultiAddressEnabled() && electionAddr.size() > 1 && self.isMultiAddressReachabilityCheckEnabled()) {
+            // since ZOOKEEPER-3188 we can use multiple election addresses to reach a server. It is possible, that the
+            // one we are using is already dead and we need to clean-up, so when we will create a new connection
+            // then we will choose an other one, which is actually reachable
+            senderWorkerMap.get(sid).asyncValidateIfSocketIsStillReachable();
+        }
+        return true;
+    }
+
+    // we are doing connection initiation always asynchronously, since it is possible that
+    // the socket connection timeouts or the SSL handshake takes too long and don't want
+    // to keep the rest of the connections to wait
+    return initiateConnectionAsync(electionAddr, sid);
+}
+```
+
+
+
+```java
+public boolean initiateConnectionAsync(final MultipleAddresses electionAddr, final Long sid) {
+    if (!inprogressConnections.add(sid)) {
+        // simply return as there is a connection request to
+        // server 'sid' already in progress.
+        LOG.debug("Connection request to server id: {} is already in progress, so skipping this request", sid);
+        return true;
+    }
+    try {
+        connectionExecutor.execute(new QuorumConnectionReqThread(electionAddr, sid));
+        connectionThreadCnt.incrementAndGet();
+    } catch (Throwable e) {
+        // Imp: Safer side catching all type of exceptions and remove 'sid'
+        // from inprogress connections. This is to avoid blocking further
+        // connection requests from this 'sid' in case of errors.
+        inprogressConnections.remove(sid);
+        LOG.error("Exception while submitting quorum connection request", e);
+        return false;
+    }
+    return true;
+}
+```
+
+异步
+
+
+```java
+private class QuorumConnectionReqThread extends ZooKeeperThread {
+    final MultipleAddresses electionAddr;
+    final Long sid;
+    QuorumConnectionReqThread(final MultipleAddresses electionAddr, final Long sid) {
+        super("QuorumConnectionReqThread-" + sid);
+        this.electionAddr = electionAddr;
+        this.sid = sid;
+    }
+
+    @Override
+    public void run() {
+        try {
+            initiateConnection(electionAddr, sid);
+        } finally {
+            inprogressConnections.remove(sid);
+        }
+    }
+
+}
+```
+First we create the socket, perform SSL handshake and authentication if needed.
+Then we perform the initiation protocol.
+If this server has initiated the connection, then it gives up on the connection if it loses challenge. Otherwise, it keeps the connection.
+
+```java
+public void initiateConnection(final MultipleAddresses electionAddr, final Long sid) {
+    Socket sock = null;
+    try {
+        if (self.isSslQuorum()) {
+            sock = self.getX509Util().createSSLSocket();
+        } else {
+            sock = SOCKET_FACTORY.get();
+        }
+        setSockOpts(sock);
+        sock.connect(electionAddr.getReachableOrOne(), cnxTO);
+        if (sock instanceof SSLSocket) {
+            SSLSocket sslSock = (SSLSocket) sock;
+            sslSock.startHandshake();
+            LOG.info("SSL handshake complete with {} - {} - {}",
+                     sslSock.getRemoteSocketAddress(),
+                     sslSock.getSession().getProtocol(),
+                     sslSock.getSession().getCipherSuite());
+        }
+
+        LOG.debug("Connected to server {} using election address: {}:{}",
+                  sid, sock.getInetAddress(), sock.getPort());
+    } catch (X509Exception e) {
+        LOG.warn("Cannot open secure channel to {} at election address {}", sid, electionAddr, e);
+        closeSocket(sock);
+        return;
+    } catch (UnresolvedAddressException | IOException e) {
+        LOG.warn("Cannot open channel to {} at election address {}", sid, electionAddr, e);
+        closeSocket(sock);
+        return;
+    }
+
+    try {
+        startConnection(sock, sid);
+    } catch (IOException e) {
+        LOG.error(
+          "Exception while connecting, id: {}, addr: {}, closing learner connection",
+          sid,
+          sock.getRemoteSocketAddress(),
+          e);
+        closeSocket(sock);
+    }
+}
+```
+
+
+
+start
+
+这里判断如果对方server的
+
+当出现如下报错时 代表该机器无法与其它
+
+> Have smaller server identifier, so dropping the connection
+
+需要检查连接配置
+
+例如是否是host配置问题导致无法和其它机器通信
+
+或者是myid最小的机器 需要重启全部机器 从小到大
+
+```java
+private boolean startConnection(Socket sock, Long sid) throws IOException {
+    DataOutputStream dout = null;
+    DataInputStream din = null;
+    LOG.debug("startConnection (myId:{} --> sid:{})", self.getMyId(), sid);
+    try {
+        // Use BufferedOutputStream to reduce the number of IP packets. This is
+        // important for x-DC scenarios.
+        BufferedOutputStream buf = new BufferedOutputStream(sock.getOutputStream());
+        dout = new DataOutputStream(buf);
+
+        // Sending id and challenge
+
+        // First sending the protocol version (in other words - message type).
+        // For backward compatibility reasons we stick to the old protocol version, unless the MultiAddress
+        // feature is enabled. During rolling upgrade, we must make sure that all the servers can
+        // understand the protocol version we use to avoid multiple partitions. see ZOOKEEPER-3720
+        long protocolVersion = self.isMultiAddressEnabled() ? PROTOCOL_VERSION_V2 : PROTOCOL_VERSION_V1;
+        dout.writeLong(protocolVersion);
+        dout.writeLong(self.getMyId());
+
+        // now we send our election address. For the new protocol version, we can send multiple addresses.
+        Collection<InetSocketAddress> addressesToSend = protocolVersion == PROTOCOL_VERSION_V2
+                ? self.getElectionAddress().getAllAddresses()
+                : Arrays.asList(self.getElectionAddress().getOne());
+
+        String addr = addressesToSend.stream()
+                .map(NetUtils::formatInetAddr).collect(Collectors.joining("|"));
+        byte[] addr_bytes = addr.getBytes();
+        dout.writeInt(addr_bytes.length);
+        dout.write(addr_bytes);
+        dout.flush();
+
+        din = new DataInputStream(new BufferedInputStream(sock.getInputStream()));
+    } catch (IOException e) {
+        LOG.warn("Ignoring exception reading or writing challenge: ", e);
+        closeSocket(sock);
+        return false;
+    }
+
+    // authenticate learner
+    QuorumPeer.QuorumServer qps = self.getVotingView().get(sid);
+    if (qps != null) {
+        // TODO - investigate why reconfig makes qps null.
+        authLearner.authenticate(sock, qps.hostname);
+    }
+
+    // If lost the challenge, then drop the new connection
+    if (sid > self.getMyId()) {
+        LOG.info("Have smaller server identifier, so dropping the connection: (myId:{} --> sid:{})", self.getMyId(), sid);
+        closeSocket(sock);
+        // Otherwise proceed with the connection
+    } else {
+        LOG.debug("Have larger server identifier, so keeping the connection: (myId:{} --> sid:{})", self.getMyId(), sid);
+        SendWorker sw = new SendWorker(sock, sid);
+        RecvWorker rw = new RecvWorker(sock, din, sid, sw);
+        sw.setRecv(rw);
+
+        SendWorker vsw = senderWorkerMap.get(sid);
+
+        if (vsw != null) {
+            vsw.finish();
+        }
+
+        senderWorkerMap.put(sid, sw);
+
+        queueSendMap.putIfAbsent(sid, new CircularBlockingQueue<>(SEND_CAPACITY));
+
+        sw.start();
+        rw.start();
+
+        return true;
+
+    }
+    return false;
+}
+```
+
+
+
 
 
 
