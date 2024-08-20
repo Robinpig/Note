@@ -486,6 +486,49 @@ private void loadDataBase() {
 
 ## Leader Election
 
+配置4个文件
+
+
+# zoo1.cfg文件内容：
+dataDir=/export/data/zookeeper-1
+clientPort=2181
+server.1=127.0.0.1:2001:3001
+server.2=127.0.0.1:2002:3002
+server.3=127.0.0.1:2003:3003
+server.4=127.0.0.1:2004:3004:observer
+
+
+# zoo2.cfg文件内容：
+dataDir=/export/data/zookeeper-2
+clientPort=2182
+server.1=127.0.0.1:2001:3001
+server.2=127.0.0.1:2002:3002
+server.3=127.0.0.1:2003:3003
+server.4=127.0.0.1:2004:3004:observer
+
+
+# zoo3.cfg文件内容：
+dataDir=/export/data/zookeeper-3
+clientPort=2183
+server.1=127.0.0.1:2001:3001
+server.2=127.0.0.1:2002:3002
+server.3=127.0.0.1:2003:3003
+server.4=127.0.0.1:2004:3004:observer
+
+
+# zoo4.cfg文件内容：
+dataDir=/export/data/zookeeper-4
+clientPort=2184
+server.1=127.0.0.1:2001:3001
+server.2=127.0.0.1:2002:3002
+server.3=127.0.0.1:2003:3003
+server.4=127.0.0.1:2004:3004:observer
+
+
+
+leader选举存在与两个阶段中，一个是服务器启动时的leader选举。 一个是运行过程中leader节点宕机导致的leader选举
+
+
 This class manages the quorum protocol. There are three states this server can be in:
 1. Leader election - each server will elect a leader (proposing itself as a leader initially).
 2. Follower - the server will synchronize with the leader and replicate any transactions.

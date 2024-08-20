@@ -179,6 +179,126 @@ enum EventType {
 ```
 
 
+watcher demo
+
+```Java
+public class WatcherDemo implements Watcher {
+    static ZooKeeper zooKeeper;
+    static {
+        try {
+            zooKeeper = new ZooKeeper(“192.168.3.39:2181”, 4000,new WatcherDemo());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+    @Override
+    public void process(WatchedEvent event) {
+        System.out.println(“eventType:”+event.getType());
+        if(event.getType()==Event.EventType.NodeDataChanged){
+            try {
+                zooKeeper.exists(event.getPath(),true);
+            } catch (KeeperException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+    public static void main(String[] args) throws IOException, KeeperException, InterruptedException {
+        String path=“/watcher”;
+        if(zooKeeper.exists(path,false)==null) {
+            zooKeeper.create(“/watcher”, “0”.getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        }
+        Thread.sleep(1000);
+        System.out.println(“————“);
+        //true表示使用zookeeper实例中配置的watcher
+        Stat stat=zooKeeper.exists(path,true);
+        System.in.read();
+    }
+}
+```
+在创建一个zookeeper客户端对象实例时，我们通过new Watcher()向构造方法中传入一个默认的Watcher，这个Watcher将作为整个zookeeper会话期间默认Watcher，会一直被保存在客户端ZKWatchManager的defaultWatcher中
+
+
+```
+public ZooKeeper(
+    String connectString,
+    int sessionTimeout,
+    Watcher watcher,
+    long sessionId,
+    byte[] sessionPasswd,
+    boolean canBeReadOnly,
+    HostProvider hostProvider,
+    ZKClientConfig clientConfig) throws IOException {
+    LOG.info(
+        ”Initiating client connection, connectString={} “
+        + ”sessionTimeout={} watcher={} sessionId=0x{} sessionPasswd={}“,
+        connectString,
+    sessionTimeout,
+    watcher,
+    Long.toHexString(sessionId),
+    (sessionPasswd == null ? ”<null>“ : ”<hidden>“));
+
+    this.clientConfig = clientConfig != null ? clientConfig : new ZKClientConfig();
+    ConnectStringParser connectStringParser = new ConnectStringParser(connectString);
+    this.hostProvider = hostProvider;
+
+    cnxn = new ClientCnxn(
+        connectStringParser.getChrootPath(),
+        hostProvider,
+        sessionTimeout,
+        this.clientConfig,
+        watcher,
+        getClientCnxnSocket(),
+        sessionId,
+        sessionPasswd,
+        canBeReadOnly);
+    cnxn.seenRwServerBefore = true; // since user has provided sessionId
+    cnxn.start();
+}
+
+```
+
+
+ClientCnxn是zookeeper客户端和zookeeper服务器端进行通信和事件通知处理的主要类，它内部包含：
+1. SendThread：负责客户端和服务器端的数据通信，也包括事件信息的传输。
+2. EventThread：主要在客户端回调注册的Watcher进行通知处理。
+
+
+```
+public ClientCnxn(
+    String chrootPath,
+    HostProvider hostProvider,
+    int sessionTimeout,
+    ZKClientConfig clientConfig,
+    Watcher defaultWatcher,
+    ClientCnxnSocket clientCnxnSocket,
+    long sessionId,
+    byte[] sessionPasswd,
+    boolean canBeReadOnly
+) throws IOException {
+    this.chrootPath = chrootPath;
+    this.hostProvider = hostProvider;
+    this.sessionTimeout = sessionTimeout;
+    this.clientConfig = clientConfig;
+    this.sessionId = sessionId;
+    this.sessionPasswd = sessionPasswd;
+    this.readOnly = canBeReadOnly;
+
+    this.watchManager = new ZKWatchManager(
+        clientConfig.getBoolean(ZKClientConfig.DISABLE_AUTO_WATCH_RESET),
+        defaultWatcher);
+
+    this.connectTimeout = sessionTimeout / hostProvider.size();
+    this.readTimeout = sessionTimeout * 2 / 3;
+
+    this.sendThread = new SendThread(clientCnxnSocket);
+    this.eventThread = new EventThread();
+    initRequestTimeout();
+}
+
+```
+
 
 #### triggerWatch
 
