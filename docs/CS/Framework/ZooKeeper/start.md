@@ -297,6 +297,14 @@ public class ZooKeeperServerMain {
 
 QuorumPeer类型继承了ZooKeeperThread，而ZookeeperThread类型继承了Thread 也就是说QuorumPeer其实是一个线程类型
 
+QuorumPeerConfig::parse -> setupQuorumPeerConfig -> parseDynamicConfig
+
+针对 Leader 选举关键配置信息如下：
+- 读取 dataDir 目录找到 myid 文件内容，设置当前应用 sid 标识，做为投票人身份信息。下面遇到 myid 变量为当前节点自己 sid 标识。
+- 设置 peerType 当前应用是否参与选举
+- new QuorumMaj() 解析 server.前缀加载集群成员信息，加载 allMembers 所有成员，votingMembers参与选举成员，observingMembers 观察者成员，设置half值为 votingMembers.size()/2.
+
+
 QuorumPeer重写了start方法在 线程启动之前执行了一些初始化操作 QuorumPeer类型中 重写了start方法主要步骤如下:
 - 将数据从 磁盘加载到内存 中，并将事务添加到内存中的committedlog中。
 - 服务端 开启连接线程
@@ -419,6 +427,16 @@ PING的时间足够保守，以确保有合理的时间检测死连接并重新�
 
 ## loadDataBase
 
+最终 Session 和 数据的恢复，都将在 loadData 方法中完成。ZKServer 首先利用 ZKDatabase#loadDataBase 调用 FileTxnSnapLog#restore 方法，从磁盘中反序列化 100（硬编码了在 findNValidSnapshots(100) 代码里）个有效的 Snapshot 文件，恢复出 DataTree 和 sessionsWithTimeouts 两个数据结构，以便获取到最新有效的 ZXID，并使用 FileTxnSnapLog#processTransaction 方法增量地处理 DataTree 中的事务。随后根据 Session 超时时间，将超时的 Session 从 DataTree#ephemerals 变量（Map<Long: sessionId, HashSet<String>: pathList>）中移除。同时，利用 ZooKeeperServer#takeSnapshot 方法，将 DataTree 实例持久化到磁盘，创建一个全新的 Snapshot 文件
+
+Snapshot 策略
+首先，我们可以看到 SyncRequestProcessor 类的 run() 方法中，ZooKeeperServer#takeSnapshot 方法的调用是在一个新起的线程中发起的，因此 Snapshot 流程是异步发起的
+
+另外，在启动 Snapshot 线程之前，通过 𝑙𝑜𝑔𝐶𝑜𝑢𝑛𝑡>(𝑠𝑛𝑎𝑝𝐶𝑜𝑢𝑛𝑡/2+𝑟𝑎𝑛𝑑𝑅𝑜𝑙𝑙) 公式进行计算，是否应该发起 Snapshot（同时会保证前一个 Snapshot 已经结束才会开始）。由此可见 ZooKeeper 的设计巧妙之处，这里加入了 randRoll 随机数，可以降低所有 Server 节点同时发生 Snapshot 的概率，从而避免因 Snapshot 导致服务受影响。因为，Snapshot 的过程会消耗大量的 磁盘 IO、CPU 等资源，所以全部节点同时 Snapshot 会严重影响集群的对外服务能力
+
+
+按照 ZooKeeperServer 的文档中所示，事务处理的大体流程链应该为 PrepRequestProcessor - SyncRequestProcessor - FinalRequestProcessor
+
 
 ```java
 private void loadDataBase() {
@@ -488,7 +506,7 @@ private void loadDataBase() {
 
 配置4个文件
 
-
+```
 # zoo1.cfg文件内容：
 dataDir=/export/data/zookeeper-1
 clientPort=2181
@@ -523,28 +541,32 @@ server.1=127.0.0.1:2001:3001
 server.2=127.0.0.1:2002:3002
 server.3=127.0.0.1:2003:3003
 server.4=127.0.0.1:2004:3004:observer
-
+```
 
 
 leader选举存在与两个阶段中，一个是服务器启动时的leader选举。 一个是运行过程中leader节点宕机导致的leader选举
 
+
+The request for the current leader will consist solely of an xid: int xid
+
+启动时候从磁盘加载数据到内存，然后开启服务端的网络处理服务，然后开启一个管理端，接下来就进入比较重要的选举功能
+
+zookeeper 选举底层主要分为选举应用层和消息传输队列层，第一层应用层队列统一接收和发送选票，而第二层传输层队列，是按照服务端 sid 分成了多个队列，是为了避免给每台服务端发送消息互相影响。比如对某台机器发送不成功不会影响正常服务端的发送
+
+#### startLeaderElection
 
 This class manages the quorum protocol. There are three states this server can be in:
 1. Leader election - each server will elect a leader (proposing itself as a leader initially).
 2. Follower - the server will synchronize with the leader and replicate any transactions.
 
 This class will setup a datagram socket that will always respond with its view of the current leader. The response will take the form of:
-   int xid;
-   long myid;
-   long leader_id;
-   long leader_zxid;
+int xid;
+long myid;
+long leader_id;
+long leader_zxid;
 
 优先zxid最大 其次myid最大
 
-
-The request for the current leader will consist solely of an xid: int xid
-
-启动时候从磁盘加载数据到内存，然后开启服务端的网络处理服务，然后开启一个管理端，接下来就进入比较重要的选举功能
 
 ```java
 public synchronized void startLeaderElection() {
@@ -617,19 +639,20 @@ electionType 的值是哪里来的呢 其实是来源配置文件中electionAlg�
 
 ### QuorumCnxManager
 
-创建QuorumCnxManager对象： **QuorumCnxManager(qcm)** 实现领导选举中的网络连接管理功能。它为每一对节点维护唯一的一个连接，在两个节点都启动申请连接时，只有sid大的一方才会申请连接成功。qcm对每个节点维护一个消息发送队列。
+QuorumCnxManager 作为核心的实现类，用来管理 Leader 服务器与 Follow 服务器的 TCP 通信，以及消息的接收与发送等功能。在 QuorumCnxManager 中，主要定义了 ConcurrentHashMap 类型的 senderWorkerMap 数据字段，用来管理每一个通信的服务器
 
- Qcm主要成员变量： 
+Qcm主要成员变量： 
 
 - `public final ArrayBlockingQueue recvQueue;` //本节点的消息接收队列 
 - `final ConcurrentHashMap senderWorkerMap;`//对每一个远程节点都会定义一个SendWorker
 - `ConcurrentHashMap> queueSendMap;`//每个远程节点都会定义一个消息发型队列 - `Qcm`主要三个内类（线程）：
 - `Listener` 网络监听线程 - `SendWorker` 消息发送线程（每个远程节点都会有一个） - `RecvWorker` 消息接受线程
 
-这个类实现了使用TCP进行 **leader选举的连接管理器** 。
-它为每对服务器维护一个连接。棘手的部分是确保每对正确运行并可以通过网络通信的服务器只有一个连接。
 
-如果两个服务器试图同时启动一个连接，那么连接管理器将使用一种非常简单的打破连接机制，根据双方的IP地址来决定要删除哪个连接。
+
+而在 QuorumCnxManager 类的内部，定义了 RecvWorker 内部类。该类继承了一个 ZooKeeperThread 类的多线程类。主要负责消息接收。在 ZooKeeper 的实现中，为每一个集群中的通信服务器都分配一个 RecvWorker，负责接收来自其他服务器发送的信息。在 RecvWorker 的 run 函数中，不断通过 queueSendMap 队列读取信息
+
+除了接收信息的功能外，QuorumCnxManager 内还定义了一个 SendWorker 内部类用来向集群中的其他服务器发送投票信息。如下面的代码所示。在 SendWorker 类中，不会立刻将投票信息发送到 ZooKeeper 集群中，而是将投票信息首先插入到 pollSendQueue 队列，之后通过 send 函数进行发送
 
 对于每个对等点，管理器维护一个要发送的消息队列。
 
@@ -712,6 +735,7 @@ private void initializeConnectionExecutor(final long mySid, final int quorumCnxn
 
 Listener内部线程的run方法如下用于启动监听端口，监听其他server的连接与数据传输
 
+使用BIO模式 对每个member创建一个线程处理
 ```java
 public class Listener extends ZooKeeperThread {
     @Override
@@ -915,7 +939,8 @@ FastLeaderElection对象的创建涉及到哪些内容:
 
 - 创建发送队列sendqueue
 - 创建接收队列recvqueue
-- 创建Messenger类型对象
+- 创建线程 WorkerSender
+- 创建线程 WorkerReceiver
 
 ```java
 public class FastLeaderElection implements Election {
@@ -973,7 +998,10 @@ void start() {
 ```
 
 ### Sender
-
+WorkerSender 线程自旋获取 sendqueue 第一层队列元素
+- sendqueue 队列元素内容为相关选票信息详见 ToSend 类；
+- 首先判断选票 sid 是否和自己 sid 值相同，相等直接放入到 recvQueue 队列中；
+- 不相同将 sendqueue 队列元素转储到 queueSendMap第二层传输队列中。
 
 ```java
 class WorkerSender extends ZooKeeperThread {
@@ -1020,7 +1048,16 @@ class WorkerSender extends ZooKeeperThread {
 
 ### receive
 
-WorkerReceiver类型主要作用是解析来自远端的消息,并对消息内容做处理
+WorkerReceiver 线程自旋获取 recvQueue 第二层传输队列元素转存到 recvqueue 第一层队列中
+
+自旋 recvqueue 队列元素获取投票过来的选票信息
+sid>self.sid 才可以创建连接 Socket 和 SendWorker,RecvWorker 线程，存储到 senderWorkerMap中。对应第 2 步中的 sid<self.sid 逻辑，保证集群中所有节点之间只有一个通道连接。
+
+自旋从 recvqueue 队列中获取到选票信息。开始进行选举：
+- 判断当前选票和接收过来的选票周期是否一致
+- 大于当前周期更新当前选票信息，再次发送投票
+- 周期相等：当前选票信息和接收的选票信息进行 PK
+
 
 ```java
 class WorkerReceiver extends ZooKeeperThread {
@@ -1536,7 +1573,7 @@ case LOOKING:
 
 ##### lookForLeader
 
-
+recvset 是存储每个 sid 推举的选票信息
 
 ```java
 public Vote lookForLeader() throws InterruptedException {
@@ -1747,9 +1784,9 @@ It fails on the containAllQuorum() infinitely due to two facts.
 Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
 To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
 
-sendNotifications
+### sendNotifications
 
-发送消息到sendQueue
+sendNotifications() 向其它节点发送选票信息，选票信息存储到 sendqueue 队列中。sendqueue 队列由 WorkerSender 线程处理
 
 
 ```java
@@ -2213,6 +2250,12 @@ void lead() throws IOException, InterruptedException {
     }
 }
 ```
+### failover election
+
+当 ZooKeeper 集群中的 Leader 服务器发生崩溃时，集群会暂停处理事务性的会话请求，直到 ZooKeeper 集群中选举出新的 Leader 服务器。
+
+在 ZooKeeper 集群服务运行的过程中，集群中每台服务器的角色已经确定了，当 Leader 服务器崩溃后 ，ZooKeeper 集群中的其他服务器会首先将自身的状态信息变为 LOOKING 状态，该状态表示服务器已经做好选举新 Leader 服务器的准备了，这之后整个 ZooKeeper 集群开始进入选举新的 Leader 服务器过程。
+
 
 ## issue
 
@@ -2251,7 +2294,9 @@ DatadirCleanupManager日志清理工具,相关配置如下：
 这里start方法中使用了Java的Timer来启动的定时任务来清理
 在使用Zookeeper过程中，，会有 dataDir 和 dataLogDir 两个目录，分别用于 snapshot 和 事务日志 的输出 （默认情况下只有dataDir目录，snapshot和事务日志都保存在这个目录中，正常运行过程中，ZK会不断地把快照数据和事务日志输出到这两个目录，并且如果没有人为操作的话，ZK自己是不会清理这些文件的，需要管理员来清理，
 
-
+查看snapshot文件
+运行SnapshotFormatter类 -d snapshot文件绝对路径
+TxnLogToolkit
 
 具体清理方法主要调用PurgeTxnLog类的purge方法
 
