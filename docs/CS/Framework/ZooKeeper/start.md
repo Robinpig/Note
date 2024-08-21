@@ -645,12 +645,17 @@ Qcm主要成员变量：
 
 - `public final ArrayBlockingQueue recvQueue;` //本节点的消息接收队列 
 - `final ConcurrentHashMap senderWorkerMap;`//对每一个远程节点都会定义一个SendWorker
-- `ConcurrentHashMap> queueSendMap;`//每个远程节点都会定义一个消息发型队列 - `Qcm`主要三个内类（线程）：
-- `Listener` 网络监听线程 - `SendWorker` 消息发送线程（每个远程节点都会有一个） - `RecvWorker` 消息接受线程
+- `ConcurrentHashMap> queueSendMap;`//每个远程节点都会定义一个消息发型队列 
+- `Qcm`主要三个内类（线程）：
+  - `Listener` 网络监听线程 
+  - `SendWorker` 消息发送线程（每个远程节点都会有一个） 
+  - `RecvWorker` 消息接受线程
 
 
 
-而在 QuorumCnxManager 类的内部，定义了 RecvWorker 内部类。该类继承了一个 ZooKeeperThread 类的多线程类。主要负责消息接收。在 ZooKeeper 的实现中，为每一个集群中的通信服务器都分配一个 RecvWorker，负责接收来自其他服务器发送的信息。在 RecvWorker 的 run 函数中，不断通过 queueSendMap 队列读取信息
+而在 QuorumCnxManager 类的内部，定义了 RecvWorker 内部类。该类继承了一个 ZooKeeperThread 类的多线程类。
+主要负责消息接收。在 ZooKeeper 的实现中，为每一个集群中的通信服务器都分配一个 RecvWorker，负责接收来自其他服务器发送的信息。
+在 RecvWorker 的 run 函数中，不断通过 queueSendMap 队列读取信息
 
 除了接收信息的功能外，QuorumCnxManager 内还定义了一个 SendWorker 内部类用来向集群中的其他服务器发送投票信息。如下面的代码所示。在 SendWorker 类中，不会立刻将投票信息发送到 ZooKeeper 集群中，而是将投票信息首先插入到 pollSendQueue 队列，之后通过 send 函数进行发送
 
@@ -1051,7 +1056,8 @@ class WorkerSender extends ZooKeeperThread {
 WorkerReceiver 线程自旋获取 recvQueue 第二层传输队列元素转存到 recvqueue 第一层队列中
 
 自旋 recvqueue 队列元素获取投票过来的选票信息
-sid>self.sid 才可以创建连接 Socket 和 SendWorker,RecvWorker 线程，存储到 senderWorkerMap中。对应第 2 步中的 sid<self.sid 逻辑，保证集群中所有节点之间只有一个通道连接。
+sid>self.sid 才可以创建连接 Socket 和 SendWorker,RecvWorker 线程，
+存储到 senderWorkerMap中。对应第 2 步中的 sid<self.sid 逻辑，保证集群中所有节点之间只有一个通道连接。
 
 自旋从 recvqueue 队列中获取到选票信息。开始进行选举：
 - 判断当前选票和接收过来的选票周期是否一致
@@ -1603,10 +1609,6 @@ public Vote lookForLeader() throws InterruptedException {
             updateProposal(getInitId(), getInitLastLoggedZxid(), getPeerEpoch());
         }
 
-        LOG.info(
-            "New election. My id = {}, proposed zxid=0x{}",
-            self.getMyId(),
-            Long.toHexString(proposedZxid));
         sendNotifications();
 
         SyncedLearnerTracker voteSet = null;
@@ -1628,8 +1630,10 @@ public Vote lookForLeader() throws InterruptedException {
              */
             if (n == null) {
                 if (manager.haveDelivered()) {
+                    // 发送投票请求
                     sendNotifications();
                 } else {
+                    // 连接其它的servers
                     manager.connectAll();
                 }
 
@@ -1690,6 +1694,7 @@ public Vote lookForLeader() throws InterruptedException {
 
                     voteSet = getVoteTracker(recvset, new Vote(proposedLeader, proposedZxid, logicalclock.get(), proposedEpoch));
 
+                    // 存在多数派
                     if (voteSet.hasAllQuorums()) {
 
                         // Verify if there is any change in the proposed leader
