@@ -501,6 +501,112 @@ private void loadDataBase() {
     }
 ```
 
+load the database from the disk onto memory and also add the transactions to the committedlog in memory.
+
+```java
+public long loadDataBase() throws IOException {
+    long startTime = Time.currentElapsedTime();
+    long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener);
+    initialized = true;
+    long loadTime = Time.currentElapsedTime() - startTime;
+    ServerMetrics.getMetrics().DB_INIT_TIME.add(loadTime);
+    LOG.info("Snapshot loaded in {} ms, highest zxid is 0x{}, digest is {}",
+            loadTime, Long.toHexString(zxid), dataTree.getTreeDigest());
+    return zxid;
+}
+```
+
+由FileTxnSnapLog执行restore操作
+
+
+
+```java
+public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
+    long snapLoadingStartTime = Time.currentElapsedTime();
+    long deserializeResult = snapLog.deserialize(dt, sessions);
+    ServerMetrics.getMetrics().STARTUP_SNAP_LOAD_TIME.add(Time.currentElapsedTime() - snapLoadingStartTime);
+    FileTxnLog txnLog = new FileTxnLog(dataDir);
+    boolean trustEmptyDB;
+    File initFile = new File(dataDir.getParent(), "initialize");
+    if (Files.deleteIfExists(initFile.toPath())) {
+        LOG.info("Initialize file found, an empty database will not block voting participation");
+        trustEmptyDB = true;
+    } else {
+        trustEmptyDB = autoCreateDB;
+    }
+
+    RestoreFinalizer finalizer = () -> {
+        long highestZxid = fastForwardFromEdits(dt, sessions, listener);
+        // The snapshotZxidDigest will reset after replaying the txn of the
+        // zxid in the snapshotZxidDigest, if it's not reset to null after
+        // restoring, it means either there are not enough txns to cover that
+        // zxid or that txn is missing
+        DataTree.ZxidDigest snapshotZxidDigest = dt.getDigestFromLoadedSnapshot();
+        if (snapshotZxidDigest != null) {
+            LOG.warn(
+                    "Highest txn zxid 0x{} is not covering the snapshot digest zxid 0x{}, "
+                            + "which might lead to inconsistent state",
+                    Long.toHexString(highestZxid),
+                    Long.toHexString(snapshotZxidDigest.getZxid()));
+        }
+        return highestZxid;
+    };
+
+    if (-1L == deserializeResult) {
+        /* this means that we couldn't find any snapshot, so we need to
+         * initialize an empty database (reported in ZOOKEEPER-2325) */
+        if (txnLog.getLastLoggedZxid() != -1) {
+            // ZOOKEEPER-3056: provides an escape hatch for users upgrading
+            // from old versions of zookeeper (3.4.x, pre 3.5.3).
+            if (!trustEmptySnapshot) {
+                throw new IOException(EMPTY_SNAPSHOT_WARNING + "Something is broken!");
+            } else {
+                LOG.warn("{}This should only be allowed during upgrading.", EMPTY_SNAPSHOT_WARNING);
+                return finalizer.run();
+            }
+        }
+
+        if (trustEmptyDB) {
+            /* TODO: (br33d) we should either put a ConcurrentHashMap on restore()
+             *       or use Map on save() */
+            save(dt, (ConcurrentHashMap<Long, Integer>) sessions, false);
+
+            /* return a zxid of 0, since we know the database is empty */
+            return 0L;
+        } else {
+            /* return a zxid of -1, since we are possibly missing data */
+            LOG.warn("Unexpected empty data tree, setting zxid to -1");
+            dt.lastProcessedZxid = -1L;
+            return -1L;
+        }
+    }
+
+    return finalizer.run();
+}
+```
+
+先从snapshot恢复数据 再看事务日志是否有未完成的事务
+之后再save snapshot
+
+协议位于jute module下
+
+```java
+@InterfaceAudience.Public
+public interface Record {
+    void serialize(OutputArchive archive, String tag) throws IOException;
+    void deserialize(InputArchive archive, String tag) throws IOException;
+}
+```
+
+session
+
+客户端连接 process ConnectRequest
+
+submitRequestNow里 touch session
+
+检测session
+
+
 
 ## Leader Election
 
