@@ -7,6 +7,9 @@ Each time they are implemented there is a lot of work that goes into fixing the 
 Because of the difficulty of implementing these kinds of services, applications initially usually skimp on them, which make them brittle in the presence of change and difficult to manage.
 Even when done correctly, different implementations of these services lead to management complexity when the applications are deployed.
 
+
+ZooKeeper 是一个基于 Google Chubby 论文实现的一款解决分布式数据一致性问题的开源实现，方便了依赖 ZooKeeper 的应用实现 数据发布/订阅、负载均衡、服务注册与发现、分布式协调、事件通知、集群管理、Leader 选举、 分布式锁和队列 等功能
+
 ZooKeeper aims at distilling the essence of these different services into a very simple interface to a centralized coordination service.
 The service itself is distributed and highly reliable.
 Consensus, group management, and presence protocols will be implemented by the service so that the applications do not need to implement them on their own.
@@ -79,8 +82,14 @@ Container node
 TTL time to live
 
 
+ZooKeeper 的每个 ZNode 上都会存储数据，对应于每个 ZNode，ZooKeeper 都会为其维护一个叫做 Stat 的数据结构，Stat 中记录了这个 ZNode 的三个数据版本，分别是 version（当前 ZNode 数据内容的版本），cversion（当前 ZNode 子节点的版本）和 aversion（当前 ZNode 的 ACL 变更版本）。这里的版本起到了控制 ZooKeeper 操作原子性的作用
+
+如果想要让写入数据的操作支持 CAS，则可以借助 Versionable#withVersion 方法，在 setData() 的同时指定当前数据的 verison。如果写入成功，则说明在当前数据写入的过程中，没有其他用户对该 ZNode 节点的内容进行过修改；否则，会抛出一个 KeeperException.BadVersionException，以此可以判断本次 CAS 写入是失败的。而这样做的好处就是，可以避免 “并发局部更新 ZNode 节点内容” 时，发生相互覆盖的问题
 
 
+### Ephemeral Nodes
+临时节点有个特性，就是如果注册这个节点的机器失去连接(通常是宕机)，那么这个节点会被zookeeper删除。选主过程就是利用这个特性，在服务器启动的时候，去zookeeper特定的一个目录下注册一个临时节点(这个节点作为master，谁注册了这个节点谁就是master)，注册的时候，如果发现该节点已经存在，则说明已经有别的服务器注册了(也就是有别的服务器已经抢主成功)，那么当前服务器只能放弃抢主，作为从机存在。同时，抢主失败的当前服务器需要订阅该临时节点的删除事件，以便该节点删除时(也就是注册该节点的服务器宕机了或者网络断了之类的)进行再次抢主操作。选主的过程，其实就是简单的争抢在Zookeeper注册临时节点的操作，谁注册了约定的临时节点，谁就是master。所有服务器同时会在servers节点下注册一个临时节点（保存自己的基本信息），以便于应用程序读取当前可用的服务器列表
+curator的LeaderSelector
 
 ### Watches
 
@@ -179,24 +188,27 @@ enum EventType {
 ```
 
 
-watcher demo
 
+
+在创建一个zookeeper客户端对象实例时，我们通过new Watcher()向构造方法中传入一个默认的Watcher，这个Watcher将作为整个zookeeper会话期间默认Watcher，会一直被保存在客户端ZKWatchManager的defaultWatcher中
 ```Java
 public class WatcherDemo implements Watcher {
     static ZooKeeper zooKeeper;
+
     static {
         try {
-            zooKeeper = new ZooKeeper(“192.168.3.39:2181”, 4000,new WatcherDemo());
+            zooKeeper = new ZooKeeper("192.168.3.39:2181", 4000, new WatcherDemo());
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
+
     @Override
     public void process(WatchedEvent event) {
-        System.out.println(“eventType:”+event.getType());
-        if(event.getType()==Event.EventType.NodeDataChanged){
+        System.out.println("eventType:" + event.getType());
+        if (event.getType() == Event.EventType.NodeDataChanged) {
             try {
-                zooKeeper.exists(event.getPath(),true);
+                zooKeeper.exists(event.getPath(), true);
             } catch (KeeperException e) {
                 e.printStackTrace();
             } catch (InterruptedException e) {
@@ -204,15 +216,16 @@ public class WatcherDemo implements Watcher {
             }
         }
     }
+
     public static void main(String[] args) throws IOException, KeeperException, InterruptedException {
-        String path=“/watcher”;
-        if(zooKeeper.exists(path,false)==null) {
-            zooKeeper.create(“/watcher”, “0”.getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        String path = "/watcher";
+        if (zooKeeper.exists(path, false) == null) {
+            zooKeeper.create("/watcher", "0".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
         }
         Thread.sleep(1000);
-        System.out.println(“————“);
+        System.out.println("————");
         //true表示使用zookeeper实例中配置的watcher
-        Stat stat=zooKeeper.exists(path,true);
+        Stat stat = zooKeeper.exists(path, true);
         System.in.read();
     }
 }
@@ -220,43 +233,42 @@ public class WatcherDemo implements Watcher {
 在创建一个zookeeper客户端对象实例时，我们通过new Watcher()向构造方法中传入一个默认的Watcher，这个Watcher将作为整个zookeeper会话期间默认Watcher，会一直被保存在客户端ZKWatchManager的defaultWatcher中
 
 
-```
+```java
 public ZooKeeper(
-    String connectString,
-    int sessionTimeout,
-    Watcher watcher,
-    long sessionId,
-    byte[] sessionPasswd,
-    boolean canBeReadOnly,
-    HostProvider hostProvider,
-    ZKClientConfig clientConfig) throws IOException {
-    LOG.info(
-        ”Initiating client connection, connectString={} “
-        + ”sessionTimeout={} watcher={} sessionId=0x{} sessionPasswd={}“,
-        connectString,
-    sessionTimeout,
-    watcher,
-    Long.toHexString(sessionId),
-    (sessionPasswd == null ? ”<null>“ : ”<hidden>“));
+        String connectString,
+        int sessionTimeout,
+        Watcher watcher,
+        long sessionId,
+        byte[] sessionPasswd,
+        boolean canBeReadOnly,
+        HostProvider hostProvider,
+        ZKClientConfig clientConfig) throws IOException {
+  LOG.info(
+          "Initiating client connection, connectString={} "
+                  + "sessionTimeout={} watcher={} sessionId=0x{} sessionPasswd={}",
+          connectString,
+          sessionTimeout,
+          watcher,
+          Long.toHexString(sessionId),
+          (sessionPasswd == null ? "<null>" : "<hidden>"));
 
-    this.clientConfig = clientConfig != null ? clientConfig : new ZKClientConfig();
-    ConnectStringParser connectStringParser = new ConnectStringParser(connectString);
-    this.hostProvider = hostProvider;
+  this.clientConfig = clientConfig != null ? clientConfig : new ZKClientConfig();
+  ConnectStringParser connectStringParser = new ConnectStringParser(connectString);
+  this.hostProvider = hostProvider;
 
-    cnxn = new ClientCnxn(
-        connectStringParser.getChrootPath(),
-        hostProvider,
-        sessionTimeout,
-        this.clientConfig,
-        watcher,
-        getClientCnxnSocket(),
-        sessionId,
-        sessionPasswd,
-        canBeReadOnly);
-    cnxn.seenRwServerBefore = true; // since user has provided sessionId
-    cnxn.start();
+  cnxn = new ClientCnxn(
+          connectStringParser.getChrootPath(),
+          hostProvider,
+          sessionTimeout,
+          this.clientConfig,
+          watcher,
+          getClientCnxnSocket(),
+          sessionId,
+          sessionPasswd,
+          canBeReadOnly);
+  cnxn.seenRwServerBefore = true; // since user has provided sessionId
+  cnxn.start();
 }
-
 ```
 
 
@@ -265,7 +277,7 @@ ClientCnxn是zookeeper客户端和zookeeper服务器端进行通信和事件通�
 2. EventThread：主要在客户端回调注册的Watcher进行通知处理。
 
 
-```
+```java
 public ClientCnxn(
     String chrootPath,
     HostProvider hostProvider,
@@ -404,7 +416,13 @@ class ZKWatchManager implements ClientWatchManager {
     }
 }
 ```
+### session
 
+Session 指客户端会话。在 ZooKeeper 中，一个客户端会话是指 客户端和服务器之间的一个 TCP 长连接。客户端启动的时候，会与服务端建立一个 TCP 连接，客户端会话的生命周期，则是从第一次连接建立开始算起。通过这个连接，客户端能够通过心跳检测与服务器保持有效的会话，并向 ZooKeeper 服务器发送请求并接收响应，以及接收来自服务端的 Watch 事件通知
+
+Session 的 sessionTimeout 参数，用来控制一个客户端会话的超时时间。当服务器压力太大 或者是网络故障等各种原因导致客户端连接断开时，Client 会自动从 ZooKeeper 地址列表中逐一尝试重连（重试策略可使用 Curator 来实现）。只要在 sessionTimeout 规定的时间内能够重新连接上集群中任意一台服务器，那么之前创建的会话仍然有效。如果，在 sessionTimeout 时间外重连了，就会因为 Session 已经被清除了，而被告知 SESSION_EXPIRED，此时需要程序去恢复临时数据；还有一种 Session 重建后的在新节点上的数据，被之前节点上因网络延迟晚来的写请求所覆盖的情况，在 ZOOKEEPER-417 中被提出，并在该 JIRA 中新加入的 SessionMovedException，使得 用同一个 sessionld/sessionPasswd 重建 Session 的客户端能感知到，但是这个问题到 ZOOKEEPER-2219 仍然没有得到很好的解决
+
+![](https://yuzhouwan.com/picture/zk/zk_transition.png)
 
 ### ZooKeeper guarantees
 
@@ -1535,8 +1553,8 @@ public Long update(E elem, int timeout) {
 ## Watcher
 
 在DataTree中有两个IWatchManager类型的对象，一个是dataWatches，一个是childWatches， 其中:
-● dataWatches是保存节点层面的watcher对象，
-● childWatches是保存子节点层面的watcher对象，
+- dataWatches是保存节点层面的watcher对象，
+- childWatches是保存子节点层面的watcher对象，
 使用这两个监听器可以分别为节点路径添加监听器在合适的场景下来触发监听，当然也可以移除已添加路径的监听器
 
 主要的监听方法是添加，移除，触发监听器，和查询信息等方法
@@ -1626,6 +1644,21 @@ Operators resorted to ''rolling restarts'' - a manually intensive and error-pron
 | -------- | ------- | --------- |
 | Lock     | has api |           |
 | protocol | Paxos   | Zab       |
+
+
+## Tuning
+
+优化策略
+部署
+日志目录
+- 快照目录 dataDir 和 事务日志目录 dataLogDir 分离
+- 写事务日志的目录，需要保证目录空间足够大，并挂载到单独的磁盘上（为了保证数据的一致性，ZooKeeper 在返回客户端事务请求响应之前，必须要将此次请求对应的事务日志刷入到磁盘中 [forceSync 参数控制，default：yes]，所以事务日志的写入速度，直接决定了 ZooKeeper 的吞吐率）
+
+自动日志清理
+autopurge.purgeInterval
+指定清理频率，单位为小时（default：0 表示不开启自动清理）
+autopurge.snapRetainCount
+和上面 purgeInterval 参数配合使用，指定需要保留的文件数目（default：3
 
 ## Links
 

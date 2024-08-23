@@ -1,6 +1,11 @@
 ## Introduction
 NameServer是一个几乎无状态节点，可集群部署，节点之间无任何信息同步。
 
+
+NameServer包含哪些
+
+KVConfigManager
+
 ## start
 
 > 启动前注意环境变量`ROCKETMQ_HOME`的设置
@@ -12,23 +17,47 @@ Name server scan live broker table every 10s and remove last time stamp > 120s b
 
 ```java
 public class NamesrvStartup {
-  public static void main(String[] args) {
-    main0(args);
-    controllerManagerMain();
-  }
-
-  public static void main0(String[] args) {
-    try {
-      parseCommandlineAndConfigFile(args);
-      createAndStartNamesrvController();
-    } catch (Throwable e) {
-      e.printStackTrace();
-      System.exit(-1);
+    public static void main(String[] args) {
+        main0(args);
+        controllerManagerMain();
     }
-  }
+
+    public static void main0(String[] args) {
+        try {
+            parseCommandlineAndConfigFile(args);
+            createAndStartNamesrvController();
+        } catch (Throwable e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+
+    public static NamesrvController createAndStartNamesrvController() throws Exception {
+
+        NamesrvController controller = createNamesrvController();
+        start(controller);
+        NettyServerConfig serverConfig = controller.getNettyServerConfig();
+        String tip = String.format("The Name Server boot success. serializeType=%s, address %s:%d", RemotingCommand.getSerializeTypeConfigInThisServer(), serverConfig.getBindAddress(), serverConfig.getListenPort());
+        log.info(tip);
+        System.out.printf("%s%n", tip);
+        return controller;
+    }
 }
 ```
 
+
+### createNamesrvController
+```java
+public static NamesrvController createNamesrvController() {
+
+        final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig, nettyClientConfig);
+        // remember all configs to prevent discard
+        controller.getConfiguration().registerConfig(properties);
+        return controller;
+    }
+```
+
+namesrvConfig, nettyServerConfig, nettyClientConfig
 ```java
 public class NettyServerConfig implements Cloneable {
 
@@ -39,6 +68,7 @@ public class NettyServerConfig implements Cloneable {
   
 }
 ```
+### NamesrvController
 
 initialize -> start ->
 
