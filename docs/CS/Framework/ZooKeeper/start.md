@@ -745,14 +745,16 @@ electionType 的值是哪里来的呢 其实是来源配置文件中electionAlg�
 
 ### QuorumCnxManager
 
-QuorumCnxManager 作为核心的实现类，用来管理 Leader 服务器与 Follow 服务器的 TCP 通信，以及消息的接收与发送等功能。在 QuorumCnxManager 中，主要定义了 ConcurrentHashMap 类型的 senderWorkerMap 数据字段，用来管理每一个通信的服务器
+QuorumCnxManager 作为核心的实现类，用来管理 Leader 服务器与 Follow 服务器的 TCP 通信，以及消息的接收与发送等功能。
+在 QuorumCnxManager 中，主要定义了 ConcurrentHashMap 类型的 senderWorkerMap 数据字段，用来管理每一个通信的服务器
 
 Qcm主要成员变量： 
 
 - `public final ArrayBlockingQueue recvQueue;` //本节点的消息接收队列 
 - `final ConcurrentHashMap senderWorkerMap;`//对每一个远程节点都会定义一个SendWorker
 - `ConcurrentHashMap> queueSendMap;`//每个远程节点都会定义一个消息发型队列 
-- `Qcm`主要三个内类（线程）：
+
+Qcm主要三个内类（线程）：
   - `Listener` 网络监听线程 
   - `SendWorker` 消息发送线程（每个远程节点都会有一个） 
   - `RecvWorker` 消息接受线程
@@ -1042,6 +1044,14 @@ private ServerSocket createNewServerSocket() throws IOException {
 }
 ```
 
+updateProposal
+```java
+synchronized void updateProposal(long leader, long zxid, long epoch) {
+        proposedLeader = leader;
+        proposedZxid = zxid;
+        proposedEpoch = epoch;
+    }
+```
 
 
 ### FastLeaderElection
@@ -1895,9 +1905,9 @@ It fails on the containAllQuorum() infinitely due to two facts.
 Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
 To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
 
-### sendNotifications
+#### sendNotifications
 
-sendNotifications() 向其它节点发送选票信息，选票信息存储到 sendqueue 队列中。sendqueue 队列由 WorkerSender 线程处理
+sendNotifications() 向其它节点发送选票信息，选票信息存储到 sendqueue 队列中。sendqueue 队列由 WorkerSender 线程处理放置到queueSendMap中 由单独的sendWorker线程处理
 
 
 ```java

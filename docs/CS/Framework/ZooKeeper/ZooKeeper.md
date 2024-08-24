@@ -1646,6 +1646,51 @@ Operators resorted to ''rolling restarts'' - a manually intensive and error-pron
 | protocol | Paxos   | Zab       |
 
 
+## Issues
+
+如果由于过大的 TPS 或者不适当的清理策略会导致集群中数据文件，日志文件的堆积，最终导致磁盘爆满，Server 宕机
+导致磁盘中 snapshot 和 transaction log 文件非常多
+最终导致磁盘被写满，节点服务不可用
+
+ZooKeeper 官方是支持定时清理数据文件的能力的，通过 autopurge.snapRetainCount  和 autopurge.purgeInterval 指定清理的间隔和清理时需要保留的数据文件的个数，这里需要注意的是，ZooKeeper 中开启此能力需要将 autopurge.purgeInterval 设置为一个大于 0 的值，此值代表清理任务运行的间隔（单位是小时）。一般情况下，配置这两个参数开启定时清理能力之后能够很大程度减轻磁盘的容量压力。但是定时清理任务的最小间隔是 1 小时，这在一些特殊场景下无法避免磁盘爆满的问题
+
+当在两次磁盘的清理间隔中，有大量的数据变更请求时，会产生大量的 transaction log 文件和 snapshot 文件，由于没有达到清理的事件间隔，数据累计最终在下一次磁盘清理之前把磁盘写满
+
+
+ZooKeeperServer.takeSnapshot），发现在以下情况下会触发新的快照文件的生成
+
+- 节点启动，加载完数据文件之后
+- 集群中产生新 leader
+- SyncRequestProcessor 中达到一定条件（shouldSnapshot 方法指定）
+
+```java
+    private boolean shouldSnapshot() {
+        int logCount = zks.getZKDatabase().getTxnCount();
+        long logSize = zks.getZKDatabase().getTxnSize();
+        return (logCount > (snapCount / 2 + randRoll))
+               || (snapSizeInBytes > 0 && logSize > (snapSizeInBytes / 2 + randSize));
+    }
+```
+其中 logCount 的值是当前事务日志文件的大小以及事务日志的数量，snapCount，snapSizeInBytes 是通过 Java SystemProperty 配置的值，randRoll 是一个随机数（0 < randRoll < snapCount / 2）,randSize 也是一个随机数（0 < randSize < snapSizeInBytes / 2），因此这个判断条件的逻辑可以总结为下：
+
+当当前事务日志文件中的事务数量大于运行时产生的和 snapCount 相关的一个随机值（snapCount/2 < value < snapCount）或者当前的事务日志文件的大小大于一个运行是产生的和 snapSizeInBytes 相关的随机值（snapSizeInBytes/2 < value < snapSizeInBytes）就会进行一次 snapshot 的文件写入
+
+通过以上分析可知，可以通过 4 个参数对 ZooKeeper 的数据文件生成和清理进行配置。
+
+- autopurge.snapRetainCount : (No Java system property) New in 3.4.0
+- autopurge.purgeInterval : (No Java system property) New in 3.4.0
+- snapCount : (Java system property: zookeeper.snapCount)
+- snapSizeLimitInKb : (Java system property: zookeeper.snapSizeLimitInKb)
+
+前两个配置项指定 ZooKeeper 的定时清理策略，后两个参数配置ZooKeeper生成快照文件的频率。
+
+根据前面分析，可以指通过将 snapCount 和 snapSizeLimitInKb 调整大可以减小 snapshot 的生成频率，但是如果设置的过大，会导致在节点重启时，加载数据缓慢，延长服务的恢复时间，增大业务风险。
+
+autopurge.purgeInterval 最小只能指定为 1，这将清理间隔硬限制到 1 小时，针对高频写入情景无法降低风险。
+
+
+
+
 ## Tuning
 
 优化策略
@@ -1659,6 +1704,8 @@ autopurge.purgeInterval
 指定清理频率，单位为小时（default：0 表示不开启自动清理）
 autopurge.snapRetainCount
 和上面 purgeInterval 参数配合使用，指定需要保留的文件数目（default：3
+
+
 
 ## Links
 
