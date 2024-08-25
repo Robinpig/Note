@@ -557,6 +557,102 @@ public void processConnectRequest(ServerCnxn cnxn, ConnectRequest request) throw
 
 
 
+### doIO
+
+```java
+void doIO(SelectionKey k) throws InterruptedException {
+    try {
+        if (!isSocketOpen()) {
+            LOG.warn("trying to do i/o on a null socket for session: 0x{}", Long.toHexString(sessionId));
+
+            return;
+        }
+        if (k.isReadable()) {
+            int rc = sock.read(incomingBuffer);
+            if (rc < 0) {
+                try {
+                    handleFailedRead();
+                } catch (EndOfStreamException e) {
+                    // no stacktrace. this case is very common, and it is usually not a problem.
+                    LOG.info("{}", e.getMessage());
+                    // expecting close to log session closure
+                    close(e.getReason());
+                    return;
+                }
+            }
+            if (incomingBuffer.remaining() == 0) {
+                boolean isPayload;
+                if (incomingBuffer == lenBuffer) { // start of next request
+                    incomingBuffer.flip();
+                    isPayload = readLength(k);
+                    incomingBuffer.clear();
+                } else {
+                    // continuation
+                    isPayload = true;
+                }
+                if (isPayload) { // not the case for 4letterword
+                    readPayload();
+                } else {
+                    // four letter words take care
+                    // need not do anything else
+                    return;
+                }
+            }
+        }
+        if (k.isWritable()) {
+            handleWrite(k);
+
+            if (!initialized && !getReadInterest() && !getWriteInterest()) {
+                throw new CloseRequestException("responded to info probe", DisconnectReason.INFO_PROBE);
+            }
+        }
+    } catch (CancelledKeyException e) {
+        LOG.warn("CancelledKeyException causing close of session: 0x{}", Long.toHexString(sessionId));
+
+        LOG.debug("CancelledKeyException stack trace", e);
+
+        close(DisconnectReason.CANCELLED_KEY_EXCEPTION);
+    } catch (CloseRequestException e) {
+        // expecting close to log session closure
+        close();
+    } catch (EndOfStreamException e) {
+        LOG.warn("Unexpected exception", e);
+        // expecting close to log session closure
+        close(e.getReason());
+    } catch (ClientCnxnLimitException e) {
+        // Common case exception, print at debug level
+        ServerMetrics.getMetrics().CONNECTION_REJECTED.add(1);
+        LOG.warn("Closing session 0x{}", Long.toHexString(sessionId), e);
+        close(DisconnectReason.CLIENT_CNX_LIMIT);
+    } catch (IOException e) {
+        LOG.warn("Close of session 0x{}", Long.toHexString(sessionId), e);
+        close(DisconnectReason.IO_EXCEPTION);
+    }
+}
+```
+
+
+
+sendBuffer
+
+待发送的数据添加到outgoingBuffers
+
+```java
+public void sendBuffer(ByteBuffer... buffers) {
+    synchronized (outgoingBuffers) {
+        for (ByteBuffer buffer : buffers) {
+            outgoingBuffers.add(buffer);
+        }
+        outgoingBuffers.add(packetSentinel);
+    }
+    requestInterestOpsUpdate();
+}
+```
+
+
+
+NIOServerCnxnFactory中设置了ThreadLocal的DirectByteBuffer 容量默认64k
+
 
 
 ## Netty
