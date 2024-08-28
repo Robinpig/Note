@@ -71,7 +71,12 @@ call `rdbSaveKeyValuePair`
 
 #### loadDataFromDisk
 
-Function called at startup to load RDB or AOF file in memory.
+
+在startup时被调用
+
+优先AOF文件 没有AOF才加载RDB文件
+
+load RDB or AOF file in memory.
 
 - loadAppendOnlyFile
 
