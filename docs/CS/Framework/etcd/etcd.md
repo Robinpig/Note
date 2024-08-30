@@ -214,7 +214,7 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 }
 ```
-
+Accept
 ```go
 func (ln stoppableListener) Accept() (c net.Conn, err error) {
 	connc := make(chan *net.TCPConn, 1)
