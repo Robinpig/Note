@@ -1,5 +1,22 @@
 ## Introduction
 
+
+
+
+## build
+
+
+### Install
+
+安装与alias
+
+
+
+
+
+## Architecture
+
+
 - Preprocessing
 - Compilation
 - Assembly
