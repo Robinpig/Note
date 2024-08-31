@@ -28,6 +28,11 @@ yum -y install epel-release
 apt-get install qemu
 ```
 
+##### **MacOS**
+
+```shell
+brew install qemu
+```
 
 <!-- tabs:end -->
 
