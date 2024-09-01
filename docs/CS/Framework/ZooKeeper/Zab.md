@@ -267,6 +267,64 @@ public void processRequest(Request request) throws RequestProcessorException {
 ```    
 
 
+### RecvWorker
+ 
+```java
+class RecvWorker extends ZooKeeperThread {
+
+    Long sid;
+    Socket sock;
+    volatile boolean running = true;
+    final DataInputStream din;
+    final SendWorker sw;
+
+    @Override
+    public void run() {
+        threadCnt.incrementAndGet();
+        try {
+            LOG.debug("RecvWorker thread towards {} started. myId: {}", sid, QuorumCnxManager.this.mySid);
+            while (running && !shutdown && sock != null) {
+                /**
+                 * Reads the first int to determine the length of the
+                 * message
+                 */
+                int length = din.readInt();
+                if (length <= 0 || length > PACKETMAXSIZE) {
+                    throw new IOException("Received packet with invalid packet: " + length);
+                }
+                /**
+                 * Allocates a new ByteBuffer to receive the message
+                 */
+                final byte[] msgArray = new byte[length];
+                din.readFully(msgArray, 0, length);
+                addToRecvQueue(new Message(ByteBuffer.wrap(msgArray), sid));
+            }
+        } catch (Exception e) {
+            LOG.warn(
+                    "Connection broken for id {}, my id = {}",
+                    sid,
+                    QuorumCnxManager.this.mySid,
+                    e);
+        } finally {
+            sw.finish();
+            closeSocket(sock);
+        }
+    }
+}
+```
+Inserts an element in the recvQueue. 
+If the Queue is full, this methods removes an element from the head of the Queue and then inserts the element at the tail of the queue.
+
+
+```java
+    public void addToRecvQueue(final Message msg) {
+      final boolean success = this.recvQueue.offer(msg);
+      if (!success) {
+          throw new RuntimeException("Could not insert into receive queue");
+      }
+    }
+```
+
 ## Links
 
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)

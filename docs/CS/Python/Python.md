@@ -2,51 +2,51 @@
 
 
 [标准库](https://docs.python.org/3/library/)
-● binascii
-● datetime
-● gettext
-● re
-● time
+- binascii
+- datetime
+- gettext
+- re
+- time
 
 第三方库
-● jproperties
-● pangu
-● Flask
+- jproperties
+- pangu
+- Flask
 
 数据分析
-● Pandas
-● SciPy
-● NumPy
+- Pandas
+- SciPy
+- NumPy
 统计
-● Scrapy
-● StatsModels
+- Scrapy
+- StatsModels
 
 NLP
 
-● NLTK
-● Gensim
+- NLTK
+- Gensim
 机器学习
-● Scikit-learn
+- Scikit-learn
 人工智能
-● TensorFlow
-● Theano
-● Keras
+- TensorFlow
+- Theano
+- Keras
 
 
 基本绘图
-● Matplotlib
-● Seaborn
-● Bokeh
-● Plotly
+- Matplotlib
+- Seaborn
+- Bokeh
+- Plotly
 地图
-● GeoplotLib
-● MapBox
+- GeoplotLib
+- MapBox
 图像处理
-● PIL
+- PIL
 
 爬虫
-● lxml
-● requests
+- lxml
+- requests
 
 Notebook
 

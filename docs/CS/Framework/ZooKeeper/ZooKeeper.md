@@ -82,6 +82,16 @@ Container node
 TTL time to live
 
 
+
+Node中维护了一个数据结构，用于记录ZNode中数据更改的**版本号**以及**ACL**（Access Control List）的变更
+
+有了这些数据的**版本号**以及其更新的**Timestamp**，Zookeeper就可以验证客户端请求的缓存是否合法，并协调更新。
+
+而且，当Zookeeper的客户端执行**更新**或者删除操作时，都必须要带上要修改的对应数据的版本号。如果Zookeeper检测到对应的版本号不存在，则不会执行这次更新。如果合法，在ZNode中数据更新之后，其对应的版本号也会**一起更新**。
+
+> 这套版本号的逻辑，其实很多框架都在用，例如RocketMQ中，Broker向NameServer注册的时候，也会带上这样一个版本号，叫`DateVersion`。
+
+
 ZooKeeper 的每个 ZNode 上都会存储数据，对应于每个 ZNode，ZooKeeper 都会为其维护一个叫做 Stat 的数据结构，Stat 中记录了这个 ZNode 的三个数据版本，分别是 version（当前 ZNode 数据内容的版本），cversion（当前 ZNode 子节点的版本）和 aversion（当前 ZNode 的 ACL 变更版本）。这里的版本起到了控制 ZooKeeper 操作原子性的作用
 
 如果想要让写入数据的操作支持 CAS，则可以借助 Versionable#withVersion 方法，在 setData() 的同时指定当前数据的 verison。如果写入成功，则说明在当前数据写入的过程中，没有其他用户对该 ZNode 节点的内容进行过修改；否则，会抛出一个 KeeperException.BadVersionException，以此可以判断本次 CAS 写入是失败的。而这样做的好处就是，可以避免 “并发局部更新 ZNode 节点内容” 时，发生相互覆盖的问题
@@ -90,6 +100,10 @@ ZooKeeper 的每个 ZNode 上都会存储数据，对应于每个 ZNode，ZooKee
 ### Ephemeral Nodes
 临时节点有个特性，就是如果注册这个节点的机器失去连接(通常是宕机)，那么这个节点会被zookeeper删除。选主过程就是利用这个特性，在服务器启动的时候，去zookeeper特定的一个目录下注册一个临时节点(这个节点作为master，谁注册了这个节点谁就是master)，注册的时候，如果发现该节点已经存在，则说明已经有别的服务器注册了(也就是有别的服务器已经抢主成功)，那么当前服务器只能放弃抢主，作为从机存在。同时，抢主失败的当前服务器需要订阅该临时节点的删除事件，以便该节点删除时(也就是注册该节点的服务器宕机了或者网络断了之类的)进行再次抢主操作。选主的过程，其实就是简单的争抢在Zookeeper注册临时节点的操作，谁注册了约定的临时节点，谁就是master。所有服务器同时会在servers节点下注册一个临时节点（保存自己的基本信息），以便于应用程序读取当前可用的服务器列表
 curator的LeaderSelector
+
+
+
+如果当前是**临时顺序节点**，那么`ephemeralOwner`则存储了创建该节点的Owner的SessionID，有了SessionID，自然就能和对应的客户端匹配上，当Session失效之后，才能将该客户端创建的所有临时节点**全部删除**。
 
 ### Watches
 
@@ -472,6 +486,16 @@ As a result, it supports only these operations:
 - *set data* : writes data to a node
 - *get children* : retrieves a list of children of a node
 - *sync* : waits for data to be propagated
+
+
+
+### ACL
+
+ACL（Access Control List）用于控制ZNode的相关权限，其权限控制和Linux中的类似。Linux中权限**种类**分为了三种，分别是**读**、**写**、**执行**，分别对应的字母是r、w、x。其权限粒度也分为三种，分别是**拥有者权限**、**群组权限**、**其他组权限**
+
+粒度是对权限所作用的对象的分类，把上面三种粒度换个说法描述就是**对用户（Owner）、用户所属的组（Group)、其他组（Other）**的权限划分，这应该算是一种权限控制的标准了，典型的三段式。
+
+Zookeeper中虽然也是三段式，但是两者对粒度的划分存在区别。Zookeeper中的三段式为**Scheme、ID、Permissions**，含义分别为权限机制、允许访问的用户和具体的权限。
 
 ## Implementation
 
@@ -1646,6 +1670,51 @@ Operators resorted to ''rolling restarts'' - a manually intensive and error-pron
 | protocol | Paxos   | Zab       |
 
 
+## Issues
+
+如果由于过大的 TPS 或者不适当的清理策略会导致集群中数据文件，日志文件的堆积，最终导致磁盘爆满，Server 宕机
+导致磁盘中 snapshot 和 transaction log 文件非常多
+最终导致磁盘被写满，节点服务不可用
+
+ZooKeeper 官方是支持定时清理数据文件的能力的，通过 autopurge.snapRetainCount  和 autopurge.purgeInterval 指定清理的间隔和清理时需要保留的数据文件的个数，这里需要注意的是，ZooKeeper 中开启此能力需要将 autopurge.purgeInterval 设置为一个大于 0 的值，此值代表清理任务运行的间隔（单位是小时）。一般情况下，配置这两个参数开启定时清理能力之后能够很大程度减轻磁盘的容量压力。但是定时清理任务的最小间隔是 1 小时，这在一些特殊场景下无法避免磁盘爆满的问题
+
+当在两次磁盘的清理间隔中，有大量的数据变更请求时，会产生大量的 transaction log 文件和 snapshot 文件，由于没有达到清理的事件间隔，数据累计最终在下一次磁盘清理之前把磁盘写满
+
+
+ZooKeeperServer.takeSnapshot），发现在以下情况下会触发新的快照文件的生成
+
+- 节点启动，加载完数据文件之后
+- 集群中产生新 leader
+- SyncRequestProcessor 中达到一定条件（shouldSnapshot 方法指定）
+
+```java
+    private boolean shouldSnapshot() {
+        int logCount = zks.getZKDatabase().getTxnCount();
+        long logSize = zks.getZKDatabase().getTxnSize();
+        return (logCount > (snapCount / 2 + randRoll))
+               || (snapSizeInBytes > 0 && logSize > (snapSizeInBytes / 2 + randSize));
+    }
+```
+其中 logCount 的值是当前事务日志文件的大小以及事务日志的数量，snapCount，snapSizeInBytes 是通过 Java SystemProperty 配置的值，randRoll 是一个随机数（0 < randRoll < snapCount / 2）,randSize 也是一个随机数（0 < randSize < snapSizeInBytes / 2），因此这个判断条件的逻辑可以总结为下：
+
+当当前事务日志文件中的事务数量大于运行时产生的和 snapCount 相关的一个随机值（snapCount/2 < value < snapCount）或者当前的事务日志文件的大小大于一个运行是产生的和 snapSizeInBytes 相关的随机值（snapSizeInBytes/2 < value < snapSizeInBytes）就会进行一次 snapshot 的文件写入
+
+通过以上分析可知，可以通过 4 个参数对 ZooKeeper 的数据文件生成和清理进行配置。
+
+- autopurge.snapRetainCount : (No Java system property) New in 3.4.0
+- autopurge.purgeInterval : (No Java system property) New in 3.4.0
+- snapCount : (Java system property: zookeeper.snapCount)
+- snapSizeLimitInKb : (Java system property: zookeeper.snapSizeLimitInKb)
+
+前两个配置项指定 ZooKeeper 的定时清理策略，后两个参数配置ZooKeeper生成快照文件的频率。
+
+根据前面分析，可以指通过将 snapCount 和 snapSizeLimitInKb 调整大可以减小 snapshot 的生成频率，但是如果设置的过大，会导致在节点重启时，加载数据缓慢，延长服务的恢复时间，增大业务风险。
+
+autopurge.purgeInterval 最小只能指定为 1，这将清理间隔硬限制到 1 小时，针对高频写入情景无法降低风险。
+
+
+
+
 ## Tuning
 
 优化策略
@@ -1660,6 +1729,8 @@ autopurge.purgeInterval
 autopurge.snapRetainCount
 和上面 purgeInterval 参数配合使用，指定需要保留的文件数目（default：3
 
+
+
 ## Links
 
 - [Chubby](/docs/CS/Distributed/Chubby.md)
@@ -1671,3 +1742,7 @@ autopurge.snapRetainCount
 3. [Distributed Locks are Dead; Long Live Distributed Locks!](https://hazelcast.com/blog/long-live-distributed-locks/)
 4. [ZooKeeper Programmer&#39;s Guide](https://zookeeper.apache.org/doc/current/zookeeperProgrammers.html)
 5. [Dynamic Reconfiguration of Primary/Backup Clusters](https://www.usenix.org/system/files/conference/atc12/atc12-final74.pdf)
+6. [深入了解Zookeeper核心原理](https://segmentfault.com/a/1190000040297172)
+
+
+
