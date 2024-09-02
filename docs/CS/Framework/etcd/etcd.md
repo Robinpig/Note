@@ -14,6 +14,12 @@ etcd 通过 Raft 协议进行 leader 选举和数据备份，对外提供高可�
 etcd 是 Kubernetes 的后端唯一存储实现
 
 
+## Build
+
+为了保证etcd可运行，我们先在根目录上运行go mod tidy，保证依赖库没有问题。
+接着，我们阅读Makefile文件，发现其提供了make build指令。运行后，在bin目录下生成了etcd/etcdctl/etcdutl三个可执行文件，并且打印出了版本信息
+
+
 ## Architecture
 
 
@@ -60,6 +66,491 @@ EtcdServer:是整个 etcd 节点的功能的入口，包含 etcd 节点运行过
 
 raftNode 是 Raft 节点，维护 Raft 状态机的步进和状态迁移
 
+
+## start
+
+主入口函数 etcdmain.Main
+
+```go
+func Main(args []string) {
+    checkSupportArch()
+
+    if len(args) > 1 {
+        cmd := args[1]
+        switch cmd {
+        case "gateway", "grpc-proxy":
+            if err := rootCmd.Execute(); err != nil {
+                fmt.Fprint(os.Stderr, err)
+                os.Exit(1)
+            }
+            return
+        }
+    }
+
+    startEtcdOrProxyV2(args)
+}
+```
+
+
+startEtcdOrProxyV2
+```go
+func startEtcdOrProxyV2(args []string) {
+    grpc.EnableTracing = false
+
+    cfg := newConfig()
+    defaultInitialCluster := cfg.ec.InitialCluster
+
+    err := cfg.parse(args[1:])
+    lg := cfg.ec.GetLogger()
+    // If we failed to parse the whole configuration, print the error using
+    // preferably the resolved logger from the config,
+    // but if does not exists, create a new temporary logger.
+    if lg == nil {
+        var zapError error
+        // use this logger
+        lg, zapError = logutil.CreateDefaultZapLogger(zap.InfoLevel)
+        if zapError != nil {
+            fmt.Printf("error creating zap logger %v", zapError)
+            os.Exit(1)
+        }
+    }
+
+    cfg.ec.SetupGlobalLoggers()
+
+    defer func() {
+        logger := cfg.ec.GetLogger()
+        if logger != nil {
+            logger.Sync()
+        }
+    }()
+
+    defaultHost, dhErr := (&cfg.ec).UpdateDefaultClusterFromName(defaultInitialCluster)
+    if defaultHost != "" {
+        lg.Info(
+            "detected default host for advertise",
+            zap.String("host", defaultHost),
+        )
+    }
+    if dhErr != nil {
+        lg.Info("failed to detect default host", zap.Error(dhErr))
+    }
+
+    if cfg.ec.Dir == "" {
+        cfg.ec.Dir = fmt.Sprintf("%v.etcd", cfg.ec.Name)
+        lg.Warn(
+            "'data-dir' was empty; using default",
+            zap.String("data-dir", cfg.ec.Dir),
+        )
+    }
+
+    var stopped <-chan struct{}
+    var errc <-chan error
+
+    which := identifyDataDirOrDie(cfg.ec.GetLogger(), cfg.ec.Dir)
+    if which != dirEmpty {
+        switch which {
+            // start etcd
+        case dirMember:
+            stopped, errc, err = startEtcd(&cfg.ec)
+        case dirProxy:
+            err = startProxy(cfg)
+        default:
+            lg.Panic(
+                "unknown directory type",
+                zap.String("dir-type", string(which)),
+            )
+        }
+    } else {
+        shouldProxy := cfg.isProxy()
+        if !shouldProxy {
+            stopped, errc, err = startEtcd(&cfg.ec)
+            if derr, ok := err.(*etcdserver.DiscoveryError); ok && derr.Err == v2discovery.ErrFullCluster {
+                if cfg.shouldFallbackToProxy() {
+                    lg.Warn(
+                        "discovery cluster is full, falling back to proxy",
+                        zap.String("fallback-proxy", fallbackFlagProxy),
+                        zap.Error(err),
+                    )
+                    shouldProxy = true
+                }
+            } else if err != nil {
+                lg.Warn("failed to start etcd", zap.Error(err))
+            }
+        }
+        if shouldProxy {
+            err = startProxy(cfg)
+        }
+    }
+
+    if err != nil {
+        if derr, ok := err.(*etcdserver.DiscoveryError); ok {
+            switch derr.Err {
+            case v2discovery.ErrDuplicateID:
+                lg.Warn(
+                    "member has been registered with discovery service",
+                    zap.String("name", cfg.ec.Name),
+                    zap.String("discovery-token", cfg.ec.Durl),
+                    zap.Error(derr.Err),
+                )
+                lg.Warn(
+                    "but could not find valid cluster configuration",
+                    zap.String("data-dir", cfg.ec.Dir),
+                )
+                lg.Warn("check data dir if previous bootstrap succeeded")
+                lg.Warn("or use a new discovery token if previous bootstrap failed")
+
+            case v2discovery.ErrDuplicateName:
+                lg.Warn(
+                    "member with duplicated name has already been registered",
+                    zap.String("discovery-token", cfg.ec.Durl),
+                    zap.Error(derr.Err),
+                )
+                lg.Warn("cURL the discovery token URL for details")
+                lg.Warn("do not reuse discovery token; generate a new one to bootstrap a cluster")
+
+            default:
+                lg.Warn(
+                    "failed to bootstrap; discovery token was already used",
+                    zap.String("discovery-token", cfg.ec.Durl),
+                    zap.Error(err),
+                )
+                lg.Warn("do not reuse discovery token; generate a new one to bootstrap a cluster")
+            }
+            os.Exit(1)
+        }
+
+        if strings.Contains(err.Error(), "include") && strings.Contains(err.Error(), "--initial-cluster") {
+            lg.Warn("failed to start", zap.Error(err))
+            if cfg.ec.InitialCluster == cfg.ec.InitialClusterFromName(cfg.ec.Name) {
+                lg.Warn("forgot to set --initial-cluster?")
+            }
+            if types.URLs(cfg.ec.AdvertisePeerUrls).String() == embed.DefaultInitialAdvertisePeerURLs {
+                lg.Warn("forgot to set --initial-advertise-peer-urls?")
+            }
+            if cfg.ec.InitialCluster == cfg.ec.InitialClusterFromName(cfg.ec.Name) && len(cfg.ec.Durl) == 0 {
+                lg.Warn("--discovery flag is not set")
+            }
+            os.Exit(1)
+        }
+        lg.Fatal("discovery failed", zap.Error(err))
+    }
+
+    osutil.HandleInterrupts(lg)
+
+    // At this point, the initialization of etcd is done.
+    // The listeners are listening on the TCP ports and ready
+    // for accepting connections. The etcd instance should be
+    // joined with the cluster and ready to serve incoming
+    // connections.
+    notifySystemd(lg)
+
+    select {
+    case lerr := <-errc:
+        // fatal out on listener errors
+        lg.Fatal("listener failed", zap.Error(lerr))
+    case <-stopped:
+    }
+
+    osutil.Exit(0)
+}
+```
+
+startEtcd
+
+这个函数的功能：
+1. 启动etcd，如果失败则通过error返回；
+2. 启动etcd后，本节点会加入到整个集群中，就绪后则通过channele.Server.ReadyNotify()收到消息；
+3. 启动etcd后，如果遇到异常，则会通过channele.Server.StopNotify()收到消息；
+
+
+```go
+// startEtcd runs StartEtcd in addition to hooks needed for standalone etcd.
+func startEtcd(cfg *embed.Config) (<-chan struct{}, <-chan error, error) {
+    e, err := embed.StartEtcd(cfg)
+    if err != nil {
+        return nil, nil, err
+    }
+    osutil.RegisterInterruptHandler(e.Close)
+    select {
+    case <-e.Server.ReadyNotify(): // wait for e.Server to join the cluster
+    case <-e.Server.StopNotify(): // publish aborted from 'ErrStopped'
+    }
+    return e.Server.StopNotify(), e.Err(), nil
+}
+```
+
+StartEtcd launches the etcd server and HTTP handlers for client/server communication.
+The returned Etcd.Server is not guaranteed to have joined the cluster. Wait on the Etcd.Server.ReadyNotify() channel to know when it completes and is ready for use.
+
+
+```go
+func StartEtcd(inCfg *Config) (e *Etcd, err error) {
+    if err = inCfg.Validate(); err != nil {
+        return nil, err
+    }
+    serving := false
+    e = &Etcd{cfg: *inCfg, stopc: make(chan struct{})}
+    cfg := &e.cfg
+    defer func() {
+        if e == nil || err == nil {
+            return
+        }
+        if !serving {
+            // errored before starting gRPC server for serveCtx.serversC
+            for _, sctx := range e.sctxs {
+                close(sctx.serversC)
+            }
+        }
+        e.Close()
+        e = nil
+    }()
+
+    if !cfg.SocketOpts.Empty() {
+        cfg.logger.Info(
+            "configuring socket options",
+            zap.Bool("reuse-address", cfg.SocketOpts.ReuseAddress),
+            zap.Bool("reuse-port", cfg.SocketOpts.ReusePort),
+        )
+    }
+    e.cfg.logger.Info(
+        "configuring peer listeners",
+        zap.Strings("listen-peer-urls", e.cfg.getListenPeerUrls()),
+    )
+    if e.Peers, err = configurePeerListeners(cfg); err != nil {
+        return e, err
+    }
+
+    e.cfg.logger.Info(
+        "configuring client listeners",
+        zap.Strings("listen-client-urls", e.cfg.getListenClientUrls()),
+    )
+    if e.sctxs, err = configureClientListeners(cfg); err != nil {
+        return e, err
+    }
+
+    for _, sctx := range e.sctxs {
+        e.Clients = append(e.Clients, sctx.l)
+    }
+
+    var (
+        urlsmap types.URLsMap
+        token   string
+    )
+    memberInitialized := true
+    if !isMemberInitialized(cfg) {
+        memberInitialized = false
+        urlsmap, token, err = cfg.PeerURLsMapAndToken("etcd")
+        if err != nil {
+            return e, fmt.Errorf("error setting up initial cluster: %v", err)
+        }
+    }
+
+    // AutoCompactionRetention defaults to "0" if not set.
+    if len(cfg.AutoCompactionRetention) == 0 {
+        cfg.AutoCompactionRetention = "0"
+    }
+    autoCompactionRetention, err := parseCompactionRetention(cfg.AutoCompactionMode, cfg.AutoCompactionRetention)
+    if err != nil {
+        return e, err
+    }
+
+    backendFreelistType := parseBackendFreelistType(cfg.BackendFreelistType)
+    // ...
+    }
+```
+
+
+```go
+func StartEtcd(inCfg *Config) (e *Etcd, err error) {
+    // ...
+    srvcfg := config.ServerConfig{
+        Name:                                     cfg.Name,
+        ClientURLs:                               cfg.AdvertiseClientUrls,
+        PeerURLs:                                 cfg.AdvertisePeerUrls,
+        DataDir:                                  cfg.Dir,
+        DedicatedWALDir:                          cfg.WalDir,
+        SnapshotCount:                            cfg.SnapshotCount,
+        SnapshotCatchUpEntries:                   cfg.SnapshotCatchUpEntries,
+        MaxSnapFiles:                             cfg.MaxSnapFiles,
+        MaxWALFiles:                              cfg.MaxWalFiles,
+        InitialPeerURLsMap:                       urlsmap,
+        InitialClusterToken:                      token,
+        DiscoveryURL:                             cfg.Durl,
+        DiscoveryProxy:                           cfg.Dproxy,
+        NewCluster:                               cfg.IsNewCluster(),
+        PeerTLSInfo:                              cfg.PeerTLSInfo,
+        TickMs:                                   cfg.TickMs,
+        ElectionTicks:                            cfg.ElectionTicks(),
+        InitialElectionTickAdvance:               cfg.InitialElectionTickAdvance,
+        AutoCompactionRetention:                  autoCompactionRetention,
+        AutoCompactionMode:                       cfg.AutoCompactionMode,
+        QuotaBackendBytes:                        cfg.QuotaBackendBytes,
+        BackendBatchLimit:                        cfg.BackendBatchLimit,
+        BackendFreelistType:                      backendFreelistType,
+        BackendBatchInterval:                     cfg.BackendBatchInterval,
+        MaxTxnOps:                                cfg.MaxTxnOps,
+        MaxRequestBytes:                          cfg.MaxRequestBytes,
+        MaxConcurrentStreams:                     cfg.MaxConcurrentStreams,
+        SocketOpts:                               cfg.SocketOpts,
+        StrictReconfigCheck:                      cfg.StrictReconfigCheck,
+        ClientCertAuthEnabled:                    cfg.ClientTLSInfo.ClientCertAuth,
+        AuthToken:                                cfg.AuthToken,
+        BcryptCost:                               cfg.BcryptCost,
+        TokenTTL:                                 cfg.AuthTokenTTL,
+        CORS:                                     cfg.CORS,
+        HostWhitelist:                            cfg.HostWhitelist,
+        InitialCorruptCheck:                      cfg.ExperimentalInitialCorruptCheck,
+        CorruptCheckTime:                         cfg.ExperimentalCorruptCheckTime,
+        CompactHashCheckEnabled:                  cfg.ExperimentalCompactHashCheckEnabled,
+        CompactHashCheckTime:                     cfg.ExperimentalCompactHashCheckTime,
+        PreVote:                                  cfg.PreVote,
+        Logger:                                   cfg.logger,
+        ForceNewCluster:                          cfg.ForceNewCluster,
+        EnableGRPCGateway:                        cfg.EnableGRPCGateway,
+        ExperimentalEnableDistributedTracing:     cfg.ExperimentalEnableDistributedTracing,
+        UnsafeNoFsync:                            cfg.UnsafeNoFsync,
+        EnableLeaseCheckpoint:                    cfg.ExperimentalEnableLeaseCheckpoint,
+        LeaseCheckpointPersist:                   cfg.ExperimentalEnableLeaseCheckpointPersist,
+        CompactionBatchLimit:                     cfg.ExperimentalCompactionBatchLimit,
+        WatchProgressNotifyInterval:              cfg.ExperimentalWatchProgressNotifyInterval,
+        DowngradeCheckTime:                       cfg.ExperimentalDowngradeCheckTime,
+        WarningApplyDuration:                     cfg.ExperimentalWarningApplyDuration,
+        ExperimentalMemoryMlock:                  cfg.ExperimentalMemoryMlock,
+        ExperimentalTxnModeWriteWithSharedBuffer: cfg.ExperimentalTxnModeWriteWithSharedBuffer,
+        ExperimentalStopGRPCServiceOnDefrag:      cfg.ExperimentalStopGRPCServiceOnDefrag,
+        ExperimentalBootstrapDefragThresholdMegabytes: cfg.ExperimentalBootstrapDefragThresholdMegabytes,
+        V2Deprecation: cfg.V2DeprecationEffective(),
+    }
+
+    if srvcfg.ExperimentalEnableDistributedTracing {
+        tctx := context.Background()
+        tracingExporter, err := newTracingExporter(tctx, cfg)
+        if err != nil {
+            return e, err
+        }
+        e.tracingExporterShutdown = func() {
+            tracingExporter.Close(tctx)
+        }
+        srvcfg.ExperimentalTracerOptions = tracingExporter.opts
+
+        e.cfg.logger.Info("distributed tracing setup enabled")
+    }
+
+    print(e.cfg.logger, *cfg, srvcfg, memberInitialized)
+
+    if e.Server, err = etcdserver.NewServer(srvcfg); err != nil {
+        return e, err
+    }
+
+    // buffer channel so goroutines on closed connections won't wait forever
+    e.errc = make(chan error, len(e.Peers)+len(e.Clients)+2*len(e.sctxs))
+
+    // newly started member ("memberInitialized==false")
+    // does not need corruption check
+    if memberInitialized && srvcfg.InitialCorruptCheck {
+        if err = e.Server.CorruptionChecker().InitialCheck(); err != nil {
+            // set "EtcdServer" to nil, so that it does not block on "EtcdServer.Close()"
+            // (nothing to close since rafthttp transports have not been started)
+
+            e.cfg.logger.Error("checkInitialHashKV failed", zap.Error(err))
+            e.Server.Cleanup()
+            e.Server = nil
+            return e, err
+        }
+    }
+    e.Server.Start()
+
+    if err = e.servePeers(); err != nil {
+        return e, err
+    }
+    if err = e.serveClients(); err != nil {
+        return e, err
+    }
+    if err = e.serveMetrics(); err != nil {
+        return e, err
+    }
+
+    e.cfg.logger.Info(
+        "now serving peer/client/metrics",
+        zap.String("local-member-id", e.Server.ID().String()),
+        zap.Strings("initial-advertise-peer-urls", e.cfg.getAdvertisePeerUrls()),
+        zap.Strings("listen-peer-urls", e.cfg.getListenPeerUrls()),
+        zap.Strings("advertise-client-urls", e.cfg.getAdvertiseClientUrls()),
+        zap.Strings("listen-client-urls", e.cfg.getListenClientUrls()),
+        zap.Strings("listen-metrics-urls", e.cfg.getMetricsURLs()),
+    )
+    serving = true
+    return e, nil
+}
+```
+
+### serveClients
+
+serve accepts incoming connections on the listener l, creating a new service goroutine for each. The service goroutines read requests and then call handler to reply to them.
+
+```go
+func (e *Etcd) serveClients() (err error) {
+    if !e.cfg.ClientTLSInfo.Empty() {
+        e.cfg.logger.Info(
+            "starting with client TLS",
+            zap.String("tls-info", fmt.Sprintf("%+v", e.cfg.ClientTLSInfo)),
+            zap.Strings("cipher-suites", e.cfg.CipherSuites),
+        )
+    }
+
+    // Start a client server goroutine for each listen address
+    var h http.Handler
+    if e.Config().EnableV2 {
+        if e.Config().V2DeprecationEffective().IsAtLeast(config.V2_DEPR_1_WRITE_ONLY) {
+            return fmt.Errorf("--enable-v2 and --v2-deprecation=%s are mutually exclusive", e.Config().V2DeprecationEffective())
+        }
+        e.cfg.logger.Warn("Flag `enable-v2` is deprecated and will get removed in etcd 3.6.")
+        if len(e.Config().ExperimentalEnableV2V3) > 0 {
+            e.cfg.logger.Warn("Flag `experimental-enable-v2v3` is deprecated and will get removed in etcd 3.6.")
+            srv := v2v3.NewServer(e.cfg.logger, v3client.New(e.Server), e.cfg.ExperimentalEnableV2V3)
+            h = v2http.NewClientHandler(e.GetLogger(), srv, e.Server.Cfg.ReqTimeout())
+        } else {
+            h = v2http.NewClientHandler(e.GetLogger(), e.Server, e.Server.Cfg.ReqTimeout())
+        }
+    } else {
+        mux := http.NewServeMux()
+        etcdhttp.HandleBasic(e.cfg.logger, mux, e.Server)
+        etcdhttp.HandleMetrics(mux)
+        etcdhttp.HandleHealth(e.cfg.logger, mux, e.Server)
+        h = mux
+    }
+
+    gopts := []grpc.ServerOption{}
+    if e.cfg.GRPCKeepAliveMinTime > time.Duration(0) {
+        gopts = append(gopts, grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+            MinTime:             e.cfg.GRPCKeepAliveMinTime,
+            PermitWithoutStream: false,
+        }))
+    }
+    if e.cfg.GRPCKeepAliveInterval > time.Duration(0) &&
+        e.cfg.GRPCKeepAliveTimeout > time.Duration(0) {
+        gopts = append(gopts, grpc.KeepaliveParams(keepalive.ServerParameters{
+            Time:    e.cfg.GRPCKeepAliveInterval,
+            Timeout: e.cfg.GRPCKeepAliveTimeout,
+        }))
+    }
+
+    splitHttp := false
+    for _, sctx := range e.sctxs {
+        if sctx.httpOnly {
+            splitHttp = true
+        }
+    }
+
+    // start client servers in each goroutine
+    for _, sctx := range e.sctxs {
+        go func(s *serveCtx) {
+            e.errHandler(s.serve(e.Server, &e.cfg.ClientTLSInfo, h, e.errHandler, e.grpcGatewayDial(splitHttp), splitHttp, gopts...))
+        }(sctx)
+    }
+    return nil
+}
+```
 
 
 
