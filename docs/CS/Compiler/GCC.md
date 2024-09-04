@@ -74,6 +74,8 @@ size xx.o
 
 ```
 
+有许多工具可以完成对ELF文件的探索查看，如readelf、objdump
+
 use objdump
 
 ```shell
