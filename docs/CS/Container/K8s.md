@@ -111,6 +111,28 @@ sudo apt-mark hold kubelet kubeadm kubectl
 Fig.1. Kubernetes cluster architecture
 </p>
 
+
+
+在Kubernetes中 service是分布式集群架构的核心
+一个Service有以下特征
+- 唯一指定名称
+- 一个虚拟IP地址和端口号
+- 能够提供某种远程服务能力
+- 能将客户端对服务访问请求转发到一组容器应用中
+
+在Service中每个服务进程都有独立的Endpoint
+
+每个进程都将被包装到相应的Pod中 成为Pod中的一个容器 为了建立Pod和Service的关系 每个Pod都被打上了一个Label 然后给相应的Service定义Label Selector
+
+Pod运行在称为Node的环境(可以是物理机器 或者是虚拟机) 每个Node可以有多个Pod 每个Pod里都有Pause的容器
+
+
+在集群管理上 机器被划分为Master和其它Node Master运行着一些进程 kube-apiserver kube-controller-manager
+
+
+Deployment
+
+
 Master
 
 Kubernetes runs your workload by placing containers into Pods to run on Nodes. 
