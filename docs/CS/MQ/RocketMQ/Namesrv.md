@@ -6,6 +6,10 @@ NameServer包含哪些
 
 KVConfigManager
 
+NameServer不仅仅是存储了各个Broker的IP地址和端口，还存储了对应的Topic的路由数据
+
+
+
 ## start
 
 > 启动前注意环境变量`ROCKETMQ_HOME`的设置
@@ -332,6 +336,8 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
 ```
 
 #### getRouteInfoByTopic
+
+获取Topic的路由信息
 
 ```java
 

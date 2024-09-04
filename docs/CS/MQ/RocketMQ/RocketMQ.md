@@ -149,6 +149,11 @@ RocketMQ架构上主要分为四部分，如上图所示：
   5. Index Service：根据特定的Message key对投递到Broker的消息进行索引服务，以提供消息的快速查询。
 
 
+在RocketMQ4.5之前，它使用主从架构，每一个Master Broker都有一个自己的Slave Broker
+
+Broker启动的时候，会启动一个定时任务，定期的从Master Broker同步全量的数据。
+
+
 
 ## Trace
 
