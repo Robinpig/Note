@@ -281,6 +281,12 @@ such things as the number and types of its arguments, the method of passing each
 The symbol table is a data structure containing a record for each variable name, with elds for the attributes of the name.
 The data structure should be designed to allow the compiler to nd the record for each name quickly and to store or retrieve data from that record quickly.
 
+### three-phase compiler
+
+编译器前端 优化器 编译器后端
+
+编译器的IR可能有多个 会进行多次优化 如识别冗余代码 识别内存逃逸等
+
 ## Lexical Analysis
 
 ## Syntax Analysis
