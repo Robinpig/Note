@@ -10,13 +10,34 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作�
 
 
 
-
-1. [Install QEMU](/docs/CS/OS/qemu.md)
-2. git clone git://github.com/mit-pdos/xv6-public.git
+Fist of all, [Install QEMU](/docs/CS/OS/qemu.md)
 
 
 
+### x86
 
+<!-- tabs:start -->
+
+Download
+
+```shell
+git clone git://github.com/mit-pdos/xv6-public.git
+```
+
+##### **Ubuntu**
+
+```shell
+```
+
+
+
+
+
+
+
+<!-- tabs:end -->
+
+### Riscv
 
 <!-- tabs:start -->
 
@@ -25,6 +46,49 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作�
 
 
 ##### Ubuntu
+
+Make riscv-gnu-toolchain
+
+```shell
+sudo apt-get install autoconf automake autotools-dev curl python3 libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev libexpat-dev ninja-build
+```
+prepare
+```shell
+git clone https://gitee.com/mirrors/riscv-gnu-toolchain.git
+cd riscv-gnu-toolchain
+cat .gitmodules
+
+git clone https://gitee.com/mirrors/riscv-isa-sim.git
+rm -rf spike
+mv riscv-isa-sim spike
+
+git clone https://gitee.com/riscv/riscv-pk.git
+rm -rf pk
+mv riscv-pk pk
+```
+
+
+
+
+make
+```shell
+sudo mkdir /opt/riscv
+sudo chmod 777 /opt/riscv
+# zsh
+sudo vim ~/.zshrc
+source ~/.zshrc
+
+./configure --prefix=/opt/riscv --enable-multilib
+sudo make linux -j4
+```
+
+Check version
+
+```shell
+riscv64-unknown-linux-gnu-gcc -v
+```
+
+
 
 
 
@@ -36,7 +100,7 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作�
 
 > [MIT 6.S081/Fall 2020 搭建 risc-v 与 xv6 开发调试环境](https://yaoyao.io/posts/mit6.S081-basic-env-install)
 
-RISCV版本需要
+Install riscv-gnu-toolchain
 
 ```shell
 
@@ -52,15 +116,8 @@ export PATH=$PATH:/opt/homebrew/bin/riscv64-elf-gcc/bin
 
 ```shell
 riscv64-unknown-elf-gcc --version
-#riscv64-unknown-elf-gcc (GCC) 10.2.0
-
 qemu-system-riscv64 --version
-#QEMU emulator version 5.2.0
 ```
-
-
-
-
 
 下载代码
 
