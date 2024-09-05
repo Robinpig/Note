@@ -227,6 +227,8 @@ therad pool per NettyRequestProcessor
 
 在 RocketMQ 中不论是 CommitLog 还是 ConsumerQueue 都采用了 mmap
 
+Broker在收到一条消息的时候，写入Commit Log的同时，还会将当前这条消息在commit log中的offset、消息的size和对应的Tag的Hash写入到consumer queue文件
+
 ConsumerQueue 结构
 
 
