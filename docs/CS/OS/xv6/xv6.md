@@ -21,7 +21,7 @@ Fist of all, [Install QEMU](/docs/CS/OS/qemu.md)
 Download
 
 ```shell
-git clone git://github.com/mit-pdos/xv6-public.git
+git clone http://github.com/mit-pdos/xv6-public.git
 ```
 
 ##### **Ubuntu**
