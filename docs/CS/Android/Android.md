@@ -1,5 +1,13 @@
 ## Introduction
 
+
+
+## Architecture
+
+
+硬件抽象层
+
+## Discuss
 支付宝以往的启动页较单一，无法较好地宣传和提升用户体验，需要对启动页进行能力升级
 这个启动页上有个倒计时功能。这篇文章主要讲下这个倒计时的实现。
 在Android上最常见的倒计时方案是CountDownTimer。在CountDownTimer的onTick刷新时间信息到TextView，在onFinish时结束计时。相信熟练的开发GG用不了一个上午就能搞定。
