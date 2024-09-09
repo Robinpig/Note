@@ -498,6 +498,10 @@ sleep主动阻塞
 
 ### Channel
 
+
+
+channel是Golang在语言层面提供的goroutine间的通信方式，比Unix管道更易用也更轻便。channel主要用于进程内各goroutine间通信，如果需要跨进程通信，建议使用分布式系统的方法来解决
+
 在 Go 语言中，声明一个 channel 非常简单，使用内置的 make 函数即可，如下所示
 ```go
 ch:=make(chan string)
@@ -516,6 +520,13 @@ ch:=make(chan string)
    有缓冲 channel 类似一个可阻塞的队列，内部的元素先进先出。通过 make 函数的第二个参数可以指定 channel 容量的大小，进而创建一个有缓冲 channel，如下面的代码所示
 
 cacheCh:=make(chan int,5)
+
+
+
+src/runtime/chan.go:hchan定义了channel的数据结构：
+
+channel由队列、类型信息、goroutine等待队列组成
+
 
 
 ```go
@@ -542,9 +553,16 @@ type hchan struct {
     lock mutex
 }
 ```
+
+
+chan内部实现了一个环形队列作为其缓冲区，队列的长度是创建chan时指定的。
+
 RingBuffer
 
-发送和等待队列
+
+从channel读数据，如果channel缓冲区为空或者没有缓冲区，当前goroutine会被阻塞。 向channel写数据，如果channel缓冲区已满或者没有缓冲区，当前goroutine会被阻塞
+
+一般情况下recvq和sendq至少有一个为空。只有一个例外，那就是同一个goroutine使用select语句向channel一边写数据，一边读数据
 
 
 type waitq struct {
