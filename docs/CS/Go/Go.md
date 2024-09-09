@@ -1133,3 +1133,6 @@ Context 是一种非常好的工具，使用它可以很方便地控制取消多
 1. [Go语言圣经(中文版)](https://gopl-zh.github.io/)
 1. [Go语言设计与实现](https://draveness.me/golang/)
 1. [Go语言高级编程](http://docs.studygolang.com/advanced-go-programming-book/)
+1. [Go专家编程](https://docs.kilvn.com/GoExpertProgramming/)
+1. [Go Web编程](https://docs.kilvn.com/build-web-application-with-golang/zh/)
+1. [深度探索Go语言](https://book-go-runtime.netlify.app/#/)
