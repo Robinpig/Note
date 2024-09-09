@@ -25,7 +25,7 @@ yum -y install epel-release
 
 ##### **Ubuntu**
 ```shell
-apt-get install qemu
+apt-get install qemu-system
 ```
 
 ##### **MacOS**

@@ -1,5 +1,11 @@
 ## Introduction
 
+Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的语言。它具有以下特点：
+
+- 它可以在一台计算机上用几秒钟的时间编译一个大型的Go程序。
+- Go为软件构造提供了一种模型，它使依赖分析更加容易，且避免了大部分C风格include文件与库的开头。
+- Go是静态类型的语言，它的类型系统没有层级。因此用户不需要在定义类型之间的关系上花费时间，这样感觉起来比典型的面向对象语言更轻量级。
+- Go完全是垃圾回收型的语言，并为并发执行与通信提供了基本的支持
 
 ## 配置
 Go mod是package和其dependencies的集合 是构建 版本控制和管理的单元
@@ -65,6 +71,18 @@ duck type
 
 composition
 
+
+### Build
+
+go1.4之后实现了自举 需要一个1.4之后的go版本来执行
+```shell
+git clone https://github.com/golang/go.git
+cd go/src
+# wait for ALL TESTS PASSED
+./all.bash
+```
+add path
+
 ## Basic
 
 ### Type
@@ -75,7 +93,7 @@ composition
 - 有符号整型：如 int、int8、int16、int32 和 int64。
 - 无符号整型：如 uint、uint8、uint16、uint32 和 uint64。
 
-除了有用“位”（bit）大小表示的整型外，还有 int 和 uint 这两个没有具体 bit 大小的整型，它们的大小可能是 32bit，也可能是 64bit，和硬件设备 CPU 有关
+除了有用位（bit）大小表示的整型外，还有 int 和 uint 这两个没有具体 bit 大小的整型，它们的大小可能是 32bit，也可能是 64bit，和硬件设备 CPU 有关
 在整型中，如果能确定 int 的 bit 就选择比较明确的 int 类型，因为这会让你的程序具备很好的移植性。
 在 Go 语言中，还有一种字节类型 byte，它其实等价于 uint8 类型，可以理解为 uint8 类型的别名，用于定义一个字节，所以字节 byte 类型也属于整型
 
@@ -83,6 +101,8 @@ composition
 浮点数就代表现实中的小数。Go 语言提供了两种精度的浮点数，分别是 float32 和 float64。项目中最常用的是 float64，因为它的精度高，浮点计算的结果相比 float32 误差会更小
 布尔型
 一个布尔型的值只有两种：true 和 false Go 语言中的布尔型使用关键字 bool 定义
+
+#### strings
 
 字符串
 Go 语言中的字符串可以表示为任意的数据
@@ -97,9 +117,29 @@ fmt.Println(utf8.RuneCountInString(s))
 
 而使用 for range 对字符串进行循环时，也恰好是按照 unicode 字符进行循环的，所以对于字符串 s 来说，循环了 9 次
 
-零值其实就是一个变量的默认值，在 Go 语言中，如果我们声明了一个变量，但是没有对其进行初始化，那么 Go 语言会自动初始化其值为对应类型的零值。比如数字类的零值是 0，布尔型的零值是 false，字符串的零值是 “” 空字符串等
 
-指针
+字符串常量在词法解析阶段最终会被标记成StringLit类型的Token并被传递到编译的下一个阶段。在语法分析阶段，采取递归下降的方式读取Uft-8字符，单撇号或双引号是字符串的标识。分析的逻辑位于syntax/scanner.go文件中
+
+果在代码中识别到单撇号，则调用rawString函数；如果识别到双引号，则调用stdString函数，两者的处理略有不同。
+对于单撇号的处理比较简单：一直循环向后读取，直到寻找到配对的单撇号， 
+
+双引号调用stdString函数，如果出现另一个双引号则直接退出；如果出现了\\，则对后面的字符进行转义
+
+string（s.stopLit（））将解析到的字节转换为字符串，这种转换会在字符串左、右两边加上双引号，因此"hello"会被解析为""hello""。在抽象语法树阶段，无论是import语句中包的路径、结构体中的字段标签还是字符串常量，都会调用strconv.Unquote（s）去掉字符串两边的引号等干扰，还原其本来的面目
+
+字符常量存储于静态存储区，其内容不可以被改变，声明时有单撇号和双引号两种方法。字符常量的拼接发生在编译时，而字符串变量的拼接发生在运行时
+
+运行时字符串的拼接并不是简单地将一个字符串合并到另一个字符串中，而是找到一个更大的空间，并通过内存复制的形式将字符串复制到其中
+无论使用concatstring{2，3，4，5}函数中的哪一个，最终都会调用runtime.concatstrings函数
+concatstrings函数会先对传入的切片参数进行遍历，过滤空字符串并计算拼接后字符串的长度
+拼接的过程位于rawstringtmp函数中，当拼接后的字符串小于32字节时，会有一个临时的缓存供其使用。当拼接后的字符串大于32字节时，堆区会开辟一个足够大的内存空间，并将多个字符串存入其中，期间会涉及内存的复制（copy）
+
+
+### default value
+
+零值其实就是一个变量的默认值，在 Go 语言中，如果我们声明了一个变量，但是没有对其进行初始化，那么 Go 语言会自动初始化其值为对应类型的零值。比如数字类的零值是 0，布尔型的零值是 false，字符串的零值是  空字符串等
+
+### 指针
 在 Go 语言中，指针对应的是变量在内存中的存储位置，也就说指针的值就是变量的内存地址。通过 & 可以获取一个变量的地址，也就是指针。
 常量
 
@@ -120,7 +160,7 @@ Go 语言是强类型的语言，也就是说不同类型的变量是无法相�
 同理对于浮点数、布尔型，Go 语言提供了 strconv.ParseFloat、strconv.ParseBool、strconv.FormatFloat 和 strconv.FormatBool 进行互转
 
 对于数字类型之间，可以通过强制转换的方式
-这种使用方式比简单，采用“类型（要转换的变量）”格式即可。采用强制转换的方式转换数字类型，可能会丢失一些精度，比如浮点型转为整型时，小数点部分会全部丢失
+这种使用方式比简单，采用类型（要转换的变量）格式即可。采用强制转换的方式转换数字类型，可能会丢失一些精度，比如浮点型转为整型时，小数点部分会全部丢失
 
 
 #### array
@@ -213,6 +253,41 @@ if ok {
 map 的遍历是无序的，也就是说你每次遍历，键值对的顺序可能会不一样。如果想按顺序遍历，可以先获取所有的 Key，并对 Key 排序，然后根据排序好的 Key 获取对应的 Value
 和数组切片不一样，map 是没有容量的，它只有长度，也就是 map 的大小（键值对的个数）。要获取 map 的大小，使用内置的 len 函数即可
 
+
+> After long discussion it was decided that the typical use of maps did not require safe access from multiple goroutines, and in those cases where it did, the map was probably part of some larger data structure or computation that was already synchronized. Therefore requiring that all map operations grab a mutex would slow down most programs and add safety to few. This was not an easy decision, however, since it means uncontrolled map access can crash the program.
+
+Go语言选择将key与value分开存储而不是以key/value/key/value的形式存储，是为了在字节对齐时压缩空间。
+在进行hash[key]的map访问操作时，会首先找到桶的位置
+找到桶的位置后遍历tophash数组，如图8-3所示，如果在数组中找到了相同的hash，那么可以接着通过指针的寻址操作找到对应的key与value。
+
+
+在Go语言中还有一个溢出桶的概念，在执行hash[key]=value赋值操作时，当指定桶中的数据超过8个时，并不会直接开辟一个新桶，而是将数据放置到溢出桶中，每个桶的最后都存储了overflow，即溢出桶的指针。在正常情况下，数据是很少会跑到溢出桶里面去的”
+
+同理，我们可以知道，在map执行查找操作时，如果key的hash在指定桶的tophash数组中不存在，那么需要遍历溢出桶中的数据。
+后面还会看到，如果一开始，初始化map的数量比较大，则map会提前创建好一些溢出桶存储在extra*mapextra字段”
+```go
+type mapextra struct {
+	// If both key and elem do not contain pointers and are inline, then we mark bucket
+	// type as containing no pointers. This avoids scanning such maps.
+	// However, bmap.overflow is a pointer. In order to keep overflow buckets
+	// alive, we store pointers to all overflow buckets in hmap.extra.overflow and hmap.extra.oldoverflow.
+	// overflow and oldoverflow are only used if key and elem do not contain pointers.
+	// overflow contains overflow buckets for hmap.buckets.
+	// oldoverflow contains overflow buckets for hmap.oldbuckets.
+	// The indirection allows to store a pointer to the slice in hiter.
+	overflow    *[]*bmap
+	oldoverflow *[]*bmap
+
+	// nextOverflow holds a pointer to a free overflow bucket.
+	nextOverflow *bmap
+}
+```
+
+这样当出现溢出现象时，可以用提前创建好的桶而不用申请额外的内存空间。只有预分配的溢出桶使用完了，才会新建溢出桶。
+当发生以下两种情况之一时，map会进行重建：
+- map超过了负载因子大小。
+- 溢出桶的数量过多。 
+
 ### Flow Control
 
 和其他编程语言不同，在 Go 语言的 if 语句中，可以有一个简单的表达式语句，并将该语句和条件语句使用分号 ; 分开
@@ -234,6 +309,7 @@ switch 后的表达式也没有太多限制，是一个合法的表达式即可�
 延迟函数在绝大数情况下能被执行 除非显式调用Exit或者Fatal
 
 延迟函数的调用执行顺序是LIFO
+defer 有一个调用栈，越早定义越靠近栈的底部，越晚定义越靠近栈的顶部，在执行这些 defer 语句的时候，会先从栈顶弹出一个 defer 然后执行它
 
 延迟函数造成的panic不会影响其它延迟函数的执行
 
@@ -253,7 +329,7 @@ func main() {
 	time.Sleep(50 * time.Millisecond)
 }
 ```
- 
+
 
 ### init
 
@@ -388,20 +464,678 @@ type structName struct{
 有了接口和实现接口的类型，就会有类型断言。类型断言用来判断一个接口的值是否是实现该接口的某个具体类型。
 
 
+### error
+
+在 error、panic 这两种错误机制中，Go 语言更提倡 error 这种轻量错误，而不是 panic
 
 ## Generic
 
 
 ## goroutine
 
+
+
 Go不允许开发者控制goroutine的内存分配量和调度
 
 Go使用工作共享和工作窃取来管理goroutine
 
 
+Go 语言中没有线程的概念，只有协程，也称为 goroutine。相比线程来说，协程更加轻量，一个程序可以随意启动成千上万个 goroutine。
+goroutine 被 Go runtime 所调度，这一点和线程不一样。也就是说，Go 语言的并发是由 Go 自己所调度的，自己决定同时执行多少个 goroutine，什么时候执行哪几个。这些对于我们开发者来说完全透明，只需要在编码的时候告诉 Go 语言要启动几个 goroutine，至于如何调度执行，我们不用关心
+
+GMP模型
+
+系统线程不会销毁
+避免线程阻塞
+
+锁同步操作阻塞
+系统调用阻塞
+网络调用阻塞
+sleep主动阻塞
+
+监控线程sysmon
+
+
+### Channel
+
+在 Go 语言中，声明一个 channel 非常简单，使用内置的 make 函数即可，如下所示
+```go
+ch:=make(chan string)
+```
+
+
+
+其中 chan 是一个关键字，表示是 channel 类型。后面的 string 表示 channel 里的数据是 string 类型。通过 channel 的声明也可以看到，chan 是一个集合类型。
+定义好 chan 后就可以使用了，一个 chan 的操作只有两种：发送和接收。
+1. 接收：获取 chan 中的值，操作符为 <- chan。
+2. 发送：向 chan 发送值，把值放在 chan 中，操作符为 chan <-。
+
+无缓冲 channel
+   上面的示例中，使用 make 创建的 chan 就是一个无缓冲 channel，它的容量是 0，不能存储任何数据。所以无缓冲 channel 只起到传输数据的作用，数据并不会在 channel 中做任何停留。这也意味着，无缓冲 channel 的发送和接收操作是同时进行的，它也可以称为同步 channel。
+有缓冲 channel
+   有缓冲 channel 类似一个可阻塞的队列，内部的元素先进先出。通过 make 函数的第二个参数可以指定 channel 容量的大小，进而创建一个有缓冲 channel，如下面的代码所示
+
+cacheCh:=make(chan int,5)
+
+
+```go
+package runtime
+
+type hchan struct {
+    qcount   uint           // total data in the queue
+    dataqsiz uint           // size of the circular queue
+    buf      unsafe.Pointer // points to an array of dataqsiz elements
+    elemsize uint16
+    closed   uint32
+    elemtype *_type // element type
+    sendx    uint   // send index
+    recvx    uint   // receive index
+    recvq    waitq  // list of recv waiters
+    sendq    waitq  // list of send waiters
+
+    // lock protects all fields in hchan, as well as several
+    // fields in sudogs blocked on this channel.
+    //
+    // Do not change another G's status while holding this lock
+    // (in particular, do not ready a G), as this can deadlock
+    // with stack shrinking.
+    lock mutex
+}
+```
+RingBuffer
+
+发送和等待队列
+
+
+type waitq struct {
+first *sudog
+last  *sudog
+}
+
+#### send
+<-会被编译成runtime.channelSend1() -> channelSend()
+直接发送时  将数据设置到G中并唤醒G
+当buffer有空间时 将数据放入buffer
+buffer没有容量时 入等待队列阻塞
+
+```go
+// entry point for c <- x from compiled code.
+//
+//go:nosplit
+func chansend1(c *hchan, elem unsafe.Pointer) {
+    chansend(c, elem, true, getcallerpc())
+}
+```
+chansend
+```go
+/*
+ * generic single channel send/recv
+ * If block is not nil,
+ * then the protocol will not
+ * sleep but return if it could
+ * not complete.
+ *
+ * sleep can wake up with g.param == nil
+ * when a channel involved in the sleep has
+ * been closed.  it is easiest to loop and re-run
+ * the operation; we'll see that it's now closed.
+ */
+func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool {
+    if c == nil {
+        if !block {
+            return false
+        }
+        gopark(nil, nil, waitReasonChanSendNilChan, traceBlockForever, 2)
+        throw("unreachable")
+    }
+
+    if debugChan {
+        print("chansend: chan=", c, "\n")
+    }
+
+    if raceenabled {
+        racereadpc(c.raceaddr(), callerpc, abi.FuncPCABIInternal(chansend))
+    }
+
+    // Fast path: check for failed non-blocking operation without acquiring the lock.
+    //
+    // After observing that the channel is not closed, we observe that the channel is
+    // not ready for sending. Each of these observations is a single word-sized read
+    // (first c.closed and second full()).
+    // Because a closed channel cannot transition from 'ready for sending' to
+    // 'not ready for sending', even if the channel is closed between the two observations,
+    // they imply a moment between the two when the channel was both not yet closed
+    // and not ready for sending. We behave as if we observed the channel at that moment,
+    // and report that the send cannot proceed.
+    //
+    // It is okay if the reads are reordered here: if we observe that the channel is not
+    // ready for sending and then observe that it is not closed, that implies that the
+    // channel wasn't closed during the first observation. However, nothing here
+    // guarantees forward progress. We rely on the side effects of lock release in
+    // chanrecv() and closechan() to update this thread's view of c.closed and full().
+    if !block && c.closed == 0 && full(c) {
+        return false
+    }
+
+    var t0 int64
+    if blockprofilerate > 0 {
+        t0 = cputicks()
+    }
+
+    lock(&c.lock)
+
+    if c.closed != 0 {
+        unlock(&c.lock)
+        panic(plainError("send on closed channel"))
+    }
+
+    if sg := c.recvq.dequeue(); sg != nil {
+        // Found a waiting receiver. We pass the value we want to send
+        // directly to the receiver, bypassing the channel buffer (if any).
+        send(c, sg, ep, func() { unlock(&c.lock) }, 3)
+        return true
+    }
+
+    if c.qcount < c.dataqsiz {
+        // Space is available in the channel buffer. Enqueue the element to send.
+        qp := chanbuf(c, c.sendx)
+        if raceenabled {
+            racenotify(c, c.sendx, nil)
+        }
+        typedmemmove(c.elemtype, qp, ep)
+        c.sendx++
+        if c.sendx == c.dataqsiz {
+            c.sendx = 0
+        }
+        c.qcount++
+        unlock(&c.lock)
+        return true
+    }
+
+    if !block {
+        unlock(&c.lock)
+        return false
+    }
+
+    // Block on the channel. Some receiver will complete our operation for us.
+    gp := getg()
+    mysg := acquireSudog()
+    mysg.releasetime = 0
+    if t0 != 0 {
+        mysg.releasetime = -1
+    }
+    // No stack splits between assigning elem and enqueuing mysg
+    // on gp.waiting where copystack can find it.
+    mysg.elem = ep
+    mysg.waitlink = nil
+    mysg.g = gp
+    mysg.isSelect = false
+    mysg.c = c
+    gp.waiting = mysg
+    gp.param = nil
+    c.sendq.enqueue(mysg)
+    // Signal to anyone trying to shrink our stack that we're about
+    // to park on a channel. The window between when this G's status
+    // changes and when we set gp.activeStackChans is not safe for
+    // stack shrinking.
+    gp.parkingOnChan.Store(true)
+    gopark(chanparkcommit, unsafe.Pointer(&c.lock), waitReasonChanSend, traceBlockChanSend, 2)
+    // Ensure the value being sent is kept alive until the
+    // receiver copies it out. The sudog has a pointer to the
+    // stack object, but sudogs aren't considered as roots of the
+    // stack tracer.
+    KeepAlive(ep)
+
+    // someone woke us up.
+    if mysg != gp.waiting {
+        throw("G waiting list is corrupted")
+    }
+    gp.waiting = nil
+    gp.activeStackChans = false
+    closed := !mysg.success
+    gp.param = nil
+    if mysg.releasetime > 0 {
+        blockevent(mysg.releasetime-t0, 2)
+    }
+    mysg.c = nil
+    releaseSudog(mysg)
+    if closed {
+        if c.closed == 0 {
+            throw("chansend: spurious wakeup")
+        }
+        panic(plainError("send on closed channel"))
+    }
+    return true
+}
+```
+send
+
+```go
+// send processes a send operation on an empty channel c.
+// The value ep sent by the sender is copied to the receiver sg.
+// The receiver is then woken up to go on its merry way.
+// Channel c must be empty and locked.  send unlocks c with unlockf.
+// sg must already be dequeued from c.
+// ep must be non-nil and point to the heap or the caller's stack.
+func send(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
+    if raceenabled {
+        if c.dataqsiz == 0 {
+            racesync(c, sg)
+        } else {
+            // Pretend we go through the buffer, even though
+            // we copy directly. Note that we need to increment
+            // the head/tail locations only when raceenabled.
+            racenotify(c, c.recvx, nil)
+            racenotify(c, c.recvx, sg)
+            c.recvx++
+            if c.recvx == c.dataqsiz {
+                c.recvx = 0
+            }
+            c.sendx = c.recvx // c.sendx = (c.sendx+1) % c.dataqsiz
+        }
+    }
+    if sg.elem != nil {
+        sendDirect(c.elemtype, sg, ep)
+        sg.elem = nil
+    }
+    gp := sg.g
+    unlockf()
+    gp.param = unsafe.Pointer(sg)
+    sg.success = true
+    if sg.releasetime != 0 {
+        sg.releasetime = cputicks()
+    }
+    goready(gp, skip+1)
+}
+
+// Sends and receives on unbuffered or empty-buffered channels are the
+// only operations where one running goroutine writes to the stack of
+// another running goroutine. The GC assumes that stack writes only
+// happen when the goroutine is running and are only done by that
+// goroutine. Using a write barrier is sufficient to make up for
+// violating that assumption, but the write barrier has to work.
+// typedmemmove will call bulkBarrierPreWrite, but the target bytes
+// are not in the heap, so that will not help. We arrange to call
+// memmove and typeBitsBulkBarrier instead.
+
+func sendDirect(t *_type, sg *sudog, src unsafe.Pointer) {
+    // src is on our stack, dst is a slot on another stack.
+
+    // Once we read sg.elem out of sg, it will no longer
+    // be updated if the destination's stack gets copied (shrunk).
+    // So make sure that no preemption points can happen between read & use.
+    dst := sg.elem
+    typeBitsBulkBarrier(t, uintptr(dst), uintptr(src), t.Size_)
+    // No need for cgo write barrier checks because dst is always
+    // Go memory.
+    memmove(dst, src, t.Size_)
+}
+```
+#### recv
+有G 无缓存 取G
+有G 有缓存 取缓存
+无G 有缓存 取缓存
+无G 无缓存 入队列阻塞
+
+```go
+// entry points for <- c from compiled code.
+//
+//go:nosplit
+func chanrecv1(c *hchan, elem unsafe.Pointer) {
+    chanrecv(c, elem, true)
+}
+```
+
+chanrecv
+```go
+// chanrecv receives on channel c and writes the received data to ep.
+// ep may be nil, in which case received data is ignored.
+// If block == false and no elements are available, returns (false, false).
+// Otherwise, if c is closed, zeros *ep and returns (true, false).
+// Otherwise, fills in *ep with an element and returns (true, true).
+// A non-nil ep must point to the heap or the caller's stack.
+func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool) {
+    // raceenabled: don't need to check ep, as it is always on the stack
+    // or is new memory allocated by reflect.
+
+    if debugChan {
+        print("chanrecv: chan=", c, "\n")
+    }
+
+    if c == nil {
+        if !block {
+            return
+        }
+        gopark(nil, nil, waitReasonChanReceiveNilChan, traceBlockForever, 2)
+        throw("unreachable")
+    }
+
+    // Fast path: check for failed non-blocking operation without acquiring the lock.
+    if !block && empty(c) {
+        // After observing that the channel is not ready for receiving, we observe whether the
+        // channel is closed.
+        //
+        // Reordering of these checks could lead to incorrect behavior when racing with a close.
+        // For example, if the channel was open and not empty, was closed, and then drained,
+        // reordered reads could incorrectly indicate "open and empty". To prevent reordering,
+        // we use atomic loads for both checks, and rely on emptying and closing to happen in
+        // separate critical sections under the same lock.  This assumption fails when closing
+        // an unbuffered channel with a blocked send, but that is an error condition anyway.
+        if atomic.Load(&c.closed) == 0 {
+            // Because a channel cannot be reopened, the later observation of the channel
+            // being not closed implies that it was also not closed at the moment of the
+            // first observation. We behave as if we observed the channel at that moment
+            // and report that the receive cannot proceed.
+            return
+        }
+        // The channel is irreversibly closed. Re-check whether the channel has any pending data
+        // to receive, which could have arrived between the empty and closed checks above.
+        // Sequential consistency is also required here, when racing with such a send.
+        if empty(c) {
+            // The channel is irreversibly closed and empty.
+            if raceenabled {
+                raceacquire(c.raceaddr())
+            }
+            if ep != nil {
+                typedmemclr(c.elemtype, ep)
+            }
+            return true, false
+        }
+    }
+
+    var t0 int64
+    if blockprofilerate > 0 {
+        t0 = cputicks()
+    }
+
+    lock(&c.lock)
+
+    if c.closed != 0 {
+        if c.qcount == 0 {
+            if raceenabled {
+                raceacquire(c.raceaddr())
+            }
+            unlock(&c.lock)
+            if ep != nil {
+                typedmemclr(c.elemtype, ep)
+            }
+            return true, false
+        }
+        // The channel has been closed, but the channel's buffer have data.
+    } else {
+        // Just found waiting sender with not closed.
+        if sg := c.sendq.dequeue(); sg != nil {
+            // Found a waiting sender. If buffer is size 0, receive value
+            // directly from sender. Otherwise, receive from head of queue
+            // and add sender's value to the tail of the queue (both map to
+            // the same buffer slot because the queue is full).
+            recv(c, sg, ep, func() { unlock(&c.lock) }, 3)
+            return true, true
+        }
+    }
+
+    if c.qcount > 0 {
+        // Receive directly from queue
+        qp := chanbuf(c, c.recvx)
+        if raceenabled {
+            racenotify(c, c.recvx, nil)
+        }
+        if ep != nil {
+            typedmemmove(c.elemtype, ep, qp)
+        }
+        typedmemclr(c.elemtype, qp)
+        c.recvx++
+        if c.recvx == c.dataqsiz {
+            c.recvx = 0
+        }
+        c.qcount--
+        unlock(&c.lock)
+        return true, true
+    }
+
+    if !block {
+        unlock(&c.lock)
+        return false, false
+    }
+
+    // no sender available: block on this channel.
+    gp := getg()
+    mysg := acquireSudog()
+    mysg.releasetime = 0
+    if t0 != 0 {
+        mysg.releasetime = -1
+    }
+    // No stack splits between assigning elem and enqueuing mysg
+    // on gp.waiting where copystack can find it.
+    mysg.elem = ep
+    mysg.waitlink = nil
+    gp.waiting = mysg
+    mysg.g = gp
+    mysg.isSelect = false
+    mysg.c = c
+    gp.param = nil
+    c.recvq.enqueue(mysg)
+    // Signal to anyone trying to shrink our stack that we're about
+    // to park on a channel. The window between when this G's status
+    // changes and when we set gp.activeStackChans is not safe for
+    // stack shrinking.
+    gp.parkingOnChan.Store(true)
+    gopark(chanparkcommit, unsafe.Pointer(&c.lock), waitReasonChanReceive, traceBlockChanRecv, 2)
+
+    // someone woke us up
+    if mysg != gp.waiting {
+        throw("G waiting list is corrupted")
+    }
+    gp.waiting = nil
+    gp.activeStackChans = false
+    if mysg.releasetime > 0 {
+        blockevent(mysg.releasetime-t0, 2)
+    }
+    success := mysg.success
+    gp.param = nil
+    mysg.c = nil
+    releaseSudog(mysg)
+    return true, success
+}
+
+// recv processes a receive operation on a full channel c.
+// There are 2 parts:
+//  1. The value sent by the sender sg is put into the channel
+//     and the sender is woken up to go on its merry way.
+//  2. The value received by the receiver (the current G) is
+//     written to ep.
+//
+// For synchronous channels, both values are the same.
+// For asynchronous channels, the receiver gets its data from
+// the channel buffer and the sender's data is put in the
+// channel buffer.
+// Channel c must be full and locked. recv unlocks c with unlockf.
+// sg must already be dequeued from c.
+// A non-nil ep must point to the heap or the caller's stack.
+func recv(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
+    if c.dataqsiz == 0 {
+        if raceenabled {
+            racesync(c, sg)
+        }
+        if ep != nil {
+            // copy data from sender
+            recvDirect(c.elemtype, sg, ep)
+        }
+    } else {
+        // Queue is full. Take the item at the
+        // head of the queue. Make the sender enqueue
+        // its item at the tail of the queue. Since the
+        // queue is full, those are both the same slot.
+        qp := chanbuf(c, c.recvx)
+        if raceenabled {
+            racenotify(c, c.recvx, nil)
+            racenotify(c, c.recvx, sg)
+        }
+        // copy data from queue to receiver
+        if ep != nil {
+            typedmemmove(c.elemtype, ep, qp)
+        }
+        // copy data from sender to queue
+        typedmemmove(c.elemtype, qp, sg.elem)
+        c.recvx++
+        if c.recvx == c.dataqsiz {
+            c.recvx = 0
+        }
+        c.sendx = c.recvx // c.sendx = (c.sendx+1) % c.dataqsiz
+    }
+    sg.elem = nil
+    gp := sg.g
+    unlockf()
+    gp.param = unsafe.Pointer(sg)
+    sg.success = true
+    if sg.releasetime != 0 {
+        sg.releasetime = cputicks()
+    }
+    goready(gp, skip+1)
+}
+
+func chanparkcommit(gp *g, chanLock unsafe.Pointer) bool {
+    // There are unlocked sudogs that point into gp's stack. Stack
+    // copying must lock the channels of those sudogs.
+    // Set activeStackChans here instead of before we try parking
+    // because we could self-deadlock in stack growth on the
+    // channel lock.
+    gp.activeStackChans = true
+    // Mark that it's safe for stack shrinking to occur now,
+    // because any thread acquiring this G's stack for shrinking
+    // is guaranteed to observe activeStackChans after this store.
+    gp.parkingOnChan.Store(false)
+    // Make sure we unlock after setting activeStackChans and
+    // unsetting parkingOnChan. The moment we unlock chanLock
+    // we risk gp getting readied by a channel operation and
+    // so gp could continue running before everything before
+    // the unlock is visible (even to gp itself).
+    unlock((*mutex)(chanLock))
+    return true
+}
+```
+
+
+
+
+```go
+package main
+
+import (
+    "fmt"
+    "time"
+)
+
+var sum = 0
+
+func main() {
+
+    //开启100个协程让sum+10
+    for i := 0; i < 1000; i++ {
+        go add(10)
+    }
+
+    //防止提前退出
+    time.Sleep(2 * time.Second)
+    fmt.Println("和为:", sum)
+}
+
+func add(i int) {
+    sum += i
+}
+```
+
+使用 go build、go run、go test 这些 Go 语言工具链提供的命令时，添加 -race 标识可以帮你检查 Go 语言代码是否存在资源竞争
+
+
+mutex
+var( sum int mutex sync.Mutex ) funcadd(i int) { mutex.Lock() sum += i mutex.Unlock() }
+Mutex 的 Lock 和 Unlock 方法总是成对出现，而且要确保 Lock 获得锁后，一定执行 UnLock 释放锁，所以在函数或者方法中会采用 defer 语句释放锁
+
+sync.Cond
+在 Go 语言中，sync.WaitGroup 用于最终完成的场景，关键点在于一定要等待所有协程都执行完毕。
+而 sync.Cond 可以用于发号施令，一声令下所有协程都可以开始执行，关键点在于协程开始的时候是等待的，要等待 sync.Cond 唤醒才能执行。
+sync.Cond 从字面意思看是条件变量，它具有阻塞协程和唤醒协程的功能，所以可以在满足一定条件的情况下唤醒协程，但条件变量只是它的一种使用场景
+
+sync.Cond 有三个方法，它们分别是：
+1. Wait，阻塞当前协程，直到被其他协程调用 Broadcast 或者 Signal 方法唤醒，使用的时候需要加锁，使用 sync.Cond 中的锁即可，也就是 L 字段。
+2. Signal，唤醒一个等待时间最长的协程。
+3. Broadcast，唤醒所有等待的协程。
+   注意：在调用 Signal 或者 Broadcast 之前，要确保目标协程处于 Wait 阻塞状态，不然会出现死锁问题。
+
+sync.Cond 和 Java 的等待唤醒机制很像，它的三个方法 Wait、Signal、Broadcast 就分别对应 Java 中的 wait、notify、notifyAll
+
+
+
+
 ## Context
+
+一个任务会有很多个协程协作完成，一次 HTTP 请求也会触发很多个协程的启动，而这些协程有可能会启动更多的子协程，并且无法预知有多少层协程、每一层有多少个协程
+Context 就是用来简化解决这些问题的，并且是并发安全的。Context 是一个接口，它具备手动、定时、超时发出取消信号、传值等功能，主要用于控制多个协程之间的协作，尤其是取消操作。一旦取消指令下达，那么被 Context 跟踪的这些协程都会收到取消信号，就可以做清理和退出操作。
+Context 接口只有四个方法
+```go
+type Context interface {
+
+   Deadline() (deadline time.Time, ok bool)
+
+   Done() <-chan struct{}
+
+   Err() error
+
+   Value(key interface{}) interface{}
+
+}
+```
+1. Deadline 方法可以获取设置的截止时间，第一个返回值 deadline 是截止时间，到了这个时间点，Context 会自动发起取消请求，第二个返回值 ok 代表是否设置了截止时间。
+2. Done 方法返回一个只读的 channel，类型为 struct{}。在协程中，如果该方法返回的 chan 可以读取，则意味着 Context 已经发起了取消信号。通过 Done 方法收到这个信号后，就可以做清理操作，然后退出协程，释放资源。
+3. Err 方法返回取消的错误原因，即因为什么原因 Context 被取消。
+4. Value 方法获取该 Context 上绑定的值，是一个键值对，所以要通过一个 key 才可以获取对应的值。
+
+Context 接口的四个方法中最常用的就是 Done 方法，它返回一个只读的 channel，用于接收取消信号。当 Context 取消的时候，会关闭这个只读 channel，也就等于发出了取消信号
+
+我们不需要自己实现 Context 接口，Go 语言提供了函数可以帮助我们生成不同的 Context，通过这些函数可以生成一颗 Context 树，这样 Context 才可以关联起来
+父 Context 发出取消信号的时候，子 Context 也会发出，这样就可以控制不同层级的协程退出。
+从使用功能上分，有四种实现好的 Context。
+1. 空 Context：不可取消，没有截止时间，主要用于 Context 树的根节点。
+2. 可取消的 Context：用于发出取消信号，当取消的时候，它的子 Context 也会取消。
+3. 可定时取消的 Context：多了一个定时的功能。
+4. 值 Context：用于存储一个 key-value 键值对。
+
+从下图 Context 的衍生树可以看到，最顶部的是空 Context，它作为整棵 Context 树的根节点，在 Go 语言中，可以通过 context.Background() 获取一个根节点 Context。
+有了根节点 Context 后，这颗 Context 树要怎么生成呢？需要使用 Go 语言提供的四个函数。
+1. WithCancel(parent Context)：生成一个可取消的 Context。
+2. WithDeadline(parent Context, d time.Time)：生成一个可定时取消的 Context，参数 d 为定时取消的具体时间。
+3. WithTimeout(parent Context, timeout time.Duration)：生成一个可超时取消的 Context，参数 timeout 用于设置多久后取消
+
+以上四个生成 Context 的函数中，前三个都属于可取消的 Context，它们是一类函数，最后一个是值 Context，用于存储一个 key-value 键值对。
+
+Context 不仅可以取消，还可以传值，通过这个能力，可以把 Context 存储的值供其他协程使用
+
+Context 是一种非常好的工具，使用它可以很方便地控制取消多个协程。在 Go 语言标准库中也使用了它们，比如 net/http 中使用 Context 取消网络的请求。
+要更好地使用 Context，有一些使用原则需要尽可能地遵守。
+1. Context 不要放在结构体中，要以参数的方式传递。
+2. Context 作为函数的参数时，要放在第一位，也就是第一个参数。
+3. 要使用 context.Background 函数生成根节点的 Context，也就是最顶层的 Context。
+4. Context 传值要传递必须的值，而且要尽可能地少，不要什么都传。
+5. Context 多协程安全，可以在多个协程中放心使用。
+   
+
+以上原则是规范类的，Go 语言的编译器并不会做这些检查，要靠自己遵守
+
+要想跟踪一个用户的请求，必须有一个唯一的 ID 来标识这次请求调用了哪些函数、执行了哪些代码，然后通过这个唯一的 ID 把日志信息串联起来。这样就形成了一个日志轨迹，也就实现了用户的跟踪，于是思路就有了。
+1. 在用户请求的入口点生成 TraceID。
+2. 通过 context.WithValue 保存 TraceID。
+3. 然后这个保存着 TraceID 的 Context 就可以作为参数在各个协程或者函数间传递。
+4. 在需要记录日志的地方，通过 Context 的 Value 方法获取保存的 TraceID，然后把它和其他日志信息记录下来。
+5. 这样具备同样 TraceID 的日志就可以被串联起来，达到日志跟踪的目的
 
 
 ## References
 
 1. [Goproxy.cn](https://goproxy.cn/)
+1. [Go语言圣经(中文版)](https://gopl-zh.github.io/)
+1. [Go语言设计与实现](https://draveness.me/golang/)
+1. [Go语言高级编程](http://docs.studygolang.com/advanced-go-programming-book/)
+1. [Go专家编程](https://docs.kilvn.com/GoExpertProgramming/)
+1. [Go Web编程](https://docs.kilvn.com/build-web-application-with-golang/zh/)
+1. [深度探索Go语言](https://book-go-runtime.netlify.app/#/)

@@ -35,3 +35,5 @@ Note: The colons are reserved for user defined recording rules. They should not 
 
 ## References
 
+1. [Apache HertzBeat](https://github.com/apache/hertzbeat)
+

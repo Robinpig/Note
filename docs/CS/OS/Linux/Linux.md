@@ -26,7 +26,11 @@ Windows下使用Linux
 
 - [WSL](/docs/CS/OS/Windows/WSL.md)
 
-### Kernel
+## Kernel
+
+
+
+### Build
 
 编译Kernel
 
@@ -165,7 +169,7 @@ make -j8
 cat /proc/version
 ```
 
-Directory
+### Directory
 
 
 | Directory |                                                                                                                                                                                                                |  |
@@ -195,6 +199,10 @@ usr/src/kernels/
 ```
 
 - [Init](/docs/CS/OS/Linux/init.md)
+
+
+
+内核中可供调用的函数通常需要EXPORT
 
 ## Processes
 
