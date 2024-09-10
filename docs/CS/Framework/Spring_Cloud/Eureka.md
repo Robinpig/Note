@@ -786,6 +786,99 @@ public class PeerEurekaNode {
 }
 ```
 
+## Server
+
+
+```java
+@Configuration(
+    proxyBeanMethods = false
+)
+@Import({EurekaServerInitializerConfiguration.class})
+@ConditionalOnBean({EurekaServerMarkerConfiguration.Marker.class})
+@EnableConfigurationProperties({EurekaDashboardProperties.class, InstanceRegistryProperties.class, EurekaProperties.class})
+@PropertySource({"classpath:/eureka/server.properties"})
+public class EurekaServerAutoConfiguration implements WebMvcConfigurer {
+    
+}
+```
+
+
+```java
+
+@Configuration(
+    proxyBeanMethods = false
+)
+public class EurekaServerInitializerConfiguration implements ServletContextAware, SmartLifecycle, Ordered {
+    @Autowired
+    private EurekaServerConfig eurekaServerConfig;
+    private ServletContext servletContext;
+    @Autowired
+    private ApplicationContext applicationContext;
+    @Autowired
+    private EurekaServerBootstrap eurekaServerBootstrap;
+    private boolean running;
+    private final int order = 1;
+
+    public void start() {
+        (new Thread(() -> {
+            try {
+                this.eurekaServerBootstrap.contextInitialized(this.servletContext);
+                log.info("Started Eureka Server");
+                this.publish(new EurekaRegistryAvailableEvent(this.getEurekaServerConfig()));
+                this.running = true;
+                this.publish(new EurekaServerStartedEvent(this.getEurekaServerConfig()));
+            } catch (Exception var2) {
+                log.error("Could not initialize Eureka servlet context", var2);
+            }
+
+        })).start();
+    }
+
+
+}
+```
+从其它peer同步注册信息
+
+开启定时evict任务
+```java
+public class EurekaServerBootstrap {
+   public void contextInitialized(ServletContext context) {
+      try {
+         initEurekaServerContext();
+
+         context.setAttribute(EurekaServerContext.class.getName(), this.serverContext);
+      }
+      catch (Throwable e) {
+         log.error("Cannot bootstrap eureka server :", e);
+         throw new RuntimeException("Cannot bootstrap eureka server :", e);
+      }
+   }
+
+   protected void initEurekaServerContext() throws Exception {
+      // For backward compatibility
+      JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+      XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+
+      if (isAws(this.applicationInfoManager.getInfo())) {
+         this.awsBinder = new AwsBinderDelegate(this.eurekaServerConfig, this.eurekaClientConfig, this.registry,
+                 this.applicationInfoManager);
+         this.awsBinder.start();
+      }
+
+      EurekaServerContextHolder.initialize(this.serverContext);
+
+      log.info("Initialized server context");
+
+      // Copy registry from neighboring eureka node
+      int registryCount = this.registry.syncUp();
+      this.registry.openForTraffic(this.applicationInfoManager, registryCount);
+
+      // Register all monitoring statistics.
+      EurekaMonitors.registerAllStats();
+   }
+}
+```
+
 
 ## Beat
 
@@ -1042,3 +1135,6 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=service-registry)
 
+## References
+
+1. [Eureka Service源码流程图](https://www.processon.com/view/5f2dfff05653bb1b6117809a)
