@@ -40,6 +40,7 @@ type slice struct {
 
 ### makeslice
 
+切片有多种声明方式，如下所示，在只声明不赋初始值的情况下，切片slice1的值为预置的nil，切片的初始化需要使用内置的make函数
 
 
 
