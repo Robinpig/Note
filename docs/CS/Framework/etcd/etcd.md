@@ -609,6 +609,8 @@ EtcdServer 会处理这个 applyc 队列，会将 snapshot 和 entries 都 apply
 
 
 
+### read
+一个读请求从 client 通过 Round-robin 负载均衡算法，选择一个 etcd server 节点，发出 gRPC 请求，经过 etcd server 的 KVServer 模块、线性读模块、 MVCC 的 treeIndex 和 boltdb 模块紧密协作，完成了一个读请求
 
 
 
