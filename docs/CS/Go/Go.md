@@ -2,8 +2,8 @@
 
 Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的语言。它具有以下特点：
 
-- 它可以在一台计算机上用几秒钟的时间编译一个大型的Go程序。
-- Go为软件构造提供了一种模型，它使依赖分析更加容易，且避免了大部分C风格include文件与库的开头。
+- 类型安全和内存安全
+- 快速编译 Go为软件构造提供了一种模型，它使依赖分析更加容易，且避免了大部分C风格include文件与库的开头。
 - Go是静态类型的语言，它的类型系统没有层级。因此用户不需要在定义类型之间的关系上花费时间，这样感觉起来比典型的面向对象语言更轻量级。
 - Go完全是垃圾回收型的语言，并为并发执行与通信提供了基本的支持
 
@@ -621,6 +621,7 @@ Context 是一种非常好的工具，使用它可以很方便地控制取消多
 
 ## References
 
+1. [Go指南](https://tour.go-zh.org/welcome/1)
 1. [Goproxy.cn](https://goproxy.cn/)
 1. [Go语言圣经(中文版)](https://gopl-zh.github.io/)
 1. [Go语言设计与实现](https://draveness.me/golang/)
@@ -628,3 +629,7 @@ Context 是一种非常好的工具，使用它可以很方便地控制取消多
 1. [Go专家编程](https://docs.kilvn.com/GoExpertProgramming/)
 1. [Go Web编程](https://docs.kilvn.com/build-web-application-with-golang/zh/)
 1. [深度探索Go语言](https://book-go-runtime.netlify.app/#/)
+1. [Go程序设计](https://www.yuque.com/qyuhen/go)
+1. [LeetCode Cookbook](https://books.halfrost.com/leetcode/)
+1. [Mastering Go Second Edition](https://www.kancloud.cn/cloud001/golang/1601804)
+1. [go语言核心36讲](https://jums.gitbook.io/36-lectures-on-golang)
