@@ -32,6 +32,15 @@ Go进程中的众多协程其实依托于线程，借助操作系统将线程调
 
 
 
+实际上一共有三种 g：
+1. 执行用户代码的 g； 使用 go 关键字启动的 goroutine，也是我们接触最多的一类 g
+2. 执行调度器代码的 g，也即是 g0； g0 在底层和其他 g 是一样的数据结构，但是性质上有很大的区别，首先 g0 的栈大小是固定的，比如在 Linux 或者其他 Unix-like 的系统上一般是固定 8MB，不能动态伸缩，而普通的 g 初始栈大小是 2KB，可按需扩展 每个线程被创建出来之时都需要操作系统为之分配一个初始固定的线程栈，就是前面说的 8MB 大小的栈，g0 栈就代表了这个线程栈，因此每一个 m 都需要绑定一个 g0 来执行调度器代码，然后跳转到执行用户代码的地方。
+3. 执行 runtime.main 初始化工作的 main goroutine；
+
+
+启动一个新的 goroutine 是通过 go 关键字来完成的，而 go compiler 会在编译期间利用 cmd/compile/internal/gc.state.stmt 和 cmd/compile/internal/gc.state.call 这两个函数将 go 关键字翻译成 runtime.newproc 函数调用，而 runtime.newproc 接收了函数指针和其大小之后，会获取 goroutine 和调用处的程序计数器，接着再调用 runtime.newproc1
+
+
 运行Go程序时 通过一个Go的runtime函数完成初始化工作(包括schedule和GC) 最开始会创建m0和g0 为main生成一个goroutine由m0执行
 
 
@@ -89,7 +98,17 @@ goroutine创建时优先加入本地队列 可被其它P/M窃取
 
 ## schedule
 
-调度的核心策略位于schedule函数 
+调度的核心策略位于schedule函数
+Go scheduler 的调度 goroutine 过程中所调用的核心函数链如下：
+
+```
+runtime.schedule --> runtime.execute --> runtime.gogo --> goroutine code --> runtime.goexit --> runtime.goexit1 
+  --> runtime.mcall --> runtime.goexit0 --> runtime.schedule
+```
+Go scheduler 会不断循环调用 runtime.schedule() 去调度 goroutines，而每个 goroutine 执行完成并退出之后，会再次调用 runtime.schedule()，使得调度器回到调度循环去执行其他的 goroutine，不断循环，永不停歇。
+当我们使用 go 关键字启动一个新 goroutine 时，最终会调用 runtime.newproc --> runtime.newproc1，来得到 g，runtime.newproc1 会先从 P 的 gfree 缓存链表中查找可用的 g，若缓存未生效，则会新创建 g 给当前的业务函数，最后这个 g 会被传给 runtime.gogo 去真正执行
+
+
 
 调度时机
 
@@ -114,6 +133,208 @@ gopark函数最后会调用park_m，该函数会解除G和M之间的关系，根
 如果当前协程需要被唤醒，那么会先将协程的状态从_Gwaiting转换为_Grunnable，并添加到当前P的局部运行队列中
 
 
+```go
+func gopark(unlockf func(*g, unsafe.Pointer) bool, lock unsafe.Pointer, reason waitReason, traceReason traceBlockReason, traceskip int) {
+    if reason != waitReasonSleep {
+        checkTimeouts() // timeouts may expire while two goroutines keep the scheduler busy
+    }
+    mp := acquirem()
+    gp := mp.curg
+    status := readgstatus(gp)
+    if status != _Grunning && status != _Gscanrunning {
+        throw("gopark: bad g status")
+    }
+    mp.waitlock = lock
+    mp.waitunlockf = unlockf
+    gp.waitreason = reason
+    mp.waitTraceBlockReason = traceReason
+    mp.waitTraceSkip = traceskip
+    releasem(mp)
+    // can't do anything that might move the G between Ms here.
+    mcall(park_m)
+}
+
+```
+
+
+runtime.mcall 主要的工作就是是从当前 goroutine 切换回 g0 的系统堆栈，然后调用 fn(g)，而此时 runtime.mcall 调用执行的是 runtime.park_m，这个方法里会利用 CAS 把当前运行的 goroutine -- gp 的状态 从 _Grunning 切换到 _Gwaiting，表明该 goroutine 已进入到等待唤醒状态，此时封存和休眠 G 的操作就完成了，只需等待就绪之后被重新唤醒执行即可。最后调用 runtime.schedule() 再次进入调度循环，去执行下一个 goroutine，充分利用 CPU
+
+```go
+
+func park_m(gp *g) {
+	mp := getg().m
+
+	trace := traceAcquire()
+
+	if trace.ok() {
+		// Trace the event before the transition. It may take a
+		// stack trace, but we won't own the stack after the
+		// transition anymore.
+		trace.GoPark(mp.waitTraceBlockReason, mp.waitTraceSkip)
+	}
+	// N.B. Not using casGToWaiting here because the waitreason is
+	// set by park_m's caller.
+	casgstatus(gp, _Grunning, _Gwaiting)
+	if trace.ok() {
+		traceRelease(trace)
+	}
+
+	dropg()
+
+	if fn := mp.waitunlockf; fn != nil {
+		ok := fn(gp, mp.waitlock)
+		mp.waitunlockf = nil
+		mp.waitlock = nil
+		if !ok {
+			trace := traceAcquire()
+			casgstatus(gp, _Gwaiting, _Grunnable)
+			if trace.ok() {
+				trace.GoUnpark(gp, 2)
+				traceRelease(trace)
+			}
+			execute(gp, true) // Schedule it back, never returns.
+		}
+	}
+	schedule()
+}
+```
+schedule
+
+```go
+// One round of scheduler: find a runnable goroutine and execute it.
+// Never returns.
+func schedule() {
+    mp := getg().m
+
+    if mp.locks != 0 {
+        throw("schedule: holding locks")
+    }
+
+    if mp.lockedg != 0 {
+        stoplockedm()
+        execute(mp.lockedg.ptr(), false) // Never returns.
+    }
+
+    // We should not schedule away from a g that is executing a cgo call,
+    // since the cgo call is using the m's g0 stack.
+    if mp.incgo {
+        throw("schedule: in cgo")
+    }
+
+top:
+    pp := mp.p.ptr()
+    pp.preempt = false
+
+    // Safety check: if we are spinning, the run queue should be empty.
+    // Check this before calling checkTimers, as that might call
+    // goready to put a ready goroutine on the local run queue.
+    if mp.spinning && (pp.runnext != 0 || pp.runqhead != pp.runqtail) {
+        throw("schedule: spinning with local work")
+    }
+
+    gp, inheritTime, tryWakeP := findRunnable() // blocks until work is available
+
+    if debug.dontfreezetheworld > 0 && freezing.Load() {
+        // See comment in freezetheworld. We don't want to perturb
+        // scheduler state, so we didn't gcstopm in findRunnable, but
+        // also don't want to allow new goroutines to run.
+        //
+        // Deadlock here rather than in the findRunnable loop so if
+        // findRunnable is stuck in a loop we don't perturb that
+        // either.
+        lock(&deadlock)
+        lock(&deadlock)
+    }
+
+    // This thread is going to run a goroutine and is not spinning anymore,
+    // so if it was marked as spinning we need to reset it now and potentially
+    // start a new spinning M.
+    if mp.spinning {
+        resetspinning()
+    }
+
+    if sched.disable.user && !schedEnabled(gp) {
+        // Scheduling of this goroutine is disabled. Put it on
+        // the list of pending runnable goroutines for when we
+        // re-enable user scheduling and look again.
+        lock(&sched.lock)
+        if schedEnabled(gp) {
+            // Something re-enabled scheduling while we
+            // were acquiring the lock.
+            unlock(&sched.lock)
+        } else {
+            sched.disable.runnable.pushBack(gp)
+            sched.disable.n++
+            unlock(&sched.lock)
+            goto top
+        }
+    }
+
+    // If about to schedule a not-normal goroutine (a GCworker or tracereader),
+    // wake a P if there is one.
+    if tryWakeP {
+        wakep()
+    }
+    if gp.lockedm != 0 {
+        // Hands off own p to the locked m,
+        // then blocks waiting for a new p.
+        startlockedm(gp)
+        goto top
+    }
+
+    execute(gp, inheritTime)
+}
+```
+
+Schedules gp to run on the current M.
+If inheritTime is true, gp inherits the remaining time in the current time slice. Otherwise, it starts a new time slice.
+Never returns.
+
+Write barriers are allowed because this is called immediately after acquiring a P in several places.
+```go
+//go:yeswritebarrierrec
+func execute(gp *g, inheritTime bool) {
+    mp := getg().m
+
+    if goroutineProfile.active {
+        // Make sure that gp has had its stack written out to the goroutine
+        // profile, exactly as it was when the goroutine profiler first stopped
+        // the world.
+        tryRecordGoroutineProfile(gp, osyield)
+    }
+
+    // Assign gp.m before entering _Grunning so running Gs have an
+    // M.
+    mp.curg = gp
+    gp.m = mp
+    casgstatus(gp, _Grunnable, _Grunning)
+    gp.waitsince = 0
+    gp.preempt = false
+    gp.stackguard0 = gp.stack.lo + stackGuard
+    if !inheritTime {
+        mp.p.ptr().schedtick++
+    }
+
+    // Check whether the profiler needs to be turned on or off.
+    hz := sched.profilehz
+    if mp.profilehz != hz {
+        setThreadCPUProfiler(hz)
+    }
+
+    trace := traceAcquire()
+    if trace.ok() {
+        // GoSysExit has to happen when we have a P, but before GoStart.
+        // So we emit it here.
+        if !goexperiment.ExecTracer2 && gp.syscallsp != 0 {
+            trace.GoSysExit(true)
+        }
+        trace.GoStart()
+        traceRelease(trace)
+    }
+
+    gogo(&gp.sched)
+}
+```
 
 ### 抢占
 
