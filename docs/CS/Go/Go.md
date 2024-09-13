@@ -75,6 +75,14 @@ composition
 ### Build
 
 go1.4之后实现了自举 需要一个1.4之后的go版本来执行
+
+从github clone的go 源码目录下没有VERSION文件 报错如下
+```
+go tool dist: FAILED: not a Git repo; must put a VERSION file in $GOROOT
+```
+解决方法: 从官网下载最新的golang源代码进行安装
+
+
 ```shell
 git clone https://github.com/golang/go.git
 cd go/src
