@@ -99,6 +99,297 @@ work steal
 
 goroutine创建时优先加入本地队列 可被其它P/M窃取
 
+## main
+
+The main goroutine
+
+
+```go
+func main() {
+    mp := getg().m
+
+    // Racectx of m0->g0 is used only as the parent of the main goroutine.
+    // It must not be used for anything else.
+    mp.g0.racectx = 0
+
+    // Max stack size is 1 GB on 64-bit, 250 MB on 32-bit.
+    // Using decimal instead of binary GB and MB because
+    // they look nicer in the stack overflow failure message.
+    if goarch.PtrSize == 8 {
+        maxstacksize = 1000000000
+    } else {
+        maxstacksize = 250000000
+    }
+
+    // An upper limit for max stack size. Used to avoid random crashes
+    // after calling SetMaxStack and trying to allocate a stack that is too big,
+    // since stackalloc works with 32-bit sizes.
+    maxstackceiling = 2 * maxstacksize
+
+    // Allow newproc to start new Ms.
+    mainStarted = true
+
+    if haveSysmon {
+        systemstack(func() {
+            newm(sysmon, nil, -1)
+        })
+    }
+
+    // Lock the main goroutine onto this, the main OS thread,
+    // during initialization. Most programs won't care, but a few
+    // do require certain calls to be made by the main thread.
+    // Those can arrange for main.main to run in the main thread
+    // by calling runtime.LockOSThread during initialization
+    // to preserve the lock.
+    lockOSThread()
+
+    if mp != &m0 {
+        throw("runtime.main not on m0")
+    }
+
+    // Record when the world started.
+    // Must be before doInit for tracing init.
+    runtimeInitTime = nanotime()
+    if runtimeInitTime == 0 {
+        throw("nanotime returning zero")
+    }
+
+    if debug.inittrace != 0 {
+        inittrace.id = getg().goid
+        inittrace.active = true
+    }
+
+    doInit(runtime_inittasks) // Must be before defer.
+
+    // Defer unlock so that runtime.Goexit during init does the unlock too.
+    needUnlock := true
+    defer func() {
+        if needUnlock {
+            unlockOSThread()
+        }
+    }()
+
+    gcenable()
+
+    main_init_done = make(chan bool)
+    if iscgo {
+        if _cgo_pthread_key_created == nil {
+            throw("_cgo_pthread_key_created missing")
+        }
+
+        if _cgo_thread_start == nil {
+            throw("_cgo_thread_start missing")
+        }
+        if GOOS != "windows" {
+            if _cgo_setenv == nil {
+                throw("_cgo_setenv missing")
+            }
+            if _cgo_unsetenv == nil {
+                throw("_cgo_unsetenv missing")
+            }
+        }
+        if _cgo_notify_runtime_init_done == nil {
+            throw("_cgo_notify_runtime_init_done missing")
+        }
+
+        // Set the x_crosscall2_ptr C function pointer variable point to crosscall2.
+        if set_crosscall2 == nil {
+            throw("set_crosscall2 missing")
+        }
+        set_crosscall2()
+
+        // Start the template thread in case we enter Go from
+        // a C-created thread and need to create a new thread.
+        startTemplateThread()
+        cgocall(_cgo_notify_runtime_init_done, nil)
+    }
+
+    // Run the initializing tasks. Depending on build mode this
+    // list can arrive a few different ways, but it will always
+    // contain the init tasks computed by the linker for all the
+    // packages in the program (excluding those added at runtime
+    // by package plugin). Run through the modules in dependency
+    // order (the order they are initialized by the dynamic
+    // loader, i.e. they are added to the moduledata linked list).
+    for m := &firstmoduledata; m != nil; m = m.next {
+        doInit(m.inittasks)
+    }
+
+    // Disable init tracing after main init done to avoid overhead
+    // of collecting statistics in malloc and newproc
+    inittrace.active = false
+
+    close(main_init_done)
+
+    needUnlock = false
+    unlockOSThread()
+
+    if isarchive || islibrary {
+        // A program compiled with -buildmode=c-archive or c-shared
+        // has a main, but it is not executed.
+        return
+    }
+    fn := main_main // make an indirect call, as the linker doesn't know the address of the main package when laying down the runtime
+    fn()
+    if raceenabled {
+        runExitHooks(0) // run hooks now, since racefini does not return
+        racefini()
+    }
+
+    // Make racy client program work: if panicking on
+    // another goroutine at the same time as main returns,
+    // let the other goroutine finish printing the panic trace.
+    // Once it does, it will exit. See issues 3934 and 20018.
+    if runningPanicDefers.Load() != 0 {
+        // Running deferred functions should not take long.
+        for c := 0; c < 1000; c++ {
+            if runningPanicDefers.Load() == 0 {
+                break
+            }
+            Gosched()
+        }
+    }
+    if panicking.Load() != 0 {
+        gopark(nil, nil, waitReasonPanicWait, traceBlockForever, 1)
+    }
+    runExitHooks(0)
+
+    exit(0)
+    for {
+        var x *int32
+        *x = 0
+    }
+}
+```
+runtime.newm 会创建一个存储待执行函数和处理器的新结构体 runtime.m。运行时执行系统监控不需要处理器，系统监控的 Goroutine 会直接在创建的线程上运行
+
+```go
+func newm(fn func(), pp *p, id int64) {
+    // allocm adds a new M to allm, but they do not start until created by
+    // the OS in newm1 or the template thread.
+    //
+    // doAllThreadsSyscall requires that every M in allm will eventually
+    // start and be signal-able, even with a STW.
+    //
+    // Disable preemption here until we start the thread to ensure that
+    // newm is not preempted between allocm and starting the new thread,
+    // ensuring that anything added to allm is guaranteed to eventually
+    // start.
+    acquirem()
+
+    mp := allocm(pp, fn, id)
+    mp.nextp.set(pp)
+    mp.sigmask = initSigmask
+    if gp := getg(); gp != nil && gp.m != nil && (gp.m.lockedExt != 0 || gp.m.incgo) && GOOS != "plan9" {
+        // We're on a locked M or a thread that may have been
+        // started by C. The kernel state of this thread may
+        // be strange (the user may have locked it for that
+        // purpose). We don't want to clone that into another
+        // thread. Instead, ask a known-good thread to create
+        // the thread for us.
+        //
+        // This is disabled on Plan 9. See golang.org/issue/22227.
+        //
+        // TODO: This may be unnecessary on Windows, which
+        // doesn't model thread creation off fork.
+        lock(&newmHandoff.lock)
+        if newmHandoff.haveTemplateThread == 0 {
+            throw("on a locked thread with no template thread")
+        }
+        mp.schedlink = newmHandoff.newm
+        newmHandoff.newm.set(mp)
+        if newmHandoff.waiting {
+            newmHandoff.waiting = false
+            notewakeup(&newmHandoff.wake)
+        }
+        unlock(&newmHandoff.lock)
+        // The M has not started yet, but the template thread does not
+        // participate in STW, so it will always process queued Ms and
+        // it is safe to releasem.
+        releasem(getg().m)
+        return
+    }
+    newm1(mp)
+    releasem(getg().m)
+}
+```
+
+new
+
+```go
+func newm1(mp *m) {
+    if iscgo {
+        var ts cgothreadstart
+        if _cgo_thread_start == nil {
+            throw("_cgo_thread_start missing")
+        }
+        ts.g.set(mp.g0)
+        ts.tls = (*uint64)(unsafe.Pointer(&mp.tls[0]))
+        ts.fn = unsafe.Pointer(abi.FuncPCABI0(mstart))
+        if msanenabled {
+            msanwrite(unsafe.Pointer(&ts), unsafe.Sizeof(ts))
+        }
+        if asanenabled {
+            asanwrite(unsafe.Pointer(&ts), unsafe.Sizeof(ts))
+        }
+        execLock.rlock() // Prevent process clone.
+        asmcgocall(_cgo_thread_start, unsafe.Pointer(&ts))
+        execLock.runlock()
+        return
+    }
+    execLock.rlock() // Prevent process clone.
+    newosproc(mp)
+    execLock.runlock()
+}
+```
+runtime.newm1 会调用特定平台的 runtime.newsproc 通过系统调用 clone 创建一个新的线程并在新的线程中执行 runtime.mstart：
+
+```go
+//go:nowritebarrierrec
+func newosproc(mp *m) {
+    stk := unsafe.Pointer(mp.g0.stack.hi)
+    if false {
+        print("newosproc stk=", stk, " m=", mp, " g=", mp.g0, " id=", mp.id, " ostk=", &mp, "\n")
+    }
+
+    // Initialize an attribute object.
+    var attr pthreadattr
+    var err int32
+    err = pthread_attr_init(&attr)
+    if err != 0 {
+        writeErrStr(failthreadcreate)
+        exit(1)
+    }
+
+    // Find out OS stack size for our own stack guard.
+    var stacksize uintptr
+    if pthread_attr_getstacksize(&attr, &stacksize) != 0 {
+        writeErrStr(failthreadcreate)
+        exit(1)
+    }
+    mp.g0.stack.hi = stacksize // for mstart
+
+    // Tell the pthread library we won't join with this thread.
+    if pthread_attr_setdetachstate(&attr, _PTHREAD_CREATE_DETACHED) != 0 {
+        writeErrStr(failthreadcreate)
+        exit(1)
+    }
+
+    // Finally, create the thread. It starts at mstart_stub, which does some low-level
+    // setup and then calls mstart.
+    var oset sigset
+    sigprocmask(_SIG_SETMASK, &sigset_all, &oset)
+    err = retryOnEAGAIN(func() int32 {
+        return pthread_create(&attr, abi.FuncPCABI0(mstart_stub), unsafe.Pointer(mp))
+    })
+    sigprocmask(_SIG_SETMASK, &oset, nil)
+    if err != 0 {
+        writeErrStr(failthreadcreate)
+        exit(1)
+    }
+}
+```
+
 ## schedule
 
 调度的核心策略位于schedule函数
