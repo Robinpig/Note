@@ -1,3 +1,4 @@
+## Introduction
 
 网络轮询器不仅用于监控网络 I/O，还能用于监控文件的 I/O，它利用了操作系统提供的 I/O 多路复用模型来提升 I/O 设备的利用率以及程序的性能
 
@@ -18,12 +19,13 @@ Go 为了实现底层 I/O 多路复用的跨平台，分别基于上述的这些
 以netpoll_epoll.go为例
 
 epoll、kqueue、solaries 等多路复用模块都要实现以下五个函数，这五个函数构成一个虚拟的接口：
-
+```go
 func netpollinit()
 func netpollopen(fd uintptr, pd *pollDesc) int32
 func netpoll(delta int64) gList
 func netpollBreak()
 func netpollIsPollDescriptor(fd uintptr) bool
+```
 上述函数在网络轮询器中分别扮演了不同的作用：
 
 runtime.netpollinit — 初始化网络轮询器，通过 sync.Once 和 netpollInited 变量保证函数只会调用一次；
@@ -107,15 +109,16 @@ rg 和 wg — 表示二进制的信号量，可能为 pdReady、pdWait、等待�
 rd 和 wd — 等待文件描述符可读或者可写的截止日期；
 rt 和 wt — 用于等待文件描述符的计时器；
 除了上述八个变量之外，该结构体中还保存了用于保护数据的互斥锁、文件描述符。runtime.pollDesc 结构体会使用 link 字段串联成一个链表存储在 runtime.pollCache 中：
-
+```go
 type pollCache struct {
     lock  mutex
     first *pollDesc
 }
+```
 runtime.pollCache 是运行时包中的全局变量，该结构体中包含一个用于保护轮询数据的互斥锁和链表头：
 
 运行时会在第一次调用 runtime.pollCache.alloc 方法时初始化总大小约为 4KB 的 runtime.pollDesc 结构体，runtime.persistentalloc 会保证这些数据结构初始化在不会触发垃圾回收的内存中，让这些数据结构只能被内部的 epoll 和 kqueue 模块引用：
-
+```go
 func (c *pollCache) alloc() *pollDesc {
     lock(&c.lock)
     if c.first == nil {
@@ -136,34 +139,39 @@ func (c *pollCache) alloc() *pollDesc {
     unlock(&c.lock)
     return pd
 }
-每次调用该结构体都会返回链表头还没有被使用的 runtime.pollDesc，这种批量初始化的做法能够增加网络轮询器的吞吐量。Go 语言运行时会调用 runtime.pollCache.free 方法释放已经用完的 runtime.pollDesc 结构，它会直接将结构体插入链表的最前面：
+```
 
+每次调用该结构体都会返回链表头还没有被使用的 runtime.pollDesc，这种批量初始化的做法能够增加网络轮询器的吞吐量。Go 语言运行时会调用 runtime.pollCache.free 方法释放已经用完的 runtime.pollDesc 结构，它会直接将结构体插入链表的最前面：
+```go
 func (c *pollCache) free(pd *pollDesc) {
     lock(&c.lock)
     pd.link = c.first
     c.first = pd
     unlock(&c.lock)
 }
+```
+
 上述方法没有重置 runtime.pollDesc 结构体中的字段，该结构体被重复利用时才会由 runtime.poll_runtime_pollOpen 函数重置
 
 
 网络轮询器实际上就是对 I/O 多路复用技术的封装，本节将通过以下的三个过程分析网络轮询器的实现原理：
 
-网络轮询器的初始化；
-如何向网络轮询器中加入待监控的任务；
-如何从网络轮询器中获取触发的事件；
+- 网络轮询器的初始化；
+- 如何向网络轮询器中加入待监控的任务；
+- 如何从网络轮询器中获取触发的事件；
+
 上述三个过程包含了网络轮询器相关的方方面面，能够让我们对其实现有完整的理解。需要注意的是，我们在分析实现时会遵循以下两个规则：
 
 因为不同 I/O 多路复用模块的实现大同小异，本节会使用 Linux 操作系统上的 epoll 实现；
 因为处理读事件和写事件的逻辑类似，本节会省略写事件相关的代码；
-初始化
+### 初始化
 
 因为文件 I/O、网络 I/O 以及计时器都依赖网络轮询器，所以 Go 语言会通过以下两条不同路径初始化网络轮询器：
 
 internal/poll.pollDesc.init — 通过 net.netFD.init 和 os.newFile 初始化网络 I/O 和文件 I/O 的轮询信息时；
 runtime.doaddtimer — 向处理器中增加新的计时器时；
 网络轮询器的初始化会使用 runtime.poll_runtime_pollServerInit 和 runtime.netpollGenericInit 两个函数：
-
+```go
 func poll_runtime_pollServerInit() {
     netpollGenericInit()
 }
@@ -177,11 +185,14 @@ func netpollGenericInit() {
         unlock(&netpollInitLock)
     }
 }
+```
+
 runtime.netpollGenericInit 会调用平台上特定实现的 runtime.netpollinit 函数，即 Linux 上的 epoll，它主要做了以下几件事情：
 
 是调用 epollcreate1 创建一个新的 epoll 文件描述符，这个文件描述符会在整个程序的生命周期中使用；
 通过 runtime.nonblockingPipe 创建一个用于通信的管道；
 使用 epollctl 将用于读取数据的文件描述符打包成 epollevent 事件加入监听；
+```go
 var (
     epfd int32 = -1
     netpollBreakRd, netpollBreakWr uintptr
@@ -197,8 +208,10 @@ func netpollinit() {
     netpollBreakRd = uintptr(r)
     netpollBreakWr = uintptr(w)
 }
-初始化的管道为我们提供了中断多路复用等待文件描述符中事件的方法，runtime.netpollBreak 函数会向管道中写入数据唤醒 epoll：
+```
 
+初始化的管道为我们提供了中断多路复用等待文件描述符中事件的方法，runtime.netpollBreak 函数会向管道中写入数据唤醒 epoll：
+```go
 func netpollBreak() {
     for {
         var b byte
@@ -214,12 +227,14 @@ func netpollBreak() {
         }
     }
 }
+```
+
 因为目前的计时器由网络轮询器管理和触发，它能够让网络轮询器立刻返回并让运行时检查是否有需要触发的计时器。
 
 轮询事件
 
 调用 internal/poll.pollDesc.init 初始化文件描述符时不止会初始化网络轮询器，还会通过 runtime.poll_runtime_pollOpen 函数重置轮询信息 runtime.pollDesc 并调用 runtime.netpollopen 初始化轮询事件：
-
+```go
 func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
     pd := pollcache.alloc()
     lock(&pd.lock)
@@ -239,17 +254,21 @@ func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
     errno = netpollopen(fd, pd)
     return pd, int(errno)
 }
-runtime.netpollopen 的实现非常简单，它会调用 epollctl 向全局的轮询文件描述符 epfd 中加入新的轮询事件监听文件描述符的可读和可写状态：
+```
 
+runtime.netpollopen 的实现非常简单，它会调用 epollctl 向全局的轮询文件描述符 epfd 中加入新的轮询事件监听文件描述符的可读和可写状态：
+```go
 func netpollopen(fd uintptr, pd *pollDesc) int32 {
     var ev epollevent
     ev.events = _EPOLLIN | _EPOLLOUT | _EPOLLRDHUP | _EPOLLET
     *(**pollDesc)(unsafe.Pointer(&ev.data)) = pd
     return -epollctl(epfd, _EPOLL_CTL_ADD, int32(fd), &ev)
 }
+```
+
 从全局的 epfd 中删除待监听的文件描述符可以使用 runtime.netpollclose 函数，因为该函数的实现与 runtime.netpollopen 比较相似，所以这里就不展开分析了。
 
-事件循环
+### 事件循环
 
 本节将继续介绍网络轮询器的核心逻辑，也就是事件循环。我们将从以下的两个部分介绍事件循环的实现原理：
 
@@ -260,7 +279,7 @@ Goroutine 让出线程并等待读写事件；
 等待事件
 
 当我们在文件描述符上执行读写操作时，如果文件描述符不可读或者不可写，当前 Goroutine 就会执行 runtime.poll_runtime_pollWait 检查 runtime.pollDesc 的状态并调用 runtime.netpollblock 等待文件描述符的可读或者可写：
-
+```go
 func poll_runtime_pollWait(pd *pollDesc, mode int) int {
     ...
     for !netpollblock(pd, int32(mode), false) {
@@ -279,9 +298,11 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
     }
     ...
 }
+```
+
 runtime.netpollblock 是 Goroutine 等待 I/O 事件的关键函数，它会使用运行时提供的 runtime.gopark 让出当前线程，将 Goroutine 转换到休眠状态并等待运行时的唤醒。
 
-轮询等待
+### 轮询等待
 
 Go 语言的运行时会在调度或者系统监控中调用 runtime.netpoll 轮询网络，该函数的执行过程可以分成以下几个部分：
 
@@ -289,7 +310,7 @@ Go 语言的运行时会在调度或者系统监控中调用 runtime.netpoll 轮
 调用 epollwait 等待可读或者可写事件的发生；
 在循环中依次处理 epollevent 事件；
 因为传入 delay 的单位是纳秒，下面这段代码会将纳秒转换成毫秒：
-
+```go
 func netpoll(delay int64) gList {
     var waitms int32
     if delay < 0 {
@@ -303,8 +324,10 @@ func netpoll(delay int64) gList {
     } else {
         waitms = 1e9
     }
+```
+    
 计算了需要等待的时间之后，runtime.netpoll 会执行 epollwait 等待文件描述符转换成可读或者可写，如果该函数返回了负值，就可能返回空的 Goroutine 列表或者重新调用 epollwait 陷入等待：
-
+```go
     var events [128]epollevent
 retry:
     n := epollwait(epfd, &events[0], int32(len(events)), waitms)
@@ -314,8 +337,10 @@ retry:
         }
         goto retry
     }
-当 epollwait 函数返回的值大于 0 时，就意味着被监控的文件描述符出现了待处理的事件，我们在如下所示的循环中就会依次处理这些事件：
+```
 
+当 epollwait 函数返回的值大于 0 时，就意味着被监控的文件描述符出现了待处理的事件，我们在如下所示的循环中就会依次处理这些事件：
+```go
     var toRun gList
     for i := int32(0); i < n; i++ {
         ev := &events[i]
@@ -336,8 +361,10 @@ retry:
     }
     return toRun
 }
-处理的事件总共包含两种，一种是调用 runtime.netpollBreak 函数触发的事件，该函数的作用是中断网络轮询器；另一种是其他文件描述符的正常读写事件，对于这些事件，我们会交给 runtime.netpollready 处理：
+```
 
+处理的事件总共包含两种，一种是调用 runtime.netpollBreak 函数触发的事件，该函数的作用是中断网络轮询器；另一种是其他文件描述符的正常读写事件，对于这些事件，我们会交给 runtime.netpollready 处理：
+```go
 func netpollready(toRun *gList, pd *pollDesc, mode int32) {
     var rg, wg *g
     ...
@@ -349,12 +376,14 @@ func netpollready(toRun *gList, pd *pollDesc, mode int32) {
         toRun.push(wg)
     }
 }
+```
+
 runtime.netpollunblock 会在读写事件发生时，将 runtime.pollDesc 中的读或者写信号量转换成 pdReady 并返回其中存储的 Goroutine；如果返回的 Goroutine 不会为空，那么该 Goroutine 就会被加入 toRun 列表，运行时会将列表中的全部 Goroutine 加入运行队列并等待调度器的调度。
 
-截止日期
+### 截止日期
 
 网络轮询器和计时器的关系非常紧密，这不仅仅是因为网络轮询器负责计时器的唤醒，还因为文件和网络 I/O 的截止日期也由网络轮询器负责处理。截止日期在 I/O 操作中，尤其是网络调用中很关键，网络请求存在很高的不确定因素，我们需要设置一个截止日期保证程序的正常运行，这时就需要用到网络轮询器中的 runtime.poll_runtime_pollSetDeadline 函数：
-
+```go
 func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
     rd0, wd0 := pd.rd, pd.wd
     if d > 0 {
@@ -378,6 +407,8 @@ func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
             pd.rt.f = nil
         }
     }
+```
+
 该函数会先使用截止日期计算出过期的时间点，然后根据 runtime.pollDesc 的状态做出以下不同的处理：
 
 如果结构体中的计时器没有设置执行的函数时，该函数会设置计时器到期后执行的函数、传入的参数并调用 runtime.resettimer 重置计时器；
@@ -385,7 +416,7 @@ func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
 如果新的截止日期大于 0，调用 runtime.modtimer 修改计时器；
 如果新的截止日期小于 0，调用 runtime.deltimer 删除计时器；
 在 runtime.poll_runtime_pollSetDeadline 函数的最后，会重新检查轮询信息中存储的截止日期：
-
+```go
     var rg *g
     if pd.rd < 0 {
         if pd.rd < 0 {
@@ -398,6 +429,8 @@ func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
     }
     ...
 }
+```
+
 如果截止日期小于 0，上述代码会调用 runtime.netpollgoready 直接唤醒对应的 Goroutine。
 
 在 runtime.poll_runtime_pollSetDeadline 函数中直接调用 runtime.netpollgoready 是相对比较特殊的情况。在正常情况下，运行时都会在计时器到期时调用 runtime.netpollDeadline、runtime.netpollReadDeadline 和 runtime.netpollWriteDeadline 三个函数：
@@ -405,7 +438,7 @@ func poll_runtime_pollSetDeadline(pd *pollDesc, d int64, mode int) {
 
 
 上述三个函数都会通过 runtime.netpolldeadlineimpl 调用 runtime.netpollgoready 直接唤醒相应的 Goroutine:
-
+```go
 func netpolldeadlineimpl(pd *pollDesc, seq uintptr, read, write bool) {
     currentSeq := pd.rseq
     if !read {
@@ -426,6 +459,8 @@ func netpolldeadlineimpl(pd *pollDesc, seq uintptr, read, write bool) {
     }
     ...
 }
+```
+
 Goroutine 在被唤醒之后就会意识到当前的 I/O 操作已经超时，可以根据需要选择重试请求或者中止调用
 
 
@@ -437,7 +472,7 @@ Goroutine 在被唤醒之后就会意识到当前的 I/O 操作已经超时，�
 
 
 
-TCP
+## TCP
 
 ```go
 type TCPListener struct {
