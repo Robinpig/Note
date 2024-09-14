@@ -8,13 +8,19 @@
 [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
 
 
+
+需要的一些依赖环境
+```shell
+gcc pcre pcre-devel zlib zlib-devel openssl openssl-devel
+```
+
 > 下载路径https://nginx.org/download/
 > 
 ```shell
 # download source code && tar
 wget https://nginx.org/download/nginx-1.27.0.tar.gz
 
-./configure --prefix=/usr/local/nginx
+./configure --prefix=/usr/local/nginx  --with-http_ssl_module --with-http_v2_module --with-stream
 vim objs/Makefile
 # 修改优化选项 -O ==> -O0
 # CFLAGS = -pipe -O0 -W -Wall -Wpointer-arith -Wno-unused-parameter -Werror -g
