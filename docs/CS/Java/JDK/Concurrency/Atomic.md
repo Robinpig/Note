@@ -244,7 +244,7 @@ final void longAccumulate(long x, LongBinaryOperator fn,
 
 > [!NOTE]
 >
-> See [Netty Memory](/docs/CS/Java/Netty/memory.md)
+> See [Netty Memory](/docs/CS/Framework/Netty/memory.md)
 
 ### LongAccumulator
 

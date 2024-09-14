@@ -40,7 +40,7 @@ Here are a few simple examples of interesting programs that can be easily expres
 - Inverted Index
 - Distributed Sort
 
-## Execution
+## Dataflow
 
 The Map invocations are distributed across multiple machines by automatically partitioning the input data into a set of M splits.
 The input splits can be processed in parallel by different machines.

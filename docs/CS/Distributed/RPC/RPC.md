@@ -153,6 +153,39 @@ If a client crashes while the server is still busy, the server’s computation h
 
 Anyway, this is another problem that can’t be hidden from the programmers because it’s their job to decide about what to do in such cases.
 
+
+
+## Async
+
+大多数网络框架都是异步的
+
+Netty的`Channel.writeAndFlush` 会返回一个 `channelFuture`返回true只代表写入网络缓冲区成功 不代表发送成功
+
+
+
+客户端如何知道失败？
+
+一个常见的设计是：客户端发起一个 RPC 请求，会设置一个超时时间 `client_timeout`，发起调用的同时，客户端会开启一个延迟 `client_timeout` 的定时器
+
+- 接收到正常响应时，移除该定时器。
+- 定时器倒计时完毕，还没有被移除，则认为请求超时，构造一个失败的响应传递给客户端。
+
+
+
+
+## 泛化调用
+
+基于动态代理技术，RPC框架客户端做到了调用RPC方法与调用本地方法相同的体验。一般情况下服务端定义服务接口，并将接口打包到二方jar包发布。服务端在服务进程中实现该接口，而调用方在进程中根据该接口创建动态代理进行调用，与调用本地方法体验一致
+
+
+泛化调用是指在调用方没有服务方提供的 API（SDK）的情况下，对服务方进行调用，并且可以正常拿到调用结果
+泛化调用主要用于实现一个通用的远程服务 Mock 框架，可通过实现 GenericService 接口处理所有服务请求。比如如下场景：
+1. 网关服务：如果要搭建一个网关服务，那么服务网关要作为所有 RPC 服务的调用端。但是网关本身不应该依赖于服务提供方的接口 API（这样会导致每有一个新的服务发布，就需要修改网关的代码以及重新部署），所以需要泛化调用的支持。
+2. 测试平台：如果要搭建一个可以测试 RPC 调用的平台，用户输入分组名、接口、方法名等信息，就可以测试对应的 RPC 服务。那么由于同样的原因（即会导致每有一个新的服务发布，就需要修改网关的代码以及重新部署），所以平台本身不应该依赖于服务提供方的接口 API。所以需要泛化调用的支持。
+
+
+
+
 ## Performance
 
 ### Parallelism
@@ -174,8 +207,9 @@ Now [gRPC](/docs/CS/Distributed/RPC/grpc.md) and Finagle support to build stream
 
 [Thrift](/docs/CS/Distributed/RPC/Thrift.md)
 
-[Dubbo](/docs/CS/Java/Dubbo/Dubbo.md)
+[Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 
+kitex
 
 
 ## Links

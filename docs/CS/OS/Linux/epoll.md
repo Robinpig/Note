@@ -515,6 +515,7 @@ static inline void __add_wait_queue(struct wait_queue_head *wq_head, struct wait
 #### ep_send_events
 Try to transfer events to user space. In case we get 0 events and there's still timeout left over, we go trying again in search of more luck.
 call [ep_item_poll](/docs/CS/OS/Linux/epoll.md?id=ep_item_poll)
+
 ```c
 
 static int ep_send_events(struct eventpoll *ep,
@@ -871,6 +872,17 @@ This  specifies  a limit on the total number of file descriptors that a user can
 The limit is per real user ID. 
 Each registered file descriptor costs roughly 90 bytes on a 32-bit kernel, and roughly 160 bytes on a 64-bit kernel. 
 Currently, the default value for max_user_watches is 1/25 (4%) of the available low memory, divided by the registration cost in bytes.
+
+
+lt/et 模式区别的核心逻辑在 epoll_wait 的内核实现 ep_send_events_proc 函数里，就绪队列
+
+epoll_wait 的相关工作流程：
+
+- 当内核监控的 fd 产生用户关注的事件，内核将 fd (epi)节点信息添加进就绪队列。
+- 内核发现就绪队列有数据，唤醒进程工作。
+- 内核先将 fd 信息从就绪队列中删除。
+- 然后将 fd 对应就绪事件信息从内核空间拷贝到用户空间。
+- 事件数据拷贝完成后，内核检查事件模式是 lt 还是 et，如果不是 et，重新将 fd 信息添加回就绪队列，下次重新触发 epoll_wait。
 
 
 

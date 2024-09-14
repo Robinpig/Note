@@ -1,30 +1,67 @@
 ## Introduction
 NameServer是一个几乎无状态节点，可集群部署，节点之间无任何信息同步。
 
+
+NameServer包含哪些
+
+KVConfigManager
+
+NameServer不仅仅是存储了各个Broker的IP地址和端口，还存储了对应的Topic的路由数据
+
+
+
 ## start
+
+> 启动前注意环境变量`ROCKETMQ_HOME`的设置
+
+
 
 Brokers send heart beats to name server every 30 seconds and name server update live broker table time stamp.
 Name server scan live broker table every 10s and remove last time stamp > 120s brokers.
 
 ```java
 public class NamesrvStartup {
-  public static void main(String[] args) {
-    main0(args);
-    controllerManagerMain();
-  }
-
-  public static void main0(String[] args) {
-    try {
-      parseCommandlineAndConfigFile(args);
-      createAndStartNamesrvController();
-    } catch (Throwable e) {
-      e.printStackTrace();
-      System.exit(-1);
+    public static void main(String[] args) {
+        main0(args);
+        controllerManagerMain();
     }
-  }
+
+    public static void main0(String[] args) {
+        try {
+            parseCommandlineAndConfigFile(args);
+            createAndStartNamesrvController();
+        } catch (Throwable e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+
+    public static NamesrvController createAndStartNamesrvController() throws Exception {
+
+        NamesrvController controller = createNamesrvController();
+        start(controller);
+        NettyServerConfig serverConfig = controller.getNettyServerConfig();
+        String tip = String.format("The Name Server boot success. serializeType=%s, address %s:%d", RemotingCommand.getSerializeTypeConfigInThisServer(), serverConfig.getBindAddress(), serverConfig.getListenPort());
+        log.info(tip);
+        System.out.printf("%s%n", tip);
+        return controller;
+    }
 }
 ```
 
+
+### createNamesrvController
+```java
+public static NamesrvController createNamesrvController() {
+
+        final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig, nettyClientConfig);
+        // remember all configs to prevent discard
+        controller.getConfiguration().registerConfig(properties);
+        return controller;
+    }
+```
+
+namesrvConfig, nettyServerConfig, nettyClientConfig
 ```java
 public class NettyServerConfig implements Cloneable {
 
@@ -35,6 +72,7 @@ public class NettyServerConfig implements Cloneable {
   
 }
 ```
+### NamesrvController
 
 initialize -> start ->
 
@@ -105,7 +143,7 @@ public class NamesrvController {
 }
 ```
 
-### DefaultRequestProcessor#processRequest
+### DefaultRequestProcessor::processRequest
 
 ```java
 public class DefaultRequestProcessor implements NettyRequestProcessor {
@@ -298,6 +336,8 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
 ```
 
 #### getRouteInfoByTopic
+
+获取Topic的路由信息
 
 ```java
 

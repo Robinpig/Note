@@ -1,6 +1,6 @@
 ## Introduction
 
-### Software Architecture
+## Software Architecture
 
 - Monolithic
 - Service Oriented
@@ -8,7 +8,7 @@
 - Service Mesh
 - Serverless
 
-#### Monolithic architecture
+### Monolithic architecture
 
 Monolithic architecture is the traditional structure for software applications. Analysts often compare it to microservices, a newer model for application development.
 Although monolithic architecture has a long history, it is sometimes still superior to the microservices model.
@@ -62,7 +62,7 @@ Monolithic software architecture can be beneficial if your team is at the foundi
 Monolithic is perfect for startups that need to get a product up and running as soon as possible.
 However, certain issues mentioned above come with the monolithic package.
 
-#### SOA
+### SOA
 
 A service-oriented architecture (SOA) is a software architecture style that refers to an application composed of discrete and loosely coupled software agents that perform a required function. SOA has two main roles: a service provider and a service consumer.
 Both of these roles can be played by a software agent. The concept of SOA lies in the following: an application can be designed and built in a way that its modules are integrated seamlessly and can be easily reused.
@@ -93,10 +93,21 @@ The SOA approach is best suited for complex enterprise systems such as those for
 A banking system is extremely hard to break into microservices. But a monolithic approach also isn’t good for a banking system as one part could hurt the whole app.
 The best solution is to use the SOA approach and organize complex apps into isolated independent services.
 
-#### Microservice architecture
+### Microservice architecture
 
 Microservice is a type of service-oriented software architecture that focuses on building a series of autonomous components that make up an app.
 Unlike monolithic apps built as a single indivisible unit, microservice apps consist of multiple independent components that are glued together with APIs.
+
+
+
+简而言之， 微服务架构风格是一种将单个应用程序开发为一套小服务程序的方法，
+每个小服务都在自己的进程中运行， 并使用轻量级协议（通常是 HTTP 协议） 进行通信  
+这些服务围绕业务功能构建， 可通过全自动部署机制独立部署。 这些服务很少使用
+中心化管理模式， 可以用不同的编程语言开发， 也可能使用不同的数据存储技术    
+
+-- James Lewis 与 Martin Fowler  
+
+
 
 **Pros of microservices**
 
@@ -135,7 +146,63 @@ Monolithic apps consist of interdependent, indivisible units and feature very lo
 SOA is broken into smaller, moderately coupled services, and features slow development.
 Microservices are very small, loosely coupled independent services and feature rapid continuous development.
 
-#### Serverless architecture
+
+微服务架构，第⼀阶段要解决服务间的发现问题和相互通信问题，
+这是微服务框架所覆盖的基本功能。第⼆阶段要解决微服务应⽤的交付和规模化运维问题，这些是容器和Ks的领域
+
+第三阶段随着微服务架构复杂化，分布式场景下排查和诊断效
+率急剧下降开始成为开发者主要痛点，因此⼜催⽣了分布式链路跟踪和可观测性技术
+
+微服务治理
+
+并具备服务注册发现、
+服务配置、负载均衡、API 网关、分布式事务 调度 API管理 服务压测等基本能力。其中，服务治理包括无损下线，服
+务容错，服务路由 服务鉴权 限流降级等能力。可观测性包括应用监控，链路追踪，日志管理，应用诊断等
+
+
+
+
+
+
+#### Security
+
+我们对于数据库通常都会做严格的权限控制，但是由于我们的微服务对数据库是拥有完全的访
+问权限的，所以即使数据库层⾯做了⾮常严格的权限控制，⼀旦微服务层⾯突破了，也会对数
+据库造成灾难性的破坏，例如⼀个⿊客，假设具备了微服务的访问权限，可能会发⽣拖库等严
+重问题。因此微服务之间的调⽤也需要严格的⽽控制安全可信
+
+业务配置安全
+
+
+通常我们在⼊⼝处通过 WAF 提供⼊⼝层的防护，可以提供 SQL 注⼊、XSS、代码执⾏、⽂件
+包含、webshell 等通⽤ web 漏洞利⽤防御能⼒，⼊⼝层安全防护更加适⽤于 CC 攻击/爬⾍/
+扫描、流量访问控制、数据泄露检测等场景，但⼊⼝层防护也有⼀定的局限性，⼊⼝层防护完
+全基于流量特征进⾏检测，容易产⽣⼤量⽆效报警或因担⼼误报规则不敢做太严格，这给安全
+运维会带来⼀些负担，
+
+基于流量特征的防护只能看到流量内容，即⽤户的原始请求，并不能感知应⽤最终会怎
+样执⾏这条请求，有⼀些⽐较隐蔽的攻击，可能会通过变形的请求绕过流量特征的检测
+
+
+
+在应⽤层我们推荐使⽤应⽤层防护 RASP 技术来进⾏防护，RASP 全称 Runtime Application
+Self Protection，是⼀种在运⾏时检测应⽤程序攻击并进⾏⾃我保护的安全产品。RASP 通过
+Java Agent ⽅式挂载到微服务系统中，⽆需修改任何业务代码，对业务侵⼊性较低。RASP 能
+看到应⽤的上下⽂，理解应⽤最终执⾏了什么动作和命令，不管原始请求怎样变形，最终应⽤
+执⾏的动作是不变的，例如要执⾏ cat /etc/passwd 命令，⽆论流量特征如何变形，最后都会
+落到这个执⾏动作上。RASP 还能理解是什么应⽤做了什么动作（身份+⾏为），只要身份和⾏
+为不匹配，就可以检测到异常。对于⼀些加密⻢等⼿段，本质上也是对输⼊内容做变形以绕过
+基于特征的检测，RASP 同理也能都抵抗
+
+
+
+配置访问策略：
+- 从访问⽅式上，可以通过⿊⽩名单的⽅式来进⾏配置
+- 从访问粒度上，针对 Spring Cloud 类型的微服务，可以控制访问微服务的某⼀个具体的
+URL, 针对 Dubbo 类型的接⼝维度的微服务框架，可以⽀持控制访问微服务的某⼀个具体
+的接⼝
+
+### Serverless architecture
 
 Serverless architecture is a cloud computing approach to building and running apps and services without the need for infrastructure management.
 In serverless apps, code execution is managed by a server, allowing developers to deploy code without worrying about server maintenance and provision.

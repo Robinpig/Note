@@ -1,5 +1,22 @@
 ## Introduction
 
+
+
+
+## build
+
+
+### Install
+
+安装与alias
+
+
+
+
+
+## Architecture
+
+
 - Preprocessing
 - Compilation
 - Assembly
@@ -57,6 +74,8 @@ size xx.o
 
 ```
 
+有许多工具可以完成对ELF文件的探索查看，如readelf、objdump
+
 use objdump
 
 ```shell
@@ -107,6 +126,13 @@ unlikely:
 	objdump -d -S  unlikely > unlikely.txt
 	
 ```
+
+## Issues
+
+Ubuntu 多个版本gcc
+
+链接gcc
+
 
 
 

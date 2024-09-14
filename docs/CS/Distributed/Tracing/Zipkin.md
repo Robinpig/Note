@@ -252,4 +252,4 @@ The primary consumer of this API is the Web UI.
 ## Links
 
 - [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
-- [Spring Cloud](/docs/CS/Java/Spring_Cloud/Spring_Cloud.md?id=sleuth)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=sleuth)

@@ -83,12 +83,19 @@ For a small dataset, the gains are negligible, but once you get into the terabyt
 
 
 
+## Java
+
+最好默认设置UUID, 在某些序列化场景(如Redis, Tair) 默认会使用Java 的Serial, 避免后续字段的增减影响到之前数据的读取
 
 
 
 
+## JSON
 
 
+fastjson在某些场景下会导致jvm crash
+
+当多个对象存在循环引用时 GSON和Jackson会抛异常
 
 
 

@@ -4,50 +4,48 @@
 What this means is that Redis provides access to mutable data structures via a set of commands, which are sent using a *server-client* model with [TCP sockets](/docs/CS/CN/TCP/TCP.md) and a simple protocol.
 So different processes can query and modify the same data structures in a shared way.
 
-Data structures implemented into Redis have a few special properties:
-
-- Redis cares to store them on disk, even if they are always served and modified into the server memory. This means that Redis is fast, but that it is also non-volatile.
-- The implementation of data structures emphasizes memory efficiency, so data structures inside Redis will likely use less memory compared to the same data structure modelled using a high-level programming language.
-- Redis offers a number of features that are natural to find in a database, like replication, tunable levels of durability, clustering, and high availability.
-
-> Another good example is to think of Redis as a more complex version of memcached, where the operations are not just SETs and GETs, but operations that work with complex data types like Lists, Sets, ordered data structures, and so forth.
-
- 
+Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
 >  [!TIP]
 >
 > The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
 
+### Why Redis so fast
 
+完全基于内存实现 持久化机制都是使用子进程处理 不影响
+
+高效的数据结构
+
+整个 Redis 就是一个全局 哈希表，他的时间复杂度是 O(1)，而且为了防止哈希冲突导致链表过长，Redis 会执行 rehash 操作，扩充 哈希桶数量，减少哈希冲突。并且防止一次性 重新映射数据过大导致线程阻塞，采用 渐进式 rehash。巧妙的将一次性拷贝分摊到多次请求过程后总，避免阻塞。
+
+同时根据实际存储的数据类型选择不同编码
+
+线程模型
+
+保证了每个操作的原子性，也减少了线程的上下文切换和竞争
 
 > It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound. 
 > For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.
 
 
-上下文切换
-多线程同步
 
-Source code layout
+网络I/O模型  
 
+IO 多路复用，使用了单线程来轮询描述符，将数据库的开、关、读、写都转换成了事件，Redis 采用自己实现的事件分离器，效率比较高。
 
-monotonic clock
-
-
-By default, Redis will build using the POSIX clock_gettime function as the monotonic clock source. On most modern systems, the internal processor clock can be used to improve performance. Cautions can be found here: http://oliveryang.net/2015/09/pitfalls-of-TSC-usage/
-
-To build with support for the processor’s internal instruction clock, use:
-
-% make CFLAGS=“-DUSE_PROCESSOR_CLOCK”
+主从复制 哨兵集群 Cluster分片集群
 
 
 
-> Link: [How fast is Redis?](https://redis.io/topics/benchmarks)
+负载均衡
 
-The simplest way to understand how a program works is to understand the [data structures](/docs/CS/DB/Redis/struct.md) it uses.
+
+
+
 
 - [db](/docs/CS/DB/Redis/redisDb.md)
 
-Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
+
 
 ## Architecture
 
@@ -348,6 +346,10 @@ The tracking table is constituted by a radix tree of keys, each pointing to a ra
 
  Clients will normally take frequently requested objects in memory, removing them when invalidation messages are received. 
 
+```redis
+CLIENT TRACKING ON|OFF [REDIRECT client-id] [PREFIX prefix] [BCAST] [OPTIN] [OPTOUT] [NOLOOP]
+```
+
 
 
 Redis 客户端缓存支持称为*跟踪*，有两种模式：
@@ -474,8 +476,9 @@ RESP 2 无法直接 PUSH 失效消息，所以 需要另一个支持 RESP 3 协�
 
 BigKey
 
-对于JIT技术在存储引擎中而言，“EVAL is evil”，尽量避免使用lua耗费内存和计算资源
+对带宽压力大 进而影响之后的处理
 
+对于JIT技术在存储引擎中而言，“EVAL is evil”，尽量避免使用lua耗费内存和计算资源
 
 Pubsub的典型场景
 Pubsub适合悲观锁和简单信号，不适合稳定的更新，因为可能会丢消息。在1对N的消息转发通道中，服务瓶颈。还有模

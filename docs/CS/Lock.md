@@ -73,7 +73,7 @@ As for optimistic lock, database access libraries like Hibernate usually provide
 
 - [Redis](/docs/CS/DB/Redis/Lock.md) uses libraries that implement a lock algorithm like [ShedLock](https://github.com/lukas-krecan/ShedLock), and [Redisson](https://github.com/redisson/redisson/wiki/8.-Distributed-locks-and-synchronizers).
   The first one provides lock implementation using also other systems like MongoDB, DynamoDB, and more.
-- [Zookeeper](/docs/CS/Java/Zookeeper/ZooKeeper.md?id=lock) provides some recipes about locking.
+- [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=lock) provides some recipes about locking.
 - [Hazelcast](https://hazelcast.com/blog/long-live-distributed-locks/) offers a lock system based on his [CP subsystem](https://docs.hazelcast.org/docs/3.12.3/manual/html-single/index.html#cp-subsystem).
 - [有赞 Bond](https://tech.youzan.com/bond/)
 
@@ -109,6 +109,10 @@ scenarios:
 - reentrant lock
 - lock TTL
 - hot key
+
+
+
+
 
 ## Lock-based Concurrent Data Structures
 

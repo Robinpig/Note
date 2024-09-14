@@ -23,6 +23,33 @@ Network tools:
 brew install net-tools
 ```
 
+ctags
+
+```shell
+brew install ctags
+
+/opt/homebrew/opt/ctags/bin/ctags -R
+```
+
+
+
+ccat
+
+htop
+
+
+
+
+
+
 ## Links
 
 - [Mac](/docs/CS/OS/mac/mac.md)
+
+
+
+
+## References
+
+1. 
+ 

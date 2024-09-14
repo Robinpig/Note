@@ -34,13 +34,19 @@ RDB disadvantages:
   AOF also needs to fork() but you can tune how often you want to rewrite your logs without any trade-off on durability.
 
 By default Redis saves snapshots of the dataset on disk, in a binary file called `dump.rdb`.
+
 You can configure Redis to have it save the dataset every N seconds if there are at least M changes in the dataset, or you can manually call the `SAVE` or `BGSAVE` commands.
 
 For example, this configuration will make Redis automatically dump the dataset to disk every 60 seconds if at least 1000 keys changed:
 
-```
+```conf
 save 60 1000
 ```
+
+过于频繁的执行全量数据快照，有两个严重性能开销：
+
+1. 频繁生成 RDB 文件写入磁盘，磁盘压力过大。会出现上一个 RDB 还未执行完，下一个又开始生成，陷入死循环。
+2. fork 出 bgsave 子进程会阻塞主线程，主线程的内存越大，阻塞时间越长。
 
 ### RDB works
 
@@ -50,7 +56,7 @@ Whenever Redis needs to dump the dataset to disk, this is what happens:
 - The child starts to write the dataset to a temporary RDB file.
 - When the child is done writing the new RDB file, it replaces the old one.
 
-This method allows Redis to benefit from copy-on-write semantics.
+This method allows Redis to benefit from **copy-on-write** semantics.
 
 ### saveRio
 
@@ -65,7 +71,12 @@ call `rdbSaveKeyValuePair`
 
 #### loadDataFromDisk
 
-Function called at startup to load RDB or AOF file in memory.
+
+在startup时被调用
+
+优先AOF文件 没有AOF才加载RDB文件
+
+load RDB or AOF file in memory.
 
 - loadAppendOnlyFile
 
@@ -230,6 +241,12 @@ appendonly yes
 
 From now on, every time Redis receives a command that changes the dataset (e.g. `SET`) it will append it to the AOF.
 When you restart Redis it will re-play the AOF to rebuild the state like [binlog](/docs/CS/DB/MySQL/binlog.md) in MySQL
+
+
+
+写后日志避免了额外的检查开销，不需要对执行的命令进行语法检查。如果使用写前日志的话，就需要先检查语法是否有误，否则日志记录了错误的命令，在使用日志恢复的时候就会出错。
+
+AOF 日志是主线程执行，将日志写入磁盘过程中，如果磁盘压力大就会导致写磁盘很慢，导致后续的「写」指令阻塞。
 
 Since Redis 7.0.0, Redis uses a multi part AOF mechanism.
 That is, the original single AOF file is split into base file (at most one) and incremental files (there may be more than one).
@@ -664,6 +681,11 @@ Log rewriting uses the same copy-on-write trick already in use for snapshotting.
 * Now Redis atomically renames the new file into the old one, and starts appending new data into the new file.
 
 Whenever you issue a `BGREWRITEAOF` Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory.
+
+
+
+bgrewriteaof 
+
 #### rewriteAppendOnlyFileBackground
 
 

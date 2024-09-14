@@ -414,8 +414,9 @@ Tracing makes progress through the heap by moving the collector wavefront (the g
 
 ### Comparing garbage collectors
 
-It is common to ask: which is the best garbage collector to use? However, the temptation to provide a simple answer needs to be resisted. First, what does 'best' mean? Do we
-want the collector that provides the application with the best throughput, or do we want
+It is common to ask: which is the best garbage collector to use? However, the temptation to provide a simple answer needs to be resisted. First, what does 'best' mean? 
+
+Do we want the collector that provides the application with the best throughput, or do we want
 the shortest pause times? Is space utilisation important?
 Or is a compromise that combines these desirable properties required? Second, it is clear that, even if a single metric is chosen, the ranking of different collectors will vary between different applications.
 For example, in a study of twenty Java benchmarks and six different collectors, Fitzgerald and Tarditi found that for each collector there was at least one benchmark that would have been at least 15% faster with a more appropriate collector.
@@ -567,7 +568,6 @@ $$
 VrefE Node s :
 p(re f) l { fld E Root s : * f l d = ref } I (6.1)
 + l { fld E P o i nt e r s (n) : n E Node s /\ p(n) > 0 1\ * f l d = re f} I
-
 $$
 
 Having assigned reference counts, nodes with a non-zero count are retained and the rest
@@ -632,6 +632,14 @@ Note that the mark-sweep collector imposes constraints upon the heap layout.
 
 From the viewpoint of the garbage collector, mutator threads perform just three operations
 of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=Mutator-read-and-write-operations)").
+
+
+
+内存碎片
+
+分配效率
+
+
 
 ### Bitmap marking
 

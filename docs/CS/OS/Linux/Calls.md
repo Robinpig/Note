@@ -328,6 +328,11 @@ Perform a listen. Basically, we allow the protocol to do anything necessary for 
 
 get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(backlog, net.core.somaxconn)`
 
+限制了全连接队列大小和半连接个数 
+
+listen 可以重复调用，重复调用 listen 可修改 backlog，
+
+
 ```c
 // socket.c
 SYSCALL_DEFINE2(listen, int, fd, int, backlog)
@@ -728,6 +733,7 @@ void reqsk_queue_alloc(struct request_sock_queue *queue)
 ```
 
 #### request_sock_queue
+全连接队列
 
 ```c
 // request_sock.h 

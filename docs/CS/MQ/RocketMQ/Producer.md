@@ -667,6 +667,8 @@ public class MQFaultStrategy {
 
 else sendLatencyFaultEnable = false
 #### selectOneMessageQueue
+
+
 ```java
 public class TopicPublishInfo {
   public MessageQueue selectOneMessageQueue(final String lastBrokerName) {

@@ -61,7 +61,7 @@ Authorization Grant
 
 - [Computer Network](/docs/CS/CN/CN.md) 
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
-- [Spring Security](/docs/CS/Java/Spring/Security.md?id=OAuth)
+- [Spring Security](/docs/CS/Framework/Spring/Security.md?id=OAuth)
 
 ## References
 

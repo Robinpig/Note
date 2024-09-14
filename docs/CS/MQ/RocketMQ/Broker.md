@@ -1,6 +1,96 @@
 ## Introduction
 
+
+
+启动mode
+
+- 2m-2s-async
+- 2m-2s-sync
+- 2m-noslave
+- Dledger
+
+
+
+
+
 ## start
+
+```java
+public class BrokerStartup {
+
+    public static void main(String[] args) {
+        start(createBrokerController(args));
+    }
+  
+  public static BrokerController createBrokerController(String[] args) {
+        try {
+            BrokerController controller = buildBrokerController(args);
+            boolean initResult = controller.initialize();
+            if (!initResult) {
+                controller.shutdown();
+                System.exit(-3);
+            }
+            Runtime.getRuntime().addShutdownHook(new Thread(buildShutdownHook(controller)));
+            return controller;
+        } catch (Throwable e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+        return null;
+    }
+  
+  public static Runnable buildShutdownHook(BrokerController brokerController) {
+        return new Runnable() {
+            private volatile boolean hasShutdown = false;
+            private final AtomicInteger shutdownTimes = new AtomicInteger(0);
+
+            @Override
+            public void run() {
+                synchronized (this) {
+                    log.info("Shutdown hook was invoked, {}", this.shutdownTimes.incrementAndGet());
+                    if (!this.hasShutdown) {
+                        this.hasShutdown = true;
+                        long beginTime = System.currentTimeMillis();
+                        brokerController.shutdown();
+                        long consumingTimeTotal = System.currentTimeMillis() - beginTime;
+                        log.info("Shutdown hook over, consuming total time(ms): {}", consumingTimeTotal);
+                    }
+                }
+            }
+        };
+    }
+  
+  public static BrokerController start(BrokerController controller) {
+        try {
+            controller.start();
+
+            String tip = String.format("The broker[%s, %s] boot success. serializeType=%s",
+                controller.getBrokerConfig().getBrokerName(), controller.getBrokerAddr(),
+                RemotingCommand.getSerializeTypeConfigInThisServer());
+
+            if (null != controller.getBrokerConfig().getNamesrvAddr()) {
+                tip += " and name server is " + controller.getBrokerConfig().getNamesrvAddr();
+            }
+
+            log.info(tip);
+            System.out.printf("%s%n", tip);
+            return controller;
+        } catch (Throwable e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+
+        return null;
+    }
+  
+}
+```
+
+
+
+
+
+
 
 BrokerController
 
@@ -136,6 +226,8 @@ therad pool per NettyRequestProcessor
 
 
 在 RocketMQ 中不论是 CommitLog 还是 ConsumerQueue 都采用了 mmap
+
+Broker在收到一条消息的时候，写入Commit Log的同时，还会将当前这条消息在commit log中的offset、消息的size和对应的Tag的Hash写入到consumer queue文件
 
 ConsumerQueue 结构
 

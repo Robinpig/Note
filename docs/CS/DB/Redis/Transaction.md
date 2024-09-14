@@ -254,6 +254,8 @@ void touchWatchedKey(redisDb *db, robj *key) {
 }
 ```
 
+## RedisCommand
+
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md?id=persistence)

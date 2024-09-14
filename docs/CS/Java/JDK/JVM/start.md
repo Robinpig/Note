@@ -19,6 +19,22 @@ based on JDK12
 
 ## Entry
 
+
+
+Windows
+
+jvm.dll
+
+
+
+Bootstrap ClassLoader
+
+
+
+
+
+
+
 > [!TIP]
 >
 > Both  [main()](/docs/CS/Java/JDK/JVM/start.md?id=main) and [launcher](/docs/CS/Java/JDK/JVM/start.md?id=launcher)

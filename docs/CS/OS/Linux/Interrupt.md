@@ -1,5 +1,33 @@
 ## Introduction
 
+
+
+内核使用全局per-cpu变量vector_irq维护vectm和irq_desc的关系
+irq_desc和irq是一对一的关系。 irqaction表示设备对中断的处理
+
+| 字段  | 类型 | 描述 |
+| --- | --- | --- |
+| handle1 | irq_handler_t | 处理中断的函数 |
+| thread_fn  | 叫_handlcr_t | 在独立的线程中执行中断处理时 ， 真正处理中断的面数  |
+| thread | task_stmct | 对应的线程， 不在独立线程中执行中断处理时为NULL 与irq_desc 对应的irq |
+| irq IIcxt | unsigned int | 将其链桉到链表中 |
+
+
+
+两个结构体都有处理 中断的函数
+且相关的参数都已设置完毕，irq_desc并不一 定 需要 irqaction。 实际上，irq』、(lII“I Ill11(II( I(I 策略。l丸门II丿 1rqc1d1011 (I丿II、1从 )j勹“山1]lIII,II( II(I j『]丿ll 前者执行与否完全取决于handle_irq的
+采用中断的设备， 在使能 中断之前必须设詈触发方式(电平/边沿触发等)、irq号、 处理函 数等信息。内核提供了request_irq和request_threaded_irq两个函数可以方便地配置这些信息，前
+者调用后者实现
+
+
+
+
+
+
+
+
+
+
 ## Hardware
 
 - task gate

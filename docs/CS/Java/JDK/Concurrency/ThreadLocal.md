@@ -513,7 +513,7 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
 
 
 
-1. [FastThreadLocal in Netty](/docs/CS/Java/Netty/FastThreadLocal.md)
+1. [FastThreadLocal in Netty](/docs/CS/Framework/Netty/FastThreadLocal.md)
 
 
 

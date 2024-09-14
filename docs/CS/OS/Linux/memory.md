@@ -1,4 +1,10 @@
+## Introduction
 
+内核的正式入口是 start_kernel, 前面的讨论基本都发生在 start_kernel 之后，但实际上在它之 前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
+根据硬件和BIOS的配置，detect_memo1-y依次调用detect_memory_e820、 cletect_memo1-y_e801 和 cletect_memm-y_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置。 后二者作为兼容老机器 存在， 此处主要以现代计算机中的 cletect_memor y_e820 为主进行分析。
+三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存 信息。 以detect_memory_e820为例，每一条有效的信息都被存储在boot_params.e820_table数组中
+(类型为boot_e820_entr y)。
+boot_e820_entl-y有3 个字段， addr和size字段分别表示一段内存的起始地址和大小，type字段表示这段内存的用途。
 
 
 

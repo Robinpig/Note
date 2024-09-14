@@ -55,6 +55,9 @@ Method references enable you to do this; they are compact, easy-to-read lambda e
 - Anonymous Inner Class -> invokespecial
 - lambda -> invokedynamic
 
+
+lambda中参数不可变 实质就是类函数形参 在编译完之后到局部变量表一样 是不可变
+
 <!-- tabs:start -->
 
 #### **Anonymous Inner Class**
@@ -120,7 +123,21 @@ public static final #58= #57 of #61;    // Lookup=class java/lang/invoke/MethodH
 A method handle is a typed, directly executable reference to an underlying method, constructor, field, or similar low-level operation, with optional transformations of arguments or return values.
 These transformations are quite general, and include such patterns as conversion, insertion, deletion, and substitution.
 
-MethodType
+
+
+方法句柄的类型（MethodType）是由所指向方法的参数类型以及返回类型组成的。它是
+用来确认方法句柄是否适配的唯一关键。当使用方法句柄时，我们其实并不关心方法句柄所
+指向方法的类名或者方法名
+
+方法句柄的创建是通过 MethodHandles.Lookup 类来完成的。它提供了多个 API，既可
+以使用反射 API 中的 Method 来查找，也可以根据类、方法名以及方法句柄类型来查找
+
+
+方法句柄同样也有权限问题。但它与反射 API 不同，其权限检查是在句柄的创建阶段完成
+的。在实际调用过程中，Java 虚拟机并不会检查方法句柄的权限。如果该句柄被多次调用
+的话，那么与反射调用相比，它将省下重复权限检查的开销。
+需要注意的是，方法句柄的访问权限不取决于方法句柄的创建位置，而是取决于 Lookup
+对象的创建位置。
 
 CallSite
 
@@ -137,6 +154,26 @@ Compare
 ```
 -Djdk.internal.lambda.dumpProxyClasses=/DUMP/PATH
 ```
+
+
+```java
+//java -XX:+UnlockDiagnosticVMOptions -XX:+ShowHiddenFrames
+public class Foo {
+    public static void bar(Object o) {
+        new Exception().printStackTrace();
+    }
+
+    public static void main(String[] args) throws Throwable {
+        MethodHandles.Lookup l = MethodHandles.lookup();
+        MethodType t = MethodType.methodType(void.class, Object.class);
+        MethodHandle mh = l.findStatic(Foo.class, "bar", t);
+        mh.invokeExact(new Object());
+    }
+}
+```
+
+LambdaForm
+
 
 ## Functional Interface
 
@@ -169,6 +206,9 @@ They are really there to **bundle up blocks of code as data**. Consequently, the
 
 Classes in the new `java.util.stream` package provide a Stream API to support functional-style operations on streams of elements.
 The Stream API is integrated into the Collections API, which enables bulk operations on collections, such as sequential or parallel map-reduce transformations.
+
+1.流并不存储元素。这些元素可能存储在底层的集合中，或者是按需生成。2.流的操作不会修改其数据元素，而是生成一个新的流。3.流的操作是尽可能惰性执行的。这意味着直至需要其结果时，操作才会执行
+
 
 A sequence of elements supporting sequential and parallel aggregate operations.
 The following example illustrates an aggregate operation using Stream and IntStream:

@@ -168,6 +168,9 @@ A typical decomposition of a compiler into phases is shown in Figure 6.
 In practice, several phases may be grouped together, and the intermediate representations between the grouped phases need not be constructed explicitly The symbol table, which stores information about the
 entire source program, is used by all phases of the compiler.
 
+The process of converting the source code into machine code involves several phases or stages, which are collectively known as the phases of a compiler. The typical phases of a compiler are:
+
+
 <div style="text-align: center;">
 
 ```dot
@@ -202,10 +205,26 @@ digraph g{
 Fig.6. Phases of a compiler.
 </p>
 
+In summary, the phases of a compiler are: lexical analysis, syntax analysis, semantic analysis, intermediate code generation, optimization, and code generation.
+
+Symbol Table – It is a data structure being used and maintained by the compiler, consisting of all the identifier’s names along with their types. It helps the compiler to function smoothly by finding the identifiers quickly.
+
+
+
 Some compilers have a machine-independent optimization phase between the front end and the back end.
 The purpose of this optimization phase is to perform transformations on the intermediate representation,
 so that the back end can produce a better target program than it would have otherwise produced from an unoptimized intermediate representation.
 Since optimization is optional, one or the other of the two optimization phases shown in Figure 6 may be missing.
+
+The analysis of a source program is divided into mainly three phases. They are:
+
+- Linear Analysis-
+  This involves a scanning phase where the stream of characters is read from left to right. It is then grouped into various tokens having a collective meaning.
+- Hierarchical Analysis-
+  In this analysis phase, based on a collective meaning, the tokens are categorized hierarchically into nested groups.
+- Semantic Analysis-
+  This phase is used to check whether the components of the source program are meaningful or not.
+
 
 ### Lexical Analysis
 
@@ -281,6 +300,23 @@ such things as the number and types of its arguments, the method of passing each
 The symbol table is a data structure containing a record for each variable name, with elds for the attributes of the name.
 The data structure should be designed to allow the compiler to nd the record for each name quickly and to store or retrieve data from that record quickly.
 
+## 三段式编译器
+
+传统编译器采用三段式设计
+
+
+```
+┏━━━━━━━━━━━┓     ┏━━━━━━━━━━━━━━━━━━━━━━━ Compiler ━━━━━━━━━━━━━━━━━━━━┓    ┏━━━━━━━━━━━┓
+┃  source   ┃     ┃    ┏━━━━━━━━━━━┓ IR ┏━━━━━━━━━━━┓ IR ┏━━━━━━━━━━━┓  ┃    ┃  target   ┃
+┃           ┣━━━━━╋━━━>┃ front end ┣━━━>┃ optimizer ┣━━━>┃ back end  ┣━━╋━━━>┃           ┃       
+┃  program  ┃     ┃    ┗━━━━━━━━━━━┛    ┗━━━━━━━━━━━┛    ┗━━━━━━━━━━━┛  ┃    ┃  program  ┃
+┗━━━━━━━━━━━┛     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛    ┗━━━━━━━━━━━┛
+```
+
+编译器前端 优化器 编译器后端
+
+编译器的IR可能有多个 会进行多次优化 如识别冗余代码 识别内存逃逸等
+
 ## Lexical Analysis
 
 ## Syntax Analysis
@@ -314,6 +350,18 @@ The operating system maps the logical addresses into physical addresses, which a
 Control Flow Graph
 
 ## Instruction-Level Parallelism
+
+
+
+## Compilers
+
+GCC
+
+
+LLVM = clang + lllvm
+
+
+
 
 ## Links
 

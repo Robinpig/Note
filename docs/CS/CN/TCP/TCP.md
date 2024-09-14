@@ -616,7 +616,7 @@ Performing TCP Fast Open in connection 2:
 cat /proc/sys/net/ipv4/tcp_fastopen	#1
 ```
 
-[Netty TPO](/docs/CS/Java/Netty/TPO.md)
+[Netty TPO](/docs/CS/Framework/Netty/TPO.md)
 
 ### Attacks Involving TCP Connection Management
 

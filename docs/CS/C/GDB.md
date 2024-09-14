@@ -3,7 +3,7 @@
 GDB, the GNU Project debugger, allows you to see what is going on `inside' another program while it executes -- or what another program was doing at the moment it crashed.
 
 
-like LLDB in MacOS
+like LLDB clang in MacOS
 
 
 based on `ptrace`(Linux)
@@ -28,8 +28,18 @@ follow process when fork
 ```
 
 
-## gdbtui
+### gdbgui
 
+
+gdbgui
+```shell
+
+apt install python3-pip
+pip3 install gdbgui --upgrade
+```
+
+
+## gdbtui
 
 ```shell
 gdb -tui

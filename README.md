@@ -6,7 +6,6 @@
 
 [Computer Science](/docs/CS/CS.md)
 
-
 ## Mathematics
 
 [Mathematics](/docs/Mathematics/Mathematics.md)

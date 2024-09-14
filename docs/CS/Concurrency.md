@@ -138,6 +138,17 @@ Finally, though asynchronous disk I/O is now possible on most platforms, it has 
 For example, while one would simply like to use the select() interface to manage all outstanding I/Os, usually some combination of select() for networking and the AIO calls for disk I/O are required.
 
 
+## synchronization
+
+### Mutex
+| Language | Implementation         |
+| --- |------------------------|
+| C++ | std：mutex              |
+| Java | ReentrantLock          |
+| Python | thread.locking         |
+| C# | System.Threading.Mutex |
+| Rust | std::sync::Mutex       |
+
 
 
 ## Links

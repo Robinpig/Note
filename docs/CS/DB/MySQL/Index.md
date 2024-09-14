@@ -175,4 +175,6 @@ MySQL uses indexes for these operations:
 
 ## References
 
-[A Survey of B-Tree Locking Techniques](https://15721.courses.cs.cmu.edu/spring2019/papers/06-indexes/a16-graefe.pdf)
+1. [A Survey of B-Tree Locking Techniques](https://15721.courses.cs.cmu.edu/spring2019/papers/06-indexes/a16-graefe.pdf)
+2. [Mysql索引(究极无敌细节版) - Cuzzz - 博客园 (cnblogs.com)](https://www.cnblogs.com/cuzzz/p/16812054.html)
+

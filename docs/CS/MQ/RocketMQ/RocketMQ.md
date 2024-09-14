@@ -4,6 +4,12 @@ Apache RocketMQ is a distributed middleware service that adopts an asynchronous 
 The asynchronous communication model of Apache RocketMQ features simple system topology and weak upstream-downstream coupling.
 Apache RocketMQ is used in asynchronous decoupling and load shifting scenarios.
 
+
+build
+
+
+
+
 ### Domain Model
 
 <div style="text-align: center;">
@@ -141,6 +147,129 @@ RocketMQ架构上主要分为四部分，如上图所示：
   3. Store Service：提供方便简单的API接口处理消息存储到物理硬盘和查询功能。
   4. HA Service：高可用服务，提供Master Broker 和 Slave Broker之间的数据同步功能。
   5. Index Service：根据特定的Message key对投递到Broker的消息进行索引服务，以提供消息的快速查询。
+
+
+在RocketMQ4.5之前，它使用主从架构，每一个Master Broker都有一个自己的Slave Broker
+
+Broker启动的时候，会启动一个定时任务，定期的从Master Broker同步全量的数据。
+
+
+
+## Trace
+
+
+
+AsyncTraceDispatcher
+
+
+
+sendMessageBefore
+
+```java
+public class SendMessageTraceHookImpl implements SendMessageHook {
+
+    private TraceDispatcher localDispatcher;
+
+    public SendMessageTraceHookImpl(TraceDispatcher localDispatcher) {
+        this.localDispatcher = localDispatcher;
+    }
+
+    @Override
+    public String hookName() {
+        return "SendMessageTraceHook";
+    }
+
+    @Override
+    public void sendMessageBefore(SendMessageContext context) {
+        //if it is message trace data,then it doesn't recorded
+        if (context == null || context.getMessage().getTopic().startsWith(((AsyncTraceDispatcher) localDispatcher).getTraceTopicName())) {
+            return;
+        }
+        //build the context content of TraceContext
+        TraceContext traceContext = new TraceContext();
+        traceContext.setTraceBeans(new ArrayList<>(1));
+        context.setMqTraceContext(traceContext);
+        traceContext.setTraceType(TraceType.Pub);
+        traceContext.setGroupName(NamespaceUtil.withoutNamespace(context.getProducerGroup()));
+        //build the data bean object of message trace
+        TraceBean traceBean = new TraceBean();
+        traceBean.setTopic(NamespaceUtil.withoutNamespace(context.getMessage().getTopic()));
+        traceBean.setTags(context.getMessage().getTags());
+        traceBean.setKeys(context.getMessage().getKeys());
+        traceBean.setStoreHost(context.getBrokerAddr());
+        traceBean.setBodyLength(context.getMessage().getBody().length);
+        traceBean.setMsgType(context.getMsgType());
+        traceContext.getTraceBeans().add(traceBean);
+    }
+}
+```
+
+
+
+
+
+sendMessageAfter
+
+```java
+    
+public class SendMessageTraceHookImpl implements SendMessageHook {
+
+    private TraceDispatcher localDispatcher;
+  
+  	@Override
+    public void sendMessageAfter(SendMessageContext context) {
+        //if it is message trace data,then it doesn't recorded
+        if (context == null || context.getMessage().getTopic().startsWith(((AsyncTraceDispatcher) localDispatcher).getTraceTopicName())
+            || context.getMqTraceContext() == null) {
+            return;
+        }
+        if (context.getSendResult() == null) {
+            return;
+        }
+
+        if (context.getSendResult().getRegionId() == null
+            || !context.getSendResult().isTraceOn()) {
+            // if switch is false,skip it
+            return;
+        }
+
+        TraceContext traceContext = (TraceContext) context.getMqTraceContext();
+        TraceBean traceBean = traceContext.getTraceBeans().get(0);
+        int costTime = (int) ((System.currentTimeMillis() - traceContext.getTimeStamp()) / traceContext.getTraceBeans().size());
+        traceContext.setCostTime(costTime);
+        if (context.getSendResult().getSendStatus().equals(SendStatus.SEND_OK)) {
+            traceContext.setSuccess(true);
+        } else {
+            traceContext.setSuccess(false);
+        }
+        traceContext.setRegionId(context.getSendResult().getRegionId());
+        traceBean.setMsgId(context.getSendResult().getMsgId());
+        traceBean.setOffsetMsgId(context.getSendResult().getOffsetMsgId());
+        traceBean.setStoreTime(traceContext.getTimeStamp() + costTime / 2);
+        localDispatcher.append(traceContext);
+    }
+}
+```
+
+## Features
+
+### 消息过滤
+
+tag
+
+### 事务消息
+
+
+
+### 延时消息
+
+延时队列
+
+
+
+### 死信队列
+
+
 
 ## Links
 

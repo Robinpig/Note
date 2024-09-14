@@ -3,7 +3,7 @@
 
 Class file format：
 
-- magic
+- magic number
 - minor_version & major_version
 - constant_pool_count & constant_pool
 - access_flags

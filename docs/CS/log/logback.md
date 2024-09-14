@@ -122,7 +122,7 @@ class Worker extends Thread {
 ## Links
 
 - [Log](/docs/CS/log/Log.md)
-- [Spring Boot](/docs/CS/Java/Spring_Boot/Spring_Boot.md)
+- [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
 - [Log4j](/docs/CS/Java/Log4j.md)
 
 

@@ -1,29 +1,57 @@
 ## Introduction
-A _safepoint_ is a point in program execution where the state of the program is known and can be examined. Things like registers, memory, etc.
-For the JVM to completely pause and run tasks (such as GC), **all threads** must come to a safepoint.
+A _safepoint_ is a point in program execution where the state of the program is known and can be examined. Things like registers, memory, etc.
+For the JVM to completely pause and run tasks (such as GC), **all threads** must come to a safepoint.
 
-For example, to retrieve a stack trace on a thread we must come to a safepoint. This also means tools like `jstack` require that all threads of the program be able to reach a safepoint.
+For example, to retrieve a stack trace on a thread we must come to a safepoint. 
+This also means tools like `jstack` require that all threads of the program be able to reach a safepoint.
 
-> A point during program execution at which all GC roots are known and all heap object contents are consistent. From a global point of view, all threads must block at a safepoint before the GC can run. (As a special case, threads running JNI code can continue to run, because they use only handles. During a safepoint they must block instead of loading the contents of the handle.) From a local point of view, a safepoint is a distinguished point in a block of code where the executing thread may block for the GC. Most call sites qualify as safepoints. There are strong invariants which hold true at every safepoint, which may be disregarded at non-safepoints. Both compiled Java code and C/C++ code be optimized between safepoints, but less so across safepoints. The JIT compiler emits a GC map at each safepoint. C/C++ code in the VM uses stylized macro-based conventions (e.g., TRAPS) to mark potential safepoints.
+> A point during program execution at which all GC roots are known and all heap object contents are consistent. 
+> From a global point of view, all threads must block at a safepoint before the GC can run. 
+> (As a special case, threads running JNI code can continue to run, because they use only handles. During a safepoint they must block instead of loading the contents of the handle.) 
+> From a local point of view, a safepoint is a distinguished point in a block of code where the executing thread may block for the GC. Most call sites qualify as safepoints. 
+> There are strong invariants which hold true at every safepoint, which may be disregarded at non-safepoints.
+> Both compiled Java code and C/C++ code be optimized between safepoints, but less so across safepoints. 
+> The JIT compiler emits a GC map at each safepoint. C/C++ code in the VM uses stylized macro-based conventions (e.g., TRAPS) to mark potential safepoints.
 
 
-While GC is one of the most common safepoint operations, there are many VM operations[2](https://blanco.io/blog/jvm-safepoint-pauses/#fn:2) that are run while threads are at safepoints. Some may be invoked externally by connecting to the HotSpot JVM (i.e. `jstack`, `jcmd`) while others are internal to the JVM operation (monitor deflation, code deoptimization). A list of common operations is below.
+While GC is one of the most common safepoint operations, there are many VM operations[2](https://blanco.io/blog/jvm-safepoint-pauses/#fn:2) that are run while threads are at safepoints. 
+Some may be invoked externally by connecting to the HotSpot JVM (i.e. `jstack`, `jcmd`) while others are internal to the JVM operation (monitor deflation, code deoptimization). 
+A list of common operations is below.
 
 -   User Invoked:
     -   Deadlock detection
     -   JVMTI
     -   Thread Dumps
--   Run at regular intervals (see `-XX:GuaranteedSafepointInterval`[3](https://blanco.io/blog/jvm-safepoint-pauses/#fn:opt_ref))
+-   Run at regular intervals 可以配置`-XX:GuaranteedSafepointInterval=0`关闭
     -   Monitor Deflation
     -   Inline Cache Cleaning
     -   Invocation Counter Delay
     -   Compiled Code Marking
 -   Other:
-    -   Revoking [Biased Locks](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
+    -   Revoking [Biased Locks](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
     -   Compiled method Deoptimization
     -   GC
 
-All these operations force the JVM to come to a safepoint in order to run some kind of VM operation. Now we can decompose a safepoint operation times into two categories
+All these operations force the JVM to come to a safepoint in order to run some kind of VM operation.
+Now we can decompose a safepoint operation times into two categories
+
+
+除了执行 JNI 本地代码外，Java 线程还有其他几种状态：解释执行字节码、执行即时编译器生成的机器码和线程阻塞。阻塞的线程由于处于 Java 虚拟机线程调度器的掌控之下，因此属于安全点。
+其他几种状态则是运行状态，需要虚拟机保证在可预见的时间内进入安全点。否则，垃圾回收线程可能长期处于等待所有线程进入安全点的状态，从而变相地提高了垃圾回收的暂停时间。
+对于解释执行来说，字节码与字节码之间皆可作为安全点。Java 虚拟机采取的做法是，当有安全点请求时，执行一条字节码便进行一次安全点检测。
+执行即时编译器生成的机器码则比较复杂。由于这些代码直接运行在底层硬件之上，不受Java 虚拟机掌控，因此在生成机器码时，即时编译器需要插入安全点检测，以避免机器码长时间没有安全点检测的情况。
+HotSpot 虚拟机的做法便是在生成代码的方法出口以及非计数循环的循环回边（back-edge）处插入安全点检测
+
+那么为什么不在每一条机器码或者每一个机器码基本块处插入安全点检测呢？原因主要有两
+个。
+1. 安全点检测本身也有一定的开销。不过 HotSpot 虚拟机已经将机器码中安全点检测简化为一个内存访问操作。
+   在有安全点请求的情况下，Java 虚拟机会将安全点检测访问的内存所在的页设置为不可读，并且定义一个 segfault 处理器，来截获因访问该不可读内存而触发 segfault 的线程，并将它们挂起
+2. 即时编译器生成的机器码打乱了原本栈桢上的对象分布状况。在进入安全点时，机器
+码还需提供一些额外的信息，来表明哪些寄存器，或者当前栈帧上的哪些内存空间存放着指向对象的引用，以便垃圾回收器能够枚举 GC Roots
+
+由于这些信息需要不少空间来存储，因此即时编译器会尽量避免过多的安全点检测。
+不过，不同的即时编译器插入安全点检测的位置也可能不同。以 Graal 为例，除了上述位置外，它还会在计数循环的循环回边处插入安全点检测。
+其他的虚拟机也可能选取方法入口而非方法出口来插入安全点检测。
 
 **Only VM thread may execute a safepoint.**
 
@@ -41,7 +69,7 @@ So, if applications are not responding, it may be because
 
 The issue is that we need to figure out exactly what is triggering the pause in the first place if anything, and then investigate which part of the pause is taking a long time; the time to get to the safepoint (TTSP), or the time spent performing the VM operation.
 
-To do that more logging is required. The flags that need to be added to the JVM are `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1`. Adding these two arguments will print to stdout or the configured log file every time a safepoint operation occurs.
+To do that more logging is required. The flags that need to be added to the JVM are `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1`. Adding these two arguments will print to stdout or the configured log file every time a safepoint operation occurs.
 
 
 

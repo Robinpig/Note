@@ -260,6 +260,24 @@ A MAC provides message integrity and message authentication using a combination 
 
 A digital signature uses a pair of private–public keys.
 
+
+
+### 故障演练
+
+故障模拟
+
+故障主要分三类
+
+- **中间件服务故障**，如模拟hsf调用方异常，tddl调用异常等。
+- **机器故障**，如网络延迟，网络丢包等。
+- **第三方故障**，如mysql响应延迟等。
+
+故障演练的范围可以细化到应用，机房，甚至某个具体虚拟机。
+
+
+
+参考alibaba Monkeyking
+
 ## Theory of Computation
 
 

@@ -12,7 +12,7 @@ In a Pulsar cluster:
 - One or more brokers handles and load balances incoming messages from producers, dispatches messages to consumers, communicates with the Pulsar configuration store to handle various coordination tasks,
   stores messages in BookKeeper instances (aka bookies), relies on a cluster-specific ZooKeeper cluster for certain tasks, and more.
 - [BookKeeper](/docs/CS/BooKeeper/BooKeeper.md) cluster consisting of one or more bookies handles persistent storage of messages.
-- [ZooKeeper](/docs/CS/Java/ZooKeeper/ZooKeeper.md) cluster specific to that cluster handles coordination tasks between Pulsar clusters.
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) cluster specific to that cluster handles coordination tasks between Pulsar clusters.
 
 The diagram below illustrates a Pulsar cluster:
 
@@ -231,7 +231,7 @@ The Pulsar metadata store can be deployed on a separate ZooKeeper cluster or dep
 You can use one ZooKeeper cluster for both Pulsar metadata store and BookKeeper metadata store.
 If you want to deploy Pulsar brokers connected to an existing BookKeeper cluster, you need to deploy separate ZooKeeper clusters for Pulsar metadata store and BookKeeper metadata store respectively.
 
-> Pulsar also supports more metadata backend services, including [etcd](/docs/CS/Distributed/etcd.md) and [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) (for standalone Pulsar only).
+> Pulsar also supports more metadata backend services, including [etcd](/docs/CS/Framework/etcd/etcd.md) and [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) (for standalone Pulsar only).
 
 In a Pulsar instance:
 

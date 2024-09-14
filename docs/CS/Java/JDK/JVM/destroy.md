@@ -148,7 +148,7 @@ Last thread running calls `java.lang.Shutdown.shutdown()`
 
 Shutdown hooks can be used for service or application cleanup, such as deleting temporary files or cleaning up resources that are not automatically cleaned up by the OS.
 
-Because shutdown hooks all run concurrently, closing the log file could cause trouble for other shutdown hooks who want to use the logger. To avoid this problem, shutdown hooks should not rely on services that can be shut down by the application or other shutdown hooks. One way to accomplish this is to use a single shutdown hook for all services, rather than one for each service, and have it call a series of shutdown actions. For example [DubboShutdownHook](/docs/CS/Java/Dubbo/Start.md?id=shutdown-hooks)
+Because shutdown hooks all run concurrently, closing the log file could cause trouble for other shutdown hooks who want to use the logger. To avoid this problem, shutdown hooks should not rely on services that can be shut down by the application or other shutdown hooks. One way to accomplish this is to use a single shutdown hook for all services, rather than one for each service, and have it call a series of shutdown actions. For example [DubboShutdownHook](/docs/CS/Framework/Dubbo/Start.md?id=shutdown-hooks)
 
 ## Links
 

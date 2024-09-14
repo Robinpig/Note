@@ -43,6 +43,13 @@ When this is not possible, for example because of latency concerns due to very s
 
 ## Replication works
 
+同步分为三种情况：
+
+第一次主从库全量复制；
+主从正常运行期间的同步；
+主从库间网络断开重连同步。
+
+
 Every Redis master has a replication ID: it is a large pseudo random string that marks a given story of the dataset.
 Each master also takes an offset that increments for every byte of replication stream that it is produced to be sent to replicas, to update the state of the replicas with the new changes modifying the dataset.
 The replication offset is incremented even if no replica is actually connected, so basically every given pair of:
@@ -250,6 +257,66 @@ void syncWithMaster(connection *conn) {
 
 ## PSYNC
 
+![](https://mmbiz.qpic.cn/mmbiz_png/FbXJ7UCc6O1zU7aax8Hldic4B0PNZTsqhNvt5GshSvzh4e0y6YHtom4h83npL4XXZGicaJicicSKMbIT5KxybRjuXw/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+
+### fullsync
+主从库第一次复制过程大体可以分为 3 个阶段：连接建立阶段（即准备阶段）、主库同步数据到从库阶段、发送同步期间新写命令到从库阶段
+
+建立连接
+该阶段的主要作用是在主从节点之间建立连接，为数据全量同步做好准备。从库会和主库建立连接，从库执行 replicaof 并发送 psync 命令并告诉主库即将进行同步，主库确认回复后会用 FULLRESYNC 响应命令带上两个参数：主库 runID 和主库目前的复制进度 offset，返回给从库，主从库间就开始同步了
+
+master 执行 bgsave命令生成 RDB 文件，并将文件发送给从库，同时主库为每一个 slave 开辟一块 replication buffer 缓冲区记录从生成 RDB 文件开始收到的所有写命令。
+
+从库收到 RDB 文件后保存到磁盘，并清空当前数据库的数据，再加载 RDB 文件数据到内存中
+
+
+从节点加载 RDB 完成后，主节点将 replication buffer 缓冲区的数据发送到从节点，Slave 接收并执行，从节点同步至主节点相同的状态。
+
+
+replication buffer是一个在 master 端上创建的缓冲区，存放的数据是下面三个时间内所有的 master 数据写操作。
+
+1. master 执行 bgsave 产生 RDB 的期间的写操作；
+2. master 发送 rdb 到 slave 网络传输期间的写操作；
+3. slave load rdb 文件把数据恢复到内存的期间的写操作。
+
+replication buffer 由 client-output-buffer-limit slave 设置，当这个值太小会导致主从复制连接断开
+1）当 master-slave 复制连接断开，master 会释放连接相关的数据。replication buffer 中的数据也就丢失了，此时主从之间重新开始复制过程。
+
+2）还有个更严重的问题，主从复制连接断开，导致主从上出现重新执行 bgsave 和 rdb 重传操作无限循环。
+
+当主节点数据量较大，或者主从节点之间网络延迟较大时，可能导致该缓冲区的大小超过了限制，此时主节点会断开与从节点之间的连接；
+
+这种情况可能引起全量复制 -> replication buffer 溢出导致连接中断 -> 重连 -> 全量复制 -> replication buffer 缓冲区溢出导致连接中断……的循环。
+推荐把 replication buffer 的 hard/soft limit 设置成 512M
+
+
+
+### 增量复制
+当主从库完成了全量复制，它们之间就会一直维护一个网络连接，主库会通过这个连接将后续陆续收到的命令操作再同步给从库，这个过程也称为基于长连接的命令传播，使用长连接的目的就是避免频繁建立连接导致的开销。
+
+在命令传播阶段，除了发送写命令，主从节点还维持着心跳机制：PING 和 REPLCONF ACK
+
+
+断开重连增量复制的实现奥秘就是 repl_backlog_buffer 缓冲区，不管在什么时候 master 都会将写指令操作记录在 repl_backlog_buffer 中，因为内存有限， repl_backlog_buffer 是一个定长的环形数组，如果数组内容满了，就会从头开始覆盖前面的内容。
+
+master 使用 master_repl_offset记录自己写到的位置偏移量，slave 则使用 slave_repl_offset记录已经读取到的偏移量
+master 收到写操作，偏移量则会增加。从库持续执行同步的写指令后，在 repl_backlog_buffer 的已复制的偏移量 slave_repl_offset 也在不断增加。
+
+正常情况下，这两个偏移量基本相等。在网络断连阶段，主库可能会收到新的写操作命令，所以 master_repl_offset会大于 slave_repl_offset
+
+当主从断开重连后，slave 会先发送 psync 命令给 master，同时将自己的 runID，slave_repl_offset发送给 master。
+
+master 只需要把 master_repl_offset与 slave_repl_offset之间的命令同步给从库即可。
+
+
+
+replication buffer 和 repl_backlog
+
+replication buffer 对应于每个 slave，通过 config set client-output-buffer-limit slave设置。
+repl_backlog_buffer是一个环形缓冲区，整个 master 进程中只会存在一个，所有的 slave 公用。repl_backlog 的大小通过 repl-backlog-size 参数设置，默认大小是 1M，其大小可以根据每秒产生的命令、（master 执行 rdb bgsave） +（ master 发送 rdb 到 slave） + （slave load rdb 文件）时间之和来估算积压缓冲区的大小，repl-backlog-size 值不小于这两者的乘积。
+总的来说，replication buffer 是主从库在进行全量复制时，主库上用于和从库连接的客户端的 buffer，而 repl_backlog_buffer 是为了支持从库增量复制，主库上用于持续保存写操作的一块专用 buffer。
+
+repl_backlog_buffer是一块专用 buffer，在 Redis 服务器启动后，开始一直接收写操作命令，这是所有从库共享的。主库和从库会各自记录自己的复制进度，所以，不同的从库在进行恢复时，会把自己的复制进度（slave_repl_offset）发给主库，主库就可以和它独立同步。
 ### master
 
 #### masterTryPartialResynchronization
@@ -699,3 +766,4 @@ replica-ignore-maxmemory no
 ## References
 
 1. [Redis Replication](https://redis.io/topics/replication#partial-resynchronizations-after-restarts-and-failovers)
+2. [Top Redis Headaches for Devops – Replication Timeouts](https://redis.io/blog/top-redis-headaches-for-devops-replication-timeouts/)

@@ -282,6 +282,12 @@ When should I use a dead-letter queue?
 
 Most message queues provide best-effort ordering which ensures that messages are generally delivered in the same order as they're sent, and that a message is delivered at least once.
 
+
+
+### Transaction Message
+
+
+
 ### Poison-pill Messages
 
 Poison pills are special messages that can be received, but not processed.
@@ -367,7 +373,7 @@ Based on no message losing
 - Redis is always idempotent.
 - DB primary key is unique.
 - update wehn exist, insert when not exist.
-- every request has own id, check if has consumed(a set).
+- every request has own message id, check if has consumed(a set).
 
 ### message ordering
 
@@ -427,7 +433,6 @@ Kafka partition -> segment -> .log, .index, .timeindex
 RocketMQ all topics using single commitlog and multiple index
 
 
-### Comparison
 
 
 naming Service
@@ -446,3 +451,4 @@ naming Service
 ## References
 
 1. [Kafka vs. Apache RocketMQ™- Multiple Topic Stress Test Results](https://www.alibabacloud.com/blog/kafka-vs-rocketmq--multiple-topic-stress-test-results_69781)
+2. [OpenMessaging](https://openmessaging.cloud/design/2018/03/28/openmessaging-domain-architecture-v0.3/)

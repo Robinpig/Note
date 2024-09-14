@@ -36,6 +36,75 @@ Otherwise:
 
 <!-- tabs:end -->
 
+
+
+tap
+
+当tap了多个版本, riscv/riscv和riscv-software-src/riscv时会报错
+
+>  homebrew Formulae found in multiple taps:
+
+此时需要untap任意一个之后方可
+
+
+
+### 多版本
+
+参考:
+
+> https://idayer.com/homebrew-x86-arm/
+
+
+
+x86和ARM版本
+
+|          | x86                                                          | ARM                                                          |
+| -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 命令路径 | /usr/local/bin/brew                                          | /opt/homebrew/bin/brew                                       |
+| 安装脚本 | arch -x86_64 /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)" | /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)" |
+|          | 共存方案                                                     |                                                              |
+
+通过arch进入x86兼容模式
+
+切换脚本
+
+```shell
+cat << 'EOF' >> ~/.zshrc
+if [ "$(arch)" = "arm64" ]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+else
+    eval "$(/usr/local/bin/brew shellenv)"
+fi
+EOF
+
+# 生效
+source ~/.zshrc
+```
+
+执行如下命令进入
+
+```shell
+arch -x86_64 zsh
+```
+
+
+
+使用别名来调用不同的brew
+
+别名脚本
+
+```shell
+cat << 'EOF' >> ~/.zshrc
+alias abrew='arch -arm64 /opt/homebrew/bin/brew'
+alias ibrew='arch -x86_64 /usr/local/bin/brew'
+EOF
+
+# 生效
+source ~/.zshrc
+```
+
+
+
 ### ohmyzsh
 
 ```shell
