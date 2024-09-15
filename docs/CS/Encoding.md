@@ -3,6 +3,7 @@
 There are several modes of dataflow, illustrating different scenarios in which data encodings are important:
 
 - Databases, where the process writing to the database encodes the data and the process reading from the database decodes it
+
 - RPC and REST APIs, where the client encodes a request, the server decodes the request and encodes a response, and the client finally decodes the response
 - Asynchronous message passing (using message brokers or actors), where nodes communicate by sending each other messages that are encoded by the sender and decoded by the recipient
 
@@ -44,6 +45,7 @@ However, they also have a number of deep problems:
 - Efficiency (CPU time taken to encode or decode, and the size of the encoded structure) is also often an afterthought. 
   For example, Java’s built-in serialization is notorious for its bad performance and bloated encoding.
   
+
 For these reasons it’s generally a bad idea to use your language’s built-in encoding for anything other than very transient purposes.
 
 ### Textual Formats

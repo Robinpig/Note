@@ -64,3 +64,4 @@ x86处理器的INTR和NMI接受外部中断请求信号 INTR接受可屏蔽中�
 
 ## Links
 
+- [Linux Interrupt](/docs/CS/OS/Linux/Interrupt.md)
