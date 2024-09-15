@@ -97,9 +97,20 @@ sudo apt-mark hold kubelet kubeadm kubectl
 
 ### Installing a container runtime
 
+<!-- tabs:start -->
+
+Ubuntu
 
 
+```
+
+```
+
+
+<!-- tabs:end -->
 ## Architecture
+
+下图是 K8S 集群的核心组件，包括数据库 etcd，调度器 scheduler，集群入口 API Server，控制器 Controller，服务代理 kube-proxy 以及直接管理具体业务容 器的 kubelet。这些组件逻辑上可以被分为三个部分:核心组件 etcd 数据库，对 etcd 进行直接操作的入口组件 API Server，以及其他组件。这里的“其他组件”之所以 可以被划分为一类，是因为它们都可以被看做是集群的控制器。
 
 <div style="text-align: center;">
 
