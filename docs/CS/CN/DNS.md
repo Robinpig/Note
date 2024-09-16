@@ -3,6 +3,17 @@
 DNS is a distributed client/server networked database that is used by TCP/IP applications to map between host names and IP addresses (and vice versa), 
 to provide electronic mail routing information, service naming, and other capabilities.
 
+在绝大多数情况下，DNS 都是使用 UDP 协议进行通信的，DNS 协议在设计之初也推荐我们在进行域名解析时首先使用 UDP
+
+实际上，DNS 不仅使用了 UDP 协议，也使用了 TCP 协议
+
+DNS 查询的类型不止包含 A 记录、CNAME 记录等常见查询，还包含 AXFR 类型的特殊查询，这种特殊查询主要用于 [DNS 区域传输](https://en.wikipedia.org/wiki/DNS_zone_transfer)，它的作用就是在多个命名服务器之间快速迁移记录，由于查询返回的响应比较大，所以会使用 TCP 协议来传输数据包
+
+1. DNS 在设计之初就在区域传输中引入了 TCP 协议，在查询中使用 UDP 协议；
+2. 当 DNS 超过了 512 字节的限制，我们第一次在 DNS 协议中明确了『当 DNS 查询被截断时，应该使用 TCP 协议进行重试』这一规范；
+3. 随后引入的 EDNS 机制允许我们使用 UDP 最多传输 4096 字节的数据，但是由于 MTU 的限制导致的数据分片以及丢失，使得这一特性不够可靠；
+4. 在最近的几年，我们重新规定了 DNS 应该同时支持 UDP 和 TCP 协议，TCP 协议也不再只是重试时的选择
+
 The DNS is a distributed database implemented in a hierarchy of DNS servers, and an application-layer protocol that allows hosts to query the distributed database. 
 The DNS servers are often UNIX machines running the Berkeley Internet Name Domain (BIND) software [BIND 2016]. 
 The DNS protocol runs over UDP and uses port 53.
