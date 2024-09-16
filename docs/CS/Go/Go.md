@@ -101,7 +101,7 @@ Debug需要`go install github.com/go-delve/delve/cmd/dlv@latest`
 
 ## Basic
 
-### Type
+### Basic Type
 任何一门语言都有对应的基础类型， Go 语言也有自己丰富的基础类型，常用的有：整型、浮点数、布尔型和字符串
 
 
@@ -115,10 +115,11 @@ Debug需要`go install github.com/go-delve/delve/cmd/dlv@latest`
 
 浮点数
 浮点数就代表现实中的小数。Go 语言提供了两种精度的浮点数，分别是 float32 和 float64。项目中最常用的是 float64，因为它的精度高，浮点计算的结果相比 float32 误差会更小
+
 布尔型
 一个布尔型的值只有两种：true 和 false Go 语言中的布尔型使用关键字 bool 定义
 
-#### strings
+### strings
 
 
 Go 语言中的字符串可以表示为任意的数据

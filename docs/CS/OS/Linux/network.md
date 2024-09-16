@@ -1,5 +1,9 @@
 ## Introduction
 
+
+
+
+
 ## init
 
 Create [ksoftirqd](/docs/CS/OS/Linux/Interrupt.md?id=init_softirq) for each cpu.
