@@ -28,7 +28,18 @@ Windows下使用Linux
 
 ## Kernel
 
+阅读
 
+执行 ctags -R 生成索引文件 tags
+
+
+ctrl + ] 进入函数定义
+g, ctrl + ] 进入函数定义 可选择
+ctrl + o 返回
+
+在线阅读
+
+[Missing Link Electronics' LXR for Linux, QEMU, U-Boot, and Busybox](https://lxr.missinglinkelectronics.com/)
 
 ### Build
 

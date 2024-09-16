@@ -30,14 +30,14 @@ int main(){
 ```
 
 
-
-
-
 ## epoll_create
 
-create struct eventpoll
+
+
+申请分配 `eventpoll` 所需的内存并初始化
 
 ```c
+// fs/eventpoll.c
 SYSCALL_DEFINE1(epoll_create1, int, flags)
 {
 	return do_epoll_create(flags);
@@ -45,10 +45,73 @@ SYSCALL_DEFINE1(epoll_create1, int, flags)
 
 static int do_epoll_create(int flags)
 {
+	struct eventpoll *ep = NULL;
 	ep_alloc(&ep);
 
 }
 ```
+
+
+
+
+```c
+// fs/eventpoll.c
+static int ep_alloc(struct eventpoll **pep)
+{
+    ep = kzalloc(sizeof(*ep), GFP_KERNEL);
+	...
+    
+	init_waitqueue_head(&ep->wq);
+	init_waitqueue_head(&ep->poll_wait);
+	INIT_LIST_HEAD(&ep->rdllist);
+	ep->rbr = RB_ROOT_CACHED;
+	ep->ovflist = EP_UNACTIVE_PTR;
+}
+```
+
+接下来，分配一个空闲的文件描述符 `fd` 和匿名文件 `file` 。注意，`eventpoll` 实例会保存一份匿名文件的引用，并通过调用 `fd_install` 将文件描述符和匿名文件关联起来。
+
+另外还需注意 `anon_inode_getfile` 调用时将 `eventpoll` 作为匿名文件的 `private_data` 保存了起来。后面就可以通过 `epoll` 实例的文件描述符快速的找到 `eventpoll` 对象。
+
+最后，将文件描述符 `fd` 作为 epoll 的句柄返回给调用者。**`epoll` 实例其实就是一个匿名文件**
+
+```c
+static int do_epoll_create(int flags)
+
+{
+// ...
+
+fd = get_unused_fd_flags(O_RDWR | (flags & O_CLOEXEC));
+
+if (fd < 0) {
+
+error = fd;
+
+goto out_free_ep;
+
+}
+
+file = anon_inode_getfile("[eventpoll]", &eventpoll_fops, ep,
+
+O_RDWR | (flags & O_CLOEXEC));
+
+if (IS_ERR(file)) {
+
+error = PTR_ERR(file);
+
+goto out_free_fd;
+
+}
+
+ep->file = file;
+
+fd_install(fd, file);
+
+return fd;
+
+}
+```
+
 
 ### eventpoll
 
@@ -82,26 +145,6 @@ struct eventpoll {
 };
 ```
 
-
-
-
-
-### ep_alloc
-
-```c
-// fs/eventpoll.c
-static int ep_alloc(struct eventpoll **pep)
-{
-    ep = kzalloc(sizeof(*ep), GFP_KERNEL);
-	...
-    
-	init_waitqueue_head(&ep->wq);
-	init_waitqueue_head(&ep->poll_wait);
-	INIT_LIST_HEAD(&ep->rdllist);
-	ep->rbr = RB_ROOT_CACHED;
-	ep->ovflist = EP_UNACTIVE_PTR;
-}
-```
 
 ## epoll_ctl
 
