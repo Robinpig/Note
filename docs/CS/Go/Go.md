@@ -7,6 +7,10 @@ Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的
 - Go是静态类型的语言，它的类型系统没有层级。因此用户不需要在定义类型之间的关系上花费时间，这样感觉起来比典型的面向对象语言更轻量级。
 - Go完全是垃圾回收型的语言，并为并发执行与通信提供了基本的支持
 
+代码规范
+>[Google style go](https://google.github.io/styleguide/go)
+>[Go Wiki: Go Code Review Comments - The Go Programming Language](https://go.dev/wiki/CodeReviewComments)
+
 ## 配置
 Go mod是package和其dependencies的集合 是构建 版本控制和管理的单元
  package是同一路径导入文件的集合 通常package名和目录名相同
