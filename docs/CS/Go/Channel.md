@@ -27,9 +27,6 @@ type hchan struct {
     recvq    waitq  // list of recv waiters
     sendq    waitq  // list of send waiters
 
-    // lock protects all fields in hchan, as well as several
-    // fields in sudogs blocked on this channel.
-    //
     // Do not change another G's status while holding this lock
     // (in particular, do not ready a G), as this can deadlock
     // with stack shrinking.
@@ -61,6 +58,8 @@ last  *sudog
 ```
 
 ## make
+
+
 
 在 Go 语言中，声明一个 channel 非常简单，使用内置的 make 函数即可，如下所示
 
@@ -633,6 +632,20 @@ select的case语句读channel不会阻塞，尽管channel中没有数据。这�
 通过range可以持续从channel中读出数据，好像在遍历一个数组一样，当channel中没有数据时会阻塞当前goroutine，与读channel时阻塞处理机制一样
 
 > 如果向此channel写数据的goroutine退出时，系统检测到这种情况后会panic，否则range将会永久阻塞
+
+
+
+
+
+## Issues
+
+etcd#6857
+
+etcd#5505
+
+etcd#11256
+
+ettcd#9956
 
 
 
