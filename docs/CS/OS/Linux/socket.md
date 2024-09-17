@@ -184,6 +184,7 @@ struct sockaddr_un {
 - proto_ops
 
 
+socket上等待队列
 ```c
 /* struct socket - general BSD socket */
 struct socket {

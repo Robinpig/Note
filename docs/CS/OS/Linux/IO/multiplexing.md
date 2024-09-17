@@ -1,3 +1,4 @@
+## Introduction
 
 select() allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become "ready" for some class of I/O operation (e.g., input possible). A file descriptor is considered ready if it is possible to perform a corresponding I/O operation (e.g., read(2), or a sufficiently small write(2)) without blocking.
 
@@ -5,7 +6,39 @@ poll() performs a similar task to select(2): it waits for one of a set of file d
 
 ## select
 
+
+select核心实现是位图 将socket的fd注册至读 写 异常位图, 通过select调用轮询socket中的事件 生成输出位图 若统一轮询完成后 通过copy_to_user复制到输入位图并覆盖
+
+检测到事件后 通过注册到socket等待队列的回调函数poll_wake唤醒进程 被唤醒的进程再次轮询所有位图
+
+
+
+位图通过整型数组模拟 数组长度16 每个数组元素8字节 一字节为8bit, 所以位图大小为 16*8*8 = 1024
+> 进程默认打开最大描述符1024 早期该整型数组已足够使用 不易变动 且数值越大 轮询效率越低
 ```c
+// include/uapi/linux/posix_types.h
+#undef __FD_SETSIZE
+#define __FD_SETSIZE	1024
+
+typedef struct {
+	unsigned long fds_bits[__FD_SETSIZE / (8 * sizeof(long))];
+} __kernel_fd_set;
+```
+位图操作
+
+```c
+void FD_CLR(int fd, fd_set *set);
+int  FD_ISSET(int fd, fd_set *set);
+void FD_SET(int fd, fd_set *set);
+void FD_ZERO(fd_set *set);
+```
+
+select函数
+> 每次调用都需要重新设置位图信息和超时
+
+```c
+int select(int nfds, fd_set *read_fds, fd_set *write_fds, fd_set *except_fds, struct timeval *timeout);
+
 SYSCALL_DEFINE5(select, int, n, fd_set __user *, inp, fd_set __user *, outp,
     fd_set __user *, exp, struct timeval __user *, tvp)
 {
@@ -22,12 +55,6 @@ SYSCALL_DEFINE5(select, int, n, fd_set __user *, inp, fd_set __user *, outp,
 `select`将监听的文件描述符分为三组，每一组监听不同的I/O操作。`readfds/writefds/exceptfds`分别表示可写、可读、异常事件的文件描述符集合，这三个参数可以用`NULL`来表示对应的事件不需要监听。对fd_set的操作可以利用如下几个函数完成
 
 
-```
-void FD_CLR(int fd, fd_set *set);
-int  FD_ISSET(int fd, fd_set *set);
-void FD_SET(int fd, fd_set *set);
-void FD_ZERO(fd_set *set);
-```
 
 `select`的调用会阻塞到有文件描述符可以进行IO操作或被信号打断或者超时才会返回。`timeout`参数用来指定超时时间，含义如下：
 
@@ -41,7 +68,7 @@ void FD_ZERO(fd_set *set);
 
 1. `pll_table`：该结构体中的函数指针`_qproc`指向`__pollwait`函数；
 2. `struct poll_table_entry[]`：存放不同设备的`poll_table_entry`，这些条目的增加是在驱动调用`poll_wait->__pollwait()`时进行初始化并完成添加的；
-```
+```c
 struct poll_wqueues {
     poll_table pt;
     struct poll_table_page *table;
@@ -106,13 +133,23 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 static int do_select(int n, fd_set_bits *fds, struct timespec64 *end_time)
 {
 
+	poll_initwait(&table);  // 初始化 poll_wqueue
+	wait = &table.pt;
+
+	if (end_time && !end_time->tv_sec && !end_time->tv_nsec) {
+		wait->_qproc = NULL;
+		timed_out = 1;
+	}
+
+	if (end_time && !timed_out)
+		slack = select_estimate_accuracy(end_time);
     //...
     for (;;) {
         unsigned long *rinp, *routp, *rexp, *inp, *outp, *exp;
 
         inp = fds->in; outp = fds->out; exp = fds->ex;
         rinp = fds->res_in; routp = fds->res_out; rexp = fds->res_ex;
-
+		// 判断fd
         for (i = 0; i < n; ++rinp, ++routp, ++rexp) {
             unsigned long in, out, ex, all_bits, bit = 1, j;
             unsigned long res_in = 0, res_out = 0, res_ex = 0;
@@ -132,6 +169,14 @@ static int do_select(int n, fd_set_bits *fds, struct timespec64 *end_time)
                 }
             }
         }
+	    wait->_qproc = NULL;
+		if (retval || timed_out || signal_pending(current))
+			break;
+
+		if (table.error) {
+			retval = table.error;
+			break;
+		}
 
         if (!poll_schedule_timeout(&table, TASK_INTERRUPTIBLE,
                        to, slack))
@@ -142,10 +187,92 @@ static int do_select(int n, fd_set_bits *fds, struct timespec64 *end_time)
 ```
 
 
+```c
+void poll_initwait(struct poll_wqueues *pwq)
+{
+	init_poll_funcptr(&pwq->pt, __pollwait);
+	pwq->polling_task = current;
+	pwq->triggered = 0;
+	pwq->error = 0;
+	pwq->table = NULL;
+	pwq->inline_index = 0;
+}
+EXPORT_SYMBOL(poll_initwait);
+```
+
+Add a new entry
+```c
+static void __pollwait(struct file *filp, wait_queue_head_t *wait_address,
+				poll_table *p)
+{
+	struct poll_wqueues *pwq = container_of(p, struct poll_wqueues, pt);
+	struct poll_table_entry *entry = poll_get_entry(pwq);
+	if (!entry)
+		return;
+	entry->filp = get_file(filp);
+	entry->wait_address = wait_address;
+	entry->key = p->_key;
+	init_waitqueue_func_entry(&entry->wait, pollwake);
+	entry->wait.private = pwq;
+	add_wait_queue(wait_address, &entry->wait);
+}
+```
+
+wake
+```c
+static int pollwake(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
+{
+	struct poll_table_entry *entry;
+
+	entry = container_of(wait, struct poll_table_entry, wait);
+	if (key && !(key_to_poll(key) & entry->key))
+		return 0;
+	return __pollwake(wait, mode, sync, key);
+}
+
+static int __pollwake(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
+{
+	struct poll_wqueues *pwq = wait->private;
+	DECLARE_WAITQUEUE(dummy_wait, pwq->polling_task);
+
+	/*
+	 * Although this function is called under waitqueue lock, LOCK
+	 * doesn't imply write barrier and the users expect write
+	 * barrier semantics on wakeup functions.  The following
+	 * smp_wmb() is equivalent to smp_wmb() in try_to_wake_up()
+	 * and is paired with smp_store_mb() in poll_schedule_timeout.
+	 */
+	smp_wmb();
+	pwq->triggered = 1;
+
+	/*
+	 * Perform the default wake up operation using a dummy
+	 * waitqueue.
+	 *
+	 * TODO: This is hacky but there currently is no interface to
+	 * pass in @sync.  @sync is scheduled to be removed and once
+	 * that happens, wake_up_process() can be used directly.
+	 */
+	return default_wake_function(&dummy_wait, mode, sync, key);
+}
+```
+
+
 ## poll
 
 `poll`函数与`select`不同，不需要为三种事件分别设置文件描述符集，而是构造了`pollfd`结构的数组，每个数组元素指定一个描述符`fd`以及对该描述符感兴趣的条件(events)。`poll`调用返回时，每个描述符`fd`上产生的事件均被保存在`revents`成员内。  
 和`select`类似，`timeout`参数用来指定超时时间(ms)
+
+pollfd 使用时间分离的方式 每次调用无需重新设置pollfd对象 且不会反悔潮湿时间 无需重新设置
+```c
+struct pollfd {
+	int fd;
+	short events;
+	short revents;
+};
+```
+
+
 ```c
 SYSCALL_DEFINE3(poll, struct pollfd __user *, ufds, unsigned int, nfds,
         int, timeout_msecs)
@@ -251,3 +378,12 @@ static int do_poll(struct poll_list *list, struct poll_wqueues *wait,
 
 [epoll](/docs/CS/OS/Linux/IO/epoll.md) 的实现原理看起来很复杂，其实很简单，注意两个回调函数的使用：数据到达 socket 的等待队列时，通过**回调函数 ep_poll_callback** 找到 eventpoll 对象中红黑树的 epitem 节点，并将其加入就绪列队 rdllist，然后通过**回调函数 default_wake_function** 唤醒用户进程 ，并将 rdllist 传递给用户进程，让用户进程准确读取就绪的 socket 的数据。这种回调机制能够定向准确的通知程序要处理的事件，而不需要每次都循环遍历检查数据是否到达以及数据该由哪个进程处理
 
+
+## Comparison
+
+|          | select    | poll      | epoll       |
+| -------- | --------- | --------- | ----------- |
+| 实现       | 轮询 拷贝全部事件 | 轮询 拷贝全部事件 | 回调通知 拷贝就绪事件 |
+| 最大连接     | 1024      | 理论上无      | 理论上无        |
+| 是否适合大连接数 | 否         | 否         | 是           |
+|          |           |           |             |
