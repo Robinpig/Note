@@ -101,6 +101,113 @@ goroutine创建时优先加入本地队列 可被其它P/M窃取
 
 ## main
 
+
+
+```asm
+// asm_amd64.s
+TEXT runtime·rt0_go(SB),NOSPLIT|NOFRAME|TOPFRAME,$0
+	// copy arguments forward on an even stack
+	MOVQ	DI, AX		// argc
+	MOVQ	SI, BX		// argv
+	SUBQ	$(5*8), SP		// 3args 2auto
+	ANDQ	$~15, SP
+	MOVQ	AX, 24(SP)
+	MOVQ	BX, 32(SP)
+
+	// create istack out of the given (operating system) stack.
+	// _cgo_init may update stackguard.
+	MOVQ	$runtime·g0(SB), DI
+	LEAQ	(-64*1024)(SP), BX
+	MOVQ	BX, g_stackguard0(DI)
+	MOVQ	BX, g_stackguard1(DI)
+	MOVQ	BX, (g_stack+stack_lo)(DI)
+	MOVQ	SP, (g_stack+stack_hi)(DI)
+
+	// find out information about the processor we're on
+	MOVL	$0, AX
+	CPUID
+	CMPL	AX, $0
+	JE	nocpuinfo
+
+	CMPL	BX, $0x756E6547  // "Genu"
+	JNE	notintel
+	CMPL	DX, $0x49656E69  // "ineI"
+	JNE	notintel
+	CMPL	CX, $0x6C65746E  // "ntel"
+	JNE	notintel
+	MOVB	$1, runtime·isIntel(SB)
+
+	// update stackguard after _cgo_init
+	MOVQ	$runtime·g0(SB), CX
+	MOVQ	(g_stack+stack_lo)(CX), AX
+	ADDQ	$const_stackGuard, AX
+	MOVQ	AX, g_stackguard0(CX)
+	MOVQ	AX, g_stackguard1(CX)
+
+
+	LEAQ	runtime·m0+m_tls(SB), DI
+	CALL	runtime·settls(SB)
+
+	// store through it, to make sure it works
+	get_tls(BX)
+	MOVQ	$0x123, g(BX)
+	MOVQ	runtime·m0+m_tls(SB), AX
+	CMPQ	AX, $0x123
+	JEQ 2(PC)
+	CALL	runtime·abort(SB)
+ok:
+	// set the per-goroutine and per-mach "registers"
+	get_tls(BX)
+	LEAQ	runtime·g0(SB), CX
+	MOVQ	CX, g(BX)
+	LEAQ	runtime·m0(SB), AX
+
+	// save m->g0 = g0
+	MOVQ	CX, m_g0(AX)
+	// save m0 to g0->m
+	MOVQ	AX, g_m(CX)
+
+	CLD				// convention is D is always left cleared
+
+	// Check GOAMD64 requirements
+	// We need to do this after setting up TLS, so that
+	// we can report an error if there is a failure. See issue 49586.
+
+	CALL	runtime·check(SB)
+
+	MOVL	24(SP), AX		// copy argc
+	MOVL	AX, 0(SP)
+	MOVQ	32(SP), AX		// copy argv
+	MOVQ	AX, 8(SP)
+	CALL	runtime·args(SB)
+	CALL	runtime·osinit(SB)
+	CALL	runtime·schedinit(SB)
+
+	// create a new goroutine to start program
+	MOVQ	$runtime·mainPC(SB), AX		// entry
+	PUSHQ	AX
+	CALL	runtime·newproc(SB)
+	POPQ	AX
+
+	// start this M
+	CALL	runtime·mstart(SB)
+
+	CALL	runtime·abort(SB)	// mstart should never return
+	RET
+	
+// mainPC is a function value for runtime.main, to be passed to newproc.
+// The reference to runtime.main is made via ABIInternal, since the
+// actual function (not the ABI0 wrapper) is needed by newproc.
+DATA	runtime·mainPC+0(SB)/8,$runtime·main<ABIInternal>(SB)
+GLOBL	runtime·mainPC(SB),RODATA,$8
+```
+
+
+
+
+
+
+
 The main goroutine
 
 

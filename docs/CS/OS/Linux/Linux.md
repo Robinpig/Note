@@ -209,6 +209,11 @@ cat /proc/version
 usr/src/kernels/
 ```
 
+内核源码根目录下的Makefile Kconfig Kbuild是与内核配置、编译相关的文件
+
+
+
+- 
 - [Init](/docs/CS/OS/Linux/init.md)
 
 

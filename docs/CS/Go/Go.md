@@ -64,7 +64,7 @@ Traits
 
 
 
-[compile](/docs/CS/Go/Basic/compile.md)
+[compile](/docs/CS/Go/compile.md)
 
 
 goroutine
@@ -163,14 +163,15 @@ concatstrings函数会先对传入的切片参数进行遍历，过滤空字符�
 在 Go 语言中，指针对应的是变量在内存中的存储位置，也就说指针的值就是变量的内存地址。通过 & 可以获取一个变量的地址，也就是指针。
 常量
 
-
 常量的定义和变量类似，只不过它的关键字是 const。
 在 Go 语言中，只允许布尔型、字符串、数字类型这些基础类型作为常量
 iota
 iota 是一个常量生成器，它可以用来初始化相似规则的常量，避免重复的初始化
 iota 的初始值是 0，它的能力就是在每一个有常量声明的行后面 +1
 
+### Reference Type
 
+引用类型(reference type)特指slice、map、channel这三种预定义类型
 
 类型转换
 
