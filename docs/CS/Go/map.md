@@ -2,6 +2,37 @@
 
 A map is just a hash table. The data is arranged into an array of buckets. Each bucket contains up to 8 key/elem pairs. The low-order bits of the hash are used to select a bucket. Each bucket contains a few high-order bits of each hash to distinguish the entries within a single bucket.
 
+在 Go 语言中，map 是一个无序的 K-V 键值对集合，结构为 map[K]V。其中 K 对应 Key，V 对应 Value。map 中所有的 Key 必须具有相同的类型，Value 也同样，但 Key 和 Value 的类型可以不同。此外，Key 的类型必须支持 == 比较运算符，这样才可以判断它是否存在，并保证 Key 的唯一。
+map 的操作和切片、数组差不多，都是通过 [] 操作符，只不过数组切片的 [] 中是索引，而 map 的 [] 中是 Key，
+```go
+dict := make(map[string][]int)
+dict2 := map[string][]int{}
+```
+
+
+Go 语言的 map 可以获取不存在的 K-V 键值对，如果 Key 不存在，返回的 Value 是该类型的零值，比如 int 的零值就是 0。所以很多时候，我们需要先判断 map 中的 Key 是否存在。
+map 的 [] 操作符可以返回两个值：
+1. 第一个值是对应的 Value；
+2. 第二个值标记该 Key 是否存在，如果存在，它的值为 true
+```go
+nameAgeMap:=make(map[string]int)
+nameAgeMap[”飞雪无情“] = 20
+
+age,ok:=nameAgeMap[”飞雪无情1“]
+if ok {
+    fmt.Println(age)
+}    
+```
+map 的遍历是无序的，也就是说你每次遍历，键值对的顺序可能会不一样。如果想按顺序遍历，可以先获取所有的 Key，并对 Key 排序，然后根据排序好的 Key 获取对应的 Value
+和数组切片不一样，map 是没有容量的，它只有长度，也就是 map 的大小（键值对的个数）。要获取 map 的大小，使用内置的 len 函数即可
+
+
+> After long discussion it was decided that the typical use of maps did not require safe access from multiple goroutines, and in those cases where it did, the map was probably part of some larger data structure or computation that was already synchronized. Therefore requiring that all map operations grab a mutex would slow down most programs and add safety to few. This was not an easy decision, however, since it means uncontrolled map access can crash the program.
+
+Go语言选择将key与value分开存储而不是以key/value/key/value的形式存储，是为了在字节对齐时压缩空间。
+在进行hash[key]的map访问操作时，会首先找到桶的位置
+找到桶的位置后遍历tophash数组，如图8-3所示，如果在数组中找到了相同的hash，那么可以接着通过指针的寻址操作找到对应的key与value。
+
 
 
 If more than 8 keys hash to a bucket, we chain on extra buckets.
@@ -57,6 +88,17 @@ type mapextra struct {
 ```
 
 
+
+在Go语言中还有一个溢出桶的概念，在执行hash[key]=value赋值操作时，当指定桶中的数据超过8个时，并不会直接开辟一个新桶，而是将数据放置到溢出桶中，每个桶的最后都存储了overflow，即溢出桶的指针。在正常情况下，数据是很少会跑到溢出桶里面去的”
+
+同理，我们可以知道，在map执行查找操作时，如果key的hash在指定桶的tophash数组中不存在，那么需要遍历溢出桶中的数据。
+后面还会看到，如果一开始，初始化map的数量比较大，则map会提前创建好一些溢出桶存储在extra*mapextra字段”
+
+
+这样当出现溢出现象时，可以用提前创建好的桶而不用申请额外的内存空间。只有预分配的溢出桶使用完了，才会新建溢出桶。
+当发生以下两种情况之一时，map会进行重建：
+- map超过了负载因子大小。
+- 溢出桶的数量过多
 
 
 

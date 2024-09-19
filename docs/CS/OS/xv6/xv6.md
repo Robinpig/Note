@@ -4,12 +4,19 @@ xv6 是 MIT 开发的一个教学用的完整的类 Unix 操作系统，并且�
 
 xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作系统的重新实现。xv6 在一定程度上遵守 v6 的结构和风格，但它是用 ANSI C 实现的，并且是基于 x86 多核处理器的。
 
+2019年移植到RISC-V上后设置了6.S081课程
 
 
 特点
 
 - 只支持多进程 不支持多线程
-
+- 不支持内存替换
+- 不支持信号系统
+- 不支持内存映射mmap
+- 只读用户页
+- 系统调用规范不完全符合POSIX标准
+- 不支持动态链接
+- 内核态无法动态内存分配
 
 
 ## Build
@@ -157,6 +164,47 @@ brew install riscv64-elf-gdb
 
 
 <!-- tabs:end -->
+
+## 源码导读
+
+启动
+entry.S start.c main.c
+
+Qemu设置0x8000_0000 运行entry.S的 _entry函数
+调用start函数
+初始化机器态特权寄存器
+启用时钟中断
+cpu id放入tp寄存器
+
+
+调用main函数
+调用schedule函数 调度初始进程initcode
+执行init程序
+
+
+init进程
+启动sh进程
+循环调用wait回收僵尸进程
+
+
+
+
+entry和start运行在机器态 main运行在内核态
+
+
+
+
+Process
+
+
+proc.c sleeplock.c spinlock.c
+
+
+
+Memory 
+
+
+vm.c kalloc.c
 
 
 

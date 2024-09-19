@@ -170,7 +170,7 @@ The following scenario occurs when a TCP connection is established:
 3. The client must acknowledge the server’s SYN.
 
 The minimum number of packets required for this exchange is three; hence, this is called TCP’s *three-way handshake*.
-Its main purposes are to let each end of the connection know that a connection is starting and the special details that are carried as options, and to exchange the ISNs.
+**Its main purposes are to let each end of the connection know that a connection is starting and the special details that are carried as options, and to exchange the ISNs.**
 
 Since a SYN occupies one byte of the sequence number space, the acknowledgment number in the ACK of each SYN is the initial sequence number plus one.
 Similarly, the ACK of each FIN is the sequence number of the FIN plus one.
