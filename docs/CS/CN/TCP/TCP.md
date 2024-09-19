@@ -1100,7 +1100,6 @@ The sender’s actual (usable) window W is then written as the minimum of the re
 
 $$
 W = min(cwnd, awnd)
-
 $$
 
 With this relationship, the TCP sender is not permitted to have more than W unacknowledged packets or bytes outstanding in the network.
@@ -1186,7 +1185,6 @@ More precisely, cwnd is usually updated as follows for each received nonduplicat
 
 $$
 cwndt+1 = cwndt + SMSS * SMSS/cwndt
-
 $$
 
 We generally think of congestion avoidance growing the window linearly with respect to time, whereas slow start grows it exponentially with respect to time.
@@ -1305,7 +1303,6 @@ The specific window growth function, used by CUBIC to set cwnd, is as follows:
 
 $$
 W(t) = C(t-K)^3 + W_{max}
-
 $$
 
 CUBIC has been the default congestion control algorithm for Linux kernels since 2.6.18. 
@@ -1510,6 +1507,20 @@ TCP maintains seven timers for each connection. They are briefly described here,
 TCP has two timer functions: one is called every 200 ms (the fast timer) and the other every 500 ms (the slow timer).
 The delayed ACK timer is different from the other six: when the delayed ACK timer is set for a connection it means that a delayed ACK must be sent the next time the 200-ms timer expires (i.e., the elapsed time is between 0 and 200 ms).
 The other six timers are decremented every 500 ms, and only when the counter reaches 0 does the corresponding action take place.
+
+
+
+## Performance
+
+导致 TCP 性能问题的三个重要原因：
+- TCP 的拥塞控制在发生丢包时会进行退让，减少能够发送的数据段数量，但是丢包并不一定意味着网络拥塞，更多的可能是网络状况较差；
+- TCP 的三次握手带来了额外开销，这些开销不只包括需要传输更多的数据，还增加了首次传输数据的网络延迟；
+- TCP 的重传机制在数据包丢失时可能会重新传输已经成功接收的数据段，造成带宽的浪费；
+
+为了解决 TCP 的性能问题，目前业界有两种解决方案：
+1. 使用 UDP 构建性能更加优异、更灵活的传输协议，例如：QUIC19 等；
+2. 通过不同的手段优化 TCP 协议的性能，例如：选择性 ACK（Selective ACK, SACK），TCP 快开启（TCP Fast Open, TFO）；
+   由于 TCP 协议在操作系统内核中，不利于协议的更新，所以第一种方案目前发展的更好，HTTP/3 就使用了 QUIC 作为传输协议
 
 ## Links
 

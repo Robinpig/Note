@@ -61,19 +61,14 @@ type mapextra struct {
 
 
 ```go
-// A bucket for a Go map.
 type bmap struct {
-    // tophash generally contains the top byte of the hash value
-    // for each key in this bucket. If tophash[0] < minTopHash,
-    // tophash[0] is a bucket evacuation state instead.
     tophash [abi.SwissMapBucketCount]uint8
-    // Followed by bucketCnt keys and then bucketCnt elems.
-    // NOTE: packing all the keys together and then all the elems together makes the
-    // code a bit more complicated than alternating key/elem/key/elem/... but it allows
-    // us to eliminate padding which would be needed for, e.g., map[int64]int8.
-    // Followed by an overflow pointer.
 }
 ```
+
+`bmap` 结构体其实不止包含 `tophash` 字段，由于哈希表中可能存储不同类型的键值对并且 Go 语言也不支持泛型，所以键值对占据的内存空间大小只能在编译时进行推导，这些字段在运行时也都是通过计算内存地址的方式直接访问的，所以它的定义中就没有包含这些字段，但是我们能根据编译期间的 [cmd/compile/internal/gc.bmap](https://github.com/golang/go/blob/be64a19d99918c843f8555aad580221207ea35bc/src/cmd/compile/internal/gc/reflect.go#L82-L187) 函数对它的结构重建：
+
+
 
 make
 

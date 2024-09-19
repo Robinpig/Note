@@ -6,6 +6,12 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作�
 
 
 
+特点
+
+- 只支持多进程 不支持多线程
+
+
+
 ## Build
 
 
