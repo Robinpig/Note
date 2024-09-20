@@ -92,10 +92,17 @@ git clone https://github.com/golang/go.git
 cd go/src
 # wait for ALL TESTS PASSED
 ./all.bash
+
+# 修改源码后可使用make.bash编译
+./make.bash
 ```
+
+
+
+
 add path
 
-[Delve]（https://www.github.com/go-delve/delve) is a debugger for the Go programming language.
+[Delve](https://www.github.com/go-delve/delve) is a debugger for the Go programming language.
 使用如下命令install
 `go install github.com/go-delve/delve/cmd/dlv@latest`
 
