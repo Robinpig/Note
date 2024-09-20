@@ -2,7 +2,8 @@
 
 
 
-channel是Golang在语言层面提供的goroutine间的通信方式，比Unix管道更易用也更轻便。channel主要用于进程内各goroutine间通信，如果需要跨进程通信，建议使用分布式系统的方法来解决
+channel是Golang在语言层面提供的goroutine间的通信方式，比Unix管道更易用也更轻便。
+channel主要用于进程内各goroutine间通信，如果需要跨进程通信，建议使用分布式系统的方法来解决
 
 ## struct
 
@@ -34,10 +35,9 @@ type hchan struct {
 }
 ```
 
-
+### circular queue
 chan内部实现了一个环形队列作为其缓冲区，队列的长度是创建chan时指定的。
 
-RingBuffer
 
 从channel读数据，如果channel缓冲区为空或者没有缓冲区，当前goroutine会被阻塞。 向channel写数据，如果channel缓冲区已满或者没有缓冲区，当前goroutine会被阻塞
 

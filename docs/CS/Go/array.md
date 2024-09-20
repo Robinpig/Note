@@ -101,8 +101,16 @@ type slice struct {
 
 ### append
 
-使用append向Slice追加元素时，如果Slice空间不足，将会触发Slice扩容，扩容实际上是重新分配一块更大的内存，将原Slice数据拷贝进新Slice，然后返回新Slice，扩容后再将数据追加进去
+使用append()向Slice添加一个元素的实现步骤如下：
 
+- 假如Slice容量够用，则将新元素追加进去，Slice.len++，返回原Slice
+- 原Slice容量不够，则将Slice先扩容，扩容后得到新Slice
+- 将新元素追加进新Slice，Slice.len++，返回新的Slice
+
+扩容操作只关心容量，扩容容量的选择遵循以下规则：
+
+如果原Slice容量小于1024，则新Slice容量将扩大为原来的2倍；
+如果原Slice容量大于等于1024，则新Slice容量将扩大为原来的1.25倍
 
 
 ### copy
