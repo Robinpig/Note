@@ -755,3 +755,4 @@ func execute(gp *g, inheritTime bool) {
 
 ## Links
 
+- [Golang](/docs/CS/Go/Go.md)

@@ -11,7 +11,7 @@ Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的
 >[Google style go](https://google.github.io/styleguide/go)
 >[Go Wiki: Go Code Review Comments - The Go Programming Language](https://go.dev/wiki/CodeReviewComments)
 
-## 配置
+## Config
 Go mod是package和其dependencies的集合 是构建 版本控制和管理的单元
  package是同一路径导入文件的集合 通常package名和目录名相同
 
@@ -107,6 +107,14 @@ add path
 `go install github.com/go-delve/delve/cmd/dlv@latest`
 
 也可以在vscode中cmd+P Go:Install Update Tool安装工具链
+
+
+
+### Upgrade
+
+ 删除旧版本 安装新版本
+
+
 
 ## Basic
 
@@ -489,6 +497,8 @@ Context 是一种非常好的工具，使用它可以很方便地控制取消多
 
 1. [Go指南](https://tour.go-zh.org/welcome/1)
 1. [Goproxy.cn](https://goproxy.cn/)
+1. [Go入门指南](https://geekdaxue.co/read/Go-Getting-Started-Guide/README.md)
+1. [Golang 学习笔记](https://geekdaxue.co/books/lengyuezuixue@vdhg2e)
 1. [Go语言圣经(中文版)](https://gopl-zh.github.io/)
 1. [Go语言设计与实现](https://draveness.me/golang/)
 1. [Go语言高级编程](http://docs.studygolang.com/advanced-go-programming-book/)

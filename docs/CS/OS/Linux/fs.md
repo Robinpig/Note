@@ -1,5 +1,18 @@
 ## Introduction
 
+在 `/proc/PID/fd/`下面能看到句柄
+
+- 正常的文件句柄，一般显式的是一个路径
+-  `anon_inode:`前缀的匿名inode
+
+
+
+在 Linux 的文件体系中，一个文件句柄，对应一个 file 结构体，关联一个 inode
+
+对于 file 结构体来说，一定要绑定 inode 和 dentry ，哪怕是伪造的、不完整的 inode
+
+
+
 
 ```c
 
