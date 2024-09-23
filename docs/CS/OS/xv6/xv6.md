@@ -33,11 +33,13 @@ Fist of all, [Install QEMU](/docs/CS/OS/qemu.md)
 
 Download
 
+
 ```shell
 git clone http://github.com/mit-pdos/xv6-public.git
 ```
 
 ##### **Ubuntu**
+
 
 ```shell
 ```
@@ -58,7 +60,7 @@ git clone http://github.com/mit-pdos/xv6-public.git
 
 
 
-##### Ubuntu
+##### **Ubuntu**
 
 Make riscv-gnu-toolchain
 
@@ -66,6 +68,7 @@ Make riscv-gnu-toolchain
 sudo apt-get install autoconf automake autotools-dev curl python3 libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev libexpat-dev ninja-build
 ```
 prepare
+
 ```shell
 git clone https://gitee.com/mirrors/riscv-gnu-toolchain.git
 cd riscv-gnu-toolchain
@@ -84,6 +87,7 @@ mv riscv-pk pk
 
 
 make
+
 ```shell
 sudo mkdir /opt/riscv
 sudo chmod 777 /opt/riscv
@@ -96,6 +100,7 @@ sudo make linux -j4
 ```
 
 Check version
+
 
 ```shell
 riscv64-unknown-linux-gnu-gcc -v
@@ -111,9 +116,11 @@ riscv64-unknown-linux-gnu-gcc -v
 
 参考
 
+
 > [MIT 6.S081/Fall 2020 搭建 risc-v 与 xv6 开发调试环境](https://yaoyao.io/posts/mit6.S081-basic-env-install)
 
 Install riscv-gnu-toolchain
+
 
 ```shell
 
@@ -132,6 +139,9 @@ riscv64-unknown-elf-gcc --version
 qemu-system-riscv64 --version
 ```
 
+<!— tabs:end —>
+
+
 下载代码
 
 ```shell
@@ -149,11 +159,15 @@ xv6 kernel is booting
 init: starting sh
 ```
 
+### Debug
+
+
 退出虚拟机时，先按下control键和A键，然后按X键
 
 
 
 使用gdb调试
+
 
 ```shell
 brew install riscv64-elf-gdb
@@ -163,7 +177,7 @@ brew install riscv64-elf-gdb
 
 
 
-<!-- tabs:end -->
+
 
 ## 源码导读
 
@@ -200,6 +214,8 @@ Process
 proc.c sleeplock.c spinlock.c
 
 
+ctrl p 获取进程信息
+addr2line -e kernel 调用占 查看执行停顿处
 
 Memory 
 
