@@ -1,5 +1,11 @@
 ## Introduction
 
+raftexample 的目录位于 `etcd/contrib/raftexample/` ，这个目录是一个完整的 package，实现了一个极简的 kv 存储，就是为了专门理解 raft 的
+
+> 回顾[Raft](/docs/CS/Distributed/Raft.md)协议
+
+raftexample目录下go build -gcflags=all="-N -l"* 编译出goreman 使用 goreman start启动
+
 
 
 ## Node
@@ -23,9 +29,6 @@ func newRaft(c *Config) *raft {
    }
    raftlog := newLogWithSize(c.Storage, c.Logger, c.MaxCommittedSizePerReady)
    hs, cs, err := c.Storage.InitialState()
-   if err != nil {
-      panic(err) // TODO(bdarnell)
-   }
 
    r := &raft{
       id:                        c.ID,
@@ -91,7 +94,7 @@ func (r *raft) becomeFollower(term uint64, lead uint64) {
 
 
 
-
+tick 其实是由外层业务定时驱动的，t.tickElection竞争Leader
 
 ```go
 func (r *raft) tickElection() {

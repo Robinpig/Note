@@ -11,7 +11,7 @@ Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的
 >[Google style go](https://google.github.io/styleguide/go)
 >[Go Wiki: Go Code Review Comments - The Go Programming Language](https://go.dev/wiki/CodeReviewComments)
 
-## 配置
+## Config
 Go mod是package和其dependencies的集合 是构建 版本控制和管理的单元
  package是同一路径导入文件的集合 通常package名和目录名相同
 
@@ -92,14 +92,29 @@ git clone https://github.com/golang/go.git
 cd go/src
 # wait for ALL TESTS PASSED
 ./all.bash
+
+# 修改源码后可使用make.bash编译
+./make.bash
 ```
+
+
+
+
 add path
 
-[Delve]（https://www.github.com/go-delve/delve) is a debugger for the Go programming language.
+[Delve](https://www.github.com/go-delve/delve) is a debugger for the Go programming language.
 使用如下命令install
 `go install github.com/go-delve/delve/cmd/dlv@latest`
 
 也可以在vscode中cmd+P Go:Install Update Tool安装工具链
+
+
+
+### Upgrade
+
+ 删除旧版本 安装新版本
+
+
 
 ## Basic
 
@@ -123,10 +138,28 @@ add path
 
 ### strings
 
+其中关于string的描述位于src/builtin/builtin.go
+- string是8比特字节的集合，通常但并不一定是UTF-8编码的文本。
+- string可以为空（长度为0），但不会是nil；
+- string对象不可以修改。
+```go
+// string is the set of all strings of 8-bit bytes, conventionally but not
+// necessarily representing UTF-8-encoded text. A string may be empty, but
+// not nil. Values of string type are immutable.
+type string string
+```
 
-Go 语言中的字符串可以表示为任意的数据
-在 Go 语言中，可以通过操作符 + 把字符串连接起来，得到一个新的字符串
-字符串也可以通过 += 运算符操作
+
+src/runtime/string.go:stringStruct定义了string的数据结构：
+```go
+type stringStruct struct {
+    str unsafe.Pointer
+    len int
+}
+```
+string数据结构跟切片有些类似，只不过切片还有一个表示容量的成员，事实上string和切片，准确的说是byte切片经常发生转换
+
+byte切片转换成string的场景很多，为了性能上的考虑，有时候只是临时需要字符串的场景下，byte切片转换成string时并不会拷贝内存，而是直接返回一个string，这个string的指针(string.str)指向切片的内存
 
 字符串 string 也是一个不可变的字节序列，所以可以直接转为字节切片 []byte
 
@@ -156,6 +189,21 @@ string（s.stopLit（））将解析到的字节转换为字符串，这种转�
 concatstrings函数会先对传入的切片参数进行遍历，过滤空字符串并计算拼接后字符串的长度
 拼接的过程位于rawstringtmp函数中，当拼接后的字符串小于32字节时，会有一个临时的缓存供其使用。当拼接后的字符串大于32字节时，堆区会开辟一个足够大的内存空间，并将多个字符串存入其中，期间会涉及内存的复制（copy）
 
+string和[]byte都可以表示字符串，但因数据结构不同，其衍生出来的方法也不同，要跟据实际应用场景来选择。
+
+string 擅长的场景：
+
+- 需要字符串比较的场景；
+- 不需要nil字符串的场景；
+
+[]byte擅长的场景：
+
+- 修改字符串的场景，尤其是修改粒度为1个字节；
+- 函数返回值，需要用nil表示含义的场景；
+- 需要切片操作的场景；
+
+虽然看起来string适用的场景不如[]byte多，但因为string直观，在实际应用中还是大量存在，在偏底层的实现中[]byte使用更多
+
 
 ### default value
 
@@ -167,9 +215,41 @@ concatstrings函数会先对传入的切片参数进行遍历，过滤空字符�
 
 常量的定义和变量类似，只不过它的关键字是 const。
 在 Go 语言中，只允许布尔型、字符串、数字类型这些基础类型作为常量
-iota
+#### iota
 iota 是一个常量生成器，它可以用来初始化相似规则的常量，避免重复的初始化
 iota 的初始值是 0，它的能力就是在每一个有常量声明的行后面 +1
+
+iota代表了const声明块的行索引（下标从0开始）
+除此之外，const声明还有个特点，即第一个常量必须指定一个表达式，后续的常量如果没有表达式，则继承上面的表达式
+
+const块中每一行在GO中使用spec数据结构描述，spec声明如下：
+
+```go
+// A ValueSpec node represents a constant or variable declaration
+// (ConstSpec or VarSpec production).
+//
+ValueSpec struct {
+    Doc     *CommentGroup // associated documentation; or nil
+    Names   []*Ident      // value names (len(Names) > 0)
+    Type    Expr          // value type; or nil
+    Values  []Expr        // initial values; or nil
+    Comment *CommentGroup // line comments; or nil
+}
+```
+ValueSpec.Names这个切片中保存了一行中定义的常量，如果一行定义N个常量，那么ValueSpec.Names切片长度即为N。
+const块实际上是spec类型的切片，用于表示const中的多行。
+
+译期间构造常量时的伪算法如下
+```
+for iota, spec := range ValueSpecs {
+        for i, name := range spec.Names {
+            obj := NewConst(name, iota...) //此处将iota传入，用于构造常量
+            ...
+        }
+    }
+```
+
+
 
 ### Reference Type
 
@@ -417,6 +497,8 @@ Context 是一种非常好的工具，使用它可以很方便地控制取消多
 
 1. [Go指南](https://tour.go-zh.org/welcome/1)
 1. [Goproxy.cn](https://goproxy.cn/)
+1. [Go入门指南](https://geekdaxue.co/read/Go-Getting-Started-Guide/README.md)
+1. [Golang 学习笔记](https://geekdaxue.co/books/lengyuezuixue@vdhg2e)
 1. [Go语言圣经(中文版)](https://gopl-zh.github.io/)
 1. [Go语言设计与实现](https://draveness.me/golang/)
 1. [Go语言高级编程](http://docs.studygolang.com/advanced-go-programming-book/)

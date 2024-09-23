@@ -370,7 +370,11 @@ x86
 
 二进制代码分成两部分 启动扇区bootblock 和内核代码kernel 可以直接使用binutils工具查看分析
 
+xv6启动扇区代码bootblock负责bootloader的角色 将内核代码kernel装载到内存并转移控制权 
 
+启动扇区是通过bootasm.S和bootmain.c生成bootblock.o目标文件后 通过objcopy将其中的.text抽取出来到bootblock文件中产生的
+
+readelf -l bootblock.o
 
 
 

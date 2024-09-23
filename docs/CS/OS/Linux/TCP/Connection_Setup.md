@@ -236,22 +236,33 @@ not_unique:
 
 #### tcp_connect
 
-send SYN
+Build a SYN and send it off
 
 ```c
 int tcp_connect(struct sock *sk)
 {
-	tcp_connect_init(sk);
-    ...
-	tcp_connect_queue_skb(sk, buff);
+    struct tcp_sock *tp = tcp_sk(sk);
+    struct sk_buff *buff;
+    
+    ...   
+    tcp_connect_init(sk);
 
-	/* Send off SYN; include data in Fast Open. */
-	err = tp->fastopen_req ? tcp_send_syn_data(sk, buff) :
-	      tcp_transmit_skb(sk, buff, 1, sk->sk_allocation);
-    ...
-	/* Timer for repeating the SYN until an answer. */
-	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-				  inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
+    buff = tcp_stream_alloc_skb(sk, sk->sk_allocation, true);
+    tcp_init_nondata_skb(buff, tp->write_seq++, TCPHDR_SYN);
+    tcp_mstamp_refresh(tp);
+    tp->retrans_stamp = tcp_time_stamp_ts(tp);
+    tcp_connect_queue_skb(sk, buff);
+    tcp_ecn_send_syn(sk, buff);
+    tcp_rbtree_insert(&sk->tcp_rtx_queue, buff);
+
+    /* Send off SYN; include data in Fast Open. */
+    err = tp->fastopen_req ? tcp_send_syn_data(sk, buff) :
+    tcp_transmit_skb(sk, buff, 1, sk->sk_allocation);
+
+    /* Timer for repeating the SYN until an answer. */
+    inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
+                              inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
+    return 0;
 }
 ```
 

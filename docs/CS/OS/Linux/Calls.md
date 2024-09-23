@@ -1166,94 +1166,61 @@ This will accept the next outstanding connection.
 call [reqsk_queue_remove](/docs/CS/OS/Linux/Calls.md?id=reqsk_queue_remove)
 
 ```c
-// 
-struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
+struct sock *inet_csk_accept(struct sock *sk, struct proto_accept_arg *arg)
 {
-	struct inet_connection_sock *icsk = inet_csk(sk);
-	struct request_sock_queue *queue = &icsk->icsk_accept_queue;
-	struct request_sock *req;
-	struct sock *newsk;
-	int error;
+    struct inet_connection_sock *icsk = inet_csk(sk);
+    struct request_sock_queue *queue = &icsk->icsk_accept_queue;
+    struct request_sock *req;
+    struct sock *newsk;
+    int error;
 
-	lock_sock(sk);
-```
+    lock_sock(sk);
 
-We need to make sure that this socket is listening, and that it has something pending.
+    /* We need to make sure that this socket is listening,
+	 * and that it has something pending.
+	 */
+    error = -EINVAL;
+    if (sk->sk_state != TCP_LISTEN)
+        goto out_err;
 
-```c
-	error = -EINVAL;
-	if (sk->sk_state != TCP_LISTEN)
-		goto out_err;
-```
+    /* Find already established connection */
+    if (reqsk_queue_empty(queue)) {
+        long timeo = sock_rcvtimeo(sk, arg->flags & O_NONBLOCK);
 
-Try to find already established connection, if isEmpty wait or return(`O_NONBLOCK`)
+        /* If this is a non blocking socket don't sleep */
+        error = -EAGAIN;
+        if (!timeo)
+            goto out_err;
 
-```c
-	if (reqsk_queue_empty(queue)) {
-		long timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
+        error = inet_csk_wait_for_connect(sk, timeo);
+        if (error)
+            goto out_err;
+    }
+    req = reqsk_queue_remove(queue, sk);
+    arg->is_empty = reqsk_queue_empty(queue);
+    newsk = req->sk;
 
-		/* If this is a non blocking socket don't sleep */
-		error = -EAGAIN;
-		if (!timeo)
-			goto out_err;
-
-		error = inet_csk_wait_for_connect(sk, timeo);
-		if (error)
-			goto out_err;
-	}
-```
-
-remove from
-
-```c
-	req = reqsk_queue_remove(queue, sk);
-	newsk = req->sk;
-
-	if (sk->sk_protocol == IPPROTO_TCP &&
-	    tcp_rsk(req)->tfo_listener) {
-		spin_lock_bh(&queue->fastopenq.lock);
-		if (tcp_rsk(req)->tfo_listener) {
-			/* We are still waiting for the final ACK from 3WHS
+    if (sk->sk_protocol == IPPROTO_TCP &&
+        tcp_rsk(req)->tfo_listener) {
+        spin_lock_bh(&queue->fastopenq.lock);
+        if (tcp_rsk(req)->tfo_listener) {
+            /* We are still waiting for the final ACK from 3WHS
 			 * so can't free req now. Instead, we set req->sk to
 			 * NULL to signify that the child socket is taken
 			 * so reqsk_fastopen_remove() will free the req
 			 * when 3WHS finishes (or is aborted).
 			 */
-			req->sk = NULL;
-			req = NULL;
-		}
-		spin_unlock_bh(&queue->fastopenq.lock);
-	}
+            req->sk = NULL;
+            req = NULL;
+        }
+        spin_unlock_bh(&queue->fastopenq.lock);
+    }
+    
+    if (req)
+        reqsk_put(req);
+    ...
 
-out:
-	release_sock(sk);
-	if (newsk && mem_cgroup_sockets_enabled) {
-		int amt;
-
-		/* atomically get the memory usage, set and charge the
-		 * newsk->sk_memcg.
-		 */
-		lock_sock(newsk);
-
-		/* The socket has not been accepted yet, no need to look at
-		 * newsk->sk_wmem_queued.
-		 */
-		amt = sk_mem_pages(newsk->sk_forward_alloc +
-				   atomic_read(&newsk->sk_rmem_alloc));
-		mem_cgroup_sk_alloc(newsk);
-		if (newsk->sk_memcg && amt)
-			mem_cgroup_charge_skmem(newsk->sk_memcg, amt);
-
-		release_sock(newsk);
-	}
-	if (req)
-		reqsk_put(req);
-	return newsk;
-out_err:
-	newsk = NULL;
-	req = NULL;
-	*err = error;
-	goto out;
+    return newsk;
 }
 ```
 

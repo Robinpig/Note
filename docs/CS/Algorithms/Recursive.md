@@ -61,6 +61,13 @@ Iteration
 * For some problems, there are no obvious iterative algorithms.
 * Some problems are best suited for recursive solutions while others are not.
 
+
+## Tail Call
+
+尾部递归是指递归函数在调用自身后直接传回其值，而不对其再加运算，效率将会极大的提高。
+如果一个函数中所有递归形式的调用都出现在函数的末尾，我们称这个递归函数是尾递归的。当递归调用是整个函数体中最后执行的语句且它的返回值不属于表达式的一部分时，这个递归调用就是尾递归。尾递归函数的特点是在回归过程中不用做任何操作，这个特性很重要，因为大多数现代的编译器会利用这种特点自动生成优化的代码。— 来自百度百科。
+尾递归函数，部分高级语言编译器会进行优化，减少不必要的堆栈生成，使得程序栈维持固定的层数，不会出现栈溢出的情况。
+
 ## Example Algorithms of Recursion
 
 * Fibonacci Series, Factorial Finding
