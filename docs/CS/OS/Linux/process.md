@@ -5,9 +5,9 @@
 Linux employs a hierarchical scheme in which each process depends on a parent process.
 The kernel starts the init program as the first process that is responsible for further system initialization actions and display of the login prompt or (in more widespread use today) display of a graphical login interface.
 init is therefore the root from which all processes originate, more or less directly, as shown graphically by the pstree program. init is the top of a tree structure whose branches spread further and further down.
+
 ```shell
 pstree
-
 ```
 
 kthread
@@ -26,7 +26,7 @@ For this purpose, Unix uses two mechanisms called fork and exec.
 2. [exec](/docs/CS/OS/Linux/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
 
 
-### task struct
+## task struct
 
 The Linux kernel internally represents processes as tasks, via the structure `task struct`.
 Unlike other OS approaches (which make a distinction between a process, lightweight process, and thread), Linux uses the task structure to represent any execution context. 
@@ -34,7 +34,22 @@ Therefore, a single-threaded process will be represented with one task structure
 Finally, the kernel itself is multithreaded, and has kernel-level threads which are not associated with any user process and are executing kernel code.
 
 For compatibility with other UNIX systems, Linux identifies processes via the PID. The kernel organizes all processes in a doubly linked list of task structures.
+
+
+
+```c
+struct task_struct {
+       // ...... 	
+       pid_t                       pid;
+       pid_t                       tgid;
+}    
+```
+
+
+
 In addition to accessing process descriptors by traversing the linked lists, the PID can be mapped to the address of the task structure, and the process information can be accessed immediately.
+
+> 实时的空间进程布局可以在`/proc/PID/maps`文件中查看到
 
 
 ```c
@@ -761,19 +776,6 @@ struct task_struct {
        unsigned long                prev_lowest_stack;
 #endif
 
-#ifdef CONFIG_X86_MCE
-       void __user                  *mce_vaddr;
-       __u64                       mce_kflags;
-       u64                         mce_addr;
-       __u64                       mce_ripv : 1,
-                                   mce_whole_page : 1,
-                                   __mce_reserved : 62;
-       struct callback_head          mce_kill_me;
-#endif
-
-#ifdef CONFIG_KRETPROBES
-       struct llist_head               kretprobe_instances;
-#endif
 
        /*
         * New fields for task_struct should be added above here, so that
@@ -827,6 +829,8 @@ Task state bitmask. NOTE! These bits are also encoded in fs/proc/array.c: get_ta
 
 We have two separate sets of flags: task->state is about runnability, while task->exit_state are about the task exiting. Confusing, but this way modifying one set can't modify the other one by mistake.
 
+> 进程的运行状态和其它信息可以在`/proc/PID/status`文件中查看
+
 ```c
 // sched.h
 /* Used in tsk->state: */
@@ -866,23 +870,21 @@ We have two separate sets of flags: task->state is about runnability, while task
 
 ```
 
+### mm
 
-
-pid
+> 
 
 ```c
-struct task_struct {
-       // ...... 	
-       pid_t                       pid;
-       pid_t                       tgid;
-}    
+
+       struct mm_struct              *mm;
+       struct mm_struct              *active_mm;
 ```
 
 
 
 
 
-### init task
+## init task
 
 Set up the first task table, touch at your own risk!. Base=0,
 **limit=0x1fffff (=2MB)**
