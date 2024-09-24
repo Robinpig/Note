@@ -194,6 +194,56 @@ brew install riscv64-elf-gdb
 
 XV6的操作系统的加载与真实情况有一些区别。首先，XV6操作系统作为教学操作系统，它的启动过程是相对比较简单的。XV6并不会在启动时对主板上的硬件做全面的检查，而真实的Bootloader会对所有连接到计算机的所有硬件的状态进行检查。此外，XV6的Boot loader足够精简，以至于能够被压缩到小于512字节，从而能够直接将Bootloader加载进0x7c00的内存位置。真实的操作系统中，通常会有一个两步加载的过程。首先将一个加载Bootloader的程序加载在0x7c00处，然后加载进完整的功能复杂的Bootloader，再使用Bootloader加载内核
 
+
+
+```c
+void
+bootmain(void)
+{
+  struct elfhdr *elf;
+  struct proghdr *ph, *eph;
+  void (*entry)(void);
+  uchar* pa;
+
+  elf = (struct elfhdr*)0x10000;  // scratch space
+
+  // Read 1st page off disk
+  readseg((uchar*)elf, 4096, 0);
+
+  // Is this an ELF executable?
+  if(elf->magic != ELF_MAGIC)
+    return;  // let bootasm.S handle error
+
+  // Load each program segment (ignores ph flags).
+  ph = (struct proghdr*)((uchar*)elf + elf->phoff);
+  eph = ph + elf->phnum;
+  for(; ph < eph; ph++){
+    pa = (uchar*)ph->paddr;
+    readseg(pa, ph->filesz, ph->off);
+    if(ph->memsz > ph->filesz)
+      stosb(pa + ph->filesz, 0, ph->memsz - ph->filesz);
+  }
+
+  // Call the entry point from the ELF header.
+  // Does not return!
+  entry = (void(*)(void))(elf->entry);
+  entry();
+}
+
+```
+
+
+
+`bootmain.c`中的`bootmain()`函数是XV6系统启动的核心代码。
+
+- `bootmain()`函数首先从磁盘中读取第一个内存页；然后判断读取到的内存页是否是ELF文件的开头；
+- 如果是的话，根据ELF文件头内保存的每个程序头和其长度信息，依次将程序读入内存
+- 最后，从ELF文件头内找到程序的入口点，跳转到那里执行
+
+通过`readelf`命令可以得到ELF文件中程序头的详细信息。总而言之，boot loader在XV6系统的启动中主要用来将内核的ELF文件从硬盘中加载进内存，并将控制权转交给内核程序。
+
+通过获取`struct elfhdr`中`struct proghdr`的位置和大小信息，就能得知XV6内核程序段(Program Header)的位置和数量，在加载硬盘扇区的过程中，逐步向前移动`ph`指针，一个个加载对应的程序段。对于一个程序段，通过`ph->filesz`和`ph->off`获得程序段的大小和位置，使用`readseg()`函数来加载程序段，逐步向前移动`pa`指针，直到加载进的磁盘扇区使得加载进的扇区大小超过程序文件的结尾`epa`，从而完成单个程序段的加载。对于单个内核程序段，代码确保它会填满最后一个内存页
+
 ### RISC-V
 
 riscv在启动时，pc被默认设置为`0X1000`，之后经过以下几条指令，跳转到`0x80000000`
@@ -206,7 +256,7 @@ riscv在启动时，pc被默认设置为`0X1000`，之后经过以下几条指�
 
 
 
-同时，xv6在编译时，会把引导程序放在`0x80000000`位置，从而成功进入系统
+同时，xv6在编译时，会把引导程序放在`0x80000000`位置
 
 
 ```shell
