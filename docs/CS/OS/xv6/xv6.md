@@ -19,7 +19,11 @@ xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作�
 - 内核态无法动态内存分配
 
 
-## Build
+
+## Tutorial
+
+
+### Build
 
 
 
@@ -27,9 +31,7 @@ Fist of all, [Install QEMU](/docs/CS/OS/qemu.md)
 
 
 
-### x86
-
-<!-- tabs:start -->
+#### x86
 
 Download
 
@@ -38,10 +40,21 @@ Download
 git clone http://github.com/mit-pdos/xv6-public.git
 ```
 
+<!-- tabs:start -->
+
 ##### **Ubuntu**
 
 
+
+
 ```shell
+apt install
+```
+
+##### **Intel Mac**
+
+```shell
+brew install
 ```
 
 
@@ -52,13 +65,18 @@ git clone http://github.com/mit-pdos/xv6-public.git
 
 <!-- tabs:end -->
 
-### Riscv
+#### Riscv
+
+
+
+
+Download
+
+```shell
+git clone git://github.com/mit-pdos/xv6-riscv.git
+```
 
 <!-- tabs:start -->
-
-
-
-
 
 ##### **Ubuntu**
 
@@ -112,7 +130,7 @@ riscv64-unknown-linux-gnu-gcc -v
 
 
 
-##### **m1 mac**
+##### **ARM Mac**
 
 参考
 
@@ -139,30 +157,14 @@ riscv64-unknown-elf-gcc --version
 qemu-system-riscv64 --version
 ```
 
-<!— tabs:end —>
+<!-- tabs:end -->
 
 
-下载代码
-
-```shell
-
-git clone git://github.com/mit-pdos/xv6-riscv.git
-
-cd /path/to/xv6-riscv
-make qemu
-```
-
-会输出一大堆编译信息，最后：
-
-```
-xv6 kernel is booting
-init: starting sh
-```
 
 ### Debug
 
 
-退出虚拟机时，先按下control键和A键，然后按X键
+退出虚拟机时，先按下control(ctrl)键和A键，然后按X键
 
 
 
@@ -177,11 +179,63 @@ brew install riscv64-elf-gdb
 
 
 
+## Init
 
 
-## 源码导读
 
-启动
+### x86
+
+在源代码中，XV6系统的启动运行轨迹如图。系统的启动分为以下几个步骤：
+
+1. 首先，在`bootasm.S`中，系统必须初始化CPU的运行状态。具体地说，需要将x86 CPU从启动时默认的Intel 8088 16位实模式切换到80386之后的32位保护模式；然后设置初始的GDT(详细解释参见https://wiki.osdev.org/Global_Descriptor_Table)，将虚拟地址直接按值映射到物理地址；最后，调用`bootmain.c`中的`bootmain()`函数。
+2. `bootmain()`函数的主要任务是将内核的ELF文件从硬盘中加载进内存，并将控制权转交给内核程序。具体地说，此函数首先将ELF文件的前4096个字节（也就是第一个内存页）从磁盘里加载进来，然后根据ELF文件头里记录的文件大小和不同的程序头信息，将完整的ELF文件加载到内存中。然后根据ELF文件里记录的入口点，将控制权转交给XV6系统。
+3. `entry.S`的主要任务是设置页表，让分页硬件能够正常运行，然后跳转到`main.c`的`main()`函数处，开始整个操作系统的运行。
+4. `main()`函数首先初始化了与内存管理、进程管理、中断控制、文件管理相关的各种模块，然后启动第一个叫做`initcode`的用户进程。至此，整个XV6系统启动完毕。
+
+XV6的操作系统的加载与真实情况有一些区别。首先，XV6操作系统作为教学操作系统，它的启动过程是相对比较简单的。XV6并不会在启动时对主板上的硬件做全面的检查，而真实的Bootloader会对所有连接到计算机的所有硬件的状态进行检查。此外，XV6的Boot loader足够精简，以至于能够被压缩到小于512字节，从而能够直接将Bootloader加载进0x7c00的内存位置。真实的操作系统中，通常会有一个两步加载的过程。首先将一个加载Bootloader的程序加载在0x7c00处，然后加载进完整的功能复杂的Bootloader，再使用Bootloader加载内核
+
+### RISC-V
+
+riscv在启动时，pc被默认设置为`0X1000`，之后经过以下几条指令，跳转到`0x80000000`
+
+- 在第一个shell，打开xv6 gdb模式`make qemu-gdb`
+- 打开第二个shell，进行调试`riscv64-elf-gdb`
+- 可以看到启动时，qemu就在`0X1000`地址
+
+
+
+
+
+同时，xv6在编译时，会把引导程序放在`0x80000000`位置，从而成功进入系统
+
+
+```shell
+riscv64-unknown-elf-objdump -d kernel/kernel
+```
+
+查看xv6中的`kernel/kernel.ld`，可以看到`. = 0x80000000;`，这一行会将初始程序`_entry`函数放置到`0x80000000`地址
+
+
+```shell
+kernel/kernel:     file format elf64-littleriscv
+
+Disassembly of section .text:
+
+0000000080000000 <_entry>:
+    80000000:	00008117          	auipc	sp,0x8
+    80000004:	91010113          	add	sp,sp,-1776 # 80007910 <stack0>
+    80000008:	6505                	lui	a0,0x1
+    8000000a:	f14025f3          	csrr	a1,mhartid
+    8000000e:	0585                	add	a1,a1,1
+    80000010:	02b50533          	mul	a0,a0,a1
+    80000014:	912a                	add	sp,sp,a0
+    80000016:	04a000ef          	jal	80000060 <start>
+```
+
+
+
+
+
 entry.S start.c main.c
 
 Qemu设置0x8000_0000 运行entry.S的 _entry函数
@@ -207,8 +261,7 @@ entry和start运行在机器态 main运行在内核态
 
 
 
-
-Process
+## Process
 
 
 proc.c sleeplock.c spinlock.c
@@ -217,7 +270,7 @@ proc.c sleeplock.c spinlock.c
 ctrl p 获取进程信息
 addr2line -e kernel 调用占 查看执行停顿处
 
-Memory 
+## Memory 
 
 
 vm.c kalloc.c
