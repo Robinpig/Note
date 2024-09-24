@@ -17,7 +17,7 @@ xv6启动 在main() -> tvinit()中完成IDT的初始化
 
 中断的公共入口代码alltraps和公共返回代码trapret都在trapasm.S中
 
-```assembly
+```asm6502
 #include "mmu.h"
 
   # vectors.S sends all traps here.
