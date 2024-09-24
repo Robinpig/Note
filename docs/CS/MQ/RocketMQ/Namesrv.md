@@ -1,5 +1,7 @@
 ## Introduction
-NameServer是一个几乎无状态节点，可集群部署，节点之间无任何信息同步。
+NameServer是一个几乎无状态节点，可集群部署，节点是对等的 节点之间无任何信息同步 客户端访问任意节点获取的消息路由信息是一致的
+
+Name Server无状态的关键点在于 消息路由信息是存储在Broker Server上的 Broker Server会定时将本地缓存或者在文件中的消息路由信息同步到Name Server Name Server只是提供了“读”的功能
 
 
 NameServer包含哪些
@@ -9,6 +11,11 @@ KVConfigManager
 NameServer不仅仅是存储了各个Broker的IP地址和端口，还存储了对应的Topic的路由数据
 
 
+
+Name Server动态扩容/缩容需要地址服务的配置 以让客户端感知 实现动态寻址的效果
+
+- 启动Producer/Consumer时若不设置Name Server的IP地址 默认开启地址服务动态寻址功能
+- Broker除了不设置Name Server的IP 还需要显式开启地址服务的配置
 
 ## start
 
@@ -41,9 +48,6 @@ public class NamesrvStartup {
         NamesrvController controller = createNamesrvController();
         start(controller);
         NettyServerConfig serverConfig = controller.getNettyServerConfig();
-        String tip = String.format("The Name Server boot success. serializeType=%s, address %s:%d", RemotingCommand.getSerializeTypeConfigInThisServer(), serverConfig.getBindAddress(), serverConfig.getListenPort());
-        log.info(tip);
-        System.out.printf("%s%n", tip);
         return controller;
     }
 }
@@ -124,8 +128,23 @@ public class NamesrvController {
       this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.defaultExecutor);
     }
   }
-  // Three tasks： 
-  private void startScheduleService() {
+}
+```
+
+
+
+
+
+Three tasks
+
+scanNotActiveBroker 处理不活跃的客户端链接
+
+定时器周期性输出KV信息
+
+
+
+```java
+private void startScheduleService() {
     this.scanExecutorService.scheduleAtFixedRate(NamesrvController.this.routeInfoManager::scanNotActiveBroker,
             5, this.namesrvConfig.getScanNotActiveBrokerInterval(), TimeUnit.MILLISECONDS);
 
@@ -140,8 +159,52 @@ public class NamesrvController {
       }
     }, 10, 1, TimeUnit.SECONDS);
   }
+```
+
+
+
+
+
+
+
+监听通信运行状态
+
+```java
+public class BrokerHousekeepingService implements ChannelEventListener {
+
+    private final NamesrvController namesrvController;
+
+    public BrokerHousekeepingService(NamesrvController namesrvController) {
+        this.namesrvController = namesrvController;
+    }
+
+    @Override
+    public void onChannelConnect(String remoteAddr, Channel channel) {
+    }
+
+    @Override
+    public void onChannelClose(String remoteAddr, Channel channel) {
+        this.namesrvController.getRouteInfoManager().onChannelDestroy(channel);
+    }
+
+    @Override
+    public void onChannelException(String remoteAddr, Channel channel) {
+        this.namesrvController.getRouteInfoManager().onChannelDestroy(channel);
+    }
+
+    @Override
+    public void onChannelIdle(String remoteAddr, Channel channel) {
+        this.namesrvController.getRouteInfoManager().onChannelDestroy(channel);
+    }
+
+    @Override
+    public void onChannelActive(String remoteAddr, Channel channel) {
+
+    }
 }
 ```
+
+
 
 ### DefaultRequestProcessor::processRequest
 
@@ -218,6 +281,8 @@ clients get latest route information by active
 ## Route
 
 ### RouteInfoManager
+
+Name Server使用RouteInfoManager来管理消息主题配置信息
 
 ```java
 
