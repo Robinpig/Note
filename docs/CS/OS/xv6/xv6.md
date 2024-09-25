@@ -244,6 +244,83 @@ bootmain(void)
 
 通过获取`struct elfhdr`中`struct proghdr`的位置和大小信息，就能得知XV6内核程序段(Program Header)的位置和数量，在加载硬盘扇区的过程中，逐步向前移动`ph`指针，一个个加载对应的程序段。对于一个程序段，通过`ph->filesz`和`ph->off`获得程序段的大小和位置，使用`readseg()`函数来加载程序段，逐步向前移动`pa`指针，直到加载进的磁盘扇区使得加载进的扇区大小超过程序文件的结尾`epa`，从而完成单个程序段的加载。对于单个内核程序段，代码确保它会填满最后一个内存页
 
+
+
+```assembly
+# The xv6 kernel starts executing in this file. This file is linked with
+# the kernel C code, so it can refer to kernel symbols such as main().
+# The boot block (bootasm.S and bootmain.c) jumps to entry below.
+        
+# Multiboot header, for multiboot boot loaders like GNU Grub.
+# http://www.gnu.org/software/grub/manual/multiboot/multiboot.html
+#
+# Using GRUB 2, you can boot xv6 from a file stored in a
+# Linux file system by copying kernel or kernelmemfs to /boot
+# and then adding this menu entry:
+#
+# menuentry "xv6" {
+# 	insmod ext2
+# 	set root='(hd0,msdos1)'
+# 	set kernel='/boot/kernel'
+# 	echo "Loading ${kernel}..."
+# 	multiboot ${kernel} ${kernel}
+# 	boot
+# }
+
+#include "asm.h"
+#include "memlayout.h"
+#include "mmu.h"
+#include "param.h"
+
+# Multiboot header.  Data to direct multiboot loader.
+.p2align 2
+.text
+.globl multiboot_header
+multiboot_header:
+  #define magic 0x1badb002
+  #define flags 0
+  .long magic
+  .long flags
+  .long (-magic-flags)
+
+# By convention, the _start symbol specifies the ELF entry point.
+# Since we haven't set up virtual memory yet, our entry point is
+# the physical address of 'entry'.
+.globl _start
+_start = V2P_WO(entry)
+
+# Entering xv6 on boot processor, with paging off.
+.globl entry
+entry:
+  # Turn on page size extension for 4Mbyte pages
+  movl    %cr4, %eax
+  orl     $(CR4_PSE), %eax
+  movl    %eax, %cr4
+  # Set page directory
+  movl    $(V2P_WO(entrypgdir)), %eax
+  movl    %eax, %cr3
+  # Turn on paging.
+  movl    %cr0, %eax
+  orl     $(CR0_PG|CR0_WP), %eax
+  movl    %eax, %cr0
+
+  # Set up the stack pointer.
+  movl $(stack + KSTACKSIZE), %esp
+
+  # Jump to main(), and switch to executing at
+  # high addresses. The indirect call is needed because
+  # the assembler produces a PC-relative instruction
+  # for a direct jump.
+  mov $main, %eax
+  jmp *%eax
+
+.comm stack, KSTACKSIZE
+```
+
+
+
+
+
 ### RISC-V
 
 riscv在启动时，pc被默认设置为`0X1000`，之后经过以下几条指令，跳转到`0x80000000`
@@ -282,7 +359,159 @@ Disassembly of section .text:
     80000016:	04a000ef          	jal	80000060 <start>
 ```
 
+kernel.ld
 
+```assembly
+UTPUT_ARCH( "riscv" )
+ENTRY( _entry )
+
+SECTIONS
+{
+  /*
+   * ensure that entry.S / _entry is at 0x80000000,
+   * where qemu's -kernel jumps.
+   */
+  . = 0x80000000;
+
+  .text : {
+    *(.text .text.*)
+    . = ALIGN(0x1000);
+    _trampoline = .;
+    *(trampsec)
+    . = ALIGN(0x1000);
+    ASSERT(. - _trampoline == 0x1000, "error: trampoline larger than one page");
+    PROVIDE(etext = .);
+  }
+
+  .rodata : {
+    . = ALIGN(16);
+    *(.srodata .srodata.*) /* do not need to distinguish this from .rodata */
+    . = ALIGN(16);
+    *(.rodata .rodata.*)
+  }
+
+  .data : {
+    . = ALIGN(16);
+    *(.sdata .sdata.*) /* do not need to distinguish this from .data */
+    . = ALIGN(16);
+    *(.data .data.*)
+  }
+
+  .bss : {
+    . = ALIGN(16);
+    *(.sbss .sbss.*) /* do not need to distinguish this from .bss */
+    . = ALIGN(16);
+    *(.bss .bss.*)
+  }
+
+  PROVIDE(end = .);
+}
+
+```
+
+_entry函数主要用于开辟栈空间，以便后续运行C代码 每一个CPU都会有自己的栈，将栈指针指向stack0 + 4096 * CPU_ID 位置
+
+```assembly
+.section .text
+.global _entry
+_entry:
+        # set up a stack for C.
+        # stack0 is declared in start.c,
+        # with a 4096-byte stack per CPU.
+        # sp = stack0 + (hartid * 4096)
+        la sp, stack0
+        li a0, 1024*4
+        csrr a1, mhartid
+        addi a1, a1, 1
+        mul a0, a0, a1
+        add sp, sp, a0
+        # jump to start() in start.c
+        call start
+spin:
+        j spin
+```
+
+设置 MSTATUS 寄存器，下一步跳转到Supervisor Mode；设置EPC，控制下一步跳转到main；关闭分页机制；将所有的**中断**和**异常**都**委托**给Supervisor态；将所有物理内存的访问权限都分配给Supervisor态；启动时钟中断(`timerinit`, )；将当前的hard id都保存在tp寄存器（Thread Pointer）；之后使用`mret`指令跳转到Supervisor态 开始执行main函数
+
+
+
+```c
+// entry.S needs one stack per CPU.
+__attribute__ ((aligned (16))) char stack0[4096 * NCPU];
+
+// entry.S jumps here in machine mode on stack0.
+void
+start()
+{
+  // set M Previous Privilege mode to Supervisor, for mret.
+  unsigned long x = r_mstatus();
+  x &= ~MSTATUS_MPP_MASK;
+  x |= MSTATUS_MPP_S;
+  w_mstatus(x);
+
+  // set M Exception Program Counter to main, for mret.
+  // requires gcc -mcmodel=medany
+  w_mepc((uint64)main);
+
+  // disable paging for now.
+  w_satp(0);
+
+  // delegate all interrupts and exceptions to supervisor mode.
+  w_medeleg(0xffff);
+  w_mideleg(0xffff);
+  w_sie(r_sie() | SIE_SEIE | SIE_STIE | SIE_SSIE);
+
+  // configure Physical Memory Protection to give supervisor mode
+  // access to all of physical memory.
+  w_pmpaddr0(0x3fffffffffffffull);
+  w_pmpcfg0(0xf);
+
+  // ask for clock interrupts.
+  timerinit();
+
+  // keep each CPU's hartid in its tp register, for cpuid().
+  int id = r_mhartid();
+  w_tp(id);
+
+  // switch to supervisor mode and jump to main().
+  asm volatile("mret");
+}
+```
+
+
+
+时钟中断
+
+用户态发生时钟中断时，首先由M状态捕获，进入timervec，然后设置S态的software int中断，mret返回用户态；之后用户态检测到S态的software异常，跳转到S态，执行对应的中断处理程序，最后通过sret返回用户态
+
+```c
+// ask each hart to generate timer interrupts.
+void
+timerinit()
+{
+  // enable supervisor-mode timer interrupts.
+  w_mie(r_mie() | MIE_STIE);
+  
+  // enable the sstc extension (i.e. stimecmp).
+  w_menvcfg(r_menvcfg() | (1L << 63)); 
+  
+  // allow supervisor to use stimecmp and time.
+  w_mcounteren(r_mcounteren() | 2);
+  
+  // ask for the very first timer interrupt.
+  w_stimecmp(r_time() + 1000000);
+}
+```
+
+`main` 函数初始化所有设备和子系统，初始化地址空间，创建内核页表，分配一个物理内存页给内核栈
+
+main 函数调用 userinit 函数创建第一个用户进程
+
+
+
+第一个用户进程执行的代码就是 `user/initcode.S` 中代码，其实际上就是调用 `exec("\init", 0)`, 执行init程序
+
+init程序创建文件描述符0,1,2，并开启一个shell窗口 init程序子进程是一个shell，其本身在无限循环处理孤儿进程
 
 
 
