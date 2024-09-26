@@ -13,6 +13,8 @@ Interrupt Descriptor Table(IDT)
 
 xv6启动 在main() -> tvinit()中完成IDT的初始化
 
+## x86
+
 
 
 中断的公共入口代码alltraps和公共返回代码trapret都在trapasm.S中
@@ -171,7 +173,22 @@ trap(struct trapframe *tf)
 }
 ```
 
+
+
+`main` 函数初始化所有设备和子系统，初始化地址空间，创建内核页表，分配一个物理内存页给内核栈
+
+main 函数调用 userinit 函数创建第一个用户进程
+
+
+
+第一个用户进程执行的代码就是 `user/initcode.S` 中代码，其实际上就是调用 `exec("\init", 0)`, 执行init程序
+
+init程序创建文件描述符0,1,2，并开启一个shell窗口 init程序子进程是一个shell，其本身在无限循环处理孤儿进程
+
+
+
 xv6用到的中断/异常编号见trap.h
+
 - 前面32个是x86处理器硬件规定的专用编号
 - 外设I/O中断使用T_IRQ0 = 32 之后的向量号
 
@@ -215,7 +232,7 @@ xv6用到的中断/异常编号见trap.h
 
 
 
-
+## RISC-V
 
 发生中断后 若确定是系统调用
 

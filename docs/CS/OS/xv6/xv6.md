@@ -319,6 +319,42 @@ entry:
 
 
 
+#### main
+
+
+
+```c
+
+// Bootstrap processor starts running C code here.
+// Allocate a real stack and switch to it, first
+// doing some setup required for memory allocator to work.
+int
+main(void)
+{
+  kinit1(end, P2V(4*1024*1024)); // phys page allocator
+  kvmalloc();      // kernel page table
+  mpinit();        // detect other processors
+  lapicinit();     // interrupt controller
+  seginit();       // segment descriptors
+  cprintf("\ncpu%d: starting xv6\n\n", cpunum());
+  picinit();       // another interrupt controller
+  ioapicinit();    // another interrupt controller
+  consoleinit();   // console hardware
+  uartinit();      // serial port
+  pinit();         // process table
+  tvinit();        // trap vectors
+  binit();         // buffer cache
+  fileinit();      // file table
+  ideinit();       // disk
+  if(!ismp)
+    timerinit();   // uniprocessor timer
+  startothers();   // start other processors
+  kinit2(P2V(4*1024*1024), P2V(PHYSTOP)); // must come after startothers()
+  userinit();      // first user process
+  mpmain();        // finish this processor's setup
+}
+```
+
 
 
 ### RISC-V
@@ -523,8 +559,68 @@ Qemu设置0x8000_0000 运行entry.S的 _entry函数
 启用时钟中断
 cpu id放入tp寄存器
 
-
 调用main函数
+
+
+
+#### main
+
+
+
+如果不是CPU0，则会循环等待CPU0进行系统初始化完成之后，才会进行下一步操作
+
+```shell
+#include "types.h"
+#include "param.h"
+#include "memlayout.h"
+#include "riscv.h"
+#include "defs.h"
+
+volatile static int started = 0;
+
+// start() jumps here in supervisor mode on all CPUs.
+void
+main()
+{
+  if(cpuid() == 0){
+    consoleinit();
+    printfinit();
+    printf("\n");
+    printf("xv6 kernel is booting\n");
+    printf("\n");
+    kinit();         // physical page allocator
+    kvminit();       // create kernel page table
+    kvminithart();   // turn on paging
+    procinit();      // process table
+    trapinit();      // trap vectors
+    trapinithart();  // install kernel trap vector
+    plicinit();      // set up interrupt controller
+    plicinithart();  // ask PLIC for device interrupts
+    binit();         // buffer cache
+    iinit();         // inode table
+    fileinit();      // file table
+    virtio_disk_init(); // emulated hard disk
+    userinit();      // first user process
+    __sync_synchronize();
+    started = 1;
+  } else {
+    while(started == 0)
+      ;
+    __sync_synchronize();
+    printf("hart %d starting\n", cpuid());
+    kvminithart();    // turn on paging
+    trapinithart();   // install kernel trap vector
+    plicinithart();   // ask PLIC for device interrupts
+  }
+
+  scheduler();        
+}
+```
+
+
+
+
+
 调用schedule函数 调度初始进程initcode
 执行init程序
 
@@ -707,58 +803,6 @@ xv6启动扇区代码bootblock负责bootloader的角色 将内核代码kernel装
 启动扇区是通过bootasm.S和bootmain.c生成bootblock.o目标文件后 通过objcopy将其中的.text抽取出来到bootblock文件中产生的
 
 readelf -l bootblock.o
-
-
-
-Riscv
-
-```shell
-#include "types.h"
-#include "param.h"
-#include "memlayout.h"
-#include "riscv.h"
-#include "defs.h"
-
-volatile static int started = 0;
-
-// start() jumps here in supervisor mode on all CPUs.
-void
-main()
-{
-  if(cpuid() == 0){
-    consoleinit();
-    printfinit();
-    printf("\n");
-    printf("xv6 kernel is booting\n");
-    printf("\n");
-    kinit();         // physical page allocator
-    kvminit();       // create kernel page table
-    kvminithart();   // turn on paging
-    procinit();      // process table
-    trapinit();      // trap vectors
-    trapinithart();  // install kernel trap vector
-    plicinit();      // set up interrupt controller
-    plicinithart();  // ask PLIC for device interrupts
-    binit();         // buffer cache
-    iinit();         // inode table
-    fileinit();      // file table
-    virtio_disk_init(); // emulated hard disk
-    userinit();      // first user process
-    __sync_synchronize();
-    started = 1;
-  } else {
-    while(started == 0)
-      ;
-    __sync_synchronize();
-    printf("hart %d starting\n", cpuid());
-    kvminithart();    // turn on paging
-    trapinithart();   // install kernel trap vector
-    plicinithart();   // ask PLIC for device interrupts
-  }
-
-  scheduler();        
-}
-```
 
 
 
