@@ -13,13 +13,15 @@ Interrupt Descriptor Table(IDT)
 
 xv6启动 在main() -> tvinit()中完成IDT的初始化
 
+CPU不切换到内核的页表，不切换到内核的栈，不保存除`pc`外的其它寄存器。那些事需要由内核来做。在trap的过程中CPU做尽量少的工作，这是为了给软件提供尽可能高的灵活性
+
 ## x86
 
 
 
 中断的公共入口代码alltraps和公共返回代码trapret都在trapasm.S中
 
-```asm6502
+```assembly
 #include "mmu.h"
 
   # vectors.S sends all traps here.
@@ -171,6 +173,23 @@ trap(struct trapframe *tf)
   if(proc && proc->killed && (tf->cs&3) == DPL_USER)
     exit();
 }
+```
+
+
+
+```c
+// mmu.h
+struct gatedesc {
+  uint off_15_0 : 16;   // low 16 bits of offset in segment
+  uint cs : 16;         // code segment selector
+  uint args : 5;        // # args, 0 for interrupt/trap gates
+  uint rsv1 : 3;        // reserved(should be zero I guess)
+  uint type : 4;        // type(STS_{TG,IG32,TG32})
+  uint s : 1;           // must be 0 (system)
+  uint dpl : 2;         // descriptor(meaning new) privilege level
+  uint p : 1;           // Present
+  uint off_31_16 : 16;  // high bits of offset in segment
+};
 ```
 
 

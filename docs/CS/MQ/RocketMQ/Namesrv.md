@@ -3,10 +3,17 @@ NameServer是一个几乎无状态节点，可集群部署，节点是对等的 
 
 Name Server无状态的关键点在于 消息路由信息是存储在Broker Server上的 Broker Server会定时将本地缓存或者在文件中的消息路由信息同步到Name Server Name Server只是提供了“读”的功能
 
+Namesrv组件
 
-NameServer包含哪些
+- KVConfigManager：KV配置管理 key-value配置管理，增删改查
+- RouteInfoManager：路由信息管理
 
-KVConfigManager
+- - 注册Broker，提供Broker信息（名字、角色编号、地址、集群名）
+  - 注册Topic，提供Topic信息（Topic名、读写权限、队列情况）
+
+
+
+
 
 NameServer不仅仅是存储了各个Broker的IP地址和端口，还存储了对应的Topic的路由数据
 

@@ -1115,3 +1115,4 @@ xv6进程只保存父子关系
 2. [操作系统原型 - xv6分析与实验](https://book.douban.com/subject/35550326/)
 3. [xv6 中文文档](https://th0ar.gitbooks.io/xv6-chinese/content/)
 4. [xv6操作系统启动过程(RISC-V)](https://juejin.cn/post/7308621051525120037)
+5. [ 6.S081 All-In-One (dgs.zone)](https://xv6.dgs.zone/)
