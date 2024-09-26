@@ -359,6 +359,77 @@ main(void)
 
 ### RISC-V
 
+
+
+查看Makefile里qemu的配置 会用 `-kernel $K/kernel` 参数指定内核文件，`-file fs.img` 参数指定文件系统镜像
+
+```makefile
+QEMU = qemu-system-riscv64
+
+QEMUOPTS = -machine virt -bios none -kernel $K/kernel -m 128M -smp $(CPUS) -nographic
+QEMUOPTS += -global virtio-mmio.force-legacy=false
+QEMUOPTS += -drive file=fs.img,if=none,format=raw,id=x0
+QEMUOPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
+
+qemu: $K/kernel fs.img
+    $(QEMU) $(QEMUOPTS)
+
+.gdbinit: .gdbinit.tmpl-riscv
+    sed "s/:1234/:$(GDBPORT)/" < $^ > $@
+
+qemu-gdb: $K/kernel .gdbinit fs.img
+    @echo "*** Now run 'gdb' in another window." 1>&2
+    $(QEMU) $(QEMUOPTS) -S $(QEMUGDB)
+```
+
+
+
+```makefile
+K=kernel
+U=user
+
+OBJS = \
+  $K/entry.o \
+  $K/start.o \
+  $K/console.o \
+  $K/printf.o \
+  $K/uart.o \
+  $K/kalloc.o \
+  $K/spinlock.o \
+  $K/string.o \
+  $K/main.o \
+  $K/vm.o \
+  $K/proc.o \
+  $K/swtch.o \
+  $K/trampoline.o \
+  $K/trap.o \
+  $K/syscall.o \
+  $K/sysproc.o \
+  $K/bio.o \
+  $K/fs.o \
+  $K/log.o \
+  $K/sleeplock.o \
+  $K/file.o \
+  $K/pipe.o \
+  $K/exec.o \
+  $K/sysfile.o \
+  $K/kernelvec.o \
+  $K/plic.o \
+  $K/virtio_disk.o
+
+LD = $(TOOLPREFIX)ld
+LDFLAGS = -z max-page-size=4096
+  
+$K/kernel: $(OBJS) $K/kernel.ld $U/initcode
+	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) 
+	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
+	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
+```
+
+
+
+
+
 riscv在启动时，pc被默认设置为`0X1000`，之后经过以下几条指令，跳转到`0x80000000`
 
 - 在第一个shell，打开xv6 gdb模式`make qemu-gdb`
@@ -395,7 +466,7 @@ Disassembly of section .text:
     80000016:	04a000ef          	jal	80000060 <start>
 ```
 
-kernel.ld
+kernel.ld文件中可以得知kernel文件的入口为 `_entry` 函数
 
 ```assembly
 UTPUT_ARCH( "riscv" )
@@ -614,6 +685,179 @@ main()
   }
 
   scheduler();        
+}
+```
+
+
+
+#### userinit
+
+`userinit`函数代码，首先会通过`allocproc` 函数为第一个用户进程分配进程结构体proc，然后将`initproc`变量指向这个第一个用户进程的进程结构体
+
+通过`uvminit`函数给进程分配一个页，且将initcode放置到这个页中，设置当前进程所占内存大小为PGSIZE `uvminit`函数其实只服务于第一个进程的创建，主要是将initcode代码放到虚拟内存地址为 **0x0** 的位置上面
+
+
+
+将进程名称设置为`initcode`，将进程所在目录设置为`/`，将进程状态设置为`RUNNABLE` 随后等待main函数执行调度函数
+
+```c
+// Set up first user process.
+void
+userinit(void)
+{
+  struct proc *p;
+
+  p = allocproc();
+  initproc = p;
+  
+  // allocate one user page and copy initcode's instructions
+  // and data into it.
+  uvmfirst(p->pagetable, initcode, sizeof(initcode));
+  p->sz = PGSIZE;
+
+  // prepare for the very first "return" from kernel to user.
+  p->trapframe->epc = 0;      // user program counter
+  p->trapframe->sp = PGSIZE;  // user stack pointer
+
+  safestrcpy(p->name, "initcode", sizeof(p->name));
+  p->cwd = namei("/");
+
+  p->state = RUNNABLE;
+
+  release(&p->lock);
+}
+```
+
+
+
+```c
+// a user program that calls exec("/init")
+// assembled from ../user/initcode.S
+// od -t xC ../user/initcode
+uchar initcode[] = {
+  0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x45, 0x02,
+  0x97, 0x05, 0x00, 0x00, 0x93, 0x85, 0x35, 0x02,
+  0x93, 0x08, 0x70, 0x00, 0x73, 0x00, 0x00, 0x00,
+  0x93, 0x08, 0x20, 0x00, 0x73, 0x00, 0x00, 0x00,
+  0xef, 0xf0, 0x9f, 0xff, 0x2f, 0x69, 0x6e, 0x69,
+  0x74, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00
+};
+```
+
+`user/initcode.S` 代码如下，start为其中第一个符号，编译后在二进制最前面。可以看出，start函数实际上执行的就是`exec("/init", 0)`，也就是运行/init程序
+
+```assembly
+# Initial process that execs /init.
+# This code runs in user space.
+
+#include "syscall.h"
+
+# exec(init, argv)
+.globl start
+start:
+        la a0, init
+        la a1, argv
+        li a7, SYS_exec
+        ecall
+
+# for(;;) exit();
+exit:
+        li a7, SYS_exit
+        ecall
+        jal exit
+
+# char init[] = "/init\0";
+init:
+  .string "/init\0"
+
+# char *argv[] = { init, 0 };
+.p2align 2
+argv:
+  .quad init
+  .quad 0
+```
+
+
+
+init.c`主要fork了一个子进程，然后打开shell窗口，方便用户进行交互操作。其主要做的就是`fork();exec("sh", 0);
+
+```c
+user/init.c
+int
+main(void)
+{
+  int pid, wpid;
+
+  if(open("console", O_RDWR) < 0){
+    mknod("console", CONSOLE, 0);
+    open("console", O_RDWR);
+  }
+  dup(0);  // stdout
+  dup(0);  // stderr
+
+  for(;;){
+    printf("init: starting sh\n");
+    pid = fork();
+    if(pid < 0){
+      printf("init: fork failed\n");
+      exit(1);
+    }
+    if(pid == 0){
+      exec("sh", argv);
+      printf("init: exec sh failed\n");
+      exit(1);
+    }
+
+    for(;;){
+      // this call to wait() returns if the shell exits,
+      // or if a parentless process exits.
+      wpid = wait((int *) 0);
+      if(wpid == pid){
+        // the shell exited; restart it.
+        break;
+      } else if(wpid < 0){
+        printf("init: wait returned an error\n");
+        exit(1);
+      } else {
+        // it was a parentless process; do nothing.
+      }
+    }
+  }
+}
+```
+
+shell就是不断地使用getcmd函数读取命令行的输入，然后使用`fork`来创建一个子进程。父进程调用`wait`来等待子进程执行命令。子进程调用`runcmd`来执行真正的命令
+
+```c
+int
+main(void)
+{
+  static char buf[100];
+  int fd;
+
+  // Ensure that three file descriptors are open.
+  while((fd = open("console", O_RDWR)) >= 0){
+    if(fd >= 3){
+      close(fd);
+      break;
+    }
+  }
+
+  // Read and run input commands.
+  while(getcmd(buf, sizeof(buf)) >= 0){
+    if(buf[0] == 'c' && buf[1] == 'd' && buf[2] == ' '){
+      // Chdir must be called by the parent, not the child.
+      buf[strlen(buf)-1] = 0;  // chop \n
+      if(chdir(buf+3) < 0)
+        fprintf(2, "cannot cd %s\n", buf+3);
+      continue;
+    }
+    if(fork1() == 0)
+      runcmd(parsecmd(buf));
+    wait(0);
+  }
+  exit(0);
 }
 ```
 
@@ -870,3 +1114,4 @@ xv6进程只保存父子关系
 1. [xv6 a simple, Unix-like teaching operating system](https://pdos.csail.mit.edu/6.828/2018/xv6/book-rev11.pdf)
 2. [操作系统原型 - xv6分析与实验](https://book.douban.com/subject/35550326/)
 3. [xv6 中文文档](https://th0ar.gitbooks.io/xv6-chinese/content/)
+4. [xv6操作系统启动过程(RISC-V)](https://juejin.cn/post/7308621051525120037)
