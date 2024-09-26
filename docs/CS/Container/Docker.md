@@ -2,6 +2,8 @@
 
 A Docker container image is a lightweight, standalone, executable package of software that includes everything needed to run an application: code, runtime, system tools, system libraries and settings.
 
+> 2013年3月15日 PyCon Solomon Hykes的演讲 [The future of Linux Containers](https://www.youtube.com/watch?v=wW9CAH9nSLs)
+
 **Container images** become containers at runtime and in the case of **Docker containers** – images become containers when they run on Docker Engine.<br/> 
 Available for both Linux and Windows-based applications, containerized software will always run the same, regardless of the infrastructure.
 Containers isolate software from its environment and ensure that it works uniformly despite differences for instance between development and staging.
@@ -15,6 +17,11 @@ Docker containers that run on Docker Engine:
 * **Standard:** Docker created the industry standard for containers, so they could be portable anywhere
 * **Lightweight:** Containers share the machine’s OS system kernel and therefore do not require an OS per application, driving higher server efficiencies and reducing server and licensing costs
 * **Secure:** Applications are safer in containers and Docker provides the strongest default isolation capabilities in the industry
+
+> 目前使用Docker基本上有两个选择： **Docker Desktop** 和 **Docker Engine**
+>
+> - Docker Desktop是专门针对个人使用而设计的，支持Mac和Windows快速安装，具有直观的图形界面，还集成了许多周边工具，方便易用
+> - Docker Engine则和Docker Desktop正好相反，完全免费，但只能在Linux上运行，只能使用命令行操作
 
 
 ### Moby
@@ -33,21 +40,8 @@ Install Docker Desktop:
 ##### **Ubuntu**
 
 ```shell
-# Add Docker's official GPG key:
-sudo apt-get update
-sudo apt-get install ca-certificates curl gnupg
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
+sudo apt install -y docker.io
 
-# Add the repository to Apt sources:
-echo \
-  "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-sudo apt-get update
-
-sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
 ##### **Fedora**
@@ -89,6 +83,14 @@ rm -rf /usr/local/share/fish/vendor_completions.d/docker.fish
 ```
 
 <!-- tabs:end -->
+
+第一个 `service docker start` 是启动Docker的后台服务，第二个 `usermod -aG` 是把当前的用户加入Docker的用户组。这是因为操作Docker必须要有root权限，而直接使用root用户不够安全， 加入Docker用户组是一个比较好的选择，这也是Docker官方推荐的做法
+
+```plain
+sudo service docker start         #启动docker服务
+# 重新登录后生效
+sudo usermod -aG docker ${USER}   #当前用户加入docker组
+```
 
 After installed done, open Docker Desktop and set registry-mirrors:
 
