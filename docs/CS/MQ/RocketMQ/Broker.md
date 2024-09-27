@@ -251,6 +251,10 @@ Files
 - multi ConsumeQueue
 - Index
 
+
+
+
+
 DefaultMessageStore
 
 - MessageStoreConfig
@@ -268,6 +272,10 @@ DefaultMessageStore
 - BrokerConfig
 - StoreCheckpoint
 - dispatcherList
+
+
+
+`CommitLog` : `MappedFileQueue` : `MappedFile` = 1 : 1 : N
 
 ### putMessage
 

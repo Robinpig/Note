@@ -5,10 +5,8 @@ You do not need to create producers each time you send messages or destroy the p
 If you regularly create and destroy producers, a large number of short connection requests are generated on the broker.
 We recommend that you create and initialize the minimum number of producers that your business scenarios require, and reuse as many producers as you can.
 
-
 DefaultMQProducerImpl 封装了大部分 Producer 的业务逻辑，
-MQClientInstance 封装了客户端一些通用的业务逻辑，MQClientAPIImpl 封装了客户端
-与服务端的 RPC，NettyRemotingClient 实现了底层网络通信。
+MQClientInstance 封装了客户端一些通用的业务逻辑，MQClientAPIImpl 封装了客户端与服务端的 RPC，NettyRemotingClient 实现了底层网络通信。
 
 
 ```java
@@ -259,6 +257,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
   }
 }
 ```
+
+
+
+### tryToFindTopicPublishInfo
+
+
+
+
+
+
+executeAsyncMessageSend
 
 
 ```java
