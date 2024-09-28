@@ -39,7 +39,7 @@ ctrl + o 返回
 
 在线阅读
 
-[Missing Link Electronics' LXR for Linux, QEMU, U-Boot, and Busybox](https://lxr.missinglinkelectronics.com/)
+[bootlin](https://elixir.bootlin.com/linux/v6.11/source)
 
 ### Build
 

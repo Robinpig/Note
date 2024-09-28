@@ -13,6 +13,10 @@ Class file format：
 - methods_count & methods
 - attributes_count & attributes
 
+
+
+使用[jclasslib bytecode editor](https://github.com/ingokegel/jclasslib)查看class文件
+
 ### access flags
 
 ### Constant Pool

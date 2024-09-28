@@ -1535,3 +1535,16 @@ with jvisualvm
 1. [Java T point](https://www.javatpoint.com/jvm-java-virtual-machine)
 2. [The Java® Virtual Machine Specification Java SE 17 Edition](https://docs.oracle.com/javase/specs/jvms/se17/html/)
 3. [深入理解Java虚拟机（第3版）- 周志明](https://book.douban.com/subject/34907497/)
+4. [Java虚拟机精讲]
+5. [实战JAVA虚拟机 JVM故障诊断与性能优化]
+6. [自己动手写Java虚拟机]
+7. [深入浅出：Java虚拟机设计与实现]
+8. [揭秘Java虚拟机：JVM设计原理与实现]
+9. [虚拟机设计与实现：以JVM为例]
+10. [深入解析Java虚拟机HotSpot]
+11. [HotSpot实战]
+12. [深入Java虚拟机：JVM G1 GC的算法与实现]
+13. [深入探索JVM垃圾回收]
+14. [JVM G1源码分析和调优]
+15. [新一代垃圾回收器-ZGC设计与实现]
+16. [深入剖析Java虚拟机 : 源码剖析与实例详解（基础卷）]
