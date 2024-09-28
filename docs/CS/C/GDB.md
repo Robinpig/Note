@@ -5,6 +5,18 @@ GDB, the GNU Project debugger, allows you to see what is going on `inside' anoth
 
 like LLDB clang in MacOS
 
+以下是一些gdb的常用命令
+```shell
+layout split        # 同时打开源码及汇编窗口
+layout reg          # 打开寄存器窗口
+layout asm          # 打开汇编窗口
+next / nexti        # 单步到下一行 源代码 / 指令，不进入函数
+step / stepi        # 单步到下一行 源代码 / 指令，进入函数
+break (b)           # 设置断点，后面可接函数、行号、地址等
+continue (c)        # 继续执行到下一个断点
+```
+
+
 
 based on `ptrace`(Linux)
 
