@@ -7,6 +7,101 @@ raftexample 的目录位于 `etcd/contrib/raftexample/` ，这个目录是一个
 raftexample目录下go build -gcflags=all="-N -l"* 编译出goreman 使用 goreman start启动
 
 
+etcd-raft 最大设计亮点就是抽离了网络、持久化、协程等逻辑，用一个纯粹的 raft StateMachine 来实现 raft 算法逻辑，充分的解耦，有助于 raft 算法本身的正确实现，而且更容易纯粹的去测试 raft 算法最本质的逻辑，而不需要考虑引入其他因素（各种异常）
+
+
+etcd-raft StateMachine 封装在 raft struct 中，其状态如下
+
+
+
+```go
+type StateType uint64
+
+var stmap = [...]string{
+    “StateFollower”,
+    “StateCandidate”,
+    “StateLeader”,
+    “StatePreCandidate”,
+}
+
+func (st StateType) String() string {
+    return stmap[uint64(st)]
+}
+```
+
+状态转换如下图
+
+
+
+
+raft state 转换的调用接口
+
+```go
+func (r *raft) becomeFollower(term uint64, lead uint64)
+func (r *raft) becomePreCandidate()
+func (r *raft) becomeCandidate() 
+func (r *raft) becomeLeader()
+```
+
+
+
+
+etcd 将 raft 相关的所以处理都抽象为了 Msg，通过 Step 接口处理
+```go
+func (r *raft) Step(m pb.Message) error {
+    // ... Handle the message term, which may result in our stepping down to a follower.
+
+    switch m.Type {
+    // ...
+
+    default:
+        err := r.step(r, m)
+    }
+    return nil
+}
+
+```
+
+
+其中 step 是一个回调函数，在不同的 state 会设置不同的回调函数来驱动 raft，这个回调函数 stepFunc 就是在 become* 函数完成的设置
+
+```go
+type raft struct {
+    // ...
+    step stepFunc
+}
+
+```
+
+
+step 回调函数有如下几个值，其中 stepCandidate 会处理 PreCandidate 和 Candidate 两种状态
+
+```go
+func stepFollower(r *raft, m pb.Message) error 
+func stepCandidate(r *raft, m pb.Message) error
+func stepLeader(r *raft, m pb.Message) error
+
+```
+
+
+
+所有的外部处理请求经过 raft StateMachine 处理都会首先被转换成统一抽象的输入 Message（Msg），Msg 会通过 raft.Step(m) 接口完成 raft StateMachine 的处理，Msg 分两类：
+
+- 本地 Msg，term = 0，这种 Msg 并不会经过网络发送给 Peer，只是将 Node 接口的一些请求转换成 raft StateMachine 统一处理的抽象 Msg，这里以 Propose 接口为例，向 raft 提交一个 Op 操作，其会被转换成 MsgProp，通过 raft.Step() 传递给 raft StateMachine，最后可能被转换成给 Peer 复制 Op log 的 MsgApp Msg；（即发送给本地peer的消息）
+- 非本地 Msg，term 非 0，这种 Msg 会经过网络发送给 Peer；这里以 Msgheartbeat 为例子，就是 Leader 给 Follower 发送的心跳包。但是这个 MsgHeartbeat Msg 是通过 Tick 接口传入的，这个接口会向 raft StateMachine 传递一个 MsgBeat Msg，raft StateMachine 处理这个 MsgBeat 就是向复制组其它 Peer 分别发送一个 MsgHeartbeat Msg
+
+
+
+
+
+Ready
+
+由于 etcd 的网络、持久化模块和 raft 核心是分离的，所以当 raft 处理到某一些阶段的时候，需要输出一些东西，给外部处理，例如 Op log entries 持久化，Op log entries 复制的 Msg 等；以 heartbeat 为例，输入是 MsgBeat Msg，经过状态机状态化之后，就变成了给复制组所有的 Peer 发送心跳的 MsgHeartbeat Msg；在 ectd 中就是通过一个 Ready 的数据结构来封装当前 Raft state machine 已经准备好的数据和 Msg 供外部处理。下面是 Ready 的数据结构
+
+
+
+
+
 
 ## Node
 

@@ -304,7 +304,7 @@ func startEtcdOrProxyV2(args []string) {
 }
 ```
 
-startEtcd
+### startEtcd
 
 这个函数的功能：
 1. 启动etcd，如果失败则通过error返回；
@@ -533,6 +533,12 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 }
 ```
 
+
+
+
+
+
+
 ### serveClients
 
 serve accepts incoming connections on the listener l, creating a new service goroutine for each. The service goroutines read requests and then call handler to reply to them.
@@ -655,6 +661,27 @@ EtcdServer 会处理这个 applyc 队列，会将 snapshot 和 entries 都 apply
 
 
 最后调用 applyWait 的 Trigger，唤醒客户端请求的等待线程，返回客户端的请求。
+
+
+
+put 流程
+
+
+client 通过 grpc 发送一个 Put kv request，etcd server 的 rpc server 收到这个请求，通过 node 模块的 Propose 接口提交，node 模块将这个 Put kv request 转换成 raft StateMachine 认识的 MsgProp Msg 并通过 propc Channel 传递给 node 模块的 coroutine；
+node 模块 coroutine 监听在 propc Channel 中，收到 MsgProp Msg 之后，通过 raft.Step(Msg) 接口将其提交给 raft StateMachine 处理；
+raft StateMachine 处理完这个 MsgProp Msg 会产生 1 个 Op log entry 和 2 个发送给另外两个副本的 Append entries 的 MsgApp messages，node 模块会将这两个输出打包成 Ready，然后通过 readyc Channel 传递给 raftNode 模块的 coroutine；
+raftNode 模块的 coroutine 通过 readyc 读取到 Ready，首先通过网络层将 2 个 append entries 的 messages 发送给两个副本(PS:这里是异步发送的)；
+raftNode 模块的 coroutine 自己将 Op log entry 通过持久化层的 WAL 接口同步的写入 WAL 文件中
+raftNode 模块的 coroutine 通过 advancec Channel 通知当前 Ready 已经处理完，请给我准备下一个 带出的 raft StateMachine 输出Ready；
+其他副本的返回 Append entries 的 response： MsgAppResp message，会通过 node 模块的接口经过 recevc Channel 提交给 node 模块的 coroutine；
+node 模块 coroutine 从 recev Channel 读取到 MsgAppResp，然后提交给 raft StateMachine 处理。node 模块 coroutine 会驱动 raft StateMachine 得到关于这个 committedEntires，也就是一旦大多数副本返回了就可以 commit 了，node 模块 new 一个新的 Ready其包含了 committedEntries，通过 readyc Channel 传递给 raftNode 模块 coroutine 处理；
+raftNode 模块 coroutine 从 readyc Channel 中读取 Ready结构，然后取出已经 commit 的 committedEntries 通过 applyc 传递给另外一个 etcd server coroutine 处理，其会将每个 apply 任务提交给 FIFOScheduler 调度异步处理，这个调度器可以保证 apply 任务按照顺序被执行，因为 apply 的执行是不能乱的；
+raftNode 模块的 coroutine 通过 advancec Channel 通知当前 Ready 已经处理完，请给我准备下一个待处理的 raft StateMachine 输出Ready；
+FIFOScheduler 调度执行 apply 已经提交的 committedEntries
+AppliedIndex 推进，通知 ReadLoop coroutine，满足 applied index>= commit index 的 read request 可以返回；
+调用网络层接口返回 client 成功。
+OK，整个 Put kv request 的处理请求流程大致介绍完。需要注意的是，上面尽管每个步骤都有严格的序号，但是很多操作是异步，并发甚至并行的发生的，序号并不是严格的发生先后顺序，例如上面的 11 和 12，分别在不同 coroutine 并行处理，并非严格的发生时间序列。
+
 
 
 
