@@ -293,6 +293,12 @@ Most message queues provide best-effort ordering which ensures that messages are
 Poison pills are special messages that can be received, but not processed.
 They are a mechanism used in order to signal a consumer to end its work so it is no longer waiting for new inputs, and is similar to closing a socket in a client/server model.
 
+
+
+### Message Tracing
+
+消息轨迹
+
 ## Security
 
 Message queues will authenticate applications that try to access the queue, and allow you to use encryption to encrypt messages over the network as well as in the queue itself.
