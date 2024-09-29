@@ -271,6 +271,71 @@ tag
 
 
 
+
+
+### Message Tracing
+
+
+
+```java
+public enum TraceType {
+    Pub,
+    SubBefore,
+    SubAfter,
+    EndTransaction,
+}
+```
+
+
+
+客户端中统一使用TraceBean装载消息轨迹数据
+
+```java
+public class TraceBean {
+    private static final String LOCAL_ADDRESS = UtilAll.ipToIPv4Str(UtilAll.getIP());
+    private String topic = "";
+    private String msgId = "";
+    private String offsetMsgId = "";
+    private String tags = "";
+    private String keys = "";
+    private String storeHost = LOCAL_ADDRESS;
+    private String clientHost = LOCAL_ADDRESS;
+    private long storeTime;
+    private int retryTimes;
+    private int bodyLength;
+    private MessageType msgType;
+    private LocalTransactionState transactionState;
+    private String transactionId;
+    private boolean fromTransactionCheck;
+}
+```
+
+轨迹上下文
+
+- TraceContext
+- ConsumeMessageContext
+- SendMessageContext
+- FilterMessageContext
+- EndTransactionContext
+- CheckForbiddenContext
+
+
+
+使用TraceContext组合不同上下文对象
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=RocketMQ)

@@ -56,17 +56,6 @@ Java input streams can support zero-copy through the java.nio.channels.FileChann
 RDMA (Remote Direct Memory Access) protocols deeply rely on zero-copy techniques.
 
 
-## mmap
-
-In computing, mmap(2) is a POSIX-compliant Unix system call that maps files or devices into memory. 
-It is a method of memory-mapped file I/O. 
-It implements demand paging because file contents are not immediately read from disk and initially use no physical RAM at all. 
-The actual reads from disk are performed after a specific location is accessed, in a lazy manner. 
-
-
-The mmap system call has been used in various database implementations as an alternative for implementing a buffer pool, although this created a different set of problems that could realistically only be fixed using a buffer pool.
-
-> [Are You Sure You Want to Use MMAP in Your Database Management System?](https://db.cs.cmu.edu/papers/2022/cidr2022-p13-crotty.pdf)
 
 ## sendfile
 

@@ -973,3 +973,46 @@ struct mm_struct {
 	unsigned long cpu_bitmap[];
 };
 ```
+
+
+在Linux内核中，虚拟内存是用过结构体 vm_area_struct 来管理的，通过 vm_area_struct 结构体可以把虚拟内存划分为多个用途不相同的内存区，
+比如可以划分为数据段区、代码段区等等，vm_area_struct 结构体的定义如下：
+
+
+每个进程都由 task_struct 结构进行管理，task_struct 结构中的 mm 成员指向了每个进程的内存管理结构 mm_struct，而 mm_struct 结构的 mmap 成员记录了进程虚拟内存空间各个内存区的 vm_area_struct 结构链表
+
+<div style="text-align: center;">
+
+![](./img/vm_area_struct.png)
+
+</div>
+
+<p style="text-align: center;">Fig.1. vm_area_struct</p>
+
+当调用 mmap() 时，内核会创建一个 vm_area_struct 结构，并且把 vm_start 和 vm_end 指向虚拟内存空间的某个内存区，并且把 vm_file 字段指向映射的文件对象。然后调用文件对象的 mmap 接口来对 vm_area_struct 结构的 vm_ops 成员进行初始化，如 ext2 文件系统的文件对象会调用 generic_file_mmap() 函数进行初始化
+
+
+vm_operations_struct 结构的 nopage 接口会在访问内存发生异常时被调用，上面指向的是 filemap_nopage() 函数，filemap_nopage() 函数的主要工作是：
+
+- 把映射到虚拟内存区的文件内容读入到物理内存页中。
+- 对访问发生异常的虚拟内存地址与物理内存地址进行映射
+
+
+虚拟内存页m 映射到 物理内存页x，并且把映射的文件的内容读入到物理内存中，这样就把内存与文件的映射关系建立起来，对映射的内存区进行读写操作实际上就是对文件的读写操作。
+一般来说，对映射的内存空间进行读写并不会实时写入到文件中，所以要对内存与文件进行同步时需要调用 msync() 函数来实现
+
+
+> 像 read()/write() 这些系统调用，首先需要进行内核空间，然后把文件内容读入到缓存中，然后再对缓存进行读写操作，最后由内核定时同步到文件中
+
+而调用 mmap() 系统调用对文件进行映射后，用户对映射后的内存进行读写实际上是对文件缓存的读写，所以减少了一次系统调用，从而加速了对文件读写的效率
+
+
+ 
+## Links
+
+
+
+## References
+
+1. []()
+

@@ -261,10 +261,139 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
 
 ### tryToFindTopicPublishInfo
+从本地缓存(ConcurrentMap< String/\* topic \*/, TopicPublishInfo>)中尝试获取，第一次肯定为空
+尝试从 NameServer 获取配置信息并更新本地缓存配置。
+如果找到可用的路由信息并返回。
+如果未找到路由信息，则再次尝试使用默认的 topic 去找路由配置信息。
+```java
+private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
+    TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
+    if (null == topicPublishInfo || !topicPublishInfo.ok()) {
+        this.topicPublishInfoTable.putIfAbsent(topic, new TopicPublishInfo());
+        this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic);
+        topicPublishInfo = this.topicPublishInfoTable.get(topic);
+    }
+
+    if (topicPublishInfo.isHaveTopicRouterInfo() || topicPublishInfo.ok()) {
+        return topicPublishInfo;
+    } else {
+        this.mQClientFactory.updateTopicRouteInfoFromNameServer(topic, true, this.defaultMQProducer);
+        topicPublishInfo = this.topicPublishInfoTable.get(topic);
+        return topicPublishInfo;
+    }
+}
+```
+代码@1：为了避免重复从 NameServer 获取配置信息，在这里使用了ReentrantLock,并且设有超时时间。固定为3000s。
+代码@2，@3的区别，一个是获取默认 topic 的配置信息，一个是获取指定 topic 的配置信息，该方法在这里就不跟踪进去了，具体的实现就是通过与 NameServer 的长连接 Channel 发送 GET_ROUTEINTO_BY_TOPIC (105)命令，获取配置信息。注意，次过程的超时时间为3s，由此可见，NameServer的实现要求高效。
+代码@4、@5、@6：从这里开始，拿到最新的 topic 路由信息后，需要与本地缓存中的 topic 发布信息进行比较，如果有变化，则需要同步更新发送者、消费者关于该 topic 的缓存。
+代码@7：更新发送者的缓存。
+代码@8：更新订阅者的缓存（消费队列信息）。
+至此tryToFindTopicPublishInfo 运行完毕，从 NameServe r获取 TopicPublishData，继续消息发送的第二个步骤，选取一个消息队列
 
 
+```java
+public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
+    DefaultMQProducer defaultMQProducer) {
+    try {
+        if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+            try {
+                TopicRouteData topicRouteData;
+                if (isDefault && defaultMQProducer != null) {
+                    topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(clientConfig.getMqClientApiTimeout());
+                    if (topicRouteData != null) {
+                        for (QueueData data : topicRouteData.getQueueDatas()) {
+                            int queueNums = Math.min(defaultMQProducer.getDefaultTopicQueueNums(), data.getReadQueueNums());
+                            data.setReadQueueNums(queueNums);
+                            data.setWriteQueueNums(queueNums);
+                        }
+                    }
+                } else {
+                    topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, clientConfig.getMqClientApiTimeout());
+                }
+                if (topicRouteData != null) {
+                    TopicRouteData old = this.topicRouteTable.get(topic);
+                    boolean changed = topicRouteData.topicRouteDataChanged(old);
+                    if (!changed) {
+                        changed = this.isNeedUpdateTopicRouteInfo(topic);
+                    } else {
+                        log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
+                    }
 
+                    if (changed) {
 
+                        for (BrokerData bd : topicRouteData.getBrokerDatas()) {
+                            this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
+                        }
+
+                        // Update endpoint map
+                        {
+                            ConcurrentMap<MessageQueue, String> mqEndPoints = topicRouteData2EndpointsForStaticTopic(topic, topicRouteData);
+                            if (!mqEndPoints.isEmpty()) {
+                                topicEndPointsTable.put(topic, mqEndPoints);
+                            }
+                        }
+
+                        // Update Pub info
+                        {
+                            TopicPublishInfo publishInfo = topicRouteData2TopicPublishInfo(topic, topicRouteData);
+                            publishInfo.setHaveTopicRouterInfo(true);
+                            for (Entry<String, MQProducerInner> entry : this.producerTable.entrySet()) {
+                                MQProducerInner impl = entry.getValue();
+                                if (impl != null) {
+                                    impl.updateTopicPublishInfo(topic, publishInfo);
+                                }
+                            }
+                        }
+
+                        // Update sub info
+                        if (!consumerTable.isEmpty()) {
+                            Set<MessageQueue> subscribeInfo = topicRouteData2TopicSubscribeInfo(topic, topicRouteData);
+                            for (Entry<String, MQConsumerInner> entry : this.consumerTable.entrySet()) {
+                                MQConsumerInner impl = entry.getValue();
+                                if (impl != null) {
+                                    impl.updateTopicSubscribeInfo(topic, subscribeInfo);
+                                }
+                            }
+                        }
+                        TopicRouteData cloneTopicRouteData = new TopicRouteData(topicRouteData);
+                        log.info("topicRouteTable.put. Topic = {}, TopicRouteData[{}]", topic, cloneTopicRouteData);
+                        this.topicRouteTable.put(topic, cloneTopicRouteData);
+                        return true;
+                    }
+                } else {
+                    log.warn("updateTopicRouteInfoFromNameServer, getTopicRouteInfoFromNameServer return null, Topic: {}. [{}]", topic, this.clientId);
+                }
+            } catch (MQClientException e) {
+                if (!topic.startsWith(MixAll.RETRY_GROUP_TOPIC_PREFIX) && !topic.equals(TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC)) {
+                    log.warn("updateTopicRouteInfoFromNameServer Exception", e);
+                }
+            } catch (RemotingException e) {
+                log.error("updateTopicRouteInfoFromNameServer Exception", e);
+                throw new IllegalStateException(e);
+            } finally {
+                this.lockNamesrv.unlock();
+            }
+        } else {
+            log.warn("updateTopicRouteInfoFromNameServer tryLock timeout {}ms. [{}]", LOCK_TIMEOUT_MILLIS, this.clientId);
+        }
+    } catch (InterruptedException e) {
+        log.warn("updateTopicRouteInfoFromNameServer Exception", e);
+    }
+
+    return false;
+}
+```
+sendLatencyFaultEnable，是否开启消息失败延迟规避机制，该值在消息发送者那里可以设置，如果该值为false,直接从 topic 的所有队列中选择下一个，而不考虑该消息队列是否可用（比如Broker挂掉）。
+代码@2-start--end,这里使用了本地线程变量 ThreadLocal 保存上一次发送的消息队列下标，消息发送使用轮询机制获取下一个发送消息队列。
+代码@2对 topic 所有的消息队列进行一次验证，为什么要循环呢？因为加入了发送异常延迟，要确保选中的消息队列(MessageQueue)所在的Broker是正常的。
+代码@3：判断当前的消息队列是否可用。
+要理解代码@2，@3 处的逻辑，我们就需要理解 RocketMQ 发送消息延迟机制，具体实现类：MQFaultStrategy
+latencyMax：最大延迟时间数值，在消息发送之前，先记录当前时间（start），然后消息发送成功或失败时记录当前时间（end），(end-start)代表一次消息延迟时间，发送错误时，updateFaultItem 中 isolation 为 true，与 latencyMax 中值进行比较时得值为 30s,也就时该 broke r在接下来得 600000L，也就时5分钟内不提供服务，等待该 Broker 的恢复
+
+计算出来的延迟值+加上本次消息的延迟值，设置 为FaultItem 的 startTimestamp,表示当前时间必须大于该 startTimestamp 时，该 broker 才重新参与 MessageQueue 的负载。
+从@2--@3，一旦一个 MessageQueue 符合条件，即刻返回，但该 Topic 所在的所 有Broker全部标记不可用时，进入到下一步逻辑处理。（在此处，我们要知道，标记为不可用，并不代表真的不可用，Broker 是可以在故障期间被运营管理人员进行恢复的，比如重启）。
+代码@4，5：根据 Broker 的 startTimestart 进行一个排序，值越小，排前面，然后再选择一个，返回（此时不能保证一定可用，会抛出异常，如果消息发送方式是同步调用，则有重试机制）。
+接下来将进入到消息发送的第三步，发现消息
 
 
 executeAsyncMessageSend
