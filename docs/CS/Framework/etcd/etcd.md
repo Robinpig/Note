@@ -609,7 +609,135 @@ func (e *Etcd) serveClients() (err error) {
 ```
 
 
+EtcdServer::Start -> EtcdServer::start -> EtcdServer::run
 
+```go
+func (s *EtcdServer) run() {
+    lg := s.Logger()
+
+    sn, err := s.r.raftStorage.Snapshot()
+    if err != nil {
+        lg.Panic("failed to get snapshot from Raft storage", zap.Error(err))
+    }
+
+    // asynchronously accept apply packets, dispatch progress in-order
+    sched := schedule.NewFIFOScheduler()
+
+    var (
+        smu   sync.RWMutex
+        syncC <-chan time.Time
+    )
+    setSyncC := func(ch <-chan time.Time) {
+        smu.Lock()
+        syncC = ch
+        smu.Unlock()
+    }
+    getSyncC := func() (ch <-chan time.Time) {
+        smu.RLock()
+        ch = syncC
+        smu.RUnlock()
+        return
+    }
+    rh := &raftReadyHandler{
+        getLead:    func() (lead uint64) { return s.getLead() },
+        updateLead: func(lead uint64) { s.setLead(lead) },
+        updateLeadership: func(newLeader bool) {
+            if !s.isLeader() {
+                if s.lessor != nil {
+                    s.lessor.Demote()
+                }
+                if s.compactor != nil {
+                    s.compactor.Pause()
+                }
+                setSyncC(nil)
+            } else {
+                if newLeader {
+                    t := time.Now()
+                    s.leadTimeMu.Lock()
+                    s.leadElectedTime = t
+                    s.leadTimeMu.Unlock()
+                }
+                setSyncC(s.SyncTicker.C)
+                if s.compactor != nil {
+                    s.compactor.Resume()
+                }
+            }
+            if newLeader {
+                s.leaderChangedMu.Lock()
+                lc := s.leaderChanged
+                s.leaderChanged = make(chan struct{})
+                close(lc)
+                s.leaderChangedMu.Unlock()
+            }
+            // TODO: remove the nil checking
+            // current test utility does not provide the stats
+            if s.stats != nil {
+                s.stats.BecomeLeader()
+            }
+        },
+        updateCommittedIndex: func(ci uint64) {
+            cci := s.getCommittedIndex()
+            if ci > cci {
+                s.setCommittedIndex(ci)
+            }
+        },
+    }
+    s.r.start(rh)
+
+    ep := etcdProgress{
+        confState: sn.Metadata.ConfState,
+        snapi:     sn.Metadata.Index,
+        appliedt:  sn.Metadata.Term,
+        appliedi:  sn.Metadata.Index,
+    }
+
+    defer func() {
+        s.wgMu.Lock() // block concurrent waitgroup adds in GoAttach while stopping
+        close(s.stopping)
+        s.wgMu.Unlock()
+        s.cancel()
+        sched.Stop()
+
+        // wait for gouroutines before closing raft so wal stays open
+        s.wg.Wait()
+
+        s.SyncTicker.Stop()
+
+        // must stop raft after scheduler-- etcdserver can leak rafthttp pipelines
+        // by adding a peer after raft stops the transport
+        s.r.stop()
+
+        s.Cleanup()
+
+        close(s.done)
+    }()
+
+    var expiredLeaseC <-chan []*lease.Lease
+    if s.lessor != nil {
+        expiredLeaseC = s.lessor.ExpiredLeasesC()
+    }
+
+    for {
+        select {
+        case ap := <-s.r.apply():
+            f := func(context.Context) { s.applyAll(&ep, &ap) }
+            sched.Schedule(f)
+        case leases := <-expiredLeaseC:
+            s.revokeExpiredLeases(leases)
+        case err := <-s.errorc:
+            lg.Warn("server error", zap.Error(err))
+            lg.Warn("data-dir used by this member must be removed")
+            return
+        case <-getSyncC():
+            if s.v2store.HasTTLKeys() {
+                s.sync(s.Cfg.ReqTimeout())
+            }
+        case <-s.stop:
+            return
+        }
+    }
+}
+```
 
 ## 消息处理
 
@@ -1121,3 +1249,4 @@ type Peer interface {
 ## References
 
 1. [深入浅出 etcd 系列 part 1 – 解析 etcd 的架构和代码框架](https://mp.weixin.qq.com/s/C2WKrfcJ1sVQuSxlpi6uNQ)
+1. [深入浅出etcd/raft —— 0x00 引言](https://blog.mrcroxx.com/posts/code-reading/etcdraft-made-simple/0-introduction/)
