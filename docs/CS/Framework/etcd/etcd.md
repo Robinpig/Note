@@ -30,7 +30,7 @@ etcd 整体架构如下图所示：
 
 <div style="text-align: center;">
 
-![Fig.1. Queue](img/Architecture.png)
+![Fig.1. Architecture](img/Architecture.png)
 
 </div>
 
