@@ -159,7 +159,55 @@ public void start() throws Exception {
     }
 ```
 
+#### registerBrokerAll
+
+
+
 Broker sync route table every 30s
+
+```java
+public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway, boolean forceRegister) {
+        ConcurrentMap<String, TopicConfig> topicConfigMap = this.getTopicConfigManager().getTopicConfigTable();
+        ConcurrentHashMap<String, TopicConfig> topicConfigTable = new ConcurrentHashMap<>();
+
+        for (TopicConfig topicConfig : topicConfigMap.values()) {
+            if (!PermName.isWriteable(this.getBrokerConfig().getBrokerPermission())
+                || !PermName.isReadable(this.getBrokerConfig().getBrokerPermission())) {
+                topicConfigTable.put(topicConfig.getTopicName(),
+                    new TopicConfig(topicConfig.getTopicName(), topicConfig.getReadQueueNums(), topicConfig.getWriteQueueNums(),
+                        topicConfig.getPerm() & getBrokerConfig().getBrokerPermission()));
+            } else {
+                topicConfigTable.put(topicConfig.getTopicName(), topicConfig);
+            }
+
+            if (this.brokerConfig.isEnableSplitRegistration()
+                && topicConfigTable.size() >= this.brokerConfig.getSplitRegistrationSize()) {
+                TopicConfigAndMappingSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().buildSerializeWrapper(topicConfigTable);
+                doRegisterBrokerAll(checkOrderConfig, oneway, topicConfigWrapper);
+                topicConfigTable.clear();
+            }
+        }
+
+        Map<String, TopicQueueMappingInfo> topicQueueMappingInfoMap = this.getTopicQueueMappingManager().getTopicQueueMappingTable().entrySet().stream()
+            .map(entry -> new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), TopicQueueMappingDetail.cloneAsMappingInfo(entry.getValue())))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        TopicConfigAndMappingSerializeWrapper topicConfigWrapper = this.getTopicConfigManager().
+            buildSerializeWrapper(topicConfigTable, topicQueueMappingInfoMap);
+        if (this.brokerConfig.isEnableSplitRegistration() || forceRegister || needRegister(this.brokerConfig.getBrokerClusterName(),
+            this.getBrokerAddr(),
+            this.brokerConfig.getBrokerName(),
+            this.brokerConfig.getBrokerId(),
+            this.brokerConfig.getRegisterBrokerTimeoutMills(),
+            this.brokerConfig.isInBrokerContainer())) {
+            doRegisterBrokerAll(checkOrderConfig, oneway, topicConfigWrapper);
+        }
+    }
+```
+
+
+
+
 
 PushConumser
 

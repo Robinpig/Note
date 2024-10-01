@@ -148,17 +148,48 @@ zcat /proc/config.gz > .config
 brew install make
 brew install aarch64-elf-gcc
 brew install openssl@1.1
+```
+内核源码同级新建include目录，拷贝[elf.h](https://raw.githubusercontent.com/bminor/glibc/master/elf/elf.h)文件到其中
 
-/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- defconfig
+> 由于macOS环境已经定义了uuid_t从而引发了重复定义的错误
+>
+> error: member reference base type 'typeof (((struct tee_client_device_id )0)->uuid)' (aka 'unsigned char [16]') is not a structure or union uuid.b[15])
+
+scripts/mod/file2alias.c文件中
+
+```
+typedef struct {
+        __u8 b[16];
+ } uuid_le;
+
+#ifdef __APPLE__
+#define uuid_t compat_uuid_t
+#endif
+
+ typedef struct {
+        __u8 b[16];
+ } uuid_t;
+```
+
+
+
+```shell
+/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- HOSTCFLAGS="-I../include -I/opt/homebrew/opt/openssl@1.1/include/" HOSTLDFLAGS="-L/opt/homebrew/opt/openssl@1.1/lib/" -j8
 
 # 去掉CONFIG_KVM选项避免不必要的报错
 # [ ] Virtualization  ----
 /opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- menuconfig
-
-
 ```
 
 > https://ixx.life/notes/cross-compile-linux-on-macos/
+
+查看vmlinux文件
+
+```shell
+file vmlinux
+```
+
+
 
 ##### **x86 Mac**
 

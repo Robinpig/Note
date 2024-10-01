@@ -1547,4 +1547,5 @@ with jvisualvm
 13. [深入探索JVM垃圾回收]
 14. [JVM G1源码分析和调优]
 15. [新一代垃圾回收器-ZGC设计与实现]
-16. [深入剖析Java虚拟机 : 源码剖析与实例详解（基础卷）]
+16. [深入剖析Java虚拟机 : 源码剖析与实例详解（基础卷）]()
+17. [HotSpot Glossary of Terms](https://openjdk.org/groups/hotspot/docs/HotSpotGlossary.html)
