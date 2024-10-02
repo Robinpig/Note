@@ -168,6 +168,21 @@ qemu-system-riscv64 --version
 
 
 
+
+proc.c sleeplock.c spinlock.c
+
+ctrl p 获取进程信息是由内核函数procdump打印
+
+进程后面的数字是调用栈关于函数调用的返回地址 可以使用addr2line -e kernel []  查看对应代码 将调用栈所有地址逐个检查 可以还原出进程阻塞前的函数调用嵌套情况
+
+例如上面的sh 进程是通 过系统 调用进入到内核的，具体过程包括alltraps->trap->
+
+s y s c a l l - > s y s _ r e a d ()- > r e a d i ()- > c o n s o l e r e a d ()- > s l e e p ()
+
+
+
+
+
 使用gdb调试
 
 
@@ -177,7 +192,9 @@ brew install riscv64-elf-gdb
 
 第一个窗口 make qemu-gdb , 第二个窗口riscv64-elf-gdb
 
+'
 
+如果 我们希 望各个线程 都受gdb 控制而执 行，而不是现在只控制其中一个线程， 那么我们设置set-scheduler-locking=on，反 之设置力off。我们还可以控制调试命令施加到指定的线程上，例如用具体的ID 列表，或者用all指代所有线程
 
 ## Init
 
@@ -356,6 +373,10 @@ main(void)
 ```
 
 
+
+
+
+mpmain()是启动代码的最后阶段， 随后将进入scheduler()调度器中的无限循环(不再返回)。因此，mpmain()的第一件事 情 就 是 打 印 “ c p u X : s t a r t i n g ” 的 信 息 ，然 用 i d t i n i t ( ) 装 入 中 断 描 述 符 I D T 表 以 响 应 时 钟 中断(及其他中断)，接着将 cpu->started 设置 1，让其他处理器知道本处理器已经完成 启动。 最后进入到调度器的scheduler()中的无限循环中，每隔一个tick时钟中断就选取 下一个就绪进程来执行
 
 ### RISC-V
 
@@ -880,14 +901,7 @@ entry和start运行在机器态 main运行在内核态
 
 
 
-## Process
 
-
-proc.c sleeplock.c spinlock.c
-
-
-ctrl p 获取进程信息
-addr2line -e kernel 调用占 查看执行停顿处
 
 ## Memory 
 
@@ -908,8 +922,8 @@ vm.c kalloc.c
 #include "user/user.h"
 
 int main() {
-printf("Hello World!\n");
-exit(0);
+	printf("Hello World!\n");
+	exit(0);
 }
 ```
 

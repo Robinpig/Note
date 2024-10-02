@@ -38,7 +38,7 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 
 
-在操作系统中，所有的进程信息`struct proc`都存储在`ptable`中，`ptable`的定义如下
+在操作系统中，ptable.proc[NPR OC]数组用于记录所有 进程 的PCB;initproc是i n i t 进 程的 P C ，`ptable`的定义如下
 
 ```c
 struct {
@@ -47,7 +47,52 @@ struct {
 } ptable;
 ```
 
+由于各个处 理器共享一个全局进程表(ptable)，因此 xv6 的调度算法采用了极简单的时间片轮转算法。因为各处理器核上的调度器并发地共享 一 个就绪进程 队列, 所以需要用自旋锁进行互斥保护
 
+定时器每 经过一个计时周期tick就会发出时钟中断，每次都会经时钟中断处理函数 进入到调度函数，从而引 发一 次调度。调度器则是简单地循环扫描pt abl e[]，找到下一个就绪 进程，并且切换过去 也就是说，xv6的时间片并不是指一个进程每 次能执 行一个时间片tick 对应 的时长， 而是不管该进程什么时候开始拥 有CPU的，只要到下一个 时钟tick就 必须再次调度。 每 一 遍 轮 转 过 程 中，各 个 进程 所 占 有 的 C P U 时 间 是 不 确 定 的 ，小 于 或 等 于 一 个 时 钟 t i c k 长度。例如某个进程A在执行了半个tick时间然后阻 塞睡眠，此时调度器执行另一个就 绪进程B，那么B 执行半个tick后就将面临下一次调度
+
+
+
+除了被动的定时中断原因外，还可能因为进程发 出系统调用进入内核，出于某些原因 而需要 阻塞，从而主动要求切换到其他进程。例如发 出磁盘读写操作、或者直接进行 s l e e p 系 统 调 用 都 可 能 进 入 阻 塞 并切 换 到 其 他 进 程
+
+
+
+
+
+CPU
+
+
+
+```c
+// Per-CPU state
+struct cpu {
+  uchar apicid;                // Local APIC ID
+  struct context *scheduler;   // swtch() here to enter scheduler
+  struct taskstate ts;         // Used by x86 to find stack for interrupt
+  struct segdesc gdt[NSEGS];   // x86 global descriptor table
+  volatile uint started;       // Has the CPU started?
+  int ncli;                    // Depth of pushcli nesting.
+  int intena;                  // Were interrupts enabled before pushcli?
+
+  // Cpu-local storage variables; see below
+  struct cpu *cpu;
+  struct proc *proc;           // The currently-running process.
+};
+
+extern struct cpu cpus[NCPU];
+extern int ncpu;
+
+// Per-CPU variables, holding pointers to the
+// current cpu and to the current process.
+// The asm suffix tells gcc to use "%gs:0" to refer to cpu
+// and "%gs:4" to refer to proc.  seginit sets up the
+// %gs segment register so that %gs refers to the memory
+// holding those two variables in the local cpu's struct cpu.
+// This is similar to how thread-local variables are implemented
+// in thread libraries such as Linux pthreads.
+extern struct cpu *cpu asm("%gs:0");       // &cpus[cpunum()]
+extern struct proc *proc asm("%gs:4");     // cpus[cpunum()].proc
+```
 
 
 
