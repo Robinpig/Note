@@ -69,10 +69,10 @@ We rely on probability to analyze hash-table operations, but you can understand 
 
 ### Tree
 
-[Trees](/docs/CS/Algorithms/tree.md) in general are very useful abstractions in computer science.
+[Trees](/docs/CS/Algorithms/tree/tree.md) in general are very useful abstractions in computer science.
 
-- [Trie](/docs/CS/Algorithms/Trie.md)
-- [Red-Black Tree](/docs/CS/Algorithms/Red-Black-Tree.md)
+- [Trie](/docs/CS/Algorithms/tree/Trie.md)
+- [Red-Black Tree](/docs/CS/Algorithms/tree/Red-Black-Tree.md)
 
 > [!NOTE]
 >

@@ -35,7 +35,7 @@ Furthermore, these structures generally require a separate data reorganization p
 
 <div style="text-align: center;">
 
-![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)](img/LSM-Update-Structures.png)
+![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)](../img/LSM-Update-Structures.png)
 
 </div>
 
@@ -53,7 +53,7 @@ Although the $C_1$ component is disk resident, frequently referenced page nodes 
 
 <div style="text-align: center;">
 
-![LSM Components](img/LSM-Component.png)
+![LSM Components](../img/LSM-Component.png)
 
 </div>
 
@@ -82,7 +82,7 @@ Subsequent merge steps bring together increasing index value segments of the $C_
 
 <div style="text-align: center;">
 
-![Rolling merge steps](img/LSM-Rolling.png)
+![Rolling merge steps](../img/LSM-Rolling.png)
 
 </div>
 
@@ -137,7 +137,7 @@ During the life of a long-lived entry inserted in an LSM-tree, it starts in the 
 
 <div style="text-align: center;">
 
-![Fig.4. An LSM-tree of K+1 components](img/LSM-Multi-Component.png)
+![Fig.4. An LSM-tree of K+1 components](../img/LSM-Multi-Component.png)
 
 </div>
 
@@ -196,7 +196,7 @@ The tiering merge policy is more write optimized since it reduces the merge freq
 
 <div style="text-align: center;">
 
-![Fig.5. LSM-tree merge policies](img/LSM-Merge-Policy.png)
+![Fig.5. LSM-tree merge policies](../img/LSM-Merge-Policy.png)
 
 </div>
 
@@ -259,7 +259,7 @@ For example, LevelDB uses a round-robin policy (to minimize the total write cost
 
 <div style="text-align: center;">
 
-![Fig.6. Partitioned leveling merge policy](img/LSM-Partitioned-Policy.png)
+![Fig.6. Partitioned leveling merge policy](../img/LSM-Partitioned-Policy.png)
 
 </div>
 
@@ -279,7 +279,7 @@ This allows a disk component to be formed incrementally based on the unit of SST
 
 <div style="text-align: center;">
 
-![Fig.7. Partitioned tiering with vertical grouping](img/LSM-Partitioned-Tiering-Vertical.png)
+![Fig.7. Partitioned tiering with vertical grouping](../img/LSM-Partitioned-Tiering-Vertical.png)
 
 </div>
 
@@ -298,7 +298,7 @@ It should also be noted that under this scheme SSTables are no longer fixed-size
 
 <div style="text-align: center;">
 
-![Fig.8. Partitioned tiering with horizontal grouping](img/LSM-Partitioned-Tiering-Horizontal.png)
+![Fig.8. Partitioned tiering with horizontal grouping](../img/LSM-Partitioned-Tiering-Horizontal.png)
 
 </div>
 
@@ -442,7 +442,7 @@ A large body of research has been conducted to re- duce the write amplification 
 
 One way to optimize write amplification is to apply tiering since it has much lower write amplification than leveling.
 This will lead to worse query performance and space utilization.
-The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/LSM.md?id=Tiering-Merge_Policy).
+The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/tree/LSM.mdSM.md?id=Tiering-Merge_Policy).
 
 The WriteBuffer(WB) Tree can be viewed as a variant of the partitioned tiering design with vertical grouping.
 It has made the following modifications.
@@ -580,7 +580,7 @@ Although the idea behind key-value separation is simple, it leads to many challe
 
 <div style="text-align: center;">
 
-![Fig.9. WiscKey Data Layout on SSD](img/LSM-Wisckey-Data-Layout.png)
+![Fig.9. WiscKey Data Layout on SSD](../img/LSM-Wisckey-Data-Layout.png)
 
 </div>
 
@@ -621,7 +621,7 @@ The corresponding value addresses retrieved from the LSM-tree are inserted into 
 
 <div style="text-align: center;">
 
-![Fig.10. WiscKey New Data Layout for Garbage Collection](img/LSM-Wisckey-vLog.png)
+![Fig.10. WiscKey New Data Layout for Garbage Collection](../img/LSM-Wisckey-vLog.png)
 
 </div>
 
@@ -663,7 +663,7 @@ However, this garbage-collection process has been shown to be a new performance 
 
 <div style="text-align: center;">
 
-![Fig.11. WiscKey stores values into an append-only log toreduce the write amplification of the LSM-tree.](img/LSM-Wisckey-vLog.png)
+![Fig.11. WiscKey stores values into an append-only log toreduce the write amplification of the LSM-tree.](../img/LSM-Wisckey-vLog.png)
 
 </div>
 
@@ -803,7 +803,7 @@ For statistics that are not mergeable, multiple synopses are kept to improve the
 
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree.md?id=LSM)
+- [Trees](/docs/CS/Algorithms/tree/tree.md?id=LSM)
 
 ## References
 

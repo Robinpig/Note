@@ -144,7 +144,7 @@ In most cases queries must be answered on-line, so randomly permuting the input 
 Balanced tree algorithms rearrange the tree as operations are performed to maintain certain balance conditions and assure good performance.
 
 Skip lists are a probabilistic alternative to balanced trees.
-Skip list is a data structure that can be used as an alternative to [balanced binary trees](/docs/CS/Algorithms/tree.md).
+Skip list is a data structure that can be used as an alternative to [balanced binary trees](/docs/CS/Algorithms/tree/tree.md).
 As compared to a binary tree, skip lists allow quick search, insertion and deletion of elements.
 This is achieved by using probabilistic balancing rather than strictly enforce balancing.
 It is basically a linked list with additional pointers such that intermediate nodes can be skipped.

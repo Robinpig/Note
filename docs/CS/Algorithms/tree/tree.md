@@ -5,7 +5,7 @@ In trees ADT (Abstract Data Type), the order of the elements is not important. I
 
 <div style="text-align: center;">
 
-![A Tree](img/Tree.png)
+![A Tree](../img/Tree.png)
 
 </div>
 
@@ -38,7 +38,7 @@ In trees ADT (Abstract Data Type), the order of the elements is not important. I
 
 <div style="text-align: center;">
 
-![A Tree](img/Skew-Tree.png)
+![A Tree](../img/Skew-Tree.png)
 
 </div>
 
@@ -165,7 +165,7 @@ The tree on the right has a node with key 7 in the left subtree of a node with k
 
 <div style="text-align: center;">
 
-![Binary Search Tree](img/Binary-Search-Tree.png)
+![Binary Search Tree](../img/Binary-Search-Tree.png)
 
 </div>
 
@@ -226,7 +226,7 @@ An AVL tree is identical to a binary search tree, except that for every node in 
 
 In below figure the tree on the left is an AVL tree, but the tree on the right is not.
 
-![AVL Tree](img/AVL-Tree.png)
+![AVL Tree](../img/AVL-Tree.png)
 
 ### Single Rotation
 
@@ -294,7 +294,7 @@ Figure 7 shows binary tree, 2-3-Tree, and B-Tree nodes side by side, which help
 
 <div style="text-align: center;">
 
-![Binary tree, 2-3-Tree, and B-Tree nodes side by side](./img/B-Tree.png)
+![Binary tree, 2-3-Tree, and B-Tree nodes side by side](../img/B-Tree.png)
 
 </div>
 
@@ -305,7 +305,7 @@ Fig.7. Binary tree, 2-3-Tree, and B-Tree nodes side by side.
 
 ## LSM-trees
 
-The [LSM-tree](/docs/CS/Algorithms/LSM.md) uses an algorithm that defers and batches index changes, migrating the changes out to disk in a particularly efficient way reminiscent of merge sort.
+The [LSM-tree](/docs/CS/Algorithms/tree/LSM.md) uses an algorithm that defers and batches index changes, migrating the changes out to disk in a particularly efficient way reminiscent of merge sort.
 
 ## Summary
 
