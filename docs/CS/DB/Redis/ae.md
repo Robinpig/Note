@@ -663,13 +663,26 @@ typedef struct aeFiredEvent {
 
 
 ### Summaries of Events
-
-
 | Event Type  | Socket Type | Callback Method     | For              |
 | ------------- | ------------- | --------------------- | ------------------ |
 | AE_READABLE | Listen      | acceptTCPHandler    | connect          |
 | AE_READABLE | connected   | readQueryFromClient | read and execute |
 | AE_WRITABLE | connected   | sendReplyToClient   | Return data      |
+
+## Implementations
+
+
+整个 I/O 多路复用模块抹平了不同平台上 I/O 多路复用函数的差异性，提供了相同的接口：
+
+- static int aeApiCreate(aeEventLoop *eventLoop)
+- static int aeApiResize(aeEventLoop *eventLoop, int setsize)
+- static void aeApiFree(aeEventLoop *eventLoop)
+- static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask)
+- static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask)
+- static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp)
+
+因为各个函数所需要的参数不同，我们在每一个子模块内部通过一个 aeApiState 来存储需要的上下文信息
+
 
 ## epoll
 
@@ -821,6 +834,13 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask) {
 ```
 
 ## select
+
+```c
+typedef struct aeApiState {
+    fd_set rfds, wfds;
+    fd_set _rfds, _wfds;
+} aeApiState;
+```
 
 ## Summary
 
