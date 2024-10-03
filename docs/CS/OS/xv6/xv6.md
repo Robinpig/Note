@@ -1,6 +1,6 @@
 ## Introduction
 
-xv6 是 MIT 开发的一个教学用的完整的类 Unix 操作系统，并且在 MIT 的操作系统课程 [6.828](http://pdos.csail.mit.edu/6.828/2012/xv6.html) 中使用
+xv6 是 MIT 开发的一个教学用的完整的类 Unix 操作系统, 是UNIX Version(v6)的简单实现，并且在 MIT 的操作系统课程 [6.828](http://pdos.csail.mit.edu/6.828/2012/xv6.html) 中使用
 
 xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作系统的重新实现。xv6 在一定程度上遵守 v6 的结构和风格，但它是用 ANSI C 实现的，并且是基于 x86 多核处理器的。
 
@@ -46,9 +46,16 @@ git clone http://github.com/mit-pdos/xv6-public.git
 
 
 
-
+安装qemu
 ```shell
-apt install
+sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virtinst virt-manager
+```
+>[MIT6.828 Fall2018 笔记 - Homework 3: xv6 system calls](https://www.cnblogs.com/zsmumu/p/12622898.html)
+
+运行时一直在 Booting from Hard Disk... , 修改kernel.ld的内容
+```shell
+/* Include debugging information in kernel memory */
+.stab : AT(LOADADDR(.rodata) + SIZEOF(.rodata)){
 ```
 
 ##### **Intel Mac**
@@ -163,6 +170,8 @@ qemu-system-riscv64 --version
 
 ### Debug
 
+使用`make qemu-nox` 不弹出仿真窗口
+
 
 退出虚拟机时，先按下control(ctrl)键和A键，然后按X键
 
@@ -172,12 +181,12 @@ qemu-system-riscv64 --version
 proc.c sleeplock.c spinlock.c
 
 ctrl p 获取进程信息是由内核函数procdump打印
-
-进程后面的数字是调用栈关于函数调用的返回地址 可以使用addr2line -e kernel []  查看对应代码 将调用栈所有地址逐个检查 可以还原出进程阻塞前的函数调用嵌套情况
-
-例如上面的sh 进程是通 过系统 调用进入到内核的，具体过程包括alltraps->trap->
-
-s y s c a l l - > s y s _ r e a d ()- > r e a d i ()- > c o n s o l e r e a d ()- > s l e e p ()
+```
+$ 1 sleep  init 80103fb7 8010405f 80104a6d 80105b41 80105883
+2 sleep  sh 80103f80 801002ea 80101030 80104d66 80104a6d 80105b41 80105883
+```
+进程后面的数字是调用栈关于函数调用的返回地址 可以使用addr2line -e kernel [] 查看对应代码 将调用栈所有地址逐个检查 可以还原出进程阻塞前的函数调用嵌套情况
+例如上面的sh进程是通过系统 调用进入到内核的，具体过程包括alltraps->trap->syscall->sys_read()->readi()->consoleread()->sleep()
 
 
 
@@ -194,9 +203,12 @@ brew install riscv64-elf-gdb
 
 '
 
-如果 我们希 望各个线程 都受gdb 控制而执 行，而不是现在只控制其中一个线程， 那么我们设置set-scheduler-locking=on，反 之设置力off。我们还可以控制调试命令施加到指定的线程上，例如用具体的ID 列表，或者用all指代所有线程
+如果 我们希望各个线程 都受gdb控制而执行，而不是现在只控制其中一个线程，那么我们设置set-scheduler-locking=on，反之设置力off
+我们还可以控制调试命令施加到指定的线程上，例如用具体的ID列表，或者用all指代所有线程
 
 ## Init
+
+xv6二进制代码分成两部分 bootloader和kernel
 
 
 
@@ -209,7 +221,10 @@ brew install riscv64-elf-gdb
 3. `entry.S`的主要任务是设置页表，让分页硬件能够正常运行，然后跳转到`main.c`的`main()`函数处，开始整个操作系统的运行。
 4. `main()`函数首先初始化了与内存管理、进程管理、中断控制、文件管理相关的各种模块，然后启动第一个叫做`initcode`的用户进程。至此，整个XV6系统启动完毕。
 
-XV6的操作系统的加载与真实情况有一些区别。首先，XV6操作系统作为教学操作系统，它的启动过程是相对比较简单的。XV6并不会在启动时对主板上的硬件做全面的检查，而真实的Bootloader会对所有连接到计算机的所有硬件的状态进行检查。此外，XV6的Boot loader足够精简，以至于能够被压缩到小于512字节，从而能够直接将Bootloader加载进0x7c00的内存位置。真实的操作系统中，通常会有一个两步加载的过程。首先将一个加载Bootloader的程序加载在0x7c00处，然后加载进完整的功能复杂的Bootloader，再使用Bootloader加载内核
+XV6的操作系统的加载与真实情况有一些区别。首先，XV6操作系统作为教学操作系统，它的启动过程是相对比较简单的
+XV6并不会在启动时对主板上的硬件做全面的检查，而真实的Bootloader会对所有连接到计算机的所有硬件的状态进行检查。
+此外，XV6的Boot loader足够精简，以至于能够被压缩到小于512字节，从而能够直接将Bootloader加载进0x7c00的内存位置
+真实的操作系统中，通常会有一个两步加载的过程。首先将一个加载Bootloader的程序加载在0x7c00处，然后加载进完整的功能复杂的Bootloader，再使用Bootloader加载内核
 
 
 
