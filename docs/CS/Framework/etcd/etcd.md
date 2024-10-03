@@ -15,6 +15,14 @@ etcd 通过 Raft 协议进行 leader 选举和数据备份，对外提供高可�
 
 etcd 是 Kubernetes 的后端唯一存储实现
 
+> 为什么不用ZooKeeper呢？
+>
+> 从高可用性、数据一致性、功能这三个角度来说，ZooKeeper是满足CoreOS诉求的。然而当时的ZooKeeper不支持通过API安全地变更成员，需要人工修改一个个节点的配置，并重启进程。
+>
+> 若变更姿势不正确，则有可能出现脑裂等严重故障。适配云环境、可平滑调整集群规模、在线变更运行时配置是CoreOS的期望目标，而ZooKeeper在这块的可维护成本相对较高。
+>
+> 其次ZooKeeper是用 Java 编写的，部署较繁琐，占用较多的内存资源，同时ZooKeeper RPC的序列化机制用的是Jute，自己实现的RPC API。无法使用curl之类的常用工具与之互动，CoreOS期望使用比较简单的HTTP + JSON
+
 
 ## Build
 
@@ -738,6 +746,898 @@ func (s *EtcdServer) run() {
     }
 }
 ```
+
+
+
+## server
+
+etcd server定义了如下的Service KV和Range方法，启动的时候它会将实现KV各方法的对象注册到gRPC Server，并在其上注册对应的拦截器。下面的代码中的Range接口就是负责读取etcd key-value的的RPC接口
+
+```go
+service KV {  
+  // Range gets the keys in the range from the key-value store.  
+  rpc Range(RangeRequest) returns (RangeResponse) {  
+      option (google.api.http) = {  
+        post: "/v3/kv/range"  
+        body: "*"  
+      };  
+  }  
+  ....
+}
+```
+
+其次 etcd 会根据当前的全局版本号（空集群启动时默认为 1）自增，生成 put hello 操作对应的版本号 revision{2,0}，这就是 boltdb 的 key
+
+
+
+拦截器提供了在执行一个请求前后的hook能力，除了我们上面提到的debug日志、metrics统计、对etcd Learner节点请求接口和参数限制等能力，etcd还基于它实现了以下特性:
+
+- 要求执行一个操作前集群必须有Leader；
+- 请求延时超过指定阈值的，打印包含来源IP的慢查询日志(3.5版本)。
+
+server收到client的Range RPC请求后，根据ServiceName和RPC Method将请求转发到对应的handler实现，handler首先会将上面描述的一系列拦截器串联成一个执行，在拦截器逻辑中，通过调用KVServer模块的Range接口获取数据
+
+## quota
+
+
+
+ReadIndex
+
+当收到一个线性读请求时，被请求的server首先会从Leader获取集群最新的已提交的日志索引(committed index)
+
+Leader收到ReadIndex请求时，为防止脑裂等异常场景，会向Follower节点发送心跳确认，一半以上节点确认Leader身份后才能将已提交的索引(committed index)返回给节点C
+
+被请求节点则会等待，直到状态机已应用索引(applied index)大于等于Leader的已提交索引时(committed Index)(上图中的流程四)，然后去通知读请求，数据已赶上Leader，你可以去状态机中访问数据了
+
+以上就是线性读通过ReadIndex机制保证数据一致性原理， 当然还有其它机制也能实现线性读，如在早期etcd 3.0中读请求通过走一遍Raft协议保证一致性， 这种Raft log read机制依赖磁盘IO， 性能相比ReadIndex较差
+
+```go
+const (
+    // DefaultQuotaBytes is the number of bytes the backend Size may
+    // consume before exceeding the space quota.
+    DefaultQuotaBytes = int64(2 * 1024 * 1024 * 1024) // 2GB
+    // MaxQuotaBytes is the maximum number of bytes suggested for a backend
+    // quota. A larger quota may lead to degraded performance.
+    MaxQuotaBytes = int64(8 * 1024 * 1024 * 1024) // 8GB
+)
+```
+
+
+
+为了保证集群稳定性，避免雪崩，任何提交到Raft模块的请求，都会做一些简单的限速判断。如下面的流程图所示，首先，如果Raft模块已提交的日志索引（committed index）比已应用到状态机的日志索引（applied index）超过了5000，那么它就返回一个”etcdserver: too many requests”错误给client
+
+然后它会尝试去获取请求中的鉴权信息，若使用了密码鉴权、请求中携带了token，如果token无效，则返回”auth: invalid auth token”错误给client。
+
+其次它会检查你写入的包大小是否超过默认的1.5MB， 如果超过了会返回”etcdserver: request is too large”错误给给client
+
+最后通过一系列检查之后，会生成一个唯一的ID，将此请求关联到一个对应的消息通知channel，然后向Raft模块发起（Propose）一个提案（Proposal）
+
+向Raft模块发起提案后，KVServer模块会等待此put请求，等待写入结果通过消息通知channel返回或者超时。etcd默认超时时间是7秒（5秒磁盘IO延时+2*1秒竞选超时时间），如果一个请求超时未返回结果，则可能会出现你熟悉的etcdserver: request timed out错误
+
+
+
+
+
+
+
+```go
+func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.InternalRaftRequest) (*applyResult, error) {
+    ai := s.getAppliedIndex()
+    ci := s.getCommittedIndex()
+    if ci > ai+maxGapBetweenApplyAndCommitIndex {
+        return nil, ErrTooManyRequests
+    }
+    // check authinfo if it is not InternalAuthenticateRequest
+
+    // max-request-bytes '1572864' 1.5M
+    if len(data) > int(s.Cfg.MaxRequestBytes) {
+		return nil, ErrRequestTooLarge
+	}
+    
+    // ...
+    err = s.r.Propose(cctx, data)
+
+    select {
+	case x := <-ch:
+		return x.(*applyResult), nil
+	case <-cctx.Done():
+		proposalsFailed.Inc()
+		s.w.Trigger(id, nil) // GC wait
+		return nil, s.parseProposeCtxErr(cctx.Err(), start)
+	case <-s.done:
+		return nil, ErrStopped
+	}
+    
+    }
+```
+
+
+
+Raft模块收到提案后，如果当前节点是Follower，它会转发给Leader，只有Leader才能处理写请求。Leader收到提案后，通过Raft模块输出待转发给Follower节点的消息和待持久化的日志条目，日志条目则封装了我们上面所说的put hello提案内容。
+
+etcdserver从Raft模块获取到以上消息和日志条目后，作为Leader，它会将put提案消息广播给集群各个节点，同时需要把集群Leader任期号、投票信息、已提交索引、提案内容持久化到一个WAL（Write Ahead Log）日志文件中，用于保证集群的一致性、可恢复性
+
+
+
+
+
+WAL模块如何持久化Raft日志条目。它首先先将Raft日志条目内容（含任期号、索引、提案内容）序列化后保存到WAL记录的Data字段， 然后计算Data的CRC值，设置Type为Entry Type， 以上信息就组成了一个完整的WAL记录。
+
+最后计算WAL记录的长度，顺序先写入WAL长度（Len Field），然后写入记录内容，调用fsync持久化到磁盘，完成将日志条目保存到持久化存储中。
+
+当一半以上节点持久化此日志条目后， Raft模块就会通过channel告知etcdserver模块，put提案已经被集群多数节点确认，提案状态为已提交，你可以执行此提案内容了。
+
+于是进入流程六，etcdserver模块从channel取出提案内容，添加到先进先出（FIFO）调度队列，随后通过Apply模块按入队顺序，异步、依次执行提案内容
+
+
+
+newRaftNode
+
+```go
+func newRaftNode(cfg raftNodeConfig) *raftNode {
+	var lg raft.Logger
+	if cfg.lg != nil {
+		lg = NewRaftLoggerZap(cfg.lg)
+	} else {
+		lcfg := logutil.DefaultZapLoggerConfig
+		var err error
+		lg, err = NewRaftLogger(&lcfg)
+		if err != nil {
+			log.Fatalf("cannot create raft logger %v", err)
+		}
+	}
+	raft.SetLogger(lg)
+	r := &raftNode{
+		lg:             cfg.lg,
+		tickMu:         new(sync.Mutex),
+		raftNodeConfig: cfg,
+		// set up contention detectors for raft heartbeat message.
+		// expect to send a heartbeat within 2 heartbeat intervals.
+		td:         contention.NewTimeoutDetector(2 * cfg.heartbeat),
+		readStateC: make(chan raft.ReadState, 1),
+		msgSnapC:   make(chan raftpb.Message, maxInFlightMsgSnap),
+		applyc:     make(chan apply),
+		stopped:    make(chan struct{}),
+		done:       make(chan struct{}),
+	}
+	if r.heartbeat == 0 {
+		r.ticker = &time.Ticker{}
+	} else {
+		r.ticker = time.NewTicker(r.heartbeat)
+	}
+	return r
+}
+```
+
+EtcdServer::Start -> EtcdServer::start -> EtcdServer::run
+
+
+
+```go
+func (s *EtcdServer) run() {
+    lg := s.Logger()
+
+    sn, err := s.r.raftStorage.Snapshot()
+    if err != nil {
+        lg.Panic("failed to get snapshot from Raft storage", zap.Error(err))
+    }
+
+    // asynchronously accept apply packets, dispatch progress in-order
+    sched := schedule.NewFIFOScheduler()
+
+    var (
+        smu   sync.RWMutex
+        syncC <-chan time.Time
+    )
+    setSyncC := func(ch <-chan time.Time) {
+        smu.Lock()
+        syncC = ch
+        smu.Unlock()
+    }
+    getSyncC := func() (ch <-chan time.Time) {
+        smu.RLock()
+        ch = syncC
+        smu.RUnlock()
+        return
+    }
+    rh := &raftReadyHandler{
+        getLead:    func() (lead uint64) { return s.getLead() },
+        updateLead: func(lead uint64) { s.setLead(lead) },
+        updateLeadership: func(newLeader bool) {
+            if !s.isLeader() {
+                if s.lessor != nil {
+                    s.lessor.Demote()
+                }
+                if s.compactor != nil {
+                    s.compactor.Pause()
+                }
+                setSyncC(nil)
+            } else {
+                if newLeader {
+                    t := time.Now()
+                    s.leadTimeMu.Lock()
+                    s.leadElectedTime = t
+                    s.leadTimeMu.Unlock()
+                }
+                setSyncC(s.SyncTicker.C)
+                if s.compactor != nil {
+                    s.compactor.Resume()
+                }
+            }
+            if newLeader {
+                s.leaderChangedMu.Lock()
+                lc := s.leaderChanged
+                s.leaderChanged = make(chan struct{})
+                close(lc)
+                s.leaderChangedMu.Unlock()
+            }
+            // TODO: remove the nil checking
+            // current test utility does not provide the stats
+            if s.stats != nil {
+                s.stats.BecomeLeader()
+            }
+        },
+        updateCommittedIndex: func(ci uint64) {
+            cci := s.getCommittedIndex()
+            if ci > cci {
+                s.setCommittedIndex(ci)
+            }
+        },
+    }
+    s.r.start(rh)
+
+    ep := etcdProgress{
+        confState: sn.Metadata.ConfState,
+        snapi:     sn.Metadata.Index,
+        appliedt:  sn.Metadata.Term,
+        appliedi:  sn.Metadata.Index,
+    }
+
+    defer func() {
+        s.wgMu.Lock() // block concurrent waitgroup adds in GoAttach while stopping
+        close(s.stopping)
+        s.wgMu.Unlock()
+        s.cancel()
+        sched.Stop()
+
+        // wait for gouroutines before closing raft so wal stays open
+        s.wg.Wait()
+
+        s.SyncTicker.Stop()
+
+        // must stop raft after scheduler-- etcdserver can leak rafthttp pipelines
+        // by adding a peer after raft stops the transport
+        s.r.stop()
+
+        s.Cleanup()
+
+        close(s.done)
+    }()
+
+    var expiredLeaseC <-chan []*lease.Lease
+    if s.lessor != nil {
+        expiredLeaseC = s.lessor.ExpiredLeasesC()
+    }
+
+    for {
+        select {
+        case ap := <-s.r.apply():
+            f := func(context.Context) { s.applyAll(&ep, &ap) }
+            sched.Schedule(f)
+        case leases := <-expiredLeaseC:
+            s.revokeExpiredLeases(leases)
+        case err := <-s.errorc:
+            lg.Warn("server error", zap.Error(err))
+            lg.Warn("data-dir used by this member must be removed")
+            return
+        case <-getSyncC():
+            if s.v2store.HasTTLKeys() {
+                s.sync(s.Cfg.ReqTimeout())
+            }
+        case <-s.stop:
+            return
+        }
+    }
+}
+```
+
+
+
+
+
+raftNode::start
+
+```go
+func (r *raftNode) start(rh *raftReadyHandler) {
+	internalTimeout := time.Second
+
+	go func() {
+		defer r.onStop()
+		islead := false
+
+		for {
+			select {
+			case <-r.ticker.C:
+				r.tick()
+			case rd := <-r.Ready():
+				if rd.SoftState != nil {
+					newLeader := rd.SoftState.Lead != raft.None && rh.getLead() != rd.SoftState.Lead
+					if newLeader {
+						leaderChanges.Inc()
+					}
+
+					if rd.SoftState.Lead == raft.None {
+						hasLeader.Set(0)
+					} else {
+						hasLeader.Set(1)
+					}
+
+					rh.updateLead(rd.SoftState.Lead)
+					islead = rd.RaftState == raft.StateLeader
+					if islead {
+						isLeader.Set(1)
+					} else {
+						isLeader.Set(0)
+					}
+					rh.updateLeadership(newLeader)
+					r.td.Reset()
+				}
+
+				if len(rd.ReadStates) != 0 {
+					select {
+					case r.readStateC <- rd.ReadStates[len(rd.ReadStates)-1]:
+					case <-time.After(internalTimeout):
+						r.lg.Warn("timed out sending read state", zap.Duration("timeout", internalTimeout))
+					case <-r.stopped:
+						return
+					}
+				}
+
+				notifyc := make(chan struct{}, 1)
+				ap := apply{
+					entries:  rd.CommittedEntries,
+					snapshot: rd.Snapshot,
+					notifyc:  notifyc,
+				}
+
+				updateCommittedIndex(&ap, rh)
+
+				waitWALSync := shouldWaitWALSync(rd)
+				if waitWALSync {
+					// gofail: var raftBeforeSaveWaitWalSync struct{}
+					if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
+						r.lg.Fatal("failed to save Raft hard state and entries", zap.Error(err))
+					}
+				}
+
+				select {
+				case r.applyc <- ap:
+				case <-r.stopped:
+					return
+				}
+
+				// the leader can write to its disk in parallel with replicating to the followers and them
+				// writing to their disks.
+				// For more details, check raft thesis 10.2.1
+				if islead {
+					// gofail: var raftBeforeLeaderSend struct{}
+					r.transport.Send(r.processMessages(rd.Messages))
+				}
+
+				// Must save the snapshot file and WAL snapshot entry before saving any other entries or hardstate to
+				// ensure that recovery after a snapshot restore is possible.
+				if !raft.IsEmptySnap(rd.Snapshot) {
+					// gofail: var raftBeforeSaveSnap struct{}
+					if err := r.storage.SaveSnap(rd.Snapshot); err != nil {
+						r.lg.Fatal("failed to save Raft snapshot", zap.Error(err))
+					}
+					// gofail: var raftAfterSaveSnap struct{}
+				}
+
+				if !waitWALSync {
+					// gofail: var raftBeforeSave struct{}
+					if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
+						r.lg.Fatal("failed to save Raft hard state and entries", zap.Error(err))
+					}
+				}
+				if !raft.IsEmptyHardState(rd.HardState) {
+					proposalsCommitted.Set(float64(rd.HardState.Commit))
+				}
+				// gofail: var raftAfterSave struct{}
+
+				if !raft.IsEmptySnap(rd.Snapshot) {
+					// Force WAL to fsync its hard state before Release() releases
+					// old data from the WAL. Otherwise could get an error like:
+					// panic: tocommit(107) is out of range [lastIndex(84)]. Was the raft log corrupted, truncated, or lost?
+					// See https://github.com/etcd-io/etcd/issues/10219 for more details.
+					if err := r.storage.Sync(); err != nil {
+						r.lg.Fatal("failed to sync Raft snapshot", zap.Error(err))
+					}
+
+					// etcdserver now claim the snapshot has been persisted onto the disk
+					notifyc <- struct{}{}
+
+					// gofail: var raftBeforeApplySnap struct{}
+					r.raftStorage.ApplySnapshot(rd.Snapshot)
+					r.lg.Info("applied incoming Raft snapshot", zap.Uint64("snapshot-index", rd.Snapshot.Metadata.Index))
+					// gofail: var raftAfterApplySnap struct{}
+
+					if err := r.storage.Release(rd.Snapshot); err != nil {
+						r.lg.Fatal("failed to release Raft wal", zap.Error(err))
+					}
+					// gofail: var raftAfterWALRelease struct{}
+				}
+
+				r.raftStorage.Append(rd.Entries)
+
+				if !islead {
+					// finish processing incoming messages before we signal raftdone chan
+					msgs := r.processMessages(rd.Messages)
+
+					// now unblocks 'applyAll' that waits on Raft log disk writes before triggering snapshots
+					notifyc <- struct{}{}
+
+					// Candidate or follower needs to wait for all pending configuration
+					// changes to be applied before sending messages.
+					// Otherwise we might incorrectly count votes (e.g. votes from removed members).
+					// Also slow machine's follower raft-layer could proceed to become the leader
+					// on its own single-node cluster, before apply-layer applies the config change.
+					// We simply wait for ALL pending entries to be applied for now.
+					// We might improve this later on if it causes unnecessary long blocking issues.
+					waitApply := false
+					for _, ent := range rd.CommittedEntries {
+						if ent.Type == raftpb.EntryConfChange {
+							waitApply = true
+							break
+						}
+					}
+					if waitApply {
+						// blocks until 'applyAll' calls 'applyWait.Trigger'
+						// to be in sync with scheduled config-change job
+						// (assume notifyc has cap of 1)
+						select {
+						case notifyc <- struct{}{}:
+						case <-r.stopped:
+							return
+						}
+					}
+
+					// gofail: var raftBeforeFollowerSend struct{}
+					r.transport.Send(msgs)
+				} else {
+					// leader already processed 'MsgSnap' and signaled
+					notifyc <- struct{}{}
+				}
+
+				r.Advance()
+			case <-r.stopped:
+				return
+			}
+		}
+	}()
+}
+```
+
+
+
+Etcdserver/raft.go
+
+```go
+// start prepares and starts raftNode in a new goroutine. It is no longer safe
+// to modify the fields after it has been started.
+func (r *raftNode) start(rh *raftReadyHandler) {
+    internalTimeout := time.Second
+
+    go func() {
+        defer r.onStop()
+        islead := false
+
+        for {
+            select {
+            case <-r.ticker.C:
+                r.tick()
+            case rd := <-r.Ready():
+                if rd.SoftState != nil {
+                    newLeader := rd.SoftState.Lead != raft.None && rh.getLead() != rd.SoftState.Lead
+                    if newLeader {
+                        leaderChanges.Inc()
+                    }
+
+                    if rd.SoftState.Lead == raft.None {
+                        hasLeader.Set(0)
+                    } else {
+                        hasLeader.Set(1)
+                    }
+
+                    rh.updateLead(rd.SoftState.Lead)
+                    islead = rd.RaftState == raft.StateLeader
+                    if islead {
+                        isLeader.Set(1)
+                    } else {
+                        isLeader.Set(0)
+                    }
+                    rh.updateLeadership(newLeader)
+                    r.td.Reset()
+                }
+
+                if len(rd.ReadStates) != 0 {
+                    select {
+                    case r.readStateC <- rd.ReadStates[len(rd.ReadStates)-1]:
+                    case <-time.After(internalTimeout):
+                        r.lg.Warn("timed out sending read state", zap.Duration("timeout", internalTimeout))
+                    case <-r.stopped:
+                        return
+                    }
+                }
+
+                notifyc := make(chan struct{}, 1)
+                ap := apply{
+                    entries:  rd.CommittedEntries,
+                    snapshot: rd.Snapshot,
+                    notifyc:  notifyc,
+                }
+
+                updateCommittedIndex(&ap, rh)
+
+                waitWALSync := shouldWaitWALSync(rd)
+                if waitWALSync {
+                    // gofail: var raftBeforeSaveWaitWalSync struct{}
+                    if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
+                        r.lg.Fatal("failed to save Raft hard state and entries", zap.Error(err))
+                    }
+                }
+
+                select {
+                case r.applyc <- ap:
+                case <-r.stopped:
+                    return
+                }
+
+                // the leader can write to its disk in parallel with replicating to the followers and them
+                // writing to their disks.
+                // For more details, check raft thesis 10.2.1
+                if islead {
+                    // gofail: var raftBeforeLeaderSend struct{}
+                    r.transport.Send(r.processMessages(rd.Messages))
+                }
+
+                // Must save the snapshot file and WAL snapshot entry before saving any other entries or hardstate to
+                // ensure that recovery after a snapshot restore is possible.
+                if !raft.IsEmptySnap(rd.Snapshot) {
+                    // gofail: var raftBeforeSaveSnap struct{}
+                    if err := r.storage.SaveSnap(rd.Snapshot); err != nil {
+                        r.lg.Fatal("failed to save Raft snapshot", zap.Error(err))
+                    }
+                    // gofail: var raftAfterSaveSnap struct{}
+                }
+
+                if !waitWALSync {
+                    // gofail: var raftBeforeSave struct{}
+                    if err := r.storage.Save(rd.HardState, rd.Entries); err != nil {
+                        r.lg.Fatal("failed to save Raft hard state and entries", zap.Error(err))
+                    }
+                }
+                if !raft.IsEmptyHardState(rd.HardState) {
+                    proposalsCommitted.Set(float64(rd.HardState.Commit))
+                }
+                // gofail: var raftAfterSave struct{}
+
+                if !raft.IsEmptySnap(rd.Snapshot) {
+                    // Force WAL to fsync its hard state before Release() releases
+                    // old data from the WAL. Otherwise could get an error like:
+                    // panic: tocommit(107) is out of range [lastIndex(84)]. Was the raft log corrupted, truncated, or lost?
+                    // See https://github.com/etcd-io/etcd/issues/10219 for more details.
+                    if err := r.storage.Sync(); err != nil {
+                        r.lg.Fatal("failed to sync Raft snapshot", zap.Error(err))
+                    }
+
+                    // etcdserver now claim the snapshot has been persisted onto the disk
+                    notifyc <- struct{}{}
+
+                    // gofail: var raftBeforeApplySnap struct{}
+                    r.raftStorage.ApplySnapshot(rd.Snapshot)
+                    r.lg.Info("applied incoming Raft snapshot", zap.Uint64("snapshot-index", rd.Snapshot.Metadata.Index))
+                    // gofail: var raftAfterApplySnap struct{}
+
+                    if err := r.storage.Release(rd.Snapshot); err != nil {
+                        r.lg.Fatal("failed to release Raft wal", zap.Error(err))
+                    }
+                    // gofail: var raftAfterWALRelease struct{}
+                }
+
+                r.raftStorage.Append(rd.Entries)
+
+                if !islead {
+                    // finish processing incoming messages before we signal raftdone chan
+                    msgs := r.processMessages(rd.Messages)
+
+                    // now unblocks 'applyAll' that waits on Raft log disk writes before triggering snapshots
+                    notifyc <- struct{}{}
+
+                    // Candidate or follower needs to wait for all pending configuration
+                    // changes to be applied before sending messages.
+                    // Otherwise we might incorrectly count votes (e.g. votes from removed members).
+                    // Also slow machine's follower raft-layer could proceed to become the leader
+                    // on its own single-node cluster, before apply-layer applies the config change.
+                    // We simply wait for ALL pending entries to be applied for now.
+                    // We might improve this later on if it causes unnecessary long blocking issues.
+                    waitApply := false
+                    for _, ent := range rd.CommittedEntries {
+                        if ent.Type == raftpb.EntryConfChange {
+                            waitApply = true
+                            break
+                        }
+                    }
+                    if waitApply {
+                        // blocks until 'applyAll' calls 'applyWait.Trigger'
+                        // to be in sync with scheduled config-change job
+                        // (assume notifyc has cap of 1)
+                        select {
+                        case notifyc <- struct{}{}:
+                        case <-r.stopped:
+                            return
+                        }
+                    }
+
+                    // gofail: var raftBeforeFollowerSend struct{}
+                    r.transport.Send(msgs)
+                } else {
+                    // leader already processed 'MsgSnap' and signaled
+                    notifyc <- struct{}{}
+                }
+
+                r.Advance()
+            case <-r.stopped:
+                return
+            }
+        }
+    }()
+}
+```
+
+## node
+
+
+
+node启动时是启动了一个协程，处理node的里的多个通道，包括tickc，调用tick()方法。该方法会动态改变，对于follower和candidate，它就是tickElection，对于leader和，它就是tickHeartbeat。tick就像是一个etcd节点的心脏跳动，在follower这里，每次tick会去检查是不是leader的心跳是不是超时了。对于leader，每次tick都会检查是不是要发送心跳了
+
+
+
+
+
+
+
+
+
+当集群已经产生了leader，则leader会在固定间隔内给所有节点发送心跳。其他节点收到心跳以后重置心跳等待时间，只要心跳等待不超时，follower的状态就不会改变。
+具体的过程如下：
+\1. 对于leader，tick被设置为tickHeartbeat，tickHeartbeat会产生增长递增心跳过期时间计数(heartbeatElapsed)，如果心跳过期时间超过了心跳超时时间计数(heartbeatTimeout)，它会产生一个MsgBeat消息。心跳超时时间计数是系统设置死的，就是1。也就是说只要1次tick时间过去，基本上会发送心跳消息。发送心跳首先是调用状态机的step方法
+
+
+
+
+
+
+
+```go
+func (r *raft) Step(m pb.Message) error {
+    // Handle the message term, which may result in our stepping down to a follower.
+    switch {
+    case m.Term == 0:
+        // local message
+    case m.Term > r.Term:
+        if m.Type == pb.MsgVote || m.Type == pb.MsgPreVote {
+            force := bytes.Equal(m.Context, []byte(campaignTransfer))
+            inLease := r.checkQuorum && r.lead != None && r.electionElapsed < r.electionTimeout
+            if !force && inLease {
+                // If a server receives a RequestVote request within the minimum election timeout
+                // of hearing from a current leader, it does not update its term or grant its vote
+                r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] ignored %s from %x [logterm: %d, index: %d] at term %d: lease is not expired (remaining ticks: %d)",
+                    r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term, r.electionTimeout-r.electionElapsed)
+                return nil
+            }
+        }
+        switch {
+        case m.Type == pb.MsgPreVote:
+            // Never change our term in response to a PreVote
+        case m.Type == pb.MsgPreVoteResp && !m.Reject:
+            // We send pre-vote requests with a term in our future. If the
+            // pre-vote is granted, we will increment our term when we get a
+            // quorum. If it is not, the term comes from the node that
+            // rejected our vote so we should become a follower at the new
+            // term.
+        default:
+            r.logger.Infof("%x [term: %d] received a %s message with higher term from %x [term: %d]",
+                r.id, r.Term, m.Type, m.From, m.Term)
+            if m.Type == pb.MsgApp || m.Type == pb.MsgHeartbeat || m.Type == pb.MsgSnap {
+                r.becomeFollower(m.Term, m.From)
+            } else {
+                r.becomeFollower(m.Term, None)
+            }
+        }
+
+    case m.Term < r.Term:
+        if (r.checkQuorum || r.preVote) && (m.Type == pb.MsgHeartbeat || m.Type == pb.MsgApp) {
+            // We have received messages from a leader at a lower term. It is possible
+            // that these messages were simply delayed in the network, but this could
+            // also mean that this node has advanced its term number during a network
+            // partition, and it is now unable to either win an election or to rejoin
+            // the majority on the old term. If checkQuorum is false, this will be
+            // handled by incrementing term numbers in response to MsgVote with a
+            // higher term, but if checkQuorum is true we may not advance the term on
+            // MsgVote and must generate other messages to advance the term. The net
+            // result of these two features is to minimize the disruption caused by
+            // nodes that have been removed from the cluster's configuration: a
+            // removed node will send MsgVotes (or MsgPreVotes) which will be ignored,
+            // but it will not receive MsgApp or MsgHeartbeat, so it will not create
+            // disruptive term increases, by notifying leader of this node's activeness.
+            // The above comments also true for Pre-Vote
+            //
+            // When follower gets isolated, it soon starts an election ending
+            // up with a higher term than leader, although it won't receive enough
+            // votes to win the election. When it regains connectivity, this response
+            // with "pb.MsgAppResp" of higher term would force leader to step down.
+            // However, this disruption is inevitable to free this stuck node with
+            // fresh election. This can be prevented with Pre-Vote phase.
+            r.send(pb.Message{To: m.From, Type: pb.MsgAppResp})
+        } else if m.Type == pb.MsgPreVote {
+            // Before Pre-Vote enable, there may have candidate with higher term,
+            // but less log. After update to Pre-Vote, the cluster may deadlock if
+            // we drop messages with a lower term.
+            r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
+                r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
+            r.send(pb.Message{To: m.From, Term: r.Term, Type: pb.MsgPreVoteResp, Reject: true})
+        } else {
+            // ignore other cases
+            r.logger.Infof("%x [term: %d] ignored a %s message with lower term from %x [term: %d]",
+                r.id, r.Term, m.Type, m.From, m.Term)
+        }
+        return nil
+    }
+
+    switch m.Type {
+    case pb.MsgHup:
+        if r.preVote {
+            r.hup(campaignPreElection)
+        } else {
+            r.hup(campaignElection)
+        }
+
+    case pb.MsgVote, pb.MsgPreVote:
+        // We can vote if this is a repeat of a vote we've already cast...
+        canVote := r.Vote == m.From ||
+            // ...we haven't voted and we don't think there's a leader yet in this term...
+            (r.Vote == None && r.lead == None) ||
+            // ...or this is a PreVote for a future term...
+            (m.Type == pb.MsgPreVote && m.Term > r.Term)
+        // ...and we believe the candidate is up to date.
+        if canVote && r.raftLog.isUpToDate(m.Index, m.LogTerm) {
+            // Note: it turns out that that learners must be allowed to cast votes.
+            // This seems counter- intuitive but is necessary in the situation in which
+            // a learner has been promoted (i.e. is now a voter) but has not learned
+            // about this yet.
+            // For example, consider a group in which id=1 is a learner and id=2 and
+            // id=3 are voters. A configuration change promoting 1 can be committed on
+            // the quorum `{2,3}` without the config change being appended to the
+            // learner's log. If the leader (say 2) fails, there are de facto two
+            // voters remaining. Only 3 can win an election (due to its log containing
+            // all committed entries), but to do so it will need 1 to vote. But 1
+            // considers itself a learner and will continue to do so until 3 has
+            // stepped up as leader, replicates the conf change to 1, and 1 applies it.
+            // Ultimately, by receiving a request to vote, the learner realizes that
+            // the candidate believes it to be a voter, and that it should act
+            // accordingly. The candidate's config may be stale, too; but in that case
+            // it won't win the election, at least in the absence of the bug discussed
+            // in:
+            // https://github.com/etcd-io/etcd/issues/7625#issuecomment-488798263.
+            r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] cast %s for %x [logterm: %d, index: %d] at term %d",
+                r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
+            // When responding to Msg{Pre,}Vote messages we include the term
+            // from the message, not the local term. To see why, consider the
+            // case where a single node was previously partitioned away and
+            // it's local term is now out of date. If we include the local term
+            // (recall that for pre-votes we don't update the local term), the
+            // (pre-)campaigning node on the other end will proceed to ignore
+            // the message (it ignores all out of date messages).
+            // The term in the original message and current local term are the
+            // same in the case of regular votes, but different for pre-votes.
+            r.send(pb.Message{To: m.From, Term: m.Term, Type: voteRespMsgType(m.Type)})
+            if m.Type == pb.MsgVote {
+                // Only record real votes.
+                r.electionElapsed = 0
+                r.Vote = m.From
+            }
+        } else {
+            r.logger.Infof("%x [logterm: %d, index: %d, vote: %x] rejected %s from %x [logterm: %d, index: %d] at term %d",
+                r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), r.Vote, m.Type, m.From, m.LogTerm, m.Index, r.Term)
+            r.send(pb.Message{To: m.From, Term: r.Term, Type: voteRespMsgType(m.Type), Reject: true})
+        }
+
+    default:
+        err := r.step(r, m)
+        if err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+
+
+
+
+StartEtcd -> Etcd::serveClients -> serveCtx::serve
+
+
+
+
+
+```go
+func (sctx *serveCtx) registerGateway(dial func(ctx context.Context) (*grpc.ClientConn, error)) (*gw.ServeMux, error) {
+    ctx := sctx.ctx
+
+    conn, err := dial(ctx)
+    if err != nil {
+        return nil, err
+    }
+    gwmux := gw.NewServeMux()
+
+    handlers := []registerHandlerFunc{
+        etcdservergw.RegisterKVHandler,
+        etcdservergw.RegisterWatchHandler,
+        etcdservergw.RegisterLeaseHandler,
+        etcdservergw.RegisterClusterHandler,
+        etcdservergw.RegisterMaintenanceHandler,
+        etcdservergw.RegisterAuthHandler,
+        v3lockgw.RegisterLockHandler,
+        v3electiongw.RegisterElectionHandler,
+    }
+    for _, h := range handlers {
+        if err := h(ctx, gwmux, conn); err != nil {
+            return nil, err
+        }
+    }
+    go func() {
+        <-ctx.Done()
+        if cerr := conn.Close(); cerr != nil {
+            sctx.lg.Warn(
+                "failed to close connection",
+                zap.String("address", sctx.l.Addr().String()),
+                zap.Error(cerr),
+            )
+        }
+    }()
+
+    return gwmux, nil
+}
+```
+
+
+
+
+
+
+
+quotaKVServer::Put
+
+EtcdServer::Put -> EtcdServer::raftRquest -> EtcdServer::processInternalRaftRequestOnce -> raftNode::Propose
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## 消息处理
 

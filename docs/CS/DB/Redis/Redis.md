@@ -16,22 +16,31 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 
 高效的数据结构
 
-整个 Redis 就是一个全局 哈希表，他的时间复杂度是 O(1)，而且为了防止哈希冲突导致链表过长，Redis 会执行 rehash 操作，扩充 哈希桶数量，减少哈希冲突。并且防止一次性 重新映射数据过大导致线程阻塞，采用 渐进式 rehash。巧妙的将一次性拷贝分摊到多次请求过程后总，避免阻塞。
+整个 Redis 就是一个全局哈希表，他的时间复杂度是$O(1)$，而且为了防止哈希冲突导致链表过长，Redis 会执行 rehash 操作，扩充哈希桶数量，减少哈希冲突
+并且防止一次性 重新映射数据过大导致线程阻塞，采用渐进式 rehash。巧妙的将一次性拷贝分摊到多次请求过程后总，避免阻塞。
 
 同时根据实际存储的数据类型选择不同编码
 
-线程模型
+#### Thread Model
 
-保证了每个操作的原子性，也减少了线程的上下文切换和竞争
+Redis 使用单线程模型进行设计 保证了每个操作的原子性，也减少了线程的上下文切换和竞争 同时能带来更好的可维护性，方便开发和调试
 
 > It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound. 
 > For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.
 
+如果这种吞吐量不能满足我们的需求，更推荐的做法是使用分片的方式将不同的请求交给不同的 Redis 服务器来处理，而不是在同一个 Redis 服务中引入大量的多线程操作
+
+Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时就会使用主处理线程之外的其他线程，例如 UNLINK、FLUSHALL ASYNC、FLUSHDB ASYNC 等非阻塞的删除操作
+
+> However with Redis 4.0 we started to make Redis more threaded. 
+> For now this is limited to deleting objects in the background, and to blocking commands implemented via Redis modules. 
+> For the next releases, the plan is to make Redis more and more threaded.
+
+#### IO
+
+[I/O多路复用模块](/docs/CS/DB/Redis/ae.md)封装了底层的 select、epoll、avport 以及 kqueue 这些I/O多路复用函数，为上层提供了相同的接口
 
 
-网络I/O模型  
-
-IO 多路复用，使用了单线程来轮询描述符，将数据库的开、关、读、写都转换成了事件，Redis 采用自己实现的事件分离器，效率比较高。
 
 主从复制 哨兵集群 Cluster分片集群
 

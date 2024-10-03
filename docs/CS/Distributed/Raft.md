@@ -543,7 +543,7 @@ This will eventually cause availability problems without some mechanism to disca
 Snapshotting is the simplest approach to compaction.
 In snapshotting, the entire current system state is written to a snapshot on stable storage, then the entire log up to that point is discarded.
 Snapshotting is used in Chubby and ZooKeeper, and the remainder of this section describes snapshotting in Raft.
-Incremental approaches to compaction, such as log cleaning and [log-structured merge trees](/docs/CS/Algorithms/LSM.md), are also possible.
+Incremental approaches to compaction, such as log cleaning and [log-structured merge trees](/docs/CS/Algorithms/tree/LSM.md), are also possible.
 These operate on a fraction of the data at once, so they spread the load of compaction more evenly over time.
 They first select a region of data that has accumulated many deleted and overwritten objects, then they rewrite the live objects from that region more compactly and free the region.
 This requires significant additional mechanism and complexity compared to snapshotting, which simplifies the problem by always operating on the entire data set.

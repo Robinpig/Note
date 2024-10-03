@@ -47,7 +47,7 @@ This hierarchy is shown in Figure 9.
 
 <div style="text-align: center;">
 
-![B-Tree node hierarchy](./img/B-Tree-Hierarchy.png)
+![B-Tree node hierarchy](../img/B-Tree-Hierarchy.png)
 
 </div>
 
@@ -84,7 +84,7 @@ The first pointer in the node points to the subtree holding items less than the 
 
 <div style="text-align: center;">
 
-![How separator keys split a tree into subtrees](./img/Separator-Keys.png)
+![How separator keys split a tree into subtrees](../img/Separator-Keys.png)
 
 </div>
 
@@ -192,7 +192,7 @@ Since balancing changes the min/max invariant of the sibling nodes, we have to u
 
 <div style="text-align: center;">
 
-![B-Tree balancing](./img/B-Tree-Balancing.png)
+![B-Tree balancing](../img/B-Tree-Balancing.png)
 
 </div>
 
@@ -241,7 +241,7 @@ Better space utilization can be obtained if, instead of always splitting a node 
 
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree.md?id=B-Trees)
+- [Trees](/docs/CS/Algorithms/tree/tree.md?id=B-Trees)
 
 ## References
 
