@@ -558,6 +558,10 @@ node启动时是启动了一个协程，处理node的里的多个通道，包括
 该方法会动态改变，对于follower和candidate，它就是tickElection，对于leader和，它就是tickHeartbeat。tick就像是一个etcd节点的心脏跳动，在follower这里，每次tick会去检查是不是leader的心跳是不是超时了。对于leader，每次tick都会检查是不是要发送心跳了
 
 
+
+startNode -> NewRawNode -> newRaft
+
+
 ### run
 
 
@@ -808,6 +812,124 @@ func (r *raft) maybeCommit() bool {
 
 
 
+```go
+type Entry struct {
+	Term  uint64    `protobuf:"varint,2,opt,name=Term" json:"Term"`
+	Index uint64    `protobuf:"varint,3,opt,name=Index" json:"Index"`
+	Type  EntryType `protobuf:"varint,1,opt,name=Type,enum=raftpb.EntryType" json:"Type"`
+	Data  []byte    `protobuf:"bytes,4,opt,name=Data" json:"Data,omitempty"`
+}
+```
+
+
+
+
+
+里面有两个存储位置，一个是storage是保存已经持久化过的日志条目。unstable是保存的尚未持久化的日志条目
+
+```go
+
+type raftLog struct {
+	// storage contains all stable entries since the last snapshot.
+	storage Storage
+
+	// unstable contains all unstable entries and snapshot.
+	// they will be saved into storage.
+	unstable unstable
+
+	// committed is the highest log position that is known to be in
+	// stable storage on a quorum of nodes.
+	committed uint64
+	// applied is the highest log position that the application has
+	// been instructed to apply to its state machine.
+	// Invariant: applied <= committed
+	applied uint64
+
+	logger Logger
+
+	// maxNextEntsSize is the maximum number aggregate byte size of the messages
+	// returned from calls to nextEnts.
+	maxNextEntsSize uint64
+}
+```
+
+
+
+storage包含一个WAL来保存日志条目，一个Snapshotter负责保存日志快照的
+
+```go
+type storage struct {
+	*wal.WAL
+	*snap.Snapshotter
+}
+
+type Storage interface {
+	// Save function saves ents and state to the underlying stable storage.
+	// Save MUST block until st and ents are on stable storage.
+	Save(st raftpb.HardState, ents []raftpb.Entry) error
+	// SaveSnap function saves snapshot to the underlying stable storage.
+	SaveSnap(snap raftpb.Snapshot) error
+	// Close closes the Storage and performs finalization.
+	Close() error
+	// Release releases the locked wal files older than the provided snapshot.
+	Release(snap raftpb.Snapshot) error
+	// Sync WAL
+	Sync() error
+}
+```
+
+
+
+
+
+WAL是一种追加的方式将日志条目一条一条顺序存放在文件中。存放在WAL的记录都是walpb.Record形式的结构。Type代表数据的类型，Crc是生成的Crc校验字段。Data是真正的数据。v3版本中，有下图显示的几种Type：
+\- metadataType：元数据类型，元数据会保存当前的node id和cluster id。
+\- entryType：日志条目
+\- stateType：存放的是集群当前的状态HardState，如果集群的状态有变化，就会在WAL中存放一个新集群状态数据。里面包括当前Term，当前竞选者、当前已经commit的日志。
+\- crcType：存放crc校验字段。读取数据是，会根据这个记录里的crc字段对前面已经读出来的数据进行校验。
+\- snapshotType：存放snapshot的日志点。包括日志的Index和Term
+
+```go
+// WAL is a logical representation of the stable storage.
+// WAL is either in read mode or append mode but not both.
+// A newly created WAL is in append mode, and ready for appending records.
+// A just opened WAL is in read mode, and ready for reading records.
+// The WAL will be ready for appending after reading out all the previous records.
+type WAL struct {
+	lg *zap.Logger
+
+	dir string // the living directory of the underlay files
+
+	// dirFile is a fd for the wal directory for syncing on Rename
+	dirFile *os.File
+
+	metadata []byte           // metadata recorded at the head of each WAL
+	state    raftpb.HardState // hardstate recorded at the head of WAL
+
+	start     walpb.Snapshot // snapshot to start reading
+	decoder   *decoder       // decoder to decode records
+	readClose func() error   // closer for decode reader
+
+	unsafeNoSync bool // if set, do not fsync
+
+	mu      sync.Mutex
+	enti    uint64   // index of the last entry saved to the wal
+	encoder *encoder // encoder to encode records
+
+	locks []*fileutil.LockedFile // the locked files the WAL holds (the name is increasing)
+	f
+```
+
+WAL有read模式和write模式，区别是write模式会使用文件锁开启独占文件模式。read模式不会独占文件
+
+
+
+Snapshotter 提供保存快照的SaveSnap方法。在v2中，快照实际就是storage中存的那个node组成的树结构。它是将整个树给序列化成了json。在v3中，快照是boltdb数据库的数据文件，通常就是一个叫db的文件。v3的处理实际代码比较混乱，并没有真正走snapshotter
+
+
+
+
+
 ### newLog
 
 初始化storage字段
@@ -936,7 +1058,15 @@ func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
 
 
 
+## ReadIndex
 
+当收到一个线性读请求时，被请求的server首先会从Leader获取集群最新的已提交的日志索引(committed index)
+
+Leader收到ReadIndex请求时，为防止脑裂等异常场景，会向Follower节点发送心跳确认，一半以上节点确认Leader身份后才能将已提交的索引(committed index)返回给节点C
+
+被请求节点则会等待，直到状态机已应用索引(applied index)大于等于Leader的已提交索引时(committed Index)(上图中的流程四)，然后去通知读请求，数据已赶上Leader，你可以去状态机中访问数据了
+
+以上就是线性读通过ReadIndex机制保证数据一致性原理， 当然还有其它机制也能实现线性读，如在早期etcd 3.0中读请求通过走一遍Raft协议保证一致性， 这种Raft log read机制依赖磁盘IO， 性能相比ReadIndex较差
 
 
 
