@@ -430,6 +430,11 @@ You can also store tables in general tablespaces. General tablespaces are shared
 They can be created outside of the MySQL data directory, are capable of holding multiple tables, and support tables of all row formats.
 For more information, see Section 15.6.3.3, “General Tablespaces”.
 
+## Cluster
+
+
+
+
 
 ## InnoDB Limits
 
