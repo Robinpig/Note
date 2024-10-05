@@ -102,6 +102,19 @@ Each worker process is single‑threaded and runs independently, grabbing new co
 The processes can communicate using shared memory for shared cache data, session persistence data, and other shared resources.
 
 
+
+
+
+一旦master进程接收到重新加载配置的信号，它将检查新配置文件的语法是否正确，并尝试应用其中提供的配置。
+
+- 如果成功，master进程将启动新的worker进程，并发送消息给旧的worker进程，要求他们shutdown 旧的worker进程在接收到关闭命令后，停止接受新的连接，直到所有之前已经接受的连接全部处理完为止。之后，旧的worker进程退出
+- 否则，master进程将回滚所做的更改，并继续使用旧配置。
+
+
+
+nginx的master进程的进程ID，默认情况下，放在nginx.pid文件中，该文件所在的目录一般是/usr/local/nginx/logs 或者 /var/run
+
+
 ## Struct
 
 
@@ -403,7 +416,7 @@ main
        - ngx_process_events_and_timers
    - ngx_start_cache_manager_processes 
    - ngx_init_cycle
-    
+   
 ### master cycle
 
 ```c
