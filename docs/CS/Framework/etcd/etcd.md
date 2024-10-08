@@ -2265,6 +2265,12 @@ type Peer interface {
 }
 ```
 
+## Comparison
+
+
+- 在读行为上，ZooKeeper默认读可能会返回stale data，而etcd使用的线性读，能确保读取到反应集群共识的最新数据。
+- 共识算法上，etcd使用的是Raft，ZooKeeper使用的是Zab
+
 ## Links
 
 - [K8s](/docs/CS/Container/K8s.md)
