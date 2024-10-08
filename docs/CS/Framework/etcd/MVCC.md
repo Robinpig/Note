@@ -1,6 +1,8 @@
 ## Introduction
 
-etcd的使用场景是一种“读多写少”的场景，etcd里  的一个key，其实并不会发生频繁的变更，但是一旦发生变更，etcd就  需要通知监控这个key的所有客户端
+etcd的使用场景是一种“读多写少”的场景，etcd里  的一个key，其实并不会发生频繁的变更，但是一旦发生变更，etcd就需要通知监控这个key的所有客户端
+
+etcd本质上是内存数据库，所有的数据都是加载到了内存中，当然，它跟redis一样，数据都是持久化了的，只是在启动的时候，将文件数据重新全部加载到内存中
 
 etcd v2 是一个内存数据库，整个数据库拥有一个`Stop-the-World`的大锁，通过锁机制来解决并发带来的数据竞争。
 
@@ -29,11 +31,26 @@ etcd v3 为什么要选择 MVCC
 
 
 多版本并发控制 (Multiversion concurrency control) 模块是为了解决etcd v2 不支持保存 key 的历史版本、不支持多 key 事务等问题而产生的
-它核心由内存树形索引模块 (treeIndex) 和嵌入式的 KV 持久化存储库 boltdb 组成。
+它核心由内存树形索引模块 (treeIndex) 和嵌入式的 KV 持久化存储库 boltdb 组成
+
+treeIndex模块是基于Google开源的内存版btree库实现的 treeIndex模块只会保存用户的key和相关版本号信息，用户key的value数据存储在boltdb里面，相比ZooKeeper和etcd v2全内存存储，etcd v3对内存要求更低
 
 
 
-etcd本质上是内存数据库，所有的数据都是加载到了内存中，当然，它跟redis一样，数据都是持久化了的，只是在启动的时候，将文件数据重新全部加载到内存中
+
+
+boltdb的key是全局递增的版本号(revision)，value是用户key、value等字段组合成的结构体，然后通过treeIndex模块来保存用户key和版本号的映射关系。
+
+读事务流程从treeIndex中获取key的版本号
+
+在获取到版本号信息后，就可从boltdb模块中获取用户的key-value数据了。不过并不是所有请求都一定要从boltdb获取数据 etcd出于数据一致性、性能等考虑，在访问boltdb前，首先会从一个内存读事务buffer中，二分查找你要访问key是否在buffer里面，若命中则直接返回
+
+若buffer未命中，此时就真正需要向boltdb模块查询数据 
+boltdb里每个bucket类似对应MySQL一个表，用户的key数据存放的bucket名字的是key，etcd MVCC元数据存放的bucket是meta。
+
+因boltdb使用B+ tree来组织用户的key-value数据，获取bucket key对象后，通过boltdb的游标Cursor可快速在B+ tree找到key hello对应的value数据，返回给client
+
+
 
 
 
@@ -142,14 +159,43 @@ etcd v2的每个key只保留一个value，所以数据库并不大，可以直  
 
 ## put
 
-一个 put 命令流程如下图所示：
+一个 put 命令流程如下：
+
+首先是流程一client端发起gRPC调用到etcd节点，和读请求不一样的是，写请求需要经过db配额（Quota）模块
 
 1. 首先它需要从 treeIndex 模块中查询 key 的 keyIndex 索引信息
 2. 其次 etcd 会根据当前的全局版本号（空集群启动时默认为 1）自增，生成 put hello 操作对应的版本号 revision{2,0}，这就是 boltdb 的 key
 
+当etcd server收到put/txn等写请求的时候，会首先检查下当前etcd db大小加上你请求的key-value大小之和是否超过了配额（quota-backend-bytes）。
+如果超过了配额，它会产生一个告警（Alarm）请求，告警类型是NO SPACE，并通过Raft日志同步给其它节点，告知db无空间了，并将告警持久化存储到db中。
+最终，无论是API层gRPC模块还是负责将Raft侧已提交的日志条目应用到状态机的Apply模块，都拒绝写入，集群只读
+
+为什么当你把配额（quota-backend-bytes）调大后，集群依然拒绝写入呢?
+
+原因就是我们前面提到的NO SPACE告警。Apply模块在执行每个命令的时候，都会去检查当前是否存在NO SPACE告警，如果有则拒绝写入。所以还需要你额外发送一个取消告警（etcdctl alarm disarm）的命令，以消除所有告警
+
+其次你需要检查etcd的压缩（compact）配置是否开启、配置是否合理。etcd保存了一个key所有变更历史版本，如果没有一个机制去回收旧的版本，那么内存和db大小就会一直膨胀，在etcd里面，压缩模块负责回收旧版本的工作。
+压缩模块支持按多种方式回收旧版本，比如保留最近一段时间内的历史版本。不过你要注意，它仅仅是将旧版本占用的空间打个空闲（Free）标记，后续新的数据写入的时候可复用这块空间，而无需申请新的空间
+如果你需要回收空间，减少db大小，得使用碎片整理（defrag）， 它会遍历旧的db文件数据，写入到一个新的db文件。但是它对服务性能有较大影响，不建议你在生产集群频繁使用
+
+最后你需要注意配额（quota-backend-bytes）的行为，默认’0’就是使用etcd默认的2GB大小，你需要根据你的业务场景适当调优。如果你填的是个小于0的数，就会禁用配额功能，这可能会让你的db大小处于失控，导致性能下降，不建议你禁用配额
 
 
 
+通过流程二的配额检查后，请求就从API层转发到了流程三的KVServer模块的put方法，我们知道etcd是基于Raft算法实现节点间数据复制的，因此它需要将put写请求内容打包成一个提案消息，提交给Raft模块。不过KVServer模块在提交提案前，还有如下的一系列检查和限速
+
+
+<div style="text-align: center;">
+
+![put](img/put-server.png)
+
+</div>
+
+<p style="text-align: center;">Fig.1. put</p>
+
+
+
+最后通过一系列检查之后，会生成一个唯一的ID，将此请求关联到一个对应的消息通知channel，然后向Raft模块发起（Propose）一个提案（Proposal）
 
 
 
