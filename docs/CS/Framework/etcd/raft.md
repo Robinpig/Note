@@ -882,12 +882,12 @@ type Storage interface {
 
 
 
-WAL是一种追加的方式将日志条目一条一条顺序存放在文件中。存放在WAL的记录都是walpb.Record形式的结构。Type代表数据的类型，Crc是生成的Crc校验字段。Data是真正的数据。v3版本中，有下图显示的几种Type：
-\- metadataType：元数据类型，元数据会保存当前的node id和cluster id。
-\- entryType：日志条目
-\- stateType：存放的是集群当前的状态HardState，如果集群的状态有变化，就会在WAL中存放一个新集群状态数据。里面包括当前Term，当前竞选者、当前已经commit的日志。
-\- crcType：存放crc校验字段。读取数据是，会根据这个记录里的crc字段对前面已经读出来的数据进行校验。
-\- snapshotType：存放snapshot的日志点。包括日志的Index和Term
+WAL是一种追加的方式将日志条目一条一条顺序存放在文件中。存放在WAL的记录都是walpb.Record形式的结构。Type代表数据的类型，Crc是生成的Crc校验字段。Data是真正的数据。v3版本中，有如下几种Type：
+- metadataType：元数据类型，元数据会保存当前的node id和cluster id。
+- entryType：日志条目
+- stateType：存放的是集群当前的状态HardState，如果集群的状态有变化，就会在WAL中存放一个新集群状态数据。里面包括当前Term，当前竞选者、当前已经commit的日志。
+- crcType：存放crc校验字段。读取数据是，会根据这个记录里的crc字段对前面已经读出来的数据进行校验。
+- snapshotType：存放snapshot的日志点。包括日志的Index和Term
 
 ```go
 // WAL is a logical representation of the stable storage.
