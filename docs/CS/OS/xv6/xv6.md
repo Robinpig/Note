@@ -58,13 +58,40 @@ sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils vir
 .stab : AT(LOADADDR(.rodata) + SIZEOF(.rodata)){
 ```
 
-##### **Intel Mac**
+##### **Mac**
+
+
+
+ARM架构Mac需要安装x86版本的Homebrew
 
 ```shell
-brew install
+brew tap nativeos/i386-elf-toolchain
+brew install nativeos/i386-elf-toolchain/i386-elf-binutils
+brew install nativeos/i386-elf-toolchain/i386-elf-gcc
+
+brew install i386-elf-gdb
+brew install qemu
+```
+
+修改Makefile 配置 Cross-compiling
+
+```makefile
+TOOLPREFIX = i386-elf-
 ```
 
 
+
+make时mp.o文件告警
+
+修改Makefile -Wall或者 -Werror修改成 -Wno-error
+
+
+
+由上面mp.o编译失败导致
+
+> file not recognized: File format not recognized
+
+使用make clean
 
 
 
@@ -137,7 +164,7 @@ riscv64-unknown-linux-gnu-gcc -v
 
 
 
-##### **ARM Mac**
+##### **Mac**
 
 参考
 
