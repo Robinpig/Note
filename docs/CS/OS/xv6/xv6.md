@@ -65,6 +65,7 @@ sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils vir
 ARM架构Mac需要安装x86版本的Homebrew
 
 ```shell
+# 安装binutils gcc
 brew tap nativeos/i386-elf-toolchain
 brew install nativeos/i386-elf-toolchain/i386-elf-binutils
 brew install nativeos/i386-elf-toolchain/i386-elf-gcc
@@ -213,6 +214,8 @@ $ 1 sleep  init 80103fb7 8010405f 80104a6d 80105b41 80105883
 2 sleep  sh 80103f80 801002ea 80101030 80104d66 80104a6d 80105b41 80105883
 ```
 进程后面的数字是调用栈关于函数调用的返回地址 可以使用addr2line -e kernel [] 查看对应代码 将调用栈所有地址逐个检查 可以还原出进程阻塞前的函数调用嵌套情况
+> i386编译的binutils使用 i386-elf-addr2line
+
 例如上面的sh进程是通过系统 调用进入到内核的，具体过程包括alltraps->trap->syscall->sys_read()->readi()->consoleread()->sleep()
 
 
