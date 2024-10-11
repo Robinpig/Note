@@ -431,6 +431,14 @@ type structName struct{
 
 在 error、panic 这两种错误机制中，Go 语言更提倡 error 这种轻量错误，而不是 panic
 
+
+
+panic 有三种诞生方式：
+
+- 程序猿主动：调用 `panic()`函数；
+- 编译器的隐藏代码：比如除零场景；
+- 内核发送给进程信号：比如非法地址访问 ；
+
 ## Generic
 
 
