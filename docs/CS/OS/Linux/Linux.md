@@ -197,6 +197,44 @@ file vmlinux
 
 ```
 
+##### **Docker**
+
+```dockerfile
+FROM --platform=linux/amd64 dockerproxy.cn/debian:10.8-slim
+
+RUN apt-get update
+RUN apt install -y apt-transport-https ca-certificates \
+    && echo 'deb https://mirrors.tuna.tsinghua.edu.cn/debian/ buster main contrib non-free \n\
+    deb https://mirrors.tuna.tsinghua.edu.cn/debian/ buster-updates main contrib non-free \n\
+    deb https://mirrors.tuna.tsinghua.edu.cn/debian-security buster/updates main contrib non-free\n'\
+    > /etc/apt/sources.list \
+    && apt update && apt-get install -y \
+    bc \
+    bison \
+    build-essential \
+    cpio \
+    flex \
+    libelf-dev \
+    libncurses-dev \
+    libssl-dev \
+    vim-tiny \
+    qemu-kvm \
+    gdb
+ADD ./start-gdb.sh /usr/local/bin
+ADD ./build-kernel.sh /usr/local/bin
+RUN chmod a+x /usr/local/bin/*.sh
+WORKDIR /workspace
+
+
+ENV PATH /path/to/qemu-aarch64-static:$PATH
+ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
+```
+添加platform参数
+```shell
+docker run --platform=linux/amd64
+```
+
+
 <!-- tabs:end -->
 
 
@@ -346,6 +384,8 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 ## Loadable kernel module
 
+
+
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
@@ -371,3 +411,4 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## References
 
 1. [Experience with Processes and Monitors in Mesa](https://people.eecs.berkeley.edu/~brewer/cs262/Mesa.pdf)
+1. [Linux核心概念详解](https://s3.shizhz.me/)

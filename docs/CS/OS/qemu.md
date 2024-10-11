@@ -38,6 +38,17 @@ brew install qemu
 
 
 
+## arch
+
+qemu-system-aarch64出现如下报错
+> there is no default Use -machine help to list supported machines
+
+使用`qemu-system-aarch64`需要 -M指定machine
+
+
+qemu-system-aarch64 CPU 100%
+
+
 
 ```shell
 p %eip
