@@ -356,7 +356,6 @@ find . -print0 \
 
 运行
 ```shell
-
 qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
 ```
 
@@ -426,7 +425,7 @@ exec /bin/sh
 qemu-system-aarch64 -s -S -name vm2 -M virt -cpu cortex-a57 -m 4096M -kernel /workspace/obj/linux/arch/arm64/boot/Image -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append nokaslr root="/dev/ram init=/init console=ttyAMA0"
 ```
 
-<!— tabs:end —>
+<!—- tabs:end -—>
 
 
 ### Directory
