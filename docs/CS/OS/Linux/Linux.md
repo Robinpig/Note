@@ -425,8 +425,8 @@ exec /bin/sh
 qemu-system-aarch64 -s -S -name vm2 -M virt -cpu cortex-a57 -m 4096M -kernel /workspace/obj/linux/arch/arm64/boot/Image -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append nokaslr root="/dev/ram init=/init console=ttyAMA0"
 ```
 
-<!—- tabs:end -—>
 
+<!-- tabs:end -->
 
 ### Directory
 
