@@ -196,9 +196,31 @@ file vmlinux
 ```shell
 
 ```
+##### **x86 Docker**
 
-##### **Docker**
+> 参考[Linux核心概念详解 - 1. 调试环境](https://s3.shizhz.me/s3e1)
 
+需要一个能够编译 Linux Kernel 的 Docker 镜像 新建目录 $HOME/linux/docker:
+在该目录下创建文件 build-kernel.sh 并写入如下内容：
+```shell
+Copy
+#!/bin/bash
+
+cd /workspace/linux-5.12.14
+make O=../obj/linux/ -j$(nproc)
+```
+
+在该目录下创建文件 start-gdb.sh 并写入如下内容：
+
+```shell
+Copy
+#!/bin/bash
+
+echo 'add-auto-load-safe-path /workspace/linux-5.12.14/scripts/gdb/vmlinux-gdb.py' > /root/.gdbinit # 让 gdb 能够顺利加载内核的调试脚本，如果在下一节编译 Linux Kernel 时下载的是另一版本的 Linux Kernel 代码，请修改这里的版本号
+cd /workspace/obj/linux/
+gdb vmlinux -ex "target remote :1234" # 启动 gdb 远程调试内核
+```
+创建文件 Dockerfile 并写入如下内容：
 ```dockerfile
 FROM --platform=linux/amd64 dockerproxy.cn/debian:10.8-slim
 
@@ -209,6 +231,8 @@ RUN apt install -y apt-transport-https ca-certificates \
     deb https://mirrors.tuna.tsinghua.edu.cn/debian-security buster/updates main contrib non-free\n'\
     > /etc/apt/sources.list \
     && apt update && apt-get install -y \
+    procps \
+    vim \
     bc \
     bison \
     build-essential \
@@ -229,11 +253,112 @@ WORKDIR /workspace
 ENV PATH /path/to/qemu-aarch64-static:$PATH
 ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
 ```
-添加platform参数
+通过如下命令构建镜像：
+
 ```shell
-docker run --platform=linux/amd64
+Copy
+docker build --platform=linux/amd64 -t linux-builder .
 ```
 
+下载最新稳定版的内核代码：
+
+```shell
+cd $HOME/linux/
+wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.12.14.tar.xz
+tar -xvJf linux-5.12.14.tar.xz
+```
+
+
+创建编译结果的输出目录：
+```shell
+mkdir -p $HOME/linux/obj
+```
+
+进入目录 $HOME/linux/ 并运行如下命令，进入容器编译内核：
+```shell
+
+docker run --platform=linux/amd64 -it --name linux-builder -v $HOME/linux:/workspace linux-builder
+```
+在容器内进入解压后内核源代码目录，并配置 Kernel 的编译选项：
+
+```shell
+cd /workspace/linux-5.12.14
+make O=../obj/linux menuconfig
+```
+> Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
+
+编译kernel
+> Mac的APFS文件系统默认case insensitive, 导致make
+
+```shell
+bash build-kernel.sh
+```
+
+下载 busybox 到工作目录并解压:
+```shell
+
+cd $HOME/linux
+wget https://busybox.net/downloads/busybox-1.33.1.tar.bz2
+tar -vxjf busybox-1.33.1.tar.bz2
+```
+回到编译内核的容器 linux-builder 中，对 busybox 进行编译配置：
+```shell
+
+mkdir -p /workspace/obj/busybox # 创建 busybox 的编译输出目录
+cd /workspace/busybox-1.33.1
+make O=../obj/busybox menuconfig
+```
+最后一条命令会打开配置目录，选中 Settings ---> Build static binary (no shared libs)
+
+然后通过如下命令编译并安装 busybox:
+```shell
+
+cd /workspace/obj/busybox/
+make -j$(nproc)
+make install
+```
+
+使用 busybox 构建一个极简的 initramfs, 能引导 Linux 启动并进入一个 shell 环境就足够。在容器中回到目录 /workspace 执行如下命令：
+
+```shell
+mkdir -p /workspace/initramfs/busybox
+cd !$
+mkdir -p {bin,sbin,etc,proc,sys,usr/{bin,sbin}}
+cp -av /workspace/obj/busybox/_install/* .
+```
+此时我们已经将 busybox 生成的可执行文件全部拷贝到了对应目录，但还缺少一个 init 程序，可以简单写一个 shell 脚本来充当 init, 将如下内容写入文件 /workspace/initramfs/busybox/init 中：
+
+```shell
+#!/bin/sh
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+
+echo -e "\nBoot took $(cut -d' ' -f1 /proc/uptime) seconds\n"
+
+exec /bin/sh
+```
+为文件添加可执行权限：
+
+```shell
+chmod a+x /workspace/initramfs/busybox/init
+```
+通过如下命令将所有内容打包：
+```shell
+cd /workspace/initramfs/busybox
+
+find . -print0 \
+| cpio --null -ov --format=newc \
+| gzip -9 > /workspace/obj/initramfs-busybox.cpio.gz
+```
+
+文件 /workspace/obj/initramfs-busybox.cpio.gz 便是最终的 initramfs, 该文件会在启动内核时作为参数传递给 qemu.
+
+运行
+```shell
+
+qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
+```
 
 <!-- tabs:end -->
 
@@ -247,6 +372,68 @@ make -j8
 
 ```shell
 cat /proc/version
+```
+
+
+
+##### **ARM Docker**
+
+ARM配置操作基本同x86 以下列出的是不同点
+
+Dockerfile
+
+
+
+> Busybox 配置时需要disable Applets->Shells->ash->job control
+> 否则将在linux启动后报错 can't access tty,job control turned off
+
+
+配置用户文件
+```
+# /etc/passwd
+root:x:0:0:Linux User,,,:/root:/bin/sh
+
+# /etc/group
+tty:x:0:
+
+# /etc/shadow
+root::::::::
+```
+
+配置init
+```
+#!/bin/sh
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+
+echo -e "\nBoot took $(cut -d' ' -f1 /proc/uptime) seconds\n"
+
+mkdir -p /home/admin
+
+mount -n -t tmpfs none /dev
+
+mknod -m 622 /dev/console c 5 1
+mknod -m 666 /dev/null c 1 3
+mknod -m 666 /dev/zero c 1 5
+mknod -m 666 /dev/ptmx c 5 2
+mknod -m 666 /dev/tty c 5 0 # <--
+mknod -m 444 /dev/random c 1 8
+mknod -m 444 /dev/urandom c 1 9
+mknod -m 666 /dev/ttyAMA0 c 5 3
+
+chown admin:tty /dev/console
+chown admin:tty /dev/ptmx
+chown admin:tty /dev/tty
+chown admin:tty /dev/ttyAMA0 
+
+exec /bin/sh
+```
+
+
+启动
+```shell
+qemu-system-aarch64 -s -S -name vm2 -M virt -cpu cortex-a57 -m 4096M -kernel /workspace/obj/linux/arch/arm64/boot/Image -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append nokaslr root="/dev/ram init=/init console=ttyAMA0"
 ```
 
 ### Directory

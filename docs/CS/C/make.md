@@ -10,6 +10,37 @@ apt-get install make
 make -v
 ```
 
+## version
+
+需要降低版本
+
+
+在官网 https://ftp.gnu.org/gnu/make/ 下载对应版本的 make, 如:
+
+```shell
+wget http://ftp.gnu.org/gnu/make/make-3.81.tar.gz
+tar xf make-3.81.tar.gz
+
+./configure --prefix=/usr/local/make-3.81
+sh build.sh
+sudo make install
+
+# replace
+sudo cp make /usr/bin/make
+```
+在执行 sh build.sh 时，遇到如下错误
+```
+/mnt/d/Users/Lantern/Desktop/work/kernal/make-3.81/./glob/glob.c:575: undefined reference to `__alloca'
+glob.o:/mnt/d/Users/Lantern/Desktop/work/kernal/make-3.81/./glob/glob.c:726: more undefined references to `__alloca' follow
+```
+需要修改glob.c
+```c
+# before
+# if _GNU_GLOB_INTERFACE_VERSION == GLOB_INTERFACE_VERSION
+# after
+# if _GNU_GLOB_INTERFACE_VERSION >= GLOB_INTERFACE_VERSION
+```
+
 ## Makefile
 
 在Linux环境下，当我们输入make命令时，它就在当前目录查找一个名为Makefile的文件，然后，根据这个文件定义的规则，自动化地执行任意命令，包括编译命令
