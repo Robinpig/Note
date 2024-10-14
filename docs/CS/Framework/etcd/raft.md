@@ -7,7 +7,25 @@ raftexample 的目录位于 `etcd/contrib/raftexample/` ，这个目录是一个
 
 > 回顾[Raft](/docs/CS/Distributed/Raft.md)协议
 
-raftexample目录下go build -gcflags=all="-N -l"* 编译出goreman 使用 goreman start启动
+
+
+```shell
+cd <directory>/src/go.etcd.io/etcd/contrib/raftexample
+go build -o raftexample
+
+# single node
+raftexample —id 1 —cluster http://127.0.0.1:12379 —port 12380
+
+# local cluster
+goreman start
+
+# test
+curl -L http://127.0.0.1:12380/my-key -XPUT -d hello
+curl -L http://127.0.0.1:12380/my-key
+
+```
+
+
 
 > The raftexample consists of three components: a raft-backed key-value store, a REST API server, and a raft consensus server based on etcd's raft implementation.
 > 

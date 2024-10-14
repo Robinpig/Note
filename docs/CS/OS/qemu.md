@@ -60,4 +60,7 @@ p %eip
 
 ## Links
 
+- [Operating System](/docs/CS/OS/OS.md)
+- [Computer Organization](/docs/CS/CO/CO.md)
+
 ## References
