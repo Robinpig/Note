@@ -28,107 +28,51 @@ Windows下使用Linux
 
 ## Kernel
 
-阅读
-
-执行 ctags -R 生成索引文件 tags
+调试环境需要安装qemu+gdb
 
 
-ctrl + ] 进入函数定义
-g, ctrl + ] 进入函数定义 可选择
-ctrl + o 返回
 
-在线阅读
+需要准备如下：
 
-[bootlin](https://elixir.bootlin.com/linux/v6.11/source)
+- 带调试信息的内核vmlinux
+- 一个压缩的内核vmlinuz bzImage/Image
+- 一份裁剪过的文件系统initrd/init
+
+
+
+vmlinux 是生成的内核二进制文件它是一个没有压缩的镜像
+
+**Image**是vmlinux经过OBJCOPY后生成的纯二进制映像文件
+
+**zImage**是Image经过压缩后形成的一种映像压缩文件
+
+**uImage**是在zImage基础上在前面64字节加上内核信息后的映像压缩文件，供uboot使用
+
+
+
+fs可以通过不同的tools来构建
+
+- buildroot
+
+
+
+
+
+> 
 
 ### Build
 
-编译Kernel
 
-下载解压缩 kernel
+<!-- tabs:start -->
+
+##### **Ubuntu**
+
 
 ```shell
  wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.10.3.tar.xz
  
  tar Jxf linux-6.10.3.tar.xz
 ```
-
-
-
-Linux 内核的构建过程会查找 .config 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
-获取 Linux 内核的 .config 文件有两种方式：
-
-- 使用你的 Linux 发行版的配置作为基础（推荐做法）
-- 使用默认的，通用的配置
-
-
-Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
-
-- 大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
-- 一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
-
-
-```shell
-export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-
-make allnoconfig
-make menuconfig
-```
-
-
-
-
-过程中遇到问题需要关闭功能 例如CONFIG_DEBUG_INFO_BIF=N时需要重新设置.config
-- 运行脚本关闭: scripts/config --disable CONFIG_DEBUG_INFO_BIF
-- 在menuconfig上设置
-
-menuconfig是Linux平台用于管理代码工程、模块及功能的实用工具
-menuconfig 其实只能算是一个“前端”，用于支撑它、决定它拥有什么配置项的“后端”则被称为 Kconfig
-
-Kconfig参考文档位于 ./Document/kbuild/kconfig-language.rst
-
-Kconfig常用的几个知识点有以下五个：
-
-1. config模块
-2. menuconfig模块
-3. menu模块
-4. choice模块
-5. if 与 depends on 模块
-
-```
-General setup  --->   
-  [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support  
-  [*] Configure standard kernel features (expert users)  ---> 
-
-Executable file formats  --->
-  [*] Kernel support for ELF binaries 
-  [*] Kernel support for scripts starting with #! 
-
-Device Drivers  --->  
-  Generic Driver Options  --->
-    [*] Maintain a devtmpfs filesystem to mount at /dev
-    [*]   Automount devtmpfs at /dev, after the kernel mounted the rootfs 
-
-Device Drivers  ---> 
-  Character devices  ---> 
-    Serial drivers  ---> 
-      [*] ARM AMBA PL010 serial port support 
-        [*]   Support for console on AMBA serial port
-      [*] ARM AMBA PL011 serial port support  
-        [*]   Support for console on AMBA serial port   
-
-File systems  --->  
-  [*] Second extended fs support
-  [*] The Extended 4 (ext4) filesystem 
-
-Device Drivers  ---> 
-  [*] Block devices  ---> 
-    [*]   RAM block device support
-```
-
-<!-- tabs:start -->
-
-##### **Ubuntu**
 
 > 异常: gelf.h: No such file or directory
 > 
@@ -294,7 +238,14 @@ make O=../obj/linux menuconfig
 bash build-kernel.sh
 ```
 
+
+
+
+
+
+
 下载 busybox 到工作目录并解压:
+
 ```shell
 
 cd $HOME/linux
@@ -308,11 +259,12 @@ mkdir -p /workspace/obj/busybox # 创建 busybox 的编译输出目录
 cd /workspace/busybox-1.33.1
 make O=../obj/busybox menuconfig
 ```
-最后一条命令会打开配置目录，选中 Settings ---> Build static binary (no shared libs)
+最后一条命令会打开配置目录，选中 Settings ---> Build static binary (no shared libs) 
+
+
 
 然后通过如下命令编译并安装 busybox:
 ```shell
-
 cd /workspace/obj/busybox/
 make -j$(nproc)
 make install
@@ -390,7 +342,7 @@ root::::::::
 ```
 
 配置init
-```
+```shell
 #!/bin/sh
 
 mount -t proc none /proc
@@ -419,7 +371,6 @@ chown admin:tty /dev/ttyAMA0
 exec /bin/sh
 ```
 
-
 启动
 ```shell
 qemu-system-aarch64 -s -S -name vm2 -M virt -cpu cortex-a57 -m 4096M -kernel /workspace/obj/linux/arch/arm64/boot/Image -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append nokaslr root="/dev/ram init=/init console=ttyAMA0"
@@ -428,30 +379,115 @@ qemu-system-aarch64 -s -S -name vm2 -M virt -cpu cortex-a57 -m 4096M -kernel /wo
 
 <!-- tabs:end -->
 
-### Directory
+
+#### config
 
 
-| Directory |                                                                                                                                                                                                                |  |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | - |
-| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                          |  |
-| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources.<br />There is a separate subdirectory for each processor architecture supported by the kernel.                    |  |
-| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book).<br />It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |  |
-| mm        | High-level memory management resides in mm/.                                                                                                                                                                   |  |
-| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                                  |  |
-| include   | include/ contains all header files with publicly exported functions.                                                                                                                                           |  |
-| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                     |  |
-| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                              |  |
-| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel,<br />including data structures to implement various trees and data compression routines.                               |  |
-| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                               |  |
-| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                                   |  |
-| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                                     |  |
-| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                       |  |
-|           |                                                                                                                                                                                                                |  |
-| firmware  |                                                                                                                                                                                                                |  |
-| virt      |                                                                                                                                                                                                                |  |
-| usr       |                                                                                                                                                                                                                |  |
-| tools     |                                                                                                                                                                                                                |  |
-| block     | block device                                                                                                                                                                                                   |  |
+
+
+Linux 内核的构建过程会查找 .config 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
+获取 Linux 内核的 .config 文件有两种方式：
+
+- 使用你的 Linux 发行版的配置作为基础（推荐做法）
+- 使用默认的，通用的配置
+
+
+Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
+
+- 大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
+- 一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
+
+
+```shell
+export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
+
+make allnoconfig
+make menuconfig
+```
+
+
+
+
+过程中遇到问题需要关闭功能 例如CONFIG_DEBUG_INFO_BIF=N时需要重新设置.config
+- 运行脚本关闭: scripts/config --disable CONFIG_DEBUG_INFO_BIF
+- 在menuconfig上设置
+
+menuconfig是Linux平台用于管理代码工程、模块及功能的实用工具
+menuconfig 其实只能算是一个“前端”，用于支撑它、决定它拥有什么配置项的“后端”则被称为 Kconfig
+
+Kconfig参考文档位于 ./Document/kbuild/kconfig-language.rst
+
+Kconfig常用的几个知识点有以下五个：
+
+1. config模块
+2. menuconfig模块
+3. menu模块
+4. choice模块
+5. if 与 depends on 模块
+
+```
+General setup  --->   
+  [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support  
+  [*] Configure standard kernel features (expert users)  ---> 
+
+Executable file formats  --->
+  [*] Kernel support for ELF binaries 
+  [*] Kernel support for scripts starting with #! 
+
+Device Drivers  --->  
+  Generic Driver Options  --->
+    [*] Maintain a devtmpfs filesystem to mount at /dev
+    [*]   Automount devtmpfs at /dev, after the kernel mounted the rootfs 
+
+Device Drivers  ---> 
+  Character devices  ---> 
+    Serial drivers  ---> 
+      [*] ARM AMBA PL010 serial port support 
+        [*]   Support for console on AMBA serial port
+      [*] ARM AMBA PL011 serial port support  
+        [*]   Support for console on AMBA serial port   
+
+File systems  --->  
+  [*] Second extended fs support
+  [*] The Extended 4 (ext4) filesystem 
+
+Device Drivers  ---> 
+  [*] Block devices  ---> 
+    [*]   RAM block device support
+```
+
+
+### Read
+
+执行 ctags -R 生成索引文件 tags
+- ctrl + ] 进入函数定义
+- g, ctrl + ] 进入函数定义 可选择
+- ctrl + o 返回
+
+> 在线阅读 [bootlin](https://elixir.bootlin.com/linux/v6.11/source)
+#### Directory
+
+
+| Directory |                                                                                                                                                                                                                |     |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                          |     |
+| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources.<br />There is a separate subdirectory for each processor architecture supported by the kernel.                    |     |
+| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book).<br />It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |     |
+| mm        | High-level memory management resides in mm/.                                                                                                                                                                   |     |
+| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                                  |     |
+| include   | include/ contains all header files with publicly exported functions.                                                                                                                                           |     |
+| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                     |     |
+| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                              |     |
+| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel,<br />including data structures to implement various trees and data compression routines.                               |     |
+| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                               |     |
+| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                                   |     |
+| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                                     |     |
+| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                        |     |
+| firmware  |                                                                                                                                                                                                                |     |
+| virt      |                                                                                                                                                                                                                |     |
+| usr       |                                                                                                                                                                                                                |     |
+| tools     |                                                                                                                                                                                                                |     |
+| block     | block device                                                                                                                                                                                                   |     |
 
 ```shell
 usr/src/kernels/

@@ -48,6 +48,8 @@ qemu-system-aarch64出现如下报错
 
 qemu-system-aarch64 CPU 100%
 
+添加`-nographic`参数解决如下问题
+> Could not initialize SDL(No available video device) - exiting
 
 
 ```shell

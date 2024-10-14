@@ -1,5 +1,23 @@
 ## Introduction
 
+
+
+查看服务进程
+
+```shell
+launchctl list | grep <service>
+```
+
+停止/启动进程
+
+```shell
+launchctl stop/start <service>
+```
+
+
+
+
+
 ## Install Tools
 
 ## Homebrew

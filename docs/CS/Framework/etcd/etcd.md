@@ -29,6 +29,16 @@ etcd 是 Kubernetes 的后端唯一存储实现
 为了保证etcd可运行，我们先在根目录上运行go mod tidy，保证依赖库没有问题。
 接着，我们阅读Makefile文件，发现其提供了make build指令。运行后，在bin目录下生成了etcd/etcdctl/etcdutl三个可执行文件，并且打印出了版本信息
 
+查看Profile文件 如下命令可以快速启动一个3节点的本地集群
+
+```shell
+goreman -f Procfile start
+```
+
+
+
+
+
 
 ## Architecture
 
@@ -46,12 +56,13 @@ etcd 整体架构如下图所示：
 Fig.1. Architecture
 </p>
 
-从大体上可以将其划分为以下 4 个模块：
+从大体上可以将其划分为以下几个模块：
 
-- http：负责对外提供 http 访问接口和 http client
+- client: 包括v2和v3两个版本
+- network：负责对外提供 http 访问接口
 - raft 状态机：根据接受的 raft 消息进行状态转移，调用各状态下的动作。
-- wal 日志存储：持久化存储日志条目。
-- kv 数据存储：kv 数据的存储引擎，v3 支持不同的后端存储，当前采用 boltdb。通过 boltdb 支持事务操作。
+- **功能逻辑层**：etcd核心特性实现层，如典型的KVServer模块、MVCC模块、Auth鉴权模块、Lease租约模块、Compactor压缩模块等，其中MVCC模块主要由treeIndex模块和boltdb模块组成
+- storage：存储层包含预写日志(WAL)模块、快照(Snapshot)模块、boltdb模块。其中WAL可保障etcd crash后数据不丢失，boltdb则保存了集群元数据和用户写入的数据
 
 
 etcd v2的问题
@@ -1681,14 +1692,14 @@ EtcdServer::Put -> EtcdServer::raftRquest -> EtcdServer::processInternalRaftRequ
 
 
 
-clientv3库基于gRPC client API封装了操作etcd KVServer、Cluster、Auth、Lease、Watch等模块的API，同时还包含了负载均衡、健康探测和故障切换等特性 在解析完请求中的参数后，etcdctl会创建一个clientv3库对象，使用KVServer模块的API来访问etcd server
+etcd的客户端工具etcdctl是通过clientv3库来访问etcd server的 clientv3库基于gRPC client API封装了操作etcd KVServer、Cluster、Auth、Lease、Watch等模块的API，同时还包含了负载均衡、健康探测和故障切换等特性 在解析完请求中的参数后，etcdctl会创建一个clientv3库对象，使用KVServer模块的API来访问etcd server
 
 clientv3库采用的负载均衡算法为Round-robin。针对每一个请求，Round-robin算法通过轮询的方式依次从endpoint列表中选择一个endpoint访问(长连接)，使etcd server负载尽量均衡
 
 > 1. 如果你的client 版本<= 3.3，那么当你配置多个endpoint时，负载均衡算法仅会从中选择一个IP并创建一个连接（Pinned endpoint），这样可以节省服务器总连接数。但在这我要给你一个小提醒，在heavy usage场景，这可能会造成server负载不均衡。
 > 2. 在client 3.4之前的版本中，负载均衡算法有一个严重的Bug：如果第一个节点异常了，可能会导致你的client访问etcd server异常，特别是在Kubernetes场景中会导致APIServer不可用。不过，该Bug已在 Kubernetes 1.16版本后被修复
 
-为请求选择好etcd server节点，client就可调用etcd server的KVServer模块的Range RPC方法，把请求发送给etcd server
+为请求选择好etcd server节点，client就可把请求发送给etcd server
 
 
 
@@ -1733,8 +1744,6 @@ func (kv *kv) Do(ctx context.Context, op Op) (OpResponse, error) {
 
 
 
-
-
 KVClient is the client API for KV service.
 
 ```go
@@ -1766,6 +1775,34 @@ type KVClient interface {
 
 
 
+### put
+
+client 通过 grpc 发送一个 Put kv request，etcd server 的 rpc server 收到这个请求，通过 node 模块的 Propose 接口提交，node 模块将这个 Put kv request 转换成 raft StateMachine 认识的 MsgProp Msg 并通过 propc Channel 传递给 node 模块的 coroutine；
+node 模块 coroutine 监听在 propc Channel 中，收到 MsgProp Msg 之后，通过 raft.Step(Msg) 接口将其提交给 raft StateMachine 处理；
+raft StateMachine 处理完这个 MsgProp Msg 会产生 1 个 Op log entry 和 2 个发送给另外两个副本的 Append entries 的 MsgApp messages，node 模块会将这两个输出打包成 Ready，然后通过 readyc Channel 传递给 raftNode 模块的 coroutine；
+raftNode 模块的 coroutine 通过 readyc 读取到 Ready，首先通过网络层将 2 个 append entries 的 messages 发送给两个副本(PS:这里是异步发送的)；
+raftNode 模块的 coroutine 自己将 Op log entry 通过持久化层的 WAL 接口同步的写入 WAL 文件中
+raftNode 模块的 coroutine 通过 advancec Channel 通知当前 Ready 已经处理完，请给我准备下一个 带出的 raft StateMachine 输出Ready；
+其他副本的返回 Append entries 的 response： MsgAppResp message，会通过 node 模块的接口经过 recevc Channel 提交给 node 模块的 coroutine；
+node 模块 coroutine 从 recev Channel 读取到 MsgAppResp，然后提交给 raft StateMachine 处理。node 模块 coroutine 会驱动 raft StateMachine 得到关于这个 committedEntires，也就是一旦大多数副本返回了就可以 commit 了，node 模块 new 一个新的 Ready其包含了 committedEntries，通过 readyc Channel 传递给 raftNode 模块 coroutine 处理；
+raftNode 模块 coroutine 从 readyc Channel 中读取 Ready结构，然后取出已经 commit 的 committedEntries 通过 applyc 传递给另外一个 etcd server coroutine 处理，其会将每个 apply 任务提交给 FIFOScheduler 调度异步处理，这个调度器可以保证 apply 任务按照顺序被执行，因为 apply 的执行是不能乱的；
+raftNode 模块的 coroutine 通过 advancec Channel 通知当前 Ready 已经处理完，请给我准备下一个待处理的 raft StateMachine 输出Ready；
+FIFOScheduler 调度执行 apply 已经提交的 committedEntries
+AppliedIndex 推进，通知 ReadLoop coroutine，满足 applied index>= commit index 的 read request 可以返回；
+调用网络层接口返回 client 成功。
+OK，整个 Put kv request 的处理请求流程大致介绍完。需要注意的是，上面尽管每个步骤都有严格的序号，但是很多操作是异步，并发甚至并行的发生的，序号并不是严格的发生先后顺序，例如上面的 11 和 12，分别在不同 coroutine 并行处理，并非严格的发生时间序列。
+
+
+
+### get
+
+etcd的客户端工具etcdctl是通过clientv3库来访问etcd server的，clientv3库基于gRPC client API封装了操作etcd KVServer、Cluster、Auth、Lease、Watch等模块的API，同时还包含了负载均衡、健康探测和故障切换等特性
+
+```shell
+etcdctl get hello --endpoints http://127.0.0.1:2379
+```
+
+get请求对应KVClient的实现
 
 ```go
 func (c *kVClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.CallOption) (*RangeResponse, error) {
@@ -1777,10 +1814,6 @@ func (c *kVClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.Cal
 	return out, nil
 }
 ```
-
-
-
-
 
 etcd server定义了如下的Service KV和Range方法，启动的时候它会将实现KV各方法的对象注册到gRPC Server，并在其上注册对应的拦截器
 
@@ -1833,7 +1866,7 @@ raftNode 的 start()方法另外启动了一个协程，处理 readyc 队列(图
 
 另外需要将已经同步好的日志应用到状态机中，让状态机更新状态和 kv 存储，通知等待请求完成的客户端。因此需要将已经确定同步好的日志、快照等信息封装在一个 apply 消息中推送到 applyc 队列。
 
- 
+
 
 EtcdServer 的 apply 处理
 
@@ -1842,33 +1875,6 @@ EtcdServer 会处理这个 applyc 队列，会将 snapshot 和 entries 都 apply
 
 
 最后调用 applyWait 的 Trigger，唤醒客户端请求的等待线程，返回客户端的请求。
-
-
-
-put 流程
-
-
-client 通过 grpc 发送一个 Put kv request，etcd server 的 rpc server 收到这个请求，通过 node 模块的 Propose 接口提交，node 模块将这个 Put kv request 转换成 raft StateMachine 认识的 MsgProp Msg 并通过 propc Channel 传递给 node 模块的 coroutine；
-node 模块 coroutine 监听在 propc Channel 中，收到 MsgProp Msg 之后，通过 raft.Step(Msg) 接口将其提交给 raft StateMachine 处理；
-raft StateMachine 处理完这个 MsgProp Msg 会产生 1 个 Op log entry 和 2 个发送给另外两个副本的 Append entries 的 MsgApp messages，node 模块会将这两个输出打包成 Ready，然后通过 readyc Channel 传递给 raftNode 模块的 coroutine；
-raftNode 模块的 coroutine 通过 readyc 读取到 Ready，首先通过网络层将 2 个 append entries 的 messages 发送给两个副本(PS:这里是异步发送的)；
-raftNode 模块的 coroutine 自己将 Op log entry 通过持久化层的 WAL 接口同步的写入 WAL 文件中
-raftNode 模块的 coroutine 通过 advancec Channel 通知当前 Ready 已经处理完，请给我准备下一个 带出的 raft StateMachine 输出Ready；
-其他副本的返回 Append entries 的 response： MsgAppResp message，会通过 node 模块的接口经过 recevc Channel 提交给 node 模块的 coroutine；
-node 模块 coroutine 从 recev Channel 读取到 MsgAppResp，然后提交给 raft StateMachine 处理。node 模块 coroutine 会驱动 raft StateMachine 得到关于这个 committedEntires，也就是一旦大多数副本返回了就可以 commit 了，node 模块 new 一个新的 Ready其包含了 committedEntries，通过 readyc Channel 传递给 raftNode 模块 coroutine 处理；
-raftNode 模块 coroutine 从 readyc Channel 中读取 Ready结构，然后取出已经 commit 的 committedEntries 通过 applyc 传递给另外一个 etcd server coroutine 处理，其会将每个 apply 任务提交给 FIFOScheduler 调度异步处理，这个调度器可以保证 apply 任务按照顺序被执行，因为 apply 的执行是不能乱的；
-raftNode 模块的 coroutine 通过 advancec Channel 通知当前 Ready 已经处理完，请给我准备下一个待处理的 raft StateMachine 输出Ready；
-FIFOScheduler 调度执行 apply 已经提交的 committedEntries
-AppliedIndex 推进，通知 ReadLoop coroutine，满足 applied index>= commit index 的 read request 可以返回；
-调用网络层接口返回 client 成功。
-OK，整个 Put kv request 的处理请求流程大致介绍完。需要注意的是，上面尽管每个步骤都有严格的序号，但是很多操作是异步，并发甚至并行的发生的，序号并不是严格的发生先后顺序，例如上面的 11 和 12，分别在不同 coroutine 并行处理，并非严格的发生时间序列。
-
-
-
-
-### read
-一个读请求从 client 通过 Round-robin 负载均衡算法，选择一个 etcd server 节点，发出 gRPC 请求，经过 etcd server 的 KVServer 模块、线性读模块、 MVCC 的 treeIndex 和 boltdb 模块紧密协作，完成了一个读请求
-
 
 
 ## Network

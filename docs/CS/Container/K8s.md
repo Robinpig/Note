@@ -92,6 +92,20 @@ sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 ```
 
+
+
+##### **Mac**
+
+Mac下通常使用Docker Desktop的k8s
+
+遇到Kubernetes一直在starting的情况
+
+> [`Docker Desktop for Mac` 开启并使用 `Kubernetes`](https://github.com/maguowei/k8s-docker-desktop-for-mac?tab=readme-ov-file#docker-desktop-for-mac-%E5%BC%80%E5%90%AF%E5%B9%B6%E4%BD%BF%E7%94%A8-kubernetes)
+
+
+
+
+
 <!-- tabs:end -->
 
 
