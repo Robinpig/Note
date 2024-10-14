@@ -1703,14 +1703,14 @@ EtcdServer::Put -> EtcdServer::raftRquest -> EtcdServer::processInternalRaftRequ
 
 
 
-clientv3库基于gRPC client API封装了操作etcd KVServer、Cluster、Auth、Lease、Watch等模块的API，同时还包含了负载均衡、健康探测和故障切换等特性 在解析完请求中的参数后，etcdctl会创建一个clientv3库对象，使用KVServer模块的API来访问etcd server
+etcd的客户端工具etcdctl是通过clientv3库来访问etcd server的 clientv3库基于gRPC client API封装了操作etcd KVServer、Cluster、Auth、Lease、Watch等模块的API，同时还包含了负载均衡、健康探测和故障切换等特性 在解析完请求中的参数后，etcdctl会创建一个clientv3库对象，使用KVServer模块的API来访问etcd server
 
 clientv3库采用的负载均衡算法为Round-robin。针对每一个请求，Round-robin算法通过轮询的方式依次从endpoint列表中选择一个endpoint访问(长连接)，使etcd server负载尽量均衡
 
 > 1. 如果你的client 版本<= 3.3，那么当你配置多个endpoint时，负载均衡算法仅会从中选择一个IP并创建一个连接（Pinned endpoint），这样可以节省服务器总连接数。但在这我要给你一个小提醒，在heavy usage场景，这可能会造成server负载不均衡。
 > 2. 在client 3.4之前的版本中，负载均衡算法有一个严重的Bug：如果第一个节点异常了，可能会导致你的client访问etcd server异常，特别是在Kubernetes场景中会导致APIServer不可用。不过，该Bug已在 Kubernetes 1.16版本后被修复
 
-为请求选择好etcd server节点，client就可调用etcd server的KVServer模块的Range RPC方法，把请求发送给etcd server
+为请求选择好etcd server节点，client就可把请求发送给etcd server
 
 
 
@@ -1755,8 +1755,6 @@ func (kv *kv) Do(ctx context.Context, op Op) (OpResponse, error) {
 
 
 
-
-
 KVClient is the client API for KV service.
 
 ```go
@@ -1788,25 +1786,7 @@ type KVClient interface {
 
 
 
-
-```go
-func (c *kVClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.CallOption) (*RangeResponse, error) {
-	out := new(RangeResponse)
-	err := c.cc.Invoke(ctx, "/etcdserverpb.KV/Range", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-```
-
-
-
-
-
-
 ### put
-
 
 client 通过 grpc 发送一个 Put kv request，etcd server 的 rpc server 收到这个请求，通过 node 模块的 Propose 接口提交，node 模块将这个 Put kv request 转换成 raft StateMachine 认识的 MsgProp Msg 并通过 propc Channel 传递给 node 模块的 coroutine；
 node 模块 coroutine 监听在 propc Channel 中，收到 MsgProp Msg 之后，通过 raft.Step(Msg) 接口将其提交给 raft StateMachine 处理；
@@ -1825,7 +1805,7 @@ OK，整个 Put kv request 的处理请求流程大致介绍完。需要注意�
 
 
 
-### read
+### get
 
 etcd的客户端工具etcdctl是通过clientv3库来访问etcd server的，clientv3库基于gRPC client API封装了操作etcd KVServer、Cluster、Auth、Lease、Watch等模块的API，同时还包含了负载均衡、健康探测和故障切换等特性
 
@@ -1833,11 +1813,18 @@ etcd的客户端工具etcdctl是通过clientv3库来访问etcd server的，clien
 etcdctl get hello --endpoints http://127.0.0.1:2379
 ```
 
-一个读请求从 client 通过 Round-robin 负载均衡算法，选择一个 etcd server 节点，发出 gRPC 请求，经过 etcd server 的 KVServer 模块、线性读模块、 MVCC 的 treeIndex 和 boltdb 模块紧密协作，完成了一个读请求
+get请求对应KVClient的实现
 
-> client 3.4之前的版本中，负载均衡算法有一个严重的Bug：如果第一个节点异常了，可能会导致你的client访问etcd server异常，特别是在Kubernetes场景中会导致APIServer不可用。不过，该Bug已在 Kubernetes 1.16版本后被修复
-
-
+```go
+func (c *kVClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.CallOption) (*RangeResponse, error) {
+	out := new(RangeResponse)
+	err := c.cc.Invoke(ctx, "/etcdserverpb.KV/Range", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+```
 
 etcd server定义了如下的Service KV和Range方法，启动的时候它会将实现KV各方法的对象注册到gRPC Server，并在其上注册对应的拦截器
 

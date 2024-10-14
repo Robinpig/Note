@@ -28,6 +28,37 @@ Windows下使用Linux
 
 ## Kernel
 
+调试环境需要安装qemu+gdb
+
+
+
+需要准备如下：
+
+- 带调试信息的内核vmlinux
+- 一个压缩的内核vmlinuz bzImage/Image
+- 一份裁剪过的文件系统initrd/init
+
+
+
+vmlinux 是生成的内核二进制文件它是一个没有压缩的镜像
+
+**Image**是vmlinux经过OBJCOPY后生成的纯二进制映像文件
+
+**zImage**是Image经过压缩后形成的一种映像压缩文件
+
+**uImage**是在zImage基础上在前面64字节加上内核信息后的映像压缩文件，供uboot使用
+
+
+
+fs可以通过不同的tools来构建
+
+- buildroot
+
+
+
+
+
+> 
 
 ### Build
 
@@ -207,7 +238,14 @@ make O=../obj/linux menuconfig
 bash build-kernel.sh
 ```
 
+
+
+
+
+
+
 下载 busybox 到工作目录并解压:
+
 ```shell
 
 cd $HOME/linux
@@ -221,7 +259,9 @@ mkdir -p /workspace/obj/busybox # 创建 busybox 的编译输出目录
 cd /workspace/busybox-1.33.1
 make O=../obj/busybox menuconfig
 ```
-最后一条命令会打开配置目录，选中 Settings ---> Build static binary (no shared libs)
+最后一条命令会打开配置目录，选中 Settings ---> Build static binary (no shared libs) 
+
+
 
 然后通过如下命令编译并安装 busybox:
 ```shell
