@@ -298,25 +298,14 @@ Default: 0
 
 > -- [listen(2) — Linux manual page](https://man7.org/linux/man-pages/man2/listen.2.html)
 >
-> The behavior of the backlog argument on TCP sockets changed with
-> Linux 2.2.
-> Now it specifies the queue length for completely
-> established sockets waiting to be accepted, instead of the number
-> of incomplete connection requests.
-> The maximum length of the
-> queue for incomplete sockets can be set using
-> /proc/sys/net/ipv4/tcp_max_syn_backlog.
-> When syncookies are
-> enabled there is no logical maximum length and this setting is
-> ignored.  See tcp(7) for more information.
+> The behavior of the backlog argument on TCP sockets changed with Linux 2.2.
+> Now it specifies the queue length for completely established sockets waiting to be accepted, instead of the number of incomplete connection requests.
+> The maximum length of the queue for incomplete sockets can be set using /proc/sys/net/ipv4/tcp_max_syn_backlog.
+> When syncookies are enabled there is no logical maximum length and this setting is ignored.  See tcp(7) for more information.
 >
-> If the backlog argument is greater than the value in
-> /proc/sys/net/core/somaxconn, then it is silently capped to that
-> value.
-> Since Linux 5.4, the default in this file is 4096; in
-> earlier kernels, the default value is 128.  In kernels before
-> 2.4.25, this limit was a hard coded value, SOMAXCONN, with the
-> value 128.
+> If the backlog argument is greater than the value in /proc/sys/net/core/somaxconn, then it is silently capped to that value.
+> Since Linux 5.4, the default in this file is 4096; in earlier kernels, the default value is 128.  
+> In kernels before 2.4.25, this limit was a hard coded value, SOMAXCONN, with the value 128.
 
 **listen for socket connections and limit the queue of incoming connections**
 
@@ -398,15 +387,9 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
        struct inet_connection_sock *icsk = inet_csk(sk);
        struct inet_sock *inet = inet_sk(sk);
        int err = -EADDRINUSE;
-```
 
-call `reqsk_queue_alloc`
-
-```c
        reqsk_queue_alloc(&icsk->icsk_accept_queue);
-```
 
-```c
        sk->sk_ack_backlog = 0;
        inet_csk_delack_init(sk);
 
@@ -1949,3 +1932,4 @@ struct pollfd {
 
 1. [打破砂锅挖到底—— Epoll 多路复用是如何转起来的？](https://mp.weixin.qq.com/s/Py2TE9CdQ92fGLpg-SEj_g)
 2. [SYN packet handling in the wild](https://blog.cloudflare.com/syn-packet-handling-in-the-wild/#queuesizelimits)
+3. [[内核源码] 网络协议栈 - listen (tcp)](https://wenfh2020.com/2021/07/21/kernel-sys-listen/)

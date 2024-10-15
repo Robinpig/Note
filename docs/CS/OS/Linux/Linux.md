@@ -58,7 +58,15 @@ fs可以通过不同的tools来构建
 
 
 
-> 
+编译busybox时因为内存不足出现如下错误 可在Docker Desktop中看到内存占用很高, 创建较大内存的容器后重新make
+
+> gcc: fatal error: Killed signal terminated program cc1
+
+
+
+出现如下问题 需要 设置disable Applets->Shells->ash->job control
+
+> can't access tty; job control turned off
 
 ### Build
 

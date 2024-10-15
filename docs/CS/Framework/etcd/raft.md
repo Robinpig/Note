@@ -131,7 +131,7 @@ func (h *httpKVAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 | POST     | confChangeC <- cc    | 将新节点加入集群 |
 | DELETE   | confChangeC <- cc    | 从集群中移除节点 |
 
-`kvstore`是连接raft服务器与REST服务器的桥梁，是实现键值存储功能的重要组件
+`kvstore`是连接raft服务器与REST服务器的桥梁，是实现键值存储功能的重要组件 与键值对相关的请求都会通过`kvstore`提供的方法处理，而有关集群配置的请求则是会编码为`etcd/raft/v3/raftpb`中proto定义的消息格式，直接传入`confChangeC`信道。从`main.go`可以看出，该信道的消费者是raft模块
 
 
 
@@ -257,6 +257,60 @@ func (s *kvstore) recoverFromSnapshot(snapshot []byte) error {
 }
 ```
 
+#### readCommits
+
+readCommits方法会循环遍历`commitC`信道中raft模块传来的消息。从`commitC`中收到的消息可能为nil或非nil。因为raftexample功能简单，因此其通过nil表示raft模块完成重放日志的信号或用来通知`kvstore`从上一个快照恢复的信号
+
+当`data`为nil时，该方法会通过`kvstore`的快照管理模块`snapshotter`尝试加载上一个快照。如果快照存在，说明这是通知其恢复快照的信号，接下来会调用`recoverFromSnapshot`方法从该快照中恢复，随后进入下一次循环，等待日志重放完成的信号；如果没找到快照，那么说明这是raft模块通知其日志重放完成的信号，因此直接返回
+
+当`data`非nil时，说明这是raft模块发布的已经通过共识提交了的键值对。此时，先从字节数组数据中反序列化出键值对，并加锁修改map中的键值对
+
+```go
+func (s *kvstore) readCommits(commitC <-chan *commit, errorC <-chan error) {
+    for commit := range commitC {
+        if commit == nil {
+            // signaled to load snapshot
+            snapshot, err := s.loadSnapshot()
+            if err != nil {
+                log.Panic(err)
+            }
+            if snapshot != nil {
+                log.Printf("loading snapshot at term %d and index %d", snapshot.Metadata.Term, snapshot.Metadata.Index)
+                if err := s.recoverFromSnapshot(snapshot.Data); err != nil {
+                    log.Panic(err)
+                }
+            }
+            continue
+        }
+
+        for _, data := range commit.data {
+            var dataKv kv
+            dec := gob.NewDecoder(bytes.NewBufferString(data))
+            if err := dec.Decode(&dataKv); err != nil {
+                log.Fatalf("raftexample: could not decode message (%v)", err)
+            }
+            s.mu.Lock()
+            s.kvStore[dataKv.Key] = dataKv.Val
+            s.mu.Unlock()
+        }
+        close(commit.applyDoneC)
+    }
+    if err, ok := <-errorC; ok {
+        log.Fatal(err)
+    }
+}
+```
+
+
+
+
+
+
+
+
+
+### raftNode
+
 
 
 在raftexample中，raft服务器被封装成了一个`raftNode`结构体
@@ -320,48 +374,121 @@ type raftNode struct {
 | snapCount uint64                        | 当wal中的日志超过该值时，触发快照操作并压缩日志。            |
 | transport *rafthttp.Transport           | etcd/raft模块通信时使用的接口。同样，这里使用了基于http的默认实现。 |
 
-### newRaftNode
+#### newRaftNode
+
+在创建raftNode时，需要提供节点`id`、对等节点url`peers`、是否是要加入已存在的集群`join`、获取快照的函数签名`getSnapshot`、提议信道`proposeC`、配置变更提议信道`confChangeC`这些参数
+
+在`newRaftNode`函数中，仅初始化了`raftNode`的部分参数，其余的参数会在重放预写日志后配置。随后，该函数启动了一个协程，该协程调用了`raftNode`的`startRaft()`方法来启动raft节点。当前函数会将raft模块用来通知已提交的提议的信道、报错信道、和快照管理器加载完成信号的信道返回给调用者
+
+
+
+首先，该方法从当前的快照的元数据设置`raftNode`的相关字段，并设置一个每100毫秒产生一个信号的循环定时器。`serveChannels`的循环会根据这个信号调用`Node`接口的`Tick()`方法，驱动`Node`执行
 
 ```go
+func (rc *raftNode) serveChannels() {
+    snap, err := rc.raftStorage.Snapshot()
+    if err != nil {
+        panic(err)
+    }
+    rc.confState = snap.Metadata.ConfState
+    rc.snapshotIndex = snap.Metadata.Index
+    rc.appliedIndex = snap.Metadata.Index
 
-// newRaftNode initiates a raft instance and returns a committed log entry
-// channel and error channel. Proposals for log updates are sent over the
-// provided the proposal channel. All log entries are replayed over the
-// commit channel, followed by a nil message (to indicate the channel is
-// current), then new log entries. To shutdown, close proposeC and read errorC.
-func newRaftNode(id int, peers []string, join bool, getSnapshot func() ([]byte, error), proposeC <-chan string,
-	confChangeC <-chan raftpb.ConfChange) (<-chan *commit, <-chan error, <-chan *snap.Snapshotter) {
+    defer rc.wal.Close()
 
-	commitC := make(chan *commit)
-	errorC := make(chan error)
+    ticker := time.NewTicker(100 * time.Millisecond)
+    defer ticker.Stop()
+    // ...
+}
+```
 
-	rc := &raftNode{
-		proposeC:    proposeC,
-		confChangeC: confChangeC,
-		commitC:     commitC,
-		errorC:      errorC,
-		id:          id,
-		peers:       peers,
-		join:        join,
-		waldir:      fmt.Sprintf("raftexample-%d", id),
-		snapdir:     fmt.Sprintf("raftexample-%d-snap", id),
-		getSnapshot: getSnapshot,
-		snapCount:   defaultSnapshotCount,
-		stopc:       make(chan struct{}),
-		httpstopc:   make(chan struct{}),
-		httpdonec:   make(chan struct{}),
+在循环中，如果`proposeC`或`confChangeC`中的一个被关闭，程序会将其置为`nil`，所以只有二者均不是`nil`时才执行循环。每次循环会通过select选取一个有消息传入的信道，通过`Node`接口提交给raft服务器。当循环结束后，关闭`stopc`信道，即发送关闭信号
 
-		logger: zap.NewExample(),
+```go
+func (rc *raftNode) serveChannels() {
+    // ...
+    // send proposals over raft
+    go func() {
+        confChangeCount := uint64(0)
 
-		snapshotterReady: make(chan *snap.Snapshotter, 1),
-		// rest of structure populated after WAL replay
-	}
-	go rc.startRaft()
-	return commitC, errorC, rc.snapshotterReady
+        for rc.proposeC != nil && rc.confChangeC != nil {
+            select {
+            case prop, ok := <-rc.proposeC:
+                if !ok {
+                    rc.proposeC = nil
+                } else {
+                    // blocks until accepted by raft state machine
+                    rc.node.Propose(context.TODO(), []byte(prop))
+                }
+
+            case cc, ok := <-rc.confChangeC:
+                if !ok {
+                    rc.confChangeC = nil
+                } else {
+                    confChangeCount++
+                    cc.ID = confChangeCount
+                    rc.node.ProposeConfChange(context.TODO(), cc)
+                }
+            }
+        }
+        // client closed channel; shutdown raft if not already
+        close(rc.stopc)
+    }()
+    // ...
+}
+```
+
+该循环同时监听4个信道：
+
+1. 循环定时器的信道，每次收到信号后，调用`Node`接口的`Tick`函数驱动`Node`。
+2. `Node.Ready()`返回的信道，每当`Node`准备好一批数据后，会将数据通过该信道发布。开发者需要对该信道收到的`Ready`结构体中的各字段进行处理。在处理完成一批数据后，开发者还需要调用`Node.Advance()`告知`Node`这批数据已处理完成，可以继续传入下一批数据。
+3. 通信模块报错信道，收到来自该信道的错误后`raftNode`会继续上报该错误，并关闭节点。
+4. 用来表示停止信号的信道，当该信道被关闭时，阻塞的逻辑会从该分支运行，关闭节点。
+
+其中，`Node.Ready()`返回的信道逻辑最为复杂。因为其需要处理raft状态机传入的各种数据，并交付给相应的模块处理
+
+```go
+func (rc *raftNode) serveChannels() {
+    // ...
+    // event loop on raft state machine updates
+    for {
+        select {
+        case <-ticker.C:
+            rc.node.Tick()
+
+        // store raft entries to wal, then publish over commit channel
+        case rd := <-rc.node.Ready():
+            rc.wal.Save(rd.HardState, rd.Entries)
+            if !raft.IsEmptySnap(rd.Snapshot) {
+                rc.saveSnap(rd.Snapshot)
+                rc.raftStorage.ApplySnapshot(rd.Snapshot)
+                rc.publishSnapshot(rd.Snapshot)
+            }
+            rc.raftStorage.Append(rd.Entries)
+            rc.transport.Send(rd.Messages)
+            applyDoneC, ok := rc.publishEntries(rc.entriesToApply(rd.CommittedEntries))
+            if !ok {
+                rc.stop()
+                return
+            }
+            rc.maybeTriggerSnapshot(applyDoneC)
+            rc.node.Advance()
+
+        case err := <-rc.transport.ErrorC:
+            rc.writeError(err)
+            return
+
+        case <-rc.stopc:
+            rc.stop()
+            return
+        }
+    }
 }
 ```
 
 
+
+#### startRaft
 
 `startRaft`方法虽然看上去很长，但是实现的功能很简单。
 
@@ -451,6 +578,169 @@ func (rc *raftNode) startRaft() {
 
 
 
+etcd/raft的`Ready`结构体中包含如下数据：
+
+
+
+```go
+// Ready encapsulates the entries and messages that are ready to read,
+// be saved to stable storage, committed or sent to other peers.
+// All fields in Ready are read-only.
+type Ready struct {
+    // The current volatile state of a Node.
+    // SoftState will be nil if there is no update.
+    // It is not required to consume or store SoftState.
+    *SoftState
+
+    // The current state of a Node to be saved to stable storage BEFORE
+    // Messages are sent.
+    // HardState will be equal to empty state if there is no update.
+    pb.HardState
+
+    // ReadStates can be used for node to serve linearizable read requests locally
+    // when its applied index is greater than the index in ReadState.
+    // Note that the readState will be returned when raft receives msgReadIndex.
+    // The returned is only valid for the request that requested to read.
+    ReadStates []ReadState
+
+    // Entries specifies entries to be saved to stable storage BEFORE
+    // Messages are sent.
+    Entries []pb.Entry
+
+    // Snapshot specifies the snapshot to be saved to stable storage.
+    Snapshot pb.Snapshot
+
+    // CommittedEntries specifies entries to be committed to a
+    // store/state-machine. These have previously been committed to stable
+    // store.
+    CommittedEntries []pb.Entry
+
+    // Messages specifies outbound messages to be sent AFTER Entries are
+    // committed to stable storage.
+    // If it contains a MsgSnap message, the application MUST report back to raft
+    // when the snapshot has been received or has failed by calling ReportSnapshot.
+    Messages []pb.Message
+
+    // MustSync indicates whether the HardState and Entries must be synchronously
+    // written to disk or if an asynchronous write is permissible.
+    MustSync bool
+}
+```
+
+`Ready`结构体中各个字段的注释已经很好地说明了其处理方式，这很有助于我们理解raftexample中对`Ready`信道的处理方式：
+
+1. 将`HardState`和`Entries`写入预写日志，将其保存在稳定存储上。
+2. 如果有快照，现将快照保存到稳定存储中，然后应用快照，最后通过向`commitC`写入`nil`值通知`kvstore`加载快照。（省略的一些细节。）
+3. 将`Entries`追加到`MemoryStorage`中（第1步仅写入到了预写日志中）。
+4. 通过通信模块将`Messages`中的消息分发给其它raft节点。
+5. 通过`publishEntries`方法发布新增的日志条目。
+6. 通过`maybeTriggerSnapshot`方法检查`MemoryStorage`中日志条目长度，如果超过设定的最大长度，则触发快照机制并压缩日志。
+
+
+
+虽然看上去步骤较多，但是处理逻辑都很简单。这里我们仅看一下第5步的逻辑。
+
+在第5步中，首先通过`entriesToApply`方法，从`Ready`结构体的`Entries`字段中找到还没有应用到本地状态机中的日志起点即后续日志条目。然后通过`publishEntries`方法发布这些日志条目。
+
+
+
+
+
+`publishEntries`会遍历传入的日志列表，对于普通的日志条目，先将其反序列化，通过`commitC`信道传给`kvstore`处理；对于用于变更集群配置的日志，则根据变更的内容（如增加或删除集群中的某个节点），修改通信模块中的相关记录。然后修改`appliedIndex`为当前日志的`Index`。除此之外，`publishEntries`还判断了日志`Index`是否为前文中提到的`lastIndex`。如果当前`Index`等于`lastIndex`，则说明之前的操作是在重放日志，且此时日志重放完成，因此需要向`commitC`信道写入`nil`以通知`kvstore`日志重放完成
+
+
+
+```go
+// publishEntries writes committed log entries to commit channel and returns
+// whether all entries could be published.
+func (rc *raftNode) publishEntries(ents []raftpb.Entry) (<-chan struct{}, bool) {
+    if len(ents) == 0 {
+        return nil, true
+    }
+
+    data := make([]string, 0, len(ents))
+    for i := range ents {
+        switch ents[i].Type {
+        case raftpb.EntryNormal:
+            if len(ents[i].Data) == 0 {
+                // ignore empty messages
+                break
+            }
+            s := string(ents[i].Data)
+            data = append(data, s)
+        case raftpb.EntryConfChange:
+            var cc raftpb.ConfChange
+            cc.Unmarshal(ents[i].Data)
+            rc.confState = *rc.node.ApplyConfChange(cc)
+            switch cc.Type {
+            case raftpb.ConfChangeAddNode:
+                if len(cc.Context) > 0 {
+                    rc.transport.AddPeer(types.ID(cc.NodeID), []string{string(cc.Context)})
+                }
+            case raftpb.ConfChangeRemoveNode:
+                if cc.NodeID == uint64(rc.id) {
+                    log.Println("I've been removed from the cluster! Shutting down.")
+                    return nil, false
+                }
+                rc.transport.RemovePeer(types.ID(cc.NodeID))
+            }
+        }
+    }
+
+    var applyDoneC chan struct{}
+
+    if len(data) > 0 {
+        applyDoneC = make(chan struct{}, 1)
+        select {
+        case rc.commitC <- &commit{data, applyDoneC}:
+        case <-rc.stopc:
+            return nil, false
+        }
+    }
+
+    // after commit, update appliedIndex
+    rc.appliedIndex = ents[len(ents)-1].Index
+
+    return applyDoneC, true
+}
+```
+
+propc channel 由 node 启动时运行的一个协程处理，调用 raft 的 Step()方法，如果当前节点是 follower，实际就是调用 stepFollower()。而 stepFollower 对 MsgProp 消息的处理就是：直接转发给 leader
+
+leader 在接收到 MsgProp 消息以后，会调用 appendEntries()将日志 append 到 raftLog 中。这时候日志已经保存到了 leader 的缓存中
+
+
+
+leader 在 append 日志以后会调用 bcastAppend()广播日志给所有其他节点。raft 结构中有一个 Progress 数组，这个数组是 leader 用来保存各个 follower 当前的同步状态的，由于不同实例运行的硬件环境、网络等条件不同，各 follower 同步日志的快慢不一样，因此 leader 会在本地记录每个 follower 当前同步到哪了，才能在每次同步日志的时候知道需要发送那些日志过去。Progress 中有一个 Match 字段，代表其中一个 follower 当前已经同步过的最新的 index。而 Next 字段是需要 leader 发送给它的下一条日志的 index
+
+
+
+sendAppend 先根据 Progress 中的 Next 字段获取前一条日志的 term，这个是为了给 follower 校验用的，待会我们会讲到。然后获取本地的日志条目到 ents。获取的时候是从 Next 字段开始往后取，直到达到单条消息承载的最大日志条数(如果没有达到最大日志条数，就取到最新的日志结束，细节可以看 raftLog 的 entries 方法
+
+1. 如果获取日志有问题，说明 Next 字段标示的日志可能已经过期，需要同步 snapshot，这个就是上图的 if 语句里面的内容。这部分我们等 snapshot 的时候再细讲。
+2. 正常获取到日志以后，就把日志塞到 Message 的 Entries 字段中，Message 的 Type 为 MsgApp，表示这是一条同步日志的消息。Index 设置为 Next-1，和 LogTerm 一样，都是为了给 follower 校验用的，下面会详细讲述。设置 commit 为 raftLog 的 commited 字段，这个是给 follower 设置它的本地缓存里面的 commited 用的。最后的那个"switch pr.State"是一个优化措施，它在 send 之前就将 pr 的 Next 值设置为准备发送的日志的最大 index+1。意思是我还没有发出去，就认为它发完了，后面比如 leader 接收到 heartbeat response 以后也可以直接发送 entries。
+3. follower 接收到 MsgApp 以后会调用 handleAppendEntries()方法处理。处理逻辑是：如果 index 小于已经确认为 commited 的 index，说明这些日志已经过期了，则直接回复 commited 的 index。否则，调用 maybeAppend()把日志 append 到 raftLog 里面。maybeAppend 的处理比较重要。首先它通过判断消息中的 Index 和 LogTerm 来判断发来的这批日志的前一条日志和本地存的是不是一样，如果不一样，说明 leader 和 follower 的日志在 Index 这个地方就没有对上号了，直接返回不能 append。如果是一样的，再进去判断发来的日志里面有没有和本地有冲突（有可能有些日志前面已经发过来同步过，所以会出现 leader 发来的日志已经在 follower 这里存了）。如果有冲突，就从第一个冲突的地方开始覆盖本地的日志
+
+
+
+follower 调用完 maybeAppend 以后会调用 send 发送 MsgAppResp，把当前已经 append 的日志最新 index 告诉给 leader。如果是 maybeAppend 返回了 false 说明不能 append，会回复 Reject 消息给 leader。消息和日志最后都是在 raftNode.start()启动的协程里面处理的。它会先持久化日志，然后发送消息
+
+follower 调用完 maybeAppend 以后会调用 send 发送 MsgAppResp，把当前已经 append 的日志最新 index 告诉给 leader。如果是 maybeAppend 返回了 false 说明不能 append，会回复 Reject 消息给 leader。消息和日志最后都是在 raftNode.start()启动的协程里面处理的。它会先持久化日志，然后发送消息
+
+
+
+leader 收到 follower 回复的 MsgAppResp 以后，首先判断如果 follower reject 了日志，就把 Progress 的 Next 减回到 Match+1，从已经确定同步的日志开始从新发送日志。如果没有 reject 日志，就用刚刚已经发送的日志 index 更新 Progess 的 Match 和 Next，下一次发送日志就可以从新的 Next 开始了。然后调用 maybeCommit 把多数节点同步的日志设置为 commited
+
+
+
+commited 会随着 MsgHeartbeat 或者 MsgApp 同步给 follower。随后 leader 和 follower 都会将 commited 的日志 apply 到状态机中，也就是会更新 kv 存储
+
+
+
+
+
+日志的持久化是调用 WAL 的 Save 完成的，同时如果有 raft 状态变更也会写到 WAL 中(作为 stateType)。日志会顺序地写入文件。同时使用 MustSync 判断是不是要调用操作系统的系统调用 fsync，fsync 是一次真正的 io 调用。从 MustSync 函数可以看到，只要有 log 条目，或者 raft 状态有变更，都会调用 fsync 持久化。最后我们看到如果写得太多超过了一个段大小的话(一个段是 64MB，就是 wal 一个文件的大小)。会调用 cut()拆分文件
+
 
 
 
@@ -468,6 +758,122 @@ func (rc *raftNode) startRaft() {
 ## raft
 
 etcd-raft 最大设计亮点就是抽离了网络、持久化、协程等逻辑，用一个纯粹的 raft StateMachine 来实现 raft 算法逻辑，充分的解耦，有助于 raft 算法本身的正确实现，而且更容易纯粹的去测试 raft 算法最本质的逻辑，而不需要考虑引入其他因素（各种异常）
+
+
+
+### Node
+
+`Node`接口是开发者仅有的操作etcd/raft的方式
+
+```go
+
+// Node represents a node in a raft cluster.
+type Node interface {
+	// Tick increments the internal logical clock for the Node by a single tick. Election
+	// timeouts and heartbeat timeouts are in units of ticks.
+	Tick()
+	// Campaign causes the Node to transition to candidate state and start campaigning to become leader.
+	Campaign(ctx context.Context) error
+	// Propose proposes that data be appended to the log. Note that proposals can be lost without
+	// notice, therefore it is user's job to ensure proposal retries.
+	Propose(ctx context.Context, data []byte) error
+	// ProposeConfChange proposes a configuration change. Like any proposal, the
+	// configuration change may be dropped with or without an error being
+	// returned. In particular, configuration changes are dropped unless the
+	// leader has certainty that there is no prior unapplied configuration
+	// change in its log.
+	//
+	// The method accepts either a pb.ConfChange (deprecated) or pb.ConfChangeV2
+	// message. The latter allows arbitrary configuration changes via joint
+	// consensus, notably including replacing a voter. Passing a ConfChangeV2
+	// message is only allowed if all Nodes participating in the cluster run a
+	// version of this library aware of the V2 API. See pb.ConfChangeV2 for
+	// usage details and semantics.
+	ProposeConfChange(ctx context.Context, cc pb.ConfChangeI) error
+
+	// Step advances the state machine using the given message. ctx.Err() will be returned, if any.
+	Step(ctx context.Context, msg pb.Message) error
+
+	// Ready returns a channel that returns the current point-in-time state.
+	// Users of the Node must call Advance after retrieving the state returned by Ready.
+	//
+	// NOTE: No committed entries from the next Ready may be applied until all committed entries
+	// and snapshots from the previous one have finished.
+	Ready() <-chan Ready
+
+	// Advance notifies the Node that the application has saved progress up to the last Ready.
+	// It prepares the node to return the next available Ready.
+	//
+	// The application should generally call Advance after it applies the entries in last Ready.
+	//
+	// However, as an optimization, the application may call Advance while it is applying the
+	// commands. For example. when the last Ready contains a snapshot, the application might take
+	// a long time to apply the snapshot data. To continue receiving Ready without blocking raft
+	// progress, it can call Advance before finishing applying the last ready.
+	Advance()
+	// ApplyConfChange applies a config change (previously passed to
+	// ProposeConfChange) to the node. This must be called whenever a config
+	// change is observed in Ready.CommittedEntries, except when the app decides
+	// to reject the configuration change (i.e. treats it as a noop instead), in
+	// which case it must not be called.
+	//
+	// Returns an opaque non-nil ConfState protobuf which must be recorded in
+	// snapshots.
+	ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState
+
+	// TransferLeadership attempts to transfer leadership to the given transferee.
+	TransferLeadership(ctx context.Context, lead, transferee uint64)
+
+	// ReadIndex request a read state. The read state will be set in the ready.
+	// Read state has a read index. Once the application advances further than the read
+	// index, any linearizable read requests issued before the read request can be
+	// processed safely. The read state will have the same rctx attached.
+	// Note that request can be lost without notice, therefore it is user's job
+	// to ensure read index retries.
+	ReadIndex(ctx context.Context, rctx []byte) error
+
+	// Status returns the current status of the raft state machine.
+	Status() Status
+	// ReportUnreachable reports the given node is not reachable for the last send.
+	ReportUnreachable(id uint64)
+	// ReportSnapshot reports the status of the sent snapshot. The id is the raft ID of the follower
+	// who is meant to receive the snapshot, and the status is SnapshotFinish or SnapshotFailure.
+	// Calling ReportSnapshot with SnapshotFinish is a no-op. But, any failure in applying a
+	// snapshot (for e.g., while streaming it from leader to follower), should be reported to the
+	// leader with SnapshotFailure. When leader sends a snapshot to a follower, it pauses any raft
+	// log probes until the follower can apply the snapshot and advance its state. If the follower
+	// can't do that, for e.g., due to a crash, it could end up in a limbo, never getting any
+	// updates from the leader. Therefore, it is crucial that the application ensures that any
+	// failure in snapshot sending is caught and reported back to the leader; so it can resume raft
+	// log probing in the follower.
+	ReportSnapshot(id uint64, status SnapshotStatus)
+	// Stop performs any necessary termination of the Node.
+	Stop()
+}
+```
+
+
+
+`Node`结构中的方法按调用时机可以分为三类：
+
+|        方法        | 描述                                                         |
+| :----------------: | :----------------------------------------------------------- |
+|       `Tick`       | 由时钟（循环定时器）驱动，每隔一定时间调用一次，驱动`raft`结构体的内部时钟运行。 |
+| `Ready`、`Advance` | 这两个方法往往成对出现。准确的说，是`Ready`方法返回的`Ready`结构体信道的信号与`Advance`方法成对出现。每当从`Ready`结构体信道中收到来自`raft`的消息时，用户需要按照一定顺序对`Ready`结构体中的字段进行处理。在完成对`Ready`的处理后，需要调用`Advance`方法，通知`raft`这批数据已经处理完成，可以继续传入下一批。 |
+|      其它方法      | 需要时随时调用。                                             |
+
+
+
+node启动时是启动了一个协程，处理node的里的多个通道，包括tickc，调用tick()方法
+该方法会动态改变，对于follower和candidate，它就是tickElection，对于leader和，它就是tickHeartbeat。tick就像是一个etcd节点的心脏跳动，在follower这里，每次tick会去检查是不是leader的心跳是不是超时了。对于leader，每次tick都会检查是不是要发送心跳了
+
+
+
+startNode -> NewRawNode -> newRaft
+
+
+
+### state
 
 
 etcd-raft StateMachine 封装在 raft struct 中，其状态如下
@@ -568,16 +974,6 @@ Ready
 
 
 
-
-
-## Node
-
-node启动时是启动了一个协程，处理node的里的多个通道，包括tickc，调用tick()方法
-该方法会动态改变，对于follower和candidate，它就是tickElection，对于leader和，它就是tickHeartbeat。tick就像是一个etcd节点的心脏跳动，在follower这里，每次tick会去检查是不是leader的心跳是不是超时了。对于leader，每次tick都会检查是不是要发送心跳了
-
-
-
-startNode -> NewRawNode -> newRaft
 
 
 ### run
