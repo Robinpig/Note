@@ -864,6 +864,83 @@ type Node interface {
 
 
 
+Now that you are holding onto a Node you have a few responsibilities:
+
+First, you must read from the Node.Ready() channel and process the updates it contains. These steps may be performed in parallel, except as noted in step
+2.
+
+1. Write HardState, Entries, and Snapshot to persistent storage if they are
+   not empty. Note that when writing an Entry with Index i, any
+   previously-persisted entries with Index >= i must be discarded.
+
+2. Send all Messages to the nodes named in the To field. 
+   It is important that no messages be sent until the latest HardState has been persisted to disk, and all Entries written by any previous Ready batch (Messages may be sent while entries from the same batch are being persisted). 
+   To reduce the I/O latency, an optimization can be applied to make leader write to disk in parallel with its followers (as explained at section 10.2.1 in Raft thesis). 
+   If any Message has type MsgSnap, call Node.ReportSnapshot() after it has been sent (these messages may be large).
+
+Note: Marshalling messages is not thread-safe; it is important that you
+make sure that no new entries are persisted while marshalling.
+The easiest way to achieve this is to serialize the messages directly inside
+your main raft loop.
+
+3. Apply Snapshot (if any) and CommittedEntries to the state machine.
+   If any committed Entry has Type EntryConfChange, call Node.ApplyConfChange()
+   to apply it to the node. The configuration change may be cancelled at this point
+   by setting the NodeID field to zero before calling ApplyConfChange
+   (but ApplyConfChange must be called one way or the other, and the decision to cancel
+   must be based solely on the state machine and not external information such as
+   the observed health of the node).
+
+4. Call Node.Advance() to signal readiness for the next batch of updates.
+   This may be done at any time after step 1, although all updates must be processed
+   in the order they were returned by Ready.
+
+Second, all persisted log entries must be made available via an
+implementation of the Storage interface. The provided MemoryStorage
+type can be used for this (if you repopulate its state upon a
+restart), or you can supply your own disk-backed implementation.
+
+Third, when you receive a message from another node, pass it to Node.Step:
+```go
+	func recvRaftRPC(ctx context.Context, m raftpb.Message) {
+		n.Step(ctx, m)
+	}
+```
+
+Finally, you need to call Node.Tick() at regular intervals (probably
+via a time.Ticker). Raft has two important timeouts: heartbeat and the
+election timeout. However, internally to the raft package time is
+represented by an abstract "tick".
+
+The total state machine handling loop will look something like this:
+```go
+	for {
+	  select {
+	  case <-s.Ticker:
+	    n.Tick()
+	  case rd := <-s.Node.Ready():
+	    saveToStorage(rd.State, rd.Entries, rd.Snapshot)
+	    send(rd.Messages)
+	    if !raft.IsEmptySnap(rd.Snapshot) {
+	      processSnapshot(rd.Snapshot)
+	    }
+	    for _, entry := range rd.CommittedEntries {
+	      process(entry)
+	      if entry.Type == raftpb.EntryConfChange {
+	        var cc raftpb.ConfChange
+	        cc.Unmarshal(entry.Data)
+	        s.Node.ApplyConfChange(cc)
+	      }
+	    }
+	    s.Node.Advance()
+	  case <-s.done:
+	    return
+	  }
+	}
+```
+
+
+
 node启动时是启动了一个协程，处理node的里的多个通道，包括tickc，调用tick()方法
 该方法会动态改变，对于follower和candidate，它就是tickElection，对于leader和，它就是tickHeartbeat。tick就像是一个etcd节点的心脏跳动，在follower这里，每次tick会去检查是不是leader的心跳是不是超时了。对于leader，每次tick都会检查是不是要发送心跳了
 
