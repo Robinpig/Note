@@ -240,7 +240,8 @@ make O=../obj/linux menuconfig
 > Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
 
 编译kernel
-> Mac的APFS文件系统默认case insensitive, 导致make
+> Mac的APFS文件系统默认case insensitive, 导致make的xt_TCPMSS.o变成xt_tcpmss.o
+> 需要修改Makefile里变成xt_tcpmss.o
 
 ```shell
 bash build-kernel.sh
@@ -635,3 +636,4 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 1. [Experience with Processes and Monitors in Mesa](https://people.eecs.berkeley.edu/~brewer/cs262/Mesa.pdf)
 1. [Linux核心概念详解](https://s3.shizhz.me/)
+2. [linux-insides](https://0xax.gitbooks.io/linux-insides/content/)
