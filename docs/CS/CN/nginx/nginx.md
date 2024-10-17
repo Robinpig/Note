@@ -8,6 +8,74 @@
 [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
 
 
+Dockerfile
+```dockerfile
+FROM dockerproxy.cn/ubuntu:22.04
+
+EXPOSE 80
+
+RUN apt-get update 
+RUN apt install -y init perl wget vim gcc libxslt1-dev libxml2-dev zlib1g-dev libpcre3-dev libbz2-dev libssl-dev make systemd
+
+RUN cd /usr/src && wget https://nginx.org/download/nginx-1.22.0.tar.gz && tar -xf nginx-1.22.0.tar.gz && rm -f nginx-1.22.0.tar.gz
+RUN cd /usr/src && wget http://labs.frickle.com/files/ngx_cache_purge-2.3.tar.gz && tar -xf ngx_cache_purge-2.3.tar.gz && rm -f ngx_cache_purge-2.3.tar.gz
+RUN cd /usr/src/nginx-1.22.0 && wget https://github.com/openssl/openssl/releases/download/openssl-3.0.7/openssl-3.0.7.tar.gz && tar -xf openssl-3.0.7.tar.gz && rm -f openssl-3.0.7.tar.gz
+RUN rm -f /usr/src/ngx_cache_purge-2.3.tar.gz
+RUN mkdir /usr/local/nginx
+
+RUN cd /usr/src/nginx-1.22.0 && ./configure  \
+    --conf-path=/etc/nginx/nginx.conf  --prefix=/usr/local/nginx \
+    --error-log-path=/var/log/nginx/error.log --http-log-path=/var/log/nginx/access.log \
+    --pid-path=/run/nginx.pid \
+    --with-cc-opt="-static -static-libgcc" \
+    --with-ld-opt="-static" --with-cpu-opt=generic --with-pcre \
+    --with-mail --with-ipv6 --with-poll_module --with-select_module \
+    --with-select_module --with-poll_module \
+    --with-http_ssl_module --with-http_realip_module \
+    --with-http_v2_module \
+    --with-http_addition_module --with-http_sub_module --with-http_dav_module \
+    --with-http_flv_module --with-http_mp4_module --with-http_gunzip_module \
+    --with-http_gzip_static_module --with-http_auth_request_module \
+    --with-http_random_index_module --with-http_secure_link_module \
+    --with-http_degradation_module --with-http_stub_status_module \
+    --with-mail --with-mail_ssl_module --with-openssl=./openssl-3.0.7 \
+    --add-module=../ngx_cache_purge-2.3  \
+    && make && make install \
+	&& ln -s /usr/local/nginx/sbin/nginx /usr/local/sbin/
+
+
+COPY nginx.service /lib/systemd/system
+
+RUN systemctl enable nginx.service
+```
+
+
+nginx.service
+```shell
+[Unit]
+Description=The NGINX HTTP and reverse proxy server
+After=syslog.target network.target remote-fs.target nss-lookup.target
+
+[Service]
+Type=forking
+PIDFile=/run/nginx.pid
+ExecStartPre=/usr/local/sbin/nginx -t
+ExecStart=/usr/local/sbin/nginx
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+
+```shell
+docker build -t nginx:1.22.0 .
+
+docker run --rm --name nginx-builder -p 80:80  -itd --privileged nginx:1.22.0 /usr/sbin/init /bin/sh -c systemctl start nginx
+
+```
 
 需要的一些依赖环境
 ```shell
