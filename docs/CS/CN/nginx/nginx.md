@@ -7,6 +7,9 @@
 
 [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
 
+<!-- tabs:start -->
+
+##### **Docker**
 
 Dockerfile
 ```dockerfile
@@ -77,6 +80,8 @@ docker run --rm --name nginx-builder -p 80:80  -itd --privileged nginx:1.22.0 /u
 
 ```
 
+##### **Ubuntu**
+
 需要的一些依赖环境
 ```shell
 gcc pcre pcre-devel zlib zlib-devel openssl openssl-devel
@@ -96,6 +101,9 @@ vim objs/Makefile
 # 重新编译安装
 make && make install
 ```
+
+<!-- tabs:end -->
+
 
 
 ```shell
