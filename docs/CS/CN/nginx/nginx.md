@@ -961,6 +961,13 @@ ngx_event_actions_t see [Event](/docs/CS/CN/nginx/event.md)
 
 ## Configuration
 
+### config
+
+
+
+p
+
+
 // core/ngx_conf_file.c
 ngx_conf_parse
 
