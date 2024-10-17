@@ -1774,6 +1774,13 @@ type KVClient interface {
 
 
 
+etcd server启动的时候它会将实现KV各方法的对象注册到gRPC Server，并在其上注册对应的拦截器
+
+拦截器提供了在执行一个请求前后的hook能力 例如debug日志、metrics统计、对etcd Learner节点请求接口和参数限制等能力 另外etcd还基于它实现了以下特性:
+
+- 要求执行一个操作前集群必须有Leader；
+- 请求延时超过指定阈值的，打印包含来源IP的慢查询日志(3.5版本)。
+
 
 ### put
 
@@ -1815,7 +1822,7 @@ func (c *kVClient) Range(ctx context.Context, in *RangeRequest, opts ...grpc.Cal
 }
 ```
 
-etcd server定义了如下的Service KV和Range方法，启动的时候它会将实现KV各方法的对象注册到gRPC Server，并在其上注册对应的拦截器
+etcd server定义了如下的Service KV和Range方法
 
 ```protobuf
 service KV {
@@ -1828,11 +1835,6 @@ service KV {
   }
 }
 ```
-
-拦截器提供了在执行一个请求前后的hook能力，除了我们上面提到的debug日志、metrics统计、对etcd Learner节点请求接口和参数限制等能力，etcd还基于它实现了以下特性:
-
-- 要求执行一个操作前集群必须有Leader；
-- 请求延时超过指定阈值的，打印包含来源IP的慢查询日志(3.5版本)
 
 server收到client的Range RPC请求后，根据ServiceName和RPC Method将请求转发到对应的handler实现，handler首先会将上面描述的一系列拦截器串联成一个执行，在拦截器逻辑中，通过调用KVServer模块的Range接口获取数据
 
@@ -1875,6 +1877,20 @@ EtcdServer 会处理这个 applyc 队列，会将 snapshot 和 entries 都 apply
 
 
 最后调用 applyWait 的 Trigger，唤醒客户端请求的等待线程，返回客户端的请求。
+
+
+
+#### 线性读
+
+当收到一个线性读请求时，它首先会从Leader获取集群最新的已提交的日志索引(committed index)
+
+Leader收到ReadIndex请求时，为防止脑裂等异常场景，会向Follower节点发送心跳确认，一半以上节点确认Leader身份后才能将已提交的索引(committed index)返回给节点C
+
+C节点则会等待，直到状态机已应用索引(applied index)大于等于Leader的已提交索引时(committed Index)(上图中的流程四)，然后去通知读请求，数据已赶上Leader，你可以去状态机中访问数据了
+
+> 在早期etcd 3.0中读请求通过走一遍Raft协议保证一致性， 这种Raft log read机制依赖磁盘IO， 性能相比ReadIndex较差
+
+
 
 
 ## Network
