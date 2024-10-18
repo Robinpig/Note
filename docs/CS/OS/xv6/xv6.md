@@ -236,6 +236,35 @@ brew install riscv64-elf-gdb
 如果 我们希望各个线程 都受gdb控制而执行，而不是现在只控制其中一个线程，那么我们设置set-scheduler-locking=on，反之设置力off
 我们还可以控制调试命令施加到指定的线程上，例如用具体的ID列表，或者用all指代所有线程
 
+## 代码总览
+
+xv6源代码总量较小
+
+### x86
+
+```shell
+ls *.S
+bootasm.S  entry.S  entryother.S  initcode.S  swtch.S  trapasm.S  usys.S  vectors.S
+
+ls *.h
+asm.h  date.h  elf.h    file.h  kbd.h        mmu.h  param.h  sleeplock.h  stat.h     traps.h  user.h
+buf.h  defs.h  fcntl.h  fs.h    memlayout.h  mp.h   proc.h   spinlock.h   syscall.h  types.h  x86.h
+
+ls *.c
+bio.c       exec.c      ide.c     kill.c   main.c    picirq.c  sh.c         syscall.c  ulib.c       zombie.c
+bootmain.c  file.c      init.c    lapic.c  memide.c  pipe.c    sleeplock.c  sysfile.c  umalloc.c
+cat.c       forktest.c  ioapic.c  ln.c     mkdir.c   printf.c  spinlock.c   sysproc.c  usertests.c
+console.c   fs.c        kalloc.c  log.c    mkfs.c    proc.c    stressfs.c   trap.c     vm.c
+echo.c      grep.c      kbd.c     ls.c     mp.c      rm.c      string.c     uart.c     wc.c
+```
+
+xv6二进制代码分成两个部分 一个是启动扇区的bootblock 另一个是内核代码kernel 两个都是ELF格式的文件
+
+
+
+
+
+
 ## Init
 
 xv6二进制代码分成两部分 bootloader和kernel
