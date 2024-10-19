@@ -3,7 +3,7 @@
 [nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by Igor Sysoev.
 
 
-### Install NGINX
+### Install
 
 [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
 
@@ -103,6 +103,8 @@ make && make install
 ```
 
 <!-- tabs:end -->
+
+### Debug
 
 
 
