@@ -38,7 +38,7 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 
 
-在操作系统中，ptable.proc[NPR OC]数组用于记录所有 进程 的PCB;initproc是i n i t 进 程的 P C ，`ptable`的定义如下
+在操作系统中，ptable.proc[NPR OC]数组用于记录所有进程的PCB;initproc是init进程的PC ，`ptable`的定义如下
 
 ```c
 struct {
