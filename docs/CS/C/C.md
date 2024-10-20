@@ -21,3 +21,11 @@ C 语言是一种通用的、面向过程式的计算机程序设计语言。197
 ## Links
 
 - [C++](/docs/CS/C++/C++.md)
+
+
+## References
+
+1. [C Primer Plus]()
+2. [C Pointer]
+3. [Trap]
+4. [C Expert]

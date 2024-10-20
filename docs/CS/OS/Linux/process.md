@@ -2193,6 +2193,10 @@ configured in ‘‘tickless’’ mode. This is useful when there is only one p
 mode. Finally, on newer systems, high-resolution timers allow the kernel to keep
 track of time in sub-jiffy granularity.
 
+> ARM阵营提出大小核的概念 
+>
+> Energy Awareness Scheduler(EAS)
+
 
 ### Scheduler
 

@@ -1,3 +1,4 @@
+## Introduction
 
 
 
@@ -25,3 +26,9 @@ static inline void INIT_HLIST_NODE(struct hlist_node *h)
 
 **pprev : ptr -> hlist_node or hlis_thead
 
+
+
+
+## Links
+
+- [Linux](/docs/CS/OS/Linux/Linux.md)

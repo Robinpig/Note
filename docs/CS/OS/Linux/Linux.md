@@ -8,13 +8,23 @@ All the so-called “Linux” distributions are really distributions of GNU/Linu
 On a purely technical level, the kernel is an intermediary layer between the hardware and the software.
 Its purpose is to pass application requests to the hardware and to act as a low-level driver to address the devices and components of the system.
 
+
+
+Linux系统诞生于1991年10月5日
+
+
+
+
+
 常见Linux发行版
 
-- Red Hat Enterprise Linux
-- [Fedora](/docs/CS/OS/Linux/Distribution/Fedora.md)
-- [Ubuntu](/docs/CS/OS/Linux/Distribution/Ubuntu.md)
-- [CentOS](/docs/CS/OS/Linux/Distribution/CentOS.md)
-- Debian
+- Red Hat Linux
+  - Red Hat Enterprise Linux
+  - [Fedora](/docs/CS/OS/Linux/Distribution/Fedora.md)
+  - [CentOS](/docs/CS/OS/Linux/Distribution/CentOS.md)
+- Debian Linux
+  - [Ubuntu](/docs/CS/OS/Linux/Distribution/Ubuntu.md)
+- SuSE Linux
 - Arch Linux
 
 跨平台在其它OS下使用Linux
@@ -25,6 +35,16 @@ Its purpose is to pass application requests to the hardware and to act as a low-
 Windows下使用Linux
 
 - [WSL](/docs/CS/OS/Windows/WSL.md)
+
+
+
+Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如模块化设计 抢占式内核 动态加载内核模块等
+
+模块是被编译的目标文件 可以在运行时的内核中动态加载和卸载 和微内核实现的模块化不同 它们不是作为独立模块执行的 而是和静态编译的内核函数一样 运行在内核态中 模块的引入带来了不少的有点
+
+- 内核的功能和设备驱动可以编译成动态加载/卸载的模块 驱动开发者需要遵守API来访问内核核心 提高开发效率
+- 内核模块可以设计成平台无关的
+- 相比微内核 具有宏内核的性能优势
 
 ## Kernel
 
@@ -94,6 +114,29 @@ zcat /proc/config.gz > .config
 
 ```
 
+> make[1]: *** No rule to make target 'debian/canonical-certs.pem', needed by 'certs/x509_certificate_list'.  Stop.
+> make: *** [Makefile:1809: certs] Error 2
+> 
+> scripts/config --disable SYSTEM_TRUSTED_KEYS
+
+
+##### **ARM Ubuntu**
+> 基于[奔跑吧 Linux内核 入门篇]()
+
+```shell
+wget https://github.com/runninglinuxkernel/runninglinuxkernel_5.0/archive/refs/heads/rlk_5.0.zip
+unzip rlk_5.0.zip
+mv runninglinuxkernel_5.0-rlk_5.0/ runninglinuxkernel_5.0
+
+cd runninglinuxkernel_5.0/
+sudo ./run_rlk_arm64.sh build_kernel
+sudo ./run_rlk_arm64.sh build_rootfs
+./run_rlk_arm64.sh run
+```
+
+
+
+
 ##### **ARM Mac**
 
 ```shell
@@ -148,6 +191,7 @@ file vmlinux
 ```shell
 
 ```
+
 ##### **x86 Docker**
 
 > 参考[Linux核心概念详解 - 1. 调试环境](https://s3.shizhz.me/s3e1)
@@ -406,7 +450,12 @@ Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
 - 大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
 - 一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
 
+```shell
+cp /boot/config-${uname -r} .config
+```
 
+
+make 方式
 ```shell
 export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 
@@ -473,10 +522,15 @@ Device Drivers  --->
 - g, ctrl + ] 进入函数定义 可选择
 - ctrl + o 返回
 
+打开vim后 加载tags文件
+```shell
+:set tags=tags
+```
+
 > 在线阅读 [bootlin](https://elixir.bootlin.com/linux/v6.11/source)
 #### Directory
 
-
+目录结构
 | Directory |                                                                                                                                                                                                                |     |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
 | kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                          |     |

@@ -8,6 +8,8 @@ An operating system (OS) is a software program that serves as the interface betw
 - Shell
 
 
+
+
 - Abstract
 - Multiplex, sharing and isolation
 - Security
@@ -26,6 +28,25 @@ Currently, there are two main paradigms on which the implementation of operating
 2. Monolithic Kernels — They are the alternative, traditional concept.
    Here, the entire code of the kernel — including all its subsystems such as memory management, filesystems, or device drivers — is packed into a single file.
    Each function has access to all other parts of the kernel; this can result in elaborately nested source code if programming is not done with great care.
+
+The main differences between the Microkernel and Monolithic Kernel are as follows:
+
+| Features                                       | Microkernel                                                  | Monolithic Kernel                                            |
+| :--------------------------------------------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
+| **Definition**                                 | It is a kernel type that implements an operating system by providing low-level address space management, IPC, and thread management. | It is a type of kernel in which the complete operating system runs at the kernel speed. |
+| **Size**                                       | It is smaller in size.                                       | It is bigger than the microkernel.                           |
+| **Speed**                                      | Its process execution is slower.                             | Its process execution is faster.                             |
+| **Basic**                                      | It implements kernel and user services in different address spaces. | It implements both user and kernel services in the same address space. |
+| **Security**                                   | It is more secure than the monolithic kernel.                | It is less secure than the microkernel.                      |
+| **Stability**                                  | A single process failure does not affect other processes.    | In a monolithic kernel, if a service fails, the entire system fails. |
+| **Extendible**                                 | It is easy to extend.                                        | It is hard to extend.                                        |
+| **Code**                                       | More code is necessary to write a microkernel.               | Less code is necessary to write a monolithic kernel.         |
+| **Inter-Process**                              | Communication Microkernels use the messaging queues to achieve IPC. | The monolithic kernels use signals and sockets to achieve IPC. |
+| **Maintainability It is easily maintainable.** | Maintenance takes extra time and resources.                  |                                                              |
+| **Debug**                                      | It is easy to debug.                                         | It is hard to debug.                                         |
+| **Example**                                    | Symbian, L4Linux, K42, Mac OS X, PikeOS, HURD, etc.          | Linux, BSDs, Solaris, OS-9, DOS, OpenVMS, etc.               |
+
+
 
 Because, at the moment, the performance of monolithic kernels is still greater than that of microkernels, Linux was and still is implemented according to this paradigm.
 However, one major innovation has been introduced.

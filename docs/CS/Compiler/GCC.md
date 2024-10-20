@@ -1,6 +1,12 @@
 ## Introduction
 
 
+- 本地编译
+- Cross Compile
+
+交叉工具链命名规则
+`[arch] [-os] [-9(gnu)eabi]`
+
 
 
 ## build
@@ -22,9 +28,15 @@
 - Assembly
 - Linking
 
+```shell
 gcc -E hello.c -o hello.i
 gcc -S hello.i -o hello.s
 gcc -c hello.s -o hello.o
+```
+
+
+
+
 
 ## ELF
 
