@@ -508,3 +508,4 @@ volatile
 3. [The java.util.concurrent Synchronizer Framework](http://gee.cs.oswego.edu/dl/papers/aqs.pdf)
 4. [Concurrent Programming in Java](http://gee.cs.oswego.edu/dl/cpj/index.html)
 5. [Concurrency is hard](https://mkralka.github.io/blog/concurrency-is-hard)
+6. [Quotes from the JLS on Threading](https://cs.lmu.edu/~ray/notes/javathreadnotes/)

@@ -1,5 +1,17 @@
+## Introduction
 
-
+```c
+// include/linux/cdev.h
+struct cdev {
+	struct kobject kobj;
+	struct module *owner;
+	const struct file_operations *ops;
+	struct list_head list;
+	dev_t dev;
+	unsigned int count;
+} __randomize_layout;
+```
+设备驱动可以通过两种方式产生cdev 一种是全局静态变量 另一种是使用内核提供的cdev_alloc()接口函数
 ### net_device
 
 struct net_device - The DEVICE structure.
@@ -23,6 +35,14 @@ Callers must hold the rtnl semaphore. You may want register_netdev() instead of 
 
 BUGS:
 The locking appears insufficient to guarantee two parallel registers will not get the same name.
+
+```c
+void cdev_init(struct cdev *, const struct file_operations *);
+
+struct cdev *cdev_alloc(void);
+```
+
+
 
 
 
