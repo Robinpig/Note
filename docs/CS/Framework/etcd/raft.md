@@ -742,6 +742,27 @@ commited 会随着 MsgHeartbeat 或者 MsgApp 同步给 follower。随后 leader
 日志的持久化是调用 WAL 的 Save 完成的，同时如果有 raft 状态变更也会写到 WAL 中(作为 stateType)。日志会顺序地写入文件。同时使用 MustSync 判断是不是要调用操作系统的系统调用 fsync，fsync 是一次真正的 io 调用。从 MustSync 函数可以看到，只要有 log 条目，或者 raft 状态有变更，都会调用 fsync 持久化。最后我们看到如果写得太多超过了一个段大小的话(一个段是 64MB，就是 wal 一个文件的大小)。会调用 cut()拆分文件
 
 
+propc channel 由 node 启动时运行的一个协程处理，调用 raft 的 Step()方法，如果当前节点是 follower，实际就是调用 stepFollower()。而 stepFollower 对 MsgProp 消息的处理就是：直接转发给 leader
+leader 在接收到 MsgProp 消息以后，会调用 appendEntries()将日志 append 到 raftLog 中。这时候日志已经保存到了 leader 的缓存中
+
+leader 在 append 日志以后会调用 bcastAppend()广播日志给所有其他节点。raft 结构中有一个 Progress 数组，这个数组是 leader 用来保存各个 follower 当前的同步状态的，由于不同实例运行的硬件环境、网络等条件不同，各 follower 同步日志的快慢不一样，因此 leader 会在本地记录每个 follower 当前同步到哪了，才能在每次同步日志的时候知道需要发送那些日志过去。Progress 中有一个 Match 字段，代表其中一个 follower 当前已经同步过的最新的 index。而 Next 字段是需要 leader 发送给它的下一条日志的 index
+
+sendAppend 先根据 Progress 中的 Next 字段获取前一条日志的 term，这个是为了给 follower 校验用的，待会我们会讲到。然后获取本地的日志条目到 ents。获取的时候是从 Next 字段开始往后取，直到达到单条消息承载的最大日志条数(如果没有达到最大日志条数，就取到最新的日志结束，细节可以看 raftLog 的 entries 方法
+1. 如果获取日志有问题，说明 Next 字段标示的日志可能已经过期，需要同步 snapshot，这个就是上图的 if 语句里面的内容。这部分我们等 snapshot 的时候再细讲。
+2. 正常获取到日志以后，就把日志塞到 Message 的 Entries 字段中，Message 的 Type 为 MsgApp，表示这是一条同步日志的消息。Index 设置为 Next-1，和 LogTerm 一样，都是为了给 follower 校验用的，下面会详细讲述。设置 commit 为 raftLog 的 commited 字段，这个是给 follower 设置它的本地缓存里面的 commited 用的。最后的那个"switch pr.State"是一个优化措施，它在 send 之前就将 pr 的 Next 值设置为准备发送的日志的最大 index+1。意思是我还没有发出去，就认为它发完了，后面比如 leader 接收到 heartbeat response 以后也可以直接发送 entries。
+3. follower 接收到 MsgApp 以后会调用 handleAppendEntries()方法处理。处理逻辑是：如果 index 小于已经确认为 commited 的 index，说明这些日志已经过期了，则直接回复 commited 的 index。否则，调用 maybeAppend()把日志 append 到 raftLog 里面。maybeAppend 的处理比较重要。首先它通过判断消息中的 Index 和 LogTerm 来判断发来的这批日志的前一条日志和本地存的是不是一样，如果不一样，说明 leader 和 follower 的日志在 Index 这个地方就没有对上号了，直接返回不能 append。如果是一样的，再进去判断发来的日志里面有没有和本地有冲突（有可能有些日志前面已经发过来同步过，所以会出现 leader 发来的日志已经在 follower 这里存了）。如果有冲突，就从第一个冲突的地方开始覆盖本地的日志
+
+ follower 调用完 maybeAppend 以后会调用 send 发送 MsgAppResp，把当前已经 append 的日志最新 index 告诉给 leader。如果是 maybeAppend 返回了 false 说明不能 append，会回复 Reject 消息给 leader。消息和日志最后都是在 raftNode.start()启动的协程里面处理的。它会先持久化日志，然后发送消息
+follower 调用完 maybeAppend 以后会调用 send 发送 MsgAppResp，把当前已经 append 的日志最新 index 告诉给 leader。如果是 maybeAppend 返回了 false 说明不能 append，会回复 Reject 消息给 leader。消息和日志最后都是在 raftNode.start()启动的协程里面处理的。它会先持久化日志，然后发送消息
+
+leader 收到 follower 回复的 MsgAppResp 以后，首先判断如果 follower reject 了日志，就把 Progress 的 Next 减回到 Match+1，从已经确定同步的日志开始从新发送日志。如果没有 reject 日志，就用刚刚已经发送的日志 index 更新 Progess 的 Match 和 Next，下一次发送日志就可以从新的 Next 开始了。然后调用 maybeCommit 把多数节点同步的日志设置为 commited
+
+commited 会随着 MsgHeartbeat 或者 MsgApp 同步给 follower。随后 leader 和 follower 都会将 commited 的日志 apply 到状态机中，也就是会更新 kv 存储
+
+
+日志的持久化是调用 WAL 的 Save 完成的，同时如果有 raft 状态变更也会写到 WAL 中(作为 stateType)。日志会顺序地写入文件。同时使用 MustSync 判断是不是要调用操作系统的系统调用 fsync，fsync 是一次真正的 io 调用。从 MustSync 函数可以看到，只要有 log 条目，或者 raft 状态有变更，都会调用 fsync 持久化。最后我们看到如果写得太多超过了一个段大小的话(一个段是 64MB，就是 wal 一个文件的大小)。会调用 cut()拆分文件
+
+
 
 
 
