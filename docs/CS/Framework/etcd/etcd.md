@@ -29,6 +29,12 @@ etcd 是 Kubernetes 的后端唯一存储实现
 为了保证etcd可运行，我们先在根目录上运行go mod tidy，保证依赖库没有问题。
 接着，我们阅读Makefile文件，发现其提供了make build指令。运行后，在bin目录下生成了etcd/etcdctl/etcdutl三个可执行文件，并且打印出了版本信息
 
+
+
+### Deployment
+
+静态启动
+
 查看Profile文件 如下命令可以快速启动一个3节点的本地集群
 
 ```shell
@@ -36,7 +42,9 @@ goreman -f Procfile start
 ```
 
 
+动态发现
 
+DNS发现
 
 
 
