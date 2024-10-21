@@ -1781,10 +1781,15 @@ etcd server启动的时候它会将实现KV各方法的对象注册到gRPC Serve
 - 要求执行一个操作前集群必须有Leader；
 - 请求延时超过指定阈值的，打印包含来源IP的慢查询日志(3.5版本)。
 
-
 ### put
 
-client 通过 grpc 发送一个 Put kv request，etcd server 的 rpc server 收到这个请求，通过 node 模块的 Propose 接口提交，node 模块将这个 Put kv request 转换成 raft StateMachine 认识的 MsgProp Msg 并通过 propc Channel 传递给 node 模块的 coroutine；
+```shell
+etcdctl put hello world --endpoints http://127.0.0.1:2379
+```
+
+首先client端通过负载均衡算法选择一个etcd节点，发起gRPC调用。然后etcd节点收到请求后经过gRPC拦截器、Quota模块后，进入KVServer模块，KVServer模块向Node模块提交一个Propose
+
+node 模块将这个 Put kv request 转换成 raft StateMachine 认识的 MsgProp Msg 并通过 propc Channel 传递给 node 模块的 coroutine；
 node 模块 coroutine 监听在 propc Channel 中，收到 MsgProp Msg 之后，通过 raft.Step(Msg) 接口将其提交给 raft StateMachine 处理；
 raft StateMachine 处理完这个 MsgProp Msg 会产生 1 个 Op log entry 和 2 个发送给另外两个副本的 Append entries 的 MsgApp messages，node 模块会将这两个输出打包成 Ready，然后通过 readyc Channel 传递给 raftNode 模块的 coroutine；
 raftNode 模块的 coroutine 通过 readyc 读取到 Ready，首先通过网络层将 2 个 append entries 的 messages 发送给两个副本(PS:这里是异步发送的)；
