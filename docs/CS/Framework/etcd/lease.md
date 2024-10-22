@@ -4,16 +4,18 @@ Lease顾名思义，client和etcd server之间存在一个约定，内容是etcd
 
 etcd在启动的时候，创建Lessor模块的时候，它会启动两个常驻goroutine，如上图所示，一个是RevokeExpiredLease任务，定时检查是否有过期Lease，发起撤销过期的Lease操作。一个是CheckpointScheduledLease，定时触发更新Lease的剩余到期时间的操作。
 Lessor模块提供了Grant、Revoke、LeaseTimeToLive、LeaseKeepAlive API给client使用，各接口作用如下:
-● Grant表示创建一个TTL为你指定秒数的Lease，Lessor会将Lease信息持久化存储在boltdb中；
-● Revoke表示撤销Lease并删除其关联的数据；
-● LeaseTimeToLive表示获取一个Lease的有效期、剩余时间；
-● LeaseKeepAlive表示为Lease续期。
+- Grant表示创建一个TTL为你指定秒数的Lease，Lessor会将Lease信息持久化存储在boltdb中；
+- Revoke表示撤销Lease并删除其关联的数据；
+- LeaseTimeToLive表示获取一个Lease的有效期、剩余时间；
+- LeaseKeepAlive表示为Lease续期。
+```shell
 
 # 创建一个TTL为600秒的lease，etcd server返回LeaseID 
 $ etcdctl lease grant 600
  # 查看lease的TTL、剩余时间 
 $ etcdctl lease timetolive 326975935f48f814
 
+```
 当Lease server收到client的创建一个有效期600秒的Lease请求后，会通过Raft模块完成日志同步，随后Apply模块通过Lessor模块的Grant接口执行日志条目内容。
 首先Lessor的Grant接口会把Lease保存到内存的ItemMap数据结构中，然后它需要持久化Lease，将Lease数据保存到boltdb的Lease bucket中，返回一个唯一的LeaseID给client。
 通过这样一个流程，就基本完成了Lease的创建
@@ -23,9 +25,9 @@ KV模块的API接口提供了一个"–lease"参数，你可以通过如下命�
 renew
 为了防止Lease被淘汰，你需要定期发送LeaseKeepAlive请求给etcd server续期Lease，本质是更新Lease的到期时间
 
-expire
+## expire
 
-淘汰过期Lease的工作由Lessor模块的一个异步goroutine负责。如下面架构图虚线框所示，它会定时从最小堆中取出已过期的Lease，执行删除Lease和其关联的key列表数据的RevokeExpiredLease任务
+淘汰过期Lease的工作由Lessor模块的一个异步goroutine负责 它会定时从最小堆中取出已过期的Lease，执行删除Lease和其关联的key列表数据的RevokeExpiredLease任务
 
 目前etcd是基于最小堆来管理Lease，实现快速淘汰过期的Lease。
 etcd早期的时候，淘汰Lease非常暴力。etcd会直接遍历所有Lease，逐个检查Lease是否过期，过期则从Lease关联的key集合中，取出key列表，删除它们，时间复杂度是O(N)。

@@ -1598,3 +1598,5 @@ Leader收到ReadIndex请求时，为防止脑裂等异常场景，会向Follower
 
 ## References
 
+1. [raft 工程化案例之 etcd 源码实现](https://zhuanlan.zhihu.com/p/600893553)
+2. [etcd 源码分析](https://www.zhihu.com/column/c_1574793366772060162)

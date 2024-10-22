@@ -11,33 +11,37 @@ etcd基于多路复用等机制，实现了一个client/TCP连接支持多gRPC S
 etcd经历了从滑动窗口到MVCC机制的演变，滑动窗口是仅保存有限的最近历史版本到内存中，而MVCC机制则将历史版本保存在磁盘中，避免了历史版本的丢失，极大的提升了Watch机制的可靠性。
 etcd v2滑动窗口是如何实现的？它有什么缺点呢？
 它使用的是如下一个简单的环形数组来存储历史事件版本，当key被修改后，相关事件就会被添加到数组中来。若超过eventQueue的容量，则淘汰最旧的事件。在etcd v2中，eventQueue的容量是固定的1000，因此它最多只会保存1000条事件记录，不会占用大量etcd内存导致etcd OOM
-
+```go
 type EventHistory struct {
-   Queue      eventQueue
-   StartIndex uint64
-   LastIndex  uint64
-   rwl        sync.RWMutex
+    Queue      eventQueue
+    StartIndex uint64
+    LastIndex  uint64
+    rwl        sync.RWMutex
 }
+```
 
 
 它的缺陷显而易见的，固定的事件窗口只能保存有限的历史事件版本，是不可靠的。当写请求较多的时候、client与server网络出现波动等异常时，很容易导致事件丢失，client不得不触发大量的expensive查询操作，以获取最新的数据及版本号，才能持续监听数据。
 特别是对于重度依赖Watch机制的Kubernetes来说，显然是无法接受的。因为这会导致控制器等组件频繁的发起expensive List Pod等资源操作，导致APIServer/etcd出现高负载、OOM等，对稳定性造成极大的伤害
 
 watch请求流程
+
 当你通过etcdctl或API发起一个watch key请求的时候，etcd的gRPCWatchServer收到watch请求后，会创建一个serverWatchStream, 它负责接收client的gRPC Stream的create/cancel watcher请求(recvLoop goroutine)，并将从MVCC模块接收的Watch事件转发给client(sendLoop goroutine)。
 当serverWatchStream收到create watcher请求后，serverWatchStream会调用MVCC模块的WatchStream子模块分配一个watcher id，并将watcher注册到MVCC的WatchableKV模块。
 在etcd启动的时候，WatchableKV模块会运行syncWatchersLoop和syncVictimsLoop goroutine，分别负责不同场景下的事件推送，它们也是Watch特性可靠性的核心之一。
 从架构图中你可以看到Watch特性的核心实现是WatchableKV模块
 
 
-
+```go
 type WatchableKV interface {
     KV
     Watchable
 }
+```
 
-
+```shell
 etcdctl watch hello -w=json –rev=1
+```
 
 Watch特性的核心实现模块是watchableStore etcd根据不同场景将watcher分类，实现了轻重分离、低耦合。我首先给你介绍下synced watcher、unsynced watcher它们各自的含义。
 synced watcher，顾名思义，表示此类watcher监听的数据都已经同步完毕，在等待新的变更。
@@ -45,7 +49,7 @@ synced watcher，顾名思义，表示此类watcher监听的数据都已经同�
 unsynced watcher，表示此类watcher监听的数据还未同步完成，落后于当前最新数据变更，正在努力追赶。
 如果你创建的watcher指定版本号小于etcd server当前最新版本号，那么它就会保存到unsynced watcherGroup中。比如我们的这个案例中watch带指定版本号1监听时，版本号1和etcd server当前版本之间的数据并未同步给你，因此它就属于此类。
 
-
+```go
 type watchableStore struct {
     *store
 
@@ -67,6 +71,7 @@ type watchableStore struct {
     stopc chan struct{}
     wg    sync.WaitGroup
 }
+```
 
 
 从以上介绍中，我们可以将可靠的事件推送机制拆分成最新事件推送、异常场景重试、历史事件推送机制三个子问题来进行分析。
@@ -77,7 +82,7 @@ type watchableStore struct {
 serverWatchStream的sendLoop goroutine监听到channel消息后，读出消息立即推送给client（流程6和7），至此，完成一个最新修改事件推送
 
 
-
+```go
 func (tw *watchableStoreTxnWrite) End() {
     changes := tw.Changes()
     if len(changes) == 0 {
@@ -104,7 +109,7 @@ func (tw *watchableStoreTxnWrite) End() {
     tw.TxnWrite.End()
     tw.s.mu.Unlock()
 }
-
+```
 
 接收Watch事件channel的buffer容量默认1024 若出现channel buffer满了，etcd为了保证Watch事件的高可靠性，并不会丢弃它，而是将此watcher从synced watcherGroup中删除，然后将此watcher和事件列表保存到一个名为受害者victim的watcherBatch结构中，通过异步机制重试保证事件的可靠性
 
@@ -135,6 +140,11 @@ etcd使用map记录了监听单个key的watcher 同时Watch特性不仅仅可以
 
 
 
+
+
+## Links
+
+- [etcd](/docs/CS/Framework/etcd/etcd.md)
 
 
 
