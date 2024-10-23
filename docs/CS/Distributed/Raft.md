@@ -667,6 +667,21 @@ Linearizable reads must not return stale data, and Raft needs two extra precauti
    - Only elect leaders with all committed entries in their logs
    - New leader defers committing entries from prior terms
 
+
+### prevote
+
+
+In the Pre-Vote algorithm, a candidate only increments its term if it first learns from a majority of the cluster that they would be willing to grant the candidate their votes (if the candidate’s log is sufficiently up-to-date, and the voters have not received heartbeats from a valid leader for at least a baseline election timeout)
+
+
+
+
+
+
+
+
+
+
 ## Links
 
 - [Consensus](/docs/CS/Distributed/Consensus.md)

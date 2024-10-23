@@ -1063,7 +1063,127 @@ Msg 会通过 raft.Step(m) 接口完成 raft StateMachine 的处理，Msg 分两
 
 
 
+Step方法在处理MsgHup消息时，会根据当前配置中是否开启了Pre-Vote机制，以不同的CampaignType调用hup方法。CampaignType是一种枚举类型（go语言的枚举实现方式）
 
+
+
+
+hup方法会对节点当前状态进行一些检查，如果检查通过才会试图让当前节点发起投票或预投票。首先，hup会检查当前节点是否已经是leader，如果已经是leader那么直接返回。接下来，hup通过promotable()方法判断当前节点能否提升为leader
+
+promotable()的判定规则有三条：
+1. 当前节点是否已被集群移除。（通过ProgressTracker.ProgressMap映射中是否有当前节点的id的映射判断。当节点被从集群中移除后，被移除的节点id会被从该映射中移除。笔者会在后续讲解集群配置变更的文章中详细分析其实现。）
+2. 当前节点是否为learner节点。
+3. 当前节点是否还有未被保存到稳定存储中的快照。
+这三条规则中，只要有一条为真，那么当前节点就无法成为leader。在hup方法中，除了需要promotable()为真，还需要判断一条规则：
+1. 当前的节点已提交的日志中，是否有还未被应用的集群配置变更ConfChange消息。
+如果当前节点已提交的日志中还有未应用的ConfChange消息，那么该节点也无法提升为leader。
+只有当以上条件都满足后，hup方法才会调用campaign方法，根据配置，开始投票或预投票
+
+
+‚MsgVote‘ requests votes for election. When a node is a follower or candidate and ‚MsgHup‘ is passed to its Step method, then the node calls ‚campaign‘ method to campaign itself to become a leader.
+Once ‚campaign‘ method is called, the node becomes candidate and sends ‚MsgVote‘ to peers in cluster to request votes.
+When passed to leader or candidate’s Step method and the message’s Term is lower than leader’s or candidate’s, ‚MsgVote‘ will be rejected (‚MsgVoteResp‘ is returned with Reject true).
+If leader or candidate receives ‚MsgVote‘ with higher term, it will revert back to follower.
+When ‚MsgVote‘ is passed to follower, it votes for the sender only when sender’s last term is greater than MsgVote’s term or sender’s last term is equal to MsgVote’s term but sender’s last committed index is greater than or equal to follower’s.
+
+
+
+
+func (r *raft) campaign(t CampaignType) {
+    if !r.promotable() {
+        // This path should not be hit (callers are supposed to check), but
+        // better safe than sorry.
+        r.logger.Warningf(„%x is unpromotable; campaign() should have been called“, r.id)
+    }
+    var term uint64
+    var voteMsg pb.MessageType
+    if t == campaignPreElection {
+        r.becomePreCandidate()
+        voteMsg = pb.MsgPreVote
+        // PreVote RPCs are sent for the next term before we’ve incremented r.Term.
+        term = r.Term + 1
+    } else {
+        r.becomeCandidate()
+        voteMsg = pb.MsgVote
+        term = r.Term
+    }
+    if _, _, res := r.poll(r.id, voteRespMsgType(voteMsg), true); res == quorum.VoteWon {
+        // We won the election after voting for ourselves (which must mean that
+        // this is a single-node cluster). Advance to the next state.
+        if t == campaignPreElection {
+            r.campaign(campaignElection)
+        } else {
+            r.becomeLeader()
+        }
+        return
+    }
+    var ids []uint64
+    {
+        idMap := r.prs.Voters.IDs()
+        ids = make([]uint64, 0, len(idMap))
+        for id := range idMap {
+            ids = append(ids, id)
+        }
+        sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+    }
+    for _, id := range ids {
+        if id == r.id {
+            continue
+        }
+        r.logger.Infof(„%x [logterm: %d, index: %d] sent %s request to %x at term %d“,
+            r.id, r.raftLog.lastTerm(), r.raftLog.lastIndex(), voteMsg, id, r.Term)
+
+        var ctx []byte
+        if t == campaignTransfer {
+            ctx = []byte(t)
+        }
+        r.send(pb.Message{Term: term, To: id, Type: voteMsg, Index: r.raftLog.lastIndex(), LogTerm: r.raftLog.lastTerm(), Context: ctx})
+    }
+}
+
+
+
+开启Pre-Vote后，首次调用campaign时，参数为campaignPreElection。此时会调用becomePreCandidate方法，该方法不会修改当前节点的Term值，因此发送的MsgPreVote消息的Term应为当前的Term + 1。而如果没有开启Pre-Vote或已经完成预投票进入正式投票的流程或是Leader Transfer时（即使开启了Pre-Vote，Leader Transfer也不会进行预投票），会调用becomeCandidate方法。该方法会增大当前节点的Term，因此发送MsgVote消息的Term就是此时的Term。becomeXXX用来将当前状态机的状态与相关行为切换相应的角色
+
+
+
+var voteMsg pb.MessageType
+    if t == campaignPreElection {
+        r.becomePreCandidate()
+        voteMsg = pb.MsgPreVote
+        // PreVote RPCs are sent for the next term before we‘ve incremented r.Term.
+        term = r.Term + 1
+    } else {
+        r.becomeCandidate()
+        voteMsg = pb.MsgVote
+        term = r.Term
+    }
+    
+    
+poll方法会在更新本地的投票状态并获取当前投票结果。如果节点投票给自己后就赢得了选举，这说明集群是以单节点的模式启动的，那么如果当前是预投票阶段当前节点就能立刻开启投票流程、如果已经在投票流程中或是在Leader Transfer就直接当选leader即可。如果集群不是以单节点的模式运行的，那么就需要向其它有资格投票的节点发送投票请求
+
+在调用step字段记录的函数处理请求前，Step会根据消息的Term字段，进行一些预处理
+etcd/raft使用Term为0的消息作为本地消息，Step不会对本地消息进行特殊处理，直接进入之后的逻辑
+
+对于Term大于当前节点的Term的消息，如果消息类型为MsgVote或MsgPreVote，先要检查这些消息是否需要处理。其判断规则如下：
+1. force：如果该消息的CampaignType为campaignTransfer，force为真，表示该消息必须被处理。
+2. inLease：如果开启了Check Quorum（开启Check Quorum会自动开启Leader Lease），且election timeout超时前收到过leader的消息，那么inLease为真，表示当前Leader Lease还没有过期。
+如果!force && inLease，说明该消息不需要被处理，可以直接返回。
+对于Term大于当前节点的Term的消息，Step还需要判断是否需要切换自己的身份为follower，其判断规则如下：
+1. 如果消息为MsgPreVote消息，那么不需要转为follower。
+2. 如果消息为MsgPreVoteResp且Reject字段不为真时，那么不需要转为follower。
+3. 否则，转为follower。
+在转为follower时，新的Term就是该消息的Term。如果消息类型是MsgApp、MsgHeartbeat、MsgSnap，说明这是来自leader的消息，那么将lead字段直接置为该消息的发送者的id，否则暂时不知道当前的leader节点是谁。
+
+后，如果消息的Term比当前Term小，因存在1.4节中提到的问题，除了忽略消息外，还要做额外的处理
+
+Candidate和PreCandidate的行为有很多相似之处
+预选举与选举的区别在主要在于预选举不会改变状态机的term也不会修改当前term的该节点投出的选票
+
+
+    
+    
+    
 
 Ready
 
@@ -1169,46 +1289,78 @@ func (r *raft) tickElection() {
 }
 ```
 
+Candidate和PreCandidate的行为有很多相似之处
+预选举与选举的区别在主要在于预选举不会改变状态机的term也不会修改当前term的该节点投出的选票
 
 
-如果Cluster开启PreVote模式 当Follower选举计时器timout后会调用becomePreCandidate切换state到PreCandidate
 
-
-
-```go
-func (r *raft) becomePreCandidate() {
-   // TODO(xiangli) remove the panic when the raft implementation is stable
-   if r.state == StateLeader {
-      panic("invalid transition [leader -> pre-candidate]")
-   }
-   // Becoming a pre-candidate changes our step functions and state,
-   // but doesn't change anything else. In particular it does not increase
-   // r.Term or change r.Vote.
-   r.step = stepCandidate
-   r.prs.ResetVotes()
-   r.tick = r.tickElection
-   r.lead = None
-   r.state = StatePreCandidate
-   r.logger.Infof("%x became pre-candidate at term %d", r.id, r.Term)
-}
 ```
-
-当节点可联系到半数以上节点后 调用
-
-```go
 func (r *raft) becomeCandidate() {
-   // TODO(xiangli) remove the panic when the raft implementation is stable
-   if r.state == StateLeader {
-      panic("invalid transition [leader -> candidate]")
-   }
-   r.step = stepCandidate
-   r.reset(r.Term + 1)
-   r.tick = r.tickElection
-   r.Vote = r.id
-   r.state = StateCandidate
-   r.logger.Infof("%x became candidate at term %d", r.id, r.Term)
+    r.step = stepCandidate
+    r.reset(r.Term + 1)
+    r.tick = r.tickElection
+    r.Vote = r.id
+    r.state = StateCandidate
 }
+
+func (r *raft) reset(term uint64) {
+    if r.Term != term {
+        r.Term = term
+        r.Vote = None
+    }
+    r.lead = None
+
+    r.electionElapsed = 0
+    r.heartbeatElapsed = 0
+    r.resetRandomizedElectionTimeout()
+
+    r.abortLeaderTransfer()
+
+    r.prs.ResetVotes()
+    r.prs.Visit(func(id uint64, pr *tracker.Progress) {
+        *pr = tracker.Progress{
+            Match:     0,
+            Next:      r.raftLog.lastIndex() + 1,
+            Inflights: tracker.NewInflights(r.prs.MaxInflight),
+            IsLearner: pr.IsLearner,
+        }
+        if id == r.id {
+            pr.Match = r.raftLog.lastIndex()
+        }
+    })
+
+    r.pendingConfIndex = 0
+    r.uncommittedSize = 0
+    r.readOnly = newReadOnly(r.readOnly.option)
+}
+
+func (r *raft) becomePreCandidate() {
+    // Becoming a pre-candidate changes our step functions and state,
+    // but doesn‘t change anything else. In particular it does not increase
+    // r.Term or change r.Vote.
+    r.step = stepCandidate
+    r.prs.ResetVotes()
+    r.tick = r.tickElection
+    r.lead = None
+    r.state = StatePreCandidate
+}
+
 ```
+reset方法用于状态机切换角色时初始化相关字段。因为切换到PreCandidate严格来说并不算真正地切换角色，因此becomePreCandidate中没有调用reset方法，而becomeCandidate、becomeLeader、becomeFollower都调用了reset方法
+
+
+stepLeader中处理的消息可以分为两类，一类是不需要知道谁是发送者的消息（大多数为本地消息），另一类需要知道谁是发送者的消息（大多数为来自其它节点的消息）。
+stepLeader中对第一类消息的处理方式如下：
+1. MsgBeat：该消息为heartbeat timeout超时后通知leader广播心跳消息的消息。因此，收到该消息后，广播心跳消息。
+2. MsgCheckQuorum：该消息为开启Check Quorum时election timeout超时后通知leader进行相关操作的消息。因此，检查活跃的节点数是否达到quorum，如果无法达到，那么退位为follower（其相关操作涉及ProgressTracker，笔者会在后续的文章中分析，这里只需要知道其作用即可）。
+第二类消息中，与选举相关的只有MsgTransferLeader消息：
+1. 忽略来自learner的MsgTransferLeader消息。
+2. 判断是否正在进行Leader Transfer，如果正在进行但转移的目标相同，那么不再做处理；如果正在进行但转移的目标不同，那么打断正在进行的Leader Transfer，而执行新的转移。
+3. 如果转移目标是当前节点，而当前节点已经是leader了，那么不做处理。
+4. 记录转移目标，以用做第2步中是否打断上次转移的依据。
+5. 判断转移目标的日志是否跟上了leader。如果跟上了，向其发送MsgTimeoutNow消息，让其立即超时并进行新的选举；否则正常向其发送日志。如果转移目标的日志没有跟上leader，则leader在处理转移目标对其日志复制消息的响应时，会判断其是否跟上了leader，如果那时跟上了则向其发送MsgTimeoutNow消息，让其立即超时并进行新的选举 
+
+
 
 
 
@@ -1364,6 +1516,72 @@ type raftLog struct {
 	maxNextEntsSize uint64
 }
 ```
+
+
+unstable.entries[i] has raft log position i+unstable.offset.
+Note that unstable.offset may be less than the highest log  position in storage; this means that the next write to storage  might need to truncate the log before persisting unstable.entries.
+
+
+type unstable struct {
+    // the incoming unstable snapshot, if any.
+    snapshot *pb.Snapshot
+    // all entries that have not yet been written to storage.
+    entries []pb.Entry
+    offset  uint64
+
+    logger Logger
+}
+当unstable中的Entry记录被写入到Storage之后，会调用stableTo()方法清掉entries中的Entry记录
+
+
+func (u *unstable) stableTo(i, t uint64) {
+    gt, ok := u.maybeTerm(i)
+    if !ok {
+        return
+    }
+    // if i < offset, term is matched with the snapshot
+    // only update the unstable entries if term is matched with
+    // an unstable entry.
+    if gt == t && i >= u.offset {
+        u.entries = u.entries[i+1-u.offset:]
+        u.offset = i + 1
+        u.shrinkEntriesArray()
+    }
+}
+
+// shrinkEntriesArray discards the underlying array used by the entries slice
+// if most of it isn’t being used. This avoids holding references to a bunch of
+// potentially large entries that aren‘t needed anymore. Simply clearing the
+// entries wouldn’t be safe because clients might still be using them.
+func (u *unstable) shrinkEntriesArray() {
+    // We replace the array if we‘re using less than half of the space in
+    // it. This number is fairly arbitrary, chosen as an attempt to balance
+    // memory usage vs number of allocations. It could probably be improved
+    // with some focused tuning.
+    const lenMultiple = 2
+    if len(u.entries) == 0 {
+        u.entries = nil
+    } else if len(u.entries)*lenMultiple < cap(u.entries) {
+        newEntries := make([]pb.Entry, len(u.entries))
+        copy(newEntries, u.entries)
+        u.entries = newEntries
+    }
+}
+
+
+
+同理，当unstable中的snapshot记录被写入到Storage之后，会调用stableSnapTo()方法清掉snapshot字段
+
+
+func (u *unstable) stableSnapTo(i uint64) {
+    if u.snapshot != nil && u.snapshot.Metadata.Index == i {
+        u.snapshot = nil
+    }
+}
+
+
+
+
 
 
 
