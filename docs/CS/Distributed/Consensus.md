@@ -369,7 +369,7 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 ## blockchain
 
 
-共识算法还有一个很重要的领域，就是比较火的区块链，比如工作量证明（POW）、权益证明（POS）和委托权益证明（DPOS）、置信度证明（PoB）等等，都是共识算法，这篇文章就列出来了 30 种
+共识算法还有一个很重要的领域，就是比较火的区块链，比如工作量证明（POW）、权益证明（POS）和委托权益证明（DPOS）、置信度证明（PoB）等等，都是共识算法
 大家熟知的zk、etcd这种之所以叫“传统分布式”，就是相对于区块链这种”新型分布式系统“而言的，都是多节点共同工作，只是区块链有几点特殊：
 1. 区块链需要解决的是拜占庭将军问题，paxos之类的一致性算法无法对抗欺诈节点
 2. 区块链中不存在中央控制方，没有一个节点可以控制或协调账本数据的生成
@@ -380,28 +380,28 @@ Standard consensus algorithms won’t do as they themselves are not Byzantine fa
 
 PoW，Proof of Work
 不足：
-● 速度慢。
-● 耗能巨大，对环境不好。
-● 易受“规模经济”（economies of scale）的影响。
+- 速度慢。
+- 耗能巨大，对环境不好。
+- 易受“规模经济”（economies of scale）的影响。
 使用者：Bitcoin、Ethereum、Litecoin、Dogecoin等。
 类型：有竞争共识（Competitive consensus）
 https://bitcoin.org/bitcoin.pdf
 
-oS，Proof of Stake）
+PoS，Proof of Stake）
 优点：
-● 节能。
-● 攻击者代价更大。
-● 不易受“规模经济”的影响。
+- 节能。
+- 攻击者代价更大。
+- 不易受“规模经济”的影响。
 不足：
-● “无利害关系“(Nothing at stake)”攻击问题。
+- “无利害关系“(Nothing at stake)”攻击问题。
 使用者：Ethereum（即将推出）、Peercoin、Nxt。
 类型：有竞争共识。
 
 延迟工作量证明（dPoW，Delayed Proof-of-Work）
 优点：
-● 节能。
-● 安全性增加。
-● 可以通过非直接提供 Bitcoin（或是其它任何安全链），添加价值到其它区块链，无需付出 Bitcoin（或是其它任何安全链）交易的代价。
+- 节能。
+- 安全性增加。
+- 可以通过非直接提供 Bitcoin（或是其它任何安全链），添加价值到其它区块链，无需付出 Bitcoin（或是其它任何安全链）交易的代价。
 不足：
 * 只有使用 PoW 或 PoS 的区块链，才能采用这种共识算法。
 

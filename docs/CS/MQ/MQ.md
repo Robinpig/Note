@@ -414,7 +414,7 @@ The Cons of Using RabbitMQ:
 
 ## Pulsar
 
-
+[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) is a distributed pub-sub messaging platform with a very flexible messaging model and an intuitive client API.
 
 
 
