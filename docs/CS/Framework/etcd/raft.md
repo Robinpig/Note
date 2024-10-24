@@ -1088,7 +1088,7 @@ When ‚MsgVote‘ is passed to follower, it votes for the sender only when send
 
 
 
-
+```go
 func (r *raft) campaign(t CampaignType) {
     if !r.promotable() {
         // This path should not be hit (callers are supposed to check), but
@@ -1140,13 +1140,14 @@ func (r *raft) campaign(t CampaignType) {
         r.send(pb.Message{Term: term, To: id, Type: voteMsg, Index: r.raftLog.lastIndex(), LogTerm: r.raftLog.lastTerm(), Context: ctx})
     }
 }
+```
 
 
 
 开启Pre-Vote后，首次调用campaign时，参数为campaignPreElection。此时会调用becomePreCandidate方法，该方法不会修改当前节点的Term值，因此发送的MsgPreVote消息的Term应为当前的Term + 1。而如果没有开启Pre-Vote或已经完成预投票进入正式投票的流程或是Leader Transfer时（即使开启了Pre-Vote，Leader Transfer也不会进行预投票），会调用becomeCandidate方法。该方法会增大当前节点的Term，因此发送MsgVote消息的Term就是此时的Term。becomeXXX用来将当前状态机的状态与相关行为切换相应的角色
 
 
-
+```go
 var voteMsg pb.MessageType
     if t == campaignPreElection {
         r.becomePreCandidate()
@@ -1158,7 +1159,7 @@ var voteMsg pb.MessageType
         voteMsg = pb.MsgVote
         term = r.Term
     }
-    
+```
     
 poll方法会在更新本地的投票状态并获取当前投票结果。如果节点投票给自己后就赢得了选举，这说明集群是以单节点的模式启动的，那么如果当前是预投票阶段当前节点就能立刻开启投票流程、如果已经在投票流程中或是在Leader Transfer就直接当选leader即可。如果集群不是以单节点的模式运行的，那么就需要向其它有资格投票的节点发送投票请求
 
@@ -1294,7 +1295,7 @@ Candidate和PreCandidate的行为有很多相似之处
 
 
 
-```
+```go
 func (r *raft) becomeCandidate() {
     r.step = stepCandidate
     r.reset(r.Term + 1)
@@ -1344,7 +1345,6 @@ func (r *raft) becomePreCandidate() {
     r.lead = None
     r.state = StatePreCandidate
 }
-
 ```
 reset方法用于状态机切换角色时初始化相关字段。因为切换到PreCandidate严格来说并不算真正地切换角色，因此becomePreCandidate中没有调用reset方法，而becomeCandidate、becomeLeader、becomeFollower都调用了reset方法
 
@@ -1492,7 +1492,6 @@ type Entry struct {
 里面有两个存储位置，一个是storage是保存已经持久化过的日志条目。unstable是保存的尚未持久化的日志条目
 
 ```go
-
 type raftLog struct {
 	// storage contains all stable entries since the last snapshot.
 	storage Storage
@@ -1521,7 +1520,7 @@ type raftLog struct {
 unstable.entries[i] has raft log position i+unstable.offset.
 Note that unstable.offset may be less than the highest log  position in storage; this means that the next write to storage  might need to truncate the log before persisting unstable.entries.
 
-
+```go
 type unstable struct {
     // the incoming unstable snapshot, if any.
     snapshot *pb.Snapshot
@@ -1531,9 +1530,11 @@ type unstable struct {
 
     logger Logger
 }
+```
+
 当unstable中的Entry记录被写入到Storage之后，会调用stableTo()方法清掉entries中的Entry记录
 
-
+```go
 func (u *unstable) stableTo(i, t uint64) {
     gt, ok := u.maybeTerm(i)
     if !ok {
@@ -1567,18 +1568,18 @@ func (u *unstable) shrinkEntriesArray() {
         u.entries = newEntries
     }
 }
-
+```
 
 
 同理，当unstable中的snapshot记录被写入到Storage之后，会调用stableSnapTo()方法清掉snapshot字段
 
-
+```go
 func (u *unstable) stableSnapTo(i uint64) {
     if u.snapshot != nil && u.snapshot.Metadata.Index == i {
         u.snapshot = nil
     }
 }
-
+```
 
 
 
