@@ -146,6 +146,66 @@ type node struct {
 
 ## start
 
+```go
+// Etcd contains a running etcd server and its listeners.
+type Etcd struct {
+	Peers   []*peerListener
+	Clients []net.Listener
+	// a map of contexts for the servers that serves client requests.
+	sctxs            map[string]*serveCtx
+	metricsListeners []net.Listener
+
+	tracingExporterShutdown func()
+
+	Server *etcdserver.EtcdServer
+
+	cfg   Config
+	stopc chan struct{}
+	errc  chan error
+
+	closeOnce sync.Once
+}
+```
+
+
+启动调用链过程
+```
+main()                                etcdmain/main.go
+ |-checkSupportArch()
+ |-startEtcdOrProxyV2()               etcdmain/etcd.go
+   |-newConfig()
+   |-setupLogging()
+   |-startEtcd()
+     // 为客户端/服务器通信启动etcd服务器和HTTP处理程序。
+   | |-embed.StartEtcd()              embed/etcd.go 
+   |   |-configurePeerListeners()      
+   |   |-configureClientListeners()
+   |   |-EtcdServer.ServerConfig()    生成新的配置
+   |   |-EtcdServer.NewServer()       etcdserver/server.go 启动Raft服务
+   |   |-EtcdServer.Start()           开始启动服务
+   |   | |-EtcdServer.start()           执行服务器开始服务请求所需的任何初始化
+   |   |   |-wait.New()               新建WaitGroup组以及一些管道服务
+   |   |   |-EtcdServer.run()         etcdserver/raft.go 启动应用层的处理协程
+   |   |   | |-raft.start()             启动处理协程
+   |   |-Etcd.servePeers()            启动集群内部通讯
+   |   | |-etcdhttp.NewPeerHandler()  新建http.Handler来处理etcd中其他成员请求
+   |   | |-srv.Serve()                配置http服务
+   |   | |-e.errHandler(l.serve())       启动集群间http协程，开始多路传输监听
+   |   |-Etcd.serveClients()           启动协程处理客户请求
+   |   | |-http.NewServeMux()        启动监听客户端的协程
+   |   | |-sctxs.serve()               启动服务器
+   |   |   |-v3rpc.Server()             启动gRPC服务 /etcdserver/api/v3rpc/grpc.go
+   |   |   | |-grpc.NewServer()         调用gRPC的接口创建
+   |   |   | |-pb.RegisterKVServer()    注册各种的服务，这里包含了多个
+   |   |   | |-pb.RegisterWatchServer()
+   |   |-Etcd.serveMetrics()
+   |-notifySystemd()
+   |-select()                         等待stopped
+   |-osutil.Exit()
+ 
+```
+
+
 主入口函数 etcdmain.Main
 
 ```go
@@ -552,9 +612,38 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 
 
 
+### EtcdServer::NewServer
 
-
-
+函数调用关系链
+```
+NewServer()  etcdserver/server.go 通过配置创建一个新的EtcdServer对象，不同场景不同
+ |-bootstrap(cfg)
+ | |-bootstrapSnapshot(cfg)  新建snap对象，等待存储或恢复
+ | |-wal.Exist()
+ | |-v2store.New()                  初始化内存B+树
+ | |-bootstrapBackend()             初始化操作treeIndex以及BoltDB持久化的对象
+ |   |-recoverSnapshot()            从快照中恢复
+ | |-bootstrapWALFromSnapshot()    已有WAL，在原有数据中恢复未提交数据
+ | |-bootstrapCluster()               对于每一个集群成员进行存储配置
+ | |-bootstrapStorage()               对于没有WAL情况，进行统一分配存储
+ | |-cluster.Finalize()                 对于每一个集群成员进行最后配置
+ | |-bootstrapRaft()                   为当前服务器配置raft 对象
+ |-stats.NewServerStats()              配置server状态
+ |-stats.NewLeaderStats()             成为Leader状态
+ |-srv=&EtcdServer{raft.newRaftNode() …}新建etcdserver对象，并初始化raft对象运行
+ | |-raft.RestartNode()  若无其他成员则重启节点
+ | |-raft.StartNode()    若有则新启节点
+ |   |-setupNode()                     配置节点
+ |   | |-rn = NewRawNode()                 raft/node.go 新建一个type node struct对象
+ |   | |-rn.Bootstrap(peers)                  通过追加配置来初始化RawNode
+ |   |   |-raft.becomeFollower()             成为Follower状态
+ |   | |-n := newNode(rn)                   封装rawNode
+ |   |-go node.run()                     循环运行节点监听任务
+|-lease.NewLessor()                 恢复Lessor状态 mvcc.New
+ |- mvcc.New()                      新建mvcc存储管理对象
+ |-auth.NewAuthStore()               
+ 
+```
 
 ### serveClients
 
@@ -2497,3 +2586,4 @@ echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 1. [深入浅出 etcd 系列 part 1 – 解析 etcd 的架构和代码框架](https://mp.weixin.qq.com/s/C2WKrfcJ1sVQuSxlpi6uNQ)
 1. [深入浅出etcd/raft —— 0x00 引言](https://blog.mrcroxx.com/posts/code-reading/etcdraft-made-simple/0-introduction/)
 2. [etcd架构以及源码解析](https://github.com/csunny/etcd-from-arch-to-souce-code)
+3. [etcd 源码分析](https://www.zhihu.com/column/c_1574793366772060162)
