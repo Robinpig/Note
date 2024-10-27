@@ -144,20 +144,6 @@ Prepare environment:
 
 <!-- tabs:start -->
 
-##### **Ubuntu**
-
-```shell
-sudo apt-get install autoconf make zip
-sudo apt-get install libffi-dev
-sudo apt-get install build-essential 
-sudo apt-get install libasound2-dev 
-sudo apt-get install libcups2-dev 
-sudo apt-get install libfontconfig1-dev 
-sudo apt-get install libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxt-dev 
-```
-
-
-
 ##### **MacOS**
 
 make sure you have installed Xcode
