@@ -282,8 +282,26 @@ xv6二进制代码分成两部分 bootloader和kernel
 
 XV6的操作系统的加载与真实情况有一些区别。首先，XV6操作系统作为教学操作系统，它的启动过程是相对比较简单的
 XV6并不会在启动时对主板上的硬件做全面的检查，而真实的Bootloader会对所有连接到计算机的所有硬件的状态进行检查。
-此外，XV6的Boot loader足够精简，以至于能够被压缩到小于512字节，从而能够直接将Bootloader加载进0x7c00的内存位置
+此外，XV6的Boot loader足够精简，以至于能够bootblock能被压缩到512字节，从而能够直接加载进0x7c00的内存位置
 真实的操作系统中，通常会有一个两步加载的过程。首先将一个加载Bootloader的程序加载在0x7c00处，然后加载进完整的功能复杂的Bootloader，再使用Bootloader加载内核
+
+
+
+Start the first CPU: switch to 32-bit protected mode, jump into C.
+The BIOS loads this code from the first sector of the hard disk into memory at physical address 0x7c00 and starts executing in real mode with %cs=0 %ip=7c00.
+
+```asm
+.code16                       # Assemble for 16-bit mode
+.globl start
+start:
+  cli                         # BIOS enabled interrupts; disable
+
+  # Zero data segment registers DS, ES, and SS.
+  xorw    %ax,%ax             # Set %ax to zero
+  movw    %ax,%ds             # -> Data Segment
+  movw    %ax,%es             # -> Extra Segment
+  movw    %ax,%ss             # -> Stack Segment
+```
 
 
 
