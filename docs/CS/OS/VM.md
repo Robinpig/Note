@@ -17,6 +17,14 @@ A single physical machine can run multiple virtual machines, each with their own
 These virtual machines are isolated from each other.
 
 
+## VMware
+
+虚拟机挂载共享文件夹
+```shell
+vmhgfs-fuse .host:/ /mnt/hgfs -o rw,allow_other
+```
+
+
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

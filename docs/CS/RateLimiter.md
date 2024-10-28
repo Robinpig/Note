@@ -18,19 +18,9 @@ Several algorithms are used for rate limiting, including
 
 - Token bucket
 - Leaky bucket
-- Sliding window logs
-- Sliding window counters
-
-
-- 计数器
-  - 固定窗口 瞬时峰值隐患
-  - solid window 窗口粒度越小消耗资源高
-- leaky bucket algorithm
-  - as a meter 类似令牌桶 存储累积量 允许一定的突发
-  - as a queue 限制速率 不支持突发流量
-- token bucket 存储累积量
-
-
+- Fixed window counter
+- Sliding window log
+- Sliding window counter
 
 ### Counter
 
@@ -89,6 +79,7 @@ The sliding window counters can be separated into the following concepts:
 - If a request comes when the current bucket has reached it’s throat limit, the request is blocked.
 
 ### Leaky Bucket
+
 It is based on the idea that if the average rate at which water is poured exceeds the rate at which the bucket leaks, the bucket will overflow.
 
 **The leaky bucket empties at a fixed rate. 
@@ -108,10 +99,18 @@ The leaky bucket algorithm can be separated into the following concepts:
 ### Token Bucket
 
 
-- The token bucket algorithm allocates tokens at a fixed rate into a “bucket.”
-- Each request consumes a token from the bucket, and requests are only allowed if there are sufficient tokens available.
-- Unused tokens are stored in the bucket, up to a maximum capacity.
-- This algorithm provides a simple and flexible way to control the rate of requests and smooth out bursts of traffic.
+The token bucket algorithm allocates tokens at a fixed rate into a “bucket.”
+Each request consumes a token from the bucket, and requests are only allowed if there are sufficient tokens available.
+Unused tokens are stored in the bucket, up to a maximum capacity.
+This algorithm provides a simple and flexible way to control the rate of requests and smooth out bursts of traffic.
+
+The token bucket algorithm can be conceptually understood as follows:
+
+A token is added to the bucket every $1/r$ seconds.
+The bucket can hold at the most b tokens. If a token arrives when the bucket is full, it is discarded.
+When a packet (network layer PDU) of n bytes arrives,
+if at least n tokens are in the bucket, n tokens are removed from the bucket, and the packet is sent to the network.
+if fewer than n tokens are available, no tokens are removed from the bucket, and the packet is considered to be non-conformant.
 
 
 guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in `SmoothRateLimiter`.

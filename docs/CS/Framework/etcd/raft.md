@@ -587,42 +587,13 @@ etcd/raft的`Ready`结构体中包含如下数据：
 // be saved to stable storage, committed or sent to other peers.
 // All fields in Ready are read-only.
 type Ready struct {
-    // The current volatile state of a Node.
-    // SoftState will be nil if there is no update.
-    // It is not required to consume or store SoftState.
     *SoftState
-
-    // The current state of a Node to be saved to stable storage BEFORE
-    // Messages are sent.
-    // HardState will be equal to empty state if there is no update.
     pb.HardState
-
-    // ReadStates can be used for node to serve linearizable read requests locally
-    // when its applied index is greater than the index in ReadState.
-    // Note that the readState will be returned when raft receives msgReadIndex.
-    // The returned is only valid for the request that requested to read.
     ReadStates []ReadState
-
-    // Entries specifies entries to be saved to stable storage BEFORE
-    // Messages are sent.
     Entries []pb.Entry
-
-    // Snapshot specifies the snapshot to be saved to stable storage.
     Snapshot pb.Snapshot
-
-    // CommittedEntries specifies entries to be committed to a
-    // store/state-machine. These have previously been committed to stable
-    // store.
     CommittedEntries []pb.Entry
-
-    // Messages specifies outbound messages to be sent AFTER Entries are
-    // committed to stable storage.
-    // If it contains a MsgSnap message, the application MUST report back to raft
-    // when the snapshot has been received or has failed by calling ReportSnapshot.
     Messages []pb.Message
-
-    // MustSync indicates whether the HardState and Entries must be synchronously
-    // written to disk or if an asynchronous write is permissible.
     MustSync bool
 }
 ```
@@ -776,13 +747,8 @@ commited 会随着 MsgHeartbeat 或者 MsgApp 同步给 follower。随后 leader
 
 
 
-## raft
 
-etcd-raft 最大设计亮点就是抽离了网络、持久化、协程等逻辑，用一个纯粹的 raft StateMachine 来实现 raft 算法逻辑，充分的解耦，有助于 raft 算法本身的正确实现，而且更容易纯粹的去测试 raft 算法最本质的逻辑，而不需要考虑引入其他因素（各种异常）
-
-
-
-### Node
+## Node
 
 `Node`接口是开发者仅有的操作etcd/raft的方式
 
@@ -790,85 +756,19 @@ etcd-raft 最大设计亮点就是抽离了网络、持久化、协程等逻辑�
 
 // Node represents a node in a raft cluster.
 type Node interface {
-	// Tick increments the internal logical clock for the Node by a single tick. Election
-	// timeouts and heartbeat timeouts are in units of ticks.
 	Tick()
-	// Campaign causes the Node to transition to candidate state and start campaigning to become leader.
 	Campaign(ctx context.Context) error
-	// Propose proposes that data be appended to the log. Note that proposals can be lost without
-	// notice, therefore it is user's job to ensure proposal retries.
 	Propose(ctx context.Context, data []byte) error
-	// ProposeConfChange proposes a configuration change. Like any proposal, the
-	// configuration change may be dropped with or without an error being
-	// returned. In particular, configuration changes are dropped unless the
-	// leader has certainty that there is no prior unapplied configuration
-	// change in its log.
-	//
-	// The method accepts either a pb.ConfChange (deprecated) or pb.ConfChangeV2
-	// message. The latter allows arbitrary configuration changes via joint
-	// consensus, notably including replacing a voter. Passing a ConfChangeV2
-	// message is only allowed if all Nodes participating in the cluster run a
-	// version of this library aware of the V2 API. See pb.ConfChangeV2 for
-	// usage details and semantics.
 	ProposeConfChange(ctx context.Context, cc pb.ConfChangeI) error
-
-	// Step advances the state machine using the given message. ctx.Err() will be returned, if any.
 	Step(ctx context.Context, msg pb.Message) error
-
-	// Ready returns a channel that returns the current point-in-time state.
-	// Users of the Node must call Advance after retrieving the state returned by Ready.
-	//
-	// NOTE: No committed entries from the next Ready may be applied until all committed entries
-	// and snapshots from the previous one have finished.
 	Ready() <-chan Ready
-
-	// Advance notifies the Node that the application has saved progress up to the last Ready.
-	// It prepares the node to return the next available Ready.
-	//
-	// The application should generally call Advance after it applies the entries in last Ready.
-	//
-	// However, as an optimization, the application may call Advance while it is applying the
-	// commands. For example. when the last Ready contains a snapshot, the application might take
-	// a long time to apply the snapshot data. To continue receiving Ready without blocking raft
-	// progress, it can call Advance before finishing applying the last ready.
 	Advance()
-	// ApplyConfChange applies a config change (previously passed to
-	// ProposeConfChange) to the node. This must be called whenever a config
-	// change is observed in Ready.CommittedEntries, except when the app decides
-	// to reject the configuration change (i.e. treats it as a noop instead), in
-	// which case it must not be called.
-	//
-	// Returns an opaque non-nil ConfState protobuf which must be recorded in
-	// snapshots.
 	ApplyConfChange(cc pb.ConfChangeI) *pb.ConfState
-
-	// TransferLeadership attempts to transfer leadership to the given transferee.
 	TransferLeadership(ctx context.Context, lead, transferee uint64)
-
-	// ReadIndex request a read state. The read state will be set in the ready.
-	// Read state has a read index. Once the application advances further than the read
-	// index, any linearizable read requests issued before the read request can be
-	// processed safely. The read state will have the same rctx attached.
-	// Note that request can be lost without notice, therefore it is user's job
-	// to ensure read index retries.
 	ReadIndex(ctx context.Context, rctx []byte) error
-
-	// Status returns the current status of the raft state machine.
 	Status() Status
-	// ReportUnreachable reports the given node is not reachable for the last send.
 	ReportUnreachable(id uint64)
-	// ReportSnapshot reports the status of the sent snapshot. The id is the raft ID of the follower
-	// who is meant to receive the snapshot, and the status is SnapshotFinish or SnapshotFailure.
-	// Calling ReportSnapshot with SnapshotFinish is a no-op. But, any failure in applying a
-	// snapshot (for e.g., while streaming it from leader to follower), should be reported to the
-	// leader with SnapshotFailure. When leader sends a snapshot to a follower, it pauses any raft
-	// log probes until the follower can apply the snapshot and advance its state. If the follower
-	// can't do that, for e.g., due to a crash, it could end up in a limbo, never getting any
-	// updates from the leader. Therefore, it is crucial that the application ensures that any
-	// failure in snapshot sending is caught and reported back to the leader; so it can resume raft
-	// log probing in the follower.
 	ReportSnapshot(id uint64, status SnapshotStatus)
-	// Stop performs any necessary termination of the Node.
 	Stop()
 }
 ```
@@ -967,7 +867,26 @@ node启动时是启动了一个协程，处理node的里的多个通道，包括
 
 
 
-startNode -> NewRawNode -> newRaft
+etcdserver.NewServer -> startNode -> NewRawNode -> newRaft
+
+```
+raft.StartNode()
+ |-setupNode()   新建一个节点
+ | |-rn = NewRawNode()                 raft/node.go 新建一个type node struct对象
+ | |- rn.Bootstrap(peers)                  通过追加配置来初始化RawNode
+//这里会对关键对象初始化以及赋值，包括step=stepFollower r.tick=r.tickElection函数
+ |   |-raft.becomeFollower()  
+ |   | |-raft.reset()                               开始启动时设置term为1
+ |   |    |-raft.resetRandomizedElectionTimeout() 更新选举的随机超时时间
+ |   |-raftLog.append()               将配置更新日志添加
+ |-node.run()       raft/node.go 节点运行，会启动一个协程运行 <<<long running>>>
+ | |-node.rn.readyWithoutAccept()
+ |     |-newReady()                   新建type Ready对象
+ | |-raft.tick()      等待n.tickc管道，这里实际就是在上面赋值的tickElection()函数
+ ```
+## raft
+
+etcd-raft 最大设计亮点就是抽离了网络、持久化、协程等逻辑，用一个纯粹的 raft StateMachine 来实现 raft 算法逻辑，充分的解耦，有助于 raft 算法本身的正确实现，而且更容易纯粹的去测试 raft 算法最本质的逻辑，而不需要考虑引入其他因素（各种异常）
 
 
 
@@ -1791,22 +1710,261 @@ func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
 
 ## ReadIndex
 
-当收到一个线性读请求时，被请求的server首先会从Leader获取集群最新的已提交的日志索引(committed index)
+从raft协议可知，leader拥有最新的状态，如果读请求都走leader，那么leader可以直接返回结果给客户端。
+然而，在出现网络分区和时钟快慢相差比较大的情况下，这有可能会返回老的数据，即stale read，这违反了Linearizable Read。
+例如，leader和其他followers之间出现网络分区，其他followers已经选出了新的leader，并且新的leader已经commit了一堆数据，
+然而由于不同机器的时钟走的快慢不一，原来的leader可能并没有发觉自己的lease过期，仍然认为自己还是合法的leader直接给客户端返回结果，从而导致了stale read
 
-Leader收到ReadIndex请求时，为防止脑裂等异常场景，会向Follower节点发送心跳确认，一半以上节点确认Leader身份后才能将已提交的索引(committed index)返回给节点C
+Raft作者提出了一种叫做ReadIndex的方案：
+当leader接收到读请求时，将当前commit index记录下来，记作read index，在返回结果给客户端之前，leader需要先确定自己到底还是不是真的leader，
+确定的方法就是给其他所有peers发送一次心跳，如果收到了多数派的响应，说明至少这个读请求到达这个节点时，这个节点仍然是leader，
+这时只需要等到commit index被apply到状态机后，即可返回结果
 
-被请求节点则会等待，直到状态机已应用索引(applied index)大于等于Leader的已提交索引时(committed Index)(上图中的流程四)，然后去通知读请求，数据已赶上Leader，你可以去状态机中访问数据了
+```go
+func (n *node) ReadIndex(ctx context.Context, rctx []byte) error {
+    return n.step(ctx, pb.Message{Type: pb.MsgReadIndex, Entries: []pb.Entry{{Data: rctx}}})
+}
+```
 
-以上就是线性读通过ReadIndex机制保证数据一致性原理， 当然还有其它机制也能实现线性读，如在早期etcd 3.0中读请求通过走一遍Raft协议保证一致性， 这种Raft log read机制依赖磁盘IO， 性能相比ReadIndex较差
+ReadIndex流程总四步:
+1. leader check自己是否在当前term commit过entry
+2. leader记录下当前commit index，然后leader给所有peers发心跳广播
+3. 收到多数派响应代表读请求到达时还是leader，然后等待apply index大于等于commit index
+4. 返回结果
+
+
+ReadState provides state for read only query.
+It's caller's responsibility to call ReadIndex first before getting this state from ready, it's also caller's duty to differentiate if this state is what it requests through RequestCtx, eg. given a unique id as RequestCtx
+
+```go
+type ReadState struct {
+    Index      uint64
+    RequestCtx []byte
+}
+```
+readIndexStatus用来追踪Leader向Followers发送的心跳信息的响应
+
+
+```go
+type readIndexStatus struct {
+    req   pb.Message
+    index uint64
+    // NB: this never records 'false', but it's more convenient to use this
+    // instead of a map[uint64]struct{} due to the API of quorum.VoteResult. If
+    // this becomes performance sensitive enough (doubtful), quorum.VoteResult
+    // can change to an API that is closer to that of CommittedIndex.
+    acks map[uint64]bool
+}
+```
+readOnly管理全局的读ReadIndex请求
+
+```go
+type readOnly struct {
+    option           ReadOnlyOption
+    pendingReadIndex map[string]*readIndexStatus
+    readIndexQueue   []string
+}
+```
+etcd-server在启动时会创建一个后台协程，运行的方法是：linearizableReadLoop，如下
+
+```go
+func (s *EtcdServer) Start() { 
+    s.start()
+    s.goAttach(func() { s.publish(s.Cfg.ReqTimeout()) }) 
+    s.goAttach(s.purgeFile)
+    s.goAttach(func() { monitorFileDescriptor(s.stopping) }) 
+    s.goAttach(s.monitorVersions)
+    s.goAttach(s.linearizableReadLoop)
+    s.goAttach(s.monitorKVHash)
+}
+```
+这个goroutine等着有读请求的信号，并且在有信号来的时候调用底层的raft核心协议处理层来获取信号发生时刻的commit index
+
+
+```go
+func (s *EtcdServer) linearizableReadLoop() {
+    for {
+        requestId := s.reqIDGen.Next()
+        leaderChangedNotifier := s.LeaderChangedNotify()
+        select {
+        case <-leaderChangedNotifier:
+            continue
+        case <-s.readwaitc:
+        case <-s.stopping:
+            return
+        }
+
+        // as a single loop is can unlock multiple reads, it is not very useful
+        // to propagate the trace from Txn or Range.
+        trace := traceutil.New("linearizableReadLoop", s.Logger())
+
+        nextnr := newNotifier()
+        s.readMu.Lock()
+        nr := s.readNotifier
+        s.readNotifier = nextnr
+        s.readMu.Unlock()
+
+        confirmedIndex, err := s.requestCurrentIndex(leaderChangedNotifier, requestId)
+        if isStopped(err) {
+            return
+        }
+        if err != nil {
+            nr.notify(err)
+            continue
+        }
+
+        trace.Step("read index received")
+
+        trace.AddField(traceutil.Field{Key: "readStateIndex", Value: confirmedIndex})
+
+        appliedIndex := s.getAppliedIndex()
+        trace.AddField(traceutil.Field{Key: "appliedIndex", Value: strconv.FormatUint(appliedIndex, 10)})
+
+        if appliedIndex < confirmedIndex {
+            select {
+            case <-s.applyWait.Wait(confirmedIndex):
+            case <-s.stopping:
+                return
+            }
+        }
+        // unblock all l-reads requested at indices before confirmedIndex
+        nr.notify(nil)
+        trace.Step("applied index is now lower than readState.Index")
+    }
+}
+```
+linearizableReadLoop的信号的直接来源是linearizableReadNotify
+
+```go
+func (s *EtcdServer) linearizableReadNotify(ctx context.Context) error {
+    s.readMu.RLock()
+    nc := s.readNotifier
+    s.readMu.RUnlock()
+
+    // signal linearizable loop for current notify if it hasn't been already
+    select {
+    case s.readwaitc <- struct{}{}:
+    default:
+    }
+
+    // wait for read state notification
+    select {
+    case <-nc.c:
+        return nc.err
+    case <-ctx.Done():
+        return ctx.Err()
+    case <-s.done:
+        return ErrStopped
+    }
+}
+```
+
+linearizableReadNotify会在Range/Txn/Authenticate等多处中被调用
+
+```go
+func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResponse, error) {
+    // ...
+    if !r.Serializable {
+        err = s.linearizableReadNotify(ctx)
+    }
+    // ...
+}
+```
+
+
+
+```go
+
+func stepLeader(r *raft, m pb.Message) error {
+    // These message types do not require any progress for m.From.
+    switch m.Type {
+    // ...
+    case pb.MsgReadIndex:
+        // Postpone read only request when this leader has not committed
+        // any log entry at its term.
+        if !r.committedEntryInCurrentTerm() {
+            r.pendingReadIndexMessages = append(r.pendingReadIndexMessages, m)
+            return nil
+        }
+
+        sendMsgReadIndexResponse(r, m)
+
+        return nil
+    }
+    // ...
+     
+    return nil
+}
+
+// committedEntryInCurrentTerm return true if the peer has committed an entry in its term.
+func (r *raft) committedEntryInCurrentTerm() bool {
+	return r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(r.raftLog.committed)) == r.Term
+}
+
+
+
+func sendMsgReadIndexResponse(r *raft, m pb.Message) {
+	// thinking: use an internally defined context instead of the user given context.
+	// We can express this in terms of the term and index instead of a user-supplied value.
+	// This would allow multiple reads to piggyback on the same message.
+	switch r.readOnly.option {
+	// If more than the local vote is needed, go through a full broadcast.
+	case ReadOnlySafe:
+		r.readOnly.addRequest(r.raftLog.committed, m)
+		// The local node automatically acks the request.
+		r.readOnly.recvAck(r.id, m.Entries[0].Data)
+		r.bcastHeartbeatWithCtx(m.Entries[0].Data)
+	case ReadOnlyLeaseBased:
+		if resp := r.responseToReadIndexReq(m, r.raftLog.committed); resp.To != None {
+			r.send(resp)
+		}
+	}
+}
+```
+
+
+
+
+ddRequest()会把这个读请求到达时的leader的commit index保存起来，并且维护一些状态信息
+
+```go
+// addRequest adds a read only request into readonly struct.
+// `index` is the commit index of the raft state machine when it received
+// the read only request.
+// `m` is the original read only request message from the local or remote node.
+func (ro *readOnly) addRequest(index uint64, m pb.Message) {
+    s := string(m.Entries[0].Data)
+    if _, ok := ro.pendingReadIndex[s]; ok {
+        return
+    }
+    ro.pendingReadIndex[s] = &readIndexStatus{index: index, req: m, acks: make(map[uint64]bool)}
+    ro.readIndexQueue = append(ro.readIndexQueue, s)
+}
+```
+bcastHeartbeatWithCtx()则向其他Followers节点发送心跳消息MsgHeartbeat
+
+
+```go
+func (r *raft) bcastHeartbeatWithCtx(ctx []byte) {
+    r.prs.Visit(func(id uint64, _ *tracker.Progress) {
+        if id == r.id {
+            return
+        }
+        r.sendHeartbeat(id, ctx)
+    })
+}
+```
+
+
+
+
+```go
 
 
 
 
 
-
-
-
-
+```
 
 
 ## Links

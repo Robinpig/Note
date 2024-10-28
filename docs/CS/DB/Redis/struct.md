@@ -111,55 +111,18 @@ The following is the list of all the data structures supported by Redis, which w
 <!-- tabs:end -->
 
 
-<div style="text-align: center;">
+<table id="tfhover" class="tftable" border="1">
+<tr><th>Data Type</th><th>Desc</th><th>Encoding</th><th>struct</th><th>Header 5</th></tr>
+<tr> <td rowspan="3">OBJ_STRING</td> <td rowspan="3">string </td><td> </td><td> </td><td> </td></tr>
 
+<tr><td>  </td><td> </td><td> </td></tr>
+<tr><td>  </td><td> </td><td> </td></tr>
+<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
+</table>
 
-```dot
-strict digraph  {
-autosize=false;
-
-
-  subgraph cluster_Type {
-        label="object"
-      
-        {rank="same";stream;list;set;hash;zset;string;}
-  }
-
-  subgraph cluster_Encoding {
-      label="encoding"
-      stream_encoding[label="stream"]
- 
-    {rank="same";quicklist;intset;dict;ziplist;skiplist;int;emstr;raw;stream_encoding;}
-  }
-  
- list -> quicklist;
-
- set -> intset;
- set -> dict;
- 
- hash -> dict;
- hash -> ziplist;
-
- zset -> ziplist;
- zset -> skiplist; 
- 
- string -> int;
- string -> emstr;
- string -> raw;
- 
- stream -> stream_encoding;
-  
-
-}
-```
-
-
-
-</div>
-
-<p style="text-align: center;">
-Fig.1. Structs
-</p>
 
 
 ![](https://substackcdn.com/image/fetch/f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F36232d4c-1720-4ca0-81db-bbb6df5f95a2_1600x687.png)

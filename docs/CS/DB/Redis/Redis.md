@@ -56,6 +56,24 @@ Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时
 
 
 
+## Build
+
+##### **Mac**
+
+```shell
+make MALLOC=jemalloc CFLAGS="-g -O0" 
+```
+Some build issues:
+| Issue                                               | Fix                                                     | References                                                   |
+| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| error: variable has incomplete type 'struct stat64' | add `#define MAC_OS_X_VERSION_10_6` into `src/config.h` | [Build Issue in arm](https://github.com/redis/redis/issues/12585) |      
+
+
+
+
+
+
+
 ## Architecture
 
 

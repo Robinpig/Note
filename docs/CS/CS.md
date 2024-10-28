@@ -134,7 +134,7 @@ These specifications are part of the Jakarta EE platform.
 
 [Lock](/docs/CS/Lock.md)
 
-[Limiter](/docs/CS/Limiter.md)
+[Limiter](/docs/CS/RateLimiter)
 
 
 

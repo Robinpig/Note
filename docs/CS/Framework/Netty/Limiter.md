@@ -12,4 +12,4 @@ AbstractTrafficShapingHandler
 
 
 ## Links
-- [Limiter](/docs/CS/Limiter.md)
+- [Limiter](/docs/CS/RateLimiter)

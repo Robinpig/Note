@@ -140,23 +140,14 @@ then the overall effect can be to reduce latency, even though more requests are 
 
 > Ref [building.md](https://github.com/openjdk/jdk/blob/master/doc/building.md)
 
+支持编译的平台:
+[Supported Build Platforms](https://wiki.openjdk.org/display/Build/Supported+Build+Platforms)
+
+Mac aarch64从jdk11开始支持
+
 Prepare environment:
 
 <!-- tabs:start -->
-
-##### **Ubuntu**
-
-```shell
-sudo apt-get install autoconf make zip
-sudo apt-get install libffi-dev
-sudo apt-get install build-essential 
-sudo apt-get install libasound2-dev 
-sudo apt-get install libcups2-dev 
-sudo apt-get install libfontconfig1-dev 
-sudo apt-get install libx11-dev libxext-dev libxrender-dev libxrandr-dev libxtst-dev libxt-dev 
-```
-
-
 
 ##### **MacOS**
 
