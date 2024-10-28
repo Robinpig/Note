@@ -1710,22 +1710,261 @@ func (l *raftLog) findConflict(ents []pb.Entry) uint64 {
 
 ## ReadIndex
 
-当收到一个线性读请求时，被请求的server首先会从Leader获取集群最新的已提交的日志索引(committed index)
+从raft协议可知，leader拥有最新的状态，如果读请求都走leader，那么leader可以直接返回结果给客户端。
+然而，在出现网络分区和时钟快慢相差比较大的情况下，这有可能会返回老的数据，即stale read，这违反了Linearizable Read。
+例如，leader和其他followers之间出现网络分区，其他followers已经选出了新的leader，并且新的leader已经commit了一堆数据，
+然而由于不同机器的时钟走的快慢不一，原来的leader可能并没有发觉自己的lease过期，仍然认为自己还是合法的leader直接给客户端返回结果，从而导致了stale read
 
-Leader收到ReadIndex请求时，为防止脑裂等异常场景，会向Follower节点发送心跳确认，一半以上节点确认Leader身份后才能将已提交的索引(committed index)返回给节点C
+Raft作者提出了一种叫做ReadIndex的方案：
+当leader接收到读请求时，将当前commit index记录下来，记作read index，在返回结果给客户端之前，leader需要先确定自己到底还是不是真的leader，
+确定的方法就是给其他所有peers发送一次心跳，如果收到了多数派的响应，说明至少这个读请求到达这个节点时，这个节点仍然是leader，
+这时只需要等到commit index被apply到状态机后，即可返回结果
 
-被请求节点则会等待，直到状态机已应用索引(applied index)大于等于Leader的已提交索引时(committed Index)(上图中的流程四)，然后去通知读请求，数据已赶上Leader，你可以去状态机中访问数据了
+```go
+func (n *node) ReadIndex(ctx context.Context, rctx []byte) error {
+    return n.step(ctx, pb.Message{Type: pb.MsgReadIndex, Entries: []pb.Entry{{Data: rctx}}})
+}
+```
 
-以上就是线性读通过ReadIndex机制保证数据一致性原理， 当然还有其它机制也能实现线性读，如在早期etcd 3.0中读请求通过走一遍Raft协议保证一致性， 这种Raft log read机制依赖磁盘IO， 性能相比ReadIndex较差
+ReadIndex流程总四步:
+1. leader check自己是否在当前term commit过entry
+2. leader记录下当前commit index，然后leader给所有peers发心跳广播
+3. 收到多数派响应代表读请求到达时还是leader，然后等待apply index大于等于commit index
+4. 返回结果
+
+
+ReadState provides state for read only query.
+It's caller's responsibility to call ReadIndex first before getting this state from ready, it's also caller's duty to differentiate if this state is what it requests through RequestCtx, eg. given a unique id as RequestCtx
+
+```go
+type ReadState struct {
+    Index      uint64
+    RequestCtx []byte
+}
+```
+readIndexStatus用来追踪Leader向Followers发送的心跳信息的响应
+
+
+```go
+type readIndexStatus struct {
+    req   pb.Message
+    index uint64
+    // NB: this never records 'false', but it's more convenient to use this
+    // instead of a map[uint64]struct{} due to the API of quorum.VoteResult. If
+    // this becomes performance sensitive enough (doubtful), quorum.VoteResult
+    // can change to an API that is closer to that of CommittedIndex.
+    acks map[uint64]bool
+}
+```
+readOnly管理全局的读ReadIndex请求
+
+```go
+type readOnly struct {
+    option           ReadOnlyOption
+    pendingReadIndex map[string]*readIndexStatus
+    readIndexQueue   []string
+}
+```
+etcd-server在启动时会创建一个后台协程，运行的方法是：linearizableReadLoop，如下
+
+```go
+func (s *EtcdServer) Start() { 
+    s.start()
+    s.goAttach(func() { s.publish(s.Cfg.ReqTimeout()) }) 
+    s.goAttach(s.purgeFile)
+    s.goAttach(func() { monitorFileDescriptor(s.stopping) }) 
+    s.goAttach(s.monitorVersions)
+    s.goAttach(s.linearizableReadLoop)
+    s.goAttach(s.monitorKVHash)
+}
+```
+这个goroutine等着有读请求的信号，并且在有信号来的时候调用底层的raft核心协议处理层来获取信号发生时刻的commit index
+
+
+```go
+func (s *EtcdServer) linearizableReadLoop() {
+    for {
+        requestId := s.reqIDGen.Next()
+        leaderChangedNotifier := s.LeaderChangedNotify()
+        select {
+        case <-leaderChangedNotifier:
+            continue
+        case <-s.readwaitc:
+        case <-s.stopping:
+            return
+        }
+
+        // as a single loop is can unlock multiple reads, it is not very useful
+        // to propagate the trace from Txn or Range.
+        trace := traceutil.New("linearizableReadLoop", s.Logger())
+
+        nextnr := newNotifier()
+        s.readMu.Lock()
+        nr := s.readNotifier
+        s.readNotifier = nextnr
+        s.readMu.Unlock()
+
+        confirmedIndex, err := s.requestCurrentIndex(leaderChangedNotifier, requestId)
+        if isStopped(err) {
+            return
+        }
+        if err != nil {
+            nr.notify(err)
+            continue
+        }
+
+        trace.Step("read index received")
+
+        trace.AddField(traceutil.Field{Key: "readStateIndex", Value: confirmedIndex})
+
+        appliedIndex := s.getAppliedIndex()
+        trace.AddField(traceutil.Field{Key: "appliedIndex", Value: strconv.FormatUint(appliedIndex, 10)})
+
+        if appliedIndex < confirmedIndex {
+            select {
+            case <-s.applyWait.Wait(confirmedIndex):
+            case <-s.stopping:
+                return
+            }
+        }
+        // unblock all l-reads requested at indices before confirmedIndex
+        nr.notify(nil)
+        trace.Step("applied index is now lower than readState.Index")
+    }
+}
+```
+linearizableReadLoop的信号的直接来源是linearizableReadNotify
+
+```go
+func (s *EtcdServer) linearizableReadNotify(ctx context.Context) error {
+    s.readMu.RLock()
+    nc := s.readNotifier
+    s.readMu.RUnlock()
+
+    // signal linearizable loop for current notify if it hasn't been already
+    select {
+    case s.readwaitc <- struct{}{}:
+    default:
+    }
+
+    // wait for read state notification
+    select {
+    case <-nc.c:
+        return nc.err
+    case <-ctx.Done():
+        return ctx.Err()
+    case <-s.done:
+        return ErrStopped
+    }
+}
+```
+
+linearizableReadNotify会在Range/Txn/Authenticate等多处中被调用
+
+```go
+func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeResponse, error) {
+    // ...
+    if !r.Serializable {
+        err = s.linearizableReadNotify(ctx)
+    }
+    // ...
+}
+```
+
+
+
+```go
+
+func stepLeader(r *raft, m pb.Message) error {
+    // These message types do not require any progress for m.From.
+    switch m.Type {
+    // ...
+    case pb.MsgReadIndex:
+        // Postpone read only request when this leader has not committed
+        // any log entry at its term.
+        if !r.committedEntryInCurrentTerm() {
+            r.pendingReadIndexMessages = append(r.pendingReadIndexMessages, m)
+            return nil
+        }
+
+        sendMsgReadIndexResponse(r, m)
+
+        return nil
+    }
+    // ...
+     
+    return nil
+}
+
+// committedEntryInCurrentTerm return true if the peer has committed an entry in its term.
+func (r *raft) committedEntryInCurrentTerm() bool {
+	return r.raftLog.zeroTermOnErrCompacted(r.raftLog.term(r.raftLog.committed)) == r.Term
+}
+
+
+
+func sendMsgReadIndexResponse(r *raft, m pb.Message) {
+	// thinking: use an internally defined context instead of the user given context.
+	// We can express this in terms of the term and index instead of a user-supplied value.
+	// This would allow multiple reads to piggyback on the same message.
+	switch r.readOnly.option {
+	// If more than the local vote is needed, go through a full broadcast.
+	case ReadOnlySafe:
+		r.readOnly.addRequest(r.raftLog.committed, m)
+		// The local node automatically acks the request.
+		r.readOnly.recvAck(r.id, m.Entries[0].Data)
+		r.bcastHeartbeatWithCtx(m.Entries[0].Data)
+	case ReadOnlyLeaseBased:
+		if resp := r.responseToReadIndexReq(m, r.raftLog.committed); resp.To != None {
+			r.send(resp)
+		}
+	}
+}
+```
+
+
+
+
+ddRequest()会把这个读请求到达时的leader的commit index保存起来，并且维护一些状态信息
+
+```go
+// addRequest adds a read only request into readonly struct.
+// `index` is the commit index of the raft state machine when it received
+// the read only request.
+// `m` is the original read only request message from the local or remote node.
+func (ro *readOnly) addRequest(index uint64, m pb.Message) {
+    s := string(m.Entries[0].Data)
+    if _, ok := ro.pendingReadIndex[s]; ok {
+        return
+    }
+    ro.pendingReadIndex[s] = &readIndexStatus{index: index, req: m, acks: make(map[uint64]bool)}
+    ro.readIndexQueue = append(ro.readIndexQueue, s)
+}
+```
+bcastHeartbeatWithCtx()则向其他Followers节点发送心跳消息MsgHeartbeat
+
+
+```go
+func (r *raft) bcastHeartbeatWithCtx(ctx []byte) {
+    r.prs.Visit(func(id uint64, _ *tracker.Progress) {
+        if id == r.id {
+            return
+        }
+        r.sendHeartbeat(id, ctx)
+    })
+}
+```
+
+
+
+
+```go
 
 
 
 
 
-
-
-
-
+```
 
 
 ## Links
