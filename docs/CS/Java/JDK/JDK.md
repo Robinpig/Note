@@ -153,8 +153,7 @@ Prepare environment:
 
 make sure you have installed Xcode
 ```shell
-brew install ccache
-brew install freetype
+brew install ccache freetype autoconf
 ```
 
 <!-- tabs:end -->
