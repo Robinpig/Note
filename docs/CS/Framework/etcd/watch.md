@@ -24,7 +24,123 @@ type EventHistory struct {
 它的缺陷显而易见的，固定的事件窗口只能保存有限的历史事件版本，是不可靠的。当写请求较多的时候、client与server网络出现波动等异常时，很容易导致事件丢失，client不得不触发大量的expensive查询操作，以获取最新的数据及版本号，才能持续监听数据。
 特别是对于重度依赖Watch机制的Kubernetes来说，显然是无法接受的。因为这会导致控制器等组件频繁的发起expensive List Pod等资源操作，导致APIServer/etcd出现高负载、OOM等，对稳定性造成极大的伤害
 
-watch请求流程
+
+```go
+type watcher struct {
+    // the watcher key
+    key []byte
+    // end indicates the end of the range to watch.
+    // If end is set, the watcher is on a range.
+    end []byte
+
+    // victim is set when ch is blocked and undergoing victim processing
+    victim bool
+
+    // compacted is set when the watcher is removed because of compaction
+    compacted bool
+    restore bool
+
+    // minRev is the minimum revision update the watcher will accept
+    minRev int64
+    id     WatchID
+
+    fcs []FilterFunc
+    // a chan to send out the watch response.
+    // The chan might be shared with other watchers.
+    ch chan<- WatchResponse
+}
+```
+
+当watcher实例监听的key发生了变化 则使用一个Event实例进行表示
+
+```go
+type Event struct {
+    // type is the kind of event. If type is a PUT, it indicates
+    // new data has been stored to the key. If type is a DELETE,
+    // it indicates the key was deleted.
+    Type Event_EventType `protobuf:"varint,1,opt,name=type,proto3,enum=mvccpb.Event_EventType" json:"type,omitempty"`
+    // kv holds the KeyValue for the event.
+    // A PUT event contains current kv pair.
+    // A PUT event with kv.Version=1 indicates the creation of a key.
+    // A DELETE/EXPIRE event contains the deleted key with
+    // its modification revision set to the revision of deletion.
+    Kv *KeyValue `protobuf:"bytes,2,opt,name=kv,proto3" json:"kv,omitempty"`
+    // prev_kv holds the key-value pair before the event happens.
+    PrevKv               *KeyValue `protobuf:"bytes,3,opt,name=prev_kv,json=prevKv,proto3" json:"prev_kv,omitempty"`
+    XXX_NoUnkeyedLiteral struct{}  `json:"-"`
+    XXX_unrecognized     []byte    `json:"-"`
+    XXX_sizecache        int32     `json:"-"`
+}
+```
+
+eventBatch.add添加Event实例
+```go
+func (eb *eventBatch) add(ev mvccpb.Event) {
+    if eb.revs > watchBatchMaxRevs {
+        // maxed out batch size
+        return
+    }
+
+    if len(eb.evs) == 0 {
+        // base case
+        eb.revs = 1
+        eb.evs = append(eb.evs, ev)
+        return
+    }
+
+    // revision accounting
+    ebRev := eb.evs[len(eb.evs)-1].Kv.ModRevision
+    evRev := ev.Kv.ModRevision
+    if evRev > ebRev {
+        eb.revs++
+        if eb.revs > watchBatchMaxRevs {
+            eb.moreRev = evRev
+            return
+        }
+    }
+
+    eb.evs = append(eb.evs, ev)
+}
+```
+
+WatchResponse表示一次响应
+
+
+```go
+type WatchResponse struct {
+    Header *ResponseHeader `protobuf:"bytes,1,opt,name=header,proto3" json:"header,omitempty"`
+    // watch_id is the ID of the watcher that corresponds to the response.
+    WatchId int64 `protobuf:"varint,2,opt,name=watch_id,json=watchId,proto3" json:"watch_id,omitempty"`
+    // created is set to true if the response is for a create watch request.
+    // The client should record the watch_id and expect to receive events for
+    // the created watcher from the same stream.
+    // All events sent to the created watcher will attach with the same watch_id.
+    Created bool `protobuf:"varint,3,opt,name=created,proto3" json:"created,omitempty"`
+    // canceled is set to true if the response is for a cancel watch request.
+    // No further events will be sent to the canceled watcher.
+    Canceled bool `protobuf:"varint,4,opt,name=canceled,proto3" json:"canceled,omitempty"`
+    // compact_revision is set to the minimum index if a watcher tries to watch
+    // at a compacted index.
+    //
+    // This happens when creating a watcher at a compacted revision or the watcher cannot
+    // catch up with the progress of the key-value store.
+    //
+    // The client should treat the watcher as canceled and should not try to create any
+    // watcher with the same start_revision again.
+    CompactRevision int64 `protobuf:"varint,5,opt,name=compact_revision,json=compactRevision,proto3" json:"compact_revision,omitempty"`
+    // cancel_reason indicates the reason for canceling the watcher.
+    CancelReason string `protobuf:"bytes,6,opt,name=cancel_reason,json=cancelReason,proto3" json:"cancel_reason,omitempty"`
+    // framgment is true if large watch response was split over multiple responses.
+    Fragment             bool            `protobuf:"varint,7,opt,name=fragment,proto3" json:"fragment,omitempty"`
+    Events               []*mvccpb.Event `protobuf:"bytes,11,rep,name=events,proto3" json:"events,omitempty"`
+    XXX_NoUnkeyedLiteral struct{}        `json:"-"`
+    XXX_unrecognized     []byte          `json:"-"`
+    XXX_sizecache        int32           `json:"-"`
+}
+```
+
+
+## watch请求流程
 
 当你通过etcdctl或API发起一个watch key请求的时候，etcd的gRPCWatchServer收到watch请求后，会创建一个serverWatchStream, 它负责接收client的gRPC Stream的create/cancel watcher请求(recvLoop goroutine)，并将从MVCC模块接收的Watch事件转发给client(sendLoop goroutine)。
 当serverWatchStream收到create watcher请求后，serverWatchStream会调用MVCC模块的WatchStream子模块分配一个watcher id，并将watcher注册到MVCC的WatchableKV模块。
@@ -43,7 +159,8 @@ type WatchableKV interface {
 etcdctl watch hello -w=json –rev=1
 ```
 
-Watch特性的核心实现模块是watchableStore etcd根据不同场景将watcher分类，实现了轻重分离、低耦合。我首先给你介绍下synced watcher、unsynced watcher它们各自的含义。
+Watch特性的核心实现模块是watchableStore watchableStore结构体完成了注册watcher实例、管理watcher实例，以及发送触发watcher之后的响应等核心功能
+etcd根据不同场景将watcher分类，实现了轻重分离、低耦合。我首先给你介绍下synced watcher、unsynced watcher它们各自的含义。
 synced watcher，顾名思义，表示此类watcher监听的数据都已经同步完毕，在等待新的变更。
 如果你创建的watcher未指定版本号(默认0)、或指定的版本号大于etcd sever当前最新的版本号(currentRev)，那么它就会保存到synced watcherGroup中。watcherGroup负责管理多个watcher，能够根据key快速找到监听该key的一个或多个watcher。
 unsynced watcher，表示此类watcher监听的数据还未同步完成，落后于当前最新数据变更，正在努力追赶。
