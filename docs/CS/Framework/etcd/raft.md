@@ -2413,15 +2413,85 @@ func (r *raft) bcastHeartbeatWithCtx(ctx []byte) {
 ```
 
 
+当leader收到心跳响应消息MsgHeartbeatResp
+r.readOnly.advance(m)会返回m以前的所有的request id（m其实也就是应用调用ReadIndex时的请求id，而且请求id是单调递增的，因此当在某个时刻确认了请求id为m的主信息，那么m之前的主信息也认为是此）
+
+```go
+func stepLeader(r *raft, m pb.Message) error {
+    // ...
+    switch m.Type {
+    // ...
+    case pb.MsgHeartbeatResp:
+		pr.RecentActive = true
+		pr.ProbeSent = false
+
+		// free one slot for the full inflights window to allow progress.
+		if pr.State == tracker.StateReplicate && pr.Inflights.Full() {
+			pr.Inflights.FreeFirstOne()
+		}
+		if pr.Match < r.raftLog.lastIndex() {
+			r.sendAppend(m.From)
+		}
+
+		if r.readOnly.option != ReadOnlySafe || len(m.Context) == 0 {
+			return nil
+		}
+
+		if r.prs.Voters.VoteResult(r.readOnly.recvAck(m.From, m.Context)) != quorum.VoteWon {
+			return nil
+		}
+
+		rss := r.readOnly.advance(m)
+		for _, rs := range rss {
+			if resp := r.responseToReadIndexReq(rs.req, rs.index); resp.To != None {
+				r.send(resp)
+			}
+		}
+    }
+    // ...
+     
+    return nil
+}
+
+func (r *raft) responseToReadIndexReq(req pb.Message, readIndex uint64) pb.Message {
+	if req.From == None || req.From == r.id {
+		r.readStates = append(r.readStates, ReadState{
+			Index:      readIndex,
+			RequestCtx: req.Entries[0].Data,
+		})
+		return pb.Message{}
+	}
+	return pb.Message{
+		Type:    pb.MsgReadIndexResp,
+		To:      req.From,
+		Index:   readIndex,
+		Entries: req.Entries,
+	}
+}
+```
+
+在Follower节点上执行ReadIndex，那么它必须先要向Leader去查询commit index，然后收到响应后在创建ReadState记录commit信息，后续的处理和Leader别无二致
 
 
 ```go
-
-
-
-
+func stepFollower(r *raft, m pb.Message) error {
+    switch m.Type {
+    // ...
+    case pb.MsgReadIndex:
+        if r.lead == None {
+            return nil
+        }
+        m.To = r.lead
+        r.send(m)
+    case pb.MsgReadIndexResp:
+        r.readStates = append(r.readStates, ReadState{Index: m.Index, RequestCtx: m.Entries[0].Data})
+    }
+    return nil
+}
 
 ```
+
+
 
 
 ## Links
