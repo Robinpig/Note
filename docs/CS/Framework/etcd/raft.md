@@ -884,6 +884,335 @@ raft.StartNode()
  |     |-newReady()                   新建type Ready对象
  | |-raft.tick()      等待n.tickc管道，这里实际就是在上面赋值的tickElection()函数
  ```
+
+
+## storage
+
+
+### MemoryStorage
+
+MemoryStorage在内存中维护上述状态信息（hardState字段）、快照数据（snapshot字段）及所有的Entry记录（ents字段，[]raftpb.Entry类型），在MemoryStorage.ents字段中维 护 了 快 照 数 据 之 后 的 所 有 Entry 记 录
+MemoryStorage继承了sync.Mutex，MemoryStorage中的大部分操作是需要加锁同步的
+
+MemoryStorage implements the Storage interface backed by an in-memory array
+
+```go
+// 
+type MemoryStorage struct {
+    // Protects access to all fields. Most methods of MemoryStorage are
+    // run on the raft goroutine, but Append() is run on an application
+    // goroutine.
+    sync.Mutex
+
+    hardState pb.HardState
+    snapshot  pb.Snapshot
+    // ents[i] has raft log position i+snapshot.Metadata.Index
+    ents []pb.Entry
+}
+```
+
+MemoryStorage需要更新快照数据时 ， 会 调 用MemoryStorage.ApplySnapshot()方法将 SnapShot实例保存到MemoryStorage中，例如，在节点重启时，就会通过读取快照文件创建对应的SnapShot 实例， 然后保存到MemoryStorage中
+
+
+```go
+// ApplySnapshot overwrites the contents of this Storage object with
+// those of the given snapshot.
+func (ms *MemoryStorage) ApplySnapshot(snap pb.Snapshot) error {
+    ms.Lock()
+    defer ms.Unlock()
+
+    //handle check for old snapshot being applied
+    msIndex := ms.snapshot.Metadata.Index
+    snapIndex := snap.Metadata.Index
+    if msIndex >= snapIndex {
+        return ErrSnapOutOfDate
+    }
+
+    ms.snapshot = snap
+    ms.ents = []pb.Entry{{Term: snap.Metadata.Term, Index: snap.Metadata.Index}}
+    return nil
+}
+```
+
+
+```go
+// Append the new entries to storage.
+// TODO (xiangli): ensure the entries are continuous and
+// entries[0].Index > ms.entries[0].Index
+func (ms *MemoryStorage) Append(entries []pb.Entry) error {
+    if len(entries) == 0 {
+        return nil
+    }
+
+    ms.Lock()
+    defer ms.Unlock()
+
+    first := ms.firstIndex()
+    last := entries[0].Index + uint64(len(entries)) - 1
+
+    // shortcut if there is no new entry.
+    if last < first {
+        return nil
+    }
+    // truncate compacted entries
+    if first > entries[0].Index {
+        entries = entries[first-entries[0].Index:]
+    }
+
+    offset := entries[0].Index - ms.ents[0].Index
+    switch {
+    case uint64(len(ms.ents)) > offset:
+        ms.ents = append([]pb.Entry{}, ms.ents[:offset]...)
+        ms.ents = append(ms.ents, entries...)
+    case uint64(len(ms.ents)) == offset:
+        ms.ents = append(ms.ents, entries...)
+    default:
+        getLogger().Panicf("missing log entry [last: %d, append at: %d]",
+            ms.lastIndex(), entries[0].Index)
+    }
+    return nil
+}
+```
+
+Entries returns a slice of log entries in the range [lo,hi).
+MaxSize limits the total size of the log entries returned, but
+Entries returns at least one entry if any
+
+
+```go
+func (ms *MemoryStorage) Entries(lo, hi, maxSize uint64) ([]pb.Entry, error) {
+	ms.Lock()
+	defer ms.Unlock()
+	offset := ms.ents[0].Index
+	if lo <= offset {
+		return nil, ErrCompacted
+	}
+	if hi > ms.lastIndex()+1 {
+		getLogger().Panicf("entries' hi(%d) is out of bound lastindex(%d)", hi, ms.lastIndex())
+	}
+	// only contains dummy entries.
+	if len(ms.ents) == 1 {
+		return nil, ErrUnavailable
+	}
+
+	ents := ms.ents[lo-offset : hi-offset]
+	return limitSize(ents, maxSize), nil
+}
+
+func limitSize(ents []pb.Entry, maxSize uint64) []pb.Entry {
+	if len(ents) == 0 {
+		return ents
+	}
+	size := ents[0].Size()
+	var limit int
+	for limit = 1; limit < len(ents); limit++ {
+		size += ents[limit].Size()
+		if uint64(size) > maxSize {
+			break
+		}
+	}
+	return ents[:limit]
+}
+```
+MemoryStorage.Term（）方法与 Entries（）方法类似，也会进行一系列边界检测，最终通过MemoryStorage.ents字段读取指定Entry的Term值
+
+```go
+func (ms *MemoryStorage) Term(i uint64) (uint64, error) {
+    ms.Lock()
+    defer ms.Unlock()
+    offset := ms.ents[0].Index
+    if i < offset {
+        return 0, ErrCompacted
+    }
+    if int(i-offset) >= len(ms.ents) {
+        return 0, ErrUnavailable
+    }
+    return ms.ents[i-offset].Term, nil
+}
+```
+随着系统的运行，MemoryStorage.ents中保存的Entry记录会不断增加，为了减小内存的压力，定期创建快照来记录当前节点的状态并压缩 MemoryStorage.ents数组的空间是非常有必要的，这样就可以降低内存使用。
+```go
+// CreateSnapshot makes a snapshot which can be retrieved with Snapshot() and
+// can be used to reconstruct the state at that point.
+// If any configuration changes have been made since the last compaction,
+// the result of the last ApplyConfChange must be passed in.
+func (ms *MemoryStorage) CreateSnapshot(i uint64, cs *pb.ConfState, data []byte) (pb.Snapshot, error) {
+    ms.Lock()
+    defer ms.Unlock()
+    if i <= ms.snapshot.Metadata.Index {
+        return pb.Snapshot{}, ErrSnapOutOfDate
+    }
+
+    offset := ms.ents[0].Index
+    if i > ms.lastIndex() {
+        getLogger().Panicf("snapshot %d is out of bound lastindex(%d)", i, ms.lastIndex())
+    }
+
+    ms.snapshot.Metadata.Index = i
+    ms.snapshot.Metadata.Term = ms.ents[i-offset].Term
+    if cs != nil {
+        ms.snapshot.Metadata.ConfState = *cs
+    }
+    ms.snapshot.Data = data
+    return ms.snapshot, nil
+}
+```
+新建SnapShot之后，一般会调用MemoryStorage.Compact（）方法将MemoryStorage.ents中指定索引之前的Entry记录全部抛弃，从而实现压缩MemoryStorage.ents的目的
+
+```go
+// Compact discards all log entries prior to compactIndex.
+// It is the application's responsibility to not attempt to compact an index
+// greater than raftLog.applied.
+func (ms *MemoryStorage) Compact(compactIndex uint64) error {
+    ms.Lock()
+    defer ms.Unlock()
+    offset := ms.ents[0].Index
+    if compactIndex <= offset {
+        return ErrCompacted
+    }
+    if compactIndex > ms.lastIndex() {
+        getLogger().Panicf("compact %d is out of bound lastindex(%d)", compactIndex, ms.lastIndex())
+    }
+
+    i := compactIndex - offset
+    ents := make([]pb.Entry, 1, 1+uint64(len(ms.ents))-i)
+    ents[0].Index = ms.ents[i].Index
+    ents[0].Term = ms.ents[i].Term
+    ents = append(ents, ms.ents[i+1:]...)
+    ms.ents = ents
+    return nil
+}
+```
+
+
+EtcdServer::run
+```go
+func (s *EtcdServer) applyAll(ep *etcdProgress, apply *apply) {
+    s.applySnapshot(ep, apply)
+    s.applyEntries(ep, apply)
+
+    proposalsApplied.Set(float64(ep.appliedi))
+    s.applyWait.Trigger(ep.appliedi)
+
+    // wait for the raft routine to finish the disk writes before triggering a
+    // snapshot. or applied index might be greater than the last index in raft
+    // storage, since the raft routine might be slower than apply routine.
+    <-apply.notifyc
+
+    s.triggerSnapshot(ep)
+    select {
+    // snapshot requested via send()
+    case m := <-s.r.msgSnapC:
+        merged := s.createMergedSnapshotMessage(m, ep.appliedt, ep.appliedi, ep.confState)
+        s.sendMergedSnap(merged)
+    default:
+    }
+}
+```
+
+
+```go
+func (s *EtcdServer) triggerSnapshot(ep *etcdProgress) {
+    if ep.appliedi-ep.snapi <= s.Cfg.SnapshotCount {
+        return
+    }
+
+    lg := s.Logger()
+    lg.Info(
+        "triggering snapshot",
+        zap.String("local-member-id", s.ID().String()),
+        zap.Uint64("local-member-applied-index", ep.appliedi),
+        zap.Uint64("local-member-snapshot-index", ep.snapi),
+        zap.Uint64("local-member-snapshot-count", s.Cfg.SnapshotCount),
+    )
+
+    s.snapshot(ep.appliedi, ep.confState)
+    ep.snapi = ep.appliedi
+}
+```
+
+
+```go
+// TODO: non-blocking snapshot
+func (s *EtcdServer) snapshot(snapi uint64, confState raftpb.ConfState) {
+    clone := s.v2store.Clone()
+    // commit kv to write metadata (for example: consistent index) to disk.
+    //
+    // This guarantees that Backend's consistent_index is >= index of last snapshot.
+    //
+    // KV().commit() updates the consistent index in backend.
+    // All operations that update consistent index must be called sequentially
+    // from applyAll function.
+    // So KV().Commit() cannot run in parallel with apply. It has to be called outside
+    // the go routine created below.
+    s.KV().Commit()
+
+    s.GoAttach(func() {
+        lg := s.Logger()
+
+        d, err := clone.SaveNoCopy()
+        // TODO: current store will never fail to do a snapshot
+        // what should we do if the store might fail?
+        if err != nil {
+            lg.Panic("failed to save v2 store", zap.Error(err))
+        }
+        snap, err := s.r.raftStorage.CreateSnapshot(snapi, &confState, d)
+        if err != nil {
+            // the snapshot was done asynchronously with the progress of raft.
+            // raft might have already got a newer snapshot.
+            if err == raft.ErrSnapOutOfDate {
+                return
+            }
+            lg.Panic("failed to create snapshot", zap.Error(err))
+        }
+        // SaveSnap saves the snapshot to file and appends the corresponding WAL entry.
+        if err = s.r.storage.SaveSnap(snap); err != nil {
+            lg.Panic("failed to save snapshot", zap.Error(err))
+        }
+        if err = s.r.storage.Release(snap); err != nil {
+            lg.Panic("failed to release wal", zap.Error(err))
+        }
+
+        lg.Info(
+            "saved snapshot",
+            zap.Uint64("snapshot-index", snap.Metadata.Index),
+        )
+
+        // When sending a snapshot, etcd will pause compaction.
+        // After receives a snapshot, the slow follower needs to get all the entries right after
+        // the snapshot sent to catch up. If we do not pause compaction, the log entries right after
+        // the snapshot sent might already be compacted. It happens when the snapshot takes long time
+        // to send and save. Pausing compaction avoids triggering a snapshot sending cycle.
+        if atomic.LoadInt64(&s.inflightSnapshots) != 0 {
+            lg.Info("skip compaction since there is an inflight snapshot")
+            return
+        }
+
+        // keep some in memory log entries for slow followers.
+        compacti := uint64(1)
+        if snapi > s.Cfg.SnapshotCatchUpEntries {
+            compacti = snapi - s.Cfg.SnapshotCatchUpEntries
+        }
+
+        err = s.r.raftStorage.Compact(compacti)
+        if err != nil {
+            // the compaction was done asynchronously with the progress of raft.
+            // raft log might already been compact.
+            if err == raft.ErrCompacted {
+                return
+            }
+            lg.Panic("failed to compact", zap.Error(err))
+        }
+        lg.Info(
+            "compacted Raft logs",
+            zap.Uint64("compact-index", compacti),
+        )
+    })
+}
+```
+
+
+
 ## raft
 
 etcd-raft 最大设计亮点就是抽离了网络、持久化、协程等逻辑，用一个纯粹的 raft StateMachine 来实现 raft 算法逻辑，充分的解耦，有助于 raft 算法本身的正确实现，而且更容易纯粹的去测试 raft 算法最本质的逻辑，而不需要考虑引入其他因素（各种异常）
@@ -1111,7 +1440,135 @@ Ready
 
 
 
+### raft struct
 
+```go
+
+func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+    start := time.Now()
+
+    if r.Method != "POST" {
+        w.Header().Set("Allow", "POST")
+        http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+        snapshotReceiveFailures.WithLabelValues(unknownSnapshotSender).Inc()
+        return
+    }
+
+    w.Header().Set("X-Etcd-Cluster-ID", h.cid.String())
+
+    if err := checkClusterCompatibilityFromHeader(h.lg, h.localID, r.Header, h.cid); err != nil {
+        http.Error(w, err.Error(), http.StatusPreconditionFailed)
+        snapshotReceiveFailures.WithLabelValues(unknownSnapshotSender).Inc()
+        return
+    }
+
+    addRemoteFromRequest(h.tr, r)
+
+    dec := &messageDecoder{r: r.Body}
+    // let snapshots be very large since they can exceed 512MB for large installations
+    m, err := dec.decodeLimit(snapshotLimitByte)
+    from := types.ID(m.From).String()
+    if err != nil {
+        msg := fmt.Sprintf("failed to decode raft message (%v)", err)
+        h.lg.Warn(
+            "failed to decode Raft message",
+            zap.String("local-member-id", h.localID.String()),
+            zap.String("remote-snapshot-sender-id", from),
+            zap.Error(err),
+        )
+        http.Error(w, msg, http.StatusBadRequest)
+        recvFailures.WithLabelValues(r.RemoteAddr).Inc()
+        snapshotReceiveFailures.WithLabelValues(from).Inc()
+        return
+    }
+
+    msgSize := m.Size()
+    receivedBytes.WithLabelValues(from).Add(float64(msgSize))
+
+    if m.Type != raftpb.MsgSnap {
+        h.lg.Warn(
+            "unexpected Raft message type",
+            zap.String("local-member-id", h.localID.String()),
+            zap.String("remote-snapshot-sender-id", from),
+            zap.String("message-type", m.Type.String()),
+        )
+        http.Error(w, "wrong raft message type", http.StatusBadRequest)
+        snapshotReceiveFailures.WithLabelValues(from).Inc()
+        return
+    }
+
+    snapshotReceiveInflights.WithLabelValues(from).Inc()
+    defer func() {
+        snapshotReceiveInflights.WithLabelValues(from).Dec()
+    }()
+
+    h.lg.Info(
+        "receiving database snapshot",
+        zap.String("local-member-id", h.localID.String()),
+        zap.String("remote-snapshot-sender-id", from),
+        zap.Uint64("incoming-snapshot-index", m.Snapshot.Metadata.Index),
+        zap.Int("incoming-snapshot-message-size-bytes", msgSize),
+        zap.String("incoming-snapshot-message-size", humanize.Bytes(uint64(msgSize))),
+    )
+
+    // save incoming database snapshot.
+
+    n, err := h.snapshotter.SaveDBFrom(r.Body, m.Snapshot.Metadata.Index)
+    if err != nil {
+        msg := fmt.Sprintf("failed to save KV snapshot (%v)", err)
+        h.lg.Warn(
+            "failed to save incoming database snapshot",
+            zap.String("local-member-id", h.localID.String()),
+            zap.String("remote-snapshot-sender-id", from),
+            zap.Uint64("incoming-snapshot-index", m.Snapshot.Metadata.Index),
+            zap.Error(err),
+        )
+        http.Error(w, msg, http.StatusInternalServerError)
+        snapshotReceiveFailures.WithLabelValues(from).Inc()
+        return
+    }
+
+    receivedBytes.WithLabelValues(from).Add(float64(n))
+
+    downloadTook := time.Since(start)
+    h.lg.Info(
+        "received and saved database snapshot",
+        zap.String("local-member-id", h.localID.String()),
+        zap.String("remote-snapshot-sender-id", from),
+        zap.Uint64("incoming-snapshot-index", m.Snapshot.Metadata.Index),
+        zap.Int64("incoming-snapshot-size-bytes", n),
+        zap.String("incoming-snapshot-size", humanize.Bytes(uint64(n))),
+        zap.String("download-took", downloadTook.String()),
+    )
+
+    if err := h.r.Process(context.TODO(), m); err != nil {
+        switch v := err.(type) {
+        // Process may return writerToResponse error when doing some
+        // additional checks before calling raft.Node.Step.
+        case writerToResponse:
+            v.WriteTo(w)
+        default:
+            msg := fmt.Sprintf("failed to process raft message (%v)", err)
+            h.lg.Warn(
+                "failed to process Raft message",
+                zap.String("local-member-id", h.localID.String()),
+                zap.String("remote-snapshot-sender-id", from),
+                zap.Error(err),
+            )
+            http.Error(w, msg, http.StatusInternalServerError)
+            snapshotReceiveFailures.WithLabelValues(from).Inc()
+        }
+        return
+    }
+
+    // Write StatusNoContent header after the message has been processed by
+    // raft, which facilitates the client to report MsgSnap status.
+    w.WriteHeader(http.StatusNoContent)
+
+    snapshotReceive.WithLabelValues(from).Inc()
+    snapshotReceiveSeconds.WithLabelValues(from).Observe(time.Since(start).Seconds())
+}
+```
 
 
 ### run
