@@ -774,6 +774,24 @@ type Node interface {
 ```
 
 
+node结构体是Node接口的实现之一
+```go
+type node struct {
+    propc      chan msgWithResult
+    recvc      chan pb.Message
+    confc      chan pb.ConfChangeV2
+    confstatec chan pb.ConfState
+    readyc     chan Ready
+    advancec   chan struct{}
+    tickc      chan struct{}
+    done       chan struct{}
+    stop       chan struct{}
+    status     chan chan Status
+
+    rn *RawNode
+}
+```
+
 
 `Node`结构中的方法按调用时机可以分为三类：
 
@@ -885,6 +903,59 @@ raft.StartNode()
  | |-raft.tick()      等待n.tickc管道，这里实际就是在上面赋值的tickElection()函数
  ```
 
+
+```go
+func StartNode(c *Config, peers []Peer) Node {
+    if len(peers) == 0 {
+        panic("no peers given; use RestartNode instead")
+    }
+    rn, err := NewRawNode(c)
+    if err != nil {
+        panic(err)
+    }
+    rn.Bootstrap(peers)
+
+    n := newNode(rn)
+
+    go n.run()
+    return &n
+}
+
+func NewRawNode(config *Config) (*RawNode, error) {
+	r := newRaft(config)
+	rn := &RawNode{
+		raft: r,
+	}
+	rn.prevSoftSt = r.softState()
+	rn.prevHardSt = r.hardState()
+	return rn, nil
+}
+```
+
+```go
+func newNode(rn *RawNode) node {
+    return node{
+        propc:      make(chan msgWithResult),
+        recvc:      make(chan pb.Message),
+        confc:      make(chan pb.ConfChangeV2),
+        confstatec: make(chan pb.ConfState),
+        readyc:     make(chan Ready),
+        advancec:   make(chan struct{}),
+        // make tickc a buffered chan, so raft node can buffer some ticks when the node
+        // is busy processing raft messages. Raft node will resume process buffered
+        // ticks when it becomes idle.
+        tickc:  make(chan struct{}, 128),
+        done:   make(chan struct{}),
+        stop:   make(chan struct{}),
+        status: make(chan chan Status),
+        rn:     rn,
+    }
+}
+```
+
+### run
+
+node.run()方法会处理node结构体中封装的全部通道
 
 ## storage
 
