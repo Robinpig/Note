@@ -23,13 +23,10 @@ etcd 是 Kubernetes 的后端唯一存储实现
 >
 > 其次ZooKeeper是用 Java 编写的，部署较繁琐，占用较多的内存资源，同时ZooKeeper RPC的序列化机制用的是Jute，自己实现的RPC API。无法使用curl之类的常用工具与之互动，CoreOS期望使用比较简单的HTTP + JSON
 
-
 ## Build
 
 为了保证etcd可运行，我们先在根目录上运行go mod tidy，保证依赖库没有问题。
 接着，我们阅读Makefile文件，发现其提供了make build指令。运行后，在bin目录下生成了etcd/etcdctl/etcdutl三个可执行文件，并且打印出了版本信息
-
-
 
 ### Deployment
 
@@ -41,18 +38,13 @@ etcd 是 Kubernetes 的后端唯一存储实现
 goreman -f Procfile start
 ```
 
-
 动态发现
 
 DNS发现
 
-
-
 ## Architecture
 
-
 etcd 整体架构如下图所示：
-
 
 <div style="text-align: center;">
 
@@ -71,7 +63,6 @@ Fig.1. Architecture
 - raft 状态机：根据接受的 raft 消息进行状态转移，调用各状态下的动作。
 - **功能逻辑层**：etcd核心特性实现层，如典型的KVServer模块、MVCC模块、Auth鉴权模块、Lease租约模块、Compactor压缩模块等，其中MVCC模块主要由treeIndex模块和boltdb模块组成
 - storage：存储层包含预写日志(WAL)模块、快照(Snapshot)模块、boltdb模块。其中WAL可保障etcd crash后数据不丢失，boltdb则保存了集群元数据和用户写入的数据
-
 
 etcd v2的问题
 
@@ -102,6 +93,7 @@ etcd v3就是为了解决以上稳定性、扩展性、性能问题而诞生的�
 在 Etcd v2 与 v3 两个版本中，使用的存储方式完全不同，所以两个版本的数据并不兼容，对外提供的接口也是不一样的，不同版本的数据是相互隔离的，只能使用对应的版本去存储与获取
 
 在v3中，store的实现分为两部分
+
 - backend store：可以使用不同的存储，默认使用BoltDB(单机的支持事务的键值对存储)
 - 内存索引，基于 http://github.com/google/btree 的b树索引实现
 
@@ -110,16 +102,9 @@ etcd 在 BoltDB 中存储的 key是 revision，value 是 etcd 自定义的键值
 
 v3版本的存储废弃了树形的存储结构但是可以通过前缀的方式来模拟 更接近ZooKeeper的实现
 
-
-
 EtcdServer:是整个 etcd 节点的功能的入口，包含 etcd 节点运行过程中需要的大部分成员。
 
-
-
 raftNode 是 Raft 节点，维护 Raft 状态机的步进和状态迁移
-
-
-
 
 ### Data Model
 
@@ -167,8 +152,8 @@ type Etcd struct {
 }
 ```
 
-
 启动调用链过程
+
 ```
 main()                                etcdmain/main.go
  |-checkSupportArch()
@@ -178,7 +163,7 @@ main()                                etcdmain/main.go
    |-startEtcd()
      // 为客户端/服务器通信启动etcd服务器和HTTP处理程序。
    | |-embed.StartEtcd()              embed/etcd.go 
-   |   |-configurePeerListeners()      
+   |   |-configurePeerListeners()    
    |   |-configureClientListeners()
    |   |-EtcdServer.ServerConfig()    生成新的配置
    |   |-EtcdServer.NewServer()       etcdserver/server.go 启动Raft服务
@@ -205,7 +190,6 @@ main()                                etcdmain/main.go
  
 ```
 
-
 主入口函数 etcdmain.Main
 
 ```go
@@ -228,8 +212,8 @@ func Main(args []string) {
 }
 ```
 
-
 startEtcdOrProxyV2
+
 ```go
 func startEtcdOrProxyV2(args []string) {
     grpc.EnableTracing = false
@@ -395,10 +379,10 @@ func startEtcdOrProxyV2(args []string) {
 ### startEtcd
 
 这个函数的功能：
+
 1. 启动etcd，如果失败则通过error返回；
 2. 启动etcd后，本节点会加入到整个集群中，就绪后则通过channele.Server.ReadyNotify()收到消息；
 3. 启动etcd后，如果遇到异常，则会通过channele.Server.StopNotify()收到消息；
-
 
 ```go
 // startEtcd runs StartEtcd in addition to hooks needed for standalone etcd.
@@ -418,7 +402,6 @@ func startEtcd(cfg *embed.Config) (<-chan struct{}, <-chan error, error) {
 
 StartEtcd launches the etcd server and HTTP handlers for client/server communication.
 The returned Etcd.Server is not guaranteed to have joined the cluster. Wait on the Etcd.Server.ReadyNotify() channel to know when it completes and is ready for use.
-
 
 ```go
 func StartEtcd(inCfg *Config) (e *Etcd, err error) {
@@ -484,7 +467,6 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
     // ...
     }
 ```
-
 
 ```go
 func StartEtcd(inCfg *Config) (e *Etcd, err error) {
@@ -610,11 +592,10 @@ func StartEtcd(inCfg *Config) (e *Etcd, err error) {
 }
 ```
 
-
-
 ### EtcdServer::NewServer
 
 函数调用关系链
+
 ```
 NewServer()  etcdserver/server.go 通过配置创建一个新的EtcdServer对象，不同场景不同
  |-bootstrap(cfg)
@@ -641,11 +622,12 @@ NewServer()  etcdserver/server.go 通过配置创建一个新的EtcdServer对象
  |   |-go node.run()                     循环运行节点监听任务
 |-lease.NewLessor()                 恢复Lessor状态 mvcc.New
  |- mvcc.New()                      新建mvcc存储管理对象
- |-auth.NewAuthStore()               
+ |-auth.NewAuthStore()             
  
 ```
 
 serveCtx:serve
+
 ```go
 // serve accepts incoming connections on the listener l,
 // creating a new service goroutine for each. The service goroutines
@@ -814,7 +796,6 @@ func (sctx *serveCtx) serve(
 }
 ```
 
-
 ### serveClients
 
 serve accepts incoming connections on the listener l, creating a new service goroutine for each. The service goroutines read requests and then call handler to reply to them.
@@ -883,7 +864,6 @@ func (e *Etcd) serveClients() (err error) {
 }
 ```
 
-
 EtcdServer::Start -> EtcdServer::start -> EtcdServer::run
 
 ```go
@@ -1014,8 +994,6 @@ func (s *EtcdServer) run() {
 }
 ```
 
-
-
 ## server
 
 etcd server定义了如下的Service KV和Range方法，启动的时候它会将实现KV各方法的对象注册到gRPC Server，并在其上注册对应的拦截器。下面的代码中的Range接口就是负责读取etcd key-value的的RPC接口
@@ -1035,8 +1013,6 @@ service KV {
 
 其次 etcd 会根据当前的全局版本号（空集群启动时默认为 1）自增，生成 put hello 操作对应的版本号 revision{2,0}，这就是 boltdb 的 key
 
-
-
 拦截器提供了在执行一个请求前后的hook能力，除了我们上面提到的debug日志、metrics统计、对etcd Learner节点请求接口和参数限制等能力，etcd还基于它实现了以下特性:
 
 - 要求执行一个操作前集群必须有Leader；
@@ -1045,8 +1021,6 @@ service KV {
 server收到client的Range RPC请求后，根据ServiceName和RPC Method将请求转发到对应的handler实现，handler首先会将上面描述的一系列拦截器串联成一个执行，在拦截器逻辑中，通过调用KVServer模块的Range接口获取数据
 
 ## quota
-
-
 
 ReadIndex
 
@@ -1068,7 +1042,9 @@ const (
     MaxQuotaBytes = int64(8 * 1024 * 1024 * 1024) // 8GB
 )
 ```
+
 不建议db配置超过8g原因
+
 1. 启动时重建内存treeIndex
 
 treeIndex模块维护了用户key与boltdb key的映射关系，boltdb的key、value又包含了构建treeIndex的所需的数据。因此etcd启动的时候，会启动不同角色的goroutine并发完成treeIndex构建。
@@ -1078,6 +1054,7 @@ treeIndex模块维护了用户key与boltdb key的映射关系，boltdb的key、v
 其次是构建treeIndex索引的goroutine。它从主goroutine获取mvccpb.KeyValue数据，基于key、版本号、是否带删除标识等信息，构建keyIndex对象，插入到treeIndex模块的B-tree中。
 
 因可能存在多个goroutine并发操作treeIndex，treeIndex的Insert函数会加全局锁，如下所示。etcd启动时只有一个构建treeIndex索引的goroutine，因此key多时，会比较慢。之前我尝试优化成多goroutine并发构建，但是效果不佳，大量耗时会消耗在此锁上
+
 ```go
 func (ti *treeIndex) Insert(ki *keyIndex) {
     ti.Lock()
@@ -1093,7 +1070,6 @@ etcd在启动的时候，会通过boltdb的Open API获取数据库对象，而Op
 而当你的db文件大小超过节点内存配置时，若你查询的key所相关的branch page、leaf page不在内存中，那就会触发主缺页中断，导致读延时抖动、QPS下降。
 因此为了保证etcd集群性能的稳定性，我建议你的etcd节点内存规格要大于你的etcd db文件大小
 
-
 在etcd 3.4中提供了trace特性，它可帮助我们定位、分析请求耗时过长问题。不过你需要特别注意的是，此特性在etcd 3.4中，因为依赖zap logger，默认为关闭。你可以通过设置etcd启动参数中的–logger=zap来开启。
 开启之后，我们可以在etcd日志中找到类似如下的耗时记录
 
@@ -1107,9 +1083,6 @@ db文件增大后，另外一个非常大的隐患是用户client发起的expens
 那么有哪些expensive read请求会导致etcd不稳定性呢？
 首先是简单的count only查询。如下图所示，当你想通过API统计一个集群有多少key时，如果你的key较多，则有可能导致内存突增和较大的延时
 
-
-
-
 为了保证集群稳定性，避免雪崩，任何提交到Raft模块的请求，都会做一些简单的限速判断。如下面的流程图所示，首先，如果Raft模块已提交的日志索引（committed index）比已应用到状态机的日志索引（applied index）超过了5000，那么它就返回一个”etcdserver: too many requests”错误给client
 
 然后它会尝试去获取请求中的鉴权信息，若使用了密码鉴权、请求中携带了token，如果token无效，则返回”auth: invalid auth token”错误给client。
@@ -1119,12 +1092,6 @@ db文件增大后，另外一个非常大的隐患是用户client发起的expens
 最后通过一系列检查之后，会生成一个唯一的ID，将此请求关联到一个对应的消息通知channel，然后向Raft模块发起（Propose）一个提案（Proposal）
 
 向Raft模块发起提案后，KVServer模块会等待此put请求，等待写入结果通过消息通知channel返回或者超时。etcd默认超时时间是7秒（5秒磁盘IO延时+2*1秒竞选超时时间），如果一个请求超时未返回结果，则可能会出现你熟悉的etcdserver: request timed out错误
-
-
-
-
-
-
 
 ```go
 func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.InternalRaftRequest) (*applyResult, error) {
@@ -1139,7 +1106,7 @@ func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.In
     if len(data) > int(s.Cfg.MaxRequestBytes) {
 		return nil, ErrRequestTooLarge
 	}
-    
+  
     // ...
     err = s.r.Propose(cctx, data)
 
@@ -1153,19 +1120,13 @@ func (s *EtcdServer) processInternalRaftRequestOnce(ctx context.Context, r pb.In
 	case <-s.done:
 		return nil, ErrStopped
 	}
-    
+  
     }
 ```
-
-
 
 Raft模块收到提案后，如果当前节点是Follower，它会转发给Leader，只有Leader才能处理写请求。Leader收到提案后，通过Raft模块输出待转发给Follower节点的消息和待持久化的日志条目，日志条目则封装了我们上面所说的put hello提案内容。
 
 etcdserver从Raft模块获取到以上消息和日志条目后，作为Leader，它会将put提案消息广播给集群各个节点，同时需要把集群Leader任期号、投票信息、已提交索引、提案内容持久化到一个WAL（Write Ahead Log）日志文件中，用于保证集群的一致性、可恢复性
-
-
-
-
 
 WAL模块如何持久化Raft日志条目。它首先先将Raft日志条目内容（含任期号、索引、提案内容）序列化后保存到WAL记录的Data字段， 然后计算Data的CRC值，设置Type为Entry Type， 以上信息就组成了一个完整的WAL记录。
 
@@ -1174,8 +1135,6 @@ WAL模块如何持久化Raft日志条目。它首先先将Raft日志条目内容
 当一半以上节点持久化此日志条目后， Raft模块就会通过channel告知etcdserver模块，put提案已经被集群多数节点确认，提案状态为已提交，你可以执行此提案内容了。
 
 于是进入流程六，etcdserver模块从channel取出提案内容，添加到先进先出（FIFO）调度队列，随后通过Apply模块按入队顺序，异步、依次执行提案内容
-
-
 
 newRaftNode
 
@@ -1217,8 +1176,6 @@ func newRaftNode(cfg raftNodeConfig) *raftNode {
 
 EtcdServer::Start -> EtcdServer::start -> EtcdServer::run
 
-
-
 ```go
 func (s *EtcdServer) run() {
     lg := s.Logger()
@@ -1346,10 +1303,6 @@ func (s *EtcdServer) run() {
     }
 }
 ```
-
-
-
-
 
 raftNode::start
 
@@ -1523,8 +1476,6 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 	}()
 }
 ```
-
-
 
 Etcdserver/raft.go
 
@@ -1703,27 +1654,11 @@ func (r *raftNode) start(rh *raftReadyHandler) {
 
 ## node
 
-
-
 node启动时是启动了一个协程，处理node的里的多个通道，包括tickc，调用tick()方法。该方法会动态改变，对于follower和candidate，它就是tickElection，对于leader和，它就是tickHeartbeat。tick就像是一个etcd节点的心脏跳动，在follower这里，每次tick会去检查是不是leader的心跳是不是超时了。对于leader，每次tick都会检查是不是要发送心跳了
-
-
-
-
-
-
-
-
 
 当集群已经产生了leader，则leader会在固定间隔内给所有节点发送心跳。其他节点收到心跳以后重置心跳等待时间，只要心跳等待不超时，follower的状态就不会改变。
 具体的过程如下：
 \1. 对于leader，tick被设置为tickHeartbeat，tickHeartbeat会产生增长递增心跳过期时间计数(heartbeatElapsed)，如果心跳过期时间超过了心跳超时时间计数(heartbeatTimeout)，它会产生一个MsgBeat消息。心跳超时时间计数是系统设置死的，就是1。也就是说只要1次tick时间过去，基本上会发送心跳消息。发送心跳首先是调用状态机的step方法
-
-
-
-
-
-
 
 ```go
 func (r *raft) Step(m pb.Message) error {
@@ -1869,15 +1804,7 @@ func (r *raft) Step(m pb.Message) error {
 }
 ```
 
-
-
-
-
 StartEtcd -> Etcd::serveClients -> serveCtx::serve
-
-
-
-
 
 ```go
 func (sctx *serveCtx) registerGateway(dial func(ctx context.Context) (*grpc.ClientConn, error)) (*gw.ServeMux, error) {
@@ -1919,31 +1846,9 @@ func (sctx *serveCtx) registerGateway(dial func(ctx context.Context) (*grpc.Clie
 }
 ```
 
-
-
-
-
-
-
 quotaKVServer::Put
 
 EtcdServer::Put -> EtcdServer::raftRquest -> EtcdServer::processInternalRaftRequestOnce -> raftNode::Propose
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 ## 消息处理
 
@@ -1955,10 +1860,6 @@ EtcdServer::Put -> EtcdServer::raftRquest -> EtcdServer::processInternalRaftRequ
 2. client 的 grpc 调用：启动时会向 grpc server 注册 quotaKVServer 对象，quotaKVServer 是以组合的方式增强了 kvServer 这个数据结构。grpc 消息解析完以后会调用 kvServer 的 Range、Put、DeleteRange、Txn、Compact 等方法。kvServer 中包含有一个 RaftKV 的接口，由 EtcdServer 这个结构实现。所以最后就是调用到 EtcdServer 的 Range、Put、DeleteRange、Txn、Compact 等方法
 3. 节点之间的 grpc 消息：每个 EtcdServer 中包含有 Transport 结构，Transport 中会有一个 peers 的 map，每个 peer 封装了节点到其他某个节点的通信方式。包括 streamReader、streamWriter 等，用于消息的发送和接收。streamReader 中有 recvc 和 propc 队列，streamReader 处理完接收到的消息会将消息推到这连个队列中。由 peer 去处理，peer 调用 raftNode 的 Process 方法处理消息
 
-
-
-
-
 etcd的客户端工具etcdctl是通过clientv3库来访问etcd server的 clientv3库基于gRPC client API封装了操作etcd KVServer、Cluster、Auth、Lease、Watch等模块的API，同时还包含了负载均衡、健康探测和故障切换等特性 在解析完请求中的参数后，etcdctl会创建一个clientv3库对象，使用KVServer模块的API来访问etcd server
 
 clientv3库采用的负载均衡算法为Round-robin。针对每一个请求，Round-robin算法通过轮询的方式依次从endpoint列表中选择一个endpoint访问(长连接)，使etcd server负载尽量均衡
@@ -1967,8 +1868,6 @@ clientv3库采用的负载均衡算法为Round-robin。针对每一个请求，R
 > 2. 在client 3.4之前的版本中，负载均衡算法有一个严重的Bug：如果第一个节点异常了，可能会导致你的client访问etcd server异常，特别是在Kubernetes场景中会导致APIServer不可用。不过，该Bug已在 Kubernetes 1.16版本后被修复
 
 为请求选择好etcd server节点，client就可把请求发送给etcd server
-
-
 
 ```go
 
@@ -2009,8 +1908,6 @@ func (kv *kv) Do(ctx context.Context, op Op) (OpResponse, error) {
 
 ```
 
-
-
 KVClient is the client API for KV service.
 
 ```go
@@ -2039,15 +1936,12 @@ type KVClient interface {
 }
 ```
 
-
-
 etcd server启动的时候它会将实现KV各方法的对象注册到gRPC Server，并在其上注册对应的拦截器
 
 拦截器提供了在执行一个请求前后的hook能力 例如debug日志、metrics统计、对etcd Learner节点请求接口和参数限制等能力 另外etcd还基于它实现了以下特性:
 
 - 要求执行一个操作前集群必须有Leader；
 - 请求延时超过指定阈值的，打印包含来源IP的慢查询日志(3.5版本)。
-
 
 ### get
 
@@ -2086,25 +1980,15 @@ service KV {
 
 server收到client的Range RPC请求后，根据ServiceName和RPC Method将请求转发到对应的handler实现，handler首先会将上面描述的一系列拦截器串联成一个执行，在拦截器逻辑中，通过调用KVServer模块的Range接口获取数据
 
-
-
 对于客户端消息，调用到 EtcdServer 处理时，一般都是先注册一个等待队列，调用 node 的 Propose 方法，然后用等待队列阻塞等待消息处理完成。Propose 方法会往 propc 队列中推送一条 MsgProp 消息。 对于节点间的消息，raftNode 的 Process 是直接调用 node 的 step 方法，将消息推送到 node 的 recvc 或者 propc 队列中。 可以看到，外界所有消息这时候都到了 node 结构中的 recvc 队列或者 propc 队列中
-
-
 
 node 处理消息
 
 node 启动时会启动一个协程，处理 node 的各个队列中的消息，当然也包括 recvc 和 propc 队列。从 propc 和 recvc 队列中拿到消息，会调用 raft 对象的 Step 方法，raft 对象封装了 raft 的协议数据和操作，其对外的 Step 方法是真正 raft 协议状态机的步进方法。当接收到消息以后，根据协议类型、Term 字段做相应的状态改变处理，或者对选举请求做相应处理。对于一般的 kv 增删改查数据请求消息，会调用内部的 step 方法。
 
-
-
 内部的 step 方法是一个可动态改变的方法，将随状态机的状态变化而变化。当状态机处于 leader 状态时，该方法就是 stepLeader；当状态机处于 follower 状态时，该方法就是 stepFollower；当状态机处于 Candidate 状态时，该方法就是 stepCandidate。leader 状态会直接处理 MsgProp 消息。将消息中的日志条目存入本地缓存。follower 则会直接将 MsgProp 消息转发给 leader，转发的过程是将先将消息推送到 raft 的 msgs 数组中。 node 处理完消息以后，要么生成了缓存中的日志条目，要么生成了将要发送出去的消息。缓存中的日志条目需要进一步处理(比如同步和持久化)，而消息需要进一步处理发送出去。
 
-
-
 处理过程还是在 node 的这个协程中，在循环开始会调用 newReady，将需要进一步处理的日志和需要发送出去的消息，以及状态改变信息，都封装在一个 Ready 消息中。Ready 消息会推行到 readyc 队列中。(图中 5)
-
-
 
 raftNode 的处理
 
@@ -2116,17 +2000,11 @@ raftNode 的 start()方法另外启动了一个协程，处理 readyc 队列(图
 
 另外需要将已经同步好的日志应用到状态机中，让状态机更新状态和 kv 存储，通知等待请求完成的客户端。因此需要将已经确定同步好的日志、快照等信息封装在一个 apply 消息中推送到 applyc 队列。
 
-
-
 EtcdServer 的 apply 处理
 
 EtcdServer 会处理这个 applyc 队列，会将 snapshot 和 entries 都 apply 到 kv 存储中去
 
-
-
 最后调用 applyWait 的 Trigger，唤醒客户端请求的等待线程，返回客户端的请求。
-
-
 
 #### 线性读
 
@@ -2138,12 +2016,9 @@ C节点则会等待，直到状态机已应用索引(applied index)大于等于L
 
 > 在早期etcd 3.0中读请求通过走一遍Raft协议保证一致性， 这种Raft log read机制依赖磁盘IO， 性能相比ReadIndex较差
 
-
-
 ### put
 
 与读流程不一样的是写流程还涉及 Quota、WAL、Apply 三个模块
-
 
 ```shell
 etcdctl put hello world --endpoints http://127.0.0.1:2379
@@ -2165,8 +2040,6 @@ FIFOScheduler 调度执行 apply 已经提交的 committedEntries
 AppliedIndex 推进，通知 ReadLoop coroutine，满足 applied index>= commit index 的 read request 可以返回；
 调用网络层接口返回 client 成功。
 OK，整个 Put kv request 的处理请求流程大致介绍完。需要注意的是，上面尽管每个步骤都有严格的序号，但是很多操作是异步，并发甚至并行的发生的，序号并不是严格的发生先后顺序，例如上面的 11 和 12，分别在不同 coroutine 并行处理，并非严格的发生时间序列。
-
-
 
 ## Network
 
@@ -2261,7 +2134,9 @@ func (srv *Server) Serve(l net.Listener) error {
 	}
 }
 ```
+
 Accept
+
 ```go
 func (ln stoppableListener) Accept() (c net.Conn, err error) {
 	connc := make(chan *net.TCPConn, 1)
@@ -2603,7 +2478,6 @@ type Peer interface {
 - proxy组件收到client的请求后，它根据从etcd读取到的对应服务的路由配置、负载均衡算法（比如Round-robin）转发到对应的业务server。
 - 业务server启动的时候，通过etcd的写接口Txn/Put等，注册自身地址信息、协议到高可用的etcd集群上。业务server缩容、故障时，对应的key应能自动从etcd集群删除，因此相关key需要关联lease信息，设置一个合理的TTL，并定时发送keepalive请求给Leader续租，以防止租约及key被淘汰
 
-
 Apache APISIX其实就是上面服务发现原理架构图中的proxy组件 它由控制面和数据面组成。
 控制面顾名思义，就是你通过Admin API下发服务、路由、安全配置的操作。控制面默认的服务发现存储是etcd，当然也支持consul、nacos等。
 数据面是在实现基于服务路由信息数据转发的基础上，提供了限速、鉴权、安全、日志等一系列功能，也就是解决了我们上面提的分布式及微服务架构中的典型痛点
@@ -2620,11 +2494,7 @@ Apache APISIX在启动的时候，首先会通过Range操作获取网关的配�
 
 答案是不处理Watch返回的相关错误信息，比如已压缩ErrCompacted错误。Apache APISIX项目在从etcd v2中切换到etcd v3早期的时候，同样也犯了这个错误
 
-
-
 ### Transaction
-
-
 
 etcd v3为了解决多key的原子操作问题，提供了全新迷你事务API，同时基于MVCC版本号，它可以实现各种隔离级别的事务。它的基本结构如下：
 
@@ -2633,8 +2503,6 @@ client.Txn(ctx).If(cmp1, cmp2, ...).Then(op1, op2, ...,).Else(op1, op2, …)
 ```
 
 它的基本原理是，在If语句中，你可以添加一系列的条件表达式，若条件表达式全部通过检查，则执行Then语句的get/put/delete等操作，否则执行Else的get/put/delete等操作
-
-
 
 If语句支持哪些检查项呢？
 
@@ -2657,13 +2525,7 @@ If语句通过以上MVCC版本号、value值、各种比较运算符(等于、�
 
 etcd社区基于以上介绍的事务特性，提供了一个简单的事务框架[STM](https://github.com/etcd-io/etcd/blob/v3.4.9/clientv3/concurrency/stm.go)，构建了各个事务隔离级别类，帮助你进一步简化应用编程复杂度
 
-
-
-
-
 ## Tuning
-
-
 
 The default settings in etcd should work well for installations on a local network where the average network latency is low. However, when using etcd across multiple data centers or over networks with high latency, the heartbeat interval and election timeout settings may need tuning.
 The network isn’t the only source of latency. Each request and response may be impacted by slow disks on both the leader and follower. Each of these timeouts represents the total time from request to successful response from the other machine.
@@ -2682,15 +2544,14 @@ The heartbeat interval and election timeout value should be the same for all mem
 etcd appends all key changes to a log file. This log grows forever and is a complete linear history of every change made to the keys. A complete history works well for lightly used clusters but clusters that are heavily used would carry around a large log.
 To avoid having a huge log etcd makes periodic snapshots. These snapshots provide a way for etcd to compact the log by saving the current state of the system and removing old logs.
 
-Creating snapshots with the V2 backend can be expensive, so snapshots are only created after a given number of changes to etcd. By default, snapshots will be made after every 10,000 changes. 
-
+Creating snapshots with the V2 backend can be expensive, so snapshots are only created after a given number of changes to etcd. By default, snapshots will be made after every 10,000 changes.
 
 disk
-
 
 An etcd cluster is very sensitive to disk latencies. Since etcd must persist proposals to its log, disk activity from other processes may cause long fsync latencies. The upshot is etcd may miss heartbeats, causing request timeouts and temporary leader loss. An etcd server can sometimes stably run alongside these processes when given a high disk priority.
 
 On Linux, etcd’s disk priority can be configured with ionice:
+
 ```
 # best effort, highest priority
 $ sudo ionice -c2 -n0 -p `pgrep etcd`
@@ -2699,14 +2560,15 @@ $ sudo ionice -c2 -n0 -p `pgrep etcd`
 Network
 
 If the etcd leader serves a large number of concurrent client requests, it may delay processing follower peer requests due to network congestion. This manifests as send buffer error messages on the follower nodes:
+
 ```
 dropped MsgProp to 247ae21ff9436b2d since streamMsg’s sending buffer is full
 dropped MsgAppResp to 247ae21ff9436b2d since streamMsg‘s sending buffer is full
 
 ```
 
-
 These errors may be resolved by prioritizing etcd’s peer traffic over its client traffic. On Linux, peer traffic can be prioritized by using the traffic control mechanism:
+
 ```
 tc qdisc add dev eth0 root handle 1: prio bands 3
 tc filter add dev eth0 parent 1: protocol ip prio 1 u32 match ip sport 2380 0xffff flowid 1:1
@@ -2715,21 +2577,22 @@ tc filter add dev eth0 parent 1: protocol ip prio 2 u32 match ip sport 2379 0xff
 tc filter add dev eth0 parent 1: protocol ip prio 2 u32 match ip dport 2379 0xffff flowid 1:1
 ```
 
-
-
 CPU
 
 As etcd is very sensitive to latency, performance can further be optimized on Linux systems by setting the CPU governor to performance or conservative mode.
 
 On Linux, the CPU governor can be configured to performance mode:
+
 ```
 echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 ```
 
+偶数节点虽然多了一台机器，但是容错能力是一样的 多一台机器增加不了性能，反而会拉低写入速度
 
+etcd 集群是一个 Raft Group，没有 shared。所以它的极限有两部分，一是单机的容量限制，内存和磁盘；二是网络开销，每次 Raft 操作需要所有节点参与
+每一次写操作需要集群中大多数节点将日志落盘成功后，Leader 节点才能修改内部状态机，并将结果返回给客户端 节点越多性能越低，所以扩展很多 etcd 节点是没有意义的，一般是 3、5、7， 7 个也足够了
 
-
-
+The majority side becomes the available cluster and the minority side is unavailable; there is no “split-brain” in etcd.
 
 ## Comparison
 
@@ -2742,18 +2605,14 @@ echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
 - Consul提供了原生的分布式锁、健康检查、服务发现机制支持，让业务可以更省心，不过etcd和ZooKeeper也都有相应的库，帮助你降低工作量
 - 多数据中心。在多数据中心支持上，只有Consul是天然支持的，虽然它本身不支持数据自动跨数据中心同步，但是它提供的服务发现机制、[Prepared Query](https://www.consul.io/api-docs/query)功能，赋予了业务在一个可用区后端实例故障时，可将请求转发到最近的数据中心实例。而etcd和ZooKeeper并不支持
 
-
-
-
-
 ## Links
 
 - [K8s](/docs/CS/Container/K8s.md)
 
-
 ## References
 
 1. [深入浅出 etcd 系列 part 1 – 解析 etcd 的架构和代码框架](https://mp.weixin.qq.com/s/C2WKrfcJ1sVQuSxlpi6uNQ)
-1. [深入浅出etcd/raft —— 0x00 引言](https://blog.mrcroxx.com/posts/code-reading/etcdraft-made-simple/0-introduction/)
-2. [etcd架构以及源码解析](https://github.com/csunny/etcd-from-arch-to-souce-code)
-3. [etcd 源码分析](https://www.zhihu.com/column/c_1574793366772060162)
+2. [深入浅出etcd/raft —— 0x00 引言](https://blog.mrcroxx.com/posts/code-reading/etcdraft-made-simple/0-introduction/)
+3. [etcd架构以及源码解析](https://github.com/csunny/etcd-from-arch-to-souce-code)
+4. [etcd 源码分析](https://www.zhihu.com/column/c_1574793366772060162)
+5. [etcd 原理解析：读etcd 技术内幕](http://www.xuyasong.com/?p=1706)

@@ -957,6 +957,141 @@ func newNode(rn *RawNode) node {
 
 node.run()方法会处理node结构体中封装的全部通道
 
+```go
+func (n *node) run() {
+    var propc chan msgWithResult
+    var readyc chan Ready
+    var advancec chan struct{}
+    var rd Ready
+
+    r := n.rn.raft
+
+    lead := None
+
+    for {
+        if advancec != nil {
+            readyc = nil
+        } else if n.rn.HasReady() {
+            // Populate a Ready. Note that this Ready is not guaranteed to
+            // actually be handled. We will arm readyc, but there's no guarantee
+            // that we will actually send on it. It's possible that we will
+            // service another channel instead, loop around, and then populate
+            // the Ready again. We could instead force the previous Ready to be
+            // handled first, but it's generally good to emit larger Readys plus
+            // it simplifies testing (by emitting less frequently and more
+            // predictably).
+            rd = n.rn.readyWithoutAccept()
+            readyc = n.readyc
+        }
+
+        if lead != r.lead {
+            if r.hasLeader() {
+                if lead == None {
+                    r.logger.Infof("raft.node: %x elected leader %x at term %d", r.id, r.lead, r.Term)
+                } else {
+                    r.logger.Infof("raft.node: %x changed leader from %x to %x at term %d", r.id, lead, r.lead, r.Term)
+                }
+                propc = n.propc
+            } else {
+                r.logger.Infof("raft.node: %x lost leader %x at term %d", r.id, lead, r.Term)
+                propc = nil
+            }
+            lead = r.lead
+        }
+
+        select {
+        // TODO: maybe buffer the config propose if there exists one (the way
+        // described in raft dissertation)
+        // Currently it is dropped in Step silently.
+        case pm := <-propc:
+            m := pm.m
+            m.From = r.id
+            err := r.Step(m)
+            if pm.result != nil {
+                pm.result <- err
+                close(pm.result)
+            }
+        case m := <-n.recvc:
+            // filter out response message from unknown From.
+            if pr := r.prs.Progress[m.From]; pr != nil || !IsResponseMsg(m.Type) {
+                r.Step(m)
+            }
+        case cc := <-n.confc:
+            _, okBefore := r.prs.Progress[r.id]
+            cs := r.applyConfChange(cc)
+            // If the node was removed, block incoming proposals. Note that we
+            // only do this if the node was in the config before. Nodes may be
+            // a member of the group without knowing this (when they're catching
+            // up on the log and don't have the latest config) and we don't want
+            // to block the proposal channel in that case.
+            //
+            // NB: propc is reset when the leader changes, which, if we learn
+            // about it, sort of implies that we got readded, maybe? This isn't
+            // very sound and likely has bugs.
+            if _, okAfter := r.prs.Progress[r.id]; okBefore && !okAfter {
+                var found bool
+            outer:
+                for _, sl := range [][]uint64{cs.Voters, cs.VotersOutgoing} {
+                    for _, id := range sl {
+                        if id == r.id {
+                            found = true
+                            break outer
+                        }
+                    }
+                }
+                if !found {
+                    propc = nil
+                }
+            }
+            select {
+            case n.confstatec <- cs:
+            case <-n.done:
+            }
+        case <-n.tickc:
+            n.rn.Tick()
+        case readyc <- rd:
+            n.rn.acceptReady(rd)
+            advancec = n.advancec
+        case <-advancec:
+            n.rn.Advance(rd)
+            rd = Ready{}
+            advancec = nil
+        case c := <-n.status:
+            c <- getStatus(r)
+        case <-n.stop:
+            close(n.done)
+            return
+        }
+    }
+}
+```
+newReady()函数，它会读取底层raft实例中的各项数据及相关状态，并最终封装成Ready实例返回给上层模块
+
+
+```go
+func newReady(r *raft, prevSoftSt *SoftState, prevHardSt pb.HardState) Ready {
+    rd := Ready{
+        Entries:          r.raftLog.unstableEntries(),
+        CommittedEntries: r.raftLog.nextEnts(),
+        Messages:         r.msgs,
+    }
+    if softSt := r.softState(); !softSt.equal(prevSoftSt) {
+        rd.SoftState = softSt
+    }
+    if hardSt := r.hardState(); !isHardStateEqual(hardSt, prevHardSt) {
+        rd.HardState = hardSt
+    }
+    if r.raftLog.unstable.snapshot != nil {
+        rd.Snapshot = *r.raftLog.unstable.snapshot
+    }
+    if len(r.readStates) != 0 {
+        rd.ReadStates = r.readStates
+    }
+    rd.MustSync = MustSync(r.hardState(), prevHardSt, len(rd.Entries))
+    return rd
+}
+```
+
 ## storage
 
 
@@ -1294,7 +1429,7 @@ etcd-raft 最大设计亮点就是抽离了网络、持久化、协程等逻辑�
 
 
 etcd-raft StateMachine 封装在 raft struct 中，其状态如下
-
+正常情况只有3种状态 为了防止在分区的情况下，某个split的Follower的Term数值变得很大的场景，引入了PreCandidate
 
 
 ```go
@@ -1352,8 +1487,9 @@ func (r *raft) Step(m pb.Message) error {
 
 ```
 
-
-其中 step 是一个回调函数，在不同的 state 会设置不同的回调函数来驱动 raft，这个回调函数 stepFunc 就是在 become* 函数完成的设置
+这里需要注意的就是对应的每个bacome*中的step和tick
+- 它的step属性是一个函数指针，根据当前节点的不同角色，指向不同的消息处理函数stepLeader/stepFollower/stepCandidate。
+- tick也是一个函数指针，根据角色的不同，也会在tickHeartbeat和tickElection之间来回切换，分别用来触发定时心跳和选举检测
 
 ```go
 type raft struct {
@@ -1643,7 +1779,29 @@ func (h *snapshotHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 
 ### run
+raft集群中各个节点之前的通讯都是通过这个message进行的
 
+```go
+type Message struct {
+    Type MessageType `protobuf:"varint,1,opt,name=type,enum=raftpb.MessageType" json:"type"`
+    To   uint64      `protobuf:"varint,2,opt,name=to" json:"to"`
+    From uint64      `protobuf:"varint,3,opt,name=from" json:"from"`
+    Term uint64      `protobuf:"varint,4,opt,name=term" json:"term"`
+    // logTerm is generally used for appending Raft logs to followers. For example,
+    // (type=MsgApp,index=100,logTerm=5) means leader appends entries starting at
+    // index=101, and the term of entry at index 100 is 5.
+    // (type=MsgAppResp,reject=true,index=100,logTerm=5) means follower rejects some
+    // entries from its leader as it already has an entry with term 5 at index 100.
+    LogTerm    uint64   `protobuf:"varint,5,opt,name=logTerm" json:"logTerm"`
+    Index      uint64   `protobuf:"varint,6,opt,name=index" json:"index"`
+    Entries    []Entry  `protobuf:"bytes,7,rep,name=entries" json:"entries"`
+    Commit     uint64   `protobuf:"varint,8,opt,name=commit" json:"commit"`
+    Snapshot   Snapshot `protobuf:"bytes,9,opt,name=snapshot" json:"snapshot"`
+    Reject     bool     `protobuf:"varint,10,opt,name=reject" json:"reject"`
+    RejectHint uint64   `protobuf:"varint,11,opt,name=rejectHint" json:"rejectHint"`
+    Context    []byte   `protobuf:"bytes,12,opt,name=context" json:"context,omitempty"`
+}
+```
 
 
 ## start
@@ -1724,8 +1882,7 @@ func (r *raft) becomeFollower(term uint64, lead uint64) {
 
 
 
-tick 其实是由外层业务定时驱动的，t.tickElection竞争Leader
-
+如果可以成为leader 并且 没有收到leader的心跳，候选超时时间过期了 则重新发起新的选举请求
 ```go
 func (r *raft) tickElection() {
    r.electionElapsed++
@@ -2058,7 +2215,7 @@ type Storage interface {
 
 
 
-
+### WAL
 
 WAL是一种追加的方式将日志条目一条一条顺序存放在文件中。存放在WAL的记录都是walpb.Record形式的结构。Type代表数据的类型，Crc是生成的Crc校验字段。Data是真正的数据。v3版本中，有如下几种Type：
 - metadataType：元数据类型，元数据会保存当前的node id和cluster id。
@@ -2100,7 +2257,22 @@ type WAL struct {
 
 WAL有read模式和write模式，区别是write模式会使用文件锁开启独占文件模式。read模式不会独占文件
 
+WAL写具体的流程：
+1. 客户端向etcd集群发起一次请求，请求中封装的Entry首先会交给etcd-raft处理，etcd-raft会将Entry记录保存到raftLog.unstable中；
+2. etcd-raft将Entry记录封装到Ready实例中，返回给上层模块进行持久化；
+3. 上层模块收到持久化的Ready记录之后，会记录到WAL文件中，然后进行持久化，最后通知etcd-raft模块进行处理；
+4. etcd-raft将该Entry记录从unstable中移到storage中保存；
+5. 当该Entry记录被复制到集区中的半数以上节点的时候，该Entry记录会被Lader节点认为是已经提交了，封装到Ready实例中通知上层模块；
+6. 此时上层模块将该Ready实例封装的Entry记录应用到状态机中
 
+
+etcd日志的保存总体流程如下：
+1. 集群某个节点收到client的put请求要求修改数据。节点会生成一个Type为MsgProp的Message，发送给leader。
+2. leader收到Message以后，会处理Message中的日志条目，将其append到raftLog的unstable的日志中，并且调用bcastAppend()广播append日志的消息
+3. leader中的消息最终会以MsgApp类型的消息通知follower，follower收到这些信息之后，同leader一样，先将缓存中的日志条目持久化到磁盘中并将当前已经持久化的最新日志index返回给leader
+4. 最后leader收到大多数的follower的确认，commit自己的log，同时再次广播通知follower自己已经提交
+
+### snap
 
 Snapshotter 提供保存快照的SaveSnap方法。在v2中，快照实际就是storage中存的那个node组成的树结构。它是将整个树给序列化成了json。在v3中，快照是boltdb数据库的数据文件，通常就是一个叫db的文件。v3的处理实际代码比较混乱，并没有真正走snapshotter
 
@@ -2562,7 +2734,33 @@ func stepFollower(r *raft, m pb.Message) error {
 
 ```
 
+## mutex
 
+TryLock locks the mutex if not already locked by another session.
+If lock is held by another session, return immediately after attempting necessary cleanup
+The ctx argument is used for the sending/receiving Txn RPC.
+```go
+func (m *Mutex) TryLock(ctx context.Context) error {
+    resp, err := m.tryAcquire(ctx)
+    if err != nil {
+        return err
+    }
+    // if no key on prefix / the minimum rev is key, already hold the lock
+    ownerKey := resp.Responses[1].GetResponseRange().Kvs
+    if len(ownerKey) == 0 || ownerKey[0].CreateRevision == m.myRev {
+        m.hdr = resp.Header
+        return nil
+    }
+    client := m.s.Client()
+    // Cannot lock, so delete the key
+    if _, err := client.Delete(ctx, m.myKey); err != nil {
+        return err
+    }
+    m.myKey = "\x00"
+    m.myRev = -1
+    return ErrLocked
+}
+```
 
 
 ## Links
@@ -2575,3 +2773,5 @@ func stepFollower(r *raft, m pb.Message) error {
 
 1. [raft 工程化案例之 etcd 源码实现](https://zhuanlan.zhihu.com/p/600893553)
 2. [etcd 源码分析](https://www.zhihu.com/column/c_1574793366772060162)
+3. [etcd Raft库解析](https://www.codedump.info/post/20180922-etcd-raft/)
+
