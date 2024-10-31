@@ -1,0 +1,83 @@
+## Introduction
+
+
+
+
+
+
+
+
+
+## start
+
+kernel从`arch/arm64/kernel/head.S`的__HEAD开始运行 这里边主要就进行一些运行C代码之前的基础初始化，例如打开MMU，初始化部分页表和运行堆栈等
+
+这里会将bootloader通过x0寄存器传过来的fdt保存到__fdt_pointer，后面会用到。另外就是保存kimage_voffset，后面用于计算内存物理地址和虚拟地址的offset。这里边又涉及到PFN，page table, page，PGD，PTE等概念
+
+汇编代码运行完成后，执行的第一个C函数就是start_kernel。这个函数调用的其他函数比较多，其中一个比较重要的就是setup_arch。每个arch都有对应的实现，其中arm64的在 `arch/arm64/kernel/setup.c`
+
+
+
+它又会调用到setup_machine_fdt，这个里边又会一直调用到fdt.c里边，将汇编阶段保存的__fdt_pointer存储到initial_boot_params里边。
+
+这里顺便说下我们平时说的dt是device tree的缩写，全名是open firmware device tree，所以我们看到很多与device tree相关的接口都是以of_开头，这里的of就是open firmware的缩写
+
+> 我们平时在代码中看到的dts是源码，是device tree source的简称，经过dtc工具的编译后转换为dtb格式，也就是我们所说的flatten devcie tree。这里将其再转换为device_node tree
+
+linux kernel一共有3个线程在运行。其中idle线程主要是在系统空闲时被schedule调度，kthreadd主要用于创建线程 一个是1号线程init
+
+
+
+init首先会调用到kernel_init_freeable这个函数，这个函数又会调用smp_init，在这个里边会将其他cpu核bring up并从secondary_entry开始运行，并很快跳转到C函数secondary_start_kernel。这个时候整个系统就有2 + cpu number个线程了，其中2表示的是init和kthreadd线程，cpu number则是每个cpu都有个idle线程
+
+
+
+到这个时候除idle线程外的其他线程就可以调度到其他cpu运行了。接下来kernel_init_freeable还要调用一个很重要的函数就是do_basic_setup，在这个里边会调用do_initcalls。
+
+do_initcalls就是依次调用我们平时定义的xxx_initcall，这里通常是kernel启动最耗时的部分，只要打开
+
+- 
+
+```
+initcall_debug=true
+```
+
+
+
+这个启动选项就可以看到每个initcall消耗的时间及当前运行的哪个initcall，搞启动时间优化或者initcall crash的同学可以重点关注下。我们平时用module_init在编入内核后对应的其实就是device_initcall。相关的level对应关系定义在
+
+- 
+
+```
+include/linux/init.h
+```
+
+
+
+还有个需要特别注意的是由于initcall是按照level进行调用的，我们平时在使用时一定要选对level，否则如果依赖的子系统或模块的initcall还没调用就调用我们的initcall那可能就会出问题。
+
+其中of_platform_default_populate_init属于arch_initcall_sync，也就是3s level，在这里会扫描前面setup_arch创建的device_node tree，凡是dts对应的bus在of_default_bus_match_table中能找到，并且node包含compatible属性的都会为其创建struct platform_device，并加入到platform_bus_type中。
+
+其他bus，例如I2C，SPI等总线子设备则需要对应的bus controller调用相应framework的接口创建合适的device用于后面driver module init时注册到对应bus后好进行匹配。例如I2C bus的controller它们本身都是platform_device，用的level 4 initcall进行初始化，level在of_platform_default_populate_init之后，在client driver之前，这就确保了它们可以在driver之前进行probe，并根据dts创建好i2c_client。这里再次体现了选择正确level的重要性。
+
+另外还有个一个比较特殊的initcall是rootfs_initcall，它是处于level 5和level 6之间的一个等级，这个initcall会启动一个线程异步解压initramfs，用于加快linux启动速度。
+
+level中不带s的要比带s的先执行。而我们的module_init，也就是大部分驱动用的initcall 6是在of_platform_default_populate_init创建好了platform_device才会被调用到，这样就可以直接执行platform_match函数进行匹配。
+
+在执行initcall的过程中可能各个模块都会创建新的线程，这个时候线程数就已经很多了。
+
+platform_driver在probe时会传入一个platform_device的参数，这个是由它注册的bus决定的。因为probe函数是由bus的match调用过来的，例如I2C就是i2c_client。platform_device的成员变量device中包含一个device_node变量，这里边就含有dts的相关信息。driver即可以通过of的接口直接获取到这个device_node本身的信息，也可以通过这个device_node中包含的handle信息，获取到provider的对象引用，后续通过这个引用操作provider。
+
+这种provider一般都是框架层提供的抽象对象，例如struct clk，并不会直接操作对应的provider驱动，这样抽象的目的是为了提高consumer代码的通用性，及屏蔽掉provider的差异化和细节，就跟pinctrl和gpiolib的框架一样。简单的驱动一般只使用device_node本身配置的数值信息即可，只有比较复杂的需要依赖其他模块的driver才会使用到provider。
+
+上面扯了很多initcall相关的内容，稍微有点啰嗦，但很多细节还没涉及到，我们后续再通过单独的文章进行分析。这里我们再回到kernel_init函数，在initcall执行完成以后，也就是系统基本初始化好了后，我们就会开始运行init可执行文件，这是用户空间第一个进程。后续的其他进程都是由它fork出来。至此，整个linux就运行起来了。
+
+至于后面的加载内核模块，mount硬盘都是通过系统调用完成的了
+
+
+
+
+
+## Links
+
+- [Linux](/docs/CS/OS/Linux/Linux.md)
