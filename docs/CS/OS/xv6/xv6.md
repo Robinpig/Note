@@ -452,6 +452,10 @@ start32:
 
 ```
 
+
+#### bootmain
+
+
 bootmain.c做的相当于bootloader的工作 加载kernel
 
 运行 的时候是将 以下作为栈使用，根据内存低 1M 布局图可以看出，以下有大约 30K 的空闲空间
