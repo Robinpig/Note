@@ -31,7 +31,7 @@ Memcached Server不互相通信
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
-- [Cache](/docs/CS/Cache.md)
+- [Cache](/docs/CS/SE/Cache.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - Twemcache
 - Twemproxy

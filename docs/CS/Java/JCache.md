@@ -77,7 +77,7 @@ Guava cache
 
 ## Links
 
-- [Cache](/docs/CS/Cache.md)
+- [Cache](/docs/CS/SE/Cache.md)
 - [Spring Cache](/docs/CS/Framework/Spring/Cache.md)
 
 ## References

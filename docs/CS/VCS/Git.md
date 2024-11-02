@@ -50,6 +50,34 @@ git branch -a
 # delete local branch
 git branch -d branchName
 ```
+
+
+### reset
+
+代码回滚使用revert会增加一条commit记录
+
+
+
+> [!WARNING]
+>
+> reset is dangerous
+
+使用reset修改的是HEAD 需要强制push
+
+```shell
+git reset --hard [commit hash]
+
+git push -f
+```
+
+其它开发需要同步HEAD, 之后再执行commit 同步前先确保本地代码stash
+
+```shell
+git reset --hard origin/master
+```
+
+
+
 ## Sub
 
 ```shell

@@ -125,7 +125,7 @@ The last step aims to restore consistency and compensate for mistakes the progra
 
 > [!TIP]
 >
-> Consistency in CAP is defined quite differently from what [ACID](/docs/CS/Transaction.md?id=ACID) defines as consistency.
+> Consistency in CAP is defined quite differently from what [ACID](/docs/CS/SE/Transaction.md?id=ACID) defines as consistency.
 > ACID consistency describes transaction consistency: transaction brings the database from one valid state to another, maintaining all the database invariants (such as uniqueness constraints and referential integrity).
 > In CAP, it means that operations are atomic (operations succeed or fail in their entirety) and consistent (operations never leave the data in an inconsistent state).
 

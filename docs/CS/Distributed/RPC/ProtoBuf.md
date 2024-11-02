@@ -4,4 +4,4 @@
 
 ## Links
 
-- [Encoding](/docs/CS/Encoding.md)
+- [Encoding](/docs/CS/Security/Encoding.md)

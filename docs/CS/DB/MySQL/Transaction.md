@@ -354,7 +354,7 @@ In Concurrency Control theory, there are two ways you can deal with conflicts:
 
 Because MVCC (Multi-Version Concurrency Control) is such a prevalent Concurrency Control technique (not only in relational database systems, in this article, I’m going to explain how it works.
 
-When the [ACID transaction properties](/docs/CS/Transaction.md?id=ACID) were first defined, Serializability was assumed. And to provide a Strict Serializable transaction outcome, the [2PL (Two-Phase Locking)](https://vladmihalcea.com/2pl-two-phase-locking/) mechanism was employed. When using 2PL, every read requires a shared lock acquisition, while a write operation requires taking an exclusive lock.
+When the [ACID transaction properties](/docs/CS/SE/Transaction.md?id=ACID) were first defined, Serializability was assumed. And to provide a Strict Serializable transaction outcome, the [2PL (Two-Phase Locking)](https://vladmihalcea.com/2pl-two-phase-locking/) mechanism was employed. When using 2PL, every read requires a shared lock acquisition, while a write operation requires taking an exclusive lock.
 
 - a shared lock blocks Writers, but it allows other Readers to acquire the same shared lock
 - an exclusive lock blocks both Readers and Writers concurring for the same lock
@@ -984,7 +984,7 @@ XA : isolation level must be `SERIALIZABLE`
 ## Links
 
 - [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
-- [Transaction](/docs/CS/Transaction.md)
+- [Transaction](/docs/CS/SE/Transaction.md)
 
 ## References
 

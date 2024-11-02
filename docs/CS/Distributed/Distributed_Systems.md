@@ -220,14 +220,14 @@ The definition of the partially synchronous model requires that eventually the s
 ## Consistency and Consensus
 
 The best way of building fault-tolerant systems is to find some general-purpose abstractions with useful guarantees, implement them once,
-and then let applications rely on those guarantees. This is the same approach as we used with [transactions](/docs/CS/Transaction.md):
+and then let applications rely on those guarantees. This is the same approach as we used with [transactions](/docs/CS/SE/Transaction.md):
 by using a transaction, the application can pretend that there are no crashes (atomicity), that nobody else is concurrently accessing the database (isolation), and that storage devices are perfectly reliable (durability).
 Even though crashes, race conditions, and disk failures do occur, the transaction abstraction hides those problems so that the application doesn’t need to worry about them.
 
 We will now continue along the same lines, and seek abstractions that can allow an application to ignore some of the problems with distributed systems.
 For example, one of the most important abstractions for distributed systems is *consensus*: that is, getting all of the nodes to agree on something.
 
-There is some similarity between distributed consistency models and the hierarchy of [transaction isolation levels](/docs/CS/Transaction.md?id=Isolation-Levels).
+There is some similarity between distributed consistency models and the hierarchy of [transaction isolation levels](/docs/CS/SE/Transaction.md?id=Isolation-Levels).
 But while there is some overlap, they are mostly independent concerns: transaction isolation is primarily about avoiding race conditions due to concurrently executing transactions,
 whereas distributed consistency is mostly about coordinating the state of replicas in the face of delays and faults.
 
@@ -355,7 +355,7 @@ if operation A completes before operation B begins, then B should logically take
 
 ##### Linearizability Versus Serializability
 
-Linearizability is easily confused with [serializability](/docs/CS/Transaction.md?id=Serializability), as both words seem to mean something like “can be arranged in a sequential order.”
+Linearizability is easily confused with [serializability](/docs/CS/SE/Transaction.md?id=Serializability), as both words seem to mean something like “can be arranged in a sequential order.”
 However, they are two quite different guarantees, and it is important to distinguish between them:
 
 - Serializability is an isolation property of transactions, where every transaction may read and write multiple objects (rows, documents, records).
@@ -617,7 +617,7 @@ Instead, they detect and handle conflicts: in COPS, this is done by checking the
 
 [Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
 
-In “[Replication Lag](/docs/CS/Transaction.md?id=Replication-Lag)” we looked at some timing issues that occur in a replicated database.
+In “[Replication Lag](/docs/CS/SE/Transaction.md?id=Replication-Lag)” we looked at some timing issues that occur in a replicated database.
 If you look at two database nodes at the same moment in time, you’re likely to see different data on the two nodes, because write requests arrive on different nodes at different times.
 These inconsistencies occur no matter what replication method the database uses (single-leader, multi-leader, or leaderless replication).
 
@@ -1203,7 +1203,7 @@ zookeeper
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
-- [Encoding](/docs/CS/Encoding.md)
+- [Encoding](/docs/CS/Security/Encoding.md)
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 
 ## References

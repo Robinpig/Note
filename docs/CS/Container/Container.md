@@ -1,7 +1,6 @@
 ## Introduction
 
-Containerization is the packaging of software code with just the operating system (OS) libraries and dependencies required to 
-run the code to create a single lightweight executable—called a container—that runs consistently on any infrastructure.
+Containerization is the packaging of software code with just the operating system (OS) libraries and dependencies required to run the code to create a single lightweight executable—called a container—that runs consistently on any infrastructure.
 More portable and resource-efficient than virtual machines (VMs), containers have become the de facto compute units of modern cloud-native applications.
 
 Containerization allows developers to create and deploy applications faster and more securely. 

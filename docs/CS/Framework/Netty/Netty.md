@@ -356,7 +356,7 @@ AllocateByteBuf
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Cassandra](/docs/CS/DB/Cassandra.md)
 - [Hadoop](/docs/CS/Java/Hadoop/Hadoop.md)
-- [ElasticSearch](/docs/CS/ES.md)
+- [ElasticSearch](/docs/CS/Framework/ES/ES.md)
 
 ## References
 

@@ -24,7 +24,7 @@ In this scenario, it’s important to define an appropriate RTO (Recovery Time O
 RPO (Recovery Point Objective--the last point or transaction captured in the recovery) on the data resident in the In-Memory engine to determine whether or not this is suitable.
 Design strategies and characteristics of different In-Memory engines can be applied to meet most RTO and RPO requirements.
 
-![Cache](./img/Cache.png)
+![Cache](../img/Cache.png)
 
 
 | Layer        | Client-Side                                                           | DNS                                                                              | Web                                                                           | App                                                | Database                                               |
@@ -496,7 +496,7 @@ At this time, large concurrent requests may overwhelm the back-end DB instantane
 
 Solution
 
-- [Circular Breaker](/docs/CS/CircuitBreaker.md)
+- [Circular Breaker](/docs/CS/SE/CircuitBreaker.md)
 
 Avoid too many requests accessing DataBases.
 

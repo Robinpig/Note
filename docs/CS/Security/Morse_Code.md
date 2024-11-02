@@ -12,7 +12,7 @@ A dah is three times as long as a dit, and the pause has the same length as the 
 
 <div style="text-align: center;">
 
-![Fig.1. International Morse Code](img/Morse_Code.png)
+![Fig.1. International Morse Code](../img/Morse_Code.png)
 
 </div>
 

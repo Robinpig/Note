@@ -130,7 +130,7 @@ A full-fledged memory barrier orders both loads and stores, but again only on th
 
 ## Links
 
-- [Cache](/docs/CS/Cache.md)
+- [Cache](/docs/CS/SE/Cache.md)
 
 ## References
 

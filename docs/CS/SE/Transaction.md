@@ -72,7 +72,7 @@ The database ensures that when the transactions have committed, the result is th
 
 <div style="text-align: center;">
 
-![Fig.1. A race condition between two clients concurrently incrementing a counter](img/Concurrent-Increment-Counter.png)
+![Fig.1. A race condition between two clients concurrently incrementing a counter](../img/Concurrent-Increment-Counter.png)
 
 </div>
 
@@ -196,7 +196,7 @@ This is illustrated in Figure 2, where user 1 has set x = 3, but user 2’s get 
 
 <div style="text-align: center;">
 
-![Fig.2. Dirty reads](img/Dirty-Reads.png)
+![Fig.2. Dirty reads](../img/Dirty-Reads.png)
 
 </div>
 
@@ -234,7 +234,7 @@ By preventing dirty writes, this isolation level avoids some kinds of concurrenc
 
 <div style="text-align: center;">
 
-![Fig.3. Dirty writes](img/Dirty-Writes.png)
+![Fig.3. Dirty writes](../img/Dirty-Writes.png)
 
 </div>
 
@@ -266,7 +266,7 @@ For example, Figure 4 illustrates a problem that can occur with read committed.
 
 <div style="text-align: center;">
 
-![Fig.4. Read skew](img/Read-Skew.png)
+![Fig.4. Read skew](../img/Read-Skew.png)
 
 </div>
 
@@ -328,7 +328,7 @@ Whenever a transaction writes anything to the database, the data it writes is ta
 
 <div style="text-align: center;">
 
-![Fig.5. Implementing snapshot isolation using multi-version objects](img/MVCC.png)
+![Fig.5. Implementing snapshot isolation using multi-version objects](../img/MVCC.png)
 
 </div>
 
@@ -499,7 +499,7 @@ What happens next is illustrated in Figure 6.
 
 <div style="text-align: center;">
 
-![Fig.6. Write skew](img/Write-Skew.png)
+![Fig.6. Write skew](../img/Write-Skew.png)
 
 </div>
 
@@ -910,7 +910,7 @@ This process is shown in Figure 13-1.
 
 <div style="text-align: center;">
 
-![2PC](img/2PC.png)
+![2PC](../img/2PC.png)
 
 </div>
 
@@ -968,7 +968,7 @@ It is important to implement proper recovery mechanisms and have backup coordina
 
 <div style="text-align: center;">
 
-![3PC](img/3PC.png)
+![3PC](../img/3PC.png)
 
 </div>
 
