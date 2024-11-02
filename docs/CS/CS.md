@@ -101,6 +101,8 @@ These specifications are part of the Jakarta EE platform.
 
 ## Other Topics
 
+[Software Engineering](/docs/CS/SE/Engineering.md)
+
 [Concurrency](/docs/CS/SE/Concurrency.md)
 
 [Cache](/docs/CS/SE/Cache.md)
@@ -113,7 +115,7 @@ These specifications are part of the Jakarta EE platform.
 
 [Encoding](/docs/CS/Security/Encoding.md)
 
-[Browser](/docs/CS/Browser.md)
+[Browser](/docs/CS/Browser/Browser.md)
 
 Ints are not Integers, Floats are not Reals.
 

@@ -83,11 +83,9 @@ Dead, ossifying IT systems rapidly bring the organization to a standstill, unabl
 我们基于应⽤开发、测试、运维的不同阶段，对服务治理的概念做⼀个区分，分为开发态、测
 试态和运行态。其中运⾏态⼜分为发布态、安全态和⾼可⽤。
 
-![alt text](image.png)
 
 中间件只需要提供⼀个标准的轻量级 SDK，提供简单实现和
-接⼝；剩余的⽐较重的逻辑，就可以写在 Java Agent 中，通过 ClassFileTransformer 的⽅式动
-态插⼊到 Java 代码中
+接⼝；剩余的⽐较重的逻辑，就可以写在 Java Agent 中，通过 ClassFileTransformer 的⽅式动态插⼊到 Java 代码中
 
 业务⽅也只需要依赖⼀个中间件 SDK 作为接⼝，由于主要逻辑都在 Java Agent 中，业务⽅就
 避免了频繁升级 SDK 的成本，专注于业务研发。以开源的 Java 应⽤为例，业务⽅只需要依赖⼀

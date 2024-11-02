@@ -17,7 +17,7 @@ Spring Cloud focuses on providing good out of box experience for typical use cas
 * Short lived microservices (tasks)
 * Consumer-driven and producer-driven contract testing
 
-[Cloud Native](/docs/CS/Framework/Spring_Cloud/Cloud.md) is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development.
+[Cloud Native](/docs/CS/Cloud/Cloud.md) is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development.
 A related discipline is that of building `12-factor` Applications, in which development practices are aligned with delivery and operations goals—for instance, by using declarative programming and management and monitoring.
 Spring Cloud facilitates these styles of development in a number of specific ways.
 The starting point is a set of features to which all components in a distributed system need easy access.

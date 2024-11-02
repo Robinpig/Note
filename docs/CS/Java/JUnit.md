@@ -19,4 +19,4 @@ It requires JUnit 4.12 or later to be present on the class path or module path.
 
 ## Links
 
-- [Test](/docs/CS/Test.md)
+- [Test](/docs/CS/SE/Test.md)

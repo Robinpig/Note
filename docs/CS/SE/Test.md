@@ -6,7 +6,7 @@
 
 <div style="text-align: center;">
 
-![Fig.1. Test](./img/Test.png)
+![Fig.1. Test](../img/Test.png)
 
 </div>
 
