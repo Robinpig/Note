@@ -411,7 +411,7 @@ PoS，Proof of Stake）
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed)
 
 ## References
 

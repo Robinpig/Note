@@ -110,7 +110,7 @@ The storage and visualization of that data is intentionally left to other tools.
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed)
 
 
 ## References

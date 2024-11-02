@@ -22,7 +22,7 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 
 ### Distributed Systems
 
-A [distributed system](/docs/CS/Distributed/Distributed_Systems.md) is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
+A [distributed system](/docs/CS/Distributed/Distributed) is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
 This definition leads to the following especially significant characteristics of distributed systems:
 concurrency of components, lack of a global clock and independent failures of components.
 

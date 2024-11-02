@@ -973,7 +973,7 @@ We also touched on methods for resolving conflicts by merging together concurren
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed)
 - [Partitioning](/docs/CS/Distributed/Partition.md)
 
 ## References

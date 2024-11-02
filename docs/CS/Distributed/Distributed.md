@@ -236,12 +236,14 @@ whereas distributed consistency is mostly about coordinating the state of replic
 What happens if multiple clients read or modify different copies of data simultaneously or within a short period.
 There’s no single right answer to that question, since these semantics are different depending on the application, but they are well studied in the context of consistency models.
 
-*Consistency models* provide different semantics and guarantees.
-You can think of a consistency model as a contract between the participants: what each replica has to do to satisfy the required semantics, and what users can expect when issuing read and write operations.
-
+A history is a collection of operations, including their concurrent structure.
+A consistency model is a set of histories.
 Consistency models describe what expectations clients might have in terms of possible returned values despite the existence of multiple copies of data and concurrent accesses to it.
 
-A consistency model is a set of histories.
+
+
+*Consistency models* provide different semantics and guarantees.
+You can think of a consistency model as a contract between the participants: what each replica has to do to satisfy the required semantics, and what users can expect when issuing read and write operations.
 
 
 From [Jepsen Consistency Models](https://jepsen.io/consistency):
@@ -262,7 +264,7 @@ Fig.1. Consistency Models
 
 Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the **real-time ordering** of those operations: e.g., if operation A completes before operation B begins, then B should logically take effect after A.
 
-When real-time constraints are not important, but you still want every process to observe the same total order, try [sequential consistency](/docs/CS/Distributed/Distributed_Systems.md?id=Sequential-Consistency)
+When real-time constraints are not important, but you still want every process to observe the same total order, try [sequential consistency](/docs/CS/Distributed/Distributed?id=Sequential-Consistency)
 
 Concurrent operations are represented as one of the possible sequential histories for which visibility properties hold.
 There is some indeterminism in linearizability, as there may exist more than one way in which the events can be ordered.
@@ -623,7 +625,7 @@ but some threads will have only a few messages in common, so there might be no s
 In a causally consistent system, we get session guarantees for the application, ensuring the view of the database is consistent with its own actions, even if it executes read and write requests against different,
 potentially inconsistent, servers.
 These guarantees are: monotonic reads, monotonic writes, read-your-writes, writes-follow-reads. 
-You can find more information on these [session models](/docs/CS/Distributed/Distributed_Systems.md?id=Session-Models).
+You can find more information on these [session models](/docs/CS/Distributed/Distributed?id=Session-Models).
 
 Causal consistency can be implemented using logical clocks and sending context metadata with every message, summarizing which operations logically precede the current one.
 When the update is received from the server, it contains the latest version of the context. Any operation can be processed only if all operations preceding it have already been applied.

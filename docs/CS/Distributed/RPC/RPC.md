@@ -214,7 +214,7 @@ kitex
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed)
 
 ## References
 1. [RFC 647 - Procedure Call Protocol Documents，Version 2](https://datatracker.ietf.org/doc/rfc647/)

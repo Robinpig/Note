@@ -2,7 +2,7 @@
 
 It is impossible for a distributed computer system to simultaneously provide all three of the following guarantees:
 
-- **Consistency**: all nodes see the same data at the same time(Actually means linearizability)
+- **Consistency**: all nodes see the same data at the same time(Actually means [linearizability](/docs/CS/Distributed/Distributed.md?id=linearizability))
 - **Availability**: Node failures do not prevent other survivors from continuing to operate (a guarantee that every request receives a response about whether it succeeded or failed)
 - **Partition tolerance**: the system continues to operate despite arbitrary partitioning due to network failures (e.g., message loss)
 
@@ -160,7 +160,7 @@ FLP: No deterministic 1-crash-robust consensus algorithm exists with asynchronou
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed)
 
 ## References
 

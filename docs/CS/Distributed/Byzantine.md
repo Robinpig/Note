@@ -285,7 +285,7 @@ However, when extremely high reliability is required, such assumptions cannot be
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed)
 
 ## References
 

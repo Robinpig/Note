@@ -101,5 +101,5 @@ fastjson在某些场景下会导致jvm crash
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed_Systems.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed)
 - [RPC](/docs/CS/Distributed/RPC/RPC.md)
