@@ -260,15 +260,18 @@ Fig.1. Consistency Models
 
 #### Linearizability
 
-*Linearizability* is the strongest single-object, single-operation consistency model.
-Under this model, effects of the write become visible to all readers exactly once at some point in time between its start and end,
-and no client can observe state transitions or side effects of partial (i.e., unfinished, still in-flight) or incomplete (i.e., interrupted before completion) write operations.
+Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the **real-time ordering** of those operations: e.g., if operation A completes before operation B begins, then B should logically take effect after A.
 
-“Concurrent operations are represented as one of the possible sequential histories for which visibility properties hold.
+When real-time constraints are not important, but you still want every process to observe the same total order, try [sequential consistency](/docs/CS/Distributed/Distributed_Systems.md?id=Sequential-Consistency)
+
+Concurrent operations are represented as one of the possible sequential histories for which visibility properties hold.
 There is some indeterminism in linearizability, as there may exist more than one way in which the events can be ordered.
 
-If two operations overlap, they may take effect in any order. All read operations that occur after write operation completion can observe the effects of this operation.
+If two operations overlap, they may take effect in any order. 
+All read operations that occur after write operation completion can observe the effects of this operation.
 As soon as a single read operation returns a particular value, all reads that come after it return the value at least as recent as the one it returns.
+
+> Herlihy & Wing introduced linearizability in their 1990 paper [Linearizability: A Correctness Condition for Concurrent Objects](http://cs.brown.edu/~mph/HerlihyW90/p463-herlihy.pdf). 
 
 There is some flexibility in terms of the order in which concurrent events occur in a global history, but they cannot be reordered arbitrarily.
 Operation results should not become effective before the operation starts as that would require an oracle able to predict future operations.
@@ -344,7 +347,6 @@ Viotti and Vukolić rephrase this definition in terms of three set-theoretic con
 - RealTime (consistent with the real time bound)
 - RVal (obeying the single-threaded laws of the associated object’s datatype)
 
-[How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Progranms](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/How-to-Make-a-Multiprocessor-Computer-That-Correctly-Executes-Multiprocess-Programs.pdf)
 
 Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the real-time ordering of those operations: e.g.,
 if operation A completes before operation B begins, then B should logically take effect after A.
@@ -525,35 +527,50 @@ even though operations on two independent objects are linearizable, operations t
 
 #### Sequential Consistency
 
+Informally, sequential consistency implies that operations appear to take place in some total order, and that that order is consistent with the order of operations on each individual process.
+
+A process in a sequentially consistent system may be far ahead, or behind, of other processes. For instance, they may read arbitrarily stale state. However, once a process A has observed some operation from process B, it can never observe a state *prior* to B. This, combined with the total ordering property, makes sequential consistency a surprisingly strong model for programmers.
+
+Leslie Lamport defined sequential consistency in his 1979 paper [How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Programs](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/How-to-Make-a-Multiprocessor-Computer-That-Correctly-Executes-Multiprocess-Programs.pdf). He uses “sequentially consistent” to imply...
+
+> … the result of any execution is the same as if the operations of all the processors were executed in some sequential order, and the operations of each individual processor appear in this sequence in the order specified by its program.
+
 Viotti and Vukolić decompose sequential consistency into three properties:
 
 - SingleOrder (there exists some total order of operations)
 - PRAM
 - RVal (the order must be consistent with the semantics of the datatype)
 
-“Achieving linearizability might be too expensive, but it is possible to relax the model, while still providing rather strong consistency guarantees. Sequential consistency allows ordering operations as if they were executed in some sequential order, while requiring operations of each individual process to be executed in the same order they were performed by the process.
+Achieving linearizability might be too expensive, but it is possible to relax the model, while still providing rather strong consistency guarantees. 
+Sequential consistency allows ordering operations as if they were executed in some sequential order,
+while requiring operations of each individual process to be executed in the same order they were performed by the process.
 
-Processes can observe operations executed by other participants in the order consistent with their own history, but this view can be arbitrarily stale from the global perspective [KINGSBURY18a]. Order of execution between processes is undefined, as there’s no shared notion of time.”
+Processes can observe operations executed by other participants in the order consistent with their own history, but this view can be arbitrarily stale from the global perspective. 
+Order of execution between processes is undefined, as there’s no shared notion of time.
 
-“Sequential consistency was initially introduced in the context of concurrency, describing it as a way to execute multiprocessor programs correctly. The original description required memory requests to the same cell to be ordered in the queue (FIFO, arrival order), did not impose global ordering on the overlapping writes to independent memory cells, and allowed reads to fetch the value from the memory cell, or the latest value from the queue if the queue was nonempty [LAMPORT79]. This example helps to understand the semantics of sequential consistency. Operations can be ordered in different ways (depending on the arrival order, or even arbitrarily in case two writes arrive simultaneously), but all processes observe the operations in the same order.
+Sequential consistency was initially introduced in the context of concurrency, describing it as a way to execute multiprocessor programs correctly. 
+The original description required memory requests to the same cell to be ordered in the queue (FIFO, arrival order),
+did not impose global ordering on the overlapping writes to independent memory cells, and allowed reads to fetch the value from the memory cell, or the latest value from the queue if the queue was nonempty. 
+This example helps to understand the semantics of sequential consistency. 
+Operations can be ordered in different ways (depending on the arrival order, or even arbitrarily in case two writes arrive simultaneously), but all processes observe the operations in the same order.
 
-Each process can issue read and write requests in an order specified by its own program, which is very intuitive. Any nonconcurrent, single-threaded program executes its steps this way: one after another. All write operations propagating from the same process appear in the order they were submitted by this process. Operations propagating from different sources may be ordered arbitrarily, but this order will be consistent from the readers’ perspective.”
+Each process can issue read and write requests in an order specified by its own program, which is very intuitive. 
+Any nonconcurrent, single-threaded program executes its steps this way: one after another. 
+All write operations propagating from the same process appear in the order they were submitted by this process.
+Operations propagating from different sources may be ordered arbitrarily, but this order will be consistent from the readers’ perspective.
 
 > [!NOTE]
 >
-> Sequential consistency is often confused with linearizability since both have similar semantics. Sequential consistency, just as linearizability, requires operations to be globally ordered, but linearizability requires the local order of each process and global order to be consistent. In other words, linearizability respects a real-time operation order. Under sequential consistency, ordering holds only for the same-origin writes [VIOTTI16]. Another important distinction is composition: we can combine linearizable histories and still expect results to be linearizable, while sequentially consistent schedules are not composable [ATTIYA94].”
+> Sequential consistency is often confused with linearizability since both have similar semantics. Sequential consistency, just as linearizability, requires operations to be globally ordered, but linearizability requires the local order of each process and global order to be consistent. In other words, linearizability respects a real-time operation order. Under sequential consistency, ordering holds only for the same-origin writes. Another important distinction is composition: we can combine linearizable histories and still expect results to be linearizable, while sequentially consistent schedules are not composable.
 
-Figure 11-5 shows how write(x,1) and write(x,2) can become visible to P3 and P4.
-Even though in wall-clock terms, 1 was written before 2, it can get ordered after 2.
-At the same time, while P3 already reads the value 1, P4 can still read 2.
-However, both orders, 1 → 2 and 2 → 1, are valid, as long as they’re consistent for different readers. 
-What’s important here is that both P3 and P4 have observed values in the same order: first 2, and then 1.
+
 
 Stale reads can be explained, for example, by replica divergence: even though writes propagate to different replicas in the same order, they can arrive there at different times.
 
 The main difference with linearizability is the absence of globally enforced time bounds. 
 Under linearizability, an operation has to become effective within its wall-clock time bounds.
-By the time the write W₁ operation completes, its results have to be applied, and every reader should be able to see the value at least as recent as one written by W₁. Similarly, after a read operation R₁ returns, any read operation that happens after it should return the value that R₁ has seen or a later value (which, of course, has to follow the same rule).
+By the time the write W₁ operation completes, its results have to be applied, and every reader should be able to see the value at least as recent as one written by W₁.
+Similarly, after a read operation R₁ returns, any read operation that happens after it should return the value that R₁ has seen or a later value (which, of course, has to follow the same rule).
 
 Sequential consistency relaxes this requirement: an operation’s results can become visible after its completion, as long as the order is consistent from the individual processors’ perspective.
 Same-origin writes can’t “jump” over each other: their program order, relative to their own executing process, has to be preserved. 
@@ -561,6 +578,10 @@ The other restriction is that the order in which operations have appeared must b
 
 Similar to linearizability, modern CPUs do not guarantee sequential consistency by default and, since the processor can reorder instructions,
 we should use memory barriers (also called fences) to make sure that writes become visible to concurrently running threads in order.
+
+
+
+
 
 #### Causal consistency
 
@@ -579,7 +600,8 @@ all processes have to see causally related operations in the same order. Concurr
 
 First, let’s take a look at why we need causality and how writes that have no causal relationship can propagate. 
 In Figure 11-6, processes P1 and P2 make writes that aren’t causally ordered.
-The results of these operations can propagate to readers at different times and out of order. Process P3 will see the value 1 before it sees 2, while P4 will first see 2, and then 1.
+The results of these operations can propagate to readers at different times and out of order. 
+Process P3 will see the value 1 before it sees 2, while P4 will first see 2, and then 1.
 
 In addition to a written value, we now have to specify a logical clock value that would establish a causal order between operations.
 P1 starts with a write operation write(x,∅,1)→t1, which starts from the initial value ∅. 
@@ -640,6 +662,20 @@ In case of a conflict, the notion of latest value might change, as the values fr
 Eventually is an interesting term to describe value propagation, since it specifies no hard time bound in which it has to happen.
 If the delivery service provides nothing more than an “eventually” guarantee, it doesn’t sound like it can be relied upon.
 However, in practice, this works well, and many databases these days are described as eventually consistent.
+
+
+#### Client-centric Consistency
+
+以客户端为中心的一致性为单一客户端提供一致性保证，保证该客户端对数据存储的访问的一致性，但是它不为不同客户端的并发访问提供任何一致性保证
+
+以客户端为中心的一致性包含了四种子模型：
+
+- 单调读一致性（Monotonic-read Consistency）：如果一个进程读取数据项 x 的值，那么该进程对于 x 后续的所有读操作要么读取到第一次读取的值要么读取到更新的值。即保证客户端不会读取到旧值。
+- 单调写一致性（Monotonic-write Consistency）：一个进程对数据项 x 的写操作必须在该进程对 x 执行任何后续写操作之前完成。即保证客户端的写操作是串行的。
+- 读写一致性（Read-your-writes Consistency）：一个进程对数据项 x 执行一次写操作的结果总是会被该进程对 x 执行的后续读操作看见。即保证客户端能读到自己最新写入的值。
+- 写读一致性（Writes-follow-reads Consistency）：同一个进程对数据项 x 执行的读操作之后的写操作，保证发生在与 x 读取值相同或比之更新的值上。即保证客户端对一个数据项的写操作是基于该客户端最新读取的值
+
+
 
 #### Strong Eventual Consistency and CRDTs
 
