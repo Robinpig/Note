@@ -97,6 +97,168 @@ extern struct proc *proc asm("%gs:4");     // cpus[cpunum()].proc
 
 
 
+### fork
+
+
+
+Allocproc
+
+
+```c
+// Look in the process table for an UNUSED proc.
+// If found, change state to EMBRYO and initialize
+// state required to run in the kernel.
+// Otherwise return 0.
+// Must hold ptable.lock.
+static struct proc*
+allocproc(void)
+{
+  struct proc *p;
+  char *sp;
+
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    if(p->state == UNUSED)
+      goto found;
+  return 0;
+
+found:
+  p->state = EMBRYO;
+  p->pid = nextpid++;
+
+  // Allocate kernel stack.
+  if((p->kstack = kalloc()) == 0){
+    p->state = UNUSED;
+    return 0;
+  }
+  sp = p->kstack + KSTACKSIZE;
+
+  // Leave room for trap frame.
+  sp -= sizeof *p->tf;
+  p->tf = (struct trapframe*)sp;
+
+  // Set up new context to start executing at forkret,
+  // which returns to trapret.
+  sp -= 4;
+  *(uint*)sp = (uint)trapret;
+
+  sp -= sizeof *p->context;
+  p->context = (struct context*)sp;
+  memset(p->context, 0, sizeof *p->context);
+  p->context->eip = (uint)forkret;
+
+  return p;
+}
+
+
+```
+
+
+
+
+
+### schedule
+
+
+#### scheduler
+
+Per-CPU process scheduler. Each CPU calls scheduler() after setting itself up.
+Scheduler never returns.  It loops, doing:
+ - choose a process to run
+ - swtch to start running that process
+ - eventually that process transfers control via swtch back to the scheduler
+ 
+ 
+ 内核中只维护了一个全局的“就绪队列”，为所有 共享。每个 都有自己的调度器，调度器从这个全局队列挑选合适的进程然后将 分配给它。
+单队列的形式实现起来比较简单，对所有的 来说很公平。这个队列是全局共享的，所以当一个挑选进程时需要加锁，不然多个 就可能选取同一个进程。但是锁机制不可避免带来额外的开销使得性能降低
+
+
+
+
+
+```c
+
+void
+scheduler(void)
+{
+  struct proc *p;
+
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      // Switch to chosen process.  It is the process’s job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      swtch(&cpu->scheduler, p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      proc = 0;
+    }
+    release(&ptable.lock);
+
+  }
+}
+
+```
+#### switch
+
+
+
+
+Context switch
+#
+#   void swtch(struct context **old, struct context *new);
+# 
+# Save current register context in old
+# and then load register context from new.
+
+
+
+
+```
+
+# Context switch
+#
+#   void swtch(struct context **old, struct context *new);
+# 
+# Save current register context in old
+# and then load register context from new.
+
+.globl swtch
+swtch:
+  movl 4(%esp), %eax
+  movl 8(%esp), %edx
+
+  # Save old callee-save registers
+  pushl %ebp
+  pushl %ebx
+  pushl %esi
+  pushl %edi
+
+  # Switch stacks
+  movl %esp, (%eax)
+  movl %edx, %esp
+
+  # Load new callee-save registers
+  popl %edi
+  popl %esi
+  popl %ebx
+  popl %ebp
+  ret
+```
+
+
 
 ## RISC-V
 
@@ -131,7 +293,12 @@ struct proc {
 }
 ```
 
-scheduler
+### fork
+
+
+### schedule
+
+#### scheduler
 
 ```c
 // Per-CPU process scheduler.

@@ -303,6 +303,163 @@ start:
   movw    %ax,%ss             # -> Stack Segment
 ```
 
+> The A20 Address Line is the physical representation of the 21st bit (number 20, counting from 0) of any memory access. When the IBM-AT (Intel 286) was introduced, it was able to access up to sixteen megabytes of memory (instead of the 1 MByte of the 8086). But to remain compatible with the 8086, a quirk in the 8086 architecture (memory wraparound) had to be duplicated in the AT. To achieve this, the A20 line on the address bus was disabled by default.
+The wraparound was caused by the fact the 8086 could only access 1 megabyte of memory, but because of the segmented memory model it could effectively address up to 1 megabyte and 64 kilobytes (minus 16 bytes). Because there are 20 address lines on the 8086 (A0 through A19), any address above the 1 megabyte mark wraps around to zero. For some reason a few short-sighted programmers decided to write programs that actually used this wraparound (rather than directly addressing the memory at its normal location at the bottom of memory). Therefore in order to support these 8086-era programs on the new processors, this wraparound had to be emulated on the IBM AT and its compatibles; this was originally achieved by way of a latch that by default set the A20 line to zero. Later the 486 added the logic into the processor and introduced the A20M pin to control it.
+> For an operating system developer (or Bootloader developer) this means the A20 line has to be enabled so that all memory can be accessed. This started off as a simple hack but as simpler methods were added to do it, it became harder to program code that would definitely enable it and even harder to program code that would definitely disable it.
+
+
+
+在初始化好寄存器后，xv6 bootasm.S 接下来要做的事情就是打开 A20 gate 突破 1MB 内存寻址的限制。
+控制 A20 gate 的方法有 3 种：
+- 804x 键盘控制器法
+- Fast A20 法
+- BIOS 中断法
+ 
+xv6 用了第一种 804x 键盘控制器法，这也是最古老且效率最慢的一种。当然因为硬件的不同，这三种方法可能不会被硬件都支持，正确的做法应该是这三种都尝试一下，每尝试一个就验证一下 A20 gate 是否被正确打开以保证兼容各种硬件。但是 xv6 作为一款教学用的操作系统就没必要做的这么复杂里。只用了一种最古老的方法（保证兼容大多数硬件）而且没有对打开成功与否做验证。像诸如 Linux 这样的操作系统就把三种方法的实现都做好里，并且加上了验证机制。
+
+在开启A20线之前需要关闭中断以防止我们的内核陷入混乱。命令字节是通过端口0x64来发送的
+
+我们具体来看 xv6 的实现代码
+bootasm.S 用了两个方法 seta20.1 和 seta20.2 来实现通过 804x 键盘控制器打开 A20 gate
+
+```
+seta20.1:
+  inb     $0x64,%al               # Wait for not busy
+  testb   $0x2,%al
+  jnz     seta20.1
+
+  movb    $0xd1,%al               # 0xd1 -> port 0x64, prepare write to 0x60
+  outb    %al,$0x64
+
+seta20.2:
+  inb     $0x64,%al               # Wait for not busy
+  testb   $0x2,%al
+  jnz     seta20.2
+
+  movb    $0xdf,%al               # 0xdf -> port 0x60
+  outb    %al,$0x60
+```
+
+
+在进入保护模式前需要将 GDT 准备好
+
+
+根据 SEG_ASM宏构建了两个段描述符：代码段描述符和数据段描述符，因为代码段在 GDT 中的
+索引设为 1，所以先构建的代码段描述符。 GDT第一个描述符是没用的，所以直接设置为 0。
+
+
+
+```
+
+# asm.h
+
+#define SEG_NULLASM                                             \
+        .word 0, 0;                                             \
+        .byte 0, 0, 0, 0
+
+// The 0xC0 means the limit is in 4096-byte units
+// and (for executable segments) 32-bit mode.
+#define SEG_ASM(type,base,lim)                                  \
+        .word (((lim) >> 12) & 0xffff), ((base) & 0xffff);      \
+        .byte (((base) >> 16) & 0xff), (0x90 | (type)),         \
+                (0xC0 | (((lim) >> 28) & 0xf)), (((base) >> 24) & 0xff)
+
+
+
+# Bootstrap GDT
+.p2align 2                                # force 4 byte alignment
+gdt:
+  SEG_NULLASM                             # null seg
+  SEG_ASM(STA_X|STA_R, 0x0, 0xffffffff)   # code seg
+  SEG_ASM(STA_W, 0x0, 0xffffffff)         # data seg
+
+
+
+
+
+```
+
+构建 GDT位置信息
+CPU需要知道构建的GDT在哪，所以需要将GDT的起始地址和界限这两样信息加载到GDTR寄存器
+gdtdesc即为 需GDTR要的 48 位位置信息指针，它包括了GDT的起始位置和界限
+
+
+```
+gdtdesc:
+  .word   (gdtdesc - gdt - 1)             # sizeof(gdt) - 1
+  .long   gdt                             # address gdt
+
+```
+加载 有专门的指令
+
+```
+  lgdt    gdtdesc
+```
+
+将 寄存器的 PE 位置 1 开启保护模式
+
+```
+
+  movl    %cr0, %eax
+  orl     $CR0_PE, %eax
+  movl    %eax, %cr0
+```
+
+从此开始进入保护模式，16 位的 CPU 变成了 32 位的 CPU，此刻前后的指令格式也是不一样的，在
+此之前使用的 16 位指令，在此之后使用的 32 位指令，这里所说的多少位的指令不是说这个指令的长
+度，而是两种模式下指令的编码都不一样，也就是说同一条指令在两种模式下的机器码可能不一样。
+但是我们应该都知道，为了加快 CPU 执行指令的效率，存在着一种机制：流水线，简单来说，就是把
+多条指令加载到流水线上，同时运行不同指令不同部分。问题就出在这儿，进入保护模式后流水线上可
+能还存在 16位的指令，所以进入保护模式后需要清空流水线，无条件跳转 指令可以用来清空流水线
+
+
+
+这里就是使用了一个长跳指令来刷新流水线，顺便设置 和 寄存器，因为现在是保护模式
+了，段寄存器的可见部分应存放的是段选择子，所以将 内核代码段选择子写进
+，这里的 相当于选择子的 域，所以左移3位。左移操作右边添 0，这页
+说明 位为 0 表示 ，位域为0，表特权级0，也就是内核态
+
+
+
+
+
+```
+
+#define SEG_KCODE 1
+
+ljmp    $(SEG_KCODE<<3), $start32
+
+```
+上面那个长跳跳转到此
+
+
+
+```
+start32:
+  # Set up the protected-mode data segment registers
+  movw    $(SEG_KDATA<<3), %ax    # Our data segment selector
+  movw    %ax, %ds                # -> DS: Data Segment
+  movw    %ax, %es                # -> ES: Extra Segment
+  movw    %ax, %ss                # -> SS: Stack Segment
+  movw    $0, %ax                 # Zero segments not ready for use
+  movw    %ax, %fs                # -> FS
+  movw    %ax, %gs                # -> GS
+
+  # Set up the stack pointer and call into C.
+  movl    $start, %esp 						# set 0x7c00
+  call    bootmain
+
+
+```
+
+
+#### bootmain
+
+
+bootmain.c做的相当于bootloader的工作 加载kernel
+
+运行 的时候是将 以下作为栈使用，根据内存低 1M 布局图可以看出，以下有大约 30K 的空闲空间
+
 
 
 ```c
@@ -428,7 +585,7 @@ entry:
 
 
 
-#### main
+#### xv6#main
 
 
 
@@ -464,11 +621,159 @@ main(void)
 }
 ```
 
+xv6定义了一个全局的CPU数据结构，mpinit函数就是探寻有多少个CPU然后初始化的 ，每个CPU都对应着一个 LAPIC， LAPIC的ID也就可以用来唯一标识
 
 
 
 
-mpmain()是启动代码的最后阶段， 随后将进入scheduler()调度器中的无限循环(不再返回)。因此，mpmain()的第一件事 情 就 是 打 印 “ c p u X : s t a r t i n g ” 的 信 息 ，然 用 i d t i n i t ( ) 装 入 中 断 描 述 符 I D T 表 以 响 应 时 钟 中断(及其他中断)，接着将 cpu->started 设置 1，让其他处理器知道本处理器已经完成 启动。 最后进入到调度器的scheduler()中的无限循环中，每隔一个tick时钟中断就选取 下一个就绪进程来执行
+```c
+
+struct cpu cpus[NCPU];
+int ncpu;
+
+```
+
+
+##### mpinit
+
+
+```c
+
+
+void
+mpinit(void)
+{
+  uchar *p, *e;
+  struct mp *mp;
+  struct mpconf *conf;
+  struct mpproc *proc;
+  struct mpioapic *ioapic;
+
+  if((conf = mpconfig(&mp)) == 0)
+    return;
+  ismp = 1;
+  lapic = (uint*)conf->lapicaddr;
+  for(p=(uchar*)(conf+1), e=(uchar*)conf+conf->length; p<e; ){
+    switch(*p){
+    case MPPROC:
+      proc = (struct mpproc*)p;
+      if(ncpu < NCPU) {
+        cpus[ncpu].apicid = proc->apicid;  // apicid may differ from ncpu
+        ncpu++;
+      }
+      p += sizeof(struct mpproc);
+      continue;
+    case MPIOAPIC:
+      ioapic = (struct mpioapic*)p;
+      ioapicid = ioapic->apicno;
+      p += sizeof(struct mpioapic);
+      continue;
+    case MPBUS:
+    case MPIOINTR:
+    case MPLINTR:
+      p += 8;
+      continue;
+    default:
+      ismp = 0;
+      break;
+    }
+  }
+  if(!ismp){
+    // Didn’t like what we found; fall back to no MP.
+    ncpu = 1;
+    lapic = 0;
+    ioapicid = 0;
+    return;
+  }
+
+  if(mp->imcrp){
+    // Bochs doesn’t support IMCR, so this doesn’t run on Bochs.
+    // But it would on real hardware.
+    outb(0x22, 0x70);   // Select IMCR
+    outb(0x23, inb(0x23) | 1);  // Mask external interrupts.
+  }
+}
+```
+
+Start the non-boot (AP) processors
+
+```c
+
+static void
+startothers(void)
+{
+  extern uchar _binary_entryother_start[], _binary_entryother_size[];
+  uchar *code;
+  struct cpu *c;
+  char *stack;
+
+  // Write entry code to unused memory at 0x7000.
+  // The linker has placed the image of entryother.S in
+  // _binary_entryother_start.
+  code = P2V(0x7000);
+  memmove(code, _binary_entryother_start, (uint)_binary_entryother_size);
+
+  for(c = cpus; c < cpus+ncpu; c++){
+    if(c == cpus+cpunum())  // We’ve started already.
+      continue;
+
+    // Tell entryother.S what stack to use, where to enter, and what
+    // pgdir to use. We cannot use kpgdir yet, because the AP processor
+    // is running in low  memory, so we use entrypgdir for the APs too.
+    stack = kalloc();
+    *(void**)(code-4) = stack + KSTACKSIZE;
+    *(void**)(code-8) = mpenter;
+    *(int**)(code-12) = (void *) V2P(entrypgdir);
+
+    lapicstartap(c->apicid, V2P(code));
+
+    // wait for cpu to finish mpmain()
+    while(c->started == 0)
+      ;
+  }
+}
+```
+
+AP会执行mpenter完成启动
+
+```
+
+// Other CPUs jump here from entryother.S.
+static void
+mpenter(void)
+{
+  switchkvm();
+  seginit();
+  lapicinit();
+  mpmain();
+}
+
+
+```
+
+
+##### mpmain
+
+
+CPU这个结构体中的元素started置1表示这个CPU已经启动好了，这里就会通知startothers函数，可以启动下一个AP了。最后就是调用scheduler可以开始调度执行程序了。
+
+```c
+static void
+mpmain(void)
+{
+  cprintf(“cpu%d: starting\n”, cpunum());
+  idtinit();       // load idt register
+  xchg(&cpu->started, 1); // tell startothers() we’re up
+  scheduler();     // start running processes
+}
+
+```
+
+
+执行完startothers ，所有的AP就启动好了，最后BSP本身再执行mpmain自身完成启动
+
+
+
 
 ### RISC-V
 
@@ -747,7 +1052,7 @@ cpu id放入tp寄存器
 
 
 
-#### main
+#### riscv#main
 
 
 
