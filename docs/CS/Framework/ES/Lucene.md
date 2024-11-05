@@ -20,4 +20,4 @@ segment
 
 ## Links
 
-- [Elastic Search]()
+- [ElasticSearch](/docs/CS/Framework/ES/ES.md)
