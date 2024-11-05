@@ -34,6 +34,15 @@ sudo vim /etc/sysctl.d/k8s.conf
 sudo sysctl -p /etc/sysctl.d/k8s.conf
 ```
 
+[Install Tools](https://kubernetes.io/docs/tasks/tools/)
+
+Windows上WSL和虚拟机不适用 在`minikube start`报错 不支持双重虚拟化
+
+安装minikube 依赖Docker 需要确认镜像是否可以下载
+
+```shell
+minikube status
+```
 
 ### Installing kubeadm, kubelet and kubectl
 

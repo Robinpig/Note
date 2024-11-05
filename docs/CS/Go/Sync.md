@@ -30,6 +30,10 @@ The zero value for a Mutex is an unlocked mutex.
 16年1.9版本增加饥饿模式 限制不公平时间 修复唤醒goroutine在最末尾的问题
 18年 分离慢速和快速逻辑 方便inline提高性能
 
+1.14版本 在Unlocking a highly contented Mutex下directly yields 给下一个waiting mutex的goroutine
+> [记一次 Consul 故障分析与优化](https://www.infoq.cn/article/qV02j2EZMjboW8cKcOpg)
+> [sync: Mutex performance collapses with high concurrency](https://github.com/golang/go/issues/33747)
+
 ```go
 const (
     mutexLocked = 1 << iota // mutex is locked

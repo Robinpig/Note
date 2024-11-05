@@ -10,6 +10,22 @@
 
 [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
+
+MySQL 8.4 的 "mysql_native_password is not loaded" 插件未加载错误
+
+Windows修改my.ini文件
+```
+[mysqld]
+mysql_native_password=ON
+```
+
+```shell
+ALTER USER 'your_username'@'your_hostname' IDENTIFIED WITH mysql_native_password BY 'your_password';
+
+FLUSH PRIVILEGES;
+```
+
+
 ##### **Docker**
 
 ```shell

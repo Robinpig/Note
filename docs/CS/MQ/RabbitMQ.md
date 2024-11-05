@@ -1,6 +1,12 @@
 ## Introduction
 
 
+```shell
+docker pull rabbitmq
+
+docker run -d -p 15673:15672 -p 5674:5672 --restart=always -e RABBITMQ_DEFAULT_VHOST=my_vhost -e RABBITMQ_DEFAULT_USER=admin -e RABBITMQ_DEFAULT_PASS=admin123456 --hostname myRabbit --name rabbitmq-new rabbitmq:latest
+```
+
 Only Queue model
 
 - A producer is a user application that sends messages.

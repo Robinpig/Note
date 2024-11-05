@@ -106,6 +106,45 @@ After installed done, open Docker Desktop and set registry-mirrors:
 ```
 
 
+Docker开启监听2375端口
+
+<!-- tabs:start -->
+
+##### **Mac**
+
+```shell
+
+```
+
+##### **Windows**
+
+Windows较为复杂 `netstat -ano | findstr :2375` 发现没有进程
+[Port 2375 not listening](https://github.com/docker/for-win/issues/3546)
+```
+netsh interface ipv4 show excludedportrange protocol=tcp
+```
+
+
+
+停止winnat服务
+```shell
+net stop winnat
+dism.exe /Online /Disable-Feature:Microsoft-Hyper-V
+```
+
+
+```shell
+netsh int ipv4 add excludedportrange protocol=tcp startport=2375 numberofports=1
+```
+
+reset后重启
+```shell
+netsh int ip reset
+```
+
+<!-- tabs:start -->
+
+
 Docker builds containers using 10 major system features.
 The specific features are as follows:
 - PID namespace— Process identifiers and capabilities

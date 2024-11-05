@@ -414,7 +414,21 @@ Observability is the ability to observe the internal state of a running system f
 For metrics and traces, Spring Boot uses Micrometer Observation. 
 To create your own observations (which will lead to metrics and traces), you can inject an `ObservationRegistry`.
 
+
+## Issues
+
+
+启动报错 SnakeYAML在读取YAML文件时出现的java.nio.charset.MalformedInputException:Input length
+
+确认yaml文件编码 可能是文件编码是UTF-8 然后存在中文字符导致
+
+
+
+
 ## Links
 
 - [Spring Framework](/docs/CS/Framework/Spring/Spring.md)
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
+- Splunk
+- Solr
+
