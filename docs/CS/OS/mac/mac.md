@@ -37,6 +37,14 @@ clang test.c -o test
 这些代码中没有一处会直接访问固定的逻辑地址。由位置无关代码编译生成的可执行文件称为位置无关可执行文件(Position Independent Executable, PIE).
 
 
+mac使用 launchctl 管理app
+```shell
+launchctl list
+launchctl stop
+launchctl start
+
+```
+
 ## Issues
 
 MBP长期没关机 突然跨设备Handoff失效 需要把mac重启
