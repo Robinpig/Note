@@ -248,7 +248,7 @@ call `java.lang.ClassLoader.getSystemClassLoader()` and init AppClassLoader and 
   - create InstanceKlass
     - Initialize itable offset tables
     - fill_oop_maps
-    - create mirror class
+    - create mirror(java.lang.Class instance)
 - Linking
   - Verification
   - Rewriting after verification but before the first method of the class is executed

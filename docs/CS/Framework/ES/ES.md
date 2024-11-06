@@ -27,6 +27,9 @@ Elasticsearch 在分布式架构中有两个最常见的应用场景，一个是
 - 根据订单号分库可以把订单表和订单详细信息表或者订单物流表分配到同库join
 - 当根据用户id去查询所有订单时就会出现跨库
 
+> 社区 [discuss.elastic](https://discuss.elastic.co/) 和 [elastic中文社区](https://elasticsearch.cn/)
+
+
 
 ## Install
 
@@ -46,6 +49,16 @@ xpack.security.enabled: false
 ingest.geoip.downloader.enabled: false
 ```
 
+
+
+
+
+
+
+
+
+
+
 ##### **Windows**
 
 
@@ -57,6 +70,18 @@ ingest.geoip.downloader.enabled: false
 
 
 ##### **Docker**
+
+[Install Elasticsearch with Docker](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html)
+
+
+
+
+
+验证
+
+curl ’http://localhost:9200/?pretty‘
+
+
 
 
 ### start
@@ -89,6 +114,36 @@ bin/elasticsearch-plugin install analysis-icu
 Document会序列化成JSON格式
 
 每个Document都会有一份metadata
+
+一个 Elasticsearch 集群可以包含多个 索引（数据库），也就是说其中包含了很多 类型（表）。这些类型中包含了很多的 文档（行），然后每个文档中又包含了很多的 字段（列）
+
+
+Elasticsearch  ⇒ 索引   ⇒ 类型  ⇒ 文档  ⇒ 字段(Fields)
+
+
+
+
+for example
+
+PUT /megacorp/employee/1
+{
+  ”first_name“ : ”John“,
+  ”last_name“ :  ”Smith“,
+  ”age“ :        25,
+  ”about“ :      ”I love to go rock climbing“,
+  ”interests“: [ ”sports“, ”music“ ]
+}
+
+
+获取内容包含元数据信息
+
+
+GET /megacorp/employee/1
+
+
+
+
+
 
 
 
