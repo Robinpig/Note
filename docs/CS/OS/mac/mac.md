@@ -45,6 +45,12 @@ launchctl start
 
 ```
 
+查看端口占用
+```shell
+#命令格式：lsof -i :端口
+lsof -i:8080
+```
+
 ## Issues
 
 MBP长期没关机 突然跨设备Handoff失效 需要把mac重启

@@ -35,7 +35,13 @@ It provides a “lego set” of dozens of standard components and a framework fo
 
 Install Docker Desktop:
 
+> IDEA和VS Code的Docker插件非常实用
+
+
 <!-- tabs:start -->
+
+
+
 
 ##### **Ubuntu**
 
@@ -84,6 +90,8 @@ rm -rf /usr/local/share/fish/vendor_completions.d/docker.fish
 
 <!-- tabs:end -->
 
+
+
 第一个 `service docker start` 是启动Docker的后台服务，第二个 `usermod -aG` 是把当前的用户加入Docker的用户组。这是因为操作Docker必须要有root权限，而直接使用root用户不够安全， 加入Docker用户组是一个比较好的选择，这也是Docker官方推荐的做法
 
 ```plain
@@ -113,7 +121,11 @@ Docker开启监听2375端口
 ##### **Mac**
 
 ```shell
-
+docker run -it -d --name=socat \
+  -p 2375:2375 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  alpine/socat \
+  TCP4-LISTEN:2375,fork,reuseaddr UNIX-CONNECT:/var/run/docker.sock
 ```
 
 ##### **Windows**
@@ -295,7 +307,7 @@ Disable OOM_kill cause Host server down
 ## Docker Compose
 
 
-docker-compose将所管理的容器分为三层， 分别是工程（project），服务（service）以及容器（containner）
+[Docker Compose](https://docs.docker.com/compose/)将所管理的容器分为三层， 分别是工程（project），服务（service）以及容器（containner）
 docker-compose并没有解决负载均衡的问题。因此需要借助其他工具实现服务发现及负载均衡
 
 
