@@ -6,7 +6,6 @@ To emphasize this, and to clarify the project's governance structure, Prometheus
 
 Prometheus collects and stores its metrics as time series data, i.e. metrics information is stored with the timestamp at which it was recorded, alongside optional key-value pairs called labels.
 
-
 Prometheus's main features are:
 
 * a multi-dimensional data model with time series data identified by metric name and key/value pairs
@@ -17,10 +16,9 @@ Prometheus's main features are:
 * targets are discovered via service discovery or static configuration
 * multiple modes of graphing and dashboarding support
 
-
 ## Data Model
 
-Prometheus fundamentally stores all data as time series: streams of timestamped values belonging to the same metric and the same set of labeled dimensions. 
+Prometheus fundamentally stores all data as time series: streams of timestamped values belonging to the same metric and the same set of labeled dimensions.
 Besides stored time series, Prometheus may generate temporary derived time series as the result of queries.
 
 Every time series is uniquely identified by its metric name and optional key-value pairs called labels.
@@ -29,10 +27,15 @@ The metric name specifies the general feature of a system that is measured (e.g.
 
 Note: The colons are reserved for user defined recording rules. They should not be used by exporters or direct instrumentation.
 
+## Grafana
+
+Dashboard
 
 
-
-
+| App   | exporter | grafana     |
+| ----- | -------- | ----------- |
+| MySQL |    prom/mysqld-exporter      | 14057-mysql |
+| Redis |      oliver006/redis_exporter    | 11835       |
 
 
 ## Links
@@ -42,4 +45,3 @@ Note: The colons are reserved for user defined recording rules. They should not 
 ## References
 
 1. [Apache HertzBeat](https://github.com/apache/hertzbeat)
-
