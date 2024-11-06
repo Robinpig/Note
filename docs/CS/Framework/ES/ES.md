@@ -55,7 +55,7 @@ ingest.geoip.downloader.enabled: false
 
 
 
-
+<!-- tabs:start -->
 
 
 
@@ -75,7 +75,7 @@ ingest.geoip.downloader.enabled: false
 
 
 
-
+<!-- tabs:end -->
 
 验证
 
@@ -124,21 +124,23 @@ Elasticsearch  ⇒ 索引   ⇒ 类型  ⇒ 文档  ⇒ 字段(Fields)
 
 
 for example
-
+```http
 PUT /megacorp/employee/1
 {
-  ”first_name“ : ”John“,
-  ”last_name“ :  ”Smith“,
-  ”age“ :        25,
-  ”about“ :      ”I love to go rock climbing“,
-  ”interests“: [ ”sports“, ”music“ ]
+”first_name“ : ”John“,
+”last_name“ :  ”Smith“,
+”age“ :        25,
+”about“ :      ”I love to go rock climbing“,
+”interests“: [ ”sports“, ”music“ ]
 }
+```
 
 
 获取内容包含元数据信息
 
-
+```http
 GET /megacorp/employee/1
+```
 
 
 

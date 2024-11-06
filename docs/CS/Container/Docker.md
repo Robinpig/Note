@@ -291,6 +291,20 @@ container killed because of OOM
 
 Disable OOM_kill cause Host server down
 
+
+## Docker Compose
+
+
+docker-compose将所管理的容器分为三层， 分别是工程（project），服务（service）以及容器（containner）
+docker-compose并没有解决负载均衡的问题。因此需要借助其他工具实现服务发现及负载均衡
+
+
+每个目录下有且仅有一个docker-compose.yml文件用于描述Docker配置
+
+
+
+
+
 ## Links
 
 - [Container](/docs/CS/Container/Container.md)

@@ -280,13 +280,15 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 Eureka1.0 存在问题
 1. 订阅者获取的服务信息是全量的 对内存压力大 在多数据中心部署时订阅者其实只需要获取同数据中心的即可
 2. 订阅者定时pull 实时性不够好 且存在空pull浪费
-3. Eureka Server的peer节点需要存储全量数据 内存压力大 写请求容易达到峰值
+3. Eureka Server的peer节点对每个写请求都会转发到其它的peer节点 对于不断增加的写请求只能通过提高配置来解决
 
 
 Eureka2.0改进
-1. pull模式转向push 实现更小粒度的订阅
-2. 读写分离
-## Links
+1. pull模式转向push 实现更小粒度 服务按需订阅的功能
+2. 读写分离 写集群相对稳定，无需经常扩容；读集群可以按需扩容以提高数据推送能力
+3. 新增审计日志的功能和功能更丰富的Dashboard
+
+# Links
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=service-registry)
 

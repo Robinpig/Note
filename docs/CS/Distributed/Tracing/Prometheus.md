@@ -12,8 +12,8 @@ Prometheus's main features are:
 * a multi-dimensional data model with time series data identified by metric name and key/value pairs
 * PromQL, a flexible query language to leverage this dimensionality
 * no reliance on distributed storage; single server nodes are autonomous
-* time series collection happens via a pull model over HTTP
-* pushing time series is supported via an intermediary gateway
+* **time series collection happens via a pull model over HTTP**
+* pushing time series is supported via an intermediary gateway
 * targets are discovered via service discovery or static configuration
 * multiple modes of graphing and dashboarding support
 
@@ -28,6 +28,12 @@ Every time series is uniquely identified by its metric name and optional key-val
 The metric name specifies the general feature of a system that is measured (e.g. http_requests_total - the total number of HTTP requests received). It may contain ASCII letters and digits, as well as underscores and colons. It must match the regex [a-zA-Z_:][a-zA-Z0-9_:]*.
 
 Note: The colons are reserved for user defined recording rules. They should not be used by exporters or direct instrumentation.
+
+
+
+
+
+
 
 ## Links
 
