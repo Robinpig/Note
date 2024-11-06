@@ -41,6 +41,8 @@ At the bottom, memory is allocated in large regions from the OS. At the middle, 
 
 
 
+## Link
 
+- [RuntimeArea](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
 
 

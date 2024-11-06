@@ -325,7 +325,7 @@ not a part of Run-Time Data Areas
 ### Metaspace
 
 
-Since its inception in [JEP 122: Remove the Permanent Generation](https://openjdk.java.net/jeps/122), metaspace has been somewhat notorious for high off-heap memory usage.
+Since its inception in [JEP 122: Remove the Permanent Generation](https://openjdk.java.net/jeps/122), [metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md) has been somewhat notorious for high off-heap memory usage.
 
 
 
