@@ -13,6 +13,23 @@ Computer Organization and Architecture comprehensively covers processor and comp
 SouthBridge
 NorthBridge
 
+## Number System
+
+Ints are not Integers, Floats are not Reals.
+
+IEEE Standard 754 Floating Point Numbers
+
+IEEE 754 has 3 basic components:
+
+1. **The Sign of Mantissa**
+   This is as simple as the name. 0 represents a positive number while 1 represents a negative number.
+2. **The Biased exponent**
+   The exponent field needs to represent both positive and negative exponents. A bias is added to the actual exponent in order to get the stored exponent.
+3. **The Normalised Mantissa**
+   The mantissa is part of a number in scientific notation or a floating-point number, consisting of its significant digits.
+   Here we have only 2 digits, i.e. O and 1. So a normalised mantissa is one with only one 1 to the left of the decimal.
+   IEEE 754 numbers are divided into two based on the above three components: single precision and double precision.
+
 
 ## ISA
 
