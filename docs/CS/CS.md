@@ -26,7 +26,6 @@ A [distributed system](/docs/CS/Distributed/Distributed) is one in which compone
 This definition leads to the following especially significant characteristics of distributed systems:
 concurrency of components, lack of a global clock and independent failures of components.
 
-[Transaction](/docs/CS/SE/Transaction.md)
 
 ## MQ
 
@@ -109,6 +108,8 @@ These specifications are part of the Jakarta EE platform.
 [Cache](/docs/CS/SE/Cache.md)
 
 [Lock](/docs/CS/SE/Lock.md)
+
+[Transaction](/docs/CS/SE/Transaction.md)
 
 
 [Limiter](/docs/CS/SE/RateLimiter.md)
