@@ -60,7 +60,16 @@ cluster.conf文件需配置在 ～/nacos/conf/下
 
 整体架构分为用户层、 业务层、 内核层和插件， 用户层主要解决用户使用的易用性问题， 业务层主要解决服务发现和配置管理的功能问题， 内核层解决分布式系统⼀致性、 存储、 高可用等核心问题，插件解决扩展性问题。  
 
-![](./img/Architecture.png)
+
+<div style="text-align: center;">
+
+![Fig.1. Architecture](./img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">Fig.1. Architecture</p>
+
+
 
 采⽤了阿⾥巴巴内部⾃研的 Distro 协议来实现数据弱⼀致性同步。其中所有节点都将存储集群内所有服务元数据，因此都可以提供数据读取服务，但每个节点只负责⼀部分客户端的数据写服务
 
