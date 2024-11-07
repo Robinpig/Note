@@ -24,3 +24,6 @@ Ownership
 
 ## References
 
+1. [Rust 视界 2023](https://github.com/RustMagazine/rust-horizon-2023)
+2. [Rust Magazine 2022](https://rustmagazine.github.io/rust_magazine_2022/)
+3. [Rust Magazine 2021](https://rustmagazine.github.io/rust_magazine_2021/)
