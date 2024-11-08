@@ -91,6 +91,7 @@ fs可以通过不同的tools来构建
 ### Build
 
 
+#### Build examples
 <!-- tabs:start -->
 
 ##### **Ubuntu**
@@ -514,6 +515,40 @@ Device Drivers  --->
     [*]   RAM block device support
 ```
 
+#### makefile
+
+install.sh脚本文件只是完成复制的功能 将bzImage文件复制到vmlinuz
+```makefile
+#linux/arch/x86/boot/Makefile
+install:
+        sh $(srctree)/$(src)/install.sh $(KERNELRELEASE) $(obj)/bzImage \
+                System.map "$(INSTALL_PATH)"
+```
+
+生成bzImage文件需要三个依赖文件：setup.bin、vmlinux.bin，linux/arch/x86/boot/tools目录下的build
+```makefile
+#linux/arch/x86/boot/Makefile
+$(obj)/bzImage: $(obj)/setup.bin $(obj)/vmlinux.bin $(obj)/tools/build FORCE
+        $(call if_changed,image)
+        @$(kecho) 'Kernel: $@ is ready' ' (#'`cat .version`')'
+```
+
+build只是一个HOSTOS下的应用程序，它的作用就是将setup.bin、vmlinux.bin两个文件拼接成一个bzImage文件
+
+vmlinux.bin文件依赖于linux/arch/x86/boot/compressed/目录下的vmlinux目标
+```makefile
+#linux/arch/x86/boot/Makefile
+OBJCOPYFLAGS_vmlinux.bin := -O binary -R .note -R .comment -S
+$(obj)/vmlinux.bin: $(obj)/compressed/vmlinux FORCE
+        $(call if_changed,objcopy)
+```
+linux/arch/x86/boot/compressed目录下的vmlinux是由该目录下的head_32.o或者head_64.o、cpuflags.o、error.o、kernel.o、misc.o、string.o 、cmdline.o 、early_serial_console.o等文件以及piggy.o链接而成的
+
+setup.bin文件是由objcopy命令根据setup.elf生成的
+setup.bin文件正是由/arch/x86/boot/目录下一系列对应的程序源代码文件编译链接产生
+
+
+
 
 ### Read
 
@@ -662,6 +697,12 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 ## Loadable kernel module
 
+
+## Commands
+
+可以通过man查看命令
+
+> [Linux命令搜索](https://wangchujiang.com/linux-command/)
 
 
 ## Links

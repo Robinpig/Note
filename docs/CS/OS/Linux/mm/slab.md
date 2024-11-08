@@ -1,27 +1,111 @@
 ## Introduction
 
-Create a cache.
-```c
+slab分配器分配内存以字节为单位，基于伙伴分配器的大内存进一步细分成小内存分配。换句话说，slab 分配器仍然从 Buddy 分配器中申请内存，之后自己对申请来的内存细分管理
 
-/**
- * Returns a ptr to the cache on success, NULL on failure.
- * Cannot be called within a int, but can be interrupted.
- * The @ctor is run when new pages are allocated by the cache.
- *
- * The flags are
- *
- * %SLAB_POISON - Poison the slab with a known test pattern (a5a5a5a5)
- * to catch references to uninitialised memory.
- *
- * %SLAB_RED_ZONE - Insert `Red' zones around the allocated memory to check
- * for buffer overruns.
- *
- * %SLAB_HWCACHE_ALIGN - Align the objects in this cache to a hardware
- * cacheline.  This can be beneficial if you're counting cycles as closely
- * as davem.
- *
- * Return: a pointer to the created cache or %NULL in case of error
- */
+除了提供小内存外，slab 分配器的第二个任务是维护常用对象的缓存。对于内核中使用的许多结构，初始化对象所需的时间可等于或超过为其分配空间的成本。当创建一个新的slab 时，许多对象将被打包到其中并使用构造函数（如果有）进行初始化。释放对象后，它会保持其初始化状态，这样可以快速分配对象
+>举例来说, 为管理与进程关联的文件系统数据, 内核必须经常生成struct fs_struct的新实例. 此类型实例占据的内存块同样需要经常回收(在进程结束时). 换句话说, 内核趋向于非常有规律地分配并释放大小为sizeof(fs_struct)的内存块. slab分配器将释放的内存块保存在一个内部列表中. 并不马上返回给伙伴系统. 在请求为该类对象分配一个新实例时, 会使用最近释放的内存块。S这有两个优点. 首先, 由于内核不必使用伙伴系统算法, 处理时间会变短. 其次, 由于该内存块仍然是”新”的，因此其仍然驻留在CPU硬件缓存的概率较高
+
+SLAB分配器的最后一项任务是提高CPU硬件缓存的利用率。 如果将对象包装到SLAB中后仍有剩余空间，则将剩余空间用于为SLAB着色。 SLAB着色是一种尝试使不同SLAB中的对象使用CPU硬件缓存中不同行的方案。 通过将对象放置在SLAB中的不同起始偏移处，对象可能会在CPU缓存中使用不同的行，从而有助于确保来自同一SLAB缓存的对象不太可能相互刷新。 通过这种方案，原本被浪费掉的空间可以实现一项新功能
+
+
+
+```c
+struct kmem_cache {
+    unsigned int object_size;/* The original size of the object */
+    unsigned int size;  /* The aligned/padded/added on size  */
+    unsigned int align; /* Alignment as calculated */
+    slab_flags_t flags; /* Active flags on the slab */
+    unsigned int useroffset;/* Usercopy region offset */
+    unsigned int usersize;  /* Usercopy region size */
+    const char *name;   /* Slab name for sysfs */
+    int refcount;       /* Use counter */
+    void (*ctor)(void *);   /* Called on object slot creation */
+    struct list_head list;  /* List of all slab caches on the system */
+};
+```
+
+SLAB分配器由可变数量的缓存组成，这些缓存由称为“缓存链”的双向循环链表链接在一起
+
+```c
+struct kmem_cache_node {
+    spinlock_t list_lock;
+
+#ifdef CONFIG_SLAB
+    struct list_head slabs_partial; /* partial list first, better asm code */
+    struct list_head slabs_full;
+    struct list_head slabs_free;
+    unsigned long total_slabs;  /* length of all slab lists */
+    unsigned long free_slabs;   /* length of free slab list only */
+    unsigned long free_objects;
+    unsigned int free_limit;
+    unsigned int colour_next;   /* Per-node cache coloring */
+    struct array_cache *shared; /* shared per node */
+    struct alien_cache **alien; /* on other nodes */
+    unsigned long next_reap;    /* updated without locking */
+    int free_touched;       /* updated without locking */
+#endif
+...
+
+};
+```
+kmem_cache_noed 记录了3种slab：
+● slabs_full ：已经完全分配的 slab
+● slabs_partial： 部分分配的slab
+● slabs_free：空slab，或者没有对象被分配
+Linux kernel 使用 struct page 来描述一个slab。单个slab可以在slab链表之间移动，例如如果一个半满slab被分配了对象后变满了，就要从 slabs_partial 中被删除，同时插入到 slabs_full 中去。
+
+```c
+struct page {
+    unsigned long flags;        /* Atomic flags, some possibly
+                     * updated asynchronously */
+    union {
+        struct {    /* slab, slob and slub */
+            union {
+                struct list_head slab_list;
+                struct {    /* Partial pages */
+                    struct page *next;
+#ifdef CONFIG_64BIT
+                    int pages;  /* Nr of pages left */
+                    int pobjects;   /* Approximate count */
+#else
+                    short int pages;
+                    short int pobjects;
+#endif
+                };
+            };
+            struct kmem_cache *slab_cache; /* not slob */
+            /* Double-word boundary */
+            void *freelist;     /* first free object */
+            union {
+                void *s_mem;    /* slab: first object */
+                unsigned long counters;     /* SLUB */
+                ...
+            };
+        }; 
+        ...
+    };
+    ...
+} _struct_page_alignment;
+```
+操作系统启动创建kmem_cache完成后，这三个链表都为空，只有在申请对象时发现没有可用的 slab 时才会创建一个新的SLAB，并加入到这三个链表中的一个中
+
+```c
+// include/linux/mmzone.h
+struct free_area {
+	struct list_head	free_list[MIGRATE_TYPES];
+	unsigned long		nr_free;
+};
+```
+
+
+
+
+Create a cache.
+
+Returns a ptr to the cache on success, NULL on failure.
+Cannot be called within a int, but can be interrupted.
+The @ctor is run when new pages are allocated by the cache.
+```c
 int __kmem_cache_create(struct kmem_cache *cachep, slab_flags_t flags)
 {
 	size_t ralign = BYTES_PER_WORD;
@@ -195,6 +279,7 @@ done:
 
 
 ### kmem_cache_create
+
 - Create a cache.
 - name: A string which is used in /proc/slabinfo to identify this cache.
 - size: The size of objects to be created in this cache.
@@ -320,6 +405,64 @@ out_unlock:
 		return NULL;
 	}
 	return s;
+}
+```
+
+#### kmem_cache_destroy
+```c
+// mm/slab_common.c
+void kmem_cache_destroy(struct kmem_cache *s)
+{
+    int err;
+
+    if (unlikely(!s))
+        return;
+
+    mutex_lock(&slab_mutex);
+
+    s->refcount--;
+    if (s->refcount)
+        goto out_unlock;
+
+    err = shutdown_cache(s);
+    if (err) {
+        pr_err("kmem_cache_destroy %s: Slab cache still has objects\n",
+               s->name);
+        dump_stack();
+    }
+out_unlock:
+    mutex_unlock(&slab_mutex);
+}
+EXPORT_SYMBOL(kmem_cache_destroy);
+
+
+static int shutdown_cache(struct kmem_cache *s)
+{
+	/* free asan quarantined objects */
+	kasan_cache_shutdown(s);
+
+	if (__kmem_cache_shutdown(s) != 0)
+		return -EBUSY;
+
+	list_del(&s->list);
+
+	if (s->flags & SLAB_TYPESAFE_BY_RCU) {
+#ifdef SLAB_SUPPORTS_SYSFS
+		sysfs_slab_unlink(s);
+#endif
+		list_add_tail(&s->list, &slab_caches_to_rcu_destroy);
+		schedule_work(&slab_caches_to_rcu_destroy_work);
+	} else {
+		kfence_shutdown_cache(s);
+#ifdef SLAB_SUPPORTS_SYSFS
+		sysfs_slab_unlink(s);
+		sysfs_slab_release(s);
+#else
+		slab_kmem_cache_release(s);
+#endif
+	}
+
+	return 0;
 }
 ```
 
@@ -772,3 +915,8 @@ void kfree(const void *objp)
 	local_irq_restore(flags);
 }
 ```
+
+
+## Links
+
+- [Linux Memory](/docs/CS/OS/Linux/mm/memory.md)

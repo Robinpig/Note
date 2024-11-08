@@ -248,32 +248,6 @@ slabtop
 
 
 
-
-tcp 内存使用slab分配
-
-dmidecode 查看CPU 内存信息
-每个CPU和它直接相连的内存条组成Node
-
-numactl --hardware
-查看Node情况
-Node划分为Zone
-
-```shell
-cat /proc/zoneinfo #查看zone信息
-```
-
-Zone包含Page 一般为4KB
-
-
-```shell
-cat /proc/slabinfo
-slabtop
-```
-
-slab_def.h
-
-mm/slab.h
-
 ### page
 
 The kernel treats physical pages as the basic unit of memory management.
@@ -1007,6 +981,74 @@ vm_operations_struct 结构的 nopage 接口会在访问内存发生异常时被
 而调用 mmap() 系统调用对文件进行映射后，用户对映射后的内存进行读写实际上是对文件缓存的读写，所以减少了一次系统调用，从而加速了对文件读写的效率
 
 
+## allocator
+
+The kernel offers two mechanisms for allocating memory, both of which are built on top of the kernel's page allocator (zoned buddy allocator):
+- page allocator (zoned buddy allocator): – [slab allocator](/docs/CS/OS/Linux/mm/slab.md) obtains physically contiguous memory in the kernel's own address space; this allocator is typically accessed via kmalloc(),
+- vmalloc() returns memory in a separate address space; that memory will be virtually contiguous but may be physically scattered.
+
+
+### slab
+
+
+tcp 内存使用slab分配
+
+dmidecode 查看CPU 内存信息
+每个CPU和它直接相连的内存条组成Node
+
+numactl --hardware
+查看Node情况
+Node划分为Zone
+
+```shell
+cat /proc/zoneinfo #查看zone信息
+```
+
+Zone包含Page 一般为4KB
+
+
+```shell
+cat /proc/slabinfo
+slabtop
+```
+
+slab_def.h
+
+mm/slab.h
+
+
+### malloc
+
+
+sys_brk() for the most part doesn't need the global kernel lock, except when an application is doing something nasty like trying to un-brk an area that has already been mapped to a regular file.  in this case, the unmapping will need to invoke file system routines that need the global lock.
+
+
+```c
+SYSCALL_DEFINE1(brk, unsigned long, brk)
+{
+    struct mm_struct *mm = current->mm;
+
+    if (brk < mm->start_brk || brk > mm->context.end_brk)
+        return mm->brk;
+
+    if (mm->brk == brk)
+        return mm->brk;
+
+    /*
+     * Always allow shrinking brk
+     */
+    if (brk <= mm->brk) {
+        mm->brk = brk;
+        return brk;
+    }
+
+    /*
+     * Ok, looks good - let it rip.
+     */
+    flush_icache_user_range(mm->brk, brk);
+    return mm->brk = brk;
+}
+```
 
 ## Links
 

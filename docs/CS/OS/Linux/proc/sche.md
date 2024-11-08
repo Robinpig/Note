@@ -1,3 +1,9 @@
+## Introduction
+
+
+
+
+
 ```dot
 strict digraph {
 
@@ -317,6 +323,34 @@ task structs
 #endif
 };
 ```
+
+
+## policy
+
+Scheduling policies
+```c
+#define SCHED_NORMAL		0
+#define SCHED_FIFO		1
+#define SCHED_RR		2
+#define SCHED_BATCH		3
+/* SCHED_ISO: reserved but not implemented yet */
+#define SCHED_IDLE		5
+#define SCHED_DEADLINE		6
+```
+
+这几个调度类的优先级如下：Deadline > Realtime > Fair。Linux内核在选择下一个任务执行时，会按照该顺序来进行选择，也就是先从dl_rq里选择任务，然后从rt_rq里选择任务，最后从cfs_rq里选择任务。所以实时任务总是会比普通任务先得到执行
+
+
+如果你的某些任务对延迟容忍度很低，比如说在嵌入式系统中就有很多这类任务，那就可以考虑将你的任务设置为实时任务，比如将它设置为SCHED_FIFO的任务：
+```shell
+chrt -f -p 1 pid
+```
+
+如果你不做任何设置的话，用户线程在默认情况下都是普通线程，也就是属于Fair调度类，由CFS调度器来进行管理。CFS调度器的目的是为了实现线程运行的公平性，举个例子，假设一个CPU上有两个线程需要执行，那么每个线程都将分配50%的CPU时间，以保障公平性。其实，各个线程之间执行时间的比例，也是可以人为干预的，比如在Linux上可以调整进程的nice值来干预，从而让优先级高一些的线程执行更多时间。这就是CFS调度器的大致思想
+
+> [Android](/docs/CS/OS/Android/schedule.md)更多的是实时的任务
+
+
 
 ## schedule
 
