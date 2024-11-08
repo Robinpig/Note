@@ -1241,7 +1241,7 @@ zookeeper
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
-- [Encoding](/docs/CS/Security/Encoding.md)
+- [Encoding](/docs/CS/Security/Marshalling)
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 
 ## References

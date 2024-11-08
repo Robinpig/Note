@@ -1,4 +1,3 @@
-# Scikit-Learn
 
 ## 1.Supervised Learning
 

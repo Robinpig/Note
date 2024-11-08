@@ -121,115 +121,9 @@ These specifications are part of the Jakarta EE platform.
 ## Other Topics
 
 
-[Encoding](/docs/CS/Security/Encoding.md)
 
 [Browser](/docs/CS/Browser/Browser.md)
 
-Ints are not Integers, Floats are not Reals.
-
-IEEE Standard 754 Floating Point Numbers
-
-IEEE 754 has 3 basic components:
-
-1. **The Sign of Mantissa**
-   This is as simple as the name. 0 represents a positive number while 1 represents a negative number.
-2. **The Biased exponent**
-   The exponent field needs to represent both positive and negative exponents. A bias is added to the actual exponent in order to get the stored exponent.
-3. **The Normalised Mantissa**
-   The mantissa is part of a number in scientific notation or a floating-point number, consisting of its significant digits.
-   Here we have only 2 digits, i.e. O and 1. So a normalised mantissa is one with only one 1 to the left of the decimal.
-   IEEE 754 numbers are divided into two based on the above three components: single precision and double precision.
-
-Number Systems
-
-## Data Compression
-
-Compressing data can reduce the amount of data to be sent or stored by partially eliminating inherent redundancy. Redundancy is created when we produce data.
-Through data compression, we make transmission and storage more efficient, and at the same time, we preserve the integrity of the data.
-
-### Lossless Data Compression
-
-In lossless data compression, the integrity of the data is preserved.
-The original data and the data after compression and decompression are exactly the same because, in these methods, the compression and decompression algorithms are exact inverses of each other: no part of the data is lost in the process.
-Redundant data is removed in compression and added during decompression.
-
-Lossless compression methods are normally used when we cannot afford to lose any data. For example, we must not lose data when we compress a text file or an application program.
-
-We discuss three lossless compression methods in this section: run-length encoding, Huffman coding, and the Lempel Ziv algorithm.
-
-Run-length encoding is probably the simplest method of compression. It can be used to compress data made of any combination of symbols.
-It does not need to know the frequency of occurrence of symbols (as is necessary for Huffman coding) and can be very efficient if data is represented as 0s and 1s.
-
-Huffman coding assigns shorter codes to symbols that occur more frequently and longer codes to those that occur less frequently.
-
-Lempel Ziv (LZ) encoding, named after its inventors (Abraham Lempel and Jacob Ziv), is an example of a category of algorithms called dictionary-based encoding.
-The idea is to create a dictionary (a table) of strings used during the communication session.
-If both the sender and the receiver have a copy of the dictionary, then previously encountered strings can be substituted by their index in the dictionary to reduce the amount of information transmitted.
-
-### Lossy Data Compression
-
-## Security
-
-As an asset, information needs to be secured from attacks.
-To be secure, information needs to be hidden from unauthorized access (*confidentiality*), protected from unauthorized change(*integrity*), and available to an authorized entity when it is needed (*availability*).
-
-### Attacks
-
-In general, two types of attacks threaten the confidentiality of information: snooping and traffic analysis.
-
-The integrity of data can be threatened by several kinds of attacks: modification, masquerading, replaying, and repudiation.
-
-We mention only one attack threatening availability: *denial of service*.
-
-### Services and techniques
-
-ITU-T defines some security services to achieve security goals and prevent attacks.
-Each of these services is designed to prevent one or more attacks while maintaining security goals. The actual implementation of security goals needs some techniques.
-Two techniques are prevalent today: one is very general (cryptography) and one is specific (steganography).
-
-#### Cryptography
-
-Cryptography, a word with Greek origins, means ‘secret writing’. However, we use the term to refer to the science and art of transforming messages to make them secure and immune to attacks.
-Although in the past cryptography referred only to the encryption and decryption of messages using secret keys, today it is defined as involving three distinct mechanisms: symmetric-key encipherment, asymmetric-key encipherment, and hashing.
-
-#### Steganography
-
-The word steganography, with origins in Greek, means ‘covered writing’, in contrast to cryptography, which means ‘secret writing’.
-Cryptography means concealing the contents of a message by enciphering; steganography means concealing the message itself by covering it with something else.
-
-### Confidentiality
-
-Confidentiality can be achieved using ciphers. Ciphers can be divided into two broad categories: symmetric-key and asymmetric-key.
-
-### Message integrity
-
-One way to preserve the integrity of a document is through the use of a *fingerprint*.
-To preserve the integrity of a message, the message is passed through an algorithm called a **cryptographic hash function**.
-The function creates a compressed image of the message, called a digest, that can be used like a fingerprint.
-
-> The message digest needs to be safe from change.
-
-A MAC provides message integrity and message authentication using a combination of a hash function and a secret key.
-
-### Digital signature
-
-A digital signature uses a pair of private–public keys.
-
-### 故障演练
-
-故障模拟
-
-故障主要分三类
-
-- **中间件服务故障**，如模拟hsf调用方异常，tddl调用异常等。
-- **机器故障**，如网络延迟，网络丢包等。
-- **第三方故障**，如mysql响应延迟等。
-
-故障演练的范围可以细化到应用，机房，甚至某个具体虚拟机。
-
-参考alibaba Monkeyking
-
-## Theory of Computation
 
 ## The Turing Machine
 
@@ -272,3 +166,4 @@ After careful examination of the two sets, if the interrogator cannot definitely
 ## References
 
 1. [Foundations of Computer Science]()
+2. [CS自学指南](https://csdiy.wiki/)
