@@ -44,6 +44,10 @@ based on `ptrace`(Linux)
 
 
 
+> [OnlineGDB](https://www.onlinegdb.com/)
+
+
+
 ```c
 #include <sys/ptrace.h>
 long ptrace(enum __ptrace_request request, pid_t pid,
