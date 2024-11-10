@@ -10,15 +10,15 @@ The table below summarizes the main differences between Java NIO and IO.
 | Blocking IO     | Non blocking IO |
 |                 | Selectors       |
 
-## Non-blocking IO
+
 
 Java NIO enables you to do non-blocking IO. For instance, a thread can ask a channel to read data into a buffer. While the channel reads data into the buffer, the thread can do something else. Once data is read into the buffer, the thread can then continue processing it. The same is true for writing data to channels.
 
-## Channels and Buffers
+
 
 In NIO you work with channels and buffers. Data is always read from a channel into a buffer, or written from a buffer to a channel.
 
-### Channels
+## Channels
 
 Java NIO Channels are similar to streams with a few differences:
 
@@ -33,7 +33,12 @@ Here are the most important Channel implementations in Java NIO:
 * SocketChannel
 * ServerSocketChannel
 
-### Buffers
+
+### FileChannel
+
+
+
+## Buffers
 
 A buffer is essentially a block of memory into which you can write data, which you can then later read again. This memory block is wrapped in a NIO Buffer object, which provides a set of methods that makes it easier to work with the memory block.
 

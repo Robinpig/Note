@@ -598,7 +598,7 @@ Quite unlike hard links, removing the original file named file causes the soft l
 
 ## files_struct
 
-Open file table structure
+[task_struct](/docs/CS/OS/Linux/proc/process.md?id=task_struct)中保存着files_struct
 
 ```c
 struct files_struct {
@@ -623,14 +623,9 @@ struct files_struct {
 };
 ```
 
-In the new lock-free model of file descriptor management,
-the reference counting is similar, but the locking is
-based on RCU. The file descriptor table contains multiple
-elements - the fd sets (open_fds and close_on_exec, the
-array of file pointers, the sizes of the sets and the array
-etc.). In order for the updates to appear atomic to
-a lock-free reader, all the elements of the file descriptor
-table are in a separate structure - struct fdtable.
+In the new lock-free model of file descriptor management, the reference counting is similar, but the locking is based on RCU. 
+The file descriptor table contains multiple elements - the fd sets (open_fds and close_on_exec, the array of file pointers, the sizes of the sets and the array etc.). 
+In order for the updates to appear atomic to a lock-free reader, all the elements of the file descriptor table are in a separate structure - struct fdtable.
 ```c
 struct fdtable {
 	unsigned int max_fds;
