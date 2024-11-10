@@ -180,11 +180,13 @@ struct sockaddr_un {
 ## socket
 
 
+
+socket中重要的pointer
+- fd
 - sock
 - proto_ops
 
 
-socket上等待队列
 ```c
 /* struct socket - general BSD socket */
 struct socket {
@@ -199,6 +201,8 @@ struct socket {
 	struct socket_wq	wq;
 };
 ```
+socket上等待队列
+ 
 
 
 
