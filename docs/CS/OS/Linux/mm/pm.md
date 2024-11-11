@@ -1061,7 +1061,7 @@ out:
     return page;
 }
 ```
-free
+## free
 ```c
 static inline void free_the_page(struct page *page, unsigned int order)
 {
@@ -1073,6 +1073,9 @@ static inline void free_the_page(struct page *page, unsigned int order)
 
 
 ```
+free_unref_page
+
+
 
 ```c
 
@@ -1262,6 +1265,7 @@ done_merging:
 ```
 
 
+free_pages_ok
 
 
 ```c
