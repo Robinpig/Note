@@ -24,7 +24,6 @@ The actual layout of the memory zones is hardware dependent as not all architect
 
 Many multi-processor machines are NUMA - Non-Uniform Memory Access - systems. In such systems the memory is arranged into banks that have different access latency depending on the “distance” from the processor. Each bank is referred to as a node and for each node Linux constructs an independent memory management subsystem. A node has its own set of zones, lists of free and used pages and various statistics counters. You can find more details about NUMA in What is NUMA?` and in NUMA Memory Policy.
 
-
 Page cache
 The physical memory is volatile and the common case for getting data into the memory is to read it from files. Whenever a file is read, the data is put into the page cache to avoid expensive disk access on the subsequent reads. Similarly, when one writes to a file, the data is placed in the page cache and eventually gets into the backing storage device. The written pages are marked as dirty and when Linux decides to reuse them for other purposes, it makes sure to synchronize the file contents on the device with the updated data.
 Anonymous Memory
@@ -59,6 +58,10 @@ The OOM killer selects a task to sacrifice for the sake of the overall system he
 其中低 128 T 表示用户态虚拟内存空间，虚拟内存地址范围为：0x0000 0000 0000 0000  - 0x0000 7FFF FFFF F000 。
 高 128 T 表示内核态虚拟内存空间，虚拟内存地址范围为：0xFFFF 8000 0000 0000  - 0xFFFF FFFF FFFF FFFF
 在 64 位机器上的指针寻址范围为 2^64，但是在实际使用中我们只使用了其中的低 48 位来表示虚拟内存地址，那么这多出的高 16 位就形成了这个地址空洞(canonical address)
+
+
+
+## mm_struct
 
 在 copy_process 函数中创建 task_struct 结构，并拷贝父进程的相关资源到新进程的 task_struct 结构里，其中就包括拷贝父进程的虚拟内存空间 mm_struct 结构。这里可以看出子进程在新创建出来之后它的虚拟内存空间是和父进程的虚拟内存空间一模一样的，直接拷贝过来
 
@@ -242,6 +245,7 @@ vm_area_struct 结构中的 vm_next ，vm_prev 指针分别指向 VMA 节点所�
 
 
 ```c
+// include/linux/mm_types.h
 struct mm_struct {
     struct vm_area_struct *mmap;  /* list of VMAs */
 }

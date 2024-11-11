@@ -19,8 +19,18 @@ The mmap system call has been used in various database implementations as an alt
 
 > [Are You Sure You Want to Use MMAP in Your Database Management System?](https://db.cs.cmu.edu/papers/2022/cidr2022-p13-crotty.pdf)
 
-
 ### do_mmap
+
+```c
+       #include <sys/mman.h>
+
+       void *mmap(void addr[.length], size_t length, int prot, int flags, int fd, off_t offset);
+       int munmap(void addr[.length], size_t length);
+```
+
+如果我们通过 mmap 映射的是磁盘上的一个文件，那么就需要通过参数 fd 来指定要映射文件的描述符（file descriptor），通过参数 offset 来指定文件映射区域在文件中偏移
+
+
 
 ```c
 // mm/mmap.c
