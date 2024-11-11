@@ -1,5 +1,25 @@
 ## Introduction
 
+Linux memory management subsystem is responsible, as the name implies, for managing the memory in the system. 
+This includes implementation of virtual memory and demand paging, memory allocation both for kernel internal structures and user space programs, 
+mapping of files into processes address space and many other cool things.
+
+Linux memory management is a complex system with many configurable settings. 
+Most of these settings are available via /proc filesystem and can be queried and adjusted using sysctl. 
+These APIs are described in Documentation for /proc/sys/vm/ and in man 5 proc.
+
+Linux 内核使用页式内存管理，应用程序给出的内存地址是虚拟地址，它需要经过若干级页表一级一级的变换，才变成真正的物理地址。
+当访问一个由虚拟地址表示的内存空间时，需要先经过若干次的内存访问，得到每一级页表中用于转换的页表项（页表是存放在内存里面的），才能完成映射。也就是说，要实现一次内存访问，实际上内存被访问了 N+1 次（N=页表级数），并且还需要做 N 次加法运算
+地址映射必须要有硬件支持，mmu（内存管理单元）就是这个硬件。并且需要有 cache 来保存页表，这个 cache 就是 TLB（Translation lookaside buffer）
+
+地址映射还是有着不小的开销。 一些嵌入式硬件上可能会放弃使用 mmu，这样的硬件能够运行 VxWorks（一个很高效的嵌入式实时操作系统）、linux（linux 也有禁用 mmu 的编译选项）等系统
+使用 mmu 的优势也是很大的，最主要的是出于安全性考虑。各个进程都是相互独立的虚拟地址空间，互不干扰。而放弃地址映射之后，所有程序将运行在同一个地址空间。于是，在没有 mmu 的机器上，一个进程越界访存，可能引起其他进程莫名其妙的错误，甚至导致内核崩溃
+
+在地址映射这个问题上，内核只提供页表，实际的转换是由硬件去完成的。那么内核如何生成这些页表呢？这就有两方面的内容：虚拟地址空间的管理和物理内存的管理。（实际上只有用户态的地址映射才需要管理，内核态的地址映射是写死的
+
+
+## init
+
 内核的正式入口是 start_kernel, 前面的讨论基本都发生在 start_kernel 之后，但实际上在它之 前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
 根据硬件和BIOS的配置，detect_memo1-y依次调用detect_memory_e820、 cletect_memo1-y_e801 和 cletect_memm-y_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置。 后二者作为兼容老机器 存在， 此处主要以现代计算机中的 cletect_memor y_e820 为主进行分析。
 三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存 信息。 以detect_memory_e820为例，每一条有效的信息都被存储在boot_params.e820_table数组中
@@ -8,7 +28,6 @@ boot_e820_entl-y有3 个字段， addr和size字段分别表示一段内存的�
 
 
 
-## init
 
 Set up kernel memory allocators
 called by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
@@ -982,6 +1001,8 @@ vm_operations_struct 结构的 nopage 接口会在访问内存发生异常时被
 
 
 ## allocator
+
+Linux系统的内存管理是一个很复杂的“工程”，它不仅仅是物理内存管理，同时包括虚拟内存管理、内存交换和回收等，还有管理中的各式各样的算法
 
 The kernel offers two mechanisms for allocating memory, both of which are built on top of the kernel's page allocator (zoned buddy allocator):
 - page allocator (zoned buddy allocator): – [slab allocator](/docs/CS/OS/Linux/mm/slab.md) obtains physically contiguous memory in the kernel's own address space; this allocator is typically accessed via kmalloc(),

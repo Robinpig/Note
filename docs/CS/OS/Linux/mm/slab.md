@@ -8,7 +8,7 @@ slab分配器分配内存以字节为单位，基于伙伴分配器的大内存�
 SLAB分配器的最后一项任务是提高CPU硬件缓存的利用率。 如果将对象包装到SLAB中后仍有剩余空间，则将剩余空间用于为SLAB着色。 SLAB着色是一种尝试使不同SLAB中的对象使用CPU硬件缓存中不同行的方案。 通过将对象放置在SLAB中的不同起始偏移处，对象可能会在CPU缓存中使用不同的行，从而有助于确保来自同一SLAB缓存的对象不太可能相互刷新。 通过这种方案，原本被浪费掉的空间可以实现一项新功能
 
 
-
+### kmem_cache
 ```c
 struct kmem_cache {
     unsigned int object_size;/* The original size of the object */
@@ -49,9 +49,34 @@ struct kmem_cache_node {
 };
 ```
 kmem_cache_noed 记录了3种slab：
-● slabs_full ：已经完全分配的 slab
-● slabs_partial： 部分分配的slab
-● slabs_free：空slab，或者没有对象被分配
+- slabs_full ：已经完全分配的 slab
+- slabs_partial： 部分分配的slab
+- slabs_free：空slab，或者没有对象被分配
+
+kmalloc_info[] is to make slub_debug=,kmalloc-xx option work at boot time. kmalloc_index() supports up to 2^26=64MB, so the final entry of the table is kmalloc-67108864.
+index = 1 和 index = 2 是个例外，内核单独支持了 kmalloc-96 和 kmalloc-192 这两个通用 slab cache。
+因为在内核中，对于内存块的申请需求大部分情况下都在 96 字节或者 192 字节附近，如果内核不单独支持这两个尺寸的通用 slab cache。那么当内核申请一个尺寸在 64 字节到 96 字节之间的内存块时，内核会直接从 kmalloc-128 中分配一个 128 字节大小的内存块，这样就导致了内存块内部碎片比较大，浪费宝贵的内存资源
+
+
+
+kmalloc 体系所支持的内存块尺寸与 slab allocator 体系的实现有关，在 Linux 内核中 slab allocator 体系的实现分为三种：slab 实现，slub 实现，slob 实现。
+而在被大规模运用的服务器 Linux 操作系统中，slab allocator 体系采用的是 slub 实现
+
+kmalloc 体系所能支持的内存块尺寸范围由 KMALLOC_SHIFT_LOW 和 KMALLOC_SHIFT_HIGH 决定，它们被定义在 /include/linux/slab.h 文件中：
+其中 kmalloc 支持的最小内存块尺寸为：2^KMALLOC_SHIFT_LOW，在 slub 实现中 KMALLOC_SHIFT_LOW = 3，kmalloc 支持的最小内存块尺寸为 8 字节大小。
+
+kmalloc 支持的最大内存块尺寸为：2^KMALLOC_SHIFT_HIGH，在 slub 实现中 KMALLOC_SHIFT_HIGH = 13，kmalloc 支持的最大内存块尺寸为 8K ，也就是两个内存页大小
+
+```c
+/* A table of kmalloc cache names and sizes */
+
+extern const struct kmalloc_info_struct {
+    const char *name[NR_KMALLOC_TYPES];
+    unsigned int size;
+} kmalloc_info[];
+```
+
+
 Linux kernel 使用 struct page 来描述一个slab。单个slab可以在slab链表之间移动，例如如果一个半满slab被分配了对象后变满了，就要从 slabs_partial 中被删除，同时插入到 slabs_full 中去。
 
 ```c
@@ -278,7 +303,7 @@ done:
 
 
 
-### kmem_cache_create
+#### kmem_cache_create
 
 - Create a cache.
 - name: A string which is used in /proc/slabinfo to identify this cache.
@@ -312,8 +337,10 @@ kmem_cache_create(const char *name, unsigned int size, unsigned int align,
 }
 ```
 
-kmem_cache_create_usercopy - Create a cache with a region suitable
-for copying to userspace
+> 查看不同尺寸的slab cache cat /proc/slabinfo
+
+
+kmem_cache_create_usercopy - Create a cache with a region suitable for copying to userspace
 - name: A string which is used in /proc/slabinfo to identify this cache.
 - size: The size of objects to be created in this cache.
 - align: The required alignment for the objects.
@@ -467,64 +494,40 @@ static int shutdown_cache(struct kmem_cache *s)
 ```
 
 
+```c
+int __kmem_cache_shutdown(struct kmem_cache *cachep)
+{
+    return __kmem_cache_shrink(cachep);
+}
+
+int __kmem_cache_shrink(struct kmem_cache *cachep)
+{
+	int ret = 0;
+	int node;
+	struct kmem_cache_node *n;
+
+	drain_cpu_caches(cachep);
+
+	check_irq_on();
+	for_each_kmem_cache_node(cachep, node, n) {
+		drain_freelist(cachep, n, INT_MAX);
+
+		ret += !list_empty(&n->slabs_full) ||
+			!list_empty(&n->slabs_partial);
+	}
+	return (ret ? 1 : 0);
+}
+```
+
+
 ## kmalloc
 
-```c
+kmalloc is the normal method of allocating memory for objects smaller than page size in the kernel.
+The allocated object address is aligned to at least ARCH_KMALLOC_MINALIGN bytes. For @size of power of two bytes, the alignment is also guaranteed to be at least to the size. For other sizes, the alignment is guaranteed to be at least the largest power-of-two divisor of @size. 
 
-/**
- * kmalloc - allocate memory
- * @size: how many bytes of memory are required.
- * @flags: the type of memory to allocate.
- *
- * kmalloc is the normal method of allocating memory
- * for objects smaller than page size in the kernel.
- *
- * The allocated object address is aligned to at least ARCH_KMALLOC_MINALIGN
- * bytes. For @size of power of two bytes, the alignment is also guaranteed
- * to be at least to the size.
- *
- * The @flags argument may be one of the GFP flags defined at
- * include/linux/gfp.h and described at
- * :ref:`Documentation/core-api/mm-api.rst <mm-api-gfp-flags>`
- *
- * The recommended usage of the @flags is described at
- * :ref:`Documentation/core-api/memory-allocation.rst <memory_allocation>`
- *
- * Below is a brief outline of the most useful GFP flags
- *
- * %GFP_KERNEL
- *	Allocate normal kernel ram. May sleep.
- *
- * %GFP_NOWAIT
- *	Allocation will not sleep.
- *
- * %GFP_ATOMIC
- *	Allocation will not sleep.  May use emergency pools.
- *
- * %GFP_HIGHUSER
- *	Allocate memory from high memory on behalf of user.
- *
- * Also it is possible to set different flags by OR'ing
- * in one or more of the following additional @flags:
- *
- * %__GFP_HIGH
- *	This allocation has high priority and may use emergency pools.
- *
- * %__GFP_NOFAIL
- *	Indicate that this allocation is in no way allowed to fail
- *	(think twice before using).
- *
- * %__GFP_NORETRY
- *	If memory is not immediately available,
- *	then give up at once.
- *
- * %__GFP_NOWARN
- *	If allocation fails, don't issue any warnings.
- *
- * %__GFP_RETRY_MAYFAIL
- *	Try really hard to succeed the allocation but fail
- *	eventually.
- */
+
+
+```c
 static __always_inline void *kmalloc(size_t size, gfp_t flags)
 {
 	if (__builtin_constant_p(size)) {
@@ -547,6 +550,32 @@ static __always_inline void *kmalloc(size_t size, gfp_t flags)
 	return __kmalloc(size, flags);
 }
 ```
+
+如果通过kmalloc_large()进行内存分配，将会经kmalloc_large()->kmalloc_order()->__get_free_pages()，最终通过Buddy伙伴算法申请所需内存
+
+```c
+// mm/slab.c
+static __always_inline void *__do_kmalloc(size_t size, gfp_t flags,
+					  unsigned long caller)
+{
+	struct kmem_cache *cachep;
+	void *ret;
+
+	if (unlikely(size > KMALLOC_MAX_CACHE_SIZE))
+		return NULL;
+	cachep = kmalloc_slab(size, flags);
+	if (unlikely(ZERO_OR_NULL_PTR(cachep)))
+		return cachep;
+	ret = slab_alloc(cachep, flags, size, caller);
+
+	ret = kasan_kmalloc(cachep, ret, size, flags);
+	trace_kmalloc(caller, ret,
+		      size, cachep->size, flags);
+
+	return ret;
+}
+```
+kmalloc()实现较为简单，起分配所得的内存不仅是虚拟地址上的连续存储空间，同时也是物理地址上的连续存储空间
 
 
 
@@ -916,7 +945,15 @@ void kfree(const void *objp)
 }
 ```
 
+if (unlikely(ZERO_OR_NULL_PTR(x)))对地址做非零判断，接着virt_to_head_page(x)将虚拟地址转换到页面；再是判断if (unlikely(!PageSlab(page)))判断该页面是否作为slab分配管理，如果是的话则转为通过slab_free()进行释放，否则将进入if分支中；在if分支中，将会kfree_hook()做释放前kmemleak处理（该函数主要是封装了kmemleak_free()），完了之后将会__free_memcg_kmem_pages()将页面释放，同时该函数内也将cgroup释放处理
+
+
 
 ## Links
 
 - [Linux Memory](/docs/CS/OS/Linux/mm/memory.md)
+
+
+## References
+
+1. [The Slab Allocator: An Object-Caching Kernel Memory Allocator](https://people.eecs.berkeley.edu/~kubitron/courses/cs194-24-S13/hand-outs/bonwick_slab.pdf)
