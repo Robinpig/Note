@@ -28,7 +28,37 @@ void *mmap(void addr[.length], size_t length, int prot, int flags, int fd, off_t
 int munmap(void addr[.length], size_t length);
 ```
 
-如果我们通过 mmap 映射的是磁盘上的一个文件，那么就需要通过参数 fd 来指定要映射文件的描述符（file descriptor），通过参数 offset 来指定文件映射区域在文件中偏移
+The starting address for the new mapping is specified in addr.  The length argument specifies the length of the mapping (which must be greater than 0).
+
+If addr is NULL, then the kernel chooses the (page-aligned)
+address at which to create the mapping; this is the most portable
+method of creating a new mapping.  
+If addr is not NULL, then the
+kernel takes it as a hint about where to place the mapping; on
+Linux, the kernel will pick a nearby page boundary (but always
+above or equal to the value specified by /proc/sys/vm/mmap_min_addr) and attempt to create the mapping there.  
+If another mapping already exists there, the kernel picks a new address that may or may not depend on the hint.  
+The address of the new mapping is returned as the result of the call.
+
+The contents of a file mapping (as opposed to an anonymous
+mapping; see MAP_ANONYMOUS below), are initialized using length
+bytes starting at offset offset in the file (or other object)
+referred to by the file descriptor fd.  offset must be a multiple
+of the page size as returned by sysconf(_SC_PAGE_SIZE).
+
+After the mmap() call has returned, the file descriptor, fd, can
+be closed immediately without invalidating the mapping.
+
+
+A file is mapped in multiples of the page size.  For a file that
+       is not a multiple of the page size, the remaining bytes in the
+       partial page at the end of the mapping are zeroed when mapped,
+       and modifications to that region are not written out to the file.
+       The effect of changing the size of the underlying file of a
+       mapping on the pages that correspond to added or removed regions
+       of the file is unspecified.
+
+
 
 
 
@@ -595,6 +625,288 @@ int mlock_future_check(struct mm_struct *mm, unsigned long flags,
 }
 ```
 
+#### mmap_region
+
+1. vm_area_alloc
+
+
+```c
+unsigned long mmap_region(struct file *file, unsigned long addr,
+		unsigned long len, vm_flags_t vm_flags, unsigned long pgoff,
+		struct list_head *uf)
+{
+	struct mm_struct *mm = current->mm;
+	struct vm_area_struct *vma = NULL;
+	struct vm_area_struct *next, *prev, *merge;
+	pgoff_t pglen = len >> PAGE_SHIFT;
+	unsigned long charged = 0;
+	unsigned long end = addr + len;
+	unsigned long merge_start = addr, merge_end = end;
+	bool writable_file_mapping = false;
+	pgoff_t vm_pgoff;
+	int error;
+	VMA_ITERATOR(vmi, mm, addr);
+
+	/* Check against address space limit. */
+	if (!may_expand_vm(mm, vm_flags, len >> PAGE_SHIFT)) {
+		unsigned long nr_pages;
+
+		/*
+		 * MAP_FIXED may remove pages of mappings that intersects with
+		 * requested mapping. Account for the pages it would unmap.
+		 */
+		nr_pages = count_vma_pages_range(mm, addr, end);
+
+		if (!may_expand_vm(mm, vm_flags,
+					(len >> PAGE_SHIFT) - nr_pages))
+			return -ENOMEM;
+	}
+
+	/* Unmap any existing mapping in the area */
+	if (do_vmi_munmap(&vmi, mm, addr, len, uf, false))
+		return -ENOMEM;
+
+	/*
+	 * Private writable mapping: check memory availability
+	 */
+	if (accountable_mapping(file, vm_flags)) {
+		charged = len >> PAGE_SHIFT;
+		if (security_vm_enough_memory_mm(mm, charged))
+			return -ENOMEM;
+		vm_flags |= VM_ACCOUNT;
+	}
+
+	next = vma_next(&vmi);
+	prev = vma_prev(&vmi);
+	if (vm_flags & VM_SPECIAL) {
+		if (prev)
+			vma_iter_next_range(&vmi);
+		goto cannot_expand;
+	}
+
+	/* Attempt to expand an old mapping */
+	/* Check next */
+	if (next && next->vm_start == end && !vma_policy(next) &&
+	    can_vma_merge_before(next, vm_flags, NULL, file, pgoff+pglen,
+				 NULL_VM_UFFD_CTX, NULL)) {
+		merge_end = next->vm_end;
+		vma = next;
+		vm_pgoff = next->vm_pgoff - pglen;
+	}
+
+	/* Check prev */
+	if (prev && prev->vm_end == addr && !vma_policy(prev) &&
+	    (vma ? can_vma_merge_after(prev, vm_flags, vma->anon_vma, file,
+				       pgoff, vma->vm_userfaultfd_ctx, NULL) :
+		   can_vma_merge_after(prev, vm_flags, NULL, file, pgoff,
+				       NULL_VM_UFFD_CTX, NULL))) {
+		merge_start = prev->vm_start;
+		vma = prev;
+		vm_pgoff = prev->vm_pgoff;
+	} else if (prev) {
+		vma_iter_next_range(&vmi);
+	}
+
+	/* Actually expand, if possible */
+	if (vma &&
+	    !vma_expand(&vmi, vma, merge_start, merge_end, vm_pgoff, next)) {
+		khugepaged_enter_vma(vma, vm_flags);
+		goto expanded;
+	}
+
+	if (vma == prev)
+		vma_iter_set(&vmi, addr);
+cannot_expand:
+
+	/*
+	 * Determine the object being mapped and call the appropriate
+	 * specific mapper. the address has already been validated, but
+	 * not unmapped, but the maps are removed from the list.
+	 */
+	vma = vm_area_alloc(mm);
+	if (!vma) {
+		error = -ENOMEM;
+		goto unacct_error;
+	}
+
+	vma_iter_config(&vmi, addr, end);
+	vma->vm_start = addr;
+	vma->vm_end = end;
+	vm_flags_init(vma, vm_flags);
+	vma->vm_page_prot = vm_get_page_prot(vm_flags);
+	vma->vm_pgoff = pgoff;
+
+	if (file) {
+		vma->vm_file = get_file(file);
+		error = call_mmap(file, vma);
+		if (error)
+			goto unmap_and_free_vma;
+
+		if (vma_is_shared_maywrite(vma)) {
+			error = mapping_map_writable(file->f_mapping);
+			if (error)
+				goto close_and_free_vma;
+
+			writable_file_mapping = true;
+		}
+
+		/*
+		 * Expansion is handled above, merging is handled below.
+		 * Drivers should not alter the address of the VMA.
+		 */
+		error = -EINVAL;
+		if (WARN_ON((addr != vma->vm_start)))
+			goto close_and_free_vma;
+
+		vma_iter_config(&vmi, addr, end);
+		/*
+		 * If vm_flags changed after call_mmap(), we should try merge
+		 * vma again as we may succeed this time.
+		 */
+		if (unlikely(vm_flags != vma->vm_flags && prev)) {
+			merge = vma_merge_new_vma(&vmi, prev, vma,
+						  vma->vm_start, vma->vm_end,
+						  vma->vm_pgoff);
+			if (merge) {
+				/*
+				 * ->mmap() can change vma->vm_file and fput
+				 * the original file. So fput the vma->vm_file
+				 * here or we would add an extra fput for file
+				 * and cause general protection fault
+				 * ultimately.
+				 */
+				fput(vma->vm_file);
+				vm_area_free(vma);
+				vma = merge;
+				/* Update vm_flags to pick up the change. */
+				vm_flags = vma->vm_flags;
+				goto unmap_writable;
+			}
+		}
+
+		vm_flags = vma->vm_flags;
+	} else if (vm_flags & VM_SHARED) {
+		error = shmem_zero_setup(vma);
+		if (error)
+			goto free_vma;
+	} else {
+		vma_set_anonymous(vma);
+	}
+
+	if (map_deny_write_exec(vma, vma->vm_flags)) {
+		error = -EACCES;
+		goto close_and_free_vma;
+	}
+
+	/* Allow architectures to sanity-check the vm_flags */
+	error = -EINVAL;
+	if (!arch_validate_flags(vma->vm_flags))
+		goto close_and_free_vma;
+
+	error = -ENOMEM;
+	if (vma_iter_prealloc(&vmi, vma))
+		goto close_and_free_vma;
+
+	/* Lock the VMA since it is modified after insertion into VMA tree */
+	vma_start_write(vma);
+	vma_iter_store(&vmi, vma);
+	mm->map_count++;
+	if (vma->vm_file) {
+		i_mmap_lock_write(vma->vm_file->f_mapping);
+		if (vma_is_shared_maywrite(vma))
+			mapping_allow_writable(vma->vm_file->f_mapping);
+
+		flush_dcache_mmap_lock(vma->vm_file->f_mapping);
+		vma_interval_tree_insert(vma, &vma->vm_file->f_mapping->i_mmap);
+		flush_dcache_mmap_unlock(vma->vm_file->f_mapping);
+		i_mmap_unlock_write(vma->vm_file->f_mapping);
+	}
+
+	/*
+	 * vma_merge() calls khugepaged_enter_vma() either, the below
+	 * call covers the non-merge case.
+	 */
+	khugepaged_enter_vma(vma, vma->vm_flags);
+
+	/* Once vma denies write, undo our temporary denial count */
+unmap_writable:
+	if (writable_file_mapping)
+		mapping_unmap_writable(file->f_mapping);
+	file = vma->vm_file;
+	ksm_add_vma(vma);
+expanded:
+	perf_event_mmap(vma);
+
+	vm_stat_account(mm, vm_flags, len >> PAGE_SHIFT);
+	if (vm_flags & VM_LOCKED) {
+		if ((vm_flags & VM_SPECIAL) || vma_is_dax(vma) ||
+					is_vm_hugetlb_page(vma) ||
+					vma == get_gate_vma(current->mm))
+			vm_flags_clear(vma, VM_LOCKED_MASK);
+		else
+			mm->locked_vm += (len >> PAGE_SHIFT);
+	}
+
+	if (file)
+		uprobe_mmap(vma);
+
+	/*
+	 * New (or expanded) vma always get soft dirty status.
+	 * Otherwise user-space soft-dirty page tracker won't
+	 * be able to distinguish situation when vma area unmapped,
+	 * then new mapped in-place (which must be aimed as
+	 * a completely new data area).
+	 */
+	vm_flags_set(vma, VM_SOFTDIRTY);
+
+	vma_set_page_prot(vma);
+
+	validate_mm(mm);
+	return addr;
+
+close_and_free_vma:
+	if (file && vma->vm_ops && vma->vm_ops->close)
+		vma->vm_ops->close(vma);
+
+	if (file || vma->vm_file) {
+unmap_and_free_vma:
+		fput(vma->vm_file);
+		vma->vm_file = NULL;
+
+		vma_iter_set(&vmi, vma->vm_end);
+		/* Undo any partial mapping done by a device driver. */
+		unmap_region(mm, &vmi.mas, vma, prev, next, vma->vm_start,
+			     vma->vm_end, vma->vm_end, true);
+	}
+	if (writable_file_mapping)
+		mapping_unmap_writable(file->f_mapping);
+free_vma:
+	vm_area_free(vma);
+unacct_error:
+	if (charged)
+		vm_unacct_memory(charged);
+	validate_mm(mm);
+	return error;
+}
+```
+
+
+
+```c
+int generic_file_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	struct address_space *mapping = file->f_mapping;
+
+	if (!mapping->a_ops->read_folio)
+		return -ENOEXEC;
+	file_accessed(file);
+	vma->vm_ops = &generic_file_vm_ops;
+	return 0;
+}
+
+```
+
+
 mmap 的共享匿名映射其实本质上还是共享文件映射，只不过这个文件比较特殊，创建于 dev/zero 目录下的 tmpfs 文件系统中
 ```c
 int shmem_zero_setup(struct vm_area_struct *vma)
@@ -636,11 +948,10 @@ static const struct vm_operations_struct shmem_vm_ops = {
 };
 ```
 
+## munmap
 
 
-```c
 
-```
 
 ## Tuning
 

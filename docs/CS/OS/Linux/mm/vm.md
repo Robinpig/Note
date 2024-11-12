@@ -396,6 +396,82 @@ struct vm_area_struct {
 ```
 
 
+## page fault
+
+mmap() 系统调用并没有直接将文件的页缓存映射到虚拟内存中，所以当访问到没有映射的虚拟内存地址时，将会触发 缺页异常。当 CPU 触发缺页异常时，将会调用 do_page_fault() 函数来修复触发异常的虚拟内存地址
+
+```
+do_page_fault()
+└→ handle_mm_fault()
+   └→ handle_pte_fault()
+      └→ do_linear_fault()
+         └→ __do_fault()
+
+```
+
+__do_fault() 函数对处理文件映射：
+
+- 调用虚拟内存管理区结构（vma）的 fault() 回调函数（也就是 filemap_fault() 函数）来获取到文件的页缓存。
+- 将虚拟内存地址映射到页缓存的物理内存页（也就是将进程的页表项设置为上面生成的页表项的值）。
+
+```c
+static vm_fault_t __do_fault(struct vm_fault *vmf)
+{
+	struct vm_area_struct *vma = vmf->vma;
+	struct folio *folio;
+	vm_fault_t ret;
+
+	/*
+	 * Preallocate pte before we take page_lock because this might lead to
+	 * deadlocks for memcg reclaim which waits for pages under writeback:
+	 *				lock_page(A)
+	 *				SetPageWriteback(A)
+	 *				unlock_page(A)
+	 * lock_page(B)
+	 *				lock_page(B)
+	 * pte_alloc_one
+	 *   shrink_page_list
+	 *     wait_on_page_writeback(A)
+	 *				SetPageWriteback(B)
+	 *				unlock_page(B)
+	 *				# flush A, B to clear the writeback
+	 */
+	if (pmd_none(*vmf->pmd) && !vmf->prealloc_pte) {
+		vmf->prealloc_pte = pte_alloc_one(vma->vm_mm);
+		if (!vmf->prealloc_pte)
+			return VM_FAULT_OOM;
+	}
+
+	ret = vma->vm_ops->fault(vmf);
+	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY |
+			    VM_FAULT_DONE_COW)))
+		return ret;
+
+	folio = page_folio(vmf->page);
+	if (unlikely(PageHWPoison(vmf->page))) {
+		vm_fault_t poisonret = VM_FAULT_HWPOISON;
+		if (ret & VM_FAULT_LOCKED) {
+			if (page_mapped(vmf->page))
+				unmap_mapping_folio(folio);
+			/* Retry if a clean folio was removed from the cache. */
+			if (mapping_evict_folio(folio->mapping, folio))
+				poisonret = VM_FAULT_NOPAGE;
+			folio_unlock(folio);
+		}
+		folio_put(folio);
+		vmf->page = NULL;
+		return poisonret;
+	}
+
+	if (unlikely(!(ret & VM_FAULT_LOCKED)))
+		folio_lock(folio);
+	else
+		VM_BUG_ON_PAGE(!folio_test_locked(folio), vmf->page);
+
+	return ret;
+}
+```
+
 
 
 ## vmalloc
