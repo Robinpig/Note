@@ -8,6 +8,29 @@ Ongoing development efforts trend toward making jemalloc among the best allocato
 and eliminating/mitigating weaknesses that have practical repercussions for real world applications.
 
 
+jemalloc对哪些进行优化
+- false sharing
+
+```c
+#include <jemalloc/jemalloc.h>
+
+void *malloc(	size_t size);
+void free(	void *ptr);
+```
+
+
+jemalloc基于申请内存的大小把内存分配分为small, large,huge三种类型
+
+
+
 ## Links
 
 - [Memory](/docs/CS/memory/memory.md)
+
+
+
+
+
+## References
+
+1. [A Scalable Concurrent malloc(3) Implementation for FreeBSD](https://people.freebsd.org/~jasone/jemalloc/bsdcan2006/jemalloc.pdf)
