@@ -24,7 +24,6 @@ The actual layout of the memory zones is hardware dependent as not all architect
 
 Many multi-processor machines are NUMA - Non-Uniform Memory Access - systems. In such systems the memory is arranged into banks that have different access latency depending on the “distance” from the processor. Each bank is referred to as a node and for each node Linux constructs an independent memory management subsystem. A node has its own set of zones, lists of free and used pages and various statistics counters. You can find more details about NUMA in What is NUMA?` and in NUMA Memory Policy.
 
-
 Page cache
 The physical memory is volatile and the common case for getting data into the memory is to read it from files. Whenever a file is read, the data is put into the page cache to avoid expensive disk access on the subsequent reads. Similarly, when one writes to a file, the data is placed in the page cache and eventually gets into the backing storage device. The written pages are marked as dirty and when Linux decides to reuse them for other purposes, it makes sure to synchronize the file contents on the device with the updated data.
 Anonymous Memory
@@ -59,6 +58,10 @@ The OOM killer selects a task to sacrifice for the sake of the overall system he
 其中低 128 T 表示用户态虚拟内存空间，虚拟内存地址范围为：0x0000 0000 0000 0000  - 0x0000 7FFF FFFF F000 。
 高 128 T 表示内核态虚拟内存空间，虚拟内存地址范围为：0xFFFF 8000 0000 0000  - 0xFFFF FFFF FFFF FFFF
 在 64 位机器上的指针寻址范围为 2^64，但是在实际使用中我们只使用了其中的低 48 位来表示虚拟内存地址，那么这多出的高 16 位就形成了这个地址空洞(canonical address)
+
+
+
+## mm_struct
 
 在 copy_process 函数中创建 task_struct 结构，并拷贝父进程的相关资源到新进程的 task_struct 结构里，其中就包括拷贝父进程的虚拟内存空间 mm_struct 结构。这里可以看出子进程在新创建出来之后它的虚拟内存空间是和父进程的虚拟内存空间一模一样的，直接拷贝过来
 
@@ -242,6 +245,7 @@ vm_area_struct 结构中的 vm_next ，vm_prev 指针分别指向 VMA 节点所�
 
 
 ```c
+// include/linux/mm_types.h
 struct mm_struct {
     struct vm_area_struct *mmap;  /* list of VMAs */
 }
@@ -286,6 +290,111 @@ libc对内存的分配有两种途径：一是调整堆的大小，二是mmap �
 对于一个进程来说，栈一般是可以被伸展得比较大（如：8MB）。然而对于线程呢？
 首先线程的栈是怎么回事？前面说过，线程的 mm 是共享其父进程的。虽然栈是 mm 中的一个 vma，但是线程不能与其父进程共用这个 vma（两个运行实体显然不用共用一个栈）。于是，在线程创建时，线程库通过 mmap 新建了一个 vma，以此作为线程的栈（大于一般为：2M）。
 可见，线程的栈在某种意义上并不是真正栈，它是一个固定的区域，并且容量很有限。
+
+
+### vm_area_struct
+
+
+This struct describes a virtual memory area. There is one of these per VM-area/task.
+A VM area is any part of the process virtual memory space that has a special rule for the page-fault handlers (ie a shared library, the executable area etc).
+
+```c
+struct vm_area_struct {
+	/* The first cache line has the info for VMA tree walking. */
+
+	unsigned long vm_start;		/* Our start address within vm_mm. */
+	unsigned long vm_end;		/* The first byte after our end address
+					   within vm_mm. */
+
+	/* linked list of VM areas per task, sorted by address */
+	struct vm_area_struct *vm_next, *vm_prev;
+
+	struct rb_node vm_rb;
+
+	/*
+	 * Largest free memory gap in bytes to the left of this VMA.
+	 * Either between this VMA and vma->vm_prev, or between one of the
+	 * VMAs below us in the VMA rbtree and its ->vm_prev. This helps
+	 * get_unmapped_area find a free area of the right size.
+	 */
+	unsigned long rb_subtree_gap;
+
+	/* Second cache line starts here. */
+
+	struct mm_struct *vm_mm;	/* The address space we belong to. */
+
+	/*
+	 * Access permissions of this VMA.
+	 * See vmf_insert_mixed_prot() for discussion.
+	 */
+	pgprot_t vm_page_prot;
+	unsigned long vm_flags;		/* Flags, see mm.h. */
+
+	/*
+	 * For areas with an address space and backing store,
+	 * linkage into the address_space->i_mmap interval tree.
+	 *
+	 * For private anonymous mappings, a pointer to a null terminated string
+	 * containing the name given to the vma, or NULL if unnamed.
+	 */
+
+	union {
+		struct {
+			struct rb_node rb;
+			unsigned long rb_subtree_last;
+		} shared;
+		/*
+		 * Serialized by mmap_sem. Never use directly because it is
+		 * valid only when vm_file is NULL. Use anon_vma_name instead.
+		 */
+		struct anon_vma_name *anon_name;
+	};
+
+	/*
+	 * A file's MAP_PRIVATE vma can be in both i_mmap tree and anon_vma
+	 * list, after a COW of one of the file pages.	A MAP_SHARED vma
+	 * can only be in the i_mmap tree.  An anonymous MAP_PRIVATE, stack
+	 * or brk vma (with NULL file) can only be in an anon_vma list.
+	 */
+	struct list_head anon_vma_chain; /* Serialized by mmap_lock &
+					  * page_table_lock */
+	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
+
+	/* Function pointers to deal with this struct. */
+	const struct vm_operations_struct *vm_ops;
+
+	/* Information about our backing store: */
+	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
+					   units */
+	struct file * vm_file;		/* File we map to (can be NULL). */
+	void * vm_private_data;		/* was vm_pte (shared mem) */
+
+#ifdef CONFIG_SWAP
+	atomic_long_t swap_readahead_info;
+#endif
+#ifndef CONFIG_MMU
+	struct vm_region *vm_region;	/* NOMMU mapping region */
+#endif
+#ifdef CONFIG_NUMA
+	struct mempolicy *vm_policy;	/* NUMA policy for the VMA */
+#endif
+	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
+} __randomize_layout;
+```
+
+
+根据 vm_file->f_inode 我们可以关联到映射文件的 struct inode，近而关联到映射文件在磁盘中的磁盘块 i_block，这个就是 mmap 内存文件映射最本质的东西
+
+```c
+struct vm_area_struct {
+	/* Information about our backing store: */
+	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
+					   units */
+	struct file * vm_file;		/* File we map to (can be NULL). */
+}	
+```
+
+
 
 
 ## vmalloc

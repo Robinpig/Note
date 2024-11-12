@@ -19,14 +19,381 @@ The mmap system call has been used in various database implementations as an alt
 
 > [Are You Sure You Want to Use MMAP in Your Database Management System?](https://db.cs.cmu.edu/papers/2022/cidr2022-p13-crotty.pdf)
 
+## mmap
+
+```c
+#include <sys/mman.h>
+
+void *mmap(void addr[.length], size_t length, int prot, int flags, int fd, off_t offset);
+int munmap(void addr[.length], size_t length);
+```
+
+如果我们通过 mmap 映射的是磁盘上的一个文件，那么就需要通过参数 fd 来指定要映射文件的描述符（file descriptor），通过参数 offset 来指定文件映射区域在文件中偏移
+
+
+
+### ksys_mmap_pgoff
+```c
+// arch/x86/kernel/sys_x86_64.c
+SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
+		unsigned long, prot, unsigned long, flags,
+		unsigned long, fd, unsigned long, off)
+{
+	if (off & ~PAGE_MASK)
+		return -EINVAL;
+
+	return ksys_mmap_pgoff(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
+}
+
+unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
+			      unsigned long prot, unsigned long flags,
+			      unsigned long fd, unsigned long pgoff)
+{
+	struct file *file = NULL;
+	unsigned long retval;
+
+	if (!(flags & MAP_ANONYMOUS)) {
+		audit_mmap_fd(fd, flags);
+		file = fget(fd);
+		if (!file)
+			return -EBADF;
+		if (is_file_hugepages(file)) {
+			len = ALIGN(len, huge_page_size(hstate_file(file)));
+		} else if (unlikely(flags & MAP_HUGETLB)) {
+			retval = -EINVAL;
+			goto out_fput;
+		}
+	} else if (flags & MAP_HUGETLB) {
+		struct hstate *hs;
+
+		hs = hstate_sizelog((flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
+		if (!hs)
+			return -EINVAL;
+
+		len = ALIGN(len, huge_page_size(hs));
+		/*
+		 * VM_NORESERVE is used because the reservations will be
+		 * taken when vm_ops->mmap() is called
+		 */
+		file = hugetlb_file_setup(HUGETLB_ANON_FILE, len,
+				VM_NORESERVE,
+				HUGETLB_ANONHUGE_INODE,
+				(flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
+		if (IS_ERR(file))
+			return PTR_ERR(file);
+	}
+
+	retval = vm_mmap_pgoff(file, addr, len, prot, flags, pgoff);
+out_fput:
+	if (file)
+		fput(file);
+	return retval;
+}
+
+```
+ksys_mmap_pgoff 函数主要是针对 mmap 大页映射的情况进行预处理
+
+
+
+```c
+static inline bool is_file_hugepages(struct file *file)
+{
+	if (file->f_op == &hugetlbfs_file_operations)
+		return true;
+
+	return is_file_shm_hugepages(file);
+}
+
+bool is_file_shm_hugepages(struct file *file)
+{
+	return file->f_op == &shm_file_operations_huge;
+}
+```
+#### vm_mmap_pgoff
+在一般情况下，我们调用 mmap 进行内存映射的时候，内核只是会在进程的虚拟内存空间中为这次映射分配一段虚拟内存，然后建立好这段虚拟内存与相关文件之间的映射关系就结束了，内核并不会为映射分配物理内存
+物理内存的分配工作需要延后到这段虚拟内存被 CPU 访问的时候，通过缺页中断来进入内核，分配物理内存，并在页表中建立好映射关系
+
+
+但是当我们调用 mmap 的时候，如果在 flags 参数中设置了 MAP_POPULATE 或者 MAP_LOCKED 标志位之后，物理内存的分配动作会提前发生。
+
+首先会通过 do_mmap_pgoff 函数在进程虚拟内存空间中分配出一段未映射的虚拟内存区域，返回值 ret 表示映射的这段虚拟内存区域的起始地址。
+
+紧接着就会调用 mm_populate，内核会在 mmap 刚刚映射出来的这段虚拟内存区域上，依次扫描这段 vma 中的每一个虚拟页，并对每一个虚拟页触发缺页异常，从而为其立即分配物理内存
+
+```c
+unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
+	unsigned long len, unsigned long prot,
+	unsigned long flag, unsigned long pgoff)
+{
+	unsigned long ret;
+	struct mm_struct *mm = current->mm;
+	unsigned long populate;
+	LIST_HEAD(uf);
+
+	ret = security_mmap_file(file, prot, flag);
+	if (!ret) {
+		if (mmap_write_lock_killable(mm))
+			return -EINTR;
+		ret = do_mmap(file, addr, len, prot, flag, pgoff, &populate,
+			      &uf);
+		mmap_write_unlock(mm);
+		userfaultfd_unmap_complete(mm, &uf);
+		if (populate)
+			mm_populate(ret, populate);
+	}
+	return ret;
+}
+```
+
+populate and/or mlock pages within a range of address space
+```c
+int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
+{
+	struct mm_struct *mm = current->mm;
+	unsigned long end, nstart, nend;
+	struct vm_area_struct *vma = NULL;
+	int locked = 0;
+	long ret = 0;
+
+	end = start + len;
+
+	for (nstart = start; nstart < end; nstart = nend) {
+		/*
+		 * We want to fault in pages for [nstart; end) address range.
+		 * Find first corresponding VMA.
+		 */
+		if (!locked) {
+			locked = 1;
+			mmap_read_lock(mm);
+			vma = find_vma(mm, nstart);
+		} else if (nstart >= vma->vm_end)
+			vma = vma->vm_next;
+		if (!vma || vma->vm_start >= end)
+			break;
+		/*
+		 * Set [nstart; nend) to intersection of desired address
+		 * range with the first VMA. Also, skip undesirable VMA types.
+		 */
+		nend = min(end, vma->vm_end);
+		if (vma->vm_flags & (VM_IO | VM_PFNMAP))
+			continue;
+		if (nstart < vma->vm_start)
+			nstart = vma->vm_start;
+		/*
+		 * Now fault in a range of pages. populate_vma_page_range()
+		 * double checks the vma flags, so that it won't mlock pages
+		 * if the vma was already munlocked.
+		 */
+		ret = populate_vma_page_range(vma, nstart, nend, &locked);
+		if (ret < 0) {
+			if (ignore_errors) {
+				ret = 0;
+				continue;	/* continue at next VMA */
+			}
+			break;
+		}
+		nend = nstart + ret * PAGE_SIZE;
+		ret = 0;
+	}
+	if (locked)
+		mmap_read_unlock(mm);
+	return ret;	/* 0 or negative error code */
+}
+```
+populate a range of pages in the vma.
+
+
+```c
+long populate_vma_page_range(struct vm_area_struct *vma,
+		unsigned long start, unsigned long end, int *locked)
+{
+	struct mm_struct *mm = vma->vm_mm;
+	unsigned long nr_pages = (end - start) / PAGE_SIZE;
+	int gup_flags;
+	long ret;
+
+	VM_BUG_ON(!PAGE_ALIGNED(start));
+	VM_BUG_ON(!PAGE_ALIGNED(end));
+	VM_BUG_ON_VMA(start < vma->vm_start, vma);
+	VM_BUG_ON_VMA(end   > vma->vm_end, vma);
+	mmap_assert_locked(mm);
+
+	/*
+	 * Rightly or wrongly, the VM_LOCKONFAULT case has never used
+	 * faultin_page() to break COW, so it has no work to do here.
+	 */
+	if (vma->vm_flags & VM_LOCKONFAULT)
+		return nr_pages;
+
+	gup_flags = FOLL_TOUCH;
+	/*
+	 * We want to touch writable mappings with a write fault in order
+	 * to break COW, except for shared mappings because these don't COW
+	 * and we would not want to dirty them for nothing.
+	 */
+	if ((vma->vm_flags & (VM_WRITE | VM_SHARED)) == VM_WRITE)
+		gup_flags |= FOLL_WRITE;
+
+	/*
+	 * We want mlock to succeed for regions that have any permissions
+	 * other than PROT_NONE.
+	 */
+	if (vma_is_accessible(vma))
+		gup_flags |= FOLL_FORCE;
+
+	/*
+	 * We made sure addr is within a VMA, so the following will
+	 * not result in a stack expansion that recurses back here.
+	 */
+	ret = __get_user_pages(mm, start, nr_pages, gup_flags,
+				NULL, NULL, locked);
+	lru_add_drain();
+	return ret;
+}
+```
+
+
+```c
+static long __get_user_pages(struct mm_struct *mm,
+		unsigned long start, unsigned long nr_pages,
+		unsigned int gup_flags, struct page **pages,
+		struct vm_area_struct **vmas, int *locked)
+{
+	long ret = 0, i = 0;
+	struct vm_area_struct *vma = NULL;
+	struct follow_page_context ctx = { NULL };
+
+	if (!nr_pages)
+		return 0;
+
+	start = untagged_addr(start);
+
+	VM_BUG_ON(!!pages != !!(gup_flags & (FOLL_GET | FOLL_PIN)));
+
+	/*
+	 * If FOLL_FORCE is set then do not force a full fault as the hinting
+	 * fault information is unrelated to the reference behaviour of a task
+	 * using the address space
+	 */
+	if (!(gup_flags & FOLL_FORCE))
+		gup_flags |= FOLL_NUMA;
+
+	do {
+		struct page *page;
+		unsigned int foll_flags = gup_flags;
+		unsigned int page_increm;
+
+		/* first iteration or cross vma bound */
+		if (!vma || start >= vma->vm_end) {
+			vma = find_extend_vma(mm, start);
+			if (!vma && in_gate_area(mm, start)) {
+				ret = get_gate_page(mm, start & PAGE_MASK,
+						gup_flags, &vma,
+						pages ? &pages[i] : NULL);
+				if (ret)
+					goto out;
+				ctx.page_mask = 0;
+				goto next_page;
+			}
+
+			if (!vma) {
+				ret = -EFAULT;
+				goto out;
+			}
+			ret = check_vma_flags(vma, gup_flags);
+			if (ret)
+				goto out;
+
+			if (is_vm_hugetlb_page(vma)) {
+				i = follow_hugetlb_page(mm, vma, pages, vmas,
+						&start, &nr_pages, i,
+						gup_flags, locked);
+				if (locked && *locked == 0) {
+					/*
+					 * We've got a VM_FAULT_RETRY
+					 * and we've lost mmap_lock.
+					 * We must stop here.
+					 */
+					BUG_ON(gup_flags & FOLL_NOWAIT);
+					goto out;
+				}
+				continue;
+			}
+		}
+retry:
+		/*
+		 * If we have a pending SIGKILL, don't keep faulting pages and
+		 * potentially allocating memory.
+		 */
+		if (fatal_signal_pending(current)) {
+			ret = -EINTR;
+			goto out;
+		}
+		cond_resched();
+
+		page = follow_page_mask(vma, start, foll_flags, &ctx);
+		if (!page) {
+			ret = faultin_page(vma, start, &foll_flags, locked);
+			switch (ret) {
+			case 0:
+				goto retry;
+			case -EBUSY:
+				ret = 0;
+				fallthrough;
+			case -EFAULT:
+			case -ENOMEM:
+			case -EHWPOISON:
+				goto out;
+			}
+			BUG();
+		} else if (PTR_ERR(page) == -EEXIST) {
+			/*
+			 * Proper page table entry exists, but no corresponding
+			 * struct page. If the caller expects **pages to be
+			 * filled in, bail out now, because that can't be done
+			 * for this page.
+			 */
+			if (pages) {
+				ret = PTR_ERR(page);
+				goto out;
+			}
+
+			goto next_page;
+		} else if (IS_ERR(page)) {
+			ret = PTR_ERR(page);
+			goto out;
+		}
+		if (pages) {
+			pages[i] = page;
+			flush_anon_page(vma, page, start);
+			flush_dcache_page(page);
+			ctx.page_mask = 0;
+		}
+next_page:
+		if (vmas) {
+			vmas[i] = vma;
+			ctx.page_mask = 0;
+		}
+		page_increm = 1 + (~(start >> PAGE_SHIFT) & ctx.page_mask);
+		if (page_increm > nr_pages)
+			page_increm = nr_pages;
+		i += page_increm;
+		start += page_increm * PAGE_SIZE;
+		nr_pages -= page_increm;
+	} while (nr_pages);
+out:
+	if (ctx.pgmap)
+		put_dev_pagemap(ctx.pgmap);
+	return i ? i : ret;
+}
+```
 
 ### do_mmap
 
+do_mmap 是 mmap 系统调用的核心函数，内核会在这里完成内存映射的整个流程
+
 ```c
 // mm/mmap.c
-/*
- * The caller must write-lock current->mm->mmap_lock.
- */
 unsigned long do_mmap(struct file *file, unsigned long addr,
 			unsigned long len, unsigned long prot,
 			unsigned long flags, unsigned long pgoff,
@@ -206,67 +573,74 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	return addr;
 }
 ```
-ksys_mmap_pgoff
+
+通过 mlock_future_check 函数来检查本次映射需要锁定的物理内存页数加上进程已经锁定的物理内存页数总体上是否超过了内存资源锁定限额 rlimit(RLIMIT_MEMLOCK)
+
 ```c
-
-SYSCALL_DEFINE6(mmap_pgoff, unsigned long, addr, unsigned long, len,
-		unsigned long, prot, unsigned long, flags,
-		unsigned long, fd, unsigned long, pgoff)
+int mlock_future_check(struct mm_struct *mm, unsigned long flags,
+		       unsigned long len)
 {
-	return ksys_mmap_pgoff(addr, len, prot, flags, fd, pgoff);
-}
-unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
-			      unsigned long prot, unsigned long flags,
-			      unsigned long fd, unsigned long pgoff)
-{
-	struct file *file = NULL;
-	unsigned long retval;
+	unsigned long locked, lock_limit;
 
-	if (!(flags & MAP_ANONYMOUS)) {
-		audit_mmap_fd(fd, flags);
-		file = fget(fd);
-		if (!file)
-			return -EBADF;
-		if (is_file_hugepages(file)) {
-			len = ALIGN(len, huge_page_size(hstate_file(file)));
-		} else if (unlikely(flags & MAP_HUGETLB)) {
-			retval = -EINVAL;
-			goto out_fput;
-		}
-	} else if (flags & MAP_HUGETLB) {
-		struct hstate *hs;
-
-		hs = hstate_sizelog((flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
-		if (!hs)
-			return -EINVAL;
-
-		len = ALIGN(len, huge_page_size(hs));
-		/*
-		 * VM_NORESERVE is used because the reservations will be
-		 * taken when vm_ops->mmap() is called
-		 */
-		file = hugetlb_file_setup(HUGETLB_ANON_FILE, len,
-				VM_NORESERVE,
-				HUGETLB_ANONHUGE_INODE,
-				(flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
-		if (IS_ERR(file))
-			return PTR_ERR(file);
+	/*  mlock MCL_FUTURE? */
+	if (flags & VM_LOCKED) {
+		locked = len >> PAGE_SHIFT;
+		locked += mm->locked_vm;
+		lock_limit = rlimit(RLIMIT_MEMLOCK);
+		lock_limit >>= PAGE_SHIFT;
+		if (locked > lock_limit && !capable(CAP_IPC_LOCK))
+			return -EAGAIN;
 	}
-
-	retval = vm_mmap_pgoff(file, addr, len, prot, flags, pgoff);
-out_fput:
-	if (file)
-		fput(file);
-	return retval;
+	return 0;
 }
-
-
 ```
 
-在一般情况下，我们调用 mmap 进行内存映射的时候，内核只是会在进程的虚拟内存空间中为这次映射分配一段虚拟内存，然后建立好这段虚拟内存与相关文件之间的映射关系就结束了，内核并不会为映射分配物理内存
-物理内存的分配工作需要延后到这段虚拟内存被 CPU 访问的时候，通过缺页中断来进入内核，分配物理内存，并在页表中建立好映射关系
+mmap 的共享匿名映射其实本质上还是共享文件映射，只不过这个文件比较特殊，创建于 dev/zero 目录下的 tmpfs 文件系统中
+```c
+int shmem_zero_setup(struct vm_area_struct *vma)
+{
+	struct file *file;
+	loff_t size = vma->vm_end - vma->vm_start;
+
+	/*
+	 * Cloning a new file under mmap_lock leads to a lock ordering conflict
+	 * between XFS directory reading and selinux: since this file is only
+	 * accessible to the user through its mapping, use S_PRIVATE flag to
+	 * bypass file security, in the same way as shmem_kernel_file_setup().
+	 */
+	file = shmem_kernel_file_setup("dev/zero", size, vma->vm_flags);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	if (vma->vm_file)
+		fput(vma->vm_file);
+	vma->vm_file = file;
+	vma->vm_ops = &shmem_vm_ops;
+
+	if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
+			((vma->vm_start + ~HPAGE_PMD_MASK) & HPAGE_PMD_MASK) <
+			(vma->vm_end & HPAGE_PMD_MASK)) {
+		khugepaged_enter(vma, vma->vm_flags);
+	}
+
+	return 0;
+}
+
+static const struct vm_operations_struct shmem_vm_ops = {
+	.fault		= shmem_fault,
+	.map_pages	= filemap_map_pages,
+#ifdef CONFIG_NUMA
+	.set_policy     = shmem_set_policy,
+	.get_policy     = shmem_get_policy,
+#endif
+};
+```
 
 
+
+```c
+
+```
 
 ## Tuning
 
