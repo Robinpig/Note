@@ -991,3 +991,4 @@ Performance Issues
 1. [mmap(2) — Linux manual page](https://www.man7.org/linux/man-pages/man2/mmap.2.html)
 2. [从内核世界透视 mmap 内存映射的本质（原理篇）](https://mp.weixin.qq.com/s?__biz=Mzg2MzU3Mjc3Ng==&mid=2247488750&idx=1&sn=247a4603299e203793fac8b6c5e61071&chksm=ce77d2a9f9005bbf3b024bc9f9192f2de63a70fd33db1113d9f9c0d8a1ced2099fbeb727a3d7&scene=178&cur_album_id=2559805446807928833#rd)
 3. [从内核世界透视 mmap 内存映射的本质（源码实现篇）](https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=HLW-MGejV7qK1OI3UlKwV62XCDs4I6_YJvMvcfQa&target_url=https%3A%2F%2Fmp.weixin.qq.com%2Fs%3F__biz%3DMzg2MzU3Mjc3Ng%3D%3D%26mid%3D2247488879%26idx%3D1%26sn%3D4cbbabc648e1a29466c3309371a27a4f%26chksm%3Dce77d328f9005a3e7a0bb0b0ff7ad88b5a3f10c8ad850fb5b503d51001b63eeb2c909ba32a78%26scene%3D178%26cur_album_id%3D2559805446807928833#rd)
+4. [【Linux内核】深入理解 mmap](https://sunhuashan.github.io/2024/05/10/%E4%B8%80%E6%96%87%E6%90%9E%E6%87%82mmap/)

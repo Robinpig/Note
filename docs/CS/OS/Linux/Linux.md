@@ -675,7 +675,8 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## memory
 
 - [memory](/docs/CS/OS/Linux/memory.md)
-- [slab](/docs/CS/OS/Linux/slab.md)
+- [slab](/docs/CS/OS/Linux/mm/slab.md)
+- [mmap](/docs/CS/OS/Linux/mm/mmap.md)
 
 ## fs
 
@@ -685,7 +686,6 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 - [IO](/docs/CS/OS/Linux/IO/IO.md)
 - [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
-- [mmap](/docs/CS/OS/Linux/IO/mmap.md)
 
 ## Network
 
