@@ -43,22 +43,245 @@ Here are the most important Channel implementations in Java NIO:
 A buffer is essentially a block of memory into which you can write data, which you can then later read again. This memory block is wrapped in a NIO Buffer object, which provides a set of methods that makes it easier to work with the memory block.
 
 
+Capacity, Position and Limit
+
+```java
+public abstract class Buffer {
+    // Invariants: mark <= position <= limit <= capacity
+    private int mark = -1;
+    private int position = 0;
+    private int limit;
+    private int capacity;
+}
+```
 
 
-directBuffer
-
-mapped memory
-
-#### Capacity, Position and Limit
-
-position<=limit<=capacity
-
-Using a** **`Buffer` to read and write data typically follows this little 4-step process:
+Using a `Buffer` to read and write data typically follows this little 4-step process:
 
 1. Write data into the Buffer
 2. Call** **`buffer.flip()`
 3. Read data out of the Buffer
 4. Call** **`buffer.clear()` or** **`buffer.compact()`
+
+调用flip切换到read
+```java
+public Buffer flip() {
+    limit = position;
+    position = 0;
+    mark = -1;
+    return this;
+}
+```
+
+
+```java
+public Buffer clear() {
+    position = 0;
+    limit = capacity;
+    mark = -1;
+    return this;
+}
+```
+读取了 Buffer 中的部分数据，但是还有一部分数据没有读取，这时候，调用 clear() 方法开启写模式向 Buffer 中写入数据的话，就会出问题，因为这会覆盖掉我们还没有读取的数据部分
+
+
+
+
+```java
+class HeapByteBuffer extends ByteBuffer {
+    public ByteBuffer compact() {
+
+        int pos = position();
+        int lim = limit();
+        assert (pos <= lim);
+        int rem = (pos <= lim ? lim - pos : 0);
+        System.arraycopy(hb, ix(pos), hb, ix(0), rem);
+        position(rem);
+        limit(capacity());
+        discardMark();
+        return this;
+    }
+}
+```
+
+### ByteBuffer
+
+A byte buffer is either direct or non-direct. Given a direct byte buffer, the Java virtual machine will make a best effort to perform native I/ O operations directly upon it. That is, it will attempt to avoid copying the buffer's content to (or from) an intermediate buffer before (or after) each invocation of one of the underlying operating system's native I/ O operations.
+
+```java
+public abstract class ByteBuffer
+    extends Buffer
+    implements Comparable<ByteBuffer> {
+    // These fields are declared here rather than in Heap-X-Buffer in order to
+    // reduce the number of virtual method invocations needed to access these
+    // values, which is especially costly when coding small buffers.
+    //
+    final byte[] hb;
+    final int offset;
+    boolean isReadOnly;
+}
+```
+
+A direct byte buffer may be created by invoking the allocateDirect factory method of this class. The buffers returned by this method typically have somewhat higher allocation and deallocation costs than non-direct buffers. The contents of direct buffers may reside outside of the normal garbage-collected heap, and so their impact upon the memory footprint of an application might not be obvious. It is therefore recommended that direct buffers be allocated primarily for large, long-lived buffers that are subject to the underlying system's native I/ O operations. In general it is best to allocate direct buffers only when they yield a measurable gain in program performance.
+A direct byte buffer may also be created by mapping a region of a file directly into memory. An implementation of the Java platform may optionally support the creation of direct byte buffers from native code via JNI. If an instance of one of these kinds of buffers refers to an inaccessible region of memory then an attempt to access that region will not change the buffer's content and will cause an unspecified exception to be thrown either at the time of the access or at some later time.
+Whether a byte buffer is direct or non-direct may be determined by invoking its isDirect method. This method is provided so that explicit buffer management can be done in performance-critical code.
+
+
+NIO 又根据 Buffer 背后的数据存储内存不同分为了：HeapBuffer，DirectBuffer，MappedBuffer
+
+
+DirectBuffer 背后的存储内存是在堆外内存中分配，MappedBuffer 是通过内存文件映射将文件中的内容直接映射到堆外内存中，其本质也是一个 DirectBuffer
+
+
+由于 DirectBuffer 和 MappedBuffer 背后的存储内存是在堆外内存中分配，不受 JVM 管理，所以不能用一个 Java 基本类型的数组表示，而是直接记录这段堆外内存的起始地址
+```java
+public abstract class Buffer {
+    // Used by heap byte buffers or direct buffers with Unsafe access
+    // For heap byte buffers this field will be the address relative to the
+    // array base address and offset into that array. The address might
+    // not align on a word boundary for slices, nor align at a long word
+    // (8 byte) boundary for byte[] allocations on 32-bit systems.
+    // For direct buffers it is the start address of the memory region. The
+    // address might not align on a word boundary for slices, nor when created
+    // using JNI, see NewDirectByteBuffer(void*, long).
+    // Should ideally be declared final
+    // NOTE: hoisted here for speed in JNI GetDirectBufferAddress
+    long address;
+}
+```
+
+### HeapByteBuffer
+
+
+```java
+class HeapByteBuffer extends ByteBuffer {
+    // For speed these fields are actually declared in X-Buffer;
+    // these declarations are here as documentation
+    /*
+    protected final byte[] hb;
+    protected final int offset;
+    */
+
+    HeapByteBuffer(int cap, int lim, MemorySegmentProxy segment) {            // package-private
+        super(-1, 0, lim, cap, new byte[cap], 0, segment);
+        /*
+        hb = new byte[cap];
+        offset = 0;
+        */
+        this.address = ARRAY_BASE_OFFSET;
+    }
+} 
+```
+
+```java
+public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer> {
+    public static ByteBuffer wrap(byte[] array, int offset, int length) {
+        try {
+            return new HeapByteBuffer(array, offset, length, null);
+        } catch (IllegalArgumentException x) {
+            throw new IndexOutOfBoundsException();
+        }
+    }
+}
+```
+
+
+
+
+### MappedByteBuffer
+
+A direct byte buffer whose content is a memory-mapped region of a file.
+
+
+```java
+public abstract class MappedByteBuffer
+    extends ByteBuffer {
+    private final FileDescriptor fd;
+    private final boolean isSync;
+
+    // This should only be invoked by the DirectByteBuffer constructors
+    //
+    MappedByteBuffer(int mark, int pos, int lim, int cap, // package-private
+                     FileDescriptor fd, boolean isSync, MemorySegmentProxy segment) {
+        super(mark, pos, lim, cap, segment);
+        this.fd = fd;
+        this.isSync = isSync;
+    }
+}
+```
+
+Mapped byte buffers are created via the FileChannel.map method.
+
+映射信息封装到Unmapper中
+```java
+public MappedByteBuffer map(MapMode mode, long position, long size) throws IOException {
+        if (size > Integer.MAX_VALUE)
+            throw new IllegalArgumentException("Size exceeds Integer.MAX_VALUE");
+        boolean isSync = isSync(Objects.requireNonNull(mode, "Mode is null"));
+        int prot = toProt(mode);
+        Unmapper unmapper = mapInternal(mode, position, size, prot, isSync);
+        if (unmapper == null) {
+            // a valid file descriptor is not required
+            FileDescriptor dummy = new FileDescriptor();
+            if ((!writable) || (prot == MAP_RO))
+                return Util.newMappedByteBufferR(0, 0, dummy, null, isSync);
+            else
+                return Util.newMappedByteBuffer(0, 0, dummy, null, isSync);
+        } else if ((!writable) || (prot == MAP_RO)) {
+            return Util.newMappedByteBufferR((int)unmapper.cap,
+                    unmapper.address + unmapper.pagePosition,
+                    unmapper.fd,
+                    unmapper, isSync);
+        } else {
+            return Util.newMappedByteBuffer((int)unmapper.cap,
+                    unmapper.address + unmapper.pagePosition,
+                    unmapper.fd,
+                    unmapper, isSync);
+        }
+    }
+```
+调用到native方法map0
+```java
+// FileChannelImpl.java
+private native long map0(int prot, long position, long length, boolean isSync)
+        throws IOException;
+```
+
+后续 JVM 进程在访问这段 MappedByteBuffer 的时候就相当于是直接访问映射文件的 page cache。整个过程是在用户态进行，不需要切态。
+
+假设现在系统中有两个 JVM 进程同时通过 mmap 对同一个磁盘文件上的同一段文件区域进行私有内存映射，那么这两个 JVM 进程就会在各自的内存空间中获取到一段属于各自的 MappedByteBuffer（进程的虚拟内存空间是相互隔离的）。
+
+现在第一个 JVM 进程已经访问过它的 MappedByteBuffer 了，并且已经完成了缺页处理，但是第二个 JVM 进程还没有访问过它的 MappedByteBuffer，所以 JVM  进程2 页表中相应的 pte 还是空的，它访问这段 MappedByteBuffer 的时候仍然会产生缺页中断。
+
+但是 进程2 的缺页处理就很简单了，因为前面 进程1 已经通过缺页中断将映射的文件内容加载到 page cache 中了，所以 进程2 进入到内核中一下就在 page cache 中找到它所需要的文件页了，与属于它的 MappedByteBuffer 通过页表关联一下就可以了。同样是因为采用私有文件映射的原因，进程 2 的这个页表项 pte 也是只读的
+
+#### Unmapper
+
+```java
+// FileChannelImpl.java
+private static abstract class Unmapper
+        implements Runnable, UnmapperProxy {
+    // may be required to close file
+    private static final NativeDispatcher nd = new FileDispatcherImpl();
+
+    private volatile long address;
+    protected final long size;
+    protected final long cap;
+    private final FileDescriptor fd;
+    private final int pagePosition;
+
+    private Unmapper(long address, long size, long cap,
+                     FileDescriptor fd, int pagePosition) {
+        assert (address != 0);
+        this.address = address;
+        this.size = size;
+        this.cap = cap;
+        this.fd = fd;
+        this.pagePosition = pagePosition;
+    }
+}
+```
+
 
 ## Selectors
 
@@ -124,3 +347,4 @@ See [Netty EventLoop - Selector](/docs/CS/Framework/Netty/EventLoop.md?id=Select
 ## Reference
 
 1. [Java NIO Tutorial](http://tutorials.jenkov.com/java-nio/index.html)
+2. [从 Linux 内核角度探秘 JDK MappedByteBuffer](https://mp.weixin.qq.com/s?__biz=Mzg2MzU3Mjc3Ng==&mid=2247489304&idx=1&sn=18e905f573906ecff411ebdcf9c1a9c5&chksm=ce77d15ff9005849b022e4288e793e5036bda42916591a4a3d28f76554188c25cfbd35d951f9&cur_album_id=2486138956225757185&scene=190#rd)
