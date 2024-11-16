@@ -37,6 +37,41 @@ Here are the most important Channel implementations in Java NIO:
 ### FileChannel
 
 
+```java
+public long transferTo(long position, long count, WritableByteChannel target) throws IOException {
+        ensureOpen();
+        if (!target.isOpen())
+            throw new ClosedChannelException();
+        if (!readable)
+            throw new NonReadableChannelException();
+        if (target instanceof FileChannelImpl &&
+            !((FileChannelImpl)target).writable)
+            throw new NonWritableChannelException();
+        if ((position < 0) || (count < 0))
+            throw new IllegalArgumentException();
+        long sz = size();
+        if (position > sz)
+            return 0;
+
+        if ((sz - position) < count)
+            count = sz - position;
+
+        // Attempt a direct transfer, if the kernel supports it, limiting
+        // the number of bytes according to which platform
+        int icount = (int)Math.min(count, MAX_DIRECT_TRANSFER_SIZE);
+        long n;
+        if ((n = transferToDirectly(position, icount, target)) >= 0)
+            return n;
+
+        // Attempt a mapped transfer, but only to trusted channel types
+        if ((n = transferToTrustedChannel(position, count, target)) >= 0)
+            return n;
+
+        // Slow path for untrusted targets
+        return transferToArbitraryChannel(position, count, target);
+}
+```
+
 
 ## Buffers
 
@@ -241,11 +276,196 @@ public MappedByteBuffer map(MapMode mode, long position, long size) throws IOExc
     }
 ```
 调用到native方法map0
+
+捕获到的OOM会以 OOM:Map failed抛出
+
+```java
+private Unmapper mapInternal(MapMode mode, long position, long size, int prot, boolean isSync)
+        throws IOException
+    {
+        ensureOpen();
+        // check ...
+        long addr = -1;
+        int ti = -1;
+        try {
+            beginBlocking();
+            ti = threads.add();
+            if (!isOpen())
+                return null;
+
+            long mapSize;
+            int pagePosition;
+            synchronized (positionLock) {
+                long filesize;
+                do {
+                    long comp = Blocker.begin();
+                    try {
+                        filesize = nd.size(fd);
+                    } finally {
+                        Blocker.end(comp);
+                    }
+                } while ((filesize == IOStatus.INTERRUPTED) && isOpen());
+                if (!isOpen())
+                    return null;
+
+                if (filesize < position + size) { // Extend file size
+                    if (!writable) {
+                        throw new IOException("Channel not open for writing " +
+                            "- cannot extend file to required size");
+                    }
+                    int rv;
+                    do {
+                        long comp = Blocker.begin();
+                        try {
+                            rv = nd.truncate(fd, position + size);
+                        } finally {
+                            Blocker.end(comp);
+                        }
+                    } while ((rv == IOStatus.INTERRUPTED) && isOpen());
+                    if (!isOpen())
+                        return null;
+                }
+
+                if (size == 0) {
+                    return null;
+                }
+
+                pagePosition = (int)(position % allocationGranularity);
+                long mapPosition = position - pagePosition;
+                mapSize = size + pagePosition;
+                try {
+                    // If map0 did not throw an exception, the address is valid
+                    addr = map0(fd, prot, mapPosition, mapSize, isSync);
+                } catch (OutOfMemoryError x) {
+                    // An OutOfMemoryError may indicate that we've exhausted
+                    // memory so force gc and re-attempt map
+                    System.gc();
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException y) {
+                        Thread.currentThread().interrupt();
+                    }
+                    try {
+                        addr = map0(fd, prot, mapPosition, mapSize, isSync);
+                    } catch (OutOfMemoryError y) {
+                        // After a second OOME, fail
+                        throw new IOException("Map failed", y);
+                    }
+                }
+            } // synchronized
+
+            // On Windows, and potentially other platforms, we need an open
+            // file descriptor for some mapping operations.
+            FileDescriptor mfd;
+            try {
+                mfd = nd.duplicateForMapping(fd);
+            } catch (IOException ioe) {
+                unmap0(addr, mapSize);
+                throw ioe;
+            }
+
+            assert (IOStatus.checkAll(addr));
+            assert (addr % allocationGranularity == 0);
+            Unmapper um = (isSync
+                           ? new SyncUnmapper(addr, mapSize, size, mfd, pagePosition)
+                           : new DefaultUnmapper(addr, mapSize, size, mfd, pagePosition));
+            return um;
+        } finally {
+            threads.remove(ti);
+            endBlocking(IOStatus.checkAll(addr));
+        }
+}
+```
+
 ```java
 // FileChannelImpl.java
 private native long map0(int prot, long position, long length, boolean isSync)
         throws IOException;
 ```
+
+调用的mmp64指向了[mmap](/docs/CS/OS/Linux/mm/mmap.md)
+
+```c
+// UnixFileDispatcherImpl.c
+
+#define mmap64 mmap
+
+JNIEXPORT jlong JNICALL
+Java_sun_nio_ch_UnixFileDispatcherImpl_map0(JNIEnv *env, jclass klass, jobject fdo,
+jint prot, jlong off, jlong len,
+jboolean map_sync)
+{
+void *mapAddress = 0;
+jint fd = fdval(env, fdo);
+int protections = 0;
+int flags = 0;
+
+    // should never be called with map_sync and prot == PRIVATE
+    assert((prot != sun_nio_ch_UnixFileDispatcherImpl_MAP_PV) || !map_sync);
+
+    if (prot == sun_nio_ch_UnixFileDispatcherImpl_MAP_RO) {
+        protections = PROT_READ;
+        flags = MAP_SHARED;
+    } else if (prot == sun_nio_ch_UnixFileDispatcherImpl_MAP_RW) {
+        protections = PROT_WRITE | PROT_READ;
+        flags = MAP_SHARED;
+    } else if (prot == sun_nio_ch_UnixFileDispatcherImpl_MAP_PV) {
+        protections =  PROT_WRITE | PROT_READ;
+        flags = MAP_PRIVATE;
+    }
+
+    // if MAP_SYNC and MAP_SHARED_VALIDATE are not defined then it is
+    // best to define them here. This ensures the code compiles on old
+    // OS releases which do not provide the relevant headers. If run
+    // on the same machine then it will work if the kernel contains
+    // the necessary support otherwise mmap should fail with an
+    // invalid argument error
+
+#ifndef MAP_SYNC
+#define MAP_SYNC 0x80000
+#endif
+#ifndef MAP_SHARED_VALIDATE
+#define MAP_SHARED_VALIDATE 0x03
+#endif
+
+    if (map_sync) {
+        // ensure
+        //  1) this is Linux on AArch64, x86_64, or PPC64 LE
+        //  2) the mmap APIs are available at compile time
+#if !defined(LINUX) || ! (defined(aarch64) || (defined(amd64) && defined(_LP64)) || defined(ppc64le))
+// TODO - implement for solaris/AIX/BSD/WINDOWS and for 32 bit
+JNU_ThrowInternalError(env, "should never call map on platform where MAP_SYNC is unimplemented");
+return IOS_THROWN;
+#else
+flags |= MAP_SYNC | MAP_SHARED_VALIDATE;
+#endif
+}
+
+    mapAddress = mmap64(
+        0,                    /* Let OS decide location */
+        len,                  /* Number of bytes to map */
+        protections,          /* File permissions */
+        flags,                /* Changes are shared */
+        fd,                   /* File descriptor of mapped file */
+        off);                 /* Offset into file */
+
+    if (mapAddress == MAP_FAILED) {
+        if (map_sync && errno == ENOTSUP) {
+            JNU_ThrowIOExceptionWithLastError(env, "map with mode MAP_SYNC unsupported");
+            return IOS_THROWN;
+        }
+
+        if (errno == ENOMEM) {
+            JNU_ThrowOutOfMemoryError(env, "Map failed");
+            return IOS_THROWN;
+        }
+        return handle(env, -1, "Map failed");
+    }
+
+    return ((jlong) (unsigned long) mapAddress);
+}
+```
+
 
 后续 JVM 进程在访问这段 MappedByteBuffer 的时候就相当于是直接访问映射文件的 page cache。整个过程是在用户态进行，不需要切态。
 

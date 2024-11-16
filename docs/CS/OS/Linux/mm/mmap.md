@@ -15,7 +15,8 @@ It implements demand paging because file contents are not immediately read from 
 The actual reads from disk are performed after a specific location is accessed, in a lazy manner.
 
 
-The mmap system call has been used in various database implementations as an alternative for implementing a buffer pool, although this created a different set of problems that could realistically only be fixed using a buffer pool.
+The mmap system call has been used in various database implementations as an alternative for implementing a buffer pool, 
+although this created a different set of problems that could realistically only be fixed using a buffer pool.
 
 > [Are You Sure You Want to Use MMAP in Your Database Management System?](https://db.cs.cmu.edu/papers/2022/cidr2022-p13-crotty.pdf)
 
@@ -30,33 +31,21 @@ int munmap(void addr[.length], size_t length);
 
 The starting address for the new mapping is specified in addr.  The length argument specifies the length of the mapping (which must be greater than 0).
 
-If addr is NULL, then the kernel chooses the (page-aligned)
-address at which to create the mapping; this is the most portable
-method of creating a new mapping.  
-If addr is not NULL, then the
-kernel takes it as a hint about where to place the mapping; on
-Linux, the kernel will pick a nearby page boundary (but always
-above or equal to the value specified by /proc/sys/vm/mmap_min_addr) and attempt to create the mapping there.  
-If another mapping already exists there, the kernel picks a new address that may or may not depend on the hint.  
+If addr is NULL, then the kernel chooses the (page-aligned)address at which to create the mapping; this is the most portable method of creating a new mapping.  
+If addr is not NULL, then the kernel takes it as a hint about where to place the mapping; on Linux, 
+the kernel will pick a nearby page boundary (but always above or equal to the value specified by /proc/sys/vm/mmap_min_addr) and attempt to create the mapping there.  
+If another mapping already exists there, the kernel picks a new address that may or may not depend on the hint.
 The address of the new mapping is returned as the result of the call.
 
-The contents of a file mapping (as opposed to an anonymous
-mapping; see MAP_ANONYMOUS below), are initialized using length
-bytes starting at offset offset in the file (or other object)
-referred to by the file descriptor fd.  offset must be a multiple
-of the page size as returned by sysconf(_SC_PAGE_SIZE).
+The contents of a file mapping (as opposed to an anonymous mapping; see MAP_ANONYMOUS below),
+are initialized using length bytes starting at offset offset in the file (or other object) referred to by the file descriptor fd. 
+offset must be a multiple of the page size as returned by sysconf(_SC_PAGE_SIZE).
 
-After the mmap() call has returned, the file descriptor, fd, can
-be closed immediately without invalidating the mapping.
+After the mmap() call has returned, the file descriptor, fd, can be closed immediately without invalidating the mapping.
 
-
-A file is mapped in multiples of the page size.  For a file that
-       is not a multiple of the page size, the remaining bytes in the
-       partial page at the end of the mapping are zeroed when mapped,
-       and modifications to that region are not written out to the file.
-       The effect of changing the size of the underlying file of a
-       mapping on the pages that correspond to added or removed regions
-       of the file is unspecified.
+A file is mapped in multiples of the page size.  
+For a file that is not a multiple of the page size, the remaining bytes in the partial page at the end of the mapping are zeroed when mapped, and modifications to that region are not written out to the file.
+The effect of changing the size of the underlying file of a mapping on the pages that correspond to added or removed regions of the file is unspecified.
 
 
 
@@ -421,6 +410,9 @@ out:
 ### do_mmap
 
 do_mmap 是 mmap 系统调用的核心函数，内核会在这里完成内存映射的整个流程
+
+> `sysctl_max_map_count` throw ENOMEM 需要调用程序做处理
+> - [在Java里会抛出OOM: Map failed异常](/docs/CS/Java/JDK/IO/NIO.md?id=MappedByteBuffer)
 
 ```c
 // mm/mmap.c
