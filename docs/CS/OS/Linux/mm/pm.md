@@ -553,14 +553,25 @@ typedef struct {
 #define PFN_PHYS(x) ((phys_addr_t)(x) << PAGE_SHIFT)
 #define PHYS_PFN(x) ((unsigned long)((x) >> PAGE_SHIFT))
 ```
-
+### FLATMEM
 平坦内存模型：由一个全局数组mem_map 存储 struct page，直接线性映射到实际的物理内存
+mem_map 全局数组的下标就是相应物理页对应的 PFN 。
+
+在平坦内存模型下 ，page_to_pfn 与 pfn_to_page 的计算逻辑就非常简单，本质就是基于 mem_map 数组进行偏移操作
+### DISCONTIGMEM
+FLATMEM 平坦内存模型只适合管理一整块连续的物理内存，而对于多块非连续的物理内存来说使用 FLATMEM 平坦内存模型进行管理则会造成很大的内存空间浪费
+
+在 DISCONTIGMEM 非连续内存模型中，内核将物理内存从宏观上划分成了一个一个的节点 node （微观上还是一页一页的物理页），每个 node 节点管理一块连续的物理内存
+这样一来这些连续的物理内存页均被划归到了对应的 node 节点中管理，就避免了内存空洞造成的空间浪费
 
 
-
-内存被分为一个个Section，每个Section包含一个sturct page 数组，这样每个数组就不用顺序存放了，结局了热插拔问题。而所有的section又由一个统一的mem_section 数组管理
+### SPARSEMEM
 
 SPARSEMEM_VMEMMAP是虚拟映射，走页表
+SPARSEMEM 稀疏内存模型的核心思想就是对粒度更小的连续内存块进行精细的管理，用于管理连续内存块的单元被称作 section 。物理页大小为 4k 的情况下， section 的大小为 128M ，物理页大小为 16k 的情况下， section 的大小为 512M
+
+在内核中用 struct mem_section 结构体表示 SPARSEMEM 模型中的 section
+
 将所有的mem_section中page 都抽象到一个虚拟数组vmemmap，这样在进行struct page *和pfn转换时，之间使用vmemmap数组即可，如下转换（位于include\asm-generic\memory_model.h)
 
 
@@ -1357,3 +1368,7 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 ## Links
 
 - [Linux Memory](/docs/CS/OS/Linux/mm/memory.md)
+
+## References
+
+1. [一步一图带你深入理解 Linux 物理内存管理](https://mp.weixin.qq.com/s?__biz=Mzg2MzU3Mjc3Ng==&mid=2247486879&idx=1&sn=0bcc59a306d59e5199a11d1ca5313743&chksm=ce77cbd8f90042ce06f5086b1c976d1d2daa57bc5b768bac15f10ee3dc85874bbeddcd649d88&cur_album_id=2559805446807928833&scene=189#wechat_redirect)

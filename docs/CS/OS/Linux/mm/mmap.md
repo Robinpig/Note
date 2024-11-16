@@ -684,8 +684,6 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		goto cannot_expand;
 	}
 
-	/* Attempt to expand an old mapping */
-	/* Check next */
 	if (next && next->vm_start == end && !vma_policy(next) &&
 	    can_vma_merge_before(next, vm_flags, NULL, file, pgoff+pglen,
 				 NULL_VM_UFFD_CTX, NULL)) {
@@ -694,7 +692,6 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		vm_pgoff = next->vm_pgoff - pglen;
 	}
 
-	/* Check prev */
 	if (prev && prev->vm_end == addr && !vma_policy(prev) &&
 	    (vma ? can_vma_merge_after(prev, vm_flags, vma->anon_vma, file,
 				       pgoff, vma->vm_userfaultfd_ctx, NULL) :
@@ -718,11 +715,6 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		vma_iter_set(&vmi, addr);
 cannot_expand:
 
-	/*
-	 * Determine the object being mapped and call the appropriate
-	 * specific mapper. the address has already been validated, but
-	 * not unmapped, but the maps are removed from the list.
-	 */
 	vma = vm_area_alloc(mm);
 	if (!vma) {
 		error = -ENOMEM;
@@ -750,31 +742,16 @@ cannot_expand:
 			writable_file_mapping = true;
 		}
 
-		/*
-		 * Expansion is handled above, merging is handled below.
-		 * Drivers should not alter the address of the VMA.
-		 */
 		error = -EINVAL;
 		if (WARN_ON((addr != vma->vm_start)))
 			goto close_and_free_vma;
 
 		vma_iter_config(&vmi, addr, end);
-		/*
-		 * If vm_flags changed after call_mmap(), we should try merge
-		 * vma again as we may succeed this time.
-		 */
 		if (unlikely(vm_flags != vma->vm_flags && prev)) {
 			merge = vma_merge_new_vma(&vmi, prev, vma,
 						  vma->vm_start, vma->vm_end,
 						  vma->vm_pgoff);
 			if (merge) {
-				/*
-				 * ->mmap() can change vma->vm_file and fput
-				 * the original file. So fput the vma->vm_file
-				 * here or we would add an extra fput for file
-				 * and cause general protection fault
-				 * ultimately.
-				 */
 				fput(vma->vm_file);
 				vm_area_free(vma);
 				vma = merge;
@@ -850,13 +827,6 @@ expanded:
 	if (file)
 		uprobe_mmap(vma);
 
-	/*
-	 * New (or expanded) vma always get soft dirty status.
-	 * Otherwise user-space soft-dirty page tracker won't
-	 * be able to distinguish situation when vma area unmapped,
-	 * then new mapped in-place (which must be aimed as
-	 * a completely new data area).
-	 */
 	vm_flags_set(vma, VM_SOFTDIRTY);
 
 	vma_set_page_prot(vma);

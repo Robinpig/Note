@@ -507,6 +507,41 @@ struct vm_area_struct {
 }	
 ```
 
+#### rbtree
+
+VMA 目前是通过一个红黑树（rbtree，red-black tree）的变种来管理的，针对红黑树来说增加了一个额外的双向链表，用来让内核遍历某个进程地址空间中的所有 VMA。内核开发者对这种数据结构的不满已经有一段时间了，原因有很多：rbtree 不能很好地支持范围（ranges），难以用 lockless（不需要获取锁）的方式来进行操作（rbtree 需要进行 balance 操作，这会同时影响多个 item），而且 rbtree 遍历的效率很低，这也是为什么需要一个额外的双向链表。
+
+对 VMA 的操作会使用一个 lock 来保护（具体来说是一个 reader/writer semaphore），这个 lock 位于 struct mm_struct 中，此前名为 mmap_sem，2020 年 6 月的 5.8 版本将其改名为 mmap_lock。改名是为了能将对这个 lock 的操作都用 API 包装起来，希望将来替换的时候方便
+
+用户经常会碰到争抢这个 lock 的情况，尤其是那些在大型系统中使用多线程应用的用户
+
+#### maple tree
+
+maple tree属于Btree类型
+
+
+```
+struct maple_tree {
+	union {
+		spinlock_t	ma_lock;
+		lockdep_map_p	ma_external_lock;
+	};
+	unsigned int	ma_flags;
+	void __rcu      *ma_root;
+};
+```
+
+If the tree contains a single entry at index 0, it is usually stored in tree->ma_root.
+To optimise for the page cache, an entry which ends in '00','01' or '11' is stored in the root, but an entry which ends in '10' will be stored in a node.  
+Bits 3-6 are used to store enum maple_type.
+
+The flags are used both to store some immutable information about this tree(set at tree creation time) and dynamic information set under the spinlock.
+
+Another use of flags are to indicate global states of the tree.  
+This is the case with the MAPLE_USE_RCU flag, which indicates the tree is currently in RCU mode.  
+This mode was added to allow the tree to reuse nodes instead of re-allocating and RCU freeing nodes when there is a single user.
+
+leaf node（叶子节点）中最多包含 16 个元素，而 internal node（内部节点）中最多包含 10 个元素
 
 ### load binary
 
@@ -1063,9 +1098,12 @@ load_elf_interp 将进程依赖的动态链接库 .so 文件映射到虚拟内�
 从 __START_KERNEL_map 开始是大小为 512M 的区域用于存放内核代码段、全局变量、BSS 等。这里对应到物理内存开始的位置，减去 __START_KERNEL_map 就能得到物理内存的地址。这里和直接映射区有点像，但是不矛盾，因为直接映射区之前有 8T 的空洞区域，早就过了内核代码在物理内存中加载的位置
 
 
+
+
 ## page fault
 
 mmap() 系统调用并没有直接将文件的页缓存映射到虚拟内存中，所以当访问到没有映射的虚拟内存地址时，将会触发 缺页异常。当 CPU 触发缺页异常时，将会调用 do_page_fault() 函数来修复触发异常的虚拟内存地址
+
 
 ```
 do_page_fault()
@@ -1075,6 +1113,104 @@ do_page_fault()
          └→ __do_fault()
 
 ```
+
+
+
+These routines also need to handle stuff like marking pages dirty
+and/or accessed for architectures that don't do it in hardware (most
+RISC architectures).  The early dirtying is also good on the i386.
+
+There is also a hook called "update_mmu_cache()" that architectures
+with external mmu caches can use to update those (ie the Sparc or
+PowerPC hashed page tables that act as extended TLBs).
+
+We enter with non-exclusive mmap_lock (to exclude vma changes, but allow
+concurrent faults).
+
+The mmap_lock may have been released depending on flags and our return value.
+See filemap_fault() and __folio_lock_or_retry().
+
+```c
+static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
+{
+	pte_t entry;
+
+	if (unlikely(pmd_none(*vmf->pmd))) {
+		/*
+		 * Leave __pte_alloc() until later: because vm_ops->fault may
+		 * want to allocate huge page, and if we expose page table
+		 * for an instant, it will be difficult to retract from
+		 * concurrent faults and from rmap lookups.
+		 */
+		vmf->pte = NULL;
+		vmf->flags &= ~FAULT_FLAG_ORIG_PTE_VALID;
+	} else {
+		/*
+		 * A regular pmd is established and it can't morph into a huge
+		 * pmd by anon khugepaged, since that takes mmap_lock in write
+		 * mode; but shmem or file collapse to THP could still morph
+		 * it into a huge pmd: just retry later if so.
+		 */
+		vmf->pte = pte_offset_map_nolock(vmf->vma->vm_mm, vmf->pmd,
+						 vmf->address, &vmf->ptl);
+		if (unlikely(!vmf->pte))
+			return 0;
+		vmf->orig_pte = ptep_get_lockless(vmf->pte);
+		vmf->flags |= FAULT_FLAG_ORIG_PTE_VALID;
+
+		if (pte_none(vmf->orig_pte)) {
+			pte_unmap(vmf->pte);
+			vmf->pte = NULL;
+		}
+	}
+
+	if (!vmf->pte)
+		return do_pte_missing(vmf);
+
+	if (!pte_present(vmf->orig_pte))
+		return do_swap_page(vmf);
+
+	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
+		return do_numa_page(vmf);
+
+	spin_lock(vmf->ptl);
+	entry = vmf->orig_pte;
+	if (unlikely(!pte_same(ptep_get(vmf->pte), entry))) {
+		update_mmu_tlb(vmf->vma, vmf->address, vmf->pte);
+		goto unlock;
+	}
+	if (vmf->flags & (FAULT_FLAG_WRITE|FAULT_FLAG_UNSHARE)) {
+		if (!pte_write(entry))
+			return do_wp_page(vmf);
+		else if (likely(vmf->flags & FAULT_FLAG_WRITE))
+			entry = pte_mkdirty(entry);
+	}
+	entry = pte_mkyoung(entry);
+	if (ptep_set_access_flags(vmf->vma, vmf->address, vmf->pte, entry,
+				vmf->flags & FAULT_FLAG_WRITE)) {
+		update_mmu_cache_range(vmf, vmf->vma, vmf->address,
+				vmf->pte, 1);
+	} else {
+		/* Skip spurious TLB flush for retried page fault */
+		if (vmf->flags & FAULT_FLAG_TRIED)
+			goto unlock;
+		/*
+		 * This is needed only for protection faults but the arch code
+		 * is not yet telling us if this is a protection fault or not.
+		 * This still avoids useless tlb flushes for .text page faults
+		 * with threads.
+		 */
+		if (vmf->flags & FAULT_FLAG_WRITE)
+			flush_tlb_fix_spurious_fault(vmf->vma, vmf->address,
+						     vmf->pte);
+	}
+unlock:
+	pte_unmap_unlock(vmf->pte, vmf->ptl);
+	return 0;
+}
+```
+
+
 
 __do_fault() 函数对处理文件映射：
 
@@ -1139,6 +1275,164 @@ static vm_fault_t __do_fault(struct vm_fault *vmf)
 }
 ```
 
+
+```c
+vm_fault_t filemap_fault(struct vm_fault *vmf)
+{
+	int error;
+	struct file *file = vmf->vma->vm_file;
+	struct file *fpin = NULL;
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	pgoff_t max_idx, index = vmf->pgoff;
+	struct folio *folio;
+	vm_fault_t ret = 0;
+	bool mapping_locked = false;
+
+	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	if (unlikely(index >= max_idx))
+		return VM_FAULT_SIGBUS;
+
+	/*
+	 * Do we have something in the page cache already?
+	 */
+	folio = filemap_get_folio(mapping, index);
+	if (likely(!IS_ERR(folio))) {
+		/*
+		 * We found the page, so try async readahead before waiting for
+		 * the lock.
+		 */
+		if (!(vmf->flags & FAULT_FLAG_TRIED))
+			fpin = do_async_mmap_readahead(vmf, folio);
+		if (unlikely(!folio_test_uptodate(folio))) {
+			filemap_invalidate_lock_shared(mapping);
+			mapping_locked = true;
+		}
+	} else {
+		/* No page in the page cache at all */
+		count_vm_event(PGMAJFAULT);
+		count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
+		ret = VM_FAULT_MAJOR;
+		fpin = do_sync_mmap_readahead(vmf);
+retry_find:
+		/*
+		 * See comment in filemap_create_folio() why we need
+		 * invalidate_lock
+		 */
+		if (!mapping_locked) {
+			filemap_invalidate_lock_shared(mapping);
+			mapping_locked = true;
+		}
+		folio = __filemap_get_folio(mapping, index,
+					  FGP_CREAT|FGP_FOR_MMAP,
+					  vmf->gfp_mask);
+		if (IS_ERR(folio)) {
+			if (fpin)
+				goto out_retry;
+			filemap_invalidate_unlock_shared(mapping);
+			return VM_FAULT_OOM;
+		}
+	}
+
+	if (!lock_folio_maybe_drop_mmap(vmf, folio, &fpin))
+		goto out_retry;
+
+	/* Did it get truncated? */
+	if (unlikely(folio->mapping != mapping)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		goto retry_find;
+	}
+	VM_BUG_ON_FOLIO(!folio_contains(folio, index), folio);
+
+	/*
+	 * We have a locked folio in the page cache, now we need to check
+	 * that it's up-to-date. If not, it is going to be due to an error,
+	 * or because readahead was otherwise unable to retrieve it.
+	 */
+	if (unlikely(!folio_test_uptodate(folio))) {
+		/*
+		 * If the invalidate lock is not held, the folio was in cache
+		 * and uptodate and now it is not. Strange but possible since we
+		 * didn't hold the page lock all the time. Let's drop
+		 * everything, get the invalidate lock and try again.
+		 */
+		if (!mapping_locked) {
+			folio_unlock(folio);
+			folio_put(folio);
+			goto retry_find;
+		}
+
+		/*
+		 * OK, the folio is really not uptodate. This can be because the
+		 * VMA has the VM_RAND_READ flag set, or because an error
+		 * arose. Let's read it in directly.
+		 */
+		goto page_not_uptodate;
+	}
+
+	/*
+	 * We've made it this far and we had to drop our mmap_lock, now is the
+	 * time to return to the upper layer and have it re-find the vma and
+	 * redo the fault.
+	 */
+	if (fpin) {
+		folio_unlock(folio);
+		goto out_retry;
+	}
+	if (mapping_locked)
+		filemap_invalidate_unlock_shared(mapping);
+
+	/*
+	 * Found the page and have a reference on it.
+	 * We must recheck i_size under page lock.
+	 */
+	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	if (unlikely(index >= max_idx)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		return VM_FAULT_SIGBUS;
+	}
+
+	vmf->page = folio_file_page(folio, index);
+	return ret | VM_FAULT_LOCKED;
+
+page_not_uptodate:
+	/*
+	 * Umm, take care of errors if the page isn't up-to-date.
+	 * Try to re-read it _once_. We do this synchronously,
+	 * because there really aren't any performance issues here
+	 * and we need to check for errors.
+	 */
+	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	error = filemap_read_folio(file, mapping->a_ops->read_folio, folio);
+	if (fpin)
+		goto out_retry;
+	folio_put(folio);
+
+	if (!error || error == AOP_TRUNCATED_PAGE)
+		goto retry_find;
+	filemap_invalidate_unlock_shared(mapping);
+
+	return VM_FAULT_SIGBUS;
+
+out_retry:
+	/*
+	 * We dropped the mmap_lock, we need to return to the fault handler to
+	 * re-find the vma and come back and find our hopefully still populated
+	 * page.
+	 */
+	if (!IS_ERR(folio))
+		folio_put(folio);
+	if (mapping_locked)
+		filemap_invalidate_unlock_shared(mapping);
+	if (fpin)
+		fput(fpin);
+	return ret | VM_FAULT_RETRY;
+}
+EXPORT_SYMBOL(filemap_fault);
+
+```
 
 
 ## vmalloc
@@ -1328,3 +1622,4 @@ __alloc_vmap_area(unsigned long size, unsigned long align,
 ## References
 
 1. [一步一图带你深入理解 Linux 虚拟内存管理](https://mp.weixin.qq.com/s?__biz=Mzg2MzU3Mjc3Ng==&mid=2247486732&idx=1&sn=435d5e834e9751036c96384f6965b328&chksm=ce77cb4bf900425d33d2adfa632a4684cf7a63beece166c1ffedc4fdacb807c9413e8c73f298&token=1931867638&lang=zh_CN&scene=21#wechat_redirect)
+2. [Introducing maple trees](https://lwn.net/Articles/845507/)
