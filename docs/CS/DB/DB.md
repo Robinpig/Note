@@ -69,7 +69,7 @@ Some datasets are bounded by their real-world representations, such as student r
 
 One of the ways to classify databases is by how the data is stored on disk: row- or column-wise. 
 Tables can be partitioned either horizontally (storing values belonging to the same row together), or vertically (storing values belonging to the same column together). 
-Figure 2 depicts this distinction: (a) shows the values partitioned column-wise, and (b) shows the values partitioned row-wise.
+Figure 2 depicts this distinction: (a) shows the values partitioned column-wise, and (b) shows the values partitioned row-wise.
 
 
 
@@ -475,7 +475,7 @@ Secondary indexes can point directly to the data record, or simply store its pri
 
 If the order of data records follows the search key order, this index is called clustered (also known as clustering). Data records in the clustered case are usually stored in the same file or in a clustered file, where the key order is preserved. If the data is stored in a separate file, and its order does not follow the key order, the index is called nonclustered (sometimes called unclustered).
 
-Figure 3 shows the difference between the two approaches:
+Figure 3 shows the difference between the two approaches:
 - a) Two indexes reference data entries directly from secondary index files.
 - b) A secondary index goes through the indirection layer of a primary index to locate the data entries.
 
@@ -508,7 +508,7 @@ By referencing data directly, we can reduce the number of disk seeks, but have t
 Updating just a couple of indexes might work if the workload mostly consists of reads, but this approach does not work well for write-heavy workloads with multiple indexes. To reduce the costs of pointer updates, instead of payload offsets, some implementations use primary keys for indirection. For example, MySQL InnoDB uses a primary index and performs two lookups: one in the secondary index, and one in a primary index when performing a query.
 This adds an overhead of a primary index lookup instead of following the offset directly from the secondary index.
 
-Figure 6 shows how the two approaches are different:
+Figure 6 shows how the two approaches are different:
 
 - a) Two indexes reference data entries directly from secondary index files.
 - b) A secondary index goes through the indirection layer of a primary index to locate the data entries.
@@ -963,6 +963,23 @@ In LevelDB, this in-memory index is a sparse collection of some of the keys, but
 This automaton can be transformed into a Levenshtein automaton, which supports efficient search for words within a given edit distance.
 
 Other fuzzy search techniques go in the direction of document classification and machine learning. See an information retrieval textbook for more detail.
+
+
+## Tuning
+
+
+引自 [InfoQ 不敢把数据库运行在 K8s 上？容器化对数据库性能有影响吗?](https://www.infoq.cn/article/sh2tjyw1dki4zqpakujj):
+
+![](https://static001.geekbang.org/wechat/images/2e/2e9a348aac0cc015f6c81a1a0ed8c983.png)
+
+
+- MySQL 需要特别关注临时文件，由于临时文件使用的是 BufferedIO，如果没有 Cgroup 限制，会很快触发 OS 大量的脏页刷脏，这个刷脏过程会占用存储设备的几乎所有通道，造成正常请求卡住，这种现象是比较经典的 Disk IO hang。
+- PostgreSQL 是多进程模式，所以需要十分关注链接数和页表大小，虽然使用 Hugepage 方案可以降低页表的负担，
+  但是 Hugepage 本身还是有比较多的副作用，利用 pgBouncer 之类的 proxy 做链接复用是一种更好的解法；当开启 full page 时，PostgreSQL 对 I/O 带宽的需求非常强烈，此时的瓶颈为 I/O 带宽；当 I/O 和链接数都不是瓶颈时，PostgreSQL 在更高的并发下瓶颈来自内部的锁实现机制。具体可以参考《Postgresql@k8s 性能优化记》[7]。
+- MongoDB 整体表现比较稳定，主要的问题一般来自 Disk I/O 和链接数，WiredTiger 在 cache 到 I/O 的流控上做得比较出色，虽然有 I/O 争抢，但是 IO hang 的概率比较小，当然 OLTP 数据库的 workload 会比 MongoDB 更复杂一些，也更难达到一种均衡。
+- Redis 的瓶颈主要在网络，所以需要特别关注应用和 Redis 服务之间的网络延迟，这部分延迟由网络链路决定，Redis 满载时 70%+ 的 CPU 消耗在网络栈上，所以为了解决网络性能的扩展性问题，Redis 6.0 版本引入了网络多线程功能，真正的 worker thread 还是单线程，这个功能在大幅提升 Redis 性能的同时也保持了 Redis 简单优雅的特性
+
+
 
 ## Links
 
