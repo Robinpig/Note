@@ -36,6 +36,9 @@ Here are the most important Channel implementations in Java NIO:
 
 ### FileChannel
 
+- Attempt a direct transfer
+- Attempt a mapped transfer
+- HeapBuffer
 
 ```java
 public long transferTo(long position, long count, WritableByteChannel target) throws IOException {
@@ -70,6 +73,106 @@ public long transferTo(long position, long count, WritableByteChannel target) th
         // Slow path for untrusted targets
         return transferToArbitraryChannel(position, count, target);
 }
+```
+
+
+```java
+private long transferToDirectlyInternal(long position, int icount,
+                                            WritableByteChannel target,
+                                            FileDescriptor targetFD)
+        throws IOException
+    {
+        assert !nd.transferToDirectlyNeedsPositionLock() ||
+               Thread.holdsLock(positionLock);
+
+        long n = -1;
+        int ti = -1;
+        try {
+            beginBlocking();
+            ti = threads.add();
+            if (!isOpen())
+                return -1;
+            do {
+                long comp = Blocker.begin();
+                try {
+                    n = transferTo0(fd, position, icount, targetFD);
+                } finally {
+                    Blocker.end(comp);
+                }
+            } while ((n == IOStatus.INTERRUPTED) && isOpen());
+            if (n == IOStatus.UNSUPPORTED_CASE) {
+                if (target instanceof SinkChannelImpl)
+                    pipeSupported = false;
+                if (target instanceof FileChannelImpl)
+                    fileSupported = false;
+                return IOStatus.UNSUPPORTED_CASE;
+            }
+            if (n == IOStatus.UNSUPPORTED) {
+                // Don't bother trying again
+                transferToNotSupported = true;
+                return IOStatus.UNSUPPORTED;
+            }
+            return IOStatus.normalize(n);
+        } finally {
+            threads.remove(ti);
+            end (n > -1);
+        }
+    }
+
+```
+
+
+```c
+
+JNIEXPORT jlong JNICALL
+Java_sun_nio_ch_FileDispatcherImpl_transferTo0(JNIEnv *env, jobject this,
+                                                    jobject srcFDO,
+                                                    jlong position, jlong count,
+                                                    jobject dstFDO, jboolean append)
+{
+    jint srcFD = fdval(env, srcFDO);
+    jint dstFD = fdval(env, dstFDO);
+
+    jlong max = (jlong)java_lang_Integer_MAX_VALUE;
+    struct sf_parms sf_iobuf;
+    jlong result;
+
+    if (position > max)
+        return IOS_UNSUPPORTED_CASE;
+
+    if (count > max)
+        count = max;
+
+    memset(&sf_iobuf, 0, sizeof(sf_iobuf));
+    sf_iobuf.file_descriptor = srcFD;
+    sf_iobuf.file_offset = (off_t)position;
+    sf_iobuf.file_bytes = count;
+
+    result = send_file(&dstFD, &sf_iobuf, SF_SYNC_CACHE);
+
+    /* AIX send_file() will return 0 when this operation complete successfully,
+     * return 1 when partial bytes transferred and return -1 when an error has
+     * occurred.
+     */
+    if (result == -1) {
+        if (errno == EWOULDBLOCK)
+            return IOS_UNAVAILABLE;
+        if ((errno == EINVAL) && ((ssize_t)count >= 0))
+            return IOS_UNSUPPORTED_CASE;
+        if (errno == EINTR)
+            return IOS_INTERRUPTED;
+        if (errno == ENOTSOCK)
+            return IOS_UNSUPPORTED;
+        JNU_ThrowIOExceptionWithLastError(env, "Transfer failed");
+        return IOS_THROWN;
+    }
+
+    if (sf_iobuf.bytes_sent > 0)
+        return (jlong)sf_iobuf.bytes_sent;
+
+    return IOS_UNSUPPORTED_CASE;
+}
+
 ```
 
 
