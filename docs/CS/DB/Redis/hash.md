@@ -566,3 +566,7 @@ However because `SCAN` has very little state associated (just the cursor) it has
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct.md?id=hashes)
+
+## References
+
+1. [Redis Internal Data Structure : Dictionary](https://blog.wjin.org/posts/redis-internal-data-structure-dictionary.html)

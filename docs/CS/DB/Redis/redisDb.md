@@ -1,34 +1,47 @@
 ## Introduction
 
-Certain Redis commands operate on specific data types; others are general.
-Examples of generic commands are `DEL` and `EXPIRE`. They operate on keys and not on their values specifically.
-All those generic commands are defined inside `db.c`.
 
-Moreover `db.c` implements an API in order to perform certain operations on the Redis dataset without directly accessing the internal data structures.
 
-The most important functions inside `db.c` which are used in many command implementations are the following:
+[redisServer](/docs/CS/DB/Redis/server.md?id=server) 中存储着redisDb数组的指针
 
-* [lookupKeyRead()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) and [lookupKeyWrite()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) are used in order to get a pointer to the value associated to a given key, or `NULL` if the key does not exist.
-* [dbAdd()](/docs/CS/DB/Redis/redisDb.md?id=add) and its higher level counterpart `setKey()` create a new key in a Redis database.
-* [dbDelete()](/docs/CS/DB/Redis/redisDb.md?id=delete) removes a key and its associated value.
-* `emptyDb()` removes an entire single database or all the databases defined.
+```c
+struct redisServer {
+  	redisDb *db;
+  	int dbnum;                      /* Total number of configured DBs */
+}  
+```
 
-The rest of the file implements the generic commands exposed to the client.
+在initServer时创建redisDb数据
+
+```c
+void initServer(void){
+  ...
+  /* Create the Redis databases, and initialize other internal state. */
+    for (j = 0; j < server.dbnum; j++) {
+        server.db[j].dict = dictCreate(&dbDictType);
+        server.db[j].expires = dictCreate(&dbExpiresDictType);
+        server.db[j].expires_cursor = 0;
+        server.db[j].blocking_keys = dictCreate(&keylistDictType);
+        server.db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType);
+        server.db[j].watched_keys = dictCreate(&keylistDictType);
+        server.db[j].id = j;
+        server.db[j].avg_ttl = 0;
+        server.db[j].defrag_later = listCreate();
+        server.db[j].slots_to_keys = NULL; /* Set by clusterInit later on if necessary. */
+        listSetFreeMethod(server.db[j].defrag_later,(void (*)(void*))sdsfree);
+    }
+}
+```
+
+## redisDb
 
 Redis database representation. There are multiple databases identified by integers from 0 (the default database) up to the max configured database.
-The database number is the 'id' field in the structure.
 
 ```java
 // server.h
 typedef struct redisDb {
     dict *dict;                 /* The keyspace for this DB */
-```
-
-Timeout of keys with a timeout set
-
-
-```c
-    dict *expires;
+    dict *expires;							/* Timeout of keys with a timeout set */
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
     dict *ready_keys;           /* Blocked keys that received a PUSH */
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
@@ -38,6 +51,15 @@ Timeout of keys with a timeout set
     list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
 } redisDb;
 ```
+
+将expires和dict分开存储因为不是每个key都有过期时间 分开存储能节省空间 在key过期时便于查询
+
+blocking_keys 和 ready_keys 用于BLPOP命令的
+
+
+
+### dict
+
 
 ```c
 // dict.h
@@ -55,6 +77,12 @@ struct dict {
 };
 ```
 
+一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
+
+
+
+
+
 [dicht in hash](/docs/CS/DB/Redis/hash.md?id=dicht)
 
 ```c
@@ -70,6 +98,23 @@ typedef struct dictEntry {
     struct dictEntry *next;
 } dictEntry;
 ```
+
+
+
+
+
+Certain Redis commands operate on specific data types; others are general.
+Examples of generic commands are `DEL` and `EXPIRE`. They operate on keys and not on their values specifically.
+All those generic commands are defined inside `db.c`.
+
+Moreover `db.c` implements an API in order to perform certain operations on the Redis dataset without directly accessing the internal data structures.
+
+The most important functions inside `db.c` which are used in many command implementations are the following:
+
+* [lookupKeyRead()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) and [lookupKeyWrite()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) are used in order to get a pointer to the value associated to a given key, or `NULL` if the key does not exist.
+* [dbAdd()](/docs/CS/DB/Redis/redisDb.md?id=add) and its higher level counterpart `setKey()` create a new key in a Redis database.
+* [dbDelete()](/docs/CS/DB/Redis/redisDb.md?id=delete) removes a key and its associated value.
+* `emptyDb()` removes an entire single database or all the databases defined.
 
 ## redisObject
 
@@ -160,6 +205,8 @@ robj *createObject(int type, void *ptr) {
 ```
 
 ## get
+
+
 
 ### lookupKey
 
@@ -929,3 +976,5 @@ Set:
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+
+## References

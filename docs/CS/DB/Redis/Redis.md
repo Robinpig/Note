@@ -24,17 +24,22 @@ Some build issues:
 | error: variable has incomplete type 'struct stat64' | add `#define MAC_OS_X_VERSION_10_6` into `src/config.h` | [Build Issue in arm](https://github.com/redis/redis/issues/12585) |      
 
 
-### directory
 
 Redis源码目录:
 - deps
   - jemalloc
-  - hredis
-  - linenoise
-  - lua
-  - hdr
+  - Hiredis
+  - Linenoise
+  - Lua
+  - hdr_histogram
 - src
+  - commands
+  - modules
+
 - test
+- utils
+
+
 
 
 
@@ -58,6 +63,10 @@ Fig.1. Architecture
 [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
 
 Server and Client
+
+Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 它包含了存储的[redisDb] 网络监听 客户端缓存等信息
+
+
 
 
 ### Why Redis so fast
