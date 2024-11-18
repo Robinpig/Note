@@ -262,9 +262,7 @@ The length of the local variable array of a frame is determined at compile-time 
 
 A single local variable can hold a value of type `boolean`, `byte`, `char`, `short`, `int`, `float`, `reference`, or `returnAddress`. A pair of local variables can hold a value of type `long` or `double`.
 
-Local variables are addressed by indexing. The index of the first local variable is zero. An integer is considered to be an index into the local variable array if and only if that integer is between zero and one less than the size of the local variable array.
-
-A value of type `long` or type `double` occupies two consecutive local variables. Such a value may only be addressed using the lesser index. For example, a value of type `double` stored in the local variable array at index *n* actually occupies the local variables with indices *n* and *n*+1; however, the local variable at index *n*+1 cannot be loaded from. It can be stored into. However, doing so invalidates the contents of local variable *n*.
+A value of type `long` or type `double` occupies two consecutive local variables. Such a value may only be addressed using the lesser index. 
 
 The Java Virtual Machine does not require *n* to be even. In intuitive terms, values of types `long` and `double` need not be 64-bit aligned in the local variables array. Implementors are free to decide the appropriate way to represent such values using the two local variables reserved for the value.
 
@@ -342,3 +340,10 @@ VirtualSpaceList
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+
+
+
+
+## References
+
+1. [JVM 内存结构](https://doocs.github.io/jvm/01-jvm-memory-structure.html)
