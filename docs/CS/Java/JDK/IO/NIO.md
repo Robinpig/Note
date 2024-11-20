@@ -40,6 +40,154 @@ Here are the most important Channel implementations in Java NIO:
 - Attempt a mapped transfer
 - HeapBuffer
 
+
+
+通过 NativeDispatcher 对具体 Channel 操作实现分发，调用具体的系统调用
+
+#### read
+
+```java
+public class FileChannelImpl extends FileChannel {
+    public int read(ByteBuffer dst) throws IOException {
+        // ...
+        synchronized (positionLock) {
+            // ...
+            try {
+                // ...
+                do {
+                    long comp = Blocker.begin();
+                    try {
+                        n = IOUtil.read(fd, dst, -1, direct, alignment, nd);
+                    } finally {
+                        Blocker.end(comp);
+                    }
+                } while ((n == IOStatus.INTERRUPTED) && isOpen());
+                return IOStatus.normalize(n);
+            } finally {
+                // ...
+            }
+        }
+    }
+}
+```
+
+
+
+```java
+public class IOUtil {
+    static int read(FileDescriptor fd, ByteBuffer dst, long position,
+                    boolean directIO, boolean async,
+                    int alignment, NativeDispatcher nd)
+    throws IOException
+    {
+        if (dst.isReadOnly())
+            throw new IllegalArgumentException("Read-only buffer");
+        if (dst instanceof DirectBuffer)
+            return readIntoNativeBuffer(fd, dst, position, directIO, async, alignment, nd);
+
+        // Substitute a native buffer
+        ByteBuffer bb;
+        int rem = dst.remaining();
+        if (directIO) {
+            Util.checkRemainingBufferSizeAligned(rem, alignment);
+            bb = Util.getTemporaryAlignedDirectBuffer(rem, alignment);
+        } else {
+            bb = Util.getTemporaryDirectBuffer(rem);
+        }
+        try {
+            int n = readIntoNativeBuffer(fd, bb, position, directIO, async, alignment, nd);
+            bb.flip();
+            if (n > 0)
+                dst.put(bb);
+            return n;
+        } finally {
+            Util.offerFirstTemporaryDirectBuffer(bb);
+        }
+    }
+}
+```
+
+
+
+```java
+private static int readIntoNativeBuffer(FileDescriptor fd, ByteBuffer bb,
+                                            long position, boolean directIO,
+                                            boolean async, int alignment,
+                                            NativeDispatcher nd)
+        throws IOException
+    {
+        int pos = bb.position();
+        int lim = bb.limit();
+        assert (pos <= lim);
+        int rem = (pos <= lim ? lim - pos : 0);
+
+        if (directIO) {
+            Util.checkBufferPositionAligned(bb, pos, alignment);
+            Util.checkRemainingBufferSizeAligned(rem, alignment);
+        }
+
+        if (rem == 0)
+            return 0;
+        int n = 0;
+        acquireScope(bb, async);
+        try {
+            if (position != -1) {
+                n = nd.pread(fd, bufferAddress(bb) + pos, rem, position);
+            } else {
+                n = nd.read(fd, bufferAddress(bb) + pos, rem);
+            }
+        } finally {
+            releaseScope(bb);
+        }
+        if (n > 0)
+            bb.position(pos + n);
+        return n;
+    }
+```
+
+最终会调用到 NativeDispatcher 的 read 方法 对于FileChannel 的实现为 FileDispatcherImpl
+
+```java
+class UnixFileDispatcherImpl extends FileDispatcher {
+
+    int read(FileDescriptor fd, long address, int len) throws IOException {
+        return read0(fd, address, len);
+    }
+}
+```
+
+系统调用[read](/docs)
+
+```c
+JNIEXPORT jint JNICALL
+Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz, jobject fdo,
+                                      jlong address, jint len)
+{
+    // ...
+    result = ReadFile(h,          /* File handle to read */
+                      (LPVOID)address,    /* address to put data */
+                      len,        /* number of bytes to read */
+                      &read,      /* number of bytes read */
+                      NULL);      /* no overlapped struct */
+    // ...
+    return convertReturnVal(env, (jint)read, JNI_TRUE);
+}
+```
+
+
+
+
+
+#### write
+
+
+
+
+
+
+
+#### transfer
+
 ```java
 public long transferTo(long position, long count, WritableByteChannel target) throws IOException {
         ensureOpen();
