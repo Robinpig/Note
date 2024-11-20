@@ -1,5 +1,12 @@
 ## Introduction
 
+set是无序集合 
+
+Sets can be encoded as:
+  - `hashtable`, normal set encoding.
+  - `intset`, a special encoding used for small sets composed solely of integers.
+  - `listpack`, Redis >= 7.2, a space-efficient encoding used for small sets.
+
 ## sadd
 
 1. [lookupKeyWrite](/docs/CS/DB/Redis/redisDb.md?id=add)

@@ -77,6 +77,8 @@ The following is the list of all the data structures supported by Redis, which w
 
 
 
+Redis objects can be encoded in different ways
+
 
 
 <!-- tabs:start -->
@@ -239,7 +241,9 @@ It is worth noting that small hashes (i.e., a few elements with small values) ar
 
 ### Sets
 
-Redis [Sets](/docs/CS/DB/Redis/set.md) are unordered collections of strings. The `SADD` command adds new elements to a set.
+Redis [Sets](/docs/CS/DB/Redis/set.md) are unordered collections of strings. 
+
+The `SADD` command adds new elements to a set.
 It's also possible to do a number of other operations against sets like testing if a given element already exists, performing the intersection, union or difference between multiple sets, and so forth.
 
 Sets are good for expressing relations between objects. For instance we can easily use sets in order to implement tags.
@@ -380,3 +384,4 @@ A [Redis script](/docs/CS/DB/Redis/struct.md?id=lua-scripts) is transactional by
 ## References
 
 1. [A Crash Course in Redis](https://blog.bytebytego.com/p/a-crash-course-in-redis)
+2. [OBJECT ENCODING](https://redis.io/docs/latest/commands/object-encoding/)
