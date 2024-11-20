@@ -116,7 +116,6 @@ typedef struct pglist_data {
 } pg_data_t;
 ```
 
-
 内存被划分为节点. 每个节点关联到系统中的一个处理器, 内核中表示为pg_data_t的实例. 系统中每个节点被链接到一个以NULL结尾的pgdat_list链表中<而其中的每个节点利用pg_data_tnode_next字段链接到下一节．而对于PC这种UMA结构的机器来说, 只使用了一个成为contig_page_data的静态pg_data_t结构.
 各个节点又被划分为内存管理区域, 一个管理区域通过struct zone_struct描述, 其被定义为zone_t, 用以表示内存的某个范围, 低端范围的16MB被描述为ZONE_DMA, 某些工业标准体系结构中的(ISA)设备需要用到它, 然后是可直接映射到内核的普通内存域ZONE_NORMAL,最后是超出了内核段的物理地址域ZONE_HIGHMEM, 被称为高端内存. 是系统中预留的可用内存空间, 不能被内核直接映射
 
@@ -125,6 +124,82 @@ typedef struct pglist_data {
 > - ISA总线的直接内存存储DMA处理器有一个严格的限制 : 他们只能对RAM的前16MB进行寻址
 > - 在具有大容量RAM的现代32位计算机中, CPU不能直接访问所有的物理地址, 因为线性地址空间太小, 内核不可能直接映射所有物理内存到线性地址空间, 我们会在后面典型架构(x86)上内存区域划分详细讲解x86_32上的内存区域划分
 > 因此Linux内核对不同区域的内存需要采用不同的管理方式和映射方式, 因此内核将物理地址或者成用zone_t表示的不同地址区域
+
+探测内存布局
+
+```c
+// arch/x86/boot/memory.c
+void detect_memory(void)
+{
+    detect_memory_e820();
+
+    detect_memory_e801();
+
+    detect_memory_88();
+}
+```
+
+可以清晰的看到上面分别调用了三个函数detect_memory_e820()、detect_memory_e801()和detect_memory_88()。较新的电脑调用detect_memory_e820()足矣探测内存布局，detect_memory_e801()和detect_memory_88()则是针对较老的电脑进行兼容而保留的
+
+```c
+static void detect_memory_e820(void)
+{
+    int count = 0;
+    struct biosregs ireg, oreg;
+    struct boot_e820_entry *desc = boot_params.e820_table;
+    static struct boot_e820_entry buf; /* static so it is zeroed */
+
+    initregs(&ireg);
+    ireg.ax  = 0xe820;
+    ireg.cx  = sizeof(buf);
+    ireg.edx = SMAP;
+    ireg.di  = (size_t)&buf;
+
+    /*
+     * Note: at least one BIOS is known which assumes that the
+     * buffer pointed to by one e820 call is the same one as
+     * the previous call, and only changes modified fields.  Therefore,
+     * we use a temporary buffer and copy the results entry by entry.
+     *
+     * This routine deliberately does not try to account for
+     * ACPI 3+ extended attributes.  This is because there are
+     * BIOSes in the field which report zero for the valid bit for
+     * all ranges, and we don't currently make any use of the
+     * other attribute bits.  Revisit this if we see the extended
+     * attribute bits deployed in a meaningful way in the future.
+     */
+
+    do {
+        intcall(0x15, &ireg, &oreg);
+        ireg.ebx = oreg.ebx; /* for next iteration... */
+
+        /* BIOSes which terminate the chain with CF = 1 as opposed
+           to %ebx = 0 don't always report the SMAP signature on
+           the final, failing, probe. */
+        if (oreg.eflags & X86_EFLAGS_CF)
+            break;
+
+        /* Some BIOSes stop returning SMAP in the middle of
+           the search loop.  We don't know exactly how the BIOS
+           screwed up the map at that point, we might have a
+           partial map, the full map, or complete garbage, so
+           just return failure. */
+        if (oreg.eax != SMAP) {
+            count = 0;
+            break;
+        }
+
+        *desc++ = buf;
+        count++;
+    } while (ireg.ebx && count < ARRAY_SIZE(boot_params.e820_table));
+
+    boot_params.e820_entries = count;
+}
+```
+
+
+
+
 
 
 
@@ -736,7 +811,55 @@ out:
 EXPORT_SYMBOL(__alloc_pages_nodemask);
 ```
 
+
+
+## alloc
+
+
+
+__alloc_pages_slowpath
+- wake_all_kswapds
+- __alloc_pages_direct_compact
+- __gfp_pfmemalloc_flags
+- get_page_from_freelist
+- __alloc_pages_direct_reclaim - __perform_reclaim - try_to_free_pages - shrink_zones - shrink_node
+- prepare_scan_count
+- shrink_node_memcgs
+- shrink_lruvec
+- get_scan_count
+- shrink_list
+- shrink_inactive_list
+- lru_add_drain
+- isolate_lru_follos
+- shrink_follo_list
+- follo_check_references
+- add_to_swap
+- try_to_unmap
+- pageout
+- free_unref_page_list
+- move_follos_to_lru
+- free_unref_page_list
+- shrink_active_list
+- lru_add_drain
+- islate_lr_follos
+- follo_referenced
+- move_follos_to_lru
+- free_unref_page_list
+- shrink_slab
+
+
+当进入_alloc_pages_slowpath时，往往意味着伙伴系统中可用的连续内存不足，可能有多种情况。
+第1种情况，空闲内存足够，但内存碎片过多，找不到连续的大段内存  此时需要进行compact _alloc_pages_direct_compact 			
+第2种情况，空闲内存不足， 需要释放一些已经被占用的内存，这就是内存回收，也就是reclaim
+
+内存释放之前需要保证现有内存内容不丢失 一种方法是对被换出的部分进行落盘 需要时再加载回来
+
+
+
 #### get_page_from_freelist
+
+内核通过 get_page_from_freelist 函数，挨个遍历检查各个 NUMA 节点中的物理内存区域是否有足够的空闲内存可以满足本次的内存分配要求，当找到符合内存分配标准的物理内存区域 zone 之后，接下来就会通过 rmqueue 函数进入到该物理内存区域 zone 对应的伙伴系统中分配物理内存
+
 ```c
 static struct page *
 get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
@@ -1136,7 +1259,168 @@ out:
     return page;
 }
 ```
+
+
+
+
 ## free
+
+
+某一次内存回收过程中扫描哪些node、 过程中可以进行哪些操作以及退出条件等控制了整个 扫描过程。这些由scan_control结构体定义，调用栈中 tty_to_free_pages函数为它赋值
+
+```c
+unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
+                                gfp_t gfp_mask, nodemask_t *nodemask)
+{
+    unsigned long nr_reclaimed;
+    struct scan_control sc = {
+        .nr_to_reclaim = SWAP_CLUSTER_MAX,
+        .gfp_mask = current_gfp_context(gfp_mask),
+        .reclaim_idx = gfp_zone(gfp_mask),
+        .order = order,
+        .nodemask = nodemask,
+        .priority = DEF_PRIORITY,
+        .may_writepage = !laptop_mode,
+        .may_unmap = 1,
+        .may_swap = 1,
+    };
+
+    /*
+	 * scan_control uses s8 fields for order, priority, and reclaim_idx.
+	 * Confirm they are large enough for max values.
+	 */
+    BUILD_BUG_ON(MAX_PAGE_ORDER >= S8_MAX);
+    BUILD_BUG_ON(DEF_PRIORITY > S8_MAX);
+    BUILD_BUG_ON(MAX_NR_ZONES > S8_MAX);
+
+    /*
+	 * Do not enter reclaim if fatal signal was delivered while throttled.
+	 * 1 is returned so that the page allocator does not OOM kill at this
+	 * point.
+	 */
+    if (throttle_direct_reclaim(sc.gfp_mask, zonelist, nodemask))
+        return 1;
+
+    set_task_reclaim_state(current, &sc.reclaim_state);
+    trace_mm_vmscan_direct_reclaim_begin(order, sc.gfp_mask);
+
+    nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
+
+    trace_mm_vmscan_direct_reclaim_end(nr_reclaimed);
+    set_task_reclaim_state(current, NULL);
+
+    return nr_reclaimed;
+}
+```
+
+
+```c
+struct scan_control {
+    /* How many pages shrink_list() should reclaim */
+    unsigned long nr_to_reclaim;
+
+    /*
+	 * Nodemask of nodes allowed by the caller. If NULL, all nodes
+	 * are scanned.
+	 */
+    nodemask_t	*nodemask;
+
+    /*
+	 * The memory cgroup that hit its limit and as a result is the
+	 * primary target of this reclaim invocation.
+	 */
+    struct mem_cgroup *target_mem_cgroup;
+
+    /*
+	 * Scan pressure balancing between anon and file LRUs
+	 */
+    unsigned long	anon_cost;
+    unsigned long	file_cost;
+
+    /* Can active folios be deactivated as part of reclaim? */
+    #define DEACTIVATE_ANON 1
+    #define DEACTIVATE_FILE 2
+    unsigned int may_deactivate:2;
+    unsigned int force_deactivate:1;
+    unsigned int skipped_deactivate:1;
+
+    /* Writepage batching in laptop mode; RECLAIM_WRITE */
+    unsigned int may_writepage:1;
+
+    /* Can mapped folios be reclaimed? */
+    unsigned int may_unmap:1;
+
+    /* Can folios be swapped as part of reclaim? */
+    unsigned int may_swap:1;
+
+    /* Not allow cache_trim_mode to be turned on as part of reclaim? */
+    unsigned int no_cache_trim_mode:1;
+
+    /* Has cache_trim_mode failed at least once? */
+    unsigned int cache_trim_mode_failed:1;
+
+    /* Proactive reclaim invoked by userspace through memory.reclaim */
+    unsigned int proactive:1;
+
+    /*
+	 * Cgroup memory below memory.low is protected as long as we
+	 * don't threaten to OOM. If any cgroup is reclaimed at
+	 * reduced force or passed over entirely due to its memory.low
+	 * setting (memcg_low_skipped), and nothing is reclaimed as a
+	 * result, then go back for one more cycle that reclaims the protected
+	 * memory (memcg_low_reclaim) to avert OOM.
+	 */
+    unsigned int memcg_low_reclaim:1;
+    unsigned int memcg_low_skipped:1;
+
+    unsigned int hibernation_mode:1;
+
+    /* One of the zones is ready for compaction */
+    unsigned int compaction_ready:1;
+
+    /* There is easily reclaimable cold cache in the current node */
+    unsigned int cache_trim_mode:1;
+
+    /* The file folios on the current node are dangerously low */
+    unsigned int file_is_tiny:1;
+
+    /* Always discard instead of demoting to lower tier memory */
+    unsigned int no_demotion:1;
+
+    /* Allocation order */
+    s8 order;
+
+    /* Scan (total_size >> priority) pages at once */
+    s8 priority;
+
+    /* The highest zone to isolate folios for reclaim from */
+    s8 reclaim_idx;
+
+    /* This context's GFP mask */
+    gfp_t gfp_mask;
+
+    /* Incremented by the number of inactive pages that were scanned */
+    unsigned long nr_scanned;
+
+    /* Number of pages freed so far during a call to shrink_zones() */
+    unsigned long nr_reclaimed;
+
+    struct {
+        unsigned int dirty;
+        unsigned int unqueued_dirty;
+        unsigned int congested;
+        unsigned int writeback;
+        unsigned int immediate;
+        unsigned int file_taken;
+        unsigned int taken;
+    } nr;
+
+    /* for recording the reclaimed slab by now */
+    struct reclaim_state reclaim_state;
+};
+```
+
+
 ```c
 static inline void free_the_page(struct page *page, unsigned int order)
 {
