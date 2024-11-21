@@ -1208,7 +1208,7 @@ A distributed system consists of a finite set of processes and a finite set of c
 
 [Concurrency Control in Distributed Database Systems](https://people.eecs.berkeley.edu/~brewer/cs262/concurrency-distributed-databases.pdf)
 
-## Calc
+## Computing
 
 Big Data
 
@@ -1227,6 +1227,14 @@ engine
 - Planner
 - optimizer
 - Executor
+
+
+
+分布式计算框架
+
+- Hadoop
+- Spark
+- Flink
 
 ## Metadata service
 
