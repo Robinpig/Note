@@ -81,7 +81,7 @@ static struct file_system_type sock_fs_type = {
 	.kill_sb =	kill_anon_super,
 };
 ```
-call sockfs_init_fs_context when [mount fs](/docs/CS/OS/Linux/fs.md?id=init_fs_context)
+call sockfs_init_fs_context when [mount fs](/docs/CS/OS/Linux/fs/fs.md?id=init_fs_context)
 
 ```c
 

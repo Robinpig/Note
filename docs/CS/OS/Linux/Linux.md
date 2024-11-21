@@ -12,10 +12,6 @@ Its purpose is to pass application requests to the hardware and to act as a low-
 
 Linux系统诞生于1991年10月5日
 
-
-
-
-
 常见Linux发行版
 
 - Red Hat Linux
@@ -37,6 +33,10 @@ Windows下使用Linux
 - [WSL](/docs/CS/OS/Windows/WSL.md)
 
 
+
+> [!TIP]
+>
+> 常见的一些[使用经验](/docs/CS/OS/Linux/Experience.md)
 
 Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如模块化设计 抢占式内核 动态加载内核模块等
 
@@ -680,7 +680,7 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 ## fs
 
-- [fs](/docs/CS/OS/Linux/fs.md)
+- [fs](/docs/CS/OS/Linux/fs/fs.md)
 
 ## IO
 
@@ -689,11 +689,11 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 ## Network
 
-- [network](/docs/CS/OS/Linux/network.md)
+- [network](/docs/CS/OS/Linux/net/network.md)
 - [socket](/docs/CS/OS/Linux/socket.md)
-- [IP](/docs/CS/OS/Linux/IP.md)
+- [IP](/docs/CS/OS/Linux/net/IP.md)
 - [TCP](/docs/CS/OS/Linux/TCP.md)
-- [UDP](/docs/CS/OS/Linux/UDP.md)
+- [UDP](/docs/CS/OS/Linux/net/UDP.md)
 
 ## Loadable kernel module
 

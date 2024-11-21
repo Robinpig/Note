@@ -361,7 +361,7 @@ back_from_confirm:
 	up->pending = AF_INET;
 ```
 
-call [ip_append_data](/docs/CS/OS/Linux/IP.md?id=ip_append_data)
+call [ip_append_data](/docs/CS/OS/Linux/net/IP.md?id=ip_append_data)
 
 ```c
 do_append_data:
@@ -429,7 +429,7 @@ int udp_push_pending_frames(struct sock *sk)
 }
 ```
 
-call [ip_send_skb](/docs/CS/OS/Linux/IP.md?id=ip_send_skb)
+call [ip_send_skb](/docs/CS/OS/Linux/net/IP.md?id=ip_send_skb)
 ```c
 
 static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,

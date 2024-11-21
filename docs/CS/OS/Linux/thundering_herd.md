@@ -1071,4 +1071,4 @@ multiple process
 ## Links
 
 - [processes](/docs/CS/OS/Linux/process.md)
-- [network](/docs/CS/OS/Linux/network.md)
+- [network](/docs/CS/OS/Linux/net/network.md)
