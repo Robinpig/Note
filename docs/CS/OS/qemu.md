@@ -9,7 +9,8 @@ In this mode the CPU may be fully emulated, or it may work with a hypervisor suc
 The second supported way to use QEMU is User Mode Emulation, where QEMU can launch processes compiled for one CPU on another CPU.
 In this mode the CPU is always emulated.
 
-**Installing QEMU**
+
+### Installing
 
 <!-- tabs:start -->
 
@@ -33,6 +34,16 @@ apt-get install qemu-system
 ```shell
 brew install qemu
 ```
+
+
+<!-- tabs:end -->
+
+
+### Build
+<!-- tabs:start -->
+##### **Docker**
+
+
 
 <!-- tabs:end -->
 
@@ -66,3 +77,5 @@ p %eip
 - [Computer Organization](/docs/CS/CO/CO.md)
 
 ## References
+
+1. [Qemu 4.2.1 版本构建](https://runsisi.com/2024/06/23/qemu/)

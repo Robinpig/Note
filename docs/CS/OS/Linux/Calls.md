@@ -1223,6 +1223,258 @@ struct sock *inet_csk_accept(struct sock *sk, struct proto_accept_arg *arg)
  */
 ```
 
+
+
+
+
+## read
+
+内核通过查找进程文件符表，定位到内核已打开文件集上的文件信息，从而找到此文件的inode。
+inode在address_space上查找要请求的文件页是否已经缓存在页缓存中。如果存在，则直接返回这片文件页的内容。
+如果不存在，则通过inode定位到文件磁盘地址，将数据从磁盘复制到页缓存。 之后再次发起读页面过程，进而将页缓存中的数据发给用户进程
+
+```c
+// fs/read_write.c
+SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
+{
+    return ksys_read(fd, buf, count);
+}
+
+ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
+{
+	struct fd f = fdget_pos(fd);
+	ssize_t ret = -EBADF;
+
+	if (f.file) {
+		loff_t pos, *ppos = file_ppos(f.file);
+		if (ppos) {
+			pos = *ppos;
+			ppos = &pos;
+		}
+		ret = vfs_read(f.file, buf, count, ppos);
+		if (ret >= 0 && ppos)
+			f.file->f_pos = pos;
+		fdput_pos(f);
+	}
+	return ret;
+}
+
+static inline struct fd fdget_pos(int fd)
+{
+	return __to_fd(__fdget_pos(fd));
+}
+
+/* file_ppos returns &file->f_pos or NULL if file is stream */
+static inline loff_t *file_ppos(struct file *file)
+{
+	return file->f_mode & FMODE_STREAM ? NULL : &file->f_pos;
+}
+```
+
+file->f_op 包含着文件系统对文件的操作函数
+
+其实真正的读 read 操作是调用 file -> f_op -> read()
+
+
+
+```c
+ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+{
+    ssize_t ret;
+    // ...
+    ret = rw_verify_area(READ, file, pos, count);
+
+    if (file->f_op->read)
+        ret = file->f_op->read(file, buf, count, pos);
+    else if (file->f_op->read_iter)
+        ret = new_sync_read(file, buf, count, pos);
+    else
+        ret = -EINVAL;
+    if (ret > 0) {
+        fsnotify_access(file);
+        add_rchar(current, ret);
+    }
+    inc_syscr(current);
+    return ret;
+}
+```
+
+
+
+```c
+static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
+{
+    struct iovec iov = { .iov_base = buf, .iov_len = len };
+    struct kiocb kiocb;
+    struct iov_iter iter;
+    ssize_t ret;
+
+    init_sync_kiocb(&kiocb, filp);
+    kiocb.ki_pos = (ppos ? *ppos : 0);
+    iov_iter_init(&iter, READ, &iov, 1, len);
+
+    ret = call_read_iter(filp, &kiocb, &iter);
+    BUG_ON(ret == -EIOCBQUEUED);
+    if (ppos)
+        *ppos = kiocb.ki_pos;
+    return ret;
+}
+
+static inline ssize_t call_read_iter(struct file *file, struct kiocb *kio,
+				     struct iov_iter *iter)
+{
+	return file->f_op->read_iter(kio, iter);
+}
+```
+
+read_iter
+
+
+
+socket走到tcp_recvmsg
+
+
+
+```c
+static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
+{
+    struct file *file = iocb->ki_filp;
+    struct socket *sock = file->private_data;
+    struct msghdr msg = {.msg_iter = *to,
+                 .msg_iocb = iocb};
+    ssize_t res;
+
+    if (file->f_flags & O_NONBLOCK || (iocb->ki_flags & IOCB_NOWAIT))
+        msg.msg_flags = MSG_DONTWAIT;
+
+    if (iocb->ki_pos != 0)
+        return -ESPIPE;
+
+    if (!iov_iter_count(to))    /* Match SYS5 behaviour */
+        return 0;
+
+    res = sock_recvmsg(sock, &msg, msg.msg_flags);
+    *to = msg.msg_iter;
+    return res;
+}
+
+```
+
+
+
+
+
+
+
+```c
+size_t copy_page_to_iter(struct page *page, size_t offset, size_t bytes,
+             struct iov_iter *i)
+{
+    if (unlikely(!page_copy_sane(page, offset, bytes)))
+        return 0;
+    if (i->type & (ITER_BVEC|ITER_KVEC)) {
+        void *kaddr = kmap_atomic(page);
+        size_t wanted = copy_to_iter(kaddr + offset, bytes, i);
+        kunmap_atomic(kaddr);
+        return wanted;
+    } else if (unlikely(iov_iter_is_discard(i)))
+        return bytes;
+    else if (likely(!iov_iter_is_pipe(i)))
+        return copy_page_to_iter_iovec(page, offset, bytes, i);
+    else
+        return copy_page_to_iter_pipe(page, offset, bytes, i);
+}
+EXPORT_SYMBOL(copy_page_to_iter);
+```
+
+## write
+
+```c
+// fs/read_write.c
+SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
+        size_t, count)
+{
+    return ksys_write(fd, buf, count);
+}
+
+ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
+{
+    struct fd f = fdget_pos(fd);
+    ssize_t ret = -EBADF;
+
+    if (f.file) {
+        loff_t pos, *ppos = file_ppos(f.file);
+        if (ppos) {
+            pos = *ppos;
+            ppos = &pos;
+        }
+        ret = vfs_write(f.file, buf, count, ppos);
+        if (ret >= 0 && ppos)
+            f.file->f_pos = pos;
+        fdput_pos(f);
+    }
+
+    return ret;
+}
+```
+
+
+
+
+
+
+
+```c
+ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
+{
+    ssize_t ret;
+    // ...
+    ret = rw_verify_area(WRITE, file, pos, count);
+
+    file_start_write(file);
+    if (file->f_op->write)
+        ret = file->f_op->write(file, buf, count, pos);
+    else if (file->f_op->write_iter)
+        ret = new_sync_write(file, buf, count, pos);
+    else
+        ret = -EINVAL;
+    if (ret > 0) {
+        fsnotify_modify(file);
+        add_wchar(current, ret);
+    }
+    inc_syscw(current);
+    file_end_write(file);
+    return ret;
+}
+```
+
+
+
+
+
+```c
+
+static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
+{
+    struct iovec iov = { .iov_base = (void __user *)buf, .iov_len = len };
+    struct kiocb kiocb;
+    struct iov_iter iter;
+    ssize_t ret;
+
+    init_sync_kiocb(&kiocb, filp);
+    kiocb.ki_pos = (ppos ? *ppos : 0);
+    iov_iter_init(&iter, WRITE, &iov, 1, len);
+
+    ret = call_write_iter(filp, &kiocb, &iter);
+    BUG_ON(ret == -EIOCBQUEUED);
+    if (ret > 0 && ppos)
+        *ppos = kiocb.ki_pos;
+    return ret;
+}
+```
+
+
+
 ## sendfile
 
 sendfile() copies data between one file descriptor and another.

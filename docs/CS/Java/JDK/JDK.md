@@ -194,6 +194,24 @@ Maven, Compile
 jdwp host/ip from 0.0.0.0 to localhost and not support to debug remotely
 
 
+
+## Tuning
+
+Java的编译和启动时长都较长 开发和部署效率低
+
+
+
+Maven改造 大多数编译慢的情况都是生成依赖树阶段 依赖多而复杂 就更易去仓库下载依赖
+
+- 优化依赖分析算法 边生成依赖树边进行版本仲裁
+- 增量缓存依赖树 修改pom文件的情况远小于修改自己代码的情况
+- maven程序编译成机器码运行
+
+## Links
+
+
+
+
 ## References
 
 1. [The Java Language Environment: Contents A White Paper](https://www.oracle.com/java/technologies/language-environment.html)

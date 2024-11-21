@@ -59,7 +59,7 @@ Cloud native technologies and architectures typically consist of some combinatio
 
 ##### Quartz
 
-[Quartz](/docs/CS/Framework/Quartz/Quartz.md) can be used to create simple or complex schedules for executing tens, hundreds, or even tens-of-thousands of jobs.
+[Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md) can be used to create simple or complex schedules for executing tens, hundreds, or even tens-of-thousands of jobs.
 
 ##### Spring Framework
 

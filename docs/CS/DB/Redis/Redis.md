@@ -10,6 +10,65 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 >
 > The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
 
+
+## Build
+
+##### **Mac**
+
+```shell
+make MALLOC=jemalloc CFLAGS="-g -O0" 
+```
+Some build issues:
+| Issue                                               | Fix                                                     | References                                                   |
+| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
+| error: variable has incomplete type 'struct stat64' | add `#define MAC_OS_X_VERSION_10_6` into `src/config.h` | [Build Issue in arm](https://github.com/redis/redis/issues/12585) |      
+
+
+
+Redis源码目录:
+- deps
+  - jemalloc
+  - Hiredis
+  - Linenoise
+  - Lua
+  - hdr_histogram
+- src
+  - commands
+  - modules
+
+- test
+- utils
+
+
+
+
+
+
+
+## Architecture
+
+
+<div style="text-align: center;">
+
+![Fig.1. Architecture](./img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Architecture
+</p>
+
+
+
+[Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
+
+Server and Client
+
+Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 它包含了存储的[redisDb] 网络监听 客户端缓存等信息
+
+
+
+
 ### Why Redis so fast
 
 完全基于内存实现 持久化机制都是使用子进程处理 不影响
@@ -25,15 +84,15 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 
 Redis 使用单线程模型进行设计 保证了每个操作的原子性，也减少了线程的上下文切换和竞争 同时能带来更好的可维护性，方便开发和调试
 
-> It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound. 
+> It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound.
 > For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.
 
 如果这种吞吐量不能满足我们的需求，更推荐的做法是使用分片的方式将不同的请求交给不同的 Redis 服务器来处理，而不是在同一个 Redis 服务中引入大量的多线程操作
 
 Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时就会使用主处理线程之外的其他线程，例如 UNLINK、FLUSHALL ASYNC、FLUSHDB ASYNC 等非阻塞的删除操作
 
-> However with Redis 4.0 we started to make Redis more threaded. 
-> For now this is limited to deleting objects in the background, and to blocking commands implemented via Redis modules. 
+> However with Redis 4.0 we started to make Redis more threaded.
+> For now this is limited to deleting objects in the background, and to blocking commands implemented via Redis modules.
 > For the next releases, the plan is to make Redis more and more threaded.
 
 #### IO
@@ -56,48 +115,12 @@ Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时
 
 
 
-## Build
-
-##### **Mac**
-
-```shell
-make MALLOC=jemalloc CFLAGS="-g -O0" 
-```
-Some build issues:
-| Issue                                               | Fix                                                     | References                                                   |
-| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
-| error: variable has incomplete type 'struct stat64' | add `#define MAC_OS_X_VERSION_10_6` into `src/config.h` | [Build Issue in arm](https://github.com/redis/redis/issues/12585) |      
-
-
-
-
-
-
-
-## Architecture
-
-
-<div style="text-align: center;">
-
-![Fig.1. Architecture](./img/Architecture.png)
-
-</div>
-
-<p style="text-align: center;">
-Fig.1. Architecture
-</p>
-
-
 ## Persistence
 
 [Persistence](/docs/CS/DB/Redis/persist.md) refers to the writing of data to durable storage, such as a solid-state disk (SSD).
 The most important thing to understand is the different trade-offs between the RDB and AOF persistence.
 
 
-
-## [Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
-
-Server and Client
 
 ## Event
 

@@ -847,3 +847,4 @@ server.ssl.key-store-password=secretpassword
 ## References
 
 1. [Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc)
+2. [Spring MVC 实现原理与源码解析系统 —— 精品合集](https://www.iocoder.cn/Spring-MVC/good-collection/?title)

@@ -1243,12 +1243,6 @@ A data node contains a reference to its parent, a byte array as its data, an arr
 ```java
 @SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
 public class DataNode implements Record {
-    // the digest value of this node, calculated from path, data and stat
-    private volatile long digest;
-
-    // indicate if the digest of this node is up to date or not, used to
-    // optimize the performance.
-    volatile boolean digestCached;
 
     /** the data for this datanode */
     byte[] data;

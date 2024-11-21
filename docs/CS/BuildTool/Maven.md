@@ -133,6 +133,61 @@ If no scope is listed, it means the dependency is omitted.`import`
 | `post-site`   | execute processes needed to finalize the site generation, and to prepare for site deployment |
 | `site-deploy` | deploy the generated site documentation to the specified web server                          |
 
+
+
+
+
+## Repository
+
+ maven 默认是不下载 snapshot 包
+
+```xml
+<repositories>
+    <repository>
+        <id>nexus</id>
+        <url>http://localhost:18081/repository/maven-public/</url>
+        <releases>
+            <enabled>true</enabled>
+            <updatePolicy>always</updatePolicy>
+        </releases>
+        <snapshots>
+            <!--Download snapshot-->
+            <enabled>true</enabled>
+            <updatePolicy>always</updatePolicy>
+        </snapshots>
+    </repository>
+ </repositories>
+```
+
+set profile
+
+```xml
+<profiles>
+    <profile>
+        <id>dev</id>
+        <activation>
+            <activeByDefault>true</activeByDefault>
+        </activation>
+        <properties>
+            <spring.profiles.active>dev</spring.profiles.active>
+            <bvpro.api.version>2.0.0-SNAPSHOT</bvpro.api.version>
+        </properties>
+    </profile>
+    <profile>
+        <id>prod</id>
+        <properties>
+            <spring.profiles.active>prod</spring.profiles.active>
+            <bvpro.api.version>1.9.0</bvpro.api.version>
+        </properties>
+        </properties>
+    </profile>
+</profiles>
+```
+
+
+
+
+
 ## use
 
 ### clean

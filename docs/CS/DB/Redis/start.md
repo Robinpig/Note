@@ -1494,11 +1494,29 @@ void aeMain(aeEventLoop *eventLoop) {
 
 ## Do
 
-### execute
+这里看一下命令的执行流程
+
+
+
+server中两个重要的buffer
+
+```c
+struct redisServer {
+ 		...
+    list *clients_pending_write; /* There is to write or install handler. */
+    list *clients_pending_read;  /* Client has pending read socket buffers. */
+}
+```
+
+
+
+
 
 #### readQueryFromClient
 
 `readQueryFromClient()` is the ***readable event handler*** and accumulates data from read from the client into the query buffer.
+
+
 
 ```c
 void readQueryFromClient(connection *conn) {
@@ -1543,7 +1561,6 @@ void readQueryFromClient(connection *conn) {
             return;
         }
     } else if (nread == 0) {
-        serverLog(LL_VERBOSE, "Client closed connection");
         freeClientAsync(c);
         return;
     } else if (c->flags & CLIENT_MASTER) {
@@ -1574,6 +1591,151 @@ void readQueryFromClient(connection *conn) {
      processInputBuffer(c);
 }
 ```
+
+主线程首次调用会执行 postponeClientRead 检查 将clients放入 clients_pending_read 列表
+
+
+```c
+int postponeClientRead(client *c) {
+    if (server.io_threads_active &&
+        server.io_threads_do_reads &&
+        !ProcessingEventsWhileBlocked &&
+        !(c->flags & (CLIENT_MASTER|CLIENT_SLAVE|CLIENT_BLOCKED)) &&
+        io_threads_op == IO_THREADS_OP_IDLE)
+    {
+        listAddNodeHead(server.clients_pending_read,c);
+        c->pending_read_list_node = listFirst(server.clients_pending_read);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+```
+
+
+
+主线程在执行beforeSleep函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients分配给线程绑定队列
+
+When threaded I/O is also enabled for the reading + parsing side, the readable handler will just put normal clients into a queue of clients to process (instead of serving them synchronously). 
+This function runs the queue using the I/O threads, and process them in order to accumulate the reads in the buffers, and also parse the first command available rendering it in the client structures.
+This function achieves thread safety using a fan-out -> fan-in paradigm:
+Fan out: The main thread fans out work to the io-threads which block until setIOPendingCount() is called with a value larger than 0 by the main thread.
+Fan in: The main thread waits until getIOPendingCount() returns 0. 
+
+Then it can safely perform post-processing and return to normal synchronous work.
+
+```c
+int handleClientsWithPendingReadsUsingThreads(void) {
+    if (!server.io_threads_active || !server.io_threads_do_reads) return 0;
+    int processed = listLength(server.clients_pending_read);
+    if (processed == 0) return 0;
+
+    /* Distribute the clients across N different lists. */
+    listIter li;
+    listNode *ln;
+    listRewind(server.clients_pending_read,&li);
+    int item_id = 0;
+    while((ln = listNext(&li))) {
+        client *c = listNodeValue(ln);
+        int target_id = item_id % server.io_threads_num;
+        listAddNodeTail(io_threads_list[target_id],c);
+        item_id++;
+    }
+
+    /* Give the start condition to the waiting threads, by setting the
+     * start condition atomic var. */
+    io_threads_op = IO_THREADS_OP_READ;
+    for (int j = 1; j < server.io_threads_num; j++) {
+        int count = listLength(io_threads_list[j]);
+        setIOPendingCount(j, count);
+    }
+
+    /* Also use the main thread to process a slice of clients. */
+    listRewind(io_threads_list[0],&li);
+    while((ln = listNext(&li))) {
+        client *c = listNodeValue(ln);
+        readQueryFromClient(c->conn);
+    }
+    listEmpty(io_threads_list[0]);
+
+    /* Wait for all the other threads to end their work. */
+    while(1) {
+        unsigned long pending = 0;
+        for (int j = 1; j < server.io_threads_num; j++)
+            pending += getIOPendingCount(j);
+        if (pending == 0) break;
+    }
+
+    io_threads_op = IO_THREADS_OP_IDLE;
+
+    /* Run the list of clients again to process the new buffers. */
+    while(listLength(server.clients_pending_read)) {
+        ln = listFirst(server.clients_pending_read);
+        client *c = listNodeValue(ln);
+        listDelNode(server.clients_pending_read,ln);
+        c->pending_read_list_node = NULL;
+
+        serverAssert(!(c->flags & CLIENT_BLOCKED));
+
+        if (beforeNextClient(c) == C_ERR) {
+            /* If the client is no longer valid, we avoid
+             * processing the client later. So we just go
+             * to the next. */
+            continue;
+        }
+
+        /* Once io-threads are idle we can update the client in the mem usage */
+        updateClientMemUsage(c);
+
+        if (processPendingCommandAndInputBuffer(c) == C_ERR) {
+            /* If the client is no longer valid, we avoid
+             * processing the client later. So we just go
+             * to the next. */
+            continue;
+        }
+
+        /* We may have pending replies if a thread readQueryFromClient() produced
+         * replies and did not put the client in pending write queue (it can't).
+         */
+        if (!(c->flags & CLIENT_PENDING_WRITE) && clientHasPendingReplies(c))
+            putClientInPendingWriteQueue(c);
+    }
+
+    /* Update processed count on server */
+    server.stat_io_reads_processed += processed;
+
+    return processed;
+}
+```
+
+
+
+
+
+```c
+int processPendingCommandAndInputBuffer(client *c) {
+    if (c->flags & CLIENT_PENDING_COMMAND) {
+        c->flags &= ~CLIENT_PENDING_COMMAND;
+        if (processCommandAndResetClient(c) == C_ERR) {
+            return C_ERR;
+        }
+    }
+
+    /* Now process client if it has more data in it's buffer.
+     *
+     * Note: when a master client steps into this function,
+     * it can always satisfy this condition, because its querbuf
+     * contains data not applied. */
+    if (c->querybuf && sdslen(c->querybuf) > 0) {
+        return processInputBuffer(c);
+    }
+    return C_OK;
+}
+```
+
+
+
+
 
 #### processInputBuffer
 
@@ -1688,122 +1850,40 @@ int processCommandAndResetClient(client *c) {
 }
 ```
 
-#### execCommand
+这里调用了[processCommand]() 处理命令 在函数内部调用 c->cmd->proc处理真正的命令 这里以GET的函数 getCommand 为例
 
 ```c
-// multi.c
-void execCommand(client *c) {
-    int j;
-    robj **orig_argv;
-    int orig_argc;
-    struct redisCommand *orig_cmd;
-    int must_propagate = 0; /* Need to propagate MULTI/EXEC to AOF / slaves? */
-    int was_master = server.masterhost == NULL;
+void getCommand(client *c) {
+    getGenericCommand(c);
+}
 
-    if (!(c->flags & CLIENT_MULTI)) {
-        addReplyError(c,"EXEC without MULTI");
-        return;
+int getGenericCommand(client *c) {
+    robj *o;
+
+    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp])) == NULL)
+        return C_OK;
+
+    if (checkType(c,o,OBJ_STRING)) {
+        return C_ERR;
     }
 
-    /* Check if we need to abort the EXEC because:
-     * 1) Some WATCHed key was touched.
-     * 2) There was a previous error while queueing commands.
-     * A failed EXEC in the first case returns a multi bulk nil object
-     * (technically it is not an error but a special behavior), while
-     * in the second an EXECABORT error is returned. */
-    if (c->flags & (CLIENT_DIRTY_CAS|CLIENT_DIRTY_EXEC)) {
-        addReply(c, c->flags & CLIENT_DIRTY_EXEC ? shared.execaborterr :
-                                                   shared.nullarray[c->resp]);
-        discardTransaction(c);
-        goto handle_monitor;
-    }
-
-    /* Exec all the queued commands */
-    unwatchAllKeys(c); /* Unwatch ASAP otherwise we'll waste CPU cycles */
-    orig_argv = c->argv;
-    orig_argc = c->argc;
-    orig_cmd = c->cmd;
-    addReplyArrayLen(c,c->mstate.count);
-    for (j = 0; j < c->mstate.count; j++) {
-        c->argc = c->mstate.commands[j].argc;
-        c->argv = c->mstate.commands[j].argv;
-        c->cmd = c->mstate.commands[j].cmd;
-
-        /* Propagate a MULTI request once we encounter the first command which
-         * is not readonly nor an administrative one.
-         * This way we'll deliver the MULTI/..../EXEC block as a whole and
-         * both the AOF and the replication link will have the same consistency
-         * and atomicity guarantees. */
-        if (!must_propagate &&
-            !server.loading &&
-            !(c->cmd->flags & (CMD_READONLY|CMD_ADMIN)))
-        {
-            execCommandPropagateMulti(c);
-            must_propagate = 1;
-        }
-
-        int acl_keypos;
-        int acl_retval = ACLCheckCommandPerm(c,&acl_keypos);
-        if (acl_retval != ACL_OK) {
-            addACLLogEntry(c,acl_retval,acl_keypos,NULL);
-            addReplyErrorFormat(c,
-                "-NOPERM ACLs rules changed between the moment the "
-                "transaction was accumulated and the EXEC call. "
-                "This command is no longer allowed for the "
-                "following reason: %s",
-                (acl_retval == ACL_DENIED_CMD) ?
-                "no permission to execute the command or subcommand" :
-                "no permission to touch the specified keys");
-        } else {
-            call(c,server.loading ? CMD_CALL_NONE : CMD_CALL_FULL);
-        }
-
-        /* Commands may alter argc/argv, restore mstate. */
-        c->mstate.commands[j].argc = c->argc;
-        c->mstate.commands[j].argv = c->argv;
-        c->mstate.commands[j].cmd = c->cmd;
-    }
-    c->argv = orig_argv;
-    c->argc = orig_argc;
-    c->cmd = orig_cmd;
-    discardTransaction(c);
-
-    /* Make sure the EXEC command will be propagated as well if MULTI
-     * was already propagated. */
-    if (must_propagate) {
-        int is_master = server.masterhost == NULL;
-        server.dirty++;
-        /* If inside the MULTI/EXEC block this instance was suddenly
-         * switched from master to slave (using the SLAVEOF command), the
-         * initial MULTI was propagated into the replication backlog, but the
-         * rest was not. We need to make sure to at least terminate the
-         * backlog with the final EXEC. */
-        if (server.repl_backlog && was_master && !is_master) {
-            char *execcmd = "*1\r\n$4\r\nEXEC\r\n";
-            feedReplicationBacklog(execcmd,strlen(execcmd));
-        }
-    }
-
-handle_monitor:
-    /* Send EXEC to clients waiting data from MONITOR. We do it here
-     * since the natural order of commands execution is actually:
-     * MUTLI, EXEC, ... commands inside transaction ...
-     * Instead EXEC is flagged as CMD_SKIP_MONITOR in the command
-     * table, and we do it here with correct ordering. */
-    if (listLength(server.monitors) && !server.loading)
-        replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+    addReplyBulk(c,o);
+    return C_OK;
+}
+```
+返回值是通过addReply 返回
+ 
+```c
+void addReplyBulk(client *c, robj *obj) {
+    addReplyBulkLen(c,obj);
+    addReply(c,obj);
+    addReply(c,shared.crlf);
 }
 ```
 
 #### addReply
 
 ```c
-/* -----------------------------------------------------------------------------
- * Higher level functions to queue data on the client output buffer.
- * The following functions are the ones that commands implementations will call.
- * -------------------------------------------------------------------------- */
-
-/* Add the object 'obj' string representation to the client output buffer. */
 void addReply(client *c, robj *obj) {
     if (prepareClientToWrite(c) != C_OK) return;
 
@@ -1924,7 +2004,7 @@ void sendReplyToClient(connection *conn) {
 
 #### writeToClient
 
-Write data in output buffers to client. Return C_OK if the client is still valid after the call, C_ERR if it was freed because of some error.
+Write data in output buffers to client.
 If handler_installed is set, it will attempt to clear the write event.
 This function is called by threads, but always with handler_installed set to 0.
 So when handler_installed is set to 0 the function must be thread safe.
