@@ -1176,7 +1176,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 
 #### sk_data_ready
 
-`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/socket.md?id=sock_init_data)
+`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/net/socket.md?id=sock_init_data)
 
 ```c
 void sock_def_readable(struct sock *sk)

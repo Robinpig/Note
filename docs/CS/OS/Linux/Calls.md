@@ -26,7 +26,7 @@
 
 ## socket
 
-see [sys_socket](/docs/CS/OS/Linux/socket.md?id=create)
+see [sys_socket](/docs/CS/OS/Linux/net/socket.md?id=create)
 
 ## bind
 
@@ -378,7 +378,7 @@ int inet_listen(struct socket *sock, int backlog)
 
 #### inet_csk_listen_start
 
-inet_connection_sock see [socket](/docs/CS/OS/Linux/socket.md?id=inet_connection_sock)
+inet_connection_sock see [socket](/docs/CS/OS/Linux/net/socket.md?id=inet_connection_sock)
 
 ```c
 // net/ipv4/iinet_connection_sock.c

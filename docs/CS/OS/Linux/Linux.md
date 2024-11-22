@@ -690,7 +690,7 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## Network
 
 - [network](/docs/CS/OS/Linux/net/network.md)
-- [socket](/docs/CS/OS/Linux/socket.md)
+- [socket](/docs/CS/OS/Linux/net/socket.md)
 - [IP](/docs/CS/OS/Linux/net/IP.md)
 - [TCP](/docs/CS/OS/Linux/TCP.md)
 - [UDP](/docs/CS/OS/Linux/net/UDP.md)

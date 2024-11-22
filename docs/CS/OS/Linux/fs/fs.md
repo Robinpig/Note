@@ -536,7 +536,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 Make all filesystems support this unconditionally
 
 call `init_fs_context` by file_system_type:
-1. [sockfs](/docs/CS/OS/Linux/socket.md?id=sockfs_init_fs_context)
+1. [sockfs](/docs/CS/OS/Linux/net/socket.md?id=sockfs_init_fs_context)
 
 ```c
 	

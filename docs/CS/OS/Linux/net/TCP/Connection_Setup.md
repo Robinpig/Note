@@ -49,7 +49,7 @@ digraph {
 
 see system calls:
 
-1. [socket](/docs/CS/OS/Linux/socket.md?id=create)
+1. [socket](/docs/CS/OS/Linux/net/socket.md?id=create)
 2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
 3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
 4. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
