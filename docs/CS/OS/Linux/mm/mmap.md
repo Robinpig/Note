@@ -4,18 +4,14 @@ mmap() creates a new mapping in the virtual address space of the calling process
 
 在调用 mmap 进行匿名映射的时候（比如进行堆内存的分配），是将进程虚拟内存空间中的某一段虚拟内存区域与物理内存中的匿名内存页进行映射，当调用 mmap 进行文件映射的时候，是将进程虚拟内存空间中的某一段虚拟内存区域与磁盘中某个文件中的某段区域进行映射
 
-
-
 在进程虚拟内存空间的布局中，有一段叫做文件映射与匿名映射区的虚拟内存区域，当我们在用户态应用程序中调用 mmap 进行内存映射的时候，所需要的虚拟内存就是在这个区域中划分出来的
-
 
 In computing, mmap(2) is a POSIX-compliant Unix system call that maps files or devices into memory.
 It is a method of memory-mapped file I/O.
 It implements demand paging because file contents are not immediately read from disk and initially use no physical RAM at all.
 The actual reads from disk are performed after a specific location is accessed, in a lazy manner.
 
-
-The mmap system call has been used in various database implementations as an alternative for implementing a buffer pool, 
+The mmap system call has been used in various database implementations as an alternative for implementing a buffer pool,
 although this created a different set of problems that could realistically only be fixed using a buffer pool.
 
 > [Are You Sure You Want to Use MMAP in Your Database Management System?](https://db.cs.cmu.edu/papers/2022/cidr2022-p13-crotty.pdf)
@@ -31,27 +27,24 @@ int munmap(void addr[.length], size_t length);
 
 The starting address for the new mapping is specified in addr.  The length argument specifies the length of the mapping (which must be greater than 0).
 
-If addr is NULL, then the kernel chooses the (page-aligned)address at which to create the mapping; this is the most portable method of creating a new mapping.  
-If addr is not NULL, then the kernel takes it as a hint about where to place the mapping; on Linux, 
-the kernel will pick a nearby page boundary (but always above or equal to the value specified by /proc/sys/vm/mmap_min_addr) and attempt to create the mapping there.  
+If addr is NULL, then the kernel chooses the (page-aligned)address at which to create the mapping; this is the most portable method of creating a new mapping.
+If addr is not NULL, then the kernel takes it as a hint about where to place the mapping; on Linux,
+the kernel will pick a nearby page boundary (but always above or equal to the value specified by /proc/sys/vm/mmap_min_addr) and attempt to create the mapping there.
 If another mapping already exists there, the kernel picks a new address that may or may not depend on the hint.
 The address of the new mapping is returned as the result of the call.
 
 The contents of a file mapping (as opposed to an anonymous mapping; see MAP_ANONYMOUS below),
-are initialized using length bytes starting at offset offset in the file (or other object) referred to by the file descriptor fd. 
+are initialized using length bytes starting at offset offset in the file (or other object) referred to by the file descriptor fd.
 offset must be a multiple of the page size as returned by sysconf(_SC_PAGE_SIZE).
 
 After the mmap() call has returned, the file descriptor, fd, can be closed immediately without invalidating the mapping.
 
-A file is mapped in multiples of the page size.  
+A file is mapped in multiples of the page size.
 For a file that is not a multiple of the page size, the remaining bytes in the partial page at the end of the mapping are zeroed when mapped, and modifications to that region are not written out to the file.
 The effect of changing the size of the underlying file of a mapping on the pages that correspond to added or removed regions of the file is unspecified.
 
-
-
-
-
 ### ksys_mmap_pgoff
+
 ```c
 // arch/x86/kernel/sys_x86_64.c
 SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
@@ -110,9 +103,8 @@ out_fput:
 }
 
 ```
+
 ksys_mmap_pgoff 函数主要是针对 mmap 大页映射的情况进行预处理
-
-
 
 ```c
 static inline bool is_file_hugepages(struct file *file)
@@ -128,10 +120,11 @@ bool is_file_shm_hugepages(struct file *file)
 	return file->f_op == &shm_file_operations_huge;
 }
 ```
+
 #### vm_mmap_pgoff
+
 在一般情况下，我们调用 mmap 进行内存映射的时候，内核只是会在进程的虚拟内存空间中为这次映射分配一段虚拟内存，然后建立好这段虚拟内存与相关文件之间的映射关系就结束了，内核并不会为映射分配物理内存
 物理内存的分配工作需要延后到这段虚拟内存被 CPU 访问的时候，通过缺页中断来进入内核，分配物理内存，并在页表中建立好映射关系
-
 
 但是当我们调用 mmap 的时候，如果在 flags 参数中设置了 MAP_POPULATE 或者 MAP_LOCKED 标志位之后，物理内存的分配动作会提前发生。
 
@@ -165,6 +158,7 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 ```
 
 populate and/or mlock pages within a range of address space
+
 ```c
 int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
 {
@@ -219,8 +213,8 @@ int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
 	return ret;	/* 0 or negative error code */
 }
 ```
-populate a range of pages in the vma.
 
+populate a range of pages in the vma.
 
 ```c
 long populate_vma_page_range(struct vm_area_struct *vma,
@@ -270,7 +264,6 @@ long populate_vma_page_range(struct vm_area_struct *vma,
 	return ret;
 }
 ```
-
 
 ```c
 static long __get_user_pages(struct mm_struct *mm,
@@ -412,6 +405,7 @@ out:
 do_mmap 是 mmap 系统调用的核心函数，内核会在这里完成内存映射的整个流程
 
 > `sysctl_max_map_count` throw ENOMEM 需要调用程序做处理
+>
 > - [在Java里会抛出OOM: Map failed异常](/docs/CS/Java/JDK/IO/NIO.md?id=MappedByteBuffer)
 
 ```c
@@ -620,7 +614,6 @@ int mlock_future_check(struct mm_struct *mm, unsigned long flags,
 #### mmap_region
 
 1. vm_area_alloc
-
 
 ```c
 unsigned long mmap_region(struct file *file, unsigned long addr,
@@ -852,8 +845,6 @@ unacct_error:
 }
 ```
 
-
-
 ```c
 int generic_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
@@ -868,8 +859,8 @@ int generic_file_mmap(struct file *file, struct vm_area_struct *vma)
 
 ```
 
-
 mmap 的共享匿名映射其实本质上还是共享文件映射，只不过这个文件比较特殊，创建于 dev/zero 目录下的 tmpfs 文件系统中
+
 ```c
 int shmem_zero_setup(struct vm_area_struct *vma)
 {
@@ -912,13 +903,7 @@ static const struct vm_operations_struct shmem_vm_ops = {
 
 ## munmap
 
-
-
-
 ## Tuning
-
-
-
 
 Don't use it in DBMS
 
@@ -936,13 +921,11 @@ Memory Cache pages are transparent and every read causes an I/O stall.
 
 - OS hints
 
-
 Error Handling
 
 Validating pages is cumbersome and any access can cause a SIGBUS.
 
 Performance Issues
-
 
 ## Links
 
