@@ -4,6 +4,11 @@
 
 ## start
 
+
+### EurekaServerBootstrap
+
+这里是Spring Cloud封装的
+
 @EnableEurekaServer开启 使用自动配置EurekaServerAutoConfiguration
 ```java
 @Configuration(
@@ -36,12 +41,10 @@ public class EurekaServerInitializerConfiguration implements ServletContextAware
         (new Thread(() -> {
             try {
                 this.eurekaServerBootstrap.contextInitialized(this.servletContext);
-                log.info("Started Eureka Server");
                 this.publish(new EurekaRegistryAvailableEvent(this.getEurekaServerConfig()));
                 this.running = true;
                 this.publish(new EurekaServerStartedEvent(this.getEurekaServerConfig()));
             } catch (Exception var2) {
-                log.error("Could not initialize Eureka servlet context", var2);
             }
 
         })).start();
@@ -51,7 +54,8 @@ public class EurekaServerInitializerConfiguration implements ServletContextAware
 }
 ```
 
-#### contextInitialized
+#### initEurekaServerContext
+
 从其它peer同步注册信息
 
 开启定时evict任务
@@ -82,7 +86,6 @@ public class EurekaServerBootstrap {
 
       EurekaServerContextHolder.initialize(this.serverContext);
 
-      log.info("Initialized server context");
 
       // Copy registry from neighboring eureka node
       int registryCount = this.registry.syncUp();
@@ -94,9 +97,48 @@ public class EurekaServerBootstrap {
 }
 ```
 
-#### initialize
+### EurekaBootStrap
 
 
+Initializes Eureka, including syncing up with other Eureka peers and publishing the registry.
+```java
+public abstract class EurekaBootStrap implements ServletContextListener {
+    @Override
+    public void contextInitialized(ServletContextEvent event) {
+        try {
+            initEurekaEnvironment();
+            initEurekaServerContext();
+
+            ServletContext sc = event.getServletContext();
+            sc.setAttribute(EurekaServerContext.class.getName(), serverContext);
+        } catch (Throwable e) {
+            logger.error("Cannot bootstrap eureka server :", e);
+            throw new RuntimeException("Cannot bootstrap eureka server :", e);
+        }
+    }
+}
+```
+
+Double check 的单例配置
+
+```java
+public abstract class EurekaBootStrap implements ServletContextListener {
+    protected void initEurekaEnvironment() throws Exception {
+        String dataCenter = ConfigurationManager.getConfigInstance().getString(EUREKA_DATACENTER);
+        if (dataCenter == null) {
+            ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, DEFAULT);
+        } else {
+            ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, dataCenter);
+        }
+        String environment = ConfigurationManager.getConfigInstance().getString(EUREKA_ENVIRONMENT);
+        if (environment == null) {
+            ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_ENVIRONMENT, TEST);
+        }
+    }
+}
+```
+
+#### initEurekaServerContext
 
 The class that kick starts the eureka server.
 The eureka server is configured by using the configuration EurekaServerConfig specified by eureka.server.props in the classpath.
@@ -115,7 +157,7 @@ public abstract class EurekaBootStrap implements ServletContextListener {
         ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
 
         ApplicationInfoManager applicationInfoManager = null;
-
+        // init DiscoveryClient
         if (eurekaClient == null) {
             EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
                     ? new CloudInstanceConfig()
@@ -139,7 +181,8 @@ public abstract class EurekaBootStrap implements ServletContextListener {
                     eurekaServerConfig,
                     eurekaClient.getEurekaClientConfig(),
                     serverCodecs,
-                    eurekaClient, eurekaServerHttpClientFactory
+                    eurekaClient,
+                    eurekaServerHttpClientFactory
             );
             awsBinder = new AwsBinderDelegate(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), registry, applicationInfoManager);
             awsBinder.start();
@@ -148,7 +191,8 @@ public abstract class EurekaBootStrap implements ServletContextListener {
                     eurekaServerConfig,
                     eurekaClient.getEurekaClientConfig(),
                     serverCodecs,
-                    eurekaClient, eurekaServerHttpClientFactory
+                    eurekaClient,
+                    eurekaServerHttpClientFactory
             );
         }
 
@@ -171,7 +215,6 @@ public abstract class EurekaBootStrap implements ServletContextListener {
         EurekaServerContextHolder.initialize(serverContext);
 
         serverContext.initialize();
-        logger.info("Initialized server context");
 
         // Copy registry from neighboring eureka node
         int registryCount = registry.syncUp();
@@ -182,6 +225,138 @@ public abstract class EurekaBootStrap implements ServletContextListener {
     }
 }
 ```
+
+init DiscoveryClient
+
+
+
+create PeerAwareInstanceRegistry
+
+
+init PeerEurekaNodes
+
+
+#### initialize
+init EurekaServerContext
+
+```java
+@Singleton
+public class DefaultEurekaServerContext implements EurekaServerContext {
+    @PostConstruct
+    @Override
+    public void initialize() {
+        peerEurekaNodes.start();
+        try {
+            registry.init(peerEurekaNodes);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+```
+
+
+```java
+public abstract class PeerEurekaNodes {
+    public void start() {
+        taskExecutor = Executors.newSingleThreadScheduledExecutor(
+                new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread thread = new Thread(r, "Eureka-PeerNodesUpdater");
+                        thread.setDaemon(true);
+                        return thread;
+                    }
+                }
+        );
+        try {
+            updatePeerEurekaNodes(resolvePeerUrls());
+            Runnable peersUpdateTask = new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        updatePeerEurekaNodes(resolvePeerUrls());
+                    } catch (Throwable e) {
+                        logger.error("Cannot update the replica Nodes", e);
+                    }
+
+                }
+            };
+            taskExecutor.scheduleWithFixedDelay(
+                    peersUpdateTask,
+                    serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
+                    serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
+                    TimeUnit.MILLISECONDS
+            );
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+        for (PeerEurekaNode node : peerEurekaNodes) {
+            logger.info("Replica node URL:  {}", node.getServiceUrl());
+        }
+    }
+}
+```
+
+
+
+```java
+@Singleton
+public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
+    @Override
+    public void init(PeerEurekaNodes peerEurekaNodes) throws Exception {
+        this.numberOfReplicationsLastMin.start();
+        this.peerEurekaNodes = peerEurekaNodes;
+        initializedResponseCache();
+        scheduleRenewalThresholdUpdateTask();
+        initRemoteRegionRegistry();
+    }
+}
+```
+
+
+#### sync registry
+
+Copy registry from neighboring eureka node
+
+```java
+@Singleton
+public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
+
+    @Override
+    public int syncUp() {
+        // Copy entire entry from neighboring DS node
+        int count = 0;
+
+        for (int i = 0; ((i < serverConfig.getRegistrySyncRetries()) && (count == 0)); i++) {
+            if (i > 0) {
+                try {
+                    Thread.sleep(serverConfig.getRegistrySyncRetryWaitMs());
+                } catch (InterruptedException e) {
+                    logger.warn("Interrupted during registry transfer..");
+                    break;
+                }
+            }
+            Applications apps = eurekaClient.getApplications();
+            for (Application app : apps.getRegisteredApplications()) {
+                for (InstanceInfo instance : app.getInstances()) {
+                    try {
+                        if (isRegisterable(instance)) {
+                            register(instance, instance.getLeaseInfo().getDurationInSecs(), true);
+                            count++;
+                        }
+                    } catch (Throwable t) {
+                        logger.error("During DS init copy", t);
+                    }
+                }
+            }
+        }
+        return count;
+    }
+}
+```
+
+开启心跳统计的定时任务
 
 ```java
 @Singleton
@@ -238,6 +413,7 @@ class EvictionTask extends TimerTask {
 }
 ```
 evict 从registry缓存中获取注册实例信息 判断过期加入expiredLeases中 最后随机(Knuth shuffle algorithm)从过期列表淘汰
+
 ```java
 public void evict(long additionalLeaseMs) {
    // We collect first all expired items, to evict them in random order. For large eviction sets,
@@ -282,6 +458,7 @@ public void evict(long additionalLeaseMs) {
 }
 ```
 
+#### register monitor
 
 
 ## Links

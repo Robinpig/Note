@@ -52,6 +52,410 @@ public class EurekaClientAutoConfiguration {
 }
 ```
 
+
+```java
+
+    @Inject
+    DiscoveryClient(ApplicationInfoManager applicationInfoManager, EurekaClientConfig config, TransportClientFactories transportClientFactories, AbstractDiscoveryClientOptionalArgs args,
+                    Provider<BackupRegistry> backupRegistryProvider, EndpointRandomizer endpointRandomizer) {
+        if (args != null) {
+            this.healthCheckHandlerProvider = args.healthCheckHandlerProvider;
+            this.healthCheckCallbackProvider = args.healthCheckCallbackProvider;
+            this.eventListeners.addAll(args.getEventListeners());
+            this.preRegistrationHandler = args.preRegistrationHandler;
+        } else {
+            this.healthCheckCallbackProvider = null;
+            this.healthCheckHandlerProvider = null;
+            this.preRegistrationHandler = null;
+        }
+        this.transportClientFactories = transportClientFactories;
+        this.applicationInfoManager = applicationInfoManager;
+        InstanceInfo myInfo = applicationInfoManager.getInfo();
+
+        clientConfig = config;
+        staticClientConfig = clientConfig;
+        transportConfig = config.getTransportConfig();
+        instanceInfo = myInfo;
+        if (myInfo != null) {
+            appPathIdentifier = instanceInfo.getAppName() + "/" + instanceInfo.getId();
+        } else {
+            logger.warn("Setting instanceInfo to a passed in null value");
+        }
+
+        this.backupRegistryProvider = backupRegistryProvider;
+        this.endpointRandomizer = endpointRandomizer;
+        this.urlRandomizer = new EndpointUtils.InstanceInfoBasedUrlRandomizer(instanceInfo);
+        localRegionApps.set(new Applications());
+
+        fetchRegistryGeneration = new AtomicLong(0);
+
+        remoteRegionsToFetch = new AtomicReference<String>(clientConfig.fetchRegistryForRemoteRegions());
+        remoteRegionsRef = new AtomicReference<>(remoteRegionsToFetch.get() == null ? null : remoteRegionsToFetch.get().split(","));
+
+        if (config.shouldFetchRegistry()) {
+            this.registryStalenessMonitor = new ThresholdLevelsMetric(this, METRIC_REGISTRY_PREFIX + "lastUpdateSec_", new long[]{15L, 30L, 60L, 120L, 240L, 480L});
+        } else {
+            this.registryStalenessMonitor = ThresholdLevelsMetric.NO_OP_METRIC;
+        }
+        monitoredValue(METRIC_REGISTRY_PREFIX + "lastSuccessfulRegistryFetchTimePeriod", this,
+            DiscoveryClient::getLastSuccessfulRegistryFetchTimePeriodInternal);
+
+        if (config.shouldRegisterWithEureka()) {
+            this.heartbeatStalenessMonitor = new ThresholdLevelsMetric(this, METRIC_REGISTRATION_PREFIX + "lastHeartbeatSec_", new long[]{15L, 30L, 60L, 120L, 240L, 480L});
+        } else {
+            this.heartbeatStalenessMonitor = ThresholdLevelsMetric.NO_OP_METRIC;
+        }
+        monitoredValue(METRIC_REGISTRATION_PREFIX + "lastSuccessfulHeartbeatTimePeriod", this,
+            DiscoveryClient::getLastSuccessfulHeartbeatTimePeriodInternal);
+
+        logger.info("Initializing Eureka in region {}", clientConfig.getRegion());
+
+        if (!config.shouldRegisterWithEureka() && !config.shouldFetchRegistry()) {
+            logger.info("Client configured to neither register nor query for data.");
+            scheduler = null;
+            heartbeatExecutor = null;
+            cacheRefreshExecutor = null;
+            eurekaTransport = null;
+            instanceRegionChecker = new InstanceRegionChecker(new PropertyBasedAzToRegionMapper(config), clientConfig.getRegion());
+
+            // This is a bit of hack to allow for existing code using DiscoveryManager.getInstance()
+            // to work with DI'd DiscoveryClient
+            DiscoveryManager.getInstance().setDiscoveryClient(this);
+            DiscoveryManager.getInstance().setEurekaClientConfig(config);
+
+            initTimestampMs = System.currentTimeMillis();
+            initRegistrySize = this.getApplications().size();
+            registrySize.set(initRegistrySize);
+            logger.info("Discovery Client initialized at timestamp {} with initial instances count: {}",
+                    initTimestampMs, initRegistrySize);
+
+            return;  // no need to setup up an network tasks and we are done
+        }
+
+        try {
+            // default size of 2 - 1 each for heartbeat and cacheRefresh
+            scheduler = Executors.newScheduledThreadPool(2,
+                new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread thread = new Thread(r, "DiscoveryClient-%d");
+                        thread.setDaemon(true);
+                        return thread;
+                    }
+                });
+
+            heartbeatExecutor = new ThreadPoolExecutor(
+                    1, clientConfig.getHeartbeatExecutorThreadPoolSize(), 0, TimeUnit.SECONDS,
+                    new SynchronousQueue<Runnable>(),
+                new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread thread = new Thread(r, "DiscoveryClient-HeartbeatExecutor-%d");
+                        thread.setDaemon(true);
+                        return thread;
+                    }
+                }
+            );  // use direct handoff
+
+            cacheRefreshExecutor = new ThreadPoolExecutor(
+                    1, clientConfig.getCacheRefreshExecutorThreadPoolSize(), 0, TimeUnit.SECONDS,
+                    new SynchronousQueue<Runnable>(),
+                new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread thread = new Thread(r, "DiscoveryClient-CacheRefreshExecutor-%d");
+                        thread.setDaemon(true);
+                        return thread;
+                    }
+                }
+            );  // use direct handoff
+
+            eurekaTransport = new EurekaTransport();
+            scheduleServerEndpointTask(eurekaTransport, args);
+
+            AzToRegionMapper azToRegionMapper;
+            if (clientConfig.shouldUseDnsForFetchingServiceUrls()) {
+                azToRegionMapper = new DNSBasedAzToRegionMapper(clientConfig);
+            } else {
+                azToRegionMapper = new PropertyBasedAzToRegionMapper(clientConfig);
+            }
+            if (null != remoteRegionsToFetch.get()) {
+                azToRegionMapper.setRegionsToFetch(remoteRegionsToFetch.get().split(","));
+            }
+            instanceRegionChecker = new InstanceRegionChecker(azToRegionMapper, clientConfig.getRegion());
+        } catch (Throwable e) {
+            throw new RuntimeException("Failed to initialize DiscoveryClient!", e);
+        }
+
+        if (clientConfig.shouldFetchRegistry()) {
+            try {
+                boolean primaryFetchRegistryResult = fetchRegistry(false);
+                if (!primaryFetchRegistryResult) {
+                    logger.info("Initial registry fetch from primary servers failed");
+                }
+                boolean backupFetchRegistryResult = true;
+                if (!primaryFetchRegistryResult && !fetchRegistryFromBackup()) {
+                    backupFetchRegistryResult = false;
+                    logger.info("Initial registry fetch from backup servers failed");
+                }
+                if (!primaryFetchRegistryResult && !backupFetchRegistryResult && clientConfig.shouldEnforceFetchRegistryAtInit()) {
+                    throw new IllegalStateException("Fetch registry error at startup. Initial fetch failed.");
+                }
+            } catch (Throwable th) {
+                logger.error("Fetch registry error at startup: {}", th.getMessage());
+                throw new IllegalStateException(th);
+            }
+        }
+
+        // call and execute the pre registration handler before all background tasks (inc registration) is started
+        if (this.preRegistrationHandler != null) {
+            this.preRegistrationHandler.beforeRegistration();
+        }
+
+        if (clientConfig.shouldRegisterWithEureka() && clientConfig.shouldEnforceRegistrationAtInit()) {
+            try {
+                if (!register() ) {
+                    throw new IllegalStateException("Registration error at startup. Invalid server response.");
+                }
+            } catch (Throwable th) {
+                logger.error("Registration error at startup: {}", th.getMessage());
+                throw new IllegalStateException(th);
+            }
+        }
+
+        // finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
+        initScheduledTasks();
+
+        // This is a bit of hack to allow for existing code using DiscoveryManager.getInstance()
+        // to work with DI'd DiscoveryClient
+        DiscoveryManager.getInstance().setDiscoveryClient(this);
+        DiscoveryManager.getInstance().setEurekaClientConfig(config);
+
+        initTimestampMs = System.currentTimeMillis();
+        initRegistrySize = this.getApplications().size();
+        registrySize.set(initRegistrySize);
+        logger.info("Discovery Client initialized at timestamp {} with initial instances count: {}",
+                initTimestampMs, initRegistrySize);
+    }
+
+```
+
+
+fetchRegistry
+
+```java
+
+    private boolean fetchRegistry(boolean forceFullRegistryFetch) {
+        long monotonicTime = SpectatorUtil.time(FETCH_REGISTRY_TIMER);
+
+        try {
+            // If the delta is disabled or if it is the first time, get all
+            // applications
+            Applications applications = getApplications();
+
+            if (clientConfig.shouldDisableDelta()
+                    || (clientConfig.getRegistryRefreshSingleVipAddress() != null && !clientConfig.getRegistryRefreshSingleVipAddress().isEmpty())
+                    || forceFullRegistryFetch
+                    || (applications == null)
+                    || (applications.getRegisteredApplications().size() == 0)
+                    || (applications.getVersion() == -1)) //Client application does not have latest library supporting delta
+            {
+                logger.info("Disable delta property : {}", clientConfig.shouldDisableDelta());
+                logger.info("Single vip registry refresh property : {}", clientConfig.getRegistryRefreshSingleVipAddress());
+                logger.info("Force full registry fetch : {}", forceFullRegistryFetch);
+                logger.info("Application is null : {}", (applications == null));
+                logger.info("Registered Applications size is zero : {}",
+                        (applications.getRegisteredApplications().size() == 0));
+                logger.info("Application version is -1: {}", (applications.getVersion() == -1));
+                getAndStoreFullRegistry();
+            } else {
+                getAndUpdateDelta(applications);
+            }
+            applications.setAppsHashCode(applications.getReconcileHashCode());
+            logTotalInstances();
+        } catch (Throwable e) {
+            logger.info(PREFIX + "{} - was unable to refresh its cache! This periodic background refresh will be retried in {} seconds. status = {} stacktrace = {}",
+                    appPathIdentifier, clientConfig.getRegistryFetchIntervalSeconds(), e.getMessage(), ExceptionUtils.getStackTrace(e));
+            return false;
+        } finally {
+            SpectatorUtil.record(FETCH_REGISTRY_TIMER, monotonicTime);
+        }
+
+        // Notify about cache refresh before updating the instance remote status
+        onCacheRefreshed();
+
+        // Update remote status based on refreshed data held in the cache
+        updateInstanceRemoteStatus();
+
+        // registry was fetched successfully, so return true
+        return true;
+    }
+
+```
+
+getAndStoreFullRegistry
+
+```java
+
+    private void getAndStoreFullRegistry() throws Throwable {
+        long currentUpdateGeneration = fetchRegistryGeneration.get();
+
+        logger.info("Getting all instance registry info from the eureka server");
+
+        Applications apps = null;
+        EurekaHttpResponse<Applications> httpResponse = clientConfig.getRegistryRefreshSingleVipAddress() == null
+                ? eurekaTransport.queryClient.getApplications(remoteRegionsRef.get())
+                : eurekaTransport.queryClient.getVip(clientConfig.getRegistryRefreshSingleVipAddress(), remoteRegionsRef.get());
+        if (httpResponse.getStatusCode() == Status.OK.getStatusCode()) {
+            apps = httpResponse.getEntity();
+        }
+        logger.info("The response status is {}", httpResponse.getStatusCode());
+
+        if (apps == null) {
+            logger.error("The application is null for some reason. Not storing this information");
+        } else if (fetchRegistryGeneration.compareAndSet(currentUpdateGeneration, currentUpdateGeneration + 1)) {
+            localRegionApps.set(this.filterAndShuffle(apps));
+            logger.debug("Got full registry with apps hashcode {}", apps.getAppsHashCode());
+        } else {
+            logger.warn("Not updating applications as another thread is updating it already");
+        }
+    }
+
+```
+shuffleAndFilterInstances
+
+```java
+    private void shuffleAndFilterInstances(Map<String, VipIndexSupport> srcMap, boolean filterUpInstances) {
+
+        Random shuffleRandom = new Random();
+        for (Map.Entry<String, VipIndexSupport> entries : srcMap.entrySet()) {
+            VipIndexSupport vipIndexSupport = entries.getValue();
+            AbstractQueue<InstanceInfo> vipInstances = vipIndexSupport.instances;
+            final List<InstanceInfo> filteredInstances;
+            if (filterUpInstances) {
+                filteredInstances = vipInstances.stream().filter(ii -> ii.getStatus() == InstanceStatus.UP)
+                        .collect(Collectors.toCollection(() -> new ArrayList<>(vipInstances.size())));
+            } else {
+                filteredInstances = new ArrayList<InstanceInfo>(vipInstances);
+            }
+            Collections.shuffle(filteredInstances, shuffleRandom);
+            vipIndexSupport.vipList.set(filteredInstances);
+            vipIndexSupport.roundRobinIndex.set(0);
+        }
+    }
+```
+
+
+
+Gets the full registry information from the eureka server and stores it locally. 
+When applying the full registry, the following flow is observed: 
+if (update generation have not advanced (due to another thread)) atomically set the registry to the new registry
+
+
+```java
+    private void getAndUpdateDelta(Applications applications) throws Throwable {
+        long currentUpdateGeneration = fetchRegistryGeneration.get();
+
+        Applications delta = null;
+        EurekaHttpResponse<Applications> httpResponse = eurekaTransport.queryClient.getDelta(remoteRegionsRef.get());
+        if (httpResponse.getStatusCode() == Status.OK.getStatusCode()) {
+            delta = httpResponse.getEntity();
+        }
+
+        if (delta == null) {
+            logger.warn("The server does not allow the delta revision to be applied because it is not safe. "
+                    + "Hence got the full registry.");
+            getAndStoreFullRegistry();
+        } else if (fetchRegistryGeneration.compareAndSet(currentUpdateGeneration, currentUpdateGeneration + 1)) {
+            logger.debug("Got delta update with apps hashcode {}", delta.getAppsHashCode());
+            String reconcileHashCode = "";
+            if (fetchRegistryUpdateLock.tryLock()) {
+                try {
+                    updateDelta(delta);
+                    reconcileHashCode = getReconcileHashCode(applications);
+                } finally {
+                    fetchRegistryUpdateLock.unlock();
+                }
+            } else {
+                logger.warn("Cannot acquire update lock, aborting getAndUpdateDelta");
+            }
+            // There is a diff in number of instances for some reason
+            if (!reconcileHashCode.equals(delta.getAppsHashCode()) || clientConfig.shouldLogDeltaDiff()) {
+                reconcileAndLogDifference(delta, reconcileHashCode);  // this makes a remoteCall
+            }
+        } else {
+            logger.warn("Not updating application delta as another thread is updating it already");
+            logger.debug("Ignoring delta update with apps hashcode {}, as another thread is updating it already", delta.getAppsHashCode());
+        }
+    }
+```
+
+
+
+updateDelta
+
+```java
+private void updateDelta(Applications delta) {
+        int deltaCount = 0;
+        for (Application app : delta.getRegisteredApplications()) {
+            for (InstanceInfo instance : app.getInstances()) {
+                Applications applications = getApplications();
+                String instanceRegion = instanceRegionChecker.getInstanceRegion(instance);
+                if (!instanceRegionChecker.isLocalRegion(instanceRegion)) {
+                    Applications remoteApps = remoteRegionVsApps.get(instanceRegion);
+                    if (null == remoteApps) {
+                        remoteApps = new Applications();
+                        remoteRegionVsApps.put(instanceRegion, remoteApps);
+                    }
+                    applications = remoteApps;
+                }
+
+                ++deltaCount;
+                if (ActionType.ADDED.equals(instance.getActionType())) {
+                    Application existingApp = applications.getRegisteredApplications(instance.getAppName());
+                    if (existingApp == null) {
+                        applications.addApplication(app);
+                    }
+                    logger.debug("Added instance {} to the existing apps in region {}", instance.getId(), instanceRegion);
+                    applications.getRegisteredApplications(instance.getAppName()).addInstance(instance);
+                } else if (ActionType.MODIFIED.equals(instance.getActionType())) {
+                    Application existingApp = applications.getRegisteredApplications(instance.getAppName());
+                    if (existingApp == null) {
+                        applications.addApplication(app);
+                    }
+                    logger.debug("Modified instance {} to the existing apps ", instance.getId());
+
+                    applications.getRegisteredApplications(instance.getAppName()).addInstance(instance);
+
+                } else if (ActionType.DELETED.equals(instance.getActionType())) {
+                    Application existingApp = applications.getRegisteredApplications(instance.getAppName());
+                    if (existingApp != null) {
+                        logger.debug("Deleted instance {} to the existing apps ", instance.getId());
+                        existingApp.removeInstance(instance);
+                        /*
+                         * We find all instance list from application(The status of instance status is not only the status is UP but also other status)
+                         * if instance list is empty, we remove the application.
+                         */
+                        if (existingApp.size() == 0) {
+                            applications.removeApplication(existingApp);
+                        }
+                    }
+                }
+            }
+        }
+        logger.debug("The total number of instances fetched by the delta processor : {}", deltaCount);
+
+        getApplications().setVersion(delta.getVersion());
+        getApplications().shuffleInstances(clientConfig.shouldFilterOnlyUpInstances());
+
+        for (Applications applications : remoteRegionVsApps.values()) {
+            applications.setVersion(delta.getVersion());
+            applications.shuffleInstances(clientConfig.shouldFilterOnlyUpInstances());
+        }
+    }
+```
+
+
 ### client::start
 
 SmartLifeCycle in Spring refresh
