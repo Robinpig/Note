@@ -7,6 +7,20 @@ slab分配器分配内存以字节为单位，基于伙伴分配器的大内存�
 
 SLAB分配器的最后一项任务是提高CPU硬件缓存的利用率。 如果将对象包装到SLAB中后仍有剩余空间，则将剩余空间用于为SLAB着色。 SLAB着色是一种尝试使不同SLAB中的对象使用CPU硬件缓存中不同行的方案。 通过将对象放置在SLAB中的不同起始偏移处，对象可能会在CPU缓存中使用不同的行，从而有助于确保来自同一SLAB缓存的对象不太可能相互刷新。 通过这种方案，原本被浪费掉的空间可以实现一项新功能
 
+slab 对象池的三种实现：slab，slub，slob
+
+slab 的实现，最早是由 Sun 公司的 Jeff Bonwick 大神在 Solaris 2.4  系统中设计并实现的，由于 Jeff Bonwick 大神公开了 slab 的实现方法，因此被 Linux 所借鉴并于 1996 年在 Linux 2.0 版本中引入了 slab，用于 Linux 内核早期的小内存分配场景
+
+由于 slab 的实现非常复杂，slab 中拥有多种存储对象的队列，队列管理开销比较大，slab 元数据比较臃肿，对 NUMA 架构的支持臃肿繁杂（slab 引入时内核还没支持 NUMA），这样导致 slab 内部为了维护这些自身元数据管理结构就得花费大量的内存空间，这在配置有超大容量内存的服务器上，内存的浪费是非常可观的
+
+slub 简化了 slab 一些复杂的设计，同时保留了 slab 的基本思想，摒弃了 slab 众多管理队列的概念，并针对多处理器，NUMA 架构进行优化，放弃了效果不太明显的 slab 着色机制。slub 与 slab 相比，提高了性能，吞吐量，并降低了内存的浪费。成为现在内核中常用的 slab 实现
+
+
+slob 的实现是在内核 2.6.16 版本（2006 年发布）引入的，它是专门为嵌入式小型机器小内存的场景设计的，所以实现上很精简，能在小型机器上提供很不错的性能
+
+slab 对象池在内存管理系统中的架构层次是基于伙伴系统之上构建的，slab 对象池会一次性向伙伴系统申请一个或者多个完整的物理内存页，在这些完整的内存页内在逐步划分出一小块一小块的内存块出来，而这些小内存块的尺寸就是 slab 对象池所管理的内核核心对象占用的内存大小
+
+
 
 ### kmem_cache
 ```c
@@ -516,6 +530,313 @@ int __kmem_cache_shrink(struct kmem_cache *cachep)
 			!list_empty(&n->slabs_partial);
 	}
 	return (ret ? 1 : 0);
+}
+```
+
+## free
+
+在开始释放内存块 x 之前，内核需要首先通过 cache_from_obj 函数确认内存块 x 是否真正属于我们指定的 slab cache
+
+
+virt_to_cache 函数首先会通过释放对象的虚拟内存地址找到其所在的物理内存页 page，然后通过 struct page 结构中的 slab_cache 指针找到 page 所属的 slab cache。
+
+
+```c
+// slub.c
+void kmem_cache_free(struct kmem_cache *s, void *x)
+{
+    s = cache_from_obj(s, x);
+    if (!s)
+        return;
+    slab_free(s, virt_to_head_page(x), x, NULL, 1, _RET_IP_);
+    trace_kmem_cache_free(_RET_IP_, x, s->name);
+}
+EXPORT_SYMBOL(kmem_cache_free);
+```
+
+
+```c
+static __always_inline void slab_free(struct kmem_cache *s, struct page *page,
+                      void *head, void *tail, int cnt,
+                      unsigned long addr)
+{
+    /*
+     * With KASAN enabled slab_free_freelist_hook modifies the freelist
+     * to remove objects, whose reuse must be delayed.
+     */
+    if (slab_free_freelist_hook(s, &head, &tail))
+        do_slab_free(s, page, head, tail, cnt, addr);
+}
+```
+
+
+```c
+/*
+ * Fastpath with forced inlining to produce a kfree and kmem_cache_free that
+ * can perform fastpath freeing without additional function calls.
+ *
+ * The fastpath is only possible if we are freeing to the current cpu slab
+ * of this processor. This typically the case if we have just allocated
+ * the item before.
+ *
+ * If fastpath is not possible then fall back to __slab_free where we deal
+ * with all sorts of special processing.
+ *
+ * Bulk free of a freelist with several objects (all pointing to the
+ * same page) possible by specifying head and tail ptr, plus objects
+ * count (cnt). Bulk free indicated by tail pointer being set.
+ */
+static __always_inline void do_slab_free(struct kmem_cache *s,
+                struct page *page, void *head, void *tail,
+                int cnt, unsigned long addr)
+{
+    void *tail_obj = tail ? : head;
+    struct kmem_cache_cpu *c;
+    unsigned long tid;
+
+    memcg_slab_free_hook(s, &head, 1);
+redo:
+    /*
+     * Determine the currently cpus per cpu slab.
+     * The cpu may change afterward. However that does not matter since
+     * data is retrieved via this pointer. If we are on the same cpu
+     * during the cmpxchg then the free will succeed.
+     */
+    do {
+        tid = this_cpu_read(s->cpu_slab->tid);
+        c = raw_cpu_ptr(s->cpu_slab);
+    } while (IS_ENABLED(CONFIG_PREEMPTION) &&
+         unlikely(tid != READ_ONCE(c->tid)));
+
+    /* Same with comment on barrier() in slab_alloc_node() */
+    barrier();
+
+    if (likely(page == c->page)) {
+        void **freelist = READ_ONCE(c->freelist);
+
+        set_freepointer(s, tail_obj, freelist);
+
+        if (unlikely(!this_cpu_cmpxchg_double(
+                s->cpu_slab->freelist, s->cpu_slab->tid,
+                freelist, tid,
+                head, next_tid(tid)))) {
+
+            note_cmpxchg_failure("slab_free", s, tid);
+            goto redo;
+        }
+        stat(s, FREE_FASTPATH);
+    } else
+        __slab_free(s, page, head, tail_obj, cnt, addr);
+
+}
+```
+
+
+
+```c
+/*
+ * Slow path handling. This may still be called frequently since objects
+ * have a longer lifetime than the cpu slabs in most processing loads.
+ *
+ * So we still attempt to reduce cache line usage. Just take the slab
+ * lock and free the item. If there is no additional partial page
+ * handling required then we can return immediately.
+ */
+static void __slab_free(struct kmem_cache *s, struct page *page,
+            void *head, void *tail, int cnt,
+            unsigned long addr)
+
+{
+    void *prior;
+    int was_frozen;
+    struct page new;
+    unsigned long counters;
+    struct kmem_cache_node *n = NULL;
+    unsigned long flags;
+
+    stat(s, FREE_SLOWPATH);
+
+    if (kfence_free(head))
+        return;
+
+    if (kmem_cache_debug(s) &&
+        !free_debug_processing(s, page, head, tail, cnt, addr))
+        return;
+
+    do {
+        if (unlikely(n)) {
+            spin_unlock_irqrestore(&n->list_lock, flags);
+            n = NULL;
+        }
+        prior = page->freelist;
+        counters = page->counters;
+        set_freepointer(s, tail, prior);
+        new.counters = counters;
+        was_frozen = new.frozen;
+        new.inuse -= cnt;
+        if ((!new.inuse || !prior) && !was_frozen) {
+
+            if (kmem_cache_has_cpu_partial(s) && !prior) {
+
+                /*
+                 * Slab was on no list before and will be
+                 * partially empty
+                 * We can defer the list move and instead
+                 * freeze it.
+                 */
+                new.frozen = 1;
+
+            } else { /* Needs to be taken off a list */
+
+                n = get_node(s, page_to_nid(page));
+                /*
+                 * Speculatively acquire the list_lock.
+                 * If the cmpxchg does not succeed then we may
+                 * drop the list_lock without any processing.
+                 *
+                 * Otherwise the list_lock will synchronize with
+                 * other processors updating the list of slabs.
+                 */
+                spin_lock_irqsave(&n->list_lock, flags);
+
+            }
+        }
+
+    } while (!cmpxchg_double_slab(s, page,
+        prior, counters,
+        head, new.counters,
+        "__slab_free"));
+
+    if (likely(!n)) {
+
+        if (likely(was_frozen)) {
+            /*
+             * The list lock was not taken therefore no list
+             * activity can be necessary.
+             */
+            stat(s, FREE_FROZEN);
+        } else if (new.frozen) {
+            /*
+             * If we just froze the page then put it onto the
+             * per cpu partial list.
+             */
+            put_cpu_partial(s, page, 1);
+            stat(s, CPU_PARTIAL_FREE);
+        }
+
+        return;
+    }
+
+    if (unlikely(!new.inuse && n->nr_partial >= s->min_partial))
+        goto slab_empty;
+
+    /*
+     * Objects left in the slab. If it was not on the partial list before
+     * then add it.
+     */
+    if (!kmem_cache_has_cpu_partial(s) && unlikely(!prior)) {
+        remove_full(s, n, page);
+        add_partial(n, page, DEACTIVATE_TO_TAIL);
+        stat(s, FREE_ADD_PARTIAL);
+    }
+    spin_unlock_irqrestore(&n->list_lock, flags);
+    return;
+
+slab_empty:
+    if (prior) {
+        /*
+         * Slab on the partial list.
+         */
+        remove_partial(n, page);
+        stat(s, FREE_REMOVE_PARTIAL);
+    } else {
+        /* Slab must be on the full list */
+        remove_full(s, n, page);
+    }
+
+    spin_unlock_irqrestore(&n->list_lock, flags);
+    stat(s, FREE_SLAB);
+    discard_slab(s, page);
+}
+```
+
+
+```c
+// slab.c
+void kmem_cache_free(struct kmem_cache *cachep, void *objp)
+{
+    unsigned long flags;
+    cachep = cache_from_obj(cachep, objp);
+    if (!cachep)
+        return;
+
+    local_irq_save(flags);
+    debug_check_no_locks_freed(objp, cachep->object_size);
+    if (!(cachep->flags & SLAB_DEBUG_OBJECTS))
+        debug_check_no_obj_freed(objp, cachep->object_size);
+    __cache_free(cachep, objp, _RET_IP_);
+    local_irq_restore(flags);
+
+    trace_kmem_cache_free(_RET_IP_, objp, cachep->name);
+}
+EXPORT_SYMBOL(kmem_cache_free);
+```
+
+```c
+/*
+ * Release an obj back to its cache. If the obj has a constructed state, it must
+ * be in this state _before_ it is released.  Called with disabled ints.
+ */
+static __always_inline void __cache_free(struct kmem_cache *cachep, void *objp,
+                     unsigned long caller)
+{
+    if (is_kfence_address(objp)) {
+        kmemleak_free_recursive(objp, cachep->flags);
+        __kfence_free(objp);
+        return;
+    }
+
+    if (unlikely(slab_want_init_on_free(cachep)))
+        memset(objp, 0, cachep->object_size);
+
+    /* Put the object into the quarantine, don't touch it for now. */
+    if (kasan_slab_free(cachep, objp))
+        return;
+
+    /* Use KCSAN to help debug racy use-after-free. */
+    if (!(cachep->flags & SLAB_TYPESAFE_BY_RCU))
+        __kcsan_check_access(objp, cachep->object_size,
+                     KCSAN_ACCESS_WRITE | KCSAN_ACCESS_ASSERT);
+
+    ___cache_free(cachep, objp, caller);
+}
+```
+
+
+最终调用到 alloc_pages
+```c
+// include/linux/gfp.h
+#define __get_free_page(gfp_mask) \
+		__get_free_pages((gfp_mask), 0)
+
+#define __get_dma_pages(gfp_mask, order) \
+		__get_free_pages((gfp_mask) | GFP_DMA, (order))
+
+// mm/page_alloc.c
+unsigned long get_zeroed_page(gfp_t gfp_mask)
+{
+    return __get_free_pages(gfp_mask | __GFP_ZERO, 0);
+}
+EXPORT_SYMBOL(get_zeroed_page);
+
+unsigned long __get_free_pages(gfp_t gfp_mask, unsigned int order)
+{
+	struct page *page;
+
+	page = alloc_pages(gfp_mask & ~__GFP_HIGHMEM, order);
+	if (!page)
+		return 0;
+	return (unsigned long) page_address(page);
 }
 ```
 

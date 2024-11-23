@@ -125,6 +125,8 @@ typedef struct pglist_data {
 > - 在具有大容量RAM的现代32位计算机中, CPU不能直接访问所有的物理地址, 因为线性地址空间太小, 内核不可能直接映射所有物理内存到线性地址空间, 我们会在后面典型架构(x86)上内存区域划分详细讲解x86_32上的内存区域划分
 > 因此Linux内核对不同区域的内存需要采用不同的管理方式和映射方式, 因此内核将物理地址或者成用zone_t表示的不同地址区域
 
+#### detect_memory
+
 探测内存布局
 
 ```c
@@ -139,7 +141,8 @@ void detect_memory(void)
 }
 ```
 
-可以清晰的看到上面分别调用了三个函数detect_memory_e820()、detect_memory_e801()和detect_memory_88()。较新的电脑调用detect_memory_e820()足矣探测内存布局，detect_memory_e801()和detect_memory_88()则是针对较老的电脑进行兼容而保留的
+可以清晰的看到上面分别调用了三个函数detect_memory_e820()、detect_memory_e801()和detect_memory_88()
+较新的电脑调用detect_memory_e820()足矣探测内存布局，detect_memory_e801()和detect_memory_88()则是针对较老的电脑进行兼容而保留的
 
 ```c
 static void detect_memory_e820(void)
@@ -736,6 +739,11 @@ cat /proc/buddyinfo
 ```
 
 
+## alloc
+
+
+alloc_pages
+
 
 ```c
 // include/linux/gfp.h
@@ -804,61 +812,66 @@ out:
         page = NULL;
     }
 
-    trace_mm_page_alloc(page, order, alloc_mask, ac.migratetype);
-
     return page;
 }
 EXPORT_SYMBOL(__alloc_pages_nodemask);
 ```
 
+#### prepare_alloc_pages
 
+```c
 
-## alloc
+static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
+		int preferred_nid, nodemask_t *nodemask,
+		struct alloc_context *ac, gfp_t *alloc_gfp,
+		unsigned int *alloc_flags)
+{
+	ac->highest_zoneidx = gfp_zone(gfp_mask);
+	ac->zonelist = node_zonelist(preferred_nid, gfp_mask);
+	ac->nodemask = nodemask;
+	ac->migratetype = gfp_migratetype(gfp_mask);
 
+	if (cpusets_enabled()) {
+		*alloc_gfp |= __GFP_HARDWALL;
+		/*
+		 * When we are in the interrupt context, it is irrelevant
+		 * to the current task context. It means that any node ok.
+		 */
+		if (in_task() && !ac->nodemask)
+			ac->nodemask = &cpuset_current_mems_allowed;
+		else
+			*alloc_flags |= ALLOC_CPUSET;
+	}
 
+	might_alloc(gfp_mask);
 
-__alloc_pages_slowpath
-- wake_all_kswapds
-- __alloc_pages_direct_compact
-- __gfp_pfmemalloc_flags
-- get_page_from_freelist
-- __alloc_pages_direct_reclaim - __perform_reclaim - try_to_free_pages - shrink_zones - shrink_node
-- prepare_scan_count
-- shrink_node_memcgs
-- shrink_lruvec
-- get_scan_count
-- shrink_list
-- shrink_inactive_list
-- lru_add_drain
-- isolate_lru_follos
-- shrink_follo_list
-- follo_check_references
-- add_to_swap
-- try_to_unmap
-- pageout
-- free_unref_page_list
-- move_follos_to_lru
-- free_unref_page_list
-- shrink_active_list
-- lru_add_drain
-- islate_lr_follos
-- follo_referenced
-- move_follos_to_lru
-- free_unref_page_list
-- shrink_slab
+	if (should_fail_alloc_page(gfp_mask, order))
+		return false;
 
+	*alloc_flags = gfp_to_alloc_flags_cma(gfp_mask, *alloc_flags);
 
-当进入_alloc_pages_slowpath时，往往意味着伙伴系统中可用的连续内存不足，可能有多种情况。
-第1种情况，空闲内存足够，但内存碎片过多，找不到连续的大段内存  此时需要进行compact _alloc_pages_direct_compact 			
-第2种情况，空闲内存不足， 需要释放一些已经被占用的内存，这就是内存回收，也就是reclaim
+	/* Dirty zone balancing only done in the fast path */
+	ac->spread_dirty_pages = (gfp_mask & __GFP_WRITE);
 
-内存释放之前需要保证现有内存内容不丢失 一种方法是对被换出的部分进行落盘 需要时再加载回来
+	/*
+	 * The preferred zone is used for statistics but crucially it is
+	 * also used as the starting point for the zonelist iterator. It
+	 * may get reset for allocations that ignore memory policies.
+	 */
+	ac->preferred_zoneref = first_zones_zonelist(ac->zonelist,
+					ac->highest_zoneidx, ac->nodemask);
+
+	return true;
+}
+```
 
 
 
 #### get_page_from_freelist
 
-内核通过 get_page_from_freelist 函数，挨个遍历检查各个 NUMA 节点中的物理内存区域是否有足够的空闲内存可以满足本次的内存分配要求，当找到符合内存分配标准的物理内存区域 zone 之后，接下来就会通过 rmqueue 函数进入到该物理内存区域 zone 对应的伙伴系统中分配物理内存
+内核通过 get_page_from_freelist 函数，挨个遍历检查各个 NUMA 节点中的物理内存区域是否有足够的空闲内存可以满足本次的内存分配要求，
+当找到符合内存分配标准的物理内存区域 zone 之后，接下来就会通过 rmqueue 函数进入到该物理内存区域 zone 对应的伙伴系统中分配物理内存
+
 
 ```c
 static struct page *
@@ -1261,12 +1274,52 @@ out:
 ```
 
 
+### alloc_pages_slowpath
+
+内存降到 WMARK_LOW 后进入slowpath
+
+__alloc_pages_slowpath
+  - wake_all_kswapds
+  - __alloc_pages_direct_compact
+  - __gfp_pfmemalloc_flags
+  - get_page_from_freelist
+  - __alloc_pages_direct_reclaim - __perform_reclaim - try_to_free_pages - shrink_zones - shrink_node
+    - prepare_scan_count
+    - shrink_node_memcgs
+      - shrink_lruvec
+        - get_scan_count
+        - shrink_list
+          - shrink_inactive_list
+          - lru_add_drain
+          - isolate_lru_follos
+          - shrink_follo_list
+          - follo_check_references
+          - add_to_swap
+          - try_to_unmap
+          - pageout
+          - free_unref_page_list
+          - move_follos_to_lru
+          - free_unref_page_list
+        - shrink_active_list
+          - lru_add_drain
+          - islate_lr_follos
+          - follo_referenced
+          - move_follos_to_lru
+          - free_unref_page_list
+      - shrink_slab
 
 
-## free
+当进入_alloc_pages_slowpath时，往往意味着伙伴系统中可用的连续内存不足，可能有多种情况。
+第1种情况，空闲内存足够，但内存碎片过多，找不到连续的大段内存  此时需要进行compact _alloc_pages_direct_compact 			
+第2种情况，空闲内存不足， 需要释放一些已经被占用的内存，这就是内存回收，也就是reclaim
+
+内存释放之前需要保证现有内存内容不丢失 一种方法是对被换出的部分进行落盘 需要时再加载回来
 
 
-某一次内存回收过程中扫描哪些node、 过程中可以进行哪些操作以及退出条件等控制了整个 扫描过程。这些由scan_control结构体定义，调用栈中 tty_to_free_pages函数为它赋值
+
+#### try_to_free_pages
+
+某一次内存回收过程中扫描哪些node、 过程中可以进行哪些操作以及退出条件等控制了整个 扫描过程。这些由scan_control结构体定义，调用栈中 try_to_free_pages函数为它赋值
 
 ```c
 unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
@@ -1421,6 +1474,24 @@ struct scan_control {
 ```
 
 
+
+
+
+## free
+
+```c
+void __free_pages(struct page *page, unsigned int order)
+{
+	if (put_page_testzero(page))
+		free_the_page(page, order);
+	else if (!PageHead(page))
+		while (order-- > 0)
+			free_the_page(page + (1 << order), order);
+}
+EXPORT_SYMBOL(__free_pages);
+```
+
+
 ```c
 static inline void free_the_page(struct page *page, unsigned int order)
 {
@@ -1429,10 +1500,9 @@ static inline void free_the_page(struct page *page, unsigned int order)
     else
         __free_pages_ok(page, order, FPI_NONE);
 }
-
-
 ```
-free_unref_page
+
+### free_unref_page
 
 
 
@@ -1484,6 +1554,36 @@ static void free_unref_page_commit(struct page *page, unsigned long pfn)
 		free_pcppages_bulk(zone, READ_ONCE(pcp->batch), pcp);
 }
 ```
+
+### __free_pages_ok
+
+```c
+
+static void __free_pages_ok(struct page *page, unsigned int order,
+			    fpi_t fpi_flags)
+{
+	unsigned long flags;
+	int migratetype;
+	unsigned long pfn = page_to_pfn(page);
+	struct zone *zone = page_zone(page);
+
+	if (!free_pages_prepare(page, order, true, fpi_flags))
+		return;
+
+	migratetype = get_pfnblock_migratetype(page, pfn);
+
+	spin_lock_irqsave(&zone->lock, flags);
+	if (unlikely(has_isolate_pageblock(zone) ||
+		is_migrate_isolate(migratetype))) {
+		migratetype = get_pfnblock_migratetype(page, pfn);
+	}
+	__free_one_page(page, pfn, zone, order, migratetype, fpi_flags);
+	spin_unlock_irqrestore(&zone->lock, flags);
+
+	__count_vm_events(PGFREE, 1 << order);
+}
+```
+
 free_one_page
 ```c
 static void free_one_page(struct zone *zone,
