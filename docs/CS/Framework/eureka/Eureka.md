@@ -22,7 +22,16 @@ The bottom line is, during the network outages, the server tries to be as resili
 but there is a possibility of clients having different views of the servers during that time.
 
 In these scenarios, the server tries to protect the information it already has. There may be scenarios in case of a mass outage that this may cause the clients to get the instances that do not exist anymore. The clients must make sure they are resilient to eureka server returning an instance that is non-existent or un-responsive. The best protection in these scenarios is to timeout quickly and try other servers.
- 
+
+### Directory
+
+eureka分为以下几个部分
+
+- server
+- client
+
+
+
 
 ## Beat
 
