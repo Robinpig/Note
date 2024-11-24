@@ -249,7 +249,7 @@ public class EurekaClientAutoConfiguration {
 ```
 
 
-fetchRegistry
+### fetchRegistry
 
 ```java
 
@@ -268,13 +268,6 @@ fetchRegistry
                     || (applications.getRegisteredApplications().size() == 0)
                     || (applications.getVersion() == -1)) //Client application does not have latest library supporting delta
             {
-                logger.info("Disable delta property : {}", clientConfig.shouldDisableDelta());
-                logger.info("Single vip registry refresh property : {}", clientConfig.getRegistryRefreshSingleVipAddress());
-                logger.info("Force full registry fetch : {}", forceFullRegistryFetch);
-                logger.info("Application is null : {}", (applications == null));
-                logger.info("Registered Applications size is zero : {}",
-                        (applications.getRegisteredApplications().size() == 0));
-                logger.info("Application version is -1: {}", (applications.getVersion() == -1));
                 getAndStoreFullRegistry();
             } else {
                 getAndUpdateDelta(applications);
@@ -301,7 +294,7 @@ fetchRegistry
 
 ```
 
-getAndStoreFullRegistry
+#### getAndStoreFullRegistry
 
 ```java
 
@@ -355,10 +348,7 @@ shuffleAndFilterInstances
 
 
 
-Gets the full registry information from the eureka server and stores it locally. 
-When applying the full registry, the following flow is observed: 
-if (update generation have not advanced (due to another thread)) atomically set the registry to the new registry
-
+#### getAndUpdateDelta
 
 ```java
     private void getAndUpdateDelta(Applications applications) throws Throwable {
@@ -371,8 +361,6 @@ if (update generation have not advanced (due to another thread)) atomically set 
         }
 
         if (delta == null) {
-            logger.warn("The server does not allow the delta revision to be applied because it is not safe. "
-                    + "Hence got the full registry.");
             getAndStoreFullRegistry();
         } else if (fetchRegistryGeneration.compareAndSet(currentUpdateGeneration, currentUpdateGeneration + 1)) {
             logger.debug("Got delta update with apps hashcode {}", delta.getAppsHashCode());

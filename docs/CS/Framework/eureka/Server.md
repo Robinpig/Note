@@ -2,12 +2,63 @@
 
 
 
+
+
+编译测试
+
+<!-- tabs:start -->
+
+
+###### **改动后**
+
+```java
+public class EurekaClientServerRestIntegrationTest {
+    private static void startServer() throws Exception {
+        server = new Server(8080);
+
+        WebAppContext webAppCtx = new WebAppContext(new File("./src/main/webapp").getAbsolutePath(), "/");
+        webAppCtx.setDescriptor(new File("./src/main/webapp/WEB-INF/web.xml").getAbsolutePath());
+        webAppCtx.setResourceBase(new File("./src/main/resources").getAbsolutePath());
+        webAppCtx.setClassLoader(Thread.currentThread().getContextClassLoader());
+        server.setHandler(webAppCtx);
+        server.start();
+
+        eurekaServiceUrl = "http://localhost:8080/v2";
+    }
+}
+```
+
+###### **改动前**
+
+原有实现是在war包上进行
+```java
+public class EurekaClientServerRestIntegrationTest {
+    private static void startServer() throws Exception {
+        File warFile = findWar();
+
+        server = new Server(8080);
+
+        WebAppContext webapp = new WebAppContext();
+        webapp.setContextPath("/");
+        webapp.setWar(warFile.getAbsolutePath());
+        server.setHandler(webapp);
+
+        server.start();
+
+        eurekaServiceUrl = "http://localhost:8080/v2";
+    }
+}
+```
+
+<!-- tabs:end -->
+
+
 ## start
 
 Eureka Server首先是个web容器
 
 - EurekaServerBootstrap是在 Spring Cloud 启动 eureka server 的类
-- EurekaBootStrap 是用来启动 eureka server 的类
+- EurekaBootStrap 是用来启动 eureka server 的类 EurekaBootStrap 实现了 ServletContextListener，在容器启动的时候就会调用 EurekaBootStrap#contextInitialized 从而完成对 Eureka 核心组件的初始化
 
 
 
@@ -306,6 +357,7 @@ public abstract class PeerEurekaNodes {
 ```
 
 
+初始化了缓存信息
 
 ```java
 @Singleton
@@ -318,6 +370,96 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         scheduleRenewalThresholdUpdateTask();
         initRemoteRegionRegistry();
     }
+}
+```
+
+##### initializedResponseCache
+
+ResponseCacheImpl 初始化
+
+- 在 ResponseCacheImpl 初始化的时候通过 [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap) 构建一级只读缓存 readOnlyCacheMap；
+- 通过 [Guava]() 创建的 readWriteCacheMap expire timeout = 180s
+- readOnlyCacheMap 会通过定时任务 TimerTask 从 readWriteCacheMap 构建二级读写缓存进行比对更新(每 30 秒执行一次)
+- 在 ResponseCacheImpl 中还提供了 invalidate 方法进行手动过期，当 Eureka Server 发生了服务注册、下线、故障会自动过期该缓存
+
+```java
+// AbstractInstanceRegistry
+@Override
+public synchronized void initializedResponseCache() {
+    if (responseCache == null) {
+        responseCache = new ResponseCacheImpl(serverConfig, serverCodecs, this);
+    }
+}
+
+// ResponseCacheImpl
+public class ResponseCacheImpl implements ResponseCache {
+    private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
+    private final java.util.Timer timer = new java.util.Timer("Eureka-CacheFillTimer", true);
+
+    ResponseCacheImpl(EurekaServerConfig serverConfig, ServerCodecs serverCodecs, AbstractInstanceRegistry registry) {
+        this.serverCodecs = serverCodecs;
+        this.shouldUseReadOnlyResponseCache = serverConfig.shouldUseReadOnlyResponseCache();
+        this.registry = registry;
+
+        long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
+        this.readWriteCacheMap =
+                CacheBuilder.newBuilder().initialCapacity(serverConfig.getInitialCapacityOfResponseCache())
+                        .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
+                        .removalListener(new RemovalListener<Key, Value>() {
+                            @Override
+                            public void onRemoval(RemovalNotification<Key, Value> notification) {
+                                Key removedKey = notification.getKey();
+                                if (removedKey.hasRegions()) {
+                                    Key cloneWithNoRegions = removedKey.cloneWithoutRegions();
+                                    regionSpecificKeys.remove(cloneWithNoRegions, removedKey);
+                                }
+                            }
+                        })
+                        .build(new CacheLoader<Key, Value>() {
+                            @Override
+                            public Value load(Key key) throws Exception {
+                                if (key.hasRegions()) {
+                                    Key cloneWithNoRegions = key.cloneWithoutRegions();
+                                    regionSpecificKeys.put(cloneWithNoRegions, key);
+                                }
+                                Value value = generatePayload(key);
+                                return value;
+                            }
+                        });
+
+        if (shouldUseReadOnlyResponseCache) {
+            timer.schedule(getCacheUpdateTask(),
+                    new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
+                            + responseCacheUpdateIntervalMs),
+                    responseCacheUpdateIntervalMs);
+        }
+        SpectatorUtil.monitoredValue("responseCacheSize", this, ResponseCacheImpl::getCurrentSize);
+    }
+}
+```
+
+
+当 Eureka Client 获取注册表的时候，首先会从只读缓存中获取数据
+如果只读缓存为空就会从读写缓存中获取数据，并把读取到的值添加到只读缓存当中
+```java
+Value getValue(final Key key, boolean useReadOnlyCache) {
+        Value payload = null;
+        try {
+            if (useReadOnlyCache) {
+                final Value currentPayload = readOnlyCacheMap.get(key);
+                if (currentPayload != null) {
+                    payload = currentPayload;
+                } else {
+                    payload = readWriteCacheMap.get(key);
+                    readOnlyCacheMap.put(key, payload);
+                }
+            } else {
+                payload = readWriteCacheMap.get(key);
+            }
+        } catch (Throwable t) {
+            logger.error("Cannot get value for key : {}", key, t);
+        }
+        return payload;
 }
 ```
 
@@ -422,48 +564,86 @@ class EvictionTask extends TimerTask {
 evict 从registry缓存中获取注册实例信息 判断过期加入expiredLeases中 最后随机(Knuth shuffle algorithm)从过期列表淘汰
 
 ```java
-public void evict(long additionalLeaseMs) {
-   // We collect first all expired items, to evict them in random order. For large eviction sets,
-   // if we do not that, we might wipe out whole apps before self preservation kicks in. By randomizing it,
-   // the impact should be evenly distributed across all applications.
-   List<Lease<InstanceInfo>> expiredLeases = new ArrayList<>();
-   for (Entry<String, Map<String, Lease<InstanceInfo>>> groupEntry : registry.entrySet()) {
-      Map<String, Lease<InstanceInfo>> leaseMap = groupEntry.getValue();
-      if (leaseMap != null) {
-         for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
-            Lease<InstanceInfo> lease = leaseEntry.getValue();
-            if (lease.isExpired(additionalLeaseMs) && lease.getHolder() != null) {
-               expiredLeases.add(lease);
+public abstract class AbstractInstanceRegistry implements InstanceRegistry {
+    public void evict(long additionalLeaseMs) {
+        logger.debug("Running the evict task");
+
+        if (!isLeaseExpirationEnabled()) {
+            logger.debug("DS: lease expiration is currently disabled.");
+            return;
+        }
+
+        // We collect first all expired items, to evict them in random order. For large eviction sets,
+        // if we do not that, we might wipe out whole apps before self preservation kicks in. By randomizing it,
+        // the impact should be evenly distributed across all applications.
+        List<Lease<InstanceInfo>> expiredLeases = new ArrayList<>();
+        for (Entry<String, Map<String, Lease<InstanceInfo>>> groupEntry : registry.entrySet()) {
+            Map<String, Lease<InstanceInfo>> leaseMap = groupEntry.getValue();
+            if (leaseMap != null) {
+                for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
+                    Lease<InstanceInfo> lease = leaseEntry.getValue();
+                    if (lease.isExpired(additionalLeaseMs) && lease.getHolder() != null) {
+                        expiredLeases.add(lease);
+                    }
+                }
             }
-         }
-      }
-   }
+        }
 
-   // To compensate for GC pauses or drifting local time, we need to use current registry size as a base for
-   // triggering self-preservation. Without that we would wipe out full registry.
-   int registrySize = (int) getLocalRegistrySize();
-   int registrySizeThreshold = (int) (registrySize * serverConfig.getRenewalPercentThreshold());
-   int evictionLimit = registrySize - registrySizeThreshold;
+        // To compensate for GC pauses or drifting local time, we need to use current registry size as a base for
+        // triggering self-preservation. Without that we would wipe out full registry.
+        int registrySize = (int) getLocalRegistrySize();
+        int registrySizeThreshold = (int) (registrySize * serverConfig.getRenewalPercentThreshold());
+        int evictionLimit = registrySize - registrySizeThreshold;
 
-   int toEvict = Math.min(expiredLeases.size(), evictionLimit);
-   if (toEvict > 0) {
-      logger.info("Evicting {} items (expired={}, evictionLimit={})", toEvict, expiredLeases.size(), evictionLimit);
+        int toEvict = Math.min(expiredLeases.size(), evictionLimit);
+        if (toEvict > 0) {
 
-      Random random = new Random(System.currentTimeMillis());
-      for (int i = 0; i < toEvict; i++) {
-         // Pick a random item (Knuth shuffle algorithm)
-         int next = i + random.nextInt(expiredLeases.size() - i);
-         Collections.swap(expiredLeases, i, next);
-         Lease<InstanceInfo> lease = expiredLeases.get(i);
+            Random random = new Random(System.currentTimeMillis());
+            for (int i = 0; i < toEvict; i++) {
+                // Pick a random item (Knuth shuffle algorithm)
+                int next = i + random.nextInt(expiredLeases.size() - i);
+                Collections.swap(expiredLeases, i, next);
+                Lease<InstanceInfo> lease = expiredLeases.get(i);
 
-         String appName = lease.getHolder().getAppName();
-         String id = lease.getHolder().getId();
-         EXPIRED.increment();
-         internalCancel(appName, id, false);
-      }
-   }
+                String appName = lease.getHolder().getAppName();
+                String id = lease.getHolder().getId();
+                EXPIRED.increment();
+                internalCancel(appName, id, false);
+            }
+        }
+    }
 }
 ```
+
+判断是否允许expire
+- 首先判断 Eureka Server 是否开启了自我保护机制 eureka.enableSelfPreservation 为 true 开启反之不开启。如果没有开启直接返回 true，可以进行服务过期处理。
+- 然后判断每分钟期望的续约数(numberOfRenewsPerMinThreshold) 大于 0 并且实际每分钟的续约数(getNumOfRenewsInLastMin()) 大于每分钟期望的续约数(numberOfRenewsPerMinThreshold
+
+```java
+@Override
+public boolean isLeaseExpirationEnabled() {
+    if (!isSelfPreservationModeEnabled()) {
+        // The self preservation mode is disabled, hence allowing the instances to expire.
+        return true;
+    }
+    return numberOfRenewsPerMinThreshold > 0 && getNumOfRenewsInLastMin() > numberOfRenewsPerMinThreshold;
+}
+```
+
+
+```java
+protected void updateRenewsPerMinThreshold() {
+    this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
+            * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
+            * serverConfig.getRenewalPercentThreshold());
+}
+```
+
+## serve
+
+ServletContainer是 jersey 框架的核心处理类，每一个 Web 框架都会有一个前端处理器。统一接收并处理客户端的请求。类似于 Spring MVC 中的 DispatcherServlet
+与 DispatcherServlet 是一个 Servlet 不同的是它既是一个 Servlet 同时也实现了 Filter
+
 
 #### register monitor
 
