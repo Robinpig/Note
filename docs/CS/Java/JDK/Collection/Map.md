@@ -1,6 +1,17 @@
-### Map Hierarchy
+## Introduction
 
-![Map](img/Map.png)
+
+
+
+<div style="text-align: center;">
+
+![Fig.1. Map](./img/Map.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Fig.1. Map
+</p>
 
 ## Summary
 
