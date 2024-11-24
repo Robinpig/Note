@@ -1,5 +1,13 @@
 ## Introduction
 
+客户端提供了一个简单的接口 EurekaClient 具体的实现是 DiscoveryClient
+
+EurekaClient API contracts are: 
+
+- provide the ability to get InstanceInfo(s) (in various different ways)
+- provide the ability to get data about the local Client (known regions, own AZ etc) 
+- provide the ability to register and access the healthcheck handler for the client
+
 
 
 ## Start
@@ -790,44 +798,7 @@ public class ApplicationResource {
     @Consumes({"application/json", "application/xml"})
     public Response addInstance(InstanceInfo info,
                                 @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
-        logger.debug("Registering instance {} (replication={})", info.getId(), isReplication);
-        // validate that the instanceinfo contains all the necessary required fields
-        if (isBlank(info.getId())) {
-            return Response.status(400).entity("Missing instanceId").build();
-        } else if (isBlank(info.getHostName())) {
-            return Response.status(400).entity("Missing hostname").build();
-        } else if (isBlank(info.getIPAddr())) {
-            return Response.status(400).entity("Missing ip address").build();
-        } else if (isBlank(info.getAppName())) {
-            return Response.status(400).entity("Missing appName").build();
-        } else if (!appName.equals(info.getAppName())) {
-            return Response.status(400).entity("Mismatched appName, expecting " + appName + " but was " + info.getAppName()).build();
-        } else if (info.getDataCenterInfo() == null) {
-            return Response.status(400).entity("Missing dataCenterInfo").build();
-        } else if (info.getDataCenterInfo().getName() == null) {
-            return Response.status(400).entity("Missing dataCenterInfo Name").build();
-        }
-
-        // handle cases where clients may be registering with bad DataCenterInfo with missing data
-        DataCenterInfo dataCenterInfo = info.getDataCenterInfo();
-        if (dataCenterInfo instanceof UniqueIdentifier) {
-            String dataCenterInfoId = ((UniqueIdentifier) dataCenterInfo).getId();
-            if (isBlank(dataCenterInfoId)) {
-                boolean experimental = "true".equalsIgnoreCase(serverConfig.getExperimental("registration.validation.dataCenterInfoId"));
-                if (experimental) {
-                    String entity = "DataCenterInfo of type " + dataCenterInfo.getClass() + " must contain a valid id";
-                    return Response.status(400).entity(entity).build();
-                } else if (dataCenterInfo instanceof AmazonInfo) {
-                    AmazonInfo amazonInfo = (AmazonInfo) dataCenterInfo;
-                    String effectiveId = amazonInfo.get(AmazonInfo.MetaDataKey.instanceId);
-                    if (effectiveId == null) {
-                        amazonInfo.getMetadata().put(AmazonInfo.MetaDataKey.instanceId.getName(), info.getId());
-                    }
-                } else {
-                    logger.warn("Registering DataCenterInfo of type {} without an appropriate id", dataCenterInfo.getClass());
-                }
-            }
-        }
+        // ...
 
         registry.register(info, "true".equals(isReplication));
         return Response.status(204).build();  // 204 to be backwards compatible
@@ -851,10 +822,11 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 }
 ```
 
-#### register info
+#### register
 
 ```java
-public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
+public abstract class AbstractInstanceRegistry implements InstanceRegistry {
+    public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
         read.lock();
         try {
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
@@ -903,7 +875,7 @@ public void register(InstanceInfo registrant, int leaseDuration, boolean isRepli
             // This is where the initial state transfer of overridden status happens
             if (!InstanceStatus.UNKNOWN.equals(registrant.getOverriddenStatus())) {
                 logger.debug("Found overridden status {} for instance {}. Checking to see if needs to be add to the "
-                                + "overrides", registrant.getOverriddenStatus(), registrant.getId());
+                        + "overrides", registrant.getOverriddenStatus(), registrant.getId());
                 if (!overriddenInstanceStatusMap.containsKey(registrant.getId())) {
                     logger.info("Not found overridden id {} and hence adding it", registrant.getId());
                     overriddenInstanceStatusMap.put(registrant.getId(), registrant.getOverriddenStatus());
@@ -933,6 +905,7 @@ public void register(InstanceInfo registrant, int leaseDuration, boolean isRepli
             read.unlock();
         }
     }
+}
 ```
 
 #### replicateToPeers

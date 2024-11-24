@@ -4,10 +4,17 @@
 
 ## start
 
+Eureka Server首先是个web容器
+
+- EurekaServerBootstrap是在 Spring Cloud 启动 eureka server 的类
+- EurekaBootStrap 是用来启动 eureka server 的类
+
+
+
 
 ### EurekaServerBootstrap
 
-这里是Spring Cloud封装的
+EurekaServer在SpringCloud中的启动分析与 [EurekaBootStrap](/docs/CS/Framework/eureka/Server.md?id=EurekaBootStrap) 类似
 
 @EnableEurekaServer开启 使用自动配置EurekaServerAutoConfiguration
 ```java
