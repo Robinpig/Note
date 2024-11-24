@@ -107,6 +107,9 @@ Why do sockets provide the interface from the upper three layers of the OSI mode
 
 Therefore, the interface between layers 4 and 5 is the natural place to build the API.
 
+
+
+
 ## Application Layer
 
 Network applications are the raisons exist of a computer network.
