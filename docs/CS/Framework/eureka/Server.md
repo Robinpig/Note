@@ -533,6 +533,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 }
 ```
 evict Timer启动 60s一次 淘汰90s*2时间内未续期的服务实例
+
 ```java
 
    protected void postInit() {
@@ -547,6 +548,41 @@ evict Timer启动 60s一次 淘汰90s*2时间内未续期的服务实例
    }
 ```
 
+MeasuredRate负责统计续约次数
+- currentBucket会在renew时increment
+- 每60s会将currentBucket的值copy到lastBucket 即为最近60s的续约次数
+```java
+public class MeasuredRate {
+    private final AtomicLong lastBucket = new AtomicLong(0);
+    private final AtomicLong currentBucket = new AtomicLong(0);
+
+    private final long sampleInterval;
+    private final Timer timer;
+
+    private volatile boolean isActive;
+
+    public synchronized void start() {
+        if (!isActive) {
+            timer.schedule(new TimerTask() {
+
+                @Override
+                public void run() {
+                    try {
+                        // Zero out the current bucket.
+                        lastBucket.set(currentBucket.getAndSet(0));
+                    } catch (Throwable e) {
+                        logger.error("Cannot reset the Measured Rate", e);
+                    }
+                }
+            }, sampleInterval, sampleInterval);
+
+            isActive = true;
+        }
+    }
+}
+```
+
+#### EvictionTask
 ```java
 class EvictionTask extends TimerTask {
    @Override
@@ -556,20 +592,41 @@ class EvictionTask extends TimerTask {
          logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
          evict(compensationTimeMs);
       } catch (Throwable e) {
-         logger.error("Could not run the evict task", e);
       }
    }
 }
 ```
+
+compute a compensation time defined as the actual time this task was executed since the prev iteration, vs the configured amount of time for execution.
+This is useful for cases where changes in time (due to clock skew or gc for example) causes the actual eviction task to execute later than the desired time according to the configured cycle.
+
+```java
+long getCompensationTimeMs() {
+            long currNanos = getCurrentTimeNano();
+            long lastNanos = lastExecutionNanosRef.getAndSet(currNanos);
+            if (lastNanos == 0l) {
+                return 0l;
+            }
+
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(currNanos - lastNanos);
+            long compensationTime = elapsedMs - serverConfig.getEvictionIntervalTimerInMs();
+            return compensationTime <= 0l ? 0l : compensationTime;
+        }
+```
+
+
 evict 从registry缓存中获取注册实例信息 判断过期加入expiredLeases中 最后随机(Knuth shuffle algorithm)从过期列表淘汰
+- Eureka Client 在进行续约的时候是把 lastUpdateTimestamp 设置成系统的当前时间 + 90 秒。
+  然后 Eureka Server 在进行服务过期判断的时候是：最后一次续约时间 + 90 秒 + 补偿时间小于系统当前时间就会以服务进行过期。
+  最后在 Eureka Client 拉取注册表是每 30 秒进行拉取。所以一个服务不可用时其它服务需要感知到这个服务不可用就需要：90 秒 + 90 秒 + 30 秒 = 210秒，也就是 3 分半才能感知到
+- Eureka Server 在服务过期的时候会根据：应用实例 * 0.15 与 心跳过期应用个数随机顺序将它们剔除出去。
+  因为对于需要大量剔除服务应用时，如果我们不这样做，我们可能会在 Eureka 自我保护开始之前清除整个应用程序。通过随机化,影响应该均匀分布在所有应用程序中
 
 ```java
 public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     public void evict(long additionalLeaseMs) {
-        logger.debug("Running the evict task");
 
         if (!isLeaseExpirationEnabled()) {
-            logger.debug("DS: lease expiration is currently disabled.");
             return;
         }
 
