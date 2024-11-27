@@ -1195,6 +1195,109 @@ public class ClientCnxn {
 
 wakeupCnxn
 
+## process
+
+```dot
+digraph "QuorumZooKeeperServer" {
+rankdir = "BT"
+splines  = ortho;
+fontname = "Inconsolata";
+
+node [colorscheme = ylgnbu4];
+edge [colorscheme = dark28, dir = both];
+
+FollowerZooKeeperServer [shape = record, label = "{ FollowerZooKeeperServer |  }"];
+LeaderZooKeeperServer   [shape = record, label = "{ LeaderZooKeeperServer |  }"];
+LearnerZooKeeperServer  [shape = record, label = "{ LearnerZooKeeperServer |  }"];
+ObserverZooKeeperServer [shape = record, label = "{ ObserverZooKeeperServer |  }"];
+QuorumZooKeeperServer   [shape = record, label = "{ QuorumZooKeeperServer |  }"];
+ZooKeeperServer         [shape = record, label = "{ ZooKeeperServer |  }"];
+
+FollowerZooKeeperServer -> LearnerZooKeeperServer  [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+LeaderZooKeeperServer   -> QuorumZooKeeperServer   [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+LearnerZooKeeperServer  -> QuorumZooKeeperServer   [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+ObserverZooKeeperServer -> LearnerZooKeeperServer  [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+QuorumZooKeeperServer   -> ZooKeeperServer         [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+
+}
+```
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    protected void setupRequestProcessors() {
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        RequestProcessor syncProcessor = new SyncRequestProcessor(this, finalProcessor);
+        ((SyncRequestProcessor) syncProcessor).start();
+        firstProcessor = new PrepRequestProcessor(this, syncProcessor);
+        ((PrepRequestProcessor) firstProcessor).start();
+    }
+}
+```
+
+
+```java
+public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
+    @Override
+    protected void setupRequestProcessors() {
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        RequestProcessor toBeAppliedProcessor = new Leader.ToBeAppliedRequestProcessor(finalProcessor, getLeader());
+        commitProcessor = new CommitProcessor(toBeAppliedProcessor, Long.toString(getServerId()), false, getZooKeeperServerListener());
+        commitProcessor.start();
+        ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this, commitProcessor);
+        proposalProcessor.initialize();
+        prepRequestProcessor = new PrepRequestProcessor(this, proposalProcessor);
+        prepRequestProcessor.start();
+        firstProcessor = new LeaderRequestProcessor(this, prepRequestProcessor);
+
+        setupContainerManager();
+    }
+}
+```
+
+```java
+public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
+    @Override
+    protected void setupRequestProcessors() {
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        commitProcessor = new CommitProcessor(finalProcessor, Long.toString(getServerId()), true, getZooKeeperServerListener());
+        commitProcessor.start();
+        firstProcessor = new FollowerRequestProcessor(this, commitProcessor);
+        ((FollowerRequestProcessor) firstProcessor).start();
+        syncProcessor = new SyncRequestProcessor(this, new SendAckRequestProcessor(getFollower()));
+        syncProcessor.start();
+    }
+}
+```
+
+```java
+public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
+    @Override
+    protected void setupRequestProcessors() {
+        // We might consider changing the processor behaviour of
+        // Observers to, for example, remove the disk sync requirements.
+        // Currently, they behave almost exactly the same as followers.
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        commitProcessor = new CommitProcessor(finalProcessor, Long.toString(getServerId()), true, getZooKeeperServerListener());
+        commitProcessor.start();
+        firstProcessor = new ObserverRequestProcessor(this, commitProcessor);
+        ((ObserverRequestProcessor) firstProcessor).start();
+
+        /*
+         * Observer should write to disk, so that the it won't request
+         * too old txn from the leader which may lead to getting an entire
+         * snapshot.
+         *
+         * However, this may degrade performance as it has to write to disk
+         * and do periodic snapshot which may double the memory requirements
+         */
+        if (syncRequestProcessorEnabled) {
+            syncProcessor = new SyncRequestProcessor(this, null);
+            syncProcessor.start();
+        }
+    }
+}
+```
+
 ## Server
 
 
