@@ -433,6 +433,18 @@ Snapshot 策略
 
 按照 ZooKeeperServer 的文档中所示，事务处理的大体流程链应该为 PrepRequestProcessor - SyncRequestProcessor - FinalRequestProcessor
 
+PrepRequestProcessor和SyncRequestProcessor都是一个线程子类，而在实际的ZK服务端运行过程中这两个就是以线程轮询的方式异步执行的
+FinalRequestProcessor实现类只实现了RequestProcessor接口，因此这个类的流程是同步的，为什么呢？
+因为这个类一般都是处理所有的请求类型，且在RequestProcessor调用链的末尾，没有nextProcessor，因此便不需要像其它的RequestProcessor实现类一样使用线程轮询的方式来处理请求。
+
+其用到的三个重要实现子类功能分别如下：
+1. PrepRequestProcessor：RequestProcessor的开始部分，根据请求的参数判断请求的类型，如create、delete操作这些，随后将会创建相应的Record实现子类，进行一些合法性校验以及改动记录；
+2. SyncRequestProcessor：同步刷新记录请求到日志，在将请求的日志同步到磁盘之前，不会把请求传递给下一个RequestProcessor；
+3. FinalRequestProcessor：为RequestProcessor的末尾处理类，从名字也能看出来，基本上所有的请求都会最后经过这里此类将会处理改动记录以及session记录，最后会根据请求的操作类型更新对象的ServerCnxn对象并回复请求的客户端
+
+以一次ZK Client端向Server端请求创建节点请求为例，ZK的做法是使用一个RequestHeader对象和CreateRequest分别序列化并组合形成一次请求，
+到ZK Server端先反序列化RequestHeader获取Client端的请求类型，再根据不同的请求类型使用相应的Request对象反序列化，
+这样Server端和Client端就可以完成信息的交互。相应也是一样的步骤，只是RequestHeader变成了ReplyHeader，而Request变成了Response。大致交互图如下
 
 ```java
 private void loadDataBase() {
@@ -1693,6 +1705,8 @@ case LOOKING:
 
 recvset 是存储每个 sid 推举的选票信息
 
+
+
 ```java
 public Vote lookForLeader() throws InterruptedException {
     // ...
@@ -1879,6 +1893,57 @@ public Vote lookForLeader() throws InterruptedException {
     }
 }
 ```
+取dataTree上的lastProcessedZxid
+
+```java
+private long getInitLastLoggedZxid() {
+    if (self.getLearnerType() == LearnerType.PARTICIPANT) {
+        return self.getLastLoggedZxid();
+    } else {
+        return Long.MIN_VALUE;
+    }
+}
+
+public long getDataTreeLastProcessedZxid() {
+    return dataTree.lastProcessedZxid;
+}
+```
+
+
+
+We return true if one of the following three cases hold:
+1. New epoch is higher
+2. New epoch is the same as current epoch, but new zxid is higher
+3. New epoch is the same as current epoch, new zxid is the same as current zxid, but server id is higher.
+
+```java
+protected boolean totalOrderPredicate(long newId, long newZxid, long newEpoch, long curId, long curZxid, long curEpoch) {
+    if (self.getQuorumVerifier().getWeight(newId) == 0) {
+        return false;
+    }
+
+    return ((newEpoch > curEpoch)
+            || ((newEpoch == curEpoch)
+                && ((newZxid > curZxid)
+                    || ((newZxid == curZxid)
+                        && (newId > curId)))));
+}
+```
+update state
+```java
+private void setPeerState(long proposedLeader, SyncedLearnerTracker voteSet) {
+    ServerState ss = (proposedLeader == self.getMyId()) ? ServerState.LEADING : learningState();
+    self.setPeerState(ss);
+    if (ss == ServerState.LEADING) {
+        leadingVoteSet = voteSet;
+    }
+}
+```
+在case COMMITANDACTIVATE中，我们可以看到当其收到leader改变相关的消息时，就会抛出异常。接下来它自己就会变成LOOKING状态，开始选举
+
+当leader宕机后 follower会通过心跳检测退出循环 关闭socket 设置状态为LOOKING 重新开始选举
+
+leader检测到过半节点失去通信时 退出当前循环 关闭所有和learner的socket连接 设置状态为LOOKING 开始新的选举
 
 
 In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING. 
@@ -1900,6 +1965,7 @@ It fails on the containAllQuorum() infinitely due to two facts.
 
 Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
 To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
+
 
 #### sendNotifications
 

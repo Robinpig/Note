@@ -26,6 +26,18 @@ ZAB协议的消息广播过程使用原子广播协议，类似于一个二阶�
 在广播过程中，leader会为每一个follower分配一个单独的队列，然后将需要广播的事务proposal依次放入，并且根据FIFO策略进行消息发送。每个follower接收到proposal之后，都会首先将其以事务日志的形式写入本地磁盘，写入成功后反馈leader一个ack响应。当leader收到超过半数的follower的ack响应之后，就会广播一个commit消息给所有follower以通知其进行事务提交，同时leader自身也完成事务的提交。每个follower在接收到commit之后，也会完成对事务的提交。
 在广播过程中，如果follower接收到proposal之后记录事务日志失败，或者proposal丢失。紧接着不久后，它直接接到了这个proposal的commit，那么follower就会向leader发送请求重新申请这个任务，leader会再次发送proposal和commit
 
+
+[Reassign `ZXID` for solving 32bit overflow problem](https://issues.apache.org/jira/browse/ZOOKEEPER-2789)
+1. I am worry about if the lower 8 bits of the upper 32 bits are divided into the low 32 bits of the entire `long` and become 40 bits low, there may be a concurrent problem.
+   Actually, it shouldn't be worried, all operation about `ZXID` is bit operation rather than `=` assignment operation.
+   So, it cann't be a concurrent problem in `JVM` level.
+2. Yep, it is. Especially, if it is `1k/s` ops, then as long as $2^ {32} / (86400 * 1000) \approx 49.7$ days `ZXID` will exhausted. 
+   And more terrible situation will make the `re-election` process comes early.
+   At the same time, the "re-election" process could take half a minute. And it will be cannot acceptable.
+3. As so far, it will throw a `XidRolloverException` to force `re-election` process and reset the `counter` to zero
+
+
+
 ```java
     public enum ServerState {
         LOOKING,
